@@ -78,7 +78,7 @@ class EvidenceView:
 
 @dataclass(frozen=True)
 class Action:
-    """可派发动作(M1.3 top_actions 的评分形态; skill 由 method_router 填充)."""
+    """可派发动作(M1.3 top_actions 的评分形态; skill 由 worker 自选 — routing CUT issue #1)."""
 
     claim_id: str
     action: str
