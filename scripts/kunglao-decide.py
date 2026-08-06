@@ -72,12 +72,12 @@ def _cheapness_order(claims: list[dict], deps: dict) -> list[pr.Action]:
         parents = depends_on.get(cid, []) or []
         if any(p not in terminal_ids for p in parents):
             continue
-        cost = pr.next_tier_cost(c)
+        ch = pr.cheapness(c)
         rows.append(pr.Action(
-            claim_id=cid, action=pr.classify_action(c), score=cost, skill=None,
+            claim_id=cid, action=pr.classify_action(c), score=ch, skill=None,
             tier=min(int(c.get("evidence_tier_attempted", 0)) + 1, 3),
             attempts=int(c.get("promotion_attempts", 0)),
-            delta_disc=0.0, expected_unlock=0.0, unc=0.0, cost=cost,
+            leverage=0.0, discriminator=0.0, novelty=0.0, cost=pr.action_cost(c),
         ))
     rows.sort(key=lambda a: a.score, reverse=True)
     return rows
