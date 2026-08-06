@@ -1,0 +1,1 @@
+{"api_calls": [{"name": "WinHttpOpen", "args": ["0x7ff600001000", 4]}, {"name": "WinHttpConnect", "args": ["0x7ff600002000", 8]}]}

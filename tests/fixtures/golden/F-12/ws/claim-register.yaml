@@ -1,0 +1,7 @@
+claims:
+- id: C-1
+  status: OPEN
+  boundary_type: positive_observation
+  evidence_tier_attempted: 0
+  promotion_attempts: 1
+  depends_on: []

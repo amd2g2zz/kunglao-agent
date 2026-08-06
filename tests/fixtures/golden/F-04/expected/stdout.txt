@@ -1,0 +1,25 @@
+{
+  "decision": "BLOCKED",
+  "exit_code": 4,
+  "action": "1 claim(s) have a failed attempt with no failure_analysis: ['C-1']. Run failure_analysis_gate.py <ws> to reason about WHY the method failed before re-dispatch or NEGATIVE.",
+  "open_claims": [
+    {
+      "id": "C-1",
+      "status": "OPEN",
+      "blocked": false
+    }
+  ],
+  "open_count": 1,
+  "unblocked_open_count": 0,
+  "blocked_open_count": 0,
+  "failure_blocked": [
+    "C-1"
+  ],
+  "partial_facts": [],
+  "partial_count": 0,
+  "active_workers": 0,
+  "free_slots": 3,
+  "worker_cap": 3,
+  "stuck_workers": [],
+  "active_blockers": []
+}

@@ -1,0 +1,25 @@
+# kong-agent gitignore — scoped to this skill only
+# Compiled Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Test artifacts
+*.tmp
+*.bak
+*.bak-*
+*~
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+
+# Logs (transient)
+*.log
+
+# Workspace state snapshots (not skill code)
+.state/
+# Malware samples — NEVER tracked
+**/bins/
+test_workspace/

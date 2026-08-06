@@ -1,0 +1,2 @@
+OK: 1 blocker(s) checked, none stale (closed claims: 1)
+  (skipped 1 blocker(s) with no claim_id detectable)

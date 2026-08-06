@@ -1,0 +1,23 @@
+{
+  "decision": "SATURATED",
+  "exit_code": 3,
+  "action": "All 3 slots busy with 1 open claim(s) queued. Poll workers — do not idle.",
+  "open_claims": [
+    {
+      "id": "C-1",
+      "status": "OPEN",
+      "blocked": false
+    }
+  ],
+  "open_count": 1,
+  "unblocked_open_count": 1,
+  "blocked_open_count": 0,
+  "failure_blocked": [],
+  "partial_facts": [],
+  "partial_count": 0,
+  "active_workers": 3,
+  "free_slots": 0,
+  "worker_cap": 3,
+  "stuck_workers": [],
+  "active_blockers": []
+}

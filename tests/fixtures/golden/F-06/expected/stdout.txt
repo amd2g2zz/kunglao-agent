@@ -1,0 +1,23 @@
+{
+  "decision": "DISPATCH",
+  "exit_code": 1,
+  "action": "Run priority.py and dispatch the top claim. 1 unblocked open claim(s), 3 free slot(s).",
+  "open_claims": [
+    {
+      "id": "C-1",
+      "status": "OPEN",
+      "blocked": false
+    }
+  ],
+  "open_count": 1,
+  "unblocked_open_count": 1,
+  "blocked_open_count": 0,
+  "failure_blocked": [],
+  "partial_facts": [],
+  "partial_count": 0,
+  "active_workers": 0,
+  "free_slots": 3,
+  "worker_cap": 3,
+  "stuck_workers": [],
+  "active_blockers": []
+}

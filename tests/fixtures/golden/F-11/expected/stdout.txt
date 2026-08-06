@@ -1,0 +1,7 @@
+# kong-agent progress report (2026-08-06T06:45:43Z)
+
+## Claims: 2 total (1 terminal = 50% converged)
+  - OPEN: 1
+  - PROVEN: 1
+## Workers: 0 in-flight; 0 potentially stuck (>20m no update)
+## Blockers: 0 active (run stale_blocker_prune.py to resolve)

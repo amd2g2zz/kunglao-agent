@@ -1,0 +1,22 @@
+{
+  "decision": "DISPATCH_VERIFIER",
+  "exit_code": 2,
+  "action": "Dispatch a verifier for 1 partial fact(s). Do NOT declare PROVEN without sign-off.",
+  "open_claims": [],
+  "open_count": 0,
+  "unblocked_open_count": 0,
+  "blocked_open_count": 0,
+  "failure_blocked": [],
+  "partial_facts": [
+    {
+      "fact": "F001",
+      "status": "PARTIAL"
+    }
+  ],
+  "partial_count": 1,
+  "active_workers": 0,
+  "free_slots": 3,
+  "worker_cap": 3,
+  "stuck_workers": [],
+  "active_blockers": []
+}

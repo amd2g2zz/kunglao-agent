@@ -1,0 +1,23 @@
+# claim-register.yaml — all claims (C-NN). See DESIGN Appendix A.
+# Phase 0.7 seeds PRIMARY claims (from task_spec) + background claims (from CTI).
+# Workers/orchestrator update status, promotion_attempts, evidence_tier_attempted.
+
+claims: []
+
+# each claim entry shape (append to claims: list):
+#  - id: C-001
+#    statement: "<falsifiable claim text>"
+#    answers_question: null       # task_spec primary_question.id (or null)
+#    boundary_type: confirmed     # §6.7 nine types:
+#                                 #   confirmed | capability_not_executed | link_not_closed
+#                                 #   source_derived | numeric | observation
+#                                 #   coordinate | pure_negative | contradiction
+#    promotion_gate: ""           # required non-empty if boundary_type ∈ open set
+#                                 #   open = {capability_not_executed, link_not_closed,
+#                                 #           observation, source_derived, numeric}
+#    promotion_attempts: 0        # §11 hook rejects dispatch when ≥3
+#    evidence_tier_attempted: 0   # §8.5 iterative-deepening tier gate (0|1|2|3)
+#    status: OPEN                 # PROVEN | INFERRED | NEGATIVE | REFUTED | OPEN | DEFERRED | VERIFIED
+#                                 #   terminal = {PROVEN, VERIFIED, NEGATIVE, REFUTED, DEFERRED}
+#    source: cti                  # cti | static_re | dynamic_re | user_feedback | synthesis
+#    competitor_group: null       # v1.7 — task_spec model_selection q_id (or null)

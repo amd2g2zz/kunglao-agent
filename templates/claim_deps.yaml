@@ -1,0 +1,11 @@
+# claim_deps.yaml — claim dependency DAG + competitor groups. See DESIGN §13/Appendix A.
+# Refutation propagates along depends_on (§9 rule 4(b)).
+# competitor_group (v1.7): K mutually-exclusive claims for a model_selection question.
+
+depends_on: {}
+  # C-002: [C-001]    # C-002 is only true if C-001 is
+  # C-005: [C-002, C-003]
+
+competitor_groups: {}
+  # q3: [C-005a, C-005b, C-005c]   # v1.7: task_spec model_selection question id → K claims
+  #                                 # C0b: ≥1 reaches terminal + rest REFUTED/DEFERRED → q answered

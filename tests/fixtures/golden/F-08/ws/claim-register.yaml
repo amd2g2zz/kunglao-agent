@@ -1,0 +1,13 @@
+claims:
+- id: C-old
+  status: OPEN
+  boundary_type: positive_observation
+  evidence_tier_attempted: 0
+  promotion_attempts: 0
+  depends_on: []
+- id: C-new
+  status: OPEN
+  boundary_type: positive_observation
+  evidence_tier_attempted: 0
+  promotion_attempts: 0
+  depends_on: []

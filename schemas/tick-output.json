@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "tick-output.json",
+  "title": "M5 MONITOR 输出契约(冻结 @ phase-5, module-design.md §M5.3)",
+  "description": "kunglao-monitor 的 JSON 输出。heartbeat 二分 + loop 对账 + agent watch + 健康判定。",
+  "type": "object",
+  "required": ["ts", "heartbeat", "active_workers", "stale_agents", "gone_events", "help_requests", "stuck", "health", "next"],
+  "properties": {
+    "ts": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
+    "heartbeat": { "enum": ["alive", "STALE"] },
+    "active_workers": { "type": "integer", "minimum": 0 },
+    "stale_agents": { "type": "array", "items": { "type": "string" } },
+    "gone_events": { "type": "array", "items": { "type": "string" } },
+    "help_requests": { "type": "array", "items": { "type": "string" } },
+    "stuck": { "type": "array", "items": { "type": "string" } },
+    "health": { "enum": ["HEALTHY", "STALLED", "SPINNING"] },
+    "next": { "type": "string" }
+  }
+}

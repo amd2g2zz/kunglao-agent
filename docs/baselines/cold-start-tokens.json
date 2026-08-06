@@ -1,0 +1,125 @@
+{
+  "protocol": "v1",
+  "entries": [
+    {
+      "date": "2026-08-06T06:46:16Z",
+      "protocol": "v1",
+      "estimator": "chars/4",
+      "total_chars": 127862,
+      "total_est_tokens": 31966,
+      "by_file": {
+        "claim-register.yaml": {
+          "chars": 65792,
+          "est_tokens": 16448
+        },
+        "claim_deps.yaml": {
+          "chars": 435,
+          "est_tokens": 109
+        },
+        "task_spec.yaml": {
+          "chars": 3395,
+          "est_tokens": 849
+        },
+        "facts/_INDEX.md": {
+          "chars": 12214,
+          "est_tokens": 3054
+        },
+        ".convergence_ledger.jsonl": {
+          "chars": 18028,
+          "est_tokens": 4507
+        },
+        "progress.txt": {
+          "chars": 4000,
+          "est_tokens": 1000
+        },
+        "analysis_state.txt": {
+          "chars": 23998,
+          "est_tokens": 6000
+        }
+      },
+      "missing": [
+        "digest.md"
+      ]
+    },
+    {
+      "date": "2026-08-06T06:46:16Z",
+      "protocol": "v1",
+      "estimator": "chars/4",
+      "total_chars": 127862,
+      "total_est_tokens": 31966,
+      "by_file": {
+        "claim-register.yaml": {
+          "chars": 65792,
+          "est_tokens": 16448
+        },
+        "claim_deps.yaml": {
+          "chars": 435,
+          "est_tokens": 109
+        },
+        "task_spec.yaml": {
+          "chars": 3395,
+          "est_tokens": 849
+        },
+        "facts/_INDEX.md": {
+          "chars": 12214,
+          "est_tokens": 3054
+        },
+        ".convergence_ledger.jsonl": {
+          "chars": 18028,
+          "est_tokens": 4507
+        },
+        "progress.txt": {
+          "chars": 4000,
+          "est_tokens": 1000
+        },
+        "analysis_state.txt": {
+          "chars": 23998,
+          "est_tokens": 6000
+        }
+      },
+      "missing": [
+        "digest.md"
+      ]
+    },
+    {
+      "date": "2026-08-06T06:46:16Z",
+      "protocol": "v1",
+      "estimator": "chars/4",
+      "total_chars": 127862,
+      "total_est_tokens": 31966,
+      "by_file": {
+        "claim-register.yaml": {
+          "chars": 65792,
+          "est_tokens": 16448
+        },
+        "claim_deps.yaml": {
+          "chars": 435,
+          "est_tokens": 109
+        },
+        "task_spec.yaml": {
+          "chars": 3395,
+          "est_tokens": 849
+        },
+        "facts/_INDEX.md": {
+          "chars": 12214,
+          "est_tokens": 3054
+        },
+        ".convergence_ledger.jsonl": {
+          "chars": 18028,
+          "est_tokens": 4507
+        },
+        "progress.txt": {
+          "chars": 4000,
+          "est_tokens": 1000
+        },
+        "analysis_state.txt": {
+          "chars": 23998,
+          "est_tokens": 6000
+        }
+      },
+      "missing": [
+        "digest.md"
+      ]
+    }
+  ]
+}

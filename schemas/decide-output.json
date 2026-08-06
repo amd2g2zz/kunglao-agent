@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "kunglao-agent/schemas/decide-output.json",
+  "title": "kunglao-decide output (M1.3 frozen)",
+  "description": "M1 DECIDE 输出契约(冻结, worker_pulse 解析)。源: .research-tree-alignment/kong-agent-module-design.md M1.3 (L129-139)。",
+  "type": "object",
+  "required": [
+    "decision",
+    "exit_code",
+    "top_actions",
+    "blocked",
+    "failure_blocked",
+    "stale",
+    "drifts",
+    "explore_mode",
+    "selfcheck"
+  ],
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["DISPATCH", "DISPATCH_VERIFIER", "SATURATED", "BLOCKED", "CONVERGED"]
+    },
+    "exit_code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4,
+      "description": "0=CONVERGED 1=DISPATCH 2=DISPATCH_VERIFIER 3=SATURATED 4=BLOCKED"
+    },
+    "top_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "action", "score", "skill"],
+        "properties": {
+          "claim_id": { "type": "string" },
+          "action": { "type": "string", "description": "动作类型 = method-graph.yaml 节点 id" },
+          "score": { "type": "number" },
+          "skill": { "type": ["string", "null"], "description": "method_router 选定的 skill; 路由 escalate 时为 null" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "blocked": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "open 且 blocked 的 claim id"
+    },
+    "failure_blocked": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "failed attempt 且无当前 failure_analysis 的 claim id"
+    },
+    "stale": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "stuck worker 名(>20min 无状态更新)"
+    },
+    "drifts": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "plan/state 漂移(阶段 4 不计算, 恒 [] — 见 contract.md 契约空白)"
+    },
+    "explore_mode": {
+      "type": "boolean",
+      "description": "true = verified_fact_count < EXPLORE_THRESHOLD(5), top_actions 按 cheapness 铺开 T1"
+    },
+    "selfcheck": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "行为契约扫描违规(反问/自加 cap); 无 --scan-text 时为 []"
+    },
+    "escalations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["claim_id", "action", "reason"],
+        "properties": {
+          "claim_id": { "type": "string" },
+          "action": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      },
+      "description": "method_router 图断 escalates(附加字段, 非冻结必需)"
+    },
+    "open_count": { "type": "integer" },
+    "partial_count": { "type": "integer" },
+    "free_slots": { "type": "integer" },
+    "error": { "type": "string", "description": "异常时保守 BLOCKED 的错误描述(附加字段)" }
+  },
+  "additionalProperties": true
+}

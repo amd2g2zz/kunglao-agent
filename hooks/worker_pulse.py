@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""worker_pulse.py - convergence pulse injected after every worker completion (v1.9.8).
+
+WHY: v1.9's convergence loop is agent-invoked — the orchestrator must
+REMEMBER to run convergence_check.py every turn. When it forgets (or gets
+absorbed in processing a worker report), there is no backstop: the loop
+drifts, and "kunglao-agent 笨了" shows up again as a mystery. This hook makes
+the convergence state arrive automatically: at the exact moment a worker
+completes (PostToolUse on Agent), the orchestrator receives a compact
+"where are we, what's next" pulse — zero effort, zero forgetting.
+
+SMART = narrow + alive-only (same philosophy as dispatch_gate):
+  - fires ONLY when a worker/agent call completed AND the payload carries a
+    claim dispatch prefix `[T<N> tools=...] claim <C-NN>` — i.e. a kunglao-agent
+    worker just finished. Everything else → silent.
+  - fires ONLY while kunglao-agent is ACTIVATED (30-min TTL, renewed by the
+    orchestrator at Phase 0 / heartbeat). No activation / expired = hooks
+    sleep. A stray session can't receive pulses it didn't sign up for.
+  - INJECTES guidance (additionalContext), never aborts. The orchestrator
+    still owns the decision; the pulse is a heuristic nudge, not a gate.
+
+Output shape (one compact block):
+  [worker_pulse] W-<n> finished
+  DECISION: <DISPATCH|SATURATED|BLOCKED|DISPATCH_VERIFIER|CONVERGED> — <action>
+  next up: <top dispatchable claim via priority.py>
+  flags: stuck=<...> failure-blocked=<...> partial=<...>
+
+Pure read: reads claim-register.yaml + runs convergence_check/priority in
+subprocess. No state writes, no files touched (except the ledger side-effect
+of convergence_check, which is by-design).
+
+Wiring (in .claude/settings.json PostToolUse, Agent matcher — alongside
+worker_budget):
+  {"matcher": "Agent", "hooks": [{"type": "command",
+    "command": "python C:/Users/hr/.claude/skills/kunglao-agent/hooks/worker_pulse.py"}]}
+"""
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
+DISPATCH_RE = re.compile(
+    r"\[T\s*([123])\s+tools\s*=\s*([^\]]*)\]\s*claim\s+([A-Z]+-\d+)",
+    re.IGNORECASE,
+)
+
+
+def _resolve_workspace(payload: dict) -> Path | None:
+    cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
+    for base in [cwd / "malware-analysis-workspace", cwd]:
+        if (base / "claim-register.yaml").exists():
+            return base
+    return None
+
+
+def _kunglao_active(ws: Path) -> bool:
+    """Strict activation: worker_pulse fires only if explicitly activated AND
+    not expired (30-min TTL). Default-inactive — a non-kunglao-agent session gets
+    zero injection. Mirrors dispatch_gate.py::_kunglao_active."""
+    state_path = ws / ".hook_state.json"
+    if not state_path.exists():
+        return False
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "scripts"))
+        import hook_activation as ha
+        return ha.is_active_strict(ws, "worker_pulse")
+    except Exception:
+        return False
+
+
+def _was_dispatch(payload: dict) -> bool:
+    """Did the completed Agent call look like a kunglao-agent worker dispatch?
+    Matches the dispatch prefix in the prompt the orchestrator sent."""
+    tool_input = payload.get("tool_input") or {}
+    prompt_parts = []
+    if isinstance(tool_input, dict):
+        for k in ("prompt", "description", "task"):
+            v = tool_input.get(k)
+            if v:
+                prompt_parts.append(str(v))
+    else:
+        prompt_parts = [str(tool_input)]
+    return bool(DISPATCH_RE.search(" ".join(prompt_parts)))
+
+
+def _run_py(args: list, ws: Path):
+    """Run a kunglao-agent script. Args are absolute paths (cwd is the workspace,
+    so relative paths would resolve against it, not the skill dir — v1.9.8
+    bug caught in the first pulse test)."""
+    try:
+        return subprocess.run(
+            [sys.executable] + args,
+            capture_output=True, text=True, timeout=20,
+            cwd=str(ws),
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+
+
+def _build_pulse(ws: Path) -> str:
+    """Compact convergence snapshot: decision + next-up claim + flags."""
+    lines = ["[worker_pulse] worker completed — convergence pulse (auto):"]
+
+    cc = _run_py([str(SKILL_DIR / "scripts" / "convergence_check.py"), str(ws), "--json"], ws)
+    d = None
+    if cc and cc.returncode in (0, 1, 2, 3, 4):
+        try:
+            d = json.loads(cc.stdout)
+        except json.JSONDecodeError:
+            d = None
+    if d:
+        lines.append(f"DECISION: {d['decision']} — {d['action']}")
+        flags = []
+        if d.get("stuck_workers"):
+            flags.append(f"stuck={[w['worker'] for w in d['stuck_workers']]}")
+        if d.get("failure_blocked"):
+            flags.append(f"failure-blocked={list(d['failure_blocked'])}")
+        if d.get("partial_count"):
+            flags.append(f"partial={d['partial_count']}")
+        if d.get("active_blockers"):
+            flags.append(f"blockers={d['active_blockers']}")
+        if flags:
+            lines.append("flags: " + "; ".join(flags))
+
+    # next-up claim via priority.py
+    pr = _run_py([str(SKILL_DIR / "scripts" / "priority.py"), str(ws), "--json"], ws)
+    if pr and pr.returncode == 0:
+        try:
+            pj = json.loads(pr.stdout)
+        except json.JSONDecodeError:
+            pj = None
+        if pj and pj.get("dispatchable"):
+            top = pj["dispatchable"][0]
+            lines.append(f"next up: {top['id']} (score {top['score']}) {top.get('statement', '')[:80]}")
+        elif pj:
+            lines.append("next up: no dispatchable claims (check DECISION above)")
+
+    if len(lines) == 1:
+        return ""
+    lines.append("(decide per convergence-loop; the pulse is a heuristic, not a verdict)")
+    return "\n".join(lines)
+
+
+def main() -> int:
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+    except json.JSONDecodeError:
+        return 0
+
+    ws = _resolve_workspace(payload)
+    if ws is None:
+        return 0
+    if not _kunglao_active(ws):
+        return 0  # not activated or expired — hooks sleep
+    if not _was_dispatch(payload):
+        return 0  # not a kunglao-agent worker completion — silent
+
+    pulse = _build_pulse(ws)
+    if not pulse:
+        return 0
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": pulse,
+        }
+    }, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

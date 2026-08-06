@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "verify-output.json",
+  "title": "M3 VERIFY 输出契约(冻结 @ phase-5, module-design.md §M3.3)",
+  "description": "kunglao-verify 的 JSON 输出。L1 机械层重跑 reproduce 比对 sha256; L2 对抗层 kunglao-redteam 派发; anchors 数字保真。",
+  "type": "object",
+  "required": ["fact_id", "claim_id", "l1", "l2", "anchors", "overall"],
+  "properties": {
+    "fact_id": { "type": "string", "pattern": "^F-?[0-9A-Za-z-]+$" },
+    "claim_id": { "type": "string", "pattern": "^C-?[0-9A-Za-z-]+$" },
+    "l1": {
+      "type": "object",
+      "required": ["verdict", "actual_sha256", "cmd"],
+      "properties": {
+        "verdict": { "enum": ["PASS", "FAIL"] },
+        "actual_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "cmd": { "type": "string" }
+      }
+    },
+    "l2": {
+      "type": "object",
+      "required": ["verdict", "gaps"],
+      "properties": {
+        "verdict": { "enum": ["CONFIRMED", "REFUTED", "UNVERIFIED-WITH-GAP", "NOT-RUN"] },
+        "gaps": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "anchors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["byte_offset", "cmd", "expected"],
+        "properties": {
+          "byte_offset": { "type": "string", "pattern": "^0x[0-9a-fA-F]+$" },
+          "cmd": { "type": "string" },
+          "expected": { "type": "string" }
+        }
+      }
+    },
+    "overall": { "enum": ["VERIFIED", "REJECTED", "PARTIAL"] }
+  }
+}

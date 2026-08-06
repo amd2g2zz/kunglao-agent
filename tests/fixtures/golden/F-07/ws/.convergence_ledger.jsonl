@@ -1,0 +1,5 @@
+{"ts": "2026-08-06T00:00:00Z", "decision": "DISPATCH", "open_count": 5, "open_ids": [], "partial_count": 0, "active_workers": 0, "blockers": [], "facts_total": 0}
+{"ts": "2026-08-06T00:05:00Z", "decision": "DISPATCH", "open_count": 4, "open_ids": [], "partial_count": 0, "active_workers": 0, "blockers": [], "facts_total": 0}
+{"ts": "2026-08-06T00:10:00Z", "decision": "DISPATCH", "open_count": 3, "open_ids": [], "partial_count": 0, "active_workers": 0, "blockers": [], "facts_total": 0}
+{"ts": "2026-08-06T00:15:00Z", "decision": "DISPATCH", "open_count": 2, "open_ids": [], "partial_count": 0, "active_workers": 0, "blockers": [], "facts_total": 0}
+{"ts": "2026-08-06T00:20:00Z", "decision": "DISPATCH", "open_count": 1, "open_ids": [], "partial_count": 0, "active_workers": 0, "blockers": [], "facts_total": 0}

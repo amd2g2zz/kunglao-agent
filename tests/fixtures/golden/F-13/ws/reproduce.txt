@@ -1,0 +1,1 @@
+python -c "import struct; print(hex(struct.unpack('<H', open('a.bin','rb').read(2))[0]))"

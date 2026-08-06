@@ -1,0 +1,2 @@
+WinHttpOpen|e003a737
+WinHttpConnect|c541cf55

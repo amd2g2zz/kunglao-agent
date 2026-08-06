@@ -1,0 +1,26 @@
+{
+  "verdict": "HEALTHY",
+  "exit_code": 0,
+  "action": "Converging: open_count 5→1 over 5 rounds (D-4). Keep dispatching via convergence_check.py.",
+  "rounds": 5,
+  "first_open_count": 5,
+  "last_open_count": 1,
+  "open_delta": -4,
+  "flatline_run": 1,
+  "stuck_claims": [],
+  "churn": {
+    "facts_delta": 0,
+    "open_delta": -4,
+    "is_churning": false
+  },
+  "last_snapshot": {
+    "ts": "2026-08-06T00:20:00Z",
+    "decision": "DISPATCH",
+    "open_count": 1,
+    "open_ids": [],
+    "partial_count": 0,
+    "active_workers": 0,
+    "blockers": [],
+    "facts_total": 0
+  }
+}
