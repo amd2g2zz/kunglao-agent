@@ -44,7 +44,12 @@ STALLED_FLATLINE = 5      # consecutive unchanged open_count snapshots
 STALLED_STUCK_CLAIM = 3   # a claim open this many consecutive snapshots
 SPINNING_FLATLINE = 8     # longer flatline = spinning, not just hard
 SPINNING_CHURN_FACTS = 5  # facts grew this many while open_count held
-SAME_TURN_WINDOW_SEC = 120  # snapshots within this gap = same orchestrator turn
+SAME_TURN_WINDOW_SEC = 30   # snapshots within this gap = same orchestrator turn
+# Pressure valve: never collapse more than this many consecutive same-state
+# entries, even if they're all within the time window. Without this, an
+# orchestrator calling convergence_check every ~20s for 5+ minutes would
+# have every entry dedup'd to 1, hiding a real flatline.
+MAX_DEDUP_COLLAPSE = 2
 
 EXIT_HEALTHY = 0
 EXIT_STALLED = 1
@@ -99,11 +104,18 @@ def _dedup_consecutive(ledger: list) -> list:
     that is the stalled-loop signal we exist to detect. Without the time gate,
     a flatline at open_count=3 across 10 turns would dedup to 1 entry and hide
     the stall entirely.
+
+    M2 fix (pressure valve): even when entries ARE within the time window,
+    never collapse more than MAX_DEDUP_COLLAPSE consecutive same-state entries.
+    This prevents the edge case where an orchestrator calling convergence_check
+    every ~20s for several minutes has ALL entries collapsed, hiding a real
+    flatline that should trigger SPINNING detection.
     """
     if not ledger:
         return []
     out = [ledger[0]]
     out_ts = _parse_ts(ledger[0].get("ts"))
+    collapse_run = 0  # consecutive collapses for the current out entry
     for e in ledger[1:]:
         same_state = (
             e.get("open_count") == out[-1].get("open_count")
@@ -113,11 +125,17 @@ def _dedup_consecutive(ledger: list) -> list:
         close_in_time = False
         if out_ts and e_ts:
             close_in_time = abs((e_ts - out_ts).total_seconds()) < SAME_TURN_WINDOW_SEC
-        # collapse only if BOTH same-state AND close-in-time; missing ts → keep (conservative)
-        if same_state and close_in_time:
+        # collapse only if ALL THREE conditions hold:
+        #   1. same state
+        #   2. close in time (< SAME_TURN_WINDOW_SEC)
+        #   3. haven't already collapsed MAX_DEDUP_COLLAPSE for this out entry
+        # Missing ts → keep (conservative); pressure valve → keep (preserve flatline)
+        if same_state and close_in_time and collapse_run < MAX_DEDUP_COLLAPSE:
+            collapse_run += 1
             continue
         out.append(e)
         out_ts = e_ts
+        collapse_run = 0
     return out
 
 
