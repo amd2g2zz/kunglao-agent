@@ -319,6 +319,60 @@ def compare_register_change(reg_path: Path, before: dict[str, str] | None,
     return True, 'ok'
 
 
+# ---------- BLIND verifier gate for PROVEN (issue #15 / PRD M1) ----------
+# Even the orchestrator cannot write PROVEN to a claim whose fact file lacks
+# a valid verifier_sign_off block. This catches orchestrator bypasses (direct
+# register edits that skip claim_migrator). The formal gate lives in
+# scripts/blind_gate.py; this function is the hook-side backstop.
+
+def compare_register_change_proven_gate(
+    reg_path: Path, before: dict[str, str] | None,
+    agent_name: str, facts_dir: Path
+) -> tuple[bool, str]:
+    """Check that any newly-PROVEN claim has independent BLIND sign-off.
+
+    Unlike compare_register_change (which exempts the orchestrator from the
+    worker self-promotion guard), this gate applies to ALL actors including
+    the orchestrator: PROVEN requires verifier_sign_off, period.
+    """
+    if before is None:
+        return True, 'no-before snapshot'
+    after = _claim_statuses(reg_path)
+    if after is None:
+        return True, 'register unreadable'
+    # find claims that became PROVEN
+    newly_proven = [cid for cid, st in after.items()
+                    if before.get(cid) != st and st == 'PROVEN']
+    if not newly_proven:
+        return True, 'no PROVEN promotions'
+    # check BLIND gate for each
+    try:
+        sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
+        from blind_gate import check_proven_gate
+    except ImportError:
+        return True, 'blind_gate unavailable (fail open)'
+    register_text = reg_path.read_text(encoding='utf-8', errors='replace')
+    import re as _re
+    violations = []
+    for cid in newly_proven:
+        worker_id = None
+        m = _re.search(rf"- id:\s*{_re.escape(cid)}\b(.*?)(?=\n-\s*id:|\Z)",
+                       register_text, _re.DOTALL)
+        if m:
+            for key in ('worker_id', 'last_dispatched_worker'):
+                wm = _re.search(rf"\b{key}:\s*(\S+)", m.group(1))
+                if wm and wm.group(1).strip().lower() not in ('null', 'none', '~'):
+                    worker_id = wm.group(1).strip().strip("'\"")
+                    break
+        allowed, effective, reason = check_proven_gate(cid, facts_dir, worker_id=worker_id)
+        if not allowed:
+            violations.append(f'{cid}: {reason}')
+    if violations:
+        return False, (f'BLIND GATE: PROVEN without independent verifier sign-off — '
+                       f'{"; ".join(violations)}. Downgrade to STAMP or obtain BLIND sign-off.')
+    return True, f'{len(newly_proven)} PROVEN promotion(s) with valid BLIND sign-off'
+
+
 def register_worker(path: Path, entry: dict) -> None:
     text = path.read_text(encoding='utf-8') if path.exists() else ''
     workers = read_active_workers(path) + [entry]

@@ -134,6 +134,25 @@ def _set_claim_status(reg_path: Path, claim_id: str, new_status: str) -> bool:
     return True
 
 
+def _extract_worker_id(register_text: str, claim_id: str) -> str | None:
+    """Extract worker_id or last_dispatched_worker for a claim from register text."""
+    import re
+    # Match the claim block starting with "- id: <claim_id>" up to the next "- id:" or EOF
+    m = re.search(
+        rf"- id:\s*{re.escape(claim_id)}\b(.*?)(?=\n-\s*id:|\Z)",
+        register_text, re.DOTALL)
+    if not m:
+        return None
+    block = m.group(1)
+    for key in ("worker_id", "last_dispatched_worker"):
+        wm = re.search(rf"\b{key}:\s*(\S+)", block)
+        if wm:
+            val = wm.group(1).strip().strip("'\"")
+            if val and val.lower() not in ("null", "none", "~", ""):
+                return val
+    return None
+
+
 def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tuple[bool, str]:
     """claim 状态迁移(合法性检查 + 落地, M4.2 L331).
 
@@ -141,6 +160,11 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
     状态 → (False, reason), 不落地. orchestrator 写 terminal → 更新 register
     + 记 ledger 事件(claim_promoted / claim_refuted). DEFERRED 无专属
     event_type → 仅 register 更新(契约空白决策). 非 terminal 迁移 → register 更新.
+
+    BLIND gate (issue #15 / PRD M1): orchestrator promoting to PROVEN must
+    have a valid verifier_sign_off block in the claim's fact file. Without
+    it (or on BLIND REFUTE / self-stamp), the effective status is STAMP
+    (claimed-but-unverified), not PROVEN. STAMP is non-terminal.
     """
     reg_path = ws / "claim-register.yaml"
     if not reg_path.exists():
@@ -153,18 +177,34 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             f"WORKER SELF-PROMOTION BLOCKED (maker-checker): actor={actor!r} tried "
             f"to write terminal status {new_status!r} for {claim_id}. Only the "
             f"orchestrator promotes after kunglao-redteam passes."))
-    if not _set_claim_status(reg_path, claim_id, new_status):
+
+    # ---- BLIND gate (issue #15): PROVEN requires independent verifier sign-off
+    effective_status = new_status
+    gate_msg = ""
+    if new_status == "PROVEN":
+        try:
+            from blind_gate import check_proven_gate, STAMP
+            worker_id = _extract_worker_id(register, claim_id)
+            allowed, effective_status, gate_reason = check_proven_gate(
+                claim_id, ws / "facts", worker_id=worker_id)
+            if not allowed:
+                gate_msg = f" [BLIND GATE: {gate_reason}]"
+        except ImportError:
+            pass  # blind_gate not available — fail open (no gate)
+
+    if not _set_claim_status(reg_path, claim_id, effective_status):
         return (False, f"could not rewrite status for {claim_id} in claim-register.yaml")
     event_type = None
-    if new_status in ("PROVEN", "VERIFIED"):
+    if effective_status in ("PROVEN", "VERIFIED"):
         event_type = "claim_promoted"
-    elif new_status in ("NEGATIVE", "REFUTED"):
+    elif effective_status in ("NEGATIVE", "REFUTED"):
         event_type = "claim_refuted"
     if event_type:
         record_event(ws, {"source_module": "claim_migrator", "event_type": event_type,
-                          "payload": {"claim_id": claim_id, "status": new_status}})
-    return (True, f"claim {claim_id} → {new_status} by {actor} (register updated"
-                  + (f"; ledger {event_type}" if event_type else ""))
+                          "payload": {"claim_id": claim_id, "status": effective_status}})
+    return (True, f"claim {claim_id} → {effective_status} by {actor} (register updated"
+                  + (f"; ledger {event_type}" if event_type else "")
+                  + gate_msg)
 
 
 def main(argv: list[str] | None = None) -> int:
