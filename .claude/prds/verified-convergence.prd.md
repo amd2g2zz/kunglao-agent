@@ -53,10 +53,10 @@ kunglao-agent 的"CONVERGED"今天**不保证产出可信**——实测当前 wo
 
 | # | Milestone | Outcome(用户可见) | Status | Plan |
 |---|---|---|---|---|
-| 1 | PROVEN = verified | 每条 PROVEN 必有 BLIND 签字(98%→100%);无签字自动降级 STAMP | pending | — |
-| 2 | CONVERGED = complete + verified | 收敛需 primary_q 全 BLIND 答 + 零 orphan + 零假收敛 | pending | — |
-| 3 | Loop 跑到真收敛 | heartbeat 不假死,门 1/2 能在无人监督下 fire 到真完成 | pending | — |
-| 4 | 现存 46 假 PROVEN 清账 | 批量补验证 / 标 UNVERIFIED / 重跑,诚实暴露历史假自主 | pending | — |
+| 1 | PROVEN = verified | 每条 PROVEN 必有 BLIND 签字(98%→100%);无签字自动降级 STAMP | complete | PR#20 `4c2109e` |
+| 2 | CONVERGED = complete + verified | 收敛需 primary_q 全 BLIND 答 + 零 orphan + 零假收敛 | complete | PR#21 `92a97cb` |
+| 3 | Loop 跑到真收敛 | heartbeat 不假死,门 1/2 能在无人监督下 fire 到真完成 | complete | PR#18 `16d4e72` |
+| 4 | 现存 46 假 PROVEN 清账 | 批量补验证 / 标 UNVERIFIED / 重跑,诚实暴露历史假自主 | complete(基线) | PR#19 `c39134e`;audit-2026-08-10.md(46 条分类:22 unverified / 24 has-evidence-no-signoff / 1 verified) |
 
 ## Open Questions
 
