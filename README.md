@@ -98,22 +98,162 @@ flowchart TD
 
 ---
 
-## Quick start
+## Installation
+
+### Prerequisites
+
+| Requirement | Why | Version |
+|---|---|---|
+| **Claude Code** | kunglao-agent is a Claude Code skill (runs as the orchestrator loop) | latest |
+| **Python** | Scripts, hooks, gates, evidence tooling | 3.11+ |
+| **uv** | Python env + dependency management (`pyproject.toml` / `uv.lock`) | latest |
+| **git** | Worktree-based dev + state checkpointing | 2.30+ |
+| **Ghidra** (optional) | Static decompile/disasm via MCP bridge or `analyzeHeadless.bat` | 11+ |
+| **Analysis VM** (optional) | Dynamic dispatch (sample execution / Frida / x64dbg) — never on host | Windows 10/11 |
+
+### 1. Install the skill
+
+kunglao-agent is a Claude Code skill. Clone it into the skills directory:
 
 ```bash
-# 1. Install (uv-managed Python 3.11+)
-uv sync
-
-# 2. Initialize a workspace for a sample
-python scripts/kunglao-init.py <workspace>   # scaffolds + mounts sample + seeds claims
-
-# 3. Activate hooks + heartbeat (orchestrator-only)
-python scripts/hook_activation.py <ws> --wire-up
-python scripts/hook_activation.py <ws> --heartbeat-on
-
-# 4. Enter the convergence loop (the orchestrator runs /kunglao-agent)
-#    Every tick: convergence_check → dispatch → verify → repeat until CONVERGED
+git clone https://github.com/amd2g2zz/kunglao-agent.git ~/.claude/skills/kunglao-agent
+cd ~/.claude/skills/kunglao-agent
+uv sync                       # restore .venv with cryptography / pyyaml / capstone / pefile / ...
 ```
+
+Install the worker + verifier subagents (they live alongside, in `~/.claude/agents/`):
+
+```bash
+# kunglao-worker (maker) + kunglao-redteam (BLIND checker) ship with the repo
+cp agents/kunglao-worker.md ~/.claude/agents/
+cp agents/kunglao-redteam.md ~/.claude/agents/
+# optional specialists
+cp agents/ghidra-light.md floss-filter.md pefile-signature.md cti-correlator.md ~/.claude/agents/
+```
+
+### 2. Wire hooks (orchestrator-only, per workspace)
+
+The enforcement gates (worker_budget, heartbeat, dispatch_gate) are PreToolUse/PostToolUse hooks. They are **not** auto-installed — wire them explicitly per workspace:
+
+```bash
+python ~/.claude/skills/kunglao-agent/scripts/hook_activation.py <workspace> --wire-up      # idempotent hook registration
+python ~/.claude/skills/kunglao-agent/scripts/hook_activation.py <workspace> --heartbeat-on # register .heartbeat.json
+python ~/.claude/skills/kunglao-agent/scripts/hook_activation.py <workspace> --reconcile    # rebuild active_workers from worktrees
+```
+
+### 3. (Optional) MCP servers + VM
+
+| Capability | MCP server | Notes |
+|---|---|---|
+| Static decompile / xref / disasm | `ghidra` | bridge at `127.0.0.1:8089`; falls back to `analyzeHeadless.bat` |
+| Dynamic stepping | `x64dbg` | **VM-only** — `connect_remote(host=<VM IP>, ...)`; host channel forbidden |
+| Runtime hooking | `frida` | **VM-only** — `192.168.20.128:1337` |
+| CTI lookup | `virustotal` | needs `VT_API_KEY` |
+
+VM control goes through the `vmr-shell` skill (`VMR_SERVER_URL=http://192.168.20.128:9876`). Sample execution on the host is blocked by the `block_malware_exec` hook — this is intentional.
+
+---
+
+## Usage
+
+### Workspace layout
+
+kunglao-agent operates on a **workspace** (one per sample engagement):
+
+```
+<workspace>/
+├── bins/<sha256>              # the sample (gitignored, never committed)
+├── task_spec.yaml             # primary_questions / scope / constraints / depth / success_criteria
+├── claim-register.yaml        # all claims (C-NN) with status (OPEN/PROVEN/STAMP/...)
+├── claim_deps.yaml            # claim DAG + competitor_groups (for ACH)
+├── facts/                     # byte-anchored facts (F-NNN-*.md) + _INDEX.md
+├── evidence/                  # raw evidence + _index.json (eid → path + sha256 + reliability)
+├── notes/                     # analysis notes (note-NNN.md)
+├── runs/                      # worker-status, ledgers, .heartbeat.json, digest.md
+└── CLAUDE.md                  # workspace rules (V1–V5: CTI non-truth, sandbox non-conclusion, ...)
+```
+
+### Initialize
+
+```bash
+# scaffold a fresh workspace + mount sample + seed claims from task_spec primary_questions
+python scripts/kunglao-init.py <workspace>
+```
+
+`kunglao-init` is idempotent (detects `[initialized]` marker; `--force` to rebuild with backup).
+
+### Run the convergence loop
+
+In Claude Code, invoke the skill:
+
+```
+/kunglao-agent
+```
+
+or describe the task — it auto-triggers on phrases like *"分析这个样本"* / *"kunglao-agent stuck"* / *"不收敛"*. The orchestrator then runs autonomously:
+
+1. **Cold start** — reads `claim-register.yaml` + `facts/_INDEX.md` + digest (≤38K tokens, not full progress).
+2. **Every tick** — `convergence_check.py <workspace>` returns a decision:
+
+   | Decision | Exit | Orchestrator action |
+   |---|---|---|
+   | `DISPATCH` | 1 | `priority_ratio` ranks open claims → dispatch top specialist worker |
+   | `DISPATCH_VERIFIER` | 2 | dispatch BLIND verifier for partial facts |
+   | `SATURATED` | 3 | poll stuck workers, do not idle |
+   | `BLOCKED` | 4 | resolve blockers (self-recovery L1→L2→L3), then re-check |
+   | `CONVERGED` | 0 | loop done — write report |
+
+3. **Worker** (maker) gathers byte evidence → writes `facts/F-NNN.md` + `runs/worker-status-<id>.md`.
+4. **Verifier** (kunglao-redteam, BLIND) forward-derives from raw evidence → sign-off or `REFUTE` (→ dissent).
+5. **Gates** enforce: `provenance_gate` (cite raw not derivation), `blind_gate` (PROVEN needs sign-off), `completeness_gate` (CONVERGED needs all primary_q PROVEN + zero orphan).
+6. **Loop** until `CONVERGED` — output is a byte-proven, independently-verified, evidence-indexed fact base.
+
+### Monitor
+
+```bash
+# at-a-glance progress
+python scripts/progress_report.py <workspace>
+
+# is the loop actually converging, or spinning?
+python scripts/convergence_health.py <workspace>
+
+# worker status (all workers)
+cat <workspace>/runs/worker-status-w*.md
+
+# evidence coverage (BLIND + source reliability)
+python tools/measure_blind_coverage.py <workspace> --reliability
+```
+
+### Dispatch contract (when the orchestrator dispatches)
+
+```
+[T1 tools=grep,xxd] claim C-007 <task>     # prefix parsed by worker_budget hook
+```
+- `T1`/`T2`/`T3` = cheap / medium / expensive (emulation / VM)
+- `tools=` = the tools the worker may use (enforced)
+- Gates: ≤3 concurrent workers, per-claim cap, tier gate, heartbeat-alive, self-cap detection.
+
+### Example output
+
+A `PROVEN` fact (`facts/F061-c401-ep-recheck.md`):
+
+```yaml
+id: F061
+status: VERIFIED-BY-W01-static-byte-recheck
+confidence: almost_certain        # ICD-203 7-tier (P4)
+claim_id: C-401
+provenance:
+  - {role: sample, path: bins/<sha>}
+  - {role: capture_log, path: runs/c329-inner-pe.bin}   # cited via evidence/_index.json
+reproduce: |
+  python -c "import struct; d=open('runs/c329-inner-pe.bin','rb').read(); ..."
+verifier_sign_off:                 # BLIND (M1) — required for PROVEN, else STAMP
+  verifier: kunglao-redteam
+  verdict: CONFIRMED
+  derived_via: [struct.parse, pefile, capstone]   # ≥2 independent paths
+```
+
+
 
 ### CLI reference
 
