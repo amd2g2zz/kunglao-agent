@@ -115,3 +115,52 @@ Implementer Sub-agent → Verifier Sub-agent → MCP/Git/Tickets → Human Gate 
 - `design-spec.md` §3.6 — digest 算法(项 1 接线的目标)
 - `refactor-plan.md` 阶段 6/7 — digest/eval 已合 dev(本文件项 1/2 是其后续 wire-up)
 - `references/convergence-loop.md` — v1.9 convergence 行为(本文件评估的对象)
+
+---
+
+## 7. 多 subagent 细化结论(2026-08-10,4 agent 讨论)
+
+派 4 个 subagent(框架专家 / 可靠性 ×2 / YAGNI 怀疑者;RE 域 agent 被 heartbeat gate 拦未补, skeptic 兼盖规模论据)。结论**取代 §4 原 5 项优先级**。
+
+### 7.1 强共识:heartbeat cycle-lock 是唯一真 bug
+
+3 个 agent 独立得出:
+- `heartbeat_touch.py` 用 bare `write_text`(非 `_atomic_write`),4 进程(orchestrator + 3 worker)并发 read-modify-write 同一 `.heartbeat.json`,无 flock/PID/cycle flag → 经典竞态 → 写丢失。
+- hook bump `activity_ts`,但 `check_heartbeat_alive()` 只读 `last_tick_ts`——**两字段从不交叉**。`--heartbeat-on` 后 `setdefault("last_tick_ts")` 永远 no-op。
+- 本次会话 STALE=5267min 拦截 = 此路径的**活症状**,非理论风险。
+- `heartbeat_tick.py` 不检查"上 tick 在跑";两 cron tick 重叠 → 同时 reconcile `analysis_state.txt [active_workers]` → dispatch gate 读旧值 → **WORKER_CAP=3 不变量被绕过**。
+- 这是 v1.9.12/13/18/25/26 "心跳停了"反复症状的新变体(机制从 cron-未注册 → 并发写丢失/双轨不交叉)。
+
+### 7.2 砍(与已有机制重叠)
+
+| 原项 | 砍因 | 已有机制 |
+|---|---|---|
+| #2 loop-audit | 95% 改名,§5 自己承认"升级 acceptance 成仪表盘" | acceptance_check.py(5 条 binary gate) |
+| #5 STATE↔契约 drift | 90% 重叠,僵尸 active_workers 已被 v1.9.18 修 | plan_drift_detector.py(5 类 drift)+ --reconcile |
+| #3 hill-climbing L4 | LangChain"pivot to L4"是 SaaS 规模论据;单用户偶尔跑样本 ROI 负 | 无(新概念但规模不值) |
+
+### 7.3 冲突裁决
+
+- **L4 优先级**:框架专家主张 #2(LangChain"value compounds")vs skeptic 砍(SaaS-scale fantasy)。**裁决:skeptic 对**——kunglao 单用户偶尔跑样本,failure-registry 数据量不足以喂 L4,L4 defer。
+- **digest 接冷启动**:skeptic 指出 76K→38K 在 1M Opus context 是 3.8% vs 7.6%,非瓶颈。**defer**(Haiku 频繁撞墙才值)。
+- **模式 5 Ralph**:框架专家纠正——CONVERGED=claim 清零 + convergence_check 机械执行 = 强 Ralph(退出由机械检查器定,非自报),**应 ✅**;"问对问题集"隐患是 L4 问题不是 Ralph 语义。
+
+### 7.4 细化后优先级(取代 §4)
+
+| 序 | 项 | 性质 | 决策 |
+|---|---|---|---|
+| **1** | heartbeat cycle-lock + last_tick_ts/activity_ts 双轨合一 | correctness bug(活症状) | **必做** |
+| 2 | triage 质量评估(convergence_check claim 排序/槽位) | 评估盲点(框架专家补) | 做(评估非改码) |
+| — | digest 接冷启动 | 效率非瓶颈(Opus 1M) | defer |
+| — | 3 PENDING gate 失败场景验证 | 软约束 | defer(单用户风险可接受) |
+| 砍 | loop-audit / loop-sync / hill-climbing | 重叠 / SaaS 规模 | 不做 |
+
+### 7.5 被低估的次级风险(reliability#2 补)
+
+- SPINNING gate `_dedup_consecutive` 误折真实 flatline(代码 L98-101 自警)→ 假收敛 → 无界烧钱。
+- Windows + git worktree + antivirus 三重干扰下 mtime 作 liveness signal 不可靠(antivirus 刷新 mtime → 假活跃;git checkout reset mtime → 假僵尸,正在写的 facts 丢失)。
+- heartbeat STALE 级联:block dispatch → ledger 不更新 → convergence_health 读 stale trajectory → false SPINNING → panic-dispatch → 更多无效 token。
+
+### 7.6 0 项全做会崩吗
+
+不会。acceptance_check 守 build、convergence_health 守 spin、plan_drift_detector 守 drift;175 tests green。**但 heartbeat 双轨 bug 是活症状(本会话实测),应单独立项修——这是 §4→§7 细化唯一产出的必做项。**
