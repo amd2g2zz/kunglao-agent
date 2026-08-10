@@ -294,3 +294,78 @@ def test_non_proven_terminal_not_affected(ws_factory):
         assert ok, f"{terminal} must not require BLIND: {msg}"
         reg = yaml.safe_load((ws2 / "claim-register.yaml").read_text(encoding="utf-8"))
         assert {c["id"]: c["status"] for c in reg["claims"]}["C-50"] == terminal
+
+
+# =====================================================================
+# Dissent recording: BLIND REFUTE writes structured dissent (P4, issue #27)
+# =====================================================================
+
+def test_record_dissent_appends_block_to_fact(ws_factory):
+    """REFUTE: record_dissent writes a ```dissent block with required fields."""
+    ws = ws_factory(claims=[{"id": "C-60", "status": "VERIFIED"}])
+    fact_path = _write_fact(ws, "C-60", "# fact body\nsome evidence\n")
+    from blind_gate import record_dissent, extract_dissent
+    record_dissent(
+        fact_path=fact_path,
+        verifier_id="kunglao-redteam-w5",
+        finding="found alt-config at 0x500 contradicting claim",
+        evidence_path="evidence/alt-config.bin",
+    )
+    text = fact_path.read_text(encoding="utf-8")
+    # block must be present
+    assert "```dissent" in text, "dissent block marker not found"
+    # extract and verify fields
+    dissents = extract_dissent(text)
+    assert len(dissents) >= 1, "at least one dissent must be extractable"
+    d = dissents[-1]  # latest dissent
+    assert d["verifier_id"] == "kunglao-redteam-w5"
+    assert "alt-config" in d["finding"]
+    assert d["evidence_path"] == "evidence/alt-config.bin"
+    assert "ts" in d or "timestamp" in d, "dissent must have a timestamp"
+
+
+def test_record_dissent_preserves_original_content(ws_factory):
+    """Dissent append must not destroy existing fact content."""
+    ws = ws_factory(claims=[{"id": "C-61", "status": "VERIFIED"}])
+    original = "# Important Fact\n\nThis is critical evidence.\n"
+    fact_path = _write_fact(ws, "C-61", original)
+    from blind_gate import record_dissent
+    record_dissent(
+        fact_path=fact_path,
+        verifier_id="v2",
+        finding="refuted",
+        evidence_path="evidence/x.txt",
+    )
+    text = fact_path.read_text(encoding="utf-8")
+    assert "Important Fact" in text
+    assert "critical evidence" in text
+
+
+def test_extract_dissent_returns_empty_when_none():
+    """No dissent block → empty list."""
+    from blind_gate import extract_dissent
+    assert extract_dissent("# plain fact\nno dissent") == []
+
+
+def test_extract_dissent_multiple_blocks():
+    """Multiple dissent blocks (re-refutation) → all extracted in order."""
+    from blind_gate import extract_dissent
+    text = (
+        "# fact\n\n"
+        "```dissent\n"
+        "verifier_id: v1\n"
+        "finding: first issue\n"
+        "evidence_path: evidence/a.txt\n"
+        "ts: 2026-08-10T10:00:00Z\n"
+        "```\n\n"
+        "```dissent\n"
+        "verifier_id: v2\n"
+        "finding: second issue\n"
+        "evidence_path: evidence/b.txt\n"
+        "ts: 2026-08-10T11:00:00Z\n"
+        "```\n"
+    )
+    dissents = extract_dissent(text)
+    assert len(dissents) == 2
+    assert dissents[0]["verifier_id"] == "v1"
+    assert dissents[1]["verifier_id"] == "v2"

@@ -85,6 +85,66 @@ def _validate_fields(fields: dict) -> dict | None:
     return fields
 
 
+def record_dissent(
+    fact_path: Path,
+    verifier_id: str,
+    finding: str,
+    evidence_path: str,
+    ts: str | None = None,
+) -> None:
+    """Append a structured dissent block to a fact file (ICD-203 #8).
+
+    Called when a BLIND verifier returns REFUTE — the dissent record
+    ensures the disagreement is formally documented, not silently dropped.
+
+    The dissent is written as a fenced ```dissent yaml block at the end
+    of the fact file, preserving all existing content.
+    """
+    if ts is None:
+        ts = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    block = (
+        f"\n```dissent\n"
+        f"verifier_id: {verifier_id}\n"
+        f"finding: {finding!r}\n"
+        f"evidence_path: {evidence_path}\n"
+        f"ts: {ts}\n"
+        f"```\n"
+    )
+    existing = fact_path.read_text(encoding="utf-8", errors="replace")
+    fact_path.write_text(existing + block, encoding="utf-8")
+
+
+def extract_dissent(fact_text: str) -> list[dict]:
+    """Extract all ```dissent blocks from fact text.
+
+    Returns a list of dicts (one per dissent block), ordered by appearance.
+    Returns empty list if no dissent blocks found.
+    """
+    if not fact_text or "```dissent" not in fact_text:
+        return []
+    results = []
+    for m in re.finditer(r"```dissent\s*\n(.*?)```", fact_text, re.DOTALL):
+        block_text = m.group(1).strip()
+        fields: dict[str, str] = {}
+        for line in block_text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, _, val = line.partition(":")
+            key = key.strip()
+            val = val.strip()
+            # Remove surrounding quotes if present (yaml-style repr)
+            if val.startswith("'") and val.endswith("'"):
+                val = val[1:-1]
+            elif val.startswith('"') and val.endswith('"'):
+                val = val[1:-1]
+            if key:
+                fields[key] = val
+        if fields:
+            results.append(fields)
+    return results
+
+
 def find_fact_file(facts_dir: Path, claim_id: str) -> Path | None:
     """Locate the fact file for a claim: facts/<claim_id>.md, or any *.md
     whose first 2000 chars contain the claim_id."""
