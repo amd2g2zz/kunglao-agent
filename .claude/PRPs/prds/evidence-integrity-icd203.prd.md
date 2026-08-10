@@ -119,11 +119,11 @@ Evidence Index + Provenance Gate + 源可靠性评级 —— 这三件事让证�
 
 | # | Phase | Description | Status | Parallel | Depends | PRP Plan |
 |---|---|---|---|---|---|---|
-| 1 | Evidence Index | 建 `evidence/_INDEX` + 注册现有 raw(eid/path/hash/type/provenance) | pending | - | - | - |
-| 2 | Provenance Gate | fact provenance 必引索引→完整原始;派生拒(M1 blind_gate 模式扩展) | pending | - | 1 | - |
-| 3 | ICD-203 Source Reliability | 每条 evidence Admiralty 评级(机械默认+verifier 校) | pending | with 4 | 1 | - |
-| 4 | Probability Ladder + Dissents | confidence 扩 7 档 + BLIND REFUTE 结构化 dissent | pending | with 3 | 1 | - |
-| 5 | 46 Re-verify via Index | 经索引批量溯 46 假 PROVEN 原始 + 补 BLIND/标 UNVERIFIED | pending | - | 1, 2 | - |
+| 1 | Evidence Index | 建 `evidence/_INDEX` + 注册现有 raw(eid/path/hash/type/provenance) | complete | - | - | PR#28 `86b6ae1` |
+| 2 | Provenance Gate | fact provenance 必引索引→完整原始;派生拒(M1 blind_gate 模式扩展) | complete | - | 1 | PR#29 `5728d90` |
+| 3 | ICD-203 Source Reliability | 每条 evidence Admiralty 评级(机械默认+verifier 校) | complete | with 4 | 1 | PR#31 `e78e064` |
+| 4 | Probability Ladder + Dissents | confidence 扩 7 档 + BLIND REFUTE 结构化 dissent | complete | with 3 | 1 | PR#30 `676f83b` |
+| 5 | 46 Re-verify via Index | 经索引批量溯 46 假 PROVEN 原始 + 补 BLIND/标 UNVERIFIED | complete(审计) | - | 1, 2 | PR#32 `121162b`(47 PROVEN:10 has-raw / 18 derivation-only / 19 unverifiable) |
 
 ### Phase Details
 
