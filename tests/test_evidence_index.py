@@ -1,6 +1,7 @@
-"""tests/test_evidence_index.py — evidence index builder (P1, PRD evidence-integrity).
+"""tests/test_evidence_index.py — evidence index builder (P1 + P3 ICD-203 source reliability).
 
 RED: build_evidence_index 扫 raw 证据(排除派生),eid→path+sha256 可溯。
+P3: 每条 entry 带 source_reliability(Admiralty A-F/1-6)。
 """
 from __future__ import annotations
 
@@ -24,6 +25,23 @@ def _fixture(ws: Path) -> Path:
     _write(ws / "analysis_artifacts" / "vm_runtime" / "summary.json", '{"net": 0}')  # 派生
     return ws
 
+
+def _fixture_rich(ws: Path) -> Path:
+    """Fixture with diverse evidence types for reliability testing."""
+    _write(ws / "evidence" / "capture-c206.txt", "capture data")
+    _write(ws / "evidence" / "trace-syscall.txt", "trace data")
+    _write(ws / "evidence" / "memory-dump.bin", b"\x00" * 64)
+    _write(ws / "evidence" / "decompile-func.txt", "decompiled code")
+    _write(ws / "evidence" / "disasm-main.txt", "disasm output")
+    _write(ws / "evidence" / "yara-packer.json", '{"yara": "upx"}')
+    _write(ws / "evidence" / "tool-output.json", '{"tool": "die"}')
+    _write(ws / "evidence" / "cti-vt.json", '{"vt": "report"}')
+    _write(ws / "evidence" / "sandbox-cape.json", '{"cape": "report"}')
+    _write(ws / "evidence" / "network.pcap", b"\xd4\xc3\xb2\xa1" * 10)
+    return ws
+
+
+# ── P1 tests (existing) ──────────────────────────────────────────────
 
 def test_scan_registers_raw_excludes_derivation(tmp_path):
     ws = _fixture(tmp_path)
@@ -83,3 +101,109 @@ def test_type_classification(tmp_path):
     trc = [p for p in by_path if "full_trace" in p][0]
     assert by_path[cap] in ("capture", "text"), f"capture type: {by_path[cap]}"
     assert by_path[trc] in ("trace", "text"), f"trace type: {by_path[trc]}"
+
+
+# ── P3 ICD-203 source reliability tests ──────────────────────────────
+
+def test_source_reliability_field_exists(tmp_path):
+    """Every index entry must have a source_reliability field."""
+    ws = _fixture_rich(tmp_path)
+    idx = bei.build_index(ws)
+    assert len(idx["entries"]) > 0, "fixture should produce entries"
+    for e in idx["entries"]:
+        assert "source_reliability" in e, f"缺 source_reliability: {e}"
+        val = e["source_reliability"]
+        assert isinstance(val, str), f"source_reliability 应为 str: {val}"
+        assert len(val) == 2, f"source_reliability 应为 2 字符(如 A1): {val}"
+        assert val[0] in "ABCDEF", f"source_reliability 首字符应 A-F: {val}"
+        assert val[1] in "123456", f"source_reliability 次字符应 1-6: {val}"
+
+
+def test_mechanical_defaults_by_type(tmp_path):
+    """Mechanical default source_reliability assigned by evidence type."""
+    ws = _fixture_rich(tmp_path)
+    idx = bei.build_index(ws)
+    by_type = {}
+    for e in idx["entries"]:
+        by_type[e["type"]] = e["source_reliability"]
+
+    # Direct observation types -> A1
+    assert by_type.get("capture") == "A1", f"capture should be A1, got {by_type.get('capture')}"
+    assert by_type.get("trace") == "A1", f"trace should be A1, got {by_type.get('trace')}"
+    assert by_type.get("dump") == "A1", f"dump should be A1, got {by_type.get('dump')}"
+    assert by_type.get("pcap") == "A1", f"pcap should be A1, got {by_type.get('pcap')}"
+
+    # Tool-derived from artifact -> A2
+    assert by_type.get("decompile") == "A2", f"decompile should be A2, got {by_type.get('decompile')}"
+    assert by_type.get("disasm") == "A2", f"disasm should be A2, got {by_type.get('disasm')}"
+
+    # Tool pattern match -> B2
+    assert by_type.get("yara-scan") == "B2", f"yara-scan should be B2, got {by_type.get('yara-scan')}"
+
+    # CTI third-party -> C5
+    assert by_type.get("cti") == "C5", f"cti should be C5, got {by_type.get('cti')}"
+
+    # Sandbox -> D3
+    assert by_type.get("sandbox") == "D3", f"sandbox should be D3, got {by_type.get('sandbox')}"
+
+
+def test_custom_rel_map_overrides_default(tmp_path):
+    """--rel reliability_map.yaml overrides mechanical defaults."""
+    ws = _fixture_rich(tmp_path)
+    rel_map = {
+        "by_type": {
+            "json": "A1",
+            "cti": "B2",
+        },
+    }
+    idx = bei.build_index(ws, rel_map=rel_map)
+    by_type = {}
+    for e in idx["entries"]:
+        by_type.setdefault(e["type"], []).append(e["source_reliability"])
+
+    # json overridden to A1
+    if "json" in by_type:
+        assert all(r == "A1" for r in by_type["json"]), \
+            f"json overridden to A1, got {by_type['json']}"
+    # cti overridden to B2
+    if "cti" in by_type:
+        assert all(r == "B2" for r in by_type["cti"]), \
+            f"cti overridden to B2, got {by_type['cti']}"
+
+
+def test_eid_specific_override_takes_precedence(tmp_path):
+    """eid-specific override in rel_map takes precedence over type-specific."""
+    ws = _fixture_rich(tmp_path)
+    idx_default = bei.build_index(ws)
+    target_eid = idx_default["entries"][0]["eid"]
+    target_type = idx_default["entries"][0]["type"]
+
+    rel_map = {
+        target_eid: "F6",
+        "by_type": {
+            target_type: "B2",
+        },
+    }
+    idx = bei.build_index(ws, rel_map=rel_map)
+    for e in idx["entries"]:
+        if e["eid"] == target_eid:
+            assert e["source_reliability"] == "F6", \
+                f"eid-specific should be F6, got {e['source_reliability']}"
+
+
+def test_reliability_in_written_json(tmp_path):
+    """Written _index.json includes source_reliability in every entry."""
+    ws = _fixture_rich(tmp_path)
+    bei.build_and_write(ws)
+    data = json.loads((ws / "evidence" / "_index.json").read_text("utf-8"))
+    for e in data["entries"]:
+        assert "source_reliability" in e, f"written entry missing source_reliability: {e}"
+
+
+def test_reliability_column_in_md(tmp_path):
+    """Written _INDEX.md includes source_reliability column."""
+    ws = _fixture_rich(tmp_path)
+    bei.build_and_write(ws)
+    md = (ws / "evidence" / "_INDEX.md").read_text("utf-8")
+    assert "source_reliability" in md or "reliability" in md.lower(), \
+        "MD should mention source_reliability"
