@@ -14,11 +14,15 @@ Outputs (human + --json):
   unverified: N-M    # PROVEN claims lacking sign-off (= STAMP candidates)
   coverage: M/N      # ratio [0.0, 1.0]
 
+With --reliability, instead reports ICD-203 source_reliability coverage
+of evidence/_index.json entries (P3 metric).
+
 Exit 0 always — this is a measurement tool, not a gate.
 
 Usage:
   python tools/measure_blind_coverage.py <workspace>
   python tools/measure_blind_coverage.py <workspace> --json
+  python tools/measure_blind_coverage.py <workspace> --reliability
 """
 from __future__ import annotations
 
@@ -29,8 +33,10 @@ from pathlib import Path
 
 # scripts/ is on sys.path via pytest.ini pythonpath; for standalone CLI add it.
 _SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
-if str(_SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS))
+_TOOLS = Path(__file__).resolve().parent
+for _p in (_SCRIPTS, _TOOLS):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 import yaml  # noqa: E402
 
@@ -89,13 +95,72 @@ def measure(ws: Path) -> dict:
     }
 
 
+def measure_reliability(ws: Path) -> dict:
+    """Measure ICD-203 source_reliability coverage in evidence/_index.json.
+
+    Returns dict with: total, with_reliability, missing, coverage,
+    breakdown (per-type count + per-reliability-code count).
+    """
+    idx_path = ws / "evidence" / "_index.json"
+    if not idx_path.exists():
+        return {
+            "total": 0,
+            "with_reliability": 0,
+            "missing": 0,
+            "coverage": 0.0,
+            "breakdown": {},
+        }
+    data = json.loads(idx_path.read_text(encoding="utf-8"))
+    entries = data.get("entries", [])
+    total = len(entries)
+    with_rel = sum(1 for e in entries if e.get("source_reliability"))
+    missing = total - with_rel
+    coverage = with_rel / total if total > 0 else 0.0
+
+    by_type: dict[str, int] = {}
+    by_code: dict[str, int] = {}
+    for e in entries:
+        t = e.get("type", "unknown")
+        by_type[t] = by_type.get(t, 0) + 1
+        code = e.get("source_reliability", "(missing)")
+        by_code[code] = by_code.get(code, 0) + 1
+
+    return {
+        "total": total,
+        "with_reliability": with_rel,
+        "missing": missing,
+        "coverage": round(coverage, 4),
+        "by_type": by_type,
+        "by_code": by_code,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="Measure BLIND verifier coverage of PROVEN claims")
     ap.add_argument("workspace", type=Path, help="workspace root")
     ap.add_argument("--json", action="store_true", dest="as_json",
                     help="machine-readable JSON output")
+    ap.add_argument("--reliability", action="store_true",
+                    help="report ICD-203 source_reliability coverage instead")
     args = ap.parse_args(argv)
+
+    if args.reliability:
+        result = measure_reliability(args.workspace)
+        if args.as_json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        print(f"Total evidence entries: {result['total']}")
+        print(f"With source_reliability: {result['with_reliability']}")
+        print(f"Missing: {result['missing']}")
+        pct = result["coverage"] * 100
+        print(f"Coverage: {pct:.1f}%")
+        if result.get("by_code"):
+            print()
+            print("By Admiralty code:")
+            for code in sorted(result["by_code"]):
+                print(f"  {code}: {result['by_code'][code]}")
+        return 0
 
     result = measure(args.workspace)
 
