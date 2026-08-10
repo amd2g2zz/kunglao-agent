@@ -319,6 +319,60 @@ def compare_register_change(reg_path: Path, before: dict[str, str] | None,
     return True, 'ok'
 
 
+# ---------- BLIND verifier gate for PROVEN (issue #15 / PRD M1) ----------
+# Even the orchestrator cannot write PROVEN to a claim whose fact file lacks
+# a valid verifier_sign_off block. This catches orchestrator bypasses (direct
+# register edits that skip claim_migrator). The formal gate lives in
+# scripts/blind_gate.py; this function is the hook-side backstop.
+
+def compare_register_change_proven_gate(
+    reg_path: Path, before: dict[str, str] | None,
+    agent_name: str, facts_dir: Path
+) -> tuple[bool, str]:
+    """Check that any newly-PROVEN claim has independent BLIND sign-off.
+
+    Unlike compare_register_change (which exempts the orchestrator from the
+    worker self-promotion guard), this gate applies to ALL actors including
+    the orchestrator: PROVEN requires verifier_sign_off, period.
+    """
+    if before is None:
+        return True, 'no-before snapshot'
+    after = _claim_statuses(reg_path)
+    if after is None:
+        return True, 'register unreadable'
+    # find claims that became PROVEN
+    newly_proven = [cid for cid, st in after.items()
+                    if before.get(cid) != st and st == 'PROVEN']
+    if not newly_proven:
+        return True, 'no PROVEN promotions'
+    # check BLIND gate for each
+    try:
+        sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
+        from blind_gate import check_proven_gate
+    except ImportError:
+        return True, 'blind_gate unavailable (fail open)'
+    register_text = reg_path.read_text(encoding='utf-8', errors='replace')
+    import re as _re
+    violations = []
+    for cid in newly_proven:
+        worker_id = None
+        m = _re.search(rf"- id:\s*{_re.escape(cid)}\b(.*?)(?=\n-\s*id:|\Z)",
+                       register_text, _re.DOTALL)
+        if m:
+            for key in ('worker_id', 'last_dispatched_worker'):
+                wm = _re.search(rf"\b{key}:\s*(\S+)", m.group(1))
+                if wm and wm.group(1).strip().lower() not in ('null', 'none', '~'):
+                    worker_id = wm.group(1).strip().strip("'\"")
+                    break
+        allowed, effective, reason = check_proven_gate(cid, facts_dir, worker_id=worker_id)
+        if not allowed:
+            violations.append(f'{cid}: {reason}')
+    if violations:
+        return False, (f'BLIND GATE: PROVEN without independent verifier sign-off — '
+                       f'{"; ".join(violations)}. Downgrade to STAMP or obtain BLIND sign-off.')
+    return True, f'{len(newly_proven)} PROVEN promotion(s) with valid BLIND sign-off'
+
+
 def register_worker(path: Path, entry: dict) -> None:
     text = path.read_text(encoding='utf-8') if path.exists() else ''
     workers = read_active_workers(path) + [entry]
@@ -525,10 +579,23 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
     hb_skill = _skill / 'runs' / '.heartbeat.json'
 
     def _age(hb_path: Path):
+        # F1 (#14): liveness = max(last_tick_ts, activity_ts) — tool 活跃(activity_ts)
+        # 即使 cron 不 tick(last_tick_ts stale)也算 alive。修 v1.9.36 语义分裂
+        # (hook bump activity_ts 但 gate 只读 last_tick_ts → fix 没修 gate)。
         try:
             data = json.loads(hb_path.read_text(encoding='utf-8'))
-            last = datetime.fromisoformat(data.get('last_tick_ts', '').replace('Z', '+00:00'))
-            return (datetime.now(timezone.utc) - last), data.get('last_tick_ts', '')
+            parsed = []
+            for k in ('last_tick_ts', 'activity_ts'):
+                v = data.get(k, '')
+                if v:
+                    try:
+                        parsed.append((datetime.fromisoformat(v.replace('Z', '+00:00')), v))
+                    except ValueError:
+                        pass
+            if not parsed:
+                return None, ''
+            dt, s = max(parsed, key=lambda x: x[0])  # most recent = best liveness
+            return (datetime.now(timezone.utc) - dt), s
         except Exception:
             return None, ''
 
@@ -544,19 +611,15 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
                 '  python <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n'
                 '  CronCreate */5 * * * * <heartbeat_loop_prompt.py output>\n'
                 '§6.1b v1.9.28: dispatching a task != monitoring started.')
-    try:
-        data = json.loads(hb.read_text(encoding='utf-8'))
-        last_str = data.get('last_tick_ts', '')
-        last = datetime.fromisoformat(last_str.replace('Z', '+00:00'))
-    except Exception as exc:
+    age, last_str = _age(hb)
+    if age is None:
         return (False,
-                f'heartbeat file unreadable ({exc}) — re-register with --heartbeat-on')
-    age = datetime.now(timezone.utc) - last
+                'heartbeat file unreadable / no parseable timestamps — re-register with --heartbeat-on')
     if age > timedelta(minutes=35):
         return (False,
                 f'heartbeat STALE ({int(age.total_seconds()//60)} min > 35) — cron not '
-                f'ticking. Re-register: --heartbeat-on + CronCreate /loop 5m.')
-    return (True, f'heartbeat alive (last tick {last_str})')
+                f'ticking AND no recent tool activity. Re-register: --heartbeat-on + CronCreate /loop 5m.')
+    return (True, f'heartbeat alive (last activity {last_str})')
 
 
 def pre_check(payload: dict, paths: dict) -> int:

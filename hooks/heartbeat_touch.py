@@ -42,7 +42,11 @@ def main() -> int:
             data = json.loads(hb.read_text(encoding="utf-8"))
             data["activity_ts"] = utc_now()
             data.setdefault("last_tick_ts", data["activity_ts"])  # legacy readers
-            hb.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            # F2 (#14): 原子写 (tmp→replace) 替 bare write_text, 消除 RC3 并发竞态
+            # (orchestrator + N worker 并发触发此 hook 时无写丢失)。
+            tmp = hb.with_suffix(hb.suffix + ".tmp")
+            tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            tmp.replace(hb)
             return 0
         except Exception as exc:  # noqa: BLE001 — never break the tool call
             print(f"heartbeat_touch: heartbeat refresh failed ({exc})",

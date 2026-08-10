@@ -183,6 +183,86 @@ def _count_facts(workspace: Path) -> int:
 
 LEDGER_NAME = ".convergence_ledger.jsonl"
 
+# STAMP = claimed-but-unverified (from blind_gate.py M1). These are NOT PROVEN.
+NON_PROVEN_ANSWER = {"STAMP", "UNVERIFIED"}
+
+
+def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) -> list:
+    """Find terminal claims that have no answers_question linking to a primary_question.
+
+    An orphan = a claim in TERMINAL status with no `answers_question` field.
+    Only checked when primary_questions exist (if the workspace doesn't use
+    the primary_questions feature, all claims are inherently question-less
+    and that's fine).
+
+    Returns list of {"id": ..., "status": ...} dicts for orphan terminal claims.
+    """
+    if primary_question_ids is not None and not primary_question_ids:
+        # Workspace has primary_questions: [] (feature not used) — skip orphan check
+        return []
+    out = []
+    for c in (reg.get("claims") or []):
+        status = (c.get("status") or "UNKNOWN").upper()
+        if status not in TERMINAL:
+            continue
+        aq = c.get("answers_question")
+        if not aq:
+            out.append({"id": c.get("id"), "status": status})
+    return out
+
+
+def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
+    """Find primary_questions that have NO PROVEN answering claim.
+
+    A primary_question is "verified" only when a claim with
+    answers_question == q.id has status == PROVEN (BLIND-verified per M1).
+    STAMP, UNVERIFIED, VERIFIED, NEGATIVE etc. do NOT satisfy — M2 requires
+    BLIND-verified answers.
+
+    Returns list of {"question": q_id, "answering_claims": [...]} dicts.
+    """
+    pqs = task_spec.get("primary_questions") or []
+    if not pqs:
+        return []
+
+    # Extract question IDs (support both "qid: description" dict and plain string forms)
+    pq_ids = []
+    for q in pqs:
+        if isinstance(q, dict):
+            pq_ids.extend(q.keys())
+        elif isinstance(q, str):
+            pq_ids.append(q)
+
+    claims = reg.get("claims") or []
+    unverified = []
+    for qid in pq_ids:
+        answering = [
+            {"id": c.get("id"), "status": (c.get("status") or "UNKNOWN").upper()}
+            for c in claims
+            if c.get("answers_question") == qid
+        ]
+        has_proven = any(a["status"] == "PROVEN" for a in answering)
+        if not has_proven:
+            unverified.append({"question": qid, "answering_claims": answering})
+    return unverified
+
+
+def _load_task_spec(workspace: Path) -> dict:
+    """Load task_spec.yaml for primary_questions. Returns {} if missing."""
+    return _load_yaml(workspace / "task_spec.yaml")
+
+
+def _pq_ids(task_spec: dict) -> set:
+    """Extract the set of primary_question IDs from task_spec."""
+    pqs = task_spec.get("primary_questions") or []
+    ids = set()
+    for q in pqs:
+        if isinstance(q, dict):
+            ids.update(q.keys())
+        elif isinstance(q, str):
+            ids.add(q)
+    return ids
+
 
 def _append_ledger(workspace: Path, d: dict) -> None:
     """Append one state snapshot per call. convergence_health.py reads the trajectory.
@@ -225,12 +305,19 @@ def _failure_blocked(workspace: Path) -> list:
 
 def decide(workspace: Path) -> dict:
     reg = _load_yaml(workspace / "claim-register.yaml")
+    task_spec = _load_task_spec(workspace)
+    pq_ids = _pq_ids(task_spec)
+
     opens = _open_claims(reg)
     partials = _partial_facts(workspace)
     active, stuck = _scan_active_workers(workspace)
     free_slots = max(0, WORKER_CAP - active)
     blockers = _active_blockers(workspace)
     failure_blocked_ids = _failure_blocked(workspace)
+
+    # M2 completeness gate: check before declaring CONVERGED
+    orphans = _orphan_terminal_claims(reg, pq_ids if pq_ids is not None else None)
+    unverified_pqs = _unverified_primary_questions(reg, task_spec)
 
     blocked_claims = [c for c in opens if c["blocked"]]
     # unblocked_open = open, not infra-blocked, AND not failure-analysis-blocked
@@ -239,8 +326,23 @@ def decide(workspace: Path) -> dict:
 
     # Decision matrix (order matters)
     if not opens and not partials:
-        decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
-            "No open claims, no partial facts. Loop is done — write the report."
+        # M2 completeness gate: CONVERGED requires primary_questions all PROVEN
+        # AND zero orphan terminal claims. Otherwise downgrade.
+        if orphans:
+            orphan_ids = [o["id"] for o in orphans]
+            decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
+                f"Cannot CONVERGE: {len(orphans)} orphan terminal claim(s) {orphan_ids} " \
+                f"have no answers_question — link them to a primary_question or reopen."
+        elif unverified_pqs:
+            uv_ids = [u["question"] for u in unverified_pqs]
+            decision, exit_code, action = "SATURATED", EXIT_SATURATED, \
+                f"Cannot CONVERGE: primary_questions {uv_ids} lack PROVEN answering claims " \
+                f"(need BLIND-verified PROVEN, not STAMP/unverified). " \
+                f"Dispatch verifier or rework answering claims."
+        else:
+            decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
+                "No open claims, no partial facts. All primary_questions PROVEN, zero orphans. " \
+                "Loop is done — write the report."
     elif unblocked_open and free_slots:
         decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
             f"Run priority.py and dispatch the top claim. {len(unblocked_open)} unblocked open claim(s), {free_slots} free slot(s)."
@@ -257,6 +359,10 @@ def decide(workspace: Path) -> dict:
     elif opens and not unblocked_open:
         decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
             f"All {len(opens)} open claim(s) are blocked. Resolve blockers: {blockers or 'none on disk'}."
+    else:
+        # Fallback (should not normally reach here)
+        decision, exit_code, action = "SATURATED", EXIT_SATURATED, \
+            "Unexpected state — investigate manually."
 
     return {
         "decision": decision,
@@ -274,6 +380,9 @@ def decide(workspace: Path) -> dict:
         "worker_cap": WORKER_CAP,
         "stuck_workers": stuck,
         "active_blockers": blockers,
+        # M2 completeness diagnostics
+        "orphan_claims": orphans,
+        "unverified_primary_qs": unverified_pqs,
     }
 
 
