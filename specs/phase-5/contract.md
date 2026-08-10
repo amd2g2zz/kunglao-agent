@@ -162,4 +162,4 @@ tick(ws):
 1. 全部新增测试绿 + 全量回归绿(`python -m pytest -q -p no:cacheprovider`): 本阶段 5 条 + 原 143 条不回归(test_kunglao_init 4P+1S 在)
 2. `schemas/verify-output.json` / `schemas/tick-output.json` 对 kunglao-verify / kunglao-monitor 输出通过 jsonschema 校验
 3. E5.1: verify/record 为旁路新 CLI(kunglao.py 等旧入口零改动); E5.2 reconciler 留后续; E5.3 旧通道只读由 claim_migrator maker-checker 门禁体现
-4. 约束: 不碰 SKILL.md/references/hooks/kunglao.py/convergence_check.py/priority.py/priority_ratio.py/method_router.py/kunglao-decide.py/test_kunglao_init.py/test_contract_docs.py/test_suite_health.py/tools/; 不 git commit
+4. 约束: 不碰 SKILL.md/references/hooks/kunglao.py/convergence_check.py/priority.py/priority_ratio.py/kunglao-decide.py/test_kunglao_init.py/test_contract_docs.py/test_suite_health.py/tools/; 不 git commit
