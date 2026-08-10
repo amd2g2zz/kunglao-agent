@@ -525,10 +525,23 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
     hb_skill = _skill / 'runs' / '.heartbeat.json'
 
     def _age(hb_path: Path):
+        # F1 (#14): liveness = max(last_tick_ts, activity_ts) — tool 活跃(activity_ts)
+        # 即使 cron 不 tick(last_tick_ts stale)也算 alive。修 v1.9.36 语义分裂
+        # (hook bump activity_ts 但 gate 只读 last_tick_ts → fix 没修 gate)。
         try:
             data = json.loads(hb_path.read_text(encoding='utf-8'))
-            last = datetime.fromisoformat(data.get('last_tick_ts', '').replace('Z', '+00:00'))
-            return (datetime.now(timezone.utc) - last), data.get('last_tick_ts', '')
+            parsed = []
+            for k in ('last_tick_ts', 'activity_ts'):
+                v = data.get(k, '')
+                if v:
+                    try:
+                        parsed.append((datetime.fromisoformat(v.replace('Z', '+00:00')), v))
+                    except ValueError:
+                        pass
+            if not parsed:
+                return None, ''
+            dt, s = max(parsed, key=lambda x: x[0])  # most recent = best liveness
+            return (datetime.now(timezone.utc) - dt), s
         except Exception:
             return None, ''
 
@@ -544,19 +557,15 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
                 '  python <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n'
                 '  CronCreate */5 * * * * <heartbeat_loop_prompt.py output>\n'
                 '§6.1b v1.9.28: dispatching a task != monitoring started.')
-    try:
-        data = json.loads(hb.read_text(encoding='utf-8'))
-        last_str = data.get('last_tick_ts', '')
-        last = datetime.fromisoformat(last_str.replace('Z', '+00:00'))
-    except Exception as exc:
+    age, last_str = _age(hb)
+    if age is None:
         return (False,
-                f'heartbeat file unreadable ({exc}) — re-register with --heartbeat-on')
-    age = datetime.now(timezone.utc) - last
+                'heartbeat file unreadable / no parseable timestamps — re-register with --heartbeat-on')
     if age > timedelta(minutes=35):
         return (False,
                 f'heartbeat STALE ({int(age.total_seconds()//60)} min > 35) — cron not '
-                f'ticking. Re-register: --heartbeat-on + CronCreate /loop 5m.')
-    return (True, f'heartbeat alive (last tick {last_str})')
+                f'ticking AND no recent tool activity. Re-register: --heartbeat-on + CronCreate /loop 5m.')
+    return (True, f'heartbeat alive (last activity {last_str})')
 
 
 def pre_check(payload: dict, paths: dict) -> int:
