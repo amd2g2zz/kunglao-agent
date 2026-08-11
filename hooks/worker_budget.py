@@ -488,8 +488,24 @@ def _read_all_claims(path: Path) -> list[dict]:
 
 # ---------- checks ----------
 
-def check_workers_lt_3(state_path: Path) -> tuple[bool, str]:
-    n = len(read_active_workers(state_path))
+def check_workers_lt_3(paths: dict) -> tuple[bool, str]:
+    """Single source of truth (issue #37): count ACTIVE workers from status files
+    (lib_kunglao.scan_active_workers), NOT the analysis_state.txt [active_workers]
+    cache — reconcile can clear or leave that cache stale, so reading it made the
+    gate and convergence_check disagree on the active count.
+
+    FAIL_OPEN: workspace key missing or scan raises -> allow (a hook must never
+    block dispatch on its own scan failure; that would deadlock the loop).
+    """
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return True, ''
+    try:
+        sys.path.insert(0, str(_SKILL_ROOT / 'hooks'))
+        from lib_kunglao import scan_active_workers
+        n, _stuck = scan_active_workers(Path(ws))
+    except Exception:
+        return True, ''  # FAIL_OPEN — never block dispatch on scan failure
     if n >= MAX_WORKERS:
         return (False, f'active_workers={n} >= {MAX_WORKERS}')
     return (True, f'active_workers={n}')
@@ -696,7 +712,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
     tier, tools, cid = parse_dispatch(desc)
     checks = [
-        ('workers', check_workers_lt_3(paths['state'])),
+        ('workers', check_workers_lt_3(paths)),
         ('cap', check_promotion_attempts(paths['register'], cid)),
         ('tools', check_tools_allowed(tools, paths['task_spec'])),
         ('hostchan', check_host_forbidden_tools(tools)),
