@@ -125,6 +125,16 @@ def _build_pulse(ws: Path) -> tuple[str, str | None]:
             flags.append(f"partial={d['partial_count']}")
         if d.get("active_blockers"):
             flags.append(f"blockers={d['active_blockers']}")
+        # DLQ (#36): surface quarantined (DEAD) claim count. Fail-open — a
+        # missing module or register must never break the convergence pulse.
+        try:
+            sys.path.insert(0, str(SKILL_DIR / "scripts"))
+            import dead_letter as _dl  # sibling in scripts/
+            _quarantined = _dl.count_dead(ws)
+            if _quarantined:
+                flags.append(f"quarantined={_quarantined}")
+        except Exception:
+            pass
         if flags:
             lines.append("flags: " + "; ".join(flags))
 

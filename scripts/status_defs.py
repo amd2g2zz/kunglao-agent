@@ -7,13 +7,18 @@ place and every consumer picks it up. See
 
 Sets
 ----
-TERMINAL (7 values):
-    {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE", "SUPERSEDED"}
+TERMINAL (8 values):
+    {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE", "SUPERSEDED", "DEAD"}
     Any status in TERMINAL means the claim needs no further work.
     SUPERSEDED added for #59: a claim closed by replacement (superseded_by)
     is terminal and must not be re-dispatched. Previously absent, so
     convergence_check._open_claims / priority._is_open counted superseded
     claims as OPEN and the loop DISPATCHed on already-closed claims.
+    DEAD added for #36: a claim killed by the DLQ (promotion_attempts >= 3,
+    poison / exhausted) is terminal and must not be re-dispatched. Without
+    it, the convergence loop re-ranked exhausted claims every tick, spinning
+    workers on claims that will not close. mark_dead (scripts/dead_letter.py)
+    is the explicit writer; consumers pick up DEAD via this set.
     NOTE: the pre-change scripts were split 5-value (convergence_check /
     priority / priority_ratio / failure_analysis_gate / kunglao_record /
     progress_report: no STALE) vs 6-value (stale_blocker_prune /
@@ -63,7 +68,7 @@ Adding a new status (operating manual, e.g. #36 DEAD)
    hardcoded copy from drifting.
 """
 
-TERMINAL = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE", "SUPERSEDED"}
+TERMINAL = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE", "SUPERSEDED", "DEAD"}
 
 PARTIAL_STATUSES = {"PARTIALLY-VERIFIED", "PARTIAL", "PARTIALLY_VERIFIED"}
 

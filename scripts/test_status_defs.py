@@ -2,7 +2,7 @@
 
 RED phase of the status-defs-safety-net change (GitHub #34). These tests
 pin the contract:
-- TERMINAL is 6-valued (incl. STALE)
+- TERMINAL is 8-valued (incl. STALE, SUPERSEDED, DEAD)
 - PARTIAL_STATUSES / IN_PROGRESS_STATUSES match the pre-existing semantics
 - LedgerLineType distinguishes snapshot (default) from outcome rows
 - No consumer script may redefine these sets
@@ -23,10 +23,10 @@ import status_defs  # noqa: E402
 
 # ---------- TERMINAL ----------
 
-def test_terminal_is_7_valued_with_superseded():
+def test_terminal_is_8_valued_with_superseded_and_dead():
     assert status_defs.TERMINAL == {
         "PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE",
-        "SUPERSEDED",
+        "SUPERSEDED", "DEAD",
     }
 
 
