@@ -55,6 +55,24 @@ a CONFLICT (needs-resolution): `fact_contradiction_gate.py` blocks claim
 promotion to PROVEN (downgrade to STAMP) until a link is added. Same
 conclusion on the same topic = converged, not conflicting.
 
+**INFERENCE-SCOPE convention (#48)**: `verifier_sign_off` MAY carry an
+optional `evidence_path:` field (verifier's own evidence artifact; not
+required, backward compatible). For **inferential** claims (statement or
+fact text matches routing/causal patterns: `routing` / `route` /
+`not on .* path` / `correction` / `corrects F<NN>` / `gate` /
+`0 hits`/`0 occurrences` used as path evidence), the sign-off MUST cover the
+inference itself: its evidence (`evidence_path` / `refute_attempt` /
+`finding`) MUST contain an independent static-evidence marker (`xref`,
+`disasm`, `decompile`, `capstone`, `ghidra`, `ida`, `call graph`,
+`callsite`) and MUST NOT rely on `orchestrator-captured` evidence. A
+byte-anchor-only sign-off (string counts, byte hashes) is insufficient for
+routing/inference conclusions; violation downgrades PROVEN to STAMP
+(`scripts/blind_gate.py::check_inference_blind_scope`). Additionally, when
+the fact reports a negative hit (`0 hits` / `0 occurrences`) AND its
+provenance self-reports an environmental fault (`stalled` /
+`never reconnected` / `未触发` / `timeout`), independent static xref is
+mandatory — the dynamic miss cannot establish a routing conclusion.
+
 ## fact.expected (assignment-class value-assertion convention, #49)
 
 `expected:` is verified byte-exact by `kunglao_verify.py::l1_mechanical`. Two shapes:

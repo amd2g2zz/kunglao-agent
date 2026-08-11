@@ -404,6 +404,14 @@ def compare_register_change_proven_gate(
         have_contradiction_gate = True
     except ImportError:
         have_contradiction_gate = False
+    # inference-scope gate (#48): inferential/routing claims need independent
+    # static sign-off coverage — byte anchors / orchestrator-captured evidence
+    # do not cover the inference (a2b5e25c problem 2, F040).
+    try:
+        from blind_gate import check_inference_blind_scope
+        have_inference_gate = True
+    except ImportError:
+        have_inference_gate = False
     register_text = reg_path.read_text(encoding='utf-8', errors='replace')
     import re as _re
     violations = []
@@ -424,6 +432,11 @@ def compare_register_change_proven_gate(
             c_ok, c_reason = check_proven_contradiction(cid, facts_dir)
             if not c_ok:
                 violations.append(f'{cid}: {c_reason}')
+        if have_inference_gate:
+            i_ok, _, i_reason = check_inference_blind_scope(
+                cid, facts_dir, register_text, worker_id=worker_id)
+            if not i_ok:
+                violations.append(f'{cid}: {i_reason}')
     if violations:
         return False, (f'PROMOTION GATE: PROVEN rejected — '
                        f'{"; ".join(violations)}. Downgrade to STAMP or resolve the blockers.')

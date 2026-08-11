@@ -38,6 +38,22 @@ STAMP = "STAMP"
 # for backward compat with blocks written before verdict was added.
 _REQUIRED_FIELDS = ("verifier_id", "refute_attempt", "sign_off_at")
 
+# ---- inference-scope gate (issue #48, a2b5e25c problem 2) ----
+# A claim is *inferential* when its statement or fact text carries
+# routing/causal patterns: the BLIND sign-off must then cover the inference
+# itself (independent static evidence), not just byte anchors.
+INFERENTIAL_PATTERNS = (
+    r"routing", r"\broute\b", r"not on .* path", r"not on path",
+    r"correction", r"corrects F-?\d+", r"\bgate\b",
+    r"\b0 hits\b", r"\b0 occurrences\b",
+)
+_ZERO_HITS_PATTERNS = (r"\b0 hits\b", r"\b0 occurrences\b")
+_ENV_FAULT_PATTERNS = (r"stalled", r"never reconnected", r"\breconnect",
+                       r"未触发", r"timeout")
+_STATIC_MARKERS = (r"\bxref", r"disasm", r"decompile", r"capstone", r"ghidra",
+                   r"\bida\b", r"call graph", r"callsite")
+_ORCH_CAPTURED = r"orchestrator[- ]captured"
+
 
 def extract_verifier_signoff(fact_text: str) -> dict | None:
     """Parse the verifier_sign_off block from fact text.
@@ -204,3 +220,136 @@ def check_proven_gate(
     return (True, "PROVEN",
             f"BLIND verified by {signoff.get('verifier_id', '?')} "
             f"at {signoff.get('sign_off_at', '?')}")
+
+
+# =====================================================================
+# Inference-scope gate (issue #48) — D1-D4
+# =====================================================================
+
+def is_inferential_claim(statement: str, fact_text: str) -> bool:
+    """True when the claim statement or fact text (first 4000 chars, mirroring
+    find_fact_file's scan window) carries inferential/routing/causal patterns.
+
+    D1: patterns are the mechanical contract (issue keywords verbatim);
+    `0 hits` / `0 occurrences` count as inferential as path evidence.
+    """
+    hay = " ".join([statement or "", (fact_text or "")[:4000]]).lower()
+    return any(re.search(p, hay) for p in INFERENTIAL_PATTERNS)
+
+
+def _has_zero_hits(text: str) -> bool:
+    return any(re.search(p, text.lower()) for p in _ZERO_HITS_PATTERNS)
+
+
+def _has_env_fault(text: str) -> bool:
+    return any(re.search(p, text.lower()) for p in _ENV_FAULT_PATTERNS)
+
+
+def _signoff_evidence_text(signoff: dict) -> str:
+    """D2: sign-off evidence = evidence_path + refute_attempt + finding."""
+    parts = []
+    for key in ("evidence_path", "refute_attempt", "finding"):
+        val = signoff.get(key)
+        if isinstance(val, str):
+            parts.append(val)
+    return " ".join(parts)
+
+
+def _has_static_evidence(text: str) -> bool:
+    """D2.2: ≥1 independent static-evidence marker → coverage."""
+    low = text.lower()
+    return any(re.search(p, low) for p in _STATIC_MARKERS)
+
+
+def _claim_statement(register_text: str, claim_id: str) -> str:
+    """Parse the `statement:` field for a claim from register text.
+
+    Splits the yaml into per-claim blocks (`- id:` / `id:` line starts a new
+    block), matches the target claim, returns its statement (unquoted) or "".
+    """
+    if not register_text:
+        return ""
+    cid = claim_id.strip()
+    blocks = re.split(r"\n(?=\s*-?\s*id:)", register_text)
+    for block in blocks:
+        lines = block.splitlines()
+        if not lines:
+            continue
+        if re.search(r"\bid:\s*" + re.escape(cid) + r"\s*$", lines[0], re.IGNORECASE):
+            m = re.search(r"^\s*statement:\s*(.+)$", block, re.MULTILINE)
+            if m:
+                return m.group(1).strip().strip('"').strip("'")
+            return ""
+    return ""
+
+
+def check_inference_blind_scope(
+    claim_id: str,
+    facts_dir: Path,
+    register_text: str,
+    worker_id: str | None = None,
+) -> tuple[bool, str, str]:
+    """Inference-scope gate for PROVEN promotions (a2b5e25c problem 2, #48).
+
+    Inferential/routing/causal claims need independent static sign-off
+    coverage — byte anchors or orchestrator-captured evidence do not cover
+    the inference. Mirrors check_proven_gate's standalone checks (fact /
+    signoff / self-stamp / REFUTE) so this gate is complete on its own and
+    usable by the register-write backstop.
+
+    D4 check order: fact exists → signoff exists → self-stamp → REFUTE →
+    orchestrator-captured → static markers → env-fault diagnostic.
+
+    Returns (allowed, effective_status, reason) — same contract as
+    check_proven_gate; every failure reason carries uppercase "INFERENCE".
+    """
+    fact_path = find_fact_file(facts_dir, claim_id)
+    if fact_path is None:
+        return (False, STAMP, f"INFERENCE gate: no fact file for {claim_id}")
+    fact_text = fact_path.read_text(encoding="utf-8", errors="replace")
+    statement = _claim_statement(register_text, claim_id)
+    if not is_inferential_claim(statement, fact_text):
+        # RED3: non-inferential claims are outside this gate's scope — the
+        # BLIND gate (check_proven_gate, always run first at both wire points)
+        # governs sign-off existence for them.
+        return (True, "PROVEN",
+                f"INFERENCE gate: non-inferential claim {claim_id} — "
+                f"BLIND byte-anchor sign-off suffices")
+    signoff = extract_verifier_signoff(fact_text)
+    if signoff is None:
+        return (False, STAMP,
+                f"INFERENCE gate: verifier_sign_off missing in {fact_path.name} — "
+                f"claim {claim_id} cannot be PROVEN without independent BLIND verification")
+    if worker_id and signoff.get("verifier_id") == worker_id:
+        return (False, STAMP,
+                f"INFERENCE gate: self-stamp rejected: "
+                f"verifier_id={signoff['verifier_id']!r} == worker_id={worker_id!r} "
+                f"(maker-checker §1b: maker cannot self-certify)")
+    verdict = (signoff.get("verdict") or "CONFIRMED").upper()
+    if verdict == "REFUTE":
+        return (False, STAMP,
+                f"INFERENCE gate: BLIND verifier REFUTED claim {claim_id}: "
+                f"{signoff.get('refute_attempt', '')}")
+
+    evidence_text = _signoff_evidence_text(signoff)
+    if re.search(_ORCH_CAPTURED, evidence_text, re.IGNORECASE):
+        # RED1: orchestrator-captured evidence is not independent coverage
+        return (False, STAMP,
+                f"INFERENCE gate: orchestrator-captured evidence cannot cover an "
+                f"inferential claim ({claim_id}) — require independent static xref")
+    if _has_static_evidence(evidence_text):
+        # RED2 / RED4b: independent static evidence covers the inference
+        return (True, "PROVEN",
+                f"INFERENCE gate: {claim_id} inference covered by independent "
+                f"static evidence: {evidence_text[:120]}")
+    if _has_zero_hits(fact_text) and _has_env_fault(fact_text):
+        # RED4 / a2b5e25c F040: 0-hits observed while the debuggee self-reports
+        # an env fault — the dynamic miss cannot establish a routing conclusion
+        return (False, STAMP,
+                f"INFERENCE gate: environmental negative evidence cannot establish "
+                f"routing ({claim_id}) — 0-hits observed while provenance self-reports "
+                f"env fault; require independent static xref")
+    return (False, STAMP,
+            f"INFERENCE gate: byte-anchor sign-off insufficient for inferential "
+            f"claim {claim_id} — require independent static evidence "
+            f"(xref/disasm/decompile)")

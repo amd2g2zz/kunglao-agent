@@ -204,6 +204,20 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                 gate_msg += f" [CONFLICT GATE: {c_reason}]"
         except ImportError:
             pass  # fact_contradiction_gate not available — fail open (no gate)
+        # ---- inference-scope gate (#48): PROVEN also requires the BLIND
+        # sign-off to cover inferential/routing claims with independent static
+        # evidence — byte anchors or orchestrator-captured evidence do not
+        # cover the inference (a2b5e25c problem 2, F040).
+        try:
+            from blind_gate import check_inference_blind_scope, STAMP
+            worker_id = _extract_worker_id(register, claim_id)
+            i_ok, _, i_reason = check_inference_blind_scope(
+                claim_id, ws / "facts", register, worker_id=worker_id)
+            if not i_ok:
+                effective_status = STAMP
+                gate_msg += f" [INFERENCE GATE: {i_reason}]"
+        except ImportError:
+            pass  # blind_gate not available — fail open (no gate)
 
     if not _set_claim_status(reg_path, claim_id, effective_status):
         return (False, f"could not rewrite status for {claim_id} in claim-register.yaml")
