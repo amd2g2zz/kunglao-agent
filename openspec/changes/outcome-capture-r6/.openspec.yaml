@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-11
+goal: capture verify/red-team verdicts as ledger OUTCOME rows + aggregate soft
+  reward (#35)
