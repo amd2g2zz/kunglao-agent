@@ -7,9 +7,13 @@ place and every consumer picks it up. See
 
 Sets
 ----
-TERMINAL (6 values):
-    {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE"}
+TERMINAL (7 values):
+    {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE", "SUPERSEDED"}
     Any status in TERMINAL means the claim needs no further work.
+    SUPERSEDED added for #59: a claim closed by replacement (superseded_by)
+    is terminal and must not be re-dispatched. Previously absent, so
+    convergence_check._open_claims / priority._is_open counted superseded
+    claims as OPEN and the loop DISPATCHed on already-closed claims.
     NOTE: the pre-change scripts were split 5-value (convergence_check /
     priority / priority_ratio / failure_analysis_gate / kunglao_record /
     progress_report: no STALE) vs 6-value (stale_blocker_prune /
@@ -59,7 +63,7 @@ Adding a new status (operating manual, e.g. #36 DEAD)
    hardcoded copy from drifting.
 """
 
-TERMINAL = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE"}
+TERMINAL = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE", "SUPERSEDED"}
 
 PARTIAL_STATUSES = {"PARTIALLY-VERIFIED", "PARTIAL", "PARTIALLY_VERIFIED"}
 

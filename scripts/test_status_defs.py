@@ -23,9 +23,10 @@ import status_defs  # noqa: E402
 
 # ---------- TERMINAL ----------
 
-def test_terminal_is_6_valued_with_stale():
+def test_terminal_is_7_valued_with_superseded():
     assert status_defs.TERMINAL == {
         "PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE",
+        "SUPERSEDED",
     }
 
 
