@@ -71,6 +71,10 @@ DEFAULT_STALE_MINUTES = 10
 # D3: worker status files fresher than this block the kick (session mid-dispatch).
 # Mirrors lib_kunglao STUCK_MINUTES (20).
 FRESH_WORKER_MINUTES = 20
+# #45: fired-predicate resume prompt bounds — the open-claims list is truncated
+# by priority (priority.rank_claims order) when over either bound.
+DEFAULT_MAX_PROMPT_CHARS = 4000
+DEFAULT_MAX_OPEN_CLAIMS = 15
 
 KICKER_LOCK_FILE = ".kicker.lock"
 KICKER_PROMPT_FILE = ".kicker-prompt.txt"
@@ -342,6 +346,305 @@ def validate_interval(tick_interval_min: int) -> None:
         raise ValueError(f"tick interval must be positive, got {tick_interval_min}")
 
 
+# ---------- #45: fired-predicate resume prompt (RECOVER layer) ----------
+#
+# F4 ("an LLM saying done is not an event", ARC-AGI-3 52-run ablation:
+# goal-abandonment 0.00 -> 1.00 when the external commitment store is
+# removed): a kicked fresh session MUST resume from fired predicates over
+# LOGGED MECHANICAL STATE — the convergence ledger last snapshot, the claim
+# register, the facts index, the worker status files — and NEVER from the
+# dying session's narrative (progress.txt "我正在做...", analysis_state.txt
+# task fields are LLM self-descriptions, not events).
+
+_RESUME_CLAIM_ID_RE = re.compile(r"^-\s+id:\s*(\S+)")
+_RESUME_CLAIM_STATUS_RE = re.compile(r"^\s+status:\s*(\S+)")
+RESUME_LEDGER_NAME = ".convergence_ledger.jsonl"
+
+
+def _ledger_last_snapshot(ws: Path) -> tuple[dict | None, int]:
+    """Return (last SNAPSHOT row, snapshot count) from the convergence ledger.
+
+    OUTCOME rows (status_defs.LedgerLineType contract) are events, never
+    snapshots; unparseable lines are skipped (recovery bias — proceed with
+    what parses). Missing/corrupt ledger -> (None, 0); the prompt still
+    builds from the remaining sources.
+    """
+    try:
+        from status_defs import LedgerLineType, ledger_line_type
+    except ImportError:
+        LedgerLineType, ledger_line_type = None, None
+
+    def _is_snapshot(row: dict) -> bool:
+        if LedgerLineType is None:
+            return row.get("type") != "outcome"
+        return ledger_line_type(row) == LedgerLineType.SNAPSHOT
+
+    p = ws / RESUME_LEDGER_NAME
+    if not p.exists():
+        return None, 0
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None, 0
+    last, round_n = None, 0
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except (ValueError, TypeError):
+            continue
+        if not isinstance(row, dict) or not _is_snapshot(row):
+            continue
+        round_n += 1
+        last = row
+    return last, round_n
+
+
+def _claim_is_open(status, partial_statuses) -> bool:
+    return status == "OPEN" or status in partial_statuses
+
+
+def _register_open_ids(ws: Path) -> list[str]:
+    """OPEN / PARTIALLY-VERIFIED claim ids from claim-register.yaml.
+
+    Line scan (no yaml dep): each `- id: X` starts a claim entry; the
+    entry's `  status: S` line decides membership. IN_PROGRESS claims are
+    excluded — a dispatched claim is covered by the worker status files, not
+    open for dispatch.
+    """
+    p = ws / "claim-register.yaml"
+    if not p.exists():
+        return []
+    try:
+        from status_defs import PARTIAL_STATUSES
+    except ImportError:
+        PARTIAL_STATUSES = {"PARTIALLY-VERIFIED", "PARTIAL", "PARTIALLY_VERIFIED"}
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    out: list[str] = []
+    cur_id, cur_status = None, None
+    for line in lines:
+        m = _RESUME_CLAIM_ID_RE.match(line)
+        if m:
+            if cur_id is not None and _claim_is_open(cur_status, PARTIAL_STATUSES):
+                out.append(cur_id)
+            cur_id, cur_status = m.group(1), None
+            continue
+        s = _RESUME_CLAIM_STATUS_RE.match(line)
+        if s and cur_id is not None:
+            cur_status = s.group(1).upper()
+    if cur_id is not None and _claim_is_open(cur_status, PARTIAL_STATUSES):
+        out.append(cur_id)
+    return out
+
+
+def _in_progress_workers(ws: Path) -> list[str]:
+    """Worker ids from runs/worker-status-*.md whose LAST status line is in-progress.
+
+    Same last-status rule as has_fresh_workers / _scan_active_workers; mtime
+    is NOT a filter — the recovery prompt must surface the dead session's
+    stale in-progress workers so the fresh session can reconcile them.
+    """
+    runs = ws / "runs"
+    if not runs.exists():
+        return []
+    try:
+        files = sorted(runs.glob("worker-status-*.md"))
+    except OSError:
+        return []
+    out = []
+    for p in files:
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        last_status = None
+        for line in text.splitlines():
+            m = _STATUS_RE.search(line)
+            if m:
+                last_status = m.group(1).lower()
+        if last_status == "in-progress":
+            out.append(p.stem.replace("worker-status-", ""))
+    return out
+
+
+def _partial_fact_ids(ws: Path) -> list[str]:
+    """Fact ids from facts/_INDEX.md lines whose 2nd `|` field is PARTIAL-*.
+
+    Mirrors convergence_check._partial_facts (same line format, same
+    errors="replace" — the real index contains non-UTF8 bytes).
+    """
+    idx = ws / "facts" / "_INDEX.md"
+    if not idx.exists():
+        return []
+    try:
+        from status_defs import PARTIAL_STATUSES
+    except ImportError:
+        PARTIAL_STATUSES = {"PARTIALLY-VERIFIED", "PARTIAL", "PARTIALLY_VERIFIED"}
+    out = []
+    try:
+        lines = idx.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return out
+    for line in lines:
+        if "|" not in line:
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) < 2:
+            continue
+        status = parts[1].upper()
+        if any(s in status for s in PARTIAL_STATUSES):
+            out.append(parts[0])
+    return out
+
+
+def _blocker_ids(ws: Path, snapshot: dict | None) -> list[str]:
+    """Ledger blockers; when the snapshot lacks the key, scan blockers/*.md
+    (excluding INVALIDATED — mirrors convergence_check._active_blockers)."""
+    if snapshot is not None and "blockers" in snapshot:
+        return [str(b) for b in (snapshot.get("blockers") or []) if str(b).strip()]
+    bdir = ws / "blockers"
+    if not bdir.exists():
+        return []
+    out = []
+    try:
+        for p in bdir.glob("*.md"):
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if "INVALIDATED" in text.upper():
+                continue
+            out.append(p.stem)
+    except OSError:
+        pass
+    return sorted(out)
+
+
+def _facts_total(ws: Path, snapshot: dict | None) -> int:
+    """Ledger facts_total; when absent, count facts/F*.md from disk."""
+    if snapshot is not None and snapshot.get("facts_total") is not None:
+        return int(snapshot["facts_total"])
+    fdir = ws / "facts"
+    if not fdir.exists():
+        return 0
+    try:
+        return sum(1 for p in fdir.glob("F*.md")
+                   if p.is_file() and p.name.upper().startswith("F"))
+    except OSError:
+        return 0
+
+
+def _priority_ordered_ids(open_ids: list[str], ws: Path) -> list[str]:
+    """Order open ids by priority.rank_claims score desc; unranked keep register order.
+
+    The loop dispatches by THIS ranker (the single sanctioned one), so
+    truncation keeps exactly the claims the loop would dispatch next. The
+    module is optional — any failure falls back to register order (recovery
+    must not depend on optional modules).
+    """
+    try:
+        import priority
+        import yaml
+        reg = {}
+        p = ws / "claim-register.yaml"
+        if p.exists():
+            reg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        deps = {}
+        dp = ws / "claim_deps.yaml"
+        if dp.exists():
+            deps = yaml.safe_load(dp.read_text(encoding="utf-8")) or {}
+        rows = priority.rank_claims(reg, deps, priority.DEFAULT_WEIGHTS)
+        ranked = [r["id"] for r in rows]
+        return ranked + [i for i in open_ids if i not in ranked]
+    except Exception:
+        return open_ids
+
+
+def build_resume_prompt(ws, *,
+                        max_chars: int = DEFAULT_MAX_PROMPT_CHARS,
+                        max_open_claims: int = DEFAULT_MAX_OPEN_CLAIMS) -> str:
+    """#45 RECOVER: fresh-session kick prompt from fired predicates over logged state.
+
+    Reads ONLY mechanical state: the last SNAPSHOT row of the convergence
+    ledger (round number = snapshot count; ts / decision / open_ids /
+    active_workers / blockers / facts_total), OPEN / PARTIALLY-VERIFIED
+    claims from claim-register.yaml, PARTIAL facts from facts/_INDEX.md, and
+    in-progress runs/worker-status-*.md. NEVER reads progress.txt /
+    analysis_state.txt (LLM self-descriptions, not events — research F4:
+    "an LLM saying done is not an event"). The open-claims list is truncated
+    by priority (priority.rank_claims order) when over max_open_claims or
+    when the assembled prompt exceeds max_chars, with an explicit
+    "(+N more truncated by priority)" marker.
+    """
+    ws = Path(ws)
+    snapshot, round_n = _ledger_last_snapshot(ws)
+    reg_ids = _register_open_ids(ws)
+    ledger_ids = [str(i) for i in ((snapshot or {}).get("open_ids") or [])]
+    # register order first (the mechanical truth), then ledger open_ids not
+    # already listed (fired predicates — the issue's RED contract)
+    open_ids = list(reg_ids)
+    for cid in ledger_ids:
+        if cid not in open_ids:
+            open_ids.append(cid)
+    ordered = _priority_ordered_ids(open_ids, ws)
+    total = len(ordered)
+    truncated = 0
+    shown = list(ordered)
+    if max_open_claims > 0 and len(shown) > max_open_claims:
+        shown = shown[:max_open_claims]
+        truncated = total - len(shown)
+
+    workers = _in_progress_workers(ws)
+    blockers = _blocker_ids(ws, snapshot)
+    partials = _partial_fact_ids(ws)
+    facts_total = _facts_total(ws, snapshot)
+
+    if open_ids:
+        next_step = ("按 scripts/priority.py 的 rank_claims 派发 top claim "
+                     "(<=3 workers cap + tier gate); 完成 worker 后验证 facts → "
+                     "更新 claim-register + _INDEX")
+    else:
+        next_step = ("CONVERGED, verify report — 无 open claims; 先跑 convergence "
+                     "checklist (doubt_checker + 随机抽验 1 fact + --heartbeat-check) "
+                     "再宣告完成")
+
+    def _assemble(ids: list[str], dropped: int) -> str:
+        ids_text = ", ".join(ids) if ids else "(none)"
+        marker = f" (+{dropped} more truncated by priority)" if dropped else ""
+        ts = (snapshot or {}).get("ts") or "(no snapshot)"
+        decision = (snapshot or {}).get("decision") or "(no snapshot)"
+        worker_text = ", ".join(workers) if workers else "(none)"
+        blocker_text = ", ".join(blockers) if blockers else "(none)"
+        partial_text = ", ".join(partials) if partials else "(none)"
+        return (
+            f"你正在收敛循环第 {round_n} 轮 — fired-predicate resume (#45): "
+            f"由 logged mechanical state 构造, 绝不读 dying session 的 narrative.\n"
+            f"ledger 末行快照: ts={ts}, decision={decision}\n"
+            f"当前 open claims ({len(ids)}/{total}): {ids_text}{marker}\n"
+            f"active workers (in-progress worker-status-*.md): {worker_text}\n"
+            f"blockers ({len(blockers)}): {blocker_text}\n"
+            f"facts_total: {facts_total}\n"
+            f"partial facts ({len(partials)}): {partial_text}\n"
+            f"\n"
+            f"下一步: {next_step}"
+        )
+
+    prompt = _assemble(shown, truncated)
+    # hard char cap: drop lowest-priority entries until the prompt fits
+    while len(prompt) > max_chars and len(shown) > 1:
+        shown = shown[:-1]
+        truncated = total - len(shown)
+        prompt = _assemble(shown, truncated)
+    if len(prompt) > max_chars and shown:
+        prompt = _assemble([], total)
+    return prompt
+
+
 # ---------- orchestration ----------
 
 def tick(workspace: Path, *,
@@ -395,9 +698,10 @@ def tick(workspace: Path, *,
             print(f"kicker: project hooks ensured ({appended} appended) — {spath}")
         else:
             print(f"kicker: project hooks OK (unchanged) — {spath}")
-        # 4. kick (D4): loop prompt verbatim, staged to a file, delivered via stdin
-        from heartbeat_loop_prompt import build_prompt
-        prompt = build_prompt(str(workspace))
+        # 4. kick (D4): fired-predicate resume prompt (#45), staged to a file,
+        # delivered via stdin — fresh session resumes from mechanical state,
+        # never from the dying session's narrative.
+        prompt = build_resume_prompt(workspace)
         prompt_file = runs / KICKER_PROMPT_FILE
         prompt_file.write_text(prompt, encoding="utf-8")
         if dry_run:
