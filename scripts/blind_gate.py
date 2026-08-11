@@ -47,6 +47,27 @@ INFERENTIAL_PATTERNS = (
     r"correction", r"corrects F-?\d+", r"\bgate\b",
     r"\b0 hits\b", r"\b0 occurrences\b",
 )
+# ---- #56: NEGATIVE-existence conclusions are inferential too ----
+# A "does not exist"/"absent"/"not present" conclusion drawn from a dynamic
+# miss must reach the environmental-negative-evidence diagnostic instead of
+# short-circuiting as non-inferential. Scoped to NEGATIVE conclusions — a
+# positive existence claim ("Foo exists at 0x...") is NOT flagged (no false
+# positives). Word-boundaried to avoid matching "absentee" / "present[ation]".
+_NEGATIVE_EXISTENCE_PATTERNS = (
+    r"does not exist", r"\babsent\b", r"\bnot present\b",
+    r"不存在", r"未发现",
+)
+# ---- #56: environmental-negative-evidence BASIS vocabulary ----
+# #48 recognized only `0 hits`/`0 occurrences`; the F040 incident's
+# 无调用捕获 ("no call captured") trigger and sibling phrasings also indicate
+# a dynamic miss under env fault. Used by the env-fault diagnostic.
+_ENV_NEGATIVE_BASIS_PATTERNS = (
+    r"\b0 hits\b", r"\b0 occurrences\b",
+    r"no call captured", r"no calls observed", r"\bnever called\b",
+    r"无调用捕获", r"未触发",
+)
+# Backward-compat narrow subset (#48 contract); the diagnostic now uses the
+# broader _has_env_negative_basis. Kept so external readers/tests still resolve.
 _ZERO_HITS_PATTERNS = (r"\b0 hits\b", r"\b0 occurrences\b")
 _ENV_FAULT_PATTERNS = (r"stalled", r"never reconnected", r"\breconnect",
                        r"未触发", r"timeout")
@@ -232,13 +253,27 @@ def is_inferential_claim(statement: str, fact_text: str) -> bool:
 
     D1: patterns are the mechanical contract (issue keywords verbatim);
     `0 hits` / `0 occurrences` count as inferential as path evidence.
+    #56: NEGATIVE-existence conclusions (`does not exist`/`absent`/`not
+    present`) are inferential too, so they reach the environmental-negative-
+    evidence diagnostic instead of short-circuiting as non-inferential.
     """
     hay = " ".join([statement or "", (fact_text or "")[:4000]]).lower()
-    return any(re.search(p, hay) for p in INFERENTIAL_PATTERNS)
+    if any(re.search(p, hay) for p in INFERENTIAL_PATTERNS):
+        return True
+    return any(re.search(p, hay) for p in _NEGATIVE_EXISTENCE_PATTERNS)
 
 
 def _has_zero_hits(text: str) -> bool:
+    """Narrow #48 subset (0 hits / 0 occurrences). Kept for backward compat;
+    the env-fault diagnostic uses the broader _has_env_negative_basis (#56)."""
     return any(re.search(p, text.lower()) for p in _ZERO_HITS_PATTERNS)
+
+
+def _has_env_negative_basis(text: str) -> bool:
+    """#56 — broadened environmental-negative-evidence basis: BP 0 hits /
+    0 occurrences / no call captured / no calls observed / 无调用捕获. The
+    F040 incident's self-report vocabulary extends beyond literal `0 hits`."""
+    return any(re.search(p, text.lower()) for p in _ENV_NEGATIVE_BASIS_PATTERNS)
 
 
 def _has_env_fault(text: str) -> bool:
@@ -342,13 +377,15 @@ def check_inference_blind_scope(
         return (True, "PROVEN",
                 f"INFERENCE gate: {claim_id} inference covered by independent "
                 f"static evidence: {evidence_text[:120]}")
-    if _has_zero_hits(fact_text) and _has_env_fault(fact_text):
-        # RED4 / a2b5e25c F040: 0-hits observed while the debuggee self-reports
-        # an env fault — the dynamic miss cannot establish a routing conclusion
+    if _has_env_negative_basis(fact_text) and _has_env_fault(fact_text):
+        # RED4 / a2b5e25c F040 (#56 generalization): a dynamic miss — BP 0
+        # hits / no call captured / no calls observed — while the debuggee
+        # self-reports an env fault cannot establish a routing OR existence
+        # conclusion. Independent static xref is mandatory.
         return (False, STAMP,
                 f"INFERENCE gate: environmental negative evidence cannot establish "
-                f"routing ({claim_id}) — 0-hits observed while provenance self-reports "
-                f"env fault; require independent static xref")
+                f"routing or existence ({claim_id}) — dynamic miss observed while "
+                f"provenance self-reports env fault; require independent static xref")
     return (False, STAMP,
             f"INFERENCE gate: byte-anchor sign-off insufficient for inferential "
             f"claim {claim_id} — require independent static evidence "
