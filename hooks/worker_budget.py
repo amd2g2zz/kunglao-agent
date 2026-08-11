@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -65,6 +66,50 @@ def _load_yaml(path):
     if not path or not Path(path).exists():
         return {}
     return yaml.safe_load(Path(path).read_text(encoding='utf-8')) or {}
+
+
+def _run_py(args, cwd=None):
+    """Run a skill script, fail-open: any subprocess failure -> None."""
+    try:
+        return subprocess.run(
+            [sys.executable] + args,
+            capture_output=True, text=True, timeout=20,
+            cwd=cwd,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+
+
+def check_plan_drift(paths):
+    """v1.9.29: plan-drift gate wired into PreToolUse. FAIL_OPEN on any
+    subprocess/workspace resolution failure — the hook stays usable."""
+    ws = paths.get('workspace')
+    if not ws:
+        return True, ''
+    r = _run_py([str(_SKILL_ROOT / 'scripts' / 'plan_drift_detector.py'),
+                 str(ws), '--active-only'])
+    if r is None:
+        return True, ''
+    if r.returncode == 0:
+        return True, ''
+    return False, f"plan drift detected (rc={r.returncode}): {(r.stderr or r.stdout or '')[:200]}"
+
+
+def check_convergence_health(paths):
+    """v1.9.29: STALLED/SPINNING gate wired into PreToolUse. FAIL_OPEN on any
+    subprocess/workspace resolution failure."""
+    ws = paths.get('workspace')
+    if not ws:
+        return True, ''
+    r = _run_py([str(_SKILL_ROOT / 'scripts' / 'convergence_health.py'),
+                 str(ws)])
+    if r is None:
+        return True, ''
+    if r.returncode == 1:
+        return False, "convergence STALLED — diagnose before dispatching"
+    if r.returncode == 2:
+        return False, "convergence SPINNING — STOP dispatching"
+    return True, ''
 
 
 def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid):
@@ -636,6 +681,10 @@ def pre_check(payload: dict, paths: dict) -> int:
         # v1.9.28: heartbeat MUST be alive before any dispatch — mechanical
         # gate closes the recurring 'dispatch without monitoring' failure.
         ('heartbeat', check_heartbeat_alive(paths['state'])),
+        # v1.9.29: plan drift + convergence health wired in as mechanical
+        # gates (R1/R3 of research-tree r3). FAIL_OPEN inside the checks.
+        ('drift', check_plan_drift(paths)),
+        ('health', check_convergence_health(paths)),
     ]
     for name, (ok, msg) in checks:
         if not ok:
@@ -705,6 +754,7 @@ def _resolve_paths(payload: dict) -> dict:
     for base in candidates:
         if (base / 'analysis_state.txt').exists():
             return {
+                'workspace': str(base),
                 'state': base / 'analysis_state.txt',
                 'register': base / 'claim-register.yaml',
                 'deps': base / 'claim_deps.yaml',
@@ -712,6 +762,7 @@ def _resolve_paths(payload: dict) -> dict:
             }
     base = candidates[0]
     return {
+        'workspace': str(base),
         'state': base / 'analysis_state.txt',
         'register': base / 'claim-register.yaml',
         'deps': base / 'claim_deps.yaml',

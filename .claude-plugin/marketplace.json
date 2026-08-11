@@ -1,0 +1,39 @@
+{
+  "name": "kunglao-agent",
+  "description": "RE orchestrator looper — convergence-driven worker/verifier dispatch for malware-analysis workspaces",
+  "owner": {
+    "name": "hr"
+  },
+  "metadata": {
+    "description": "kunglao-agent RE orchestrator (v1.9): convergence-loop dispatch, worker/verifier separation, maker-checker verification, fact-base convergence"
+  },
+  "plugins": [
+    {
+      "name": "kunglao-agent",
+      "source": "./",
+      "description": "RE orchestrator looper (v1.9) — convergence-driven worker/verifier dispatch with maker-checker verification for malware-analysis workspaces",
+      "version": "1.9.0",
+      "author": {
+        "name": "hr"
+      },
+      "license": "MIT",
+      "keywords": [
+        "reverse-engineering",
+        "malware-analysis",
+        "orchestrator",
+        "verification",
+        "convergence-loop",
+        "maker-checker",
+        "fact-base"
+      ],
+      "category": "workflow",
+      "tags": [
+        "reverse-engineering",
+        "malware-analysis",
+        "orchestrator",
+        "verification"
+      ],
+      "strict": false
+    }
+  ]
+}

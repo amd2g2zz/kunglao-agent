@@ -1,0 +1,27 @@
+{
+  "ts": "2026-08-06T07:21:17Z",
+  "user_settings": "C:\\Users\\hr\\.claude\\settings.json",
+  "project_settings": "C:\\Users\\hr\\.claude\\skills\\.claude\\settings.json",
+  "user_level": {
+    "exists": true,
+    "hooks_segment": true,
+    "present": [
+      "heartbeat_touch.py",
+      "worker_budget.py",
+      "dispatch_gate.py",
+      "worker_pulse.py"
+    ],
+    "missing": []
+  },
+  "project_level": {
+    "exists": false,
+    "hooks_segment": false,
+    "present": [],
+    "missing": [
+      "heartbeat_touch.py",
+      "worker_budget.py",
+      "dispatch_gate.py",
+      "worker_pulse.py"
+    ]
+  }
+}

@@ -25,7 +25,7 @@ from pathlib import Path
 
 import yaml
 
-TERMINAL_STATUSES = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED"}
+from status_defs import TERMINAL as TERMINAL_STATUSES
 
 
 def utc_now() -> datetime:

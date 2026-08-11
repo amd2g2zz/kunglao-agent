@@ -27,6 +27,7 @@ Usage:
 """
 from __future__ import annotations
 import gate_telemetry as _gt
+from status_defs import TERMINAL
 
 import argparse
 import re
@@ -36,8 +37,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
-
-TERMINAL_STATUSES = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE"}
 
 
 def utc_now() -> str:
@@ -55,7 +54,7 @@ def get_closed_claims(workspace: Path) -> set:
     for c in (reg or {}).get("claims", []) or []:
         cid = c.get("id")
         status = (c.get("status") or "").upper()
-        if cid and status in TERMINAL_STATUSES:
+        if cid and status in TERMINAL:
             out.add(cid)
     return out
 

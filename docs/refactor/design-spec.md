@@ -1,4 +1,6 @@
-# kong-agent v2.0 工程设计规格书(修订版)
+# kunglao-agent v2.0 工程设计规格书(修订版)
+
+> **HISTORICAL (2026-08-11)**: 本文档写成时名为 `kong-agent`;技能已更名为 `kunglao-agent`,本文档中的 `kong.py` / `lib_kong.py` 等名称均为历史设计引用,不是当前代码。当前实现见 `scripts/kunglao*.py` + `scripts/hook_activation.py`。此档案仅用于追溯设计意图。
 
 > 修订: 恢复 kong-redteam 对抗验证(修订前被弱化) + 新增 subskill 拆分(用户纠正: 拆分=拆 subskills, 非代码收敛)
 > 修订 2026-08-06: 方法路由 → 资源选择层(kong-select CLI)+ 反馈闭环 + resource-registry 动态注册(8 → 9 CLI)

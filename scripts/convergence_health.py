@@ -204,7 +204,14 @@ def assess(ledger: list) -> dict:
     open_delta = last_open - first_open
     rounds = len(ledger)
 
-    if flatline >= SPINNING_FLATLINE or churn["is_churning"]:
+    # v1.9.30: a converged loop is NOT spinning. SPINNING/STALLED mean open
+    # work is flat — the loop finished (open_count=0) and then sat idle across
+    # sessions is a completed state, not a stuck one. Without this guard, a
+    # finished loop's trailing CONVERGED snapshots trigger flatline >= 8 and
+    # block ALL dispatches (including unrelated research agents).
+    if last_open == 0:
+        verdict, exit_code = "HEALTHY", EXIT_HEALTHY
+    elif flatline >= SPINNING_FLATLINE or churn["is_churning"]:
         verdict, exit_code = "SPINNING", EXIT_SPINNING
     elif flatline >= STALLED_FLATLINE or stuck:
         verdict, exit_code = "STALLED", EXIT_STALLED

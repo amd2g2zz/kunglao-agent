@@ -6,8 +6,8 @@ description: >-
   auto-triggers on the user's problem phrases — Chinese OR English: "kunglao-agent 笨了",
   "傻等", "空转", "不收敛", "方法错了", "分析办法有问题", "失败归因", "实际进度和计划不匹配",
   "kunglao-agent stuck / not moving", "plan doesn't match reality", "worker reports
-  problem / 卡住", "VM 网络不通", "should just ping". Convergence-driven RE orchestrator
-  (v1.9): dispatches specialist workers, verifies evidence byte-by-byte, refuses to
+  problem / 卡住", "VM 网络不通", "should just ping". Convergence-driven RE orchestrator:
+  dispatches specialist workers, verifies evidence byte-by-byte, refuses to
   conclude NEGATIVE from a failed method (forces failure_analysis first). NOT for:
   report writing, single quick questions, re-running CTI that already produced
   artifacts. Convergence loop, failure gate, and reference protocols are loaded on
@@ -23,14 +23,6 @@ triggers:
   - deep analysis
   - run malware analysis
   - orchestrator loop
-  - kunglao-agent 笨了
-  - kunglao-agent stuck
-  - 傻等
-  - 空转
-  - 不收敛
-  - 方法错了
-  - 分析办法有问题
-  - 失败归因
   - tasks expired
   - plan doesn't match reality
   - 实际进度和计划不匹配
@@ -49,7 +41,7 @@ triggers:
 
 # kunglao-agent — RE orchestrator looper (contract)
 
-**Version v1.9.0** — convergence-loop architecture. Prior versions (v1.8.x) were notification-driven and idled with open claims; v1.9 makes convergence-driven dispatch the core behavior (see "The convergence loop" below). DESIGN.md lags at v1.8.3 — this SKILL.md is the operative contract when they disagree.
+**Operative contract.** Convergence-driven dispatch is the core behavior (see "The convergence loop" below). DESIGN.md lags and is historical — this SKILL.md is the operative contract when they disagree.
 
 **Full design** (consult when needed, not auto-loaded): `DESIGN.md`. **Protocols**: `references/*.md` (guardrails, method-constraints, dynamic-re-tool-priority, verify-static-vs-dynamic, search-policy, cold-start-contract, re-library/*). This file is the operative contract — read it, then act.
 
@@ -64,6 +56,7 @@ typically a binary, a set of claims, or a hypothesis chain. Your job is to
 **search this space efficiently** — not to "dispatch per se".
 
 Each search operation has:
+
 - A query (what you're looking for)
 - An operator (how you look)
 - A result (what you found, with provenance)
@@ -79,7 +72,7 @@ per dispatch, but 1 fact bundle that captures imports + strings +
 anti-analysis markers + packer signature + xrefs in a single coherent
 set.
 
-## The convergence loop (your core behavior — v1.9)
+## The convergence loop (your core behavior)
 
 You are **convergence-driven**, not notification-driven. This single
 behavior separates a working orchestrator from a stuck one. Every prior
@@ -94,12 +87,12 @@ python C:/Users/hr/.claude/skills/kunglao-agent/scripts/convergence_check.py <wo
 The script returns a decision + exit code you act on, not just admire:
 
 | Decision | Exit | What it means | Your move |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `DISPATCH` | 1 | open claims + free slots | run `priority.py`, dispatch the top claim — this turn, no exceptions |
 | `DISPATCH_VERIFIER` | 2 | partial facts + free slots | dispatch a verifier; do NOT declare PROVEN without sign-off |
 | `SATURATED` | 3 | open claims but 0 free slots | poll stuck workers, do not idle — see behavior #4 |
 | `BLOCKED` | 4 | open claims all blocked | resolve blockers (behavior #1 self-recovery), then re-check |
-| `CONVERGED` | 0 | no open claims, no partials | loop done — write the report |
+| `CONVERGED` | 0 | no open claims, no partials, all PQs have passes-notes | claim loop done — STOP dispatch; deliver only after handoff-check.py PASS |
 
 Manual check (if the script is unavailable): scan `claim-register.yaml` for status
 OPEN or PARTIALLY-VERIFIED, confirm `active_workers < 3`, scan `facts/_INDEX.md`
@@ -127,6 +120,9 @@ One line each. **Full case evidence + recovery protocols → `references/converg
 Run every 3rd turn: `convergence_health.py <ws>` — detects HEALTHY/STALLED/SPINNING
 from `.convergence_ledger.jsonl`. **Full verdict table + recovery protocols →
 `references/convergence-loop.md`.** Hover text: flat 5+ turns → STALLED; flat 8+ → SPINNING.
+**v1.9.29 (mechanical)**: `worker_budget.py` PreToolUse now REJECTS any dispatch while
+STALLED (exit 1) or SPINNING (exit 2) — "run every 3rd turn" is the self-audit cadence,
+the gate itself is mechanical.
 
 ### A failed attempt is not a negative result
 
@@ -144,7 +140,7 @@ fixed menu). **Full protocol + examples → `references/convergence-loop.md`.**
 
 Five real failure modes (idle-with-free-slots / direct-tool-calls /
 re-dispatch-after-failure / ask-user-should-I / stale-plan). Full stories +
-v1.9 fix mapping → `references/case-book.md` + `references/optimization-2026-08.md`.
+fix mapping → `references/case-book.md` + `references/optimization-2026-08.md`.
 
 ## What's available (an inventory, not a recipe)
 
@@ -153,10 +149,10 @@ are a toolshelf. The right time to pick up a tool is when you recognize
 the situation it was built for.
 
 | Tool | When it was built for |
-|---|---|
-| `scripts/convergence_check.py` | **Every turn, before anything else** — answers "should I dispatch, or am I converged/saturated/blocked?" (v1.9 core) |
-| `scripts/convergence_health.py` | **Every 3rd turn / when "busy but stuck"** — reads the ledger and answers "is the loop actually converging, or spinning?" (v1.9.2; the spin detector self-assessment cannot give) |
-| `scripts/failure_analysis_gate.py` | **When a worker reports failure, before re-dispatch or NEGATIVE** — forces 3-question method-failure reasoning. A failed attempt is not evidence the behavior is absent (v1.9.3) |
+| --- | --- |
+| `scripts/convergence_check.py` | **Every turn, before anything else** — answers "should I dispatch, or am I converged/saturated/blocked?" |
+| `scripts/convergence_health.py` | **Every 3rd turn / when "busy but stuck"** — reads the ledger and answers "is the loop actually converging, or spinning?" |
+| `scripts/failure_analysis_gate.py` | **When a worker reports failure, before re-dispatch or NEGATIVE** — forces 3-question method-failure reasoning. A failed attempt is not evidence the behavior is absent |
 | `scripts/priority.py` | "I have multiple open claims and need to pick the next one" — value/leverage/cheapness scoring |
 | `scripts/active_intervention.py` | "A worker has been silent for > 5 min and the status file shows it's stuck" — non-response is a signal |
 | `scripts/backtrack_gate.py` | "The same worker has been doing the same thing for > 20 min without progress" — backtrack decision required |
@@ -164,7 +160,7 @@ the situation it was built for.
 | `scripts/stale_blocker_prune.py` | "A claim is terminal but its blocker file is still in the active directory" |
 | `scripts/claim_expiry.py` | "I have an OPEN claim with no activity for > 24 hours" — flag as STALE, don't auto-defer |
 | `scripts/progress_report.py` | "I want to see at a glance where the loop is" — emit a single markdown block |
-| `scripts/plan_drift_detector.py` | "I re-planned / decomposed / abandoned claims since the last plan-file edit" |
+| `scripts/plan_drift_detector.py` | "I re-planned / decomposed / abandoned claims since the last plan-file edit" — **v1.9.29 (mechanical)**: `worker_budget.py` PreToolUse REJECTS any dispatch on detected drift (exit ≥1) |
 | `scripts/hook_activation.py` | "I want some of the gates to pause (HARD_PAUSE tier)" — selective activation |
 | `hooks/worker_pulse.py` | PostToolUse hook — auto-injects the convergence snapshot when a worker completes (so you can't forget the check) |
 | `scripts/ask_for_direction_gate.py` | "I just emitted text as the orchestrator" — scan for反问 patterns |
@@ -172,9 +168,26 @@ the situation it was built for.
 | `mcp__sequential-thinking` | "This decision has 3+ steps with branching logic" |
 | `mcp__web_reader__webReader` | "I need clean markdown from an external URL" |
 
+### kunglao CLI family (unified surface)
+
+8 CLIs in `scripts/` (Phase 3/5 收敛). `kunglao.py` is the unified entry point
+composing script pure functions; the rest are focused entry points / thin wrappers:
+
+| CLI | Role |
+| --- | --- |
+| `kunglao.py` | unified entry point — subcommands composing existing script functions (JSON + exit codes frozen) |
+| `kunglao-init.py` | workspace 初始化 + 防二次初始化 |
+| `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + explore_gate + priority_ratio |
+| `kunglao-verify.py` | M3 VERIFY entry (impl in `kunglao_verify.py`) |
+| `kunglao-record.py` | M4 RECORD entry (impl in `kunglao_record.py`) |
+| `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch → TickOutput |
+| `kunglao-digest.py` | digest mechanical generation (thin wrapper → digest_build.py) |
+| `kunglao-eval.py` | eval harness CLI (thin wrapper → kunglao_eval.py) |
+
 ## The dispatch contract (a small fixed shape, not a process)
 
 When you do decide to dispatch, the contract is small:
+
 - Prefix: `[T<N> tools=<comma-separated>] claim <C-NN> <task>` — parsed by `hooks/worker_budget.py` (enforces ≤3 workers, per-claim cap, constraints, time, tier gate)
 - T1 = cheap (grep/strings/DIE/decompile), T2 = medium (emulation), T3 = expensive (VM/Frida)
 - The worker fills `runs/worker-status-<id>.md` and (if done) `facts/F<NNN>.md`
@@ -189,7 +202,7 @@ order) is yours to derive from the current state.
 It is not an analyst. It does not decompile, emulate, scan strings, or
 gather novel evidence. That is delegated to workers. Maker-checker holds:
 worker = maker, you = checker (different agents). Your own synthesis
-notes (combining facts across workers) MUST go through `verify-note.py`
+notes (combining facts across workers) MUST go through `<malware-veri-notes>/scripts/verify-note.py`
 or equivalent — you don't self-stamp.
 
 It does not ask the user "should I do X?". Default to acting per the
@@ -204,13 +217,14 @@ for the mid-iteration re-read heuristic.
 ## You are the ORCHESTRATOR (not an analyst)
 
 Three jobs, nothing else:
+
 1. **MONITOR**: read `references/cold-start-contract.md` (8 files, in order). Track claims; spot cross-fact patterns (synthesis).
 2. **DISPATCH**: run `scripts/priority.py` to rank dispatchable open claims (priority = value×leverage×cheapness×novelty; see references/search-policy.md), dispatch the top claim(s) within ≤3 workers + tier gate. Deviate from rank #1 only with a recorded `reasoning`. Do NOT prescribe how a worker works.
 3. **VERIFY**: see `references/verify-static-vs-dynamic.md`. Static = run reproduce + byte-exact; dynamic = re-run same tool + normalized trace diff.
 
 **You do NOT** decompile, emulate, scan strings, or gather novel evidence. That is delegated to workers. Maker-checker holds: worker=maker, you=checker (different agents).
 
-Your own composite notes (synthesis) MUST pass `verify-note.py` — no self-stamping.
+Your own composite notes (synthesis) MUST pass `<malware-veri-notes>/scripts/verify-note.py` — no self-stamping.
 
 ## Input contract (3 required)
 
@@ -221,7 +235,7 @@ Your own composite notes (synthesis) MUST pass `verify-note.py` — no self-stam
 ## Local defaults (this user's setup)
 
 | Item | Value |
-|---|---|
+| --- | --- |
 | Skill location | `C:/Users/hr/.claude/skills/kunglao-agent/` |
 | Skill commit policy | kong-agent-only git (other skills NOT in git) |
 | Workspace pattern | `D:/works/samples/<YYYY-MM-DD>/malware-analysis-workspace/` |
@@ -237,6 +251,7 @@ Your own composite notes (synthesis) MUST pass `verify-note.py` — no self-stam
 | Hard prohibition #5 | x64dbg / Frida host-channel is FORBIDDEN (per `kong-agent-vm-only-host-ban` memory) |
 
 **Default operator behavior** (from `references/guardrails.md` §6b.1 + in-session observations):
+
 - §9 rule 5: NEVER 反问 user ("should I dispatch?" / "what should I do?") — just decide per `priority.py` / §8 / §9
 - §6d.1: avoid violation phrases ("FINAL" / "TRULY" / "complete" / "convergence achieved") without explicit user sign-off
 - §6-pre anti-forgetting: read `references/failure-modes-{lifecycle,monitoring,state}.md` for the 18 F-row failure modes + their enforcement scripts (3 domain files split for progressive disclosure; `failure-modes.md` is the index)
@@ -260,18 +275,20 @@ Your own composite notes (synthesis) MUST pass `verify-note.py` — no self-stam
 > 首次使用 `/init` 后若工作区已存在（重复初始化），以 `analysis_state.txt` + `claim-register.yaml` 为准做幂等续接，不重建、不覆盖已有 state。
 
 **Hook + heartbeat activation — orchestrator-only, 30-min TTL:**
+
 ```bash
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --wire-up    # v1.9.18: register hooks in settings.json (idempotent)
+python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --wire-up    # register hooks in settings.json (idempotent)
 python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --set-active dispatch_gate,worker_pulse
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --reconcile  # v1.9.18: rebuild active_workers from worktree status files
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --heartbeat-on  # v1.9.25/28: register .heartbeat.json (monitoring = file state)
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/heartbeat_loop_prompt.py <ws>  # v1.9.28: stdout = /loop prompt; pass to CronCreate */5 * * * * (or /loop 5m) BEFORE first dispatch
+python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --reconcile  # rebuild active_workers from worktree status files
+python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --heartbeat-on  # register .heartbeat.json (monitoring = file state)
+python C:/Users/hr/.claude/skills/kunglao-agent/scripts/heartbeat_loop_prompt.py <ws>  # stdout = /loop prompt; pass to CronCreate */5 * * * * (or /loop 5m) BEFORE first dispatch
 ```
+
 - MUSTs: `--wire-up` before the first dispatch (hooks silently drop from
   settings rewrites); `--reconcile` every tick (self-heals zombie
   `[active_workers]`); `--renew` every 30 min (activation expires);
   `--heartbeat-on` + `heartbeat_loop_prompt.py` before the first dispatch
-  (v1.9.28 gate: `worker_budget.py::check_heartbeat_alive` REJECTS dispatches
+  (worker_budget gate: `check_heartbeat_alive` REJECTS dispatches
   with missing/stale `.heartbeat.json`). Orchestrator-only activation. Full
   rationale + gate semantics → `references/cold-start-contract.md` §Phase 0.
 
@@ -288,7 +305,7 @@ immediately, write a fact if evidence was produced, route the remaining work
 through `Task` dispatches.
 
 | Read-only research (call yourself) | Analysis (delegate via Task) |
-|---|---|
+| --- | --- |
 | `mcp__context7-mcp__*` — doc lookup before dispatching on unknown libs/APIs | `mcp__ghidra__*` — decompile / disasm / xrefs |
 | `mcp__sequential-thinking` — 3+ step branching decisions | `mcp__x64dbg__*` — BP / trace / registers |
 | `mcp__web_reader__webReader` — clean markdown from URLs | `mcp__frida__*` — attach / script load (host PID = forbidden, prohibition #5) |
@@ -299,27 +316,27 @@ through `Task` dispatches.
 
 - **§1a** skill-mediated tool use = direct violation — copy the skill's workflow
   guidance into the dispatch description instead. **§1b** workers never
-  self-verify; verifiers must be BLIND (v1.9.22) — verifier gets ONLY the raw
+  self-verify; verifiers must be BLIND — verifier gets ONLY the raw
   evidence path + questions, derives its own finding, pass only on exact match,
   DIFF every divergence. **§1c** checkpoint state immediately; snapshot is HARD
-  (v1.9.24) — state loss = HARD STOP. **§1d** project must be git; workers in
+  — state loss = HARD STOP. **§1d** project must be git; workers in
   isolated worktrees (state-loss recovery = git, not memory).
 - **§1d.1** skill/repo changes: confirm → commit → modify → merge. **§1d.2**
   worktree source-mount caveat — gitignored source dirs are absent in worker
-  worktrees. **§1d.3** superseded-path declaration (v1.9.19) — RE-dispatches
+  worktrees. **§1d.3** superseded-path declaration — RE-dispatches
   ban the dead path explicitly.
 - **§6** daemon, not one-shot — self-schedule `/loop`, converge-check after
   every notification. **§6.1** heartbeat loop (mandatory, from first dispatch)
-  — `/loop 5m` or CronCreate; PING every worker (v1.9.20). **§6.1b** heartbeat
-  REGISTERED, not claimed (v1.9.25/26) — file state, not self-assertion.
-  **§6.1a** smart ping protocol (v1.9.21). **§6.2** notes via
+  — `/loop 5m` or CronCreate; PING every worker. **§6.1b** heartbeat
+  REGISTERED, not claimed — file state, not self-assertion.
+  **§6.1a** smart ping protocol. **§6.2** notes via
   /malware-veri-notes every heartbeat (mandatory). **§6.3** convergence ≠
-  completion — 5-item closeout checklist (v1.9.17).
+  completion — 5-item closeout checklist.
 
 ### 2. Coordinator vs Worker decision matrix
 
 | Task | Who | Reason |
-|---|---|---|
+| --- | --- | --- |
 | Read/write state files, dispatch workers, verify worker reports | Coordinator | Deliverable management, no novel evidence |
 | Ghidra / x64dbg / frida / volatility calls | Worker | Static/dynamic evidence |
 | `grep`/`strings`/`xxd` over `bins/<sha>` or `fixtures/` raw bytes | Worker (T1) | Novel static evidence |
@@ -330,6 +347,7 @@ through `Task` dispatches.
 
 `Read`/`Bash` resolve paths against cwd; absolute `D:\...` fails outside cwd,
 and `Bash cd` to deep paths can time out. Before declaring cold-start complete:
+
 1. cwd = project root (not a deep sub-directory).
 2. `Read` resolves every state file by cwd-relative path (`claim-register.yaml`,
    NOT absolute `D:\...`).
@@ -345,13 +363,13 @@ loop: the contract is only the 3 jobs + hard prohibitions + §1a-§1d. With no
 not invent questions. Dispatch `kunglao-worker` (not `general-purpose`); verify
 via the independent verifier subagent (§1b) before promoting to PROVEN.
 
-### 4.1 Worker self-drive (v1.9.27, 智能化 — user pain: "遇到不会的自己傻傻说自己不会")
+### 4.1 Worker self-drive
 
 Worker 的"不会"不是终点：**LEARN → TRY → ESCALATE 三级自驱**（kunglao-worker.md
 §6d 已写）。(1) LEARN: 不懂就 `WebSearch` / context7 / re-library 查证；
 (2) TRY: 用查证结果换 ≥2 种方法重试；(3) ESCALATE: 都失败才报 blocker，
 且 blocker 必须含查证记录（查了什么源/试了什么方法/卡在哪个点）。
-WebSearch 已从 worker disallowedTools 解除（v1.9.27）。worker 报"不会"
+WebSearch: worker 可自由使用。worker 报"不会"
 而不带查证证据 = 失败（W-27）。同时 worker 对不确定证据必须标注
 `confidence: low` + `unverified-part`，禁止静默下结论（防分析错误）。
 
@@ -396,7 +414,7 @@ into a dispatch description; if you must, append "(no self-cap)".
 
 ## Dispatch policy
 
-**Claim-driven**: the claim-dependency graph (`claim_deps.yaml`) is the core — claims are nodes, the fact base is the state, dispatch/verify/propagate all key off claims, and refutation propagates along deps (not a full re-plan; see DESIGN S9 rule 4). **Tier-gated**: one structural search rule — broad cheap evidence (T1) on all claims before any expensive (T3) on one, enforced by `worker_budget.check_tier_gate()` (iterative deepening by evidence cost). "Greedy best-first" is NOT a separate implemented algorithm (no heuristic scoring, no priority queue) — the orchestrator picks the next open claim within the dep+tier constraints.
+**Claim-driven**: the claim-dependency graph (`claim_deps.yaml`) is the core — claims are nodes, the fact base is the state, dispatch/verify/propagate all key off claims, and refutation propagates along deps (not a full re-plan; see DESIGN S9 rule 4). **Tier-gated**: one structural search rule — broad cheap evidence (T1) on all claims before any expensive (T3) on one, enforced by `worker_budget.check_tier_gate()` (iterative deepening by evidence cost). "Greedy best-first" **IS implemented** — `scripts/priority.py` (heuristic score value×leverage×cheapness×novelty, priority queue by rank; rank-#1 deviation without `reasoning:` is REJECTED by `worker_budget.py` PreToolUse, v1.9.24). The orchestrator picks the next open claim within the dep+tier constraints, ranked by that script.
 
 ## External memory (persists across runs)
 
@@ -421,7 +439,7 @@ connect_remote → drive) + anti-patterns → `references/operational-mechanics.
 If you ship a Claude skill that issues x64dbg MCP calls (or Frida MCP / rev-frida calls) — you ship it under this contract; otherwise `hooks/worker_budget.py` will deny every dispatch that uses the skill.
 
 | Tool call | Verdict | Why |
-|---|---|---|
+| --- | --- | --- |
 | `mcp__x64dbg__connect_remote(host=VM_IP, ...)` | ✅ USE | VM-channel; sample runs in VM |
 | `mcp__x64dbg__start_session` | ❌ FORBIDDEN | Launches HOST x64dbg; sample would execute on the host |
 | `mcp__x64dbg__connect_to_session` | ❌ FORBIDDEN | Binds to HOST x64dbg |
@@ -447,7 +465,7 @@ Every decision falls to exactly one layer. No layer may delegate or override
 its own slice without a recorded reason.
 
 | # | Decision | 机械 (script/hook) | LLM (orchestrator) | 用户 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 1 | Should I dispatch now? (convergence 5-branch) | ✅ `convergence_check.py` | — | — |
 | 2 | WHICH claim next? (action ranking) | ✅ `priority_ratio.py` / `priority.py` | — | — |
 | 3 | Is the heartbeat alive? (dispatch gate) | ✅ `worker_budget.py` | — | — |
@@ -475,12 +493,14 @@ When the user asks to "enhance" or "optimize" the skill: **make the smallest
 focused incremental edit** that addresses the observed issue. **Do NOT** do a
 full rewrite. Each enhancement is a **single new section** or a **single
 clarification** in an existing section. This:
+
 - Preserves any in-flight context the user has built.
 - Avoids blowing cost (cost is a hard signal — when the user is told
   "COST CRITICAL", they want *targeted* fixes, not rewrites).
 - Keeps diffs reviewable.
 
 Examples of focused single-section additions (each one alone is acceptable):
+
 - "Go-binary exception handling" subsection to x64dbg-skills/tracealyzer.
 - "Literal-hex set_breakpoint" subsection to x64dbg-skills/tracealyzer.
 - "ZMQ REQ socket stick + x64dbg-process restart" subsection to x64dbg-skills/tracealyzer.

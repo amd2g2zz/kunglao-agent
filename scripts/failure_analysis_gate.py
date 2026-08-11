@@ -60,7 +60,8 @@ from pathlib import Path
 
 import yaml
 
-TERMINAL = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED"}
+from status_defs import TERMINAL
+
 ANALYSES_DIR = "analyses"
 
 

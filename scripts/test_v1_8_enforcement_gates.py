@@ -431,6 +431,9 @@ def main() -> int:
         "test_f14_stale_blocker",
         "test_f15_stale_claim_expiry",
         "test_f17_plan_drift",
+        # E3.4: DESIGN §8 C0 note-layer gate (T-1a)
+        "test_note_layer_gate_blocks_converged",
+        "test_note_layer_gate_skips_no_pq",
     ]
     tests = [globals()[n] for n in _names]
     fails = []
@@ -537,6 +540,61 @@ def test_f17_plan_drift():
         except (TypeError, AttributeError):
             pass
     print("  [OK ] F17 plan-drift ORPHAN_CLAIM detectable")
+
+
+# ---------- E3.4: DESIGN §8 C0 note-layer gate (T-1a, commit e2f2432) ----------
+
+def test_note_layer_gate_blocks_converged():
+    """§8 C0: PROVEN claims + satisfied claim layer but NO passes-note -> NOT CONVERGED.
+
+    Regression for the premature-delivery root cause: the old claim-layer-only
+    check returned CONVERGED ("write the report") while the note layer was
+    unsatisfied. The gate must downgrade to DISPATCH_VERIFIER (exit 2)."""
+    import convergence_check as cc
+    with tempfile.TemporaryDirectory() as tmp:
+        ws = Path(tmp)
+        (ws / "runs").mkdir()
+        (ws / "notes").mkdir()
+        (ws / "task_spec.yaml").write_text(
+            "primary_questions:\n- id: q1\n  q: q1\n  need: model_selection\n",
+            encoding="utf-8")
+        # claim-layer: q1 answered PROVEN, no orphans, no partials
+        (ws / "claim-register.yaml").write_text(
+            "claims:\n- id: C-1\n  status: PROVEN\n  answers_question: q1\n"
+            "  boundary_type: positive_observation\n  evidence_tier_attempted: 0\n"
+            "  promotion_attempts: 0\n  depends_on: []\n",
+            encoding="utf-8")
+        # note layer: note exists but verify_status=pending (not passes)
+        (ws / "notes" / "01-draft.md").write_text(
+            "---\nid: 01-draft\nclaim_id: C-1\nverify_status: pending\n---\n",
+            encoding="utf-8")
+        d = cc.decide(ws)
+        assert d["decision"] != "CONVERGED", \
+            f"§8 C0: CONVERGED despite no passes-note (note_layer_gaps={d.get('note_layer_gaps')})"
+        assert d["decision"] == "DISPATCH_VERIFIER", f"expected DISPATCH_VERIFIER, got {d['decision']}"
+        assert d["exit_code"] == 2
+        assert d.get("note_layer_gaps") == ["q1"]
+    print("  [OK ] §8 C0: PROVEN claims + no passes-note -> DISPATCH_VERIFIER")
+
+
+def test_note_layer_gate_skips_no_pq():
+    """§8 C0: no primary_questions (feature unused) -> gate skips, no regression."""
+    import convergence_check as cc
+    with tempfile.TemporaryDirectory() as tmp:
+        ws = Path(tmp)
+        (ws / "runs").mkdir()
+        (ws / "task_spec.yaml").write_text(
+            "primary_questions: []\n",
+            encoding="utf-8")
+        (ws / "claim-register.yaml").write_text(
+            "claims:\n- id: C-1\n  status: PROVEN\n  boundary_type: positive_observation\n"
+            "  evidence_tier_attempted: 0\n  promotion_attempts: 0\n  depends_on: []\n",
+            encoding="utf-8")
+        d = cc.decide(ws)
+        assert d["decision"] == "CONVERGED", \
+            f"no-PQ workspace must still converge; got {d['decision']} (gaps={d.get('note_layer_gaps')})"
+        assert d["exit_code"] == 0
+    print("  [OK ] §8 C0: no primary_questions -> gate skipped, CONVERGED preserved")
 
 if __name__ == "__main__":
     sys.exit(main())

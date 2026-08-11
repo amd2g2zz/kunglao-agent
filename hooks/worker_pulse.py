@@ -101,8 +101,10 @@ def _run_py(args: list, ws: Path):
         return None
 
 
-def _build_pulse(ws: Path) -> str:
-    """Compact convergence snapshot: decision + next-up claim + flags."""
+def _build_pulse(ws: Path) -> tuple[str, str | None]:
+    """Compact convergence snapshot: decision + next-up claim + flags.
+    Returns (pulse, decision) — decision is None when convergence_check
+    output is unavailable."""
     lines = ["[worker_pulse] worker completed — convergence pulse (auto):"]
 
     cc = _run_py([str(SKILL_DIR / "scripts" / "convergence_check.py"), str(ws), "--json"], ws)
@@ -140,9 +142,9 @@ def _build_pulse(ws: Path) -> str:
             lines.append("next up: no dispatchable claims (check DECISION above)")
 
     if len(lines) == 1:
-        return ""
+        return "", (d or {}).get("decision")
     lines.append("(decide per convergence-loop; the pulse is a heuristic, not a verdict)")
-    return "\n".join(lines)
+    return "\n".join(lines), (d or {}).get("decision")
 
 
 def main() -> int:
@@ -159,7 +161,13 @@ def main() -> int:
     if not _was_dispatch(payload):
         return 0  # not a kunglao-agent worker completion — silent
 
-    pulse = _build_pulse(ws)
+    pulse, decision = _build_pulse(ws)
+    # v1.9.29 (R5): BLOCKED/SATURATED are mechanical — mark the worker
+    # completion as failed with the pulse as context, so the orchestrator
+    # cannot proceed past a blocked/saturated convergence state.
+    if pulse and decision in ("BLOCKED", "SATURATED"):
+        print(pulse, file=sys.stderr)
+        return 2
     if not pulse:
         return 0
     print(json.dumps({

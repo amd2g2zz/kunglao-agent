@@ -42,10 +42,10 @@ from pathlib import Path
 
 import yaml
 
+from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES
+
 WORKER_CAP = 3
 STUCK_MINUTES = 20
-TERMINAL = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED"}
-PARTIAL_STATUSES = {"PARTIALLY-VERIFIED", "PARTIAL", "PARTIALLY_VERIFIED"}
 
 # Exit codes
 EXIT_CONVERGED = 0
@@ -125,7 +125,7 @@ def _open_claims(reg: dict):
     out = []
     for c in (reg.get("claims") or []):
         status = (c.get("status") or "UNKNOWN").upper()
-        if status not in TERMINAL and status != "IN_PROGRESS":
+        if status not in TERMINAL and status not in IN_PROGRESS_STATUSES:
             out.append({"id": c.get("id"), "status": status, "blocked": bool(c.get("blocked"))})
     return out
 
@@ -212,12 +212,16 @@ def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) 
 
 
 def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
-    """Find primary_questions that have NO PROVEN answering claim.
+    """Find primary_questions that have NO answering claim.
 
-    A primary_question is "verified" only when a claim with
-    answers_question == q.id has status == PROVEN (BLIND-verified per M1).
-    STAMP, UNVERIFIED, VERIFIED, NEGATIVE etc. do NOT satisfy — M2 requires
-    BLIND-verified answers.
+    A primary_question is "verified" when a claim with
+    answers_question == q.id has a terminal status appropriate to the
+    question's need:
+      - model_selection / protocol_description: status == PROVEN
+        (BLIND-verified per M1).
+      - yes_no_with_evidence: any terminal status answering the
+        yes/no question (PROVEN / VERIFIED / NEGATIVE / REFUTED).
+    STAMP, UNVERIFIED, PARTIAL etc. do NOT satisfy.
 
     Returns list of {"question": q_id, "answering_claims": [...]} dicts.
     """
@@ -225,26 +229,75 @@ def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
     if not pqs:
         return []
 
-    # Extract question IDs (support both "qid: description" dict and plain string forms)
-    pq_ids = []
+    # Map question id -> need
+    question_need = {}
     for q in pqs:
         if isinstance(q, dict):
-            pq_ids.extend(q.keys())
+            qid = q.get("id")
+            if qid:
+                question_need[qid] = q.get("need")
         elif isinstance(q, str):
-            pq_ids.append(q)
+            question_need[q] = None
 
     claims = reg.get("claims") or []
     unverified = []
-    for qid in pq_ids:
+    for qid, need in question_need.items():
         answering = [
             {"id": c.get("id"), "status": (c.get("status") or "UNKNOWN").upper()}
             for c in claims
             if c.get("answers_question") == qid
         ]
-        has_proven = any(a["status"] == "PROVEN" for a in answering)
-        if not has_proven:
+        if need == "yes_no_with_evidence":
+            terminal_ok = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED"}
+            satisfied = any(a["status"] in terminal_ok for a in answering)
+        else:
+            satisfied = any(a["status"] == "PROVEN" for a in answering)
+        if not satisfied:
             unverified.append({"question": qid, "answering_claims": answering})
     return unverified
+
+
+def _note_layer_gaps(workspace: Path, pq_ids: set, reg: dict) -> list:
+    """DESIGN §8 C0 note-layer gate: every primary_question needs a note with
+    verify_status=passes whose claim_id answers that question.
+
+    Link chain: note.claim_id -> claim.answers_question -> q_id
+    (notes carry no direct answers_question field; the link is via the claim).
+
+    Returns pq_ids lacking such a note. Skip (return []) when notes/ is absent
+    or no primary_questions are defined (feature unused -> no regression)."""
+    if not pq_ids or not (workspace / "notes").exists():
+        return []
+    import re as _re
+    claim_answers = {}
+    for c in (reg.get("claims") or []):
+        cid = c.get("id")
+        aq = c.get("answers_question")
+        if cid and aq:
+            claim_answers[str(cid).strip()] = str(aq).strip()
+    answered = set()
+    for p in (workspace / "notes").glob("*.md"):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if not text.lstrip().startswith("---"):
+            continue
+        parts = text.split("---", 2)
+        if len(parts) < 3:
+            continue
+        fm = parts[1]
+        vs = _re.search(r"^verify_status:\s*(\S+)", fm, _re.M)
+        cid_m = _re.search(r"^claim_id:\s*([^\n]+)", fm, _re.M)
+        if not (vs and cid_m):
+            continue
+        if vs.group(1).strip().lower() != "passes":
+            continue
+        cid = cid_m.group(1).strip().strip("[]").split(",")[0].strip()
+        qid = claim_answers.get(cid)
+        if qid:
+            answered.add(qid)
+    return [q for q in pq_ids if q not in answered]
 
 
 def _load_task_spec(workspace: Path) -> dict:
@@ -258,7 +311,9 @@ def _pq_ids(task_spec: dict) -> set:
     ids = set()
     for q in pqs:
         if isinstance(q, dict):
-            ids.update(q.keys())
+            qid = q.get("id")
+            if qid:
+                ids.add(qid)
         elif isinstance(q, str):
             ids.add(q)
     return ids
@@ -318,6 +373,8 @@ def decide(workspace: Path) -> dict:
     # M2 completeness gate: check before declaring CONVERGED
     orphans = _orphan_terminal_claims(reg, pq_ids if pq_ids is not None else None)
     unverified_pqs = _unverified_primary_questions(reg, task_spec)
+    # DESIGN §8 C0 note-layer gate: every pq needs a verify_status=passes note
+    pq_note_gaps = _note_layer_gaps(workspace, pq_ids, reg)
 
     blocked_claims = [c for c in opens if c["blocked"]]
     # unblocked_open = open, not infra-blocked, AND not failure-analysis-blocked
@@ -339,10 +396,15 @@ def decide(workspace: Path) -> dict:
                 f"Cannot CONVERGE: primary_questions {uv_ids} lack PROVEN answering claims " \
                 f"(need BLIND-verified PROVEN, not STAMP/unverified). " \
                 f"Dispatch verifier or rework answering claims."
+        elif pq_note_gaps:
+            decision, exit_code, action = "DISPATCH_VERIFIER", EXIT_VERIFY, \
+                f"Note-layer (DESIGN §8 C0) not satisfied: primary_questions {pq_note_gaps} " \
+                f"lack a note with verify_status=passes (link: note.claim_id -> claim.answers_question). " \
+                f"Run verify-note.py before delivery."
         else:
             decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
-                "No open claims, no partial facts. All primary_questions PROVEN, zero orphans. " \
-                "Loop is done — write the report."
+                "Claim loop done — all open claims closed, partials verified, primary_questions PROVEN " \
+                "with verify_status=passes notes. STOP dispatch. Delivery requires handoff-check.py PASS."
     elif unblocked_open and free_slots:
         decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
             f"Run priority.py and dispatch the top claim. {len(unblocked_open)} unblocked open claim(s), {free_slots} free slot(s)."
@@ -383,6 +445,7 @@ def decide(workspace: Path) -> dict:
         # M2 completeness diagnostics
         "orphan_claims": orphans,
         "unverified_primary_qs": unverified_pqs,
+        "note_layer_gaps": pq_note_gaps,
     }
 
 

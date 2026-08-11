@@ -22,8 +22,10 @@ from pathlib import Path
 LEDGER_NAME = "ledger.jsonl"
 EVENT_TYPES = ("fact_written", "fact_verified", "claim_promoted", "claim_refuted",
                "failure_recorded", "intent_opened", "intent_closed")
-# 与 hooks/worker_budget.py TERMINAL_STATUS 同集 (worker_budget L25)
-TERMINAL_STATUSES = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED"}
+# #34: unified 6-value TERMINAL from status_defs (was 5-value local copy
+# annotated "同集 worker_budget"; STALE now terminal — a stale claim needs
+# no further work, so claim_promoted on STALE is a real promotion)
+from status_defs import TERMINAL as TERMINAL_STATUSES
 # 与 hooks/worker_budget.py check_claim_status_change 豁免集一致 (L289)
 ORCHESTRATOR_ACTORS = ("orchestrator", "main", "kunglao-orch")
 

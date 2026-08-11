@@ -61,7 +61,7 @@ collapses the only mechanism that defeats confirmation bias. Rules:
      (verifier filename is reserved).
 2. **Only an independent verifier subagent writes `verify_status`** — a
    fresh `Task` agent with no shared context, dispatched via
-   `scripts/verify-note.py` (or by the orchestrator if absent). The
+   `<malware-veri-notes>/scripts/verify-note.py` (or by the orchestrator if absent). The
    verifier reproduces the worker's `reproduce:` block byte-exact and
    writes `runs/<ts>-verify-<NN>.md` + the fact's `verified_by_run:`.
 3. **Orchestrator enforces at dispatch time**: reject reports with verdict
@@ -70,7 +70,7 @@ collapses the only mechanism that defeats confirmation bias. Rules:
 4. **Exception**: if verifier subagent is genuinely unavailable (budget
    cap, infra down), the worker may write
    `self_caveat: "unverified — needs verifier pass"`. `verify_status`
-   stays `pending`; fact cannot be cited by `handoff-check.py`.
+   stays `pending`; fact cannot be cited by `<malware-veri-notes>/scripts/handoff-check.py`.
 
 §1 is the *tool* boundary (orchestrator vs worker). §1b is the *epistemic*
 boundary (maker vs checker). Both must hold.
