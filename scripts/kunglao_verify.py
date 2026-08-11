@@ -365,7 +365,8 @@ def l2_redteam(claim_id: str, ws: Path, dispatcher=None) -> tuple[str, list[str]
     return (verdict, list(gaps or []))
 
 
-def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False) -> dict:
+def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
+           binary_path: Path | None = None) -> dict:
     """M3.4 状态机(L282-293): lint → L1 → (需语义才 L2 + anchor_check).
 
     #49: assignment-class lint gate 先跑 — 缺 value 断言即 REJECTED(不提升)。
@@ -402,8 +403,32 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False) -
         else:
             overall = "PARTIAL"
 
+    # ---- #50 disasm post-gate (fail-open): VA-anchored value assertions in
+    # the fact must match capstone disassembly of the sample binary byte-exact.
+    # a2b5e25c problem 1 — the fact-layer defense (F015 shape).
+    disasm = None
+    if binary_path is not None:
+        try:
+            import sys as _sys
+            _tools_dir = str(Path(__file__).resolve().parent.parent / "tools")
+            if _tools_dir not in _sys.path:
+                _sys.path.insert(0, _tools_dir)
+            from disasm_constant_check import check_fact_disasm
+            disasm = check_fact_disasm(
+                Path(fact["_path"]).read_text(encoding="utf-8", errors="replace"),
+                binary_path)
+            if not disasm.get("ok"):
+                overall = "REJECTED"
+        except ImportError:
+            disasm = {"ok": True, "skipped":
+                      "disasm_constant_check unavailable (capstone/pefile missing?)"}
+        except Exception as exc:
+            disasm = {"ok": True, "skipped": f"disasm gate failed open: {exc}"}
+
     out = {"fact_id": fact_id, "claim_id": claim_id, "l1": l1, "l2": l2,
            "anchors": anchors, "overall": overall, "lint": lint}
+    if disasm is not None:
+        out["disasm"] = disasm
     runs = ws / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     (runs / f"verify-{fact_id}-{utc_now().replace(':', '')}.json").write_text(

@@ -95,6 +95,20 @@ Assignment-class `expected` lacking concrete value assertions (e.g. only
 NOT promote to PROVEN/VERIFIED — there are no byte-exact targets. The lint runs
 before L1 inside `verify()`; rejection forces `overall = REJECTED`.
 
+### VA-anchored assertions + disasm byte-exact check (#50)
+Assignment-class assertions MAY carry a line VA anchor — `0x<hex>: field=value`
+or `@0x<hex> field=value` — naming the instruction address that establishes the
+value. `tools/disasm_constant_check.py` resolves VA → file offset via pefile
+sections, disassembles the site with capstone, and compares byte-exact: numeric
+claims (hex/decimal) against the instruction immediate; scaled claims (`X*K`)
+require a `mul`/`imul` with immediate K at the site; variable-name claims SKIP
+(not mechanically decidable without dataflow). `kunglao_verify.verify(...,
+binary_path=pe)` runs this as a post-gate (mismatch → `overall = REJECTED`,
+fail-open on missing binary/capstone/pefile); the report pipeline invokes
+`disasm_constant_check.py --report <listing> --reference <fact> --binary <pe>`
+pre-handoff to cross-check the listing against the fact's expected map AND the
+disassembly (the a2b5e25c problem-1 cross-layer defense).
+
 ### migration (`--grace` / `--grace-scan`)
 Existing PROVEN facts whose `expected` is assignment-class-but-no-assertions need
 backfilling. Run `kunglao-verify.py <ws> --grace-scan` to enumerate them, then
