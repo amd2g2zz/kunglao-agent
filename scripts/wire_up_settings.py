@@ -13,9 +13,10 @@ def wire_up_settings() -> int:
 
     Idempotent merge: reads current settings, appends our hook entries under
     PreToolUse/PostToolUse with matcher "Agent" (heartbeat_touch on matcher
-    "Bash"), skips entries that already exist (same command path), preserves
-    every other key. Writes back with 4-space indent. Returns the number of
-    hook entries registered.
+    "Bash"), and under Stop (no matcher — Stop fires on every termination)
+    registers hooks/completion_gate.py (#55). Skips entries that already exist
+    (same command path / basename), preserves every other key. Writes back with
+    4-space indent. Returns the number of hook entries registered.
     """
     settings_path = Path.home() / ".claude" / "settings.json"
     existing = {}
@@ -51,6 +52,25 @@ def wire_up_settings() -> int:
         new.append({"matcher": matcher, "hooks": [_entry(hook_file)]})
         return other + new, True
 
+    def _ensure_stop(entries: list, hook_file: str) -> tuple[list, bool]:
+        """Stop hooks carry no matcher (they fire on every Stop event). Dedupe
+        by command basename across all Stop entries so re-wiring replaces, not
+        stacks. Appends one entry with the single hook."""
+        kept, found = [], False
+        for e in entries:
+            hs = e.get("hooks", [])
+            filtered = []
+            for h in hs:
+                cmd = str(h.get("command", "")).replace("\\", "/")
+                if cmd.rsplit("/", 1)[-1] == hook_file:
+                    found = True  # drop existing — re-added fresh below
+                else:
+                    filtered.append(h)
+            if filtered:
+                kept.append({"hooks": filtered})
+        kept.append({"hooks": [_entry(hook_file)]})
+        return kept, True
+
     count = 0
     pre, added = _ensure(pre, "Agent", "worker_budget.py")
     count += added
@@ -70,8 +90,16 @@ def wire_up_settings() -> int:
     post, added = _ensure(post, "Agent", "state_anchor.py")
     count += added
 
+    # completion_gate (#55): the code-owned completion gate. Stop hook — fires
+    # at session termination, blocks when task-oracle.yaml is unsatisfied.
+    # No matcher (Stop is not a tool-use event); dedupe by command basename.
+    stop = hooks.get("Stop") or []
+    stop, added = _ensure_stop(stop, "completion_gate.py")
+    count += added
+
     hooks["PreToolUse"] = pre
     hooks["PostToolUse"] = post
+    hooks["Stop"] = stop
     existing["hooks"] = hooks
     settings_path.write_text(
         json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"

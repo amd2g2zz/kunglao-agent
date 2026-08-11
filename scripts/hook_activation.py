@@ -65,6 +65,7 @@ ALL_HOOKS = {
     "dispatch_gate",
     "worker_pulse",
     "state_anchor",
+    "completion_gate",
 }
 
 TIER_DEFAULTS = {
