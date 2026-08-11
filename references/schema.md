@@ -46,3 +46,38 @@ competitor_groups: {q3: [C-005a, C-005b]}  # v1.7 mutually-exclusive K claims
 
 ## facts/_INDEX.md
 `F<id> | <status> | <claim_id> | <one-line conclusion>` — one row per fact. Maintained by `scripts/update_index.py`.
+
+## fact.expected (assignment-class value-assertion convention, #49)
+
+`expected:` is verified byte-exact by `kunglao_verify.py::l1_mechanical`. Two shapes:
+
+- **Non-assignment-class** (no bare `=`): verified by whole-blob sha256. Use for
+  hex/sha literals (`0x5a4d`, a 64-hex sha256) and pure API call sequences
+  (`calls Foo(a, b)`).
+- **Assignment-class** (contains a bare `=` that is not `==`/`!=`/`>=`/`<=`/`:=`):
+  MUST list concrete value assertions — each binding a field to a value with its
+  offset/register/immediate source — so `l1_mechanical` has per-field byte-exact
+  targets. Example:
+  `frameRateNum=fps; frameRateDen=1; averageBitRate=bitrate; maxBitRate=bitrate; gopLength=0xFFFFFFFF`.
+  The reproduce command MUST emit each assertion as a `field=value` (or
+  `field: value`) line; `l1_mechanical` compares field by field and reports the
+  mismatched field name on failure (it does NOT reduce the blob to one sha256).
+
+### lint gate (D1/D3)
+Assignment-class `expected` lacking concrete value assertions (e.g. only
+`field=??` placeholders) is **rejected** by `check_assignment_expected` and MUST
+NOT promote to PROVEN/VERIFIED — there are no byte-exact targets. The lint runs
+before L1 inside `verify()`; rejection forces `overall = REJECTED`.
+
+### migration (`--grace` / `--grace-scan`)
+Existing PROVEN facts whose `expected` is assignment-class-but-no-assertions need
+backfilling. Run `kunglao-verify.py <ws> --grace-scan` to enumerate them, then
+either backfill value assertions or run a single verify pass with `--grace`
+(warn-only, non-blocking) for one migration cycle.
+
+### BREAKING (a2b5e25c)
+This is a breaking change for any existing assignment-class fact whose `expected`
+carried only an API sequence or placeholders — it is now rejected until backfilled
+with concrete value assertions. Drive: the a2b5e25c incident where F015 (NVENC
+init) passed L1 with an API-sequence-only `expected` while the field assignments
+were all-reversed; the old whole-blob sha256 hid the per-field mismatch.
