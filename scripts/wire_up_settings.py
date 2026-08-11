@@ -64,6 +64,11 @@ def wire_up_settings() -> int:
     count += added
     post, added = _ensure(post, "Agent", "worker_pulse.py")
     count += added
+    # state_anchor (#44): per-turn mechanical state re-anchor on every worker
+    # completion — the L1 PREVENT layer (F5 forget/refresh). Same matcher /
+    # _entry shape as worker_pulse; idempotent via _ensure's basename dedupe.
+    post, added = _ensure(post, "Agent", "state_anchor.py")
+    count += added
 
     hooks["PreToolUse"] = pre
     hooks["PostToolUse"] = post

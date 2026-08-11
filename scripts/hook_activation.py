@@ -64,6 +64,7 @@ ALL_HOOKS = {
     "memory_capture",
     "dispatch_gate",
     "worker_pulse",
+    "state_anchor",
 }
 
 TIER_DEFAULTS = {
