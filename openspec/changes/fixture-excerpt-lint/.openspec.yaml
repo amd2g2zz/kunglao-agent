@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-11
+goal: "Front-line excerpt-text lint flaging *1000-without-unit: and sVarN
+  speculation; complementary to #50 (byte-exact) and #49 (expected-value)"
