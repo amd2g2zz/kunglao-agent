@@ -270,6 +270,39 @@ def has_fresh_workers(runs_dir: Path, fresh_minutes: int = FRESH_WORKER_MINUTES)
     return False
 
 
+# ---------- #43: should_kick drift branch (alive-but-stuck detection) ----------
+
+def should_kick(workspace: Path) -> bool:
+    """#43 drift branch: kick only when drift PERSISTS beyond the cure window.
+
+    Drift = alive-but-stuck: heartbeat fresh, ledger writing, state frozen —
+    the F2/F3 regime time-based dead-session detection cannot see. Detected
+    at ROTATION_WINDOW (3) frozen signatures; escalated to a kick only when
+    the frozen run spans >= DRIFT_ESCALATE_ROWS (6) rows. The 3->6-row gap
+    is the cure-first window for the #44 state_anchor hook — a drift that
+    heals inside the window must not be recovered by a fresh session. A
+    progressing worker exempts at every level (never kick a session whose
+    workers move).
+
+    Bare-name `lib_kunglao` is ambiguous under pytest (pythonpath = . hooks
+    scripts tools — hooks first, so hooks/worker_budget.py resolves its own
+    hooks/lib_kunglao.py). Production is unambiguous (this script runs with
+    scripts/ at sys.path[0]); the test harness loads the same module by
+    explicit path under the same unique name, so both share one instance.
+    """
+    import importlib.util
+    name = "lib_kunglao_scripts"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent / "lib_kunglao.py"
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
+    return (lib.drift_detected(workspace)
+            and lib.signature_rotation(workspace) >= lib.DRIFT_ESCALATE_ROWS)
+
+
 # ---------- D4/D5: command construction (strings only, never executed here) ----------
 
 def build_kick_command(claude_bin: str) -> list[str]:
