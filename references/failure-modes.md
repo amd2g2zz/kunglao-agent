@@ -14,6 +14,7 @@ The 18 failure modes are split into 3 domain files (progressive disclosure):
 ## When to load which
 
 - User reports dispatch issues (stuck, idle, re-issuing) -> load `failure-modes-lifecycle.md`
+- User reports premature-termination (declared "done" with open items, cost-as-stop-reason, self-invented tiers like 备注级/deferred) -> load the "Termination failures" section of `failure-modes-lifecycle.md` (#54; detector: `scripts/premature_termination_detect.py`)
 - User reports worker-level problems (false PROVEN, ignored help, backtrack needed) -> load `failure-modes-monitoring.md`
 - User reports plan/status/progress issues (stale blockers, drifted plan) -> load `failure-modes-state.md`
 
