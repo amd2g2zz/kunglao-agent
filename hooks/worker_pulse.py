@@ -40,6 +40,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
@@ -47,6 +48,53 @@ DISPATCH_RE = re.compile(
     r"\[T\s*([123])\s+tools\s*=\s*([^\]]*)\]\s*claim\s+([A-Z]+-\d+)",
     re.IGNORECASE,
 )
+
+# v1.9.30 (#38): soft stale-worker detection for the non-dispatch PostToolUse
+# path. A worker is in-progress iff the LAST `status:` line (most-recent-state
+# wins, same convention as lib_kunglao.scan_active_workers and
+# backtrack_gate.parse_status) lowercased + dash->underscore == "in_progress".
+STATUS_RE = re.compile(r"^\s*status\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+STUCK_MIN = 20  # minutes — mirrors backtrack_gate default --stuck-min 20
+
+
+def _check_stale_workers(ws: Path) -> str:
+    """Soft mtime-stale detection for the non-dispatch PostToolUse path (#38).
+
+    Scans `ws/runs/worker-status-*.md` for in-progress files whose mtime
+    exceeds STUCK_MIN. Returns a human-readable message naming each stale
+    worker + age, or '' if none. NEVER aborts — the hard REJECT is
+    worker_budget's job (check_backtrack_gate). Any OSError / missing runs/
+    dir -> '' (no crash, no false alarm)."""
+    runs = ws / "runs"
+    if not runs.is_dir():
+        return ''
+    now = time.time()
+    stale = []
+    try:
+        for p in runs.glob("worker-status-*.md"):
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            matches = STATUS_RE.findall(text)
+            if not matches:
+                continue
+            last = matches[-1].lower().replace("-", "_")
+            if last != "in_progress":
+                continue
+            try:
+                age_min = (now - p.stat().st_mtime) / 60
+            except OSError:
+                continue
+            if age_min > STUCK_MIN:
+                stale.append(f"{p.name} (age {age_min:.0f}m)")
+    except OSError:
+        return ''
+    if not stale:
+        return ''
+    return (f"[worker_pulse] {len(stale)} stale in-progress worker(s) "
+            f"(> {STUCK_MIN}m no status-file update): " + ", ".join(stale) +
+            " — intervene or force a `## backtrack` block.")
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
@@ -169,7 +217,18 @@ def main() -> int:
     if not _kunglao_active(ws):
         return 0  # not activated or expired — hooks sleep
     if not _was_dispatch(payload):
-        return 0  # not a kunglao-agent worker completion — silent
+        # v1.9.30 (#38): even on the non-dispatch path, surface mtime-stale
+        # in-progress workers as a soft additionalContext. NEVER aborts
+        # (rc=0); the hard REJECT is worker_budget.check_backtrack_gate.
+        stale_msg = _check_stale_workers(ws)
+        if stale_msg:
+            print(json.dumps({
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": stale_msg,
+                }
+            }, ensure_ascii=False))
+        return 0  # not a kunglao-agent worker completion — soft pulse only
 
     pulse, decision = _build_pulse(ws)
     # v1.9.29 (R5): BLOCKED/SATURATED are mechanical — mark the worker

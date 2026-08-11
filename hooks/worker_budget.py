@@ -112,6 +112,36 @@ def check_convergence_health(paths):
     return True, ''
 
 
+def check_backtrack_gate(paths):
+    """v1.9.30: stuck-worker backtrack gate wired into PreToolUse (#38).
+    Mirrors check_plan_drift / check_convergence_health: runs the existing
+    backtrack_gate.py via _run_py (20s timeout) and FAIL_OPEN on any
+    subprocess/workspace resolution failure — the hook stays usable.
+
+    backtrack_gate rc:
+      0  -> clean (no stuck workers, or stuck-but-valid-backtrack)
+      1  -> stuck worker(s) without a valid `## backtrack` block
+      2  -> stuck >30m, decision != redispatch (stale un-actioned)
+      other/None -> fail open (broken gate must not block dispatch)
+    """
+    ws = paths.get('workspace')
+    if not ws:
+        return True, ''
+    r = _run_py([str(_SKILL_ROOT / 'scripts' / 'backtrack_gate.py'),
+                 str(ws)])
+    if r is None:
+        return True, ''
+    if r.returncode == 0:
+        return True, ''
+    if r.returncode == 1:
+        return False, ("stuck worker(s) without a valid `## backtrack` block — "
+                       "force a backtrack decision before dispatching")
+    if r.returncode == 2:
+        return False, ("stuck worker(s) with stale backtrack (>30m un-actioned, "
+                       "decision != redispatch) — escalate or override to redispatch")
+    return True, ''  # unknown rc -> fail open
+
+
 def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid):
     """Best-first priority audit — v1.9.24 returns (ok, msg, deviated).
 
@@ -726,6 +756,10 @@ def pre_check(payload: dict, paths: dict) -> int:
         # gates (R1/R3 of research-tree r3). FAIL_OPEN inside the checks.
         ('drift', check_plan_drift(paths)),
         ('health', check_convergence_health(paths)),
+        # v1.9.30 (#38): stuck-worker backtrack gate — closes the
+        # built-but-not-wired gap (backtrack_gate.py existed but was never
+        # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
+        ('backtrack', check_backtrack_gate(paths)),
     ]
     for name, (ok, msg) in checks:
         if not ok:
