@@ -47,6 +47,14 @@ competitor_groups: {q3: [C-005a, C-005b]}  # v1.7 mutually-exclusive K claims
 ## facts/_INDEX.md
 `F<id> | <status> | <claim_id> | <one-line conclusion>` — one row per fact. Maintained by `scripts/update_index.py`.
 
+**CONFLICT convention (#47)**: two PROVEN facts are same-topic when their
+topic-key sets intersect (same `claim_id`, or overlapping `sample_refs`, or
+overlapping `cites`). If their conclusions differ (whitespace-normalized) and
+neither declares `supersedes:`/`superseded_by:` naming the other, the pair is
+a CONFLICT (needs-resolution): `fact_contradiction_gate.py` blocks claim
+promotion to PROVEN (downgrade to STAMP) until a link is added. Same
+conclusion on the same topic = converged, not conflicting.
+
 ## fact.expected (assignment-class value-assertion convention, #49)
 
 `expected:` is verified byte-exact by `kunglao_verify.py::l1_mechanical`. Two shapes:

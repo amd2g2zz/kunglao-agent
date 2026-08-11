@@ -193,6 +193,17 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                 gate_msg = f" [BLIND GATE: {gate_reason}]"
         except ImportError:
             pass  # blind_gate not available — fail open (no gate)
+        # ---- contradiction gate (#47): PROVEN also requires no same-topic
+        # CONFLICT — same-topic multi-PROVEN facts with differing conclusions
+        # need a supersedes/superseded_by link, else downgrade to STAMP.
+        try:
+            from fact_contradiction_gate import check_proven_contradiction, STAMP
+            c_ok, c_reason = check_proven_contradiction(claim_id, ws / "facts")
+            if not c_ok:
+                effective_status = STAMP
+                gate_msg += f" [CONFLICT GATE: {c_reason}]"
+        except ImportError:
+            pass  # fact_contradiction_gate not available — fail open (no gate)
 
     if not _set_claim_status(reg_path, claim_id, effective_status):
         return (False, f"could not rewrite status for {claim_id} in claim-register.yaml")

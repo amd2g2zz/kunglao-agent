@@ -396,6 +396,14 @@ def compare_register_change_proven_gate(
         from blind_gate import check_proven_gate
     except ImportError:
         return True, 'blind_gate unavailable (fail open)'
+    # contradiction gate (#47): PROVEN also requires no same-topic CONFLICT —
+    # same-topic multi-PROVEN facts with differing conclusions need a
+    # supersedes/superseded_by link, else the write is blocked.
+    try:
+        from fact_contradiction_gate import check_proven_contradiction
+        have_contradiction_gate = True
+    except ImportError:
+        have_contradiction_gate = False
     register_text = reg_path.read_text(encoding='utf-8', errors='replace')
     import re as _re
     violations = []
@@ -412,9 +420,13 @@ def compare_register_change_proven_gate(
         allowed, effective, reason = check_proven_gate(cid, facts_dir, worker_id=worker_id)
         if not allowed:
             violations.append(f'{cid}: {reason}')
+        if have_contradiction_gate:
+            c_ok, c_reason = check_proven_contradiction(cid, facts_dir)
+            if not c_ok:
+                violations.append(f'{cid}: {c_reason}')
     if violations:
-        return False, (f'BLIND GATE: PROVEN without independent verifier sign-off — '
-                       f'{"; ".join(violations)}. Downgrade to STAMP or obtain BLIND sign-off.')
+        return False, (f'PROMOTION GATE: PROVEN rejected — '
+                       f'{"; ".join(violations)}. Downgrade to STAMP or resolve the blockers.')
     return True, f'{len(newly_proven)} PROVEN promotion(s) with valid BLIND sign-off'
 
 
