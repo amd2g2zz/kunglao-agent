@@ -50,3 +50,9 @@ python scripts/progress_report.py <ws> && \
   python scripts/claim_expiry.py <ws> && \
   python scripts/plan_drift_detector.py <ws>
 ```
+
+### Implementation-Bug Class (S3 #132)
+
+See `failure-modes-state.md` § "Implementation-Bug Class" for script-level bug
+patterns (state drift, race conditions, schema mismatch, phantom entries).
+These complement the F1-F18 LLM-behavior taxonomy.

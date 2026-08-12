@@ -34,3 +34,25 @@ python scripts/progress_report.py <ws> && \
   python scripts/claim_expiry.py <ws> && \
   python scripts/plan_drift_detector.py <ws>
 ```
+
+## Implementation-Bug Class (S3 #132)
+
+The F1-F18 taxonomy covers **LLM behavior failures** (idle, re-dispatch,
+self-stamping). This section covers **script implementation bugs** discovered
+during S3 hardening — distinct failure modes where the code itself is wrong.
+
+### Patterns
+
+| Bug Class | Example | Grep Pattern |
+|---|---|---|
+| Local state copy drift (TERMINAL 5-value) | F1: claim-status guard had local copy of 5-value list, diverged from canonical | `grep -rn "OPEN\|CLOSED\|DEFERRED" scripts/ --include="*.py" \| grep -v status_defs` |
+| Read-modify-write race | F8: blind_gate read YAML, modified in memory, wrote back — concurrent workers could clobber | `grep -rn "yaml.load\|yaml.safe_load\|yaml.dump" scripts/ --include="*.py"` |
+| Schema-output mismatch | F1/F2: script produced fields not in declared schema; consumers silently ignored extra fields | `grep -rn "json.dumps\|yaml.dump" scripts/ --include="*.py"` |
+| Phantom entry | F8/#123: memory_capture existed in paused_hooks but not ALL_HOOKS — ghost reference | `grep -rn "ALL_HOOKS\|paused\|HARD_PAUSE" scripts/ --include="*.py"` |
+
+### Checklist for Future Audits
+
+1. **Single-source check**: every constant/enum has exactly one definition site; grep for duplicates
+2. **Schema contract check**: script output fields match declared schema keys exactly
+3. **Phantom reference check**: every hook/gate referenced in paused/active lists exists in the canonical registry
+4. **Race condition check**: state files that undergo read-modify-write have no concurrent writer paths
