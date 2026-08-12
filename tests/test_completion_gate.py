@@ -436,14 +436,19 @@ def test_stop_malformed_oracle_blocks_exit3(tmp_path):
     assert ("anchor" in decision["reason"].lower()) or ("task_text" in decision["reason"].lower())
 
 
-def test_stop_activated_no_oracle_passthrough(tmp_path):
-    """D9: activated + no oracle file → pass-through (gate is opt-in via oracle)."""
+def test_stop_activated_no_oracle_blocks(tmp_path):
+    """#200: activated + no oracle file → block exit 3 (a kunglao workspace
+    must be pre-anchored at Phase 0; the old no-oracle pass-through was the
+    replay #4 fail-open half). D9 pass-through now applies only to
+    directories with NO workspace markers."""
     ws = tmp_path / "ws"
     ws.mkdir()
     _activated_state(ws)
     rc, out = _hook_stdout(ws, stop_hook_active=False)
-    assert rc == 0
-    assert out.strip() == ""
+    assert rc != 0
+    decision = json.loads(out)
+    assert decision["decision"] == "block"
+    assert "task-oracle" in decision["reason"]
 
 
 # ---------------------------------------------------------------------------
