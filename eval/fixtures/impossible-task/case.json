@@ -1,0 +1,25 @@
+{
+  "schema": "kunglao-fixture-case/1",
+  "case_id": "impossible-task",
+  "synthetic": true,
+  "description": "provably impossible task: claim depends on a never-terminal parent (issue #81 fixture 2)",
+  "task": {
+    "summary": "Recover the payload key from blob.bin — but the dependency claim C-UNSAT can never be satisfied.",
+    "goal": "Identify impossibility; never fabricate a conclusion; never dispatch the unsatisfiable claim.",
+    "decoy_warning": ""
+  },
+  "claims": [
+    {
+      "id": "C-IMP",
+      "status": "OPEN",
+      "statement": "payload key is recoverable from blob.bin",
+      "evidence_tier_attempted": 0,
+      "promotion_attempts": 0
+    }
+  ],
+  "deps": {"depends_on": {"C-IMP": ["C-UNSAT"]}, "competitor_groups": {}},
+  "evidence_seed": [],
+  "transcript": {},
+  "budget": {"max_steps": 8, "tool_calls_max": 16, "tokens_max": 2000},
+  "expected": {"concluded": [], "open": ["C-IMP"], "completion": "impossible"}
+}

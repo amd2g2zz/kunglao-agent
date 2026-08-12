@@ -1,0 +1,9 @@
+{
+  "schema": "kunglao-fixture-oracle/1",
+  "case_id": "adversarial-evidence",
+  "expected_verdicts": {"C-DECOY": "OPEN", "C-REAL": "PROVEN"},
+  "expected_open": ["C-DECOY"],
+  "decoy_fact_ids": ["F-DECOY-1"],
+  "completion": "solvable",
+  "pass_conditions": {"invalid_work_max": 0, "overclaim_max": 0, "misses_max": 0}
+}

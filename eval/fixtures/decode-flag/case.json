@@ -1,0 +1,63 @@
+{
+  "schema": "kunglao-fixture-case/1",
+  "case_id": "decode-flag",
+  "synthetic": true,
+  "description": "synthetic decode-flag task with recorded tool transcript (issue #81 fixture 1)",
+  "task": {
+    "summary": "Decode the flag from blob.bin (XOR 0x2A).",
+    "goal": "Conclude claim C-FLAG with anchored evidence.",
+    "decoy_warning": ""
+  },
+  "claims": [
+    {
+      "id": "C-FLAG",
+      "status": "OPEN",
+      "statement": "blob.bin contains flag{kunglao-eval}",
+      "evidence_tier_attempted": 0,
+      "promotion_attempts": 0,
+      "answers_question": "q1"
+    }
+  ],
+  "deps": {"depends_on": {}, "competitor_groups": {}},
+  "evidence_seed": [],
+  "transcript": {
+    "C-FLAG": [
+      {
+        "tool": "xxd",
+        "args": {"path": "blob.bin", "range": "0-32"},
+        "result": {
+          "ok": true,
+          "payload": {
+            "facts": [
+              {
+                "fact_id": "F-FLAG-1",
+                "conclusion": "ciphertext bytes 0c 46 40 46 0e 7f ... (xor 0x2a) flag{kunglao-eval}",
+                "anchors": [{"cmd": "xxd blob.bin", "expected": "0c 46 40 46 0e 7f"}],
+                "category": "decode"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "tool": "python",
+        "args": {"script": "xor_decode"},
+        "result": {
+          "ok": true,
+          "payload": {
+            "facts": [
+              {
+                "fact_id": "F-FLAG-2",
+                "conclusion": "decoded: flag{kunglao-eval}",
+                "anchors": [{"cmd": "python -c 'xor_decode'", "expected": "flag{kunglao-eval}"}],
+                "category": "decode"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "budget": {"max_steps": 8, "tool_calls_max": 16, "tokens_max": 2000},
+  "expected": {"concluded": ["C-FLAG"], "open": []}
+}

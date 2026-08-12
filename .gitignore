@@ -30,3 +30,6 @@ __pycache__/
 **/bins/
 test_workspace/
 runs/
+
+# Eval harness generated receipts (reproducible via scripts/kunglao-eval.py --all)
+eval/receipts/
