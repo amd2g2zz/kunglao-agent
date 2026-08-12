@@ -1,0 +1,27 @@
+[project]
+name = "kunglao-agent"
+version = "1.9.29"
+description = "Convergence-driven reverse-engineering orchestrator — Claude Code skill (issue #80 release contract)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+# Declared set = modules actually imported by scripts/ hooks/ tools/ tests/ memory/scripts/
+# (verified by tests/test_release_receipt.py::test_pyproject_declares_imported_dependencies).
+# cryptography/requests are NOT imported anywhere — do not add them back without an import.
+dependencies = [
+    "PyYAML>=6.0",
+    "pefile>=2023.2.7",
+    "capstone>=5.0",
+    "jsonschema>=4.0",
+]
+
+# Dev tooling lives in a PEP 735 dependency group, NOT an optional extra:
+# `uv sync` installs dependency groups by default, so a fresh clone can run
+# the standard test command right after the documented install command.
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+# NOTE: pytest configuration lives in pytest.ini (single source of truth).
+# Do not add [tool.pytest.ini_options] here — two configs would split authority.

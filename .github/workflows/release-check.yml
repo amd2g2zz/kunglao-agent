@@ -1,0 +1,51 @@
+# release-check.yml — kunglao-agent release contract gate (issue #80)
+#
+# Clean-environment validation of the release contract:
+#   1. install with the documented command (uv sync --locked — no hidden state)
+#   2. validate the release manifest + CLI surface (release_receipt.py --check)
+#   3. run the standard test command (python -m pytest -q)
+#   4. generate + upload a machine-readable release receipt (revision, lock
+#      digest, asset inventory, CLI inventory, test result)
+#
+# README test counts / "shipped" claims point at this receipt artifact.
+
+name: release-check
+
+on:
+  push:
+    branches: [ "dev", "master" ]
+  pull_request:
+    branches: [ "dev", "master" ]
+
+jobs:
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install uv (documented dependency manager)
+      run: python -m pip install uv
+
+    - name: Install dependencies (locked)
+      run: uv sync --locked
+
+    - name: Validate release manifest + CLI surface
+      run: uv run python scripts/release_receipt.py --check
+
+    - name: Run standard test command
+      run: uv run python -m pytest -q --junitxml=.pytest-result.xml
+
+    - name: Generate release receipt
+      run: uv run python scripts/release_receipt.py --pytest-junit .pytest-result.xml --out release-receipt.json
+
+    - name: Upload release receipt
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-receipt-${{ github.sha }}
+        path: release-receipt.json
+        if-no-files-found: error

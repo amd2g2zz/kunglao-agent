@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites>
+  <testsuite name="pytest" tests="625" failures="6" skipped="1" errors="0" time="77.17">
+    <testcase classname="tests.test_acceptance" name="test_acceptance_overall_passes" time="0.010"/>
+    <testcase classname="tests.test_contract_docs" name="test_skill_lte_500_lines" time="0.010">
+      <failure message="AssertionError">SKILL.md 510 lines &gt; 500</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

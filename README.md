@@ -4,7 +4,7 @@
 >
 > Formerly `kong-agent`. Built on Claude Code (skills + agents + hooks).
 
-[![tests](https://img.shields.io/badge/tests-269%20passed-brightgreen)](.) [![python](https://img.shields.io/badge/python-3.11%2B-blue)](.) [![license](https://img.shields.io/badge/license-MIT-lightgrey)](.)
+[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.11%2B-blue)](.) [![license](https://img.shields.io/badge/license-MIT-lightgrey)](.)
 
 ---
 
@@ -118,8 +118,12 @@ kunglao-agent is a Claude Code skill. Clone it into the skills directory:
 ```bash
 git clone https://github.com/amd2g2zz/kunglao-agent.git ~/.claude/skills/kunglao-agent
 cd ~/.claude/skills/kunglao-agent
-uv sync                       # restore .venv with cryptography / pyyaml / capstone / pefile / ...
+uv sync --locked              # restore .venv from uv.lock — pyyaml / pefile / capstone / jsonschema
 ```
+
+`uv sync --locked` requires only a clean clone: the dependency set is declared in
+`pyproject.toml` and pinned in `uv.lock`, both revision-owned (issue #80 release
+contract — see [Release contract](#release-contract)).
 
 Install the worker + verifier subagents (they live alongside, in `~/.claude/agents/`):
 
@@ -151,6 +155,27 @@ python ~/.claude/skills/kunglao-agent/scripts/hook_activation.py <workspace> --r
 | CTI lookup | `virustotal` | needs `VT_API_KEY` |
 
 VM control goes through the `vmr-shell` skill (`VMR_SERVER_URL=http://192.168.20.128:9876`). Sample execution on the host is blocked by the `block_malware_exec` hook — this is intentional.
+
+---
+
+## Release contract
+
+The checked-out revision IS the release artifact. Three revision-owned pieces make a clean clone reproducible (issue #80):
+
+- **`pyproject.toml` + `uv.lock`** — the dependency set actually imported by the codebase (`pyyaml` / `pefile` / `capstone` / `jsonschema`; `pytest` in the dev group), pinned by a committed lockfile. `uv sync --locked` is the documented install command.
+- **`release-manifest.yaml`** — the DECLARED inventory: version, dependencies, every shipped agent asset (`agents/*.md`), hook, template, the 8-CLI inventory, and the router subcommand surface. Adding a shipped asset without declaring it here fails CI.
+- **`scripts/release_receipt.py`** — the OBSERVED inventory: generates a machine-readable receipt (`release-receipt.json`) with revision, lockfile digest, per-asset sha256, CLI `--help` exit codes, and test result. Run it locally with `--check` for a fast manifest/CLI gate, or point it at a junit XML (`--pytest-junit`) to reuse a pytest run.
+
+CI (`.github/workflows/release-check.yml`) runs this on every PR/push to `dev`/`master`: `uv sync --locked` → `release_receipt.py --check` → the standard test command → uploads the receipt as a workflow artifact.
+
+**Test counts and "shipped" claims in this README are NOT hand-maintained** — the source of truth is the release receipt artifact on the latest CI run. Verify a fresh clone like CI does:
+
+```bash
+uv sync --locked
+uv run python scripts/release_receipt.py --check
+uv run python -m pytest -q
+uv run python scripts/kunglao_eval.py --oracle-selfcheck
+```
 
 ---
 
@@ -259,7 +284,7 @@ verifier_sign_off:                 # BLIND (M1) — required for PROVEN, else ST
 
 | CLI | Job |
 |---|---|
-| `kunglao.py` | Orchestrator entry (subcommand router) |
+| `kunglao.py` | Orchestrator entry (subcommand router: `decide` / `tick` / `verify` / `record` / `health`) |
 | `kunglao-decide` | M1 DECIDE — convergence decision + VoI ranking |
 | `kunglao-verify` | M3 VERIFY — L1 mechanical + L2 BLIND verifier |
 | `kunglao-record` | M4 RECORD — ledger (idempotent event append) |
@@ -267,6 +292,8 @@ verifier_sign_off:                 # BLIND (M1) — required for PROVEN, else ST
 | `kunglao-digest` | Mechanical 6-section digest (cold-start compression) |
 | `kunglao-init` | Idempotent workspace init (anti-double-init) |
 | `kunglao-eval` | Eval harness (oracle 10/10 self-check + three-arm + fault injection) |
+
+Every CLI in this table is receipt-validated (see [Release contract](#release-contract)): existence + `--help` exit 0 are checked mechanically on each CI run.
 
 ---
 
@@ -280,7 +307,7 @@ kunglao-agent/
 │                            #   provenance_gate, heartbeat_*, convergence_health, ...
 ├── hooks/                   # worker_budget (M2 gate), heartbeat_touch, dispatch_gate, ...
 ├── tools/                   # build_evidence_index, audit_legacy_proven, measure_blind_coverage, ...
-├── tests/                   # 269 tests (TDD: RED → GREEN per feature)
+├── tests/                   # TDD suite (RED → GREEN per feature; counts in release receipt)
 ├── references/              # 19 protocol docs (convergence-loop, guardrails, RE library, ...)
 ├── schemas/                 # Frozen JSON schemas (decide/verify/tick/event output)
 ├── specs/                   # Per-phase contracts (phase-3.5/4/5)
@@ -301,7 +328,7 @@ Built **SDD (OpenSpec) + TDD**, one-issue-one-PR-one-branch-one-worktree, merged
 git worktree add .worktrees/<name> -b <name> dev
 openspec new change <name>           # scaffold change proposal
 # RED: write failing test → GREEN: minimal impl → refactor
-python -m pytest -q                  # 269 must stay green
+python -m pytest -q                  # baseline counts in the release receipt (CI artifact)
 openspec validate <name>
 gh pr create --base dev              # squash-merge, delete branch, close issue
 ```
@@ -319,7 +346,7 @@ Every change has an OpenSpec proposal (`openspec/changes/<name>/`: proposal + de
 - ✅ 6-phase refactor (cleanup / VoI priority / digest / eval harness / 8-CLI convergence / acceptance)
 - ✅ verified-convergence (BLIND gate / completeness gate / heartbeat F1+F2 / legacy audit)
 - ✅ evidence-integrity (evidence index / provenance gate / source reliability / probability+dissent / re-verify audit)
-- ✅ 269 tests, acceptance PASS, 8 CLIs green
+- ✅ release contract: revision-owned manifest + lockfile + agent assets, receipt-validated CLI surface, clean-env CI (test counts in the release receipt)
 
 **Known gaps (honest)**:
 - 46 legacy `PROVEN` claims audited (10 have-raw / 18 derivation-only / 19 unverifiable) — actual re-verification is follow-up work

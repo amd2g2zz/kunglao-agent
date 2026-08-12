@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "release-receipt",
+  "description": "Machine-readable release receipt for kunglao-agent (issue #80) — revision, dependency lock digest, asset inventory (sha256), CLI inventory, test result. Inventory digests only: no secrets.",
+  "type": "object",
+  "required": ["schema_version", "revision", "generated_at", "dependencies", "assets", "clis", "router", "tests", "valid"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "revision": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "valid": { "type": "boolean" },
+    "dependencies": {
+      "type": "object",
+      "required": ["pyproject", "lockfile"],
+      "properties": {
+        "pyproject": { "$ref": "#/definitions/asset" },
+        "lockfile": { "$ref": "#/definitions/asset" }
+      }
+    },
+    "assets": {
+      "type": "object",
+      "required": ["agents", "hooks", "templates", "openspec_changes"],
+      "properties": {
+        "agents": { "type": "array", "items": { "$ref": "#/definitions/asset" } },
+        "hooks": { "type": "array", "items": { "$ref": "#/definitions/asset" } },
+        "templates": { "type": "array", "items": { "$ref": "#/definitions/asset" } },
+        "openspec_changes": { "type": "array", "items": { "$ref": "#/definitions/asset" } }
+      }
+    },
+    "clis": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "help_exit"],
+        "properties": {
+          "name": { "type": "string" },
+          "help_exit": { "type": "integer" }
+        }
+      }
+    },
+    "router": {
+      "type": "object",
+      "required": ["command", "subcommands", "help_exit"],
+      "properties": {
+        "command": { "type": "string" },
+        "subcommands": { "type": "array", "items": { "type": "string" } },
+        "help_exit": { "type": "integer" }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "required": ["command"],
+      "properties": {
+        "command": { "type": "string" },
+        "collected": { "type": ["integer", "null"] },
+        "passed": { "type": ["integer", "null"] },
+        "failed": { "type": ["integer", "null"] },
+        "skipped": { "type": ["integer", "null"] }
+      }
+    }
+  },
+  "definitions": {
+    "asset": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": { "type": "string" }
+      }
+    }
+  }
+}
