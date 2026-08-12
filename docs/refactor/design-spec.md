@@ -449,7 +449,7 @@ next_tier_cheap:    {T1:1.0, T2:0.5, T3:0.2}(成本分母)
 ~/.claude/agents/ 已存在:
   kong-worker(通用 maker 骨架) / kong-redteam(对抗 checker) /
   ghidra-light / floss-filter / pefile-signature / go-symbols /
-  cti-correlator / shodan-host / verdict-scorer
+  verdict-scorer
 
 另: .mcp.json mcpServers(ghidra/frida/virustotal/volatility/x64dbg...)+ scripts/ 亦为资源注册来源【修订 2026-08-06】
 ```

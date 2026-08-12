@@ -33,7 +33,7 @@ mount sample → seed claims (from primary questions) → convergence loop:
 CONVERGED: report built on a byte-proven, independently-verified, evidence-indexed fact base
 ```
 
-It is **not** an analyst — it never decompiles/emulates/scans itself. It orchestrates specialist worker agents (ghidra-light, floss-filter, pefile-signature, cti-correlator, kunglao-worker) and an adversarial verifier (kunglao-redteam). Maker-checker holds: worker = maker, redteam = checker, **different agents**.
+It is **not** an analyst — it never decompiles/emulates/scans itself. It orchestrates specialist worker agents (ghidra-light, floss-filter, pefile-signature, go-symbols, kunglao-worker) and an adversarial verifier (kunglao-redteam). Maker-checker holds: worker = maker, redteam = checker, **different agents**.
 
 ---
 
@@ -134,7 +134,7 @@ Install the worker + verifier subagents (they live alongside, in `~/.claude/agen
 cp agents/kunglao-worker.md ~/.claude/agents/
 cp agents/kunglao-redteam.md ~/.claude/agents/
 # optional specialists
-cp agents/ghidra-light.md floss-filter.md pefile-signature.md cti-correlator.md ~/.claude/agents/
+cp agents/ghidra-light.md floss-filter.md pefile-signature.md go-symbols.md ~/.claude/agents/
 ```
 
 ### 2. Wire hooks (orchestrator-only, per workspace)

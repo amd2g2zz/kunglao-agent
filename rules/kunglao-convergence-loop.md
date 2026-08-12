@@ -35,7 +35,7 @@ python C:/Users/hr/.claude/skills/kunglao-agent/scripts/convergence_check.py <wo
 ## 4. 5 behaviors (各一行)
 
 1. **self-recovery** — 工具失败先自恢复: L1 同 MCP 换模式 → L2 读对应 skill 的 setup.sh → L3 派 env-fix worker; 三级全败才可升级求助。
-2. **specialist-first** — 有专职 agent 就派专职: ghidra-light / floss-filter / cti-correlator / pefile-signature / verdict-scorer; general-purpose 是最后手段。
+2. **specialist-first** — 有专职 agent 就派专职: ghidra-light / floss-filter / go-symbols / pefile-signature / verdict-scorer; general-purpose 是最后手段。
 3. **cost-is-noise** — 成本提示是信息, 不是停因; 用户说"不要考虑成本"就写 cost_override=true 到 analysis_state.txt, 之后全当噪声。
 4. **poll-workers** — 每轮 cat 全部 worker 的 status 文件; 有卡住/等待的 worker 就是你的介入信号, 不许只盯最后一个。
 5. **false-completion-trap** — commit / 更新 _INDEX / 写 progress.txt 只是记录状态, 不改状态; open-claim 计数才是真相。
