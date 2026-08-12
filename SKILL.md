@@ -37,8 +37,8 @@ triggers:
   - malware sample triage
   - claim-driven RE
   - byte-anchored fact base
-arguments: [workspace]
-argument-hint: [workspace]
+arguments: [request]
+argument-hint: [request]
 ---
 
 # kunglao-agent — RE orchestrator looper (contract)
@@ -252,13 +252,24 @@ Your own composite notes (synthesis) MUST pass `<malware-veri-notes>/scripts/ver
 
 ## Arguments
 
-Invocation: `/kunglao-agent [workspace]`
+Invocation: `/kunglao-agent [request]` — the parameter is the USER REQUEST,
+either a subcommand or a natural-language need. **Workspace is never a parameter**:
+workspace detection always runs in Phase 0 per the Local defaults table below.
 
-- `$ARGUMENTS` non-empty: the first argument is the workspace path (e.g.
-  `D:/works/samples/<YYYY-MM-DD>/malware-analysis-workspace`). Phase 0
-  workspace detection uses this path directly — do not guess from the
-  workspace pattern.
-- `$ARGUMENTS` empty: detect per the Local defaults table below.
+1. **Subcommand** (exact, case-insensitive):
+   | subcommand | behavior |
+   |---|---|
+   | `init` | Phase 0 workspace initialization (scaffold + sample mount + task_spec intake + hooks) |
+   | `analysis` (alias `analyze`) | enter the convergence loop (dispatch/verify/update) — the default for unrecognized input and empty `$ARGUMENTS` |
+   | `verify [fact_id]` | run only the M3 verify chain (L1 mechanical + L2 redteam) |
+   | `resume` (alias `continue`) | idempotent continuation of an existing workspace (no re-scaffold) |
+   | `decide` `tick` `record` `health` `monitor` `digest` `eval` | mechanical CLI passthrough to the kunglao CLI family (`scripts/kunglao.py` subcommands) |
+
+2. **User request** (anything else): map by intent keywords to a subcommand —
+   初始化/工作区/scaffold → `init`; 分析/继续分析/收敛/循环/deep analysis/analyze/run → `analysis`;
+   验证/verify/F-NNN → `verify`; 健康/状态/monitor/health → `health`; unrecognized → `analysis`.
+
+3. **Empty** `$ARGUMENTS` → `analysis` (the default convergence loop).
 
 ## Local defaults (this user's setup)
 
