@@ -345,6 +345,39 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             gate_msg += (f" [INFERENCE GATE: verifier runtime error "
                          f"({type(exc).__name__}: {exc}); degraded to STAMP "
                          f"(guardrails SS1b self_caveat allowed)]")
+        # ---- provenance gate (#147 wiring) ----
+        # The research replay showed check_provenance_gate exists but was NOT
+        # on the PROVEN path — summary-only facts were promoted. Every PROVEN
+        # promotion must carry raw provenance that resolves to evidence-index
+        # entries with matching hashes. Import failure = FAIL_CLOSED (same
+        # policy as the other REQUIRED_FOR_TERMINAL_STATE gates, #78).
+        # Gate scope: only when the workspace HAS an evidence index — a bare
+        # workspace without evidence machinery keeps its legacy promotion
+        # path (regression contract, test_fix_98_deadlock S9).
+        try:
+            from provenance_gate import check_provenance_gate
+        except Exception as exc:
+            return (False, _required_gate_receipt("provenance_gate", exc, claim_id))
+        try:
+            from blind_gate import find_fact_file
+            fact_file = find_fact_file(ws / "facts", claim_id)
+            if fact_file is None:
+                effective_status = STAMP
+                gate_msg += f" [PROVENANCE GATE: no fact file for {claim_id}]"
+            elif (ws / "evidence" / "_index.json").exists():
+                p_ok, p_reason = check_provenance_gate(fact_file, ws)
+                if not p_ok:
+                    # Evidence-integrity violation (bad ref / hash drift):
+                    # refuse the promotion — do NOT record a fake STAMP for a
+                    # workspace whose evidence machinery is present but says
+                    # the provenance does not resolve.
+                    return (False, f"PROVENANCE GATE: {p_reason} — "
+                                   f"refusing {claim_id} promotion")
+        except Exception as exc:
+            effective_status = STAMP
+            gate_msg += (f" [PROVENANCE GATE: verifier runtime error "
+                         f"({type(exc).__name__}: {exc}); degraded to STAMP "
+                         f"(guardrails SS1b self_caveat allowed)]")
 
     if not _set_claim_status(reg_path, claim_id, effective_status):
         return (False, f"could not rewrite status for {claim_id} in claim-register.yaml")
