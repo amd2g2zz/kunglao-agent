@@ -82,6 +82,7 @@ class LedgerLineType:
 
     SNAPSHOT = "snapshot"
     OUTCOME = "outcome"
+    OPERATOR_ACTION = "operator_action"
 
 
 def ledger_line_type(row: dict) -> str:

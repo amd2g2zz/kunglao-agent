@@ -435,6 +435,33 @@ def _append_ledger(workspace: Path, d: dict) -> None:
         pass
 
 
+def record_operator_action(workspace, action: str, actor: str = "orchestrator",
+                           claim_id: str = "", reason: str = "",
+                           before: str = "", after: str = "") -> None:
+    """Append an OPERATOR_ACTION row to the convergence ledger (#142).
+
+    Records who changed what and why: defer/override_proven/weight_change/claim_edit.
+    Writes directly to the ledger (not via _append_ledger which expects snapshot fields).
+    """
+    from status_defs import LedgerLineType
+    entry = {
+        "type": LedgerLineType.OPERATOR_ACTION,
+        "action": action,
+        "actor": actor,
+        "claim_id": claim_id,
+        "reason": reason,
+        "before": before,
+        "after": after,
+        "ts": utc_now().isoformat(timespec="seconds"),
+    }
+    try:
+        newline_char = chr(10)
+        with open(workspace / LEDGER_NAME, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + newline_char)
+    except OSError:
+        pass
+
+
 def _failure_blocked(workspace: Path) -> list:
     """Claims with a failed attempt but no current failure_analysis.
     These cannot be re-dispatched or marked NEGATIVE until reasoned about.
