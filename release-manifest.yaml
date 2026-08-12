@@ -41,6 +41,13 @@ assets:
     - templates/claim-register.yaml
     - templates/failure-registry.yaml
     - templates/task_spec.yaml
+  knowledge:
+    # #147 / report §4.5.4: a run must bind to the exact knowledge-base
+    # revision. SKILL.md + references/ digests land in the receipt.
+    - SKILL.md
+  references:
+    # Directory entry is digested via sha256_dir by release_receipt.
+    - references/
 
 clis:
   # The 8 independent CLIs (tests/test_cli_matrix.py) — each must answer --help with exit 0.
