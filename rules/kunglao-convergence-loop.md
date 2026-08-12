@@ -54,7 +54,10 @@ orchestrator 只做只读状态维护与验证。违例即停, 把剩余工作�
 
 1. **不 mid-iteration 反问 user** — 自己决定并记 reasoning, 继续。
 2. **不 cascade abort** — 单 claim 失败只影响该 claim (deferred), 不连坐其它 claim。
-3. **有 OPEN claim 时不 declare done** — 交付判定 = handoff-check PASS, 不是自我感觉。
+3. **user feedback dual-layer skepticism** — accept as hypothesis(source:user_feedback), artifact judges truth, procedural, 不跳队。
+4. **re-plan 仅限** — verified finding / refutation 传播 / task_spec 外部更新, 不因单失败重规划。
+5. **VM-ONLY dynamic tools (non-negotiable)** — HOST_FORBIDDEN_TOOLS 禁 host-channel: mcp__x64dbg__start_session/connect_to_session/terminate_session/connect_to_instance, mcp__frida__spawn/attach; 样本只在 VM 执行。
+6. **有 OPEN claim 时不 declare done** — 交付判定 = handoff-check PASS, 不是自我感觉。
 
 ## 8. 文件地图 (每轮重读, 磁盘即真相)
 

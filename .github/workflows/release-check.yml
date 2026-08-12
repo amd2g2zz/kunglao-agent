@@ -37,6 +37,9 @@ jobs:
     - name: Validate release manifest + CLI surface
       run: uv run python scripts/release_receipt.py --check
 
+    - name: Check global-rule hard prohibitions subset (issue #99)
+      run: uv run python scripts/check_global_rule_subset.py
+
     - name: Run standard test command
       run: uv run python -m pytest -q --junitxml=.pytest-result.xml
 
