@@ -85,3 +85,43 @@ def test_no_broken_links_in_re_library():
     )
     broken = [ln for ln in r.stdout.splitlines() if "BROKEN_LINK" in ln]
     assert not broken, "\n".join(broken)
+
+
+def test_references_index_pins_all_reference_files():
+    """Every references/*.md and references/re-library/*.md must be pinned
+    in references/_INDEX.yaml with a digest matching the file on disk
+    (recall-engine precondition: deterministic index before runtime recall)."""
+    import hashlib
+    import subprocess
+    import sys
+
+    import yaml
+
+    index_path = ROOT / "references" / "_INDEX.yaml"
+    if not index_path.exists():
+        raise AssertionError("references/_INDEX.yaml missing")
+    index = yaml.safe_load(index_path.read_text(encoding="utf-8")) or {}
+    files = index.get("files", {})
+    actual_md = sorted(
+        str(p.relative_to(ROOT)).replace("\\", "/")
+        for p in (ROOT / "references").glob("**/*.md")
+    )
+    missing = [f for f in actual_md if f not in files]
+    assert not missing, f"files not pinned in _INDEX.yaml: {missing}"
+
+    mismatches = []
+    for rel, expect in files.items():
+        p = ROOT / rel
+        if not p.exists():
+            mismatches.append(f"{rel}: missing on disk")
+            continue
+        actual = hashlib.sha256(p.read_bytes()).hexdigest()
+        if actual != expect:
+            mismatches.append(f"{rel}: index={expect[:12]} actual={actual[:12]}")
+    assert not mismatches, f"digest drift: {mismatches}"
+
+    r = subprocess.run(
+        [sys.executable, "scripts/structural_check.py", "."],
+        capture_output=True, text=True,
+    )
+    assert "INDEX_DRIFT" not in r.stdout, r.stdout
