@@ -115,6 +115,25 @@ def judge(oracle, declaration_text=None) -> tuple[int, str]:
     reason (D4 — corroborating color; the declaration NEVER changes the code).
     """
     # --- exit 3: no anchor (refuse self-produced anchor — #54 F1) ---
+    # #147: global contradiction recompute — the workspace, not the oracle,
+    # is the authority (replay #2: a pre-filled oracle with zero open_items
+    # PASSED while two PROVEN facts contradicted). Import guarded so judge
+    # stays pure when there is no workspace context. A workspace without a
+    # facts index has zero facts and cannot hold a contradiction.
+    ws_path = oracle.get("workspace_path") if isinstance(oracle, dict) else None
+    if ws_path:
+        try:
+            import fact_contradiction_gate as fcg
+            from pathlib import Path as _P
+            _ws = _P(ws_path)
+            if (_ws / "facts" / "_INDEX.md").exists():
+                conflicts = fcg.scan_conflicts(_ws / "facts" / "_INDEX.md", _ws / "facts")
+                if conflicts:
+                    pairs = "; ".join(f"{c['fact_a']} <-> {c['fact_b']}" for c in conflicts)
+                    return (1, f"GLOBAL CONTRADICTION: same-topic PROVEN facts with "
+                               f"differing conclusions: {pairs}")
+        except Exception:  # noqa: BLE001 — FAIL_CLOSED on this path (#147)
+            return (1, "GLOBAL CONTRADICTION check unavailable — refuse completion")
     if not isinstance(oracle, dict):
         return (3, "task_text missing: oracle is absent (None) — refuse "
                    "self-produced anchor (the #54 F1 self-anchoring failure)")
