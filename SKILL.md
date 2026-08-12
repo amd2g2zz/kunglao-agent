@@ -94,7 +94,7 @@ The script returns a decision + exit code you act on, not just admire:
 | `DISPATCH_VERIFIER` | 2 | partial facts + free slots | dispatch a verifier; do NOT declare PROVEN without sign-off |
 | `SATURATED` | 3 | open claims but 0 free slots | poll stuck workers, do not idle — see behavior #4 |
 | `BLOCKED` | 4 | open claims all blocked | resolve blockers (behavior #1 self-recovery), then re-check |
-| `CONVERGED` | 0 | no open claims, no partials, all PQs have passes-notes | claim loop done — STOP dispatch; deliver only after handoff-check.py PASS |
+| `CONVERGED` | 0 | no open claims, no partials, all PQs have passes-notes | claim loop done — but CONVERGED does NOT scan global contradictions, does NOT verify provenance lineage, and does NOT consume discoveries written in fact bodies (shellcode / next-stage payloads). Before delivering, re-run the completion transaction (convergence_check + completion_gate + global contradiction scan) and confirm zero unresolved obligations |
 
 Manual check (if the script is unavailable): scan `claim-register.yaml` for status
 OPEN or PARTIALLY-VERIFIED, confirm `active_workers < 3`, scan `facts/_INDEX.md`
