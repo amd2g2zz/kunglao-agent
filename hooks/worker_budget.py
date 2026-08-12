@@ -242,8 +242,6 @@ def tool_to_constraint(tool: str) -> str | None:
     """Map a tool name to the task_spec constraint key it requires, or None."""
     if tool in VM_TOOLS or tool.startswith('mcp__x64dbg'):
         return 'vm_detonation'
-    if tool.startswith('mcp__virustotal'):
-        return 'external_cti_query'
     return None
 
 

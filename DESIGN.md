@@ -41,7 +41,6 @@ scope:                       # claim 是否进队列
 
 constraints:                 # worker 不可破,§11 hook 强制
   vm_detonation: forbidden        # 未授权 → 需 VM 的 claim 直接 deferred
-  external_cti_query: forbidden
   time_budget_minutes: 120
   dynamic_re: allowed
 
@@ -85,17 +84,15 @@ orchestrator 自撰的 composite note 也必须经 `verify-note.py`(独立 verif
 
 | 支柱 | 工具 |
 |---|---|
-| **CTI 冷启动**(只读) | `evidence/cti-*.json`、`claim-register.yaml`、现有 fact base。**永不重查** |
 | **样本类型检测** | DIE(`evidence/die.json`)、`pefile-signature`、resources 扫描 |
 | **静态 RE** | `ghidra-malware`、`ghidra-re`、`ghidra-light` agent、`mcp__ghidra__*`、`pefile-signature`、`mal-recon` |
 | **动态 RE** | `malware-framework`(Qiling)、`rev-frida`、`mcp__x64dbg__*`、`vmr-shell`(需预授权)。worker 按场景选 |
 | **内存 dump** | `mcp__volatility__*` |
 | **pcap** | TBD,检测到即 `deferred_until: tooling-available` |
-| **CTI 交叉** | `cti-correlator` agent、`cti-linkage-false-positive-check` skill |
 | **验证** | `malware-veri-notes`(`verify-note.py` + `lint-notes.py` + fact/note/run schema)。**schema 唯一 owner 是 malware-veri-notes** — kunglao-agent worker 产出的 facts 必须遵循其 fact schema(含 numeric 事实的 `unit:` 字段,见 `~/.claude/rules/common/numeric-fidelity.md`);schema 演进先在 veri-notes 落,再同步 worker 契约,避免"定义方与生产方脱节"导致报告口径丢失 |
 | **裁决**(收敛后可选) | `verdict-scorer` agent |
 
-注:`cti-correlator` / `verdict-scorer` 是 **agent type**,非 skill。
+注:`verdict-scorer` 是 **agent type**,非 skill。
 
 ## 7. Phase 0 SETUP(pre-loop,允许与用户交互;**所有步幂等——目标文件存在且非空则跳过,不 clobber**)
 
@@ -323,7 +320,7 @@ PE/ELF/Mach-O/shellcode → 全可用。dump → volatility。pcap → deferred_
 | 1 | **SKILL.md §6-pre "Anti-forgetting protocol"**:6 行紧凑表(F1 傻等 / F2 忘记心跳 / F3 后台监视不 ping / F4 不根据 subagent 返回优化 / F5 死锁僵尸 / F6 弃用专业 agent),把 orchestrator 在-session 反复违反的失败模式集中到 SKILL.md 主体读取位置(不再埋在 §6e / §6f.1)。每个 F 行:title 含可观察症状 + 中段引用具体 § 文件 + 末尾显式禁令 | SKILL.md §6-pre |
 | 2 | **B1c blocker type**:新阻断类型 "worker died without notification" (worker 进程退出/crash 但 post_check 未跑,status 文件停在 in-progress 死循环)。日志路径 `blockers/B1c-<timestamp>-<workerID>.md`;检测路径: cross-check `worker_budget.py::read_active_workers` + `TaskList` 双 liveness signal,**DEAD CHECK FIRST, THEN PING**(严禁 SendMessage 死 worker 会阻塞 orchestrator)| §8 + §11 |
 | 3 | **F3 单 worker focus bug 修复**:heartbeat 必须 `for worker in active-worker registry` 穷举,不能 short-circuit 到 last-dispatched worker ID。`converge-checklist.md` "Active workers" 表为 load-bearing 状态机。明确引用 `references/guardrails.md §6b.1`,SKILL.md 主体不再重复完整 prose | §6-pre F3 + §6b.1 |
-| 4 | **F6 stage-agent-bypass 修复**:`general-purpose` 从 soft "last resort" 升级为 hard `last resort — must justify`,违反触发条件明确为 "<50-line dispatch + general-purpose 即 §6e 违规"。claim→agent map(Ghidra 关键词→ghidra-light / Go pcln→go-symbols / Authenticode→pefile-signature / floss→floss-filter / VT relationship→cti-correlator / shodan→shodan-host / verdict→verdict-scorer / 其它→kunglao-worker);"Never general-purpose for a single-step claim" | §6e + §6-pre F6 |
+| 4 | **F6 stage-agent-bypass 修复**:`general-purpose` 从 soft "last resort" 升级为 hard `last resort — must justify`,违反触发条件明确为 "<50-line dispatch + general-purpose 即 §6e 违规"。claim→agent map(Ghidra 关键词→ghidra-light / Go pcln→go-symbols / Authenticode→pefile-signature / floss→floss-filter / shodan→shodan-host / verdict→verdict-scorer / 其它→kunglao-worker);"Never general-purpose for a single-step claim" | §6e + §6-pre F6 |
 | 5 | **§7 self-cap-safe-prose**:v1.8.1 `_SELF_CAP_RE` 反讽 —— SKILL.md 主体 prose("every ~5 min"/"30-min frida trace"/"Interval: 15 min T3")会让 orchestrator 写出 self-cap dispatch 触发自身 reject。§7 列 `_SELF_CAP_RE` 4 行 verbatim 模式 + 7 行 negation allowlist + 10 行 safe paraphrase 表("wait 5 min" → "heartbeat until done";"30-min frida trace" → "long-running frida trace";带 negation phrase 的 dispatch 例)| §7 |
 | 6 | **Description frontmatter 推 pushiness**:`description:` 重写把 3 个被埋的义务加粗(**actively pings silent workers every ~5 min** / **dispatches next open claim before idling** / **re-plans after every worker return**);`triggers:` 从 6 行扩展到 11 行,加 5 个英文触发器(RE orchestrator / run the RE loop / malware sample triage / claim-driven RE / byte-anchored fact base) | SKILL.md frontmatter |
 | 7 | **§6e 优先表硬约束**:`general-purpose` cell 加 "<50-line dispatch + general-purpose = §6e violation"。新增"Detection rule (in-session)"段:违反时自纠正(取消 dispatch + 用正确 stage agent 重派 + 在 dispatch reasoning 记录偏差)| §6e |

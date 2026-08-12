@@ -3,7 +3,7 @@
 Hook enforces 5 dispatch gates + worker accounting:
   (a) <=3 concurrent workers
   (b) target claim promotion_attempts < 3
-  (c) intended_tools subset of task_spec.constraints (vm/cti)
+  (c) intended_tools subset of task_spec.constraints (vm)
   (d) now < deadline_ts (time budget)
   (e) tier gate (§8.5): tier=N needs all open claims at evidence_tier_attempted >= N-1
 
@@ -117,8 +117,10 @@ def test_tool_to_constraint_vm():
     assert tool_to_constraint('rev-frida') == 'vm_detonation'
 
 
-def test_tool_to_constraint_cti():
-    assert tool_to_constraint('mcp__virustotal__get_file_report') == 'external_cti_query'
+def test_tool_to_constraint_cti_removed():
+    # VT tools no longer map to any constraint (B4-5: CTI/OSINT out of scope).
+    assert tool_to_constraint('mcp__virustotal__get_file_report') is None
+    assert tool_to_constraint('mcp__virustotal__search_vt') is None
 
 
 def test_tool_to_constraint_no_constraint():
@@ -267,7 +269,7 @@ def test_check_promotion_attempts_reject(tmp_path):
 
 def test_check_tools_allowed_ok(tmp_path):
     ts = tmp_path / 'task_spec.yaml'
-    _write_task_spec(ts, {'vm_detonation': 'allowed', 'external_cti_query': 'forbidden'})
+    _write_task_spec(ts, {'vm_detonation': 'allowed'})
     ok, _ = check_tools_allowed(['mcp__ghidra__*', 'grep'], ts)
     assert ok
 
@@ -277,13 +279,6 @@ def test_check_tools_allowed_vm_forbidden(tmp_path):
     _write_task_spec(ts, {'vm_detonation': 'forbidden'})
     ok, msg = check_tools_allowed(['vmr-shell'], ts)
     assert not ok and 'vm' in msg.lower()
-
-
-def test_check_tools_allowed_cti_forbidden(tmp_path):
-    ts = tmp_path / 'task_spec.yaml'
-    _write_task_spec(ts, {'external_cti_query': 'forbidden'})
-    ok, _ = check_tools_allowed(['mcp__virustotal__get_file_report'], ts)
-    assert not ok
 
 
 def test_check_deadline_ok(tmp_path):

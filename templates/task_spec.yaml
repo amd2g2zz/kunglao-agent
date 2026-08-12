@@ -19,7 +19,6 @@ scope:                         # claim 进队列的过滤器
 
 constraints:                   # worker 不可破 — §11 PreToolUse hook 强制
   vm_detonation: forbidden      # forbidden | allowed — vmr-shell 需此 allowed
-  external_cti_query: forbidden # forbidden | allowed — 只读现有 CTI 时 forbidden
   time_budget_minutes: 120      # Phase 0.4 算 deadline_ts = now + 此值
   dynamic_re: allowed           # allowed | forbidden — 仿真/Frida 总开关
 
