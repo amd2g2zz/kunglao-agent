@@ -78,7 +78,7 @@ def _scan_active_workers(workspace: Path):
     """Count in-flight + stuck workers from runs/worker-status-*.md.
 
     v1.9.13 (worktree isolation): worker state lives in EACH worker's git
-    worktree (.wt-*/malware-analysis-workspace/runs/), NOT the main workspace
+    worktree (.wt-*/ with .kunglao-worktree marker/), NOT the main workspace
     (merged status files are removed from the main tree). Scan the main
     workspace runs/ PLUS every .wt-*/ worktree runs/ dir.
 
@@ -92,8 +92,10 @@ def _scan_active_workers(workspace: Path):
     _status_line = _re.compile(r"status:\s*(\S+)")
     dirs = [workspace / "runs"]
     try:
-        for wt in workspace.parent.glob(".wt-*/malware-analysis-workspace/runs"):
-            dirs.append(wt)
+        for wt in workspace.parent.glob(".wt-*/.kunglao-worktree"):
+            runs_dir = wt.parent / "malware-analysis-workspace" / "runs"
+            if runs_dir.exists():
+                dirs.append(runs_dir)
     except OSError:
         pass
     active = 0

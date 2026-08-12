@@ -21,7 +21,10 @@ def reconcile_workers(workspace: Path) -> int:
     active_ids = set()
     dirs = [workspace / "runs"]
     try:
-        dirs += sorted(workspace.parent.glob(".wt-*/malware-analysis-workspace/runs"))
+        for _m in sorted(workspace.parent.glob(".wt-*/.kunglao-worktree")):
+            _r = _m.parent / "malware-analysis-workspace" / "runs"
+            if _r.is_dir():
+                dirs.append(_r)
     except OSError:
         pass
     for runs in dirs:

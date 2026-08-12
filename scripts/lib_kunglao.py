@@ -109,7 +109,7 @@ def workers_progressing(ws, now: datetime | None = None,
     status file is mechanical evidence of movement (D3).
 
     Scan targets mirror convergence_check._scan_active_workers: workspace
-    runs/ PLUS every .wt-*/malware-analysis-workspace/runs worktree dir
+    runs/ PLUS every .wt-*/ with .kunglao-worktree marker worktree dir
     (v1.9.13 worktree isolation); the LAST `status:` line decides (lowercased);
     only `in-progress` counts; mtime YOUNGER than fresh_minutes. OSError on
     glob/read/stat skips that file.
@@ -120,8 +120,10 @@ def workers_progressing(ws, now: datetime | None = None,
     ws = Path(ws)
     dirs = [ws / "runs"]
     try:
-        for wt in ws.parent.glob(".wt-*/malware-analysis-workspace/runs"):
-            dirs.append(wt)
+        for wt in ws.parent.glob(".wt-*/.kunglao-worktree"):
+            runs_dir = wt.parent / "malware-analysis-workspace" / "runs"
+            if runs_dir.exists():
+                dirs.append(runs_dir)
     except OSError:
         pass
     for runs in dirs:
