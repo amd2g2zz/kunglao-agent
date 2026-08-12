@@ -18,13 +18,15 @@ Decision matrix:
   open_claims>0 AND free_slots==0          → SATURATED      (poll workers, don't idle)
   open_claims==0 AND partial_facts==0      → CONVERGED      (loop done, write report)
   open_claims>0 AND all open are blocked   → BLOCKED        (escalate with specifics)
+  non-empty malformed primary_questions    → INVALID        (escalate, target undefined)
 
 Exit codes (machine-readable for hooks):
   0 = CONVERGED (nothing to do)
   1 = DISPATCH (open work + free slots)
   2 = DISPATCH_VERIFIER (partial facts need checking)
   3 = SATURATED (busy, poll)
-  4 = BLOCKED (open work but all blocked — escalate)
+  4 = BLOCKED (open work but all blocked — escalate); INVALID (bad task_spec) reuses this
+     so hooks that accept returncodes 0–4 keep parsing the JSON decision.
 
 Usage:
   python scripts/convergence_check.py [workspace]          # human-readable
@@ -225,19 +227,12 @@ def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
 
     Returns list of {"question": q_id, "answering_claims": [...]} dicts.
     """
-    pqs = task_spec.get("primary_questions") or []
+    pqs, _ = _parse_primary_questions(task_spec)
     if not pqs:
         return []
 
-    # Map question id -> need
-    question_need = {}
-    for q in pqs:
-        if isinstance(q, dict):
-            qid = q.get("id")
-            if qid:
-                question_need[qid] = q.get("need")
-        elif isinstance(q, str):
-            question_need[q] = None
+    # Map question id -> need (single canonical parse, issue #77)
+    question_need = dict(pqs)
 
     claims = reg.get("claims") or []
     unverified = []
@@ -305,18 +300,111 @@ def _load_task_spec(workspace: Path) -> dict:
     return _load_yaml(workspace / "task_spec.yaml")
 
 
+def _parse_pq_item(q: dict) -> tuple[str | None, str | None, str | None]:
+    """Parse ONE primary_questions list item (canonical or legacy form).
+
+    Returns (qid, need, error) — a parse error leaves qid/need as None.
+      - canonical (template) form: dict with a non-empty string `id` key;
+        extra keys (`q`, `need`, `candidates`, ...) are allowed.
+      - legacy one-key mapping: dict WITHOUT `id` and with exactly one
+        string key — the key is the question id and the value is a free-text
+        description (need=None), NOT a `need` enum.
+    """
+    if "id" in q:
+        qid = q["id"]
+        if not isinstance(qid, str) or not qid:
+            return None, None, f"'id' must be a non-empty string, got {qid!r}"
+        need = q.get("need")
+        if need is not None and not isinstance(need, str):
+            return None, None, f"'need' must be a string, got {need!r}"
+        return qid, need, None
+    if len(q) == 0:
+        return None, None, "empty mapping (expected 'id' or one-key legacy form)"
+    if len(q) > 1:
+        return None, None, \
+            f"mapping without 'id' has {len(q)} keys {list(q)!r}; " \
+            f"use {{id: ..., need: ...}} or the one-key legacy form"
+    k = next(iter(q))
+    if not isinstance(k, str):
+        return None, None, f"mapping key {k!r} is not a string"
+    v = q[k]
+    if v is not None and not isinstance(v, str):
+        return None, None, f"mapping value {v!r} is not a string or null"
+    return k, None, None
+
+
+def _parse_primary_questions(task_spec: dict) -> tuple[list, str | None]:
+    """Canonical parse of task_spec.primary_questions (issue #77 follow-up).
+
+    ONE schema at the load boundary: every consumer — _pq_ids(),
+    _unverified_primary_questions(), the orphan check and the note-layer
+    check — derives from the SAME parsed list, so a mapping-shaped
+    `primary_questions` can never silently degrade to an empty question set
+    (the pre-fix bug: c3be3c6 made extraction `q.get("id")`-only, which
+    skipped the legacy one-key mapping and disabled the M2 gates).
+
+    Accepted shapes (deterministic):
+      - key absent / `[]` / `{}`      → feature unused: ([], None)
+      - list items: plain string, canonical dict with `id`, legacy one-key
+        mapping (see _parse_pq_item)
+      - top-level non-empty mapping   → one (qid, None) per string key
+        (pre-regression behavior: keys were iterated as ids)
+
+    Returns (questions, error): questions is a list of (qid, need) tuples
+    (need None when unspecified), [] on error; error is None on success else
+    a human-readable reason naming the offending item/field. A NON-EMPTY
+    malformed / mixed-with-malformed / unrecognized input NEVER yields an
+    empty set without an error — decide() escalates INVALID.
+    """
+    raw = task_spec.get("primary_questions")
+    if raw is None:
+        return [], None
+    if raw == [] or raw == {}:
+        return [], None
+
+    if isinstance(raw, dict):
+        # top-level mapping: keys are question ids (pre-regression behavior)
+        norm = []
+        for k, v in raw.items():
+            if not isinstance(k, str):
+                return [], f"top-level mapping key {k!r} is not a string"
+            if v is not None and not isinstance(v, str):
+                return [], f"top-level mapping key {k!r} has non-string value {v!r}"
+            norm.append({k: v})
+        raw = norm
+
+    if not isinstance(raw, list):
+        return [], f"expected a list or mapping of questions, got {type(raw).__name__} ({raw!r})"
+
+    questions: list = []
+    seen: set = set()
+    for i, q in enumerate(raw):
+        if isinstance(q, str):
+            if not q:
+                return [], f"item {i} is an empty string"
+            qid, need = q, None
+        elif isinstance(q, dict):
+            qid, need, err = _parse_pq_item(q)
+            if err:
+                return [], f"item {i}: {err}"
+        else:
+            return [], f"item {i} is {type(q).__name__} ({q!r}); expected a string or mapping"
+        if qid in seen:
+            return [], f"duplicate question id {qid!r} (item {i})"
+        seen.add(qid)
+        questions.append((qid, need))
+    return questions, None
+
+
 def _pq_ids(task_spec: dict) -> set:
-    """Extract the set of primary_question IDs from task_spec."""
-    pqs = task_spec.get("primary_questions") or []
-    ids = set()
-    for q in pqs:
-        if isinstance(q, dict):
-            qid = q.get("id")
-            if qid:
-                ids.add(qid)
-        elif isinstance(q, str):
-            ids.add(q)
-    return ids
+    """Extract the set of primary_question IDs from task_spec.
+
+    Thin wrapper over the single canonical parse (issue #77). On a malformed
+    NON-EMPTY schema the set is empty ONLY because decide() escalates
+    INVALID before any gate consults it — the parse error is never silently
+    swallowed there (the bug this follow-up fixes).
+    """
+    return {qid for qid, _ in _parse_primary_questions(task_spec)[0]}
 
 
 def _append_ledger(workspace: Path, d: dict) -> None:
@@ -361,7 +449,8 @@ def _failure_blocked(workspace: Path) -> list:
 def decide(workspace: Path) -> dict:
     reg = _load_yaml(workspace / "claim-register.yaml")
     task_spec = _load_task_spec(workspace)
-    pq_ids = _pq_ids(task_spec)
+    pq_questions, pq_error = _parse_primary_questions(task_spec)
+    pq_ids = {qid for qid, _ in pq_questions}
 
     opens = _open_claims(reg)
     partials = _partial_facts(workspace)
@@ -371,7 +460,7 @@ def decide(workspace: Path) -> dict:
     failure_blocked_ids = _failure_blocked(workspace)
 
     # M2 completeness gate: check before declaring CONVERGED
-    orphans = _orphan_terminal_claims(reg, pq_ids if pq_ids is not None else None)
+    orphans = _orphan_terminal_claims(reg, pq_ids)
     unverified_pqs = _unverified_primary_questions(reg, task_spec)
     # DESIGN §8 C0 note-layer gate: every pq needs a verify_status=passes note
     pq_note_gaps = _note_layer_gaps(workspace, pq_ids, reg)
@@ -381,8 +470,13 @@ def decide(workspace: Path) -> dict:
     unblocked_open = [c for c in opens if not c["blocked"] and c["id"] not in failure_blocked_ids]
     failure_blocked_open = [c for c in opens if c["id"] in failure_blocked_ids]
 
-    # Decision matrix (order matters)
-    if not opens and not partials:
+    # Decision matrix (order matters). INVALID schema first (fail-closed):
+    # a non-empty malformed primary_questions means the run's convergence
+    # target is undefined — escalate, never dispatch against it (issue #77).
+    if pq_error:
+        decision, exit_code, action = "INVALID", EXIT_BLOCKED, \
+            f"INVALID task_spec primary_questions: {pq_error}"
+    elif not opens and not partials:
         # M2 completeness gate: CONVERGED requires primary_questions all PROVEN
         # AND zero orphan terminal claims. Otherwise downgrade.
         if orphans:
@@ -446,6 +540,7 @@ def decide(workspace: Path) -> dict:
         "orphan_claims": orphans,
         "unverified_primary_qs": unverified_pqs,
         "note_layer_gaps": pq_note_gaps,
+        "pq_parse_error": pq_error,
     }
 
 

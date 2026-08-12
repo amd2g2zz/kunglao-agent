@@ -42,8 +42,11 @@ VALID_SIGNOFF = textwrap.dedent("""\
 
 
 def _make_ws(tmp_path: Path, claims: list[dict], primary_questions: list | None = None,
-             facts: dict[str, str] | None = None) -> Path:
-    """Build a synthetic workspace with claim-register + task_spec + facts."""
+             facts: dict[str, str] | None = None, ts_text: str | None = None) -> Path:
+    """Build a synthetic workspace with claim-register + task_spec + facts.
+
+    ts_text overrides the generated task_spec.yaml with raw content (for
+    canonical / malformed / mixed primary_questions fixtures)."""
     ws = tmp_path / f"ws-{len(list(tmp_path.iterdir()))}"
     ws.mkdir(parents=True)
     (ws / "runs").mkdir()
@@ -65,18 +68,21 @@ def _make_ws(tmp_path: Path, claims: list[dict], primary_questions: list | None 
     (ws / "claim-register.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     # task_spec.yaml with primary_questions
-    ts_lines = []
-    if primary_questions:
-        ts_lines.append("primary_questions:")
-        for q in primary_questions:
-            if isinstance(q, dict):
-                qid = list(q.keys())[0]
-                ts_lines.append(f"  - {qid}: {q[qid]}")
-            else:
-                ts_lines.append(f"  - {q}")
+    if ts_text is not None:
+        (ws / "task_spec.yaml").write_text(ts_text, encoding="utf-8")
     else:
-        ts_lines.append("primary_questions: []")
-    (ws / "task_spec.yaml").write_text("\n".join(ts_lines) + "\n", encoding="utf-8")
+        ts_lines = []
+        if primary_questions:
+            ts_lines.append("primary_questions:")
+            for q in primary_questions:
+                if isinstance(q, dict):
+                    qid = list(q.keys())[0]
+                    ts_lines.append(f"  - {qid}: {q[qid]}")
+                else:
+                    ts_lines.append(f"  - {q}")
+        else:
+            ts_lines.append("primary_questions: []")
+        (ws / "task_spec.yaml").write_text("\n".join(ts_lines) + "\n", encoding="utf-8")
 
     # facts/_INDEX.md (empty)
     fdir = ws / "facts"
@@ -320,3 +326,202 @@ def test_no_primary_questions_still_converged(tmp_path):
     d = decide(ws)
     assert d["decision"] == "CONVERGED", \
         f"no primary_questions + all terminal → CONVERGED, got {d['decision']}"
+
+
+# =====================================================================
+# RED5: primary_questions schema normalization (issue #77)
+# Mapping-shaped primary_questions (legacy `- q1: description` form) must
+# NOT be silently treated as an empty question set: all four completeness
+# gates consume the SAME parsed set, and non-empty malformed/mixed schemas
+# must yield INVALID (exit != 0) with a parsing reason — never CONVERGED.
+# =====================================================================
+
+def _task_spec(*lines: str) -> str:
+    """Build a task_spec.yaml body from VERBATIM primary_questions YAML lines.
+
+    Callers pass fully-indented lines (list items at 2 spaces, continuation
+    keys at 4) so the produced YAML is exactly what the fixture intends.
+    """
+    return "primary_questions:\n" + "\n".join(lines) + "\n"
+
+
+def test_parse_primary_questions_accepts_each_form():
+    """RED5: canonical dict, plain string, legacy one-key mapping, top-level
+    mapping and explicit empty all parse; every non-empty accepted form
+    yields a NON-EMPTY id set (the M2 gates must fire on it)."""
+    from convergence_check import _parse_primary_questions
+
+    cases = [
+        ("  - id: q1\n    need: yes_no_with_evidence", {("q1", "yes_no_with_evidence")}),
+        ("  - q1", {("q1", None)}),
+        ("  - q1: sample family", {("q1", None)}),
+        ("  - q1: sample family\n  - q2: c2 config", {("q1", None), ("q2", None)}),
+    ]
+    for yaml_lines, expected in cases:
+        pqs, err = _parse_primary_questions(yaml.safe_load(_task_spec(yaml_lines)))
+        assert err is None, f"expected parse ok for {yaml_lines!r}, got {err}"
+        assert set(pqs) == expected, f"expected {expected}, got {pqs}"
+
+    # top-level mapping form (pre-regression behavior: keys are the ids)
+    pqs, err = _parse_primary_questions(yaml.safe_load("primary_questions:\n  q1: family\n"))
+    assert err is None and set(pqs) == {("q1", None)}, f"top-level mapping: {pqs}, {err}"
+
+    # explicit empty = feature unused (parse ok, empty set is LEGAL here)
+    for empty in ("primary_questions: []", "primary_questions: {}", "scope:\n  in: []"):
+        pqs, err = _parse_primary_questions(yaml.safe_load(empty))
+        assert err is None and pqs == [], f"{empty!r} → {pqs}, {err}"
+
+
+def test_parse_primary_questions_rejects_malformed():
+    """RED5: malformed / mixed-with-malformed / unrecognized NON-EMPTY shapes
+    are parse errors with a reason — never a silent empty set."""
+    from convergence_check import _parse_primary_questions
+
+    bad = [
+        "  - q1: family\n    q2: c2",        # two-key mapping, no id
+        "  - id: 123",                       # non-string id
+        "  - {}",                            # empty dict item
+        "  - 42",                            # non-str/non-dict item
+        "  - q1\n  - 42",                    # mixed accepted + malformed
+        "  - q1\n  - id: q1",                # duplicate ids
+        "  - q1: [a, b]",                    # legacy value not str/None
+        "  q1: 42",                          # top-level mapping, non-str value
+    ]
+    for yaml_lines in bad:
+        pqs, err = _parse_primary_questions(yaml.safe_load(_task_spec(yaml_lines)))
+        assert pqs == [] and err, f"{yaml_lines!r} should be an error, got {pqs}, {err}"
+
+    # top-level scalar (neither list nor mapping)
+    pqs, err = _parse_primary_questions(yaml.safe_load("primary_questions: q1"))
+    assert pqs == [] and err, f"top-level scalar should be an error, got {pqs}, {err}"
+
+    # top-level mapping with a non-string key
+    pqs, err = _parse_primary_questions(yaml.safe_load("primary_questions:\n  42: family"))
+    assert pqs == [] and err, f"non-string mapping key should be an error, got {pqs}, {err}"
+
+
+def test_legacy_one_key_mapping_feeds_all_gates(tmp_path):
+    """RED5: with the legacy one-key mapping, the id set is non-empty so the
+    orphan + unanswered-question gates actually fire (the M2 bug)."""
+    ws = _make_ws(tmp_path,
+        claims=[
+            {"id": "C-1", "status": "STAMP", "answers_question": "q1"},
+            {"id": "C-2", "status": "PROVEN"},  # orphan terminal
+        ],
+        primary_questions=[{"q1": "sample family"}],
+    )
+    from convergence_check import _pq_ids, _unverified_primary_questions, _orphan_terminal_claims
+    reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
+    ts = yaml.safe_load((ws / "task_spec.yaml").read_text(encoding="utf-8"))
+    assert _pq_ids(ts) == {"q1"}, f"legacy mapping must yield non-empty id set, got {_pq_ids(ts)}"
+    assert len(_unverified_primary_questions(reg, ts)) == 1
+    assert len(_orphan_terminal_claims(reg, {"q1"})) == 1
+
+    d = decide(ws)
+    assert d["decision"] != "CONVERGED", \
+        "legacy mapping + STAMP answer + orphan must NOT converge"
+    assert d["exit_code"] != 0
+
+
+def test_malformed_mapping_returns_invalid(tmp_path):
+    """RED5: non-empty malformed primary_questions → INVALID (exit 4), with
+    the parsing reason in action and pq_parse_error — never CONVERGED."""
+    ws = _make_ws(tmp_path,
+        claims=[{"id": "C-1", "status": "PROVEN", "answers_question": "q1"}],
+        ts_text=_task_spec("  - q1: family\n    q2: c2"),  # two-key mapping, no id
+    )
+    d = decide(ws)
+    assert d["decision"] == "INVALID", \
+        f"malformed mapping must be INVALID, got {d['decision']}"
+    assert d["exit_code"] != 0, "malformed schema must not exit 0"
+    assert d["pq_parse_error"], "pq_parse_error must carry the parsing reason"
+    assert "q1" in d["action"].lower() or "primary_questions" in d["action"].lower(), \
+        f"action should mention the offending field, got {d['action']}"
+
+
+def test_mixed_list_with_malformed_item_invalid(tmp_path):
+    """RED5: a mixed list containing one malformed item must be INVALID —
+    the set is NOT silently reduced to the parseable items."""
+    ws = _make_ws(tmp_path,
+        claims=[{"id": "C-1", "status": "PROVEN", "answers_question": "q1"}],
+        ts_text=_task_spec("  - q1\n  - 42"),
+    )
+    d = decide(ws)
+    assert d["decision"] == "INVALID", \
+        f"mixed-with-malformed must be INVALID, got {d['decision']}"
+    assert d["exit_code"] != 0
+
+
+def test_invalid_schema_blocks_dispatch_too(tmp_path):
+    """RED5: an invalid task spec blocks even with open claims + free slots
+    (the convergence target is undefined — escalate, don't dispatch)."""
+    ws = _make_ws(tmp_path,
+        claims=[{"id": "C-1", "status": "IN_PROGRESS", "answers_question": "q1"}],
+        ts_text=_task_spec("- id: 123"),
+    )
+    d = decide(ws)
+    assert d["decision"] == "INVALID" and d["exit_code"] != 0, \
+        f"invalid schema must take precedence over DISPATCH, got {d['decision']}"
+
+
+def test_duplicate_question_ids_invalid(tmp_path):
+    """RED5: duplicate question ids are a config error → INVALID."""
+    ws = _make_ws(tmp_path,
+        claims=[{"id": "C-1", "status": "PROVEN", "answers_question": "q1"}],
+        ts_text=_task_spec("  - q1\n  - id: q1"),
+    )
+    d = decide(ws)
+    assert d["decision"] == "INVALID" and d["exit_code"] != 0
+
+
+def test_mixed_accepted_forms_normalize_and_converge(tmp_path):
+    """RED5: a list mixing canonical dict, plain string and legacy one-key
+    mapping is a legitimate mixed fixture → normalized to a NON-EMPTY set;
+    with all questions PROVEN it still converges (happy path)."""
+    ws = _make_ws(tmp_path,
+        claims=[
+            {"id": "C-1", "status": "PROVEN", "answers_question": "q1"},
+            {"id": "C-2", "status": "PROVEN", "answers_question": "q2"},
+            {"id": "C-3", "status": "PROVEN", "answers_question": "q3"},
+        ],
+        ts_text=_task_spec(
+            "  - q1",
+            "  - id: q2\n    need: yes_no_with_evidence",
+            "  - q3: family description",
+        ),
+    )
+    from convergence_check import _pq_ids
+    ts = yaml.safe_load((ws / "task_spec.yaml").read_text(encoding="utf-8"))
+    assert _pq_ids(ts) == {"q1", "q2", "q3"}, f"mixed accepted forms → all ids, got {_pq_ids(ts)}"
+    d = decide(ws)
+    assert d["decision"] == "CONVERGED", \
+        f"mixed accepted forms + all PROVEN → CONVERGED, got {d['decision']}"
+    assert d["exit_code"] == 0
+
+
+def test_top_level_mapping_form_preserved(tmp_path):
+    """RED5: `primary_questions: {q1: family}` (top-level mapping) keeps
+    working as it did before the regression — q1 is a real question."""
+    ws = _make_ws(tmp_path,
+        claims=[{"id": "C-1", "status": "STAMP", "answers_question": "q1"}],
+        ts_text="primary_questions:\n  q1: family\n",
+    )
+    d = decide(ws)
+    assert d["decision"] != "CONVERGED", \
+        f"top-level mapping + STAMP answer must not converge, got {d['decision']}"
+
+
+def test_explicit_empty_list_feature_unused(tmp_path):
+    """RED5: explicit `primary_questions: []` stays feature-unused — the
+    orphan check is skipped and CONVERGED remains legal (backward compat)."""
+    ws = _make_ws(tmp_path,
+        claims=[
+            {"id": "C-1", "status": "PROVEN", "answers_question": "q1"},
+            {"id": "C-2", "status": "PROVEN"},  # orphan terminal
+        ],
+        primary_questions=[],
+    )
+    d = decide(ws)
+    assert d["decision"] == "CONVERGED", \
+        f"explicit empty list = feature unused → CONVERGED, got {d['decision']}"
+    assert d["exit_code"] == 0
