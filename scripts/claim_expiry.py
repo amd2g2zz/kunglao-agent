@@ -33,6 +33,8 @@ from pathlib import Path
 
 import yaml
 
+from status_defs import ACTIVE_STATUSES
+
 
 def utc_now() -> datetime:
     return datetime.now(tz=timezone.utc)
@@ -74,7 +76,7 @@ def check(workspace: Path, stale_hours: int, apply: bool = False) -> int:
 
     for c in claims:
         status = (c.get("status") or "").upper()
-        if status not in ("OPEN", "IN_PROGRESS"):
+        if status not in ACTIVE_STATUSES:
             continue
         cid = c.get("id")
         last = last_activity_for(c)

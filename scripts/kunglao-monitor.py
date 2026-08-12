@@ -4,6 +4,15 @@
 组合 heartbeat_check + loop_reconcile + help_watch + stuck_watch + health_check
 → TickOutput(schemas/tick-output.json, M5.3 L396-406 冻结)。
 
+后台进程 (2026-08-12, #88): 本 CLI 作为 BACKGROUND process 运行 — 其输出是
+advisory。loop 的定时 tick 动作 (re-dispatch / verify / TaskStop) 绝不等待
+monitor 输出; tick 依据文件状态推进 (worker-status-*.md 新鲜度 / .heartbeat.json),
+monitor 的 `next` 只是建议, 不是 gate。
+
+隔离边界 (#88): 不使用 agent team 特性 (CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+never enabled / no teammates / no team setup / 无 worker↔worker messaging);
+SendMessage orchestrator→worker ping 是 sanctioned heartbeat channel。
+
 可复用(不改): loop_state.reconcile(TEMP mtime → loop-state)、
 convergence_health.assess(HEALTHY/STALLED/SPINNING)、
 active_intervention.find_help_requests/find_responses、

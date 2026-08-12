@@ -1,11 +1,11 @@
 """Tests for hooks/worker_budget.py — Pre+Post ToolUse on Agent (DESIGN §11).
 
 Hook enforces 5 dispatch gates + worker accounting:
-  (a) ≤3 concurrent workers
+  (a) <=3 concurrent workers
   (b) target claim promotion_attempts < 3
-  (c) intended_tools ⊆ task_spec.constraints (vm/cti)
+  (c) intended_tools subset of task_spec.constraints (vm/cti)
   (d) now < deadline_ts (time budget)
-  (e) tier gate (§8.5): tier=N needs all open claims at evidence_tier_attempted ≥ N-1
+  (e) tier gate (§8.5): tier=N needs all open claims at evidence_tier_attempted >= N-1
 
 TDD RED phase. Functions take explicit paths so tests can use tmp_path.
 """
@@ -63,6 +63,26 @@ def _write_register(path: Path, claims):
 def _write_task_spec(path: Path, constraints):
     """Write task_spec.yaml with given constraints."""
     path.write_text(yaml.safe_dump({'constraints': constraints}, allow_unicode=True), encoding='utf-8')
+
+
+def _write_status(ws: Path, name: str, last_status: str, prior=None):
+    """Write runs/worker-status-<name>.md whose LAST status: line is last_status.
+
+    Issue #37: the gate counts workers from these files (single source of truth),
+    mirroring convergence_check._scan_active_workers. `prior` is a list of earlier
+    status strings to exercise the last-line-decides rule (worktree snapshots carry
+    historical files). Creates ws/runs/ if needed.
+    """
+    runs = ws / 'runs'
+    runs.mkdir(parents=True, exist_ok=True)
+    lines = [f"# worker-status-{name}", ""]
+    ts = 0
+    if prior:
+        for st in prior:
+            lines.append(f"[2026-08-11T12:00:{ts:02d}Z] step | status: {st}")
+            ts += 1
+    lines.append(f"[2026-08-11T12:00:{ts:02d}Z] step | status: {last_status}")
+    (runs / f"worker-status-{name}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 # ---------- parse_dispatch ----------
@@ -171,20 +191,64 @@ def test_read_claim_missing(tmp_path):
 # ---------- checks ----------
 
 def test_check_workers_lt_3_ok(tmp_path):
-    p = tmp_path / 'analysis_state.txt'
-    _write_state(p, workers=[{'worker_id': 'w1', 'claim_id': 'C-001', 'tier': 1, 'tools': []},
-                             {'worker_id': 'w2', 'claim_id': 'C-002', 'tier': 1, 'tools': []}])
-    ok, msg = check_workers_lt_3(p)
+    """#37: gate counts status files (single source of truth), not the state cache."""
+    ws = tmp_path / 'ws'
+    _write_status(ws, 'w1', 'in-progress')
+    _write_status(ws, 'w2', 'in-progress')
+    ok, msg = check_workers_lt_3({'workspace': str(ws)})
     assert ok, msg
 
 
 def test_check_workers_lt_3_reject(tmp_path):
-    p = tmp_path / 'analysis_state.txt'
-    _write_state(p, workers=[
-        {'worker_id': f'w{i}', 'claim_id': f'C-00{i}', 'tier': 1, 'tools': []} for i in range(1, 4)
-    ])
-    ok, msg = check_workers_lt_3(p)
+    """#37: 3 in-progress status files fill the cap regardless of the state cache."""
+    ws = tmp_path / 'ws'
+    for i in range(1, 4):
+        _write_status(ws, f'w{i}', 'in-progress')
+    ok, msg = check_workers_lt_3({'workspace': str(ws)})
     assert not ok and '3' in msg
+
+
+def test_check_workers_lt_3_from_status_files(tmp_path):
+    """#37: the gate counts status files (single source of truth), not state cache."""
+    ws = tmp_path / 'ws'
+    _write_status(ws, 'w1', 'in-progress')
+    _write_status(ws, 'w2', 'in-progress')
+    _write_status(ws, 'w3', 'in-progress')
+    ok, msg = check_workers_lt_3({'workspace': str(ws)})
+    assert not ok and '3' in msg
+
+
+def test_check_workers_lt_3_empty_state_cache(tmp_path):
+    """#37: an empty [active_workers] cache must NOT fool the gate into over-allowing."""
+    ws = tmp_path / 'ws'
+    _write_status(ws, 'w1', 'in-progress')
+    _write_state(ws / 'analysis_state.txt')  # no active_workers segment
+    ok, msg = check_workers_lt_3({'workspace': str(ws)})
+    assert ok  # 1 active via status file, < 3
+
+
+def test_check_workers_lt_3_ignores_done(tmp_path):
+    """#37: a status file whose last line is done does NOT occupy a slot."""
+    ws = tmp_path / 'ws'
+    _write_status(ws, 'w1', 'in-progress')
+    _write_status(ws, 'w2', 'done')
+    ok, msg = check_workers_lt_3({'workspace': str(ws)})
+    assert ok
+
+
+def test_check_workers_lt_3_last_status_line_decides(tmp_path):
+    """#37: a file whose LAST status line is done is not active, even if an earlier
+    line said in-progress (worktree snapshots carry historical files)."""
+    ws = tmp_path / 'ws'
+    _write_status(ws, 'w1', 'done', prior=['in-progress'])
+    ok, msg = check_workers_lt_3({'workspace': str(ws)})
+    assert ok  # last line done -> not counted -> 0 active
+
+
+def test_check_workers_lt_3_missing_workspace_fails_open():
+    """#37: no workspace key -> FAIL_OPEN (allow) — scan failure never blocks dispatch."""
+    ok, msg = check_workers_lt_3({})
+    assert ok and msg == ''
 
 
 def test_check_promotion_attempts_ok(tmp_path):

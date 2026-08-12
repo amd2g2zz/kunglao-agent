@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-11
+goal: Add DEAD to status_defs.TERMINAL; mark_dead + dead-letter artifact; detect
+  dirty statuses; worker_pulse quarantined flag

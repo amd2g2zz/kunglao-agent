@@ -20,7 +20,7 @@ their work. It does NOT produce evidence.
 
 | Tool family | Orchestrator direct call? | Why |
 |---|---|---|
-| `mcp__ghidra__*` | ❌ delegate to a `Task` worker | produces static evidence |
+| `mcp__ghidra__*` | ❌ delegate to an `Agent` worker | produces static evidence |
 | `mcp__x64dbg__*` | ❌ delegate | produces dynamic evidence |
 | `mcp__frida__*` / `rev-frida` against a host PID | ❌ forbidden (Hard prohibition #5) | sample-on-host |
 | `mcp__volatility__*` | ❌ delegate | produces novel evidence |
@@ -60,8 +60,8 @@ collapses the only mechanism that defeats confirmation bias. Rules:
    - Deliverable is `runs/<ts>-<task>.md`, NOT `runs/<ts>-verify-*.md`
      (verifier filename is reserved).
 2. **Only an independent verifier subagent writes `verify_status`** — a
-   fresh `Task` agent with no shared context, dispatched via
-   `scripts/verify-note.py` (or by the orchestrator if absent). The
+   fresh `Agent` subagent with no shared context, dispatched via
+   `<malware-veri-notes>/scripts/verify-note.py` (or by the orchestrator if absent). The
    verifier reproduces the worker's `reproduce:` block byte-exact and
    writes `runs/<ts>-verify-<NN>.md` + the fact's `verified_by_run:`.
 3. **Orchestrator enforces at dispatch time**: reject reports with verdict
@@ -70,7 +70,7 @@ collapses the only mechanism that defeats confirmation bias. Rules:
 4. **Exception**: if verifier subagent is genuinely unavailable (budget
    cap, infra down), the worker may write
    `self_caveat: "unverified — needs verifier pass"`. `verify_status`
-   stays `pending`; fact cannot be cited by `handoff-check.py`.
+   stays `pending`; fact cannot be cited by `<malware-veri-notes>/scripts/handoff-check.py`.
 
 §1 is the *tool* boundary (orchestrator vs worker). §1b is the *epistemic*
 boundary (maker vs checker). Both must hold.
@@ -179,6 +179,12 @@ one worker" pathology is prevented by the active-worker registry
    via `Bash cat` (~1 KB, no overflow).
 3. **On mid-course correction**, `SendMessage` the worker; the worker
    updates the status file to acknowledge.
+
+**Isolation boundary (#88)**: workers are isolated subagents that report only
+to the orchestrator and never message each other — no agent-team features
+(`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` never enabled, no teammates, no team
+setup). Orchestrator↔worker SendMessage (the heartbeat active-ping and
+mid-course corrections) is the sanctioned channel, not a team feature.
 
 Why this works: `Bash cat <small-file>` is ~1 KB vs JSONL = 100 KB+.
 Multiple workers each have their own status file.
@@ -343,6 +349,13 @@ workers. Rules:
    patterns. WebSearch the pattern; `SendMessage` the workaround.
 4. **Update the plan after each worker activity**.
 
+**§6f.1 watchdog (isolation-first, #88)**: the watchdog reads ALL
+`worker-status-*.md` files every tick, pings silent workers via SendMessage
+(orchestrator → worker — the sanctioned channel; workers never message each
+other), applies the §6.1a smart-ping protocol, and TaskStops only after 3
+unanswered strikes. No agent-team features are involved anywhere in the
+watchdog — kunglao tasks never use teams.
+
 **Known recoverable MCP error patterns** (cheat sheet):
 
 | Error | Fix |
@@ -455,8 +468,11 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   STRUCTURED (`[ping HH:MM] step? stuck? eta?` → `step=<x> | stuck=<none|what> | eta=<min>`),
   replies append to `<ws>/runs/.ping-log.jsonl`, and the log feeds kunglao-agent's
   improvement loop (repeated stuck=infra → infra blocker; eta drift >2× →
-  looping; zero step delta + eta grows → spinning). **Full protocol + signal
-  table → `references/optimization-2026-08.md` §6.1a.**
+  looping; zero step delta + eta grows → spinning). Pings travel via
+  SendMessage (orchestrator → worker) — the sanctioned channel (v1.9.20/21,
+  #88); agent-team features (teammates, team setup, worker↔worker messaging)
+  are never used. **Full protocol + signal table →
+  `references/optimization-2026-08.md` §6.1a.**
 
 - **§6.2 — notes capture via /malware-veri-notes (mandatory, every heartbeat).**
   Each heartbeat tick (not just at the end) MUST capture valuable content

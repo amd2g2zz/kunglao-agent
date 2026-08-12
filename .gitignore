@@ -4,6 +4,12 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Virtualenv (created by the documented install command: uv sync --locked)
+.venv/
+
+# Generated release artifact (issue #80) — CI stores it as a workflow artifact
+/release-receipt.json
+
 # Test artifacts
 *.tmp
 *.bak
@@ -23,3 +29,7 @@ __pycache__/
 # Malware samples — NEVER tracked
 **/bins/
 test_workspace/
+runs/
+
+# Eval harness generated receipts (reproducible via scripts/kunglao-eval.py --all)
+eval/receipts/

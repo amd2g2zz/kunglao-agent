@@ -18,13 +18,15 @@ Decision matrix:
   open_claims>0 AND free_slots==0          → SATURATED      (poll workers, don't idle)
   open_claims==0 AND partial_facts==0      → CONVERGED      (loop done, write report)
   open_claims>0 AND all open are blocked   → BLOCKED        (escalate with specifics)
+  non-empty malformed primary_questions    → INVALID        (escalate, target undefined)
 
 Exit codes (machine-readable for hooks):
   0 = CONVERGED (nothing to do)
   1 = DISPATCH (open work + free slots)
   2 = DISPATCH_VERIFIER (partial facts need checking)
   3 = SATURATED (busy, poll)
-  4 = BLOCKED (open work but all blocked — escalate)
+  4 = BLOCKED (open work but all blocked — escalate); INVALID (bad task_spec) reuses this
+     so hooks that accept returncodes 0–4 keep parsing the JSON decision.
 
 Usage:
   python scripts/convergence_check.py [workspace]          # human-readable
@@ -42,10 +44,10 @@ from pathlib import Path
 
 import yaml
 
+from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES
+
 WORKER_CAP = 3
 STUCK_MINUTES = 20
-TERMINAL = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED"}
-PARTIAL_STATUSES = {"PARTIALLY-VERIFIED", "PARTIAL", "PARTIALLY_VERIFIED"}
 
 # Exit codes
 EXIT_CONVERGED = 0
@@ -125,7 +127,7 @@ def _open_claims(reg: dict):
     out = []
     for c in (reg.get("claims") or []):
         status = (c.get("status") or "UNKNOWN").upper()
-        if status not in TERMINAL and status != "IN_PROGRESS":
+        if status not in TERMINAL and status not in IN_PROGRESS_STATUSES:
             out.append({"id": c.get("id"), "status": status, "blocked": bool(c.get("blocked"))})
     return out
 
@@ -212,39 +214,85 @@ def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) 
 
 
 def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
-    """Find primary_questions that have NO PROVEN answering claim.
+    """Find primary_questions that have NO answering claim.
 
-    A primary_question is "verified" only when a claim with
-    answers_question == q.id has status == PROVEN (BLIND-verified per M1).
-    STAMP, UNVERIFIED, VERIFIED, NEGATIVE etc. do NOT satisfy — M2 requires
-    BLIND-verified answers.
+    A primary_question is "verified" when a claim with
+    answers_question == q.id has a terminal status appropriate to the
+    question's need:
+      - model_selection / protocol_description: status == PROVEN
+        (BLIND-verified per M1).
+      - yes_no_with_evidence: any terminal status answering the
+        yes/no question (PROVEN / VERIFIED / NEGATIVE / REFUTED).
+    STAMP, UNVERIFIED, PARTIAL etc. do NOT satisfy.
 
     Returns list of {"question": q_id, "answering_claims": [...]} dicts.
     """
-    pqs = task_spec.get("primary_questions") or []
+    pqs, _ = _parse_primary_questions(task_spec)
     if not pqs:
         return []
 
-    # Extract question IDs (support both "qid: description" dict and plain string forms)
-    pq_ids = []
-    for q in pqs:
-        if isinstance(q, dict):
-            pq_ids.extend(q.keys())
-        elif isinstance(q, str):
-            pq_ids.append(q)
+    # Map question id -> need (single canonical parse, issue #77)
+    question_need = dict(pqs)
 
     claims = reg.get("claims") or []
     unverified = []
-    for qid in pq_ids:
+    for qid, need in question_need.items():
         answering = [
             {"id": c.get("id"), "status": (c.get("status") or "UNKNOWN").upper()}
             for c in claims
             if c.get("answers_question") == qid
         ]
-        has_proven = any(a["status"] == "PROVEN" for a in answering)
-        if not has_proven:
+        if need == "yes_no_with_evidence":
+            terminal_ok = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED"}
+            satisfied = any(a["status"] in terminal_ok for a in answering)
+        else:
+            satisfied = any(a["status"] == "PROVEN" for a in answering)
+        if not satisfied:
             unverified.append({"question": qid, "answering_claims": answering})
     return unverified
+
+
+def _note_layer_gaps(workspace: Path, pq_ids: set, reg: dict) -> list:
+    """DESIGN §8 C0 note-layer gate: every primary_question needs a note with
+    verify_status=passes whose claim_id answers that question.
+
+    Link chain: note.claim_id -> claim.answers_question -> q_id
+    (notes carry no direct answers_question field; the link is via the claim).
+
+    Returns pq_ids lacking such a note. Skip (return []) when notes/ is absent
+    or no primary_questions are defined (feature unused -> no regression)."""
+    if not pq_ids or not (workspace / "notes").exists():
+        return []
+    import re as _re
+    claim_answers = {}
+    for c in (reg.get("claims") or []):
+        cid = c.get("id")
+        aq = c.get("answers_question")
+        if cid and aq:
+            claim_answers[str(cid).strip()] = str(aq).strip()
+    answered = set()
+    for p in (workspace / "notes").glob("*.md"):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if not text.lstrip().startswith("---"):
+            continue
+        parts = text.split("---", 2)
+        if len(parts) < 3:
+            continue
+        fm = parts[1]
+        vs = _re.search(r"^verify_status:\s*(\S+)", fm, _re.M)
+        cid_m = _re.search(r"^claim_id:\s*([^\n]+)", fm, _re.M)
+        if not (vs and cid_m):
+            continue
+        if vs.group(1).strip().lower() != "passes":
+            continue
+        cid = cid_m.group(1).strip().strip("[]").split(",")[0].strip()
+        qid = claim_answers.get(cid)
+        if qid:
+            answered.add(qid)
+    return [q for q in pq_ids if q not in answered]
 
 
 def _load_task_spec(workspace: Path) -> dict:
@@ -252,16 +300,111 @@ def _load_task_spec(workspace: Path) -> dict:
     return _load_yaml(workspace / "task_spec.yaml")
 
 
+def _parse_pq_item(q: dict) -> tuple[str | None, str | None, str | None]:
+    """Parse ONE primary_questions list item (canonical or legacy form).
+
+    Returns (qid, need, error) — a parse error leaves qid/need as None.
+      - canonical (template) form: dict with a non-empty string `id` key;
+        extra keys (`q`, `need`, `candidates`, ...) are allowed.
+      - legacy one-key mapping: dict WITHOUT `id` and with exactly one
+        string key — the key is the question id and the value is a free-text
+        description (need=None), NOT a `need` enum.
+    """
+    if "id" in q:
+        qid = q["id"]
+        if not isinstance(qid, str) or not qid:
+            return None, None, f"'id' must be a non-empty string, got {qid!r}"
+        need = q.get("need")
+        if need is not None and not isinstance(need, str):
+            return None, None, f"'need' must be a string, got {need!r}"
+        return qid, need, None
+    if len(q) == 0:
+        return None, None, "empty mapping (expected 'id' or one-key legacy form)"
+    if len(q) > 1:
+        return None, None, \
+            f"mapping without 'id' has {len(q)} keys {list(q)!r}; " \
+            f"use {{id: ..., need: ...}} or the one-key legacy form"
+    k = next(iter(q))
+    if not isinstance(k, str):
+        return None, None, f"mapping key {k!r} is not a string"
+    v = q[k]
+    if v is not None and not isinstance(v, str):
+        return None, None, f"mapping value {v!r} is not a string or null"
+    return k, None, None
+
+
+def _parse_primary_questions(task_spec: dict) -> tuple[list, str | None]:
+    """Canonical parse of task_spec.primary_questions (issue #77 follow-up).
+
+    ONE schema at the load boundary: every consumer — _pq_ids(),
+    _unverified_primary_questions(), the orphan check and the note-layer
+    check — derives from the SAME parsed list, so a mapping-shaped
+    `primary_questions` can never silently degrade to an empty question set
+    (the pre-fix bug: c3be3c6 made extraction `q.get("id")`-only, which
+    skipped the legacy one-key mapping and disabled the M2 gates).
+
+    Accepted shapes (deterministic):
+      - key absent / `[]` / `{}`      → feature unused: ([], None)
+      - list items: plain string, canonical dict with `id`, legacy one-key
+        mapping (see _parse_pq_item)
+      - top-level non-empty mapping   → one (qid, None) per string key
+        (pre-regression behavior: keys were iterated as ids)
+
+    Returns (questions, error): questions is a list of (qid, need) tuples
+    (need None when unspecified), [] on error; error is None on success else
+    a human-readable reason naming the offending item/field. A NON-EMPTY
+    malformed / mixed-with-malformed / unrecognized input NEVER yields an
+    empty set without an error — decide() escalates INVALID.
+    """
+    raw = task_spec.get("primary_questions")
+    if raw is None:
+        return [], None
+    if raw == [] or raw == {}:
+        return [], None
+
+    if isinstance(raw, dict):
+        # top-level mapping: keys are question ids (pre-regression behavior)
+        norm = []
+        for k, v in raw.items():
+            if not isinstance(k, str):
+                return [], f"top-level mapping key {k!r} is not a string"
+            if v is not None and not isinstance(v, str):
+                return [], f"top-level mapping key {k!r} has non-string value {v!r}"
+            norm.append({k: v})
+        raw = norm
+
+    if not isinstance(raw, list):
+        return [], f"expected a list or mapping of questions, got {type(raw).__name__} ({raw!r})"
+
+    questions: list = []
+    seen: set = set()
+    for i, q in enumerate(raw):
+        if isinstance(q, str):
+            if not q:
+                return [], f"item {i} is an empty string"
+            qid, need = q, None
+        elif isinstance(q, dict):
+            qid, need, err = _parse_pq_item(q)
+            if err:
+                return [], f"item {i}: {err}"
+        else:
+            return [], f"item {i} is {type(q).__name__} ({q!r}); expected a string or mapping"
+        if qid in seen:
+            return [], f"duplicate question id {qid!r} (item {i})"
+        seen.add(qid)
+        questions.append((qid, need))
+    return questions, None
+
+
 def _pq_ids(task_spec: dict) -> set:
-    """Extract the set of primary_question IDs from task_spec."""
-    pqs = task_spec.get("primary_questions") or []
-    ids = set()
-    for q in pqs:
-        if isinstance(q, dict):
-            ids.update(q.keys())
-        elif isinstance(q, str):
-            ids.add(q)
-    return ids
+    """Extract the set of primary_question IDs from task_spec.
+
+    Thin wrapper over the single canonical parse (issue #77). On a malformed
+    NON-EMPTY schema the set is empty ONLY because decide() escalates
+    INVALID before any gate consults it — the parse error is never silently
+    swallowed there (the bug this follow-up fixes).
+    """
+    return {qid for qid, _ in _parse_primary_questions(task_spec)[0]}
 
 
 def _append_ledger(workspace: Path, d: dict) -> None:
@@ -306,7 +449,8 @@ def _failure_blocked(workspace: Path) -> list:
 def decide(workspace: Path) -> dict:
     reg = _load_yaml(workspace / "claim-register.yaml")
     task_spec = _load_task_spec(workspace)
-    pq_ids = _pq_ids(task_spec)
+    pq_questions, pq_error = _parse_primary_questions(task_spec)
+    pq_ids = {qid for qid, _ in pq_questions}
 
     opens = _open_claims(reg)
     partials = _partial_facts(workspace)
@@ -316,16 +460,23 @@ def decide(workspace: Path) -> dict:
     failure_blocked_ids = _failure_blocked(workspace)
 
     # M2 completeness gate: check before declaring CONVERGED
-    orphans = _orphan_terminal_claims(reg, pq_ids if pq_ids is not None else None)
+    orphans = _orphan_terminal_claims(reg, pq_ids)
     unverified_pqs = _unverified_primary_questions(reg, task_spec)
+    # DESIGN §8 C0 note-layer gate: every pq needs a verify_status=passes note
+    pq_note_gaps = _note_layer_gaps(workspace, pq_ids, reg)
 
     blocked_claims = [c for c in opens if c["blocked"]]
     # unblocked_open = open, not infra-blocked, AND not failure-analysis-blocked
     unblocked_open = [c for c in opens if not c["blocked"] and c["id"] not in failure_blocked_ids]
     failure_blocked_open = [c for c in opens if c["id"] in failure_blocked_ids]
 
-    # Decision matrix (order matters)
-    if not opens and not partials:
+    # Decision matrix (order matters). INVALID schema first (fail-closed):
+    # a non-empty malformed primary_questions means the run's convergence
+    # target is undefined — escalate, never dispatch against it (issue #77).
+    if pq_error:
+        decision, exit_code, action = "INVALID", EXIT_BLOCKED, \
+            f"INVALID task_spec primary_questions: {pq_error}"
+    elif not opens and not partials:
         # M2 completeness gate: CONVERGED requires primary_questions all PROVEN
         # AND zero orphan terminal claims. Otherwise downgrade.
         if orphans:
@@ -339,10 +490,15 @@ def decide(workspace: Path) -> dict:
                 f"Cannot CONVERGE: primary_questions {uv_ids} lack PROVEN answering claims " \
                 f"(need BLIND-verified PROVEN, not STAMP/unverified). " \
                 f"Dispatch verifier or rework answering claims."
+        elif pq_note_gaps:
+            decision, exit_code, action = "DISPATCH_VERIFIER", EXIT_VERIFY, \
+                f"Note-layer (DESIGN §8 C0) not satisfied: primary_questions {pq_note_gaps} " \
+                f"lack a note with verify_status=passes (link: note.claim_id -> claim.answers_question). " \
+                f"Run verify-note.py before delivery."
         else:
             decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
-                "No open claims, no partial facts. All primary_questions PROVEN, zero orphans. " \
-                "Loop is done — write the report."
+                "Claim loop done — all open claims closed, partials verified, primary_questions PROVEN " \
+                "with verify_status=passes notes. STOP dispatch. Delivery requires handoff-check.py PASS."
     elif unblocked_open and free_slots:
         decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
             f"Run priority.py and dispatch the top claim. {len(unblocked_open)} unblocked open claim(s), {free_slots} free slot(s)."
@@ -383,6 +539,8 @@ def decide(workspace: Path) -> dict:
         # M2 completeness diagnostics
         "orphan_claims": orphans,
         "unverified_primary_qs": unverified_pqs,
+        "note_layer_gaps": pq_note_gaps,
+        "pq_parse_error": pq_error,
     }
 
 

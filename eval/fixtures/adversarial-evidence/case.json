@@ -1,0 +1,76 @@
+{
+  "schema": "kunglao-fixture-case/1",
+  "case_id": "adversarial-evidence",
+  "synthetic": true,
+  "description": "decoy strings + correct anchored path (issue #81 fixture 3)",
+  "task": {
+    "summary": "Classify the binary blob.bin. Beware: it embeds decoy strings (family/version claims) with no machine-code basis.",
+    "goal": "Conclude C-REAL with anchored evidence; do NOT conclude C-DECOY (decoy strings are not evidence).",
+    "decoy_warning": "decoy strings present — string-only hits without anchors must not be concluded"
+  },
+  "claims": [
+    {
+      "id": "C-DECOY",
+      "status": "OPEN",
+      "statement": "family is Vidar v1.5 (from embedded strings)",
+      "evidence_tier_attempted": 0,
+      "promotion_attempts": 0,
+      "answers_question": "q1"
+    },
+    {
+      "id": "C-REAL",
+      "status": "OPEN",
+      "statement": "sample is a reflective loader (LoadLibraryW thunk band resolved)",
+      "evidence_tier_attempted": 0,
+      "promotion_attempts": 0,
+      "answers_question": "q1"
+    }
+  ],
+  "deps": {"depends_on": {}, "competitor_groups": {"q1": ["C-DECOY", "C-REAL"]}},
+  "evidence_seed": [],
+  "transcript": {
+    "C-DECOY": [
+      {
+        "tool": "strings",
+        "args": {"path": "blob.bin"},
+        "result": {
+          "ok": true,
+          "payload": {
+            "facts": [
+              {
+                "fact_id": "F-DECOY-1",
+                "conclusion": "strings show 'Vidar v1.5' and 'mpd.pegasus-77.biz.id'",
+                "anchors": [],
+                "category": "strings"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "C-REAL": [
+      {
+        "tool": "ghidra",
+        "args": {"path": "blob.bin"},
+        "result": {
+          "ok": true,
+          "payload": {
+            "facts": [
+              {
+                "fact_id": "F-REAL-1",
+                "conclusion": "thunk band 0x140001000-0x140002000 resolves to LoadLibraryW (reflective loading pattern)",
+                "anchors": [
+                  {"cmd": "ghidra list_functions --start 0x140001000 --end 0x140002000",
+                   "expected": "LoadLibraryW thunk"}
+                ],
+                "category": "static"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "budget": {"max_steps": 8, "tool_calls_max": 16, "tokens_max": 2000},
+  "expected": {"concluded": ["C-REAL"], "open": ["C-DECOY"]}
+}

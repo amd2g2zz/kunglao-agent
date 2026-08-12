@@ -37,6 +37,6 @@
         }
       }
     },
-    "overall": { "enum": ["VERIFIED", "REJECTED", "PARTIAL"] }
+    "overall": { "enum": ["VERIFIED", "REJECTED", "PARTIAL", "UNVERIFIED-WITH-GAP"] }
   }
 }

@@ -1,0 +1,16 @@
+{
+  "schema": "kunglao-candidate-corpus/1",
+  "description": "Held-in/held-out corpus for the memory candidate lab (issue #82). Files reference the #81 synthetic eval fixtures (read-only; hashes pinned — a digest mismatch fails evaluation INCONCLUSIVE). held-in = staging-cohort-derived cases; held-out = unseen cases, never shown to generation. Policy invariants: overclaims / invalid_work must pass on every candidate trial.",
+  "held_in": ["decode-flag"],
+  "held_out": ["adversarial-evidence", "impossible-task"],
+  "files": {
+    "eval/fixtures/decode-flag/case.json": "1178334d81564f3a208b0bb42790a6498bcce3cb85c94d5445065a0adcce5a78",
+    "eval/fixtures/decode-flag/oracle.json": "a4f3ac233ce34d3ee91f05dfac56fb77ca8fe1cbc8a970aa202518978305c350",
+    "eval/fixtures/adversarial-evidence/case.json": "64ab424e66cc2b51501d12a1816d6f5a9a428e13d56c1792144f23cb02c476c2",
+    "eval/fixtures/adversarial-evidence/oracle.json": "1ac9c4e77f1c302700018db82a001c85733e4a3e11138b645d1e0f68f39f0f23",
+    "eval/fixtures/impossible-task/case.json": "226457313912415fb3d08110bf8e2bd0ec8415065778d85b995dbeea6ffa8343",
+    "eval/fixtures/impossible-task/oracle.json": "1a999760698946674d8357f61855f6d5cdd936b505f941aa82ac0e154c4cd790"
+  },
+  "invariants": ["overclaims", "invalid_work"],
+  "baseline_discipline": "naive"
+}

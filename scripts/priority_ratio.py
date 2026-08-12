@@ -26,7 +26,8 @@ from pathlib import Path
 
 import yaml
 
-TERMINAL = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED"}
+from status_defs import TERMINAL, IN_PROGRESS_STATUSES
+
 WEIGHTS = {"L": 0.45, "D": 0.30, "N": 0.25}
 TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
 NOVELTY_BASE = 3  # 同类别 3 个 terminal fact → N=0 (饱和)
@@ -95,7 +96,7 @@ class Action:
 
 def is_open(claim: dict) -> bool:
     """非 terminal 且非 IN_PROGRESS(与 priority.py L60-64 同规则)."""
-    return claim.get("status") not in TERMINAL and claim.get("status") != "IN_PROGRESS"
+    return claim.get("status") not in TERMINAL and claim.get("status") not in IN_PROGRESS_STATUSES
 
 
 # ---------- action 分类 (不变, 供 novelty region + worker 提示) ----------

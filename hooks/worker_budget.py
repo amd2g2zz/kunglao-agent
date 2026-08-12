@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -22,7 +23,6 @@ import yaml
 
 # ---------- constants ----------
 
-TERMINAL_STATUS = {'PROVEN', 'VERIFIED', 'NEGATIVE', 'REFUTED', 'DEFERRED'}
 MAX_WORKERS = 3
 MAX_PROMOTION_ATTEMPTS = 3
 
@@ -56,6 +56,7 @@ _SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
 try:
     from priority import rank_claims as _rank_claims, _weights as _priority_weights
+    from status_defs import TERMINAL  # single source of truth (#34, #95)
     _PRIORITY_AVAILABLE = True
 except Exception:  # pragma: no cover - hook stays usable if priority.py is moved
     _PRIORITY_AVAILABLE = False
@@ -65,6 +66,80 @@ def _load_yaml(path):
     if not path or not Path(path).exists():
         return {}
     return yaml.safe_load(Path(path).read_text(encoding='utf-8')) or {}
+
+
+def _run_py(args, cwd=None):
+    """Run a skill script, fail-open: any subprocess failure -> None."""
+    try:
+        return subprocess.run(
+            [sys.executable] + args,
+            capture_output=True, text=True, timeout=20,
+            cwd=cwd,
+        )
+    except (subprocess.SubprocessError, OSError):
+        return None
+
+
+def check_plan_drift(paths):
+    """v1.9.29: plan-drift gate wired into PreToolUse. FAIL_OPEN on any
+    subprocess/workspace resolution failure — the hook stays usable."""
+    ws = paths.get('workspace')
+    if not ws:
+        return True, ''
+    r = _run_py([str(_SKILL_ROOT / 'scripts' / 'plan_drift_detector.py'),
+                 str(ws), '--active-only'])
+    if r is None:
+        return True, ''
+    if r.returncode == 0:
+        return True, ''
+    return False, f"plan drift detected (rc={r.returncode}): {(r.stderr or r.stdout or '')[:200]}"
+
+
+def check_convergence_health(paths):
+    """v1.9.29: STALLED/SPINNING gate wired into PreToolUse. FAIL_OPEN on any
+    subprocess/workspace resolution failure."""
+    ws = paths.get('workspace')
+    if not ws:
+        return True, ''
+    r = _run_py([str(_SKILL_ROOT / 'scripts' / 'convergence_health.py'),
+                 str(ws)])
+    if r is None:
+        return True, ''
+    if r.returncode == 1:
+        return False, "convergence STALLED — diagnose before dispatching"
+    if r.returncode == 2:
+        return False, "convergence SPINNING — STOP dispatching"
+    return True, ''
+
+
+def check_backtrack_gate(paths):
+    """v1.9.30: stuck-worker backtrack gate wired into PreToolUse (#38).
+    Mirrors check_plan_drift / check_convergence_health: runs the existing
+    backtrack_gate.py via _run_py (20s timeout) and FAIL_OPEN on any
+    subprocess/workspace resolution failure — the hook stays usable.
+
+    backtrack_gate rc:
+      0  -> clean (no stuck workers, or stuck-but-valid-backtrack)
+      1  -> stuck worker(s) without a valid `## backtrack` block
+      2  -> stuck >30m, decision != redispatch (stale un-actioned)
+      other/None -> fail open (broken gate must not block dispatch)
+    """
+    ws = paths.get('workspace')
+    if not ws:
+        return True, ''
+    r = _run_py([str(_SKILL_ROOT / 'scripts' / 'backtrack_gate.py'),
+                 str(ws)])
+    if r is None:
+        return True, ''
+    if r.returncode == 0:
+        return True, ''
+    if r.returncode == 1:
+        return False, ("stuck worker(s) without a valid `## backtrack` block — "
+                       "force a backtrack decision before dispatching")
+    if r.returncode == 2:
+        return False, ("stuck worker(s) with stale backtrack (>30m un-actioned, "
+                       "decision != redispatch) — escalate or override to redispatch")
+    return True, ''  # unknown rc -> fail open
 
 
 def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid):
@@ -334,42 +409,93 @@ def compare_register_change_proven_gate(
     Unlike compare_register_change (which exempts the orchestrator from the
     worker self-promotion guard), this gate applies to ALL actors including
     the orchestrator: PROVEN requires verifier_sign_off, period.
+
+    #78 fail-closed: the BLIND / contradiction / inference gates are REQUIRED
+    for the PROVEN promotion (same policy as claim_migrator's
+    REQUIRED_FOR_TERMINAL_STATE). An unreadable register (with a
+    before-snapshot), an unavailable gate module, or a raising checker blocks
+    the write — no alternate direct-edit promotion route stays fail-open.
     """
     if before is None:
         return True, 'no-before snapshot'
     after = _claim_statuses(reg_path)
     if after is None:
-        return True, 'register unreadable'
+        # fail closed: a promotion may have been written and cannot be
+        # verified — block rather than permit an unverified PROVEN.
+        return False, ('PROMOTION GATE: claim-register.yaml unreadable after '
+                       'write — cannot verify PROVEN gate (fail closed); '
+                       'fix or restore the register and retry')
     # find claims that became PROVEN
     newly_proven = [cid for cid, st in after.items()
                     if before.get(cid) != st and st == 'PROVEN']
     if not newly_proven:
         return True, 'no PROVEN promotions'
-    # check BLIND gate for each
+    # check BLIND gate for each — required, fail closed (#78)
     try:
         sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
         from blind_gate import check_proven_gate
-    except ImportError:
-        return True, 'blind_gate unavailable (fail open)'
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: blind_gate unavailable (fail closed) '
+                       f'— {type(exc).__name__}: {exc}')
+    # contradiction gate (#47): PROVEN also requires no same-topic CONFLICT —
+    # same-topic multi-PROVEN facts with differing conclusions need a
+    # supersedes/superseded_by link, else the write is blocked.
+    try:
+        from fact_contradiction_gate import check_proven_contradiction
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: fact_contradiction_gate unavailable '
+                       f'(fail closed) — {type(exc).__name__}: {exc}')
+    # inference-scope gate (#48): inferential/routing claims need independent
+    # static sign-off coverage — byte anchors / orchestrator-captured evidence
+    # do not cover the inference (a2b5e25c problem 2, F040).
+    try:
+        from blind_gate import check_inference_blind_scope
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: blind_gate.check_inference_blind_scope '
+                       f'unavailable (fail closed) — {type(exc).__name__}: {exc}')
     register_text = reg_path.read_text(encoding='utf-8', errors='replace')
     import re as _re
     violations = []
-    for cid in newly_proven:
-        worker_id = None
-        m = _re.search(rf"- id:\s*{_re.escape(cid)}\b(.*?)(?=\n-\s*id:|\Z)",
-                       register_text, _re.DOTALL)
-        if m:
-            for key in ('worker_id', 'last_dispatched_worker'):
-                wm = _re.search(rf"\b{key}:\s*(\S+)", m.group(1))
-                if wm and wm.group(1).strip().lower() not in ('null', 'none', '~'):
-                    worker_id = wm.group(1).strip().strip("'\"")
-                    break
-        allowed, effective, reason = check_proven_gate(cid, facts_dir, worker_id=worker_id)
-        if not allowed:
-            violations.append(f'{cid}: {reason}')
+    try:
+        for cid in newly_proven:
+            worker_id = None
+            m = _re.search(rf"- id:\s*{_re.escape(cid)}\b(.*?)(?=\n-\s*id:|\Z)",
+                           register_text, _re.DOTALL)
+            if m:
+                for key in ('worker_id', 'last_dispatched_worker'):
+                    wm = _re.search(rf"\b{key}:\s*(\S+)", m.group(1))
+                    if wm and wm.group(1).strip().lower() not in ('null', 'none', '~'):
+                        worker_id = wm.group(1).strip().strip("'\"")
+                        break
+            allowed, effective, reason = check_proven_gate(cid, facts_dir, worker_id=worker_id)
+            if not allowed:
+                violations.append(f'{cid}: {reason}')
+            c_ok, c_reason = check_proven_contradiction(cid, facts_dir)
+            if not c_ok:
+                violations.append(f'{cid}: {c_reason}')
+            i_ok, _, i_reason = check_inference_blind_scope(
+                cid, facts_dir, register_text, worker_id=worker_id)
+            if not i_ok:
+                violations.append(f'{cid}: {i_reason}')
+    except ImportError as exc:
+        # Infrastructure failure (should not happen after import above, but
+        # defensive) — fail closed: code must be complete.
+        return False, (f'PROMOTION GATE: checker raised while verifying PROVEN '
+                       f'({type(exc).__name__}: {exc}) — fail closed')
+    except Exception as exc:
+        # #98 (D6/F15): runtime verifier error (timeout/resource limit) —
+        # degrade to STAMP guidance instead of hard fail-closed block.
+        # The PROVEN promotion is still blocked (cannot be PROVEN without
+        # verification), but the message guides to STAMP downgrade rather
+        # than demanding infrastructure repair.
+        for cid in newly_proven:
+            violations.append(
+                f'{cid}: VERIFIER RUNTIME ERROR '
+                f'({type(exc).__name__}: {exc}) — '
+                f'degrade to STAMP (guardrails SS1b self_caveat allowed)')
     if violations:
-        return False, (f'BLIND GATE: PROVEN without independent verifier sign-off — '
-                       f'{"; ".join(violations)}. Downgrade to STAMP or obtain BLIND sign-off.')
+        return False, (f'PROMOTION GATE: PROVEN rejected — '
+                       f'{"; ".join(violations)}. Downgrade to STAMP or resolve the blockers.')
     return True, f'{len(newly_proven)} PROVEN promotion(s) with valid BLIND sign-off'
 
 
@@ -418,8 +544,24 @@ def _read_all_claims(path: Path) -> list[dict]:
 
 # ---------- checks ----------
 
-def check_workers_lt_3(state_path: Path) -> tuple[bool, str]:
-    n = len(read_active_workers(state_path))
+def check_workers_lt_3(paths: dict) -> tuple[bool, str]:
+    """Single source of truth (issue #37): count ACTIVE workers from status files
+    (lib_kunglao.scan_active_workers), NOT the analysis_state.txt [active_workers]
+    cache — reconcile can clear or leave that cache stale, so reading it made the
+    gate and convergence_check disagree on the active count.
+
+    FAIL_OPEN: workspace key missing or scan raises -> allow (a hook must never
+    block dispatch on its own scan failure; that would deadlock the loop).
+    """
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return True, ''
+    try:
+        sys.path.insert(0, str(_SKILL_ROOT / 'hooks'))
+        from lib_kunglao import scan_active_workers
+        n, _stuck = scan_active_workers(Path(ws))
+    except Exception:
+        return True, ''  # FAIL_OPEN — never block dispatch on scan failure
     if n >= MAX_WORKERS:
         return (False, f'active_workers={n} >= {MAX_WORKERS}')
     return (True, f'active_workers={n}')
@@ -490,7 +632,7 @@ def check_tier_gate(reg_path: Path, tier: int) -> tuple[bool, str]:
         return (True, 'tier 1 ungated')
     threshold = tier - 1
     for c in _read_all_claims(reg_path):
-        if c.get('status') in TERMINAL_STATUS:
+        if c.get('status') in TERMINAL:
             continue
         eta = int(c.get('evidence_tier_attempted', 0))
         if eta < threshold:
@@ -626,7 +768,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
     tier, tools, cid = parse_dispatch(desc)
     checks = [
-        ('workers', check_workers_lt_3(paths['state'])),
+        ('workers', check_workers_lt_3(paths)),
         ('cap', check_promotion_attempts(paths['register'], cid)),
         ('tools', check_tools_allowed(tools, paths['task_spec'])),
         ('hostchan', check_host_forbidden_tools(tools)),
@@ -636,6 +778,14 @@ def pre_check(payload: dict, paths: dict) -> int:
         # v1.9.28: heartbeat MUST be alive before any dispatch — mechanical
         # gate closes the recurring 'dispatch without monitoring' failure.
         ('heartbeat', check_heartbeat_alive(paths['state'])),
+        # v1.9.29: plan drift + convergence health wired in as mechanical
+        # gates (R1/R3 of research-tree r3). FAIL_OPEN inside the checks.
+        ('drift', check_plan_drift(paths)),
+        ('health', check_convergence_health(paths)),
+        # v1.9.30 (#38): stuck-worker backtrack gate — closes the
+        # built-but-not-wired gap (backtrack_gate.py existed but was never
+        # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
+        ('backtrack', check_backtrack_gate(paths)),
     ]
     for name, (ok, msg) in checks:
         if not ok:
@@ -705,6 +855,7 @@ def _resolve_paths(payload: dict) -> dict:
     for base in candidates:
         if (base / 'analysis_state.txt').exists():
             return {
+                'workspace': str(base),
                 'state': base / 'analysis_state.txt',
                 'register': base / 'claim-register.yaml',
                 'deps': base / 'claim_deps.yaml',
@@ -712,6 +863,7 @@ def _resolve_paths(payload: dict) -> dict:
             }
     base = candidates[0]
     return {
+        'workspace': str(base),
         'state': base / 'analysis_state.txt',
         'register': base / 'claim-register.yaml',
         'deps': base / 'claim_deps.yaml',

@@ -24,6 +24,7 @@ Exit codes:
 """
 from __future__ import annotations
 import gate_telemetry as _gt
+from status_defs import TERMINAL
 
 import argparse
 import re
@@ -33,7 +34,7 @@ from pathlib import Path
 
 import yaml
 
-TERMINAL_STATUSES = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED", "STALE"}
+TERMINAL_STATUSES = TERMINAL  # #34: single source of truth (was a 6-value literal here)
 
 
 def utc_now() -> str:
@@ -85,19 +86,32 @@ def extract_next_step_claims(plan_path: Path) -> set:
 
 
 @_gt.telemetry('plan_drift_detector')
-def check(workspace: Path) -> int:
+def check(workspace: Path, active_only: bool = False) -> int:
     reg = _load_yaml(workspace / "claim-register.yaml")
     claims = (reg or {}).get("claims", []) or []
     claim_ids = {c.get("id") for c in claims if c.get("id")}
 
-    plan_path_candidates = [
-        workspace / "global_plan.txt",
-        workspace / "global_plan.yaml",
-        workspace / "plan.md",
-    ]
+    # --active-only: check the current plan file only; otherwise all plan
+    # candidates. (Phase-level plans that use a different claim-id namespace
+    # are handled by `plan_refers_to_register` below, not by globbing.)
+    if active_only:
+        plan_path_candidates = [workspace / "global_plan.txt"]
+    else:
+        plan_path_candidates = [
+            workspace / "global_plan.txt",
+            workspace / "global_plan.yaml",
+            workspace / "plan.md",
+        ]
     plan_path = next((p for p in plan_path_candidates if p.exists()), None)
     plan_ids = extract_claim_ids_from_plan(plan_path) if plan_path else set()
     next_step_ids = extract_next_step_claims(plan_path) if plan_path else set()
+
+    # v1.9.29: a plan that shares NO claim-id namespace with the register is a
+    # phase-level / legacy plan — ORPHAN_CLAIM and STALE_PLAN_ENTRY would be
+    # structural false positives (e.g. plan cites C-07 while register uses
+    # C-200+). Plan-level drift is only meaningful when plan and register
+    # reference the same claim ids.
+    plan_refers_to_register = bool(plan_ids & claim_ids)
 
     deps_path = workspace / "claim_deps.yaml"
     deps_ids = extract_claim_ids_from_deps(deps_path)
@@ -107,16 +121,17 @@ def check(workspace: Path) -> int:
 
     drifts = []
 
-    for c in claims:
-        cid = c.get("id")
-        if cid and plan_path and cid not in plan_ids:
-            drifts.append({
-                "type": "ORPHAN_CLAIM",
-                "claim_id": cid,
-                "fix": f"add claim {cid} to {plan_path.name} (mid-iteration discovery not logged)",
-            })
+    if plan_refers_to_register:
+        for c in claims:
+            cid = c.get("id")
+            if cid and plan_path and cid not in plan_ids:
+                drifts.append({
+                    "type": "ORPHAN_CLAIM",
+                    "claim_id": cid,
+                    "fix": f"add claim {cid} to {plan_path.name} (mid-iteration discovery not logged)",
+                })
 
-    if plan_path:
+    if plan_path and plan_refers_to_register:
         for cid in plan_ids:
             if cid not in claim_ids:
                 drifts.append({
@@ -142,15 +157,20 @@ def check(workspace: Path) -> int:
         qid = q.get("id") if isinstance(q, dict) else None
         if not qid:
             continue
-        answered = any(c.get("answers_question") == qid and (c.get("status") or "").upper() in ("PROVEN", "VERIFIED") for c in claims)
+        # a primary question is ANSWERED when an answering claim reached any
+        # terminal status — PROVEN/VERIFIED confirm, REFUTED/NEGATIVE answer
+        # "no", DEFERRED/STALE record a dead-end. (v1.9.30: TERMINAL_STATUSES
+        # already includes REFUTED/NEGATIVE; previously only PROVEN/VERIFIED
+        # counted, so a yes/no question answered "no" flagged as unanswered.)
+        answered = any(c.get("answers_question") == qid and (c.get("status") or "").upper() in TERMINAL_STATUSES for c in claims)
         if not answered:
             drifts.append({
                 "type": "UNANSWERED_QUESTION",
                 "claim_id": qid,
-                "fix": f"primary question {qid} has no PROVEN/VERIFIED answering claim",
+                "fix": f"primary question {qid} has no terminal-status answering claim",
             })
 
-    if plan_path:
+    if plan_path and plan_refers_to_register:
         for cid in next_step_ids:
             c = next((c for c in claims if c.get("id") == cid), None)
             if c is None:
@@ -178,14 +198,18 @@ def check(workspace: Path) -> int:
             print(f"    - {d['claim_id']}: {d['fix']}")
         if len(items) > 5:
             print(f"    ... and {len(items) - 5} more")
-    return 1
+    # v1.9.29: 3+ drift warnings in the same run = HARD_PAUSE (exit 2),
+    # per the docstring contract that the implementation previously lacked.
+    return 2 if len(drifts) >= 3 else 1
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Detect plan files drifting behind reality")
     parser.add_argument("workspace", help="workspace root")
+    parser.add_argument("--active-only", action="store_true",
+                        help="check only the current plan file (global_plan.txt), not all candidates")
     args = parser.parse_args()
-    return check(Path(args.workspace))
+    return check(Path(args.workspace), active_only=args.active_only)
 
 
 if __name__ == "__main__":

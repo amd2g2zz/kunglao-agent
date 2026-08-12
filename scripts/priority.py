@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """priority.py - kunglao-agent greedy best-first dispatch ranker (DESIGN section 8.5).
 
+This is the SINGLE SANCTIONED dispatch ranker (v1.9.29, R4). priority_ratio.py
+is M1-internal (reachable only via kunglao-decide); the hook audit
+(worker_budget.py) and pulse (worker_pulse.py) consume THIS module's output.
 Makes "greedy best-first" a REAL code-computed heuristic (not LLM free judgment).
 Each round the orchestrator runs this, then dispatches the top-ranked claim(s)
 within the <=3-workers cap and tier gate.
@@ -40,7 +43,8 @@ import json, math, os, sys
 from pathlib import Path
 import yaml
 
-TERMINAL = {'PROVEN', 'VERIFIED', 'NEGATIVE', 'REFUTED', 'DEFERRED'}
+from status_defs import TERMINAL, IN_PROGRESS_STATUSES
+
 NEXT_TIER_CHEAP = {0: 1.0, 1: 0.5, 2: 0.2}
 DEFAULT_WEIGHTS = {'value': 0.4, 'leverage': 0.3, 'cheapness': 0.2, 'novelty': 0.1}
 
@@ -61,7 +65,7 @@ def _is_open(c):
     # v1.9.16: IN_PROGRESS = dispatched to a worker, NOT dispatchable (was
     # treated as open -> priority re-recommended in-flight claims -> orchestrator
     # saw a full queue, dispatched nothing, left slots empty).
-    return c.get('status') not in TERMINAL and c.get('status') != 'IN_PROGRESS'
+    return c.get('status') not in TERMINAL and c.get('status') not in IN_PROGRESS_STATUSES
 
 
 def _transitive_unlocks(cid, depends_on, by_id, open_set):

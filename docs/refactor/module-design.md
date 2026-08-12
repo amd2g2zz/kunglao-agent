@@ -1,4 +1,6 @@
-# kong-agent 模块子模块级设计(§4 扩展)
+# kunglao-agent 模块子模块级设计(§4 扩展)
+
+> **HISTORICAL (2026-08-11)**: 本文档写成时名为 `kong-agent`;技能已更名为 `kunglao-agent`,文中 `kong.py` / `lib_kong.py` 为历史名称,当前实现见 `scripts/kunglao*.py`。此档案仅用于追溯设计意图。
 
 > 每个模块展开到: 子模块划分 / 函数签名 / 输入输出 schema / 内部状态机 / 错误处理 / 测试点。
 > 配套: kong-agent-design-spec.md §4(模块级)+ kong-agent-refactor-plan.md(目标)。

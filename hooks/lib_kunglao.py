@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ---- dispatch prefix regex (single source) ----
@@ -89,3 +89,57 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
     else:
         hook_set = active
     return hook_name in hook_set or not hook_set
+
+
+# ---- active-worker scan (single source of truth, issue #37) ----
+# Byte-for-byte mirror of scripts/convergence_check.py:_scan_active_workers so the
+# worker_budget gate and the convergence decision share ONE count source. Do NOT
+# let these drift — a gate/decision count mismatch is the exact double-truth-source
+# bug issue #37 fixes (gate read the state cache while convergence read status files).
+
+STUCK_MINUTES = 20  # mirror scripts/convergence_check.py
+
+
+def scan_active_workers(workspace: Path) -> tuple[int, list]:
+    """Count active + stuck workers from runs/worker-status-*.md.
+
+    Active = a worker whose LAST ``status:`` line is ``in-progress``. Scans the
+    workspace ``runs/`` dir plus every ``.wt-*/malware-analysis-workspace/runs``
+    worktree dir (v1.9.13 worktree isolation: worker state lives in each worker's
+    own worktree, not the main tree). Stuck = active files older than
+    STUCK_MINUTES. OSError on glob/read/stat skips that file.
+
+    Byte-for-byte mirror of scripts/convergence_check.py:_scan_active_workers.
+    """
+    status_line = re.compile(r"status:\s*(\S+)")
+    dirs = [workspace / "runs"]
+    try:
+        for wt in workspace.parent.glob(".wt-*/malware-analysis-workspace/runs"):
+            dirs.append(wt)
+    except OSError:
+        pass
+    active = 0
+    stuck = []
+    cutoff = timedelta(minutes=STUCK_MINUTES)
+    now = datetime.now(timezone.utc)
+    for runs in dirs:
+        if not runs.exists():
+            continue
+        for p in runs.glob("worker-status-*.md"):
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            # last status line decides activity
+            last_status = None
+            for line in text.splitlines():
+                m = status_line.search(line)
+                if m:
+                    last_status = m.group(1).lower()
+            if last_status != "in-progress":
+                continue
+            active += 1
+            mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
+            if (now - mtime) > cutoff:
+                stuck.append({"worker": p.stem, "age_min": int((now - mtime).total_seconds() // 60)})
+    return active, stuck

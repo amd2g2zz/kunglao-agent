@@ -4,13 +4,17 @@ Validates:
 1. memory_schema.py accepts a well-formed staging entry
 2. memory_schema.py rejects malformed entries
 3. distill.py --dry-run below threshold = NOOP
-4. distill.py at threshold = atomic write + clear
+4. distill.py at threshold = candidate-first transaction (issue #82):
+   one immutable candidate + journal `generated` row; staging KEPT until a
+   completed evaluation receipt exists (never cleared merely because a
+   candidate was attempted)
 5. Schema rejects longterm with claim_id (cross_project purity)
 
 Run: python C:/Users/hr/.claude/skills/kunglao-agent/memory/scripts/test_memory_pipeline.py
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -136,6 +140,8 @@ def test_distill_threshold_enforcement():
 
 
 def test_distill_atomic_transaction():
+    """candidate-first (issue #82): 10 staging -> 1 immutable candidate + journal
+    generated row; staging KEPT at distill time (receipt-gated clear)."""
     with tempfile.TemporaryDirectory() as tmp:
         staging = Path(tmp) / "staging"
         longterm = Path(tmp) / "longterm"
@@ -152,37 +158,53 @@ def test_distill_atomic_transaction():
             rc = dt.distill(threshold=10, force=True, dry_run=False)
             assert rc == 0, f"expected ok, got rc={rc}"
 
+            cand_files = [f for f in dt.CANDIDATE_DIR.glob("*.md")]
+            assert len(cand_files) == 1, f"expected 1 candidate record, got {len(cand_files)}: {[f.name for f in cand_files]}"
+
             lt_files = [f for f in longterm.glob("*.md") if f.name != "INDEX.md"]
-            assert len(lt_files) == 1, f"expected 1 longterm entry, got {len(lt_files)}: {[f.name for f in lt_files]}"
+            assert len(lt_files) == 0, f"longterm MUST be untouched before promotion, got {[f.name for f in lt_files]}"
 
             st_files = [f for f in staging.glob("*.md") if not f.name.startswith(".snapshot") and f.name != "INDEX.md"]
-            assert len(st_files) == 0, f"expected staging cleared, got {st_files}"
+            assert len(st_files) == 10, f"staging MUST be kept at distill time (receipt-gated clear), got {len(st_files)}"
 
-            idx = (longterm / "INDEX.md").read_text(encoding="utf-8")
-            assert "distill" in idx.lower(), f"INDEX.md missing distill entry: {idx}"
+            rows = [json.loads(l) for l in dt.JOURNAL_PATH.read_text(encoding="utf-8").splitlines() if l.strip()]
+            assert any(r["action"] == "generated" for r in rows), f"journal missing generated row: {rows}"
+            assert "status: CANDIDATE" in cand_files[0].read_text(encoding="utf-8")
 
             snap_files = list((staging / ".snapshot").rglob("*.md"))
             assert len(snap_files) == 10, f"expected 10 snapshot files, got {len(snap_files)}"
 
-            print("  [OK ] atomic distill: 10 staging -> 1 longterm + staging cleared + 10 snapshots")
+            print("  [OK ] candidate-first distill: 10 staging -> 1 CANDIDATE record + generated row + staging kept + 10 snapshots")
         finally:
             _restore()
 
 
 def _swap_paths(staging: Path, longterm: Path):
-    """Atomically swap dt.STAGING_DIR / dt.LONGTERM_DIR and return a restore closure.
+    """Atomically swap dt path constants for a tmp tree and return a restore closure.
 
     Captures the *true* module-level originals (read at call time), not stale refs
     from a previous test's mutation.
     """
-    true_staging = dt.STAGING_DIR
-    true_longterm = dt.LONGTERM_DIR
-    dt.STAGING_DIR = staging
-    dt.LONGTERM_DIR = longterm
+    pairs = [
+        ("STAGING_DIR", staging),
+        ("LONGTERM_DIR", longterm),
+        ("CANDIDATE_DIR", staging.parent / "candidates"),
+        ("RECEIPTS_DIR", staging.parent / "candidates" / "receipts"),
+        ("CORPUS_DIR", staging.parent / "candidates" / "corpus"),
+        ("BACKUP_DIR", staging.parent / "rules-backup"),
+        ("JOURNAL_PATH", staging.parent / "lifecycle-journal.jsonl"),
+        ("REGISTRY_PATH", staging.parent / "rules-registry.json"),
+    ]
+    true_values = {}
+    for name, _ in pairs:
+        true_values[name] = getattr(dt, name)
+    for name, value in pairs:
+        setattr(dt, name, value)
+    dt.CANDIDATE_DIR.mkdir(parents=True, exist_ok=True)
 
     def restore():
-        dt.STAGING_DIR = true_staging
-        dt.LONGTERM_DIR = true_longterm
+        for name, _ in pairs:
+            setattr(dt, name, true_values[name])
     return restore
 
 

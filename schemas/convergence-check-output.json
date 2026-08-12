@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "kunglao-agent/schemas/convergence-check-output.json",
+  "title": "convergence_check.decide() output (issue #97 F2)",
+  "description": "5-branch state machine raw output. Source: scripts/convergence_check.py decide() L523-544. Complementary to decide-output.json (kunglao-decide composite).",
+  "type": "object",
+  "required": [
+    "decision",
+    "exit_code",
+    "action",
+    "open_claims",
+    "open_count",
+    "unblocked_open_count",
+    "blocked_open_count",
+    "failure_blocked",
+    "partial_facts",
+    "partial_count",
+    "active_workers",
+    "free_slots",
+    "worker_cap",
+    "stuck_workers",
+    "active_blockers",
+    "orphan_claims",
+    "unverified_primary_qs",
+    "note_layer_gaps",
+    "pq_parse_error"
+  ],
+  "properties": {
+    "decision": {
+      "type": "string",
+      "enum": ["DISPATCH", "DISPATCH_VERIFIER", "SATURATED", "BLOCKED", "CONVERGED", "INVALID"]
+    },
+    "exit_code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
+      "description": "0=CONVERGED 1=DISPATCH 2=DISPATCH_VERIFIER 3=SATURATED 4=BLOCKED 5+=INVALID"
+    },
+    "action": {
+      "type": "string",
+      "description": "Human-readable action description for the orchestrator"
+    },
+    "open_claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string" },
+          "blocked": { "type": ["boolean", "null"] },
+          "blocked_by": { "type": ["string", "null"] },
+          "dispatched_at": { "type": ["string", "null"] },
+          "dispatched_worker": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "description": "Open claims from claim-register.yaml"
+    },
+    "open_count": {
+      "type": "integer",
+      "description": "Total open claims"
+    },
+    "unblocked_open_count": {
+      "type": "integer",
+      "description": "Open claims not blocked by dependencies"
+    },
+    "blocked_open_count": {
+      "type": "integer",
+      "description": "Open claims blocked by dependencies"
+    },
+    "failure_blocked": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Claim IDs with failed attempts and no current failure_analysis"
+    },
+    "partial_facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string" }
+        },
+        "additionalProperties": true
+      },
+      "description": "Partially-verified facts from facts/_INDEX.md"
+    },
+    "partial_count": {
+      "type": "integer",
+      "description": "Count of partially-verified facts"
+    },
+    "active_workers": {
+      "type": "integer",
+      "description": "Currently active (in-progress) workers"
+    },
+    "free_slots": {
+      "type": "integer",
+      "description": "Available worker slots (worker_cap - active_workers)"
+    },
+    "worker_cap": {
+      "type": "integer",
+      "description": "Maximum concurrent workers"
+    },
+    "stuck_workers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "worker": { "type": "string" },
+          "minutes": { "type": "number" },
+          "last_status": { "type": "string" },
+          "last_tick": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "description": "Workers stuck > STUCK_MINUTES (20 min) without status update"
+    },
+    "active_blockers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Dependency blockers (non-terminal claims blocking open claims)"
+    },
+    "orphan_claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string" },
+          "answers_question": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      },
+      "description": "M2 completeness: terminal claims answering no primary_question"
+    },
+    "unverified_primary_qs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "question": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "additionalProperties": true
+      },
+      "description": "M2 completeness: primary_questions not satisfied by any PROVEN claim"
+    },
+    "note_layer_gaps": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "M2 completeness: claims with evidence notes but no fact file"
+    },
+    "pq_parse_error": {
+      "type": ["string", "null"],
+      "description": "M2 completeness: primary_questions parsing error reason, or null"
+    }
+  },
+  "additionalProperties": true
+}

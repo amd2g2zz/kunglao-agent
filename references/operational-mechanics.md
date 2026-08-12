@@ -17,15 +17,19 @@ enumerate ALL workers (not just the last-dispatched) and act per row:
 ```
 EACH TICK:
   for each worker in registry:
-    age_min = (now - mtime)
+    age_min = (now - worker-status-<id>.md mtime)
     if age_min > 5 and status != 'done':
       bump ping_count
-      SendMessage(worker, "Ping ${ping_count}/3...")
+      SendMessage(worker, "Ping ${ping_count}/3...")   # orchestrator->worker ping — sanctioned channel (v1.9.20, #88)
       record ping_time
+    # liveness cross-check: read-only TaskOutput(task_id, block=false)
+    # strikes accumulate on: no status-file append / artifact touch / SendMessage reply
     if ping_count >= 3:
       TaskStop + log + redispatch
     if status == 'done' or status == 'blocked':
+      TaskStop the delivered worker FIRST (Delivery = TaskStop, below)   # #88 D1
       dispatch verifier AND remove from registry
+  # slot accounting: [active_workers] rebuilt by reconcile_workers.py from status files
 ```
 
 **CRITICAL**: enumerate ALL workers, not just the last-dispatched. W-46 sat
@@ -75,6 +79,38 @@ workers.
 **Worker rule — append status at every state change AND at least every
 ~5 min during long tasks.** The status file is the orchestrator's ONLY
 liveness signal. If you're working, write.
+
+## Delivery = TaskStop (D1, #88)
+
+A worker that has delivered MUST be stopped by the orchestrator — a
+delivered-but-unstopped background worker holds a slot forever (the actual
+zombie root cause, independent of agent teams). Delivery confirmation = the
+worker's status file shows a final state (`status: done` / `status: blocked`)
+AND its artifacts (`facts/F<NNN>.md` / `runs/<ts>-<task>.md`) are verified.
+
+**Delivery checklist — on delivery confirmation, in order:**
+1. Confirm the final status (`done` / `blocked`) in `runs/worker-status-<id>.md`.
+2. Verify the artifacts exist and are readable (facts/F<NNN>.md, runs/ report).
+3. **TaskStop the background worker** — before any further dispatch /
+   verifier / registry action.
+4. Then: dispatch the verifier, merge the worktree branch, update
+   claim-register.yaml.
+
+Mechanical aid: `hooks/worker_pulse.py` injects a
+`TASKSTOP: W-<n> delivered — TaskStop now` reminder at the delivery moment
+(PostToolUse on Agent, when the completed dispatch's worker status file shows
+a final state). Slot accounting self-heals: `scripts/reconcile_workers.py`
+excludes `done` workers from `[active_workers]`.
+
+## kunglao-monitor runs in the background (2026-08-12)
+
+`scripts/kunglao-monitor.py` (M5 MONITOR) runs as a BACKGROUND process. Its
+output (TickOutput) is advisory: it never blocks the loop's scheduled tick
+actions — re-dispatch / verify / TaskStop NEVER wait on monitor output. The
+tick proceeds on file state (`worker-status-*.md` freshness,
+`.heartbeat.json`), and the monitor's `next` verdict is a suggestion, not a
+gate. Do not design the tick loop around monitor results, and never block a
+scheduled action waiting for the monitor process to produce output.
 
 ## Specialist bootstrap tolerance + dual-probe protocol (v1.9.30, 2026-08-05)
 

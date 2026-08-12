@@ -12,12 +12,14 @@ E3.1 criteria: kunglao.py decide <ws> --json == convergence_check.py <ws> --json
 Subcommands (Phase 3, first wave):
   decide    <- convergence_check.decide (M1)
   tick      <- heartbeat_tick chain (M5, E3.2)
-  verify    <- (M3, next)
-  record    <- (M4, next)
+  verify    <- kunglao_verify.main (M3)
+  record    <- kunglao_record.main (M4)
   health    <- convergence_health (M5)
 
 Usage:
     python kunglao.py decide <workspace> --json
+    python kunglao.py verify <workspace> <fact_id> [--json]
+    python kunglao.py record <workspace> --event '<json>'
     python kunglao.py health <workspace>
 """
 from __future__ import annotations
@@ -51,6 +53,34 @@ def cmd_tick(args) -> int:
     return hbt.main() if hasattr(hbt, "main") else 0
 
 
+def cmd_verify(args) -> int:
+    """M3 VERIFY: delegate to kunglao_verify.main (L1 mechanical + L2 redteam)."""
+    import kunglao_verify as kv
+    argv = [str(args.workspace)]
+    if args.fact_id:
+        argv.append(args.fact_id)
+    if args.json:
+        argv.append("--json")
+    if args.grace:
+        argv.append("--grace")
+    if args.grace_scan:
+        argv.append("--grace-scan")
+    return kv.main(argv)
+
+
+def cmd_record(args) -> int:
+    """M4 RECORD: delegate to kunglao_record.main (ledger idempotent append)."""
+    import kunglao_record as kr
+    argv = [str(args.workspace)]
+    if args.event:
+        argv += ["--event", args.event]
+    if args.claim_migrate:
+        argv += ["--claim-migrate"] + args.claim_migrate
+    if args.read is not None:
+        argv += ["--read", args.read] if args.read else ["--read"]
+    return kr.main(argv)
+
+
 def cmd_health(args) -> int:
     import convergence_health as ch
     ws = Path(args.workspace).resolve()
@@ -69,6 +99,25 @@ def main() -> int:
     p_tick = sub.add_parser("tick", help="heartbeat tick chain (M5)")
     p_tick.add_argument("workspace", nargs="?", default=".")
     p_tick.set_defaults(func=cmd_tick)
+
+    p_verify = sub.add_parser("verify", help="M3 VERIFY (L1 mechanical + L2 redteam)")
+    p_verify.add_argument("workspace", nargs="?", default=".")
+    p_verify.add_argument("fact_id", nargs="?", default=None)
+    p_verify.add_argument("--json", action="store_true")
+    p_verify.add_argument("--grace", action="store_true",
+                          help="warn-only for assignment-class lint")
+    p_verify.add_argument("--grace-scan", action="store_true",
+                          help="list assignment-class facts lacking value assertions")
+    p_verify.set_defaults(func=cmd_verify)
+
+    p_record = sub.add_parser("record", help="M4 RECORD (ledger idempotent append)")
+    p_record.add_argument("workspace", nargs="?", default=".")
+    p_record.add_argument("--event", default=None, help='event JSON: {"source_module":..., "event_type":..., "payload": {...}}')
+    p_record.add_argument("--claim-migrate", nargs=3, metavar=("CLAIM_ID", "NEW_STATUS", "ACTOR"),
+                          help="claim status migration (legality-checked)")
+    p_record.add_argument("--read", nargs="?", const="", default=None, metavar="EVENT_TYPE",
+                          help="read back events (event_type optional, all if omitted)")
+    p_record.set_defaults(func=cmd_record)
 
     p_health = sub.add_parser("health", help="convergence health (M5)")
     p_health.add_argument("workspace", nargs="?", default=".")

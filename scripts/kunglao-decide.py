@@ -85,14 +85,17 @@ def _cheapness_order(claims: list[dict], deps: dict) -> list[pr.Action]:
 
 def _conservative_blocked(ws: Path, exc: Exception) -> dict:
     """M1.5 L164: 脚本异常 → 记 ledger(failure_recorded) + 保守 BLOCKED(不误报收敛)."""
-    try:
-        cc._append_ledger(ws, {
-            "decision": "BLOCKED", "open_count": -1, "open_claims": [],
-            "partial_count": -1, "active_workers": 0, "active_blockers": [],
-            "facts_total": -1, "error": str(exc),
-        })
-    except Exception:
-        pass
+    # v1.9.29 (R8): guard against writing poison rows (open_count:-1) into a
+    # ledger that does not exist — _append_ledger would create it empty.
+    if (ws / ".convergence_ledger.jsonl").exists():
+        try:
+            cc._append_ledger(ws, {
+                "decision": "BLOCKED", "open_count": -1, "open_claims": [],
+                "partial_count": -1, "active_workers": 0, "active_blockers": [],
+                "facts_total": -1, "error": str(exc),
+            })
+        except Exception:
+            pass
     return {
         "decision": "BLOCKED", "exit_code": cc.EXIT_BLOCKED,
         "top_actions": [], "blocked": [], "failure_blocked": [], "stale": [],
