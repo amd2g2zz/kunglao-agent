@@ -55,3 +55,5 @@ jobs:
         name: release-receipt-${{ github.sha }}
         path: release-receipt.json
         if-no-files-found: error
+      - name: Structural integrity check (issue #141)
+        run: uv run python scripts/structural_check.py .
