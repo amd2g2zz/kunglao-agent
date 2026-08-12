@@ -1,0 +1,43 @@
+{
+  "skill_name": "kunglao-agent",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Run the convergence check on a workspace with one OPEN claim C-001 (evidence_tier_attempted=0, boundary_type=positive_observation, no blockers, no depends_on). The claim-register.yaml lists C-001 with status OPEN. The convergence_check.py script must return DISPATCH (exit 1). The orchestrator reads the priority.py output and dispatches a worker agent for the top-ranked action before the round ends.",
+      "expected_output": "The orchestrator dispatches a worker agent for C-001 following priority.py ordering. convergence_check.py returns exit code 1 (DISPATCH). The round transcript includes a dispatch event targeting C-001. No claims remain OPEN without an attempt to dispatch within the same round.",
+      "files": [],
+      "expectations": [
+        "convergence_check.py reads claim-register.yaml and identifies C-001 as OPEN",
+        "The orchestrator dispatches a worker for C-001 as the first action (priority.py top result)",
+        "The round transcript contains a dispatch event for claim C-001",
+        "No idle loop occurs: the orchestrator does not proceed to monitoring or verification without first dispatching"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "A kunglao-worker agent has produced facts/F050.md with a conclusion and anchors for claim C-050. The fact contains reproduce commands (anchors) and expected values. Run blind verification: a verifier agent (different context than the worker) must independently execute the anchor commands, compare actual output to expected values, and issue a passes verdict. The worker's own self-declared PROVEN status must not be accepted without the independent verifier's confirmation.",
+      "expected_output": "The verifier independently runs the reproduction commands from F050's anchors, compares the actual output to the expected values, and writes a passes result. The claim C-050 transitions to PROVEN only after the verifier's independent passes. The worker's self-stamp is treated as STAMP (not PROVEN) until the checker confirms.",
+      "files": [],
+      "expectations": [
+        "The verifier is a different agent or context than the worker that produced F050",
+        "The verifier reads only the anchors (commands + expected values) from F050, not the conclusion text",
+        "The verifier independently executes each anchor command and compares the actual output to the expected value",
+        "The claim transitions to PROVEN only after the independent verifier issues a passes verdict",
+        "No self-stamping: the worker's own verification does not promote the claim to PROVEN"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Given a converged workspace where all claims are PROVEN, run the verdict scorer with a task_spec that specifies pq_coverage=true, maliciousness=true, and attribution=false. The B4-2 contract requires maliciousness and attribution to be decoupled: maliciousness produces a 6-dimension score leading to a classification (clean/benign/suspicious/malicious), and attribution uses Admiralty+ACH+Diamond methodology. Since attribution is disabled in the task_spec, the verdict must contain maliciousness scoring and PQ-coverage summary but must NOT contain an attribution section.",
+      "expected_output": "The verdict-scorer produces a verdict.json containing a 'maliciousness' object with 6-dimension scores and a classification field, plus a 'pq_coverage' summary. The verdict must NOT contain an 'attribution' section because the task_spec explicitly disabled it. All evidence files consumed are listed in the evidence_manifest.",
+      "files": [],
+      "expectations": [
+        "The verdict output contains a 'maliciousness' object with per-dimension scores",
+        "The verdict output contains a 'pq_coverage' summary section",
+        "The verdict output does NOT contain an 'attribution' section (disabled by task_spec)",
+        "The classification field in maliciousness is one of: clean, benign, suspicious, malicious",
+        "The verdict's evidence_manifest lists all evidence files used as input"
+      ]
+    }
+  ]
+}
