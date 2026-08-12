@@ -526,31 +526,51 @@ def decide(workspace: Path) -> dict:
                 f"lack a note with verify_status=passes (link: note.claim_id -> claim.answers_question). " \
                 f"Run verify-note.py before delivery."
         else:
-            # #147: completion transaction — CONVERGED is not trusted on the
-            # register's word. Recompute global contradictions from facts/.
-            # Any contradiction downgrades the decision (replay #2). A
-            # workspace without a facts index has zero facts and cannot hold
-            # a contradiction.
-            contradiction_reason = ""
-            if (workspace / "facts" / "_INDEX.md").exists():
-                try:
-                    import fact_contradiction_gate as fcg
-                    conflicts = fcg.scan_conflicts(workspace / "facts" / "_INDEX.md",
-                                                   workspace / "facts")
-                    if conflicts:
-                        pairs = "; ".join(
-                            f"{c['fact_a']} <-> {c['fact_b']}" for c in conflicts)
-                        contradiction_reason = f"GLOBAL CONTRADICTION: {pairs}"
-                except Exception as exc:  # fail-closed: cannot verify → cannot converge
-                    contradiction_reason = f"contradiction scan unavailable ({type(exc).__name__})"
-            if contradiction_reason:
-                decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
-                    f"Cannot CONVERGE: {contradiction_reason} — resolve via " \
-                    f"fact_contradiction_gate or supersedes links."
+            # #147: discovery consumption — disclosed payloads must be
+            # obligations before CONVERGED is possible (replay #1: fact body
+            # said 'discovered shellcode, downstream payload not analyzed'
+            # and the run converged without the obligation).
+            discovery_reason = ""
+            try:
+                import obligation_discovery as od
+                discoveries = od.scan_discoveries(workspace / "facts",
+                                                  workspace / "claim-register.yaml")
+                if discoveries:
+                    names = ", ".join(d["trigger"] for d in discoveries)
+                    discovery_reason = (
+                        f"{len(discoveries)} unconsumed discovery(s) in {names} "
+                        f"— create child obligations or record materiality rejection")
+            except Exception as exc:
+                discovery_reason = f"discovery scan unavailable ({type(exc).__name__})"
+            if discovery_reason:
+                decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
+                    f"Cannot CONVERGE: {discovery_reason}"
             else:
-                decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
-                    "Claim loop done — all open claims closed, partials verified, primary_questions PROVEN " \
-                    "with verify_status=passes notes. STOP dispatch. Delivery requires handoff-check.py PASS."
+                # #147: completion transaction — CONVERGED is not trusted on the
+                # register's word. Recompute global contradictions from facts/.
+                # Any contradiction downgrades the decision (replay #2). A
+                # workspace without a facts index has zero facts and cannot hold
+                # a contradiction.
+                contradiction_reason = ""
+                if (workspace / "facts" / "_INDEX.md").exists():
+                    try:
+                        import fact_contradiction_gate as fcg
+                        conflicts = fcg.scan_conflicts(workspace / "facts" / "_INDEX.md",
+                                                       workspace / "facts")
+                        if conflicts:
+                            pairs = "; ".join(
+                                f"{c['fact_a']} <-> {c['fact_b']}" for c in conflicts)
+                            contradiction_reason = f"GLOBAL CONTRADICTION: {pairs}"
+                    except Exception as exc:  # fail-closed: cannot verify → cannot converge
+                        contradiction_reason = f"contradiction scan unavailable ({type(exc).__name__})"
+                if contradiction_reason:
+                    decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
+                        f"Cannot CONVERGE: {contradiction_reason} — resolve via " \
+                        f"fact_contradiction_gate or supersedes links."
+                else:
+                    decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
+                        "Claim loop done — all open claims closed, partials verified, primary_questions PROVEN " \
+                        "with verify_status=passes notes. STOP dispatch. Delivery requires handoff-check.py PASS."
     elif unblocked_open and free_slots:
         decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
             f"Run priority.py and dispatch the top claim. {len(unblocked_open)} unblocked open claim(s), {free_slots} free slot(s)."
