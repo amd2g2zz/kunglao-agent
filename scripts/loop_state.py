@@ -32,6 +32,7 @@ import glob as globmod
 import json
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -49,7 +50,7 @@ def scan_temp_agents() -> dict[str, dict]:
     Returns {agent_id: {path, mtime_ts, age_min, project, session}}.
     Stat-only; never reads transcript content.
     """
-    temp = Path(os.environ.get("TEMP", "C:/Users/hr/AppData/Local/Temp"))
+    temp = Path(os.environ.get("TEMP", tempfile.gettempdir()))
     pattern = str(temp / "claude" / "*" / "*" / "tasks" / "*.output")
     now = time.time()
     out: dict[str, dict] = {}

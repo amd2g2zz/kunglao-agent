@@ -19,7 +19,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-SCRIPT = Path(r"C:/Users/hr/.claude/skills/kunglao-agent/scripts/complete_teardown.py")
+SCRIPT = Path(__file__).resolve().parent / "complete_teardown.py"  # scripts/complete_teardown.py
 
 REQUIRED_OPERATORS = ["imports", "byte_grep", "capstone", "strings", "anti_analysis"]
 

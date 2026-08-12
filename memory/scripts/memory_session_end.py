@@ -10,7 +10,7 @@ Wire-up in `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/hr/.claude/skills/kunglao-agent/memory/scripts/memory_session_end.py"
+            "command": "python <skill_root>/memory/scripts/memory_session_end.py"
           }
         ]
       }
@@ -30,7 +30,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-MEMORY_SCRIPTS = Path(r"C:/Users/hr/.claude/skills/kunglao-agent/memory/scripts")
+MEMORY_SCRIPTS = Path(__file__).resolve().parent  # kunglao-agent/memory/scripts/
 FORGET = MEMORY_SCRIPTS / "forget.py"
 DISTILL = MEMORY_SCRIPTS / "distill.py"
 

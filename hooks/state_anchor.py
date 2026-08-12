@@ -41,7 +41,7 @@ Output shape (mirrors worker_pulse emission):
 Wiring (in .claude/settings.json PostToolUse, Agent matcher — alongside
 worker_pulse / worker_budget):
   {"matcher": "Agent", "hooks": [{"type": "command",
-    "command": "python C:/Users/hr/.claude/skills/kunglao-agent/hooks/state_anchor.py"}]}
+    "command": "python <skill_root>/hooks/state_anchor.py"}]}
 Registered idempotently by scripts/wire_up_settings.py + listed in
 scripts/hook_activation.py::ALL_HOOKS.
 

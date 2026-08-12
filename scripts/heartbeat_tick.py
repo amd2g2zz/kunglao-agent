@@ -30,8 +30,8 @@ import sys
 import datetime
 from pathlib import Path
 
-SKILL = Path("C:/Users/hr/.claude/skills/kunglao-agent")
-SCRIPTS = SKILL / "scripts"
+SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/ (scripts/ -> root)
+SCRIPTS = SKILL_DIR / "scripts"
 
 
 def utc_now() -> str:

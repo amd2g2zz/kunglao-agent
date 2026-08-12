@@ -23,12 +23,13 @@ import json
 import os
 import sys
 import glob as globmod
+import tempfile
 import datetime
 from pathlib import Path
 
 STALE_MIN = 20          # mtime frozen > 20 min = STALE candidate (specialist tolerance is 10-20)
 ACTIVE_WINDOW_MIN = 30  # only report agents with activity in the last 30 min (ignore old sessions)
-TEMP = Path(os.environ.get("TEMP", "C:/Users/hr/AppData/Local/Temp"))
+TEMP = Path(os.environ.get("TEMP", tempfile.gettempdir()))
 
 
 def utc_now() -> str:

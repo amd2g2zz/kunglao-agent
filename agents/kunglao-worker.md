@@ -65,8 +65,7 @@ That is your entire job.
 
 撞墙（blocker）前必须走 LEARN→TRY→ESCALATE 三级：
 1. **查证 (LEARN)** — WebSearch / context7 / 读 re-library
-   `C:/Users/hr/.claude/skills/kunglao-agent/references/re-library/` (absolute path,
-   ~30 files). 记 status 一行 `step: learned X from <source>`.
+   `<skill_root>/references/re-library/` (~30 files). 记 status 一行 `step: learned X from <source>`.
 2. **尝试 (TRY)** — 用查到的知识换 ≥2 种不同方法重试（不是"重试同一步"）。
 3. **升级 (ESCALATE)** — 都失败才写 `blockers/<claim>.md`（查了什么源/试了什么
    方法/卡在哪点），再报 blocked。**没有查证就报 blocker = 失败**（W-27）。
@@ -276,7 +275,7 @@ self_caveat: "unverified — needs independent verifier pass"
 ---
 ```
 
-lint check: `cd <workspace> && python C:/Users/hr/.claude/skills/malware-veri-notes/scripts/lint-notes.py` — your fact must produce 0 ERR lines.
+lint check: `cd <workspace> && python <malware-veri-notes>/scripts/lint-notes.py` — your fact must produce 0 ERR lines.
 
 ## Script reusability (added 2026-07-30 — user-flagged)
 

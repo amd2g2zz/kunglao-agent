@@ -31,7 +31,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-MEMORY_DIR = Path(r"C:/Users/hr/.claude/skills/kunglao-agent/memory")
+MEMORY_DIR = Path(__file__).resolve().parent.parent.parent / "memory"  # kunglao-agent/memory
 STAGING_DIR = MEMORY_DIR / "staging"
 LONGTERM_DIR = MEMORY_DIR / "longterm"
 DISTILL_SCRIPT = MEMORY_DIR / "scripts" / "distill.py"

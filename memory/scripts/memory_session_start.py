@@ -10,7 +10,7 @@ Wire-up in `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "python C:/Users/hr/.claude/skills/kunglao-agent/memory/scripts/memory_session_start.py"
+            "command": "python <skill_root>/memory/scripts/memory_session_start.py"
           }
         ]
       }
@@ -31,7 +31,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-RECALL_SCRIPT = Path(r"C:/Users/hr/.claude/skills/kunglao-agent/memory/scripts/recall.py")
+RECALL_SCRIPT = Path(__file__).resolve().parent / "recall.py"  # kunglao-agent/memory/scripts/
 DEFAULT_TOP_K = 5
 TASK_SPEC_LOCATIONS = [
     Path.cwd() / "task_spec.yaml",

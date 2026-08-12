@@ -83,7 +83,7 @@ behavior separates a working orchestrator from a stuck one. Every prior
 **Every turn, before anything else, run the convergence check:**
 
 ```bash
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/convergence_check.py <workspace>
+python scripts/convergence_check.py <workspace>
 ```
 
 The script returns a decision + exit code you act on, not just admire:
@@ -230,17 +230,17 @@ workspace detection always runs in Phase 0 per the Local defaults table below.
 
 | Item | Value |
 | --- | --- |
-| Skill location | `C:/Users/hr/.claude/skills/kunglao-agent/` |
+| Skill location | `~/.claude/skills/kunglao-agent/` (resolved via `$CLAUDE_SKILL_DIR` or `SKILL.md` parent) |
 | Skill commit policy | kong-agent-only git (other skills NOT in git) |
 | Workspace pattern | `D:/works/samples/<YYYY-MM-DD>/malware-analysis-workspace/` |
 | Sample location | `D:/works/samples/<YYYY-MM-DD>/bins/<sha>` |
-| VM (vmr-shell) | `192.168.20.128:9876` (host C:/Users/hr/Desktop) |
+| VM (vmr-shell) | `192.168.20.128:9876` (host `~/Desktop`) |
 | Frida (VM) | `192.168.20.128:1337` |
 | Pre-installed agents | `kunglao-worker`, `ghidra-light`, `go-symbols`, `pefile-signature`, `floss-filter`, `verdict-scorer` (all in `~/.claude/agents/`) |
 | Default CLAUDE.md | `D:/works/samples/<YYYY-MM-DD>/CLAUDE.md` (reads V1-V4 规范) |
-| Memory dir | `C:/Users/hr/.claude/projects/D--works-samples-2026-07-01/memory/` |
+| Memory dir | `~/.claude/projects/<project>/memory/` |
 | Hook wire-up | NOT auto-installed — user has said "其它不用加到git里面"; wire up manually only if user requests |
-| Smoke test command | `python C:/Users/hr/.claude/skills/kunglao-agent/scripts/test_v1_8_enforcement_gates.py` (24/24 must pass) |
+| Smoke test command | `python scripts/test_v1_8_enforcement_gates.py` (24/24 must pass) |
 | Run-all-gates command | See `references/failure-modes.md` "Run all enforcement gates" section (or any of the 3 domain files) |
 | Hard prohibition #5 | x64dbg / Frida host-channel is FORBIDDEN (per `kong-agent-vm-only-host-ban` memory) |
 
@@ -271,11 +271,11 @@ workspace detection always runs in Phase 0 per the Local defaults table below.
 **Hook + heartbeat activation — orchestrator-only, 30-min TTL:**
 
 ```bash
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --wire-up    # register hooks in settings.json (idempotent)
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --set-active dispatch_gate,worker_pulse
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --reconcile  # rebuild active_workers from worktree status files
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py <ws> --heartbeat-on  # register .heartbeat.json (monitoring = file state)
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/heartbeat_loop_prompt.py <ws>  # stdout = /loop prompt; pass to CronCreate */5 * * * * (or /loop 5m) BEFORE first dispatch
+python scripts/hook_activation.py <ws> --wire-up    # register hooks in settings.json (idempotent)
+python scripts/hook_activation.py <ws> --set-active dispatch_gate,worker_pulse
+python scripts/hook_activation.py <ws> --reconcile  # rebuild active_workers from worktree status files
+python scripts/hook_activation.py <ws> --heartbeat-on  # register .heartbeat.json (monitoring = file state)
+python scripts/heartbeat_loop_prompt.py <ws>  # stdout = /loop prompt; pass to CronCreate */5 * * * * (or /loop 5m) BEFORE first dispatch
 ```
 
 - MUSTs: `--wire-up` before the first dispatch (hooks silently drop from

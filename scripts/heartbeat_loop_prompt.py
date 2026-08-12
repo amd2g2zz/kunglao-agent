@@ -26,8 +26,10 @@ from pathlib import Path
 
 
 def build_prompt(ws: str, interval: str = "5m") -> str:
-    h = "C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py"
-    tk = "C:/Users/hr/.claude/skills/kunglao-agent/scripts/heartbeat_tick.py"
+    skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/ (scripts/ -> root)
+    h = str(skill_dir / "scripts" / "hook_activation.py")
+    tk = str(skill_dir / "scripts" / "heartbeat_tick.py")
+    cc = str(skill_dir / "scripts" / "convergence_check.py")
     return f"""/loop {interval} kunglao-agent 心跳（自注册 + 监视 + 校验一体）：
 
 [启动动作 — 循环首次触发时执行一次]
@@ -41,7 +43,7 @@ python {h} {ws} --heartbeat-on   # 注册心跳（写 runs/.heartbeat.json）—
    → 结构化回复 append 到 runs/.ping-log.jsonl
    （隔离边界 #88：无 agent team；SendMessage orchestrator→worker ping 是 sanctioned channel，
     worker 之间互不 messaging）
-3. python C:/Users/hr/.claude/skills/kunglao-agent/scripts/convergence_check.py {ws} 决策：
+3. python {cc} {ws} 决策：
    DISPATCH→priority.py 派发；SATURATED→继续轮询；CONVERGED→先跑 §6.3 checklist（5 项）
    + 双签（doubt_checker + 随机抽验 1 fact）+ --heartbeat-check 通过才宣告完成
 4. 完成 worker → 验证 facts → 合入 master → 更新 claim-register + _INDEX

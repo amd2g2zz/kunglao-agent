@@ -45,8 +45,8 @@ The 18 failure modes are split into 3 domain files (progressive disclosure):
 ## Run all enforcement gates (orchestrator /loop heartbeat)
 
 ```bash
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/progress_report.py <ws> && \
-  python C:/Users/hr/.claude/skills/kunglao-agent/scripts/stale_blocker_prune.py <ws> --dry-run && \
-  python C:/Users/hr/.claude/skills/kunglao-agent/scripts/claim_expiry.py <ws> && \
-  python C:/Users/hr/.claude/skills/kunglao-agent/scripts/plan_drift_detector.py <ws>
+python scripts/progress_report.py <ws> && \
+  python scripts/stale_blocker_prune.py <ws> --dry-run && \
+  python scripts/claim_expiry.py <ws> && \
+  python scripts/plan_drift_detector.py <ws>
 ```

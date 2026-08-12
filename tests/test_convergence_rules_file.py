@@ -24,9 +24,9 @@ MIN_SHARED = 80
 # labels. Masking these before the substring check keeps the test from flagging
 # legitimate reuse while still catching verbatim copied prose.
 ALLOWED_VOCABULARY = [
-    "python C:/Users/hr/.claude/skills/kunglao-agent/scripts/convergence_check.py <workspace>",
-    "python C:/Users/hr/.claude/skills/kunglao-agent/scripts/convergence_health.py <workspace>",
-    "python C:/Users/hr/.claude/skills/kunglao-agent/scripts/failure_analysis_gate.py <workspace> <C-NN>",
+    "python scripts/convergence_check.py <workspace>",
+    "python scripts/convergence_health.py <workspace>",
+    "python scripts/failure_analysis_gate.py <workspace> <C-NN>",
     "convergence_check.py",
     "convergence_health.py",
     "failure_analysis_gate.py",

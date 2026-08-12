@@ -23,7 +23,7 @@ failure_analysis_gate's BLOCKED set → inject guidance. Otherwise → exit 0
 Wiring (in .claude/settings.json PreToolUse, Agent matcher — kunglao-agent
 dispatches via the Agent tool):
   {"matcher": "Agent", "hooks": [{"type": "command",
-    "command": "python C:/Users/hr/.claude/skills/kunglao-agent/hooks/dispatch_gate.py"}]}
+    "command": "python <skill_root>/hooks/dispatch_gate.py"}]}
 """
 from __future__ import annotations
 

@@ -10,7 +10,7 @@ Validates:
    candidate was attempted)
 5. Schema rejects longterm with claim_id (cross_project purity)
 
-Run: python C:/Users/hr/.claude/skills/kunglao-agent/memory/scripts/test_memory_pipeline.py
+Run: python <skill_root>/memory/scripts/test_memory_pipeline.py
 """
 from __future__ import annotations
 

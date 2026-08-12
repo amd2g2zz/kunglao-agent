@@ -15,7 +15,7 @@ MONITOR (读状态与 claims) / DISPATCH (按 priority.py 派 worker) / VERIFY (
 每轮任何输出/动作之前, 先跑收敛检查 (从磁盘重读 ground truth, 不靠记忆):
 
 ```bash
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/convergence_check.py <workspace>
+python scripts/convergence_check.py <workspace>
 ```
 
 `/compact` 之后、或从未 invoke 本 skill 的会话, 本规则依然生效 — 这就是它要进全局规则通道的原因。

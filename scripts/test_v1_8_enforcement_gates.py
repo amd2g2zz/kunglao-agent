@@ -15,7 +15,7 @@ Validates (24 tests across 10 gates):
   v1.8.5:
     - ask_for_direction_gate.py: Type A/B detected = REJECT; Type C with convergence = OK
 
-Run: python C:/Users/hr/.claude/skills/kunglao-agent/scripts/test_v1_8_enforcement_gates.py
+Run: python <skill_root>/scripts/test_v1_8_enforcement_gates.py
 Exit 0 if all pass, 1 if any fail.
 """
 from __future__ import annotations

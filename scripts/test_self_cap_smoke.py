@@ -5,7 +5,7 @@ Validates both directions:
 - 10 cases from SKILL.md §7 paraphrase table that MUST NOT trigger (zero FP)
 - 7 negation allowlist cases that MUST suppress the gate
 
-Run: python C:/Users/hr/.claude/skills/kunglao-agent/scripts/test_self_cap_smoke.py
+Run: python <skill_root>/scripts/test_self_cap_smoke.py
 Exit: 0 if all pass, 1 if any fail.
 """
 from __future__ import annotations

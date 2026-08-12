@@ -6,7 +6,7 @@ Validates:
   F1 (capture) - classify_event fires on each event source; writes staging entry
   F3 (auto-distill) - staging crossing threshold triggers distill.py
 
-Run: python C:/Users/hr/.claude/skills/kunglao-agent/memory/scripts/test_cognitive_memory.py
+Run: python <skill_root>/memory/scripts/test_cognitive_memory.py
 """
 from __future__ import annotations
 
@@ -240,7 +240,7 @@ def test_capture_self_correction_on_skill_edit():
         try:
             payload = {
                 "tool_name": "Edit",
-                "tool_input": {"file_path": "C:/Users/hr/.claude/skills/kunglao-agent/SKILL.md"},
+                "tool_input": {"file_path": str(Path(__file__).resolve().parent.parent.parent / "SKILL.md")},
                 "tool_result": "ok",
             }
             cls = mc.classify_event(payload)
@@ -312,7 +312,7 @@ def test_capture_triggers_distill_at_threshold():
         mc.LONGTERM_DIR = longterm
         mc.DISTILL_SCRIPT = Path(tmp) / "scripts" / "distill.py"
         (Path(tmp) / "scripts").mkdir()
-        shutil.copy(Path(r"C:/Users/hr/.claude/skills/kunglao-agent/memory/scripts/distill.py"),
+        shutil.copy(Path(__file__).resolve().parent / "distill.py",
                     mc.DISTILL_SCRIPT)
         dt.STAGING_DIR = staging
         dt.LONGTERM_DIR = longterm

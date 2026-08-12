@@ -62,7 +62,8 @@ def check_settings(settings_path: Path) -> dict:
 
 
 def rebuild_user_level(workspace: Path) -> dict:
-    script = Path("C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py")
+    skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/ (scripts/ -> root)
+    script = skill_dir / "scripts" / "hook_activation.py"
     try:
         r = subprocess.run(
             [sys.executable, str(script), str(workspace), "--wire-up"],
