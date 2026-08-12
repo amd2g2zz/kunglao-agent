@@ -46,7 +46,7 @@ import yaml
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES
 
 NEXT_TIER_CHEAP = {0: 1.0, 1: 0.5, 2: 0.2}
-DEFAULT_WEIGHTS = {'value': 0.4, 'leverage': 0.3, 'cheapness': 0.2, 'novelty': 0.1}
+DEFAULT_WEIGHTS = {'value': 0.4, 'leverage': 0.3, 'cheapness': 0.2, 'novelty': 0.05, 'outcome': 0.05}
 
 
 def _load(p):
@@ -145,6 +145,22 @@ def rank_claims(reg, deps, weights, leverage_v2=True, ws=None):
         except (ImportError, NameError):
             pass
 
+    # v1.9.30: per-claim OUTCOME history from verification ledger (#122)
+    outcome_scores = {}
+    if ws is not None:
+        try:
+            sys.path.insert(0, str(Path(ws).parent / "scripts"))
+            from outcome_capture import read_outcome_rows, aggregate_reward
+            sys.path.pop(0)
+            all_rows = read_outcome_rows(Path(ws))
+            for r in all_rows:
+                cid = r.get("claim_id", "")
+                result = r.get("result", "").strip().upper()
+                score = {"PASS": 1.0, "CONFIRMED": 1.0, "PARTIAL": 0.5, "UNVERIFIED": 0.5}.get(result, 0.0)
+                outcome_scores.setdefault(cid, []).append(score)
+        except Exception:
+            pass
+
     rows = []
     for c in claims:
         cid = c.get('id')
@@ -172,13 +188,18 @@ def rank_claims(reg, deps, weights, leverage_v2=True, ws=None):
         cheapness = NEXT_TIER_CHEAP.get(eta, 0.1)
         next_tier = min(eta + 1, 3)
         novelty = 1.0 / (1 + int(c.get('promotion_attempts', 0)))
+        claim_outcome = outcome_scores.get(cid, [])
+        outcome_factor = sum(claim_outcome) / len(claim_outcome) if claim_outcome else 0.0
+        w_outcome = weights.get('outcome', 0.0)
         score = (weights['value'] * value + weights['leverage'] * leverage +
-                 weights['cheapness'] * cheapness + weights['novelty'] * novelty)
+                 weights['cheapness'] * cheapness + weights['novelty'] * novelty +
+                 w_outcome * outcome_factor)
         rows.append({'id': cid, 'score': round(score, 3), 'value': value,
                      'leverage': round(leverage, 2), 'leverage_direct': direct_n,
                      'leverage_transitive': transit_n,
                      'cheapness': cheapness,
                      'novelty': round(novelty, 2), 'next_tier': next_tier,
+                     'outcome': round(outcome_factor, 2),
                      'statement': c.get('statement', '') or ''})
     rows.sort(key=lambda r: r['score'], reverse=True)
     return rows
