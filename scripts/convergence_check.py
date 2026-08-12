@@ -27,6 +27,7 @@ Exit codes (machine-readable for hooks):
   3 = SATURATED (busy, poll)
   4 = BLOCKED (open work but all blocked — escalate); INVALID (bad task_spec) reuses this
      so hooks that accept returncodes 0–4 keep parsing the JSON decision.
+  64 = MISSING_WORKSPACE (no claim-register.yaml found — caller passed wrong path)
 
 Usage:
   python scripts/convergence_check.py [workspace]          # human-readable
@@ -507,7 +508,7 @@ def decide(workspace: Path) -> dict:
             f"Dispatch a verifier for {len(partials)} partial fact(s). Do NOT declare PROVEN without sign-off."
     elif unblocked_open and not free_slots:
         decision, exit_code, action = "SATURATED", EXIT_SATURATED, \
-            f"All {WORKER_CAP} slots busy with {len(unblocked_open)} open claim(s) queued. Poll workers — do not idle."
+            f"All {WORKER_CAP} slots busy with {len(unblocked_open)} open claim(s) queued. Poll workers — do not wait idly."
     elif failure_blocked_open:
         decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
             f"{len(failure_blocked_open)} claim(s) have a failed attempt with no failure_analysis: {failure_blocked_ids}. " \

@@ -84,18 +84,14 @@ def _cheapness_order(claims: list[dict], deps: dict) -> list[pr.Action]:
 
 
 def _conservative_blocked(ws: Path, exc: Exception) -> dict:
-    """M1.5 L164: 脚本异常 → 记 ledger(failure_recorded) + 保守 BLOCKED(不误报收敛)."""
-    # v1.9.29 (R8): guard against writing poison rows (open_count:-1) into a
-    # ledger that does not exist — _append_ledger would create it empty.
-    if (ws / ".convergence_ledger.jsonl").exists():
-        try:
-            cc._append_ledger(ws, {
-                "decision": "BLOCKED", "open_count": -1, "open_claims": [],
-                "partial_count": -1, "active_workers": 0, "active_blockers": [],
-                "facts_total": -1, "error": str(exc),
-            })
-        except Exception:
-            pass
+    """M1.5 L164: 脚本异常 → 保守 BLOCKED(不误报收敛).
+
+    Intentionally does NOT write to the convergence ledger: on the exception
+    path we have no reliable open_count / partial_count / facts_total, and writing
+    sentinel values (e.g. -1) would poison the trajectory that convergence_health.py
+    consumes.  The missing ledger entry is harmless — health assessment treats
+    gaps as "no data for that turn" rather than an error.
+    """
     return {
         "decision": "BLOCKED", "exit_code": cc.EXIT_BLOCKED,
         "top_actions": [], "blocked": [], "failure_blocked": [], "stale": [],
@@ -109,6 +105,25 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
 
     路由层经实验证伪 CUT(issue #1): LLM worker 自选/自换工具,
     路由 ~0 价值。top_actions 的 skill 字段恒 None, 由 worker 自选。
+
+    Three decide layers with intentionally different schemas (issue #97):
+      1. convergence_check.decide() — base convergence matrix.
+         Schema: decision, exit_code, action, open_claims, open_count,
+         unblocked_open_count, blocked_open_count, failure_blocked,
+         partial_facts, partial_count, active_workers, free_slots,
+         worker_cap, stuck_workers, active_blockers, orphan_claims,
+         unverified_primary_qs, note_layer_gaps, pq_parse_error.
+         Validated against convergence-check-output.json.
+      2. kunglao-decide.decide() (this function) — composed M1 DecideOutput.
+         Schema: decision, exit_code, top_actions, blocked, failure_blocked,
+         stale, drifts, explore_mode, selfcheck, open_count, partial_count,
+         free_slots (+ optional error from _conservative_blocked).
+         Validated against decide-output.json.
+      3. _conservative_blocked() — error fallback, subset of (2) + error.
+         Schema: decision, exit_code, top_actions, blocked, failure_blocked,
+         stale, drifts, explore_mode, selfcheck, error.
+         Intentionally omits open_count/partial_count/free_slots because
+         those values are unreliable on the exception path.
     """
     try:
         base = cc.decide(ws)
