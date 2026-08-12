@@ -94,3 +94,39 @@ class TestNoCtiReferences:
                 if token in line:
                     hits.append(f"{rel}:{i}")
         assert not hits, f"Found '{token}' in test code: {hits}"
+
+
+class TestSkillMdCtiBoundary:
+    """B4-4: SKILL.md must reflect the RE-only boundary (no CTI/OSINT/attribution)."""
+
+    SKILL_MD = ROOT / "SKILL.md"
+
+    @pytest.mark.parametrize("token", _BANNED + ["CTI cold-start"])
+    def test_skill_md_no_cti_tokens(self, token: str) -> None:
+        """SKILL.md must not reference removed CTI agent names or modules."""
+        text = self.SKILL_MD.read_text(encoding="utf-8", errors="ignore")
+        assert token not in text, (
+            f"SKILL.md still contains '{token}' — remove per B4-4 boundary correction"
+        )
+
+    def test_skill_md_has_re_boundary_clause(self) -> None:
+        """SKILL.md 'What the orchestrator is NOT' section must state the RE-only boundary."""
+        text = self.SKILL_MD.read_text(encoding="utf-8", errors="ignore")
+        assert "byte-anchored, verified RE fact base" in text, (
+            "SKILL.md missing RE-only boundary clause in 'What the orchestrator is NOT'"
+        )
+
+    def test_skill_md_verdict_is_pq_coverage(self) -> None:
+        """SKILL.md Goal section must define verdict as PQ-coverage, not maliciousness."""
+        text = self.SKILL_MD.read_text(encoding="utf-8", errors="ignore")
+        assert "PROVEN-FULL fact" in text, (
+            "SKILL.md Goal must mention PROVEN-FULL fact as verdict basis"
+        )
+        assert "never a maliciousness" in text, (
+            "SKILL.md Goal must explicitly disclaim maliciousness/threat-actor judgment"
+        )
+
+    def test_skill_md_line_count(self) -> None:
+        """B4-4 edits must be net-neutral or negative (≤ 560 lines, pre-existing over-500 untouched)."""
+        lines = self.SKILL_MD.read_text(encoding="utf-8").splitlines()
+        assert len(lines) <= 560, f"SKILL.md {len(lines)} lines > 560 — edits must be net-neutral or negative"

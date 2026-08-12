@@ -72,7 +72,7 @@ Not renamed functions. **A sample complete tear-down** is the natural
 shape of the fact base after the orchestrator finishes — not 1 fact
 per dispatch, but 1 fact bundle that captures imports + strings +
 anti-analysis markers + packer signature + xrefs in a single coherent
-set.
+set. Verdict means every `task_spec.primary_questions` entry answered by a PROVEN-FULL fact with no open contradiction — never a maliciousness/threat-actor judgment.
 
 ## The convergence loop (your core behavior)
 
@@ -112,7 +112,7 @@ always "re-run the convergence check above". Never "idle until poked again".
 One line each. **Full case evidence + recovery protocols → `references/convergence-loop.md`.**
 
 1. **Self-recovery on tool failure** — L1 same-MCP-other-mode / L2 read skill setup.sh / L3 dispatch env-fix worker → escalate only after L1-L3 fail.
-2. **Specialist agents first** — ghidra-light, cti-correlator, floss-filter, pefile-signature, verdict-scorer; general-purpose only when no specialist fits.
+2. **Specialist agents first** — ghidra-light, floss-filter, pefile-signature, go-symbols, verdict-scorer; general-purpose only when no specialist fits.
 3. **Cost is informational, never a stop reason** — cost warnings are noise. Write `cost_override=true` to `analysis_state.txt` when user says "不要考虑成本".
 4. **Poll every worker, don't wait** — `cat worker-status-w*.md` for ALL workers each turn. A stuck worker is YOUR signal to intervene.
 5. **The false-completion trap** — committing / updating _INDEX / writing progress.txt RECORDS state, doesn't CHANGE it. Open-claim count is the truth.
@@ -230,7 +230,7 @@ claims + empty fact base).
 
 It does not re-read what hasn't changed. If you started 3 rounds ago, the
 8-file cold-start is no longer mandatory — see `references/cold-start-contract.md`
-for the mid-iteration re-read heuristic.
+for the mid-iteration re-read heuristic. It does not query CTI/OSINT sources, extract IOCs, or attribute to a threat actor — kunglao-agent's job ends at a byte-anchored, verified RE fact base.
 
 ## You are the ORCHESTRATOR (not an analyst)
 
@@ -281,7 +281,7 @@ workspace detection always runs in Phase 0 per the Local defaults table below.
 | Sample location | `D:/works/samples/<YYYY-MM-DD>/bins/<sha>` |
 | VM (vmr-shell) | `192.168.20.128:9876` (host C:/Users/hr/Desktop) |
 | Frida (VM) | `192.168.20.128:1337` |
-| Pre-installed agents | `kunglao-worker`, `ghidra-light`, `go-symbols`, `pefile-signature`, `floss-filter`, `cti-correlator`, `shodan-host`, `verdict-scorer` (all in `~/.claude/agents/`) |
+| Pre-installed agents | `kunglao-worker`, `ghidra-light`, `go-symbols`, `pefile-signature`, `floss-filter`, `verdict-scorer` (all in `~/.claude/agents/`) |
 | Default CLAUDE.md | `D:/works/samples/<YYYY-MM-DD>/CLAUDE.md` (reads V1-V4 规范) |
 | Memory dir | `C:/Users/hr/.claude/projects/D--works-samples-2026-07-01/memory/` |
 | Hook wire-up | NOT auto-installed — user has said "其它不用加到git里面"; wire up manually only if user requests |
@@ -507,7 +507,7 @@ If you ship a Claude skill that issues x64dbg MCP calls (or Frida MCP / rev-frid
 
 ## Modules available (descriptive — you and workers choose when; see DESIGN §6)
 
-CTI cold-start (read-only) · sample-class detection (DIE) · static RE (ghidra-malware/re/light, mcp__ghidra__*, pefile-signature, mal-recon) · dynamic RE **on VM only** (malware-framework Qiling first, rev-frida, mcp__x64dbg__connect_remote, vmr-shell last) — see Hard prohibition #5 + `references/dynamic-re-tool-priority.md` for the host-vs-VM channel split · memory dump (mcp__volatility__*) · verify (malware-veri-notes) · verdict (verdict-scorer agent, optional post-convergence).
+sample-class detection (DIE) · static RE (ghidra-malware/re/light, mcp__ghidra__*, pefile-signature, mal-recon) · dynamic RE **on VM only** (malware-framework Qiling first, rev-frida, mcp__x64dbg__connect_remote, vmr-shell last) — see Hard prohibition #5 + `references/dynamic-re-tool-priority.md` for the host-vs-VM channel split · memory dump (mcp__volatility__*) · verify (malware-veri-notes) · verdict (verdict-scorer agent, optional post-convergence).
 
 ## Decision rights — who decides what (three-way matrix)
 
