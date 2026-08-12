@@ -279,3 +279,34 @@ def test_no_index_file_rejected(tmp_path):
     ok, reason = check_provenance_gate(fact, ws)
     assert not ok, "missing index must be rejected"
     assert "index" in reason.lower()
+
+
+# =====================================================================
+# CLI entry (skills-review F5 / issue #196)
+# =====================================================================
+
+def test_provenance_gate_cli_exits_nonzero_on_bad_ref(tmp_path):
+    """CLI contract: argparse entry, exit 0 = provenance OK, 1 = rejected.
+    (skills-review F5: this checker had no CLI — now CI-visible.)"""
+    import subprocess
+    import sys
+
+    ws = tmp_path / "ws"
+    (ws / "facts").mkdir(parents=True)
+    (ws / "evidence").mkdir()
+    # Index with a DIFFERENT eid — E999 must be reported as not-found.
+    (ws / "evidence" / "_index.json").write_text(
+        '{"entries": [{"eid": "E001", "path": "evidence/cap.txt", '
+        '"sha256": "deadbeef"}], "schema": "evidence-index/1"}',
+        encoding="utf-8",
+    )
+    fact = ws / "facts" / "F001.md"
+    fact.write_text(
+        "```yaml\nprovenance:\n  - eid: E999\n```\n", encoding="utf-8"
+    )
+    r = subprocess.run(
+        [sys.executable, "scripts/provenance_gate.py", str(fact), str(ws)],
+        capture_output=True, text=True,
+    )
+    assert r.returncode == 1, (r.returncode, r.stdout, r.stderr)
+    assert "E999" in (r.stdout + r.stderr)

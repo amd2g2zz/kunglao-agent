@@ -178,3 +178,27 @@ def check_provenance_gate(fact_path: Path, ws: Path) -> tuple[bool, str]:
             )
 
     return (True, f"all {len(refs)} provenance ref(s) verified")
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI: python provenance_gate.py <fact.md> <workspace-root>
+
+    Exit 0 = provenance OK; 1 = rejected (missing index, bad ref, hash
+    mismatch). Human-readable result on stdout."""
+    import argparse
+
+    ap = argparse.ArgumentParser(
+        description="check a fact's provenance refs against the evidence index")
+    ap.add_argument("fact", type=Path, help="path to the fact .md file")
+    ap.add_argument("ws", type=Path, help="workspace root (evidence/ inside)")
+    args = ap.parse_args(argv)
+
+    ok, reason = check_provenance_gate(args.fact, args.ws)
+    print(f"{'OK' if ok else 'REJECTED'}: {reason}")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main())
