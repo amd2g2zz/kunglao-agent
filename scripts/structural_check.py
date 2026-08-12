@@ -47,6 +47,28 @@ def check_reference_links(root):
                 issues.append(f'BROKEN_LINK: {p.relative_to(root)} -> {target}')
     return issues
 
+def check_references_index_drift(root):
+    refs_index = root / 'references' / '_INDEX.yaml'
+    if not refs_index.exists():
+        return ['ERROR MISSING_REFERENCES_INDEX: references/_INDEX.yaml']
+    import hashlib
+    try:
+        import yaml
+        data = yaml.safe_load(refs_index.read_text(encoding='utf-8')) or {}
+    except Exception:
+        return ['ERROR REFERENCES_INDEX_UNREADABLE: references/_INDEX.yaml']
+    files = data.get('files') or {}
+    issues = []
+    for rel, expect in files.items():
+        p = root / rel
+        if not p.exists():
+            issues.append(f'ERROR INDEX_DRIFT: {rel} missing on disk')
+            continue
+        actual = hashlib.sha256(p.read_bytes()).hexdigest()
+        if actual != expect:
+            issues.append(f'ERROR INDEX_DRIFT: {rel} (digest mismatch)')
+    return issues
+
 def main():
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path.cwd()
     errors = []
@@ -57,8 +79,11 @@ def main():
     for d in drift: errors.append(d)
     broken = check_reference_links(root)
     for b in broken: errors.append(b)
+    ref_drift = check_references_index_drift(root)
+    errors = errors + ref_drift
     for w in warnings: print(w)
-    for e in errors: print('ERROR ' + e)
+    for e in errors:
+        print(e if e.startswith('ERROR ') else 'ERROR ' + e)
     if errors:
         return 1
     return 0
