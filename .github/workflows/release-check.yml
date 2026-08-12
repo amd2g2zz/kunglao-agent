@@ -28,11 +28,11 @@ jobs:
       with:
         python-version: "3.11"
 
-    - name: CI YAML selfcheck (issue #147)
-      run: uv run python scripts/release_check_selfcheck.py
-
     - name: Install uv (documented dependency manager)
       run: python -m pip install uv
+
+    - name: CI YAML selfcheck (issue #147)
+      run: uv run python scripts/release_check_selfcheck.py
 
     - name: Install dependencies (locked)
       run: uv sync --locked
