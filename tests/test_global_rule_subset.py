@@ -262,7 +262,7 @@ class TestCliInterface:
             "## 4. 5 behaviors\n\n"
             "1. **Self-recovery.** L1 same-MCP-other-mode, L2 read skill setup.sh, "
             "L3 dispatch env-fix worker.\n"
-            "2. **Specialist agents first.** ghidra-light, cti-correlator, "
+            "2. **Specialist agents first.** ghidra-light, "
             "floss-filter, pefile-signature, verdict-scorer.\n"
             "3. **Cost is informational.** Cost warnings are noise, never a stop "
             "reason.\n"

@@ -45,7 +45,6 @@ skill's setup.sh? Dispatched a worker to fix it?"
 
 - Static decompile → `ghidra-light` (never general-purpose for Ghidra work)
 - x64dbg stepping → the x64dbg-specialist worker (`kunglao-worker` with `tools=x64dbg`)
-- CTI correlation → `cti-correlator`
 - String extraction → `floss-filter`
 - Authenticode / packer → `pefile-signature`
 - Verdict scoring → `verdict-scorer`

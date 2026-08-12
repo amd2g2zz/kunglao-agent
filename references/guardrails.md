@@ -328,7 +328,7 @@ Priority:
 1. `kunglao-worker` (default) — contract baked into system prompt, dispatch
    prompt is SHORT (≤10 lines).
 2. Stage agents (`ghidra-light`/`go-symbols`/`pefile-signature`/
-   `floss-filter`/`cti-correlator`/`shodan-host`/`verdict-scorer`) — when
+   `floss-filter`/`verdict-scorer`) — when
    the claim IS exactly that stage.
 3. `general-purpose` (last resort) — only when neither fits AND the
    orchestrator is prepared to write the full contract preamble.

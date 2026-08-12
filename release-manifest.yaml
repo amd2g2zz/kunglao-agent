@@ -23,9 +23,7 @@ assets:
     - agents/ghidra-light.md
     - agents/floss-filter.md
     - agents/pefile-signature.md
-    - agents/cti-correlator.md
     - agents/go-symbols.md
-    - agents/shodan-host.md
     - agents/verdict-scorer.md
     - agents/verdict-redteam.md
   hooks:

@@ -128,7 +128,7 @@ misclassifies normal specialist bootstrap as death.
 - **kunglao-worker / generic**: 5 min silence → ping; 15 min → intervention;
   20+ min → backtrack/B1c. (These write status first by §1c.)
 - **Specialists (verdict-scorer, ghidra-light, floss-filter, pefile-signature,
-  go-symbols, cti-correlator)**: **10 min** bootstrap tolerance before the
+  go-symbols)**: **10 min** bootstrap tolerance before the
   first ping (their pre-status read/import phase is legitimately long);
   20 min → intervention; 30+ min → B1c. **Ping before kill — always.**
   A specialist killed mid-bootstrap loses its read work.

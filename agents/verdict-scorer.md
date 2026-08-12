@@ -33,7 +33,6 @@ You are the Stage 6 scorer. **v10: maliciousness and attribution are decoupled.*
 ## Inputs (passed by caller)
 
 - `evidence/cti-vt.json` — VirusTotal raw response (always)
-- `evidence/cti-correlated.json` — cti-correlator output (deep/hunt)
 - `evidence/die.json` — DIE output (local file only)
 - `evidence/floss-filtered.json` — floss-filter v4 two-layer output (local file only)
 - `evidence/static-ghidra.json` or `static-ida.json` — static recon (local file only)
