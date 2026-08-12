@@ -25,7 +25,7 @@ Self-stamp guard: verifier_id == claim's worker_id → NOT independent → STAMP
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -158,7 +158,7 @@ def record_dissent(
     of the fact file, preserving all existing content.
     """
     if ts is None:
-        ts = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     block = (
         f"\n```dissent\n"
         f"verifier_id: {verifier_id}\n"
