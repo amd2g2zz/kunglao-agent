@@ -5,6 +5,9 @@
 - Pinned digests must match files on disk (issue #192: 6/6 manifest
   digests drifted from eval fixtures, so verify_manifest() failed
   closed and held-out evaluation could never produce a receipt).
+- structural_check error lines must be grep-parseable (issue #193).
+- No broken links in references/ (issue #194: 3 broken links in
+  references/re-library/ made structural_check.py fail on every run).
 """
 from pathlib import Path
 
@@ -53,3 +56,32 @@ def test_candidate_corpus_digests_match_files():
         if actual != expected:
             mismatches.append(f"{rel}: manifest={expected[:12]} actual={actual[:12]}")
     assert not mismatches, f"digest drift: {mismatches}"
+
+
+def test_structural_check_error_lines_are_prefixed():
+    """Grep-parseable contract: IF structural errors exist, each line must
+    start with 'ERROR ' (research: CI grep missed unprefixed errors)."""
+    import subprocess
+    import sys
+
+    r = subprocess.run(
+        [sys.executable, "scripts/structural_check.py", "."],
+        capture_output=True, text=True,
+    )
+    error_lines = [ln for ln in r.stdout.splitlines() if "BROKEN_LINK" in ln or "MISSING_" in ln]
+    assert all(ln.startswith("ERROR ") for ln in error_lines), r.stdout
+
+
+def test_no_broken_links_in_re_library():
+    """Every relative .md link in references/ must resolve (research: 3
+    broken links: field-notes -> SKILL.md, field-notes ->
+    phishing-case-study.md, quickstart -> README.md)."""
+    import subprocess
+    import sys
+
+    r = subprocess.run(
+        [sys.executable, "scripts/structural_check.py", "."],
+        capture_output=True, text=True,
+    )
+    broken = [ln for ln in r.stdout.splitlines() if "BROKEN_LINK" in ln]
+    assert not broken, "\n".join(broken)
