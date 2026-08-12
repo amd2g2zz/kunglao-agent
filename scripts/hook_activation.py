@@ -22,7 +22,7 @@ State file schema (memory/.hook_state.json):
     "tier": "advisory | pause_non_essential | HARD_PAUSE | none",
     "phase": "DISPATCH | MONITOR | VERIFY | IDLE",
     "active_hooks": ["active_intervention", "cost_gate"],
-    "paused_hooks": ["memory_capture", "backtrack_gate"],
+    "paused_hooks": ["backtrack_gate"],
     "user_override": {"<hook_name>": "on" | "off"},
     "expires_at": "<ISO 8601 UTC — activation expires; renew with --renew>"
   }
@@ -70,11 +70,11 @@ ALL_HOOKS = {
 
 TIER_DEFAULTS = {
     "advisory": {"active": ["active_intervention", "cost_gate", "doubt_checker"],
-                  "paused": ["memory_capture"]},
+                  "paused": []},
     "pause_non_essential": {"active": ["active_intervention", "cost_gate"],
-                            "paused": ["memory_capture", "doubt_checker", "reuse_gate"]},
+                            "paused": ["doubt_checker", "reuse_gate"]},
     "HARD_PAUSE": {"active": ["cost_gate"],
-                   "paused": ["active_intervention", "memory_capture", "doubt_checker",
+                   "paused": ["active_intervention", "doubt_checker",
                               "reuse_gate", "backtrack_gate", "search_gate",
                               "troubleshooting_gate"]},
     "none": {"active": sorted(ALL_HOOKS),
