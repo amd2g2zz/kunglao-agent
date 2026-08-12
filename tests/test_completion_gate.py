@@ -395,14 +395,32 @@ def test_stop_activated_blocks_exit1(tmp_path):
 
 
 def test_stop_stop_hook_active_passthrough(tmp_path):
-    """Anti-loop: stop_hook_active=True → pass (don't trap the agent)."""
+    """Anti-loop (#199): stop_hook_active=True passes ONLY when the oracle
+    records a sanctioned second stop (adjudication.second_stop + PASS)."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    oracle = _regression_oracle()
+    oracle["adjudication"] = {"stop_hook_active": {
+        "second_stop": True, "last_decision": "PASS"}}
+    _write_oracle_yaml(ws, "task-oracle.yaml", oracle)
+    _activated_state(ws)
+    rc, out = _hook_stdout(ws, stop_hook_active=True)
+    assert rc == 0
+    assert out.strip() == ""
+
+
+def test_stop_stop_hook_active_without_sanction_blocks(tmp_path):
+    """Anti-loop (#199): stop_hook_active=True WITHOUT a sanctioned PASS on
+    record must block (the unconditional pass-through is gone)."""
     ws = tmp_path / "ws"
     ws.mkdir()
     _write_oracle_yaml(ws, "task-oracle.yaml", _regression_oracle())
     _activated_state(ws)
     rc, out = _hook_stdout(ws, stop_hook_active=True)
-    assert rc == 0
-    assert out.strip() == ""
+    assert rc != 0
+    decision = json.loads(out)
+    assert decision["decision"] == "block"
+    assert "second stop without oracle sanction" in decision["reason"]
 
 
 def test_stop_malformed_oracle_blocks_exit3(tmp_path):
