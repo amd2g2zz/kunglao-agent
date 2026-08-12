@@ -29,6 +29,30 @@ from status_defs import TERMINAL as TERMINAL_STATUSES
 # 与 hooks/worker_budget.py check_claim_status_change 豁免集一致 (L289)
 ORCHESTRATOR_ACTORS = ("orchestrator", "main", "kunglao-orch")
 
+# #78: gates REQUIRED for terminal promotion (PROVEN). When a required gate is
+# unavailable (missing module / ImportError), raises (checker exception), or
+# receives a corrupt required artifact, promotion FAILS CLOSED: original claim
+# state preserved + explicit non-success (BLOCKED) with an audit receipt —
+# a terminal state without the gates' verdicts is unverifiable. The hook-side
+# backstop (hooks/worker_budget.py compare_register_change_proven_gate)
+# imports this same policy so no alternate promotion route stays fail-open.
+REQUIRED_FOR_TERMINAL_STATE = (
+    "blind_gate",
+    "fact_contradiction_gate",
+    "blind_gate:check_inference_blind_scope",
+)
+
+
+def _required_gate_receipt(gate: str, exc: BaseException, claim_id: str) -> str:
+    """Audit receipt for a required gate that could not run (D3, #78).
+
+    Embeds checker identity, error class, and reason in the frozen
+    tuple[bool, str] return contract (specs/phase-5/contract.md L79).
+    """
+    return (f"BLOCKED: promotion of {claim_id} requires required gate {gate}; "
+            f"checker unavailable ({type(exc).__name__}): {exc} — "
+            f"register not modified (fail closed)")
+
 
 def utc_now() -> str:
     """UTC ISO-8601 秒级, Z 后缀."""
@@ -167,6 +191,11 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
     have a valid verifier_sign_off block in the claim's fact file. Without
     it (or on BLIND REFUTE / self-stamp), the effective status is STAMP
     (claimed-but-unverified), not PROVEN. STAMP is non-terminal.
+
+    #78 fail-closed: the PROVEN gates (BLIND / contradiction / inference) are
+    REQUIRED_FOR_TERMINAL_STATE — when a gate cannot run (ImportError,
+    checker exception, corrupt artifact) the migration is refused with
+    (False, BLOCKED receipt) and the register keeps its original status.
     """
     reg_path = ws / "claim-register.yaml"
     if not reg_path.exists():
@@ -180,7 +209,10 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             f"to write terminal status {new_status!r} for {claim_id}. Only the "
             f"orchestrator promotes after kunglao-redteam passes."))
 
-    # ---- BLIND gate (issue #15): PROVEN requires independent verifier sign-off
+    # ---- required gates (#78, fail closed): PROVEN requires the BLIND /
+    # contradiction / inference verdicts. Unavailability or a raising checker
+    # -> (False, BLOCKED receipt); register untouched, no ledger event. Only
+    # a gate that RAN and downgraded (STAMP) continues to the write.
     effective_status = new_status
     gate_msg = ""
     if new_status == "PROVEN":
@@ -191,8 +223,8 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                 claim_id, ws / "facts", worker_id=worker_id)
             if not allowed:
                 gate_msg = f" [BLIND GATE: {gate_reason}]"
-        except ImportError:
-            pass  # blind_gate not available — fail open (no gate)
+        except Exception as exc:
+            return (False, _required_gate_receipt("blind_gate", exc, claim_id))
         # ---- contradiction gate (#47): PROVEN also requires no same-topic
         # CONFLICT — same-topic multi-PROVEN facts with differing conclusions
         # need a supersedes/superseded_by link, else downgrade to STAMP.
@@ -202,8 +234,9 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             if not c_ok:
                 effective_status = STAMP
                 gate_msg += f" [CONFLICT GATE: {c_reason}]"
-        except ImportError:
-            pass  # fact_contradiction_gate not available — fail open (no gate)
+        except Exception as exc:
+            return (False, _required_gate_receipt(
+                "fact_contradiction_gate", exc, claim_id))
         # ---- inference-scope gate (#48): PROVEN also requires the BLIND
         # sign-off to cover inferential/routing claims with independent static
         # evidence — byte anchors or orchestrator-captured evidence do not
@@ -216,8 +249,9 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             if not i_ok:
                 effective_status = STAMP
                 gate_msg += f" [INFERENCE GATE: {i_reason}]"
-        except ImportError:
-            pass  # blind_gate not available — fail open (no gate)
+        except Exception as exc:
+            return (False, _required_gate_receipt(
+                "blind_gate:check_inference_blind_scope", exc, claim_id))
 
     if not _set_claim_status(reg_path, claim_id, effective_status):
         return (False, f"could not rewrite status for {claim_id} in claim-register.yaml")

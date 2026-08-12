@@ -403,9 +403,12 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
         else:
             overall = "PARTIAL"
 
-    # ---- #50 disasm post-gate (fail-open): VA-anchored value assertions in
-    # the fact must match capstone disassembly of the sample binary byte-exact.
-    # a2b5e25c problem 1 — the fact-layer defense (F015 shape).
+    # ---- #50 disasm post-gate (fail closed, #78): VA-anchored value
+    # assertions in the fact must match capstone disassembly of the sample
+    # binary byte-exact. a2b5e25c problem 1 — the fact-layer defense (F015
+    # shape). The caller supplied a binary, so the check is REQUIRED: an
+    # unavailable or raising checker is NEVER serialized as ok=true and must
+    # not leave a would-be VERIFIED overall (downgrade to UNVERIFIED-WITH-GAP).
     disasm = None
     if binary_path is not None:
         try:
@@ -419,11 +422,22 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
                 binary_path)
             if not disasm.get("ok"):
                 overall = "REJECTED"
-        except ImportError:
-            disasm = {"ok": True, "skipped":
-                      "disasm_constant_check unavailable (capstone/pefile missing?)"}
+        except ImportError as exc:
+            disasm = {"ok": False, "state": "SKIPPED",
+                      "checker": "disasm_constant_check",
+                      "checker_version": "unknown",
+                      "error_class": "ImportError",
+                      "reason": f"disasm_constant_check unavailable: {exc}"}
+            if overall == "VERIFIED":
+                overall = "UNVERIFIED-WITH-GAP"
         except Exception as exc:
-            disasm = {"ok": True, "skipped": f"disasm gate failed open: {exc}"}
+            disasm = {"ok": False, "state": "UNVERIFIED-WITH-GAP",
+                      "checker": "disasm_constant_check",
+                      "checker_version": "unknown",
+                      "error_class": type(exc).__name__,
+                      "reason": str(exc)}
+            if overall == "VERIFIED":
+                overall = "UNVERIFIED-WITH-GAP"
 
     out = {"fact_id": fact_id, "claim_id": claim_id, "l1": l1, "l2": l2,
            "anchors": anchors, "overall": overall, "lint": lint}

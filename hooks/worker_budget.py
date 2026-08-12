@@ -409,64 +409,77 @@ def compare_register_change_proven_gate(
     Unlike compare_register_change (which exempts the orchestrator from the
     worker self-promotion guard), this gate applies to ALL actors including
     the orchestrator: PROVEN requires verifier_sign_off, period.
+
+    #78 fail-closed: the BLIND / contradiction / inference gates are REQUIRED
+    for the PROVEN promotion (same policy as claim_migrator's
+    REQUIRED_FOR_TERMINAL_STATE). An unreadable register (with a
+    before-snapshot), an unavailable gate module, or a raising checker blocks
+    the write — no alternate direct-edit promotion route stays fail-open.
     """
     if before is None:
         return True, 'no-before snapshot'
     after = _claim_statuses(reg_path)
     if after is None:
-        return True, 'register unreadable'
+        # fail closed: a promotion may have been written and cannot be
+        # verified — block rather than permit an unverified PROVEN.
+        return False, ('PROMOTION GATE: claim-register.yaml unreadable after '
+                       'write — cannot verify PROVEN gate (fail closed); '
+                       'fix or restore the register and retry')
     # find claims that became PROVEN
     newly_proven = [cid for cid, st in after.items()
                     if before.get(cid) != st and st == 'PROVEN']
     if not newly_proven:
         return True, 'no PROVEN promotions'
-    # check BLIND gate for each
+    # check BLIND gate for each — required, fail closed (#78)
     try:
         sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
         from blind_gate import check_proven_gate
-    except ImportError:
-        return True, 'blind_gate unavailable (fail open)'
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: blind_gate unavailable (fail closed) '
+                       f'— {type(exc).__name__}: {exc}')
     # contradiction gate (#47): PROVEN also requires no same-topic CONFLICT —
     # same-topic multi-PROVEN facts with differing conclusions need a
     # supersedes/superseded_by link, else the write is blocked.
     try:
         from fact_contradiction_gate import check_proven_contradiction
-        have_contradiction_gate = True
-    except ImportError:
-        have_contradiction_gate = False
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: fact_contradiction_gate unavailable '
+                       f'(fail closed) — {type(exc).__name__}: {exc}')
     # inference-scope gate (#48): inferential/routing claims need independent
     # static sign-off coverage — byte anchors / orchestrator-captured evidence
     # do not cover the inference (a2b5e25c problem 2, F040).
     try:
         from blind_gate import check_inference_blind_scope
-        have_inference_gate = True
-    except ImportError:
-        have_inference_gate = False
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: blind_gate.check_inference_blind_scope '
+                       f'unavailable (fail closed) — {type(exc).__name__}: {exc}')
     register_text = reg_path.read_text(encoding='utf-8', errors='replace')
     import re as _re
     violations = []
-    for cid in newly_proven:
-        worker_id = None
-        m = _re.search(rf"- id:\s*{_re.escape(cid)}\b(.*?)(?=\n-\s*id:|\Z)",
-                       register_text, _re.DOTALL)
-        if m:
-            for key in ('worker_id', 'last_dispatched_worker'):
-                wm = _re.search(rf"\b{key}:\s*(\S+)", m.group(1))
-                if wm and wm.group(1).strip().lower() not in ('null', 'none', '~'):
-                    worker_id = wm.group(1).strip().strip("'\"")
-                    break
-        allowed, effective, reason = check_proven_gate(cid, facts_dir, worker_id=worker_id)
-        if not allowed:
-            violations.append(f'{cid}: {reason}')
-        if have_contradiction_gate:
+    try:
+        for cid in newly_proven:
+            worker_id = None
+            m = _re.search(rf"- id:\s*{_re.escape(cid)}\b(.*?)(?=\n-\s*id:|\Z)",
+                           register_text, _re.DOTALL)
+            if m:
+                for key in ('worker_id', 'last_dispatched_worker'):
+                    wm = _re.search(rf"\b{key}:\s*(\S+)", m.group(1))
+                    if wm and wm.group(1).strip().lower() not in ('null', 'none', '~'):
+                        worker_id = wm.group(1).strip().strip("'\"")
+                        break
+            allowed, effective, reason = check_proven_gate(cid, facts_dir, worker_id=worker_id)
+            if not allowed:
+                violations.append(f'{cid}: {reason}')
             c_ok, c_reason = check_proven_contradiction(cid, facts_dir)
             if not c_ok:
                 violations.append(f'{cid}: {c_reason}')
-        if have_inference_gate:
             i_ok, _, i_reason = check_inference_blind_scope(
                 cid, facts_dir, register_text, worker_id=worker_id)
             if not i_ok:
                 violations.append(f'{cid}: {i_reason}')
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: checker raised while verifying PROVEN '
+                       f'({type(exc).__name__}: {exc}) — fail closed')
     if violations:
         return False, (f'PROMOTION GATE: PROVEN rejected — '
                        f'{"; ".join(violations)}. Downgrade to STAMP or resolve the blockers.')
