@@ -118,3 +118,32 @@ def test_second_stop_without_oracle_sanction_blocks(tmp_path):
     payload = {"cwd": str(ws), "workspace": str(ws), "stop_hook_active": True}
     rc = _load_hook().process_event(payload)
     assert rc != 0, "unsanctioned second stop must block"
+
+
+# =====================================================================
+# No-oracle tightening (issue #200)
+# =====================================================================
+
+def test_activated_workspace_without_oracle_blocks(tmp_path):
+    """An ACTIVATED workspace (claim-register marker + hook_state) without a
+    task oracle must NOT silently pass — no-oracle is not a pass signal."""
+    import yaml
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    _activated_state(ws)
+    (ws / "claim-register.yaml").write_text(
+        yaml.safe_dump({"claims": []}, sort_keys=False), encoding="utf-8"
+    )
+    payload = {"cwd": str(ws), "workspace": str(ws)}
+    rc = _load_hook().process_event(payload)
+    assert rc != 0, "activated workspace without oracle must block"
+
+
+def test_unactivated_dir_without_oracle_still_passes(tmp_path):
+    """A directory with NO workspace markers at all must still pass (D9:
+    non-kunglao sessions get zero noise from the gate)."""
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    rc = _load_hook().process_event({"cwd": str(plain)})
+    assert rc == 0, "no markers -> D9 pass-through must hold"

@@ -40,11 +40,13 @@ ORACLE_FILE = "task-oracle.yaml"
 # ---------- workspace + activation (mirror hooks/state_anchor.py #44) ----------
 
 def _resolve_workspace(payload: dict) -> Path | None:
-    """First candidate with a task-oracle.yaml wins. The oracle is the gate's
-    primary input, so its presence is the correct workspace marker."""
+    """First candidate with a workspace MARKER wins. Markers: claim-register.yaml
+    or .hook_state.json — NOT the oracle file. (#200: an activated workspace
+    without an oracle must still be RESOLVED so the gate can block it; keying
+    on oracle presence silently passed it through.)"""
     cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
     for base in [cwd / "malware-analysis-workspace", cwd]:
-        if (base / ORACLE_FILE).exists():
+        if (base / "claim-register.yaml").exists() or (base / ".hook_state.json").exists():
             return base
     return None
 
@@ -114,9 +116,21 @@ def process_event(payload: dict) -> int:
         return 1
     ws = _resolve_workspace(payload)
     if ws is None:
-        return 0  # no oracle file → pass-through (D9)
+        return 0  # no workspace markers → pass-through (D9)
     if not _kunglao_active(ws):
         return 0  # not activated → pass-through
+    if not (ws / ORACLE_FILE).exists():
+        # #200: activated + NO task oracle → block with exit 3 (D6 family: a
+        # kunglao workspace must be pre-anchored at Phase 0; missing oracle
+        # means the run was never anchored — refusing completion is the
+        # fail-closed half of the no-oracle pass-through that replay #4
+        # observed).
+        reason = ("no task-oracle.yaml in an activated workspace — the "
+                  "orchestrator must register the oracle at Phase 0 before "
+                  "completion can be judged")
+        print(json.dumps({"decision": "block", "reason": reason},
+                         ensure_ascii=False))
+        return 3
     try:
         import yaml
         oracle = yaml.safe_load((ws / ORACLE_FILE).read_text(encoding="utf-8"))
