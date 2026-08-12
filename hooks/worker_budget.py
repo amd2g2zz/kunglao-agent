@@ -477,9 +477,22 @@ def compare_register_change_proven_gate(
                 cid, facts_dir, register_text, worker_id=worker_id)
             if not i_ok:
                 violations.append(f'{cid}: {i_reason}')
-    except Exception as exc:
+    except ImportError as exc:
+        # Infrastructure failure (should not happen after import above, but
+        # defensive) — fail closed: code must be complete.
         return False, (f'PROMOTION GATE: checker raised while verifying PROVEN '
                        f'({type(exc).__name__}: {exc}) — fail closed')
+    except Exception as exc:
+        # #98 (D6/F15): runtime verifier error (timeout/resource limit) —
+        # degrade to STAMP guidance instead of hard fail-closed block.
+        # The PROVEN promotion is still blocked (cannot be PROVEN without
+        # verification), but the message guides to STAMP downgrade rather
+        # than demanding infrastructure repair.
+        for cid in newly_proven:
+            violations.append(
+                f'{cid}: VERIFIER RUNTIME ERROR '
+                f'({type(exc).__name__}: {exc}) — '
+                f'degrade to STAMP (guardrails SS1b self_caveat allowed)')
     if violations:
         return False, (f'PROMOTION GATE: PROVEN rejected — '
                        f'{"; ".join(violations)}. Downgrade to STAMP or resolve the blockers.')

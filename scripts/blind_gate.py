@@ -76,6 +76,26 @@ _STATIC_MARKERS = (r"\bxref", r"disasm", r"decompile", r"capstone", r"ghidra",
 _ORCH_CAPTURED = r"orchestrator[- ]captured"
 
 
+def extract_self_caveat(fact_text: str) -> str | None:
+    """Extract self_caveat value from YAML frontmatter.
+
+    Returns the self_caveat string if present and non-empty, else None.
+    Guardrails SS1b: worker marks self_caveat when verifier is runtime-unavailable.
+    """
+    if not fact_text or "self_caveat" not in fact_text:
+        return None
+    # Frontmatter is between --- delimiters at the start
+    fm = re.match(r"^---\s*\n(.*?)\n---", fact_text, re.DOTALL)
+    if not fm:
+        return None
+    fm_text = fm.group(1)
+    m = re.search(r"^self_caveat:\s*(.+)$", fm_text, re.MULTILINE)
+    if not m:
+        return None
+    val = m.group(1).strip().strip('"').strip("'")
+    return val if val else None
+
+
 def extract_verifier_signoff(fact_text: str) -> dict | None:
     """Parse the verifier_sign_off block from fact text.
 
@@ -224,6 +244,13 @@ def check_proven_gate(
     if fact_path is None:
         return (False, STAMP, f"no fact file for {claim_id}")
     fact_text = fact_path.read_text(encoding="utf-8", errors="replace")
+    # #98: self_caveat check before sign-off (guardrails SS1b)
+    self_caveat = extract_self_caveat(fact_text)
+    if self_caveat is not None:
+        return (False, STAMP,
+                f"self_caveat: {self_caveat} "
+                f"(guardrails SS1b: verifier runtime-unavailable, "
+                f"claim {claim_id} cannot be PROVEN without independent BLIND verification)")
     signoff = extract_verifier_signoff(fact_text)
     if signoff is None:
         return (False, STAMP,
@@ -342,6 +369,12 @@ def check_inference_blind_scope(
     if fact_path is None:
         return (False, STAMP, f"INFERENCE gate: no fact file for {claim_id}")
     fact_text = fact_path.read_text(encoding="utf-8", errors="replace")
+    # #98: self_caveat check before sign-off (guardrails SS1b)
+    self_caveat = extract_self_caveat(fact_text)
+    if self_caveat is not None:
+        return (False, STAMP,
+                f"INFERENCE gate: self_caveat: {self_caveat} "
+                f"(guardrails SS1b: verifier runtime-unavailable)")
     statement = _claim_statement(register_text, claim_id)
     if not is_inferential_claim(statement, fact_text):
         # RED3: non-inferential claims are outside this gate's scope — the

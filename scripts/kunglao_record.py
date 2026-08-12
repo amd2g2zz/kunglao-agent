@@ -286,39 +286,54 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             f"orchestrator promotes after kunglao-redteam passes."))
 
     # ---- required gates (#78, fail closed): PROVEN requires the BLIND /
-    # contradiction / inference verdicts. Unavailability or a raising checker
-    # -> (False, BLOCKED receipt); register untouched, no ledger event. Only
-    # a gate that RAN and downgraded (STAMP) continues to the write.
+    # contradiction / inference verdicts.
+    # #98 (D6/F15): two-tier exception classification:
+    #   ImportError (gate module broken/code incomplete) -> FAIL_CLOSED, BLOCKED
+    #   non-ImportError (verifier runtime error/timeout) -> degrade to STAMP
     effective_status = new_status
     gate_msg = ""
     if new_status == "PROVEN":
+        # ---- BLIND gate ----
         try:
             from blind_gate import check_proven_gate, STAMP
+        except Exception as exc:
+            # Infrastructure failure: code incomplete -> FAIL_CLOSED
+            return (False, _required_gate_receipt("blind_gate", exc, claim_id))
+        try:
             worker_id = _extract_worker_id(register, claim_id)
             allowed, effective_status, gate_reason = check_proven_gate(
                 claim_id, ws / "facts", worker_id=worker_id)
             if not allowed:
                 gate_msg = f" [BLIND GATE: {gate_reason}]"
         except Exception as exc:
-            return (False, _required_gate_receipt("blind_gate", exc, claim_id))
-        # ---- contradiction gate (#47): PROVEN also requires no same-topic
-        # CONFLICT — same-topic multi-PROVEN facts with differing conclusions
-        # need a supersedes/superseded_by link, else downgrade to STAMP.
+            # Runtime verifier failure -> degrade to STAMP (guardrails SS1b)
+            effective_status = STAMP
+            gate_msg += (f" [BLIND GATE: verifier runtime error "
+                         f"({type(exc).__name__}: {exc}); degraded to STAMP "
+                         f"(guardrails SS1b self_caveat allowed)]")
+        # ---- contradiction gate (#47) ----
         try:
             from fact_contradiction_gate import check_proven_contradiction, STAMP
+        except Exception as exc:
+            return (False, _required_gate_receipt(
+                "fact_contradiction_gate", exc, claim_id))
+        try:
             c_ok, c_reason = check_proven_contradiction(claim_id, ws / "facts")
             if not c_ok:
                 effective_status = STAMP
                 gate_msg += f" [CONFLICT GATE: {c_reason}]"
         except Exception as exc:
-            return (False, _required_gate_receipt(
-                "fact_contradiction_gate", exc, claim_id))
-        # ---- inference-scope gate (#48): PROVEN also requires the BLIND
-        # sign-off to cover inferential/routing claims with independent static
-        # evidence — byte anchors or orchestrator-captured evidence do not
-        # cover the inference (a2b5e25c problem 2, F040).
+            effective_status = STAMP
+            gate_msg += (f" [CONFLICT GATE: verifier runtime error "
+                         f"({type(exc).__name__}: {exc}); degraded to STAMP "
+                         f"(guardrails SS1b self_caveat allowed)]")
+        # ---- inference-scope gate (#48) ----
         try:
             from blind_gate import check_inference_blind_scope, STAMP
+        except Exception as exc:
+            return (False, _required_gate_receipt(
+                "blind_gate:check_inference_blind_scope", exc, claim_id))
+        try:
             worker_id = _extract_worker_id(register, claim_id)
             i_ok, _, i_reason = check_inference_blind_scope(
                 claim_id, ws / "facts", register, worker_id=worker_id)
@@ -326,8 +341,10 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                 effective_status = STAMP
                 gate_msg += f" [INFERENCE GATE: {i_reason}]"
         except Exception as exc:
-            return (False, _required_gate_receipt(
-                "blind_gate:check_inference_blind_scope", exc, claim_id))
+            effective_status = STAMP
+            gate_msg += (f" [INFERENCE GATE: verifier runtime error "
+                         f"({type(exc).__name__}: {exc}); degraded to STAMP "
+                         f"(guardrails SS1b self_caveat allowed)]")
 
     if not _set_claim_status(reg_path, claim_id, effective_status):
         return (False, f"could not rewrite status for {claim_id} in claim-register.yaml")

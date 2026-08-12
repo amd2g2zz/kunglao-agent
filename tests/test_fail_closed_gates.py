@@ -130,7 +130,12 @@ def test_claim_migrator_blocks_proven_when_inference_gate_missing(
 
 
 def test_claim_migrator_blocks_proven_when_gate_raises(ws_factory, monkeypatch):
-    """Checker exception (non-ImportError) must also fail closed."""
+    """#78/#98: checker runtime exception (non-ImportError) degrades to STAMP.
+
+    #78 original: all exceptions BLOCKED. #98 (D6/F15): runtime exceptions
+    (verifier timeout, resource limit) degrade to STAMP per guardrails SS1b.
+    ImportError-level failures remain BLOCKED (tested separately).
+    """
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     _signoff_fact(ws, "C-1", "C-1")
     import blind_gate
@@ -140,9 +145,11 @@ def test_claim_migrator_blocks_proven_when_gate_raises(ws_factory, monkeypatch):
 
     monkeypatch.setattr(blind_gate, "check_proven_gate", boom)
     ok, msg = kunglao_record.claim_migrator(ws, "C-1", "PROVEN", "orchestrator")
-    assert not ok, f"gate exception must not permit PROVEN: {msg}"
-    assert "BLOCKED" in msg and "RuntimeError" in msg
-    assert _register_status(ws, "C-1") == "OPEN"
+    # #98: runtime error degrades to STAMP (migration succeeds, not BLOCKED)
+    assert ok, f"runtime error should degrade to STAMP: {msg}"
+    assert _register_status(ws, "C-1") == "STAMP", \
+        f"expected STAMP (not PROVEN), got {_register_status(ws, 'C-1')}"
+    assert "RuntimeError" in msg
 
 
 def test_claim_migrator_gate_failure_does_not_affect_other_claims(
