@@ -194,6 +194,11 @@ def build_receipt(manifest: dict, manifest_path: Path, revision: str,
             "agents": [asset(a) for a in manifest.get("assets", {}).get("agents", [])],
             "hooks": [asset(h) for h in manifest.get("assets", {}).get("hooks", [])],
             "templates": [asset(t) for t in manifest.get("assets", {}).get("templates", [])],
+            "knowledge": [asset(k) for k in manifest.get("assets", {}).get("knowledge", [])],
+            "references": [
+                {"path": r, "sha256": sha256_dir(Path(r)) if Path(r).is_dir() else sha256(Path(r))}
+                for r in manifest.get("assets", {}).get("references", [])
+            ],
             "openspec_changes": [
                 {"path": f"openspec/changes/{n}", "sha256": sha256_dir(Path("openspec") / "changes" / n)}
                 for n in openspec

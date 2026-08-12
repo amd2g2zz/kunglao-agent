@@ -125,3 +125,15 @@ def test_references_index_pins_all_reference_files():
         capture_output=True, text=True,
     )
     assert "INDEX_DRIFT" not in r.stdout, r.stdout
+def test_release_manifest_declares_skill_and_references():
+    """release-manifest must declare SKILL.md and the re-library digest so
+    a run can bind to the exact knowledge-base revision (report §4.5)."""
+    import yaml
+
+    manifest = yaml.safe_load(
+        (ROOT / "release-manifest.yaml").read_text(encoding="utf-8")
+    )
+    assets = manifest.get("assets", {})
+    assert "SKILL.md" in assets.get("knowledge", []), assets.get("knowledge")
+    refs = assets.get("references", [])
+    assert any("references/re-library" in r or r == "references/" for r in refs), refs
