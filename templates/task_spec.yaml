@@ -28,3 +28,11 @@ success_criteria:
   deliverable: fact_base        # 目前仅 fact_base
   must_include_ioc_table: false
   confidence_floor: 倾向于       # 可确认 | 表明 | 倾向于 | 可关联 | 不支持
+
+calibration:
+  # #147: every delivered claim MUST carry confidence + falsifier.
+  # The delivery gate (completion transaction) treats a claim without
+  # these fields as incomplete.
+  require_confidence: true
+  require_falsifier: true
+  confidence_scale: 0-1    # 0.3 = hypothesis floor; >=0.7 = direct-use
