@@ -37,3 +37,19 @@ eval/receipts/
 # Review gate + progress (never tracked)
 .review-gate/
 progress.txt
+
+# Security — never track secrets, hooks, or skill packages
+.claude/settings.json
+.claude/hooks/
+.claude/skills/
+
+# Analysis workspace (per-sample, never tracked)
+analysis_space/
+
+# Memory/dump artifacts
+*.dmp
+*.raw
+*.vmem
+
+# pytest cache
+.pytest_cache/
