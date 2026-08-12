@@ -119,7 +119,7 @@ def test_cli():
         f = td / 'trace.json'
         f.write_text(json.dumps(QILING_TRACE), encoding='utf-8')
         r = subprocess.run(
-            [sys.executable, str(Path(__file__).parent / 'normalize_trace.py'),
+            [sys.executable, str(Path(__file__).resolve().parent.parent / 'scripts' / 'normalize_trace.py'),
              str(f), '--tool', 'qiling'],
             capture_output=True, text=True,
         )

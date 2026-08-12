@@ -75,7 +75,7 @@ def test_cli_prints_fact_id():
         (td / 'expected.txt').write_text('reproduce', encoding='utf-8')
 
         r = subprocess.run(
-            [sys.executable, str(Path(__file__).parent / 'content_hash.py'),
+            [sys.executable, str(Path(__file__).resolve().parent.parent / 'scripts' / 'content_hash.py'),
              str(td / 'claim.txt'), str(td / 'repro.sh'), str(td / 'expected.txt')],
             capture_output=True, text=True,
         )
