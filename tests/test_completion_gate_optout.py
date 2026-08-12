@@ -8,13 +8,26 @@
   because the payload carries stop_hook_active=true — the decision is
   delegated to the oracle's persistent adjudication.
 """
+import importlib.util
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-sys.path.insert(0, str(ROOT / "hooks"))
-import completion_gate  # noqa: E402
+
+def _load_hook():
+    """Load hooks/completion_gate.py under a unique name (avoid the
+    sys.modules clash with scripts/completion_gate.py — same pattern as
+    tests/test_completion_gate.py::_load_hook_module)."""
+    name = "completion_gate_hook"
+    mod = sys.modules.get(name)
+    if mod is None:
+        spec = importlib.util.spec_from_file_location(
+            name, ROOT / "hooks" / "completion_gate.py")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[name] = mod
+        spec.loader.exec_module(mod)
+    return mod
 
 
 def test_task_spec_template_declares_calibration_requirement():
@@ -82,7 +95,7 @@ def test_second_stop_pass_requires_oracle_second_stop_marker(tmp_path):
         yaml.safe_dump(oracle, sort_keys=False), encoding="utf-8"
     )
     payload = {"cwd": str(ws), "workspace": str(ws), "stop_hook_active": True}
-    rc = completion_gate.process_event(payload)
+    rc = _load_hook().process_event(payload)
     assert rc == 0, f"oracle-sanctioned second stop must pass, got {rc}"
 
 
@@ -103,5 +116,5 @@ def test_second_stop_without_oracle_sanction_blocks(tmp_path):
         yaml.safe_dump(oracle, sort_keys=False), encoding="utf-8"
     )
     payload = {"cwd": str(ws), "workspace": str(ws), "stop_hook_active": True}
-    rc = completion_gate.process_event(payload)
+    rc = _load_hook().process_event(payload)
     assert rc != 0, "unsanctioned second stop must block"
