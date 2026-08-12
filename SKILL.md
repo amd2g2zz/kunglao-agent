@@ -132,59 +132,14 @@ When a worker reports failure, run `failure_analysis_gate.py <ws> <C-NN>`
 before re-dispatch or NEGATIVE. It forces three reasoning questions (not a
 fixed menu). **Full protocol + examples → `references/convergence-loop.md`.**
 
-## How a search session usually goes
+## Search cadence & failure modes
 
-背景知识（迭代形状：iteration 1 廉价算子 → 5 中价 → 8 交叉验证 → 10+ 停止）
-→ **`references/optimization-2026-08.md`**（完整文本）。核心：识别你在迭代
-曲线的哪一段，不要在 iteration 3 与 iteration 8 长得不像时惊慌。
+Iteration shape (iteration 1 cheap → 5 medium → 8 cross-validate → 10+ stop) → **`references/optimization-2026-08.md`**.
+Failure modes (idle-with-free-slots / direct-tool-calls / re-dispatch-after-failure / ask-user-should-I / stale-plan) → `references/case-book.md` + `references/optimization-2026-08.md`.
 
-## What goes wrong (case book)
+## Tool inventory & CLI family
 
-Five real failure modes (idle-with-free-slots / direct-tool-calls /
-re-dispatch-after-failure / ask-user-should-I / stale-plan). Full stories +
-fix mapping → `references/case-book.md` + `references/optimization-2026-08.md`.
-
-## What's available (an inventory, not a recipe)
-
-The skill ships with these tools. They are not instructions to use; they
-are a toolshelf. The right time to pick up a tool is when you recognize
-the situation it was built for.
-
-| Tool | When it was built for |
-| --- | --- |
-| `scripts/convergence_check.py` | **Every turn, before anything else** — answers "should I dispatch, or am I converged/saturated/blocked?" |
-| `scripts/convergence_health.py` | **Every 3rd turn / when "busy but stuck"** — reads the ledger and answers "is the loop actually converging, or spinning?" |
-| `scripts/failure_analysis_gate.py` | **When a worker reports failure, before re-dispatch or NEGATIVE** — forces 3-question method-failure reasoning. A failed attempt is not evidence the behavior is absent |
-| `scripts/priority.py` | "I have multiple open claims and need to pick the next one" — value/leverage/cheapness scoring |
-| `scripts/active_intervention.py` | "A worker has been silent for > 5 min and the status file shows it's stuck" — non-response is a signal |
-| `scripts/backtrack_gate.py` | "The same worker has been doing the same thing for > 20 min without progress" — backtrack decision required |
-| `scripts/doubt_checker.py` | "I'm about to declare a claim PROVEN-FULL" — independent verifier sign-off is structural |
-| `scripts/stale_blocker_prune.py` | "A claim is terminal but its blocker file is still in the active directory" |
-| `scripts/claim_expiry.py` | "I have an OPEN claim with no activity for > 24 hours" — flag as STALE, don't auto-defer |
-| `scripts/progress_report.py` | "I want to see at a glance where the loop is" — emit a single markdown block |
-| `scripts/plan_drift_detector.py` | "I re-planned / decomposed / abandoned claims since the last plan-file edit" — **v1.9.29 (mechanical)**: `worker_budget.py` PreToolUse REJECTS any dispatch on detected drift (exit ≥1) |
-| `scripts/hook_activation.py` | "I want some of the gates to pause (HARD_PAUSE tier)" — selective activation |
-| `hooks/worker_pulse.py` | PostToolUse hook — auto-injects the convergence snapshot when a worker completes (so you can't forget the check) |
-| `scripts/ask_for_direction_gate.py` | "I just emitted text as the orchestrator" — scan for反问 patterns |
-| `mcp__context7-mcp__resolve-library-id` + `get-library-docs` | "I'm about to dispatch a worker for an API/struct I don't fully know" |
-| `mcp__sequential-thinking` | "This decision has 3+ steps with branching logic" |
-| `mcp__web_reader__webReader` | "I need clean markdown from an external URL" |
-
-### kunglao CLI family (unified surface)
-
-8 CLIs in `scripts/` (Phase 3/5 收敛). `kunglao.py` is the unified entry point
-composing script pure functions; the rest are focused entry points / thin wrappers:
-
-| CLI | Role |
-| --- | --- |
-| `kunglao.py` | unified entry point — subcommands composing existing script functions (JSON + exit codes frozen) |
-| `kunglao-init.py` | workspace 初始化 + 防二次初始化 |
-| `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + explore_gate + priority_ratio |
-| `kunglao-verify.py` | M3 VERIFY entry (impl in `kunglao_verify.py`) |
-| `kunglao-record.py` | M4 RECORD entry (impl in `kunglao_record.py`) |
-| `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch → TickOutput |
-| `kunglao-digest.py` | digest mechanical generation (thin wrapper → digest_build.py) |
-| `kunglao-eval.py` | eval harness CLI (thin wrapper → kunglao_eval.py) |
+Script/MCP toolshelf + kunglao CLI family (8 CLIs) → **`references/tool-inventory.md`**.
 
 ## The dispatch contract (a small fixed shape, not a process)
 
@@ -484,58 +439,15 @@ and `connect_to_session` bind a stale host lockfile, not the VM x64dbg. Full
 5-step sequence (confirm VM install → launch via vmr-shell → verify ZMQ ports →
 connect_remote → drive) + anti-patterns → `references/operational-mechanics.md`.
 
-## Downstream contract for skill maintainers
+## Downstream contract & modules
 
-If you ship a Claude skill that issues x64dbg MCP calls (or Frida MCP / rev-frida calls) — you ship it under this contract; otherwise `hooks/worker_budget.py` will deny every dispatch that uses the skill.
+Skill maintainers: x64dbg/Frida MCP contract + modules list → **`references/downstream-contract.md`**.
 
-| Tool call | Verdict | Why |
-| --- | --- | --- |
-| `mcp__x64dbg__connect_remote(host=VM_IP, ...)` | ✅ USE | VM-channel; sample runs in VM |
-| `mcp__x64dbg__start_session` | ❌ FORBIDDEN | Launches HOST x64dbg; sample would execute on the host |
-| `mcp__x64dbg__connect_to_session` | ❌ FORBIDDEN | Binds to HOST x64dbg |
-| `mcp__x64dbg__terminate_session` | ❌ FORBIDDEN | Host-side cleanup; if you never bind host, you never need to terminate |
-| `mcp__x64dbg__connect_to_instance` | ❌ FORBIDDEN | Alias host-bind path |
-| `mcp__frida__spawn`, `mcp__frida__attach` (against host PID) | ❌ FORBIDDEN | Spawns/attaches on host |
-| `rev-frida` against `192.168.20.128:1337` (VM frida-server) | ✅ USE | VM-channel |
-| Direct `vmrun` / `qemu-system` / `wine` that runs `bins/` or `extracted/` on host | ❌ FORBIDDEN | Sample-on-host by any other name |
+## Decision rights — three-way matrix
 
-**Skill frontmatter rule**: if your skill's `allowed-tools:` lists any ❌ row, the kunglao-agent hook will reject every dispatch that names your skill. Replace with the ✅ equivalent. For example, replace `mcp__x64dbg__start_session` with `mcp__x64dbg__connect_remote`.
-
-**Skill body rule**: any "Connect and verify state" section must call `mcp__x64dbg__connect_remote(host=VM_IP, ...)` first; never assume the debugger is already bound. The expected setup (launch VM-side x64dbg via `vmr-shell`, confirm port listening, then connect_remote) is in `references/dynamic-re-tool-priority.md`.
-
-**Maintenance rule**: if a downstream skill (`x64dbg-skills/*`, `rev-frida`, etc.) ships with an out-of-date `allowed-tools` frontmatter that includes any ❌ row, **the upstream enforcement is the safety net** — it will refuse the dispatch and ask the worker to fix the tool list. Do NOT remove the upstream hook to "make the downstream work"; instead, fix the downstream's `allowed-tools`.
-
-## Modules available (descriptive — you and workers choose when; see DESIGN §6)
-
-sample-class detection (DIE) · static RE (ghidra-malware/re/light, mcp__ghidra__*, pefile-signature, mal-recon) · dynamic RE **on VM only** (malware-framework Qiling first, rev-frida, mcp__x64dbg__connect_remote, vmr-shell last) — see Hard prohibition #5 + `references/dynamic-re-tool-priority.md` for the host-vs-VM channel split · memory dump (mcp__volatility__*) · verify (malware-veri-notes) · verdict (verdict-scorer agent, optional post-convergence).
-
-## Decision rights — who decides what (three-way matrix)
-
-Every decision falls to exactly one layer. No layer may delegate or override
-its own slice without a recorded reason.
-
-| # | Decision | 机械 (script/hook) | LLM (orchestrator) | 用户 |
-| --- | --- | --- | --- | --- |
-| 1 | Should I dispatch now? (convergence 5-branch) | ✅ `convergence_check.py` | — | — |
-| 2 | WHICH claim next? (action ranking) | ✅ `priority_ratio.py` / `priority.py` | — | — |
-| 3 | Is the heartbeat alive? (dispatch gate) | ✅ `worker_budget.py` | — | — |
-| 4 | May this worker be spawned? (≤3 / cap / tools / tier) | ✅ `worker_budget.py` | — | — |
-| 5 | Is this fact byte-verified? (L1 mechanical) | ✅ `kunglao-verify` L1 | — | — |
-| 6 | Is this claim adversarially confirmed? (L2) | — | ✅ kunglao-redteam 派发 | — |
-| 7 | How to verify a claim? (which reproduce/method) | — | ✅ orchestrator 选 | — |
-| 8 | Is a claim PROVEN-terminal? (promotion) | ✅ `claim_migrator`(maker-checker) | — | — |
-| 9 | What value/cost weights? | — | ✅ 每轮重排 | — |
-| 10 | Method graph update (new node/edge)? | — | ✅ escalate 后 | — |
-| 11 | Which action is highest value (RAT value order)? | — | ✅ 按价值序排序 | — |
-| 12 | Is analysis CONVERGED (end-to-end done)? | ✅ 收敛判定 | — | — |
-| 13 | New sample mount / task scope? | — | — | ✅ |
-| 14 | Cost policy / authorization boundary? | — | — | ✅ |
-| 15 | VM detonation / x64dbg host-bind? | — | — | ✅ |
-
-Counts: **机械 8** (rows 1-5, 8, 12) · **LLM 6** (rows 6, 7, 9-11) · **用户 5** (rows 13-15).
-Mechanical rows run on every tick without LLM; LLM rows may be re-checked by
-the next tick's mechanical gates; user rows are the only ones that wait on
-human input. See `references/guardrails.md` for the full decision protocol.
+Every decision falls to exactly one layer (no delegation without recorded reason).
+**机械 8 / LLM 6 / 用户 5** — full 15-row matrix → **`references/decision-rights.md`**.
+See `references/guardrails.md` for the full decision protocol.
 
 ## Maintenance — progressive disclosure
 
