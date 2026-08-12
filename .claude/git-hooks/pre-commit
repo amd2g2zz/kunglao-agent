@@ -1,0 +1,27 @@
+#!/bin/sh
+# kunglao review gate: block commit unless 3 independent all-PASS reviewer evidence is fresh.
+# Fail-closed: any resolution/validation failure blocks the commit.
+repo="$(git rev-parse --show-toplevel)" || { echo "REVIEW GATE BLOCKED: not a git repo"; exit 1; }
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || { echo "REVIEW GATE BLOCKED: cannot resolve branch"; exit 1; }
+[ "$branch" = "HEAD" ] && { echo "REVIEW GATE BLOCKED: unborn or detached HEAD — commit on a named branch first"; exit 1; }
+out="$repo/.review-gate/$(printf '%s' "$branch" | tr '/' '-').json"
+mkdir -p "$repo/.review-gate"
+log="$repo/.review-gate/hook.log"
+# python3 fallback for POSIX; python on Windows
+py="python"
+command -v "$py" >/dev/null 2>&1 || py="python3"
+command -v "$py" >/dev/null 2>&1 || { echo "REVIEW GATE BLOCKED: no python interpreter found"; exit 1; }
+# explicit absolute keyfile (NOT env-resolved: USERPROFILE/HOME redirection
+# would let a subagent self-mint+approve via a fake-home key)
+key="C:/Users/hr/.claude/kunglao-review.key"
+[ -f "$key" ] || { echo "REVIEW GATE BLOCKED: review key missing at $key"; exit 1; }
+# log-file output avoids MSYS2 SIGPIPE exit-status loss when stdout is piped
+"$py" "$repo/scripts/review_gate.py" check "$repo" "$out" "$branch" "$key" >"$log" 2>&1
+rc=$?
+cat "$log"
+if [ $rc -ne 0 ]; then
+  echo "REVIEW GATE BLOCKED: evidence invalid or stale (rc=$rc)"
+  echo "  re-run: orchestrator dispatches 3 reviewers -> scripts/review_gate.py mint"
+  exit 1
+fi
+exit 0
