@@ -285,7 +285,7 @@ def main() -> int:
     # cannot proceed past a blocked/saturated convergence state.
     if pulse and decision in ("BLOCKED", "SATURATED"):
         print(pulse, file=sys.stderr)
-        return 2
+        return 3  # BLOCKED — see hook_exit_codes.py
     if not pulse:
         if reminder:
             print(json.dumps({
