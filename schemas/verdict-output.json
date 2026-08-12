@@ -1,0 +1,177 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "kunglao-agent/schemas/verdict-output.json",
+  "title": "verdict-scorer output (v11 PQ-coverage, issue #110)",
+  "description": "evidence/verdict.json produced by verdict-scorer v11. Validates PQ-coverage verdict shape and rejects old-shape keys (classification, attribution) via additionalProperties: false. Source: agents/verdict-scorer.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["_meta", "sample_sha256", "analysis_verdict", "self_audit"],
+  "properties": {
+    "_meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "schema_version", "queried_at", "methodology"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "const": "verdict-scorer",
+          "description": "Must be 'verdict-scorer' to identify the producer"
+        },
+        "schema_version": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}-v\\d+$",
+          "description": "Date-version pattern, e.g. 2026-08-12-v11"
+        },
+        "queried_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO8601 timestamp of when the verdict was produced"
+        },
+        "methodology": {
+          "type": "string",
+          "description": "Description of the methodology used"
+        }
+      }
+    },
+    "sample_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 hash of the analyzed sample (64 lowercase hex chars)"
+    },
+    "analysis_verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "correct", "primary_questions", "unresolved", "contradictions", "degraded"],
+      "description": "Core verdict: PQ coverage completeness and correctness. additionalProperties: false rejects old-shape keys (classification, attribution, maliciousness, named_actor, etc.).",
+      "properties": {
+        "complete": {
+          "type": "boolean",
+          "description": "true when every primary_question has an answered fact meeting C0a/C0b requirements"
+        },
+        "correct": {
+          "type": "boolean",
+          "description": "false when any contradiction is detected (two PROVEN facts on same topic without resolution)"
+        },
+        "primary_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/primary_question"
+          },
+          "description": "Per-question coverage entries"
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Question IDs that are not answered (gap in evidence)"
+        },
+        "contradictions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/contradiction"
+          },
+          "description": "Same-topic PROVEN facts without supersedes or CONFLICT resolution"
+        },
+        "degraded": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/degraded_entry"
+          },
+          "description": "Self-honesty notes about evidence gaps (fail-closed per issue #78)"
+        }
+      }
+    },
+    "self_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_strength", "ignored_evidence", "open_questions"],
+      "properties": {
+        "evidence_strength": {
+          "type": "string",
+          "enum": ["strong", "mixed", "weak"],
+          "description": "strong = all PROVEN-FULL no contradictions; mixed = some gaps/degraded; weak = major gaps or multiple unresolved"
+        },
+        "ignored_evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Facts or evidence files that exist but were not relevant to PQ coverage"
+        },
+        "open_questions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Manual-verification items or areas needing further analysis"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "primary_question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "answered", "cited_fact", "confidence_band", "gap"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Primary question identifier matching task_spec.primary_questions[].id"
+        },
+        "answered": {
+          "type": "boolean",
+          "description": "true if a PROVEN-FULL fact answers this question per C0a/C0b"
+        },
+        "cited_fact": {
+          "type": ["string", "null"],
+          "description": "Fact ID that answers this question, or null if unanswered"
+        },
+        "confidence_band": {
+          "type": ["string", "null"],
+          "description": "Confidence band of the cited fact (e.g. PROVEN-FULL), or null"
+        },
+        "gap": {
+          "type": ["string", "null"],
+          "description": "Human-readable explanation when not answered; null when answered"
+        }
+      }
+    },
+    "contradiction": {
+      "type": "object",
+      "required": ["question", "fact_a", "fact_b", "nature"],
+      "properties": {
+        "question": {
+          "type": "string",
+          "description": "Primary question ID where contradiction was detected"
+        },
+        "fact_a": {
+          "type": "string",
+          "description": "First PROVEN fact ID"
+        },
+        "fact_b": {
+          "type": "string",
+          "description": "Second PROVEN fact ID"
+        },
+        "nature": {
+          "type": "string",
+          "description": "Description of what contradicts between the two facts"
+        }
+      }
+    },
+    "degraded_entry": {
+      "type": "object",
+      "required": ["reason", "affected_question"],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "description": "Description of the evidence gap"
+        },
+        "affected_question": {
+          "type": ["string", "null"],
+          "description": "Question ID affected by this degradation, or null if general"
+        }
+      }
+    }
+  }
+}
