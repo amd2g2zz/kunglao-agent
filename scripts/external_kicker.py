@@ -653,8 +653,9 @@ def tick(workspace: Path, *,
          settings_path: Path | None = None,
          claude_bin: str = "claude",
          dry_run: bool = False) -> int:
-    """One kicker tick. Order: interval gate → lock → alive? → workers? →
-    project hooks ensure → kick (record + prompt + spawn unless dry_run).
+    """One kicker tick. Order: interval gate → lock → alive? (#79: alive but
+    stuck = drift?) → workers? → project hooks ensure → kick (record + prompt
+    + spawn unless dry_run).
 
     Returns 0 = tick done (kick or skip), 1 = kick spawn failed.
     Raises ValueError for a config error (main maps it to exit 1).
@@ -667,7 +668,12 @@ def tick(workspace: Path, *,
         print(f"kicker: skip — {lock.name} held by a recent tick (concurrent/duplicate)")
         return 0
     try:
-        # 1. alive session? (D1)
+        # 1. alive session? (D1) — #79 drift branch: a fresh heartbeat alone
+        # is NOT a skip. Alive-but-stuck (persistent frozen ledger signature,
+        # no worker movement) must be recovered through the same guarded path
+        # as a dead session; should_kick() is the single #43 drift definition
+        # (escalation at DRIFT_ESCALATE_ROWS + fresh-worker exemption) — no
+        # second drift predicate may exist.
         hb_path = runs / ".heartbeat.json"
         hb = None
         if hb_path.exists():
@@ -676,9 +682,14 @@ def tick(workspace: Path, *,
             except Exception:
                 hb = None  # corrupt file → recovery bias: treat as dead
         now = datetime.now(tz=timezone.utc)
+        drift = False
         if not session_is_dead(hb, now, stale_minutes):
-            print("kicker: skip — session alive (heartbeat fresh)")
-            return 0
+            drift = should_kick(workspace)
+            if not drift:
+                print("kicker: skip — session alive (heartbeat fresh)")
+                return 0
+            print("kicker: DRIFT-KICK — session alive but stuck "
+                  "(frozen ledger signature); recovering with a fresh session")
         # 2. fresh in-progress workers? (D3)
         if has_fresh_workers(runs, FRESH_WORKER_MINUTES):
             print("kicker: skip — fresh in-progress worker status files (session mid-dispatch)")
@@ -726,10 +737,14 @@ def tick(workspace: Path, *,
                 print(f"kicker: KICK SPAWN FAILED — {exc}", file=sys.stderr)
                 record = {"kick_ts": utc_now(), "prompt_file": str(prompt_file),
                           "pid": -1, "error": str(exc)}
+                if drift:
+                    record["reason"] = "drift"
                 (runs / KICKER_LAST_FILE).write_text(
                     json.dumps(record, indent=2), encoding="utf-8")
                 return 1
         record = {"kick_ts": utc_now(), "prompt_file": str(prompt_file), "pid": pid}
+        if drift:
+            record["reason"] = "drift"
         (runs / KICKER_LAST_FILE).write_text(json.dumps(record, indent=2), encoding="utf-8")
         print(f"kicker: KICK — fresh session spawned (pid={pid}); prompt at {prompt_file}")
         return 0

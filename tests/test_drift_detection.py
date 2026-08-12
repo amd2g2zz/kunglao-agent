@@ -53,7 +53,7 @@ signature_rotation = _lib.signature_rotation
 workers_progressing = _lib.workers_progressing
 
 sys.path.insert(0, str(SCRIPTS))
-from external_kicker import should_kick  # noqa: E402
+from external_kicker import should_kick, tick  # noqa: E402
 
 NOW = datetime.now(timezone.utc)
 
@@ -239,3 +239,107 @@ def test_constants_wired():
     assert ROTATION_WINDOW == 3
     assert DRIFT_ESCALATE_ROWS == 6
     assert WORKER_PROGRESS_MINUTES == 20
+
+
+# ---------- #79: tick() drift integration (fresh-heartbeat drift recovery) ----------
+#
+# RED target: tick() returns "skip — session alive (heartbeat fresh)" without
+# ever calling should_kick(), so a session that keeps touching its heartbeat
+# while its ledger signature stays frozen can remain stuck indefinitely.
+# The controlled reproduction (issue #79): six identical ledger signatures +
+# current runs/.heartbeat.json + tick(dry_run=True) must now produce a
+# DRIFT_KICK receipt through the SAME guarded recovery path as a stale session.
+
+def write_heartbeat(ws: Path, minutes_ago: int = 0) -> Path:
+    """Fresh heartbeat: both signals younger than stale_minutes (10)."""
+    runs = ws / "runs"
+    runs.mkdir(exist_ok=True)
+    stamp = ts(minutes_ago)
+    p = runs / ".heartbeat.json"
+    p.write_text(json.dumps({"last_tick_ts": stamp, "activity_ts": stamp}),
+                 encoding="utf-8")
+    return p
+
+
+def read_receipt(ws: Path) -> dict | None:
+    p = ws / "runs" / ".kicker-last.json"
+    if not p.exists():
+        return None
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def test_tick_fresh_heartbeat_drift_kicks(ws, capsys):
+    """Controlled reproduction: 6 frozen rows + fresh heartbeat -> drift receipt."""
+    write_ledger(ws, [row() for _ in range(6)])
+    write_heartbeat(ws)
+    assert should_kick(ws) is True  # the predicate sees the drift
+    rc = tick(ws, dry_run=True)
+    assert rc == 0
+    receipt = read_receipt(ws)
+    assert receipt is not None
+    assert receipt["reason"] == "drift"
+    assert (ws / "runs" / ".kicker-prompt.txt").exists()
+    out = capsys.readouterr().out
+    assert "DRIFT-KICK" in out
+
+
+def test_tick_fresh_heartbeat_no_drift_skips(ws):
+    """No ledger -> rotation 0 -> the alive-skip is preserved."""
+    write_heartbeat(ws)
+    rc = tick(ws, dry_run=True)
+    assert rc == 0
+    assert read_receipt(ws) is None
+
+
+def test_tick_fresh_heartbeat_below_escalation_skips(ws):
+    """5 frozen rows < DRIFT_ESCALATE_ROWS -> cure window, no kick."""
+    write_ledger(ws, [row() for _ in range(5)])
+    write_heartbeat(ws)
+    rc = tick(ws, dry_run=True)
+    assert rc == 0
+    assert read_receipt(ws) is None
+
+
+def test_tick_fresh_heartbeat_progressing_worker_skips(ws):
+    """Fresh-worker race: 6 frozen rows but a worker just moved -> no kick."""
+    write_ledger(ws, [row() for _ in range(6)])
+    write_heartbeat(ws)
+    write_worker_status(ws, minutes_ago=5)
+    rc = tick(ws, dry_run=True)
+    assert rc == 0
+    assert read_receipt(ws) is None
+
+
+def test_tick_drift_repeated_ticks_deterministic(ws):
+    """Repeated dry-run ticks: lock released each round, both produce drift receipts."""
+    write_ledger(ws, [row() for _ in range(6)])
+    write_heartbeat(ws)
+    rc1 = tick(ws, dry_run=True)
+    rc2 = tick(ws, dry_run=True)
+    assert rc1 == 0
+    assert rc2 == 0
+    receipt = read_receipt(ws)
+    assert receipt is not None
+    assert receipt["reason"] == "drift"
+
+
+def test_tick_stale_session_receipt_unchanged(ws):
+    """Regression: dead session (no heartbeat) -> stale receipt, no reason key."""
+    write_ledger(ws, [row() for _ in range(6)])
+    rc = tick(ws, dry_run=True)
+    assert rc == 0
+    receipt = read_receipt(ws)
+    assert receipt is not None
+    assert set(receipt) == {"kick_ts", "prompt_file", "pid"}
+    assert "reason" not in receipt
+
+
+def test_tick_lock_held_skips_before_drift(ws):
+    """Regression: a fresh .kicker.lock skips BEFORE any drift evaluation."""
+    write_ledger(ws, [row() for _ in range(6)])
+    write_heartbeat(ws)
+    lock = ws / "runs" / ".kicker.lock"
+    lock.write_text(f"1 {ts()}\n", encoding="utf-8")  # mtime = now -> fresh
+    rc = tick(ws, dry_run=True)
+    assert rc == 0
+    assert read_receipt(ws) is None
