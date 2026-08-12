@@ -75,7 +75,8 @@ def main():
         keyfile = sys.argv[2]
         with open(keyfile, "w") as f:
             f.write(secrets.token_bytes(32).hex())
-        print(f"key written: {keyfile}")
+        os.chmod(keyfile, 0o600)
+        print(f"key written: {keyfile} (mode 0600)")
         return 0
 
     repo = sys.argv[2]
@@ -86,6 +87,9 @@ def main():
             print(f"mint FAIL: need >=3 distinct reviewer ids as args, got {ids}")
             return 2
         key = open(keyfile, "rb").read().strip()
+        if len(key) < 32:
+            print(f"mint FAIL: key too short ({len(key)} bytes, need >=32) — empty or truncated key")
+            return 2
         if os.path.realpath(keyfile) != os.path.realpath(default_keyfile()):
             print(f"WARNING: keyfile {keyfile} != pinned default {default_keyfile()} — check will fail")
         diff = staged_diff_sha(repo)
@@ -159,6 +163,9 @@ def main():
             print("REVIEW GATE BLOCKED: key file missing; orchestrator must mint")
             return 1
         key = open(keyfile, "rb").read().strip()
+        if len(key) < 32:
+            print("REVIEW GATE BLOCKED: key too short — empty or truncated key")
+            return 1
         expect = sign(key, ev.get("branch"), ev.get("diff_sha256"), sorted(revs), ev.get("minted_ts"))
         if not hmac.compare_digest(ev.get("hmac", ""), expect):
             print("REVIEW GATE BLOCKED: HMAC invalid (forged evidence?)")
