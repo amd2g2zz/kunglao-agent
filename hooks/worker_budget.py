@@ -23,7 +23,6 @@ import yaml
 
 # ---------- constants ----------
 
-TERMINAL_STATUS = {'PROVEN', 'VERIFIED', 'NEGATIVE', 'REFUTED', 'DEFERRED'}
 MAX_WORKERS = 3
 MAX_PROMOTION_ATTEMPTS = 3
 
@@ -57,6 +56,7 @@ _SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
 try:
     from priority import rank_claims as _rank_claims, _weights as _priority_weights
+    from status_defs import TERMINAL  # single source of truth (#34, #95)
     _PRIORITY_AVAILABLE = True
 except Exception:  # pragma: no cover - hook stays usable if priority.py is moved
     _PRIORITY_AVAILABLE = False
@@ -619,7 +619,7 @@ def check_tier_gate(reg_path: Path, tier: int) -> tuple[bool, str]:
         return (True, 'tier 1 ungated')
     threshold = tier - 1
     for c in _read_all_claims(reg_path):
-        if c.get('status') in TERMINAL_STATUS:
+        if c.get('status') in TERMINAL:
             continue
         eta = int(c.get('evidence_tier_attempted', 0))
         if eta < threshold:

@@ -16,6 +16,7 @@ import pytest
 REPO = Path(__file__).resolve().parent.parent.parent  # skills/
 SKILL = REPO / "kunglao-agent"
 SCRIPTS = SKILL / "scripts"
+HOOKS = SKILL / "hooks"
 
 sys.path.insert(0, str(SCRIPTS))
 import status_defs  # noqa: E402
@@ -84,18 +85,26 @@ CONSUMERS = [
     "progress_report.py",
 ]
 
+HOOK_CONSUMERS = [
+    "worker_budget.py",
+    "state_anchor.py",
+]
 
-@pytest.mark.parametrize("fname", CONSUMERS)
-def test_consumer_has_no_own_status_set(fname):
-    text = (SCRIPTS / fname).read_text(encoding="utf-8")
-    assert "TERMINAL_STATUSES = {" not in text, f"{fname} still defines TERMINAL_STATUSES"
+# Build (path, fname) tuples so parametrize can resolve scripts/ vs hooks/
+ALL_CONSUMERS = [(SCRIPTS, f) for f in CONSUMERS] + [(HOOKS, f) for f in HOOK_CONSUMERS]
+
+
+@pytest.mark.parametrize("dirpath,fname", ALL_CONSUMERS)
+def test_consumer_has_no_own_status_set(dirpath, fname):
+    text = (dirpath / fname).read_text(encoding="utf-8")
+    assert "TERMINAL_STATUS = {" not in text, f"{fname} still defines TERMINAL_STATUS"
     assert "TERMINAL = {" not in text, f"{fname} still defines TERMINAL"
     assert "PARTIAL_STATUSES = {" not in text, f"{fname} still defines PARTIAL_STATUSES"
 
 
-@pytest.mark.parametrize("fname", CONSUMERS)
-def test_consumer_imports_shared_module(fname):
-    text = (SCRIPTS / fname).read_text(encoding="utf-8")
+@pytest.mark.parametrize("dirpath,fname", ALL_CONSUMERS)
+def test_consumer_imports_shared_module(dirpath, fname):
+    text = (dirpath / fname).read_text(encoding="utf-8")
     assert "status_defs" in text, f"{fname} does not import status_defs"
     assert "from status_defs import" in text, f"{fname} does not use 'from status_defs import'"
 

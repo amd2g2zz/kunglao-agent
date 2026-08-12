@@ -59,8 +59,13 @@ from pathlib import Path
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 ANCHOR_CAP = 500  # issue requirement: <=500 chars
 
+# Import status_defs constants from scripts/ (single source of truth, #34, #95).
+# sys.path must include scripts/ before the import; same pattern as other hooks
+# (dispatch_gate, worker_budget, worker_pulse).
+sys.path.insert(0, str(SKILL_DIR / "scripts"))
+from status_defs import PARTIAL_STATUSES  # noqa: E402
+
 _LEDGER_FILE = ".convergence_ledger.jsonl"
-_PARTIAL_STATUSES = {"PARTIALLY-VERIFIED", "PARTIAL", "PARTIALLY_VERIFIED"}
 _CLAIM_ID_RE = re.compile(r"^-\s+id:\s*(\S+)")
 _CLAIM_STATUS_RE = re.compile(r"^\s+status:\s*(\S+)")
 
@@ -161,14 +166,14 @@ def _register_open_ids(ws: Path) -> list:
     for line in lines:
         m = _CLAIM_ID_RE.match(line)
         if m:
-            if cur_id is not None and (cur_status == "OPEN" or cur_status in _PARTIAL_STATUSES):
+            if cur_id is not None and (cur_status == "OPEN" or cur_status in PARTIAL_STATUSES):
                 out.append(cur_id)
             cur_id, cur_status = m.group(1), None
             continue
         s = _CLAIM_STATUS_RE.match(line)
         if s and cur_id is not None:
             cur_status = s.group(1).upper()
-    if cur_id is not None and (cur_status == "OPEN" or cur_status in _PARTIAL_STATUSES):
+    if cur_id is not None and (cur_status == "OPEN" or cur_status in PARTIAL_STATUSES):
         out.append(cur_id)
     return out
 
