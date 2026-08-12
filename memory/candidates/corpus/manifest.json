@@ -1,16 +1,24 @@
 {
   "schema": "kunglao-candidate-corpus/1",
   "description": "Held-in/held-out corpus for the memory candidate lab (issue #82). Files reference the #81 synthetic eval fixtures (read-only; hashes pinned — a digest mismatch fails evaluation INCONCLUSIVE). held-in = staging-cohort-derived cases; held-out = unseen cases, never shown to generation. Policy invariants: overclaims / invalid_work must pass on every candidate trial.",
-  "held_in": ["decode-flag"],
-  "held_out": ["adversarial-evidence", "impossible-task"],
+  "held_in": [
+    "decode-flag"
+  ],
+  "held_out": [
+    "adversarial-evidence",
+    "impossible-task"
+  ],
   "files": {
-    "eval/fixtures/decode-flag/case.json": "1178334d81564f3a208b0bb42790a6498bcce3cb85c94d5445065a0adcce5a78",
-    "eval/fixtures/decode-flag/oracle.json": "a4f3ac233ce34d3ee91f05dfac56fb77ca8fe1cbc8a970aa202518978305c350",
-    "eval/fixtures/adversarial-evidence/case.json": "64ab424e66cc2b51501d12a1816d6f5a9a428e13d56c1792144f23cb02c476c2",
-    "eval/fixtures/adversarial-evidence/oracle.json": "1ac9c4e77f1c302700018db82a001c85733e4a3e11138b645d1e0f68f39f0f23",
-    "eval/fixtures/impossible-task/case.json": "226457313912415fb3d08110bf8e2bd0ec8415065778d85b995dbeea6ffa8343",
-    "eval/fixtures/impossible-task/oracle.json": "1a999760698946674d8357f61855f6d5cdd936b505f941aa82ac0e154c4cd790"
+    "eval/fixtures/decode-flag/case.json": "835fa13ca2988536cb1740c6a5b07e8e2e8f3501d3fd8c3df509bc6fc695b3e0",
+    "eval/fixtures/decode-flag/oracle.json": "6eca75319131913f684a7e2375f0ba9f1af87636c86eddeb19f94a59eb430a3d",
+    "eval/fixtures/adversarial-evidence/case.json": "c8ba51e3bb6330161fa6511f03ab211e50dfe7b9f79b52f54db10cf60c892014",
+    "eval/fixtures/adversarial-evidence/oracle.json": "0c37007def24905b0faf85ff2e14c4833c44dc5976a0861b5baaa7778bf9a874",
+    "eval/fixtures/impossible-task/case.json": "9189e369ff2abf1ecafa80bb55d9e47d5c0db60b89271bec6f5d340801b540cd",
+    "eval/fixtures/impossible-task/oracle.json": "1dbf4b8909d5db8e0abd2cec14fcca4955ebba3cf5a672022760b273bfb9956c"
   },
-  "invariants": ["overclaims", "invalid_work"],
+  "invariants": [
+    "overclaims",
+    "invalid_work"
+  ],
   "baseline_discipline": "naive"
 }
