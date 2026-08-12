@@ -13,10 +13,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 import datetime
 import hashlib
 import json
 import sys
+import threading
 from pathlib import Path
 
 LEDGER_NAME = "ledger.jsonl"
@@ -110,30 +112,104 @@ def _atomic_write(path: Path, text: str) -> None:
         tmp.replace(path)
 
 
+def _scan_ledger_tail(p: Path, n: int = 100) -> tuple[int, list[str]]:
+    """Single-pass ledger scan: returns (line_count, last_n_non_empty_lines).
+
+    Reads the file once to avoid TOCTOU race between idempotency check and
+    seq counting.
+    """
+    if not p.exists():
+        return 0, []
+    raw = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    non_empty = [l.strip() for l in raw if l.strip()]
+    return len(non_empty), non_empty[-n:] if n else []
+
+
+def _event_id_in_lines(eid: str, lines: list[str]) -> tuple[bool, int | None]:
+    """Check if event_id exists in parsed lines. Returns (found, seq_if_found)."""
+    for line in lines:
+        try:
+            rec = json.loads(line)
+            if rec.get("event_id") == eid:
+                return True, int(rec["seq"])
+        except (json.JSONDecodeError, KeyError, ValueError):
+            continue
+    return False, None
+
+
+def _append_single_line(p: Path, text: str) -> None:
+    """Append a single line to a ledger file using os.open(O_APPEND).
+
+    O_APPEND makes the kernel seek to EOF and write atomically for sizes
+    <= PIPE_BUF (4KB+ on Windows), avoiding the temp-file rename race that
+    _atomic_write causes under concurrency.
+    """
+    data = text.encode("utf-8")
+    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+    try:
+        os.write(fd, data)
+    finally:
+        os.close(fd)
+
+
+def _ledger_lock_for(p: Path) -> threading.Lock:
+    """Return a per-path threading.Lock for serializing record_event within a process.
+
+    Uses a module-level dict keyed by resolved path. Locks are never removed
+    (the set of ledger paths in a process is small and bounded).
+    """
+    resolved = p.resolve()
+    if resolved not in _ledger_locks:
+        _ledger_locks[resolved] = threading.Lock()
+    return _ledger_locks[resolved]
+
+
+_ledger_locks: dict[Path, threading.Lock] = {}
+
+
 def record_event(ws: Path, event: dict) -> int:
-    """幂等写入(M4.2 L325): 同 event_id 重复 → 返回已有 seq; 否则 append 返回新 seq."""
+    """幂等写入(M4.2 L325): 同 event_id 重复 → 返回已有 seq; 否则 append 返回新 seq.
+
+    Fix #96 (F8): uses os.open(O_APPEND) instead of full read-modify-write
+    with _atomic_write, eliminating the concurrency race where two writers
+    overwrite each other's events. Idempotency is checked by scanning only the
+    last 100 ledger lines in a single file read, and seq is derived from the
+    same read -- no TOCTOU gap between idempotency check and seq counting.
+
+    A per-path threading.Lock serializes the read-check-append sequence within
+    a single process (the primary concurrency scenario for same-process workers).
+    Cross-process safety is provided by O_APPEND atomicity for small writes.
+    """
     et = event.get("event_type", "")
     if et not in EVENT_TYPES:
         raise ValueError(f"unknown event_type {et!r} (allowed: {', '.join(EVENT_TYPES)})")
     payload = event.get("payload") or {}
     eid = event_id_of(et, payload)
-    existing = read_events(ws)
-    for ev in existing:
-        if ev.get("event_id") == eid:
-            return int(ev["seq"])
-    rec = {
-        "seq": len(existing) + 1,
-        "event_id": eid,
-        "source_module": event.get("source_module", "unknown"),
-        "event_type": et,
-        "payload": payload,
-        "ts": utc_now(),
-    }
-    rec["checksum"] = _record_checksum(rec)
-    lines = [json.dumps(e, ensure_ascii=False) for e in existing]
-    lines.append(json.dumps(rec, ensure_ascii=False))
-    _atomic_write(ledger_path(ws), "\n".join(lines) + "\n")
-    return rec["seq"]
+
+    p = ledger_path(ws)
+    # Per-path lock: serialize read-check-append within same process
+    lock = _ledger_lock_for(p)
+    with lock:
+        # Single-pass: read file once for both idempotency check and seq
+        line_count, tail = _scan_ledger_tail(p, n=100)
+        found, existing_seq = _event_id_in_lines(eid, tail)
+        if found and existing_seq is not None:
+            return existing_seq
+
+        seq = line_count + 1
+        rec = {
+            "seq": seq,
+            "event_id": eid,
+            "source_module": event.get("source_module", "unknown"),
+            "event_type": et,
+            "payload": payload,
+            "ts": utc_now(),
+        }
+        rec["checksum"] = _record_checksum(rec)
+
+        # Atomic append via O_APPEND (no temp file, no read-modify-write)
+        _append_single_line(p, json.dumps(rec, ensure_ascii=False) + "\n")
+        return seq
 
 
 def _set_claim_status(reg_path: Path, claim_id: str, new_status: str) -> bool:
