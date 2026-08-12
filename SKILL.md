@@ -37,6 +37,8 @@ triggers:
   - malware sample triage
   - claim-driven RE
   - byte-anchored fact base
+arguments: [workspace]
+argument-hint: [workspace]
 ---
 
 # kunglao-agent — RE orchestrator looper (contract)
@@ -247,6 +249,16 @@ Your own composite notes (synthesis) MUST pass `<malware-veri-notes>/scripts/ver
 1. **sample** — `bins/<sha>`, sha256 verified
 2. **task_spec.yaml** — primary_questions / scope / constraints / depth / success_criteria (see `templates/task_spec.yaml`)
 3. **existing artifacts** — CTI/evidence/fact base, READ-ONLY, never re-query
+
+## Arguments
+
+Invocation: `/kunglao-agent [workspace]`
+
+- `$ARGUMENTS` non-empty: the first argument is the workspace path (e.g.
+  `D:/works/samples/<YYYY-MM-DD>/malware-analysis-workspace`). Phase 0
+  workspace detection uses this path directly — do not guess from the
+  workspace pattern.
+- `$ARGUMENTS` empty: detect per the Local defaults table below.
 
 ## Local defaults (this user's setup)
 

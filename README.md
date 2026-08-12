@@ -121,6 +121,8 @@ cd ~/.claude/skills/kunglao-agent
 uv sync --locked              # restore .venv from uv.lock — pyyaml / pefile / capstone / jsonschema
 ```
 
+> Deploy as a plain skill (clone to `~/.claude/skills/kunglao-agent/`). Do NOT add a `.claude-plugin/` directory: that converts the skill into a `skills-directory` plugin in the next session and breaks bare `/kunglao-agent` invocation (regression 7f5f179, 2026-08-10).
+
 `uv sync --locked` requires only a clean clone: the dependency set is declared in
 `pyproject.toml` and pinned in `uv.lock`, both revision-owned (issue #80 release
 contract — see [Release contract](#release-contract)).
