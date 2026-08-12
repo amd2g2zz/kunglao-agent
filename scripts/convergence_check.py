@@ -570,7 +570,8 @@ def decide(workspace: Path) -> dict:
                 else:
                     decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
                         "Claim loop done — all open claims closed, partials verified, primary_questions PROVEN " \
-                        "with verify_status=passes notes. STOP dispatch. Delivery requires handoff-check.py PASS."
+                        "with verify_status=passes notes, completion transaction clean (zero global " \
+                        "contradictions, zero unconsumed discoveries, PROVEN provenance). STOP dispatch; deliver"
     elif unblocked_open and free_slots:
         decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
             f"Run priority.py and dispatch the top claim. {len(unblocked_open)} unblocked open claim(s), {free_slots} free slot(s)."

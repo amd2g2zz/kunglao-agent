@@ -19,15 +19,16 @@ def _skill_md() -> str:
 
 
 def test_converged_contract_names_real_limitations():
-    """The CONVERGED row must name the three known gaps (contradiction /
-    provenance / discovery) and must NOT promise plain 'deliver'."""
+    """The CONVERGED row must name the three checks the completion
+    transaction NOW performs (contradiction / provenance / discovery) —
+    the contract may only rise back after the code performs them."""
     text = _skill_md()
     row_start = text.index("| `CONVERGED` |")
     row_end = text.index("\n", row_start)
     row = text[row_start:row_end]
-    for gap in ("contradiction", "provenance", "discover"):
-        assert gap in row, f"CONVERGED row must name the {gap} gap"
-    assert "STOP dispatch" not in row or "re-run the completion transaction" in row
+    for term in ("contradiction", "provenance", "discover"):
+        assert term in row, f"CONVERGED row must name the {term} check"
+    assert "STOP dispatch" in row, "re-raised contract must authorize delivery"
 
 
 def test_converged_row_does_not_reference_removed_tools():

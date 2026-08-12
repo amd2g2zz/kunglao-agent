@@ -162,7 +162,7 @@ def main() -> int:
                     "forbidden_outcome_observed": (
                         no_oracle_rc == 0 or second_stop_rc == 0
                     ),
-                    "mechanism": "missing oracle and second Stop attempt are explicitly fail-open",
+                    "mechanism": "missing oracle and second Stop attempt now fail closed (exit 3 / exit 1) instead of passing through",
                 },
             ],
         }
