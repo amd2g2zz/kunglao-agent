@@ -15,7 +15,6 @@ allowedTools:
   - mcp__context7__query-docs
   - mcp__sequential-thinking__sequentialthinking
 disallowedTools:
-  - Task
   - NotebookEdit
   - Skill
   - mcp__x64dbg__start_session
@@ -102,7 +101,10 @@ Write `runs/verify-redteam-<target>.md`:
 <each gap: what is unproven, what evidence would close it>
 ```
 
-Then SendMessage to the orchestrator (fallback: main channel): one-line verdict per claim + GAP list.
+The verdict is delivered via `runs/verify-redteam-<target>.md` (the report file
+above), received by the orchestrator through the dispatch return (final
+report) — the reliable channel for an isolated subagent. SendMessage to the
+orchestrator remains permitted (not instructed).
 
 ## Hard constraints
 

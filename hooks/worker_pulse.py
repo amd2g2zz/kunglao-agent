@@ -24,10 +24,18 @@ Output shape (one compact block):
   DECISION: <DISPATCH|SATURATED|BLOCKED|DISPATCH_VERIFIER|CONVERGED> — <action>
   next up: <top dispatchable claim via priority.py>
   flags: stuck=<...> failure-blocked=<...> partial=<...>
+  TASKSTOP: W-<n> delivered — TaskStop now          # #88: on a final-state worker
 
 Pure read: reads claim-register.yaml + runs convergence_check/priority in
 subprocess. No state writes, no files touched (except the ledger side-effect
 of convergence_check, which is by-design).
+
+TASKSTOP delivery reminder (#88, D1): when the just-completed dispatch's
+worker status file shows a FINAL state (done / blocked), the pulse appends
+`TASKSTOP: W-<n> delivered — TaskStop now` — the delivery moment is exactly
+when the orchestrator is most likely to forget the stop. A delivered-but-
+unstopped worker holds a slot forever (the zombie root cause). In-progress
+workers get no reminder (silent by default).
 
 Wiring (in .claude/settings.json PostToolUse, Agent matcher — alongside
 worker_budget):
@@ -54,6 +62,10 @@ DISPATCH_RE = re.compile(
 # wins, same convention as lib_kunglao.scan_active_workers and
 # backtrack_gate.parse_status) lowercased + dash->underscore == "in_progress".
 STATUS_RE = re.compile(r"^\s*status\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+# #88 (D1): unanchored `status:` search for the delivery-moment check — matches
+# BOTH the real status-line shape ("[12:00] step: ... | status: done") and the
+# dedicated-line shape ("status: done"); last match wins (lib_kunglao convention).
+FINAL_STATUS_RE = re.compile(r"status:\s*(\S+)", re.IGNORECASE)
 STUCK_MIN = 20  # minutes — mirrors backtrack_gate default --stuck-min 20
 
 
@@ -149,6 +161,38 @@ def _run_py(args: list, ws: Path):
         return None
 
 
+def _delivery_reminder(ws: Path) -> str:
+    """TASKSTOP delivery-moment reminder (#88 D1).
+
+    When the just-completed dispatch's worker status file shows a FINAL state
+    (`done` / `blocked` — LAST `status:` line wins, lib_kunglao convention),
+    remind the orchestrator to TaskStop the delivered worker: a
+    delivered-but-unstopped background worker holds a slot forever. Returns
+    '' when no delivered worker is found (in-progress or missing = silent)."""
+    runs = ws / "runs"
+    if not runs.is_dir():
+        return ''
+    delivered = []
+    try:
+        for p in runs.glob("worker-status-*.md"):
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            last = None
+            for line in text.splitlines():
+                m = FINAL_STATUS_RE.search(line)
+                if m:
+                    last = m.group(1).lower().replace("-", "_")
+            if last in ("done", "blocked"):
+                delivered.append(p.name.removeprefix("worker-status-").removesuffix(".md"))
+    except OSError:
+        return ''
+    if not delivered:
+        return ''
+    return "TASKSTOP: " + ", ".join(delivered) + " delivered — TaskStop now"
+
+
 def _build_pulse(ws: Path) -> tuple[str, str | None]:
     """Compact convergence snapshot: decision + next-up claim + flags.
     Returns (pulse, decision) — decision is None when convergence_check
@@ -231,6 +275,11 @@ def main() -> int:
         return 0  # not a kunglao-agent worker completion — soft pulse only
 
     pulse, decision = _build_pulse(ws)
+    # #88 D1: delivery-moment TASKSTOP reminder — fires on a dispatch
+    # completion whose worker status file shows a final state.
+    reminder = _delivery_reminder(ws)
+    if reminder and pulse:
+        pulse = pulse + "\n" + reminder
     # v1.9.29 (R5): BLOCKED/SATURATED are mechanical — mark the worker
     # completion as failed with the pulse as context, so the orchestrator
     # cannot proceed past a blocked/saturated convergence state.
@@ -238,6 +287,13 @@ def main() -> int:
         print(pulse, file=sys.stderr)
         return 2
     if not pulse:
+        if reminder:
+            print(json.dumps({
+                "hookSpecificOutput": {
+                    "hookEventName": "PostToolUse",
+                    "additionalContext": "[worker_pulse] " + reminder,
+                }
+            }, ensure_ascii=False))
         return 0
     print(json.dumps({
         "hookSpecificOutput": {

@@ -37,6 +37,18 @@ Compare `task_spec.yaml` to `task_spec_snapshot.yaml` (written after each re-pla
 > Rationale and gate semantics for the Phase 0 hook/heartbeat activation
 > commands, which remain in SKILL.md §"Phase 0 SETUP".
 
+- **Isolation-first hard rule (#88)**: kunglao-agent never uses agent teams —
+  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never enabled, no teammates are
+  spawned, no team setup is performed. Workers are isolated subagents that
+  report only to the orchestrator and never message each other; SendMessage
+  orchestrator↔worker pings (heartbeat active-ping) remain the sanctioned
+  channel.
+- **Root-cause cautionary note (2026-08-12)**: the machine-level env flag
+  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` was the root cause of the
+  misdiagnosed dispatch regression (zombie workers / "dispatch looks
+  different"). It was set globally in `~/.claude/settings.json`, is REMOVED,
+  and SHALL NOT be re-enabled. A session showing team directories or
+  teammates means the isolation-first contract is violated.
 - **Phase 0 MUST run `--wire-up`** (hooks were silently absent from settings.json
   in multiple sessions — settings rewrites drop the hooks section; PostToolUse
   `remove_worker` never fires → zombie `[active_workers]` → false `3>=3` dispatch

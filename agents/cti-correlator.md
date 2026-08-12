@@ -11,7 +11,6 @@ allowedTools:
 disallowedTools:
   - Edit
   - NotebookEdit
-  - Task
   - WebSearch
 isolation: none
 ---

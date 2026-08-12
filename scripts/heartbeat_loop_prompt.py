@@ -39,6 +39,8 @@ python {h} {ws} --heartbeat-on   # 注册心跳（写 runs/.heartbeat.json）—
 1. 读 runs/.heartbeat-tick.json 报告：exit=0 → 只需认知步骤（ping 活跃 worker / 处理完成 worker）
 2. 对每个活跃 worker 发智能 ping（§6.1a）：SendMessage "[ping HH:MM] step? stuck? eta?"
    → 结构化回复 append 到 runs/.ping-log.jsonl
+   （隔离边界 #88：无 agent team；SendMessage orchestrator→worker ping 是 sanctioned channel，
+    worker 之间互不 messaging）
 3. python C:/Users/hr/.claude/skills/kunglao-agent/scripts/convergence_check.py {ws} 决策：
    DISPATCH→priority.py 派发；SATURATED→继续轮询；CONVERGED→先跑 §6.3 checklist（5 项）
    + 双签（doubt_checker + 随机抽验 1 fact）+ --heartbeat-check 通过才宣告完成

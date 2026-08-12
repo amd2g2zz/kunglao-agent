@@ -11,6 +11,11 @@ the orchestrator MUST respond within 5 minutes (one heartbeat tick) by one of:
 
 Failure to respond = section 6-pre F-7 violation (orchestrator passive when worker asks help).
 
+Isolation boundary (#88): no agent-team features — workers are isolated
+subagents that never message each other; SendMessage orchestrator↔worker is
+the sanctioned channel. kunglao-monitor.py runs as a BACKGROUND process; its
+output never blocks the loop's scheduled tick actions (re-dispatch / verify).
+
 This script:
   1. Scans runs/ for worker-status-*.md files with `## help_request` sections
   2. Checks the response log (heartbeat_actions.md) for matching SendMessage / redispatch / B1d

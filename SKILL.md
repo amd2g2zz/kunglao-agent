@@ -197,6 +197,22 @@ When you do decide to dispatch, the contract is small:
 That's the only shape. Everything else (which tool, which agent, which
 order) is yours to derive from the current state.
 
+### Isolation-first + delivery semantics (hard rule, #88)
+
+- **No agent teams, ever**: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never
+  enabled; no teammates are spawned; no team setup is performed — teammates
+  are separate Claude instances with a shared task list and mailbox, which
+  breaks subagent isolation.
+- **Workers are isolated subagents**: they report only to the orchestrator
+  and never message each other.
+- **SendMessage orchestrator↔worker pings remain allowed**: the heartbeat
+  active-ping (orchestrator → worker, `[ping HH:MM] step? stuck? eta?`) and
+  worker replies are the sanctioned channel — NOT a team feature.
+- **Delivery = TaskStop**: a worker that has delivered (`status: done` /
+  `blocked` + artifacts verified) MUST be TaskStop'd by the orchestrator
+  before any further dispatch/verify action. Delivery checklist →
+  `references/operational-mechanics.md` "Delivery = TaskStop".
+
 ## What the orchestrator is NOT
 
 It is not an analyst. It does not decompile, emulate, scan strings, or
@@ -302,9 +318,20 @@ these bullets are what you must hold in working memory.
 **Never call an analysis tool directly.** Analysis tools produce evidence;
 workers gather it, you verify it. If you violate this: stop analysis
 immediately, write a fact if evidence was produced, route the remaining work
-through `Task` dispatches.
+through `Agent` dispatches.
 
-| Read-only research (call yourself) | Analysis (delegate via Task) |
+**Isolation-first (hard rule, #88)** — kunglao-agent NEVER uses agent teams:
+`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never enabled, no teammates are
+spawned, no team setup is performed (teammates are separate Claude instances
+sharing a task list and mailbox, which breaks subagent isolation). Workers are
+always isolated subagents: they report only to the orchestrator and never
+message each other. SendMessage between the orchestrator and its own workers
+is NOT a team feature and remains allowed — the heartbeat active-ping
+(`[ping HH:MM] step? stuck? eta?`) and worker replies are the sanctioned
+channel. A delivered worker is TaskStop'd on delivery confirmation (see "The
+dispatch contract").
+
+| Read-only research (call yourself) | Analysis (delegate via Agent) |
 | --- | --- |
 | `mcp__context7-mcp__*` — doc lookup before dispatching on unknown libs/APIs | `mcp__ghidra__*` — decompile / disasm / xrefs |
 | `mcp__sequential-thinking` — 3+ step branching decisions | `mcp__x64dbg__*` — BP / trace / registers |

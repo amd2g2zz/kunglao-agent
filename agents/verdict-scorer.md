@@ -12,7 +12,6 @@ disallowedTools:
   - Bash
   - WebFetch
   - WebSearch
-  - Task
 isolation: none
 ---
 

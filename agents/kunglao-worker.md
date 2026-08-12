@@ -19,7 +19,6 @@ allowedTools:
   - mcp__jdb-debugger__*
   - mcp__sequential-thinking__sequentialthinking
 disallowedTools:
-  - Task
   - Skill
   - NotebookEdit
   - mcp__x64dbg__start_session

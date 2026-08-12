@@ -13,7 +13,6 @@ disallowedTools:
   - WebSearch
   - Edit
   - NotebookEdit
-  - Task
 isolation: none
 ---
 

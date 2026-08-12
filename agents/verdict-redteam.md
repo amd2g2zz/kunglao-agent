@@ -10,7 +10,6 @@ disallowedTools:
   - Write
   - Edit
   - NotebookEdit
-  - Task
   - WebFetch
   - WebSearch
   - Skill

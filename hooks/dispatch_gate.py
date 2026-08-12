@@ -3,7 +3,7 @@
 
 WHY: convergence_check / priority.py / failure_analysis_gate are all
 agent-invoked — an orchestrator that skips them is unconstrained. This hook
-is the ONLY enforcement that can't be ignored: it fires on the Task tool
+is the ONLY enforcement that can't be ignored: it fires on the Agent tool
 itself, at exactly one point — when the orchestrator tries to dispatch a
 worker for a claim that is failure-blocked.
 
@@ -15,13 +15,13 @@ SMART = narrow + alive-only:
   - it injects corrective guidance (hookSpecificOutput.additionalContext),
     not a hard abort — the orchestrator can record the analysis and proceed.
 
-Design: PreToolUse hook on Task. Reads the dispatch prompt from the tool
+Design: PreToolUse hook on Agent. Reads the dispatch prompt from the tool
 input. If it matches `[T<N> tools=...] claim <C-NN>` and C-NN is in
 failure_analysis_gate's BLOCKED set → inject guidance. Otherwise → exit 0
 (silent). No state writes, no files touched.
 
 Wiring (in .claude/settings.json PreToolUse, Agent matcher — kunglao-agent
-dispatches via the Agent tool; a Task matcher is optional):
+dispatches via the Agent tool):
   {"matcher": "Agent", "hooks": [{"type": "command",
     "command": "python C:/Users/hr/.claude/skills/kunglao-agent/hooks/dispatch_gate.py"}]}
 """
@@ -107,9 +107,9 @@ def main() -> int:
 
     # Extract the dispatch description. kunglao-agent dispatches workers via the
     # Agent tool (worker_budget is wired on the Agent matcher); the description
-    # lives in the prompt field. Older Task-based dispatches put it in
-    # tool_input (string) or tool_input.description (dict). v1.9.8: handle all
-    # three so the gate survives whichever channel the orchestrator uses.
+    # lives in the prompt field. v1.9.8: handle all payload shapes (prompt /
+    # description / task / input as string or dict) so the gate survives
+    # whichever field carries the dispatch prompt.
     tool_input = payload.get("tool_input") or {}
     prompt_parts = []
     if isinstance(tool_input, dict):
