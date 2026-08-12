@@ -136,4 +136,4 @@ def test_release_manifest_declares_skill_and_references():
     assets = manifest.get("assets", {})
     assert "SKILL.md" in assets.get("knowledge", []), assets.get("knowledge")
     refs = assets.get("references", [])
-    assert any("references/re-library" in r or r == "references/" for r in refs), refs (feat(#206): bind release receipt to knowledge-base revision)
+    assert any("references/re-library" in r or r == "references/" for r in refs), refs
