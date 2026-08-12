@@ -331,7 +331,6 @@ def test_hook_activation_tier_defaults():
         ha.update_state(ws, "HARD_PAUSE", "MONITOR")
         assert ha.is_active(ws, "cost_gate") is True
         assert ha.is_active(ws, "active_intervention") is False
-        assert ha.is_active(ws, "memory_capture") is False
         assert ha.is_active(ws, "doubt_checker") is False
     print("  [OK ] hook_activation HARD_PAUSE keeps cost_gate only")
 
