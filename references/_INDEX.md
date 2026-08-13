@@ -45,6 +45,7 @@
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
 | `case-book.md` | failure-cases | Documents five real failure modes from prior sessions with root causes and fixes. | When recognizing a recurring behavioral pattern (e.g., idling with free slots, stale plans). |
+| `cli-script-checklist.md` | contracts | CLI script spec checklist (issue #277): parameterized / injectable / idempotent / check-apply-remove / exit-code states / text-or-JSON output / error guidance. | When writing or reviewing a reusable tool script for scripts/, or deciding between a new CLI and an inline one-liner. |
 | `cold-start-contract.md` | contracts | 8-file read sequence for round 0, incremental-change detection, Phase 0 mandates. | At session start for cold-start vs incremental-read decision, or Phase 0 hook config. |
 | `convergence-loop.md` | contracts | 5 convergence-driven behaviors with case evidence, spin-detection, failure-analysis gate. | When diagnosing a spinning/stalled loop or deciding on failed-attempt handling. |
 | `decision-rights.md` | governance | Decision rights matrix — 15-row three-way table (mechanical / LLM / user). | When resolving who decides a particular decision. |

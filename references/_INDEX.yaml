@@ -11,9 +11,10 @@ files:
   references/_index-platforms.md: 1a89e780858cbf1cbe051af5b769f3f29a3f9d6739ccc25137ee7cc838e69dd2
   references/_index-resources.md: 04db4c8e7cb2196b8fafe16c28d3f9b98df6cd9354d09d59e6a24d62929b065d
   references/_index-tools.md: 52cc8bef03be8b995519bdd4b59d76e1c60b0199c8fd9c6d3d8d645ef8a6a979
-  references/_INDEX.md: b05857ef19d913a1510bf35f0cc34c201e6787d53b9fa4d813478b766f19026e
+  references/_INDEX.md: 92139e789c0b4747c04f89c2678e9f79958683a992ce8ca605662ada6c8a8d6d
   references/archive/long-horizon-architecture-2026-07.md: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
   references/case-book.md: 699041f78c3c4cc679dfc9b27eac6bcc50b73e1561456d3e8c15110d790cb353
+  references/cli-script-checklist.md: 43b2fa4a281ed2cb77d29645426864c654cd5f425e5526adb15d8dcb90f50bbb
   references/cold-start-contract.md: 41c42f0e21a98c114f6799fe406c87bf6e4f8e5a4b7d1478386634acbde75407
   references/convergence-loop.md: 6ef0a4f0c3b48fc632cd6cc8ebd3010ebc803863e782c416411149464cbbcb86
   references/decision-rights.md: 91b0344885a200ebf0f0561607fd9e18e506b7b45968cf1cacc13238ce0071c1
