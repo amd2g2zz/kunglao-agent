@@ -157,6 +157,49 @@ def detect_sample(ws: Path) -> tuple[str, str]:
     return sample.name, sha
 
 
+CLAUDEMD_TMPL = Path(__file__).resolve().parent.parent / "templates" / "CLAUDE.md.tmpl"
+SKILL_DIR = Path(__file__).resolve().parent.parent
+
+
+def write_claudemd(ws: Path, sample_name: str, sample_sha: str) -> Path | None:
+    """Write CLAUDE.md from template with project info filled in.
+
+    Idempotent: if CLAUDE.md exists and is non-empty, skip (do not clobber).
+    Returns the written path or None if skipped.
+    """
+    target = ws / "CLAUDE.md"
+    if target.exists() and target.read_text(encoding="utf-8").strip():
+        return None
+    if not CLAUDEMD_TMPL.exists():
+        return None
+    tmpl = CLAUDEMD_TMPL.read_text(encoding="utf-8")
+
+    # Detect venv path
+    venv_candidate = ws / ".venv"
+    venv_path = str(venv_candidate) if venv_candidate.exists() else ".venv/"
+
+    # Detect Python version
+    py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+
+    text = (
+        tmpl
+        .replace("<SAMPLE_SHA1>", sample_name)
+        .replace("<SAMPLE_SHA256>", sample_sha)
+        .replace("<SAMPLE_TYPE>", "(detected at analysis time)")
+        .replace("<SAMPLE_PATH>", f"bins/{sample_name}")
+        .replace("<SKILL_DIR>", str(SKILL_DIR))
+        .replace("<VENV_PATH>", venv_path)
+    )
+    # Append Python version note to the venv section
+    text = text.replace(
+        "Activate before running scripts.",
+        f"Activate before running scripts. Python {py_version}."
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(target, text)
+    return target
+
+
 def scaffold(ws: Path) -> list[Path]:
     """幂等 scaffold(DESIGN §7 0.4): 目录 mkdir; 文件存在且非空则跳过(不 clobber)."""
     created: list[Path] = []
@@ -258,6 +301,8 @@ def initialize(ws: Path, hooks_json: Path | None) -> int:
     """Phase 2 全新初始化 + Phase 3 幂等校验."""
     scaffold(ws)
     sample, sample_sha = detect_sample(ws)
+    # Write CLAUDE.md from template (idempotent: skip if exists)
+    write_claudemd(ws, sample, sample_sha)
     draft = claim_register_text(sample, sample_sha, state_hash="")
     digest = compute_state_hash(ws, register_text=draft)
     reg = ws / "claim-register.yaml"

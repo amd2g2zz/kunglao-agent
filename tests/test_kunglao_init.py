@@ -84,3 +84,61 @@ def test_force_backs_up_first(init_ws: Path) -> None:
     assert r.returncode == 0, f"--force failed: {r.stderr}"
     backups = list(init_ws.glob("claim-register*.bak*"))
     assert backups, "no backup created before --force rebuild"
+
+
+# ---------- #265: CLAUDE.md generation ----------
+
+def test_init_writes_claudemd(init_ws: Path) -> None:
+    """#265: init writes CLAUDE.md to workspace root."""
+    r = _run_init(init_ws)
+    assert r.returncode == 0, f"init failed: {r.stderr}"
+    claude = init_ws / "CLAUDE.md"
+    assert claude.exists(), "CLAUDE.md not created by init"
+
+
+def test_claudemd_contains_sample_info(init_ws: Path) -> None:
+    """#265: CLAUDE.md contains sample SHA1 and path references."""
+    _run_init(init_ws)
+    text = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "sample.exe" in text, "CLAUDE.md missing sample filename"
+    assert "bins/" in text, "CLAUDE.md missing sample path prefix"
+
+
+def test_claudemd_contains_rules_requirement(init_ws: Path) -> None:
+    """#265: CLAUDE.md contains required rules reading instructions."""
+    _run_init(init_ws)
+    text = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "maker-checker.md" in text, "CLAUDE.md missing maker-checker rules reference"
+    assert "numeric-fidelity.md" in text, "CLAUDE.md missing numeric-fidelity rules reference"
+    assert "kunglao-convergence-loop.md" in text, "CLAUDE.md missing convergence-loop rules reference"
+
+
+def test_claudemd_contains_hard_constraints(init_ws: Path) -> None:
+    """#265: CLAUDE.md contains hard constraints section."""
+    _run_init(init_ws)
+    text = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "VM-only" in text or "VM only" in text, "CLAUDE.md missing VM-only constraint"
+    assert "Maker-checker" in text, "CLAUDE.md missing maker-checker constraint"
+
+
+def test_claudemd_idempotent_no_clobber(init_ws: Path) -> None:
+    """#265: second init does not clobber existing CLAUDE.md."""
+    _run_init(init_ws)
+    original = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
+    # Manually modify CLAUDE.md to detect clobber
+    (init_ws / "CLAUDE.md").write_text(
+        original + "\n# CUSTOM USER CONTENT\n", encoding="utf-8"
+    )
+    _run_init(init_ws)
+    after = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "CUSTOM USER CONTENT" in after, \
+        "CLAUDE.md was clobbered on second init (idempotent violation)"
+
+
+def test_claudemd_contains_state_file_map(init_ws: Path) -> None:
+    """#265: CLAUDE.md contains state file reference table."""
+    _run_init(init_ws)
+    text = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "claim-register.yaml" in text, "CLAUDE.md missing claim-register reference"
+    assert "facts/_INDEX.md" in text, "CLAUDE.md missing facts/_INDEX reference"
+    assert "runs/" in text, "CLAUDE.md missing runs/ reference"

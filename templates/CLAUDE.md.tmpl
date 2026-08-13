@@ -1,0 +1,69 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Workspace type
+
+Kunglao-agent malware RE workspace — not a software project. The "code" is state files, facts, and worker runs analyzing a malware sample.
+
+## Sample under analysis
+
+| Field | Value |
+|-------|-------|
+| SHA1 (filename) | `<SAMPLE_SHA1>` |
+| SHA256 | `<SAMPLE_SHA256>` |
+| Type | `<SAMPLE_TYPE>` |
+| Path | `<SAMPLE_PATH>` |
+
+## Skill & orchestrator
+
+Analysis is driven by `/kunglao-agent` (skill at `<SKILL_DIR>`).
+
+**Key scripts** (invoke from workspace root with `.venv` activated):
+```bash
+source .venv/Scripts/activate
+python <SKILL_DIR>/scripts/convergence_check.py .
+python <SKILL_DIR>/scripts/priority.py .
+python <SKILL_DIR>/scripts/convergence_health.py .
+python <SKILL_DIR>/scripts/failure_analysis_gate.py . <C-NN>
+```
+
+**Hook activation** (30-min TTL, renew via `/loop`):
+```bash
+python <SKILL_DIR>/scripts/hook_activation.py . --renew
+```
+
+## State files (read every turn, disk is truth)
+
+| File | Purpose |
+|------|---------|
+| `claim-register.yaml` | All claims + status (OPEN/PARTIALLY-VERIFIED/PROVEN/DEFERRED) |
+| `claim_deps.yaml` | Claim dependency graph |
+| `task_spec.yaml` | Analysis contract (depth, scope, constraints, success criteria) |
+| `analysis_state.txt` | Cognition baseline (venv, sample hash, toolchain, worker list) |
+| `global_plan.txt` | High-level analysis plan |
+| `facts/_INDEX.md` | Fact index with PARTIAL/PROVEN markers |
+| `blockers/` | Active blocker files |
+| `runs/` | Worker status files + `.heartbeat.json` |
+
+**Facts** go in `facts/F<NNN>.md` with byte-anchored, reproducible evidence.
+
+## Hard constraints
+
+- **Dynamic tools VM-only**: x64dbg, Frida, sample execution must run on VM. Never launch/debug/inject on host.
+- **x64dbg**: only `connect_remote(host=..., ...)` — never `start_session` / `connect_to_session` / `connect_to_instance` / `terminate_session`.
+- **Orchestrator does not analyze**: the orchestrator monitors/dispatches/verifies only. Decompile, strings, grep, emulation, debugging -> workers.
+- **Maker-checker**: worker=maker, orchestrator=checker. Facts must be independently verified before promotion to PROVEN.
+- **No mid-iteration user questions**: decide + record reasoning + continue.
+
+## Required rules (read every session)
+
+Read these rules from `~/.claude/rules/common/` at the start of every session — they define behavior baselines that apply even when the kunglao-agent skill is not loaded:
+
+- **maker-checker.md** — maker/checker separation: workers make, the orchestrator checks, no self-stamping.
+- **numeric-fidelity.md** — counting-basis fidelity: every numeric fact must declare its counting unit; multi-basis numbers must not be collapsed to a single figure.
+- **kunglao-convergence-loop.md** — orchestrator convergence loop: monitor/dispatch/verify cycle, worker polling, false-completion trap avoidance.
+
+## Python venv
+
+Path: `<VENV_PATH>`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts.
