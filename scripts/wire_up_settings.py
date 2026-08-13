@@ -10,6 +10,13 @@ that dies with the worktree — deleting the worktree silently killed all 8
 hooks and blocked every session's tool calls. Project-level deployment makes
 hooks live and die WITH the workspace: no global pollution, no stale
 worktree-bound commands.
+
+Issue #269 (2026-08-13): hook COMMAND paths are absolute and point at the
+CANONICAL deployed skill install (~/.claude/skills/kunglao-agent/hooks) — the
+generation used `Path(__file__)` (the script's own location), so a --wire-up
+run from a dev worktree bound the commands to the worktree path, which dies
+with the worktree (#228 lesson). _canonical_hooks_dir() decouples the
+registered path from wherever this module happens to run.
 """
 from __future__ import annotations
 
@@ -30,6 +37,22 @@ def _settings_target(workspace: Path | None) -> Path:
         return Path(workspace).resolve() / ".claude" / "settings.json"
     cwd = Path.cwd().resolve()
     return cwd / ".claude" / "settings.json"
+
+
+def _canonical_hooks_dir() -> Path:
+    """Canonical deployed skill hooks dir — where hook COMMAND paths must point.
+
+    Issue #269: hook commands are absolute paths into the CANONICAL skill
+    install (~/.claude/skills/kunglao-agent/hooks), never this module's own
+    location. This script may be run from a dev worktree
+    (C:/Users/hr/.claude/wt-*/); a worktree-bound command dies with the
+    worktree — the #228 incident: 8 hooks went silent at once when the
+    referenced path was deleted. When this module IS deployed at the canonical
+    location (the normal production case), the two coincide and `here` wins.
+    """
+    here = Path(__file__).resolve().parent.parent / "hooks"
+    canonical = Path.home() / ".claude" / "skills" / "kunglao-agent" / "hooks"
+    return here if here == canonical else canonical
 
 
 def wire_up_settings(workspace: Path | None = None, global_opt_in: bool = False) -> int:
@@ -70,8 +93,10 @@ def wire_up_settings(workspace: Path | None = None, global_opt_in: bool = False)
     pre = hooks.get("PreToolUse") or []
     post = hooks.get("PostToolUse") or []
 
-    # hook_dir: <skill>/hooks (this module lives in <skill>/scripts/)
-    hook_dir = Path(__file__).resolve().parent.parent / "hooks"
+    # hook_dir: the CANONICAL deployed skill hooks dir — NOT this module's
+    # own location (#269; running from a worktree must not bind hook commands
+    # to the worktree path, which dies with it — #228).
+    hook_dir = _canonical_hooks_dir()
 
     def _entry(hook_file: str) -> dict:
         # POSIX path (forward slashes): hooks run via `sh -c` — Windows
