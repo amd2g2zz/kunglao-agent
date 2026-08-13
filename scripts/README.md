@@ -5,8 +5,8 @@ Every `.py` in this directory is classified by role and by where it is
 referenced. The reference map below is the definitive answer to "who uses
 this script?" — used to keep documentation, hooks, CI, and tests in sync.
 
-- **Total scripts**: 72 (70 at #230 close; +1 `references_recall.py` by #229,
-  +1 `shell_defaults.py` by #276).
+- **Total scripts**: 73 (70 at #230 close; +1 `references_recall.py` by #229,
+  +1 `shell_defaults.py` by #276, +1 `template_gen.py` by #278).
 - **Orphans**: 0 — every script has at least one live reference
   (tests/ count as references; a script referenced only by tests is
   categorized `TEST`, not orphan).
@@ -107,6 +107,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `references_recall.py` | references scored-recall CLI over the layered index — scenario → primary/supplementary; keyword → top-K ranked rows with score (no file dumps); `--list-categories` / `--scene-map` | tests, docs |
 | `wire_up_settings.py` | hook settings registration (lib for hook_activation) | hooks, lib(1), tests |
 | `shell_defaults.py` | reusable CLI: idempotent shell env-default line management (check/apply/remove, powershell+bash; #276) | lib(1), tests |
+| `template_gen.py` | deterministic script-template generator CLI (templates/scripts/*.tmpl; exit 2/3/4/5, #278) | templates, tests, docs |
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
 | `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
 
