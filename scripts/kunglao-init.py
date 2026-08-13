@@ -3,7 +3,17 @@
 """kunglao-init — workspace 初始化 + 防二次初始化 (phase 3.5, E-init.1-4).
 
 独立 CLI(非 kunglao.py 子命令, module-design L448):
-    python kunglao-init.py <workspace> [--force] [--hooks-json <path>]
+    python kunglao-init.py <workspace> [--force] [--hooks-json <path>] [--profile-root <path>]
+
+Phase 0 (#276): 环境守卫 — CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS 默认 0 化。
+    - 进程 env 该 flag 为 truthy(1/true/yes/on) → HARD 拒绝 scaffold(exit 3),
+      修复指引: unset 后重启会话, 勿用 teammate 通道
+    - unset/0 → 会话内 os.environ[flag]="0" + analysis_state.txt 写
+      agent_teams_flag=0 (default disabled)
+    - 纳入设置: 通过 shell_defaults.apply 确保现存用户 PowerShell profile
+      (Documents/PowerShell 与 Documents/WindowsPowerShell) 含
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=0, 动作记录到 init 输出
+      (--profile-root 可注入, 测试用; 默认 Path.home())
 
 三阶段防重状态机:
     Phase 1 存在性检查: claim-register.yaml 含 `[initialized]` 标记 → 续接模式
@@ -28,19 +38,33 @@ import argparse
 import datetime
 import hashlib
 import json
+import os
 import re
 import shutil
 import sys
 from pathlib import Path
+
+# #276: 可复用 CLI 管理 shell 环境默认行(禁止内联)。按仓库惯例先注入 scripts/ 到
+# sys.path 再 import 兄弟模块(兼容 `python -m` 等非直跑调用方式)。
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+import shell_defaults  # noqa: E402
 
 MARKER = "[initialized]"
 SEED_MIN = 3
 HOOK_FILES = ("worker_budget.py",)  # DESIGN §7 0.3: PreToolUse + PostToolUse → worker_budget
 HASH_RE = re.compile(r"state_hash=([0-9a-f]{64})")
 
+FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"  # #276: 默认 0 化
+AGENT_TEAMS_STATE_LINE = "agent_teams_flag=0 (default disabled)"
+
 SCAFFOLD_DIRS = ("facts", "blockers", "runs")
 SCAFFOLD_FILES = {
-    "analysis_state.txt": "# analysis_state — kunglao-init scaffold(空结构段, DESIGN §7 0.4)\n",
+    "analysis_state.txt": (
+        "# analysis_state — kunglao-init scaffold(空结构段, DESIGN §7 0.4)\n"
+        f"{AGENT_TEAMS_STATE_LINE}\n"
+    ),
     "global_plan.txt": "# global_plan — kunglao-init v1 stub\n",
     "claim_deps.yaml": "depends_on: {}\n",
     "task_spec_snapshot.yaml": "{}\n",
@@ -70,7 +94,70 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="重建: 先备份 claim-register 再重新初始化")
     parser.add_argument("--hooks-json", metavar="PATH", default=None,
                         help="hooks 部署目标 settings.json 副本; 默认 <workspace>/.claude/settings.json 若存在, 绝不写 HOME")
+    parser.add_argument("--profile-root", metavar="PATH", default=None,
+                        help="profile 根目录(默认 Path.home(); 测试可注入; #276)")
     return parser.parse_args(argv)
+
+
+def is_truthy(value: str | None) -> bool:
+    """Truthy 判定: 1/true/yes/on, 不区分大小写 (#276 默认 0 化语义)."""
+    return value is not None and value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def profile_candidates(profile_root: Path | None = None) -> list[Path]:
+    """用户 PowerShell profile 候选(Documents/PowerShell 与 Documents/WindowsPowerShell)."""
+    root = Path(profile_root) if profile_root is not None else Path.home()
+    docs = root / "Documents"
+    return [
+        docs / "PowerShell" / "Microsoft.PowerShell_profile.ps1",
+        docs / "WindowsPowerShell" / "Microsoft.PowerShell_profile.ps1",
+    ]
+
+
+def guard_agent_teams(profile_root: Path | None = None) -> tuple[int, list[str]]:
+    """Phase 0 (#276): flag 环境守卫.
+
+    - 进程 env 该 flag truthy → HARD 拒绝(exit 3), 不 scaffold, 附修复指引:
+      unset 后重启会话; 勿用 teammate 通道
+    - unset/0 → 会话内 os.environ[flag]="0" + 现存 PowerShell profile 经
+      shell_defaults.apply 纳入 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=0
+    Returns (exit_code, log_lines).
+    """
+    log: list[str] = []
+    val = os.environ.get(FLAG_NAME)
+    if is_truthy(val):
+        log.append(
+            f"kunglao-init: HARD REJECT — {FLAG_NAME} is truthy ({val!r}); "
+            f"scaffold blocked. Fix: unset {FLAG_NAME} in the launching shell "
+            f"and RESTART this session; do NOT dispatch through the teammate "
+            f"channel (kunglao #88, 2026-08-12 incident)."
+        )
+        return 3, log
+    os.environ[FLAG_NAME] = "0"
+    log.append(f"kunglao-init: env {FLAG_NAME}=0 (default disabled)")
+    found = False
+    for profile in profile_candidates(profile_root):
+        if not profile.exists():
+            continue
+        found = True
+        result = shell_defaults.apply(profile, FLAG_NAME, "0", shell="powershell")
+        log.append(f"kunglao-init: profile {profile}: {result['change']}")
+    if not found:
+        log.append("kunglao-init: no PowerShell profile found — profile write skipped")
+    return 0, log
+
+
+def ensure_agent_teams_state(ws: Path) -> bool:
+    """analysis_state.txt 记录 agent_teams_flag=0 (default disabled); 缺失则追加."""
+    p = ws / "analysis_state.txt"
+    text = p.read_text(encoding="utf-8") if p.exists() else ""
+    if "agent_teams_flag=" in text:
+        return False
+    p.parent.mkdir(parents=True, exist_ok=True)
+    if text and not text.endswith("\n"):
+        text += "\n"
+    atomic_write(p, text + f"{AGENT_TEAMS_STATE_LINE}\n")
+    return True
 
 
 def normalize_marker(text: str) -> str:
@@ -300,6 +387,8 @@ def resume(ws: Path, text: str) -> int:
 def initialize(ws: Path, hooks_json: Path | None) -> int:
     """Phase 2 全新初始化 + Phase 3 幂等校验."""
     scaffold(ws)
+    if ensure_agent_teams_state(ws):
+        print(f"kunglao-init: analysis_state {AGENT_TEAMS_STATE_LINE}")
     sample, sample_sha = detect_sample(ws)
     # Write CLAUDE.md from template (idempotent: skip if exists)
     write_claudemd(ws, sample, sample_sha)
@@ -324,8 +413,16 @@ def initialize(ws: Path, hooks_json: Path | None) -> int:
     return 0
 
 
-def run(ws: Path, force: bool = False, hooks_json: Path | None = None) -> int:
-    """状态机入口: 防重检查 → (续接 | --force 备份+重建 | 全新初始化)."""
+def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
+        profile_root: Path | None = None) -> int:
+    """状态机入口: Phase 0 环境守卫 → 防重检查 → (续接 | --force 备份+重建 | 全新初始化)."""
+    guard_rc, guard_log = guard_agent_teams(profile_root)
+    if guard_rc != 0:
+        for line in guard_log:  # HARD REJECT 指引走 stderr
+            print(line, file=sys.stderr)
+        return guard_rc
+    for line in guard_log:
+        print(line)
     ws = Path(ws).resolve()
     reg = ws / "claim-register.yaml"
     if reg.exists() and not force:
@@ -340,7 +437,8 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    return run(Path(args.workspace), force=args.force, hooks_json=args.hooks_json)
+    return run(Path(args.workspace), force=args.force, hooks_json=args.hooks_json,
+               profile_root=args.profile_root)
 
 
 if __name__ == "__main__":

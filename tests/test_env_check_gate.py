@@ -118,3 +118,59 @@ def test_main_stdin_pass_without_flag(tmp_path):
     assert r.returncode == 0
     assert r.stdout == ""
     assert r.stderr == ""
+
+
+# ---------- #276: default-disabled semantics — only TRUTHY rejects ----------
+
+def test_flag_zero_passes(tmp_path):
+    """#276: flag=0 -> exit 0, silent (the default-disabled state is clean)."""
+    ws = _kunglao_ws(tmp_path)
+    rc, stderr, ctx = evaluate(_payload(ws), environ={FLAG_NAME: "0"})
+    assert rc == 0
+    assert stderr == ""
+    assert ctx is None
+
+
+def test_flag_false_and_off_pass(tmp_path):
+    """#276: 'false'/'off'/'' are clean — no REJECT."""
+    ws = _kunglao_ws(tmp_path)
+    for value in ("false", "off", ""):
+        rc, stderr, ctx = evaluate(_payload(ws), environ={FLAG_NAME: value})
+        assert rc == 0, f"{value!r}: rc={rc}"
+        assert stderr == ""
+        assert ctx is None
+
+
+def test_flag_true_rejects(tmp_path):
+    """#276: 'true' is truthy -> hard REJECT (exit 2) with guidance."""
+    ws = _kunglao_ws(tmp_path)
+    rc, stderr, ctx = evaluate(_payload(ws), environ={FLAG_NAME: "true"})
+    assert rc == 2
+    assert "REJECT env_check_gate" in stderr
+    assert ctx is not None
+
+
+def test_flag_yes_on_case_insensitive_reject(tmp_path):
+    """#276: 'YES'/'on' (case-insensitive truthy) -> hard REJECT."""
+    ws = _kunglao_ws(tmp_path)
+    for value in ("YES", "on", "On", "TRUE"):
+        rc, stderr, ctx = evaluate(_payload(ws), environ={FLAG_NAME: value})
+        assert rc == 2, f"{value!r}: rc={rc}"
+        assert ctx is not None
+
+
+def test_main_stdin_zero_passes_end_to_end(tmp_path):
+    """The wired shape, flag=0 -> exit 0, no output."""
+    ws = _kunglao_ws(tmp_path)
+    env = {k: v for k, v in os.environ.items() if k != FLAG_NAME}
+    env[FLAG_NAME] = "0"
+    r = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parents[1] / "hooks" / "env_check_gate.py")],
+        input=json.dumps(_payload(ws)), capture_output=True,
+        encoding="utf-8", errors="replace",
+        env={"PYTHONIOENCODING": "utf-8", **env},
+        cwd=str(ws), timeout=60,
+    )
+    assert r.returncode == 0
+    assert r.stdout == ""
+    assert r.stderr == ""

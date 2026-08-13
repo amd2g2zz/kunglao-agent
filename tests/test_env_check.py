@@ -159,3 +159,73 @@ def test_hooks_fail_when_no_project_settings(monkeypatch, tmp_path):
     snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
     assert snap["checks"]["hooks_deployed"]["status"] == "FAIL"
     assert "--wire-up" in snap["checks"]["hooks_deployed"]["detail"]
+
+
+# ---------- #276: default-disabled flag semantics (truthy = FAIL, 0/false/off = PASS) ----------
+
+def test_flag_zero_is_pass(tmp_path, monkeypatch):
+    """#276: flag=0 -> agent_teams_flag PASS, detail shows 'disabled (0)'."""
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.setenv(FLAG_NAME, "0")
+
+    import env_check
+    monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", None)
+    monkeypatch.setattr(env_check, "VM_HOST", "")
+
+    rc = run(ws)
+    snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
+    assert snap["checks"]["agent_teams_flag"]["status"] == "PASS", snap
+    assert "disabled (0)" in snap["checks"]["agent_teams_flag"]["detail"]
+    assert rc in (0, 1), "flag check itself must not FAIL"
+
+
+def test_flag_false_and_off_are_pass(tmp_path, monkeypatch):
+    """#276: 'false'/'off' (non-truthy) -> PASS."""
+    for i, value in enumerate(("false", "off")):
+        ws = tmp_path / f"ws-nontruthy-{i}"
+        (ws / "runs").mkdir(parents=True)
+        monkeypatch.setenv(FLAG_NAME, value)
+        import env_check
+        monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", None)
+        monkeypatch.setattr(env_check, "VM_HOST", "")
+        run(ws)
+        snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
+        assert snap["checks"]["agent_teams_flag"]["status"] == "PASS", \
+            f"{value}: {snap['checks']['agent_teams_flag']}"
+
+
+def test_flag_true_fails(tmp_path, monkeypatch):
+    """#276: 'true' (truthy) -> agent_teams_flag FAIL, detail names the value."""
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.setenv(FLAG_NAME, "true")
+    rc = run(ws)
+    assert rc == 1
+    snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
+    assert snap["checks"]["agent_teams_flag"]["status"] == "FAIL"
+    assert "true" in snap["checks"]["agent_teams_flag"]["detail"]
+
+
+def test_flag_truthy_case_insensitive_fails(tmp_path, monkeypatch):
+    """#276: 'TRUE'/'Yes'/'ON' (case-insensitive truthy) -> FAIL."""
+    for i, value in enumerate(("TRUE", "Yes", "ON")):
+        ws = tmp_path / f"ws-truthy-{i}"
+        (ws / "runs").mkdir(parents=True)
+        monkeypatch.setenv(FLAG_NAME, value)
+        rc = run(ws)
+        assert rc == 1
+        snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
+        assert snap["checks"]["agent_teams_flag"]["status"] == "FAIL", \
+            f"{value}: {snap['checks']['agent_teams_flag']}"
+
+
+def test_flag_empty_string_is_pass(tmp_path, monkeypatch):
+    """#276: empty-string flag ('' ) -> PASS (default disabled)."""
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.setenv(FLAG_NAME, "")
+    import env_check
+    monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", None)
+    monkeypatch.setattr(env_check, "VM_HOST", "")
+    run(ws)
+    snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
+    assert snap["checks"]["agent_teams_flag"]["status"] == "PASS", \
+        snap["checks"]["agent_teams_flag"]

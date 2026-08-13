@@ -11,6 +11,7 @@ GREEN 目标(阶段 3.5 判据, E-init.1-4):
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
+
+FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
 
 @pytest.fixture
@@ -31,9 +34,21 @@ def init_ws(tmp_path) -> Path:
     return ws
 
 
-def _run_init(ws: Path, extra: list[str] | None = None) -> subprocess.CompletedProcess:
+def _run_init(ws: Path, extra: list[str] | None = None,
+              profile_root: Path | None = None,
+              flag: str | None = "0") -> subprocess.CompletedProcess:
+    """运行 kunglao-init (hermetic):
+    --profile-root 默认指向 tmp(绝不触碰生产 profile);
+    flag 默认 "0"(#276 默认禁用态; 外层会话可能被 2026-08-12 flag=1 污染),
+    传 flag=None 表示子进程 env 不携带该变量."""
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
-    return subprocess.run(argv, capture_output=True, text=True, timeout=120)
+    if profile_root is None:
+        profile_root = ws.parent / "profile-root"
+    argv += ["--profile-root", str(profile_root)]
+    env = {k: v for k, v in os.environ.items() if k != FLAG_NAME}
+    if flag is not None:
+        env[FLAG_NAME] = flag
+    return subprocess.run(argv, capture_output=True, text=True, timeout=120, env=env)
 
 
 def test_kunglao_init_script_exists() -> None:
@@ -142,3 +157,92 @@ def test_claudemd_contains_state_file_map(init_ws: Path) -> None:
     assert "claim-register.yaml" in text, "CLAUDE.md missing claim-register reference"
     assert "facts/_INDEX.md" in text, "CLAUDE.md missing facts/_INDEX reference"
     assert "runs/" in text, "CLAUDE.md missing runs/ reference"
+
+
+# ---------- #276: Phase 0 env guard (agent-teams flag default 0) ----------
+
+def test_polluted_flag_1_hard_rejects_scaffold(init_ws: Path) -> None:
+    """#276: process env flag truthy (1) -> HARD reject: non-zero exit, NO scaffold
+    (no claim-register.yaml), fix guidance on stderr."""
+    r = _run_init(init_ws, flag="1")
+    assert r.returncode != 0, f"polluted init must fail: {r.stdout}{r.stderr}"
+    assert not (init_ws / "claim-register.yaml").exists(), \
+        "polluted init must not scaffold claim-register.yaml"
+    assert "unset" in r.stderr, f"fix guidance missing 'unset': {r.stderr}"
+    assert "RESTART" in r.stderr or "restart" in r.stderr, \
+        f"fix guidance missing restart: {r.stderr}"
+
+
+def test_polluted_flag_true_rejects(init_ws: Path) -> None:
+    """Truthy values beyond '1' ('true') also reject."""
+    r = _run_init(init_ws, flag="true")
+    assert r.returncode != 0
+    assert not (init_ws / "claim-register.yaml").exists()
+
+
+def test_flag_zero_proceeds_and_records_state(init_ws: Path) -> None:
+    """flag=0 -> proceeds; analysis_state.txt records agent_teams_flag=0 (default disabled)."""
+    r = _run_init(init_ws, flag="0")
+    assert r.returncode == 0, f"init failed with flag=0: {r.stdout}{r.stderr}"
+    state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
+    assert "agent_teams_flag=0 (default disabled)" in state, state
+
+
+def test_flag_unset_proceeds_default_disabled(init_ws: Path) -> None:
+    """flag unset -> proceeds with default-disabled semantics recorded."""
+    r = _run_init(init_ws, flag=None)
+    assert r.returncode == 0, f"init failed: {r.stdout}{r.stderr}"
+    state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
+    assert "agent_teams_flag=0" in state, state
+
+
+def test_profile_inclusion_idempotent(init_ws: Path, tmp_path: Path) -> None:
+    """#276: existing PowerShell profile gets the flag=0 default line via
+    shell_defaults; second init leaves the profile byte-identical (idempotent)."""
+    profile_root = tmp_path / "profile-home"
+    profile = (profile_root / "Documents" / "PowerShell"
+               / "Microsoft.PowerShell_profile.ps1")
+    profile.parent.mkdir(parents=True)
+    profile.write_text("# my profile\n", encoding="utf-8")
+
+    r1 = _run_init(init_ws, profile_root=profile_root)
+    assert r1.returncode == 0, f"first init failed: {r1.stdout}{r1.stderr}"
+    text = profile.read_text(encoding="utf-8")
+    assert f'$env:{FLAG_NAME} = "0"' in text, f"profile not patched: {text}"
+    assert "# my profile" in text, "unrelated profile content must survive"
+    assert "appended" in r1.stdout, f"init must record the profile action: {r1.stdout}"
+
+    before = profile.read_bytes()
+    r2 = _run_init(init_ws, profile_root=profile_root)
+    assert r2.returncode == 0, f"second init failed: {r2.stdout}{r2.stderr}"
+    assert profile.read_bytes() == before, \
+        "second init must not rewrite an already-correct profile (idempotent)"
+
+
+def test_profile_inclusion_rewrites_truthy(init_ws: Path, tmp_path: Path) -> None:
+    """Existing profile carrying the truthy flag line is rewritten to 0."""
+    profile_root = tmp_path / "profile-home"
+    profile = (profile_root / "Documents" / "WindowsPowerShell"
+               / "Microsoft.PowerShell_profile.ps1")
+    profile.parent.mkdir(parents=True)
+    profile.write_text(f'$env:{FLAG_NAME} = "1"\n', encoding="utf-8")
+
+    r = _run_init(init_ws, profile_root=profile_root)
+    assert r.returncode == 0, f"init failed: {r.stdout}{r.stderr}"
+    text = profile.read_text(encoding="utf-8")
+    assert f'$env:{FLAG_NAME} = "0"' in text
+    assert f'$env:{FLAG_NAME} = "1"' not in text
+    assert "rewritten" in r.stdout, f"init must record the rewrite: {r.stdout}"
+
+
+def test_claudemd_documents_env_and_script_discipline(init_ws: Path) -> None:
+    """#276: generated CLAUDE.md carries (1) the env-variable doc section and
+    (2) the tool-script-discipline section (reusable CLI, no ad-hoc inline)."""
+    _run_init(init_ws)
+    text = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert FLAG_NAME in text, "CLAUDE.md missing agent-teams flag env doc"
+    assert "KUNGLAO_VM_HOST" in text, "CLAUDE.md missing KUNGLAO_VM_HOST doc"
+    assert "GHIDRA_HOME" in text, "CLAUDE.md missing GHIDRA_HOME doc"
+    assert "scripts/" in text, "CLAUDE.md missing scripts/ CLI discipline"
+    assert "ad-hoc" in text or "内联" in text, \
+        "CLAUDE.md must ban ad-hoc inline execution"
