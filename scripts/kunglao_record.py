@@ -286,6 +286,35 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             f"to write terminal status {new_status!r} for {claim_id}. Only the "
             f"orchestrator promotes after kunglao-redteam passes."))
 
+    # ---- #236 R3 (write-side gate): DEFERRED 写入前回查 defer_reason 引用的
+    # decision-rights 行真实存在 — 引用不存在的行 = fake blocker 向量
+    # (2026-08-12 事故). 引用违规 → 拒绝写入, register 保持原状.
+    # 工作区无 references/decision-rights.md(无治理层)→ 跳过检查, 原行为不变.
+    if new_status == "DEFERRED":
+        try:
+            from write_gate import (defer_reason_violations,
+                                    extract_claim_defer_reason,
+                                    parse_decision_rights)
+        except Exception as exc:
+            return (False, f"BLOCKED: {claim_id} DEFERRED write requires "
+                           f"write-side gate R3; checker unavailable "
+                           f"({type(exc).__name__}): {exc} — register not "
+                           f"modified (fail closed)")
+        dr_path = ws / "references" / "decision-rights.md"
+        if dr_path.exists():
+            rows = parse_decision_rights(dr_path)
+            reason = extract_claim_defer_reason(register, claim_id)
+            if reason:
+                bad = defer_reason_violations(claim_id, reason, rows)
+                if bad:
+                    cited = ", ".join(str(b["row"]) for b in bad)
+                    rows_fmt = ", ".join(str(n) for n in sorted(rows))
+                    return (False, (f"DEFER REASON REJECTED (write-side gate "
+                                    f"R3): {claim_id} defer_reason cites "
+                                    f"nonexistent decision-rights row(s): "
+                                    f"{cited} (references/decision-rights.md "
+                                    f"has rows {rows_fmt or '(none)'})"))
+
     # ---- required gates (#78, fail closed): PROVEN requires the BLIND /
     # contradiction / inference verdicts.
     # #98 (D6/F15): two-tier exception classification:
