@@ -8,15 +8,15 @@ from pathlib import Path
 import pytest
 
 REFERENCES_DIR = Path(__file__).resolve().parent.parent / "references"
-INDEX_FILE = REFERENCES_DIR / "INDEX.md"
+INDEX_FILE = REFERENCES_DIR / "_INDEX.md"
 
 
 def _all_md_files() -> set[str]:
-    """Return relative paths (Posix style) of every .md file under references/, excluding INDEX.md itself."""
+    """Return relative paths (Posix style) of every .md file under references/, excluding _INDEX.md itself."""
     return {
         p.relative_to(REFERENCES_DIR).as_posix()
         for p in REFERENCES_DIR.rglob("*.md")
-        if p.name != "INDEX.md"
+        if p.name not in ("_INDEX.md", "_INDEX.yaml")
     }
 
 
