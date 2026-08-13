@@ -107,6 +107,7 @@ def test_references_index_pins_all_reference_files():
     actual_md = sorted(
         str(p.relative_to(ROOT)).replace("\\", "/")
         for p in (ROOT / "references").glob("**/*.md")
+        if "archive/" not in str(p.relative_to(ROOT)).replace("\\", "/")
     )
     missing = [f for f in actual_md if f not in files]
     assert not missing, f"files not pinned in _INDEX.yaml: {missing}"

@@ -1,3 +1,4 @@
+> **ARCHIVED (2026-08-13, #263)**: historical, v1.8.1 snapshot. Moved from references/ to references/archive/. Retained for design-traceability; not referenced by any active code.
 
 **Heuristic**: this is a SURVEY of v1.10-a/b design ideas - **PRE-IMPLEMENTATION research**. Do NOT act on these ideas; use only as reference for v1.10 design discussions. Most of the cited mechanisms are not yet built into kunglao-agent (ElHPlan action chains, Task-Decoupled planning, LangGraph PostgresSaver-style checkpoints).
 # Long-Horizon Agent Architecture Reference Survey (2026-07-28)
