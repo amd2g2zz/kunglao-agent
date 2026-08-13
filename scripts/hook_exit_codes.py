@@ -47,4 +47,7 @@ HOOK_EXIT_SEMANTICS = {
         ExitCode.OK: "flag not set — dispatch allowed",
         ExitCode.REJECT: "dispatch rejected — CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS set (#88/#233): teammate-polluted session",
     },
+    "recall_inject": {
+        ExitCode.OK: "recall processed — knowledge injected or silent (inject-only, never rejects)",
+    },
 }

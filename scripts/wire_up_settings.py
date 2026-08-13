@@ -145,6 +145,12 @@ def wire_up_settings(workspace: Path | None = None, global_opt_in: bool = False)
     count += added
     pre, added = _ensure(pre, "Agent", "dispatch_gate.py")
     count += added
+    # recall_inject (#268): runtime knowledge recall injected into every claim
+    # dispatch. Inject-only (always exits 0 — recall must never block dispatch)
+    # and deliberately NOT activation-gated: knowledge helps whether or not the
+    # enforcement hooks are activated. Grouped with the dispatch injectors.
+    pre, added = _ensure(pre, "Agent", "recall_inject.py")
+    count += added
     # heartbeat_touch on matcher=Bash — ANY tool activity refreshes
     # last_tick_ts, decoupling heartbeat liveness from orchestrator cognition.
     pre, added = _ensure(pre, "Bash", "heartbeat_touch.py")

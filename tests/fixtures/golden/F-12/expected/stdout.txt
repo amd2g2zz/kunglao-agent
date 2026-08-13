@@ -16,3 +16,5 @@ Record with:
   python scripts/failure_analysis_gate.py <ws> C-1 --record \
       --assumption "..." --validity not-justified|justified-adequate --next-method "..."
 
+See failure-modes reference (recall #268): failure-modes.md, failure-modes-lifecycle.md, failure-modes-monitoring.md, failure-modes-state.md, case-book.md, convergence-loop.md
+

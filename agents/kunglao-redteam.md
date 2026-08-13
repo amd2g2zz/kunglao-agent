@@ -84,6 +84,20 @@ pass.**
    not been self-consistency-checked — the whole point is that a second
    independent path either corroborates (PASS) or exposes a hole (DIFF).
 
+## Knowledge recall first (issue #268)
+
+Before planning any attack, run the reference recall:
+
+```
+python <skill_root>/scripts/references_recall.py verify-static-vs-dynamic
+```
+
+plus a claim-type query matching the target (go / vm / dynamic / static
+analysis) and READ the matched files — especially `verify-static-vs-dynamic.md`
+— so your attack methods match the maker's verified method category (static vs
+dynamic). The recall list injected into your dispatch prompt by recall_inject
+is authoritative: read those files first, then write your plan-to-execute.
+
 ## Output format (your final report)
 
 Write `runs/verify-redteam-<target>.md`:

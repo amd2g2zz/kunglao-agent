@@ -501,6 +501,19 @@ def search_lessons(query: str, library: Path | None = None, limit: int = 3) -> l
     return _score_lessons(query, Path(library) if library else LESSONS_DIR_DEFAULT, limit)
 
 
+def _failure_modes_recall() -> tuple[str, ...]:
+    """#268: on a BLOCKED row, recall the failure-modes reference files so the
+    orchestrator reads the matching failure-modes-{lifecycle,monitoring,state}
+    domain file. FAIL_OPEN: any recall failure -> () (recall never blocks the
+    gate). Reuses hooks/recall_inject.recall_files — the single recall path."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+        from recall_inject import recall_files
+        return recall_files("failure modes")
+    except Exception:  # noqa: BLE001 — recall is guidance, never a blocker
+        return ()
+
+
 def _print_blocked(d: dict) -> None:
     cid = d["claim_id"]
     print(f"=== BLOCKED: {cid} (status={d.get('status')}, attempts={d.get('promotion_attempts')}) ===")
@@ -529,6 +542,11 @@ def _print_blocked(d: dict) -> None:
         for s in sim:
             print(f"  - {s['file']} (score {s['score']}, outcome {s['outcome']}): "
                   f"{s['claim_topic']} — next: {s['next_method']}")
+
+    fm = _failure_modes_recall()
+    if fm:
+        print()
+        print("See failure-modes reference (recall #268): " + ", ".join(fm))
 
 
 def main() -> int:

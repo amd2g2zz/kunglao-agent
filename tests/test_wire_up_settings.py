@@ -19,12 +19,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SKILL_HOOKS = ROOT / "hooks"
 
-# The full entry set wire_up_settings registers: 8 entries / 7 distinct hook
+# The full entry set wire_up_settings registers: 9 entries / 8 distinct hook
 # files (worker_budget registered under BOTH PreToolUse(Agent) and
 # PostToolUse(Agent)).
-WIRE_UP_ENTRIES = 8
+WIRE_UP_ENTRIES = 9
 WIRE_UP_HOOK_FILES = {
     "env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
+    "recall_inject.py",
     "heartbeat_touch.py", "worker_pulse.py", "state_anchor.py",
     "completion_gate.py",
 }
@@ -244,6 +245,7 @@ def test_selfcheck_rebuilds_project_level(tmp_path, fake_home, monkeypatch, caps
         "selfcheck rebuild must never write the user-global settings (#258)"
     assert rc == 0, "after project-level rebuild the selfcheck must pass"
     assert {"env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
+            "recall_inject.py",
             "heartbeat_touch.py", "worker_pulse.py", "state_anchor.py",
             "completion_gate.py"} <= {
                 c.replace("\\", "/").rsplit("/", 1)[-1]

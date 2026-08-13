@@ -79,6 +79,11 @@ That is your entire job.
 签名 2 分钟，省 20 分钟重跑）。
 
 1. **计划（2-5 分钟）** — FIRST 动作，写 `runs/plan-<task>.md`：
+   - `recall:` 知识召回（#268）— 先跑 `python <skill_root>/scripts/
+     references_recall.py <关键词>` 按任务领域召回 references（go 任务 →
+     languages-go.md；动态/VM → dynamic-re-tool-priority.md + tools-dynamic.md；
+     反汇编 → anti-analysis.md；失败分析 → failure-modes-*.md）。dispatch 时
+     recall_inject 注入的 recall 清单就是权威 — 命中文件先读，再写 plan。
    - `goal:` 一句话目标
    - `preflight:` 前置查证清单 — 方法签名/API/文件路径/端口等不确定的，
      **先确认再执行**（javap -s / WebSearch / context7 / 读 re-library /
