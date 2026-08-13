@@ -195,7 +195,7 @@ class TestCli:
     def test_cli_scene_map(self) -> None:
         r = _cli("--scene-map")
         assert r.returncode == 0
-        assert "动态分析" in r.stdout
+        assert "动态调试 / 运行时分析" in r.stdout
         assert "dynamic-re-tool-priority.md" in r.stdout
 
     def test_cli_help_exit_zero(self) -> None:
