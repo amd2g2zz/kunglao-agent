@@ -252,7 +252,12 @@ workspace detection always runs in Phase 0 per the Local defaults table below.
 
 ## Phase 0 SETUP (pre-loop, one-time)
 
-**Phase 0 环境探测（先行，必做）** — 任何 scaffold 之前：
+**Phase 0 环境探测（先行，必做）** — 任何 scaffold 之前，先跑机械门禁：
+
+0. **运行 env_check（机械门禁，#233）**：`python <skill>/scripts/env_check.py <ws>`。
+   - 5 项检查：① AGENT_TEAMS flag（CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS，process/User/Machine 三作用域）② VM 可达性（TCP 9876 + 1337）③ Ghidra analyzeHeadless ④ hook 部署（settings.json 中 wire_up_settings 注册的 6 个 hook）⑤ venv + 样本 sha256。每项输出 `[PASS]` / `[FAIL]`，写 `runs/.env-check.json` 快照，`OVERALL=PASS` 时 exit 0。
+   - **OVERALL=PASS 才进入分析**；任一 FAIL → 先修复对应项（下面 1-4 项即修复手册），重跑至 PASS；FAIL 未清零不得进入 Phase 0 主流程。
+   - 门禁语义（同 `hooks/env_check_gate.py`，见 references/cold-start-contract.md #88 段）：① 是 HARD — flag 开启即禁止派发（子代理走 teammate 通道，2026-08-12 实测 400 [1210] 全灭；#88 禁止该 flag）；②③④ FAIL 可恢复 — 静态分析可先继续，T3 动态分析/反编译受限。
 
 1. **探测 Python 虚拟环境**：检查当前会话是否处于 venv（`$env:VIRTUAL_ENV` / `sys.prefix != sys.base_prefix` / `.venv` 存在）。
    - 已激活 → 记录 venv 路径到 `analysis_state.txt`（`venv=<path>`）。

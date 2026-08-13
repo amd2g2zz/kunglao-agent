@@ -73,6 +73,10 @@ def wire_up_settings() -> int:
         return kept, True
 
     count = 0
+    # env_check_gate FIRST: the environment hard-gate (#233) must reject a
+    # teammate-polluted dispatch before any budget/state logic runs.
+    pre, added = _ensure(pre, "Agent", "env_check_gate.py")
+    count += added
     pre, added = _ensure(pre, "Agent", "worker_budget.py")
     count += added
     pre, added = _ensure(pre, "Agent", "dispatch_gate.py")

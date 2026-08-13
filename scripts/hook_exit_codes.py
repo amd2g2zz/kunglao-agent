@@ -43,4 +43,8 @@ HOOK_EXIT_SEMANTICS = {
         ExitCode.OK: "dispatch gate passed",
         ExitCode.REJECT: "dispatch gate failed — missing prerequisite",
     },
+    "env_check_gate": {
+        ExitCode.OK: "flag not set — dispatch allowed",
+        ExitCode.REJECT: "dispatch rejected — CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS set (#88/#233): teammate-polluted session",
+    },
 }

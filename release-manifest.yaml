@@ -30,6 +30,7 @@ assets:
     - hooks/agent_watch.py
     - hooks/completion_gate.py
     - hooks/dispatch_gate.py
+    - hooks/env_check_gate.py
     - hooks/heartbeat_touch.py
     - hooks/lib_kunglao.py
     - hooks/state_anchor.py

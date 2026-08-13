@@ -10,7 +10,7 @@ def test_reject_and_blocked_are_distinct():
 
 
 def test_all_hooks_have_semantics():
-    for hook in ["worker_budget", "worker_pulse", "state_anchor", "dispatch_gate"]:
+    for hook in ["worker_budget", "worker_pulse", "state_anchor", "dispatch_gate", "env_check_gate"]:
         assert hook in HOOK_EXIT_SEMANTICS, f"missing semantics for {hook}"
 
 
