@@ -745,6 +745,176 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
                     f'execute second)'))
 
 
+# ---------- issue #270: REJECT guidance via hookSpecificOutput.additionalContext ----------
+# #235 added corrective guidance to env_check_gate only; worker_budget's 12
+# pre_check gates (+ snapshot + devreason) REJECTed bare — `print REJECT + exit
+# 2` with no hint on how to fix, and the user reported "hook 依然是直接拒绝,
+# 没有给出任何提示" (2026-08-13). Every REJECT now ALSO emits a
+# hookSpecificOutput.additionalContext JSON on stdout with a concrete fix path
+# (same dual channel as dispatch_gate.py:137-151 / env_check_gate.py:104-113).
+# REJECT semantics are unchanged: exit 2 + stderr `REJECT <name>` summary.
+# additionalContext is per-check, concrete and executable — never boilerplate.
+
+REJECT_FIXES: dict[str, dict[str, str]] = {
+    'workers': {
+        'additionalContext': (
+            'active workers >= MAX_WORKERS (3) — slot-full, the loop has no '
+            'capacity for another worker. Fix: wait for an active worker to '
+            'finish (runs/worker-status-*.md last status line = done), or '
+            'TaskStop the stuck/retired worker to release a slot, then '
+            're-dispatch.'
+        ),
+    },
+    'cap': {
+        'additionalContext': (
+            'per-claim cost cap reached: promotion_attempts >= 3. Fix: STOP '
+            're-dispatching this claim — re-dispatch keeps rejecting by design. '
+            'Run python <skill>/scripts/failure_analysis_gate.py <ws> <claim> '
+            '(answer the 3 questions), record the next method, then re-dispatch '
+            '— or mark the claim DEFERRED / supersede it.'
+        ),
+    },
+    'tools': {
+        'additionalContext': (
+            'a dispatched tool requires a task_spec constraint that is '
+            'forbidden. Fix: dispatch with tools whose constraints are allowed '
+            'only — vm_detonation=forbidden means static tools '
+            '(grep / xxd / mcp__ghidra__*) and NO vmr-shell / rev-frida / '
+            'mcp__x64dbg__*. To use VM tools, get user authorisation and set '
+            'task_spec.constraints.vm_detonation: allowed first, then re-dispatch.'
+        ),
+    },
+    'hostchan': {
+        'additionalContext': (
+            'host-channel dynamic tool forbidden (SKILL.md §hard prohibitions '
+            '#5 — sample must never execute on the host). Fix: 只允许 '
+            'mcp__x64dbg__connect_remote(host=192.168.20.128) — launch the '
+            'VM-side x64dbg via vmr-shell first, then connect_remote; or '
+            'rev-frida against the VM frida-server (192.168.20.128:1337). '
+            'Never start_session / connect_to_session / connect_to_instance / '
+            'terminate_session / frida spawn / frida attach.'
+        ),
+    },
+    'deadline': {
+        'additionalContext': (
+            'time budget exhausted (now >= deadline_ts). Fix: the run is over '
+            'budget — either close the run out (write closeout, mark claims '
+            'accordingly), or get user approval to extend: write a new '
+            'deadline_ts in analysis_state.txt (or raise '
+            'task_spec.time_budget_minutes) and re-dispatch after the '
+            'extension is in place.'
+        ),
+    },
+    'tier': {
+        'additionalContext': (
+            'tier gate: tier=N dispatch requires every open claim at '
+            'evidence_tier_attempted >= N-1. Fix: complete the lower-tier '
+            'evidence first — raise the open claim\'s evidence_tier_attempted '
+            'in claim-register.yaml by doing that tier\'s work (static/CTI '
+            'before VM), then re-dispatch the tier=N claim.'
+        ),
+    },
+    'selfcap': {
+        'additionalContext': (
+            'self-imposed time cap in the dispatch description but '
+            'task_spec.time_budget_minutes=0/unset (contract: no budget until '
+            'convergence). Fix: remove the cap wording from the dispatch '
+            'description ("no self-cap" / "until closed"), or set '
+            'task_spec.time_budget_minutes > 0 to authorise a ceiling — '
+            'then re-dispatch.'
+        ),
+    },
+    'heartbeat': {
+        'additionalContext': (
+            'heartbeat NOT registered / STALE — dispatching without monitoring '
+            'is the #1 recurring failure. Fix BEFORE dispatching: run '
+            'python <skill>/scripts/hook_activation.py <ws> --heartbeat-on, '
+            'then register the cron (CronCreate */5 * * * * with the heartbeat '
+            'loop prompt, or /loop 5m) so monitoring ticks before the worker '
+            'starts.'
+        ),
+    },
+    'drift': {
+        'additionalContext': (
+            'plan drift detected (plan files lag reality). Fix: run '
+            'python <skill>/scripts/plan_drift_detector.py <ws> --active-only '
+            'to list the drifted items, then update global_plan.txt and/or '
+            'runs/plan-C*.md to match what the run actually does (new claim, '
+            'dropped step, superseded plan) — record the deviation reasoning — '
+            'and re-check before re-dispatching.'
+        ),
+    },
+    'health': {
+        'additionalContext': (
+            'convergence loop unhealthy (STALLED / SPINNING). Fix: run '
+            'python <skill>/scripts/convergence_health.py <ws> for the '
+            'diagnostic — STALLED: re-prime the loop (workers/heartbeat alive? '
+            'claim actually in progress?); SPINNING: STOP dispatching and '
+            'reconcile what is being re-done (usually a missing '
+            'verify/promote step) — collapse the spin, then resume.'
+        ),
+    },
+    'backtrack': {
+        'additionalContext': (
+            'stuck worker(s) without a valid backtrack decision. Fix: append a '
+            '"## backtrack" block to the stuck worker\'s '
+            'runs/worker-status-*.md (decision: redispatch / escalate / '
+            'retry_different + reason + new_approach), or resolve the stall '
+            'directly, then re-run python <skill>/scripts/backtrack_gate.py '
+            '<ws> to confirm clean before re-dispatching.'
+        ),
+    },
+    'plan': {
+        'additionalContext': (
+            'plan-first gate (kunglao-worker.md golden rule #3: PLAN FIRST, '
+            'execute second). Fix: write runs/plan-C<NN>.md '
+            '(goal / preflight / steps / fallback) for claim C-<NN> BEFORE '
+            'dispatching, or reference the plan path in the dispatch prompt '
+            'when writing it in the same turn — then re-dispatch.'
+        ),
+    },
+    'snapshot': {
+        'additionalContext': (
+            'anti state-loss marker missing (§1c v1.9.24). Fix: count facts/ '
+            'first, then start the dispatch prompt with '
+            '"facts-snapshot: N facts at <ts>" (e.g. '
+            '"facts-snapshot: 9 facts at 2026-08-13T00:00Z") — the marker '
+            'makes the pre-dispatch checkpoint verifiable — then re-dispatch.'
+        ),
+    },
+    'devreason': {
+        'additionalContext': (
+            'priority deviation without justification (anti-spoof v1.9.24). '
+            'Fix: add "reasoning: <why C-<NN> instead of the ranked #1 '
+            'C-<MM>>" to the dispatch prompt, or dispatch the top-ranked claim '
+            'instead — the deviation must be recorded, not silently skipped.'
+        ),
+    },
+}
+
+
+def _reject(name: str, msg: str, paths: dict) -> int:
+    """REJECT with guidance (issue #270): stderr summary + stdout JSON
+    hookSpecificOutput.additionalContext. Exit 2 semantics unchanged."""
+    print(f'REJECT {name}: {msg}', file=sys.stderr)
+    entry = REJECT_FIXES.get(name)
+    if not entry:
+        return 2
+    fix = entry['additionalContext']
+    fix = fix.replace('<skill>', str(_SKILL_ROOT)).replace('<ws>',
+                                                           paths.get('workspace') or '<ws>')
+    print(json.dumps({
+        'hookSpecificOutput': {
+            'hookEventName': 'PreToolUse',
+            'additionalContext': (
+                f'worker_budget REJECT {name}: {msg}\n\n'
+                f'How to fix:\n{fix}'
+            ),
+        },
+    }, ensure_ascii=False))
+    return 2
+
+
 # ---------- hook entry ----------
 
 def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
@@ -845,17 +1015,16 @@ def pre_check(payload: dict, paths: dict) -> int:
     ]
     for name, (ok, msg) in checks:
         if not ok:
-            print(f'REJECT {name}: {msg}', file=sys.stderr)
-            return 2
+            return _reject(name, msg, paths)
     # §1c v1.9.24 — facts-snapshot marker HARD-REQUIRED (anti state-loss spoof).
     # The orchestrator claims it "ls facts/ before dispatch" (§1c) — make it
     # verifiable: the dispatch prompt must carry `facts-snapshot:` (e.g.
     # "facts-snapshot: 9 facts at <ts>") or the dispatch is REJECTED.
     desc = payload.get('tool_input', {}).get('prompt', '')
     if 'facts-snapshot:' not in desc:
-        print(f'REJECT snapshot: dispatch prompt lacks `facts-snapshot:` marker '
-              f'(§1c v1.9.24 — checkpoint state before dispatch).', file=sys.stderr)
-        return 2
+        return _reject('snapshot',
+                       'dispatch prompt lacks `facts-snapshot:` marker '
+                       '(§1c v1.9.24 — checkpoint state before dispatch).', paths)
     # best-first priority audit — v1.9.24: DEVIATION REASONING IS HARD-REQUIRED.
     # check_priority returns (ok, msg, deviated). If the dispatch deviates from
     # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
@@ -865,9 +1034,10 @@ def pre_check(payload: dict, paths: dict) -> int:
     if deviated:
         desc = payload.get('tool_input', {}).get('prompt', '')
         if 'reasoning:' not in desc:
-            print(f'REJECT devreason: dispatch deviates from priority #1 but has no `reasoning:` field '
-                  f'(v1.9.24 anti-spoof). PRIORITY: {pmsg}', file=sys.stderr)
-            return 2
+            return _reject('devreason',
+                           'dispatch deviates from priority #1 but has no '
+                           '`reasoning:` field (v1.9.24 anti-spoof). '
+                           f'PRIORITY: {pmsg}', paths)
         print(f'PRIORITY (deviated w/ reasoning): {pmsg}', file=sys.stderr)
     elif pmsg:
         print(f'PRIORITY: {pmsg}', file=sys.stderr)

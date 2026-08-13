@@ -10,6 +10,9 @@ Hook enforces 5 dispatch gates + worker accounting:
 
 TDD RED phase. Functions take explicit paths so tests can use tmp_path.
 """
+import json
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -32,6 +35,7 @@ from worker_budget import (  # noqa: E402
     scan_actual_tools,
     check_worker_plan,
     pre_check,
+    REJECT_FIXES,
 )
 
 import yaml
@@ -461,6 +465,269 @@ def test_pre_check_accepts_plan_path_in_prompt(tmp_path, capsys):
         'facts-snapshot: 1 facts; write runs/plan-C001-strings.md first, then execute')
     rc = pre_check(payload, _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
+
+
+# ---------- issue #270: every REJECT carries non-empty additionalContext ----------
+# #235 fixed env_check_gate with corrective guidance; the 12 pre_check gates +
+# snapshot + devreason REJECTed bare (stderr only). Now EVERY REJECT must also
+# emit hookSpecificOutput.additionalContext (stdout JSON) with a concrete fix.
+# REJECT semantics unchanged: exit 2, `REJECT <name>` on stderr.
+
+REJECT_NAMES = [
+    'workers', 'cap', 'tools', 'hostchan', 'deadline', 'tier',
+    'selfcap', 'heartbeat', 'drift', 'health', 'backtrack', 'plan',
+    'snapshot', 'devreason',
+]
+
+# per-REJECT keyword that proves the guidance is concrete (names the mechanism),
+# not boilerplate
+REJECT_FIX_KEYWORDS = {
+    'workers': 'TaskStop',
+    'cap': 'promotion_attempts',
+    'tools': 'vm_detonation',
+    'hostchan': 'connect_remote',
+    'deadline': 'deadline_ts',
+    'tier': 'evidence_tier',
+    'selfcap': 'time_budget_minutes',
+    'heartbeat': 'heartbeat-on',
+    'drift': 'plan_drift_detector',
+    'health': 'convergence_health',
+    'backtrack': 'backtrack',
+    'plan': 'plan-C',
+    'snapshot': 'facts-snapshot',
+    'devreason': 'reasoning',
+}
+
+
+def test_reject_fixes_cover_all_reject_paths():
+    """#270: every REJECT path has a non-empty additionalContext fix — no gate
+    may REJECT bare. Set equality guards both directions (missing entry AND
+    dead entry)."""
+    assert set(REJECT_NAMES) == set(REJECT_FIXES), (
+        f'missing/dead guidance: {set(REJECT_NAMES) ^ set(REJECT_FIXES)}')
+    for name in REJECT_NAMES:
+        ctx = REJECT_FIXES[name]['additionalContext']
+        assert ctx and len(ctx.strip()) >= 30, f'REJECT {name}: guidance too thin'
+
+
+def test_reject_fixes_are_actionable():
+    """#270: each fix names its concrete repair mechanism (command / file /
+    decision), never generic 'please fix it' phrasing."""
+    for name, kw in REJECT_FIX_KEYWORDS.items():
+        assert kw in REJECT_FIXES[name]['additionalContext'], \
+            f'REJECT {name} fix must mention {kw!r}'
+
+
+def _fresh_hb(ws: Path) -> None:
+    """Write a live heartbeat (both timestamps = now) so the heartbeat gate
+    passes unless a scenario explicitly removes it."""
+    from datetime import datetime, timezone as _tz
+    now = datetime.now(_tz.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    (ws / 'runs').mkdir(parents=True, exist_ok=True)
+    (ws / 'runs' / '.heartbeat.json').write_text(
+        json.dumps({'last_tick_ts': now, 'activity_ts': now}), encoding='utf-8')
+
+
+def _healthy_ws(tmp_path) -> Path:
+    """A workspace where EVERY pre_check gate passes; scenarios toggle one off."""
+    ws = tmp_path
+    (ws / 'runs').mkdir(parents=True, exist_ok=True)
+    _fresh_hb(ws)
+    (ws / 'runs' / 'plan-C001-strings.md').write_text(
+        'goal: strings\nsteps:\nfallback:\n', encoding='utf-8')
+    (ws / 'analysis_state.txt').write_text(
+        f'deadline_ts: {int(time.time()) + 3600}\n', encoding='utf-8')
+    _write_register(ws / 'claim-register.yaml', [
+        {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 1},
+    ])
+    (ws / 'claim_deps.yaml').write_text('deps: {}\n', encoding='utf-8')
+    _write_task_spec(ws / 'task_spec.yaml', {'vm_detonation': 'allowed'})
+    return ws
+
+
+def _paths_for(ws: Path) -> dict:
+    return {
+        'workspace': str(ws),
+        'state': ws / 'analysis_state.txt',
+        'register': ws / 'claim-register.yaml',
+        'deps': ws / 'claim_deps.yaml',
+        'task_spec': ws / 'task_spec.yaml',
+    }
+
+
+def _budget_payload(prompt='facts-snapshot: 1 facts',
+                    desc='[T1 tools=grep] claim C-001 strings') -> dict:
+    return {'tool_input': {'name': 'w-test', 'description': desc, 'prompt': prompt}}
+
+
+def _assert_reject_guidance(capsys, rc: int, name: str, keyword: str) -> None:
+    """REJECT semantics unchanged (exit 2 + stderr) AND stdout JSON carries
+    non-empty hookSpecificOutput.additionalContext naming the concrete fix."""
+    captured = capsys.readouterr()
+    assert rc == 2, f'{name}: REJECT must stay exit 2'
+    assert f'REJECT {name}' in captured.err, f'{name}: stderr summary missing'
+    out = json.loads(captured.out)
+    assert out['hookSpecificOutput']['hookEventName'] == 'PreToolUse'
+    ctx = out['hookSpecificOutput']['additionalContext']
+    assert ctx and len(ctx.strip()) >= 30, f'{name}: additionalContext must be non-empty'
+    assert keyword in ctx, f'{name}: guidance must mention {keyword!r}'
+
+
+def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
+    """#270 e2e: each REJECT path (11 direct gates + snapshot + devreason) exits
+    2, prints REJECT on stderr AND emits hookSpecificOutput.additionalContext
+    (stdout JSON) with the concrete fix — mirroring dispatch_gate /
+    env_check_gate injection. drift/health/backtrack (subprocess gates) are
+    covered in test_e2e_subprocess_gates_reject_emits_guidance."""
+    import worker_budget as wb
+    from types import SimpleNamespace
+
+    # subprocess gates deterministic: all pass (rc 0)
+    monkeypatch.setattr(wb, '_run_py',
+                        lambda args, cwd=None: SimpleNamespace(
+                            returncode=0, stderr='', stdout=''))
+    # priority deviation forced for the devreason scenario (other scenarios
+    # reject before priority is consulted, so the patch is harmless)
+    monkeypatch.setattr(wb, 'check_priority',
+                        lambda *a, **k: (True, 'ADVISORY: C-001 rank #2', True))
+
+    scenarios = []
+
+    # 1 workers — 3 in-progress status files fill the cap
+    ws = _healthy_ws(tmp_path / 'workers')
+    for i in range(1, 4):
+        _write_status(ws, f'w{i}', 'in-progress')
+    scenarios.append(('workers', 'TaskStop',
+                      lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
+
+    # 2 cap — per-claim promotion cost cap reached
+    ws = _healthy_ws(tmp_path / 'cap')
+    _write_register(ws / 'claim-register.yaml', [
+        {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 3,
+         'evidence_tier_attempted': 1}])
+    scenarios.append(('cap', 'promotion_attempts',
+                      lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
+
+    # 3 tools — vm tool dispatched while task_spec forbids vm_detonation
+    ws = _healthy_ws(tmp_path / 'tools')
+    _write_task_spec(ws / 'task_spec.yaml', {'vm_detonation': 'forbidden'})
+    scenarios.append(('tools', 'vm_detonation',
+                      lambda ws=ws: wb.pre_check(
+                          _budget_payload(desc='[T1 tools=vmr-shell] claim C-001'),
+                          _paths_for(ws))))
+
+    # 4 hostchan — host-channel x64dbg tool (VM-only policy)
+    ws = _healthy_ws(tmp_path / 'hostchan')
+    scenarios.append(('hostchan', 'connect_remote',
+                      lambda ws=ws: wb.pre_check(
+                          _budget_payload(
+                              desc='[T1 tools=mcp__x64dbg__start_session] claim C-001'),
+                          _paths_for(ws))))
+
+    # 5 deadline — time budget exhausted
+    ws = _healthy_ws(tmp_path / 'deadline')
+    (ws / 'analysis_state.txt').write_text(
+        f'deadline_ts: {int(time.time()) - 10}\n', encoding='utf-8')
+    scenarios.append(('deadline', 'deadline_ts',
+                      lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
+
+    # 6 tier — tier-2 dispatch while an open claim lacks tier-1 evidence
+    ws = _healthy_ws(tmp_path / 'tier')
+    _write_register(ws / 'claim-register.yaml', [
+        {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 0}])
+    scenarios.append(('tier', 'evidence_tier',
+                      lambda ws=ws: wb.pre_check(
+                          _budget_payload(desc='[T2 tools=grep] claim C-001 strings'),
+                          _paths_for(ws))))
+
+    # 7 selfcap — self-imposed time cap with no authorised budget
+    ws = _healthy_ws(tmp_path / 'selfcap')
+    scenarios.append(('selfcap', 'time_budget_minutes',
+                      lambda ws=ws: wb.pre_check(
+                          _budget_payload(
+                              desc='[T1 tools=grep] claim C-001 cap it at 30 min'),
+                          _paths_for(ws))))
+
+    # 8 heartbeat — no live heartbeat registered
+    ws = _healthy_ws(tmp_path / 'heartbeat')
+    (ws / 'runs' / '.heartbeat.json').unlink()
+    scenarios.append(('heartbeat', 'heartbeat-on',
+                      lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
+
+    # 9 plan — plan-first gate (#239)
+    ws = _healthy_ws(tmp_path / 'plan')
+    (ws / 'runs' / 'plan-C001-strings.md').unlink()
+    scenarios.append(('plan', 'plan-C',
+                      lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
+
+    # 10 snapshot — dispatch prompt lacks the facts-snapshot marker
+    ws = _healthy_ws(tmp_path / 'snapshot')
+    scenarios.append(('snapshot', 'facts-snapshot',
+                      lambda ws=ws: wb.pre_check(
+                          _budget_payload(prompt='dispatch C-001 now'),
+                          _paths_for(ws))))
+
+    # 11 devreason — priority deviation without a reasoning field
+    ws = _healthy_ws(tmp_path / 'devreason')
+    scenarios.append(('devreason', 'reasoning',
+                      lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
+
+    assert len(scenarios) == 11
+    for name, keyword, run in scenarios:
+        _assert_reject_guidance(capsys, run(), name, keyword)
+
+
+def test_e2e_subprocess_gates_reject_emits_guidance(tmp_path, capsys, monkeypatch):
+    """#270 e2e for the 3 subprocess-backed gates (drift / health / backtrack):
+    each rejects with exit 2, stderr REJECT and non-empty additionalContext."""
+    import worker_budget as wb
+    from types import SimpleNamespace
+
+    cases = [
+        ('drift', 'plan_drift_detector.py', 1, 'plan_drift_detector'),
+        ('health', 'convergence_health.py', 1, 'convergence_health'),
+        ('backtrack', 'backtrack_gate.py', 1, 'backtrack'),
+    ]
+    for name, script, rc_val, keyword in cases:
+        ws = _healthy_ws(tmp_path / name)
+        monkeypatch.setattr(
+            wb, '_run_py',
+            lambda args, cwd=None, s=script, rv=rc_val: SimpleNamespace(
+                returncode=rv if (args and Path(args[0]).name == s) else 0,
+                stderr='fake', stdout=''))
+        _assert_reject_guidance(capsys, wb.pre_check(_budget_payload(), _paths_for(ws)),
+                                name, keyword)
+
+
+def test_main_stdin_reject_emits_context_json(tmp_path):
+    """#270 wired shape (mirrors env_check_gate.test_main_stdin_reject_end_to_end):
+    JSON payload on stdin -> exit 2, stderr REJECT, stdout hookSpecificOutput
+    JSON with non-empty additionalContext."""
+    ws = _healthy_ws(tmp_path / 'sub')
+    (ws / 'runs' / 'plan-C001-strings.md').unlink()  # force the plan REJECT
+    payload = {
+        'hook_event_name': 'PreToolUse',
+        'cwd': str(ws),
+        'tool_input': {'name': 'w-test',
+                       'description': '[T1 tools=grep] claim C-001 strings',
+                       'prompt': 'facts-snapshot: 1 facts'},
+    }
+    r = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parents[1] / 'hooks'
+                             / 'worker_budget.py')],
+        input=json.dumps(payload), capture_output=True,
+        encoding='utf-8', errors='replace',
+        env={'PYTHONIOENCODING': 'utf-8', **os.environ},
+        cwd=str(ws), timeout=60,
+    )
+    assert r.returncode == 2
+    assert 'REJECT plan' in r.stderr
+    out = json.loads(r.stdout)
+    assert out['hookSpecificOutput']['hookEventName'] == 'PreToolUse'
+    ctx = out['hookSpecificOutput']['additionalContext']
+    assert ctx and 'plan-C' in ctx
 
 
 # ---------- scan_actual_tools ----------
