@@ -90,10 +90,30 @@ def _load_manifest() -> list[dict]:
     return cases
 
 
+def _tree_digest(root: Path) -> str:
+    """Deterministic digest of a fixture tree (relpath:sha256 per file)."""
+    import hashlib
+
+    if not root.exists():
+        return "<no-ws>"
+    parts = []
+    for p in sorted(root.rglob("*")):
+        if p.is_file():
+            parts.append(f"{p.relative_to(root)}:{hashlib.sha256(p.read_bytes()).hexdigest()}")
+    return "\n".join(parts)
+
+
 @pytest.mark.parametrize("case", _load_manifest(), ids=lambda c: c["id"])
 def test_golden_replay(case: dict) -> None:
-    """逐字节重放 golden 用例, 输出须与采集的 expected 一致."""
+    """逐字节重放 golden 用例, 输出须与采集的 expected 一致.
+
+    Replay runs against a TEMPORARY COPY of the fixture ws dir — the CLI
+    appends ledger rows, so running against the fixture itself would mutate
+    tracked files and make replays non-idempotent.
+    """
     import re
+    import shutil
+    import tempfile
 
     case_dir = GOLDEN / case["id"]
     expected = case_dir / "expected" / "stdout.txt"
@@ -101,10 +121,27 @@ def test_golden_replay(case: dict) -> None:
     cmd = case["cmd"]
     env = dict(os.environ)
     env.pop("PRIORITY_WEIGHTS", None)
-    r = subprocess.run(
-        cmd["argv"], cwd=cmd.get("cwd", str(ROOT)),
-        env=env, capture_output=True, text=True, timeout=120,
-    )
+    digest_before = _tree_digest(case_dir / "ws")
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_ws = Path(tmp) / "ws"
+        if (case_dir / "ws").exists():
+            shutil.copytree(case_dir / "ws", tmp_ws)
+        else:
+            tmp_ws.mkdir()
+        # point every fixture ws argument at the temp copy (keep any file
+        # tail: F-13 passes ws/claim.txt etc.)
+        argv = []
+        for a in cmd["argv"]:
+            if "tests/fixtures/golden" in a:
+                tail = a.split("/ws", 1)[1] if "/ws" in a else ""
+                a = str(tmp_ws) + tail
+            argv.append(a)
+        r = subprocess.run(
+            argv, cwd=cmd.get("cwd", str(ROOT)),
+            env=env, capture_output=True, text=True, timeout=120,
+        )
+    assert _tree_digest(case_dir / "ws") == digest_before, \
+        f"golden replay mutated fixture ws dir: {case_dir / 'ws'}"
     if case.get("expected_exit") is not None:
         assert r.returncode == case["expected_exit"], \
             f"exit {r.returncode} != {case['expected_exit']}\nstdout={r.stdout[:500]}\nstderr={r.stderr[:500]}"
