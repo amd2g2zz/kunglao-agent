@@ -26,6 +26,47 @@ purpose: >-
 # -----------------------------------------------------------------------------
 
 tools:
+  # -- ghidra: 函数级静态侦察 (issue #293 吸收, sa-ghidra 定稿) --
+  - name: ghidra-recon
+    category: ghidra
+    capability: ghidra:recon
+    tier: T1
+    cost_tier: deep
+    input_output: {input: 样本 + --search-terms/--expected-exports/--sha256/--sha1, output: JSON(meta/imports/exports/functions/strings_of_interest/suspicious_api_calls/focus_functions/go/findings)}
+    when_not: 仅需单函数反汇编时不用, 用 ghidra-decompile-functions
+
+  - name: ghidra-decompile-functions
+    category: ghidra
+    capability: ghidra:decompile
+    tier: T1
+    cost_tier: deep
+    input_output: {input: 样本 + --addresses/--strings/--window, output: JSON(per-target decompiled C + disasm window + string xrefs)}
+    when_not: 批量全量反汇编不用; 需要 vtable 恢复时用 ghidra-vtable-struct
+
+  - name: ghidra-vtable-struct
+    category: ghidra
+    capability: ghidra:vtable
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 样本 + --address/--name/--class/--apply, output: JSON(vtable slot 表 + function fields, 可选落结构/标签)}
+    when_not: 无明确 vtable 地址或纯文本任务不用
+
+  - name: ghidra-evidence-annotations
+    category: ghidra
+    capability: ghidra:annotate
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 样本 + --mode apply|verify + --tsv, output: JSON(annotation 应用/校验摘要, verify 失败抛错 fail-closed)}
+    when_not: 无证据 TSV 需要写回/校验时不用
+
+  - name: ghidra-scan-pointer
+    category: ghidra
+    capability: ghidra:xref-scan
+    tier: T1
+    cost_tier: deep
+    input_output: {input: 样本 + --mode xref|window(--addresses/--center), output: JSON(xref/raw 8-byte 指针扫描命中)}
+    when_not: 仅字符串定位不用, 用 ghidra-decompile-functions
+
   # -- static: 反汇编常量 byte-exact 校验 (issue #284 登记) --
   - name: disasm-constant-check
     category: static
