@@ -31,7 +31,8 @@ def reconcile_workers(workspace: Path) -> int:
     for runs in dirs:
         if not runs.is_dir():
             continue
-        for p in runs.glob("worker-status-*.md"):
+        statuses = list(runs.glob("worker-status-*.md"))
+        for p in statuses:
             last = None
             for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
                 m = status_re.search(line)
@@ -45,6 +46,20 @@ def reconcile_workers(workspace: Path) -> int:
             target = p.stem[len("plan-redteam-"):]
             if not (runs / f"verify-redteam-{target}.md").exists():
                 active_ids.add(f"verifier-redteam-{target}")
+        # worker plans (issue #239): runs/plan-<task>.md is the FIRST artifact
+        # a dispatched worker writes (kunglao-worker.md golden rule #3 — PLAN
+        # FIRST, execute second), before its worker-status file. A runs dir
+        # with NO worker-status files at all while plan files exist means
+        # worker(s) started but never wrote a status file (crash / PostToolUse
+        # remove_worker never fired) — keep those slots visible so the worker
+        # budget is not silently overshot. Dirs WITH any status file are
+        # skipped: in-progress workers are already counted above, and done
+        # files mean the plans are completed-work leftovers.
+        if not statuses:
+            for p in runs.glob("plan-*.md"):
+                if p.stem.startswith("plan-redteam-"):
+                    continue  # handled above
+                active_ids.add(f"worker-plan-{p.stem[len('plan-'):]}")
 
     # rewrite the [active_workers] segment of analysis_state.txt
     state_path = workspace / "analysis_state.txt"

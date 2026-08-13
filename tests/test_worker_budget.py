@@ -30,6 +30,8 @@ from worker_budget import (  # noqa: E402
     check_deadline,
     check_tier_gate,
     scan_actual_tools,
+    check_worker_plan,
+    pre_check,
 )
 
 import yaml
@@ -342,6 +344,125 @@ def test_check_tier_gate_ignores_terminal_claims(tmp_path):
     assert ok
 
 
+# ---------- plan-to-execute gate (issue #239) ----------
+
+def _min_paths(ws: Path) -> dict:
+    """Minimal pre_check paths dict for a tmp workspace — all other gates
+    fail-open on it (no register / no state / no task_spec / 0 active).
+
+    Only the ws DIRECTORY is created, never the files: pre_check's final
+    register_worker atomic-write needs the dir, while file absence keeps the
+    heartbeat/deadline gates fail-open.
+    """
+    ws.mkdir(parents=True, exist_ok=True)
+    return {
+        'workspace': str(ws),
+        'state': ws / 'analysis_state.txt',
+        'register': ws / 'claim-register.yaml',
+        'deps': ws / 'claim_deps.yaml',
+        'task_spec': ws / 'task_spec.yaml',
+    }
+
+
+def _dispatch_payload(prompt: str) -> dict:
+    return {
+        'tool_input': {
+            'name': 'w-test',
+            'description': '[T1 tools=grep] claim C-001 strings',
+            'prompt': prompt,
+        },
+    }
+
+
+def test_check_worker_plan_missing_rejects(tmp_path):
+    """#239: a claim dispatch with NO runs/plan-C<NN>*.md and no plan path in
+    the prompt is REJECTED — PLAN FIRST (kunglao-worker.md golden rule #3)."""
+    ws = tmp_path / 'ws'
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert not ok and 'plan' in msg.lower()
+
+
+def test_check_worker_plan_exists_accepts(tmp_path):
+    """#239: the plan file already on disk (orchestrator wrote it pre-dispatch)."""
+    ws = tmp_path / 'ws'
+    (ws / 'runs').mkdir(parents=True)
+    (ws / 'runs' / 'plan-C001-strings.md').write_text(
+        'goal: decode strings\npreflight:\nsteps:\nfallback:\n', encoding='utf-8')
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert ok, msg
+
+
+def test_check_worker_plan_exact_name_accepts(tmp_path):
+    """#239: plan-C001.md / plan-c001.md (claim only, no task suffix) also
+    satisfies the gate — the real-world orchestrator plans are plan-c005.md."""
+    ws = tmp_path / 'ws'
+    (ws / 'runs').mkdir(parents=True)
+    (ws / 'runs' / 'plan-c001.md').write_text('goal: x\n', encoding='utf-8')
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert ok, msg
+
+
+def test_check_worker_plan_prompt_path_accepts(tmp_path):
+    """#239 timing relaxation: a dispatch prompt carrying the plan path passes
+    even before the file exists (plan written in the same turn)."""
+    ws = tmp_path / 'ws'
+    prompt = 'facts-snapshot: 1 facts; write runs/plan-C001-strings.md per golden rule #3'
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001', prompt)
+    assert ok, msg
+
+
+def test_check_worker_plan_prompt_wrong_claim_rejects(tmp_path):
+    """#239: a plan path for a DIFFERENT claim in the prompt does not relax."""
+    ws = tmp_path / 'ws'
+    prompt = 'facts-snapshot: 1 facts; plan: runs/plan-C002-strings.md'
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001', prompt)
+    assert not ok
+
+
+def test_check_worker_plan_no_claim_accepts(tmp_path):
+    """#239: a dispatch without a target claim cannot be plan-checked — allow."""
+    ok, msg = check_worker_plan({'workspace': str(tmp_path / 'ws')}, None)
+    assert ok
+
+
+def test_check_worker_plan_missing_workspace_fails_open():
+    """#239: no workspace key -> FAIL_OPEN (mirrors the other dispatch gates)."""
+    ok, msg = check_worker_plan({}, 'C-001')
+    assert ok and msg == ''
+
+
+def test_pre_check_rejects_dispatch_without_plan(tmp_path, capsys):
+    """#239 e2e: dispatching claim C-001 with no plan file and no plan path in
+    the prompt is REJECTED by the 12th pre_check gate."""
+    ws = tmp_path / 'ws'
+    payload = _dispatch_payload('facts-snapshot: 1 facts')
+    rc = pre_check(payload, _min_paths(ws))
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert 'REJECT plan' in captured.err
+
+
+def test_pre_check_accepts_dispatch_with_plan_file(tmp_path, capsys):
+    """#239 e2e: plan file written first -> the dispatch passes the plan gate."""
+    ws = tmp_path / 'ws'
+    (ws / 'runs').mkdir(parents=True)
+    (ws / 'runs' / 'plan-C001-strings.md').write_text(
+        'goal: decode strings\nsteps:\nfallback:\n', encoding='utf-8')
+    payload = _dispatch_payload('facts-snapshot: 1 facts')
+    rc = pre_check(payload, _min_paths(ws))
+    assert rc == 0, capsys.readouterr().err
+
+
+def test_pre_check_accepts_plan_path_in_prompt(tmp_path, capsys):
+    """#239 e2e timing relaxation: prompt referencing the plan path passes
+    even when the file is not on disk yet."""
+    ws = tmp_path / 'ws'
+    payload = _dispatch_payload(
+        'facts-snapshot: 1 facts; write runs/plan-C001-strings.md first, then execute')
+    rc = pre_check(payload, _min_paths(ws))
+    assert rc == 0, capsys.readouterr().err
+
+
 # ---------- scan_actual_tools ----------
 
 def test_scan_actual_tools_extracts_names():
@@ -374,8 +495,13 @@ def _run():
                 import tempfile
                 with tempfile.TemporaryDirectory() as td:
                     t(Path(td))
-            else:
+            elif not sig.parameters:
                 t()
+            else:
+                # pytest-only fixtures (capsys/monkeypatch) — the legacy
+                # standalone runner cannot provide them; run under pytest.
+                print(f'  SKIP  {name}: needs pytest fixture(s) {list(sig.parameters)}')
+                continue
             print(f'  PASS  {name}')
             passed += 1
         except Exception as e:

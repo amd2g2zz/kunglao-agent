@@ -695,6 +695,56 @@ def check_no_self_cap(description: str, task_spec_path: Path) -> tuple[bool, str
     return (True, f'self-cap within budget {allowed_minutes} min')
 
 
+# ---------- plan-to-execute gate (issue #239) ----------
+# kunglao-worker.md golden rule #3 (PLAN FIRST, execute second) existed but
+# had ZERO mechanical enforcement: pre_check never required a plan and
+# reconcile_workers only recognized plan-redteam-*.md. 2026-08-12 accident:
+# F006-F008 were callgraph INFERENCES written as facts — a mandatory plan
+# forces the inference to be declared in the plan phase, before execution,
+# where the orchestrator can catch it.
+
+def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[bool, str]:
+    """Issue #239: a claim dispatch REQUIRES its worker plan.
+
+    The dispatched claim C-NN must already have `runs/plan-C<NN>*.md` on disk
+    (orchestrator wrote it pre-dispatch — real-world naming is plan-c005.md,
+    claim only, no suffix), OR the dispatch prompt must reference a plan path
+    for THAT claim (timing relaxation: the plan may be written in the same
+    turn, e.g. "write runs/plan-C001-strings.md first, then execute"). A plan
+    path for a DIFFERENT claim in the prompt does NOT relax.
+
+    Returns (ok, reason). ok=False means REJECT the dispatch.
+    """
+    if not cid:
+        return (True, 'no target claim')
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return (True, '')  # FAIL_OPEN — mirrors check_workers_lt_3
+    key = cid.replace('-', '')  # C-001 -> C001 (claim key inside plan names)
+    runs = Path(ws) / 'runs'
+    if runs.is_dir():
+        # uppercase + lowercase variants (Windows globs are case-insensitive,
+        # POSIX are not — cover both so the gate is portable)
+        hits = []
+        for pat in (f'plan-{key}.md', f'plan-{key}-*.md',
+                    f'plan-{key.lower()}.md', f'plan-{key.lower()}-*.md'):
+            hits.extend(sorted(runs.glob(pat)))
+        if hits:
+            return (True, f'plan file exists: {hits[0].name}')
+    if prompt:
+        m = re.search(
+            rf'plan-[{key[0]}{key[0].lower()}]{re.escape(key[1:])}'
+            r'(?:\.md|[-_][A-Za-z0-9._-]*\.md)',
+            prompt,
+        )
+        if m:
+            return (True, f'plan path referenced in dispatch prompt: {m.group(0)}')
+    return (False, (f'no runs/plan-{key}*.md for claim {cid} and the dispatch '
+                    f'prompt does not reference a plan path for it — write the '
+                    f'plan FIRST (kunglao-worker.md golden rule #3: PLAN FIRST, '
+                    f'execute second)'))
+
+
 # ---------- hook entry ----------
 
 def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
@@ -765,6 +815,7 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
 
 def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
+    prompt = payload.get('tool_input', {}).get('prompt', '')
     tier, tools, cid = parse_dispatch(desc)
     checks = [
         ('workers', check_workers_lt_3(paths)),
@@ -785,6 +836,12 @@ def pre_check(payload: dict, paths: dict) -> int:
         # built-but-not-wired gap (backtrack_gate.py existed but was never
         # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
         ('backtrack', check_backtrack_gate(paths)),
+        # v1.9.31 (#239): plan-to-execute gate — a claim dispatch REQUIRES
+        # runs/plan-C<NN>*.md on disk OR a plan path for that claim in the
+        # dispatch prompt (timing relaxation). Closes the 2026-08-12
+        # F006-F008 accident: inference written as facts — the plan phase
+        # exposes it before execution.
+        ('plan', check_worker_plan(paths, cid, prompt)),
     ]
     for name, (ok, msg) in checks:
         if not ok:

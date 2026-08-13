@@ -32,29 +32,29 @@ class _FakeProc:
 # check_backtrack_gate  (worker_budget)
 # ============================================================
 
-def test_backtrack_gate_clean_rc0():
-    wb._run_py = lambda args, cwd=None: _FakeProc(0, "OK: no stuck workers")
+def test_backtrack_gate_clean_rc0(monkeypatch):
+    monkeypatch.setattr(wb, "_run_py", lambda args, cwd=None: _FakeProc(0, "OK: no stuck workers"))
     ok, msg = wb.check_backtrack_gate({"workspace": Path("/tmp/ws")})
     assert ok is True
     assert msg == ''
 
 
-def test_backtrack_gate_stuck_rc1():
-    wb._run_py = lambda args, cwd=None: _FakeProc(1, "REJECT: 1 stuck")
+def test_backtrack_gate_stuck_rc1(monkeypatch):
+    monkeypatch.setattr(wb, "_run_py", lambda args, cwd=None: _FakeProc(1, "REJECT: 1 stuck"))
     ok, msg = wb.check_backtrack_gate({"workspace": Path("/tmp/ws")})
     assert ok is False
     assert "backtrack" in msg.lower()
 
 
-def test_backtrack_gate_stuck_rc2():
-    wb._run_py = lambda args, cwd=None: _FakeProc(2, "HARD_PAUSE")
+def test_backtrack_gate_stuck_rc2(monkeypatch):
+    monkeypatch.setattr(wb, "_run_py", lambda args, cwd=None: _FakeProc(2, "HARD_PAUSE"))
     ok, msg = wb.check_backtrack_gate({"workspace": Path("/tmp/ws")})
     assert ok is False
     assert ("escalate" in msg.lower()) or ("redispatch" in msg.lower())
 
 
-def test_backtrack_gate_failopen_none():
-    wb._run_py = lambda args, cwd=None: None
+def test_backtrack_gate_failopen_none(monkeypatch):
+    monkeypatch.setattr(wb, "_run_py", lambda args, cwd=None: None)
     ok, msg = wb.check_backtrack_gate({"workspace": Path("/tmp/ws")})
     assert ok is True
     assert msg == ''
@@ -66,8 +66,8 @@ def test_backtrack_gate_failopen_no_workspace():
     assert msg == ''
 
 
-def test_backtrack_gate_failopen_unknown_rc():
-    wb._run_py = lambda args, cwd=None: _FakeProc(99, "weird")
+def test_backtrack_gate_failopen_unknown_rc(monkeypatch):
+    monkeypatch.setattr(wb, "_run_py", lambda args, cwd=None: _FakeProc(99, "weird"))
     ok, msg = wb.check_backtrack_gate({"workspace": Path("/tmp/ws")})
     assert ok is True
     assert msg == ''
