@@ -32,6 +32,7 @@ Usage:
   python hook_activation.py <workspace> [--set-active h1,h2] [--set-paused h3] [--phase X]
   python hook_activation.py <workspace> --renew          # refresh expiry (kunglao-agent Phase 0)
   python hook_activation.py <workspace> --is-active dispatch_gate
+  python hook_activation.py <workspace> --wire-up        # register hooks in <workspace>/.claude/settings.json (PROJECT-level, #258)
   python hook_activation.py <workspace> --heartbeat-off  # CONVERGED 后停心跳 (issue #237)
 
 T-2 split (2026-08-11): the --wire-up / --reconcile / --heartbeat-* jobs now
@@ -39,6 +40,12 @@ live in wire_up_settings.py / reconcile_workers.py / heartbeat.py; main()
 dispatches to them. The public API below (read_state, write_state, is_active,
 is_active_strict, update_state, renew) is unchanged — 7 gate scripts + hooks
 import this module as `ha`.
+
+Issue #258 (2026-08-12): --wire-up deploys to the PROJECT-level
+<workspace>/.claude/settings.json — never the user-global ~/.claude/settings.json
+(the pre-#258 default bound hooks to a worktree path that died with the
+worktree; 8 hooks went silent at once). wire_up_settings(global_opt_in=True)
+is the ONLY escape hatch, explicit opt-in with a stderr warning.
 """
 from __future__ import annotations
 
@@ -243,10 +250,12 @@ def main() -> int:
     parser.add_argument("--renew", action="store_true",
                         help="refresh activation expiry (orchestrator-only; subagents forbidden)")
     parser.add_argument("--wire-up", action="store_true",
-                        help="register kunglao-agent hooks in ~/.claude/settings.json (PreToolUse "
-                             "env_check_gate+worker_budget+dispatch_gate, PostToolUse worker_budget+worker_pulse, matcher "
-                             "Agent). Idempotent: merges into existing hooks config, preserves other keys. "
-                             "Called at Phase 0 by the orchestrator; fixes 'hooks never fired' recurrences.")
+                        help="register kunglao-agent hooks in <workspace>/.claude/settings.json "
+                             "(project-level; NOT global — issue #258: the pre-#258 default wrote "
+                             "the user-global settings, binding hooks to a worktree path that dies "
+                             "with the worktree). Idempotent: merges into existing hooks config, "
+                             "preserves other keys. Called at Phase 0 by the orchestrator; fixes "
+                             "'hooks never fired' recurrences.")
     parser.add_argument("--reconcile", action="store_true",
                         help="rebuild [active_workers] from the GROUND TRUTH — worker status "
                              "files in every .wt-*/ worktree (last status line == in-progress). Removes "
@@ -279,8 +288,9 @@ def main() -> int:
     # T-2 split: delegated jobs live in focused modules
     if args.wire_up:
         from wire_up_settings import wire_up_settings
-        n = wire_up_settings()
-        print(f"OK: kunglao-agent hooks wired into settings.json ({n} entries)")
+        n = wire_up_settings(workspace=workspace)
+        target = workspace / ".claude" / "settings.json"
+        print(f"OK: kunglao-agent hooks wired into {target} ({n} entries)")
         return 0
 
     if args.heartbeat_on:
