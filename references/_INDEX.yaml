@@ -3,6 +3,8 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
+  references/INDEX.md: 795155b0dafd15766b6a82b2f9bc4cc9de049cd7a1bf9f30cbb84bc930e6114c
+  references/_INDEX.md: 7d31a06441ab4bc69590ba52ff78c5a38f24ffdf9445a3293990617970b73751
   references/_index-anti-analysis.md: beb3d0ab06ae7939ba571cadb88479e0ba7019e9b57a161654591dbd0b2e8827
   references/_index-languages.md: 94b3d878dc633053c88d7501b003e5039008ec5ce3c1217ed3de8a1e3b581cfd
   references/_index-methodology.md: cdaf7a916791c08231040b0a64c350cd878d911a5e36d9c994e0297d19f5e228
@@ -11,26 +13,24 @@ files:
   references/_index-platforms.md: 1a89e780858cbf1cbe051af5b769f3f29a3f9d6739ccc25137ee7cc838e69dd2
   references/_index-resources.md: 04db4c8e7cb2196b8fafe16c28d3f9b98df6cd9354d09d59e6a24d62929b065d
   references/_index-tools.md: 52cc8bef03be8b995519bdd4b59d76e1c60b0199c8fd9c6d3d8d645ef8a6a979
-  references/_INDEX.md: 7d31a06441ab4bc69590ba52ff78c5a38f24ffdf9445a3293990617970b73751
   references/case-book.md: 699041f78c3c4cc679dfc9b27eac6bcc50b73e1561456d3e8c15110d790cb353
   references/cold-start-contract.md: 41c42f0e21a98c114f6799fe406c87bf6e4f8e5a4b7d1478386634acbde75407
   references/convergence-loop.md: 6ef0a4f0c3b48fc632cd6cc8ebd3010ebc803863e782c416411149464cbbcb86
   references/decision-rights.md: 91b0344885a200ebf0f0561607fd9e18e506b7b45968cf1cacc13238ce0071c1
-  references/downstream-contract.md: 294e6ffb8e5819334ae4d35487cad511a6b71afa5e0e517277ce7e5ee31d1a68
-  references/dynamic-re-tool-priority.md: 07693f6a818f1af609cb9f58816487a3511cc230fc3e98211848d161b754471a
+  references/downstream-contract.md: 4665e25d99dbac0a610e3b682a6b252fdb0e6df2749fe6269c3ef7141f4c91b0
+  references/dynamic-re-tool-priority.md: 05a52c124b23ffb1bbdaeabbde162e57846efab130fc9a6e89e02c5429075aa1
   references/excerpt-lint.md: ced0b184ddc3e721599809eb3797a4739df927d98f73987f024b56dd8978653a
   references/failure-modes-lifecycle.md: 756f5fafaa0c8e4fa336d8f1599bc166add6872e1141d34f846804318d842912
   references/failure-modes-monitoring.md: 5b2c33ff6b39f3bb1c3ca7f6020928eb2c58e6c767717a1dd4953b1795605ab3
   references/failure-modes-state.md: b8e234f172056b75c328b14848aebab0d7472251c28e7f8987e56aff989a0ea9
   references/failure-modes.md: a70b8dfca0e8a11c7cc07e6e7cc01b8ed7327f0956256f547e8740442c5dbc3d
   references/guardrails.md: 96af80dc87ba7092c56d8eecc41d08565377b2731fe3cc0838c150c921c67d80
-  references/INDEX.md: 795155b0dafd15766b6a82b2f9bc4cc9de049cd7a1bf9f30cbb84bc930e6114c
   references/long-horizon-architecture-2026-07.md: 71edda45a19494b0248530a58bc04cce6afd5266f132585e9701194dbaf7b021
   references/malware-phase-routing.md: 00e6484afaa85da42ed5cdc2c919b3d9b22ca173da37ac4c6da0d691b0ced7f2
   references/memory-protocol.md: fe3f58ba5edaea2ce71eb3552b15f58486ca222319229ebdd319b59c750090ed
   references/method-constraints.md: ed4900f487ece51be11dbae65974ef70aad990927a6fb5a8111d8f04647d7f46
-  references/operational-mechanics.md: 6acf21e2ca0c245bb946ae6ab6dc6d14123969e5291a3d3fe11b29780a214808
-  references/optimization-2026-08.md: be009fdf0a478fe8c0d359d00b8a7f9480dc876e54c676156ec41774b7b71812
+  references/operational-mechanics.md: 30e9e4941e507b389269bc72de1bcb77df0c585c60dcb189a1e53b1a5c27c474
+  references/optimization-2026-08.md: 5198c1c1b8d0268726a19dff9f75481341a2664478ae05a59f9d52854e872083
   references/re-library/anti-analysis.md: 6d8f80bc8b642ef04faf37dfbd175a4dd4d054b60221d8f624fe3580d47422d3
   references/re-library/awesome-re-resources.md: cee058ae60c6677cca107f3114402bea749b7571b7149e0648928187bb409c48
   references/re-library/detection-engineer.md: fc06be71641d31a6e8da60f3b2084197da9bc1b2bffc7ecf3d07b076b0aa9072
