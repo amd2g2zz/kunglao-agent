@@ -3,7 +3,15 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/INDEX.md: e5bb0084992d8eb08f8a0424538daf1cbe14b4f27477c72967813c5fc2aefd86
+  references/_index-anti-analysis.md: beb3d0ab06ae7939ba571cadb88479e0ba7019e9b57a161654591dbd0b2e8827
+  references/_index-languages.md: 94b3d878dc633053c88d7501b003e5039008ec5ce3c1217ed3de8a1e3b581cfd
+  references/_index-methodology.md: cdaf7a916791c08231040b0a64c350cd878d911a5e36d9c994e0297d19f5e228
+  references/_index-osint.md: f9a088973d23082fca9a36c4b9a54d3eba8b74328e93149e03fc88cc24a1f7c8
+  references/_index-patterns.md: df9d366b71d3a1a91ba128cfb946297dfe1de855f7828f9dc28ef0c0b8ac7c93
+  references/_index-platforms.md: 1a89e780858cbf1cbe051af5b769f3f29a3f9d6739ccc25137ee7cc838e69dd2
+  references/_index-resources.md: 04db4c8e7cb2196b8fafe16c28d3f9b98df6cd9354d09d59e6a24d62929b065d
+  references/_index-tools.md: 52cc8bef03be8b995519bdd4b59d76e1c60b0199c8fd9c6d3d8d645ef8a6a979
+  references/_INDEX.md: 7d31a06441ab4bc69590ba52ff78c5a38f24ffdf9445a3293990617970b73751
   references/case-book.md: 699041f78c3c4cc679dfc9b27eac6bcc50b73e1561456d3e8c15110d790cb353
   references/cold-start-contract.md: 41c42f0e21a98c114f6799fe406c87bf6e4f8e5a4b7d1478386634acbde75407
   references/convergence-loop.md: 6ef0a4f0c3b48fc632cd6cc8ebd3010ebc803863e782c416411149464cbbcb86
@@ -16,6 +24,7 @@ files:
   references/failure-modes-state.md: b8e234f172056b75c328b14848aebab0d7472251c28e7f8987e56aff989a0ea9
   references/failure-modes.md: a70b8dfca0e8a11c7cc07e6e7cc01b8ed7327f0956256f547e8740442c5dbc3d
   references/guardrails.md: 96af80dc87ba7092c56d8eecc41d08565377b2731fe3cc0838c150c921c67d80
+  references/INDEX.md: 795155b0dafd15766b6a82b2f9bc4cc9de049cd7a1bf9f30cbb84bc930e6114c
   references/long-horizon-architecture-2026-07.md: 71edda45a19494b0248530a58bc04cce6afd5266f132585e9701194dbaf7b021
   references/malware-phase-routing.md: 00e6484afaa85da42ed5cdc2c919b3d9b22ca173da37ac4c6da0d691b0ced7f2
   references/memory-protocol.md: fe3f58ba5edaea2ce71eb3552b15f58486ca222319229ebdd319b59c750090ed
@@ -25,10 +34,10 @@ files:
   references/re-library/anti-analysis.md: 6d8f80bc8b642ef04faf37dfbd175a4dd4d054b60221d8f624fe3580d47422d3
   references/re-library/awesome-re-resources.md: cee058ae60c6677cca107f3114402bea749b7571b7149e0648928187bb409c48
   references/re-library/detection-engineer.md: fc06be71641d31a6e8da60f3b2084197da9bc1b2bffc7ecf3d07b076b0aa9072
-  references/re-library/field-notes.md: 199a2e957484642375108e7dcccb0ec6bfae163ea08a4a6b03522df1dcd9d6f6
+  references/re-library/field-notes.md: 8027b1f01b1b5aa7afaf10724028cd141ac3642a7a9e65bb1b80047d7fbd909a
   references/re-library/languages-compiled.md: 04e149671060ca2469e07760f0f7af05d21304e6006835fec6acb7f62360e377
   references/re-library/languages-go.md: 75e9060c4f6dd341c7c5f2f33a5c1fbccb21cd2ab2265833ebc5368856631041
-  references/re-library/languages-platforms.md: 67b6d6bb199c0eb69488ffb5f1b514c7103cb0656804cf599f3978439bf9bbf7
+  references/re-library/languages-platforms.md: 2972c4cf498bebd4faaf9307a542dcc19506c9b804e14d24bd11992cc4e5c36e
   references/re-library/languages.md: 524540e8fcf235a67c990ccf8691bd5cc5f2913bf8cd4a7e66b150c9e193f9f3
   references/re-library/malware-analysis-quickstart.md: 35e771c448c1a6a78e78c06fa13e0a261b5f5022501dd3b6bb2162b45210e800
   references/re-library/malware-analysis-workflow.md: 8ae61d8297f5c3c8fa7b4f28b5c93561267aa8ceeed396ba88ba7d76b6d6d247
@@ -38,9 +47,9 @@ files:
   references/re-library/malware-triage.md: f27cebdb69a73c34abded034270d8f8c7d6368544565ee7e3dcea44da1dc99a3
   references/re-library/multi-search-engine-refs.md: ee2d742aa59287140b388ca10ab2c9cb7da9c5d86a2b2a991ea06a79916ed390
   references/re-library/multi-search-engine.md: ace1b8c42e5a0063d66639e8ee419c2b369f746d54b985361e7d385b561b6737
-  references/re-library/patterns-ctf-2.md: 8d3b7d1fde1cd0917641877f2d39c6c2c9621859a4da426c39ebe6be2ec240ad
-  references/re-library/patterns-ctf-3.md: 76cfa06f01a4e8ed5cc91d1942c59aa65e70171989cd0064cd92b55961e0e716
-  references/re-library/patterns-ctf.md: 41edf048db36c3cb6ab1264f226df920adfa27923844a9ec5b40664ffe655c27
+  references/re-library/patterns-debugging.md: 1b0a616e3593902f28e27a3d2610147a6bbce5a8c3830e18967c9f2a287b3a1b
+  references/re-library/patterns-decode.md: 60291518bb5d6adb6f6e601173667a2ca4fd684eb7d99a471b5b00c12590485e
+  references/re-library/patterns-simulation.md: d4372c9e216ee66896d9591af0f9afaac36833d990a64415863c64123e424469
   references/re-library/patterns.md: 8be4cb2104a62cdd17261de951a166d252bab62048a6b0b5de154cd97bc54d50
   references/re-library/phishing-case-study.md: 524fb49c71a8db364ccc02d0853f9ce986c25a537f8eadaebd0ef3d070623bc6
   references/re-library/platforms-elf.md: 71ce8375e31194215b11c52ce7736669d2487fd44d2e1a2608e21a6ded14acc4

@@ -1,25 +1,29 @@
-# CTF Reverse - Competition-Specific Patterns (Part 1)
+# 逆向分析模式 — 模拟执行与加载器 (Simulation & Execution Patterns)
+
+> 通用逆向技巧汇编:自定义虚拟机/仿真器逆向、shellcode 与多级加载器执行分析、内存中代码解密与运行时密钥提取。
+> 以恶意样本分析为主要用例(加壳/混淆样本、内存加载 shellcode、自解密 loader、无导入的 API 解析型样本)。
+> 本文档的"目标数据"指样本中需要恢复的字符串、密钥或受保护内容。
 
 ## Table of Contents
-- [Hidden Emulator Opcodes + LD_PRELOAD Key Extraction (0xFun 2026)](#hidden-emulator-opcodes--ld_preload-key-extraction-0xfun-2026)
-- [Spectre-RSB SPN Cipher — Static Parameter Extraction (0xFun 2026)](#spectre-rsb-spn-cipher--static-parameter-extraction-0xfun-2026)
-- [Image XOR Mask Recovery via Smoothness (VuwCTF 2025)](#image-xor-mask-recovery-via-smoothness-vuwctf-2025)
-- [Shellcode in Data Section via mmap RWX (VuwCTF 2025)](#shellcode-in-data-section-via-mmap-rwx-vuwctf-2025)
-- [Recursive execve Subtraction (VuwCTF 2025)](#recursive-execve-subtraction-vuwctf-2025)
-- [Byte-at-a-Time Block Cipher Attack (UTCTF 2024)](#byte-at-a-time-block-cipher-attack-utctf-2024)
-- [Mathematical Convergence Bitmap (EHAX 2026)](#mathematical-convergence-bitmap-ehax-2026)
-- [Windows PE XOR Bitmap Extraction + OCR (srdnlenCTF 2026)](#windows-pe-xor-bitmap-extraction--ocr-srdnlenctf-2026)
-- [Two-Stage Loader: RC4 Gate + VM Constraints (srdnlenCTF 2026)](#two-stage-loader-rc4-gate--vm-constraints-srdnlenctf-2026)
-- [Kernel Module Maze Solving (DiceCTF 2026)](#kernel-module-maze-solving-dicectf-2026)
-- [Multi-Threaded VM with Channel Synchronization (DiceCTF 2026)](#multi-threaded-vm-with-channel-synchronization-dicectf-2026)
-- [Backdoored Shared Library Detection via String Diffing (Hack.lu CTF 2012)](#backdoored-shared-library-detection-via-string-diffing-hacklu-ctf-2012)
-- [Custom binfmt Kernel Module with RC4 Flat Binaries (BSidesSF 2026)](#custom-binfmt-kernel-module-with-rc4-flat-binaries-bsidessf-2026)
-- [Hash-Resolved Imports / No-Import Ransomware (BSidesSF 2026)](#hash-resolved-imports--no-import-ransomware-bsidessf-2026)
-- [ELF Section Header Corruption for Anti-Analysis (BSidesSF 2026)](#elf-section-header-corruption-for-anti-analysis-bsidessf-2026)
+- [隐藏仿真器指令 + LD_PRELOAD 密钥提取](#hidden-emulator-opcodes--ld_preload-key-extraction)
+- [侧信道 S 盒 — 静态参数提取](#spectre-rsb-spn-cipher--static-parameter-extraction)
+- [图像 XOR 掩码恢复(平滑度评分)](#image-xor-mask-recovery-via-smoothness)
+- [数据段 shellcode — mmap RWX](#shellcode-in-data-section-via-mmap-rwx)
+- [递归 execve 减法链](#recursive-execve-subtraction)
+- [逐字节块密码攻击](#byte-at-a-time-block-cipher-attack)
+- [数学收敛位图分类器](#mathematical-convergence-bitmap)
+- [Windows PE XOR 位图提取 + OCR](#windows-pe-xor-bitmap-extraction--ocr)
+- [两阶段加载器:RC4 门控 + VM 约束](#two-stage-loader-rc4-gate--vm-constraints)
+- [内核模块迷宫交互分析](#kernel-module-maze-solving)
+- [多线程 VM 通道同步](#multi-threaded-vm-with-channel-synchronization)
+- [被植入后门的共享库检测(字符串比对)](#backdoored-shared-library-detection-via-string-diffing)
+- [自定义 binfmt 内核模块 + RC4 扁平二进制](#custom-binfmt-kernel-module-with-rc4-flat-binaries)
+- [哈希解析导入 / 无导入勒索软件](#hash-resolved-imports--no-import-ransomware)
+- [ELF section header 破坏型反分析](#elf-section-header-corruption-for-anti-analysis)
 
 ---
 
-## Hidden Emulator Opcodes + LD_PRELOAD Key Extraction (0xFun 2026)
+## Hidden Emulator Opcodes + LD_PRELOAD Key Extraction
 
 **Pattern (CHIP-8):** Non-standard opcode `FxFF` triggers hidden `superChipRendrer()` → AES-256-CBC decryption. Key derived from binary constants.
 
@@ -47,9 +51,11 @@ gcc -shared -fPIC -ldl -lssl hook.c -o hook.so
 LD_PRELOAD=./hook.so ./emulator rom.ch8
 ```
 
+**来源:** 0xFun 2026
+
 ---
 
-## Spectre-RSB SPN Cipher — Static Parameter Extraction (0xFun 2026)
+## Spectre-RSB SPN Cipher — Static Parameter Extraction
 
 **Pattern:** Binary uses cache side channels to implement S-boxes, but ALL cipher parameters (round keys, S-box tables, permutation) are in the binary's data section.
 
@@ -70,9 +76,11 @@ for i in range(8):
 
 **Lesson:** Side-channel implementations embed lookup tables in memory. Extract statically.
 
+**来源:** 0xFun 2026
+
 ---
 
-## Image XOR Mask Recovery via Smoothness (VuwCTF 2025)
+## Image XOR Mask Recovery via Smoothness
 
 **Pattern (Trianglification):** Image divided into triangle regions, each XOR-encrypted with `key = (mask * x - y) & 0xFF` where mask is unknown (0-255).
 
@@ -98,9 +106,11 @@ for region in regions:
 
 **Search space:** 256 candidates × N regions = trivial. Smoothness is a reliable scoring metric for natural images.
 
+**来源:** VuwCTF 2025
+
 ---
 
-## Shellcode in Data Section via mmap RWX (VuwCTF 2025)
+## Shellcode in Data Section via mmap RWX
 
 **Pattern (Missing Function):** Binary relocates data to RWX memory (mmap with PROT_READ|PROT_WRITE|PROT_EXEC) and jumps to it.
 
@@ -108,17 +118,21 @@ for region in regions:
 
 **Analysis:** Extract data section, apply XOR key (try 3-byte rotating), disassemble result.
 
+**来源:** VuwCTF 2025
+
 ---
 
-## Recursive execve Subtraction (VuwCTF 2025)
+## Recursive execve Subtraction
 
 **Pattern (String Inspector):** Binary recursively calls itself via `execve`, subtracting constants each time.
 
 **Solution:** Find base case and work backward. Often a mathematical relationship like `N * M + remainder`.
 
+**来源:** VuwCTF 2025
+
 ---
 
-## Byte-at-a-Time Block Cipher Attack (UTCTF 2024)
+## Byte-at-a-Time Block Cipher Attack
 
 **Pattern (PES-128):** First output byte depends only on first input byte (no diffusion).
 
@@ -126,17 +140,19 @@ for region in regions:
 
 **Detection:** Change one input byte → only corresponding output byte changes. This means zero cross-byte diffusion = trivially breakable.
 
+**来源:** UTCTF 2024
+
 ---
 
-## Mathematical Convergence Bitmap (EHAX 2026)
+## Mathematical Convergence Bitmap
 
-**Pattern (Compute It):** Binary classifies complex-plane coordinates by Newton's method convergence. The classification results, arranged as a grid, spell out the flag in ASCII art.
+**Pattern (Compute It):** Binary classifies complex-plane coordinates by Newton's method convergence. The classification results, arranged as a grid, spell out the target text in ASCII art.
 
 **Recognition:**
 - Input file with coordinate pairs (x, y)
 - Binary iterates a mathematical function (e.g., z^3 - 1 = 0) and outputs pass/fail
 - Grid dimensions hinted by point count (e.g., 2600 = 130×20)
-- 5-pixel-high ASCII art font common in CTFs
+- 5-pixel-high ASCII art font
 
 **Newton's method for z^3 - 1:**
 ```python
@@ -167,11 +183,13 @@ for r in range(len(bits) // WIDTH):
     print(''.join('#' if bits[r*WIDTH+c] else '.' for c in range(WIDTH)))
 ```
 
-**Key insight:** The binary is a mathematical classifier, not a flag checker. The flag is in the visual pattern of classifications, not in the binary's output. Reverse-engineer the math, apply to all coordinates, and visualize as bitmap.
+**Key insight:** The binary is a mathematical classifier, not a plaintext checker. The target data is in the visual pattern of classifications, not in the binary's output. Reverse-engineer the math, apply to all coordinates, and visualize as bitmap.
+
+**来源:** EHAX 2026
 
 ---
 
-## Windows PE XOR Bitmap Extraction + OCR (srdnlenCTF 2026)
+## Windows PE XOR Bitmap Extraction + OCR
 
 **Pattern (Artistic Warmup):** Binary renders input text, compares rendered bitmap against expected pixel data stored XOR'd with constant in `.rdata`. No need to compute — extract expected pixels directly.
 
@@ -179,7 +197,7 @@ for r in range(len(bits) // WIDTH):
 1. Reverse the core check function to identify rendering and comparison logic
 2. Find the expected pixel blob in `.rdata` (look for large data block referenced near comparison)
 3. XOR with constant (e.g., 0xAA) to recover expected rendered DIB
-4. Save as image and OCR to recover flag text
+4. Save as image and OCR to recover target text
 
 ```python
 import numpy as np
@@ -208,11 +226,13 @@ result = subprocess.run(
 print(result.stdout)
 ```
 
-**Key insight:** When a binary renders text and compares pixels, the expected pixel data is the flag rendered as an image. Extract it directly from the binary data section without needing to understand the rendering logic. OCR with charset whitelist improves accuracy for CTF flag characters.
+**Key insight:** When a binary renders text and compares pixels, the expected pixel data is the target text rendered as an image. Extract it directly from the binary data section without needing to understand the rendering logic. OCR with a charset whitelist improves accuracy for target-text characters.
+
+**来源:** srdnlenCTF 2026
 
 ---
 
-## Two-Stage Loader: RC4 Gate + VM Constraints (srdnlenCTF 2026)
+## Two-Stage Loader: RC4 Gate + VM Constraints
 
 **Pattern (Cornflake v3.5):** Two-stage malware loader — stage 1 uses RC4 username gate, stage 2 downloaded from C2 contains VM-based password validation.
 
@@ -240,14 +260,16 @@ username = rc4(b"s3cr3t_k3y_v1", bytes.fromhex("46f5289437bc009c17817e997ae82bfb
 **Stage 2 — VM constraint extraction:**
 1. Download stage 2 from C2 endpoint (e.g., `/updates/check.php`)
 2. Reverse VM bytecode interpreter (typically 15-20 opcodes)
-3. Extract linear equality constraints over flag characters
+3. Extract linear equality constraints over target string characters
 4. Solve constraint system (Z3 or manual)
 
 **Key insight:** Multi-stage loaders often use simple crypto (RC4) for the first gate and more complex validation (custom VM) for the second. The VM memory may be uninitialized (all zeros), drastically simplifying constraint extraction since memory-dependent operations become constants.
 
+**来源:** srdnlenCTF 2026
+
 ---
 
-## Kernel Module Maze Solving (DiceCTF 2026)
+## Kernel Module Maze Solving
 
 **Pattern (Explorer):** Rust kernel module implements a 3D maze via `/dev/challenge` ioctls. Navigate the maze, avoid decoy exits (status=2), find the real exit (status=1), read the flag.
 
@@ -293,11 +315,13 @@ void dfs(int fd, int x, int y, int z) {
 
 **Remote deployment:** Upload binary via base64 chunks over netcat shell, decode, execute.
 
-**Key insight:** For kernel module challenges, injecting test binaries into initramfs and probing ioctls dynamically is faster than static RE of stripped kernel modules. Keep solver binary minimal (raw syscalls, no libc) for fast upload.
+**Key insight:** For kernel modules, injecting test binaries into initramfs and probing ioctls dynamically is faster than static RE of stripped kernel modules. Keep solver binary minimal (raw syscalls, no libc) for fast upload.
+
+**来源:** DiceCTF 2026
 
 ---
 
-## Multi-Threaded VM with Channel Synchronization (DiceCTF 2026)
+## Multi-Threaded VM with Channel Synchronization
 
 **Pattern (locked-in):** Custom stack-based VM runs 16 concurrent threads verifying a 30-char flag. Threads communicate via futex-based channels. Pipeline: input → XOR scramble → transformation → base-4 state machine → final check.
 
@@ -336,9 +360,11 @@ def solve_flag(scramble_vals, lookup_table, initial_state, target_state):
 
 **Key insight:** Multi-threaded VMs require tracing data flow across thread boundaries. Channel-based communication creates a pipeline — identify each thread's role (input, transform, validate, output) by watching which channels it reads/writes. Constants that affect computation may come from unexpected sources (futex return values, thread IDs).
 
+**来源:** DiceCTF 2026
+
 ---
 
-## Backdoored Shared Library Detection via String Diffing (Hack.lu CTF 2012)
+## Backdoored Shared Library Detection via String Diffing
 
 **Pattern (Zombie Lockbox):** A setuid binary uses `strcmp` for password validation. The expected password is visible via `strings` and works under GDB (which drops suid), but fails when run normally. The binary links against a non-standard libc that patches function behavior based on suid status.
 
@@ -368,11 +394,13 @@ gdb /lib/libc/libc.so.6
 
 **Key insight:** When a binary behaves differently under GDB vs. normal execution, check `ldd` for non-standard library paths. Suid binaries drop privileges under debuggers, so a backdoored libc can detect this via `getuid`/`geteuid` syscalls and change program behavior accordingly. The `strings | diff` approach quickly reveals injected data without full disassembly.
 
----
+**来源:** Hack.lu CTF 2012
 
 ---
 
-## Custom binfmt Kernel Module with RC4 Flat Binaries (BSidesSF 2026)
+---
+
+## Custom binfmt Kernel Module with RC4 Flat Binaries
 
 **Pattern (Private Binary):** A custom Linux kernel module (`.ko`) registers a `binfmt` handler for non-standard binary formats. When a file with a specific magic number is executed, the kernel module intercepts it, decrypts the contents in memory, and jumps to the entry point.
 
@@ -410,11 +438,11 @@ decrypted = cipher.decrypt(encrypted)
 
 **Key insight:** The flat binary has no ELF headers, so standard tools won't recognize it. You must extract the load address from the kernel module (look for the `vm_mmap` call's address argument) and import the decrypted blob at that address in your disassembler. RC4 keys in kernel modules are often stored as immediate values in `mov` or `movabs` instructions rather than in data sections.
 
-**References:** BSidesSF 2026 "Private Binary"
+**来源:** BSidesSF 2026 "Private Binary"
 
 ---
 
-## Hash-Resolved Imports / No-Import Ransomware (BSidesSF 2026)
+## Hash-Resolved Imports / No-Import Ransomware
 
 **Pattern (Ran Somewhere):** Malware binary has zero visible imports — all API calls are resolved at runtime by hashing symbol names and comparing against pre-computed hash values. The binary uses `dlopen` + a custom hash table to find libc and libcrypto functions.
 
@@ -484,13 +512,13 @@ print(pt.decode())
 
 **Safety:** Always run suspected ransomware in a Docker container or VM. Mount only copies of the encrypted files, never originals.
 
-**References:** BSidesSF 2026 "Ran Somewhere"
+**来源:** BSidesSF 2026 "Ran Somewhere"
 
 ---
 
-## ELF Section Header Corruption for Anti-Analysis (BSidesSF 2026)
+## ELF Section Header Corruption for Anti-Analysis
 
-**Pattern (stubborn-elf):** An ELF binary has deliberately corrupted section header table entries, causing standard analysis tools (`readelf`, `objdump`, IDA, Ghidra) to crash or produce errors. However, the **program headers** (which the OS loader uses) are intact, so the binary executes normally. The flag is appended after the corrupted sections, marked with magic bytes.
+**Pattern (stubborn-elf):** An ELF binary has deliberately corrupted section header table entries, causing standard analysis tools (`readelf`, `objdump`, IDA, Ghidra) to crash or produce errors. However, the **program headers** (which the OS loader uses) are intact, so the binary executes normally. The target payload is appended after the corrupted sections, marked with magic bytes.
 
 ```python
 import sys
@@ -525,8 +553,8 @@ readelf -l stubborn_elf
 
 **When to recognize:** `readelf -S` crashes or shows garbage. `file` command identifies it as ELF. `readelf -l` (lowercase L, program headers) works fine. The binary runs normally despite tool failures.
 
-**References:** BSidesSF 2026 "stubborn-elf"
+**来源:** BSidesSF 2026 "stubborn-elf"
 
 ---
 
-See also: [patterns-ctf-2.md](patterns-ctf-2.md) for Part 2 (multi-layer self-decrypting binary, embedded ZIP+XOR license, stack string deobfuscation, prefix hash brute-force, CVP/LLL lattice, decision tree obfuscation, GF(2^8) Gaussian elimination), [patterns-ctf-3.md](patterns-ctf-3.md) for Part 3 (Z3 boolean circuit, sliding window popcount, keyboard LED Morse code, C++ destructor-hidden validation, VM sequential key-chain brute-force, BWT inversion, OpenType font ligature exploitation, GLSL shader VM with self-modifying code).
+See also: [patterns-decode.md](patterns-decode.md) for deobfuscation/decoding patterns (multi-layer self-decrypting binary, embedded ZIP+XOR license, stack string deobfuscation, prefix hash brute-force, CVP/LLL lattice, decision tree obfuscation, GF(2^8) Gaussian elimination), [patterns-debugging.md](patterns-debugging.md) for dynamic debugging patterns (Z3 boolean circuit, sliding window popcount, keyboard LED Morse code, C++ destructor-hidden validation, VM sequential key-chain brute-force, BWT inversion, OpenType font ligature exploitation, GLSL shader VM with self-modifying code).

@@ -1,27 +1,46 @@
 # references/ Index
 
-Navigation guide for the `references/` directory — the **progressive-disclosure entry point** for the kunglao-agent knowledge base. SKILL.md points here by scenario; the orchestrator and workers load **only the files their scenario needs**, never the whole library.
+Navigation guide for the `references/` directory — the **progressive-disclosure entry point** for the kunglao-agent knowledge base.
 
-The RE technique library under `references/re-library/` was absorbed 2026-07-29 from the former `reverse-engineering` + `malware-analysis` skills; workers consult it during dispatch instead of the standalone skills.
+**Layered index (hierarchy):**
+1. `references/_INDEX.md` — top-level domain index: 8 domains, one line each, plus the scenario→domain map. The orchestrator reads this once per round to pick a domain and dispatch.
+2. `references/_index-<domain>.md` — file-level index per domain: file → one-line summary → when to read. Workers load only their domain's index on demand.
+3. This file (`INDEX.md`) — complete catalog of every file in `references/`, kept as the fallback full listing.
+
+The RE technique library under `references/re-library/` was absorbed 2026-07-29 from the former `reverse-engineering` + `malware-analysis` skills; workers consult it during dispatch instead of the standalone skills. Malware analysis is the primary use case of this reverse-engineering agent.
 
 ## Scenario → file (progressive disclosure triggers)
 
 | 场景 | 主文件 | 补充 |
 |------|--------|------|
-| orchestrator 协议 / 门禁 / 故障 / 验证 | 顶层: `guardrails`, `cold-start-contract`, `convergence-loop`, `failure-modes` (→ `failure-modes-lifecycle` / `failure-modes-monitoring` / `failure-modes-state`), `method-constraints`, `search-policy`, `verify-static-vs-dynamic`, `operational-mechanics`, `decision-rights`, `schema`, `wal-protocol` | `case-book`, `optimization-2026-08`, `tool-inventory`, `downstream-contract` |
-| 静态反汇编 / 工具选择 | re-library: `tools` | re-library: `tools-advanced`, `anti-analysis`, `patterns` |
-| 动态分析 (x64dbg / Frida / Qiling / VM) | re-library: `tools-dynamic` + 顶层 `dynamic-re-tool-priority` | re-library: `field-notes`; `operational-mechanics` (VM 启动序列) |
-| 加壳 / 混淆 / 反分析对抗 | re-library: `anti-analysis` | re-library: `tools-advanced`, `patterns` |
+| 反汇编 / 静态分析 | re-library: `tools` | `tools-advanced`, `anti-analysis`, `patterns` |
+| 动态调试 / 运行时分析 (x64dbg / Frida / Qiling / VM) | re-library: `tools-dynamic` + 顶层 `dynamic-re-tool-priority` | `patterns-debugging`, `field-notes`, `operational-mechanics` (VM 启动序列) |
+| 加壳 / 混淆 / 反分析对抗 | re-library: `anti-analysis` | `tools-advanced`, `patterns` |
 | 加密 / 编码 / 哈希解码 | re-library: `tools-crypto` | — |
-| CTF 逆向 | re-library: `patterns-ctf` → `patterns-ctf-2` → `patterns-ctf-3` | re-library: `patterns` |
-| 语言逆向 (Go / Rust / Python / 编译型 / 平台栈) | re-library: `languages`, `languages-compiled`, `languages-go` | re-library: `languages-platforms`, `field-notes` |
-| 平台 / 格式 (ELF / Mach-O / APK / 固件 / 内核驱动) | re-library: `platforms`, `platforms-elf`, `platforms-kernel` | re-library: `platforms-hardware`, `languages-platforms` |
-| 恶意软件分析 (triage → 动态 → 检测 → 报告) | re-library: `malware-analysis`, `malware-analysis-workflow` | re-library: `malware-triage`, `malware-dynamic-analysis`, `malware-analysis-quickstart`, `detection-engineer`, `malware-report-writer` |
+| 固件 / 硬件 | re-library: `platforms-hardware` | `platforms`, `patterns-debugging` |
+| 内核驱动 / 内核模块 | re-library: `platforms-kernel` | `platforms-elf`, `patterns-simulation` |
+| 语言特定 (Go / Rust / Python / 编译型) | re-library: `languages`, `languages-compiled`, `languages-go` | `languages-platforms`, `field-notes` |
+| 平台特定 (ELF / Mach-O / APK / 嵌入式) | re-library: `platforms`, `platforms-elf` | `platforms-hardware`, `languages-platforms` |
+| 恶意软件分析 (triage → 动态 → 检测 → 报告) | re-library: `malware-analysis`, `malware-analysis-workflow` | `malware-triage`, `malware-dynamic-analysis`, `malware-analysis-quickstart` |
 | 检测规则 / IOC / 报告产出 | re-library: `detection-engineer`, `malware-report-writer` | — |
 | OSINT / 多引擎搜索 | re-library: `multi-search-engine`, `multi-search-engine-refs` | — |
 | 新样本 → 分析阶段路由 | 顶层 `malware-phase-routing` | — |
 | worker 证据验证 (reproduce / byte-exact) | 顶层 `verify-static-vs-dynamic` | `schema`, `excerpt-lint` |
 | 记忆 / 状态持久化 | `memory-protocol`, `wal-protocol` | `schema` |
+
+## Layered index files (navigation layer)
+
+| 文件 | 类别 | 用途一句话 | 何时读(渐进披露触发条件) |
+|------|------|-----------|--------------------------|
+| `_INDEX.md` | index | Top-level domain index: 8 domains (one line each: files + purpose) plus the scenario→domain map. | Orchestrator at the start of every round — read once, decide the domain, dispatch the worker. |
+| `_index-tools.md` | index | File-level index for the tools domain. | When a worker is dispatched to tooling / static-analysis work. |
+| `_index-anti-analysis.md` | index | File-level index for the anti-analysis domain. | When a worker faces anti-debug / anti-VM / anti-DBI samples. |
+| `_index-patterns.md` | index | File-level index for the patterns domain (general RE techniques). | When a worker needs pattern-recognition references. |
+| `_index-languages.md` | index | File-level index for the languages domain. | When a worker has identified the sample's language. |
+| `_index-platforms.md` | index | File-level index for the platforms domain. | When a worker has identified the sample's platform/format. |
+| `_index-methodology.md` | index | File-level index for the methodology domain (incl. malware application area). | When a worker starts a malware-sample analysis task. |
+| `_index-osint.md` | index | File-level index for the osint domain. | When a worker needs external intelligence / multi-engine search. |
+| `_index-resources.md` | index | File-level index for the resources domain. | When a worker needs external RE learning materials or community tools. |
 
 ## Top-level references
 
@@ -55,14 +74,14 @@ The RE technique library under `references/re-library/` was absorbed 2026-07-29 
 
 | 文件 | 类别 | 用途一句话 | 何时读(渐进披露触发条件) |
 |------|------|-----------|--------------------------|
-| `re-library/anti-analysis.md` | anti-analysis | Comprehensive catalog of anti-debugging, anti-VM, anti-DBI, and code-integrity techniques with practical bypass methods for both Linux and Windows. | When encountering binaries that detect debuggers, VMs, or instrumentation frameworks (Frida/Pin), or when you need to bypass integrity/self-hash checks in CTF/malware. |
+| `re-library/anti-analysis.md` | anti-analysis | Comprehensive catalog of anti-debugging, anti-VM, anti-DBI, and code-integrity techniques with practical bypass methods for both Linux and Windows. | When encountering binaries that detect debuggers, VMs, or instrumentation frameworks (Frida/Pin), or when you need to bypass integrity/self-hash checks in malware. |
 | `re-library/awesome-re-resources.md` | resources | Curated collection of reverse engineering resource repositories, tools, tutorials, and references, organized by category (ELF/Linux, Windows, mobile, etc.). | When seeking external learning materials, community tools, or reference repositories to deepen RE knowledge or find specialized utilities. |
 | `re-library/detection-engineer.md` | malware | Skill definition for transforming malware analysis findings into production detection content: Sigma rules, Suricata/Snort IDS rules, hunting queries, IOC defanging, and STIX/OpenIOC formatting. | When writing detection signatures or hunting queries from analysis findings, or when converting raw IOCs into shareable, operationalized formats. |
 | `re-library/field-notes.md` | field-notes | Detailed operational quick-notes covering binary type quirks (.pyc, WASM, APK, Flutter, .NET, packed samples), anti-debug bypasses, and specialized reversing patterns. | After initial triage, when diving into hands-on analysis of a specific binary type or encountering an unusual reversing pattern. |
-| `re-library/languages-compiled.md` | languages | CTF-focused guide for reversing compiled languages beyond C: Go, Rust, Swift, Kotlin/JVM, D, Haskell, and C++ (vtables, RTTI, stdlib patterns). | When encountering a non-C compiled binary in CTF and needing language-specific decompilation heuristics or symbol recovery techniques. |
+| `re-library/languages-compiled.md` | languages | Guide for reversing compiled languages beyond C: Go, Rust, Swift, Kotlin/JVM, D, Haskell, and C++ (vtables, RTTI, stdlib patterns). | When encountering a non-C compiled binary and needing language-specific decompilation heuristics or symbol recovery techniques. |
 | `re-library/languages-go.md` | languages | End-to-end guide for reversing Go binaries: recognizing Go artifacts, recovering stripped symbols, understanding Go memory layout, and using specialized tooling. | When analyzing a statically-linked Go binary and dealing with its massive symbol tables, goroutine structures, or stripped metadata. |
 | `re-library/languages-platforms.md` | languages | Collection of platform and framework-specific RE techniques (Android JNI/Dex, Electron, Node.js, Verilog, Intel SGX, AS/400, certificate pinning bypass, and more). | When reversing binaries tied to specific platforms or frameworks (Android apps, Electron packages, SGX enclaves, FPGA bitstreams, etc.). |
-| `re-library/languages.md` | languages | CTF reference for scripting and esoteric language reversing: Python bytecode/opcodes, Pyarmor unpacking, DOS stubs, HarmonyOS HAP, Brainfuck, UEFI, and transpilation. | When facing non-standard language targets in CTF such as Python bytecode, esolangs, UEFI firmware, or HarmonyOS apps. |
+| `re-library/languages.md` | languages | Reference for scripting and esoteric language reversing: Python bytecode/opcodes, Pyarmor unpacking, DOS stubs, HarmonyOS HAP, Brainfuck, UEFI, and transpilation. | When facing non-standard language targets such as Python bytecode, esolangs, UEFI firmware, or HarmonyOS apps. |
 | `re-library/malware-analysis-quickstart.md` | malware | Brief installation and verification guide for the malware analysis skill set, intended to get the orchestrator and sub-skills loaded into Claude quickly. | When setting up the malware analysis skill suite for the first time and confirming all sub-skills are available. |
 | `re-library/malware-analysis-workflow.md` | malware | Skill orchestrator definition that routes malware analysis tasks to specialized sub-skills (triage, dynamic analysis, detection, report writing) based on file type and phase. | When beginning any malware analysis engagement as the single entry point to coordinate multi-phase workflows. |
 | `re-library/malware-analysis.md` | malware | Comprehensive six-phase malware analysis methodology covering triage, static analysis, dynamic analysis, behavioral extraction, IOC identification, and anti-analysis bypass. | When performing end-to-end malware analysis of PE/ELF/Mach-O/APK/script samples using an integrated static-plus-dynamic approach. |
@@ -71,16 +90,16 @@ The RE technique library under `references/re-library/` was absorbed 2026-07-29 
 | `re-library/malware-triage.md` | malware | Skill definition for rapid initial assessment, classification, and prioritization of malware samples within 5-30 minutes per sample. | When receiving new samples and needing to quickly classify them, gauge threat level, and decide whether deeper analysis is warranted. |
 | `re-library/multi-search-engine-refs.md` | osint | Deep-dive guide to advanced search operators for Google, Baidu, Bing, and other engines (site search, filetype, dorking, time filters, cache tricks). | When performing open-source intelligence gathering and needing to craft precise, operator-rich queries across multiple international search engines. |
 | `re-library/multi-search-engine.md` | osint | MCP tool integration reference listing 17 search engines (8 Chinese, 9 international) with URL templates and usage instructions for API-key-free web search. | When needing to programmatically query multiple search engines from within the agent environment for OSINT or resource discovery. |
-| `re-library/patterns-ctf-2.md` | patterns | Second collection of CTF competition-specific reversing patterns (self-decrypting binaries, XOR stack strings, lattice reduction, GF(2^8) Gaussian elimination, ROP obfuscation). | When encountering a CTF challenge matching one of these specific competition problems (DiceCTF, MetaCTF, Nullcon, HTB, etc.) and needing the documented solution approach. |
-| `re-library/patterns-ctf-3.md` | patterns | Third collection of CTF competition-specific reversing patterns (Z3 boolean circuits, GLSL VMs, BPF JIT, TensorFlow inversion, race conditions, ESP32 firmware, font exploitation). | When encountering an obscure CTF pattern involving unconventional architectures, ML model inversion, shader VMs, or hardware-side channels. |
-| `re-library/patterns-ctf.md` | patterns | First collection of CTF competition-specific reversing patterns (CHIP-8 emulators, Spectre-RSB ciphers, kernel modules, multi-threaded VMs, shellcode-in-data-section loaders). | When encountering a CTF reversing challenge involving custom VMs, kernel modules, emulator extensions, or multi-threaded obfuscation. |
-| `re-library/patterns.md` | patterns | Foundational catalog of general CTF reversing patterns and techniques: custom VMs, anti-debugging bypass, nanomites, self-modifying code, XOR, LLVM CFF, S-box/keystream, and more. | When analyzing an obfuscated binary in CTF and needing to identify which general pattern category it falls under and how to approach it. |
+| `re-library/patterns-debugging.md` | patterns | Debugging & dynamic-analysis patterns: Z3 symbolic solving, sliding-window recurrence, breakpoint/tracing/side-channel extraction, VM sequential key-chain brute-force, architecture-specific firmware, DNN inversion, BPF filter analysis. | When validation logic is hidden (destructors, dead branches, time-locks, race conditions) or when dynamic tracing / symbolic constraint solving is needed. |
+| `re-library/patterns-decode.md` | patterns | Decode & deobfuscation patterns: multi-layer self-decrypting binaries, .rodata XOR stack-string deobfuscation, embedded data extraction, prefix-hash attacks, lattice/GF(2^8) constraint solving, ROPfuscation. | When a sample uses layered decryption, obfuscated strings, license/authorization checks, or when target data must be recovered by constraint solving. |
+| `re-library/patterns-simulation.md` | patterns | Simulation & execution patterns: custom VM/emulator reversing (hidden opcodes, multi-threaded VMs), shellcode-in-data-section and multi-stage loader analysis, in-memory decryption, runtime key extraction. | When a sample contains a custom VM/emulator, memory-loaded shellcode, self-decrypting loaders, no-import (hash-resolved) malware, or anti-analysis ELF tricks. |
+| `re-library/patterns.md` | patterns | Foundational catalog of general RE patterns and techniques: custom VMs, anti-debugging bypass, nanomites, self-modifying code, XOR, LLVM CFF, S-box/keystream, and more. | When analyzing an obfuscated binary and needing to identify which general pattern category it falls under and how to approach it. |
 | `re-library/phishing-case-study.md` | case-study | Documented incident of same-topic PROVEN contradiction (F035 vs F040 routing claims) and its fact-base contamination — the source of the global contradiction-scan requirement. | When a same-topic-key PROVEN pair disagrees or when completing a run that touches routing conclusions. |
 | `re-library/platforms-elf.md` | platforms | Deep-dive reference for ELF binary structure (headers, sections, segments, dynamic linking) plus anti-analysis countermeasures specific to Linux/Android targets. | When reversing Linux or Android ELF binaries and you need to parse structures, interpret section/segment details, or recognize ELF-specific anti-analysis tricks. |
-| `re-library/platforms-hardware.md` | platforms | Hardware and advanced architecture reversing reference covering HD44780 LCD GPIO, RISC-V extensions/debugging, ARM64 exploitation, MIPS64 crypto coprocessors, and MBR/bootloader RE. | When reversing embedded hardware captures, RISC-V custom instructions, ARM64 exploits, or microcontroller firmware in CTF. |
+| `re-library/platforms-hardware.md` | platforms | Hardware and advanced architecture reversing reference covering HD44780 LCD GPIO, RISC-V extensions/debugging, ARM64 exploitation, MIPS64 crypto coprocessors, and MBR/bootloader RE. | When reversing embedded hardware captures, RISC-V custom instructions, ARM64 exploits, or microcontroller firmware. |
 | `re-library/platforms-kernel.md` | platforms | Reference for reversing Windows and Linux kernel drivers, rootkits, and associated C/C++ binary patterns (WDM, KMDF, minifilters, LKM, eBPF). | When analyzing kernel-mode code such as Windows .sys drivers, Linux kernel modules, rootkits, or minifilter filesystem drivers. |
 | `re-library/platforms.md` | platforms | Platform-specific reversing reference for macOS/iOS (Mach-O, ObjC runtime, Swift), embedded/IoT firmware, Linux kernel modules, eBPF, Windows kernel drivers, and automotive CAN bus. | When analyzing binaries for non-desktop platforms such as macOS/iOS apps, IoT firmware, kernel drivers, or automotive ECU software. |
 | `re-library/tools-advanced.md` | tools | Advanced RE tooling guide covering VMProtect/Themida unpacking, binary diffing (BinDiff/Diaphora), deobfuscation frameworks (D-810, GOOMBA), symbolic execution (Triton, Manticore), Qiling, and Rizin. | When facing heavily packed or obfuscated binaries that require commercial unpacker knowledge, binary diffing, or advanced symbolic execution. |
-| `re-library/tools-crypto.md` | tools | Quick-reference guide to encryption, encoding, and hashing tools (Ciphey, CyberChef, hash utilities, cipher solvers) commonly encountered in RE and CTF work. | When you need to identify, decode, or crack encrypted/encoded/hashed data and are unsure which tool to use. |
+| `re-library/tools-crypto.md` | tools | Quick-reference guide to encryption, encoding, and hashing tools (Ciphey, CyberChef, hash utilities, cipher solvers) commonly encountered in RE work. | When you need to identify, decode, or crack encrypted/encoded/hashed data and are unsure which tool to use. |
 | `re-library/tools-dynamic.md` | tools | Dynamic analysis tooling reference covering Frida hooking, angr symbolic execution, lldb scripting, x64dbg automation, Qiling emulation, and EDR/internal debugger techniques. | When performing runtime analysis, function hooking, path exploration, or symbolic solving against a live binary. |
 | `re-library/tools.md` | tools | Core static RE tools reference covering GDB, Radare2, Ghidra (headless and MCP), Unicorn emulation, Python bytecode analysis, WASM decompilation, and Android APK extraction. | When setting up a reversing workspace or needing quick command references for the most common static analysis and emulation tools. |
