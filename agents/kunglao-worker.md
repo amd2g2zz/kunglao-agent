@@ -308,6 +308,11 @@ across samples.** Rules:
    worker can discover usage without reading source.
 6. **Document inputs/outputs** in the script's docstring: `# Input: <path>,
    <RVA>. Output: <stdout format> or <output file path>.`
+7. **No inline execution of reusable logic.** Never run analysis logic as
+   `python -c "..."` or a heredoc `<<'EOF'` inside a one-off command — reference
+   an existing `scripts/` CLI first, or write a parameterized CLI script and call
+   it. One-off diagnostics may be inline; anything likely to be reused gets a
+   script. CLI spec checklist → `references/cli-script-checklist.md`.
 
 Why this matters: a fresh worker on the next sample should be able to run
 `scripts/re/frida_attach.py --binary <sha> --hook <addr>` and get useful

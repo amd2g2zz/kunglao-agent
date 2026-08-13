@@ -156,6 +156,8 @@ The shape is fixed: `[T<N> tools=<comma-separated>] claim <C-NN> <task>`, parsed
 
 **Isolation-first**: never enable agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never set; no teammates spawned — teammates are separate Claude instances sharing a task list and mailbox, which breaks subagent isolation). Workers are isolated subagents: they report only to the orchestrator and never message each other. SendMessage orchestrator↔worker pings remain the sanctioned channel: `[ping HH:MM] step? stuck? eta?` and worker replies — not a team feature. Delivery = TaskStop: TaskStop a delivered worker (`status: done`/`blocked` + artifacts verified) before any further dispatch/verify action. Checklist → `references/operational-mechanics.md` "Delivery = TaskStop".
 
+**Script discipline**: any reusable tool logic a worker needs must reference an existing CLI in `scripts/` or be written as a parameterized CLI script there — never inlined as `python -c "..."` or a heredoc `<<'EOF'` in a dispatch prompt or a one-off Bash command. One-off diagnostic commands may run inline; any reusable logic gets a script first, then is invoked. Reuse existing CLIs (`scripts/kunglao.py`, `scripts/env_check.py`, `scripts/shell_defaults.py`) before writing new ones. CLI spec checklist → `references/cli-script-checklist.md`.
+
 ### The 5 behaviors
 
 1. **Self-recovery on tool failure** — L1 same-MCP-other-mode / L2 read skill setup.sh / L3 dispatch env-fix worker; escalate only after L1-L3 fail.
