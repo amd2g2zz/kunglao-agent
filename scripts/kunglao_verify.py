@@ -8,6 +8,10 @@
       * assignment-class expected WITH value assertions: 逐字段 byte-exact 比对 (D2, #49)
       * otherwise: 整块 sha256 比对 (原 M3.2 行为)
 - check_assignment_expected: assignment-class 必须绑定 value assertions, 否则 lint-reject (D1/D3, #49)
+- check_expected_anchor_source: expected 不得由产出脚本自算 — recompute_script
+      源码内嵌 expected 即重言式验证, lint-reject (#238 F3, 2026-08-12 adapt-final.py)
+- check_cross_workflow_redteam: provenance=cross_workflow 的 fact 必须带
+      kunglao-redteam 记录, 缺失为 WARN 不阻断 (#238 F6)
 - l2_redteam:    kunglao-redteam 派发封装接口(默认 NOT-RUN; 测试用 dispatcher stub 注入)
 - anchor_check:  PASS 必须带 anchors(byte_offset/cmd/expected); 无锚不提升
 - verify:        M3.4 状态机组合 → 写 runs/verify-<fact_id>-<ts>.json
@@ -197,6 +201,151 @@ def check_assignment_expected(fact: dict, *, grace: bool = False) -> tuple[bool,
 
 
 # ===========================================================================
+# #238 F3/F6: expected-anchor provenance gate + cross-workflow redteam record
+# ===========================================================================
+#
+# F3 (2026-08-12 adapt-final.py 事故): orchestrator 跑自己的脚本、自算 expected
+#   sha256 — L1 比对变成"脚本输出 vs 脚本自身常量"的自比。expected 必须独立于
+#   产出脚本: 若 expected 或其 sha256 出现在 provenance recompute_script 源码
+#   中 → lint 拒绝(重言式验证)。
+# F6 (F001-F003 转述事故): 来自外部工作流(mal-recon 等)的转述证据进入 fact
+#   base 前必须过 kunglao-redteam 抽验; 无 redteam 记录 → WARN(不阻断提升)。
+
+_INLINE_PROV_ENTRY_RE = re.compile(r"\{([^{}]*)\}")
+CROSS_WORKFLOW_MARKER = "cross_workflow"
+
+
+def _prov_recompute_paths(fact: dict) -> list[str]:
+    """provenance 中 role=recompute_script 的 path/url 列表(重读原始 frontmatter).
+
+    load_fact 的 flat parser 不解析 YAML 列表, 这里从 fact 文件原文抽取
+    "- {role: recompute_script, path: ...}" 与 "provenance: [{...}]" 两种形态。
+    """
+    p = fact.get("_path")
+    if not p:
+        return []
+    try:
+        text = Path(p).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    fm = text.split("---", 2)[1] if text.startswith("---") else text
+    paths: list[str] = []
+    for entry in _INLINE_PROV_ENTRY_RE.findall(fm):
+        if re.search(r"role\s*:\s*recompute_script", entry, re.IGNORECASE):
+            m = re.search(r"(?:path|url)\s*:\s*['\"]?([^,'\"}]+)", entry)
+            if m:
+                paths.append(m.group(1).strip())
+    return paths
+
+
+def _resolve_script(script_path: str, fact: dict) -> Path | None:
+    """脚本路径解析: 相对 fact 所在 workspace 根; 找不到再按原样尝试."""
+    p = Path(script_path)
+    if p.is_absolute():
+        return p if p.exists() else None
+    ws = Path(fact["_path"]).parent.parent if fact.get("_path") else Path.cwd()
+    cand = ws / p
+    return cand if cand.exists() else (p if p.exists() else None)
+
+
+def _embedded_token(src_norm: str, token: str) -> bool:
+    """token 在源码(空白已归一)中以独立 token 出现(非更长常量/标识符的子串)."""
+    if not token:
+        return False
+    return bool(re.search(r"(?<![A-Za-z0-9])" + re.escape(token) + r"(?![A-Za-z0-9])", src_norm))
+
+
+def check_expected_anchor_source(fact: dict) -> tuple[bool, str]:
+    """F3 (#238): expected 不得由产出脚本自算 — 重言式验证拒绝.
+
+    provenance 中 role=recompute_script(产出该 fact 证据的脚本)若源码内嵌
+    expected 值或其 sha256, 则 expected 不是独立锚点。返回 (False, reason)
+    阻断提升。脚本缺失 → 放行(L1 reproduce 会以 exit code 单独 FAIL)。
+    """
+    expected = str(fact.get("expected", "")).strip()
+    if not expected:
+        return True, "no expected — nothing to self-compute"
+    exp_hash = _expected_hash(expected)
+    norm_expected = re.sub(r"\s+", "", expected)
+    found_in: list[str] = []
+    for script_path in _prov_recompute_paths(fact):
+        resolved = _resolve_script(script_path, fact)
+        if resolved is None:
+            continue
+        try:
+            src = resolved.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        norm_src = re.sub(r"\s+", "", src)
+        if _embedded_token(norm_src, norm_expected) or _embedded_token(norm_src, exp_hash):
+            found_in.append(str(resolved))
+    if found_in:
+        return False, (f"expected is self-computed by producing script(s) {found_in} "
+                       "— tautological verification (no independent anchor, #238 F3)")
+    return True, "expected not embedded in recompute_script source(s) — anchor independent"
+
+
+def _is_cross_workflow(fact: dict) -> bool:
+    """provenance=cross_workflow 标记检测: 顶层字符串或 role 条目两种形态."""
+    prov = fact.get("provenance")
+    if isinstance(prov, str) and prov.strip().lower() == CROSS_WORKFLOW_MARKER:
+        return True
+    if isinstance(prov, list):
+        if any(isinstance(p, dict)
+               and str(p.get("role", "")).strip().lower() == CROSS_WORKFLOW_MARKER
+               for p in prov):
+            return True
+    # role-entry 形态经 load_fact 的 flat parser 进不来 — 从原文检测兜底
+    p = fact.get("_path")
+    if p:
+        try:
+            text = Path(p).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return False
+        fm = text.split("---", 2)[1] if text.startswith("---") else text
+        if any(re.search(r"role\s*:\s*cross_workflow", e, re.IGNORECASE)
+               for e in _INLINE_PROV_ENTRY_RE.findall(fm)):
+            return True
+    return False
+
+
+def check_cross_workflow_redteam(fact: dict, ws: Path) -> tuple[bool, str]:
+    """F6 (#238): provenance=cross_workflow 的 fact 必须带 kunglao-redteam 记录.
+
+    跨工作流(mal-recon 等)转述证据进入 fact base 前必须过 redteam 抽验。
+    记录 = frontmatter redteam_verdict ∈ {CONFIRMED, PASS} /
+    runs/verify-redteam-*.md(含 fid) / runs/verify-<fid>-*.json(l2.verdict=CONFIRMED)。
+    无记录 → (False, reason), 调用方按 WARNING 处理(不阻断提升)。
+    """
+    if not _is_cross_workflow(fact):
+        return True, "not a cross_workflow fact"
+    fid = str(fact.get("id", ""))
+    rv = str(fact.get("redteam_verdict", "")).strip().upper()
+    if rv in ("CONFIRMED", "PASS"):
+        return True, f"redteam_verdict={rv} recorded in frontmatter"
+    runs = ws / "runs"
+    if runs.is_dir():
+        for f in sorted(runs.glob("verify-redteam-*.md")):
+            try:
+                text = f.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if fid and fid in text:
+                return True, f"redteam record {f.name} cites {fid}"
+        for f in sorted(runs.glob(f"verify-{fid}-*.json")):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                continue
+            if (data.get("l2") or {}).get("verdict") == "CONFIRMED":
+                return True, f"L2 redteam CONFIRMED in {f.name}"
+    return False, ("fact marked provenance=cross_workflow (external-workflow transcription) "
+                   "but has no kunglao-redteam record — must pass redteam spot check "
+                   "(redteam_verdict / runs/verify-redteam-*.md / runs/verify-<fid>-*.json "
+                   "L2 CONFIRMED) before entering the fact base")
+
+
+# ===========================================================================
 
 def parse_reproduce(reproduce: str) -> list[str]:
     """reproduce → argv: 白名单工具开头 → 原样 argv(python 换 sys.executable);
@@ -380,8 +529,19 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
     claim_id = _find_claim_id(fact)
     anchors = fact.get("anchors", [])
 
-    lint_ok, lint_reason = check_assignment_expected(fact, grace=grace)
+    # 组合 lint 门: #49 assignment-class 绑定 + #238 F3 expected 锚点来源。
+    # 任一拒绝 → lint_ok=False(REJECTED, 不提升)。
+    ok1, r1 = check_assignment_expected(fact, grace=grace)
+    ok2, r2 = check_expected_anchor_source(fact)
+    lint_ok = ok1 and ok2
+    lint_reason = r1 if lint_ok else " | ".join(r for ok, r in ((ok1, r1), (ok2, r2)) if not ok)
     lint = {"ok": lint_ok, "reason": lint_reason, "grace": grace}
+
+    # #238 F6: cross_workflow 无 redteam 记录 → WARN(进 warnings, 不阻断)
+    warnings: list[dict] = []
+    cw_ok, cw_reason = check_cross_workflow_redteam(fact, ws)
+    if not cw_ok:
+        warnings.append({"code": "CROSS_WORKFLOW_NO_REDTEAM", "reason": cw_reason})
 
     l1 = l1_mechanical(fact, fixture)
 
@@ -441,7 +601,7 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
                 overall = "UNVERIFIED-WITH-GAP"
 
     out = {"fact_id": fact_id, "claim_id": claim_id, "l1": l1, "l2": l2,
-           "anchors": anchors, "overall": overall, "lint": lint}
+           "anchors": anchors, "overall": overall, "lint": lint, "warnings": warnings}
     if disasm is not None:
         out["disasm"] = disasm
     runs = ws / "runs"
@@ -499,6 +659,8 @@ def main(argv: list[str] | None = None) -> int:
         lint = out.get("lint", {})
         if (not lint.get("ok")) or ("WARN" in lint.get("reason", "")):
             print(f"lint: {lint.get('reason')}")
+        for w in out.get("warnings", []):
+            print(f"warn: [{w.get('code')}] {w.get('reason')}")
         print(f"kunglao-verify {out['fact_id']} (claim {out['claim_id']}): "
               f"L1={out['l1']['verdict']} L2={out['l2']['verdict']} overall={out['overall']}")
         for a in out["anchors"]:
