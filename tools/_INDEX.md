@@ -45,9 +45,9 @@
 
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
-| `audit_legacy_proven.py` | pipeline | 审计 legacy PROVEN fact 状态 | 需要清理旧事实状态时 |
+| `audit_legacy_proven.py` | aux | 审计 legacy PROVEN fact 状态 | 需要清理旧事实状态时 |
 | `build_evidence_index.py` | pipeline | 证据索引构建器(evidence/_index.json + _INDEX.md) | 证据落盘后登记索引时 |
-| `capture_golden.py` | pipeline | golden 用例采集 | 更新 golden fixtures 时 |
-| `disasm_constant_check.py` | ghidra | 反汇编常量 byte-exact 校验 | 校验反汇编断言时 |
-| `measure_blind_coverage.py` | pipeline | 盲验覆盖率测量 | 评估盲验覆盖时 |
-| `measure_cold_start.py` | pipeline | 冷启动测量 | 评估冷启动成本时 |
+| `capture_golden.py` | aux | golden 用例采集 | 更新 golden fixtures 时 |
+| `disasm_constant_check.py` | static | 反汇编常量 byte-exact 校验 | 校验反汇编断言时 |
+| `measure_blind_coverage.py` | aux | 盲验覆盖率测量 | 评估盲验覆盖时 |
+| `measure_cold_start.py` | aux | 冷启动测量 | 评估冷启动成本时 |

@@ -25,4 +25,57 @@ purpose: >-
 #     when_not: 非 ChaCha 流加密时不用
 # -----------------------------------------------------------------------------
 
-tools: []
+tools:
+  # -- static: 反汇编常量 byte-exact 校验 (issue #284 登记) --
+  - name: disasm-constant-check
+    category: static
+    capability: static:disasm-check
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: fact/report 代码清单 + PE 二进制(VA 锚点断言), output: byte-exact 断言校验 JSON(ok/mismatches/errors/skipped)}
+    when_not: 无需 VA 锚点常量校验或没有二进制样本时不用
+
+  # -- pipeline: 证据索引构建 (issue #284 登记) --
+  - name: build-evidence-index
+    category: pipeline
+    capability: pipeline:evidence-index
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: workspace 的 evidence/ + analysis_artifacts/ 原始证据, output: evidence/_index.json + _INDEX.md(eid/path/sha256/source_reliability)}
+    when_not: 纯分析不做证据登记时不用
+
+  # -- aux: legacy PROVEN 审计 (issue #284 登记) --
+  - name: audit-legacy-proven
+    category: aux
+    capability: aux:proven-audit
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: workspace(claim-register.yaml + facts/_INDEX.md), output: legacy PROVEN claim 审计(BLIND 签名维度 + 索引溯源性)}
+    when_not: 无 legacy PROVEN claim 需审计清理时不使用
+
+  # -- aux: golden master 采集 (issue #284 登记) --
+  - name: capture-golden
+    category: aux
+    capability: aux:golden-capture
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 'CASES 清单(合成工作区 + CLI 参数)', output: 'tests/fixtures/golden/{manifest.yaml, F-NN/expected/stdout.txt}'}
+    when_not: 仅契约变更流程用 --refresh 重采, 常规分析不用
+
+  # -- aux: BLIND 覆盖测量 (issue #284 登记) --
+  - name: measure-blind-coverage
+    category: aux
+    capability: aux:blind-coverage
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: workspace(claim-register.yaml + facts/*.md 的 verifier_sign_off), output: BLIND 覆盖率 JSON(PROVEN/blind_signed/unverified/coverage)}
+    when_not: 无需评估盲验覆盖时不用
+
+  # -- aux: 冷启动 token 基线测量 (issue #284 登记) --
+  - name: measure-cold-start
+    category: aux
+    capability: aux:cold-start-metrics
+    tier: T1
+    cost_tier: probe
+    input_output: {input: workspace 状态文件清单(claim-register.yaml/_INDEX/ledger/progress 等), output: docs/baselines/cold-start-tokens.json(逐文件 token 估算)}
+    when_not: 非冷启动基线测量时不使用

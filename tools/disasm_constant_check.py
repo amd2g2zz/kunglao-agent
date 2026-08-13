@@ -15,9 +15,22 @@ compares byte-exact:
 
 CLI: --report <listing> --reference <fact> --binary <pe>  (report mode)
      --fact <fact> --binary <pe>                          (fact mode)
+     --out <json>      write the JSON result to a file (default: stdout)
 
 The verify-note wire (kunglao_verify.verify, binary_path kwarg) runs fact mode
-as a post-gate; the report pipeline invokes report mode pre-handoff.
+as a post-gate via the imported `check_fact_disasm` — this module's import
+surface must stay stable (issue #284); the report pipeline invokes report mode
+pre-handoff.
+
+#277 CLI contract: --json is the default machine output; --out redirects it to
+a file. Exit codes: 0 = assertions match, 1 = negative outcome (mismatch or
+unmapped VA), 2 = operational error (missing/unreadable input file or invalid
+mode selection). PE-load failures are returned inside the JSON result as
+ok=false (exit 1), matching the fail-closed verify wire.
+
+Core PE/capstone helpers (va_to_offset / capstone_for / disasm_at / load_pe)
+live in tools/lib_disasm.py (issue #284 extraction); they are re-exported here
+so existing imports keep working.
 """
 from __future__ import annotations
 
@@ -27,9 +40,14 @@ import re
 import sys
 from pathlib import Path
 
-import capstone
-import capstone.x86
-import pefile
+import pefile  # type annotation for _load() return
+
+from lib_disasm import (  # noqa: E402  (shared PE/capstone helpers, #284)
+    capstone_for as _capstone_for,
+    disasm_at as _disasm_at,
+    load_pe as _load_pe,
+    va_to_offset,
+)
 
 _FIELD_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
 _VA_PREFIX = re.compile(r"^\s*(?:@0x(?P<a>[0-9a-fA-F]+)\s+|0x(?P<b>[0-9a-fA-F]+)\s*:\s*)")
@@ -92,50 +110,8 @@ def _scale_of(v: str) -> int | None:
 
 
 # ---- PE / disasm (D2) ----
-
-def _load_pe(binary_path: Path) -> pefile.PE:
-    return pefile.PE(str(binary_path), fast_load=True)
-
-
-def va_to_offset(pe: pefile.PE, va: int) -> int | None:
-    """VA → raw file offset via section mapping. None when the VA is not in any
-    section or is mapped but not raw-resident."""
-    rva = va - pe.OPTIONAL_HEADER.ImageBase
-    for s in pe.sections:
-        span = max(s.Misc_VirtualSize, s.SizeOfRawData)
-        if s.VirtualAddress <= rva < s.VirtualAddress + span:
-            off = rva - s.VirtualAddress + s.PointerToRawData
-            if s.PointerToRawData <= off < s.PointerToRawData + s.SizeOfRawData:
-                return off
-            return None
-    return None
-
-
-def _capstone_for(pe: pefile.PE) -> capstone.Cs:
-    mode = capstone.CS_MODE_64 if pe.FILE_HEADER.Machine == 0x8664 else capstone.CS_MODE_32
-    md = capstone.Cs(capstone.CS_ARCH_X86, mode)
-    md.detail = True
-    return md
-
-
-def _disasm_at(pe: pefile.PE, raw: bytes, va: int, count: int = 2) -> list[dict] | None:
-    """Disassemble up to `count` instructions at VA. None when VA is unmapped."""
-    off = va_to_offset(pe, va)
-    if off is None or off >= len(raw):
-        return None
-    md = _capstone_for(pe)
-    out: list[dict] = []
-    for ins in md.disasm(raw[off:off + 32], va):
-        imm = None
-        for op in ins.operands:
-            if op.type == capstone.x86.X86_OP_IMM:
-                imm = op.imm
-                break
-        out.append({"addr": ins.address, "mnemonic": ins.mnemonic,
-                    "op_str": ins.op_str, "imm": imm})
-        if len(out) >= count:
-            break
-    return out
+# va_to_offset / capstone_for / disasm_at / load_pe moved to lib_disasm.py
+# (issue #284 extraction) and re-exported above for backward compat.
 
 
 # ---- rules (D3, D4) ----
@@ -273,25 +249,40 @@ def check_report_listing(listing_text: str, fact_text: str, binary_path: Path) -
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="disasm-constant-byte-exact-checker (#50)")
-    ap.add_argument("--fact", help="fact file (fact mode)")
-    ap.add_argument("--report", help="report listing file (report mode)")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--fact", help="fact file (fact mode)")
+    mode.add_argument("--report", help="report listing file (report mode)")
     ap.add_argument("--reference", help="reference fact file (report mode)")
     ap.add_argument("--binary", required=True, help="sample PE binary")
     ap.add_argument("--json", action="store_true", help="emit JSON (default)")
+    ap.add_argument("--out", metavar="FILE",
+                    help="write JSON result to FILE instead of stdout (#277)")
     args = ap.parse_args(argv)
-    if args.fact:
-        result = check_fact_disasm(Path(args.fact).read_text(encoding="utf-8", errors="replace"),
-                                   Path(args.binary))
-    elif args.report:
-        if not args.reference:
-            ap.error("--reference is required for --report mode")
-        result = check_report_listing(
-            Path(args.report).read_text(encoding="utf-8", errors="replace"),
-            Path(args.reference).read_text(encoding="utf-8", errors="replace"),
-            Path(args.binary))
+    try:
+        if args.fact:
+            fact_text = Path(args.fact).read_text(encoding="utf-8", errors="replace")
+            result = check_fact_disasm(fact_text, Path(args.binary))
+        elif args.report:
+            if not args.reference:
+                ap.error("--reference is required for --report mode")
+            result = check_report_listing(
+                Path(args.report).read_text(encoding="utf-8", errors="replace"),
+                Path(args.reference).read_text(encoding="utf-8", errors="replace"),
+                Path(args.binary))
+        else:
+            ap.error("specify --fact or --report")
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    payload = json.dumps(result, indent=2, ensure_ascii=False)
+    if args.out:
+        try:
+            Path(args.out).write_text(payload, encoding="utf-8")
+        except OSError as exc:
+            print(f"error: cannot write --out {args.out}: {exc}", file=sys.stderr)
+            return 2
     else:
-        ap.error("specify --fact or --report")
-    print(json.dumps(result, indent=2, ensure_ascii=False))
+        print(payload)
     return 0 if result.get("ok") else 1
 
 

@@ -8,7 +8,11 @@
 source_reliability = Admiralty 评级(A-F × 1-6),机械默认按 type + --rel 可覆盖。
 派生不进 index → P2 provenance gate 拒"引派生"的 fact(派生 path 不在 index → invalid)。
 
-用法: python build_evidence_index.py <workspace> [--write] [--rel reliability_map.yaml]
+用法: python build_evidence_index.py <workspace> [--write] [--out FILE] [--rel reliability_map.yaml]
+
+#277 CLI contract: JSON is the default machine output (stdout, or --out FILE);
+--write persists evidence/_index.json + _INDEX.md under the workspace. Exit
+codes: 0 = success, 2 = operational error (missing workspace / unreadable --rel).
 """
 from __future__ import annotations
 
@@ -185,21 +189,43 @@ def _load_rel_map(path: str) -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="build_evidence_index.py", description="证据索引构建")
     ap.add_argument("workspace", help="workspace root")
-    ap.add_argument("--write", action="store_true")
+    ap.add_argument("--write", action="store_true",
+                    help="write evidence/_index.json + _INDEX.md under the workspace")
+    ap.add_argument("--out", metavar="FILE",
+                    help="write the JSON index to FILE instead of stdout (#277)")
     ap.add_argument("--rel", metavar="reliability_map.yaml",
                     help="custom Admiralty reliability overrides (YAML)")
     args = ap.parse_args(argv)
     ws = Path(args.workspace)
+    if not ws.is_dir():
+        print(f"error: workspace does not exist: {ws}", file=sys.stderr)
+        return 2
 
     rel_map = _load_rel_map(args.rel) if args.rel else None
 
     if args.write:
-        p = build_and_write(ws, rel_map=rel_map)
-        n = len(json.loads(p.read_text(encoding="utf-8"))["entries"])
-        print(f"evidence index written: {p} ({n} entries)")
+        if args.out:
+            idx = build_index(ws, rel_map=rel_map)
+            idx["generated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.out).write_text(
+                json.dumps(idx, ensure_ascii=False, indent=2), encoding="utf-8")
+            md_path = Path(args.out).with_name("_INDEX.md")
+            md_path.write_text(_render_md(idx), encoding="utf-8")
+            print(f"evidence index written: {Path(args.out).resolve()} "
+                  f"({len(idx['entries'])} entries)")
+        else:
+            p = build_and_write(ws, rel_map=rel_map)
+            n = len(json.loads(p.read_text(encoding="utf-8"))["entries"])
+            print(f"evidence index written: {p} ({n} entries)")
     else:
         idx = build_index(ws, rel_map=rel_map)
-        print(json.dumps(idx, ensure_ascii=False, indent=2))
+        payload = json.dumps(idx, ensure_ascii=False, indent=2)
+        if args.out:
+            Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.out).write_text(payload, encoding="utf-8")
+        else:
+            print(payload)
     return 0
 
 
