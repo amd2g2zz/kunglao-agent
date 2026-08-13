@@ -24,7 +24,6 @@ files:
   references/failure-modes-state.md: e2ae19b8375f0a92c88e40f77b202f00b8071dce3b81047a46f7773f9381851d
   references/failure-modes.md: 07c2d206bce4cfd066c0d881b03f823baf3433028daac99edc571cfa72e9ddf8
   references/guardrails.md: be2d5c814dbf76b6e23b42695cbad3d9daa49a0e59523a601a0a89f8b7a5c18a
-  references/long-horizon-architecture-2026-07.md: cefb106e09a80888f9f2eb88a13c8cbad5852d85b99d943744991e9fff938e91
   references/malware-phase-routing.md: bf16817e3471438273dd0f61966d30abeef6ca7fe7a7ba1880f10c39b28e8f10
   references/memory-protocol.md: 69f9a4a4a7530b2495d1c9adfc84bf20f8bd4bbd144573cf83c11ffadeba9add
   references/method-constraints.md: 23e0fd9d9284e944329e06a222e5e2569ca6e2eb205389f749e1d9e1d0cb273e

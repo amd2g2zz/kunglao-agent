@@ -56,7 +56,6 @@
 | `failure-modes-state.md` | failure-modes | F14-F18: plan-state consistency (stale blockers, claims, drift, progress). | When reporting plan/status/progress issues. |
 | `failure-modes.md` | failure-modes | Index routing the 18 failure modes across three domain files. | When a failure-mode occurred but unsure which domain file to load. |
 | `guardrails.md` | governance | Full backing reference for orchestrator guardrails. | When the SKILL.md inline summary is insufficient. |
-| `long-horizon-architecture-2026-07.md` | design | Pre-implementation research survey of 5 reference architectures. | During design discussions to cite prior art. |
 | `malware-phase-routing.md` | routing | Maps file types to analysis phases, VM isolation boundary. | At the start of a new malware engagement for phase decision. |
 | `memory-protocol.md` | memory | Two-tier memory distill pipeline, entry schemas, linkage to global memory. | When writing to memory/staging/ or triggering a distill. |
 | `method-constraints.md` | dispatch | Constraint table for known-incompatible scenarios. | Before dispatching a worker to include correct method constraints. |

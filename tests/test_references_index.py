@@ -12,11 +12,12 @@ INDEX_FILE = REFERENCES_DIR / "_INDEX.md"
 
 
 def _all_md_files() -> set[str]:
-    """Return relative paths (Posix style) of every .md file under references/, excluding _INDEX.md itself."""
+    """Return relative paths (Posix style) of every .md file under references/, excluding _INDEX.md itself and archived files."""
     return {
         p.relative_to(REFERENCES_DIR).as_posix()
         for p in REFERENCES_DIR.rglob("*.md")
         if p.name not in ("_INDEX.md", "_INDEX.yaml")
+        and "archive/" not in p.relative_to(REFERENCES_DIR).as_posix()
     }
 
 
