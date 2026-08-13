@@ -84,7 +84,7 @@ Invoke `/kunglao-agent [request]` — the parameter is the user request, either 
 1. Subcommand (exact, case-insensitive):
    | subcommand | action |
    |---|---|
-   | `init` | Phase 0 workspace initialization (scaffold + sample mount + task_spec intake + hooks) |
+   | `init` | Phase 0 workspace initialization (scaffold + CLAUDE.md + sample mount + task_spec intake + hooks) |
    | `analysis` (alias `analyze`) | enter the convergence loop (dispatch/verify/update) — default for unrecognized input and empty `$ARGUMENTS` |
    | `verify [fact_id]` | run only the M3 verify chain (L1 mechanical + L2 redteam) |
    | `resume` (alias `continue`) | continue an existing workspace idempotently (no re-scaffold) |
@@ -110,7 +110,7 @@ Invoke `/kunglao-agent [request]` — the parameter is the user request, either 
 | Run-all-gates | see `references/_INDEX.md` "failure-modes" domain |
 | Hard prohibition #5 | x64dbg / Frida host-channel FORBIDDEN |
 
-**Phase 0 → `/init`**: run `/init` for workspace scaffolding — never hand-write scaffold commands. `/init` performs: workspace scaffold (directory skeleton + state files + `facts/_INDEX.md`) → sample mount (`bins/<sha>` + fixtures) → task_spec intake (allowed to ask the user HERE, before iteration 1) → cold-start artifact discovery → pre-flight → seed claims (primary_questions → PRIMARY claims; model_selection → K competing claims via `competitor_group`) → activate hooks → enter the loop. If the workspace already exists (repeated init), resume idempotently from `analysis_state.txt` + `claim-register.yaml` — do not rebuild or overwrite existing state.
+**Phase 0 → `/init`**: run `/init` for workspace scaffolding — never hand-write scaffold commands. `/init` performs: workspace scaffold (directory skeleton + state files + `facts/_INDEX.md` + `CLAUDE.md`) → sample mount (`bins/<sha>` + fixtures) → task_spec intake (allowed to ask the user HERE, before iteration 1) → cold-start artifact discovery → pre-flight → seed claims (primary_questions → PRIMARY claims; model_selection → K competing claims via `competitor_group`) → activate hooks → enter the loop. If the workspace already exists (repeated init), resume idempotently from `analysis_state.txt` + `claim-register.yaml` — do not rebuild or overwrite existing state.
 
 ## Phase 1 Activate
 
