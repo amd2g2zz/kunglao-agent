@@ -608,6 +608,16 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
     runs.mkdir(parents=True, exist_ok=True)
     (runs / f"verify-{fact_id}-{utc_now().replace(':', '')}.json").write_text(
         json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
+    # #287 observability: mirror the verdict to the structured event log.
+    # Guarded — logging must never break verification.
+    try:
+        from kunglao_log import emit
+        emit(ws, actor="orchestrator", action="verify", claim=claim_id,
+             artifact=fact_id, duration_ms=None,
+             exit=0 if overall == "VERIFIED" else 1,
+             detail=f"L1={l1['verdict']} L2={l2['verdict']} overall={overall}")
+    except Exception:
+        pass
     return out
 
 

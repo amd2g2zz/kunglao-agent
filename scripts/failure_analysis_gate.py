@@ -100,6 +100,21 @@ def utc_now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
 
 
+def _emit_failure_blocked(workspace: Path, d: dict) -> None:
+    """#287 observability: log the gate trigger to the structured event log.
+
+    Guarded — logging must never break the gate (a failed analysis run keeps
+    its exit code and BLOCKED output even if the log write fails).
+    """
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="orchestrator", action="failure_blocked",
+             claim=d.get("claim_id"),
+             detail=f"status={d.get('status')} attempts={d.get('promotion_attempts')}")
+    except Exception:
+        pass
+
+
 def _resolve_ws(arg) -> Path:
     if arg:
         return Path(arg)
@@ -616,6 +631,8 @@ def main() -> int:
         # guidance includes similar_lessons — previously dropped here, so the
         # acceptance criterion "BLOCKED 输出含 3 相似 lesson" failed via CLI.
         r = check_claim(workspace, args.claim_id, library=args.library)
+        if r["state"] == "BLOCKED":
+            _emit_failure_blocked(workspace, r)
         if args.json:
             print(json.dumps(r, indent=2, ensure_ascii=False))
         else:
@@ -639,6 +656,7 @@ def main() -> int:
     elif blocked:
         print(f"=== {len(blocked)} claim(s) BLOCKED (failed attempt, no current analysis) ===\n")
         for d in blocked:
+            _emit_failure_blocked(workspace, d)
             _print_blocked(d)
             print()
     else:

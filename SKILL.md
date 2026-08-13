@@ -243,6 +243,13 @@ Isolation-first: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never enabled — no 
 
 **System boundary**: In = orchestrator + workers + modules + fact base + state files + verify loop + dual hook + Phase 0. Out = hr-report (downstream), report generation, symbol recovery as an end, CTI re-query.
 
+## Observability
+
+Monitor a running session from disk — no live server, no new state source:
+
+- **Status panel**: `python <SKILL_DIR>/scripts/kunglao-status.py <WORKSPACE>` renders the claims board (counts by status), active workers (id / claim / step / status / heartbeat time), convergence progress (open-count trend), and the recent event stream. ANSI colors auto-degrade off a TTY; `--no-color` forces plain text.
+- **Event log**: every worker / orchestrator / hook action appends one JSON line to `<WORKSPACE>/runs/logs/kunglao-<date>.jsonl` with ts / actor / action / claim / tool / artifact / duration_ms / exit / detail — tail it for the raw timeline behind the panel.
+
 ## Failure Routing
 
 Read `references/failure-modes.md` (index) for all 18 F-rows and their enforcement scripts; it routes to the three domain-specific files (lifecycle / monitoring / state). Symptom → countermeasure + gate:

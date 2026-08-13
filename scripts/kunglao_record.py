@@ -419,6 +419,14 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
     if event_type:
         record_event(ws, {"source_module": "claim_migrator", "event_type": event_type,
                           "payload": {"claim_id": claim_id, "status": effective_status}})
+    # #287 observability: mirror the register write to the structured event
+    # log. Guarded — logging must never break the migration.
+    try:
+        from kunglao_log import emit
+        emit(ws, actor=actor, action="claim_migrate", claim=claim_id,
+             artifact="claim-register.yaml", detail=effective_status)
+    except Exception:
+        pass
     return (True, f"claim {claim_id} → {effective_status} by {actor} (register updated"
                   + (f"; ledger {event_type}" if event_type else "")
                   + gate_msg)

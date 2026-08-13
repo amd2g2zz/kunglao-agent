@@ -659,6 +659,14 @@ def main() -> int:
 
     d = decide(workspace)
     _append_ledger(workspace, d)  # silent side channel for convergence_health.py
+    # #287 observability: mirror the convergence decision to the structured
+    # event log. Guarded — logging must never block the decision.
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="orchestrator", action="converge",
+             detail=d["decision"], exit=d["exit_code"])
+    except Exception:
+        pass
     if args.json:
         print(json.dumps(d, indent=2, ensure_ascii=False))
     else:
