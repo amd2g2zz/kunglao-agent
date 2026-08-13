@@ -53,7 +53,10 @@ def repin() -> tuple[int, list[str]]:
     changed = new_block != lines[files_start:files_end]
     if changed:
         out = lines[:files_start] + new_block + lines[files_end:]
-        INDEX.write_text("\n".join(out) + "\n", encoding="utf-8")
+        # newline="\n": text-mode write on Windows would otherwise translate
+        # LF -> CRLF, leaving the yaml CRLF on disk (issue #271 — CRLF pins
+        # caused INDEX_DRIFT; keep the file LF so re-pins are portable).
+        INDEX.write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
     return (1 if changed else 0), new_block[1:]
 
 
