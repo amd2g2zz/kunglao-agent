@@ -1,9 +1,9 @@
 {
   "argv": [
-    "C:\\Users\\hr\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\scripts\\reconcile_intents.py",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\tests\\fixtures\\golden\\F-15\\ws/analysis_state.txt",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\tests\\fixtures\\golden\\F-15\\ws/facts"
+    "{{PYTHON}}",
+    "{{ROOT}}\\scripts\\reconcile_intents.py",
+    "{{ROOT}}\\tests\\fixtures\\golden\\F-15\\ws/analysis_state.txt",
+    "{{ROOT}}\\tests\\fixtures\\golden\\F-15\\ws/facts"
   ],
-  "cwd": "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent"
+  "cwd": "{{ROOT}}"
 }

@@ -45,10 +45,48 @@ def test_claim_status_guard_importable() -> None:
 # ---------- golden master ----------
 
 def _load_manifest() -> list[dict]:
+    """Load golden cases and rebase their commands to THIS machine.
+
+    Fixtures were captured on the original author's Windows box and still
+    contain absolute paths (python.exe, C:\\Users\\hr\\.claude\\kong-refactor).
+    The captured paths were rewritten to {{PYTHON}}/{{ROOT}} placeholders in
+    the repo; on any other machine those become sys.executable and the paths
+    under ROOT.  A legacy direct-prefix branch is kept for robustness.
+    The ws/ dirs and expected/stdout.txt stay byte-for-byte comparable.
+    """
     if not MANIFEST.exists():
         return []
     import yaml
-    return yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["cases"]
+    data = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
+    cases = data["cases"]
+    OLD_PY = r"C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe"
+    OLD_PREFIX = r"C:\Users\hr\.claude\kong-refactor\kong-agent"
+    for c in cases:
+        argv = list(c["cmd"]["argv"])
+        # argv[0] is the Windows python.exe (or its {{PYTHON}} placeholder)
+        # — run with THIS interpreter
+        if argv[0] in ("{{PYTHON}}", OLD_PY):
+            argv[0] = sys.executable
+        rebased = []
+        for a in argv[1:]:
+            if isinstance(a, str):
+                if "{{ROOT}}" in a:
+                    a = str(ROOT) + a.split("{{ROOT}}", 1)[1]
+                elif OLD_PREFIX in a:
+                    a = str(ROOT) + a.split(OLD_PREFIX, 1)[1]
+                # captured paths use backslash separators, which only Windows
+                # resolves — normalize for the machine actually running them
+                a = a.replace("\\", "/")
+            rebased.append(a)
+        c["cmd"]["argv"] = [argv[0]] + rebased
+        cwd = c["cmd"].get("cwd")
+        if isinstance(cwd, str):
+            if "{{ROOT}}" in cwd:
+                cwd = str(ROOT) + cwd.split("{{ROOT}}", 1)[1]
+            elif OLD_PREFIX in cwd:
+                cwd = str(ROOT) + cwd.split(OLD_PREFIX, 1)[1]
+            c["cmd"]["cwd"] = cwd.replace("\\", "/")
+    return cases
 
 
 @pytest.mark.parametrize("case", _load_manifest(), ids=lambda c: c["id"])
@@ -75,3 +113,22 @@ def test_golden_replay(case: dict) -> None:
         exp_norm = re.sub(r"\(20\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ\)", "(<TS>)", exp)
         act_norm = re.sub(r"\(20\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ\)", "(<TS>)", r.stdout)
         assert act_norm == exp_norm, f"stdout differs:\n--- expected ---\n{exp_norm}\n--- actual ---\n{act_norm}"
+
+
+def test_golden_cmd_json_has_no_absolute_paths() -> None:
+    """Golden fixtures must be machine-portable: no absolute paths (C:\\, D:\\,
+    /Users/, /home/) anywhere in cmd.json argv/cwd or manifest.yaml."""
+    import json
+    abs_markers = ("C:\\", "c:\\", "D:\\", "d:\\", "/Users/", "/home/")
+    hits: list[str] = []
+    for case_dir in sorted(GOLDEN.glob("F-*")):
+        if not case_dir.is_dir():
+            continue
+        raw = (case_dir / "cmd.json").read_text(encoding="utf-8")
+        if any(m in raw for m in abs_markers):
+            hits.append(f"{case_dir.name}/cmd.json")
+    if MANIFEST.exists():
+        raw = MANIFEST.read_text(encoding="utf-8")
+        if any(m in raw for m in abs_markers):
+            hits.append("manifest.yaml")
+    assert not hits, f"absolute paths hardcoded in: {hits}"

@@ -13,10 +13,9 @@ from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parent.parent.parent  # skills/
-SKILL = REPO / "kunglao-agent"
-SCRIPTS = SKILL / "scripts"
-HOOKS = SKILL / "hooks"
+REPO = Path(__file__).resolve().parent.parent  # repo root (kunglao-agent/)
+SCRIPTS = REPO / "scripts"
+HOOKS = REPO / "hooks"
 
 sys.path.insert(0, str(SCRIPTS))
 import status_defs  # noqa: E402

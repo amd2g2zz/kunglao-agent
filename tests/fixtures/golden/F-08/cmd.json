@@ -1,10 +1,10 @@
 {
   "argv": [
-    "C:\\Users\\hr\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\scripts\\claim_expiry.py",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\tests\\fixtures\\golden\\F-08\\ws",
+    "{{PYTHON}}",
+    "{{ROOT}}\\scripts\\claim_expiry.py",
+    "{{ROOT}}\\tests\\fixtures\\golden\\F-08\\ws",
     "--stale-hours",
     "24"
   ],
-  "cwd": "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent"
+  "cwd": "{{ROOT}}"
 }

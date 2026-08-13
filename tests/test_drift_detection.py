@@ -226,6 +226,9 @@ def test_workers_progressing_done_file(ws):
 def test_workers_progressing_scans_worktree_runs(ws):
     wt_runs = ws.parent / ".wt-01" / "malware-analysis-workspace" / "runs"
     wt_runs.mkdir(parents=True)
+    # v1.9.13 worktree-isolation contract: only .wt-* dirs carrying the
+    # .kunglao-worktree marker are scanned
+    (ws.parent / ".wt-01" / ".kunglao-worktree").write_text("", encoding="utf-8")
     p = wt_runs / "worker-status-wt1.md"
     p.write_text(f"[{ts()}] step: x | status: in-progress\n", encoding="utf-8")
     t = (NOW - timedelta(minutes=5)).timestamp()

@@ -1,8 +1,8 @@
 {
   "argv": [
-    "C:\\Users\\hr\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\scripts\\stale_blocker_prune.py",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\tests\\fixtures\\golden\\F-10\\ws"
+    "{{PYTHON}}",
+    "{{ROOT}}\\scripts\\stale_blocker_prune.py",
+    "{{ROOT}}\\tests\\fixtures\\golden\\F-10\\ws"
   ],
-  "cwd": "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent"
+  "cwd": "{{ROOT}}"
 }

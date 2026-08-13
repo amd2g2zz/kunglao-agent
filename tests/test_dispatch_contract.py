@@ -90,7 +90,9 @@ def _scan_surface() -> list[tuple[str, int, str, str]]:
     """Grep the contract surface for stale Task-tool references.
 
     Surface = SKILL.md + everything under references/, hooks/, scripts/,
-    agents/, .claude/ (spec REQ-1). Returns [(relpath, lineno, line, pattern)].
+    agents/, .claude/ (spec REQ-1). .claude/PRPs/ planning records are
+    historical prose quoting the old `Task` tool — exempt, not live contract.
+    Returns [(relpath, lineno, line, pattern)].
     """
     targets = [SKILL]
     for d in SCAN_DIRS:
@@ -98,6 +100,8 @@ def _scan_surface() -> list[tuple[str, int, str, str]]:
     hits: list[tuple[str, int, str, str]] = []
     for p in targets:
         if "__pycache__" in p.parts or p.suffix == ".pyc":
+            continue
+        if ".claude" in p.parts and "PRPs" in p.parts:
             continue
         try:
             text = p.read_text(encoding="utf-8", errors="replace")

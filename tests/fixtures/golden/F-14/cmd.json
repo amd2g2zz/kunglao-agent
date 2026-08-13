@@ -1,10 +1,10 @@
 {
   "argv": [
-    "C:\\Users\\hr\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\scripts\\normalize_trace.py",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\tests\\fixtures\\golden\\F-14\\ws/trace.json",
+    "{{PYTHON}}",
+    "{{ROOT}}\\scripts\\normalize_trace.py",
+    "{{ROOT}}\\tests\\fixtures\\golden\\F-14\\ws/trace.json",
     "--tool",
     "qiling"
   ],
-  "cwd": "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent"
+  "cwd": "{{ROOT}}"
 }

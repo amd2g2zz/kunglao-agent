@@ -1,13 +1,13 @@
 {
   "argv": [
-    "C:\\Users\\hr\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\scripts\\update_index.py",
+    "{{PYTHON}}",
+    "{{ROOT}}\\scripts\\update_index.py",
     "upsert",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\tests\\fixtures\\golden\\F-16\\ws/facts/_INDEX.md",
+    "{{ROOT}}\\tests\\fixtures\\golden\\F-16\\ws/facts/_INDEX.md",
     "F-abc",
     "OPEN",
     "C-1",
     "test"
   ],
-  "cwd": "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent"
+  "cwd": "{{ROOT}}"
 }
