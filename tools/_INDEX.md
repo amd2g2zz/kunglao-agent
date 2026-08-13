@@ -8,7 +8,7 @@
 |---|---|---|---|
 | crypto | `_index-crypto.md` | chacha-string-layer | 加解密/编解码/哈希工具 |
 | static | `_index-static.md` | die, floss, pefile | 静态识别/特征提取工具 |
-| ghidra | `_index-ghidra.md` | ghidra-headless | Ghidra 反汇编/函数级分析 |
+| ghidra | `_index-ghidra.md` | ghidra-recon, ghidra-decompile-functions, ghidra-vtable-struct, ghidra-evidence-annotations, ghidra-scan-pointer | Ghidra 反汇编/函数级分析 |
 | dynamic | `_index-dynamic.md` | x64dbg-remote, frida-remote | VM 动态调试/运行时分析 |
 | pipeline | `_index-pipeline.md` | build-evidence-index | 证据索引/报告管线 |
 | aux | `_index-aux.md` | file-hash, strings | 辅助/杂项工具 |
@@ -51,3 +51,4 @@
 | `disasm_constant_check.py` | static | 反汇编常量 byte-exact 校验 | 校验反汇编断言时 |
 | `measure_blind_coverage.py` | aux | 盲验覆盖率测量 | 评估盲验覆盖时 |
 | `measure_cold_start.py` | aux | 冷启动测量 | 评估冷启动成本时 |
+| `ghidra/run_ghidra_postscript.py` | ghidra | analyzeHeadless 封装(调 5 件 postScript 工具) | 需要 headless 运行 Ghidra 工具时 |
