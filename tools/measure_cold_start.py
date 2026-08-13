@@ -5,7 +5,11 @@
   固定输入文件清单(claim-register.yaml / _INDEX / digest / ledger / progress 尾部)
   → 按文件 size 估 token(保守 4 chars/token) → 记录 {date, protocol, total_est, by_file}
 
-输出: docs/baselines/cold-start-tokens.json(追加式, 每次测量一行时间戳条目)
+输出: docs/baselines/cold-start-tokens.json(追加式, 每次测量一行时间戳条目; --out 可覆盖)
+
+#277 CLI contract: --out FILE overrides the output path (no hardcoded path);
+--json emits the latest measurement to stdout. Exit codes: 0 = success,
+2 = operational error (no claim-register.yaml in the workspace).
 
 协议版本 1(2026-08-06):
   - files: 状态文件清单
@@ -69,6 +73,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="measure cold-start token baseline (阶段 0)")
     ap.add_argument("workspace", help="workspace root to measure")
     ap.add_argument("--rounds", type=int, default=3, help="rounds to run (default 3)")
+    ap.add_argument("--out", metavar="FILE", default=str(OUT),
+                    help="output JSON file (default: docs/baselines/cold-start-tokens.json, #277)")
+    ap.add_argument("--json", action="store_true", dest="as_json",
+                    help="emit the latest measurement as JSON to stdout (#277)")
     args = ap.parse_args()
 
     ws = Path(args.workspace)
@@ -76,15 +84,19 @@ def main() -> int:
         print(f"FAIL: no claim-register.yaml under {ws}", file=sys.stderr)
         return 2
 
-    BASELINES.mkdir(parents=True, exist_ok=True)
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     entries = []
-    if OUT.exists():
-        entries = json.loads(OUT.read_text(encoding="utf-8"))["entries"]
+    if out_path.exists():
+        entries = json.loads(out_path.read_text(encoding="utf-8"))["entries"]
     for _ in range(args.rounds):
         entries.append(measure(ws))
-    OUT.write_text(json.dumps({"protocol": "v1", "entries": entries}, indent=2, ensure_ascii=False), encoding="utf-8")
+    out_path.write_text(json.dumps({"protocol": "v1", "entries": entries}, indent=2, ensure_ascii=False), encoding="utf-8")
 
     last = entries[-1]
+    if args.as_json:
+        print(json.dumps(last, ensure_ascii=False, indent=2))
+        return 0
     print(f"cold-start token baseline (protocol v1):")
     print(f"  rounds: {args.rounds}  total_est_tokens: {last['total_est_tokens']}  chars: {last['total_chars']}")
     print(f"  top files:")
@@ -92,7 +104,7 @@ def main() -> int:
         print(f"    {name}: {m['est_tokens']} tokens ({m['chars']} chars)")
     if last["missing"]:
         print(f"  missing (0 tokens): {', '.join(last['missing'])}")
-    print(f"  saved -> {OUT}")
+    print(f"  saved -> {out_path}")
     return 0
 
 

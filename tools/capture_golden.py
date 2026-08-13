@@ -148,12 +148,15 @@ def _argv(case: dict, ws: Path) -> list[str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description="capture golden master baselines (阶段 0)")
     ap.add_argument("--refresh", action="store_true", help="re-capture (spec 变更流程用)")
+    ap.add_argument("--out", metavar="DIR", default=str(GOLDEN),
+                    help="golden output dir (default: tests/fixtures/golden, #277)")
     args = ap.parse_args()
 
-    GOLDEN.mkdir(parents=True, exist_ok=True)
+    golden = Path(args.out)
+    golden.mkdir(parents=True, exist_ok=True)
     manifest_cases = []
     for case in CASES:
-        cdir = GOLDEN / case["id"]
+        cdir = golden / case["id"]
         cdir.mkdir(parents=True, exist_ok=True)
         ws = make_ws(cdir, case["claims"], case.get("extra"))
 
@@ -171,10 +174,10 @@ def main() -> int:
         })
         print(f"  [OK ] {case['id']} {case['script']} exit={r.returncode}")
 
-    (GOLDEN / "manifest.yaml").write_text(
+    (golden / "manifest.yaml").write_text(
         yaml.safe_dump({"cases": manifest_cases}, sort_keys=False, allow_unicode=True),
         encoding="utf-8")
-    print(f"manifest: {len(manifest_cases)} cases -> {GOLDEN / 'manifest.yaml'}")
+    print(f"manifest: {len(manifest_cases)} cases -> {golden / 'manifest.yaml'}")
     return 0
 
 

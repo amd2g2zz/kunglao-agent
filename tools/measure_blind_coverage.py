@@ -22,7 +22,11 @@ Exit 0 always — this is a measurement tool, not a gate.
 Usage:
   python tools/measure_blind_coverage.py <workspace>
   python tools/measure_blind_coverage.py <workspace> --json
+  python tools/measure_blind_coverage.py <workspace> --json --out cov.json
   python tools/measure_blind_coverage.py <workspace> --reliability
+
+#277 CLI contract: --json emits machine JSON (stdout or --out FILE). Exit 0
+always — this is a measurement tool, not a gate.
 """
 from __future__ import annotations
 
@@ -135,12 +139,23 @@ def measure_reliability(ws: Path) -> dict:
     }
 
 
+def _emit_json(payload: str, out: str | None) -> None:
+    """Write JSON payload to --out FILE or stdout (#277)."""
+    if out:
+        Path(out).parent.mkdir(parents=True, exist_ok=True)
+        Path(out).write_text(payload, encoding="utf-8")
+    else:
+        print(payload)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="Measure BLIND verifier coverage of PROVEN claims")
     ap.add_argument("workspace", type=Path, help="workspace root")
     ap.add_argument("--json", action="store_true", dest="as_json",
                     help="machine-readable JSON output")
+    ap.add_argument("--out", metavar="FILE",
+                    help="write the JSON result to FILE instead of stdout (#277)")
     ap.add_argument("--reliability", action="store_true",
                     help="report ICD-203 source_reliability coverage instead")
     args = ap.parse_args(argv)
@@ -148,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.reliability:
         result = measure_reliability(args.workspace)
         if args.as_json:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
+            _emit_json(json.dumps(result, ensure_ascii=False, indent=2), args.out)
             return 0
         print(f"Total evidence entries: {result['total']}")
         print(f"With source_reliability: {result['with_reliability']}")
@@ -165,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     result = measure(args.workspace)
 
     if args.as_json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        _emit_json(json.dumps(result, ensure_ascii=False, indent=2), args.out)
         return 0
 
     print(f"PROVEN: {result['proven']}")

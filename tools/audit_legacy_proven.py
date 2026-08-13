@@ -17,6 +17,10 @@ BLIND 签字维度 (issue #16):
 用法:
   python tools/audit_legacy_proven.py <workspace>
   python tools/audit_legacy_proven.py <workspace> --output audit.json
+  python tools/audit_legacy_proven.py <workspace> --json        # JSON → stdout
+
+#277 CLI contract: --output/--out/-o persists the JSON; --json emits it to
+stdout. Exit codes: 0 = success, 2 = operational error (missing workspace).
 """
 from __future__ import annotations
 
@@ -410,17 +414,24 @@ def main(argv: list[str] | None = None) -> int:
         help="Path to the workspace to audit.",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output", "--out", "-o",
         type=str,
         default=None,
         help="Output JSON file path (default: audit-<ws_name>-<timestamp>.json in cwd).",
     )
+    parser.add_argument(
+        "--json", action="store_true", dest="as_json",
+        help="emit the audit JSON to stdout instead of the human summary (#277)",
+    )
     args = parser.parse_args(argv)
 
     ws = args.workspace
-    if not ws.exists():
+    if not ws.is_dir():
         print(f"Error: workspace does not exist: {ws}", file=sys.stderr)
-        return 1
+        return 2
+
+    result = audit_workspace(ws)
+    result["timestamp"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     output = args.output
     if output is None:
@@ -428,7 +439,18 @@ def main(argv: list[str] | None = None) -> int:
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         output = f"audit-{ws_name}-{ts}.json"
 
-    run_audit(ws, output=output)
+    if output:
+        out_path = Path(output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(result, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    if args.as_json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        _print_summary(result)
     return 0
 
 

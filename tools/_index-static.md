@@ -3,5 +3,6 @@
 | 工具 | 契约(一行) | 何时读 / 何时不用 |
 |---|---|---|
 | `die` | `category: static · capability: static:identify · tier: T1 · cost_tier: probe · input: 样本路径 → output: 语言/编译器/加壳识别 json` | 拿到新样本先做快速识别时读; 已确认加壳族/语言后不用 |
+| `disasm-constant-check` | `category: static · capability: static:disasm-check · tier: T1 · cost_tier: cheap · input: fact/report 清单 + PE 二进制 → output: byte-exact 断言校验 json` | 校验反汇编常量断言(VA 锚点)时读; 无需 byte-exact 校验或没有二进制时不用 |
 
 <!-- 骨架: 每登记一个 static 工具到 _INDEX.yaml,在此追加一行,格式同上。 -->
