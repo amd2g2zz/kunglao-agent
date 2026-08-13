@@ -104,7 +104,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `content_hash.py` | fact/content hashing (golden capture too) | tools, tests |
 | `normalize_trace.py` | dynamic trace normalization | tools, tests |
 | `fixture_excerpt_lint.py` | fixture excerpt lint (standalone CLI) | tests, docs |
-| `references_recall.py` | references progressive-disclosure recall CLI — scene/category/filename → INDEX rows (no file dumps); `--list-categories` / `--scene-map` | tests, docs |
+| `references_recall.py` | references scored-recall CLI over the layered index — scenario → primary/supplementary; keyword → top-K ranked rows with score (no file dumps); `--list-categories` / `--scene-map` | tests, docs |
 | `wire_up_settings.py` | hook settings registration (lib for hook_activation) | hooks, lib(1), tests |
 | `shell_defaults.py` | reusable CLI: idempotent shell env-default line management (check/apply/remove, powershell+bash; #276) | lib(1), tests |
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
