@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
+TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: truthy = FAIL; 0/false/off/空 = PASS
 # Issue #228: NO machine-specific default. Unset = not configured — the check
 # FAILs with guidance instead of silently pointing at one operator's lab VM /
 # Ghidra install (a wrong default on any other machine is worse than a FAIL).
@@ -63,19 +64,28 @@ def _load_json(p: Path) -> dict:
         return {}
 
 
+def is_truthy(value: str | None) -> bool:
+    """Truthy 判定: 1/true/yes/on, 不区分大小写 (#276 默认 0 化语义)."""
+    return value is not None and value.strip().lower() in TRUTHY_VALUES
+
+
 # ---------- checks ----------
 
 def check_flag() -> tuple[bool, str]:
-    """CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS must NOT be set in process scope.
+    """CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS must NOT be TRUTHY in process scope.
 
+    #276: default-disabled — only truthy values (1/true/yes/on, case-insensitive)
+    pollute the session (teammate channel); 0/false/off/empty are the clean
+    default state and PASS with detail "disabled (<value>)".
     #88 isolation-first: flag is "REMOVED, SHALL NOT be re-enabled" (cold-start-
     contract.md:46-51). Process scope is the one that decides this session's
     teammate behavior; User/Machine scopes are checked via powershell when the
-    workspace host is Windows (informational).
+    workspace host is Windows (informational, same truthy semantics).
     """
-    violations = []
-    if os.environ.get(FLAG_NAME):
-        violations.append(f"process={os.environ.get(FLAG_NAME)}")
+    truthy = []
+    process_val = os.environ.get(FLAG_NAME)
+    if process_val is not None and is_truthy(process_val):
+        truthy.append(f"process={process_val}")
     if os.name == "nt":
         for scope in ("User", "Machine"):
             try:
@@ -85,17 +95,18 @@ def check_flag() -> tuple[bool, str]:
                     capture_output=True, text=True, timeout=10,
                 )
                 val = r.stdout.strip()
-                if val:
-                    violations.append(f"{scope.lower()}={val}")
+                if val and is_truthy(val):
+                    truthy.append(f"{scope.lower()}={val}")
             except Exception:
                 pass  # powershell unavailable — process scope suffices
-    if violations:
+    if truthy:
         return (False,
-                f"{FLAG_NAME} set ({', '.join(violations)}). Fix: unset the "
+                f"{FLAG_NAME} truthy ({', '.join(truthy)}). Fix: unset the "
                 f"variable in the launching shell, then RESTART the session — "
                 f"a polluted session dispatches through the teammate channel "
                 f"(kunglao #88 forbids it; 2026-08-12: 400 [1210] cascade).")
-    return True, "not set in any scope — clean session"
+    state = f"disabled ({process_val})" if process_val else "not set (default disabled)"
+    return True, f"{FLAG_NAME} {state} — clean session"
 
 
 def check_vm() -> tuple[bool, str]:

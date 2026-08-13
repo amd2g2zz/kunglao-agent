@@ -56,6 +56,18 @@ python <SKILL_DIR>/scripts/hook_activation.py . --renew
 - **Maker-checker**: worker=maker, orchestrator=checker. Facts must be independently verified before promotion to PROVEN.
 - **No mid-iteration user questions**: decide + record reasoning + continue.
 
+## Environment variables
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `0` (default disabled) | Agent-team dispatch channel. MUST stay `0`/unset — truthy values (1/true/yes/on) route subagent dispatches through the teammate channel (2026-08-12 incident). `kunglao-init` sets it to `0` in the session and in your PowerShell profile(s); `scripts/shell_defaults.py` manages profile default lines. |
+| `KUNGLAO_VM_HOST` | unset | VM lease host for dynamic analysis (vmr-shell port 9876 / Frida port 1337). Unset = dynamic analysis (T3) blocked; static analysis may proceed. |
+| `GHIDRA_HOME` | unset | Ghidra install root; `support/analyzeHeadless.bat` must exist under it for decompilation. |
+
+## Tool script discipline
+
+**分析所需的任何可复用逻辑必须落为 `<SKILL_DIR>/scripts/` 下的参数化 CLI 脚本**(无硬编码路径、跨工作区可复用),禁止 ad-hoc 命令行内联执行(`python -c` / heredoc);已有 CLI 优先复用(如 `scripts/shell_defaults.py` 管理 shell 环境默认行、`scripts/env_check.py` 检查环境就绪)。单次一次性命令可用 Bash 执行,但任何「下次还可能再用」的逻辑一律先落脚本再调用。
+
 ## Required rules (read every session)
 
 Read these rules from `~/.claude/rules/common/` at the start of every session — they define behavior baselines that apply even when the kunglao-agent skill is not loaded:

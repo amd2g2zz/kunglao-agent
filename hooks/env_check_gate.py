@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""env_check_gate.py - PreToolUse hard-REJECT while the AGENT_TEAMS flag is set (#233).
+"""env_check_gate.py - PreToolUse hard-REJECT while the AGENT_TEAMS flag is TRUTHY (#233/#276).
 
 2026-08-12 incident: the session ran with CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1.
 Every Agent dispatch routed through the teammate channel and died (400 [1210]
@@ -9,18 +9,22 @@ scripts/env_check.py catches the flag at Phase 0, but a polluted session can
 skip Phase 0 entirely — this hook is the mechanical backstop that fires ON the
 Agent tool itself, at the exact point a worker would be dispatched.
 
+#276 (default 0 化): only TRUTHY values (1/true/yes/on, case-insensitive)
+trigger the hard REJECT; 0/false/off/empty are the clean default state and pass
+through silently — matching scripts/env_check.py check_flag semantics.
+
 Design (mirrors dispatch_gate.py, narrow + zero-IO):
   - ZERO IO by design: reads os.environ directly. No state file, no
     .hook_state.json activation check — a teammate-polluted session must not
     dispatch even during the activation TTL, and the env lookup is the one
     check that cannot be forgotten. This hook ALWAYS fires on the Agent tool
-    while the flag is set (in a kunglao workspace); it sleeps (exit 0) as soon
-    as the flag is gone.
+    while the flag is TRUTHY (in a kunglao workspace); it sleeps (exit 0) as
+    soon as the flag is clean or gone.
   - Workspace resolution mirrors dispatch_gate._resolve_workspace: only
     kunglao-agent workspaces (claim-register.yaml present) are policed, so the
     hook (wired in the GLOBAL settings.json via wire_up_settings.py) stays
     silent in unrelated projects.
-  - flag set -> hard REJECT (exit 2 + stderr) + hookSpecificOutput.additionalContext
+  - flag TRUTHY -> hard REJECT (exit 2 + stderr) + hookSpecificOutput.additionalContext
     guidance: problem / alternative / fix. The additionalContext structure
     mirrors dispatch_gate.py:137-142.
 
@@ -38,6 +42,12 @@ from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
+TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: only truthy rejects; 0/false/空 pass
+
+
+def _is_truthy(value: str | None) -> bool:
+    """Truthy 判定: 1/true/yes/on, 不区分大小写 (#276 默认 0 化语义)."""
+    return value is not None and value.strip().lower() in TRUTHY_VALUES
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
@@ -73,8 +83,9 @@ def evaluate(payload: dict, environ: dict | None = None) -> tuple[int, str, str 
     """Hook decision for a PreToolUse(Agent) payload.
 
     Returns (exit_code, stderr_text, additional_context_or_None):
-      - (0, "", None)      — not a kunglao workspace, or flag not set: silent
-      - (2, stderr, ctx)   — flag set: hard REJECT with guidance
+      - (0, "", None)      — not a kunglao workspace, or flag not TRUTHY
+        (0/false/off/empty = default disabled, #276): silent
+      - (2, stderr, ctx)   — flag TRUTHY: hard REJECT with guidance
     environ defaults to os.environ (zero-IO direct lookup; injectable for tests).
     """
     environ = os.environ if environ is None else environ
@@ -82,7 +93,7 @@ def evaluate(payload: dict, environ: dict | None = None) -> tuple[int, str, str 
     if ws is None:
         return 0, "", None
     flag_val = environ.get(FLAG_NAME)
-    if not flag_val:
+    if not _is_truthy(flag_val):
         return 0, "", None
     return (
         2,
