@@ -135,7 +135,18 @@ def remove(profile: Path, var: str, shell: str) -> dict:
 _EXIT = {"OK": 0, "TRUTHY": 1, "ABSENT": 2}
 
 
-def _default_shell() -> str:
+def _default_shell(profile: Path | None = None) -> str:
+    """Shell format inference: explicit --shell > profile extension > platform.
+
+    A `.ps1`/`.psm1` profile is PowerShell regardless of the OS that runs
+    the CLI (CI on Linux manages Windows profiles); `.bashrc`/`.profile`/
+    `.zshrc` are bash-line formats. Extension unknown → platform default.
+    """
+    if profile is not None:
+        if profile.suffix.lower() in (".ps1", ".psm1"):
+            return "powershell"
+        if profile.name in (".bashrc", ".bash_profile", ".profile", ".zshrc"):
+            return "bash"
     return "powershell" if os.name == "nt" else "bash"
 
 
@@ -169,8 +180,8 @@ def main(argv: list[str] | None = None) -> int:
     _common(p_remove)
 
     args = ap.parse_args(argv)
-    shell = args.shell or _default_shell()
     profile = Path(args.profile)
+    shell = args.shell or _default_shell(profile)
 
     if args.command == "check":
         result = check(profile, args.var, shell)
