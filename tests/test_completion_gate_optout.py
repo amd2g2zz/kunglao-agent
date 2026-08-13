@@ -36,7 +36,7 @@ def test_task_spec_template_declares_calibration_requirement():
     (confidence + falsifier) so the delivery gate can enforce it."""
     import yaml
 
-    text = (ROOT / "templates/task_spec.yaml").read_text(encoding="utf-8")
+    text = (ROOT / "templates/state/task_spec.yaml").read_text(encoding="utf-8")
     data = yaml.safe_load(text)
     cal = data.get("calibration", {})
     assert cal.get("require_confidence", False) is True
@@ -48,7 +48,7 @@ def test_task_oracle_template_has_persistent_adjudication():
     (second-stop anti-loop lives here, not in the shim)."""
     import yaml
 
-    data = yaml.safe_load((ROOT / "templates/task-oracle.yaml").read_text(encoding="utf-8"))
+    data = yaml.safe_load((ROOT / "templates/state/task-oracle.yaml").read_text(encoding="utf-8"))
     adj = data.get("adjudication", {})
     assert "stop_hook_active" in adj
     assert "second_stop" in adj.get("stop_hook_active", {})

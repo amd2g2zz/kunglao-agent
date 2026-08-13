@@ -308,7 +308,8 @@ kunglao-agent/
 ├── scripts/                 # 55 modules: convergence_check, priority_ratio, blind_gate,
 │                            #   provenance_gate, heartbeat_*, convergence_health, ...
 ├── hooks/                   # worker_budget (M2 gate), heartbeat_touch, dispatch_gate, ...
-├── tools/                   # build_evidence_index, audit_legacy_proven, measure_blind_coverage, ...
+├── tools/                   # 工具家:crypto/ static/ ghidra/ frida/ t2/ aux/ 分类存放,
+│                            #   build_evidence_index, audit_legacy_proven, ...
 ├── tests/                   # TDD suite (RED → GREEN per feature; counts in release receipt)
 ├── references/              # 19 protocol docs (convergence-loop, guardrails, RE library, ...)
 ├── schemas/                 # Frozen JSON schemas (decide/verify/tick/event output)
@@ -316,7 +317,8 @@ kunglao-agent/
 ├── openspec/                # SDD change proposals + spec deltas
 ├── docs/refactor/           # Design docs + research (loop-engineering, refactor-plan, ...)
 ├── .claude/PRPs/prds/       # Product requirements (verified-convergence, evidence-integrity)
-└── templates/               # Workspace scaffolds (claim-register, task_spec, failure-registry)
+├── templates/               # state/(claim-register, task_spec, ...) + scripts/ + frida/ 模板
+└── pipelines/               # recipes/ — plan 编排模板
 ```
 
 ---
