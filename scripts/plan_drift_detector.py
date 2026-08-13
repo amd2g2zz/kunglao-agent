@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """plan_drift_detector.py - detect when plan files lag behind reality.
 
 User pain point: "实际进度状态和计划与文件里面的不匹配 - 比如开始规划的时候

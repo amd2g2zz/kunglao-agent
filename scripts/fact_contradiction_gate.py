@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """fact_contradiction_gate — same-topic PROVEN contradiction detection (#47).
 
 a2b5e25c problem 2: F035 and F040 were both PROVEN on the same routing topic

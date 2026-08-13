@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """kunglao-init — workspace 初始化 + 防二次初始化 (phase 3.5, E-init.1-4).
 
 独立 CLI(非 kunglao.py 子命令, module-design L448):

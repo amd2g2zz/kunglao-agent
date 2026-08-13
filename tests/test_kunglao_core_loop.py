@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Behavioral snapshot tests for core loop scripts (Phase 1b of refactor).
 
 Validates the 5 core loop scripts that previously had ZERO test coverage:

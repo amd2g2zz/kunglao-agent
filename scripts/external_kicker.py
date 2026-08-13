@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """external_kicker.py — OS-level dead-session recovery for kunglao-agent (#39).
 
 Problem (T1 obs 4, 2026-08-05): the heartbeat/loop depends on a LIVING Claude

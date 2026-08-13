@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """阶段 5 契约测试: M3 VERIFY / M4 RECORD / M5 MONITOR.
 
 Step 1 RED — 当前状态: kunglao-verify.py / kunglao-record.py / kunglao-monitor.py 不存在 → import 即 RED。

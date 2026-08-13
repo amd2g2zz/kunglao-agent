@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """kunglao-decide.py — M1 DECIDE 独立 CLI (design-spec §6.7.5 L568, module-design.md M1.3-M1.5).
 
 组合: convergence_check.decide(5 分支矩阵, golden F-01..F-16 冻结)

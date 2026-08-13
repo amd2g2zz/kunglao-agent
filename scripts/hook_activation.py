@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """hook_activation.py - selective hook activation for kunglao-agent (core).
 
 User pain point: "kunglao-agent 需要安装hook，但是只有被激活的时候hook才生效，

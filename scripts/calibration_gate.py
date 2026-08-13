@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """calibration_gate — delivery-time calibration check (#204).
 
 Every delivered claim must carry `confidence` (0..1) and a `falsifier`

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """v1.9.36 — heartbeat touch hook (root-cause fix for '整个属于心跳的BUG').
 
 Problem: heartbeat liveness depended on the ORCHESTRATOR processing the cron

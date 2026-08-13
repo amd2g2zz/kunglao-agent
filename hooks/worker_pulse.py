@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """worker_pulse.py - convergence pulse injected after every worker completion (v1.9.8).
 
 WHY: v1.9's convergence loop is agent-invoked — the orchestrator must

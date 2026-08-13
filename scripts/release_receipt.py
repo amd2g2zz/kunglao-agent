@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """release_receipt.py — kunglao-agent release receipt generator (issue #80).
 
 The OBSERVED half of the release contract (the DECLARED half is

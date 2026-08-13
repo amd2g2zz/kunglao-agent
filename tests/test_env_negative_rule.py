@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED tests for env-negative-rule (issue #56, generalizes #48's F040 gate).
 
 #48 shipped check_inference_blind_scope with an env-fault diagnostic that

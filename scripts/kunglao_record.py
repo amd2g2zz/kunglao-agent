@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """kunglao_record — M4 RECORD 实现模块 (phase 5, E5.1).
 
 独立 CLI 入口: scripts/kunglao-record.py(薄包装, 本模块含全部逻辑)。

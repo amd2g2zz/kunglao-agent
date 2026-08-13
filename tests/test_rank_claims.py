@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_rank_claims.py — tests for priority.py rank_claims with OUTCOME factor (#122)."""
 from __future__ import annotations
 import sys

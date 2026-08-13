@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_memory_distill_gate.py — issue #82 candidate-gate lifecycle (SDD+TDD).
 
 RED first: distill candidate-first state machine, candidate lab (held-in/held-out

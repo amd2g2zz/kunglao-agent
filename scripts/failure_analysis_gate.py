@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """failure_analysis_gate.py - force method reasoning after a failed attempt (v1.9.3).
 
 THE PROBLEM THIS SOLVES (user's exact words):

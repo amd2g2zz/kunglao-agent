@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """blind_gate — independent-verifier (BLIND) sign-off gate for PROVEN promotions.
 
 PRD verified-convergence M1: every claim promoted to PROVEN must carry an

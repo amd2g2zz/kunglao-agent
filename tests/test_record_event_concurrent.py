@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_record_event_concurrent.py -- Issue #96 F8: record_event
 全量重写 ledger 并发竞态导致事件丢失.
 

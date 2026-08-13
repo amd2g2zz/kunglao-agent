@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """reconcile_intents — WAL cold-restart reconciliation (DESIGN §14).
 
 On cold-restart, the orchestrator calls reconcile() to detect crash-induced state drift:

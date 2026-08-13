@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for outcome_capture.py — external-checker verdicts -> ledger OUTCOME rows (#35).
 
 RED phase of the outcome-capture-r6 change (GitHub #35). These tests pin the

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """test_operator_action.py — OPERATOR_ACTION ledger line type (#142)."""
 from __future__ import annotations
 import json

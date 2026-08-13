@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """status_defs — single source of truth for claim status sets (safety net #34).
 
 All claim-status consumers import the sets defined here instead of

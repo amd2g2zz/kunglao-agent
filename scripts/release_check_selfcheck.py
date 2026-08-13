@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """CI YAML lint — repo-owned so CI 损坏可本地复现（issue #147 P0）。
 
 Parses .github/workflows/*.yml with yaml.safe_load and prints any parse

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """reconcile_workers.py - rebuild [active_workers] from worktree status files.
 
 Extracted from hook_activation.py (T-2 split) — the --reconcile job.

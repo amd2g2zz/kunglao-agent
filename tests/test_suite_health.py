@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """阶段 0 契约测试: pytest 套件健康 + golden master 基建.
 
 Step 0/1 RED — 当前状态:

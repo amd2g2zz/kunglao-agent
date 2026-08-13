@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_cli_matrix.py — 8 独立 CLI 收敛 (issue #5, plan §8)。"""
 from __future__ import annotations
 

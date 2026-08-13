@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — tests for hooks/state_anchor.py (issue #44, L1 PREVENT layer).
 
 state_anchor is a PostToolUse(Agent) hook that injects a compact mechanical-

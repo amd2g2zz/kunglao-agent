@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED phase — prove schema mismatch (issue #97, F2).
 
 Before the fix:

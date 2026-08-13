@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """stale_blocker_prune.py - auto-resolve blockers when their claim is closed.
 
 User pain point: "状态管理很差 - 一些任务以及过期了或者以及解决了还显示的blocker"

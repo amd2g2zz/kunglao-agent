@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_digest.py — digest 机械生成 (issue #3, design-spec §3.6).
 
 RED: build_digest 产出六节 markdown, 2-4KB, 数字保真, 完整性。

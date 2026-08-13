@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Batch 0 acceptance gates for the false-closure elimination.
 
 - The SKILL.md contract must not promise checks the code does not

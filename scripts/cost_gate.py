@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """cost_gate.py - detect cost warnings and emit advisory or hard-pause.
 
 User pain point: "PostToolUse hook cost warnings interrupt kunglao-agent workflow."

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for failure-lessons (#41) — outcome field on --record + lessons library.
 
 RED phase of the failure-lessons change (GitHub #41). These tests pin the

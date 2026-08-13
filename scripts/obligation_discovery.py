@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """obligation_discovery — DiscoveryEmitted → ObligationCreated (#147 P0).
 
 Convergence only manages REGISTERED work; discoveries written into fact

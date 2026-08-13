@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_acceptance.py — 端到端静态验收 (issue #6, plan §2.3/§9)。"""
 from __future__ import annotations
 

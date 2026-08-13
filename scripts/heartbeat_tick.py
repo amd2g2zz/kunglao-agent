@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """v1.9.38 — heartbeat_tick.py: ONE-command heartbeat tick (mechanical part).
 
 The heartbeat LOOP has a platform limit: Claude Code's cron can only fire a

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for scripts/update_index.py — atomic facts/_INDEX.md maintenance (DESIGN §13.6).
 
 _INDEX.md is the orchestrator's O(1) status-count source. Format: one row per fact:

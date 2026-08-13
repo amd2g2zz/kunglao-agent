@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """dispatch_gate.py - narrow PreToolUse enforcement for failure-blocked claims (v1.9.7).
 
 WHY: convergence_check / priority.py / failure_analysis_gate are all

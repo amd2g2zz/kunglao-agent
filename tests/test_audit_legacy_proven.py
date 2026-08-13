@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_audit_legacy_proven.py — M4 issue #16: 46 假 PROVEN 审计工具.
 
 RED: fixture(混合 verified/unverified PROVEN)→ 审计正确分类

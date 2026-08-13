@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """lib_kunglao.py — kunglao-agent shared library (Phase 2 E2.4).
 
 Consolidates duplicated implementations across hooks:

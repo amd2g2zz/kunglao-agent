@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """check_global_rule_subset.py — Validate global-rule hard prohibitions are a
 semantic subset of SKILL.md hard prohibitions.
 

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED tests for disasm-constant-byte-exact-checker (issue #50, a2b5e25c problem 1).
 
 TDD: these tests import tools/disasm_constant_check.py which does NOT exist

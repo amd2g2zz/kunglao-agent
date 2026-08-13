@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — tests for scripts/external_kicker.py (issue #39, OS-level dead-session recovery).
 
 All I/O is SYNTHETIC: pytest tmp_path only. The real project settings file

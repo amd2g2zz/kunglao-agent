@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """review_gate.py — 3-reviewer all-PASS commit gate (maker-checker mechanical).
 
 Enforces the /goal contract: NO commit may land unless >=3 independent

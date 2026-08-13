@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """test_worktree_marker.py — verify .kunglao-worktree marker gating (#137)."""
 from __future__ import annotations
 import tempfile

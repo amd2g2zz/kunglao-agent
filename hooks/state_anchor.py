@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """state_anchor.py - per-turn mechanical state re-anchor (v1.9.#44, L1 PREVENT).
 
 WHY: v1.9's convergence loop is reliable only as long as the orchestrator

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Calibration gate (#204): every delivered claim MUST carry confidence +
 falsifier. A claim without them is incomplete — never silently wrong."""
 import sys

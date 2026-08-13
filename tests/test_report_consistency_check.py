@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — tests for scripts/report_consistency_check.py (#57).
 
 Cross-chapter report-INTERNAL consistency checker. Catches the 3 contradiction

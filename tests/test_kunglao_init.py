@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """阶段 3.5 契约测试: kunglao-init 防二次初始化.
 
 Step 1 RED — 当前状态: kunglao-init.py 不存在 → import 即 RED。

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for dead_letter.py — DEAD status + dead-letter quarantine (#36).
 
 TDD RED phase: these tests define the contract BEFORE implementation.

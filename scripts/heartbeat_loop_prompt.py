@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """heartbeat_loop_prompt.py — v1.9.26: generate the FULL /loop heartbeat prompt.
 
 Why: the heartbeat must be BORN registered. The orchestrator used to create

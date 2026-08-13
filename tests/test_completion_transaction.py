@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Completion transaction (issue #202): CONVERGED requires a GLOBAL
 contradiction recompute — the workspace facts index, not a pre-filled
 oracle, is the authority.

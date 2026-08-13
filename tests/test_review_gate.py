@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for scripts/review_gate.py — 3-reviewer all-PASS commit gate (#145).
 
 Covers the anti-cheat contract: mint requires >=3 distinct registered ids,

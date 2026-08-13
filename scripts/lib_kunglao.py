@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """lib_kunglao.py — scripts-side shared library for kunglao-agent (#43).
 
 Drift detection (alive-but-stuck): the session's heartbeat stays fresh

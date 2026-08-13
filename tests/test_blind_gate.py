@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED tests for blind-verify-on-promotion (issue #15, PRD M1).
 
 TDD: these tests import modules/functions that do NOT exist yet

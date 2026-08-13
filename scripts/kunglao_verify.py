@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """kunglao_verify — M3 VERIFY 实现模块 (phase 5, E5.1).
 
 独立 CLI 入口: scripts/kunglao-verify.py(薄包装, 本模块含全部逻辑)。

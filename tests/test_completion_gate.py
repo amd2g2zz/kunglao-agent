@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — tests for scripts/completion_gate.py + hooks/completion_gate.py (#55).
 
 The code-owned completion gate makes "done" a CODE verdict. judge(oracle)

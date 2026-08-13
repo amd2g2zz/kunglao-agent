@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """kunglao-monitor — M5 MONITOR 独立 CLI (phase 5, E5.3).
 
 组合 heartbeat_check + loop_reconcile + help_watch + stuck_watch + health_check

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """kunglao-record — M4 RECORD 独立 CLI 入口 (phase 5, E5.1).
 
 用法: python kunglao-record.py <ws> --event '<json>'

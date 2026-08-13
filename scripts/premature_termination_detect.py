@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """premature_termination_detect.py — detect the 4-fingerprint signature of
 premature-termination in an orchestrator's closing declaration (#54).
 

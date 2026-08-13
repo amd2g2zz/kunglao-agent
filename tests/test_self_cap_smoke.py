@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Smoke test suite for `worker_budget.detect_self_cap` and `check_no_self_cap`.
 
 Validates both directions:

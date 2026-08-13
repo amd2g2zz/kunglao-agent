@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """heartbeat.py - heartbeat register/verify as verifiable file state.
 
 Extracted from hook_activation.py (T-2 split) — the --heartbeat-on /

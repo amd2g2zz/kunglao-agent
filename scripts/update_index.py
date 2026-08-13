@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """update_index — atomic facts/_INDEX.md maintenance (DESIGN §13.6).
 
 _INDEX.md is the orchestrator's O(1) status-count source for cold-restart.

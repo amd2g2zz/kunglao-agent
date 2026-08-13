@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — fired-predicate resume prompt (issue #45, RECOVER layer, F4).
 
 RED contract: `scripts/external_kicker.py::build_resume_prompt(ws, *,

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """hook_exit_codes.py — shared exit-code definitions for all hooks.
 
 Mirrors the status_defs.py pattern: single source of truth for exit codes.

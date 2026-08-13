@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """provenance_gate — evidence provenance gate (P2, PRD evidence-integrity-icd203).
 
 Every fact must cite its evidence via the evidence index (evidence/_index.json).

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """hooks/completion_gate.py — Stop-hook shim for the code-owned completion gate (#55).
 
 Thin wrapper around scripts/completion_gate.py::judge. Reads the Claude Code

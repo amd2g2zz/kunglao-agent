@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """convergence_check.py - the "should I dispatch right now?" decision (v1.9).
 
 Companion to priority.py:

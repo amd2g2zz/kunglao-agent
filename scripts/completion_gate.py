@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """completion_gate.py — code-owned completion gate (#55).
 
 WHY: termination judgment has been pure LLM discretion — the 2026-08-11

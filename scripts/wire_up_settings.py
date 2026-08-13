@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """wire_up_settings.py - register kunglao-agent hooks in the global settings.json.
 
 Extracted from hook_activation.py (T-2 split) — the --wire-up job.

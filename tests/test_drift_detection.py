@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — tests for scripts/lib_kunglao.py drift detection + external_kicker.should_kick (#43).
 
 Drift = alive-but-stuck: heartbeat fresh + ledger writing + zero state

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Contract: the PROVEN migration path (kunglao_record.claim_migrator) MUST
 call provenance_gate.check_provenance_gate — the research replay showed the
 checker exists but is not on the mandatory path (summary-only promotion)."""

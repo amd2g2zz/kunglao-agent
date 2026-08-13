@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """digest_build.py — digest 机械生成 (issue #3, design-spec §3.6).
 
 六节 markdown digest (2-4KB), 纯机械无 LLM, 供冷启动注入替代全量 progress.txt 读取。

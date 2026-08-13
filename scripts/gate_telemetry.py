@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """gate_telemetry.py — gate 触发埋点(实验 1: 砍/留判定数据采集).
 
 各 gate 的 check() 用 @telemetry 装饰, 每次调用记一行到 runs/gate-telemetry.jsonl:

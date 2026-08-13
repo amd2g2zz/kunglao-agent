@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """convergence_health.py - is the loop actually converging, or just spinning? (v1.9.2)
 
 Reads the ledger that convergence_check.py appends each turn and asks the

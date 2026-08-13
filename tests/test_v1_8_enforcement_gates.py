@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Consolidated smoke test for v1.8.2-v1.8.5 enforcement gates.
 
 Validates (24 tests across 10 gates):

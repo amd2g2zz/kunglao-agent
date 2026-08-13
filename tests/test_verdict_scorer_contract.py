@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_verdict_scorer_contract.py — contract tests for verdict-scorer agent (issue #106).
 
 Validates that agents/verdict-scorer.md:

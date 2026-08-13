@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_evidence_index.py — evidence index builder (P1 + P3 ICD-203 source reliability).
 
 RED: build_evidence_index 扫 raw 证据(排除派生),eid→path+sha256 可溯。

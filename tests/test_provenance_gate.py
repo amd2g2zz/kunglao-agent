@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED tests for provenance_gate (P2, PRD evidence-integrity-icd203 issue #24).
 
 TDD: these tests import provenance_gate which does NOT exist yet → RED.

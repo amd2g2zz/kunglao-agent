@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_release_receipt.py — issue #80 release contract (SDD+TDD).
 
 Contract: a fresh clone reproduces the documented install + CLI surface; the

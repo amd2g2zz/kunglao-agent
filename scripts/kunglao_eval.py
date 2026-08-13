@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """kunglao_eval.py — eval harness module (issue #4, plan §7, design-spec §6.7.6).
 
 确定性核心: oracle 10/10 自检 (单独报告, 不并入 capability score)。

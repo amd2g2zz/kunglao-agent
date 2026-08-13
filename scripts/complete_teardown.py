@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """complete_teardown.py - 1-call search operator chain returning a fact bundle.
 
 User said: 'kunglao-agent是一个逆向agent,为了解决问题我把逆向问题抽象为搜索问题,

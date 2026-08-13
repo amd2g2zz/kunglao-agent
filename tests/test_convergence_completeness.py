@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED tests for CONVERGED completeness gate (issue #17, PRD M2).
 
 TDD: these tests exercise _orphan_terminal_claims, _unverified_primary_questions,

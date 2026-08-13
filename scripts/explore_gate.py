@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """explore_gate.py — M1 DECIDE 探索阶段判定 (module-design.md M1.2 L119-121, design-spec §3.2 L132-134).
 
 count < threshold → 探索模式(按 cheapness 铺开 T1)。契约空白: EXPLORE_THRESHOLD = 5

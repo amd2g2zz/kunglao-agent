@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_heartbeat_gate.py — heartbeat liveness gate F1 (#14, PRD M3).
 
 RED: gate 读 max(last_tick_ts, activity_ts) — tool 活跃(activity_ts)即使 cron 不 tick 也应 alive。

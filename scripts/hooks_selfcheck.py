@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """v1.9.37 — hooks_selfcheck.py (root-cause fix for recurring 'heartbeat/monitoring lost').
 
 Incident (2026-08-05 14:20): ~/.claude/settings.json had its entire `hooks` segment

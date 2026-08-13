@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Template contracts + Stop-hook second-stop adjudication.
 
 - Templates (issue #201): the delivery gate (#204) needs task_spec to

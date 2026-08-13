@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """worker_budget — Pre+Post ToolUse hook on Agent (DESIGN §11).
 
 Enforces 5 dispatch gates + worker accounting:

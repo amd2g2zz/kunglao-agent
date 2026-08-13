@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Contract + integration tests for #36 — DEAD status + dead-letter quarantine.
 
 Contract (mirrors tests/test_terminal_superseded.py style):

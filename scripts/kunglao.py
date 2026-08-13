@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """kunglao.py — kunglao-agent unified entry point (Phase 3 E3.1).
 
 Replaces the 31 scattered CLIs with subcommands, each composing existing

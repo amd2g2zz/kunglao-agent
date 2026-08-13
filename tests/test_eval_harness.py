@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_eval_harness.py — eval harness oracle 自检 (issue #4, plan §7).
 
 RED: oracle 10/10 (确定性核心); 三臂配置; 故障注入骨架。

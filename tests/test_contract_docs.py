@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """阶段 3 契约测试: SKILL.md 结构约束(≤500 行/一层深/授权矩阵/references 完整性).
 
 Step 1 RED — 当前状态:

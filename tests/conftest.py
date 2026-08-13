@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """阶段 0 共享 fixture: 后续所有阶段(SDD 契约测试)复用.
 
 - ws_factory:       tmp 工作区构造器(claim-register.yaml / runs / facts/_INDEX / claim_deps.yaml / task_spec.yaml)

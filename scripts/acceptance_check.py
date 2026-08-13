@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """acceptance_check.py — 端到端验收 (issue #6, plan §2.3/§9).
 
 静态验收: 验证重构核心机制就位 + 可运行 (动态真实样本 run 属生产 skill 职责, deferred)。

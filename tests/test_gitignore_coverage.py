@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_gitignore_coverage.py — verify .gitignore covers all required exclusions."""
 from pathlib import Path
 

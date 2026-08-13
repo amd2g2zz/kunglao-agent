@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for scripts/reconcile_intents.py — WAL cold-restart reconciliation (DESIGN §14).
 
 On cold-restart, scan intents. Report:

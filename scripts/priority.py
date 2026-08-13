@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """priority.py - kunglao-agent greedy best-first dispatch ranker (DESIGN section 8.5).
 
 This is the SINGLE SANCTIONED dispatch ranker (v1.9.29, R4). priority_ratio.py

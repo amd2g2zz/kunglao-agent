@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """fixture_excerpt_lint — condensed decompile excerpt conversion/speculation lint (#58).
 
 The a2b5e25c problem-1 root cause lived in a worker's CONDENSED Ghidra decompile

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for hooks/worker_budget.py — Pre+Post ToolUse on Agent (DESIGN §11).
 
 Hook enforces 5 dispatch gates + worker accounting:

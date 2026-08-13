@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — tests for scripts/fixture_excerpt_lint.py (#58).
 
 The a2b5e25c problem-1 root cause: a worker's CONDENSED Ghidra decompile

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Issue #93 regression tests: skill arguments = the user REQUEST, not a workspace path.
 
 Guards three facts (SDD design D1/D2/D3, issue #93 — user correction on #90):

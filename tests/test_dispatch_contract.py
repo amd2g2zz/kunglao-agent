@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED — dispatch contract isolation-first + TaskStop-on-delivery (issue #88).
 
 Regression tests for the isolation-first dispatch contract

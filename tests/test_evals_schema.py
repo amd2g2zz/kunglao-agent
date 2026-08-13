@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_evals_schema.py — structural validation of evals/evals.json.
 
 Guards the skill-creator contract: evals/evals.json must exist, be valid JSON,

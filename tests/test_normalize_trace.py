@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for normalize_trace.normalize — VERIFY-side trace normalization (DESIGN §12).
 
 Dynamic VERIFY must diff traces across runs deterministically. Pointers/timestamps/

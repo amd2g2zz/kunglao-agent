@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """reuse_gate.py - enforce reuse-before-recompute on every dispatch.
 
 User pain point: "考虑工作积累喜欢做一些一次性工作但是对后面分析没有太大帮助和复用性"

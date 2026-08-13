@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for status_defs.py — single source of truth for claim status sets.
 
 RED phase of the status-defs-safety-net change (GitHub #34). These tests

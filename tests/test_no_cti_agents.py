@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED test for issue #105 — B4-1 remove CTI agents.
 
 Asserts that banned agent names are absent from the codebase.

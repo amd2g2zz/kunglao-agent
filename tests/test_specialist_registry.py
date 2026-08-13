@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """test_specialist_registry.py — specialist agent routing tests (#135)."""
 from __future__ import annotations
 import re

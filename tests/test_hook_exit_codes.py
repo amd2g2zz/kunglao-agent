@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """test_hook_exit_codes.py — verify exit-code semantic separation (#134)."""
 from scripts.hook_exit_codes import ExitCode, HOOK_EXIT_SEMANTICS
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """kunglao-eval — eval harness CLI (thin wrapper, module见 kunglao_eval.py)."""
 import sys
 from pathlib import Path

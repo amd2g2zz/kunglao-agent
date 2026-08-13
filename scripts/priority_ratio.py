@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """priority_ratio.py — M1 DECIDE VoI 代理动作排序 (issue #2, design-spec §3.2).
 
 VoI 代理 / 成本 (纯机械, 零 LLM 调用):

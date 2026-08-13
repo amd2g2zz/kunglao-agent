@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """ask_for_direction_gate.py - block orchestrator self-avoidance / 反问 output.
 
 User pain point: "kunglao-agent 遇到问题不自己解决而是停下来询问或者反问"

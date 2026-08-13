@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """#46 contract tests: rules/kunglao-convergence-loop.md (distilled always-on rules).
 
 RED phase: the rules file does not exist yet — every test fails.

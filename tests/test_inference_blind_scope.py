@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED tests for inference-claim-blind-scope (issue #48, a2b5e25c problem 2).
 
 TDD: these tests import check_inference_blind_scope which does NOT exist yet →

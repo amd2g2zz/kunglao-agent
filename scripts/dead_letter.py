@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """dead_letter.py - DEAD status + quarantine for poison / exhausted claims (#36).
 
 A claim whose `promotion_attempts >= 3` has exhausted the convergence loop's

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """backtrack_gate.py - detect workers stuck > N min without progress.
 
 User pain point: "kunglao-agent 不会回退 - 遇到了问题以及很长时间了, 但是还在做

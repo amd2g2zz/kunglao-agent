@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_priority_ratio.py — VoI 代理打分 (issue #2, design-spec §3.2).
 
 RED: 新公式 score = [0.45·L + 0.30·D + 0.25·N] / cost; 旧 0.35·Δdisc 公式已废。

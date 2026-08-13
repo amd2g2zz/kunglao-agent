@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED tests for ICD-203 7-tier confidence ladder (issue #27, PRD P4).
 
 TDD: these tests import confidence_schema which does NOT exist yet → RED.

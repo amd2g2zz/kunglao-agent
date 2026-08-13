@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """DiscoveryEmitted → ObligationCreated: fact bodies that disclose
 un-analyzed payloads / shellcode / next-stage URLs must create child
 obligations (research replay #1), and decide() must refuse CONVERGED

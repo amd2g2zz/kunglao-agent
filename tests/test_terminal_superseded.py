@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED tests for #59 — SUPERSEDED MUST be a terminal status.
 
 Status quo (bug): SUPERSEDED is not in status_defs.TERMINAL, so both

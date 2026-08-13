@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """report_consistency_check — cross-chapter report-INTERNAL consistency checker (#57).
 
 Detects contradictions that live ENTIRELY INSIDE a report markdown (no binary

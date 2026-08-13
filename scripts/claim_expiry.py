@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """claim_expiry.py - mark long-untouched OPEN claims as STALE (priority demotion).
 
 User pain point: "状态管理很差 - 一些任务以及过期了"

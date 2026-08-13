@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """v1.9.39 — agent_watch.py: mechanical subagent lifecycle watch.
 
 Monitoring gap (user report 2026-08-05): a NEW subagent is invisible to

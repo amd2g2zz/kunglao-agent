@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED tests for fact_contradiction_gate (issue #47, a2b5e25c problem 2).
 
 TDD: these tests import fact_contradiction_gate which does NOT exist yet → RED.

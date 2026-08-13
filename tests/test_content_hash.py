@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Tests for content_hash.fact_id — fact_id = content-sha256 for idempotent fact writes.
 
 TDD RED phase: this test defines the contract BEFORE implementation.
