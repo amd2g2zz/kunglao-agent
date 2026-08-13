@@ -36,6 +36,7 @@ eval/receipts/
 
 # Review gate + progress (never tracked)
 .review-gate/
+.claude/reviews/
 progress.txt
 
 # Security — never track secrets, hooks, or skill packages

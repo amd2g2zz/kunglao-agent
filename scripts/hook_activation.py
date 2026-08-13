@@ -244,7 +244,7 @@ def main() -> int:
                         help="refresh activation expiry (orchestrator-only; subagents forbidden)")
     parser.add_argument("--wire-up", action="store_true",
                         help="register kunglao-agent hooks in ~/.claude/settings.json (PreToolUse "
-                             "worker_budget+dispatch_gate, PostToolUse worker_budget+worker_pulse, matcher "
+                             "env_check_gate+worker_budget+dispatch_gate, PostToolUse worker_budget+worker_pulse, matcher "
                              "Agent). Idempotent: merges into existing hooks config, preserves other keys. "
                              "Called at Phase 0 by the orchestrator; fixes 'hooks never fired' recurrences.")
     parser.add_argument("--reconcile", action="store_true",
