@@ -16,7 +16,8 @@ Checks:
   1. AGENT_TEAMS flag — process/User/Machine scope (decides session teammate behavior)
   2. VM reachability   — TCP 9876 (vmr-shell) + 1337 (Frida), 2s timeout each
   3. Ghidra            — analyzeHeadless.bat exists (path from GHIDRA_HOME env; unset = FAIL with guidance)
-  4. Hook deployment   — settings.json has the kunglao hooks wire_up_settings registers
+  4. Hook deployment   — <ws>/.claude/settings.json has the kunglao hooks
+                         wire_up_settings registers (PROJECT-level, #258/#269)
   5. venv + sample     — .venv python exists w/ cryptography+yaml; sample sha256
 
 FAIL grading (gate logic lives in hooks/env_check_gate.py):
@@ -132,8 +133,14 @@ def check_ghidra() -> tuple[bool, str]:
 
 
 def check_hooks(ws: Path) -> tuple[bool, str]:
-    """kunglao hooks registered in user settings.json (mirror of hooks_selfcheck)."""
-    settings = Path(os.environ.get("USERPROFILE", str(Path.home()))) / ".claude" / "settings.json"
+    """kunglao hooks registered in the PROJECT settings.json
+    (<ws>/.claude/settings.json) — the deployment target since #258.
+
+    #269: this previously read the user-global ~/.claude/settings.json, which
+    is NOT a deployment target since #258 — a correctly wired PROJECT-level
+    deployment was misreported as 'hooks missing'. The user-global file can
+    still be checked by hooks_selfcheck (warning-only, migration guidance)."""
+    settings = ws / ".claude" / "settings.json"
     if not settings.exists():
         return False, f"no settings.json at {settings} — run hook_activation.py --wire-up"
     s = _load_json(settings)

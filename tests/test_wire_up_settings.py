@@ -104,21 +104,26 @@ def test_wire_up_idempotent(tmp_path, fake_home):
     assert not (fake_home / ".claude" / "settings.json").exists()
 
 
-def test_wire_up_hook_paths_point_to_skill_repo(tmp_path, fake_home):
-    """Hook commands must resolve to <skill-repo>/hooks — absolute, NOT bound
-    to any worktree/workspace path (the #258 incident root cause)."""
+def test_wire_up_hook_paths_point_to_canonical_skill(tmp_path, fake_home):
+    """Hook commands must resolve to the CANONICAL skill hooks dir
+    (~/.claude/skills/kunglao-agent/hooks) — absolute, never bound to the
+    worktree/workspace this script happens to run from (#228 root cause: a
+    worktree-bound command dies with the worktree — 8 hooks went silent at
+    once; #269 requires the canonical deployed skill path)."""
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
     from wire_up_settings import wire_up_settings
     wire_up_settings(workspace=ws)
     settings = json.loads((ws / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    canonical = (fake_home / ".claude" / "skills" / "kunglao-agent" / "hooks").as_posix()
+    ws_posix = ws.as_posix()
     for cmd in _collect_commands(settings):
-        hook_path = cmd.removeprefix("python ")
-        assert hook_path.replace("\\", "/").startswith(SKILL_HOOKS.as_posix()), \
-            f"hook command must point into the skill repo hooks dir: {cmd}"
-        assert SKILL_HOOKS.joinpath(hook_path.replace("\\", "/").rsplit("/", 1)[-1]).exists(), \
-            f"hook file must exist in the skill repo: {hook_path}"
+        hook_path = cmd.removeprefix("python ").replace("\\", "/")
+        assert hook_path.startswith(canonical), \
+            f"hook command must point into the canonical skill hooks dir: {cmd}"
+        assert ws_posix not in hook_path, \
+            f"hook command must never be workspace/worktree-bound: {cmd}"
 
 
 def test_wire_up_cwd_probe(tmp_path, fake_home, monkeypatch):

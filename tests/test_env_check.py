@@ -10,7 +10,8 @@ Three scenarios (mirroring the incident-driven acceptance criteria):
 
 The check functions take explicit paths / module state so tests can monkeypatch
 deterministically: flag via os.environ, VM via socket.create_connection,
-Ghidra via GHIDRA_DEFAULT, hooks via isolated_home USERPROFILE, venv probe via
+Ghidra via GHIDRA_DEFAULT, hooks via the PROJECT-level <ws>/.claude/settings.json
+(#258/#269 — the user-global file is NOT a deployment target), venv probe via
 subprocess.run.
 """
 import json
@@ -34,9 +35,12 @@ def _kunglao_ws(tmp_path: Path) -> Path:
     return ws
 
 
-def _write_settings(home: Path) -> Path:
-    """settings.json carrying all wire-up hooks — makes check ④ pass."""
-    settings = home / ".claude" / "settings.json"
+def _write_settings(target_root: Path) -> Path:
+    """Deploy a settings.json carrying all wire-up hooks under target_root —
+    makes check ④ pass. target_root=ws -> PROJECT level (the #258/#269
+    deployment target); target_root=isolated_home -> user-global (used by the
+    negative regression test)."""
+    settings = target_root / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True)
     pre = [{"matcher": "Agent", "hooks": [
         {"type": "command", "command": f"python C:/skills/hooks/{h}"}]}
@@ -81,9 +85,10 @@ def test_vm_unreachable_fails(monkeypatch, tmp_path):
     assert snap["checks"]["vm_reachability"]["status"] == "FAIL"
 
 
-def test_all_pass_exit_0(monkeypatch, tmp_path, isolated_home):
-    """Scenario 3: flag unset + VM up + Ghidra present + hooks deployed +
-    venv deps importable -> overall PASS, exit 0, snapshot written."""
+def test_all_pass_exit_0(monkeypatch, tmp_path):
+    """Scenario 3: flag unset + VM up + Ghidra present + hooks deployed at the
+    PROJECT level + venv deps importable -> overall PASS, exit 0, snapshot
+    written."""
     ws = _kunglao_ws(tmp_path)
     monkeypatch.delenv(FLAG_NAME, raising=False)
 
@@ -98,8 +103,8 @@ def test_all_pass_exit_0(monkeypatch, tmp_path, isolated_home):
     fake_ghidra = tmp_path / "analyzeHeadless.bat"
     fake_ghidra.write_text("", encoding="utf-8")
     monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", fake_ghidra)
-    # hooks: isolated_home points USERPROFILE/HOME at tmp — deploy the hooks
-    _write_settings(isolated_home)
+    # hooks: PROJECT-level <ws>/.claude/settings.json (#258/#269)
+    _write_settings(ws)
     # venv: fake python.exe exists; probe subprocess returns rc=0
     venv_py = ws / ".venv" / "Scripts" / "python.exe"
     venv_py.parent.mkdir(parents=True)
@@ -124,3 +129,33 @@ def test_snapshot_written_on_fail(monkeypatch, tmp_path):
     snap_path = ws / "runs" / ".env-check.json"
     assert snap_path.exists()
     assert "ts" in json.loads(snap_path.read_text(encoding="utf-8"))
+
+
+def test_user_level_settings_alone_does_not_satisfy_hooks(monkeypatch, tmp_path, isolated_home):
+    """#269 regression: the hooks check must read the PROJECT-level
+    <ws>/.claude/settings.json — the #258 deployment target — NOT the
+    user-global ~/.claude/settings.json. A user-global-only deployment (the
+    pre-#258 shape, 0 hooks in the project file) must be reported FAIL, not
+    misreported as deployed."""
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.delenv(FLAG_NAME, raising=False)
+    _write_settings(isolated_home)  # user-global only — must NOT satisfy check ④
+    assert not (ws / ".claude" / "settings.json").exists(), \
+        "test setup: project-level settings must be absent"
+    assert run(ws) == 1
+    snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
+    assert snap["checks"]["hooks_deployed"]["status"] == "FAIL", \
+        "user-global-only deployment must fail the project-level check (#269)"
+    assert "settings.json" in snap["checks"]["hooks_deployed"]["detail"]
+
+
+def test_hooks_fail_when_no_project_settings(monkeypatch, tmp_path):
+    """No project-level settings.json at all -> hooks_deployed FAIL with
+    --wire-up guidance (a correctly deployed workspace must never be
+    misreported as PASS on the strength of the user-global file)."""
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.delenv(FLAG_NAME, raising=False)
+    assert run(ws) == 1
+    snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
+    assert snap["checks"]["hooks_deployed"]["status"] == "FAIL"
+    assert "--wire-up" in snap["checks"]["hooks_deployed"]["detail"]
