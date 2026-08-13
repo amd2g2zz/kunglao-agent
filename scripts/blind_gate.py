@@ -11,7 +11,7 @@ kunglao_record.claim_migrator (the formal promotion entry point) and
 hooks/worker_budget.compare_register_change (the bypass-catcher) lives in
 those modules.
 
-verifier_sign_off block format (reused from doubt_checker.py L70-84):
+verifier_sign_off block format (extracted by extract_verifier_signoff below):
     ```yaml
     verifier_sign_off:
       verifier_id: kunglao-redteam-w2

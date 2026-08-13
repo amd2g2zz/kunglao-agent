@@ -46,7 +46,8 @@ python {h} {ws} --heartbeat-on   # 注册心跳（写 runs/.heartbeat.json）—
     worker 之间互不 messaging）
 3. python {cc} {ws} 决策：
    DISPATCH→priority.py 派发；SATURATED→继续轮询；CONVERGED→先跑 §6.3 checklist（5 项）
-   + 双签（doubt_checker + 随机抽验 1 fact）+ --heartbeat-check 通过才宣告完成
+   + 独立验证（blind_gate sign-off 抽验 + kunglao-verify.py L1 重跑）
+   + --heartbeat-check 通过才宣告完成
 4. 完成 worker → 验证 facts → 合入 master → 更新 claim-register + _INDEX
 5. 按 §6.2 用 malware-veri-notes 记录笔记；保持推进不空转"""
 

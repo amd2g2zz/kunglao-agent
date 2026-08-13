@@ -611,8 +611,8 @@ def build_resume_prompt(ws, *,
                      "更新 claim-register + _INDEX")
     else:
         next_step = ("CONVERGED, verify report — 无 open claims; 先跑 convergence "
-                     "checklist (doubt_checker + 随机抽验 1 fact + --heartbeat-check) "
-                     "再宣告完成")
+                     "checklist (blind_gate sign-off 抽验 + kunglao-verify.py L1 重跑 "
+                     "+ --heartbeat-check) 再宣告完成")
 
     def _assemble(ids: list[str], dropped: int) -> str:
         ids_text = ", ".join(ids) if ids else "(none)"

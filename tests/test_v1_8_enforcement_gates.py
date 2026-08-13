@@ -6,7 +6,6 @@ Validates (24 tests across 10 gates):
     - troubleshooting_gate.py: complete report = OK; missing sections = REJECT
     - search_gate.py: search_before_work present = OK; offline_first tag = OK; absent = REJECT
     - active_intervention.py: no help_request = NOOP; help_request unresponded = REJECT
-    - doubt_checker.py: PROVEN + valid sign-off = OK; missing sign-off = REJECT
     - priority.py v2 leverage vs v1
   v1.8.4:
     - cost_gate.py: tier transitions (advisory / pause_non_essential / HARD_PAUSE)
@@ -38,7 +37,6 @@ sys.path.insert(0, str(SCRIPT_DIR))
 import troubleshooting_gate as tg
 import search_gate as sg
 import active_intervention as ai
-import doubt_checker as dc
 import priority as pr
 
 import cost_gate as cg
@@ -152,49 +150,6 @@ def test_active_intervention_rejects_unresponded():
         rc = ai.check(ws, max_age_min=5)
         assert rc == 1
     print("  [OK ] active_intervention rejects unresponded help_request")
-
-
-def test_doubt_checker_requires_signoff():
-    with tempfile.TemporaryDirectory() as tmp:
-        ws = Path(tmp)
-        _write_yaml(ws / "claim-register.yaml", {
-            "claims": [{"id": "C-001", "status": "PROVEN", "worker_id": "w1"}]
-        })
-        rc = dc.check(ws)
-        assert rc == 1
-    print("  [OK ] doubt_checker rejects PROVEN without sign-off")
-
-
-def test_doubt_checker_rejects_self_stamp():
-    with tempfile.TemporaryDirectory() as tmp:
-        ws = Path(tmp)
-        _write_yaml(ws / "claim-register.yaml", {
-            "claims": [{"id": "C-001", "status": "PROVEN", "worker_id": "w1"}]
-        })
-        (ws / "facts").mkdir()
-        (ws / "facts" / "C-001.md").write_text(
-            "## Conclusion\nyes\n\n```yaml\nverifier_sign_off:\n  verifier_id: w1\n  refute_attempt: tried\n  sign_off_at: 2026-07-31T13:00:00Z\n```\n",
-            encoding="utf-8"
-        )
-        rc = dc.check(ws)
-        assert rc == 1
-    print("  [OK ] doubt_checker rejects verifier_id == worker_id (self-stamp)")
-
-
-def test_doubt_checker_accepts_independent_signoff():
-    with tempfile.TemporaryDirectory() as tmp:
-        ws = Path(tmp)
-        _write_yaml(ws / "claim-register.yaml", {
-            "claims": [{"id": "C-001", "status": "PROVEN", "worker_id": "w1"}]
-        })
-        (ws / "facts").mkdir()
-        (ws / "facts" / "C-001.md").write_text(
-            "## Conclusion\nyes\n\n```yaml\nverifier_sign_off:\n  verifier_id: w2\n  refute_attempt: tried\n  sign_off_at: 2026-07-31T13:00:00Z\n```\n",
-            encoding="utf-8"
-        )
-        rc = dc.check(ws)
-        assert rc == 0
-    print("  [OK ] doubt_checker accepts independent verifier_sign_off")
 
 
 def test_priority_v2_leverage_sigmoid():
@@ -332,7 +287,7 @@ def test_hook_activation_tier_defaults():
         ha.update_state(ws, "HARD_PAUSE", "MONITOR")
         assert ha.is_active(ws, "cost_gate") is True
         assert ha.is_active(ws, "active_intervention") is False
-        assert ha.is_active(ws, "doubt_checker") is False
+        assert ha.is_active(ws, "reuse_gate") is False
     print("  [OK ] hook_activation HARD_PAUSE keeps cost_gate only")
 
 
@@ -408,9 +363,6 @@ def main() -> int:
         "test_search_gate_accepts_offline_tag",
         "test_active_intervention_noop_when_no_help",
         "test_active_intervention_rejects_unresponded",
-        "test_doubt_checker_requires_signoff",
-        "test_doubt_checker_rejects_self_stamp",
-        "test_doubt_checker_accepts_independent_signoff",
         "test_priority_v2_leverage_sigmoid",
         "test_cost_gate_tier_progression",
         "test_cost_gate_hard_cap_immediate",

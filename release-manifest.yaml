@@ -25,7 +25,6 @@ assets:
     - agents/pefile-signature.md
     - agents/go-symbols.md
     - agents/verdict-scorer.md
-    - agents/verdict-redteam.md
   hooks:
     - hooks/agent_watch.py
     - hooks/completion_gate.py

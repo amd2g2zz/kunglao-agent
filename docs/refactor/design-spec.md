@@ -52,7 +52,7 @@
 | `kong.py` | 编排原子入口(每 tick 自动循环, 非子命令) | 31 个 CLI 的循环调用 | Phase 3 部分 |
 | `kong-decide` | 决策/排序/资源选择(独立 CLI)【修订 2026-08-06】 | convergence_check+priority+failure_gate(scan) | ⏳ |
 | `kong-select` | 资源选择(独立 CLI: 多路召回+融合排序+组合选择+反馈更新)【修订 2026-08-06 新增】 | 无(新增) | ⏳ |
-| `kong-verify` | 验证(独立 CLI, L1 机械 + L2 redteam 派发) | doubt_checker+normalize_trace+content_hash | ⏳ |
+| `kong-verify` | 验证(独立 CLI, L1 机械 + L2 redteam 派发) | blind_gate+normalize_trace+content_hash | ⏳ |
 | `kong-record` | 记账(独立 CLI, ledger 幂等) | update_index+reconcile_intents+progress_report | ⏳ |
 | `kong-monitor` | 对账/健康(独立 CLI) | heartbeat_tick+agent_watch+convergence_health | ⏳ |
 | `kong-digest` | digest 机械生成(独立 CLI) | 无(新增) | ⏳ |
@@ -81,7 +81,7 @@
 | **M0 状态层** | claim-register.yaml(不变) + loop-state.json(新) + digest.md(新) + ledger.jsonl(新) | 唯一状态读写口; 其他模块不得自研状态逻辑 |
 | **M1 DECIDE** | convergence_check + priority + failure_analysis_gate(scan) + claim_expiry + plan_drift_detector + ask_for_direction(selfcheck) | 该不该派 / 派哪个 claim / 该 claim 内哪个 action |
 | **M2 ACT** | worker_budget + dispatch_gate(注入) + worker_pulse(通知) | 机械执行门(≤3 worker/tier/VM-only/self-cap/heartbeat/自提升防) |
-| **M3 VERIFY** | doubt_checker + normalize_trace + content_hash + **kong-redteam(对抗)** + verify-note 契约 | L1 机械重跑 → **L2 kong-redteam 攻击性对抗验证**(§3.4) |
+| **M3 VERIFY** | blind_gate + normalize_trace + content_hash + **kong-redteam(对抗)** + verify-note 契约 | L1 机械重跑 → **L2 kong-redteam 攻击性对抗验证**(§3.4) |
 | **M4 RECORD** | update_index + reconcile_intents + stale_blocker_prune + progress_report + claim 状态迁移 | ledger 写入(幂等); 状态迁移; summary_of_work 聚合 |
 | **M5 MONITOR** | heartbeat_tick + heartbeat_loop_prompt + hooks_selfcheck + hook_activation + active_intervention + backtrack_gate + agent_watch + convergence_health | tick 原子入口; 心跳/对账/卡死检测/健康 |
 
