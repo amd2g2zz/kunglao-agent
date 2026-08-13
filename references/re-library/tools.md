@@ -1,4 +1,4 @@
-# CTF Reverse - Tools Reference
+# Tools Reference
 
 ## Table of Contents
 - [GDB](#gdb)
@@ -390,7 +390,7 @@ cipher = AES.new(key, AES.MODE_CBC, iv=key)
 plaintext = cipher.decrypt(ct)
 ```
 
-**Key insight:** When `RijndaelManaged` appears in .NET decompilation, check if Key and IV are set to the same value — this is a common CTF pattern. The XOR stage often serves as a simple obfuscation layer before the real crypto.
+**Key insight:** When `RijndaelManaged` appears in .NET decompilation, check if Key and IV are set to the same value — this is a common pattern in obfuscated/protected .NET samples. The XOR stage often serves as a simple obfuscation layer before the real crypto.
 
 ---
 

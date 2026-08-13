@@ -30,7 +30,7 @@ Detailed quick notes that support [`SKILL.md`](../../SKILL.md). Read this file a
   - [Rust serde_json Schema Recovery](#rust-serde_json-schema-recovery)
   - [Position-Based Transformation Reversing](#position-based-transformation-reversing)
   - [Hex-Encoded String Comparison](#hex-encoded-string-comparison)
-- [CTF Case Notes](#ctf-case-notes)
+- [Case Notes](#case-notes)
   - [Embedded ZIP + XOR License Decryption](#embedded-zip--xor-license-decryption)
   - [Stack String Deobfuscation (.rodata XOR Blob)](#stack-string-deobfuscation-rodata-xor-blob)
   - [Prefix Hash Brute-Force](#prefix-hash-brute-force)
@@ -84,7 +84,7 @@ Detailed quick notes that support [`SKILL.md`](../../SKILL.md). Read this file a
   - [Batch Crackme Automation via objdump](#batch-crackme-automation-via-objdump)
   - [Android DEX Runtime Bytecode Patching](#android-dex-runtime-bytecode-patching)
   - [Fork + Pipe + Dead Branch Anti-Analysis](#fork--pipe--dead-branch-anti-analysis)
-- [Web/CTF Auth Bypass Case Notes](#webctf-auth-bypass-case-notes)
+- [Web Auth Bypass Case Notes](#web-auth-bypass-case-notes)
   - [Signed Cookie Key Reuse: access token to admin_session](#signed-cookie-key-reuse-access-token-to-admin_session)
 - [Web Phishing Infrastructure](#web-phishing-infrastructure)
   - [Phishing Panel: {domain_a} / {domain_b}](#phishing-panel-domain_a--domain_b)
@@ -200,7 +200,7 @@ Binary adds/subtracts position index; reverse by undoing per-index offset. See [
 ### Hex-Encoded String Comparison
 Input converted to hex, compared against constant. Decode with `xxd -r -p`. See [patterns.md](patterns.md#hex-encoded-string-comparison).
 
-## CTF Case Notes
+## Case Notes
 
 ### Embedded ZIP + XOR License Decryption
 Binary with named symbols (`EMBEDDED_ZIP`, `ENCRYPTED_MESSAGE`) in `.rodata` → extract ZIP containing license, XOR encrypted message with license bytes to recover flag. No execution needed. See [patterns-decode.md](patterns-decode.md#embedded-zip-xor-license-decryption).
@@ -248,10 +248,10 @@ N-layer binary where each layer decrypts the next using user-provided key bytes 
 **Pattern:** Binary validates input via expected popcount for each position of a 16-bit sliding window. Popcount differences create a recurrence: `bit[i+16] = bit[i] + (data[i+1] - data[i])`. Brute-force ~4000-8000 valid initial 16-bit windows; each determines the entire bit sequence. See [patterns-debugging.md](patterns-debugging.md#sliding-window-popcount-differential-propagation).
 
 ### Ruby/Perl Polyglot Constraint Satisfaction
-**Pattern:** Single file valid in both Ruby and Perl, each imposing different constraints on a key. Exploits `=begin`/`=end` (Ruby block comment) vs `=begin`/`=cut` (Perl POD) to run different code per interpreter. Intersect constraints from both languages to recover the unique key. See [languages-platforms.md](languages-platforms.md#rubyperl-polyglot-constraint-satisfaction-bearcatctf-2026).
+**Pattern:** Single file valid in both Ruby and Perl, each imposing different constraints on a key. Exploits `=begin`/`=end` (Ruby block comment) vs `=begin`/`=cut` (Perl POD) to run different code per interpreter. Intersect constraints from both languages to recover the unique key. See [languages-platforms.md](languages-platforms.md#rubyperl-polyglot-constraint-satisfaction).
 
 ### Verilog/Hardware RE
-**Pattern:** Verilog HDL source for state machines with hidden conditions gated on shift register history. Analyze `always @(posedge clk)` blocks and `case` statements to find correct input sequences. See [languages-platforms.md](languages-platforms.md#veriloghardware-reverse-engineering-srdnlenctf-2026).
+**Pattern:** Verilog HDL source for state machines with hidden conditions gated on shift register history. Analyze `always @(posedge clk)` blocks and `case` statements to find correct input sequences. See [languages-platforms.md](languages-platforms.md#veriloghardware-reverse-engineering).
 
 ### Custom binfmt Kernel Module with RC4 Flat Binaries
 **Pattern:** Kernel module registers binfmt handler for encrypted flat binaries. Reverse the `.ko` to find RC4 key (in `movabs` immediates), decrypt the flat binary, import at the fixed virtual address from the module's `vm_mmap` call. See [patterns-simulation.md](patterns-simulation.md#custom-binfmt-kernel-module-with-rc4-flat-binaries).
@@ -281,7 +281,7 @@ Large static binary with `go.buildid`? Use GoReSym to recover function names (wo
 **Pattern:** Go C2 client with UUID from `-ldflags -X`. Binary-patch UUID bytes (same length), register with C2, enumerate clients/files via API. See [languages-compiled.md](languages-compiled.md#go-binary-uuid-patching-for-c2-client-enumeration-bsidessf-2026).
 
 ### D Language Binary Reversing
-D language binaries have unique symbol mangling (not C++ style). Template-heavy, many function variants. Look for `_D` prefix in symbols. See [languages-compiled.md](languages-compiled.md#d-language-binary-reversing-csaw-ctf-2016).
+D language binaries have unique symbol mangling (not C++ style). Template-heavy, many function variants. Look for `_D` prefix in symbols. See [languages-compiled.md](languages-compiled.md#d-language-binary-reversing).
 
 ### Rust Binary Reversing
 Binary with `core::panicking` strings and `_ZN` mangled symbols? Use `rustfilt` for demangling. Panic messages contain source paths and line numbers — `strings binary | grep "panicked"` is the fastest approach. Option/Result enums use discriminant byte (0=None/Err, 1=Some/Ok). See [languages-compiled.md](languages-compiled.md#rust-binary-reversing).
@@ -299,7 +299,7 @@ Automatic path exploration to find inputs satisfying constraints. Load binary wi
 Cross-platform binary emulation with OS-level support (syscalls, filesystem). Emulate Linux/Windows/ARM/MIPS binaries on any host. No debugger artifacts — bypasses all anti-debug by default. Hook syscalls and addresses with Python API. See [tools-dynamic.md](tools-dynamic.md#qiling-framework-cross-platform-emulation).
 
 ### VMProtect / Themida Analysis
-VMProtect virtualizes code into custom bytecode. Identify VM entry (pushad-like), find handler table (large indirect jump), trace handlers dynamically. For CTF, focus on tracing operations on input rather than full devirtualization. Themida: dump at OEP with ScyllaHide + Scylla. See [tools-advanced.md](tools-advanced.md#vmprotect-analysis).
+VMProtect virtualizes code into custom bytecode. Identify VM entry (pushad-like), find handler table (large indirect jump), trace handlers dynamically. In practice, focus on tracing operations on input rather than full devirtualization. Themida: dump at OEP with ScyllaHide + Scylla. See [tools-advanced.md](tools-advanced.md#vmprotect-analysis).
 
 ### Binary Diffing
 BinDiff and Diaphora compare two binaries to highlight changes. Essential when challenge provides patched/original versions. Export from IDA/Ghidra, diff to find vulnerability or hidden functionality. See [tools-advanced.md](tools-advanced.md#binary-diffing).
@@ -338,7 +338,7 @@ Invert BWT without terminator character by trying all possible row indices. Stan
 Esoteric language using iterated fraction multiplication. Invert by swapping numerator/denominator in fraction table, run output backward. I/O encoded as prime factorization exponents. See [languages.md](languages.md#fractran-program-inversion-boston-key-party-2016).
 
 ### Opcode-Only Trace Reconstruction
-Execution traces with only opcodes (no data) still leak info through branch decisions. Sorting algorithm comparisons reveal element ordering. Reconstruct by deduplicating trace, splitting into basic blocks. See [tools-dynamic.md](tools-dynamic.md#opcode-only-trace-reconstruction-0ctf-2016).
+Execution traces with only opcodes (no data) still leak info through branch decisions. Sorting algorithm comparisons reveal element ordering. Reconstruct by deduplicating trace, splitting into basic blocks. See [tools-dynamic.md](tools-dynamic.md#opcode-only-trace-reconstruction).
 
 ### Thread Race Signed Integer Overflow
 Combat-simulation binary with thread-unsafe skill lock. Race between skill selection and damage calculation; `cdqe` sign-extends 0xFFFFFFFF to -1 (signed), causing HP overflow on subtraction. See [patterns-debugging.md](patterns-debugging.md#thread-race-condition-with-signed-integer-overflow).
@@ -347,25 +347,25 @@ Combat-simulation binary with thread-unsafe skill lock. Race between skill selec
 No IDA support — use radare2 + ESP-IDF ROM linker script (`esp32.rom.ld`) for symbol resolution. Cross-reference with public ESP-IDF HTTP server examples to identify app logic. See [patterns-debugging.md](patterns-debugging.md#esp32xtensa-firmware-reversing-with-rom-symbol-map).
 
 ### Custom VM Bytecode Lifting to LLVM IR
-Transpile custom VM bytecode to LLVM IR, then use `opt -O3` to simplify (inlining, constant folding, dead code elimination). Reduces 1300 lines to ~150 lines, revealing the underlying algorithm. See [tools-advanced.md](tools-advanced.md#custom-vm-bytecode-lifting-to-llvm-ir-google-ctf-2017).
+Transpile custom VM bytecode to LLVM IR, then use `opt -O3` to simplify (inlining, constant folding, dead code elimination). Reduces 1300 lines to ~150 lines, revealing the underlying algorithm. See [tools-advanced.md](tools-advanced.md#custom-vm-bytecode-lifting-to-llvm-ir).
 
 ### SIGFPE Signal Handler Side-Channel
-SIGFPE signal handlers create implicit control flow invisible to static analysis. Count SIGFPE signals via `strace -e signal=SIGFPE` per candidate character -- correct characters produce more signals. See [anti-analysis.md](anti-analysis.md#sigfpe-signal-handler-side-channel-via-strace-counting-plaidctf-2017).
+SIGFPE signal handlers create implicit control flow invisible to static analysis. Count SIGFPE signals via `strace -e signal=SIGFPE` per candidate character -- correct characters produce more signals. See [anti-analysis.md](anti-analysis.md#sigfpe-signal-handler-side-channel-via-strace-counting).
 
 ### Batch Crackme Automation via objdump
 Mass crackme challenges (100s of binaries) with identical structure: script `objdump` to extract CMP immediates and add/sub arithmetic sequences, then reverse-compute keys algebraically without execution. See [patterns-debugging.md](patterns-debugging.md#batch-sample-automation-via-objdump-pattern-extraction).
 
 ### Android DEX Runtime Bytecode Patching
-Native JNI library patches Dalvik bytecode in memory via `/proc/self/maps` + `mprotect` + XOR. Static APK analysis alone is insufficient -- extract XOR key and offsets from the native `.so` to reconstruct the runtime DEX. See [languages-platforms.md](languages-platforms.md#android-dex-runtime-bytecode-patching-via-procselfmaps-google-ctf-2017).
+Native JNI library patches Dalvik bytecode in memory via `/proc/self/maps` + `mprotect` + XOR. Static APK analysis alone is insufficient -- extract XOR key and offsets from the native `.so` to reconstruct the runtime DEX. See [languages-platforms.md](languages-platforms.md#android-dex-runtime-bytecode-patching-via-procselfmaps).
 
 ### Fork + Pipe + Dead Branch Anti-Analysis
 Fork/pipe IPC where parent writes data and exits, child reads and continues. Real validation hidden in a dead branch (always-false comparison). `strace` reveals the fork/pipe pattern; patch the comparison constant to reach hidden code. See [patterns-debugging.md](patterns-debugging.md#fork-pipe-dead-branch-anti-analysis).
 
-## Web/CTF Auth Bypass Case Notes
+## Web Auth Bypass Case Notes
 
 ### Signed Cookie Key Reuse: access token to admin_session
 
-**Case:** `class.pangbaoba.me` CTF homework system. Public `/access/<token>` route set a signed `student_gate`; the same access token also worked as the HMAC key for `admin_session`, allowing direct admin API access by forging the exact session payload shape.
+**Case:** `class.pangbaoba.me` web homework system. Public `/access/<token>` route set a signed `student_gate`; the same access token also worked as the HMAC key for `admin_session`, allowing direct admin API access by forging the exact session payload shape.
 
 **Core pattern:** A visible invite/access token is reused as a server-side signing secret. If one signed cookie can be validated offline, test whether sibling auth cookies use the same signing scheme and key.
 
