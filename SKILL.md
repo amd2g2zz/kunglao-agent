@@ -199,6 +199,25 @@ Three jobs, nothing else:
 
 Your own composite notes (synthesis) MUST pass `<malware-veri-notes>/scripts/verify-note.py` — no self-stamping.
 
+### Read/write boundary (#238 F2)
+
+- **读状态 — 永远允许**: `claim-register.yaml` / `task_spec.yaml` / plan / worker
+  status, 用于 MONITOR/DISPATCH 决策。这是决策, 不是分析。
+- **读证据 — 允许**: `evidence/*`、decompile、`runs/`, 用于 VERIFY 复现比对
+  与 cross-fact 模式识别。
+- **读证据并据此写 fact — 禁止(除非经 worker)**: 从所读证据推导结论并写
+  `facts/F<NNN>.md` 不是 "read-only maintenance"(2026-08-12 事故: 读
+  callgraph.txt → 写 F006-F008 行为事实)。maker 路径二选一: 派 worker 产出,
+  或标 `synthesis: true` + 来源并过 `<malware-veri-notes>/scripts/verify-note.py`
+  — 不 self-stamp。
+
+### Cross-workflow provenance (#238 F6)
+
+Fact frontmatter 标 `provenance: cross_workflow`(来自 mal-recon 等外部工作流
+的转述证据)时, 进入 fact base 前必须过 kunglao-redteam 抽验; 无 redteam
+记录(`redteam_verdict` / `runs/verify-redteam-*.md` / verify L2 CONFIRMED)
+→ lint WARN。
+
 ## Input contract (3 required)
 
 1. **sample** — `bins/<sha>`, sha256 verified
