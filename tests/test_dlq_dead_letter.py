@@ -11,7 +11,7 @@ Integration:
     with DEAD claims, and omits it when there are none.
 
 The dead_letter.py module API (mark_dead / scan / detect_dirty_statuses /
-count_dead) is covered by scripts/test_dead_letter.py.
+count_dead) is covered by tests/test_dead_letter.py.
 """
 from __future__ import annotations
 

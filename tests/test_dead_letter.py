@@ -7,8 +7,7 @@ RED runs:
   - test_mark_dead_*:                    fail until dead_letter.py exists
   - test_scan_*:                         same
   - test_detect_dirty_statuses:          same
-Run: python scripts/test_dead_letter.py
-or:  pytest scripts/test_dead_letter.py
+Run: python -m pytest tests/test_dead_letter.py -q
 """
 import sys
 from pathlib import Path
