@@ -26,6 +26,15 @@ purpose: >-
 # -----------------------------------------------------------------------------
 
 tools:
+  # -- crypto: 8 算法 CLI (issue #285 吸收) --
+  - name: crypto-tool
+    category: crypto
+    capability: crypto:decode
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 密文字节串(--in/--in-hex) + 子命令(chacha|xor-add|rolling-xor|lzss|lzma-raw|rsa-unpad|go-byte-transform|va-to-off), output: 明文/变换后字节 + --reproduce field=value}
+    when_not: 非本 8 算法族的加密方案不用; 先用 --self-check 校验环境
+
   # -- ghidra: 函数级静态侦察 (issue #293 吸收, sa-ghidra 定稿) --
   - name: ghidra-recon
     category: ghidra

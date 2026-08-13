@@ -20,7 +20,7 @@ tools/
 
 | Category | 含义 | 示例工具 |
 |---|---|---|
-| `crypto` | 加解密/编解码/哈希 | `chacha-string-layer` |
+| `crypto` | 加解密/编解码/哈希 | `crypto-tool` |
 | `static` | 静态识别/特征提取 | `die`, `floss`, `pefile` |
 | `ghidra` | Ghidra 反汇编/函数分析 | `ghidra-headless` |
 | `dynamic` | VM 动态调试/运行时分析(**VM-only**) | `x64dbg-remote`, `frida-remote` |

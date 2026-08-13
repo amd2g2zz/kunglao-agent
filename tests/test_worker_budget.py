@@ -34,6 +34,7 @@ from worker_budget import (  # noqa: E402
     check_tier_gate,
     scan_actual_tools,
     check_worker_plan,
+    check_tool_first,
     pre_check,
     REJECT_FIXES,
 )
@@ -396,6 +397,55 @@ def test_check_worker_plan_exists_accepts(tmp_path):
     assert ok, msg
 
 
+def test_check_worker_plan_empty_steps_rejects(tmp_path):
+    """#294: an empty-shell plan (every field label bare, no content) does NOT
+    satisfy the gate — existence without content is the Swiss-army-test gap."""
+    ws = tmp_path / 'ws'
+    (ws / 'runs').mkdir(parents=True)
+    (ws / 'runs' / 'plan-C001-strings.md').write_text(
+        'goal:\npreflight:\nsteps:\nfallback:\n', encoding='utf-8')
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert not ok
+    assert 'empty-shell' in msg.lower()
+
+
+def test_check_worker_plan_partial_content_accepts(tmp_path):
+    """#294: ONE filled field (goal has real text) is a real plan, not a
+    shell — only an ALL-bare plan is rejected."""
+    ws = tmp_path / 'ws'
+    (ws / 'runs').mkdir(parents=True)
+    (ws / 'runs' / 'plan-C001-strings.md').write_text(
+        'goal: decode the xor-add layer\npreflight:\nsteps:\nfallback:\n',
+        encoding='utf-8')
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert ok, msg
+
+
+def test_check_worker_plan_bom_template_rejects(tmp_path):
+    """#294 H1: a UTF-8 BOM before `goal:` (PowerShell/Notepad utf8 output)
+    must NOT turn an empty-shell template into 'content' — the byte-level
+    bypass is closed by the utf-8-sig read + explicit lstrip."""
+    ws = tmp_path / 'ws'
+    (ws / 'runs').mkdir(parents=True)
+    (ws / 'runs' / 'plan-C001-strings.md').write_bytes(
+        '﻿goal:\npreflight:\nsteps:\nfallback:\n'.encode('utf-8'))
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert not ok
+    assert 'empty-shell' in msg.lower()
+
+
+def test_check_worker_plan_unreadable_fails_open(tmp_path):
+    """#294: an unreadable plan (a directory shadowing the plan name) is a
+    system error — fail OPEN with an honest note instead of a misleading
+    empty-shell reject blaming the worker."""
+    ws = tmp_path / 'ws'
+    (ws / 'runs').mkdir(parents=True)
+    (ws / 'runs' / 'plan-C001.md').mkdir()  # directory, not a file
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert ok, msg
+    assert 'unreadable' in msg
+
+
 def test_check_worker_plan_exact_name_accepts(tmp_path):
     """#239: plan-C001.md / plan-c001.md (claim only, no task suffix) also
     satisfies the gate — the real-world orchestrator plans are plan-c005.md."""
@@ -467,6 +517,151 @@ def test_pre_check_accepts_plan_path_in_prompt(tmp_path, capsys):
     assert rc == 0, capsys.readouterr().err
 
 
+# ---------- issue #294: tool-first gate ----------
+
+def test_check_tool_first_no_keyword_match_accepts():
+    """#294: dispatch text with no tools/_INDEX.yaml keyword hit passes silently
+    (avoids false positives on unrelated claims)."""
+    ok, msg = check_tool_first({}, '[T1 tools=grep] claim C-001 strings',
+                               'facts-snapshot: 1 facts')
+    assert ok, msg
+
+
+def test_check_tool_first_keyword_match_without_marker_rejects():
+    """#294: dispatch text matching a registered tool's category/capability
+    keyword ('crypto' -> crypto-tool) with no `tool-catalog:` marker is
+    REJECTED — closes the Swiss-army-test gap (worker hand-rolled a script
+    instead of trying crypto-tool.py)."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 decode the crypto layer',
+        'facts-snapshot: 1 facts')
+    assert not ok
+    assert 'crypto-tool' in msg
+    assert 'tool-catalog' in msg
+
+
+def test_check_tool_first_marker_present_accepts():
+    """#294: a `tool-catalog: <name>` marker satisfies the gate even when the
+    text matches a registered tool's keyword."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 decode the crypto layer',
+        'facts-snapshot: 1 facts; tool-catalog: crypto-tool')
+    assert ok, msg
+
+
+def test_check_tool_first_opt_out_with_reasoning_accepts():
+    """#294: an explicit `tool-catalog: none (reasoning: ...)` opt-out passes —
+    the worker is not forced to use a tool that genuinely doesn't apply."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 decode the crypto layer',
+        'facts-snapshot: 1 facts; tool-catalog: none (reasoning: custom scheme, no algorithm match)')
+    assert ok, msg
+
+
+def test_check_tool_first_diagnostic_marker_exempts():
+    """#294: a one-off diagnostic marker exempts the dispatch (not every crypto
+    mention is a full decode task worth cataloging a tool for)."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 一次性诊断 crypto string layout',
+        'facts-snapshot: 1 facts')
+    assert ok, msg
+
+
+def test_check_tool_first_stopword_no_false_positive():
+    """#294 H2: generic category words ('static'/'pipeline'/'aux') must NOT
+    trigger the gate — 'static overview of imports' is an adjective, not a
+    disasm-constant-check dispatch."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 static overview of imports',
+        'facts-snapshot: 1 facts')
+    assert ok, msg
+
+
+def test_check_tool_first_operation_stopword_no_false_positive():
+    """#294 H2: the 'decode' capability op is also routine prose — stopworded."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 decode the string layout',
+        'facts-snapshot: 1 facts')
+    assert ok, msg
+
+
+def test_check_tool_first_cjk_adjacent_keyword_rejects():
+    """#294: a keyword glued to CJK text (解码crypto层) must still match —
+    ASCII-only boundaries, because Python's \b treats CJK chars as word chars
+    and would silently bypass the gate."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 解码crypto层',
+        'facts-snapshot: 1 facts')
+    assert not ok
+    assert 'crypto-tool' in msg
+
+
+def test_check_tool_first_keyword_inside_longer_word_ignored():
+    """#294: 'crypto' inside 'cryptography' must NOT match (ASCII boundary
+    rejects the trailing ASCII letter)."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 uses cryptography library for hashing',
+        'facts-snapshot: 1 facts')
+    assert ok, msg
+
+
+def test_check_tool_first_negated_diagnostic_not_exempt():
+    """#294: 'not a one-off diagnostic' must NOT count as an exemption — the
+    diagnostic marker is negation-aware."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 not a one-off diagnostic — decode the crypto layer',
+        'facts-snapshot: 1 facts')
+    assert not ok
+    assert 'crypto-tool' in msg
+
+
+def test_check_tool_first_diagnostic_case_insensitive():
+    """#294: 'One-off' (capitalised) is still an exemption."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 One-off diagnostic — inspect crypto section',
+        'facts-snapshot: 1 facts')
+    assert ok, msg
+
+
+def test_check_tool_first_marker_case_insensitive():
+    """#294: the `tool-catalog:` marker is recognised case-insensitively."""
+    ok, msg = check_tool_first(
+        {}, '[T1 tools=grep] claim C-001 decode the crypto layer',
+        'facts-snapshot: 1 facts; TOOL-CATALOG: crypto-tool')
+    assert ok, msg
+
+
+def test_pre_check_rejects_dispatch_matching_tool_without_marker(tmp_path, capsys):
+    """#294 e2e: a dispatch whose description matches a registered tool's
+    keyword ('crypto') with no `tool-catalog:` marker is REJECTED by the 13th
+    pre_check gate, even when the plan gate itself passes."""
+    ws = tmp_path / 'ws'
+    (ws / 'runs').mkdir(parents=True)
+    (ws / 'runs' / 'plan-C001-crypto.md').write_text(
+        'goal: decode the crypto layer\nsteps: try known algorithms\nfallback: brute force\n',
+        encoding='utf-8')
+    payload = _dispatch_payload('facts-snapshot: 1 facts')
+    payload['tool_input']['description'] = '[T1 tools=grep] claim C-001 decode the crypto layer'
+    rc = pre_check(payload, _min_paths(ws))
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert 'REJECT toolfirst' in captured.err
+
+
+def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
+    """#294 e2e: adding `tool-catalog: crypto-tool` to the prompt clears the
+    tool-first gate for the same crypto-matching dispatch."""
+    ws = tmp_path / 'ws'
+    (ws / 'runs').mkdir(parents=True)
+    (ws / 'runs' / 'plan-C001-crypto.md').write_text(
+        'goal: decode the crypto layer\nsteps: try crypto-tool xor-add\nfallback: brute force\n',
+        encoding='utf-8')
+    payload = _dispatch_payload('facts-snapshot: 1 facts; tool-catalog: crypto-tool')
+    payload['tool_input']['description'] = '[T1 tools=grep] claim C-001 decode the crypto layer'
+    rc = pre_check(payload, _min_paths(ws))
+    assert rc == 0, capsys.readouterr().err
+
+
 # ---------- issue #270: every REJECT carries non-empty additionalContext ----------
 # #235 fixed env_check_gate with corrective guidance; the 12 pre_check gates +
 # snapshot + devreason REJECTed bare (stderr only). Now EVERY REJECT must also
@@ -476,7 +671,7 @@ def test_pre_check_accepts_plan_path_in_prompt(tmp_path, capsys):
 REJECT_NAMES = [
     'workers', 'cap', 'tools', 'hostchan', 'deadline', 'tier',
     'selfcap', 'heartbeat', 'drift', 'health', 'backtrack', 'plan',
-    'snapshot', 'devreason',
+    'toolfirst', 'snapshot', 'devreason',
 ]
 
 # per-REJECT keyword that proves the guidance is concrete (names the mechanism),
@@ -494,6 +689,7 @@ REJECT_FIX_KEYWORDS = {
     'health': 'convergence_health',
     'backtrack': 'backtrack',
     'plan': 'plan-C',
+    'toolfirst': 'tool-catalog',
     'snapshot': 'facts-snapshot',
     'devreason': 'reasoning',
 }
