@@ -53,6 +53,7 @@ argument-hint: [request]
 - Static / dynamic tooling, packing, patterns → `references/re-library/`: tools, tools-advanced, tools-dynamic, tools-crypto, anti-analysis, patterns, patterns-simulation, patterns-decode, patterns-debugging, field-notes + `references/dynamic-re-tool-priority.md`
 - Languages / platforms → `references/re-library/`: languages{,-go,-compiled,-platforms}, platforms{,-elf,-hardware,-kernel}
 - Malware analysis / detection / reporting / search → `references/re-library/`: malware-analysis{,-workflow,-quickstart}, malware-triage, malware-dynamic-analysis, detection-engineer, malware-report-writer, multi-search-engine{,-refs} + `references/malware-phase-routing.md`
+Programmatic recall: `python <SKILL_DIR>/scripts/references_recall.py <scenario|category|filename>` returns the matching INDEX rows (path + purpose + when-to-read), never file contents.
 
 **Global rules this skill implements (auto-loaded every session):** `maker-checker.md` (maker/checker separation — workers make, the orchestrator checks, no self-stamping) and `numeric-fidelity.md` (counting-basis fidelity — C-020: 811 slots vs 774 records, 69+1 helper/kfunc), both in `~/.claude/rules/common/`; they apply even when this skill is not loaded. This skill owns the orchestrator mechanics (worker/verifier dispatch, gates).
 
