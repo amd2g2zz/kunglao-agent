@@ -1,0 +1,28 @@
+schema: tools-index/1
+purpose: >-
+  Machine-readable tool index for the kunglao-agent toolshelf. Each entry is one
+  tool with its capability tag, execution tier, cost tier, and input/output
+  contract. Validated by tools/validate_index.py (issue #283). Human entry
+  points: tools/_INDEX.md (6-category domain index) + tools/_index-<category>.md
+  (per-category skeletons, progressive disclosure).
+
+# ---- entry schema (machine contract) ---------------------------------------
+#   name:         unique tool id, lowercase kebab-case (e.g. chacha-string-layer)
+#   category:     one of crypto|static|ghidra|dynamic|pipeline|aux
+#   capability:   "<domain>:<operation>" capability tag, e.g. crypto:decode
+#   tier:         T1 static tool | T2 emulation | T3 VM-dynamic
+#   cost_tier:    probe | cheap | deep
+#   input_output: non-empty input->output contract (str, or {input, output})
+#   when_not:     optional — when NOT to use this tool
+#
+#   example:
+#   - name: chacha-string-layer
+#     category: crypto
+#     capability: crypto:decode
+#     tier: T1
+#     cost_tier: cheap
+#     input_output: {input: 密文字节串, output: 明文层}
+#     when_not: 非 ChaCha 流加密时不用
+# -----------------------------------------------------------------------------
+
+tools: []
