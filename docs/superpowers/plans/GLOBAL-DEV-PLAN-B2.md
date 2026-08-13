@@ -1,8 +1,24 @@
-# GLOBAL-DEV-PLAN-B2 — Batch 2（基线修复 + 技能契约化 + 治理，6 issues）三 agent 调度计划
+# GLOBAL-DEV-PLAN-B2 — Batch 2（基线修复 + 技能契约化 + 治理）三 agent 调度计划
 
 > 角色分工、依赖顺序、PR 循环规则、验收口径。**每 issue 的权威规格 = GitHub issue 正文**
 > （#226-#230 已含背景/任务/验收/依赖），本文件只定调度与跨 issue 契约。
 > 前置文档（Batch 1 已交付）：`GLOBAL-DEV-PLAN.md` + `ISSUE-SPECS.md`（#191-#206）。
+
+## 0. 执行状态（2026-08-13 更新，主控实时维护）
+
+| Wave | issue | PR | 状态 |
+|---|---|---|---|
+| A | #231 golden 可移植 | #232 (5444e85) + #242 (idempotency) | ✅ 已合入 dev（#242 补幂等提交，owner 先合了 #232 首提交） |
+| B | #224/#225 编码声明 | #225 | ✅ owner 已合入 dev，issue 已关 |
+| C | #226 SKILL.md 契约化 | #243 @ 4a9202e | CI 绿 + TEST/ACCEPT 门通过 → 待合 |
+| — | digest 重 pin | dev a14bd99 | ✅ owner #233/#238 改 references 后 3 个 pin 漂移，已重 pin 推 dev，CI 恢复绿 |
+| C | #230 scripts 治理 | — | 待 #226 合入后开始 |
+| C | #228 去硬编码 | — | 待 #230 后 |
+| C | #227 references 重组 | — | 待 #228 后 |
+| C | #229 references_recall | — | 待 #227 后 |
+| B3 | #233-#241（owner 新增批次：env_check 门禁/角色契约/生命周期清理/监视闭环等） | owner 自驱动（#248/#249 等） | 并行推进中；#226 已 fold 其中 #233/#238 的 SKILL.md 内容 |
+
+> **并行注意**：owner 在 dev 上以小时级节奏合 PR。每个 PR 切出前必须 fetch + rebase 最新 origin/dev；合并前重跑 TEST/ACCEPT。
 
 ## 1. 角色（三个 agent 职责互斥，与 Batch 1 相同）
 
