@@ -45,9 +45,12 @@ argument-hint: [request]
 
 **Operative contract.** Convergence-driven dispatch is the core behavior (see "The convergence loop" below). DESIGN.md lags and is historical — this SKILL.md is the operative contract when they disagree.
 
-**Full design** (consult when needed, not auto-loaded): `DESIGN.md`. **Protocols**: `references/*.md` (guardrails, method-constraints, dynamic-re-tool-priority, verify-static-vs-dynamic, search-policy, cold-start-contract, re-library/*). This file is the operative contract — read it, then act.
+**Full design** (on demand): `DESIGN.md`. **Reference library** — progressive disclosure: `references/INDEX.md` (categorized index + 场景→文件 map); load by scenario on demand, never wholesale. This file is the operative contract — read it, then act.
 
-**RE technique library** (absorbed 2026-07-29 from the former `reverse-engineering` + `malware-analysis` skills): `references/re-library/` (tools, tools-dynamic, tools-advanced, anti-analysis, patterns, patterns-ctf{,2,3}, languages{,-platforms,-compiled}, platforms{,-hardware}, field-notes, malware-analysis, awesome-re-resources) + `references/malware-phase-routing.md`. Workers consult these during dispatch instead of the standalone skills existing.
+- 协议/门禁/故障/验证 → `references/`: guardrails, cold-start-contract, convergence-loop, failure-modes{,-lifecycle,-monitoring,-state}, method-constraints, search-policy, verify-static-vs-dynamic, operational-mechanics, decision-rights, schema, wal-protocol
+- 静态/动态工具/加壳/CTF → `references/re-library/`: tools, tools-advanced, tools-dynamic, tools-crypto, anti-analysis, patterns, patterns-ctf{,-2,-3}, field-notes + `references/dynamic-re-tool-priority.md`
+- 语言/平台 → `references/re-library/`: languages{,-go,-compiled,-platforms}, platforms{,-elf,-hardware,-kernel}
+- 恶意软件/检测/报告/搜索 → `references/re-library/`: malware-analysis{,-workflow,-quickstart}, malware-triage, malware-dynamic-analysis, detection-engineer, malware-report-writer, multi-search-engine{,-refs} + `references/malware-phase-routing.md`
 
 **Global rules this skill implements (behavior, auto-loaded every session):** `maker-checker.md` (制作-检查分离 — §1b/§6.3/verifier 分工) and `numeric-fidelity.md` (数字口径保真 — C-020: 811 slots vs 774 records, 69+1 helper/kfunc). This skill owns the orchestrator mechanics (worker/verifier dispatch, gates); the behavioral rules live in `~/.claude/rules/common/` so they apply even when this skill is not loaded.
 
