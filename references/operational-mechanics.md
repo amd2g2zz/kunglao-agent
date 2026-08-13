@@ -283,3 +283,19 @@ finishes.
 
 **Anti-pattern:** writing `status: done` while an x64dbg/VM child is still
 attached. The fact is done; the SESSION is not — finish the session first.
+
+## Worker self-drive (moved from SKILL.md §4.1, #226)
+
+A worker's "I can't" is not the end — LEARN → TRY → ESCALATE, three-tier
+self-drive (kunglao-worker.md §6d):
+
+1. **LEARN**: look it up — `WebSearch` / context7 / re-library.
+2. **TRY**: retry with ≥2 different methods using what you found.
+3. **ESCALATE**: only when all attempts fail, report a blocker — the blocker
+   MUST carry the lookup record (what sources were checked / what methods
+   were tried / where it is stuck).
+
+WebSearch is freely available to workers. A worker that reports "I can't"
+without lookup evidence = failure (W-27). Workers MUST mark uncertain
+evidence `confidence: low` + `unverified-part` — silent conclusions are
+forbidden (anti analysis-error).

@@ -41,13 +41,13 @@ def test_skill_references_resolve() -> None:
 
 
 def test_decision_rights_table() -> None:
-    """授权矩阵三列: 机械 8 / LLM 6 / 用户 5 落盘于 SKILL.md."""
+    """授权矩阵三列: Mechanical 8 / LLM 6 / User 5 落盘于 SKILL.md(#226 英文化后改查英文标记)."""
     text = SKILL.read_text(encoding="utf-8")
-    assert "机械" in text and "8" in text, "缺少机械决策权行"
-    assert "用户" in text, "缺少用户决策权行"
+    assert "Mechanical" in text and "8" in text, "missing Mechanical decision-rights row"
+    assert "User" in text, "missing User decision-rights row"
     # 三层授权至少各出现一次
-    for col in ("机械", "LLM", "用户"):
-        assert col in text, f"授权矩阵缺 {col} 列"
+    for col in ("Mechanical", "LLM", "User"):
+        assert col in text, f"decision-rights matrix missing {col} column"
 
 
 def test_depth_one() -> None:

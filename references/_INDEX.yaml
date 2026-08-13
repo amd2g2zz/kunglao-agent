@@ -20,7 +20,7 @@ files:
   references/malware-phase-routing.md: 00e6484afaa85da42ed5cdc2c919b3d9b22ca173da37ac4c6da0d691b0ced7f2
   references/memory-protocol.md: fe3f58ba5edaea2ce71eb3552b15f58486ca222319229ebdd319b59c750090ed
   references/method-constraints.md: ed4900f487ece51be11dbae65974ef70aad990927a6fb5a8111d8f04647d7f46
-  references/operational-mechanics.md: 97a8c3e5db2138f5085b4861703e0b597c4bfced041c24bf94ef19cfd0afd669
+  references/operational-mechanics.md: ed3f1c846f2df38c1b8afecf5fde0268ea96a480bed191209af0ef7c66a3552e
   references/optimization-2026-08.md: be009fdf0a478fe8c0d359d00b8a7f9480dc876e54c676156ec41774b7b71812
   references/re-library/anti-analysis.md: 6d8f80bc8b642ef04faf37dfbd175a4dd4d054b60221d8f624fe3580d47422d3
   references/re-library/awesome-re-resources.md: cee058ae60c6677cca107f3114402bea749b7571b7149e0648928187bb409c48
