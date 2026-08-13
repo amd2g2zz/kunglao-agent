@@ -12,7 +12,7 @@ Validates the 5 core loop scripts that previously had ZERO test coverage:
 These snapshots lock behavior BEFORE the refactor (Phase 2/3 equivalence baseline).
 Style: tmp_path + synthetic fixtures (same as test_v1_8_enforcement_gates.py).
 
-Run: python <skill_root>/scripts/test_kunglao_core_loop.py
+Run: python -m pytest tests/test_kunglao_core_loop.py -q
 Exit 0 if all pass, 1 if any fail.
 """
 from __future__ import annotations
