@@ -703,8 +703,41 @@ def check_no_self_cap(description: str, task_spec_path: Path) -> tuple[bool, str
 # forces the inference to be declared in the plan phase, before execution,
 # where the orchestrator can catch it.
 
+# #294: the plan-first gate (#239) only checked file EXISTENCE — an empty-shell
+# template (goal:/preflight:/steps:/fallback: with every field bare, no content)
+# passed the gate. The Swiss-army test (C-022, 2026-08-13) showed workers can
+# satisfy `check_worker_plan` with a shell plan and then hand-roll scripts
+# instead of discovering tools/_INDEX. This regex matches a field label with
+# NOTHING after the colon (whitespace-only rest of line) — used to detect the
+# all-fields-bare shape without penalizing plans that just leave ONE field
+# terse (goal: decode strings / preflight: (empty) is still real intent).
+_BARE_FIELD_RE = re.compile(
+    r'^\s*(goal|preflight|steps|fallback)\s*:\s*$', re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _plan_is_empty_shell(text: str) -> bool:
+    """#294: True iff the plan file has NO content beyond bare field labels.
+
+    Strips every `goal:`/`preflight:`/`steps:`/`fallback:` line that has
+    nothing after the colon, then strips blank lines. If anything survives
+    (a filled-in field, extra prose, a step description), the plan is real.
+    """
+    # H1 (#294): a UTF-8 BOM (PowerShell/Notepad utf8 output) before `goal:`
+    # would make `﻿goal:` look like content — strip it explicitly in
+    # addition to the utf-8-sig read in check_worker_plan.
+    text = text.lstrip('﻿')
+    remaining = []
+    for line in text.splitlines():
+        if _BARE_FIELD_RE.match(line):
+            continue
+        if line.strip():
+            remaining.append(line)
+    return not remaining
+
+
 def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[bool, str]:
-    """Issue #239: a claim dispatch REQUIRES its worker plan.
+    """Issue #239/#294: a claim dispatch REQUIRES its worker plan, WITH CONTENT.
 
     The dispatched claim C-NN must already have `runs/plan-C<NN>*.md` on disk
     (orchestrator wrote it pre-dispatch — real-world naming is plan-c005.md,
@@ -712,6 +745,11 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
     for THAT claim (timing relaxation: the plan may be written in the same
     turn, e.g. "write runs/plan-C001-strings.md first, then execute"). A plan
     path for a DIFFERENT claim in the prompt does NOT relax.
+
+    #294: an on-disk plan that is an empty-shell template (every field label
+    present but bare — `goal:\\npreflight:\\nsteps:\\nfallback:` with nothing
+    filled in) does NOT satisfy the gate — it is existence without content.
+    The prompt-relaxation path is unaffected (the file may not exist yet).
 
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
@@ -730,7 +768,24 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
                     f'plan-{key.lower()}.md', f'plan-{key.lower()}-*.md'):
             hits.extend(sorted(runs.glob(pat)))
         if hits:
-            return (True, f'plan file exists: {hits[0].name}')
+            plan_path = hits[0]
+            try:
+                # utf-8-sig: strips a UTF-8 BOM so a PowerShell/Notepad-written
+                # template cannot smuggle '﻿goal:' past the empty-shell check.
+                plan_text = plan_path.read_text(encoding='utf-8-sig', errors='replace')
+            except OSError:
+                # unreadable (locked / directory shadowing the name) — fail
+                # OPEN with an honest note; a misleading empty-shell reject
+                # would blame the worker for a system error.
+                return (True, f'plan file exists (unreadable, content not '
+                              f'verified): {plan_path.name}')
+            if _plan_is_empty_shell(plan_text):
+                return (False, (
+                    f'{plan_path.name} is an empty-shell template (goal/preflight/'
+                    f'steps/fallback all bare, no content) — fill in the plan '
+                    f'FIRST (kunglao-worker.md golden rule #3), then re-dispatch'
+                ))
+            return (True, f'plan file exists: {plan_path.name}')
     if prompt:
         m = re.search(
             rf'plan-[{key[0]}{key[0].lower()}]{re.escape(key[1:])}'
@@ -743,6 +798,131 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
                     f'prompt does not reference a plan path for it — write the '
                     f'plan FIRST (kunglao-worker.md golden rule #3: PLAN FIRST, '
                     f'execute second)'))
+
+
+# ---------- tool-first gate (issue #294) ----------
+# The plan-to-execute gate (#239, hardened above) only forced a PLAN to exist —
+# it never checked that the plan actually looked for a registered tool before
+# committing to hand-written logic. The Swiss-army test (C-022, 2026-08-13)
+# showed a worker with a passing plan gate still wrote its own crypto-decode
+# script instead of trying tools/crypto/crypto-tool.py, because nothing in the
+# dispatch contract required it to check tools/_INDEX.yaml first. This gate
+# closes that gap MECHANICALLY: if the dispatch text (description + prompt)
+# contains a keyword that maps to a registered tool's category/capability, the
+# dispatch must carry a `tool-catalog: <name>` marker (or an explicit
+# `tool-catalog: none (reasoning: ...)` opt-out) — otherwise REJECT. No keyword
+# match -> silent pass (avoids false positives on unrelated claims).
+
+# H2 (#294): generic category/capability words are routine prose too
+# ('static overview of imports' is an adjective, not a disasm tool) — they
+# would false-positive REJECT normal dispatches. Stopworded out of the trigger
+# set; the remaining keywords (crypto/ghidra/recon/decompile/vtable/...) are
+# distinctive enough to be safe signals.
+_TOOLFIRST_STOPWORDS = frozenset({'static', 'pipeline', 'aux', 'annotate', 'decode'})
+
+# One-off diagnostic exemption: CJK phrases are substring-matched (no word
+# concept to bound), ASCII phrases are word-bounded so 'one-off' inside a
+# longer word cannot trigger, and BOTH are negation-aware — "not a one-off
+# diagnostic" must NOT count as an exemption (reviewer r1-294 finding).
+_TOOLFIRST_DIAGNOSTIC_SUBSTRINGS = ('一次性诊断', '一次性')
+_TOOLFIRST_DIAGNOSTIC_RE = re.compile(
+    r'\bone-off\b|\bone shot\b|\bdiagnostic only\b|\bdiagnostic-only\b',
+    re.IGNORECASE,
+)
+_NEGATION_RE = re.compile(r'\b(?:not|no)\b|不是|非')
+
+# H2/CJK (#294): ASCII-only word boundaries, not `\b` — Python's \b treats CJK
+# chars as word chars, so '解码crypto层' would silently bypass the gate; and
+# 'crypto' inside 'cryptography' must NOT match. (?<![A-Za-z0-9_])…(?![A-Za-z0-9_])
+# gives exactly that.
+_ASCII_BOUNDARY = r'(?<![A-Za-z0-9_]){kw}(?![A-Za-z0-9_])'
+
+
+def _load_tool_index_keywords(skill_root: Path) -> dict[str, str]:
+    """#294: map a lowercase keyword -> tool name, from tools/_INDEX.yaml.
+
+    Keywords are the category and the two halves of `capability` ("<domain>:
+    <operation>") for every registered tool — e.g. crypto-tool contributes
+    {'crypto': 'crypto-tool', 'decode': 'crypto-tool'}. Multiple tools sharing
+    a keyword keep the first-registered tool (informational only; the gate
+    only needs ONE candidate name to cite in its REJECT message).
+    """
+    index_path = skill_root / 'tools' / '_INDEX.yaml'
+    if not index_path.exists():
+        return {}
+    try:
+        data = yaml.safe_load(index_path.read_text(encoding='utf-8')) or {}
+    except yaml.YAMLError:
+        return {}
+    out: dict[str, str] = {}
+    for entry in (data.get('tools') or []):
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get('name')
+        if not name:
+            continue
+        category = str(entry.get('category') or '').strip().lower()
+        if category and category not in out:
+            out[category] = name
+        capability = str(entry.get('capability') or '')
+        domain, _, op = capability.partition(':')
+        for kw in (domain.strip().lower(), op.strip().lower()):
+            if kw and kw not in out:
+                out[kw] = name
+    return out
+
+
+def _is_diagnostic_exempt(text: str) -> bool:
+    """#294: True iff the text declares a one-off diagnostic (case-insensitive,
+    word-bounded for ASCII, negation-aware: 'not a one-off diagnostic' is NOT
+    an exemption)."""
+    for marker in _TOOLFIRST_DIAGNOSTIC_SUBSTRINGS:
+        if marker in text:
+            # CJK negation ('不是一次性') in the 16 chars before the marker
+            idx = text.find(marker)
+            prev = text[max(0, idx - 16):idx]
+            if not _NEGATION_RE.search(prev):
+                return True
+    for m in _TOOLFIRST_DIAGNOSTIC_RE.finditer(text):
+        prev = text[max(0, m.start() - 16):m.start()]
+        if not _NEGATION_RE.search(prev):
+            return True
+    return False
+
+
+def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
+    """Issue #294: a dispatch touching a registered tool's domain must cite it.
+
+    Scans `desc + prompt` for tools/_INDEX.yaml category/capability keywords
+    (ASCII-bounded, case-insensitive, stopworded). No match -> pass silently
+    (FAIL_OPEN on ambiguity — this gate only fires on a positive keyword hit).
+    A one-off diagnostic declaration exempts the dispatch. Otherwise the text
+    MUST contain `tool-catalog:` (either naming the matched tool or an
+    explicit `none (reasoning: ...)` opt-out) or the dispatch is REJECTED.
+
+    Returns (ok, reason). ok=False means REJECT the dispatch.
+    """
+    text = f'{desc}\n{prompt}'
+    text_lower = text.lower()
+    if 'tool-catalog:' in text_lower:
+        return (True, 'tool-catalog marker present')
+    if _is_diagnostic_exempt(text):
+        return (True, 'one-off diagnostic — tool-first exempt')
+    keywords = _load_tool_index_keywords(_SKILL_ROOT)
+    if not keywords:
+        return (True, 'no tools/_INDEX.yaml keywords to match — tool-first skipped')
+    for kw, tool_name in keywords.items():
+        if kw in _TOOLFIRST_STOPWORDS:
+            continue
+        if re.search(_ASCII_BOUNDARY.format(kw=re.escape(kw)), text_lower):
+            return (False, (
+                f"dispatch text matches registered tool '{tool_name}' "
+                f"(keyword '{kw}') but carries no `tool-catalog:` marker. Add "
+                f"`tool-catalog: {tool_name}` if you will try it, or "
+                f"`tool-catalog: none (reasoning: <why not>)` if it genuinely "
+                f"does not apply, then re-dispatch."
+            ))
+    return (True, 'no tool-catalog keyword match')
 
 
 # ---------- issue #270: REJECT guidance via hookSpecificOutput.additionalContext ----------
@@ -871,6 +1051,17 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             '(goal / preflight / steps / fallback) for claim C-<NN> BEFORE '
             'dispatching, or reference the plan path in the dispatch prompt '
             'when writing it in the same turn — then re-dispatch.'
+        ),
+    },
+    'toolfirst': {
+        'additionalContext': (
+            'tool-first gate (#294): the dispatch text matches a registered '
+            'tools/_INDEX.yaml entry but carries no `tool-catalog:` marker. '
+            'Fix: read <skill>/tools/_INDEX.md -> pick the matching '
+            '_index-<category>.md entry -> add `tool-catalog: <tool-name>` to '
+            'the dispatch prompt (or `tool-catalog: none (reasoning: <why '
+            'not>)` if the registered tool genuinely does not apply) — then '
+            're-dispatch.'
         ),
     },
     'snapshot': {
@@ -1012,6 +1203,12 @@ def pre_check(payload: dict, paths: dict) -> int:
         # F006-F008 accident: inference written as facts — the plan phase
         # exposes it before execution.
         ('plan', check_worker_plan(paths, cid, prompt)),
+        # v1.9.32 (#294): tool-first gate — a dispatch whose text matches a
+        # registered tools/_INDEX.yaml keyword must cite it (`tool-catalog:`)
+        # or explicitly opt out with reasoning. Closes the Swiss-army-test gap
+        # where a passing plan gate still let a worker hand-roll a script
+        # instead of trying crypto-tool.py for a crypto-decode task.
+        ('toolfirst', check_tool_first(paths, desc, prompt)),
     ]
     for name, (ok, msg) in checks:
         if not ok:

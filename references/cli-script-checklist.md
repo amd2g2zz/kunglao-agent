@@ -7,6 +7,20 @@
 > `scripts/shell_defaults.py` (idempotent shell env-default management —
 > `--var/--value/--profile/--shell`, check/apply/remove, exit codes, `--json`).
 
+## 0. 先查目录 (issue #294)
+
+写任何新脚本前, 先按顺序查:
+
+1. `tools/_INDEX.md` — 6 类能力域表, 找任务所属领域(crypto/static/ghidra/dynamic/pipeline/aux)
+2. `tools/_index-<category>.md` — 该域的一行式契约骨架, 看是否已有工具覆盖同一 capability
+3. `tools/_INDEX.yaml` — 机器契约, 确认工具名/子命令/输入输出
+
+有匹配工具 → **优先用其 CLI 试解**(参考各工具 `--help` / `input_output` 契约),
+不写新脚本。无匹配才进入下面 1-8 条写新脚本。`hooks/worker_budget.py` 的
+`toolfirst` gate 会核对 dispatch 是否带 `tool-catalog: <name>` 或
+`tool-catalog: none (reasoning: <why not>)` 标记 —— 命中已注册工具的能力
+关键词却无标记会被 REJECT。
+
 ## 1. Parameterized, never hardcoded
 
 - All targets come from CLI args, not string literals: `--binary PATH`,

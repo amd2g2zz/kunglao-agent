@@ -118,3 +118,20 @@ def test_cli_checklist_doc_registered() -> None:
     assert "cli-script-checklist.md" in idx, (
         "cli-script-checklist.md not registered in references/_INDEX.md"
     )
+
+
+def test_worker_has_tool_first_contract() -> None:
+    """Issue #294: agents/kunglao-worker.md must require checking tools/_INDEX
+    before writing a new script, and name the `tool-catalog:` dispatch marker
+    the worker_budget toolfirst gate checks for."""
+    text = WORKER.read_text(encoding="utf-8")
+    for kw in ("tools/_INDEX", "tool-catalog"):
+        assert kw in text, f"kunglao-worker.md missing tool-first keyword: {kw}"
+
+
+def test_checklist_has_tool_first_section() -> None:
+    """Issue #294: references/cli-script-checklist.md must instruct checking
+    tools/_INDEX before any new script is written ("## 0. 先查目录")."""
+    text = CHECKLIST.read_text(encoding="utf-8")
+    assert "先查目录" in text, "cli-script-checklist.md missing '## 0. 先查目录' section"
+    assert "tools/_INDEX" in text, "cli-script-checklist.md missing tools/_INDEX reference"

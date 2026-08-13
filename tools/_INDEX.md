@@ -6,7 +6,7 @@
 
 | Category | Index file | Tool shelf (examples) | Purpose |
 |---|---|---|---|
-| crypto | `_index-crypto.md` | chacha-string-layer | 加解密/编解码/哈希工具 |
+| crypto | `_index-crypto.md` | crypto-tool | 加解密/编解码/哈希工具 |
 | static | `_index-static.md` | die, floss, pefile | 静态识别/特征提取工具 |
 | ghidra | `_index-ghidra.md` | ghidra-recon, ghidra-decompile-functions, ghidra-vtable-struct, ghidra-evidence-annotations, ghidra-scan-pointer | Ghidra 反汇编/函数级分析 |
 | dynamic | `_index-dynamic.md` | x64dbg-remote, frida-remote | VM 动态调试/运行时分析 |
@@ -45,6 +45,7 @@
 
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
+| `crypto/crypto-tool.py` | crypto | 8 算法加解密/解码 CLI(chacha/xor-add/rolling-xor/lzss/lzma-raw/rsa-unpad/go-byte-transform/va-to-off) | 加密/编码/压缩层识别与试解时 |
 | `audit_legacy_proven.py` | aux | 审计 legacy PROVEN fact 状态 | 需要清理旧事实状态时 |
 | `build_evidence_index.py` | pipeline | 证据索引构建器(evidence/_index.json + _INDEX.md) | 证据落盘后登记索引时 |
 | `capture_golden.py` | aux | golden 用例采集 | 更新 golden fixtures 时 |

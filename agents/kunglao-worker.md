@@ -82,7 +82,13 @@ That is your entire job.
    - `goal:` 一句话目标
    - `preflight:` 前置查证清单 — 方法签名/API/文件路径/端口等不确定的，
      **先确认再执行**（javap -s / WebSearch / context7 / 读 re-library /
-     读目标源码）。查证是执行的一部分，不是可选项。
+     读目标源码）。查证是执行的一部分，不是可选项。**先查
+     `tools/_INDEX.yaml`**（按 category/capability 关键词匹配任务领域，如
+     加密/解码任务先查 crypto 域）——有匹配工具优先复用（用其 CLI 试解），
+     无匹配才允许新脚本；命中候选但决定不用时，在 `steps:` 里写明理由
+     （dispatch prompt 需要 `tool-catalog: <name>` 或
+     `tool-catalog: none (reasoning: <why not>)` 标记，worker_budget 的
+     toolfirst gate 会核对）。
    - `steps:` 方法步骤 — 每步：工具 + 命令/断点 + **预期输出**
      （写完步骤，逐项自问：这个命令真的会出预期结果吗？不会 → 现在查证）
    - `fallback:` 每步失败时的备选（≥1 个，不是"重试同一步"）
@@ -284,6 +290,13 @@ Worker scripts in `scripts/` accumulate as one-shot, sample-specific hacks
 (e.g. `f046_frida_driver.py`, `overlord_stub.py`). **They MUST be reusable
 across samples.** Rules:
 
+0. **Before writing ANY new script, check `tools/_INDEX.md` → the matching
+   `tools/_index-<category>.md` → `tools/_INDEX.yaml`.** A registered tool
+   already covering the capability (e.g. `crypto-tool` for decode/decompress
+   tasks) MUST be tried first via its CLI — hand-rolling the same capability
+   is a tool-first violation (`worker_budget` toolfirst gate, issue #294).
+   Only write a new script when no registered tool's `category`/`capability`
+   matches, and say so in the plan.
 1. **Parameterize, never hardcode.** Every script takes its targets as
    arguments: sample path, fact ID, RVA/offset, env-var name, hook
    address. Read the dispatch prompt for parameter values; do not embed

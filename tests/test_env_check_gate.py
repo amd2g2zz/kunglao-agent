@@ -93,7 +93,7 @@ def test_main_stdin_reject_end_to_end(tmp_path):
         [sys.executable, str(Path(__file__).resolve().parents[1] / "hooks" / "env_check_gate.py")],
         input=json.dumps(_payload(ws)), capture_output=True,
         encoding="utf-8", errors="replace",
-        env={"PYTHONIOENCODING": "utf-8", FLAG_NAME: "1", **os.environ},
+        env={"PYTHONIOENCODING": "utf-8", **os.environ, FLAG_NAME: "1"},
         cwd=str(ws), timeout=60,
     )
     assert r.returncode == 2
