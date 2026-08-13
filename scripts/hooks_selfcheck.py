@@ -12,13 +12,14 @@ mutation by Claude Code UI / plugin toggle / enabledPlugins change can silently 
 the hooks key, and nothing restores it.
 
 This script is the mechanical cure. Run every heartbeat tick (step 0 of the tick,
-before reconcile/dispatch): it verifies the 4 kunglao hooks are present in BOTH
-project-level (workspace-parent/.claude/settings.json — the stable source of truth,
-carries block_malware_exec + mcpServers + env) AND user-level (~/.claude/settings.json
-— backup). If user-level is missing any hook, it auto-rebuilds via hook_activation.py
---wire-up. If project-level is missing any hook, it reports exit=1 (project-level is
-not auto-rewritten because it carries mcpServers/env/block_malware_exec that need care;
-orchestrator surfaces to user for manual fix).
+before reconcile/dispatch): it verifies the 4 kunglao hooks are present in the
+PROJECT-level <workspace>/.claude/settings.json — the wire-up deployment target since
+issue #258 (2026-08-12; pre-#258 wrote the user-global file and bound hooks to a
+worktree path that died with the worktree). If project-level is missing any hook, it
+auto-rebuilds via hook_activation.py --wire-up (which now writes the project-level
+file). The user-global ~/.claude/settings.json is NOT a deployment target anymore:
+if it still carries kunglao hooks, this script prints a migration warning (remove
+them from global; they must live in the project settings) but never rewrites it.
 
 Wires in via heartbeat_loop_prompt.py (step 0 of every tick). Idempotent + fast (<50ms).
 """
@@ -35,6 +36,8 @@ KONG_HOOK_FILES = [
     "dispatch_gate.py",
     "worker_pulse.py",
 ]
+# User-global settings: NOT a deployment target since #258. Checked only to warn
+# about leftover kunglao hooks that should be migrated to the project level.
 USER_SETTINGS = Path.home() / ".claude" / "settings.json"
 
 
@@ -82,7 +85,9 @@ def check_settings(settings_path: Path) -> dict:
     return {"exists": True, "hooks_segment": True, "present": present, "missing": missing}
 
 
-def rebuild_user_level(workspace: Path) -> dict:
+def rebuild_project_level(workspace: Path) -> dict:
+    """Auto-rebuild the PROJECT-level settings via --wire-up (writes
+    <workspace>/.claude/settings.json since #258)."""
     skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/ (scripts/ -> root)
     script = skill_dir / "scripts" / "hook_activation.py"
     try:
@@ -97,30 +102,49 @@ def rebuild_user_level(workspace: Path) -> dict:
 
 def main() -> int:
     ws = _resolve_ws(sys.argv[1] if len(sys.argv) > 1 else None)
-    proj_settings = ws.parent / ".claude" / "settings.json"
-    user_check = check_settings(USER_SETTINGS)
+    proj_settings = ws / ".claude" / "settings.json"
     proj_check = check_settings(proj_settings)
+    user_check = check_settings(USER_SETTINGS)
+
+    # #258: user-global is NOT a deployment target. Leftover kunglao hooks there
+    # are a migration hazard (worktree-bound paths) — warn, never rewrite.
+    migration_warning = None
+    if user_check.get("hooks_segment") and user_check.get("present"):
+        migration_warning = (
+            f"WARNING: kunglao hooks still present in user-global {USER_SETTINGS} "
+            f"— migrate them to the project-level {proj_settings} and remove from "
+            f"global (issue #258: global hooks bind to a worktree path and die "
+            f"with it). This script never rewrites the global file."
+        )
+        print(migration_warning, file=sys.stderr)
+
+    rebuilt = {}
+    if proj_check.get("hooks_segment") is False or proj_check.get("missing"):
+        rebuilt = rebuild_project_level(ws)
+        if rebuilt.get("rc") == 0:
+            # maker-checker: re-read the file — don't trust the subprocess claim.
+            proj_check = check_settings(proj_settings)
 
     report = {
         "ts": utc_now(),
-        "user_settings": str(USER_SETTINGS),
         "project_settings": str(proj_settings),
-        "user_level": user_check,
+        "user_settings": str(USER_SETTINGS),
         "project_level": proj_check,
+        "user_level": user_check,
+        "user_migration_warning": migration_warning,
+        "project_rebuild": rebuilt,
     }
-
-    if user_check.get("hooks_segment") is False or user_check.get("missing"):
-        report["user_level_rebuild"] = rebuild_user_level(ws)
-
     out = ws / "runs" / ".hooks-selfcheck.json"
     try:
+        out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(report, indent=2), encoding="utf-8")
     except Exception:
         pass
 
     proj_ok = proj_check.get("hooks_segment") and not proj_check.get("missing")
-    user_ok = not user_check.get("missing") or report.get("user_level_rebuild", {}).get("rebuilt")
-    status = f"project={'OK' if proj_ok else 'MISSING ' + str(proj_check.get('missing'))}, user={'OK' if user_ok else 'DEGRADED'}"
+    status = f"project={'OK' if proj_ok else 'MISSING ' + str(proj_check.get('missing'))}"
+    if migration_warning:
+        status += " (global has leftover kunglao hooks — migrate)"
     print(f"hooks_selfcheck: {status}")
     return 0 if proj_ok else 1
 
