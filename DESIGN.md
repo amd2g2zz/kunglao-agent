@@ -82,17 +82,26 @@ orchestrator 自撰的 composite note 也必须经 `verify-note.py`(独立 verif
 
 ## 6. 模块目录(描述性,无顺序 — worker 自选)
 
+kunglao 是逆向工程 agent;下列**核心 RE 能力**对任意 RE 问题(固件 / 协议 / 工具链 / 未知二进制 / malware)通用,**malware 应用能力**是 malware 分析子集场景才用到的增强 —— 标注「malware 子集能力,非通用 RE 必需」,非 malware 样本可整层缺席,不阻塞收敛。
+
+**核心 RE 能力(通用,任意 RE 问题)**
+
 | 支柱 | 工具 |
 |---|---|
 | **样本类型检测** | DIE(`evidence/die.json`)、`pefile-signature`、resources 扫描 |
 | **静态 RE** | `ghidra-malware`、`ghidra-re`、`ghidra-light` agent、`mcp__ghidra__*`、`pefile-signature`、`mal-recon` |
 | **动态 RE** | `malware-framework`(Qiling)、`rev-frida`、`mcp__x64dbg__*`、`vmr-shell`(需预授权)。worker 按场景选 |
+| **验证** | `malware-veri-notes`(`verify-note.py` + `lint-notes.py` + fact/note/run schema)。**schema 唯一 owner 是 malware-veri-notes** — kunglao-agent worker 产出的 facts 必须遵循其 fact schema(含 numeric 事实的 `unit:` 字段,见 `~/.claude/rules/common/numeric-fidelity.md`);schema 演进先在 veri-notes 落,再同步 worker 契约,避免"定义方与生产方脱节"导致报告口径丢失 |
+
+**malware 应用能力(malware 子集能力,非通用 RE 必需)**
+
+| 支柱 | 工具 |
+|---|---|
 | **内存 dump** | `mcp__volatility__*` |
 | **pcap** | TBD,检测到即 `deferred_until: tooling-available` |
-| **验证** | `malware-veri-notes`(`verify-note.py` + `lint-notes.py` + fact/note/run schema)。**schema 唯一 owner 是 malware-veri-notes** — kunglao-agent worker 产出的 facts 必须遵循其 fact schema(含 numeric 事实的 `unit:` 字段,见 `~/.claude/rules/common/numeric-fidelity.md`);schema 演进先在 veri-notes 落,再同步 worker 契约,避免"定义方与生产方脱节"导致报告口径丢失 |
 | **裁决**(收敛后可选) | `verdict-scorer` agent |
 
-注:`verdict-scorer` 是 **agent type**,非 skill。
+注:`verdict-scorer` 是 **agent type**,非 skill。CTI 冷启动 / 交叉支柱已于 #109 移除(CTI 证据现为只读冷启动输入,见 §1 输入契约 + §7 Phase 0.7),本表按当前支柱组织。
 
 ## 7. Phase 0 SETUP(pre-loop,允许与用户交互;**所有步幂等——目标文件存在且非空则跳过,不 clobber**)
 
@@ -121,7 +130,7 @@ orchestrator 自撰的 composite note 也必须经 `verify-note.py`(独立 verif
 
 ### 闭环(收敛,交付 fact base,全机器可验)
 - **C0** task_spec 每个 `primary_question` 都有一条 **note**(`verify_status=passes` + frontmatter `answers_question: <q_id>`),该 note cites ≥1 fact 且 cited fact `status ∈ {PROVEN, VERIFIED, NEGATIVE, REFUTED, DEFERRED}`(terminal)。即——问题可由正向 fact(PROVEN)、**证伪性 fact**(NEGATIVE/REFUTED,如"不是 Vidar"/"无 C2")、或已知缺口(DEFERRED)回答。**note 持 verify_status(fact 无此字段),避免 schema 矛盾;terminal 含 NEGATIVE/REFUTED/DEFERRED,避免不可答问题死锁**。机械执行: `convergence_check.py::_note_layer_gaps`(e2f2432) — 注: 实装按 `note.claim_id → claim.answers_question` 链, 与文本"note 直接带 answers_question"有偏差, 见顶部 NOTE。
-- **C0a (v1.8.1 强化 — PROVEN 不打折)**: 对 `need: model_selection` / `need: yes_no` / `need: protocol_description` 这类**正向归因型**问题(q1/q3/q4),cited fact 必须是 **`status=PROVEN`**(不是 NEGATIVE/REFUTED/DEFERRED)。**`status=PROVEN` 且 `confidence_band=PROVEN-INITIAL` 不闭合 C0a** —— PROVEN-INITIAL 仅是 annotation band(信号初见、窗口受限、需要 ≥2 独立 tier 来源或 ≥5 分钟多 VM 才能升 PROVEN-FULL)。设计目的:防止单 VM 短窗口"PROVEN"打标 → 主循环误判收敛 → 提前开环。**PROVEN-FULL 升级路径**:`≥2 不同 tier 独立来源(tier-1 静态 + tier-3 动态双源)` OR `≥5 分钟多 VM 起爆 + 完整 IO 链(网络/文件/注册表 ≥1 类有 payload)`。**C0a 不阻塞 exclusion 型问题**(q 答"不是 X"——NEGATIVE/REFUTED 即可)
+- **C0a (v1.8.1 强化 — PROVEN 不打折)**: 对 `need: model_selection` / `need: yes_no` / `need: protocol_description` 这类**正向归因型**问题(q1/q3/q4),cited fact 必须是 **`status=PROVEN`**(不是 NEGATIVE/REFUTED/DEFERRED)。**`status=PROVEN` 且 `confidence_band=PROVEN-INITIAL` 不闭合 C0a** —— PROVEN-INITIAL 仅是 annotation band(信号初见、窗口受限、需要 ≥2 独立 tier 来源才能升 PROVEN-FULL)。设计目的:防止单 VM 短窗口"PROVEN"打标 → 主循环误判收敛 → 提前开环。**PROVEN-FULL 升级路径(唯一合法硬路径,任意 RE 问题通用)**:`≥2 独立 tier 来源(静态 + 动态双源)`。**malware 子集描述性增强(不参与全局 PROVEN-FULL 判定)**:`≥5 分钟多 VM 起爆 + 完整 IO 链(网络/文件/注册表 ≥1 类有 payload)` 只是 malware 行为观察的描述性增强示例 —— 它是 malware 子集场景的证据丰富度信号,不是通用 RE 的判定维度,也**不替代双源**:仅有 VM 起爆 + IO 链、缺第二独立 tier 来源时,仍不闭合 PROVEN-FULL。**C0a 不阻塞 exclusion 型问题**(q 答"不是 X"——NEGATIVE/REFUTED 即可)
 - **C0b** 对 `need: model_selection` 的问题(q 的 K 个竞争 claim,共享 `competitor_group`):K 中 ≥1 达 terminal **且其余 ∈ {REFUTED, DEFERRED}**(淘汰或悬置)→ 该问题被回答。证据天然淘汰劣势(§9 rule 4(b) refutation 沿 `competitor_group` 传播)。最优:1 个 PROVEN + 其余 REFUTED;可接受:1 个 PROVEN + 其余 DEFERRED(弱淘汰)**——PROVEN 的那一个仍受 C0a 约束(PROVEN-FULL,不是 PROVEN-INITIAL)**
 - **C1** `claim-register.yaml` 每个 claim 有 `boundary_type`
 - **C2** 每个 open boundary 有非空 `promotion_gate` AND `promotion_attempts ≥ 1`
@@ -312,6 +321,13 @@ PE/ELF/Mach-O/shellcode → 全可用。dump → volatility。pcap → deferred_
 ---
 
 ## changelog
+
+### #256 架构层身份审计(2026-08-13)— malware 绑定去耦
+
+| # | 修 | 条 |
+|---|---|---|
+| 1 | **§6 模块目录两层呈现**:7 支柱重组为「核心 RE 能力(样本类型检测 / 静态 RE / 动态 RE / 验证 — 通用,任意 RE 问题)+ malware 应用能力(内存 dump / pcap / 裁决 — 标注「malware 子集能力,非通用 RE 必需」,非 malware 样本可整层缺席不阻塞收敛)」。落实身份认知:kunglao = RE agent,malware 是子集 / 主要场景。工具命名不动(ghidra-malware / malware-framework / malware-veri-notes / mal-recon 不重命名、不加注)。注:CTI 冷启动 / 交叉支柱已于 #109 移除,本表按当前支柱组织 | §6 |
+| 2 | **C0a PROVEN-FULL 去 malware 绑定**:PROVEN-FULL 唯一合法硬路径 = `≥2 独立 tier 来源(静态 + 动态双源)`,任意 RE 问题通用。`≥5 分钟多 VM 起爆 + 完整 IO 链` 降级为 malware 子集描述性增强(不参与全局判定,不替代双源 —— 仅有 VM 起爆 + IO 链、缺第二 tier 来源仍不闭合 PROVEN-FULL)。原「双源 OR 多 VM 起爆」是 malware 特定语义,绑定了一类样本的动态行为观察。机械层无影响:`convergence_check.py` 只查 `status=PROVEN`,不检查 band 升级路径;无脚本 / hook 引用「VM 起爆 + IO 链」 | §8 C0a |
 
 ### v1.8.1 → v1.8.2(7 条 — orchestrator 在-session 反复违反的失败模式 + paraphrase hygiene)
 
