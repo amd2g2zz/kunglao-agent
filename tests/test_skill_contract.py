@@ -26,6 +26,11 @@ SECTIONS = [
 CJK = re.compile(r"[一-鿿]")
 HARDCODED = re.compile(r"[A-Z]:[\\/]|192\.168\.20|/Users/hr|kong-refactor")
 NARRATIVE = ["WHY=", "single most-violated", "traces to violating", "case-book"]
+DESIGN_REF = re.compile(r"DESIGN\.md")
+ISSUE_NUMBER = re.compile(r"#\d{2,3}")
+VERSION_TAG = re.compile(r"v1\.[0-9]")
+COMMIT_HASH = re.compile(r"[0-9a-f]{7,40}\b")
+SKILL_COMMIT_POLICY = re.compile(r"commit policy", re.IGNORECASE)
 
 
 def _body() -> str:
@@ -71,3 +76,29 @@ def test_skill_md_no_narrative_phrases():
     body = _body()
     hits = [w for w in NARRATIVE if w in body]
     assert not hits, f"self-narrative phrases remain: {hits}"
+
+
+def test_skill_md_no_design_md_reference():
+    """SKILL.md must not reference DESIGN.md (developer doc, not runtime)."""
+    body = _body()
+    assert not DESIGN_REF.search(body), "DESIGN.md reference found in SKILL.md body"
+
+
+def test_skill_md_no_issue_numbers():
+    """SKILL.md must not contain issue numbers (e.g. #88, #233)."""
+    body = _body()
+    hits = ISSUE_NUMBER.findall(body)
+    assert not hits, f"issue numbers found in SKILL.md body: {hits}"
+
+
+def test_skill_md_no_version_tags():
+    """SKILL.md must not contain version tags (e.g. v1.9.x)."""
+    body = _body()
+    hits = VERSION_TAG.findall(body)
+    assert not hits, f"version tags found in SKILL.md body: {hits}"
+
+
+def test_skill_md_no_skill_commit_policy():
+    """SKILL.md must not contain repo governance text (commit policy)."""
+    body = _body()
+    assert not SKILL_COMMIT_POLICY.search(body), "commit policy text found in SKILL.md body"

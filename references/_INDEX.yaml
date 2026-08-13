@@ -11,7 +11,7 @@ files:
   references/_index-platforms.md: 76e9ebddd32101b27908456a536f0146fb92d38f7907744ef7fb17520f6a5c2a
   references/_index-resources.md: 9c9ab4d5848b23bd78c4c6e1a5ce36294001d0640017dc5c6740bbacd7381870
   references/_index-tools.md: 0f7643d4d87a4327ff0c0f5f428dcaf3944ca3988364f43aa516543416b9e3ca
-  references/_INDEX.md: 0db9da35a994f552e7f17d4e5181bf74be21f198820efe4f781129260ff95670
+  references/_INDEX.md: af74637ef0ee82f84fd3f3d5c2f7cf42a1c98020cf6056c3ee95ad03cd820b64
   references/case-book.md: 4ba2689c887912ccf0e2a0f0bb31b58b120aac4c6e30db54c68cbb4a898a24a7
   references/cold-start-contract.md: c31e1c76b25253af379c43da86cf9bc539c5f6d7c92a14fb6941dfe0c137ff41
   references/convergence-loop.md: 60b3f56e47423ba0457c9bcc3a0252221b13f0fc168a976abb7234d4b8c3dd88
@@ -24,7 +24,6 @@ files:
   references/failure-modes-state.md: e2ae19b8375f0a92c88e40f77b202f00b8071dce3b81047a46f7773f9381851d
   references/failure-modes.md: 07c2d206bce4cfd066c0d881b03f823baf3433028daac99edc571cfa72e9ddf8
   references/guardrails.md: be2d5c814dbf76b6e23b42695cbad3d9daa49a0e59523a601a0a89f8b7a5c18a
-  references/INDEX.md: 771d314415b8d8d24d41310242d6c1cfe0944d6684cb1833c6f80c269d63e724
   references/long-horizon-architecture-2026-07.md: cefb106e09a80888f9f2eb88a13c8cbad5852d85b99d943744991e9fff938e91
   references/malware-phase-routing.md: bf16817e3471438273dd0f61966d30abeef6ca7fe7a7ba1880f10c39b28e8f10
   references/memory-protocol.md: 69f9a4a4a7530b2495d1c9adfc84bf20f8bd4bbd144573cf83c11ffadeba9add
@@ -65,39 +64,6 @@ files:
   references/tool-inventory.md: bfe7de213aba6dcb148ca830a8f329a36200ee49ba1c514c3cd41888dea6270e
   references/verify-static-vs-dynamic.md: 37f745c992cd76d81f7e3fd6fe1ceeb43736ea0770291a0059c17f4eb476327c
   references/wal-protocol.md: 81757f6241ea0df548e27669f47cb131ec0ec7802668bccab01ac193cdcea831
-
-  references/re-library/detection-engineer.md: fc06be71641d31a6e8da60f3b2084197da9bc1b2bffc7ecf3d07b076b0aa9072
-  references/re-library/field-notes.md: 39c2e0f23644861c42973599b2a191fe68a11920974e8faa65e3a3070b4cd28b
-  references/re-library/languages-compiled.md: ce03d6da37cac4cdf8619bad2f30a9d4e1e9fc918634a7521cae7e2ffc9ca09d
-  references/re-library/languages-go.md: 75e9060c4f6dd341c7c5f2f33a5c1fbccb21cd2ab2265833ebc5368856631041
-  references/re-library/languages-platforms.md: a3b26cd35817f51394685b49b4e79f187547f7b5bcc8601de93c246ab514440a
-  references/re-library/languages.md: 230012d76b1e22baa71fb49494b748f7081fb837fbfbc977e1acd03586b1a49c
-  references/re-library/malware-analysis-quickstart.md: 35e771c448c1a6a78e78c06fa13e0a261b5f5022501dd3b6bb2162b45210e800
-  references/re-library/malware-analysis-workflow.md: 8ae61d8297f5c3c8fa7b4f28b5c93561267aa8ceeed396ba88ba7d76b6d6d247
-  references/re-library/malware-analysis.md: affe63b960a5d94f50ce5d9715d0b267ea32813939097962f078b252239bab9a
-  references/re-library/malware-dynamic-analysis.md: d72532710308f0f8ab6373595c815b77c51b2b4cb8f3a2a9bd6b39abc1c25b6f
-  references/re-library/malware-report-writer.md: 0fd963182c3c38a273e06125315b532cd701987a612e4fecfde30fb16cfa54c3
-  references/re-library/malware-triage.md: f27cebdb69a73c34abded034270d8f8c7d6368544565ee7e3dcea44da1dc99a3
-  references/re-library/multi-search-engine-refs.md: ee2d742aa59287140b388ca10ab2c9cb7da9c5d86a2b2a991ea06a79916ed390
-  references/re-library/multi-search-engine.md: ace1b8c42e5a0063d66639e8ee419c2b369f746d54b985361e7d385b561b6737
-  references/re-library/patterns-debugging.md: 1b0a616e3593902f28e27a3d2610147a6bbce5a8c3830e18967c9f2a287b3a1b
-  references/re-library/patterns-decode.md: 60291518bb5d6adb6f6e601173667a2ca4fd684eb7d99a471b5b00c12590485e
-  references/re-library/patterns-simulation.md: d4372c9e216ee66896d9591af0f9afaac36833d990a64415863c64123e424469
-  references/re-library/patterns.md: b4a229e5fa7565271739a1e10375121ed47c76f211fda883c5b5126a571388c0
-  references/re-library/phishing-case-study.md: 524fb49c71a8db364ccc02d0853f9ce986c25a537f8eadaebd0ef3d070623bc6
-  references/re-library/platforms-elf.md: 71ce8375e31194215b11c52ce7736669d2487fd44d2e1a2608e21a6ded14acc4
-  references/re-library/platforms-hardware.md: f1b9c9de747215018856fb64149687c9b2061c3ad331c8901a95666ef128d4bc
-  references/re-library/platforms-kernel.md: 566f681ebd518434123cba917667802e5cf75cc23289fe5418ab2e0766cdfe48
-  references/re-library/platforms.md: 98038fb241229936a12e58486f6adbf50fab104bf6c9a50efb45a8d362dff1e0
-  references/re-library/tools-advanced.md: c93d6dde0de4f70b6b13bab095e1c111e790cbe7618f2da6f6867dfda946614e
-  references/re-library/tools-crypto.md: 537aaaac5d0757a768403d79243a59ccf3d2511be32e51a73afe686da00b5648
-  references/re-library/tools-dynamic.md: af6d0539a253366cf76b3266922bc4551478ebe32576fc216b68d91d0ea5f7de
-  references/re-library/tools.md: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
-  references/schema.md: 345f505cc045e2afb293e3b20574983adfa62d021d1f4b7892cf0d90c51bbba3
-  references/search-policy.md: 5a4a88cdfab1e8493a23cd531fddd3078ef9ad261a3d627f0f5a8871848e66c4
-  references/tool-inventory.md: 65b778132ac2310f0b507d8dacde254db069f90b256e86a6849d01159e953e8e
-  references/verify-static-vs-dynamic.md: 51dc34d5602e07edc27044b743acb932a6158f9eaaf2a84b169ef3d9e8b7d811
-  references/wal-protocol.md: 0dcc8fefaa011184063d335d33dd591b3cf54e4d1ec1f1e1a60ee6ff47c9c4e8
 symptom_map:
   F1: references/failure-modes-lifecycle.md
   F5: references/failure-modes-lifecycle.md
