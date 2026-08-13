@@ -1,6 +1,6 @@
-# CTF Reverse - Anti-Analysis Techniques & Bypasses
+# Anti-Analysis Techniques & Bypasses
 
-Comprehensive reference for anti-debugging, anti-VM, anti-DBI, and integrity-check techniques encountered in CTF challenges, with practical bypasses.
+Comprehensive reference for anti-debugging, anti-VM, anti-DBI, and integrity-check techniques encountered in malware and hardened targets, with practical bypasses.
 
 ## Table of Contents
 - [Linux Anti-Debug (Advanced)](#linux-anti-debug-advanced)
@@ -36,9 +36,9 @@ Comprehensive reference for anti-debugging, anti-VM, anti-DBI, and integrity-che
   - [Control Flow Flattening (Advanced)](#control-flow-flattening-advanced)
   - [Mixed Boolean-Arithmetic (MBA) Identification & Simplification](#mixed-boolean-arithmetic-mba-identification--simplification)
 - [SIGILL Handler for Execution Mode Switching (Hack.lu 2015)](#sigill-handler-for-execution-mode-switching-hacklu-2015)
-- [SIGFPE Signal Handler Side-Channel via strace Counting (PlaidCTF 2017)](#sigfpe-signal-handler-side-channel-via-strace-counting-plaidctf-2017)
-- [Instruction Trace Inversion with Keystone and Unicorn (MeePwn CTF 2017)](#instruction-trace-inversion-with-keystone-and-unicorn-meepwn-ctf-2017)
-- [Call-less Function Chaining via Stack Frame Manipulation (THC CTF 2018)](#call-less-function-chaining-via-stack-frame-manipulation-thc-ctf-2018)
+- [SIGFPE Signal Handler Side-Channel via strace Counting](#sigfpe-signal-handler-side-channel-via-strace-counting)
+- [Instruction Trace Inversion with Keystone and Unicorn](#instruction-trace-inversion-with-keystone-and-unicorn)
+- [Call-less Function Chaining via Stack Frame Manipulation](#call-less-function-chaining-via-stack-frame-manipulation)
 - [Comprehensive Bypass Strategies](#comprehensive-bypass-strategies)
   - [Universal Bypass Checklist](#universal-bypass-checklist)
   - [Layered Anti-Debug (Real-World Pattern)](#layered-anti-debug-real-world-pattern)
@@ -613,7 +613,7 @@ void sigill_handler(int sig, siginfo_t *info, void *ucontext) {
 
 ---
 
-## SIGFPE Signal Handler Side-Channel via strace Counting (PlaidCTF 2017)
+## SIGFPE Signal Handler Side-Channel via strace Counting
 
 Binary uses SIGFPE signal handlers for control flow, making static analysis unreliable. Brute-force by counting SIGFPE signals via strace — correct input characters produce more signals.
 
@@ -629,11 +629,13 @@ done
 
 **Key insight:** Signal handlers (SIGFPE, SIGSEGV, SIGILL) create implicit control flow invisible to static analysis. The number of signals raised correlates with validation progress. Counting signals via `strace -e signal=SIGFPE` turns opaque signal-based validation into a measurable side-channel for character-by-character brute-force.
 
+**References:** PlaidCTF 2017
+
 ---
 
-## Instruction Trace Inversion with Keystone and Unicorn (MeePwn CTF 2017)
+## Instruction Trace Inversion with Keystone and Unicorn
 
-UPX-packed binary applies a sequence of arithmetic-only transforms (sub, add, xor, rol, ror) to the flag. No memory side-effects — purely register arithmetic. IDAPython traces non-jump instructions, the sequence is then inverted to recover the flag.
+UPX-packed binary applies a sequence of arithmetic-only transforms (sub, add, xor, rol, ror) to the target data. No memory side-effects — purely register arithmetic. IDAPython traces non-jump instructions, the sequence is then inverted to recover the target value.
 
 **Inversion rules:**
 - Reverse the instruction sequence (last instruction first)
@@ -691,7 +693,7 @@ flag_bytes = uc.reg_read(UC_X86_REG_RAX).to_bytes(8, 'little')
 
 ---
 
-### Call-less Function Chaining via Stack Frame Manipulation (THC CTF 2018)
+### Call-less Function Chaining via Stack Frame Manipulation
 
 **Pattern:** Binary hides function calls by building a linked list of function pointers on the stack, then modifying saved RBP and return addresses so `leave; ret` instructions chain through the list without any explicit `CALL` instructions. IDA fails to decompile because push/pop are unbalanced and function boundaries cannot be determined.
 
@@ -737,7 +739,7 @@ def reverse_processing(byte):
 
 ### Layered Anti-Debug (Real-World Pattern)
 
-Many CTF challenges stack multiple checks:
+Many real-world targets stack multiple checks:
 ```text
 1. TLS callback → IsDebuggerPresent (before main)
 2. main() → ptrace(TRACEME)

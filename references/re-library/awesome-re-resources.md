@@ -102,7 +102,7 @@
 
 1. [Reverse Engineering for Beginners](https://beginners.re/) — 免费电子书
 2. [Azeria Labs ARM 教程](https://azeria-labs.com/) — ARM 汇编基础
-3. [Nightmare](https://guyinatuxedo.github.io/) — CTF 逆向/Pwn 教程
+3. [Nightmare](https://guyinatuxedo.github.io/) — 逆向/Pwn 入门实战教程
 4. [crackmes.one](https://crackmes.one/) — 逆向练习题
 
 ### 进阶（3-12 个月）

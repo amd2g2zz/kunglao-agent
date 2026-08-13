@@ -1,4 +1,4 @@
-# CTF Reverse - Dynamic Analysis Tools
+# Dynamic Analysis Tools
 
 ## Table of Contents
 - [Frida (Dynamic Instrumentation)](#frida-dynamic-instrumentation)
@@ -10,7 +10,7 @@
   - [Tracing and Stalker](#tracing-and-stalker)
   - [r2frida (Radare2 + Frida Integration)](#r2frida-radare2--frida-integration)
   - [Frida for Android/iOS](#frida-for-androidios)
-  - [Frida Memoization for Recursive Function Speedup (hxp CTF 2017)](#frida-memoization-for-recursive-function-speedup-hxp-ctf-2017)
+  - [Frida Memoization for Recursive Function Speedup](#frida-memoization-for-recursive-function-speedup)
 - [angr (Symbolic Execution)](#angr-symbolic-execution)
   - [angr Installation](#angr-installation)
   - [Basic Path Exploration](#basic-path-exploration)
@@ -26,18 +26,18 @@
 - [x64dbg (Windows Debugger)](#x64dbg-windows-debugger)
   - [Key Features](#key-features)
   - [Scripting](#scripting)
-  - [Common CTF Workflow](#common-ctf-workflow)
+  - [Common Dynamic Analysis Workflow](#common-dynamic-analysis-workflow)
 - [Qiling Framework (Cross-Platform Emulation)](#qiling-framework-cross-platform-emulation)
   - [Qiling Installation](#qiling-installation)
   - [Basic Usage](#basic-usage)
   - [Anti-Debug Bypass via Emulation](#anti-debug-bypass-via-emulation)
   - [Input Fuzzing with Qiling](#input-fuzzing-with-qiling)
 - [Triton (Dynamic Symbolic Execution)](#triton-dynamic-symbolic-execution)
-- [Intel Pin Instruction-Counting Side Channel (Hackover CTF 2015)](#intel-pin-instruction-counting-side-channel-hackover-ctf-2015)
-- [Intel Pin Instruction Counting with Genetic Algorithm (hxp CTF 2017)](#intel-pin-instruction-counting-with-genetic-algorithm-hxp-ctf-2017)
-- [Opcode-Only Trace Reconstruction (0CTF 2016)](#opcode-only-trace-reconstruction-0ctf-2016)
+- [Intel Pin Instruction-Counting Side Channel](#intel-pin-instruction-counting-side-channel)
+- [Intel Pin Instruction Counting with Genetic Algorithm](#intel-pin-instruction-counting-with-genetic-algorithm)
+- [Opcode-Only Trace Reconstruction](#opcode-only-trace-reconstruction)
 - [LD_PRELOAD time() Freeze for Deterministic Analysis (EKOPARTY 2017)](#ld_preload-time-freeze-for-deterministic-analysis-ekoparty-2017)
-- [LD_PRELOAD memcmp Side-Channel for Byte-by-Byte Bruteforce (Blaze CTF 2018)](#ld_preload-memcmp-side-channel-for-byte-by-byte-bruteforce-blaze-ctf-2018)
+- [LD_PRELOAD memcmp Side-Channel for Byte-by-Byte Bruteforce](#ld_preload-memcmp-side-channel-for-byte-by-byte-bruteforce)
 
 ---
 
@@ -217,7 +217,7 @@ Java.perform(function() {
 
 **When to use:** Anti-debugging bypass, extracting runtime-computed keys, hooking crypto functions to dump plaintext, mobile app analysis, packed binary inspection.
 
-### Frida Memoization for Recursive Function Speedup (hxp CTF 2017)
+### Frida Memoization for Recursive Function Speedup
 
 Hook a recursive function with Frida, memoize results, and replay cached values to skip redundant computation. Fibonacci-like recursive challenges with exponential complexity become instant with memoization.
 
@@ -535,14 +535,14 @@ run                            # Continue
 StepOver                       # Step over
 ```
 
-### Common CTF Workflow
+### Common Dynamic Analysis Workflow
 
 1. Set breakpoint on `GetWindowTextA`/`MessageBoxA` for GUI crackers
 2. Trace back from success/failure message
 3. Use **Scylla** plugin for IAT reconstruction on packed binaries
 4. **Snowman** decompiler plugin for quick pseudo-C
 
-**Key insight:** x64dbg has built-in pattern scanning, hardware breakpoints, and conditional logging. For Windows CTF binaries, it's often faster than IDA/Ghidra for dynamic analysis. Use the **xAnalyzer** plugin for automatic function argument annotation.
+**Key insight:** x64dbg has built-in pattern scanning, hardware breakpoints, and conditional logging. For Windows binaries, it's often faster than IDA/Ghidra for dynamic analysis. Use the **xAnalyzer** plugin for automatic function argument annotation.
 
 ---
 
@@ -658,7 +658,7 @@ flag = ''.join(chr(v.getValue()) for _, v in sorted(model.items()))
 
 ---
 
-## Intel Pin Instruction-Counting Side Channel (Hackover CTF 2015)
+## Intel Pin Instruction-Counting Side Channel
 
 **Pattern:** Brute-force input character-by-character against a binary using Intel Pin's `inscount0` tool. Each correct character causes deeper execution (more instructions) in the comparison logic.
 
@@ -687,9 +687,11 @@ while True:
 
 **Key insight:** Movfuscated binaries (compiled with `movfuscator`) expand every instruction into sequences of `mov` operations, making static analysis impractical. However, character-by-character comparison still creates measurable instruction count differences. Pin's `inscount0.so` counts total executed instructions — the correct character at each position causes ~1000+ more instructions (proceeding further in the comparison). Also works for obfuscated binaries with sequential input checks.
 
+**References:** Hackover CTF 2015
+
 ---
 
-### Intel Pin Instruction Counting with Genetic Algorithm (hxp CTF 2017)
+### Intel Pin Instruction Counting with Genetic Algorithm
 
 For self-modifying code that decrypts the next chunk only after each character check passes, standard character-by-character Pin counting fails because the search space is too large and characters may interact. Use a genetic algorithm instead to explore the input space more efficiently.
 
@@ -765,7 +767,7 @@ VOID Instruction(INS ins, VOID *v) {
 
 ---
 
-## Opcode-Only Trace Reconstruction (0CTF 2016)
+## Opcode-Only Trace Reconstruction
 
 Given an execution trace with only opcodes (no register/memory values), reconstruct the program: sort/dedup trace by address, split into basic blocks, annotate functions. Sorting algorithms are particularly vulnerable -- branch decisions leak element ordering.
 
@@ -776,6 +778,8 @@ Given an execution trace with only opcodes (no register/memory values), reconstr
 4. For sorting algorithms, partition comparisons reveal relative ordering of all input elements
 
 **Key insight:** Execution traces without data values still leak information through branch decisions. Quicksort partition comparisons reveal which element is greater/lesser at each step, enabling full recovery of the sorted input from branch direction alone.
+
+**References:** 0CTF 2016
 
 ---
 
@@ -817,7 +821,7 @@ int rand(void) { return 42; }
 
 ---
 
-### LD_PRELOAD memcmp Side-Channel for Byte-by-Byte Bruteforce (Blaze CTF 2018)
+### LD_PRELOAD memcmp Side-Channel for Byte-by-Byte Bruteforce
 
 **Pattern:** Replace `memcmp` with an LD_PRELOAD library that returns the number of matching bytes instead of the standard -1/0/1 result. This converts any memcmp-based validation into a byte-by-byte oracle. Automate with GDB Python scripting to bruteforce each character position.
 
