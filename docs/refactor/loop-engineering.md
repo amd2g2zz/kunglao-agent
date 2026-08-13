@@ -68,7 +68,7 @@ LangChain = 概念栈(讲清 4 层);DSD = 模式分类(讲清每层可选模式 
 | 层/模式 | kunglao | 状态 | 证据 |
 |---|---|---|---|
 | L1 agent | worker dispatch(maker) | ✅ | kunglao-worker |
-| L2 verification | redteam BLIND + doubt_checker + verify | ✅ 强 | v1.9.22 forward-derive |
+| L2 verification | redteam BLIND + kunglao-verify L1 + blind_gate | ✅ 强 | v1.9.22 forward-derive |
 | L3 event-driven | heartbeat + CronCreate + worker_pulse | ✅ | v1.9.28 |
 | **L4 hill-climbing** | 跨 run 不学习 | ❌ | 无 trace→harness 反馈环 |
 | 模式 5 Ralph | CONVERGED=claim 清零 + convergence_check 机械执行 | ✅ | 框架专家纠正:机械退出 = 强 Ralph(原评 ⚠️ 偏保守);"问对问题集"隐患属 L4 不属 Ralph |

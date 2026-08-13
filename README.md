@@ -29,7 +29,7 @@ mount sample → seed claims (from primary questions) → convergence loop:
   DISPATCH:  priority_ratio ranks open claims (VoI proxy / cost) → dispatch specialist worker
   worker (maker): gathers byte evidence → writes fact file
   verifier (BLIND checker): forward-derives from raw evidence → pass only on exact match
-  gates: doubt_checker / provenance_gate / blind_gate / completeness_gate
+  gates: blind_gate / provenance_gate / completeness_gate / kunglao-verify L1
 CONVERGED: report built on a byte-proven, independently-verified, evidence-indexed fact base
 ```
 

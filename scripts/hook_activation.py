@@ -4,7 +4,7 @@
 User pain point: "kunglao-agent 需要安装hook，但是只有被激活的时候hook才生效，
 否则会产生大量噪声给 kunglao-agent"
 
-kunglao-agent has 7+ enforcement hooks (active_intervention, doubt_checker, cost_gate,
+kunglao-agent has 7+ enforcement hooks (active_intervention, cost_gate,
 backtrack_gate, reuse_gate, memory_capture, etc.). Running ALL of them on EVERY
 orchestrator turn produces too much noise. This script implements selective
 activation: kunglao-agent decides per-hook whether it should fire, based on:
@@ -56,7 +56,6 @@ DEFAULT_TTL_MINUTES = 30
 # (kunglao-worker.md hard rule).
 ALL_HOOKS = {
     "active_intervention",
-    "doubt_checker",
     "cost_gate",
     "backtrack_gate",
     "reuse_gate",
@@ -70,12 +69,12 @@ ALL_HOOKS = {
 }
 
 TIER_DEFAULTS = {
-    "advisory": {"active": ["active_intervention", "cost_gate", "doubt_checker"],
+    "advisory": {"active": ["active_intervention", "cost_gate"],
                   "paused": []},
     "pause_non_essential": {"active": ["active_intervention", "cost_gate"],
-                            "paused": ["doubt_checker", "reuse_gate"]},
+                            "paused": ["reuse_gate"]},
     "HARD_PAUSE": {"active": ["cost_gate"],
-                   "paused": ["active_intervention", "doubt_checker",
+                   "paused": ["active_intervention",
                               "reuse_gate", "backtrack_gate", "search_gate",
                               "troubleshooting_gate"]},
     "none": {"active": sorted(ALL_HOOKS),

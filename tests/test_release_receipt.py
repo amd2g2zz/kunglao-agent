@@ -28,7 +28,7 @@ JUNIT = ROOT / "tests" / "fixtures" / "junit-sample.xml"
 MANIFEST_AGENTS = {
     "kunglao-worker.md", "kunglao-redteam.md", "ghidra-light.md", "floss-filter.md",
     "pefile-signature.md", "go-symbols.md",
-    "verdict-scorer.md", "verdict-redteam.md",
+    "verdict-scorer.md",
 }
 ROUTER_SUBS = ["decide", "tick", "verify", "record", "health"]
 

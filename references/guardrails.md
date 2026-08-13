@@ -496,9 +496,10 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   (5) dynamic validation considered/authorized. ANY unmet item → session
   continues. **Full checklist + rationale → `references/optimization-2026-08.md` §6.3.**
   **v1.9.24 anti-spoof double-sign**: before declaring CONVERGED publicly,
-  (a) run `scripts/doubt_checker.py <ws>` (rejects PROVEN claims without
-  verifier sign-off) AND (b) re-run the reproduce command of ONE randomly
-  chosen fact — its expected/actual must still match byte-exact. Both gates
+  (a) run the sign-off gate (`scripts/blind_gate.py`-backed claim_migrator
+  rejects PROVEN claims without independent verifier sign-off) AND (b) re-run
+  `scripts/kunglao-verify.py <ws> <fact_id>` L1 on ONE randomly chosen fact —
+  its expected/actual must still match byte-exact. Both gates
   green = the convergence claim is real, not performed.
   **Numeric fidelity at handoff**: if report inputs (fact_anchors.md /
   evidence_map.json / evidence_boundaries.md) are generated from the fact

@@ -17,7 +17,7 @@ the situation it was built for.
 | `scripts/priority.py` | "I have multiple open claims and need to pick the next one" — value/leverage/cheapness scoring |
 | `scripts/active_intervention.py` | "A worker has been silent for > 5 min and the status file shows it's stuck" — non-response is a signal |
 | `scripts/backtrack_gate.py` | "The same worker has been doing the same thing for > 20 min without progress" — backtrack decision required |
-| `scripts/doubt_checker.py` | "I'm about to declare a claim PROVEN-FULL" — independent verifier sign-off is structural |
+| `scripts/kunglao-verify.py` | "I'm about to declare a claim PROVEN-FULL" — L1 mechanical reproduce + byte-exact compare; independent verifier sign-off is structural |
 | `scripts/stale_blocker_prune.py` | "A claim is terminal but its blocker file is still in the active directory" |
 | `scripts/claim_expiry.py` | "I have an OPEN claim with no activity for > 24 hours" — flag as STALE, don't auto-defer |
 | `scripts/progress_report.py` | "I want to see at a glance where the loop is" — emit a single markdown block |
