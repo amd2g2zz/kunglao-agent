@@ -15,8 +15,12 @@ Usage:
 Output: the prompt to pass to `/loop <interval> <prompt>` (or CronCreate).
 The prompt's FIRST action is `hook_activation.py <ws> --heartbeat-on`
 (registration is born with the loop), then per-tick monitoring (reconcile /
-status poll / smart ping / convergence / renew) and the CONVERGED gate
-(heartbeat-check must pass before declaring done).
+status poll / smart ping / convergence / renew). Since v1.9.29 (issue #237)
+the convergence decision is a COMMAND, not a suggestion: DISPATCH must dispatch
+priority.py #1, BLOCKED must self-recover/reactivate, DEFERRED must check
+reactivation — no action in a tick = idle fault. CONVERGED only after
+§6.3 checklist + handoff-check PASS, then `--heartbeat-off` stops the loop
+(guarded: unconverged teardown is rejected).
 
 Pure stdlib. Exit 0.
 """
@@ -44,12 +48,17 @@ python {h} {ws} --heartbeat-on   # 注册心跳（写 runs/.heartbeat.json）—
    → 结构化回复 append 到 runs/.ping-log.jsonl
    （隔离边界 #88：无 agent team；SendMessage orchestrator→worker ping 是 sanctioned channel，
     worker 之间互不 messaging）
-3. python {cc} {ws} 决策：
-   DISPATCH→priority.py 派发；SATURATED→继续轮询；CONVERGED→先跑 §6.3 checklist（5 项）
-   + 独立验证（blind_gate sign-off 抽验 + kunglao-verify.py L1 重跑）
-   + --heartbeat-check 通过才宣告完成
+3. python {cc} {ws} 决策 → 命令式执行（每个决策必须产生收敛推进动作；无动作 = 空转故障）：
+   DISPATCH   → 必须派发 priority.py 第一名，不得空转
+   BLOCKED    → 必须自恢复（resolve / stale_blocker_prune）或重激活失败 claim
+   DEFERRED   → 必须检查可否重激活（如 VM 已可达 → 恢复 claim 并派发）
+   SATURATED  → 必须轮询全部活跃 worker（不许空等）
+   CONVERGED  → 先跑 §6.3 checklist（5 项）+ 独立验证（blind_gate sign-off 抽验
+              + kunglao-verify.py L1 重跑）+ handoff-check PASS
+              → 再 python {h} {ws} --heartbeat-off 停心跳（未收敛不可清理，删除将断派发）
 4. 完成 worker → 验证 facts → 合入 master → 更新 claim-register + _INDEX
-5. 按 §6.2 用 malware-veri-notes 记录笔记；保持推进不空转"""
+5. 按 §6.2 用 malware-veri-notes 记录笔记；每次 tick 结束必须能说出"这轮推进了什么"（填进
+   runs/.heartbeat-tick.json 的 action_taken，空字段 = 空转故障）"""
 
 
 def main() -> int:

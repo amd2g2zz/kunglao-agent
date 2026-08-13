@@ -32,6 +32,7 @@ Usage:
   python hook_activation.py <workspace> [--set-active h1,h2] [--set-paused h3] [--phase X]
   python hook_activation.py <workspace> --renew          # refresh expiry (kunglao-agent Phase 0)
   python hook_activation.py <workspace> --is-active dispatch_gate
+  python hook_activation.py <workspace> --heartbeat-off  # CONVERGED 后停心跳 (issue #237)
 
 T-2 split (2026-08-11): the --wire-up / --reconcile / --heartbeat-* jobs now
 live in wire_up_settings.py / reconcile_workers.py / heartbeat.py; main()
@@ -261,6 +262,16 @@ def main() -> int:
                              "<ws>/runs/.heartbeat.json exists and is < 35 min old (cron tick should "
                              "have refreshed it); exit 1 if missing/stale = monitoring is NOT running. "
                              "Call every heartbeat tick and before declaring CONVERGED.")
+    parser.add_argument("--heartbeat-off", action="store_true",
+                        help="STOP the heartbeat (converged teardown, issue #237 dual-constraint) — "
+                             "deletes <ws>/runs/.heartbeat.json ONLY when convergence_check.py returns "
+                             "CONVERGED (exit 0), else rejects with guidance. Cleaning up early breaks "
+                             "dispatch gating (check_heartbeat_alive); cleaning up late burns tokens on "
+                             "idle cron wakes. --force bypasses the guard (explicit override).")
+    parser.add_argument("--force", action="store_true",
+                        help="bypass --heartbeat-off preconditions (explicit operator override; "
+                             "only used when the orchestrator has a mechanical reason to stop "
+                             "an unconverged heartbeat)")
     args = parser.parse_args()
 
     workspace = Path(args.workspace)
@@ -279,6 +290,10 @@ def main() -> int:
     if args.heartbeat_check:
         from heartbeat import heartbeat_check
         return heartbeat_check(workspace)
+
+    if args.heartbeat_off:
+        from heartbeat import heartbeat_off
+        return heartbeat_off(workspace, force=args.force)
 
     if args.reconcile:
         from reconcile_workers import reconcile_workers

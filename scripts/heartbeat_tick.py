@@ -23,6 +23,10 @@ Steps executed (idempotent, all safe to re-run):
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
 1 = heartbeat stale or project hooks missing (LLM must act).
 
+The report carries `action_taken` (issue #237): the orchestrator fills what
+convergence action this tick produced (dispatched/verified/solved/reactivated);
+an empty field means the tick idled — a fault signal (tokens burned).
+
 Usage: python heartbeat_tick.py <workspace>
 """
 import json
@@ -52,7 +56,11 @@ def run(script: str, ws: Path, *extra: str) -> dict:
 
 def main() -> int:
     ws = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path("D:/works/samples/2026-07-01/malware-analysis-workspace").resolve()
-    report = {"ts": utc_now(), "workspace": str(ws)}
+    # action_taken (issue #237): the tick MUST produce a convergence action or a
+    # mechanical convergence argument. The orchestrator fills this field after
+    # reading the report — what it dispatched / verified / solved / reactivated.
+    # An empty field is the idle-tick fault signal (tokens burned with no action).
+    report = {"ts": utc_now(), "workspace": str(ws), "action_taken": ""}
 
     report["selfcheck"] = run("hooks_selfcheck.py", ws)
     report["reconcile"] = run("hook_activation.py", ws, "--reconcile")
@@ -69,7 +77,9 @@ def main() -> int:
     hb = report["heartbeat"].get("stdout", "")[:120]
     rc_renew = report["renew"].get("rc", -1)
     rc_hb = report["heartbeat"].get("rc", -1)
+    action = report["action_taken"] or "(EMPTY — 必须填充:派发/验证/解决/重激活了什么)"
     print(f"heartbeat_tick: {sc} | renew_rc={rc_renew} | {hb}")
+    print(f"action_taken: {action}")
     print(f"report: {out}")
     return 0 if rc_hb == 0 and rc_renew == 0 else 1
 
