@@ -26,7 +26,7 @@ Each marker is a short fixed string (or token set) so the contract test is deter
 
 ### D3. Distillation guard = 80-char shared-substring check vs the reference
 
-"Distill ≠ copy" is enforced mechanically: no 80+ char substring of `rules/kunglao-convergence-loop.md` may appear in `references/convergence-loop.md`, once an allowlist of shared vocabulary is masked out. The allowlist covers legitimate repeats: script paths/invocations (`convergence_check.py`, `convergence_health.py`, `failure_analysis_gate.py`, the full `python C:/Users/hr/.claude/skills/...` command lines), file names, decision tokens, and the 5 behavior labels. An 80-char window is long enough that a paraphrased sentence never trips it; a verbatim copied sentence always does.
+"Distill ≠ copy" is enforced mechanically: no 80+ char substring of `rules/kunglao-convergence-loop.md` may appear in `references/convergence-loop.md`, once an allowlist of shared vocabulary is masked out. The allowlist covers legitimate repeats: script paths/invocations (`convergence_check.py`, `convergence_health.py`, `failure_analysis_gate.py`, the full `python <skill_dir>/scripts/...` command lines), file names, decision tokens, and the 5 behavior labels. An 80-char window is long enough that a paraphrased sentence never trips it; a verbatim copied sentence always does.
 
 ### D4. Line budget <150 with headroom
 

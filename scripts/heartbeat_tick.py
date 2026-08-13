@@ -30,6 +30,7 @@ an empty field means the tick idled — a fault signal (tokens burned).
 Usage: python heartbeat_tick.py <workspace>
 """
 import json
+import os
 import subprocess
 import sys
 import datetime
@@ -41,6 +42,25 @@ SCRIPTS = SKILL_DIR / "scripts"
 
 def utc_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _resolve_ws(arg: str | None) -> Path:
+    """Workspace root: explicit arg wins; else probe cwd; else hard error.
+
+    Issue #228: the old fallback defaulted to one operator's absolute Windows
+    workspace path — silently wrong on any other machine. Never guess
+    a workspace: a wrong one means state written to the wrong tree.
+    """
+    if arg:
+        return Path(arg).resolve()
+    cwd = Path(os.getcwd())
+    for cand in (cwd, cwd / "malware-analysis-workspace"):
+        if (cand / "claim-register.yaml").exists() or (cand / "analysis_state.txt").exists():
+            return cand.resolve()
+    print(f"ERROR: no workspace found under cwd ({cwd}); pass the workspace "
+          f"explicitly: python {Path(sys.argv[0]).name} <workspace>",
+          file=sys.stderr)
+    sys.exit(2)
 
 
 def run(script: str, ws: Path, *extra: str) -> dict:
@@ -55,7 +75,7 @@ def run(script: str, ws: Path, *extra: str) -> dict:
 
 
 def main() -> int:
-    ws = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path("D:/works/samples/2026-07-01/malware-analysis-workspace").resolve()
+    ws = _resolve_ws(sys.argv[1] if len(sys.argv) > 1 else None)
     # action_taken (issue #237): the tick MUST produce a convergence action or a
     # mechanical convergence argument. The orchestrator fills this field after
     # reading the report — what it dispatched / verified / solved / reactivated.

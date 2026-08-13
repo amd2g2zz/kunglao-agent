@@ -1,7 +1,7 @@
 # Phase 5 契约 — M3 VERIFY / M4 RECORD / M5 MONITOR (Track E)
 
 来源文档(冻结源, 引文带行号):
-- `D:/works/samples/2026-07-01/malware-analysis-workspace/.research-tree-alignment/kong-agent-module-design.md`
+- `<WORKSPACE>/.research-tree-alignment/kong-agent-module-design.md` (the live workspace's design doc — layout per SKILL.md Local defaults)
   - §M0.2 签名 L40-50; M0.3 Event schema L53-72; M0.4 错误处理 L75-79; M0.5 测试点 L81-85
   - §M3 全部 L236-306(M3.1 L238-246; M3.2 L248-268; M3.3 L270-280; M3.4 L282-293; M3.5 L295-299; M3.6 L301-305)
   - §M4 全部 L309-362(M4.1 L311-319; M4.2 L321-333; M4.3 L335-341; M4.4 L343-349; M4.5 L351-355; M4.6 L357-361)

@@ -11,7 +11,7 @@
 
 ### Requirement: The skill body SHALL consume the workspace argument
 
-`SKILL.md` SHALL contain an `## Arguments` section stating the invocation form `/kunglao-agent [workspace]` and the consumption rule: when `$ARGUMENTS` is non-empty, the first argument is the workspace path (e.g. `D:/works/samples/<YYYY-MM-DD>/malware-analysis-workspace`) and Phase 0 workspace detection SHALL use it directly instead of guessing from the workspace pattern; when `$ARGUMENTS` is empty, detection SHALL fall back to the Local defaults table.
+`SKILL.md` SHALL contain an `## Arguments` section stating the invocation form `/kunglao-agent [workspace]` and the consumption rule: when `$ARGUMENTS` is non-empty, the first argument is the workspace path (e.g. `<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/malware-analysis-workspace`) and Phase 0 workspace detection SHALL use it directly instead of guessing from the workspace pattern; when `$ARGUMENTS` is empty, detection SHALL fall back to the Local defaults table.
 
 #### Scenario: body consumes the argument
 

@@ -213,17 +213,21 @@ this section = paraphrastic absorption = self-reject.
 
 ## VM-channel launch sequence (before any x64dbg MCP call)
 
-The MCP bridge at `http://192.168.20.128:8745/mcp` is an in-VM service, but its
+The MCP bridge at `http://<VM_IP>:8745/mcp` is an in-VM service, but its
 `start_session` / `connect_to_session` tools bind to whatever lockfile the MCP
-process finds in its working directory — typically a stale `D:\迅雷下载\x64dbg\…`
-copy that is NOT the live VM x64dbg. **The only reliable first call is
+process finds in its working directory — typically a stale host-downloaded
+x64dbg copy that is NOT the live VM x64dbg. **The only reliable first call is
 `mcp__x64dbg__connect_remote`.** Use this sequence for every dynamic RE engagement:
 
 ```
 # Step 1 — confirm VM-side x64dbg is installed + configured for ZMQ bind
-#   Path: C:\Users\hr\Desktop\x64dbg\release\x64\x64dbg.exe
-#   Plugin: C:\Users\hr\Desktop\x64dbg\release\x64\plugins\x64dbg-automate.dp64
-#   ZMQ deps: C:\Users\hr\Desktop\x64dbg\release\x64\plugins\libzmq-mt-4_3_5.dll
+#   VM_IP: env discovery (KUNGLAO_VM_HOST / vmr-shell discover_vm_ip.sh) — DHCP
+#   lease changes every snapshot revert; never reuse a cached address.
+#   Path: <VM_X64DBG_DIR>\release\x64\x64dbg.exe
+#   Plugin: <VM_X64DBG_DIR>\release\x64\plugins\x64dbg-automate.dp64
+#   ZMQ deps: <VM_X64DBG_DIR>\release\x64\plugins\libzmq-mt-4_3_5.dll
+#   (<VM_X64DBG_DIR>/<VM_SAMPLES_DIR> are VM-provisioning examples — locate the
+#   live install via vmr-shell)
 #   [XAutomate] in x64dbg.ini: BindAddress=0.0.0.0, ReqRepPort=69BA (27066), PubSubPort=69BB (27067)
 #   If not installed → do NOT STOP. Per convergence-loop behavior #1, self-recover:
 #     L1: try connect_remote anyway (the bind may already be live from a prior session)
@@ -233,14 +237,14 @@ copy that is NOT the live VM x64dbg. **The only reliable first call is
 #   NEVER fall back to a host-side x64dbg install (Hard prohibition #5).
 
 # Step 2 — launch VM-side x64dbg with the target PE via vmr-shell
-vmr-shell exec-cmd 'start "x64dbg" "C:\Users\hr\Desktop\x64dbg\release\x64\x64dbg.exe" "C:\tools\<sha>.exe"'
+vmr-shell exec-cmd 'start "x64dbg" "<VM_X64DBG_DIR>\release\x64\x64dbg.exe" "<VM_SAMPLES_DIR>\<sha>.exe"'
 
 # Step 3 — confirm ZMQ ports listening on the VM
 vmr-shell exec-cmd 'netstat -an | findstr :27066'
 vmr-shell exec-cmd 'netstat -an | findstr :27067'
 
 # Step 4 — connect from host via MCP — this is THE entry point
-mcp__x64dbg__connect_remote(host="192.168.20.128", req_rep_port=27066, pub_sub_port=27067)
+mcp__x64dbg__connect_remote(host=<VM_IP>, req_rep_port=27066, pub_sub_port=27067)
 mcp__x64dbg__get_debugger_status   # must show "paused" before any further call
 
 # Step 5 — drive the VM-resident x64dbg via set_breakpoint / step_into / read_memory etc.
@@ -248,7 +252,7 @@ mcp__x64dbg__get_debugger_status   # must show "paused" before any further call
 
 **Anti-patterns (refused by `HOST_FORBIDDEN_TOOLS` if attempted anyway):**
 - `mcp__x64dbg__start_session(...)` — spawns x64dbg in MCP server's CWD, NOT our VM-resident install.
-- `mcp__x64dbg__connect_to_session(...)` — binds the stale `D:\迅雷下载\x64dbg\…` lockfile. Symptom: `set_breakpoint` returns 0 hits on a known address.
+- `mcp__x64dbg__connect_to_session(...)` — binds a stale host-downloaded x64dbg lockfile. Symptom: `set_breakpoint` returns 0 hits on a known address.
 - `list_sessions` returning empty ≠ bridge broken; it just means no lockfile. Re-prove liveness via `connect_remote` + `get_debugger_status` returning `paused`.
 
 **Why this section exists even though `HOST_FORBIDDEN_TOOLS` rejects host

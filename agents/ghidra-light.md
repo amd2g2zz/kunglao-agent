@@ -1,6 +1,6 @@
 ---
 name: ghidra-light
-description: "Stage 4 light static reconnaissance via Ghidra. For local-file samples with detected language Go/Rust/OLLVM/C/C++/.NET. **Two-tier strategy**: (1) try Ghidra MCP bridge if a GUI instance with a real project is online; (2) AUTONOMOUSLY fall back to Ghidra analyzeHeadless (no GUI required) — create a project, import the binary, run a postScript to export function list + imports + xrefs to suspicious APIs, parse the JSON output. Writes evidence/static-ghidra.json. Pure local; uses Bash + Ghidra's headless analyzer at D:/ghidra_12.1.2_PUBLIC/support/analyzeHeadless.bat."
+description: "Stage 4 light static reconnaissance via Ghidra. For local-file samples with detected language Go/Rust/OLLVM/C/C++/.NET. **Two-tier strategy**: (1) try Ghidra MCP bridge if a GUI instance with a real project is online; (2) AUTONOMOUSLY fall back to Ghidra analyzeHeadless (no GUI required) — create a project, import the binary, run a postScript to export function list + imports + xrefs to suspicious APIs, parse the JSON output. Writes evidence/static-ghidra.json. Pure local; uses Bash + Ghidra's headless analyzer at `<GHIDRA_HOME>/support/analyzeHeadless.bat` (env-discovered, never hardcoded)."
 allowedTools:
   - Read
   - Grep
@@ -24,8 +24,8 @@ You perform **light static reconnaissance** via Ghidra. Two-tier strategy: try M
 
 ## How Ghidra MCP and analyzeHeadless relate
 
-- **Ghidra MCP bridge** (`D:\ghidra-mcp\bridge_mcp_ghidra.py`) exposes ~250 tools, but analysis tools are only registered after `connect_instance(project="<name>")` succeeds. Requires Ghidra GUI running + project open + MCP plugin enabled.
-- **Ghidra analyzeHeadless** (`D:\ghidra_12.1.2_PUBLIC\support\analyzeHeadless.bat`) is the headless CLI: takes `<project_dir> <project_name> -import <binary> -postscript <export.java>`, creates the project if missing, imports the binary, auto-analyzes, runs the postScript, exits. **No GUI required.**
+- **Ghidra MCP bridge** (`<GHIDRA_MCP_DIR>/bridge_mcp_ghidra.py` — path from the workspace `analysis_state.txt` toolchain probe or the caller's input) exposes ~250 tools, but analysis tools are only registered after `connect_instance(project="<name>")` succeeds. Requires Ghidra GUI running + project open + MCP plugin enabled.
+- **Ghidra analyzeHeadless** (`<GHIDRA_HOME>/support/analyzeHeadless.bat` — `<GHIDRA_HOME>` from workspace `analysis_state.txt` or the `GHIDRA_HOME` env var) is the headless CLI: takes `<project_dir> <project_name> -import <binary> -postscript <export.java>`, creates the project if missing, imports the binary, auto-analyzes, runs the postScript, exits. **No GUI required.**
 
 This subagent **prefers MCP** (faster on warm cache, richer tool set) **but falls back to analyzeHeadless** (autonomous, slower on cold start, no human setup needed).
 
@@ -33,11 +33,18 @@ This subagent **prefers MCP** (faster on warm cache, richer tool set) **but fall
 
 - `binary_path`: absolute path to the local PE file
 - `output_path`: `evidence/static-ghidra.json`
-- `ghidra_install`: default `D:/ghidra_12.1.2_PUBLIC`
-- `project_root`: default `D:/ghidra-projects` (shared with MCP path)
+- `ghidra_install`: no hardcoded default — `<GHIDRA_HOME>` from workspace `analysis_state.txt` (Phase 0 toolchain probe) or the `GHIDRA_HOME` env var
+- `project_root`: no hardcoded default — `<GHIDRA_PROJECTS>` from `analysis_state.txt` / `GHIDRA_PROJECTS` env; else `<GHIDRA_HOME>/../ghidra-projects`
 - `max_functions_to_inspect`: default `20`
 - `max_decompile_lines`: default `50`
 - `force_headless`: default `false` (set `true` to skip MCP attempt and go straight to headless)
+
+**Path discovery (no hardcoded paths, #228)**: `GHIDRA_HOME` / `GHIDRA_PROJECTS`
+resolve from the workspace `analysis_state.txt` toolchain baseline (Phase 0
+probe) or the `GHIDRA_HOME` / `GHIDRA_PROJECTS` env vars; the caller may pass
+them explicitly as `ghidra_install` / `project_root`. All shell snippets below
+use `$GHIDRA_HOME` / `$GHIDRA_PROJECTS` as the resolved values. If neither
+source yields a Ghidra install, write degraded output — never guess a path.
 
 ## Pipeline
 
@@ -81,7 +88,7 @@ This is the **autonomous path**. No user setup required.
 #### Step 2a — Ensure project directory exists
 
 ```bash
-mkdir -p D:/ghidra-projects/mal-recon-<sha256_first_16>
+mkdir -p "$GHIDRA_PROJECTS/mal-recon-<sha256_first_16>"
 ```
 
 Project name = `mal-recon-<sha256_first_16>` (unique per sample, reusable across runs).
@@ -193,8 +200,8 @@ public class ExportLightRecon extends GhidraScript {
 #### Step 2c — Run analyzeHeadless
 
 ```bash
-D:/ghidra_12.1.2_PUBLIC/support/analyzeHeadless.bat \
-  D:/ghidra-projects/mal-recon-<sha256_first_16> \
+"$GHIDRA_HOME/support/analyzeHeadless.bat" \
+  "$GHIDRA_PROJECTS/mal-recon-<sha256_first_16>" \
   mal-recon-<sha256_first_16> \
   -import <binary_path> \
   -overwrite \
@@ -204,7 +211,7 @@ D:/ghidra_12.1.2_PUBLIC/support/analyzeHeadless.bat \
 ```
 
 This will:
-1. Create the project at `D:/ghidra-projects/mal-recon-<sha256_first_16>/<project_name>.gpr` if missing
+1. Create the project at `$GHIDRA_PROJECTS/mal-recon-<sha256_first_16>/<project_name>.gpr` if missing
 2. Import the binary
 3. Run auto-analysis (up to 5 min)
 4. Run `ExportLightRecon.java` postScript which writes `<project_dir>/light_recon.json`
@@ -263,7 +270,7 @@ Read `evidence/floss-filtered.json` (string_inventory + outliers) and `evidence/
 
 ## Failure modes
 
-- **MCP path fails AND analyzeHeadless binary not found**: write degraded output with `error: "Ghidra not installed at D:/ghidra_12.1.2_PUBLIC and no MCP instance available"`. This should never happen given the install path is hardcoded.
+- **MCP path fails AND analyzeHeadless binary not found**: write degraded output with `error: "Ghidra not found (no MCP instance, no analyzeHeadless under GHIDRA_HOME)"`. Paths are environment-discovered (`analysis_state.txt` / `GHIDRA_HOME` env) — verify the discovery before declaring degraded.
 - **analyzeHeadless timeout (>5 min)**: write partial output + degraded note "analysisTimeoutPerFile=300s hit"
 - **postScript compile error**: write degraded with the compiler error in `note`, continue
 - **Import fails (encrypted / corrupted PE)**: write degraded with Ghidra's import error

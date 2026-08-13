@@ -101,7 +101,8 @@ write "task complete" while open questions remain on your claim.
 
 ### Docker + jdb-mcp (server in Docker, worker on host — user-specified)
 - **架构**：server 端 = Docker 容器跑 sample + JDWP `address=*:5005`；client 端 =
-  host jdb-mcp MCP server (java -jar D:/works/jdb-mcp/release/jdb-mcp.jar, stdio)
+  host jdb-mcp MCP server (java -jar <JDB_MCP_JAR>, stdio — jar path from workspace
+  `analysis_state.txt` toolchain baseline or the orchestrator's dispatch; no hardcoded path)
   attach localhost:5005 → worker 用 `mcp__jdb-debugger__*` 工具驱动。
 - **多容器并行**（2026-08-04 用户修正）：Docker 不是单实例 — 多个容器可并行
   （独立端口映射 `-p 5005/5006/...`）；VM/x64dbg/frida 才保持 singleton。

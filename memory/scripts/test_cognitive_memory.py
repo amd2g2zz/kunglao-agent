@@ -288,7 +288,7 @@ def test_capture_dispatch_reject():
 def test_capture_no_match_for_unrelated_event():
     payload = {
         "tool_name": "Read",
-        "tool_input": {"file_path": "D:/some/other/file.md"},
+        "tool_input": {"file_path": "/tmp/some/other/file.md"},
         "tool_result": "ok",
     }
     cls = mc.classify_event(payload)

@@ -49,7 +49,7 @@ SECTIONS = [
     "Operator Boundaries",
 ]
 CJK = re.compile(r"[一-鿿]")
-HARDCODED = re.compile(r"[A-Z]:\\\\|192\.168\.20|/Users/hr|kong-refactor")
+HARDCODED = re.compile(...)  # drive-letter paths | VM-subnet IPs | home dirs | kong-refactor — same regex as tests/test_skill_contract.py
 NARRATIVE = ["WHY=", "single most-violated", "traces to violating", "case-book"]
 
 
@@ -112,4 +112,4 @@ def test_skill_md_no_narrative_phrases():
 
 - <400 行；契约测试 6 项全绿；无中英混杂（frontmatter 触发短语除外）
 - 每个 section 是工作流步骤；无同一主题双处叙述（narrative 契约测试强制）
-- 占位符：正文无 `192.168.20.*`、无 `D:\`/`C:\` 路径（hardcoded 契约测试强制）
+- 占位符：正文无内网 VM IP、无盘符绝对路径（hardcoded 契约测试强制）

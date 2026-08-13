@@ -6,9 +6,9 @@ progress. Time-based dead-session detection (external_kicker.session_is_dead)
 cannot see it (F2/F3 regime shift, wf_5c50b792-f7c); ledger SIGNATURE
 ROTATION can.
 
-All I/O is SYNTHETIC: pytest tmp_path only. The real
-.convergence_ledger.jsonl (D:/works/samples/2026-07-01/malware-analysis-
-workspace/) is never read or written — it is only the FORMAT reference
+All I/O is SYNTHETIC: pytest tmp_path only. The live workspace
+(`<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/malware-analysis-workspace/`) is
+never read or written — it is only the FORMAT reference
 (ts, decision, open_count, open_ids, partial_count, active_workers,
 blockers, facts_total).
 """

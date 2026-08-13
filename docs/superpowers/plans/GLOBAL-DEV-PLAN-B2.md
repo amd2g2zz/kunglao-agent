@@ -81,7 +81,7 @@ Wave D（收口）:
 1. 6 个 issue 的 PR 全部被 TEST + ACCEPT approve 并合入 dev（#224 随 #225 关闭）
 2. 全量 pytest 绿（本批新增契约测试后仍 0 failed）
 3. CI（release-check）绿
-4. grep 全仓无 `D:\` `C:\` `/Users/hr` `192.168.20` 硬编码（#228 契约，fixture 中 `{{PYTHON}}/{{ROOT}}` 占位符除外）
+4. grep 全仓无盘符绝对路径 / 用户主目录 / 内网 VM 子网 IP 硬编码（#228 契约，fixture 中 `{{PYTHON}}/{{ROOT}}` 占位符除外）
 5. `release_receipt.py --check` 与 `structural_check.py` 均 exit 0
 6. 工作区收尾：临时 worktree 全部移除，主工作区停留在 origin/dev
 

@@ -24,7 +24,7 @@ You extract two things DIE doesn't natively provide:
 ## Inputs (passed by caller)
 
 - `die_json_path`: `evidence/die.json` (already-written DIE output)
-- `sample_path`: `<user input local file path>` (e.g., `D:\works\samples\2026-06-23\bins\488d2dd...`)
+- `sample_path`: `<user input local file path>` (e.g. `<WORKSPACE>/bins/<sha>` — no fixed layout)
 - `signature_output_path`: `evidence/signature.json`
 - `packer_output_path`: `evidence/packer-scan.json`
 - `project_venv_python`: `.venv/Scripts/python.exe` (pefile should be installed there; auto-install if missing)

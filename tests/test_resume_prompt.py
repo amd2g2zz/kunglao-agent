@@ -8,9 +8,9 @@ over logged mechanical state — ledger last SNAPSHOT row, claim-register OPEN
 worker-status-*.md files — and must NEVER read progress.txt /
 analysis_state.txt narrative.
 
-All I/O is SYNTHETIC: pytest tmp_path workspaces only. The real workspace
-(D:/works/samples/2026-07-01) is never read or written; no claude process is
-spawned (the kick test uses dry_run=True).
+All I/O is SYNTHETIC: pytest tmp_path workspaces only. A live workspace
+(`<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/`) is never read or written; no claude
+process is spawned (the kick test uses dry_run=True).
 """
 import json
 from pathlib import Path

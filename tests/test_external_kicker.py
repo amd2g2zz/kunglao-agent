@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """TDD RED — tests for scripts/external_kicker.py (issue #39, OS-level dead-session recovery).
 
-All I/O is SYNTHETIC: pytest tmp_path only. The real project settings file
-(D:/works/samples/2026-07-01/.claude/settings.json) is never read or written;
-no claude process is spawned and no schtasks task is registered (command
-construction is asserted as strings; the true kill->kick E2E is a documented
-manual step in the PR).
+All I/O is SYNTHETIC: pytest tmp_path only. The live workspace's project
+settings file (`<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/.claude/settings.json`)
+is never read or written; no claude process is spawned and no schtasks task
+is registered (command construction is asserted as strings; the true
+kill->kick E2E is a documented manual step in the PR).
 """
 import json
 import os
