@@ -23,6 +23,7 @@ orchestrator surfaces to user for manual fix).
 Wires in via heartbeat_loop_prompt.py (step 0 of every tick). Idempotent + fast (<50ms).
 """
 import json
+import os
 import subprocess
 import sys
 import datetime
@@ -39,6 +40,25 @@ USER_SETTINGS = Path.home() / ".claude" / "settings.json"
 
 def utc_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _resolve_ws(arg: str | None) -> Path:
+    """Workspace root: explicit arg wins; else probe cwd; else hard error.
+
+    Issue #228: the old fallback defaulted to one operator's absolute Windows
+    workspace path — silently wrong on any other machine. Never guess
+    a workspace: a wrong one means state written to the wrong tree.
+    """
+    if arg:
+        return Path(arg).resolve()
+    cwd = Path(os.getcwd())
+    for cand in (cwd, cwd / "malware-analysis-workspace"):
+        if (cand / "claim-register.yaml").exists() or (cand / "analysis_state.txt").exists():
+            return cand.resolve()
+    print(f"ERROR: no workspace found under cwd ({cwd}); pass the workspace "
+          f"explicitly: python {Path(sys.argv[0]).name} <workspace>",
+          file=sys.stderr)
+    sys.exit(2)
 
 
 def check_settings(settings_path: Path) -> dict:
@@ -76,7 +96,7 @@ def rebuild_user_level(workspace: Path) -> dict:
 
 
 def main() -> int:
-    ws = (Path(sys.argv[1]) if len(sys.argv) > 1 else Path("D:/works/samples/2026-07-01/malware-analysis-workspace")).resolve()
+    ws = _resolve_ws(sys.argv[1] if len(sys.argv) > 1 else None)
     proj_settings = ws.parent / ".claude" / "settings.json"
     user_check = check_settings(USER_SETTINGS)
     proj_check = check_settings(proj_settings)

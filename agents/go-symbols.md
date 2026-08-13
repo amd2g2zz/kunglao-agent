@@ -24,7 +24,7 @@ Recover Go symbols/types/itabs from pclntab via unstrip (no decompile) -> emit a
 - `evidence_dir`: mal-recon/<sha1>/evidence/
 - `die_path`: evidence/die.json (confirm language=Go; else STOP with degraded note)
 - prior evidence for `--data-at` targets: `evidence/floss-filtered.json` (IOC/config string addrs), `evidence/cti-correlated.json`
-- `unstrip_bin`: default `D:/tools/unstrip/unstrip.exe` (Windows) / `unstrip`
+- `unstrip_bin`: no hardcoded default — `unstrip` on PATH, else the path recorded in workspace `analysis_state.txt` (toolchain baseline) or passed by the caller
 
 ## Pipeline
 1. **sequentialthinking preamble**: confirm Go; choose suspicious-name patterns; pick data addrs to probe with `--data-at`.

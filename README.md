@@ -153,10 +153,10 @@ python ~/.claude/skills/kunglao-agent/scripts/hook_activation.py <workspace> --r
 |---|---|---|
 | Static decompile / xref / disasm | `ghidra` | bridge at `127.0.0.1:8089`; falls back to `analyzeHeadless.bat` |
 | Dynamic stepping | `x64dbg` | **VM-only** — `connect_remote(host=<VM IP>, ...)`; host channel forbidden |
-| Runtime hooking | `frida` | **VM-only** — `192.168.20.128:1337` |
+| Runtime hooking | `frida` | **VM-only** — `<VM_IP>:1337` |
 | CTI lookup | `virustotal` | needs `VT_API_KEY` |
 
-VM control goes through the `vmr-shell` skill (`VMR_SERVER_URL=http://192.168.20.128:9876`). Sample execution on the host is blocked by the `block_malware_exec` hook — this is intentional.
+VM control goes through the `vmr-shell` skill (`VMR_SERVER_URL=http://<VM_IP>:9876` — example; resolve the live lease via env discovery, `KUNGLAO_VM_HOST`). Sample execution on the host is blocked by the `block_malware_exec` hook — this is intentional.
 
 ---
 

@@ -51,7 +51,7 @@ Insert a short section above the "Local defaults" table (the section that curren
 Invocation: `/kunglao-agent [workspace]`
 
 - `$ARGUMENTS` non-empty: the first argument is the workspace path (e.g.
-  `D:/works/samples/<YYYY-MM-DD>/malware-analysis-workspace`). Phase 0
+  `<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/malware-analysis-workspace`). Phase 0
   workspace detection uses this path directly — do not guess from the
   workspace pattern.
 - `$ARGUMENTS` empty: detect per the Local defaults table below.

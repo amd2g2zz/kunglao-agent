@@ -74,7 +74,7 @@ Worker worktrees (`git worktree add`) check out only committed files — any
 gitignored source dirs (`mal-recon/*/work/` JAR decompile output, `javap/`,
 `.venv/`) are ABSENT from the worktree. When dispatching a worker that needs
 such sources, state the main-repo path explicitly in the dispatch prompt
-(e.g. "sources at `D:/works/samples/<date>/mal-recon/<sha>/work/sources/` —
+(e.g. "sources at `<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/mal-recon/<sha>/work/sources/` —
 worktree lacks it, use the main-repo copy"). Workers that hit a missing path
 must fall back to the main-repo copy and record the substitution in their
 status file, never block on it.

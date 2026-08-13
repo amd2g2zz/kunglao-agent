@@ -15,7 +15,7 @@ If you ship a Claude skill that issues x64dbg MCP calls (or Frida MCP / rev-frid
 | `mcp__x64dbg__terminate_session` | ❌ FORBIDDEN | Host-side cleanup; if you never bind host, you never need to terminate |
 | `mcp__x64dbg__connect_to_instance` | ❌ FORBIDDEN | Alias host-bind path |
 | `mcp__frida__spawn`, `mcp__frida__attach` (against host PID) | ❌ FORBIDDEN | Spawns/attaches on host |
-| `rev-frida` against `192.168.20.128:1337` (VM frida-server) | ✅ USE | VM-channel |
+| `rev-frida` against `<VM_IP>:1337` (VM frida-server) | ✅ USE | VM-channel |
 | Direct `vmrun` / `qemu-system` / `wine` that runs `bins/` or `extracted/` on host | ❌ FORBIDDEN | Sample-on-host by any other name |
 
 **Skill frontmatter rule**: if your skill's `allowed-tools:` lists any ❌ row, the kunglao-agent hook will reject every dispatch that names your skill. Replace with the ✅ equivalent. For example, replace `mcp__x64dbg__start_session` with `mcp__x64dbg__connect_remote`.

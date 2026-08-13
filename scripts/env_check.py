@@ -15,7 +15,7 @@ PASS/FAIL per check + exit code (0 = all pass, 1 = any FAIL). Writes
 Checks:
   1. AGENT_TEAMS flag — process/User/Machine scope (decides session teammate behavior)
   2. VM reachability   — TCP 9876 (vmr-shell) + 1337 (Frida), 2s timeout each
-  3. Ghidra            — analyzeHeadless.bat exists (path from env, else default)
+  3. Ghidra            — analyzeHeadless.bat exists (path from GHIDRA_HOME env; unset = FAIL with guidance)
   4. Hook deployment   — settings.json has the kunglao hooks wire_up_settings registers
   5. venv + sample     — .venv python exists w/ cryptography+yaml; sample sha256
 
@@ -37,9 +37,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
-VM_HOST = os.environ.get("KUNGLAO_VM_HOST", "192.168.20.128")
+# Issue #228: NO machine-specific default. Unset = not configured — the check
+# FAILs with guidance instead of silently pointing at one operator's lab VM /
+# Ghidra install (a wrong default on any other machine is worse than a FAIL).
+VM_HOST = os.environ.get("KUNGLAO_VM_HOST", "")
 VM_PORTS = [9876, 1337]
-GHIDRA_DEFAULT = Path(os.environ.get("GHIDRA_HOME", "D:/ghidra_12.1.2_PUBLIC")) / "support" / "analyzeHeadless.bat"
+_ghidra_home = os.environ.get("GHIDRA_HOME")
+GHIDRA_DEFAULT = Path(_ghidra_home) / "support" / "analyzeHeadless.bat" if _ghidra_home else None
 # Mirror of scripts/wire_up_settings.py registration (PreToolUse Agent/Bash +
 # PostToolUse Agent). agent_watch.py is a monitoring hook that wire_up_settings
 # never registers — requiring it here would FAIL correctly-wired machines.
@@ -95,6 +99,11 @@ def check_flag() -> tuple[bool, str]:
 
 def check_vm() -> tuple[bool, str]:
     """VM reachability: TCP connect to vmr-shell + Frida ports, 2s timeout."""
+    if not VM_HOST:
+        return (False,
+                "KUNGLAO_VM_HOST unset — set it to the live VM lease "
+                "(vmr-shell discovery). Dynamic analysis (T3) blocked; static "
+                "may proceed.")
     failed = []
     for port in VM_PORTS:
         try:
@@ -110,7 +119,11 @@ def check_vm() -> tuple[bool, str]:
 
 
 def check_ghidra() -> tuple[bool, str]:
-    """Ghidra analyzeHeadless present (path from GHIDRA_HOME env, else default)."""
+    """Ghidra analyzeHeadless present (path from GHIDRA_HOME env; unset = FAIL)."""
+    if GHIDRA_DEFAULT is None:
+        return (False,
+                "GHIDRA_HOME unset — set it to your Ghidra install root; "
+                "decompilation degraded.")
     if GHIDRA_DEFAULT.exists():
         return True, f"analyzeHeadless at {GHIDRA_DEFAULT}"
     return (False,

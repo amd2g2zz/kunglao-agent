@@ -40,7 +40,7 @@ KNOWN_TOOLS = ('vmr-shell', 'rev-frida', 'malware-framework')
 # `mcp__x64dbg__connect_remote(host=VM_IP, ...)`, after the VM-side x64dbg is
 # launched via vmr-shell. `mcp__frida__spawn` / `mcp__frida__attach` if invoked
 # with a host PID likewise run the sample on the host. Use rev-frida via the
-# VM-resident frida-server (192.168.20.128:1337) instead. See
+# VM-resident frida-server (<VM_IP>:1337) instead. See
 # `references/dynamic-re-tool-priority.md` for the launch sequence.
 HOST_FORBIDDEN_TOOLS = (
     'mcp__x64dbg__start_session',

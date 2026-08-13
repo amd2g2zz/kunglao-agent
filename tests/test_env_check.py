@@ -72,6 +72,8 @@ def test_vm_unreachable_fails(monkeypatch, tmp_path):
         raise OSError("mock: connection timed out")
 
     import env_check
+    # #228: no default VM host — set one so this test exercises the socket path
+    monkeypatch.setattr(env_check, "VM_HOST", "127.0.0.1")
     monkeypatch.setattr(env_check.socket, "create_connection", _boom)
     rc = run(ws)
     assert rc == 1
@@ -87,7 +89,9 @@ def test_all_pass_exit_0(monkeypatch, tmp_path, isolated_home):
 
     import env_check
     # VM: pretend both ports accept connections (socket() is a context manager;
-    # __enter__ does not connect — pure local, no network)
+    # __enter__ does not connect — pure local, no network). #228: no default
+    # VM host — set one so the check reaches the socket probe.
+    monkeypatch.setattr(env_check, "VM_HOST", "127.0.0.1")
     monkeypatch.setattr(env_check.socket, "create_connection",
                         lambda *a, **k: env_check.socket.socket())
     # Ghidra: pretend analyzeHeadless exists at the module-resolved path

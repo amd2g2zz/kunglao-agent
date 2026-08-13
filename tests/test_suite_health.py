@@ -49,7 +49,7 @@ def _load_manifest() -> list[dict]:
     """Load golden cases and rebase their commands to THIS machine.
 
     Fixtures were captured on the original author's Windows box and still
-    contain absolute paths (python.exe, C:\\Users\\hr\\.claude\\kong-refactor).
+    contain absolute paths (python.exe, absolute venv/home dirs).
     The captured paths were rewritten to {{PYTHON}}/{{ROOT}} placeholders in
     the repo; on any other machine those become sys.executable and the paths
     under ROOT.  A legacy direct-prefix branch is kept for robustness.

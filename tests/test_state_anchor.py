@@ -6,9 +6,9 @@ state signature (<=500 chars) into additionalContext on every worker
 completion, plus a `⚠ STATE FLAT` drift warning when drift_detected (#43).
 FAIL_OPEN: any exception -> empty string, never raises.
 
-All I/O is SYNTHETIC: pytest tmp_path workspaces only. The real workspace
-(D:/works/samples/2026-07-01/malware-analysis-workspace/) is the FORMAT
-reference only — never read or written.
+All I/O is SYNTHETIC: pytest tmp_path workspaces only. The live workspace
+(`<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/malware-analysis-workspace/`) is the
+FORMAT reference only — never read or written.
 """
 import importlib.util
 import io
