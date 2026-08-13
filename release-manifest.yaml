@@ -36,11 +36,11 @@ assets:
     - hooks/worker_budget.py
     - hooks/worker_pulse.py
   templates:
-    - templates/blocker.md
-    - templates/claim_deps.yaml
-    - templates/claim-register.yaml
-    - templates/failure-registry.yaml
-    - templates/task_spec.yaml
+    - templates/state/blocker.md
+    - templates/state/claim_deps.yaml
+    - templates/state/claim-register.yaml
+    - templates/state/failure-registry.yaml
+    - templates/state/task_spec.yaml
   knowledge:
     # #147 / report §4.5.4: a run must bind to the exact knowledge-base
     # revision. SKILL.md + references/ digests land in the receipt.

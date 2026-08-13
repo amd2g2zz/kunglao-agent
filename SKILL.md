@@ -67,7 +67,7 @@ Run the steps in order; any FAIL blocks the next step.
 
 1. **Probe the Python venv**: check activation (`$env:VIRTUAL_ENV` / `sys.prefix != sys.base_prefix` / `.venv` exists). Activated → record `venv=<path>` in `analysis_state.txt`. Not activated and `.venv/` missing → create it (`python -m venv .venv`), install dependencies (cryptography, pyyaml) into that venv only, verify with `python -c "import cryptography, yaml"`.
 
-2. **Probe the toolchain**: confirm `scripts/`, `hooks/`, `templates/` exist (`ls <SKILL_DIR>/scripts/`); Python + dependency libraries available; `convergence_check.py` executes.
+2. **Probe the toolchain**: confirm the directory layout — `scripts/`, `hooks/`, `templates/` (`state/` state templates, `scripts/` script templates, `frida/` Frida templates), `tools/` (tool homes: `crypto/` `static/` `ghidra/` `frida/` `t2/` `aux/`), `pipelines/recipes/` (plan orchestration recipes) — exist (`ls <SKILL_DIR>/scripts/`); Python + dependency libraries available; `convergence_check.py` executes.
 
 3. **Establish the cognition baseline**: write environment conclusions to `analysis_state.txt` (venv path, Python version, toolchain readiness, verified sample sha256, fixtures list). Every later cold start reads this baseline — do not re-probe.
 
@@ -75,7 +75,7 @@ Run the steps in order; any FAIL blocks the next step.
 
 5. **Workspace detection + path reachability**: the workspace is never a parameter — detect it here from the local defaults below. Confirm cwd = project root; resolve every state file by cwd-relative path (`claim-register.yaml`, not absolute paths); if `Bash cd` to a deep path times out, read state via `Read` with cwd-relative paths. Any failure → cold-start NOT complete → log a `B1a` blocker, not "best guess".
 
-**Input contract (3 required)**: ① sample — `bins/<sha>`, sha256 verified ② `task_spec.yaml` — primary_questions / scope / constraints / depth / success_criteria (template: `templates/task_spec.yaml`) ③ existing artifacts — CTI/evidence/fact base, READ-ONLY, never re-query.
+**Input contract (3 required)**: ① sample — `bins/<sha>`, sha256 verified ② `task_spec.yaml` — primary_questions / scope / constraints / depth / success_criteria (template: `templates/state/task_spec.yaml`) ③ existing artifacts — CTI/evidence/fact base, READ-ONLY, never re-query.
 
 ## Arguments
 
