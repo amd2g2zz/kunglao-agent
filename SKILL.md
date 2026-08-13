@@ -47,7 +47,12 @@ argument-hint: [request]
 
 **Identity.** kunglao-agent is a reverse-engineering agent: the orchestrator contract below applies to any RE problem. Malware analysis is the primary use case — a subset of reverse engineering, not an exclusive scope. Examples default to a malware sample; route any other RE work (firmware, protocol, tooling, unknown binaries) through the same phases.
 
-Full design: `DESIGN.md` (consult on demand, not auto-loaded). Protocols: `references/*.md` (guardrails, method-constraints, dynamic-re-tool-priority, verify-static-vs-dynamic, search-policy, cold-start-contract, re-library/*). RE technique library: `references/re-library/` (full index: `references/INDEX.md`) + `references/malware-phase-routing.md` — workers consult these during dispatch.
+**Full design** (on demand): `DESIGN.md`. **Reference library** — progressive disclosure: `references/_INDEX.md` (domain index + scenario→domain map, then per-domain `_index-*.md`); load by scenario on demand, never wholesale. This file is the operative contract — read it, then act.
+
+- Protocols / gates / failure routing / verification → `references/`: guardrails, cold-start-contract, convergence-loop, failure-modes{,-lifecycle,-monitoring,-state}, method-constraints, search-policy, verify-static-vs-dynamic, operational-mechanics, decision-rights, schema, wal-protocol
+- Static / dynamic tooling, packing, patterns → `references/re-library/`: tools, tools-advanced, tools-dynamic, tools-crypto, anti-analysis, patterns, patterns-simulation, patterns-decode, patterns-debugging, field-notes + `references/dynamic-re-tool-priority.md`
+- Languages / platforms → `references/re-library/`: languages{,-go,-compiled,-platforms}, platforms{,-elf,-hardware,-kernel}
+- Malware analysis / detection / reporting / search → `references/re-library/`: malware-analysis{,-workflow,-quickstart}, malware-triage, malware-dynamic-analysis, detection-engineer, malware-report-writer, multi-search-engine{,-refs} + `references/malware-phase-routing.md`
 
 **Global rules this skill implements (auto-loaded every session):** `maker-checker.md` (maker/checker separation — workers make, the orchestrator checks, no self-stamping) and `numeric-fidelity.md` (counting-basis fidelity — C-020: 811 slots vs 774 records, 69+1 helper/kfunc), both in `~/.claude/rules/common/`; they apply even when this skill is not loaded. This skill owns the orchestrator mechanics (worker/verifier dispatch, gates).
 
