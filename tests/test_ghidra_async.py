@@ -529,10 +529,24 @@ class TestAsyncLifecycle:
     def test_start_tool_mode_builds_headless_command(self, tmp_path):
         fake_ghidra = tmp_path / "ghidra"
         (fake_ghidra / "support").mkdir(parents=True)
-        bat = fake_ghidra / "support" / "analyzeHeadless.bat"
-        bat.write_text("@echo off\n"
-                       "echo %* > \"%~dp0..\\args.txt\"\nexit /b 0\n",
-                       encoding="utf-8")
+        # Execution-type fixture: the picked analyzeHeadless must actually
+        # run on this platform. analyze_headless_path() tries .bat first, so
+        # on POSIX write an extensionless executable script (behavior
+        # equivalent to the batch: dump argv, exit 0); on Windows keep .bat.
+        if os.name == "nt":
+            bat = fake_ghidra / "support" / "analyzeHeadless.bat"
+            bat.write_text("@echo off\n"
+                           "echo %* > \"%~dp0..\\args.txt\"\nexit /b 0\n",
+                           encoding="utf-8")
+        else:
+            sh = fake_ghidra / "support" / "analyzeHeadless"
+            sh.write_text(
+                "#!/bin/sh\n"
+                f'echo "$@" > "{fake_ghidra}/args.txt"\n'
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            sh.chmod(0o755)
         binary = tmp_path / "s.exe"
         binary.write_bytes(b"MZ")
         r = run_cli("start", "--tool", "ghidra-recon", "--binary", str(binary),
