@@ -121,3 +121,17 @@ carried only an API sequence or placeholders — it is now rejected until backfi
 with concrete value assertions. Drive: the a2b5e25c incident where F015 (NVENC
 init) passed L1 with an API-sequence-only `expected` while the field assignments
 were all-reversed; the old whole-blob sha256 hid the per-field mismatch.
+
+## machine_check oracle contract (#332, verifier records)
+
+Every verifier verification record (kunglao-redteam output) must terminate in a
+machine check: at least one `machine_check: {command, expected, actual, passed}`
+with `passed: true`, byte/execution-level command. A record missing
+`machine_check` or carrying `passed=false` fails schema validation — the fact
+stays STAMP and must not promote to PROVEN. Exception path: `machine_check: none`
++ `reason` + `claim_kind`, accepted only when the kind is in the exception-allowed
+list of `references/machine_check_map.yaml` AND matches the fact's `boundary_type`
+(pure-CTI-class claims). Contract doc: `references/machine-check-contract.md`;
+enforcement: `kunglao_verify.check_machine_check_contract` /
+`machine_check_gate` / `verify()` L2-CONFIRMED gate (failure → overall=PARTIAL +
+warning `MACHINE_CHECK_FAILED`).
