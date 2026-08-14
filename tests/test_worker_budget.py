@@ -577,6 +577,26 @@ def test_check_tool_first_stopword_no_false_positive():
     assert ok, msg
 
 
+def test_check_tool_first_category_dir_paths_no_false_positive():
+    """#340 H2: dispatch text citing the REAL tool paths under
+    tools/pipelines/ and tools/auxiliary/ (the post-#340 category dir names,
+    which _load_tool_index_keywords now derives from _INDEX.yaml category ids)
+    must NOT reject without a `tool-catalog:` marker — the path mention is
+    where-to-run guidance, not a capability claim needing catalog citation.
+    Regression: reviewer-verified that the category rename (aux→auxiliary,
+    pipeline→pipelines) injected the un-stopworded keywords 'pipelines'/
+    'auxiliary' and these very doc paths started REJECTing."""
+    desc = ('[T1 tools=python] claim C-001 evidence registration via '
+            'python tools/pipelines/build_evidence_index.py <ws> --write')
+    ok, msg = check_tool_first({}, desc, 'facts-snapshot: 1 facts')
+    assert ok, f"tools/pipelines/ path mention must not reject: {msg}"
+
+    desc2 = ('[T1 tools=python] claim C-001 cold-start baseline via '
+             'python tools/auxiliary/measure_cold_start.py <ws> --json')
+    ok2, msg2 = check_tool_first({}, desc2, 'facts-snapshot: 1 facts')
+    assert ok2, f"tools/auxiliary/ path mention must not reject: {msg2}"
+
+
 def test_check_tool_first_operation_stopword_no_false_positive():
     """#294 H2: the 'decode' capability op is also routine prose — stopworded."""
     ok, msg = check_tool_first(

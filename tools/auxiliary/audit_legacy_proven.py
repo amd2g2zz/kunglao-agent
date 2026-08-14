@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/audit_legacy_proven.py — M4 issue #16 + P5 issue #26: PROVEN 审计工具.
+"""tools/auxiliary/audit_legacy_proven.py — M4 issue #16 + P5 issue #26: PROVEN 审计工具.
 
 读 workspace 的 claim-register.yaml + facts/_INDEX.md, 列全部 PROVEN claim,
 按两个独立维度分类:
@@ -15,9 +15,9 @@ BLIND 签字维度 (issue #16):
   - unverifiable:           无 provenance、无 fact 文件、或无索引可溯
 
 用法:
-  python tools/audit_legacy_proven.py <workspace>
-  python tools/audit_legacy_proven.py <workspace> --output audit.json
-  python tools/audit_legacy_proven.py <workspace> --json        # JSON → stdout
+  python tools/auxiliary/audit_legacy_proven.py <workspace>
+  python tools/auxiliary/audit_legacy_proven.py <workspace> --output audit.json
+  python tools/auxiliary/audit_legacy_proven.py <workspace> --json        # JSON → stdout
 
 #277 CLI contract: --output/--out/-o persists the JSON; --json emits it to
 stdout. Exit codes: 0 = success, 2 = operational error (missing workspace).
@@ -130,8 +130,13 @@ def _get_or_build_index(ws: Path) -> dict | None:
             return json.loads(idx_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             pass
-    # Try building in-memory (P1 builder)
+    # Try building in-memory (P1 builder). #340: build_evidence_index lives in
+    # tools/pipelines/ — put that dir on sys.path for the lazy sibling import
+    # (pytest.ini pythonpath already covers it under the test runner).
     try:
+        _pipelines_dir = str(Path(__file__).resolve().parent.parent / "pipelines")
+        if _pipelines_dir not in sys.path:
+            sys.path.insert(0, _pipelines_dir)
         import build_evidence_index as bei
         return bei.build_index(ws)
     except Exception:

@@ -29,7 +29,7 @@ mode selection). PE-load failures are returned inside the JSON result as
 ok=false (exit 1), matching the fail-closed verify wire.
 
 Core PE/capstone helpers (va_to_offset / capstone_for / disasm_at / load_pe)
-live in tools/lib_disasm.py (issue #284 extraction); they are re-exported here
+live in tools/_lib/lib_disasm.py (issue #284 extraction, #340 shared-lib home); they are re-exported here
 so existing imports keep working.
 """
 from __future__ import annotations
@@ -41,6 +41,10 @@ import sys
 from pathlib import Path
 
 import pefile  # type annotation for _load() return
+
+_LIB_DIR = Path(__file__).resolve().parent.parent / "_lib"  # tools/_lib (#340)
+if str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))
 
 from lib_disasm import (  # noqa: E402  (shared PE/capstone helpers, #284)
     capstone_for as _capstone_for,

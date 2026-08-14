@@ -32,13 +32,13 @@ TOOLS = ROOT / "tools"
 
 REQUIRED_SEGMENTS = ("用途", "用法", "输入", "输出", "exit code", "when_not")
 
-# (类目目录名, 类目 id 用于 _index-<cat>.md 文件名)
+# (类目目录名 == 类目 id, #340: _index-<category>.md 文件名与 id 一致)
 CATEGORY_READMES = [
     ("crypto", "crypto"),
     ("static", "static"),
     ("ghidra", "ghidra"),
-    ("auxiliary", "aux"),
-    ("pipelines", "pipeline"),
+    ("auxiliary", "auxiliary"),
+    ("pipelines", "pipelines"),
 ]
 
 # golden invocation 抽查(工具名, 用法首行必须包含的片段)

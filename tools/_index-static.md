@@ -63,7 +63,7 @@
 
 ### disasm-dump
 
-- **用途**: 指定 RVA/VA 的 capstone 指令清单(VA→文件偏移复用 tools/lib_disasm.py)。
+- **用途**: 指定 RVA/VA 的 capstone 指令清单(VA→文件偏移复用 tools/_lib/lib_disasm.py)。
 - **用法**:
   ```bash
   python tools/static/disasm_dump.py --binary <样本PE> --rvas 0x1000,0x2000
@@ -90,7 +90,7 @@
 - **用途**: 对 fact/report 代码清单做 byte-exact 断言校验(VA 锚点)。
 - **用法**:
   ```bash
-  python tools/disasm_constant_check.py --binary <样本PE> --fact <facts/F-NN.md>
+  python tools/static/disasm_constant_check.py --binary <样本PE> --fact <facts/F-NN.md>
   ```
 - **输入**: fact/report 代码清单(`--fact` 或 `--report`+`--reference`) + PE 二进制(`--binary`, 必填)。
 - **输出**: byte-exact 断言校验 JSON(ok/mismatches/errors/skipped)。

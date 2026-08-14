@@ -44,11 +44,11 @@ import pefile
 _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
-_TOOLS_DIR = _THIS_DIR.parent
-if str(_TOOLS_DIR) not in sys.path:
-    sys.path.insert(0, str(_TOOLS_DIR))
+_LIB_DIR = _THIS_DIR.parent / "_lib"   # shared cross-category lib home (#340)
+if str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))
 
-from _common import (  # noqa: E402
+from common import (  # noqa: E402
     EXE_SIGNATURES,
     byte_entropy,
     find_all,

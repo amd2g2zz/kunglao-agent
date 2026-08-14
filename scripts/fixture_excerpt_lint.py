@@ -25,7 +25,7 @@ Two rules (regex heuristics only — no LLM, no binary, no network):
 LAYERING — this is #58's KEY PROPERTY. It is COMPLEMENTARY to the two existing
 mechanical checkers, NOT a duplicate of either:
 
-  #50 (tools/disasm_constant_check.py :: check_fact_disasm / check_report_listing)
+  #50 (tools/static/disasm_constant_check.py :: check_fact_disasm / check_report_listing)
       — BYTE-EXACT, BACK-LINE. Needs the sample binary + a VA anchor on each
       assertion; its `scaled` kind disproves a `*1000` by scanning capstone disasm
       for an imul/<K> at the VA. Runs AFTER VA-anchoring, against the binary.

@@ -813,9 +813,12 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
     if binary_path is not None:
         try:
             import sys as _sys
-            _tools_dir = str(Path(__file__).resolve().parent.parent / "tools")
-            if _tools_dir not in _sys.path:
-                _sys.path.insert(0, _tools_dir)
+            # #340: disasm_constant_check moved to tools/static/; its own
+            # bootstrap puts tools/_lib/ (lib_disasm) on sys.path.
+            _static_dir = str(Path(__file__).resolve().parent.parent
+                              / "tools" / "static")
+            if _static_dir not in _sys.path:
+                _sys.path.insert(0, _static_dir)
             from disasm_constant_check import check_fact_disasm
             disasm = check_fact_disasm(
                 Path(fact["_path"]).read_text(encoding="utf-8", errors="replace"),

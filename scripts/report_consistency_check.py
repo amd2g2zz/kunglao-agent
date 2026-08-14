@@ -3,7 +3,7 @@
 
 Detects contradictions that live ENTIRELY INSIDE a report markdown (no binary
 read, no fact lookup). This is the report-INTERNAL sibling of #50
-(`tools/disasm_constant_check.py`, report↔binary byte-exact) and the
+(`tools/static/disasm_constant_check.py`, report↔binary byte-exact) and the
 cross-chapter sibling of the numeric-fidelity caliber rule
 (`~/.claude/rules/common/numeric-fidelity.md`). #50 catches a report listing
 that diverges from the PE bytes; numeric-fidelity catches a single number's

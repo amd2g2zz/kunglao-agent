@@ -35,12 +35,12 @@ from pathlib import Path
 
 import pefile
 
-# Sibling static helpers (tools/static/_common.py) — entropy for sections.
+# Sibling static helpers (tools/static/common.py) — entropy for sections.
 _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
-from _common import byte_entropy  # noqa: E402
+from common import byte_entropy  # noqa: E402
 
 # UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
 # decode(errors="replace")) must not crash a GBK console — stdout unified on

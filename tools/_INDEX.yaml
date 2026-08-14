@@ -8,7 +8,7 @@ purpose: >-
 
 # ---- entry schema (machine contract) ---------------------------------------
 #   name:         unique tool id, lowercase kebab-case (e.g. chacha-string-layer)
-#   category:     one of crypto|static|ghidra|dynamic|pipeline|aux
+#   category:     one of crypto|static|ghidra|dynamic|auxiliary|pipelines (== dir name, #340)
 #   capability:   "<domain>:<operation>" capability tag, e.g. crypto:decode
 #   tier:         T1 static tool | T2 emulation | T3 VM-dynamic
 #   cost_tier:    probe | cheap | deep
@@ -171,7 +171,7 @@ tools:
     capability: static:disasm
     tier: T1
     cost_tier: cheap
-    input_output: {input: 样本 PE(--binary) + --rvas/--vas 列表 + 可选 --prologs/--strings, output: 每址 capstone 指令清单 JSON(VA→文件偏移复用 tools/lib_disasm.py)}
+    input_output: {input: 样本 PE(--binary) + --rvas/--vas 列表 + 可选 --prologs/--strings, output: 每址 capstone 指令清单 JSON(VA→文件偏移复用 tools/_lib/lib_disasm.py)}
     when_not: 需要函数级语义/反编译时不用, 用 ghidra-recon / ghidra-decompile-functions
 
   - name: shellcode-scan
@@ -209,7 +209,7 @@ tools:
 
   # -- pipeline: 证据索引构建 (issue #284 登记) --
   - name: build-evidence-index
-    category: pipeline
+    category: pipelines
     capability: pipeline:evidence-index
     tier: T1
     cost_tier: cheap
@@ -218,7 +218,7 @@ tools:
 
   # -- aux: legacy PROVEN 审计 (issue #284 登记) --
   - name: audit-legacy-proven
-    category: aux
+    category: auxiliary
     capability: aux:proven-audit
     tier: T1
     cost_tier: cheap
@@ -227,7 +227,7 @@ tools:
 
   # -- aux: golden master 采集 (issue #284 登记) --
   - name: capture-golden
-    category: aux
+    category: auxiliary
     capability: aux:golden-capture
     tier: T1
     cost_tier: cheap
@@ -236,7 +236,7 @@ tools:
 
   # -- aux: BLIND 覆盖测量 (issue #284 登记) --
   - name: measure-blind-coverage
-    category: aux
+    category: auxiliary
     capability: aux:blind-coverage
     tier: T1
     cost_tier: cheap
@@ -245,7 +245,7 @@ tools:
 
   # -- aux: 冷启动 token 基线测量 (issue #284 登记) --
   - name: measure-cold-start
-    category: aux
+    category: auxiliary
     capability: aux:cold-start-metrics
     tier: T1
     cost_tier: probe
@@ -254,7 +254,7 @@ tools:
 
   # -- aux: 样本内容 prompt 注入 sanitize (issue #307 登记) --
   - name: sanitize-text
-    category: aux
+    category: auxiliary
     capability: aux:sanitize
     tier: T1
     cost_tier: probe

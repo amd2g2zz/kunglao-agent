@@ -98,7 +98,7 @@ before L1 inside `verify()`; rejection forces `overall = REJECTED`.
 ### VA-anchored assertions + disasm byte-exact check (#50)
 Assignment-class assertions MAY carry a line VA anchor — `0x<hex>: field=value`
 or `@0x<hex> field=value` — naming the instruction address that establishes the
-value. `tools/disasm_constant_check.py` resolves VA → file offset via pefile
+value. `tools/static/disasm_constant_check.py` resolves VA → file offset via pefile
 sections, disassembles the site with capstone, and compares byte-exact: numeric
 claims (hex/decimal) against the instruction immediate; scaled claims (`X*K`)
 require a `mul`/`imul` with immediate K at the site; variable-name claims SKIP

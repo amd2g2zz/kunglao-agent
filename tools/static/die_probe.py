@@ -47,11 +47,11 @@ if str(_THIS_DIR) not in sys.path:
 # source — tools/static/common.error. Reuse it instead of a local _error().
 from common import error  # noqa: E402
 
-# r2-278-1c H1 (die_probe gap): this tool does NOT import _common (byte-scan
+# r2-278-1c H1 (die_probe gap): this tool does NOT import common (byte-scan
 # helpers); it imports common only for the single error emitter (issue #319
 # dedup). The shared UTF-8 stdout guard therefore still lives here — an
 # emoji/non-ASCII --out filename crashes on GBK consoles without it.
-# Same unified UTF-8 policy as tools/static/_common.py.
+# Same unified UTF-8 policy as tools/static/common.py.
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):

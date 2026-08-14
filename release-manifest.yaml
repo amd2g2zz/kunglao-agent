@@ -60,14 +60,14 @@ assets:
     # #320: full toolshelf declaration (reverse scan contract). Doc/index-class
     # files (README.md, _INDEX.yaml, _INDEX.md, _index-*.md) are exempt — they
     # are governed by tools/_INDEX.yaml + validate_index.py, not this manifest.
-    - tools/audit_legacy_proven.py
+    - tools/auxiliary/audit_legacy_proven.py
     - tools/auxiliary/sanitize.py
-    - tools/build_evidence_index.py
-    - tools/capture_golden.py
+    - tools/pipelines/build_evidence_index.py
+    - tools/auxiliary/capture_golden.py
     - tools/crypto/__init__.py
     - tools/crypto/algorithms.py
     - tools/crypto/crypto-tool.py
-    - tools/disasm_constant_check.py
+    - tools/static/disasm_constant_check.py
     - tools/ghidra/DecompileFunctions.java
     # #308: Ghidra async job protocol + binary diff (merged after #320 snapshot)
     - tools/ghidra/GhidraBindiff.java
@@ -80,15 +80,14 @@ assets:
     - tools/ghidra/GhidraRecon.java
     - tools/ghidra/GhidraScanPointer.java
     - tools/ghidra/run_ghidra_postscript.py
-    - tools/lib_disasm.py
-    - tools/measure_blind_coverage.py
-    - tools/measure_cold_start.py
+    - tools/_lib/lib_disasm.py
+    - tools/auxiliary/measure_blind_coverage.py
+    - tools/auxiliary/measure_cold_start.py
     - tools/pipelines/recipes/crypto-decrypt.yaml
     - tools/pipelines/recipes/go-recovery.yaml
     - tools/pipelines/recipes/iat-chain.yaml
     - tools/pipelines/recipes/stage-unpack.yaml
     - tools/pipelines/recipes/syscall-chain.yaml
-    - tools/static/_common.py
     - tools/static/binary-sweep.py
     - tools/static/c_normalize.py
     - tools/static/call-site-args.py

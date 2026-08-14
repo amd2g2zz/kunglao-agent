@@ -1,10 +1,10 @@
-# tools/pipelines — 组合 recipe 模板
+# tools/pipelines — 组合 recipe 模板 + 证据索引工具
 
-本目录是 `pipeline` 类目的工具家之一, 含 `recipes/*.yaml`: **plan 生成模板(templates), 不是执行器**。本目录无本地 .py 脚本是**设计使然**: recipe 是纯数据(声明"哪些已注册工具按什么顺序组链"), 执行由各已注册工具(`tools/_INDEX.yaml`)承担, 实例化(生成 `runs/plan-C<NN>.md`)是后续接线工作。
+本目录是 `pipelines` 类目的工具家, 含 `recipes/*.yaml`: **plan 生成模板(templates), 不是执行器**。recipe 是纯数据(声明"哪些已注册工具按什么顺序组链"), 执行由各已注册工具(`tools/_INDEX.yaml`)承担, 实例化(生成 `runs/plan-C<NN>.md`)是后续接线工作。#340 起, pipelines 类目的注册工具 `build_evidence_index.py`(`build-evidence-index`)也归位本目录 — "recipe 无本地执行器"的设计约束只针对 recipe 实例化, 不排斥注册工具入类目目录(#340 结构规则: 工具脚本一律入类目目录)。
 
 ## 与索引文档的关系
 
-worker 先读 `tools/_index-pipeline.md`(pipeline 域工具契约条目, 如 `build-evidence-index`); 本 README 说明 recipe 的 schema 与目录。机器契约见 `tools/_INDEX.yaml`(recipe 是纯数据模板, 不注册)。
+worker 先读 `tools/_index-pipelines.md`(pipelines 域工具契约条目, 如 `build-evidence-index`); 本 README 说明 recipe 的 schema 与目录。机器契约见 `tools/_INDEX.yaml`(recipe 是纯数据模板, 不注册)。
 
 ## Recipe schema (schema: plan-recipe/1)
 

@@ -70,7 +70,7 @@ class TestReverseScan:
 
     def test_doc_and_index_whitelist_exempt(self, tmp_path):
         for rel in ("tools/README.md", "tools/_INDEX.md", "tools/_INDEX.yaml",
-                    "tools/_index-aux.md", "templates/frida/README.md",
+                    "tools/_index-auxiliary.md", "templates/frida/README.md",
                     "hooks/README.md", "agents/_index-x.md"):
             _write(tmp_path, rel)
         assert release_receipt.reverse_scan(tmp_path, {}) == []

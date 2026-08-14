@@ -1,6 +1,6 @@
 """lib_disasm.py — shared PE/capstone disassembly helpers (issue #284).
 
-Extracted from tools/disasm_constant_check.py so future disasm tools (e.g. the
+Extracted from disasm_constant_check.py (now tools/static/, #340) so future disasm tools (e.g. the
 PR-1c disasm-dump) can reuse the VA→file-offset mapping and capstone setup
 without re-implementing them. Contract (#277): module functions are importable
 and side-effect free; no hardcoded paths.
