@@ -138,7 +138,8 @@ def test_validator_categories_pin_new_enum() -> None:
         f"validate_index.CATEGORIES 必须为 id==dirname 枚举, 实得: {vi.CATEGORIES}")
     data = {"tools": [{"name": "t-a", "category": "auxiliary",
                        "capability": "aux:sanitize", "tier": "T1",
-                       "cost_tier": "probe", "input_output": "x"}]}
+                       "cost_tier": "probe", "input_output": "x",
+                       "description": "minimal fixture entry"}]}  # #356 W1: description required
     assert vi.validate_index(data) == [], "auxiliary 应为合法类目"
     data["tools"][0]["category"] = "pipelines"
     assert vi.validate_index(data) == [], "pipelines 应为合法类目"
