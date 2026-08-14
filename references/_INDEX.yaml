@@ -11,7 +11,7 @@ files:
   references/_index-platforms.md: 1a89e780858cbf1cbe051af5b769f3f29a3f9d6739ccc25137ee7cc838e69dd2
   references/_index-resources.md: 04db4c8e7cb2196b8fafe16c28d3f9b98df6cd9354d09d59e6a24d62929b065d
   references/_index-tools.md: 52cc8bef03be8b995519bdd4b59d76e1c60b0199c8fd9c6d3d8d645ef8a6a979
-  references/_INDEX.md: 92139e789c0b4747c04f89c2678e9f79958683a992ce8ca605662ada6c8a8d6d
+  references/_INDEX.md: 024bf0aff8ffa15f9320be07db49fe00fe1e9f83f272b81f388bb0351f8091dc
   references/archive/long-horizon-architecture-2026-07.md: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
   references/case-book.md: 699041f78c3c4cc679dfc9b27eac6bcc50b73e1561456d3e8c15110d790cb353
   references/cli-script-checklist.md: 32d7fb1fb48a5e28e129b1f011420fdbad0d4c5c33f05f3036607e36675d5aca
@@ -62,6 +62,7 @@ files:
   references/re-library/tools.md: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
   references/schema.md: 345f505cc045e2afb293e3b20574983adfa62d021d1f4b7892cf0d90c51bbba3
   references/search-policy.md: 5a4a88cdfab1e8493a23cd531fddd3078ef9ad261a3d627f0f5a8871848e66c4
+  references/state-mapping.md: 2898e976b58d717641e01e56e2459808f1ad082f6cba7f0c0446ea76d7a98b06
   references/tool-inventory.md: 65b778132ac2310f0b507d8dacde254db069f90b256e86a6849d01159e953e8e
   references/verify-static-vs-dynamic.md: 51dc34d5602e07edc27044b743acb932a6158f9eaaf2a84b169ef3d9e8b7d811
   references/wal-protocol.md: 0dcc8fefaa011184063d335d33dd591b3cf54e4d1ec1f1e1a60ee6ff47c9c4e8
