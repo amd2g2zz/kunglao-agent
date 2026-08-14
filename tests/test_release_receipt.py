@@ -28,7 +28,7 @@ JUNIT = ROOT / "tests" / "fixtures" / "junit-sample.xml"
 MANIFEST_AGENTS = {
     "kunglao-worker.md", "kunglao-redteam.md", "ghidra-light.md", "floss-filter.md",
     "pefile-signature.md", "go-symbols.md",
-    "verdict-scorer.md",
+    "verdict-scorer.md", "kunglao-init-worker.md",
 }
 ROUTER_SUBS = ["decide", "tick", "verify", "record", "health"]
 
@@ -38,7 +38,10 @@ def _manifest() -> dict:
 
 
 def _run(cmd: list[str], timeout: int = 120) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    # UTF-8 convention (#317/#320): child output is UTF-8 — locale decoding
+    # (GBK) crashes reader threads on non-ASCII output.
+    return subprocess.run(cmd, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=timeout)
 
 
 def _sha256(path: Path) -> str:
@@ -62,7 +65,7 @@ def test_manifest_loads_and_declares_release_contract():
     assert m["version"]
     assert m["requires_python"]
     assert set(m["dependencies"]) >= {"PyYAML", "pefile", "capstone", "jsonschema"}
-    for section in ("agents", "hooks", "templates"):
+    for section in ("agents", "hooks", "templates", "tools"):
         assert m["assets"][section], f"manifest assets.{section} is empty"
     assert len(m["clis"]) == 9  # 8 entry CLIs + mcp_probe (#316)
     assert m["router_subcommands"] == ROUTER_SUBS
@@ -77,7 +80,8 @@ def test_manifest_agents_match_documented_roster():
 def test_all_declared_assets_exist_in_repo():
     declared = (list(_manifest()["assets"]["agents"])
                 + list(_manifest()["assets"]["hooks"])
-                + list(_manifest()["assets"]["templates"]))
+                + list(_manifest()["assets"]["templates"])
+                + list(_manifest()["assets"]["tools"]))
     missing = [p for p in declared if not (ROOT / p).exists()]
     assert not missing, f"declared assets missing from tree: {missing}"
 

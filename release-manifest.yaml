@@ -25,12 +25,14 @@ assets:
     - agents/pefile-signature.md
     - agents/go-symbols.md
     - agents/verdict-scorer.md
+    - agents/kunglao-init-worker.md   # #304 init worker agent
   hooks:
     - hooks/completion_gate.py
     - hooks/dispatch_gate.py
     - hooks/env_check_gate.py
     - hooks/heartbeat_touch.py
     - hooks/lib_kunglao.py
+    - hooks/recall_inject.py   # #268 wired by wire_up_settings.py:152
     - hooks/state_anchor.py
     - hooks/worker_budget.py
     - hooks/worker_pulse.py
@@ -39,11 +41,74 @@ assets:
     - templates/state/claim_deps.yaml
     - templates/state/claim-register.yaml
     - templates/state/failure-registry.yaml
+    - templates/state/task-oracle.yaml
     - templates/state/task_spec.yaml
     # #316: per-OS workspace CLAUDE.md templates (MCP supply tables)
     - templates/CLAUDE.md.windows.tmpl
     - templates/CLAUDE.md.linux.tmpl
     - templates/CLAUDE.md.android.tmpl
+    - templates/CLAUDE.md.tmpl
+    # #336: ICD-203 fact frontmatter template (merged after #320 snapshot)
+    - templates/fact-frontmatter.md
+    # #335/#278: frida + scripts templates (template_gen.py inputs)
+    - templates/frida/cfg-analyze.py.tmpl
+    - templates/frida/cfg-hook.js.tmpl
+    - templates/scripts/decryption-analysis.py.tmpl
+    - templates/scripts/disasm-pipeline.py.tmpl
+    - templates/scripts/stage-unpack.py.tmpl
+  tools:
+    # #320: full toolshelf declaration (reverse scan contract). Doc/index-class
+    # files (README.md, _INDEX.yaml, _INDEX.md, _index-*.md) are exempt — they
+    # are governed by tools/_INDEX.yaml + validate_index.py, not this manifest.
+    - tools/audit_legacy_proven.py
+    - tools/auxiliary/sanitize.py
+    - tools/build_evidence_index.py
+    - tools/capture_golden.py
+    - tools/crypto/__init__.py
+    - tools/crypto/algorithms.py
+    - tools/crypto/crypto-tool.py
+    - tools/disasm_constant_check.py
+    - tools/ghidra/DecompileFunctions.java
+    # #308: Ghidra async job protocol + binary diff (merged after #320 snapshot)
+    - tools/ghidra/GhidraBindiff.java
+    - tools/ghidra/ghidra_diff.py
+    - tools/ghidra/ghidra_job.py
+    - tools/ghidra/job_store.py
+    - tools/ghidra/GhidraEvidenceAnnotations.java
+    - tools/ghidra/GhidraExportVtableStruct.java
+    - tools/ghidra/GhidraJsonScript.java
+    - tools/ghidra/GhidraRecon.java
+    - tools/ghidra/GhidraScanPointer.java
+    - tools/ghidra/run_ghidra_postscript.py
+    - tools/lib_disasm.py
+    - tools/measure_blind_coverage.py
+    - tools/measure_cold_start.py
+    - tools/pipelines/recipes/crypto-decrypt.yaml
+    - tools/pipelines/recipes/go-recovery.yaml
+    - tools/pipelines/recipes/iat-chain.yaml
+    - tools/pipelines/recipes/stage-unpack.yaml
+    - tools/pipelines/recipes/syscall-chain.yaml
+    - tools/static/_common.py
+    - tools/static/binary-sweep.py
+    - tools/static/c_normalize.py
+    - tools/static/call-site-args.py
+    - tools/static/common.py
+    - tools/static/die_probe.py
+    - tools/static/disasm_dump.py
+    - tools/static/extract-syscalls.py
+    - tools/static/go-buildinfo-carve.py
+    - tools/static/opaque_pred.py
+    - tools/static/overlay_scan.py
+    - tools/static/pe_analyze.py
+    - tools/static/shellcode_scan.py
+    - tools/static/stack-strings.py
+    - tools/static/strings-classify.py
+    - tools/static/yara-gen.py
+    - tools/static/yara-rules/crypto-tables.yar
+    - tools/static/yara-rules/LICENSE.findcrypt-yara
+    - tools/static/yara-scan.py
+    - tools/tool-search.py
+    - tools/validate_index.py
   knowledge:
     # #147 / report §4.5.4: a run must bind to the exact knowledge-base
     # revision. SKILL.md + references/ digests land in the receipt.

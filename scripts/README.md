@@ -5,8 +5,9 @@ Every `.py` in this directory is classified by role and by where it is
 referenced. The reference map below is the definitive answer to "who uses
 this script?" — used to keep documentation, hooks, CI, and tests in sync.
 
-- **Total scripts**: 72 (74 cataloged at #278 close; −2 by #318 dead-code
-  removal — see issue #318 for the deletion list).
+- **Total scripts**: 91 (72 cataloged at #318 close; +15 by #236/#271/#287/
+  #304/#309/#316; +4 by #310/#331/#336 merged after the #320 snapshot —
+  per-script provenance in the tables below).
 - **Orphans**: 0 — every script has at least one live reference
   (tests/ count as references; a script referenced only by tests is
   categorized `TEST`, not orphan).
@@ -30,6 +31,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch | CLI, tests |
 | `kunglao-digest.py` | digest mechanical generation (thin wrapper → `digest_build.py`) | CLI, tests |
 | `kunglao-eval.py` | eval harness CLI (thin wrapper → `kunglao_eval.py`) | CLI, CI, tests |
+| `mcp_probe.py` | MCP supply probe (#316): per-type manifest + ~/.claude.json + .mcp.json probe | CLI, lib(2), tests |
 
 ## Core executors (loop machinery — invoked by hooks / CLI / other scripts)
 
@@ -39,6 +41,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `convergence_health.py` | ledger-based HEALTHY/STALLED/SPINNING verdicts | hooks, CLI, lib(2), tests |
 | `priority.py` | legacy dispatch ranker (v1 direct-cap formula, kept for compatibility) | hooks, lib(1), tests |
 | `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4) | lib(3), tests |
+| `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |
 | `hook_activation.py` | hook wire-up + tier activation (--wire-up/--renew/--heartbeat-*) | hooks, CLI, lib(6), tests |
 | `env_check.py` | environment readiness gate (venv/toolchain/VM channel) | hooks, CLI, tests |
@@ -74,6 +77,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `troubleshooting_gate.py` | report completeness gate | tests |
 | `review_gate.py` | review evidence mint/check (key-init/mint/check) | tests, docs |
 | `report_consistency_check.py` | report↔evidence consistency check | tests, docs |
+| `write_gate.py` | 写侧门禁审计器 (#236) — maker-checker 盖章回验 + 独立锚点 + defer 引用可回查 | lib(1), tests |
 
 ## State & lifecycle (claim/ledger/blocker maintenance)
 
@@ -93,7 +97,19 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `tier_rules.py` | claim tier rules | tests |
 | `loop_state.py` | loop state persistence | lib(1), tests |
 | `update_index.py` | facts/_INDEX.md maintenance | tools, tests |
+| `lint_facts.py` | facts × malware-veri-notes aligned frontmatter lint (#336) | CLI, tests |
+| `migrate_facts.py` | old-format facts → aligned schema migration (#336) | CLI, tests |
+| `retract_claim.py` | RETRACTED terminal state + dependency blast-radius reopening (#331) | CLI, tests |
 | `progress_report.py` | one-block progress report | tests |
+| `init_state.py` | init-completeness single source of truth (#304) | hooks, lib(3), tests |
+
+## Observability sidecar (issue #287)
+
+| Script | Role | Referenced from |
+| --- | --- | --- |
+| `kunglao-status.py` | status panel CLI — renders claims board + active workers + convergence trend (SKILL.md §Status panel; ANSI auto-degrade) | docs, tests |
+| `kunglao_status.py` | disk-rendered TUI status panel implementation | lib(1), tests |
+| `kunglao_log.py` | structured JSONL event log | lib(4), tests |
 
 ## Support libraries & utilities
 
@@ -110,6 +126,14 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `template_gen.py` | deterministic script-template generator CLI (templates/scripts/*.tmpl; exit 2/3/4/5, #278) | templates, tests, docs |
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
 | `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
+| `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
+| `toolchain.py` | type-aware toolchain probe matrix (#304) | lib(1), tests, docs |
+| `chunker.py` | length-measured batch chunking (#309) | tests |
+| `cost_estimate.py` | pre-dispatch cost estimator (#309) | lib(1), tests |
+| `event_taxonomy.py` | 25-class event taxonomy (#309) | tests |
+| `function_kg.py` | minimal function-level knowledge graph (#309) | tests |
+| `recov_metrics.py` | symbol/type recovery quality metrics (#309) | lib(1), tests |
+| `tool_error_policy.py` | same-tool consecutive-error hysteresis (#309) | tests |
 
 ## Release & CI support
 
@@ -119,3 +143,4 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `release_check_selfcheck.py` | release-check self-verification | CI |
 | `check_global_rule_subset.py` | global-rule subset compliance check | CI, tests |
 | `structural_check.py` | repo structure + broken-link + index drift check | CI, tests |
+| `re_pin_references.py` | references/_INDEX.yaml pin regeneration — re-run after ANY references/ edit (drift fails test_replay_gate) | docs, tests |
