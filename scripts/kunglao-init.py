@@ -76,6 +76,7 @@ import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
 # F6 (#304 review): init-completeness predicate = single source in init_state.py
 from init_state import VALID_TYPES, is_init_complete, read_project_type  # noqa: E402
+import mcp_probe  # noqa: E402  (#316: MCP supply manifest/scaffold 单一事实源)
 
 MARKER = "[initialized]"
 SEED_MIN = 3
@@ -135,6 +136,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="hooks 部署目标 settings.json 副本; 默认 <workspace>/.claude/settings.json 若存在, 绝不写 HOME")
     parser.add_argument("--profile-root", metavar="PATH", default=None,
                         help="profile 根目录(默认 Path.home(); 测试可注入; #276)")
+    parser.add_argument("--no-mcp", action="store_true",
+                        help="跳过工作区 .mcp.json scaffold (#316)")
     return parser.parse_args(argv)
 
 
@@ -445,6 +448,21 @@ def scaffold(ws: Path) -> list[Path]:
     return created
 
 
+def scaffold_mcp(ws: Path) -> str:
+    """#316: 工作区 .mcp.json scaffold (MCP 供给清单模板).
+
+    幂等: 文件已存在 → 不覆盖 (返回 "exists"); 否则写入 mcp_probe 构建的
+    合法 JSON (mcpServers 留空, mcp_manifest 携带 per-type 清单 + 每项
+    用途/来源/注册命令模板)。
+    """
+    target = ws / ".mcp.json"
+    if target.exists():
+        return "exists"
+    text = json.dumps(mcp_probe.build_scaffold_json(), indent=2, ensure_ascii=False)
+    atomic_write(target, text + "\n")
+    return "created"
+
+
 def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path) -> tuple[list, bool]:
     """同 matcher 下已有同名 hook 命令 → 跳过(幂等); 否则追加."""
     new = [e for e in entries if e.get("matcher") == matcher]
@@ -525,7 +543,7 @@ def resume(ws: Path, text: str) -> int:
 
 
 def initialize(ws: Path, hooks_json: Path | None,
-                project_type: str | None = None) -> int:
+                project_type: str | None = None, no_mcp: bool = False) -> int:
     """Phase 2 全新初始化 + Phase 3 幂等校验."""
     scaffold(ws)
     if ensure_agent_teams_state(ws):
@@ -546,6 +564,15 @@ def initialize(ws: Path, hooks_json: Path | None,
 
     # Write CLAUDE.md from type-specific template (idempotent: skip if exists)
     write_claudemd(ws, sample, sample_sha, project_type=project_type)
+    # #316: workspace .mcp.json MCP supply scaffold (idempotent; --no-mcp skips)
+    if no_mcp:
+        print("kunglao-init: .mcp.json skipped (--no-mcp)")
+    else:
+        outcome = scaffold_mcp(ws)
+        if outcome == "created":
+            print("kunglao-init: .mcp.json created (MCP supply scaffold, #316)")
+        else:
+            print("kunglao-init: .mcp.json skipped (exists — idempotent, not overwritten)")
     draft = claim_register_text(sample, sample_sha, state_hash="")
     digest = compute_state_hash(ws, register_text=draft)
     reg = ws / "claim-register.yaml"
@@ -570,7 +597,7 @@ def initialize(ws: Path, hooks_json: Path | None,
 def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
         profile_root: Path | None = None,
         project_type: str | None = None,
-        skip_toolchain: bool = False) -> int:
+        skip_toolchain: bool = False, no_mcp: bool = False) -> int:
     """状态机入口 (#304 修正流程, comment 304-5289955958):
 
     Phase 0 环境守卫 → 防重检查(续接; 缺 project_type 则升级补写后 exit 0,
@@ -639,7 +666,7 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
         if report.overall_status == toolchain.Status.FAIL:
             return refuse_toolchain(ws, report)
 
-    return initialize(ws, hooks_json, project_type=project_type)
+    return initialize(ws, hooks_json, project_type=project_type, no_mcp=no_mcp)
 
 
 def cleanup_scaffold(ws: Path, created: "Collection[Path] | None" = None
@@ -715,7 +742,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     return run(Path(args.workspace), force=args.force, hooks_json=args.hooks_json,
                profile_root=args.profile_root, project_type=args.type,
-               skip_toolchain=args.skip_toolchain)
+               skip_toolchain=args.skip_toolchain, no_mcp=args.no_mcp)
 
 
 if __name__ == "__main__":

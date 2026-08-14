@@ -35,6 +35,11 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 SKILL_DIR = _SCRIPT_DIR.parent
 
+# #316: MCP supply probe (registry: ~/.claude.json + workspace .mcp.json).
+# Single manifest source: scripts/mcp_probe.py MANIFEST — shared with the
+# kunglao-init .mcp.json scaffold and the CLAUDE.md/README doc tables.
+import mcp_probe  # noqa: E402  (same dir, sys.path injected above)
+
 VALID_TYPES = ("windows", "linux", "android")
 
 # F6 (#304 review): single source of truth for the init predicate component.
@@ -85,6 +90,10 @@ FIXES: dict[str, str] = {
     "android_server": "fix the root cause first (ADB); then adb push android_server to the device and run it; "
                       f"verified at init via `adb forward tcp:{ANDROID_SERVER_PORT} tcp:{ANDROID_SERVER_PORT}` + TCP connect",
 }
+
+# #316: registration guidance for MCP supply checks — fix text rendered by the
+# formatters like every other FIXES entry (keyed by report item name mcp:<name>).
+FIXES.update({f"mcp:{i.name}": i.register for i in mcp_probe.MANIFEST})
 
 
 class Tier(Enum):
@@ -240,6 +249,24 @@ def _adb_forward_probe(adb: str, port: int, timeout: int = 2) -> tuple[bool, str
         return True, f"listening on device port {port} (via adb forward)"
 
 
+# ---------- MCP supply (#316) ----------
+
+def _check_mcp(report: ToolchainReport, ws: Path, project_type: str) -> None:
+    """Append MCP supply checks (probe ~/.claude.json + workspace .mcp.json).
+
+    Manifest + probe live in mcp_probe.py — single source of truth shared
+    with the kunglao-init .mcp.json scaffold and the doc tables.
+    """
+    for mc in mcp_probe.check_mcp(ws, project_type):
+        report.items.append(CheckResult(
+            name=f"mcp:{mc.name}",
+            status={"PASS": Status.PASS, "FAIL": Status.FAIL,
+                    "WARN": Status.WARN}[mc.status],
+            tier=Tier.HARD if mc.tier == "HARD" else Tier.WARN,
+            detail=mc.detail,
+        ))
+
+
 # ---------- Windows manifest ----------
 
 def _check_windows(report: ToolchainReport, ws: Path) -> None:
@@ -340,6 +367,9 @@ def _check_windows(report: ToolchainReport, ws: Path) -> None:
             detail="docker not found (optional)",
         ))
 
+    # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
+    _check_mcp(report, ws, "windows")
+
 
 # ---------- Linux manifest ----------
 
@@ -425,6 +455,9 @@ def _check_linux(report: ToolchainReport, ws: Path) -> None:
             name="docker", status=Status.WARN, tier=Tier.WARN,
             detail="docker not found (optional)",
         ))
+
+    # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
+    _check_mcp(report, ws, "linux")
 
     # T2: remote debugger gdbserver (host-side PATH lookup; the VM-side
     # binary is beyond host reach — verified via the VM channel)
@@ -724,6 +757,9 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
         name="unidbg", status=Status.WARN, tier=Tier.WARN,
         detail=f"java {'found' if java else 'not found'} — unidbg is optional fallback",
     ))
+
+    # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
+    _check_mcp(report, ws, "android")
 
 
 # ---------- type resolution ----------

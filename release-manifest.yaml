@@ -40,6 +40,10 @@ assets:
     - templates/state/claim-register.yaml
     - templates/state/failure-registry.yaml
     - templates/state/task_spec.yaml
+    # #316: per-OS workspace CLAUDE.md templates (MCP supply tables)
+    - templates/CLAUDE.md.windows.tmpl
+    - templates/CLAUDE.md.linux.tmpl
+    - templates/CLAUDE.md.android.tmpl
   knowledge:
     # #147 / report §4.5.4: a run must bind to the exact knowledge-base
     # revision. SKILL.md + references/ digests land in the receipt.
@@ -49,7 +53,7 @@ assets:
     - references/
 
 clis:
-  # The 8 independent CLIs (tests/test_cli_matrix.py) — each must answer --help with exit 0.
+  # The 9 independent CLIs (tests/test_cli_matrix.py) — each must answer --help with exit 0.
   - scripts/kunglao.py
   - scripts/kunglao-decide.py
   - scripts/kunglao-verify.py
@@ -58,6 +62,8 @@ clis:
   - scripts/kunglao-init.py
   - scripts/kunglao-eval.py
   - scripts/kunglao-digest.py
+  # #316: MCP supply probe (per-type manifest + ~/.claude.json + .mcp.json probe)
+  - scripts/mcp_probe.py
 
 router_subcommands:
   # kunglao.py unified entry point surface (each must answer --help with exit 0).
