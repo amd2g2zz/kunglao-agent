@@ -140,7 +140,7 @@ Trust gates (the components behind "verified"):
 | `convergence_completeness` | `CONVERGED` requires all primary questions terminal + zero orphan claims |
 | `convergence_health` | SPINNING flatline detection (count-based, cannot be flooded) |
 | `handoff-check.py --anchors` | report anchors preserve the exact numeric counting basis of facts |
-| `review_gate.py` | repo commits require ≥3 independent reviewers + HMAC-signed evidence |
+| `review_gate.py` | repo commits require ≥1 independent reviewer + HMAC-signed evidence |
 | `env_check_gate` | hard-rejects dispatch while the agent-teams flag is truthy |
 
 Workspace layout (one workspace per sample engagement):
@@ -160,7 +160,7 @@ Workspace layout (one workspace per sample engagement):
 
 ## Development
 
-SDD (OpenSpec) + TDD: one issue → one PR → one branch → one worktree, merged to `dev` then `master`. Every commit requires ≥3 independent reviewer sign-offs minted through `review_gate.py` (HMAC).
+SDD (OpenSpec) + TDD: one issue → one PR → one branch → one worktree, merged to `dev` then `master`. Every commit requires ≥1 independent reviewer sign-off minted through `review_gate.py` (HMAC).
 
 ```bash
 git worktree add .worktrees/<name> -b <name> dev

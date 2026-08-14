@@ -35,15 +35,15 @@ gh pr create --base dev                   # squash-merge to dev, delete branch
 
 ## Review gate
 
-Before merge, all PRs must pass the 3-reviewer gate enforced by
+Before merge, all PRs must pass the 1-reviewer gate enforced by
 `scripts/review_gate.py`:
 
-- **3 independent subagent reviewers** must each produce a `PASS` file for the
-  exact staged diff.
+- **1 independent subagent reviewer** must produce a `PASS` file for the
+  exact staged diff (was 3 reviewers before the 2026-08-14 user decision).
 - Reviewer identities are restricted to known prefixes (t4-/t5-/t6-/kunglao-/
   r1-/r2-/r3-/reviewer-).
 - The orchestrator mints a signed gate token after validating evidence
-  (>=3 distinct reviewers, diff sha256 match).
+  (>=1 distinct reviewer, diff sha256 match).
 - A pre-commit hook (`review_gate.py check`) blocks commits without a valid
   gate token for the branch.
 

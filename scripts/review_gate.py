@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""review_gate.py — 3-reviewer all-PASS commit gate (maker-checker mechanical).
+"""review_gate.py — 1-reviewer all-PASS commit gate (maker-checker mechanical).
 
-Enforces the /goal contract: NO commit may land unless >=3 independent
-subagents all PASS'd the exact staged content. Trust boundary: the key file
-is orchestrator-held by convention; subagents are instructed never to commit
-and the repo pre-commit hook is the mechanical backstop. Local hooks are
-bypassable by a determined local actor (git commit --no-verify /
+Enforces the /goal contract: NO commit may land unless >=1 independent
+subagent PASS'd the exact staged content (was >=3 before the 2026-08-14 user
+decision to use a single review subagent per PR). Trust boundary: the key
+file is orchestrator-held by convention; subagents are instructed never to
+commit and the repo pre-commit hook is the mechanical backstop. Local hooks
+are bypassable by a determined local actor (git commit --no-verify /
 commit-tree / update-ref) — this gate makes honest-workflow compliance
 mechanical and forging require deliberate key exfiltration.
 
@@ -17,12 +18,12 @@ env var would let a subagent self-mint and self-approve):
 Usage:
   python scripts/review_gate.py key-init <keyfile>            # orchestrator: create session key
   python scripts/review_gate.py mint <repo> <keyfile> <branch> <evidence-glob> <id>...
-      # orchestrator: validate evidence (>=3 ids, exactly one PASS file per id,
+      # orchestrator: validate evidence (>=1 ids, exactly one PASS file per id,
       # each diff_sha256 == staged diff) -> write .review-gate/<branch>.json
       # HMAC-signed with the key. Exit 0 minted / 2 rejected.
   python scripts/review_gate.py check <repo> <outfile> <branch> [<keyfile>]
       # pre-commit hook: exit 0 pass / 1 invalid-or-missing / 2 stale-diff.
-      # Validates branch, >=3 distinct whitelisted reviewers, HMAC signature,
+      # Validates branch, >=1 distinct whitelisted reviewer, HMAC signature,
       # and diff_sha256 == current staged diff.
 """
 import glob
@@ -84,8 +85,8 @@ def main():
     if cmd == "mint":
         keyfile, branch, evglob = sys.argv[3], sys.argv[4], sys.argv[5]
         ids = sys.argv[6:]
-        if len(ids) < 3 or len(set(ids)) != len(ids):
-            print(f"mint FAIL: need >=3 distinct reviewer ids as args, got {ids}")
+        if len(ids) < 1 or len(set(ids)) != len(ids):
+            print(f"mint FAIL: need >=1 distinct reviewer ids as args, got {ids}")
             return 2
         key = open(keyfile, "rb").read().strip()
         if len(key) < 32:
@@ -151,11 +152,11 @@ def main():
             return 1
         revs = ev.get("reviewers", [])
         if (
-            len(revs) < 3
+            len(revs) < 1
             or len(set(revs)) != len(revs)
             or not all(r.startswith(AGENT_PREFIXES) for r in revs)
         ):
-            print("REVIEW GATE BLOCKED: reviewers invalid (need >=3 distinct whitelisted)")
+            print("REVIEW GATE BLOCKED: reviewers invalid (need >=1 distinct whitelisted)")
             return 1
         if ev.get("diff_sha256") != staged_diff_sha(repo):
             print("REVIEW GATE BLOCKED: staged diff changed since mint (stale)")

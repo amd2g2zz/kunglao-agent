@@ -1,5 +1,5 @@
 #!/bin/sh
-# kunglao review gate: block commit unless 3 independent all-PASS reviewer evidence is fresh.
+# kunglao review gate: block commit unless 1 independent all-PASS reviewer evidence is fresh.
 # Fail-closed: any resolution/validation failure blocks the commit.
 repo="$(git rev-parse --show-toplevel)" || { echo "REVIEW GATE BLOCKED: not a git repo"; exit 1; }
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || { echo "REVIEW GATE BLOCKED: cannot resolve branch"; exit 1; }
@@ -21,7 +21,7 @@ rc=$?
 cat "$log"
 if [ $rc -ne 0 ]; then
   echo "REVIEW GATE BLOCKED: evidence invalid or stale (rc=$rc)"
-  echo "  re-run: orchestrator dispatches 3 reviewers -> scripts/review_gate.py mint"
+  echo "  re-run: orchestrator dispatches 1 reviewer -> scripts/review_gate.py mint"
   exit 1
 fi
 exit 0

@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
-"""Tests for scripts/review_gate.py — 3-reviewer all-PASS commit gate (#145).
+"""Tests for scripts/review_gate.py — 1-reviewer all-PASS commit gate (#323).
 
-Covers the anti-cheat contract: mint requires >=3 distinct registered ids,
-each with a PASS verdict and diff_sha256 matching the staged diff; the minted
-JSON is HMAC-signed and check refuses forged/missing/stale evidence.
+Covers the anti-cheat contract: mint requires >=1 distinct registered id
+(was >=3 before the 2026-08-14 single-reviewer decision), each with a PASS
+verdict and diff_sha256 matching the staged diff; the minted JSON is
+HMAC-signed and check refuses forged/missing/stale evidence.
 """
 import hashlib
 import json
@@ -85,6 +86,19 @@ def test_mint_ok_with_three_distinct_pass(repo, key):
     assert "hmac" in ev
 
 
+def test_mint_and_check_ok_with_single_reviewer(repo, key):
+    # the canonical #323 flow: one reviewer PASSes, mint + check succeed
+    sha = staged_sha(repo)
+    write_evidence(repo, "a", "r1-gate", "PASS", sha)
+    r = run("mint", str(repo), str(key), "feat/test",
+            f"{repo}/runs/review-*.md", "r1-gate")
+    assert r.returncode == 0, r.stdout
+    ev = json.loads(gate_json(repo).read_text())
+    assert ev["reviewers"] == ["r1-gate"]
+    r = run("check", str(repo), str(gate_json(repo)), "feat/test", str(key))
+    assert r.returncode == 0, r.stdout
+
+
 def test_mint_fail_wrong_sha(repo, key):
     for rid in IDS:
         write_evidence(repo, rid, rid, "PASS", "0" * 64)
@@ -122,11 +136,10 @@ def test_mint_rejects_unregistered_alias_ids(repo, key):
     assert "unregistered" in r.stdout
 
 
-def test_mint_requires_min_three_ids(repo, key):
-    sha = staged_sha(repo)
-    write_evidence(repo, "a", "r1-gate", "PASS", sha)
-    r = run("mint", str(repo), str(key), "feat/test", f"{repo}/runs/review-*.md", "r1-gate", "r2-gate")
+def test_mint_requires_min_one_id(repo, key):
+    r = run("mint", str(repo), str(key), "feat/test", f"{repo}/runs/review-*.md")
     assert r.returncode == 2
+    assert ">=1" in r.stdout
 
 
 def test_check_ok_after_mint(repo, key):
