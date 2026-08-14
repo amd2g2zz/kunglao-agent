@@ -15,6 +15,8 @@
 | `strings-classify` | `category: static · capability: static:strings-classify · tier: T1 · cost_tier: cheap · input: 样本字节 + --min-len/--encoding → output: 字符串熵/可打印/可解码分类清单 + inventory` | 字符串熵与 base64/hex 可解码分类时读; 仅需枚举字符串时用 floss |
 | `go-buildinfo-carve` | `category: static · capability: static:buildinfo-carve · tier: T1 · cost_tier: cheap · input: 样本字节 + --window/--zero-run → output: Go buildinfo blob 清单(go 版本/path/deps)` | 提取 Go 构建信息(版本/模块/依赖数)时读; 非 Go 样本不用 |
 | `call-site-args` | `category: static · capability: static:callsite-args · tier: T1 · cost_tier: cheap · input: 反汇编文本 + --window/--abi → output: 调用点参数清单(regs/stack/pushed)` | 从反汇编文本提取调用点参数时读; 需精确数据流时用 ghidra-recon/模拟执行 |
+| `c-normalize` | `category: static · capability: static:decompile-normalize · tier: T1 · cost_tier: cheap · input: 反编译 C 文本(--in 或 stdin) + --heuristics → output: 规范化 C(modulo 惯用法 x-(x/N)*N→x%N / 死赋值删除; undefined4/8 类型启发默认关) + rule_hits/diff stats` | worker 读 Ghidra 反编译 C 前先规范化时读; 语义反混淆/谓词判定不用(用 opaque-pred) |
+| `opaque-pred` | `category: static · capability: static:opaque-predicate · tier: T1 · cost_tier: probe · input: C 表达式(--expr "...")或表达式对(--simplify "lhs -> rhs") → output: always_true/always_false/unknown + 简化常量 或 MBA 重写建议(z3 32-bit 语义); z3 缺失 exit 2 + 指引` | 静态消解不透明谓词/MBA 等价证明时读; z3 未装或非表达式任务不用 |
 
 <!-- 骨架: 每登记一个 static 工具到 _INDEX.yaml,在此追加一行,格式同上。 -->
 | `yara-scan` | `category: static · capability: static:yara-scan · tier: T1 · cost_tier: cheap · input: 二进制+规则文件 → output: 命中清单` | 规则式字节扫描(家族/IOC 证据)时; yara-python 缺失不用 |
