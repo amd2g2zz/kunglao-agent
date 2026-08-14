@@ -162,7 +162,7 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid):
     the top-ranked dispatchable one. `deviated=True` means the dispatch
     departed from rank #1 and a `reasoning:` field is HARD-REQUIRED in the
     dispatch prompt (pre_check rejects without it — anti-spoof: prevents
-    "pretend-priority" (假装按优先级) dispatches that skip the recorded-deviation discipline).
+    "pretend-priority" dispatches that skip the recorded-deviation discipline).
     """
     if not _PRIORITY_AVAILABLE or not dispatched_cid:
         return (True, '', False)
@@ -852,7 +852,7 @@ _TOOLFIRST_DIAGNOSTIC_RE = re.compile(
 _NEGATION_RE = re.compile(r'\b(?:not|no)\b|不是|非')
 
 # H2/CJK (#294): ASCII-only word boundaries, not `\b` — Python's \b treats CJK
-# chars as word chars, so '解码crypto层' (decode-the-crypto-layer) would silently bypass the gate; and
+# chars as word chars, so a CJK-attached phrase like "decode-the-crypto-layer" (解码crypto层) would silently bypass the gate; and
 # 'crypto' inside 'cryptography' must NOT match. (?<![A-Za-z0-9_])…(?![A-Za-z0-9_])
 # gives exactly that.
 _ASCII_BOUNDARY = r'(?<![A-Za-z0-9_]){kw}(?![A-Za-z0-9_])'
@@ -898,7 +898,7 @@ def _is_diagnostic_exempt(text: str) -> bool:
     an exemption)."""
     for marker in _TOOLFIRST_DIAGNOSTIC_SUBSTRINGS:
         if marker in text:
-            # CJK negation ('不是一次性' — not-one-off) in the 16 chars before the marker
+            # CJK negation (不是一次性 — "not one-off") in the 16 chars before the marker
             idx = text.find(marker)
             prev = text[max(0, idx - 16):idx]
             if not _NEGATION_RE.search(prev):
@@ -1066,8 +1066,9 @@ def check_agent_type(paths: dict, desc: str, prompt: str,
 # ---------- issue #270: REJECT guidance via hookSpecificOutput.additionalContext ----------
 # #235 added corrective guidance to env_check_gate only; worker_budget's 12
 # pre_check gates (+ snapshot + devreason) REJECTed bare — `print REJECT + exit
-# 2` with no hint on how to fix, and the user reported "hook 依然是直接拒绝,
-# 没有给出任何提示" (2026-08-13). Every REJECT now ALSO emits a
+# 2` with no hint on how to fix, and the user reported "the hook still just
+# rejects outright without giving any hint" (原文 Chinese, 2026-08-13).
+# Every REJECT now ALSO emits a
 # hookSpecificOutput.additionalContext JSON on stdout with a concrete fix path
 # (same dual channel as dispatch_gate.py:137-151 / env_check_gate.py:104-113).
 # REJECT semantics are unchanged: exit 2 + stderr `REJECT <name>` summary.
@@ -1386,7 +1387,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     # best-first priority audit — v1.9.24: DEVIATION REASONING IS HARD-REQUIRED.
     # check_priority returns (ok, msg, deviated). If the dispatch deviates from
     # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
-    # otherwise the dispatch is REJECTED (prevents "pretend-priority" (假装按优先级) spoofing:
+    # otherwise the dispatch is REJECTED (prevents "pretend-priority" spoofing:
     # dispatching a different claim without recording why).
     _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), paths.get('task_spec'), cid)
     if deviated:

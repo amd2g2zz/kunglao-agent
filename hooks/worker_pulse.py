@@ -5,7 +5,7 @@
 WHY: v1.9's convergence loop is agent-invoked — the orchestrator must
 REMEMBER to run convergence_check.py every turn. When it forgets (or gets
 absorbed in processing a worker report), there is no backstop: the loop
-drifts, and "kunglao-agent 笨了" shows up again as a mystery. This hook makes
+drifts, and "kunglao-agent got dumb" (user's words, 原文 Chinese: kunglao-agent 笨了) shows up again as a mystery. This hook makes
 the convergence state arrive automatically: at the exact moment a worker
 completes (PostToolUse on Agent), the orchestrator receives a compact
 "where are we, what's next" pulse — zero effort, zero forgetting.
