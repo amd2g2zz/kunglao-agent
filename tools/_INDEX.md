@@ -1,17 +1,17 @@
 # tools/ Domain Index — progressive disclosure entry point
 
-> Orchestrator: read this file once per round, pick a category, dispatch the worker; the worker reads `_index-<category>.md`, then loads `_INDEX.yaml` for the machine contract. Full per-category catalog below the category table.
+> Orchestrator: read this file once per round, pick a category, dispatch the worker; the worker reads `_index-<category>.md` (per-tool contract entries: 用途/用法/输入/输出/exit code/when_not — 可直接复制调用), then loads `_INDEX.yaml` for the machine contract. Full per-category catalog below the category table.
 
 ## Category table
 
 | Category | Index file | Tool shelf (examples) | Purpose |
 |---|---|---|---|
 | crypto | `_index-crypto.md` | crypto-tool | 加解密/编解码/哈希工具 |
-| static | `_index-static.md` | die, floss, pefile | 静态识别/特征提取工具 |
+| static | `_index-static.md` | die-probe, pe-analyze, yara-scan | 静态识别/特征提取工具 |
 | ghidra | `_index-ghidra.md` | ghidra-recon, ghidra-decompile-functions, ghidra-vtable-struct, ghidra-evidence-annotations, ghidra-scan-pointer | Ghidra 反汇编/函数级分析 |
 | dynamic | `_index-dynamic.md` | x64dbg-remote, frida-remote | VM 动态调试/运行时分析 |
 | pipeline | `_index-pipeline.md` | build-evidence-index | 证据索引/报告管线 |
-| aux | `_index-aux.md` | file-hash, strings | 辅助/杂项工具 |
+| aux | `_index-aux.md` | sanitize-text, measure-cold-start | 辅助/杂项工具 |
 
 | Scenario | Category |
 |---|---|
@@ -22,23 +22,32 @@
 | 证据登记 / 索引构建 / 报告生成 | pipeline |
 | 哈希 / 文件元数据 / 小杂务 | aux |
 
+## 外部能力(不在本 toolshelf, 不注册 `_INDEX.yaml`)
+
+| 能力 | 提供方 | 入口 |
+|---|---|---|
+| Frida 动态插桩(hook/attach) | MCP `mcp__frida__*` + VM 通道 `192.168.20.128:1337` | `_index-dynamic.md`; hook 模板在 `templates/frida/` |
+| x64dbg 远程调试 | MCP `mcp__x64dbg__*`(仅 `connect_remote`; 宿主禁止其余) | `_index-dynamic.md` |
+| T2 仿真/模拟执行(Qiling/unicorn) | 外部 skill `/malware-framework` | 见 [README.md](README.md) 分类结构 |
+| plan 编排模板(recipe) | `tools/pipelines/recipes/*.yaml`(纯数据模板, 非执行器) | `tools/pipelines/README.md` |
+
 ## Per-category index files
 
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
-| `_index-crypto.md` | crypto | 加解密/编解码/哈希工具骨架 + 一行式契约示例 | worker 被派发到加密识别/解码/哈希任务时 |
-| `_index-static.md` | static | 静态识别/特征提取工具骨架 + 一行式契约示例 | worker 被派发到静态 triage 任务时 |
-| `_index-ghidra.md` | ghidra | Ghidra 反汇编/函数分析工具骨架 + 一行式契约示例 | worker 被派发到函数级反汇编任务时 |
-| `_index-dynamic.md` | dynamic | VM 动态调试工具骨架 + 一行式契约示例 | worker 被派发到动态调试任务时 |
-| `_index-pipeline.md` | pipeline | 证据索引/报告管线工具骨架 + 一行式契约示例 | worker 被派发到证据登记/报告任务时 |
-| `_index-aux.md` | aux | 辅助/杂项工具骨架 + 一行式契约示例 | worker 需要哈希/文件元数据等小任务时 |
+| `_index-crypto.md` | crypto | crypto 工具契约条目(每工具 H3 条目: 用途/用法/输入/输出/exit code/when_not) | worker 被派发到加密识别/解码/哈希任务时 |
+| `_index-static.md` | static | static 工具契约条目(同上模板) | worker 被派发到静态 triage 任务时 |
+| `_index-ghidra.md` | ghidra | ghidra 工具契约条目(同上模板) | worker 被派发到函数级反汇编任务时 |
+| `_index-dynamic.md` | dynamic | VM 动态工具契约条目(MCP 提供, 同上模板) | worker 被派发到动态调试任务时 |
+| `_index-pipeline.md` | pipeline | pipeline 工具契约条目(同上模板) | worker 被派发到证据登记/报告任务时 |
+| `_index-aux.md` | aux | aux 工具契约条目(同上模板) | worker 需要哈希/文件元数据等小任务时 |
 
 ## Top-level tools files
 
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
 | `_INDEX.yaml` | machine-contract | 工具机器索引(schema `tools-index/1`): name/category/capability/tier/cost_tier/input_output/when_not,由 `validate_index.py` 校验 | 需要机器可读的工具注册表/被 gate 调用时 |
-| `README.md` | docs | 工具家说明: 分类结构 + 契约字段含义 + 如何登记新工具 | 理解分类 / 登记 / 修改契约字段时 |
+| `README.md` | docs | 工具家说明: 分类结构 + 契约字段含义 + MD 格式规范 + 如何登记新工具 | 理解分类 / 登记 / 修改契约字段时 |
 | `validate_index.py` | gate | `_INDEX.yaml` 机器契约校验器(exit 0=通过 / 1=失败,可被 gate 调用) | 校验索引、接入 gate 时 |
 
 ## tools/ scripts

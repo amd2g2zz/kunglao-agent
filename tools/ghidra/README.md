@@ -28,3 +28,13 @@ python tools/ghidra/run_ghidra_postscript.py \
 | `ghidra-scan-pointer` | `GhidraScanPointer.java` | 样本 + `--mode xref\|window`（xref: `--addresses/--bytes`; window: `--center/--window`）→ JSON（xref/raw 8-byte 指针扫描命中） |
 
 所有工具基类 `GhidraJsonScript.java`（抽象，不作为 postScript 运行）。
+
+## 与索引文档的关系
+
+worker 先读 `tools/_index-ghidra.md`（5 件工具的 6 段契约条目： 用途/用法/输入/输出/exit code/when_not， 用法为可直接复制的 `run_ghidra_postscript.py` 调用）；本 README 只说明家内文件分工与运行环境。机器契约见 `tools/_INDEX.yaml`。
+
+## exit code（run_ghidra_postscript.py 统一）
+
+- 0： postScript 成功， 输出 JSON 落盘（`--out` 或 stdout）。
+- 2： 错误 — `GHIDRA_HOME` 缺失 / `analyzeHeadless.bat` 不存在 / 参数错误 / postScript 失败（`ghidra-evidence-annotations --mode verify` 失败 fail-closed 同为 2）， 全部带错误指引。
+
