@@ -48,9 +48,9 @@ import sys
 from pathlib import Path
 
 # ---- parameters (instantiated manually; see templates/frida/README.md) ----
-TRACE_FILE = "{{TRACE_FILE}}"
+TRACE_FILE = r"{{TRACE_FILE}}"
 SAMPLE_SHA256 = "{{SAMPLE_SHA256}}"
-OUT_DIR = "{{OUT_DIR}}"
+OUT_DIR = r"{{OUT_DIR}}"
 
 TOP_N = 10           # top callers listed in summary.md
 TOP_PER_CALLEE = 3   # top callers listed per callee in summary.md
