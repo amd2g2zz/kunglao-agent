@@ -85,6 +85,23 @@ tools:
     input_output: {input: fact/report 代码清单 + PE 二进制(VA 锚点断言), output: byte-exact 断言校验 JSON(ok/mismatches/errors/skipped)}
     when_not: 无需 VA 锚点常量校验或没有二进制样本时不用
 
+  # -- static: YARA 规则扫描/生成 (issue #313, 吸收 findcrypt-yara rules 资产) --
+  - name: yara-scan
+    category: static
+    capability: static:yara-scan
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 二进制(--binary) + 规则文件/目录(--rules, 默认内置 crypto-tables), output: 命中清单(offset/rule/len/preview) + --json/--reproduce}
+    when_not: 无规则式扫描需求时不用; yara-python 缺失时 exit 2 带安装指引
+
+  - name: yara-gen
+    category: static
+    capability: static:yara-gen
+    tier: T1
+    cost_tier: probe
+    input_output: {input: 特征模式(--hex 或 --string) + --name + --meta k=v, output: YARA 规则文本(stdout)}
+    when_not: 不需要从分析发现生成检测规则时不用
+
   # -- static: 6 个零依赖静态 CLI (issue #278 PR-1b 吸收) --
   - name: extract-syscalls
     category: static

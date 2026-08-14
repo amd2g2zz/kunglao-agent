@@ -77,7 +77,7 @@ def test_tier_t1_returns_all_entries():
     r = run_cli("--tier", "T1", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 23
+    assert out["count"] == 25
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +88,7 @@ def test_cost_max_cheap_excludes_deep():
     r = run_cli("--cost-max", "cheap", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 20
+    assert out["count"] == 22
     assert all(t["cost_tier"] in ("probe", "cheap") for t in out["tools"])
     names = {t["name"] for t in out["tools"]}
     assert not (names & DEEP_TOOLS)
@@ -98,8 +98,8 @@ def test_cost_max_probe_returns_only_probe():
     r = run_cli("--cost-max", "probe", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 2
-    assert {t["name"] for t in out["tools"]} == {"measure-cold-start", "die-probe"}
+    assert out["count"] == 3
+    assert {t["name"] for t in out["tools"]} == {"measure-cold-start", "die-probe", "yara-gen"}
 
 
 # ---------------------------------------------------------------------------
