@@ -1,19 +1,23 @@
 # -*- coding: utf-8 -*-
-"""阶段 5 契约测试: M3 VERIFY / M4 RECORD / M5 MONITOR.
+"""Phase 5 contract tests: M3 VERIFY / M4 RECORD / M5 MONITOR.
 
-Step 1 RED — 当前状态: kunglao-verify.py / kunglao-record.py / kunglao-monitor.py 不存在 → import 即 RED。
+Step 1 RED — current state: kunglao-verify.py / kunglao-record.py /
+kunglao-monitor.py absent → the import itself is RED.
 
-GREEN 目标(阶段 5 判据, E5.1-E5.3):
-- E5.1 Expand: verify/record 旁路, 旧 CLI 照旧 diff 空
-- E5.2 Migrate: reconciler N=3 轮 checksum 零漂移
-- E5.3 Contract: 旧通道只读
+GREEN targets (phase 5 criteria, E5.1-E5.3):
+- E5.1 Expand: verify/record asides; the old CLIs keep diffing empty
+- E5.2 Migrate: reconciler N=3 rounds, zero checksum drift
+- E5.3 Contract: the old channel is read-only
 
-核心行为:
-- L1 机械层: parse_reproduce → run(只读白名单) → sha256 比对 expected → PASS/FAIL
-- L2 对抗层: 派发 kunglao-redteam(独立 subagent, BLIND), 输出 CONFIRMED|REFUTED|UNVERIFIED-WITH-GAP
-- anchor_check: PASS 必须带 anchors, 无锚不提升
-- ledger 幂等: 同 event_id 两次 record → 1 条
-- claims 迁移: 非 orchestrator 写 terminal 状态 → 拒(maker-checker)
+Core behaviors:
+- L1 mechanical layer: parse_reproduce → run (read-only whitelist) → sha256
+  compare against expected → PASS/FAIL
+- L2 adversarial layer: dispatch kunglao-redteam (independent subagent,
+  BLIND); output CONFIRMED|REFUTED|UNVERIFIED-WITH-GAP
+- anchor_check: a PASS must carry anchors — no anchor, no promotion
+- ledger idempotency: recording the same event_id twice → 1 entry
+- claims migration: a non-orchestrator writing a terminal state → rejected
+  (maker-checker)
 """
 from __future__ import annotations
 
@@ -28,7 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
 
-# ---------- L1 机械层判别力 ----------
+# ---------- L1 mechanical-layer discrimination ----------
 
 def _write_fact(ws: Path, fid: str, claim: str, reproduce: str, expected: str) -> Path:
     f = ws / "facts" / f"{fid}.md"
@@ -39,14 +43,14 @@ def _write_fact(ws: Path, fid: str, claim: str, reproduce: str, expected: str) -
 
 
 def test_known_fact_pass_fake_fact_fail(ws_factory, contract_validator) -> None:
-    """E5 判别力: 已知 PROVEN fact → PASS; 篡改 expected 的假 fact → FAIL."""
+    """E5 discrimination: a known PROVEN fact → PASS; a fake fact with tampered expected → FAIL."""
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     facts = ws / "facts"
     facts.mkdir()
 
-    # 真 fact: reproduce 输出与 expected 一致
+    # real fact: reproduce output matches expected
     _write_fact(ws, "F-001", "Decode PE magic", "import struct; print(hex(0x5A4D))", "0x5a4d")
-    # 假 fact: expected 被篡改(与 reproduce 实际输出不符)
+    # fake fact: expected tampered (does not match the reproduce output)
     _write_fact(ws, "F-002", "Decode PE magic", "import struct; print(hex(0x5A4D))", "0xdeadbeef")
 
     r = subprocess.run(
@@ -65,16 +69,16 @@ def test_known_fact_pass_fake_fact_fail(ws_factory, contract_validator) -> None:
 
 
 def test_anchor_check_blocks_no_anchor(ws_factory) -> None:
-    """无锚 PASS 拒提升: anchor_check(verdict) 无 anchors → False."""
+    """An anchor-less PASS refuses promotion: anchor_check(verdict) with no anchors → False."""
     from kunglao_verify import anchor_check
     v = {"l1": {"verdict": "PASS"}, "anchors": []}
     assert anchor_check(v) is False, "no-anchor PASS must be blocked"
 
 
-# ---------- M4 ledger 幂等 ----------
+# ---------- M4 ledger idempotency ----------
 
 def test_ledger_idempotent_same_event_once(ws_factory) -> None:
-    """同 event_id 两次 record → 1 条."""
+    """Recording the same event_id twice → 1 entry."""
     ws = ws_factory()
     from kunglao_record import record_event, read_events
     ev = {"source_module": "test", "event_type": "fact_written",
@@ -89,7 +93,7 @@ def test_ledger_idempotent_same_event_once(ws_factory) -> None:
 # ---------- M5 monitor TickOutput schema ----------
 
 def test_monitor_tick_output_schema(ws_factory, contract_validator) -> None:
-    """TickOutput 校验: heartbeat/active_workers/health/next 字段."""
+    """TickOutput validation: heartbeat/active_workers/health/next fields."""
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "kunglao-monitor.py"), str(ws), "--json"],
@@ -99,10 +103,10 @@ def test_monitor_tick_output_schema(ws_factory, contract_validator) -> None:
     contract_validator("tick-output", out)
 
 
-# ---------- M4 claim 迁移 maker-checker ----------
+# ---------- M4 claim migration maker-checker ----------
 
 def test_claim_migrator_blocks_worker_terminal(ws_factory) -> None:
-    """非 orchestrator 写 terminal 状态 → 拒."""
+    """A non-orchestrator writing a terminal state → rejected."""
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     from kunglao_record import claim_migrator
     ok, reason = claim_migrator(ws, "C-1", "PROVEN", actor="worker-w1")

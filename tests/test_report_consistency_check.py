@@ -30,14 +30,14 @@ import report_consistency_check as rcc  # noqa: E402
 # Regression fixture — SYNTHETIC report carrying issue #57's 3 public
 # contradiction groups + the F035 caliber amplification, spread across
 # `## N.N` / `### N.N.N` chapters. The telltale spans MUST stay intact:
-#   group A — "不经过通用的 HandleCommand" (§3.3 NEG) / "HandleCommand.func12" (§3.4 POS)
-#   group B — "命名管道或共享内存通道" (§5.4) / shared-memory code listing (§6.1.3)
-#   group C — "不依赖系统注册表实现持久化" (§1.1 NEG) / Run-key table (§2.3 POS)
-#   amplification — "环境变量...不落盘" (§2.1 config-storage NEG) / §1.1 persistence NEG
+#   group A — "does not go through the common HandleCommand" [不经过通用的 HandleCommand] (§3.3 NEG) / "HandleCommand.func12" (§3.4 POS)
+#   group B — "named pipe or shared-memory channel" [命名管道或共享内存通道] (§5.4) / shared-memory code listing (§6.1.3)
+#   group C — "persistence does not rely on the system registry" [不依赖系统注册表实现持久化] (§1.1 NEG) / Run-key table (§2.3 POS)
+#   amplification — "env vars... not persisted to disk" [环境变量...不落盘] (§2.1 config-storage NEG) / §1.1 persistence NEG
 # ---------------------------------------------------------------------------
 
 REGRESSION_FIXTURE = """\
-# 样本分析报告（回归 fixture）
+# Sample analysis report (regression fixture — Chinese body is detector input, do not translate)
 
 ## 1.1 概述
 
@@ -90,7 +90,7 @@ webrtcpub_WriteH264(frame);   // shared memory frame publish
 
 
 CLEAN_FIXTURE = """\
-# 样本分析报告（干净 fixture — 内部一致）
+# Sample analysis report (clean fixture — internally consistent; Chinese body is detector input, do not translate)
 
 ## 1.1 概述
 
