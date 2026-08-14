@@ -3,13 +3,28 @@
 
 Deterministic text-sanitize CLI for sample-derived content before it reaches
 LLM workers. Neutralizes:
-  1. Zero-width characters (U+200B/U+200C/U+200D/U+200E/U+200F/U+2060/U+FEFF/U+00AD)
+  1. Zero-width characters (U+200B/U+200C/U+200D/U+200E/U+200F/U+2060/U+2066/
+     U+2069/U+202C/U+202E/U+2069/U+FEFF/U+00AD)
   2. Homoglyphs (Cyrillic/Greek lookalikes for ASCII characters)
   3. LLM instruction markers (<|...|>, [INST], ###, System:, etc.)
+  4. ANSI escape sequences + C0 control characters (#333, --mode ansi only)
 
 Modes:
-  default = all three passes; --mode zero-width|homoglyph|markers for single
+  default = three injection passes (zero-width+homoglyph+markers);
+  --mode zero-width|homoglyph|markers for single injection pass;
+  --mode ansi = ANSI/C0 stripping pass (standalone, NOT part of full —
+    keeps #307 full-mode semantics unchanged);
   --report-only: findings JSON, no rewrite
+
+ANSI mode (#333) strips:
+  - CSI (ESC [ ...), OSC (ESC ] ... BEL/ST), DCS/SOS/PM/APC (ESC P/X/^/_ ...
+    ST), and two-byte Fe sequences (ESC + intermediates + final)
+  - C0 control characters U+0000-U+001F except LF (U+000A) and TAB (U+0009),
+    plus DEL (U+007F)
+  - ansi_count = escape sequences stripped; ctrl_count = control characters
+    stripped (a lone ESC counts as 1 ctrl char; ESC inside a sequence does
+    not double-count). Strip findings are aggregated counts, not itemized
+    in `suspicious` (console output can contain thousands of sequences).
 
 Exit codes (#277 contract):
   0 = clean or sanitized (changes applied)
@@ -20,7 +35,7 @@ CLI contract (#277):
   --in PATH       input file (or stdin if omitted)
   --json          structured JSON output
   --reproduce     field=value lines for reproducibility
-  --mode MODE     zero-width|homoglyph|markers (default: all)
+  --mode MODE     zero-width|homoglyph|markers|ansi (default: full)
   --report-only   findings only, no rewrite
   --sentinel-prefix PREFIX  custom sentinel prefix (default: INJ)
 """
@@ -154,6 +169,35 @@ MARKER_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 ]
 
 # ---------------------------------------------------------------------------
+# ANSI escape / C0 control patterns (#333)
+# ---------------------------------------------------------------------------
+
+# One ESC-led sequence per ECMA-48 §5.4:
+#   CSI  ESC [ params(0x30-0x3F)* intermediates(0x20-0x2F)* final(0x40-0x7E)
+#   OSC  ESC ] ... (BEL | ST=ESC \)
+#   DCS/SOS/PM/APC  ESC P/X/^/_ ... (BEL | ST)
+#   Fe   ESC intermediates(0x20-0x2F)* final(0x20-0x7E)  — e.g. ESC ( B, ESC 7
+#        (VT100 DECSC/DECRC), ESC = — final widened to 0x20-0x7E because
+#        real console output uses 0x30-0x3F finals (ESC 7/8) that strict
+#        ECMA-48 Fe (0x40-0x7E) would miss
+# C1 single-byte controls (U+0080-U+009F) are out of scope (not produced by
+# Ghidra/yara console output; issue #333 明确不做 GBK/mojibake 同理不涉编码)。
+ANSI_ESCAPE_RE: re.Pattern[str] = re.compile(
+    r"\x1b"
+    r"(?:"
+    r"\[[0-?]*[ -/]*[@-~]"
+    r"|\][^\x1b\x07]*(?:\x07|\x1b\\)"
+    r"|[PX^_][^\x1b\x07]*(?:\x07|\x1b\\)"
+    r"|[ -/]*[ -~]"
+    r")"
+)
+
+
+def _is_control_to_strip(cp: int) -> bool:
+    """True for C0 control chars (U+0000-U+001F) except LF/TAB, plus DEL."""
+    return (cp < 0x20 and cp not in (0x09, 0x0A)) or cp == 0x7F
+
+# ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
 
@@ -172,6 +216,8 @@ class SanitizeResult:
     zwx_count: int
     homoglyph_count: int
     marker_count: int
+    ansi_count: int = 0
+    ctrl_count: int = 0
     suspicious: list[dict] = field(default_factory=list)
     input_sha256: str = ""
     output_sha256: str = ""
@@ -285,6 +331,36 @@ def _count_and_neutralize_markers(
     return result, count
 
 
+def _count_and_strip_ansi(text: str) -> tuple[str, int, int]:
+    """Strip ANSI escape sequences and C0 control chars (keep LF/TAB).
+
+    Returns (cleaned_text, ansi_count, ctrl_count).
+      ansi_count = escape sequences removed (1 per ESC-led sequence)
+      ctrl_count = control characters removed (C0 except LF/TAB, plus DEL;
+                   a lone ESC not forming a sequence counts here, not in
+                   ansi_count — no double counting).
+    Sequence removal runs first, so the ESC bytes inside matched sequences
+    are consumed before the control-char sweep.
+    """
+    ansi_count = 0
+
+    def replacer(_m: re.Match[str]) -> str:
+        nonlocal ansi_count
+        ansi_count += 1
+        return ""
+
+    stripped = ANSI_ESCAPE_RE.sub(replacer, text)
+
+    kept: list[str] = []
+    ctrl_count = 0
+    for ch in stripped:
+        if _is_control_to_strip(ord(ch)):
+            ctrl_count += 1
+        else:
+            kept.append(ch)
+    return "".join(kept), ansi_count, ctrl_count
+
+
 def sanitize(
     text: str,
     mode: str = "full",
@@ -314,6 +390,14 @@ def sanitize(
     else:
         marker_count = 0
 
+    # ansi is a standalone mode (#333): deliberately NOT in "full" so the
+    # #307 full-mode semantics stay regression-free.
+    if mode == "ansi":
+        result_text, ansi_count, ctrl_count = _count_and_strip_ansi(result_text)
+    else:
+        ansi_count = 0
+        ctrl_count = 0
+
     input_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
     output_sha256 = hashlib.sha256(result_text.encode("utf-8")).hexdigest()
 
@@ -322,6 +406,8 @@ def sanitize(
         zwx_count=zwx_count,
         homoglyph_count=homoglyph_count,
         marker_count=marker_count,
+        ansi_count=ansi_count,
+        ctrl_count=ctrl_count,
         suspicious=[
             {"offset": s.offset, "original": s.original,
              "replacement": s.replacement, "kind": s.kind, "desc": s.desc}
@@ -347,9 +433,10 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="Emit JSON output")
     parser.add_argument("--reproduce", action="store_true",
                         help="Emit field=value reproduce lines")
-    parser.add_argument("--mode", choices=["zero-width", "homoglyph", "markers", "full"],
+    parser.add_argument("--mode",
+                        choices=["zero-width", "homoglyph", "markers", "ansi", "full"],
                         default="full",
-                        help="Sanitization mode (default: full)")
+                        help="Sanitization mode (default: full; ansi = strip ANSI/C0)")
     parser.add_argument("--report-only", action="store_true",
                         help="Report findings only, no rewrite")
     parser.add_argument("--sentinel-prefix", default="INJ",
@@ -407,12 +494,16 @@ def main(argv: list[str] | None = None) -> int:
             "zwx_count": result.zwx_count,
             "homoglyph_count": result.homoglyph_count,
             "marker_count": result.marker_count,
+            "ansi_count": result.ansi_count,
+            "ctrl_count": result.ctrl_count,
             "suspicious": result.suspicious,
         }
         json.dump(report, sys.stdout, ensure_ascii=False)
         sys.stdout.write("\n")
         # report-only: exit 0 if there were findings, 1 if clean
-        return 0 if (result.zwx_count + result.homoglyph_count + result.marker_count) > 0 else 1
+        return 0 if (result.zwx_count + result.homoglyph_count
+                     + result.marker_count
+                     + result.ansi_count + result.ctrl_count) > 0 else 1
 
     # Exit code: 0 if sanitized (changed), 1 if clean (no changes), 2 reserved for errors
     if not result.changed:
@@ -424,6 +515,8 @@ def main(argv: list[str] | None = None) -> int:
                 "zwx_count": result.zwx_count,
                 "homoglyph_count": result.homoglyph_count,
                 "marker_count": result.marker_count,
+                "ansi_count": result.ansi_count,
+                "ctrl_count": result.ctrl_count,
                 "suspicious": result.suspicious,
             }
             json.dump(report, sys.stdout, ensure_ascii=False)
@@ -437,6 +530,8 @@ def main(argv: list[str] | None = None) -> int:
             f"zwx_count={result.zwx_count}",
             f"homoglyph_count={result.homoglyph_count}",
             f"marker_count={result.marker_count}",
+            f"ansi_count={result.ansi_count}",
+            f"ctrl_count={result.ctrl_count}",
             f"output_sha256={result.output_sha256}",
         ]
         sys.stdout.write("\n".join(lines) + "\n")
@@ -447,6 +542,8 @@ def main(argv: list[str] | None = None) -> int:
             "zwx_count": result.zwx_count,
             "homoglyph_count": result.homoglyph_count,
             "marker_count": result.marker_count,
+            "ansi_count": result.ansi_count,
+            "ctrl_count": result.ctrl_count,
             "output": result.output,
             "suspicious": result.suspicious,
         }

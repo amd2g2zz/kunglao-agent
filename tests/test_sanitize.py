@@ -523,3 +523,182 @@ def test_homoglyph_offset_maps_to_original():
     homoglyphs = [s for s in data["suspicious"] if s["kind"] == "homoglyph"]
     assert homoglyphs, data
     assert homoglyphs[0]["offset"] == 3, homoglyphs
+
+
+# ---------------------------------------------------------------------------
+# ANSI / C0 control stripping (#333)
+# ---------------------------------------------------------------------------
+
+# Realistic Ghidra console output: cursor hide/clear, OSC window title
+# (BEL-terminated), CR + CSI erase-line progress pattern, color CSI, cursor
+# show, mixed with multibyte UTF-8 (é + CJK). ESC = \x1b throughout.
+GHIDRA_CONSOLE_SAMPLE = (
+    "\x1b[?25l"
+    "\x1b[2J"
+    "\x1b]0;Ghidra 12.1.2 - project\x07"
+    "Analyzing header: 100%\n"
+    "\r\x1b[KDecompiling FUN_00401000\r\n"
+    "\x1b[?25h"
+    "\x1b[32mSUCCESS\x1b[0m loading: é测试\n"
+)
+
+
+def test_ansi_mode_csi_colors_stripped(tmp_path):
+    """CSI color sequences are stripped, surrounding text survives."""
+    inp = tmp_path / "inp.txt"
+    inp.write_text("\x1b[31mRED\x1b[0m plain", encoding="utf-8")
+    r = run_cli_file(inp, "--mode", "ansi")
+    assert r.returncode == 0, r.stderr
+    assert "\x1b" not in r.stdout
+    assert "RED plain" in r.stdout
+
+
+def test_ansi_mode_ghidra_console_sample(tmp_path):
+    """Real Ghidra console output: no ESC / no CR after strip, content and
+    multibyte UTF-8 survive."""
+    inp = tmp_path / "inp.txt"
+    inp.write_bytes(GHIDRA_CONSOLE_SAMPLE.encode("utf-8"))
+    r = run_cli_file(inp, "--mode", "ansi")
+    assert r.returncode == 0, r.stderr
+    assert "\x1b" not in r.stdout
+    assert "\r" not in r.stdout
+    assert "Analyzing header: 100%" in r.stdout
+    assert "Decompiling FUN_00401000" in r.stdout
+    assert "SUCCESS loading: é测试" in r.stdout
+
+
+def test_ansi_mode_osc_bel_and_st_terminated(tmp_path):
+    """OSC sequences terminated by BEL or ST (ESC \) are both stripped."""
+    inp = tmp_path / "inp.txt"
+    inp.write_text(
+        "a\x1b]0;title\x07b\x1b]0;title2\x1b\\c", encoding="utf-8"
+    )
+    r = run_cli_file(inp, "--mode", "ansi")
+    assert r.returncode == 0, r.stderr
+    assert "\x1b" not in r.stdout
+    assert r.stdout == "abc"
+
+
+def test_ansi_mode_fe_and_cursor_sequences(tmp_path):
+    """Two-byte Fe sequences (ESC ( B, ESC 7) and cursor CSI are stripped."""
+    inp = tmp_path / "inp.txt"
+    inp.write_text("\x1b(B\x1b7\x1b8\x1b[?25l\x1b[?25hok", encoding="utf-8")
+    r = run_cli_file(inp, "--mode", "ansi")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == "ok"
+
+
+def test_ansi_mode_c0_controls_stripped_keep_nl_tab(tmp_path):
+    """C0 controls (NUL/BEL/BS/VT/FF/CR/SO/SI) are stripped; \\n and \\t kept."""
+    inp = tmp_path / "inp.txt"
+    inp.write_bytes("a\x00b\x07c\x08d\x0be\x0cf\x0dg\x0eh\x0fi\n\tz"
+                    .encode("utf-8"))
+    r = run_cli_file(inp, "--mode", "ansi")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == "abcdefghi\n\tz"
+
+
+def test_ansi_mode_del_stripped(tmp_path):
+    """DEL (U+007F) is stripped as a terminal control char."""
+    inp = tmp_path / "inp.txt"
+    inp.write_text("a\x7fb", encoding="utf-8")
+    r = run_cli_file(inp, "--mode", "ansi")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == "ab"
+
+
+def test_ansi_mode_lone_escape_counted_as_ctrl(tmp_path):
+    """A lone ESC not forming a valid sequence is stripped as a control char."""
+    inp = tmp_path / "inp.txt"
+    inp.write_bytes("lone\x1b\nnext".encode("utf-8"))
+    r = run_cli_file(inp, "--mode", "ansi", "--json")
+    assert r.returncode == 0, r.stderr
+    data = parse_json(r)
+    assert "\x1b" not in data["output"]
+    assert data["ansi_count"] == 0
+    assert data["ctrl_count"] == 1
+    assert data["output"] == "lone\nnext"
+
+
+def test_ansi_mode_multibyte_utf8_untouched(tmp_path):
+    """Multibyte UTF-8 (CJK + emoji) is byte-for-byte intact after strip."""
+    inp = tmp_path / "inp.txt"
+    inp.write_text("日本語テスト🎉\x1b[32m✓\x1b[0m中文", encoding="utf-8")
+    r = run_cli_file(inp, "--mode", "ansi")
+    assert r.returncode == 0, r.stderr
+    assert r.stdout == "日本語テスト🎉✓中文"
+
+
+def test_ansi_mode_json_counts_and_sha(tmp_path):
+    """--json: ansi_count counts sequences, ctrl_count counts C0 chars,
+    input/output sha256 present and differ."""
+    inp = tmp_path / "inp.txt"
+    text = "x\x1b[31mred\x1b[0m\n\x1b]0;t\x07y\x00\x07z"
+    inp.write_bytes(text.encode("utf-8"))
+    r = run_cli_file(inp, "--mode", "ansi", "--json")
+    assert r.returncode == 0, r.stderr
+    data = parse_json(r)
+    assert data["ansi_count"] == 3      # 2 CSI + 1 OSC
+    assert data["ctrl_count"] == 2      # NUL + BEL
+    assert data["output"] == "xred\nyz"
+    assert data["input_sha256"] != data["output_sha256"]
+    import hashlib
+    assert data["input_sha256"] == hashlib.sha256(
+        text.encode("utf-8")).hexdigest()
+    assert data["output_sha256"] == hashlib.sha256(
+        b"xred\nyz").hexdigest()
+
+
+def test_ansi_mode_reproduce_lines(tmp_path):
+    """--reproduce emits ansi_count/ctrl_count/sha256 field=value lines."""
+    inp = tmp_path / "inp.txt"
+    inp.write_text("\x1b[31mred\x1b[0m\x00", encoding="utf-8")
+    r = run_cli_file(inp, "--mode", "ansi", "--reproduce")
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.strip().split("\n")
+    for prefix in ("input_sha256=", "output_sha256=", "ansi_count=",
+                   "ctrl_count="):
+        assert any(line.startswith(prefix) for line in lines), lines
+
+
+def test_ansi_mode_report_only(tmp_path):
+    """--report-only with ansi findings: exit 0, counts present, no output."""
+    inp = tmp_path / "inp.txt"
+    inp.write_text("\x1b[31mred\x1b[0m", encoding="utf-8")
+    r = run_cli_file(inp, "--mode", "ansi", "--report-only")
+    assert r.returncode == 0, r.stderr
+    data = parse_json(r)
+    assert "output" not in data
+    assert data["ansi_count"] >= 1
+
+
+def test_ansi_mode_clean_input_exit_1(tmp_path):
+    """Plain text with \\n\\t has nothing to strip: exit 1, empty stdout."""
+    inp = tmp_path / "inp.txt"
+    inp.write_bytes("plain text\nwith tab\tand spaces".encode("utf-8"))
+    r = run_cli_file(inp, "--mode", "ansi")
+    assert r.returncode == 1, r.stderr
+    assert r.stdout.strip() == ""
+
+
+def test_ansi_mode_idempotent(tmp_path):
+    """Second ansi pass over stripped output is a fixed point (exit 1)."""
+    inp = tmp_path / "inp.txt"
+    inp.write_bytes(GHIDRA_CONSOLE_SAMPLE.encode("utf-8"))
+    r1 = run_cli_file(inp, "--mode", "ansi")
+    assert r1.returncode == 0, r1.stderr
+    inp2 = tmp_path / "inp2.txt"
+    inp2.write_bytes(r1.stdout.encode("utf-8"))
+    r2 = run_cli_file(inp2, "--mode", "ansi")
+    assert r2.returncode == 1, r2.stdout
+    assert r2.stdout.strip() == ""
+
+
+def test_full_mode_does_not_strip_c0_or_ansi(tmp_path):
+    """Zero-regression: default full mode keeps its #307 semantics and does
+    NOT strip CR/ESC/CSI (ansi is a standalone mode)."""
+    inp = tmp_path / "inp.txt"
+    inp.write_text("has\x0dcr\n\x1b[31mcolor\x1b[0m", encoding="utf-8")
+    r = run_cli_file(inp)  # default mode = full
+    assert r.returncode == 1, r.stdout  # nothing matched by full passes
+    assert r.stdout.strip() == ""
