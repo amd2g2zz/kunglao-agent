@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""kunglao-monitor — M5 MONITOR 独立 CLI (phase 5, E5.3).
+"""kunglao-monitor — M5 MONITOR standalone CLI (phase 5, E5.3).
 
-组合 heartbeat_check + loop_reconcile + help_watch + stuck_watch + health_check
-→ TickOutput(schemas/tick-output.json, M5.3 L396-406 冻结)。
+Combines heartbeat_check + loop_reconcile + help_watch + stuck_watch +
+health_check → TickOutput (schemas/tick-output.json, M5.3 L396-406 frozen).
 
-后台进程 (2026-08-12, #88): 本 CLI 作为 BACKGROUND process 运行 — 其输出是
-advisory。loop 的定时 tick 动作 (re-dispatch / verify / TaskStop) 绝不等待
-monitor 输出; tick 依据文件状态推进 (worker-status-*.md 新鲜度 / .heartbeat.json),
-monitor 的 `next` 只是建议, 不是 gate。
+Background process (2026-08-12, #88): this CLI runs as a BACKGROUND process —
+its output is advisory. The loop's scheduled tick actions (re-dispatch /
+verify / TaskStop) NEVER wait for monitor output; the tick advances on file
+state (worker-status-*.md freshness / .heartbeat.json). The monitor's `next`
+is a suggestion, not a gate.
 
-隔离边界 (#88): 不使用 agent team 特性 (CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
-never enabled / no teammates / no team setup / 无 worker↔worker messaging);
-SendMessage orchestrator→worker ping 是 sanctioned heartbeat channel。
+Isolation boundary (#88): no agent-team features
+(CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS never enabled / no teammates / no team
+setup / no worker↔worker messaging); SendMessage orchestrator→worker ping is
+the sanctioned heartbeat channel.
 
-可复用(不改): loop_state.reconcile(TEMP mtime → loop-state)、
-convergence_health.assess(HEALTHY/STALLED/SPINNING)、
-active_intervention.find_help_requests/find_responses、
-backtrack_gate.parse_status/parse_backtrack。
+Reused as-is: loop_state.reconcile (TEMP mtime → loop-state),
+convergence_health.assess (HEALTHY/STALLED/SPINNING),
+active_intervention.find_help_requests/find_responses,
+backtrack_gate.parse_status/parse_backtrack.
 
-用法: python kunglao-monitor.py <ws> [--json]
+Usage: python kunglao-monitor.py <ws> [--json]
 """
 from __future__ import annotations
 
@@ -30,13 +32,13 @@ import sys
 from pathlib import Path
 
 HEARTBEAT_FILE = "runs/.heartbeat.json"
-HEARTBEAT_MAX_MIN = 35          # 与 worker_budget.check_heartbeat_alive 同阈值
-STUCK_MIN = 20                  # 与 backtrack_gate --stuck-min 默认一致
+HEARTBEAT_MAX_MIN = 35          # same threshold as worker_budget.check_heartbeat_alive
+STUCK_MIN = 20                  # same as backtrack_gate --stuck-min default
 VALID_BACKTRACK_DECISIONS = ("continue", "retry_different", "escalate", "redispatch")
 
 
 def utc_now() -> str:
-    """UTC ISO-8601 秒级, Z 后缀(schema ts pattern)."""
+    """UTC ISO-8601, second precision, Z suffix (schema ts pattern)."""
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
@@ -45,9 +47,9 @@ def _utc_now_dt() -> datetime.datetime:
 
 
 def heartbeat_check(ws: Path) -> tuple[str, str]:
-    """M5.2 L382: 查 runs/.heartbeat.json last_tick_ts(< 35min) → (alive|STALE, detail).
+    """M5.2 L382: check runs/.heartbeat.json last_tick_ts (< 35min) → (alive|STALE, detail).
 
-    文件缺失/损坏 → STALE + re-register 提示(M5.5 L424-425).
+    Missing/corrupt file → STALE + re-register hint (M5.5 L424-425).
     """
     path = ws / HEARTBEAT_FILE
     if not path.exists():
@@ -65,9 +67,10 @@ def heartbeat_check(ws: Path) -> tuple[str, str]:
 
 
 def loop_reconcile(ws: Path) -> dict:
-    """M5.2 L385: TEMP mtime → loop-state; 与上一快照 diff → gone 事件.
+    """M5.2 L385: TEMP mtime → loop-state; diff vs previous snapshot → gone events.
 
-    TEMP glob 失败/导入失败 → 空态(不崩溃, M5.5 L423); 无快照 → 全当首次(NEW).
+    TEMP glob failure / import failure → empty state (no crash, M5.5 L423);
+    no snapshot → treat everything as first sight (NEW).
     """
     prev: dict = {}
     prev_path = ws / "runs" / "loop-state.json"
@@ -89,12 +92,12 @@ def loop_reconcile(ws: Path) -> dict:
         (ws / "runs").mkdir(parents=True, exist_ok=True)
         prev_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
     except OSError:
-        pass  # 快照写失败不崩溃 — 下次 tick 全当首次
+        pass  # snapshot write failure must not crash — next tick treats all as first sight
     return {"state": state, "gone_events": gone, "prev_ts": prev.get("ts")}
 
 
 def help_watch(ws: Path) -> list[str]:
-    """M5.1 help_watch: 未响应的 help_request 所在 worker-status 文件(active_intervention 语义)."""
+    """M5.1 help_watch: worker-status files with unanswered help_requests (active_intervention semantics)."""
     try:
         import active_intervention as ai
     except Exception:
@@ -107,7 +110,7 @@ def help_watch(ws: Path) -> list[str]:
 
 
 def stuck_watch(ws: Path) -> list[str]:
-    """M5.1 stuck_watch: in_progress 且 ≥20min 无有效 backtrack 的 worker 文件."""
+    """M5.1 stuck_watch: worker files in_progress ≥20min with no valid backtrack."""
     try:
         import backtrack_gate as bg
     except Exception:
@@ -131,9 +134,10 @@ def stuck_watch(ws: Path) -> list[str]:
 
 
 def health_check(ws: Path) -> dict:
-    """M5.2 L388: .convergence_ledger.jsonl 轨迹 → HEALTHY|STALLED|SPINNING.
+    """M5.2 L388: .convergence_ledger.jsonl trajectory → HEALTHY|STALLED|SPINNING.
 
-    NO_DATA(无账本/不可评估) → HEALTHY(不能无据判 STALLED), raw 字段保留原值.
+    NO_DATA (no ledger / not assessable) → HEALTHY (cannot declare STALLED
+    without evidence); the raw field keeps its original value.
     """
     try:
         import convergence_health as ch
@@ -149,7 +153,7 @@ def health_check(ws: Path) -> dict:
 
 def decide_next(hb: str, health: dict, help_reqs: list[str], stuck: list[str],
                 gone: list[str], active_workers: int) -> str:
-    """M5.4 L418 机械推断下一步(优先级: 心跳 → 健康 → help → stuck → gone → 空闲)."""
+    """M5.4 L418 mechanical next-step inference (priority: heartbeat → health → help → stuck → gone → idle)."""
     if hb == "STALE":
         return "re-register heartbeat: python hook_activation.py <ws> --heartbeat-on"
     if health["verdict"] == "SPINNING":
@@ -193,7 +197,7 @@ def tick(ws: Path) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """独立 CLI: python kunglao-monitor.py <ws> [--json]."""
+    """Standalone CLI: python kunglao-monitor.py <ws> [--json]."""
     ap = argparse.ArgumentParser(description="kunglao-monitor — M5 MONITOR tick")
     ap.add_argument("ws", type=Path, help="workspace root")
     ap.add_argument("--json", action="store_true", help="machine-readable JSON output")

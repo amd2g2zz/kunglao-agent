@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""loop_state.py — M0 状态层对账原型 (Phase 2 E2.1/E2.2).
+"""loop_state.py — M0 state-layer reconciliation prototype (Phase 2 E2.1/E2.2).
 
 Reconciler that derives a single loop-state view from the AUTHORITATIVE
 signal source: TEMP/claude/*/*/tasks/*.output mtime (agent lifecycle).

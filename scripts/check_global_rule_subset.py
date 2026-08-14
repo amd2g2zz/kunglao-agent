@@ -155,7 +155,7 @@ def parse_skill_prohibitions(skill_md: Path) -> list[dict[str, Any]]:
 
 
 def parse_global_rule_prohibitions(global_rule: Path) -> list[dict[str, Any]]:
-    """Parse global-rule section 7 (硬禁止)."""
+    """Parse global-rule section 7 (hard prohibitions — Chinese heading 硬禁止)."""
     text = global_rule.read_text(encoding="utf-8")
     # Try multiple heading patterns:
     # "## 7. 硬禁止" (Chinese), "## 7. Hard prohibitions" (English), "## Hard prohibitions"

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""acceptance_check.py — 端到端验收 (issue #6, plan §2.3/§9).
+"""acceptance_check.py — end-to-end acceptance (issue #6, plan §2.3/§9).
 
-静态验收: 验证重构核心机制就位 + 可运行 (动态真实样本 run 属生产 skill 职责, deferred)。
-输出: runs/e2e-acceptance-<ts>.json
+Static acceptance: verify the refactored core mechanisms are in place and
+runnable (dynamic real-sample runs belong to the production skill; deferred).
+Output: runs/e2e-acceptance-<ts>.json
 """
 from __future__ import annotations
 
@@ -102,7 +103,7 @@ def run_acceptance() -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="acceptance_check.py", description="端到端静态验收")
+    ap = argparse.ArgumentParser(prog="acceptance_check.py", description="end-to-end static acceptance")
     ap.add_argument("--write", action="store_true")
     args = ap.parse_args(argv)
     report = run_acceptance()

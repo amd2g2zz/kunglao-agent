@@ -19,9 +19,10 @@ walk away" tool. STALLED/SPINNING come with a concrete next action.
 
 Why this exists: v1.9.0-1 made convergence-driven dispatch the default, but
 a busy loop can fake convergence (DISPATCH every turn, open_count never drops).
-Without a trajectory metric + detector, "傻等" just changes shape: busy spin
-instead of idle wait. The user asked: "怎么保证 kunglao-agent 是在收敛而不是
-再空转呢?" — honest answer: you can't guarantee it, but you CAN detect it
+Without a trajectory metric + detector, idle-waiting ("傻等") just changes
+shape: busy spin instead of idle wait. The user asked (verbatim):
+"怎么保证 kunglao-agent 是在收敛而不是再空转呢?" — honest answer: you
+can't guarantee it, but you CAN detect it
 and force intervention. This script is the detector.
 
 Usage:

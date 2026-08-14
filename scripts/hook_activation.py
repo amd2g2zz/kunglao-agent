@@ -33,7 +33,7 @@ Usage:
   python hook_activation.py <workspace> --renew          # refresh expiry (kunglao-agent Phase 0)
   python hook_activation.py <workspace> --is-active dispatch_gate
   python hook_activation.py <workspace> --wire-up        # register hooks in <workspace>/.claude/settings.json (PROJECT-level, #258)
-  python hook_activation.py <workspace> --heartbeat-off  # CONVERGED 后停心跳 (issue #237)
+  python hook_activation.py <workspace> --heartbeat-off  # stop heartbeat after CONVERGED (issue #237)
 
 T-2 split (2026-08-11): the --wire-up / --reconcile / --heartbeat-* jobs now
 live in wire_up_settings.py / reconcile_workers.py / heartbeat.py; main()
