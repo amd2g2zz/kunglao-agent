@@ -1,6 +1,10 @@
 /**
  * cfg-hook.js — Frida CFG capture hook (template: templates/frida/cfg-hook.js.tmpl, #278).
  *
+ * Requires: frida >= 17 (module API: Process.getModuleByName(mod)
+ * .getExportByName(name); the two-argument Module.getExportByName form is
+ * Frida-16-only and was removed in 17 — #356 W5).
+ *
  * Captures a caller->callee control-flow trace for the exports of
  * {{TARGET_MODULE}}: every call to a target export records
  * (caller, target, args_count, thread_id, ts) into a shared buffer; buffered
@@ -120,7 +124,10 @@ function hookExports() {
             // attach loop (see docstring).
             var targetAddr;
             try {
-                targetAddr = Module.getExportByName(TARGET_MODULE, exportName);
+                // Frida 17 form (#356 W5): the 16-only two-argument
+                // Module.getExportByName(mod, name) no longer exists.
+                targetAddr = Process.getModuleByName(TARGET_MODULE)
+                    .getExportByName(exportName);
             } catch (e) {
                 console.warn('[cfg-hook] export not found: ' +
                     TARGET_MODULE + '!' + exportName);
