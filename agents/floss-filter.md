@@ -1,6 +1,20 @@
 ---
 name: floss-filter
 description: "Read `evidence/floss-raw.txt` (raw flare-floss output, up to 100k lines for Go binaries) + noise dictionary + family keywords. WRITE `evidence/floss-filtered.json` with two-layer output: (Layer A) inventory & statistics of the full survivor set; (Layer B) per-category top-K lists. Heuristic not hardcoded — you decide length/entropy/K/outlier thresholds based on the data. Pure local; no external calls. **You DO have the Write tool — you must write the JSON file yourself, not return YAML to the caller.**"
+# issue #310 mechanical trigger table — parsed by scripts/route_capability.py
+# (claim task domain x sample features -> recommended agent; worker_budget
+# agenttype gate).
+triggers:
+  pipeline_order: 3
+  intent:
+    must_any:
+      - 'strings'
+      - 'floss'
+      - 'string analysis'
+      - 'string extraction'
+      - '字符串'
+    exclude: []
+  features: {}
 allowedTools:
   - Read
   - Grep

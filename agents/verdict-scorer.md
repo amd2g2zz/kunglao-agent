@@ -1,6 +1,23 @@
 ---
 name: verdict-scorer
 description: "Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and `fact_contradiction_gate.py` output. For each primary_question, find the answering fact via answers_question, verify PROVEN status + confidence_band (C0a/C0b mirrors convergence). Detect contradictions from gate output. WRITE `evidence/verdict.json` with analysis_verdict schema v11. Pure local Read + Write."
+# issue #310 mechanical trigger table — parsed by scripts/route_capability.py
+# (claim task domain x sample features -> recommended agent; worker_budget
+# agenttype gate). pipeline_order 9: verdict is the final phase.
+triggers:
+  pipeline_order: 9
+  intent:
+    must_any:
+      - 'verdict'
+      - 'scoring'
+      - 'final assessment'
+      - 'primary_question'
+      - 'primary question'
+      - 'pq coverage'
+      - '裁决'
+      - '判定'
+    exclude: []
+  features: {}
 allowedTools:
   - Read
   - Grep

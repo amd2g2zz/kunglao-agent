@@ -1,6 +1,31 @@
 ---
 name: pefile-signature
 description: "Read evidence/die.json + the local sample file. Extract Authenticode digital signature (subject/issuer/serial/validity/cert chain) via pefile + identify packer family via DIE + YARA packer signatures + write evidence/signature.json + evidence/packer-scan.json. Pure local."
+# issue #310 mechanical trigger table — parsed by scripts/route_capability.py
+# (claim task domain x sample features -> recommended agent; worker_budget
+# agenttype gate). Packer markers in import_hints are pefile-signature's domain.
+triggers:
+  pipeline_order: 2
+  intent:
+    must_any:
+      - 'authenticode'
+      - 'pe signature'
+      - 'digital signature'
+      - 'packer'
+      - 'packed'
+      - 'certificate'
+      - '签名'
+      - '加壳'
+    exclude: []
+  features:
+    import_hints:
+      any_contains:
+        - 'upx'
+        - 'aspack'
+        - 'pecompact'
+        - 'mpress'
+        - 'themida'
+        - 'vmprotect'
 allowedTools:
   - Read
   - Grep

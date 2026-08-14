@@ -31,9 +31,9 @@ SELF = Path(__file__).resolve()
 
 # Files deleted by #318 (the kunglao-log.py wrapper is guarded although it
 # never existed in git — belt and braces against reintroduction).
+# #310 复活 route_capability(带 agenttype 消费方 worker_budget),#318 删除当时为死代码,复活后不再属删除清单
 DELETED = [
     "hooks/agent_watch.py",
-    "scripts/route_capability.py",
     "scripts/feature_probe.py",
     "scripts/fact_graph.py",
     "scripts/test_v1_8_enforcement_gates.py",
@@ -41,7 +41,6 @@ DELETED = [
     "data/action-type-map.yaml",
     "schemas/verdict-output.json",
     "references/specialist-registry.yaml",
-    "tests/test_route_capability.py",
     "tests/test_feature_probe.py",
     "tests/test_fact_graph.py",
     "tests/test_specialist_registry.py",
@@ -61,10 +60,14 @@ KEPT = [
 # Names that must have zero live references (issue #318 acceptance list +
 # verdict-output). "kunglao-log" uses the hyphen on purpose: the live
 # kunglao_log.py module must NOT match.
+# "feature_probe" is NOT in DEAD_NAMES: the feature_probe.py script stays
+# deleted (its paths remain in DELETED — existence and full-path reference
+# checks still guard it), but the #310 contract consumes the feature_probe
+# JSON output artifact (route_capability --features-file / worker_budget
+# probe.json), so the bare name legitimately appears in revived #310 files
+# as an input-format reference, not a module reference.
 DEAD_NAMES = [
     "agent_watch",
-    "route_capability",
-    "feature_probe",
     "fact_graph",
     "specialist-registry",
     "action-type-map",

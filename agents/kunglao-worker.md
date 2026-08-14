@@ -79,6 +79,10 @@ That is your entire job.
 签名 2 分钟，省 20 分钟重跑）。
 
 1. **计划（2-5 分钟）** — FIRST 动作，写 `runs/plan-<task>.md`：
+   - `agent_type:` 执行本计划的 agent 声明（#310，dispatch 时的 agent 类型 —
+     与 orchestrator 的 route_capability 推荐一致，如 `ghidra-light` /
+     `floss-filter` / `kunglao-worker`；偏差派发须由 orchestrator 在
+     dispatch prompt 带 `agent-reasoning:`）
    - `recall:` 知识召回（#268）— 先跑 `python <skill_root>/scripts/
      references_recall.py <关键词>` 按任务领域召回 references（go 任务 →
      languages-go.md；动态/VM → dynamic-re-tool-priority.md + tools-dynamic.md；
