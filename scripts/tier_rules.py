@@ -12,7 +12,7 @@ tier_for_claim(claim: dict) -> int
   - T2: static-depth analysis (disassembly / decoding / API analysis)
   - T1: everything else (default — strings/metadata scans stay T1)
 
-Conservative by design (宁低勿高 — better low than high): a miss costs one cheap static pass; an
+Conservative by design (better low than high): a miss costs one cheap static pass; an
 over-assignment costs a full VM cycle. Signals are substring matches on the
 claim's intent text (statement / verification_intent / promotion_gate /
 boundary_type / summary / task).

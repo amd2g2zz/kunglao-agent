@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
-"""ask_for_direction_gate.py - block orchestrator self-avoidance / 反问 output.
+"""ask_for_direction_gate.py - block orchestrator self-avoidance / asking-for-direction output.
 
-User pain point: "kunglao-agent 遇到问题不自己解决而是停下来询问或者反问"
-- "刚才任务做完了，我要做下一个吗?" (反问,违反 section 9 rule 5)
-- "Should I dispatch W-8 or wait?" (反问,违反 section 6d.1)
+User pain point (verbatim, in Chinese): "kunglao-agent 遇到问题不自己解决而是停下来询问或者反问"
+("kunglao-agent, when hitting a problem, solves it itself instead of
+stopping to ask or ask back")
+- "刚才任务做完了，我要做下一个吗?" ("just finished the task — should I do
+the next one?") (ask-back, violates section 9 rule 5)
+- "Should I dispatch W-8 or wait?" (ask-back, violates section 6d.1)
 
 This gate scans orchestrator output text for violation patterns:
-  - Type A (BAD 反问/疑问): "should I", "do you want", "what should I",
+  - Type A (BAD ask-back/question): "should I", "do you want", "what should I",
     "can you confirm", "please confirm", "confirm continuation",
-    "let me know", "want me to", "等用户决定"
-  - Type B (BAD 边界): "just finished X, should I move to Y?" —
+    "let me know", "want me to", "等用户决定" ("wait for the user to decide")
+  - Type B (BAD boundary): "just finished X, should I move to Y?" —
     completion = dispatch-next per priority.py, never ask
-  - Type C (OK 收敛 sign-off): "C0-C7 all pass, confirm convergence" —
+  - Type C (OK convergence sign-off): "C0-C7 all pass, confirm convergence" —
     legitimate per section 8 (only allowed after explicit convergence check)
 
 Allowed only when kunglao-agent state indicates C0-C7 convergence reached.
@@ -36,7 +39,7 @@ from pathlib import Path
 
 SELF_REDIRECT_LOG = "self_redirects.jsonl"
 
-# Type A: blatant 反问/疑问 phrases that should NEVER appear
+# Type A: blatant ask-back/question phrases that should NEVER appear
 TYPE_A_PATTERNS = [
     r"\bshould I\b",
     r"\bdo you want\b",

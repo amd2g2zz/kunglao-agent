@@ -8,7 +8,7 @@ items != 0. This is the 3rd documented recurrence (2026-07-28 / 07-30 /
 
   F1 self-anchoring        — closing quotes the agent's OWN summary, not the
                              user's verbatim instruction.
-  F2 self-invented tiering — invented tiers (备注级 / deferred / low-priority)
+  F2 self-invented tiering — invented tiers ("note-only" / deferred / low-priority)
                              that are NOT in the task mask open items.
   F3 cost-semantic drift   — a cost figure appears in the closing declaration
                              (cost is never a stop reason — behavior #3).
@@ -95,7 +95,8 @@ TIER_KEYWORDS = [
 ]
 
 # Open-item references: G<digit> (gap ids), #<digit> (issue/task ids),
-# C-<digit> (claim ids), the literal "gap"/"item", CJK 缺口/遗留项/未决项.
+# C-<digit> (claim ids), the literal "gap"/"item", CJK open-item words
+# (缺口/遗留项/未决项 — "gap"/"leftover item"/"unresolved item").
 OPEN_ITEM_REFS = [
     r"\bG\d",
     r"#\d+",
@@ -159,8 +160,9 @@ ZERO_OPEN_RE = re.compile(
 # task_text recovery + agent-region segmentation (F1 only — D3).
 # ---------------------------------------------------------------------------
 # A line is a task-echo when it leads with a task/user marker FOLLOWED BY A
-# COLON (the "：" after 任务原文 / "user:" / "task:"). The colon is required so
-# a declaration line like "Task complete." (no colon) is NOT stripped.
+# COLON (the "：" after the CJK task-source markers / "user:" / "task:"). The
+# colon is required so a declaration line like "Task complete." (no colon)
+# is NOT stripped.
 TASK_ECHO_LINE_RE = re.compile(
     r"^\s*(?:任务原文|用户|user|task|instruction|原指令)\s*[：:]",
     re.IGNORECASE | re.MULTILINE,
@@ -173,7 +175,8 @@ TASK_TEXT_EXTRACT_RE = re.compile(
 )
 
 # Content anchors extracted from task_text: CJK runs >= 3 chars (catches
-# "全面分析", "重检测") and ascii tokens >= 5 chars (catches "comprehensively",
+# CJK phrases like "comprehensive analysis"/"re-detect") and ascii tokens
+# >= 5 chars (catches "comprehensively",
 # "re-analyze"). The length threshold is the primary grammar-word filter; the
 # stoplist is a reserved tightening hook (D4).
 ANCHOR_CJK_RE = re.compile(r"[一-鿿]{3,}")

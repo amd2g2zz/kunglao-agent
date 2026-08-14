@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """plan_drift_detector.py - detect when plan files lag behind reality.
 
-User pain point: "实际进度状态和计划与文件里面的不匹配 - 比如开始规划的时候
+User pain point (verbatim, in Chinese): "实际进度状态和计划与文件里面的不匹配 - 比如开始规划的时候
 有15个任务，但是随着推进出现重新规划 任务分解 任务废弃，相关文件没跟上"
+("actual progress state and the plan disagree with the files — e.g. 15 tasks
+at planning time, but re-planning/decomposition/obsolescence as work
+progressed while the files never caught up")
 
 6 drift types detected:
   1. ORPHAN_CLAIM: claim in claim-register.yaml but NOT in global_plan.txt

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """claim_expiry.py - mark long-untouched OPEN claims as STALE (priority demotion).
 
-User pain point: "状态管理很差 - 一些任务以及过期了"
+User pain point (verbatim, in Chinese): "状态管理很差 - 一些任务以及过期了"
+("poor state management — some tasks have already expired")
 
 When an OPEN claim hasn't had any activity (no status file update, no
 dispatch, no fact written) for > N hours, it's "stale" — the worker may

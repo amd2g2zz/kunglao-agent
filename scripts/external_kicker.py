@@ -9,7 +9,7 @@ expires, the mechanical gates in worker_budget.py silently close, and dispatch
 is blocked until a HUMAN starts a new session. Recovery must not depend on
 presence.
 
-Root-cause finding (2026-08-11, 坑 7): wire_up_settings.py:20 writes hooks to
+Root-cause finding (2026-08-11, pit 7): wire_up_settings.py:20 writes hooks to
 the USER-level ~/.claude/settings.json, but the 6 hooks that actually fire
 live in the PROJECT-level .claude/settings.json of the workspace parent
 (gitignored, carries env secrets + mcpServers + block_malware_exec). --wire-up
@@ -354,8 +354,8 @@ def validate_interval(tick_interval_min: int) -> None:
 # removed): a kicked fresh session MUST resume from fired predicates over
 # LOGGED MECHANICAL STATE — the convergence ledger last snapshot, the claim
 # register, the facts index, the worker status files — and NEVER from the
-# dying session's narrative (progress.txt "我正在做...", analysis_state.txt
-# task fields are LLM self-descriptions, not events).
+# dying session's narrative (progress.txt "what I'm doing now..." lines,
+# analysis_state.txt task fields are LLM self-descriptions, not events).
 
 _RESUME_CLAIM_ID_RE = re.compile(r"^-\s+id:\s*(\S+)")
 _RESUME_CLAIM_STATUS_RE = re.compile(r"^\s+status:\s*(\S+)")
