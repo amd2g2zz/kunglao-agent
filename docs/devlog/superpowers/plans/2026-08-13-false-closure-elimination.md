@@ -34,8 +34,8 @@ references/
   re-library/phishing-case-study.md      [N] 修复 field-notes.md 断链（T8）
 hooks/completion_gate.py                 [M] 删除 stop_hook_active 放行 + no-oracle 放行收紧（T18）
 memory/candidates/corpus/manifest.json   [M] 6 个 digest 漂移修复（T12，测试驱动）
-templates/task_spec.yaml                 [M] + calibration 规范（T14，测试驱动）
-templates/task-oracle.yaml               [N] oracle 模板（T14）
+templates/state/task_spec.yaml                 [M] + calibration 规范（T14，测试驱动）
+templates/state/task-oracle.yaml               [N] oracle 模板（T14）
 release-manifest.yaml                    [M] + re-library digest 节（T23）
 scripts/release_receipt.py               [M] re-library digest 实现（T23）
 scripts/release_check_selfcheck.py       [N] CI yaml lint 的 repo-owned 预检（T13）
@@ -1147,8 +1147,8 @@ documents the boundary and pins the intermediate contract."
 ### Task 14: 模板与 oracle 模板（TDD：task_spec + task-oracle）
 
 **Files:**
-- Create: `templates/task-oracle.yaml`
-- Modify: `templates/task_spec.yaml`
+- Create: `templates/state/task-oracle.yaml`
+- Modify: `templates/state/task_spec.yaml`
 - Test: `tests/test_completion_gate_optout.py`
 
 - [ ] **Step 1: 写失败测试**
@@ -1161,7 +1161,7 @@ def test_task_spec_template_declares_calibration_requirement():
     (confidence + falsifier) so the delivery gate can enforce it."""
     import yaml
 
-    text = Path("templates/task_spec.yaml").read_text(encoding="utf-8")
+    text = Path("templates/state/task_spec.yaml").read_text(encoding="utf-8")
     data = yaml.safe_load(text)
     cal = data.get("calibration", {})
     assert cal.get("require_confidence", False) is True
@@ -1173,7 +1173,7 @@ def test_task_oracle_template_has_persistent_adjudication():
     (second-stop anti-loop lives here, not in the shim)."""
     import yaml
 
-    data = yaml.safe_load(Path("templates/task-oracle.yaml").read_text(encoding="utf-8"))
+    data = yaml.safe_load(Path("templates/state/task-oracle.yaml").read_text(encoding="utf-8"))
     adj = data.get("adjudication", {})
     assert "stop_hook_active" in adj
     assert "second_stop" in adj.get("stop_hook_active", {})
@@ -1182,11 +1182,11 @@ def test_task_oracle_template_has_persistent_adjudication():
 - [ ] **Step 2: 运行确认失败**
 
 Run: `.venv/bin/python -m pytest tests/test_completion_gate_optout.py::test_task_spec_template_declares_calibration_requirement -v`
-Expected: FAILED（templates/task_spec.yaml 无 calibration 节，task-oracle.yaml 不存在）
+Expected: FAILED（templates/state/task_spec.yaml 无 calibration 节，task-oracle.yaml 不存在）
 
 - [ ] **Step 3: 修改 task_spec 模板**
 
-Append to `templates/task_spec.yaml`:
+Append to `templates/state/task_spec.yaml`:
 
 ```yaml
 calibration:
@@ -1200,7 +1200,7 @@ calibration:
 
 - [ ] **Step 4: 创建 oracle 模板**
 
-Create `templates/task-oracle.yaml`:
+Create `templates/state/task-oracle.yaml`:
 
 ```yaml
 # task-oracle.yaml — pre-registered completion anchor (#55).
@@ -1224,7 +1224,7 @@ Expected: all passed
 - [ ] **Step 6: 提交**
 
 ```bash
-git add templates/task-oracle.yaml templates/task_spec.yaml tests/test_completion_gate_optout.py
+git add templates/state/task-oracle.yaml templates/state/task_spec.yaml tests/test_completion_gate_optout.py
 git commit -m "feat(#147): calibration + oracle templates (persistent anti-loop anchor)"
 ```
 

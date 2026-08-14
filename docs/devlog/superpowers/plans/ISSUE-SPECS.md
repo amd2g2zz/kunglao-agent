@@ -252,7 +252,7 @@ EOF
 
 **背景**：交付门（#204）需要 task_spec 声明 calibration；second-stop 持久裁决（#199/#200）需要 task-oracle 标准形态。
 
-**变更文件**：`templates/task_spec.yaml`（追加）+ 新建 `templates/task-oracle.yaml` + `tests/test_completion_gate_optout.py`（追加 2 测试）
+**变更文件**：`templates/state/task_spec.yaml`（追加）+ 新建 `templates/state/task-oracle.yaml` + `tests/test_completion_gate_optout.py`（追加 2 测试）
 
 **任务**：
 1. 写失败测试：`test_task_spec_template_declares_calibration_requirement`（calibration.require_confidence/require_falsifier == true）+ `test_task_oracle_template_has_persistent_adjudication`（adjudication.stop_hook_active 含 second_stop 键）
@@ -318,7 +318,7 @@ EOF
 
 ## ISSUE #204 — 交付校准门（calibration_gate）
 
-**背景**：无人值守目标：交付的每条 claim 必须带 confidence + falsifier，不携带视为未完成——"不静默错"的机械化（研究 §5 完成不变量补充）。当前 `templates/claim-register.yaml` 无这两个字段。
+**背景**：无人值守目标：交付的每条 claim 必须带 confidence + falsifier，不携带视为未完成——"不静默错"的机械化（研究 §5 完成不变量补充）。当前 `templates/state/claim-register.yaml` 无这两个字段。
 
 **变更文件**：新建 `scripts/calibration_gate.py` + 新测试 `tests/test_calibration_gate.py`
 
