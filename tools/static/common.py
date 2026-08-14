@@ -25,10 +25,11 @@ from pathlib import Path
 
 # r2-278-1b H1: decoded binary content can carry U+FFFD (decode(errors="replace"));
 # a GBK console (Windows) cannot encode it and a bare UnicodeEncodeError traceback
-# would break the "structured error, never a traceback" CLI contract. Emit with
-# errors="replace" so output never crashes on console encoding.
+# would break the "structured error, never a traceback" CLI contract. UTF-8
+# stdout contract (#317): stdout is unified on UTF-8 (NOT an errors="replace"
+# patch) with errors="replace" as belt-and-braces for unpaired surrogates.
 try:
-    sys.stdout.reconfigure(errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):
     pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 

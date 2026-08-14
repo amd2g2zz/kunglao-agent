@@ -42,6 +42,14 @@ from common import (  # noqa: E402
     sha256,
 )
 
+# UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
+# decode(errors="replace")) must not crash a GBK console — stdout unified on
+# UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
+
 # floss_filter.py classification regexes (D:/works/samples/2026-07-01/scripts/).
 B64_RE = re.compile(r"^[A-Za-z0-9+/]{40,}={0,2}$")
 HEX_RE = re.compile(r"^[0-9a-fA-F]{16,256}$")

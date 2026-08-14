@@ -37,6 +37,14 @@ from common import (  # noqa: E402
     sha256,
 )
 
+# UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
+# decode(errors="replace")) must not crash a GBK console — stdout unified on
+# UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
+
 MOV_BYTE_RSP = b"\xc6\x44\x24"   # mov byte ptr [rsp+disp8], imm8
 MOV_DWORD_RSP = b"\xc7\x44\x24"  # mov dword ptr [rsp+disp8], imm32
 

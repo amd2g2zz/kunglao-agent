@@ -21,6 +21,25 @@
 `tool-catalog: none (reasoning: <why not>)` 标记 —— 命中已注册工具的能力
 关键词却无标记会被 REJECT。
 
+**编码 / 命名硬约定 (issue #317, #314 A1-A3 — 缺一即被机械测试拦下):**
+
+4. **UTF-8 stdout 必配**: 新 CLI(带 `if __name__ == "__main__":` 的 .py)必须在
+   `import sys` 后立即执行 `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`,
+   外包 `try/except (AttributeError, ValueError): pass`。原因: 输出含 U+FFFD
+   (decode errors="replace" 的产物)或任何非 ASCII 时, GBK 控制台无法编码 →
+   裸 UnicodeEncodeError traceback + exit 1, 破坏 "structured error, never a
+   traceback" 契约(1b/1c/2b 三批独立踩中)。统一 UTF-8, 不是 errors="replace"
+   补丁。机械强制: `tests/test_utf8_stdout_convention.py` 扫描 tools/ 全部 CLI,
+   缺失即红。
+5. **测试 helper 解码必配**: 测试 helper 的 `subprocess.run` 必须带
+   `encoding="utf-8", errors="replace"`(不要裸用 `text=True` —— 其默认按
+   locale/GBK 解码; 工具统一 UTF-8 后, GBK 解码多字节字符 → reader thread
+   UnicodeDecodeError, stdout=None; 1c 踩中)。
+6. **目录命名避开 Windows 保留设备名**: 工具目录必须用 `tools/auxiliary/`,
+   不能用 `tools/aux/`(AUX 是 Windows 保留设备名, git 无法跟踪该路径; #307
+   刚踩, 已有 rename 先例)。机械强制: `tests/test_windows_reserved_names.py`
+   扫描仓库全部路径组件(CON/PRN/AUX/NUL/COM1-9/LPT1-9)。
+
 ## 1. Parameterized, never hardcoded
 
 - All targets come from CLI args, not string literals: `--binary PATH`,

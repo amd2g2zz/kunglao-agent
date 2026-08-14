@@ -56,6 +56,14 @@ from algorithms import (  # noqa: E402
     xor_add_stream,
 )
 
+# UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
+# decode(errors="replace")) must not crash a GBK console — stdout unified on
+# UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
+
 
 def _sha256(data):
     return hashlib.sha256(data).hexdigest()

@@ -37,7 +37,10 @@ L1_LINE_RE = re.compile(r"^([A-Za-z_][\w.]*)\s*[:=]\s*(.+)$")
 def run_cli(tool, *args):
     return subprocess.run(
         [sys.executable, str(TOOLS[tool]), *args],
-        capture_output=True, text=True, timeout=60,
+        # tools emit UTF-8 (#317 unified stdout); decode as UTF-8, not the
+        # GBK locale default, or multi-byte chars crash the reader thread
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=60,
     )
 
 

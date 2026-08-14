@@ -22,6 +22,14 @@ from pathlib import Path
 
 import yaml
 
+# UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
+# decode(errors="replace")) must not crash a GBK console — stdout unified on
+# UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 GOLDEN = ROOT / "tests" / "fixtures" / "golden"

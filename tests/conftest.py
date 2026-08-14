@@ -111,7 +111,11 @@ def golden_master():
         env.pop("PRIORITY_WEIGHTS", None)
         r = subprocess.run(
             case["cmd"]["argv"], cwd=case["cmd"].get("cwd", str(ROOT)),
-            env=env, capture_output=True, text=True, timeout=120,
+            env=env, capture_output=True, text=True,
+            # tools emit UTF-8 (#317 unified stdout); decode as UTF-8, not the
+            # GBK locale default, or multi-byte chars crash the reader thread
+            encoding="utf-8", errors="replace",
+            timeout=120,
         )
         return r.stdout
 

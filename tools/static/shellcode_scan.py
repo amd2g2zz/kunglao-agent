@@ -43,6 +43,14 @@ from _common import (  # noqa: E402
     x64_prolog_offsets,
 )
 
+# UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
+# decode(errors="replace")) must not crash a GBK console — stdout unified on
+# UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
+
 DEFAULT_LENGTH = 512
 DEFAULT_STEP = 16
 DEFAULT_MIN_RATIO = 0.6
