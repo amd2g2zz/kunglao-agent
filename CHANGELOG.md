@@ -4,6 +4,26 @@
 版本号遵循 PEP 440。v0.1 之前的内部迭代版本号 (v1.9.0–v1.9.38) 是开发期标记，
 统一折叠进 v0.1 首发（见文末映射表）。
 
+## [Unreleased]
+
+### Fixed (pre-release defect batch, #356)
+
+- W1 tools/_INDEX.yaml 28 个工具条目补一行 description（英文，15-40 字符：干什么 +
+  何时选它，从现有 input_output/when_not 提炼）；validate_index.py 新增 description
+  必填非空断言 (#356)
+- W2 CLAUDE.md 模板单源化 — 4 份模板(.tmpl/.windows/.linux/.android) 收敛为
+  CLAUDE.md.base.tmpl + kunglao-init 按 OS 注入差异段；五层分析原则收编回单源；
+  删除幻觉引用节(~/.claude/rules/common/)；新增成功标准节（可验证判据）；
+  中英混杂清理（全英文）(#356)
+- W3 硬编码拔除 — migrate_facts/wire_up_settings 的 C:/Users/hr 路径相对化或
+  <HOME> 占位；toolchain.py VM_SHELL_PORT 9876 裸常量改为 KUNGLAO_VM_SHELL_PORT
+  环境变量可配（默认 9876 不变）(#356)
+- W4 .env 部署面 — 新增 .env.example（6 个部署变量，一行英文注释）；env_check.py
+  开头接入纯 stdlib .env 解析（os.environ 优先，workspace .env 兜底，零新依赖）；
+  .gitignore 加 .env (#356)
+- W5 cfg-hook.js.tmpl Frida 17 修复 — Module.getExportByName(mod, name)(16-only) →
+  Process.getModuleByName(mod).getExportByName(name)，头注释标注 Requires: frida >= 17 (#356)
+
 ## [0.1.0] - 2026-08-14
 
 首个公开版本：收敛驱动的逆向工程编排 skill —— 以 Claude Code 为唯一界面，

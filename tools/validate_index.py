@@ -11,6 +11,8 @@ Validates the machine-readable tool index against the contract:
   tier:         T1|T2|T3   (T1 static tool / T2 emulation / T3 VM-dynamic)
   cost_tier:    probe|cheap|deep
   input_output: non-empty input->output contract (str, or {input, output})
+  description:  required non-empty English one-liner, 15-40 chars
+                (what it does + when to choose it) — issue #356 W1
   when_not:     optional — when NOT to use the tool (non-empty if present)
 
 CLI contract (gate-callable):
@@ -43,7 +45,7 @@ CATEGORIES = ("crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines")
 TIERS = ("T1", "T2", "T3")
 COST_TIERS = ("probe", "cheap", "deep")
 REQUIRED_FIELDS = ("name", "category", "capability", "tier", "cost_tier",
-                   "input_output")
+                   "input_output", "description")
 
 
 def _is_nonempty_str(value) -> bool:
@@ -119,6 +121,11 @@ def validate_index(data) -> list[str]:
         if not _is_nonempty_io(entry.get("input_output")):
             errors.append(f"{loc}: 'input_output' must be non-empty "
                           f"(str or {{input, output}})")
+
+        # #356 W1: description is required — agent tool selection aid
+        if not _is_nonempty_str(entry.get("description")):
+            errors.append(f"{loc}: missing or empty 'description' "
+                          f"(one-liner: what it does + when to choose it)")
 
         when_not = entry.get("when_not")
         if when_not is not None and not _is_nonempty_str(when_not):

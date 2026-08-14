@@ -13,6 +13,9 @@ purpose: >-
 #   tier:         T1 static tool | T2 emulation | T3 VM-dynamic
 #   cost_tier:    probe | cheap | deep
 #   input_output: non-empty input->output contract (str, or {input, output})
+#   description:  required English one-liner, 15-40 chars (what it does +
+#                 when to choose it) — issue #356 W1, distilled from
+#                 input_output/when_not (never invented semantics)
 #   when_not:     optional — when NOT to use this tool
 #
 #   example:
@@ -22,6 +25,7 @@ purpose: >-
 #     tier: T1
 #     cost_tier: cheap
 #     input_output: {input: 密文字节串, output: 明文层}
+#     description: Decodes ChaCha layers; pick for stream-cipher blobs
 #     when_not: 非 ChaCha 流加密时不用
 # -----------------------------------------------------------------------------
 
@@ -30,6 +34,7 @@ tools:
   - name: crypto-tool
     category: crypto
     capability: crypto:decode
+    description: 8-family crypto decode CLI
     tier: T1
     cost_tier: cheap
     input_output: {input: 密文字节串(--in/--in-hex) + 子命令(chacha|xor-add|rolling-xor|lzss|lzma-raw|rsa-unpad|go-byte-transform|va-to-off), output: 明文/变换后字节 + --reproduce field=value}
@@ -39,6 +44,7 @@ tools:
   - name: ghidra-recon
     category: ghidra
     capability: ghidra:recon
+    description: First-pass Ghidra recon sweep
     tier: T1
     cost_tier: deep
     input_output: {input: 样本 + --search-terms/--expected-exports/--sha256/--sha1, output: JSON(meta/imports/exports/functions/strings_of_interest/suspicious_api_calls/focus_functions/go/findings)}
@@ -47,6 +53,7 @@ tools:
   - name: ghidra-decompile-functions
     category: ghidra
     capability: ghidra:decompile
+    description: Decompile pinned functions
     tier: T1
     cost_tier: deep
     input_output: {input: 样本 + --addresses/--strings/--window/--context, output: JSON(per-target decompiled C + disasm window + string xrefs; --context 增 caller/callee ~10 行片段 + xref 串 + 已恢复命名, ghidra_context.v1)}
@@ -55,6 +62,7 @@ tools:
   - name: ghidra-vtable-struct
     category: ghidra
     capability: ghidra:vtable
+    description: Rebuild C++ vtable structs
     tier: T1
     cost_tier: cheap
     input_output: {input: 样本 + --address/--name/--class/--apply, output: JSON(vtable slot 表 + function fields, 可选落结构/标签)}
@@ -63,6 +71,7 @@ tools:
   - name: ghidra-evidence-annotations
     category: ghidra
     capability: ghidra:annotate
+    description: Apply/verify TSV annotations
     tier: T1
     cost_tier: cheap
     input_output: {input: 样本 + --mode apply|verify + --tsv, output: JSON(annotation 应用/校验摘要, verify 失败抛错 fail-closed)}
@@ -71,6 +80,7 @@ tools:
   - name: ghidra-scan-pointer
     category: ghidra
     capability: ghidra:xref-scan
+    description: Xref + raw pointer scanning
     tier: T1
     cost_tier: deep
     input_output: {input: 样本 + --mode xref|window(--addresses/--center), output: JSON(xref/raw 8-byte 指针扫描命中)}
@@ -80,6 +90,7 @@ tools:
   - name: disasm-constant-check
     category: static
     capability: static:disasm-check
+    description: Byte-exact disasm constant check
     tier: T1
     cost_tier: cheap
     input_output: {input: fact/report 代码清单 + PE 二进制(VA 锚点断言), output: byte-exact 断言校验 JSON(ok/mismatches/errors/skipped)}
@@ -89,6 +100,7 @@ tools:
   - name: yara-scan
     category: static
     capability: static:yara-scan
+    description: YARA rule scan of binaries
     tier: T1
     cost_tier: cheap
     input_output: {input: 二进制(--binary) + 规则文件/目录(--rules, 默认内置 crypto-tables), output: 命中清单(offset/rule/len/preview) + --json/--reproduce}
@@ -97,6 +109,7 @@ tools:
   - name: yara-gen
     category: static
     capability: static:yara-gen
+    description: Generate YARA rules
     tier: T1
     cost_tier: probe
     input_output: {input: 特征模式(--hex 或 --string) + --name + --meta k=v, output: YARA 规则文本(stdout)}
@@ -106,6 +119,7 @@ tools:
   - name: extract-syscalls
     category: static
     capability: static:syscall-extract
+    description: Extract x64 syscall stubs
     tier: T1
     cost_tier: cheap
     input_output: {input: 样本字节(--mode bin)或反汇编文本(--mode text), output: syscall stub 清单(location/number/name) + --reproduce field=value}
@@ -114,6 +128,7 @@ tools:
   - name: stack-strings
     category: static
     capability: static:stack-strings
+    description: Rebuild stack-constructed strings
     tier: T1
     cost_tier: cheap
     input_output: {input: 样本字节 + --start/--end/--min-len/--dword, output: "[rsp+disp] 栈构造字符串清单(slot/value/writes)"}
@@ -122,6 +137,7 @@ tools:
   - name: binary-sweep
     category: static
     capability: static:byte-sweep
+    description: Byte pattern sweep (url/ip/domain)
     tier: T1
     cost_tier: cheap
     input_output: {input: 样本字节 + --kind url|ipv4|domain|all 或 --pattern 自定义字节正则, output: 字节级模式命中清单(kind/offset/value)}
@@ -130,6 +146,7 @@ tools:
   - name: strings-classify
     category: static
     capability: static:strings-classify
+    description: Entropy/base64 string triage
     tier: T1
     cost_tier: cheap
     input_output: {input: 样本字节 + --min-len/--encoding ascii|utf16le|both, output: 字符串分类清单(entropy/printable_ratio/base64/hex) + inventory 统计}
@@ -138,6 +155,7 @@ tools:
   - name: go-buildinfo-carve
     category: static
     capability: static:buildinfo-carve
+    description: Carve Go buildinfo blobs
     tier: T1
     cost_tier: cheap
     input_output: {input: 样本字节 + --window/--zero-run, output: Go buildinfo blob 清单(offset/go_version/path/mod_count/dep_count/size)}
@@ -146,6 +164,7 @@ tools:
   - name: call-site-args
     category: static
     capability: static:callsite-args
+    description: Call-site args from disasm text
     tier: T1
     cost_tier: cheap
     input_output: {input: 反汇编文本 + --window/--abi x64|x86, output: 调用点参数清单(address/target/regs/stack/pushed)}
@@ -153,6 +172,7 @@ tools:
   - name: pe-analyze
     category: static
     capability: static:pe-parse
+    description: PE table parse, structural view
     tier: T1
     cost_tier: cheap
     input_output: {input: 样本 PE(--binary) + 子命令(headers|sections|imports|exports|resources|overlay|pdb|tls|signature|all), output: 对应 PE 表/数据 JSON + --reproduce field=value}
@@ -161,6 +181,7 @@ tools:
   - name: overlay-scan
     category: static
     capability: static:overlay-scan
+    description: PE overlay characterization
     tier: T1
     cost_tier: cheap
     input_output: {input: 样本 PE(--binary) + --mode reloc|true|mz|all, output: 覆盖区表征 JSON(reloc 表/熵/Go 证据/内嵌 PE 命中)}
@@ -169,6 +190,7 @@ tools:
   - name: disasm-dump
     category: static
     capability: static:disasm
+    description: Capstone disasm per VA list
     tier: T1
     cost_tier: cheap
     input_output: {input: 样本 PE(--binary) + --rvas/--vas 列表 + 可选 --prologs/--strings, output: 每址 capstone 指令清单 JSON(VA→文件偏移复用 tools/_lib/lib_disasm.py)}
@@ -177,6 +199,7 @@ tools:
   - name: shellcode-scan
     category: static
     capability: static:shellcode-scan
+    description: Shellcode region detection
     tier: T1
     cost_tier: cheap
     input_output: {input: 二进制 blob/PE(--binary) + --scan/--entry/--prologs/--peb/--strings, output: shellcode 候选区域 + 特征 JSON(PEB 访问/序言/字符串/入口反汇编)}
@@ -185,6 +208,7 @@ tools:
   - name: die-probe
     category: static
     capability: static:identify
+    description: DIE identify language/packer
     tier: T1
     cost_tier: probe
     input_output: {input: 样本 PE(--binary) + DIE 可执行文件(--die/$KUNGLAO_DIE), output: DIE 5-call merge JSON(语言/编译器/加壳/熵/资源); die 缺失 exit 2 + 安装指引}
@@ -194,6 +218,7 @@ tools:
   - name: c-normalize
     category: static
     capability: static:decompile-normalize
+    description: Normalize decompiled C idioms
     tier: T1
     cost_tier: cheap
     input_output: {input: 反编译 C 文本(--in 或 stdin) + --heuristics, output: 规范化 C(modulo 惯用法 x-(x/N)*N→x%N / 死赋值删除; --heuristics 开 undefined4/8 类型启发) + rule_hits/diff stats; exit 0 变换/1 无变换/2 错误}
@@ -202,6 +227,7 @@ tools:
   - name: opaque-pred
     category: static
     capability: static:opaque-predicate
+    description: Resolve opaque predicates via z3
     tier: T1
     cost_tier: probe
     input_output: {input: C 表达式(--expr "...")或表达式对(--simplify "lhs -> rhs"), output: always_true/always_false/unknown + 简化常量 或 MBA 重写建议(z3 32-bit 语义); z3 缺失 exit 2 + 安装指引}
@@ -211,6 +237,7 @@ tools:
   - name: build-evidence-index
     category: pipelines
     capability: pipeline:evidence-index
+    description: Index evidence with sha256
     tier: T1
     cost_tier: cheap
     input_output: {input: workspace 的 evidence/ + analysis_artifacts/ 原始证据, output: evidence/_index.json + _INDEX.md(eid/path/sha256/source_reliability)}
@@ -220,6 +247,7 @@ tools:
   - name: audit-legacy-proven
     category: auxiliary
     capability: aux:proven-audit
+    description: Audit legacy PROVEN claims
     tier: T1
     cost_tier: cheap
     input_output: {input: workspace(claim-register.yaml + facts/_INDEX.md), output: legacy PROVEN claim 审计(BLIND 签名维度 + 索引溯源性)}
@@ -229,6 +257,7 @@ tools:
   - name: capture-golden
     category: auxiliary
     capability: aux:golden-capture
+    description: Capture golden-master fixtures
     tier: T1
     cost_tier: cheap
     input_output: {input: 'CASES 清单(合成工作区 + CLI 参数)', output: 'tests/fixtures/golden/{manifest.yaml, F-NN/expected/stdout.txt}'}
@@ -238,6 +267,7 @@ tools:
   - name: measure-blind-coverage
     category: auxiliary
     capability: aux:blind-coverage
+    description: BLIND coverage of PROVEN facts
     tier: T1
     cost_tier: cheap
     input_output: {input: workspace(claim-register.yaml + facts/*.md 的 verifier_sign_off), output: BLIND 覆盖率 JSON(PROVEN/blind_signed/unverified/coverage)}
@@ -247,6 +277,7 @@ tools:
   - name: measure-cold-start
     category: auxiliary
     capability: aux:cold-start-metrics
+    description: Cold-start token baseline
     tier: T1
     cost_tier: probe
     input_output: {input: workspace 状态文件清单(claim-register.yaml/_INDEX/ledger/progress 等), output: docs/baselines/cold-start-tokens.json(逐文件 token 估算)}
@@ -256,6 +287,7 @@ tools:
   - name: sanitize-text
     category: auxiliary
     capability: aux:sanitize
+    description: Sanitize text vs prompt injection
     tier: T1
     cost_tier: probe
     input_output: {input: 样本派生文本(--in/标准输入) + --mode zero-width|homoglyph|markers|full + --report-only, output: 净化文本或 JSON(zwx_count/homoglyph_count/marker_count/suspicious/sha256) + --reproduce field=value}
