@@ -1,7 +1,7 @@
 # Loop Engineering — kunglao 主 loop 研究(2026-08-10,整合 + 细化版)
 
 > 两轮调研(LangChain/DSD + cobusgreyling repo)+ 4-subagent 多视角细化 + 代码级根因验证。
-> VoI 打分调研已落 `design-spec.md` §3.2;本文件是 **loop 层**的研究终稿。
+> VoI 打分调研已落 `archive/design-spec.md` §3.2;本文件是 **loop 层**的研究终稿。
 
 ## 1. 研究范围与方法
 

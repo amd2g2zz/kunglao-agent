@@ -20,7 +20,7 @@ R5 __pycache__ 不入库: .gitignore 覆盖 tools/ 任意深度的 __pycache__
 R6 迁移后 import 全链路: 每个被移动 CLI 在新位置以 --help 应答 exit 0;
    tool-search 全量可用(查询结果计数 == 注册表条数)。
 R7 旧路径引用清零: 活文档/代码/清单不得再引用旧根层路径与旧类目文件名
-   (openspec/changes/ 与 docs/devlog/ 是冻结的历史变更记录, 豁免)。
+   (openspec/changes/ 是冻结的历史变更记录, 豁免; docs/devlog/ 已于 #355 删除)。
 """
 from __future__ import annotations
 
@@ -64,7 +64,8 @@ COMMON_BYTE_SCAN = (
 )
 
 # live surfaces scanned for stale references (R7) — historical change logs
-# (openspec/changes/, docs/devlog/) are frozen records and exempt.
+# (openspec/changes/ is a frozen record set and is exempt; docs/devlog/
+# was removed entirely by #355).
 LEGACY_REFS = [
     "tools/lib_disasm.py", "tools/measure_cold_start.py",
     "tools/audit_legacy_proven.py", "tools/build_evidence_index.py",

@@ -117,7 +117,9 @@ def test_no_reference_to_legacy_precommit_path():
 def test_docs_single_design_tree():
     assert not (ROOT / "docs" / "refactor").exists(), (
         "docs/refactor/ retired in #263 — docs/design/ is the single design tree")
-    for name in ("design-spec.md", "module-design.md", "loop-engineering.md"):
+    # #355: historical design docs moved under docs/design/archive/
+    for name in ("archive/design-spec.md", "archive/module-design.md",
+                 "loop-engineering.md"):
         assert (ROOT / "docs" / "design" / name).is_file()
 
 
