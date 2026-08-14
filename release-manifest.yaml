@@ -6,7 +6,7 @@
 
 schema_version: "1.0"
 project: kunglao-agent
-version: "1.9.29"            # MUST equal pyproject.toml [project].version (receipt-checked)
+version: "0.1.0"             # MUST equal pyproject.toml [project].version (receipt-checked)
 requires_python: ">=3.11"
 
 dependencies:

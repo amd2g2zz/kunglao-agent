@@ -76,7 +76,7 @@ wheels = [
 
 [[package]]
 name = "kunglao-agent"
-version = "1.9.29"
+version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "capstone" },
