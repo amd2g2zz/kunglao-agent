@@ -83,11 +83,12 @@
 
 ## 内部版本映射
 
-v0.1 之前仓内代码注释中的 v1.9.x 标记是开发期特性溯源注释（"此 gate 于 v1.9.24 落地"），
+v0.1 之前仓内代码注释中的 v1.8.x / v1.9.x 标记是开发期特性溯源注释（"此 gate 于 v1.9.24 落地"），
 非发布版本。它们全部归属 v0.1 首发交付范围，映射关系：
 
 | 内部标记 | 代表特性（非穷举） |
 |---|---|
+| v1.8.x | orchestrator 失败模式工程化期（design rationale 存档于 docs/design/archive/DESIGN.md）：v1.8 iterative-deepening tier 门控；v1.8.1 C0a PROVEN 不打折 + self-cap 闸；v1.8.2 F1-F6 失败模式紧凑表（SKILL.md §6-pre）+ self-cap-safe-prose（§7）+ B1c blocker；v1.8.3-5 enforcement gates 套件（troubleshooting/search/active-intervention/backtrack/reuse/hook-activation/ask-for-direction，tests/test_v1_8_enforcement_gates.py）；v1.8.15/16 complete-teardown 搜索算子链（scripts/complete_teardown.py） |
 | v1.9.0-1 | convergence-driven dispatch 成为默认调度模式 |
 | v1.9.2-7 | failure-blocked claim 拦截（dispatch_gate）、优先级排序修正 |
 | v1.9.8 | worker_pulse 收敛脉冲、payload 形状全适配、fact 命名修正 |
@@ -98,13 +99,16 @@ v0.1 之前仓内代码注释中的 v1.9.x 标记是开发期特性溯源注释�
 | v1.9.22 | verifier 必须 BLIND |
 | v1.9.24 | facts-snapshot HARD-REQUIRED（防状态丢失欺骗）、best-first 偏差审计 |
 | v1.9.28 | dispatch 前置校验心跳存活（机械门禁化） |
-| v1.9.29 | plan-drift/STALLED/stuck-worker 门禁、claim-status guard（引用最多的标记，26 处） |
+| v1.9.29 | plan-drift/STALLED/stuck-worker 门禁、claim-status guard（引用最多的标记） |
 | v1.9.31 | plan-to-execute 门禁 (#239) |
 | v1.9.32 | tool-first 门禁 (#294) |
 | v1.9.33 | agenttype specialist-first 门禁 (#310) |
 | v1.9.36-38 | heartbeat 体系三件套（touch/tick/selfcheck）语义统一 |
 
-分布统计（全仓 121 处标记/37 文件）：v1.9.29×26、v1.9.24×11、v1.9.36×8、
-v1.9.28×8、v1.9.20×8、v1.9.13×7、v1.9.8×6、v1.9.12×5、v1.9.25×4、v1.9.22×4、
-其余各 1-3 处。源文件内这些注释按发布决策保留不动——它们是"何时引入"的
+分布统计（#355 重测；口径：git 追踪文件、排除冻结历史 openspec/archive + docs/design|devlog 档案 + references/archive、排除本文件自身）：
+**v1.9.x 活树 101 处/26 文件** — v1.9.29×26、v1.9.24×13、v1.9.8×6、
+v1.9.28×4、v1.9.25×4、v1.9.13×4、其余各 1-3 处；
+**v1.8.x 活树 19 处/8 文件** — v1.8.2×5、v1.8.5×4、v1.8.16×3、
+v1.8.1×2、v1.8.3×2、v1.8.4×2、v1.8.15×1（另有 22 处在冻结档案内）。
+源文件内这些注释按发布决策保留不动——它们是"何时引入"的
 溯源锚点，不是版本声明。
