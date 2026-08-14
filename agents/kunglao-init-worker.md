@@ -46,7 +46,8 @@ type-aware initialization + toolchain readiness.
    `[HH:MM] step: started init | status: in-progress`, append per step; write
    `blockers/B-<n>.md` when a HARD item is missing, with root cause + the exact
    install command. Report at the end.
-5. **HARD toolchain missing = 提示人类安装, 不静默修复** (#304 修正, comment
+5. **HARD toolchain missing = prompt the human to install, never silently
+   repair** (#304 amendment, comment
    304-5289955958): kunglao-init now runs `toolchain.check` BEFORE scaffold and
    REFUSES on HARD FAIL (exit 4) with per-item install commands. A missing HARD
    component (Ghidra/IDA, jadx, aapt, GitNexus, ADB, root...) is a
@@ -65,12 +66,12 @@ type-aware initialization + toolchain readiness.
    in the status file.
 3. **Run init (it gates itself)** —
    `python <SKILL_DIR>/scripts/kunglao-init.py <ws> --type <t>`
-   kunglao-init runs `toolchain.check` BEFORE scaffold (#304 修正). Outcomes:
+   kunglao-init runs `toolchain.check` BEFORE scaffold (#304 amendment). Outcomes:
    - exit 0 → verify `project_type=<t>` in `analysis_state.txt`, marker
      present, CLAUDE.md rendered from the type-specific template. Done path.
    - exit 4 (REFUSE) → HARD toolchain FAIL: capture the per-item
      `[FAIL] ... fix:` lines and go to step 4 (human install, NOT you).
-   - exit 5 → no sample: relay "请将样本放入 bins/ 或指定路径" to the operator.
+   - exit 5 → no sample: relay "place a sample into bins/ or specify a path" to the operator.
 4. **Relay install guidance to the human (NOT agent repair)** — write
    `blockers/B-<n>.md` carrying the refusal output verbatim: each missing
    HARD item + its exact install command + root-cause cascade (ADB missing →
