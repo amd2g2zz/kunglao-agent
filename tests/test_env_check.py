@@ -29,9 +29,16 @@ from env_check import (  # pytest.ini pythonpath = . hooks scripts tools
 
 
 def _kunglao_ws(tmp_path: Path) -> Path:
-    """Minimal workspace: runs/ exists so the snapshot write succeeds."""
+    """Minimal workspace: runs/ + FULLY initialized state (#304: [initialized]
+    marker in claim-register.yaml + project_type in analysis_state.txt) so the
+    snapshot write succeeds and init_complete passes."""
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
+    (ws / "claim-register.yaml").write_text(
+        "# [initialized] state_hash=abc seeds=3\n"
+        "claims:\n- id: C-001\n  status: OPEN\n", encoding="utf-8")
+    (ws / "analysis_state.txt").write_text(
+        "agent_teams_flag=0\nproject_type=windows\n", encoding="utf-8")
     return ws
 
 

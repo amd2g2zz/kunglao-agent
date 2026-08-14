@@ -37,6 +37,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import init_state  # noqa: E402  # F6 (#304 review): shared init-completeness predicate
+
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: truthy = FAIL; 0/false/off/空 = PASS
 # Issue #228: NO machine-specific default. Unset = not configured — the check
@@ -201,6 +203,20 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     return True, "venv deps OK" + ("; sample sha256 OK" if sample_sha256 else "")
 
 
+def check_init_complete(ws: Path) -> tuple[bool, str]:
+    """#304: init completeness check (HARD).
+
+    Requires BOTH:
+    - [initialized] marker in claim-register.yaml
+    - project_type=<type> in analysis_state.txt (where type in windows/linux/android)
+
+    Missing either -> FAIL with guidance to run kunglao-init.py --type.
+    F6 (#304 review): the predicate lives in scripts/init_state.py — single
+    source of truth shared with kunglao-init and env_check_gate.
+    """
+    return init_state.init_complete(ws)
+
+
 def read_sample_sha256(ws: Path) -> str | None:
     """Sample sha256 from task_spec.yaml (best-effort; not a hard requirement)."""
     tspec = ws / "task_spec.yaml"
@@ -216,6 +232,7 @@ def read_sample_sha256(ws: Path) -> str | None:
 
 def run(ws: Path) -> tuple[int, dict]:
     checks = {
+        "init_complete": check_init_complete(ws),
         "agent_teams_flag": check_flag(),
         "vm_reachability": check_vm(),
         "ghidra": check_ghidra(),

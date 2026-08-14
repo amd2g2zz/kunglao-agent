@@ -13,13 +13,19 @@ Agent tool itself, at the exact point a worker would be dispatched.
 trigger the hard REJECT; 0/false/off/empty are the clean default state and pass
 through silently — matching scripts/env_check.py check_flag semantics.
 
-Design (mirrors dispatch_gate.py, narrow + zero-IO):
-  - ZERO IO by design: reads os.environ directly. No state file, no
+Design (mirrors dispatch_gate.py, narrow + low-IO):
+  - FLAG check: ZERO IO — reads os.environ directly. No state file, no
     .hook_state.json activation check — a teammate-polluted session must not
     dispatch even during the activation TTL, and the env lookup is the one
-    check that cannot be forgotten. This hook ALWAYS fires on the Agent tool
-    while the flag is TRUTHY (in a kunglao workspace); it sleeps (exit 0) as
-    soon as the flag is clean or gone.
+    check that cannot be forgotten.
+  - #304 INIT-completeness check: reads TWO workspace state files per dispatch
+    in kunglao workspaces — claim-register.yaml ([initialized] marker) +
+    analysis_state.txt (project_type=). The predicate lives in
+    scripts/init_state.py (single source of truth, shared with
+    scripts/env_check.py and scripts/kunglao-init.py; #304 review F6).
+  - This hook ALWAYS fires on the Agent tool while the flag is TRUTHY (in a
+    kunglao workspace); it sleeps (exit 0) as soon as the flag is clean or
+    gone — but the init-completeness check still runs in kunglao workspaces.
   - Workspace resolution mirrors dispatch_gate._resolve_workspace: only
     kunglao-agent workspaces (claim-register.yaml present) are policed, so the
     hook (wired in the GLOBAL settings.json via wire_up_settings.py) stays
@@ -41,6 +47,11 @@ import sys
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
+# F6 (#304 review): shared init-completeness predicate lives in scripts/init_state.py.
+_SCRIPTS_DIR = SKILL_DIR / "scripts"
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+import init_state  # noqa: E402
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: only truthy rejects; 0/false/空 pass
 
@@ -48,6 +59,23 @@ TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: only truthy rejects; 0/false
 def _is_truthy(value: str | None) -> bool:
     """Truthy 判定: 1/true/yes/on, 不区分大小写 (#276 默认 0 化语义)."""
     return value is not None and value.strip().lower() in TRUTHY_VALUES
+
+
+def _check_init_complete(ws: Path) -> tuple[bool, str]:
+    """#304: Check init completeness (marker + project_type declared).
+
+    F6 (#304 review): the predicate itself lives in scripts/init_state.py
+    (single source of truth, shared with env_check.py + kunglao-init.py).
+    This wrapper only composes the hook-channel guidance.
+    Returns (is_complete, guidance_or_empty).
+    """
+    ok, detail = init_state.init_complete(ws)
+    if ok:
+        return True, ""
+    return False, (
+        f"{detail}. Run: python {SKILL_DIR}/scripts/kunglao-init.py {ws} "
+        f"--type <windows|linux|android>"
+    )
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
@@ -83,24 +111,37 @@ def evaluate(payload: dict, environ: dict | None = None) -> tuple[int, str, str 
     """Hook decision for a PreToolUse(Agent) payload.
 
     Returns (exit_code, stderr_text, additional_context_or_None):
-      - (0, "", None)      — not a kunglao workspace, or flag not TRUTHY
+      - (0, "", None)      -- not a kunglao workspace, or all checks pass
         (0/false/off/empty = default disabled, #276): silent
-      - (2, stderr, ctx)   — flag TRUTHY: hard REJECT with guidance
+      - (2, stderr, ctx)   -- flag TRUTHY: hard REJECT with guidance
+      - (2, stderr, ctx)   -- init incomplete: hard REJECT with guidance (#304)
     environ defaults to os.environ (zero-IO direct lookup; injectable for tests).
     """
     environ = os.environ if environ is None else environ
     ws = _resolve_workspace(payload)
     if ws is None:
         return 0, "", None
+
+    # Check 1: agent-teams flag (existing check, unchanged)
     flag_val = environ.get(FLAG_NAME)
-    if not _is_truthy(flag_val):
-        return 0, "", None
-    return (
-        2,
-        f"REJECT env_check_gate: {FLAG_NAME} set ({flag_val}) — teammate-polluted "
-        f"session (kunglao #88). Fix: unset {FLAG_NAME} + restart the session.",
-        _guidance(ws, flag_val),
-    )
+    if _is_truthy(flag_val):
+        return (
+            2,
+            f"REJECT env_check_gate: {FLAG_NAME} set ({flag_val}) -- teammate-polluted "
+            f"session (kunglao #88). Fix: unset {FLAG_NAME} + restart the session.",
+            _guidance(ws, flag_val),
+        )
+
+    # Check 2: #304 init completeness (marker + project_type)
+    init_ok, init_guidance = _check_init_complete(ws)
+    if not init_ok:
+        return (
+            2,
+            f"REJECT env_check_gate: workspace not fully initialized. {init_guidance}",
+            f"env_check_gate: {init_guidance}",
+        )
+
+    return 0, "", None
 
 
 def main() -> int:
