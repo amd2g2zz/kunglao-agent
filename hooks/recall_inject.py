@@ -15,8 +15,8 @@ Design (mirrors dispatch_gate / env_check_gate, inject-only):
   - Claim features -> tier via scripts/tier_rules.tier_for_claim (single
     source for T3 VM/dynamic vs T2 static-depth signals), then -> recall
     queries: go signals -> "go" (languages-go.md); tier 3 -> "vm" + "dynamic"
-    (scene 动态调试 / verify-static-vs-dynamic.md); tier 2 + default ->
-    "static analysis" (scene 反汇编/静态分析 — "disasm" itself matches nothing
+    (dynamic-debugging scene / verify-static-vs-dynamic.md); tier 2 + default ->
+    "static analysis" (disasm/static-analysis scene — "disasm" itself matches nothing
     in the index).
   - Each query runs `python scripts/references_recall.py <query>` as a
     subprocess (timeout 5s). FAIL_OPEN at every layer: any failure -> no
@@ -98,9 +98,9 @@ def queries_for_features(prompt_text: str, tier: int) -> list[str]:
     """Deterministic claim-feature -> recall query mapping (#268).
 
     go signals -> "go" (languages-go.md is the top hit); tier 3 (VM/dynamic
-    intent, via tier_rules) -> "vm" + "dynamic" (scene 动态调试 +
+    intent, via tier_rules) -> "vm" + "dynamic" (dynamic-debugging scene +
     verify-static-vs-dynamic.md); tier 2 (static-depth/disasm) and the tier 1
-    default -> "static analysis" (scene 反汇编/静态分析 — "disasm" itself
+    default -> "static analysis" (disasm/static-analysis scene — "disasm" itself
     matches nothing in the layered index).
     """
     text = prompt_text.lower()

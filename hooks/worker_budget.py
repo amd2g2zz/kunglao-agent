@@ -162,7 +162,7 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid):
     the top-ranked dispatchable one. `deviated=True` means the dispatch
     departed from rank #1 and a `reasoning:` field is HARD-REQUIRED in the
     dispatch prompt (pre_check rejects without it — anti-spoof: prevents
-    "假装按优先级" dispatches that skip the recorded-deviation discipline).
+    "pretend-priority" (假装按优先级) dispatches that skip the recorded-deviation discipline).
     """
     if not _PRIORITY_AVAILABLE or not dispatched_cid:
         return (True, '', False)
@@ -852,7 +852,7 @@ _TOOLFIRST_DIAGNOSTIC_RE = re.compile(
 _NEGATION_RE = re.compile(r'\b(?:not|no)\b|不是|非')
 
 # H2/CJK (#294): ASCII-only word boundaries, not `\b` — Python's \b treats CJK
-# chars as word chars, so '解码crypto层' would silently bypass the gate; and
+# chars as word chars, so '解码crypto层' (decode-the-crypto-layer) would silently bypass the gate; and
 # 'crypto' inside 'cryptography' must NOT match. (?<![A-Za-z0-9_])…(?![A-Za-z0-9_])
 # gives exactly that.
 _ASCII_BOUNDARY = r'(?<![A-Za-z0-9_]){kw}(?![A-Za-z0-9_])'
@@ -898,7 +898,7 @@ def _is_diagnostic_exempt(text: str) -> bool:
     an exemption)."""
     for marker in _TOOLFIRST_DIAGNOSTIC_SUBSTRINGS:
         if marker in text:
-            # CJK negation ('不是一次性') in the 16 chars before the marker
+            # CJK negation ('不是一次性' — not-one-off) in the 16 chars before the marker
             idx = text.find(marker)
             prev = text[max(0, idx - 16):idx]
             if not _NEGATION_RE.search(prev):
@@ -1105,8 +1105,8 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     'hostchan': {
         'additionalContext': (
             'host-channel dynamic tool forbidden (SKILL.md §hard prohibitions '
-            '#5 — sample must never execute on the host). Fix: 只允许 '
-            'mcp__x64dbg__connect_remote(host=192.168.20.128) — launch the '
+            '#5 — sample must never execute on the host). Fix: only '
+            'mcp__x64dbg__connect_remote(host=192.168.20.128) is allowed — launch the '
             'VM-side x64dbg via vmr-shell first, then connect_remote; or '
             'rev-frida against the VM frida-server (192.168.20.128:1337). '
             'Never start_session / connect_to_session / connect_to_instance / '
@@ -1278,15 +1278,17 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
     from datetime import datetime, timedelta, timezone
     if not state_path.exists():
         return True, 'no kunglao-agent workspace — heartbeat gate skipped'
-    # heartbeat 属 skill 监控, 不在分析工作区: 先查 cwd 侧, 再 fallback 到 skill 安装目录
+    # the heartbeat belongs to skill-level monitoring, not the analysis workspace: check the cwd side first, then fall back to the skill install dir
     hb = state_path.parent / 'runs' / '.heartbeat.json'
     _skill = Path(__file__).resolve().parents[1]
     hb_skill = _skill / 'runs' / '.heartbeat.json'
 
     def _age(hb_path: Path):
-        # F1 (#14): liveness = max(last_tick_ts, activity_ts) — tool 活跃(activity_ts)
-        # 即使 cron 不 tick(last_tick_ts stale)也算 alive。修 v1.9.36 语义分裂
-        # (hook bump activity_ts 但 gate 只读 last_tick_ts → fix 没修 gate)。
+        # F1 (#14): liveness = max(last_tick_ts, activity_ts) — tool activity
+        # (activity_ts) counts as alive even when the cron does not tick
+        # (last_tick_ts stale). Fixes the v1.9.36 semantic split (the hook
+        # bumped activity_ts but the gate only read last_tick_ts → the fix
+        # never reached the gate).
         try:
             data = json.loads(hb_path.read_text(encoding='utf-8'))
             parsed = []
@@ -1304,7 +1306,7 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
         except Exception:
             return None, ''
 
-    # workspace 心跳缺失或过期 → 用 skill 目录的新心跳(skill 监控统一注册点)
+    # workspace heartbeat missing or expired → use the fresh heartbeat from the skill dir (unified skill-monitoring registration point)
     ws_age, ws_last = _age(hb) if hb.exists() else (None, '')
     if ws_age is None or ws_age > timedelta(minutes=35):
         sk_age, sk_last = _age(hb_skill) if hb_skill.exists() else (None, '')
@@ -1384,7 +1386,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     # best-first priority audit — v1.9.24: DEVIATION REASONING IS HARD-REQUIRED.
     # check_priority returns (ok, msg, deviated). If the dispatch deviates from
     # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
-    # otherwise the dispatch is REJECTED (prevents "假装按优先级" spoofing:
+    # otherwise the dispatch is REJECTED (prevents "pretend-priority" (假装按优先级) spoofing:
     # dispatching a different claim without recording why).
     _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), paths.get('task_spec'), cid)
     if deviated:
