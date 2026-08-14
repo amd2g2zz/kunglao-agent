@@ -65,7 +65,7 @@ def health_check(ws: Path) -> dict:
     """ledger 轨迹 → HEALTHY/STALLED/SPINNING + flatline/churn 指标 (L388)"""
 
 def tick(ws: Path) -> TickOutput:
-    """组合: heartbeat→reconcile→agent_watch→help_watch→stuck_watch→health (L391)
+    """组合: heartbeat→reconcile→help_watch→stuck_watch→health (L391)
     输出: 一句话状态 + 下一步建议(LLM 只读)"""
 ```
 
@@ -136,8 +136,7 @@ Contract: 旧通道降级只读                           ← 本阶段判据 E5
 ```
 tick(ws):
   hb = heartbeat_check(ws)
-  ls = loop_reconcile(ws)                    # 更新 loop-state + 事件
-  aw = agent_watch(ws)                       # NEW/GONE/STALE(含于 ls: active/stale/gone)
+  ls = loop_reconcile(ws)                    # 更新 loop-state + 事件(active/stale/gone)
   hi = help_watch(ws)                        # 未响应 help_request
   st = stuck_watch(ws)                       # 卡死 worker
   hl = health_check(ws)                      # 轨迹健康

@@ -37,7 +37,7 @@ import tempfile
 import time
 from pathlib import Path
 
-STALE_MIN = 20          # mtime frozen > 20 min = STALE (matches agent_watch)
+STALE_MIN = 20          # mtime frozen > 20 min = STALE
 ACTIVE_WINDOW_MIN = 30  # only report agents with activity in the last 30 min
 
 

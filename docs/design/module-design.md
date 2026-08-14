@@ -405,7 +405,6 @@ Contract: 旧通道降级只读
 M5 MONITOR
 ├── heartbeat           tick_ts/activity_ts 二分(§3.7)
 ├── loop_reconcile      TEMP mtime → loop-state(§3.3)
-├── agent_watch         active/stale/gone 事件
 ├── help_watch          active_intervention(help_request 响应)
 ├── stuck_watch         backtrack_gate(卡死检测)
 └── health_check        convergence_health(HEALTHY/STALLED/SPINNING)
@@ -424,7 +423,7 @@ def health_check(ws: Path) -> dict:
     """ledger 轨迹 → HEALTHY/STALLED/SPINNING + flatline/churn 指标"""
 
 def tick(ws: Path) -> TickOutput:
-    """组合: heartbeat→reconcile→agent_watch→help_watch→stuck_watch→health
+    """组合: heartbeat→reconcile→help_watch→stuck_watch→health
     输出: 一句话状态 + 下一步建议(LLM 只读)"""
 ```
 
@@ -445,8 +444,7 @@ def tick(ws: Path) -> TickOutput:
 ```
 tick(ws):
   hb = heartbeat_check(ws)
-  ls = loop_reconcile(ws)                    # 更新 loop-state + 事件
-  aw = agent_watch(ws)                       # NEW/GONE/STALE
+  ls = loop_reconcile(ws)                    # 更新 loop-state + 事件 (active/stale/gone)
   hi = help_watch(ws)                        # 未响应 help_request
   st = stuck_watch(ws)                       # 卡死 worker
   hl = health_check(ws)                      # 轨迹健康
@@ -458,7 +456,6 @@ tick(ws):
 
 - TEMP glob 失败(目录不存在) → 空 loop-state + 警告(不崩溃)
 - heartbeat 文件损坏 → STALE + 提示 re-register
-- agent_watch 无快照 → 全当 NEW(首次)
 
 ## M5.6 测试点
 
