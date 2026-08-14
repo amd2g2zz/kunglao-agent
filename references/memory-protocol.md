@@ -1,5 +1,5 @@
 ---
-name: kong-agent-memory-protocol
+name: kunglao-agent-memory-protocol
 description: Memory architecture for kunglao-agent — two-tier staging → longterm distill with 10-item threshold and atomic clear
 metadata:
   version: 1.0
@@ -8,7 +8,7 @@ metadata:
 **Heuristic**: are you writing raw evidence directly to facts/ or routing through the 2-tier pipeline (staging -> longterm)? If direct -> skip this file. If pipeline -> read on.
 
 
-# Kong-agent memory protocol
+# kunglao-agent memory protocol
 
 ## Purpose
 

@@ -242,7 +242,7 @@ def check(workspace: Path, active_only: bool = False) -> int:
             continue
         # a primary question is ANSWERED when an answering claim reached any
         # terminal status — PROVEN/VERIFIED confirm, REFUTED/NEGATIVE answer
-        # "no", DEFERRED/STALE record a dead-end. (v1.9.30: TERMINAL_STATUSES
+        # "no", DEFERRED/STALE record a dead-end. (v1.9.29: TERMINAL_STATUSES
         # already includes REFUTED/NEGATIVE; previously only PROVEN/VERIFIED
         # counted, so a yes/no question answered "no" flagged as unanswered.)
         answered = any(c.get("answers_question") == qid and (c.get("status") or "").upper() in TERMINAL_STATUSES for c in claims)

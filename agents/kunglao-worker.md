@@ -124,10 +124,10 @@ write "task complete" while open questions remain on your claim.
 - **jdb CLI fallback**（jdb-mcp 不可用时）：`-connect com.sun.jdi.SocketAttach:
   hostname=localhost,port=5005`（Windows `-attach` 走 SharedMemory bug 已知）；
   `-J-Duser.language=en`（中文 locale 断点命中标记不匹配）。驱动脚本
-  `<workspace>/scripts/re/jdb_drive.py`（argparse：--jdb/--port/--breakpoints/
+  `<workspace>/scripts/jdb_drive.py`（argparse：--jdb/--port/--breakpoints/
   --script/--duration-secs/--log）。注意路径约定：**jdb/hashcode 工具在 workspace
-  内 scripts/re/**；**reusable HTTP 工具在顶层 `<project>/scripts/re/`**
-  （sheets_csv_probe.py 等 — c009r2 踩坑：workspace 内无 HTTP 工具，顶层才有）。
+  内 `scripts/`**；**reusable 工具按工具家原则放 `<SKILL_DIR>/tools/<category>/`
+  （登记 `tools/_INDEX.yaml`；sheets_csv_probe.py 等 — c009r2 踩坑：workspace 内无该工具，skill toolshelf 才有）。
   venv python: `<project>/.venv/Scripts/python.exe`（解密/脚本运行用，不污染全局）。
 - **Docker 镜像**：`eclipse-temurin:17-jdk`（openjdk:17-jdk-slim 已退役）；
   `bash docker/run.sh suspend`（JDWP 5005 + legal.txt 预置——注意 legal.txt
@@ -272,7 +272,7 @@ provenance:                             # lint-required — list of {role, path}
   - {role: sample, path: bins/<sha>}
   - {role: source, path: <decompile/script path>}
   - {role: capture_log, path: runs/<log file>}
-  - {role: recompute_script, path: scripts/re/<tool>.py}
+  - {role: recompute_script, path: tools/<category>/<tool>.py}
 boundary_type: observation | confirmed | capability_not_executed | pure_negative | numeric | contradiction | source_derived | link_not_closed | coordinate   # lint-required: use ONE of these 9; keep byte-anchor detail in the body + verified_by
 unit: "<counting basis for any number in claim — tool + transformation + ALL alternative bases; REQUIRED when boundary_type=numeric, else omit>"   # e.g. '8-byte ELF slots = sum(section sizes)/8; Ghidra collapses 37 LDDW -> 774 records'. Without unit, a numeric fact is a fidelity trap (C-020: 811 slots vs 774 records; 70 BPF_CALL = 69 helper + 1 kfunc). Per global rule ~/.claude/rules/common/numeric-fidelity.md.
 source: static_re | dynamic_re | mixed
@@ -311,13 +311,14 @@ across samples.** Rules:
    across samples. A script is "reusable" iff (a) it takes the sample path
    as `--binary PATH` or argv, (b) the only sample-specific constant is
    the input, (c) the output schema (stdout/file) is fixed.
-3. **Reusable tools belong in `scripts/re/`.** Suggested slots:
-   - `scripts/re/pe_headers.py` — parse PE header + section table (any binary)
-   - `scripts/re/byte_grep.py` — xxd-style byte-pattern search with offset/RVA
-   - `scripts/re/capstone_dump.py` — disasm helper (any .bin)
-   - `scripts/re/frida_attach_hooks.js` — generic Interceptor counter
+3. **Reusable tools belong in the toolshelf** — `tools/<category>/`
+   （crypto/static/ghidra/frida/t2/auxiliary，见 `tools/_INDEX.md`），并登记
+   `tools/_INDEX.yaml`。建议槽位：
+   - `tools/static/pe_headers.py` — parse PE header + section table (any binary)
+   - `tools/static/byte_grep.py` — xxd-style byte-pattern search with offset/RVA
+   - `tools/static/capstone_dump.py` — disasm helper (any .bin)
+   - `tools/frida/frida_attach_hooks.js` — generic Interceptor counter
      template, accepts hook list as JSON arg
-   - `scripts/re/wss_reverse_stub.py` — generic WSS reverse-stub
 4. **Naming**: `<verb>_<object>.py` (`byte_grep.py`, `frida_attach.py`).
    Do NOT prefix with fact ID or claim ID (`f046_frida_*.py` is forbidden
    — that's a code smell, not a description).
@@ -333,7 +334,7 @@ across samples.** Rules:
    script. CLI spec checklist → `references/cli-script-checklist.md`.
 
 Why this matters: a fresh worker on the next sample should be able to run
-`scripts/re/frida_attach.py --binary <sha> --hook <addr>` and get useful
+`tools/frida/frida_attach.py --binary <sha> --hook <addr>` and get useful
 output, without first reading 200 lines of sample-specific code.
 
 ## Return format (your final message — 3 lines, no prose padding)

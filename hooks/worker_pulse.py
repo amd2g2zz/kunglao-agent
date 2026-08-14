@@ -58,7 +58,7 @@ DISPATCH_RE = re.compile(
     re.IGNORECASE,
 )
 
-# v1.9.30 (#38): soft stale-worker detection for the non-dispatch PostToolUse
+# v1.9.29 (#38): soft stale-worker detection for the non-dispatch PostToolUse
 # path. A worker is in-progress iff the LAST `status:` line (most-recent-state
 # wins, same convention as lib_kunglao.scan_active_workers and
 # backtrack_gate.parse_status) lowercased + dash->underscore == "in_progress".
@@ -262,7 +262,7 @@ def main() -> int:
     if not _kunglao_active(ws):
         return 0  # not activated or expired — hooks sleep
     if not _was_dispatch(payload):
-        # v1.9.30 (#38): even on the non-dispatch path, surface mtime-stale
+        # v1.9.29 (#38): even on the non-dispatch path, surface mtime-stale
         # in-progress workers as a soft additionalContext. NEVER aborts
         # (rc=0); the hard REJECT is worker_budget.check_backtrack_gate.
         stale_msg = _check_stale_workers(ws)

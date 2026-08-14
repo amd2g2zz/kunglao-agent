@@ -124,7 +124,7 @@ subagent-model switch, smoke-test one dispatch (e.g. `/kunglao-agent verify
 starts; only then enter the convergence loop. If 400 [1210] appears, revert
 the model setting — it is a proxy-side rejection, not a kunglao defect.
 
-## Specialist bootstrap tolerance + dual-probe protocol (v1.9.30, 2026-08-05)
+## Specialist bootstrap tolerance + dual-probe protocol (v1.9.29, 2026-08-05)
 
 **Incident (C-332, 2026-08-05):** a freshly-dispatched verdict-scorer was
 killed as "B1c dead" after 6 minutes with no status file. Its final output
@@ -151,7 +151,7 @@ misclassifies normal specialist bootstrap as death.
    but **still appears in the running-agents list** is a **CANDIDATE**, not a
    zombie: its main task finished but a child (cleanup, SendMessage delivery,
    VM-session teardown) may still be closing out NORMALLY. **DO NOT TaskStop
-   on this signal alone** — apply the 3-strike rule (v1.9.30 §"Why 3 strikes"):
+   on this signal alone** — apply the 3-strike rule (v1.9.29 §"Why 3 strikes"):
    ping once (confirm it's finishing), ping twice if still listed, only
    TaskStop after **3 unanswered pings across 3+ ticks** with the agent still
    in the list AND no artifacts touched. "Completed output but still listed"
@@ -272,12 +272,12 @@ calls:** the hook is a safety net; this section is the entry steer. Workers
 that read it before any x64dbg call pick the right tool on the first try
 instead of leaking host-channel attempts.
 
-## VM-worker session cleanup (v1.9.32, 2026-08-05) — zombie root cause
+## VM-worker session cleanup (v1.9.29, 2026-08-05) — zombie root cause
 
 **Incident (C-331 + C-333, 2026-08-05):** two VM-session workers showed
 `completed` TaskOutput (facts written, all deliverables landed) but **stayed
-in the running-agents list** — each a zombie holding a slot. v1.9.31's
-enumeration catches them (TaskStop), but the ROOT CAUSE is that **VM-session
+in the running-agents list** — each a zombie holding a slot. #88 的枚举(TaskStop)
+catches them, but the ROOT CAUSE is that **VM-session
 workers leak subtasks**: x64dbg `connect_remote` handles / vmr-server
 sessions / background VM polls are not released when the worker's main task
 finishes.
@@ -292,7 +292,7 @@ finishes.
    worker's LAST action must still be cleanup: disconnect attempt → save
    data → report. Never leave a `go`-loop or reconnect-retry child running
    when the fact is written.
-4. Orchestrator double-check at every tick (v1.9.31): a worker whose
+4. Orchestrator double-check at every tick (#88): a worker whose
    TaskOutput reads `completed` but still appears in the running list is a
    zombie — TaskStop immediately, then **note in the ping-log which
    cleanup step it missed** so the pattern accumulates evidence.

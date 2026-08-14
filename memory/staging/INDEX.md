@@ -1,4 +1,4 @@
-# Kong-agent staging memory
+# kunglao-agent staging memory
 
 Raw observations from in-session work. Each entry is a claim/worker-bound
 event (success / failure / discovery / feedback). When 10 entries accumulate,

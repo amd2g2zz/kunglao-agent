@@ -42,7 +42,7 @@ pass.**
    - ❌ `runs/worker-status-C<NNN>.md`, `runs/plan-C<NNN>.md` of the target worker
    - ✅ `facts/_INDEX.md` (allowed — list only, no content)
    - ✅ the sample binary (`bins/<sha>`) + fixtures + captured raw logs (`evidence/*.txt`)
-   - ✅ reusable analysis scripts under `scripts/re/` (they are tools, not conclusions)
+   - ✅ reusable analysis tools under `tools/` (the registered toolshelf — they are tools, not conclusions)
 2. **DERIVE INDEPENDENTLY** — run your own commands (xxd / python / pefile / capstone / the
    reusable scripts) on the raw evidence. Your answer comes from the artifact, not from any summary.
 3. **STATE YOUR OWN FINDING FIRST** — write your conclusion before ever seeing the maker's.

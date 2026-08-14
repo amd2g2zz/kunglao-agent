@@ -1,4 +1,4 @@
-# Kong-agent longterm memory
+# kunglao-agent longterm memory
 
 Distilled rules — cross-project, claim-stripped, forward-looking. Each entry
 was synthesized from ≥10 staging entries by `scripts/distill.py` (atomic

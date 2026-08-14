@@ -114,7 +114,7 @@ def check_convergence_health(paths):
 
 
 def check_backtrack_gate(paths):
-    """v1.9.30: stuck-worker backtrack gate wired into PreToolUse (#38).
+    """v1.9.29: stuck-worker backtrack gate wired into PreToolUse (#38).
     Mirrors check_plan_drift / check_convergence_health: runs the existing
     backtrack_gate.py via _run_py (20s timeout) and FAIL_OPEN on any
     subprocess/workspace resolution failure — the hook stays usable.
@@ -1193,7 +1193,7 @@ def pre_check(payload: dict, paths: dict) -> int:
         # gates (R1/R3 of research-tree r3). FAIL_OPEN inside the checks.
         ('drift', check_plan_drift(paths)),
         ('health', check_convergence_health(paths)),
-        # v1.9.30 (#38): stuck-worker backtrack gate — closes the
+        # v1.9.29 (#38): stuck-worker backtrack gate — closes the
         # built-but-not-wired gap (backtrack_gate.py existed but was never
         # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
         ('backtrack', check_backtrack_gate(paths)),
