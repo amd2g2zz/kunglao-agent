@@ -55,11 +55,11 @@ def test_depth_one() -> None:
     text = SKILL.read_text(encoding="utf-8")
     # 主文件不应引用 references 内部再引用的深层路径(以 >1 层子目录为信号)
     deep = re.findall(r"references/([\w/-]+/[\w./-]+\.md)", text)
-    assert len(deep) <= 1, f"深层引用过多: {deep}"
+    assert len(deep) <= 1, f"too many deep references: {deep}"
 
 
 def test_skill_has_orchestrator_contract() -> None:
     """主契约保留 orchestrator 核心: 收敛循环 + 派发契约 + worker 监控."""
     text = SKILL.read_text(encoding="utf-8")
     for keyword in ("convergence", "dispatch", "worker"):
-        assert keyword.lower() in text.lower(), f"缺少核心契约关键词: {keyword}"
+        assert keyword.lower() in text.lower(), f"missing core contract keyword: {keyword}"

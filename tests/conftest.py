@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""阶段 0 共享 fixture: 后续所有阶段(SDD 契约测试)复用.
+"""Phase 0 shared fixtures: reused by all later phases (SDD contract tests).
 
-- ws_factory:       tmp 工作区构造器(claim-register.yaml / runs / facts/_INDEX / claim_deps.yaml / task_spec.yaml)
-- contract_validator: schemas/*.json 注册表(jsonschema 校验封装)
-- golden_master:   manifest 重放辅助
-- isolated_home:   monkeypatch HOME → tmp(防 hooks 部署测试写生产 settings.json)
+- ws_factory:       tmp workspace builder (claim-register.yaml / runs / facts/_INDEX / claim_deps.yaml / task_spec.yaml)
+- contract_validator: schemas/*.json registry (jsonschema validation wrapper)
+- golden_master:   manifest replay helper
+- isolated_home:   monkeypatch HOME → tmp (prevents hook-deployment tests from writing the production settings.json)
 """
 from __future__ import annotations
 
@@ -17,23 +17,24 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "schemas"
 
 
-# ---------- tmp fixture: 兼容旧测试 main() 直跑签名 ----------
+# ---------- tmp fixture: compatible with legacy tests' main() direct-run signature ----------
 
 @pytest.fixture
 def tmp(tmp_path) -> Path:
-    """旧 test_*.py 用 `def test_x(tmp: Path)` + main() 直跑(TemporaryDirectory 传 Path).
+    """Legacy test_*.py use `def test_x(tmp: Path)` + a main() direct run (TemporaryDirectory passing a Path).
 
-    pytest 下注入内置 tmp_path(同为 Path), 两模式签名一致, 零测试文件改动.
+    Under pytest the built-in tmp_path is injected (also a Path), so both
+    modes share the signature with zero test-file changes.
     """
     return tmp_path
 
 
 
-# ---------- ws_factory: tmp 工作区构造 ----------
+# ---------- ws_factory: tmp workspace construction ----------
 
 @pytest.fixture
 def ws_factory(tmp_path):
-    """构造最小合成工作区; ws_factory() 返回新工作区, 每调用独立 tmp 目录."""
+    """Build a minimal synthetic workspace; ws_factory() returns a new workspace, an isolated tmp dir per call."""
 
     def _make(claims: list[dict] | None = None, with_deps: bool = False,
               with_index: bool = False, with_runs: bool = True) -> Path:
@@ -62,13 +63,13 @@ def ws_factory(tmp_path):
     return _make
 
 
-# ---------- contract_validator: schemas/*.json 注册表 ----------
+# ---------- contract_validator: schemas/*.json registry ----------
 
 @pytest.fixture
 def contract_validator():
-    """校验任意对象是否符合 schemas/<name>.json.
+    """Validate an arbitrary object against schemas/<name>.json.
 
-    用法: contract_validator("decide-output", obj) -> None(不符抛 AssertionError)
+    Usage: contract_validator("decide-output", obj) -> None (raises AssertionError on mismatch)
     """
     import jsonschema
 
@@ -93,11 +94,11 @@ def contract_validator():
     return _validate
 
 
-# ---------- golden_master: manifest 重放辅助 ----------
+# ---------- golden_master: manifest replay helper ----------
 
 @pytest.fixture
 def golden_master():
-    """按 manifest.yaml 注册表重放 golden 用例(逐字节比对)."""
+    """Replay golden cases per the manifest.yaml registry (byte-for-byte comparison)."""
 
     def _replay(case_id: str) -> str:
         import os
@@ -122,11 +123,11 @@ def golden_master():
     return _replay
 
 
-# ---------- isolated_home: 防写生产 settings.json ----------
+# ---------- isolated_home: prevent writes to the production settings.json ----------
 
 @pytest.fixture
 def isolated_home(tmp_path, monkeypatch):
-    """把 HOME/USERPROFILE 指向 tmp, 任何 settings.json 读写落在隔离区."""
+    """Point HOME/USERPROFILE at tmp so any settings.json read/write lands in the isolated area."""
     home = tmp_path / "fake-home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))

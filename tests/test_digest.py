@@ -39,7 +39,7 @@ def test_digest_has_six_sections(tmp_path):
     md = db.build_digest(ws)
     for marker in ["## head", "## sec_a", "## sec_b", "## sec_c",
                    "## sec_d", "## sec_e", "## sec_f"]:
-        assert marker in md, f"digest 缺节: {marker}"
+        assert marker in md, f"digest missing section: {marker}"
 
 
 def test_digest_size_upper_bound(tmp_path):
@@ -47,7 +47,7 @@ def test_digest_size_upper_bound(tmp_path):
     ws = _scaffold_ws(tmp_path)
     md = db.build_digest(ws)
     n = len(md.encode("utf-8"))
-    assert n <= 4096, f"digest {n} bytes 超 4096 上限"
+    assert n <= 4096, f"digest {n} bytes exceeds the 4096 cap"
 
 
 def test_digest_writes_to_runs(tmp_path):

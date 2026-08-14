@@ -98,8 +98,8 @@ def test_tools_root_holds_only_index_docs_and_meta_tools() -> None:
 def test_moved_tools_exist_at_new_locations_only() -> None:
     missing = [new for new in MOVED_TOOLS if not (ROOT / new).is_file()]
     stale = [old for old in MOVED_TOOLS.values() if (ROOT / old).is_file()]
-    assert not missing, f"迁移缺失(新位置不存在): {missing}"
-    assert not stale, f"旧位置仍有残留(未迁移干净): {stale}"
+    assert not missing, f"migration gaps (new location missing): {missing}"
+    assert not stale, f"old locations still have leftovers (migration incomplete): {stale}"
 
 
 # ---------- R2: 类目 id == 目录名 ----------
@@ -115,8 +115,8 @@ def test_every_category_matches_directory_name() -> None:
 
 def test_legacy_category_ids_are_gone() -> None:
     categories = {t["category"] for t in _yaml_data()["tools"]}
-    assert "aux" not in categories, "旧类目 id `aux` 残留 — 应为 auxiliary"
-    assert "pipeline" not in categories, "旧类目 id `pipeline` 残留 — 应为 pipelines"
+    assert "aux" not in categories, "stale category id `aux` — should be auxiliary"
+    assert "pipeline" not in categories, "stale category id `pipeline` — should be pipelines"
     assert "auxiliary" in categories and "pipelines" in categories, (
         "auxiliary/pipelines 类目 id 缺失")
 
@@ -126,9 +126,9 @@ def test_category_index_files_align_with_ids() -> None:
     categories = {t["category"] for t in _yaml_data()["tools"]} | {"dynamic"}
     missing = [c for c in sorted(categories)
                if not (TOOLS / f"_index-{c}.md").is_file()]
-    assert not missing, f"缺 _index-<category>.md: {missing}"
-    assert not (TOOLS / "_index-aux.md").exists(), "旧 _index-aux.md 残留"
-    assert not (TOOLS / "_index-pipeline.md").exists(), "旧 _index-pipeline.md 残留"
+    assert not missing, f"missing _index-<category>.md: {missing}"
+    assert not (TOOLS / "_index-aux.md").exists(), "stale _index-aux.md remains"
+    assert not (TOOLS / "_index-pipeline.md").exists(), "stale _index-pipeline.md remains"
 
 
 def test_validator_categories_pin_new_enum() -> None:
@@ -160,7 +160,7 @@ def test_merged_common_exposes_full_union_surface() -> None:
     import common  # noqa: E402
     missing = [n for n in COMMON_CLI_PLUMBING + COMMON_BYTE_SCAN
                if not hasattr(common, n)]
-    assert not missing, f"合并后 common.py 公共面缺失: {missing}"
+    assert not missing, f"common.py public surface incomplete after the merge: {missing}"
 
 
 def test_no_static_cli_imports_the_retired_module() -> None:
@@ -200,7 +200,7 @@ def test_all_moved_clis_answer_help_at_new_locations() -> None:
         r = _run(ROOT / new, "--help")
         if r.returncode != 0:
             offenders.append(f"{new}: --help exit {r.returncode} {r.stderr[:120]}")
-    assert not offenders, "迁移后 CLI import 链断裂:\n" + "\n".join(offenders)
+    assert not offenders, "CLI import chains broken after migration:\n" + "\n".join(offenders)
 
 
 def test_meta_tools_answer_help_at_root() -> None:
@@ -245,7 +245,7 @@ def test_no_legacy_path_references_in_live_surfaces() -> None:
             for legacy in LEGACY_REFS:
                 if legacy in text:
                     offenders.append(f"{rel}: `{legacy}`")
-    assert not offenders, "旧路径引用残留(须同步到新位置):\n" + "\n".join(offenders)
+    assert not offenders, "stale old-path references (must be synced to the new location):\n" + "\n".join(offenders)
 
 
 def test_manifest_declares_new_paths_and_drops_old() -> None:

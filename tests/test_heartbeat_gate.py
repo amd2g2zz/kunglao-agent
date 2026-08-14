@@ -35,14 +35,14 @@ def test_activity_ts_keeps_gate_alive(tmp_path):
     """F1 核心:cron 不 tick(last_tick 120min 前)但 tool 活跃(activity 1min 前)→ alive。"""
     state = _make_hb(tmp_path, last_tick_ts=_mins_ago(120), activity_ts=_mins_ago(1))
     alive, msg = wb.check_heartbeat_alive(state)
-    assert alive, f"应 alive(activity_ts fresh): {msg}"
+    assert alive, f"should be alive (activity_ts fresh): {msg}"
 
 
 def test_both_stale_rejected(tmp_path):
     """两字段都 stale(120min)→ STALE(正确拒绝保留)。"""
     state = _make_hb(tmp_path, last_tick_ts=_mins_ago(120), activity_ts=_mins_ago(120))
     alive, msg = wb.check_heartbeat_alive(state)
-    assert not alive, "两字段都 stale 应拒绝"
+    assert not alive, "both fields stale must reject"
 
 
 def test_cron_only_still_alive(tmp_path):
