@@ -3,6 +3,11 @@
 | 工具 | 契约(一行) | 何时读 / 何时不用 |
 |---|---|---|
 | `die` | `category: static · capability: static:identify · tier: T1 · cost_tier: probe · input: 样本路径 → output: 语言/编译器/加壳识别 json` | 拿到新样本先做快速识别时读; 已确认加壳族/语言后不用 |
+| `die-probe` | `category: static · capability: static:identify · tier: T1 · cost_tier: probe · input: 样本(--binary) + DIE 可执行文件(--die/$KUNGLAO_DIE) → output: DIE 5-call merge json(语言/编译器/加壳/熵/资源); die 缺失 exit 2 + 指引` | 需要 DIE 结构化多面探测(熵/哈希/资源)时读; DIE 未安装时不用 |
+| `pe-analyze` | `category: static · capability: static:pe-parse · tier: T1 · cost_tier: cheap · input: 样本(--binary) + 子命令(headers/sections/imports/exports/resources/overlay/pdb/tls/signature) → output: PE 表/数据 json + --reproduce field=value` | 需要 PE 单域解析(导入/导出/资源/PDB/TLS/签名/覆盖区)时读; 需要反汇编时不用(用 disasm-dump) |
+| `overlay-scan` | `category: static · capability: static:overlay-scan · tier: T1 · cost_tier: cheap · input: 样本(--binary) + --mode reloc|true|mz|all → output: 覆盖区表征 json(reloc 表/熵/Go 证据/内嵌 PE)` | 怀疑覆盖区藏 reloc 表/Go 载荷/内嵌 PE 时读; 无覆盖区时不用 |
+| `disasm-dump` | `category: static · capability: static:disasm · tier: T1 · cost_tier: cheap · input: 样本(--binary) + --rvas/--vas 列表 → output: 每址 capstone 指令清单 json(VA→文件偏移复用 tools/lib_disasm.py)` | 需要指定 RVA/VA 的字节锚定指令清单时读; 函数级语义时不用(用 ghidra-recon) |
+| `shellcode-scan` | `category: static · capability: static:shellcode-scan · tier: T1 · cost_tier: cheap · input: blob/PE(--binary) + --scan/--entry/--prologs/--peb/--strings → output: shellcode 候选区域+特征 json` | 怀疑 blob/解密层是 shellcode 时读; 常规 PE 函数分析时不用 |
 | `disasm-constant-check` | `category: static · capability: static:disasm-check · tier: T1 · cost_tier: cheap · input: fact/report 清单 + PE 二进制 → output: byte-exact 断言校验 json` | 校验反汇编常量断言(VA 锚点)时读; 无需 byte-exact 校验或没有二进制时不用 |
 | `extract-syscalls` | `category: static · capability: static:syscall-extract · tier: T1 · cost_tier: cheap · input: 样本字节(--mode bin)/反汇编文本(--mode text) → output: syscall stub 清单(location/number/name)` | 扫描 x64 syscall stub 编号/名称时读; 非 syscall stub 任务不用 |
 | `stack-strings` | `category: static · capability: static:stack-strings · tier: T1 · cost_tier: cheap · input: 样本字节 + --start/--end/--min-len/--dword → output: [rsp+disp] 栈构造字符串清单` | 检测 mov byte/dword [rsp+disp] 栈字符串构造时读; 无该模式时不用 |
