@@ -59,7 +59,6 @@
 | `guardrails.md` | governance | Full backing reference for orchestrator guardrails. | When the SKILL.md inline summary is insufficient. |
 | `machine-check-contract.md` | contracts | Executable-oracle contract (#332): verification records must carry machine_check {command, expected, actual, passed}; exception path and mapping-table mirror of references/machine_check_map.yaml. | When validating a red-team verification record, writing one, or promoting a claim. |
 | `malware-phase-routing.md` | routing | Maps file types to analysis phases, VM isolation boundary. | At the start of a new malware engagement for phase decision. |
-| `memory-protocol.md` | memory | Two-tier memory distill pipeline, entry schemas, linkage to global memory. | When writing to memory/staging/ or triggering a distill. |
 | `method-constraints.md` | dispatch | Constraint table for known-incompatible scenarios. | Before dispatching a worker to include correct method constraints. |
 | `operational-mechanics.md` | mechanics | HOW behind heartbeat tick, worker ping, self-cap-safe dispatch, VM launch. | When implementing/debugging heartbeat, writing dispatch prose, or VM x64dbg launch. |
 | `optimization-2026-08.md` | optimization | Background compendium: smart-ping, closeout checklist, worktree caveats. | When needing the full expanded text of a compact SKILL.md reference. |

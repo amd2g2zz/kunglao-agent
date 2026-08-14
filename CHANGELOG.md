@@ -81,6 +81,11 @@
 - utcnow() 弃用替换为 timezone-aware (#131)
 - worktree 扫描要求 .kunglao-worktree 标记文件 (#137)
 
+### Fixed or Removed
+
+- 发版前卫生批 (#355) — docs/ 一次性修复日志与会话计划残渣删除、HISTORICAL 设计文档迁入 docs/design/archive/、specs/README 断链修复（去除未跟踪 .research-tree-alignment 依赖与"不引入 OpenSpec"矛盾条款）、openspec/changes 51 个已交付目录归档至 openspec/archive/、根 DESIGN.md 判定为 HISTORICAL 并迁档、CHANGELOG v1.8.x 映射段补齐、.claude/reviews/ 会话残渣出库（git-hooks 保留）、.gitignore 增加 .research-tree*/ 与 .pytest_cache
+- 死代码移除 — memory/ 子系统整体删除（staging/longterm/candidates corpus + memory/scripts 蒸馏流水线 + references/memory-protocol.md，实测零运行时消费方）；hook_activation ALL_HOOKS 与 cost_gate advice 中的 memory_capture 幽灵条目同步清除 (#355, 原 #358 Wave 6)
+
 ## 内部版本映射
 
 v0.1 之前仓内代码注释中的 v1.8.x / v1.9.x 标记是开发期特性溯源注释（"此 gate 于 v1.9.24 落地"），

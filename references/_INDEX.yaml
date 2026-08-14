@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 5abff645cb919267bf0912ec0a853739bd8707f733bd8b99249bdb1ee7f76c7f
+  references/_INDEX.md: aaac6831f4d7a50bbc49b8a19f067e704e19d1827d96a85147283f632bc8ff1c
   references/_index-anti-analysis.md: beb3d0ab06ae7939ba571cadb88479e0ba7019e9b57a161654591dbd0b2e8827
   references/_index-languages.md: 94b3d878dc633053c88d7501b003e5039008ec5ce3c1217ed3de8a1e3b581cfd
   references/_index-methodology.md: cdaf7a916791c08231040b0a64c350cd878d911a5e36d9c994e0297d19f5e228
@@ -23,12 +23,11 @@ files:
   references/excerpt-lint.md: ae0c1ea36b2087099044095e2f400c9154eb053f1d2b1a170da81477988ddbb0
   references/failure-modes-lifecycle.md: 816aebeb9c55c044c406f2d1f6bd681d16907ca667134f7b925d595090f7624d
   references/failure-modes-monitoring.md: 1a493a1540a6dab0bba9a6c4ad1a82190166c9cb51b1707bd83352892ccb7ea0
-  references/failure-modes-state.md: 922cdcbbc7b73e80ac25795b8470c2a602aad16e3cb8318a5cf7e97d4d18123c
+  references/failure-modes-state.md: 4fbaf4e1437d3677e52ccd7aa57c5f4136e60a97da3e68fd206d77ff34ad4b9d
   references/failure-modes.md: 7e7476245e9905a9547d5271cb2fec87f86b2dc471014a5f8e633abc812797cf
   references/guardrails.md: 96af80dc87ba7092c56d8eecc41d08565377b2731fe3cc0838c150c921c67d80
   references/machine-check-contract.md: db58ddb1de65a35748678090158c9ad617148b464804c20786bab0406cd48b2b
   references/malware-phase-routing.md: 00e6484afaa85da42ed5cdc2c919b3d9b22ca173da37ac4c6da0d691b0ced7f2
-  references/memory-protocol.md: 6a3345d0d48b0b0e7b603a3cd3f3afc736c4010173911a87fdd9b2d899b1eca9
   references/method-constraints.md: efcd26339f3a31a3133a83c59ad556331e33365edf02af1b9f1600c7f1a644f7
   references/operational-mechanics.md: b2bdc4d1a543f0845d666c3afd87cbbf92cf9784424d9ace0121f2d56ed6574f
   references/optimization-2026-08.md: 5198c1c1b8d0268726a19dff9f75481341a2664478ae05a59f9d52854e872083

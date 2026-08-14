@@ -5,7 +5,7 @@ User pain point: "kunglao-agent 需要安装hook，但是只有被激活的时�
 否则会产生大量噪声给 kunglao-agent"
 
 kunglao-agent has 7+ enforcement hooks (active_intervention, cost_gate,
-backtrack_gate, reuse_gate, memory_capture, etc.). Running ALL of them on EVERY
+backtrack_gate, reuse_gate, etc.). Running ALL of them on EVERY
 orchestrator turn produces too much noise. This script implements selective
 activation: kunglao-agent decides per-hook whether it should fire, based on:
   - current cost_advice tier (from cost_gate.py)
@@ -69,7 +69,6 @@ ALL_HOOKS = {
     "reuse_gate",
     "troubleshooting_gate",
     "search_gate",
-    "memory_capture",
     "dispatch_gate",
     "worker_pulse",
     "state_anchor",

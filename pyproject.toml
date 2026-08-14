@@ -5,7 +5,7 @@ description = "Convergence-driven reverse-engineering orchestrator — Claude Co
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-# Declared set = modules actually imported by scripts/ hooks/ tools/ tests/ memory/scripts/
+# Declared set = modules actually imported by scripts/ hooks/ tools/ tests/
 # (verified by tests/test_release_receipt.py::test_pyproject_declares_imported_dependencies).
 # cryptography/requests are NOT imported anywhere — do not add them back without an import.
 dependencies = [

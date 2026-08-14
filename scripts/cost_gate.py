@@ -86,7 +86,7 @@ def write_advice(workspace: Path, tier: str, count: int, latest_amount: float) -
         "latest_amount_usd": latest_amount,
         "action": {
             "advisory": "reduce dispatch verbosity; prefer T1/T2 over T3",
-            "pause_non_essential": "suspend memory_capture.py + cost_events hooks; keep active_intervention.py",
+            "pause_non_essential": "suspend non-essential hooks (reuse/troubleshooting/search); keep active_intervention.py + cost_gate",
         }.get(tier, "no action"),
     }
     path = workspace / COST_ADVICE_FILE
