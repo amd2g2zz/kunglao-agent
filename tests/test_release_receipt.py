@@ -64,7 +64,7 @@ def test_manifest_loads_and_declares_release_contract():
     assert set(m["dependencies"]) >= {"PyYAML", "pefile", "capstone", "jsonschema"}
     for section in ("agents", "hooks", "templates"):
         assert m["assets"][section], f"manifest assets.{section} is empty"
-    assert len(m["clis"]) == 8
+    assert len(m["clis"]) == 9  # 8 entry CLIs + mcp_probe (#316)
     assert m["router_subcommands"] == ROUTER_SUBS
     assert m["test_command"]
 

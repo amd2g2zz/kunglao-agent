@@ -131,6 +131,18 @@ Host emulation (T2) is deliberately NOT a shelf tool: qiling-based emulation is 
 
 Tool selection is deterministic: `tools/tool-search.py` queries the machine index (`tools/_INDEX.yaml`) by capability tag and cost budget (zero-token catalog). Workers must check the index before writing new scripts (`toolfirst` gate, enforced by `worker_budget.py`).
 
+MCP supply (#316): analysis correctness depends on registered MCP servers, so the skill manages its own supply manifest + probe + scaffold instead of relying on machine-scattered user config. The single manifest source is `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `python scripts/mcp_probe.py <ws> --type <windows|linux|android>` (exit 1 = HARD missing, 2 = WARN missing only).
+
+| MCP server | Tier | Scope | Purpose | Registration |
+|------------|------|-------|---------|--------------|
+| `ghidra` | HARD | 全型必配 | Ghidra 反编译/静态分析 | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
+| `sequential-thinking` | HARD | 全型必配 | 结构化推理 | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
+| `x64dbg` | HARD | Windows T3 动态 | 动态调试 (VM 远程) | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
+| `volatility` | WARN | Windows T3 | 内存取证 (memory forensics) | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
+| `ida-pro-vm` | WARN | 选 IDA 时 | IDA 远程分析 | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `gitnexus` | HARD | Android 建图流程 | Post-decompile 知识图谱 | `claude mcp add gitnexus -- gitnexus mcp` |
+| `virustotal` | WARN | CTI | 情报 (家族归属假设) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
+
 Trust gates (the components behind "verified"):
 
 | Gate | Enforces |
