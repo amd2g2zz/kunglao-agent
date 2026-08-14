@@ -1,0 +1,382 @@
+# -*- coding: utf-8 -*-
+"""event_taxonomy.py — 25-class event taxonomy for kunglao event sources (#309, merged #287).
+
+Absorbed idea: amruth-sn/kong events.py:19-62 (a fixed event classification
+taxonomy), re-implemented for kunglao's EXISTING sources — no new state
+format, no TUI (explicitly rejected: the Claude Code base ships its own
+interface). Output feeds the Claude-native interface:
+
+    statusline JSON (statusline_json) — compact counts + alerts
+    per-round digest (round_digest_text) — short mechanical text
+
+Sources scanned (all pre-existing; row contracts mirror the PRODUCERS, not a
+new vocabulary — every mapping value below is emitted by real code):
+    <ws>/ledger.jsonl                 kunglao_record event stream
+    <ws>/runs/logs/kunglao-*.jsonl    kunglao_log event stream (same contract)
+    <ws>/.convergence_ledger.jsonl    convergence snapshot / outcome rows
+    <ws>/runs/worker-status-*.md      worker log; last `status:` line wins
+                                      (lib_kunglao convention); vocab =
+                                      in-progress / done / blocked
+                                      (agents/kunglao-worker.md; convergence_check)
+    <ws>/claim-register.yaml          claim status states (state-derived view)
+    <ws>/blockers/*.md                active = file WITHOUT "INVALIDATED" marker
+                                      (convergence_check._active_blockers);
+                                      resolved = INVALIDATED marker or file in
+                                      blockers/.resolved/ (stale_blocker_prune)
+    <ws>/runs/verify-redteam-*.md     red-team verdict activity
+    failure_analysis_gate             gate_blocked = scan_workspace entries with
+                                      state == "BLOCKED" (same source priority.py
+                                      consumes for its failure-blocked set)
+
+Taxonomy (25 classes):
+    ledger stream      : fact_written, fact_verified, claim_promoted,
+                         claim_refuted, failure_recorded, intent_opened,
+                         intent_closed
+    convergence ledger : snapshot, outcome_passed, outcome_partial,
+                         outcome_failed, operator_action
+    workers            : worker_started (first status line is in-progress —
+                         the worker contract's opening line), worker_step
+                         (last line in-progress, fresh), worker_completed
+                         (last done), worker_failed (last blocked),
+                         worker_stuck (last in-progress, heartbeat stale
+                         > 20 min — convergence_check.STUCK_MINUTES)
+    claim states       : claim_partial, claim_deferred, claim_superseded,
+                         claim_dead
+    blockers/gates     : blocker_opened (active blocker file),
+                         blocker_resolved (INVALIDATED / .resolved/),
+                         gate_blocked (failure-analysis gate BLOCKED entries)
+    red-team           : redteam_verdict
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+import time
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass
+
+STATUS_RE = re.compile(r"status:\s*(\S+)")
+
+# real worker heartbeat convention: convergence_check.STUCK_MINUTES = 20
+STUCK_SECONDS = 20 * 60
+
+# ---------------------------------------------------------------------------
+# taxonomy (25 classes)
+# ---------------------------------------------------------------------------
+
+FACT_WRITTEN = "fact_written"
+FACT_VERIFIED = "fact_verified"
+CLAIM_PROMOTED = "claim_promoted"
+CLAIM_REFUTED = "claim_refuted"
+FAILURE_RECORDED = "failure_recorded"
+INTENT_OPENED = "intent_opened"
+INTENT_CLOSED = "intent_closed"
+SNAPSHOT = "snapshot"
+OUTCOME_PASSED = "outcome_passed"
+OUTCOME_PARTIAL = "outcome_partial"
+OUTCOME_FAILED = "outcome_failed"
+WORKER_STARTED = "worker_started"
+WORKER_STEP = "worker_step"
+WORKER_COMPLETED = "worker_completed"
+WORKER_FAILED = "worker_failed"
+WORKER_STUCK = "worker_stuck"
+CLAIM_PARTIAL = "claim_partial"
+CLAIM_DEFERRED = "claim_deferred"
+CLAIM_SUPERSEDED = "claim_superseded"
+CLAIM_DEAD = "claim_dead"
+BLOCKER_OPENED = "blocker_opened"
+BLOCKER_RESOLVED = "blocker_resolved"
+GATE_BLOCKED = "gate_blocked"
+REDTEAM_VERDICT = "redteam_verdict"
+OPERATOR_ACTION = "operator_action"
+
+ALL_EVENT_TYPES = [
+    FACT_WRITTEN, FACT_VERIFIED, CLAIM_PROMOTED, CLAIM_REFUTED, FAILURE_RECORDED,
+    INTENT_OPENED, INTENT_CLOSED,
+    SNAPSHOT, OUTCOME_PASSED, OUTCOME_PARTIAL, OUTCOME_FAILED, OPERATOR_ACTION,
+    WORKER_STARTED, WORKER_STEP, WORKER_COMPLETED, WORKER_FAILED, WORKER_STUCK,
+    CLAIM_PARTIAL, CLAIM_DEFERRED, CLAIM_SUPERSEDED, CLAIM_DEAD,
+    BLOCKER_OPENED, BLOCKER_RESOLVED, GATE_BLOCKED, REDTEAM_VERDICT,
+]
+
+LEDGER_EVENT_MAP = {
+    "fact_written": FACT_WRITTEN,
+    "fact_verified": FACT_VERIFIED,
+    "claim_promoted": CLAIM_PROMOTED,
+    "claim_refuted": CLAIM_REFUTED,
+    "failure_recorded": FAILURE_RECORDED,
+    "intent_opened": INTENT_OPENED,
+    "intent_closed": INTENT_CLOSED,
+}
+
+OUTCOME_RESULT_MAP = {
+    "passes": OUTCOME_PASSED, "confirmed": OUTCOME_PASSED,
+    "partial": OUTCOME_PARTIAL, "unverified": OUTCOME_PARTIAL,
+    "unverified-with-gap": OUTCOME_PARTIAL,
+    "fails": OUTCOME_FAILED, "refuted": OUTCOME_FAILED,
+}
+
+# The REAL worker status vocabulary (agents/kunglao-worker.md:54,
+# convergence_check._active_workers docstring, worker_pulse:169-188,
+# lib_kunglao "last status line wins"). No producer writes any other value.
+WORKER_STATUS_MAP = {
+    "in-progress": WORKER_STEP,
+    "done": WORKER_COMPLETED,
+    "blocked": WORKER_FAILED,
+}
+
+CLAIM_STATUS_MAP = {
+    "PROVEN": CLAIM_PROMOTED, "VERIFIED": CLAIM_PROMOTED,
+    "REFUTED": CLAIM_REFUTED,
+    "PARTIALLY-VERIFIED": CLAIM_PARTIAL, "PARTIAL": CLAIM_PARTIAL,
+    "PARTIALLY_VERIFIED": CLAIM_PARTIAL,
+    "DEFERRED": CLAIM_DEFERRED,
+    "SUPERSEDED": CLAIM_SUPERSEDED,
+    "DEAD": CLAIM_DEAD,
+}
+
+
+def classify_event(event: dict, source: str) -> str | None:
+    """Classify one event row from a known source; None when unclassifiable."""
+    if source == "ledger":
+        return LEDGER_EVENT_MAP.get(event.get("event_type", ""))
+    if source == "convergence":
+        row_type = event.get("type") or SNAPSHOT
+        if row_type == SNAPSHOT:
+            return SNAPSHOT
+        if row_type == "outcome":
+            return OUTCOME_RESULT_MAP.get(str(event.get("result", "")).strip().lower())
+        if row_type == "operator_action":
+            return OPERATOR_ACTION
+        return None
+    return None
+
+
+def classify_worker_status(status: str) -> str | None:
+    return WORKER_STATUS_MAP.get((status or "").strip().lower())
+
+
+def classify_claim_status(status: str) -> str | None:
+    return CLAIM_STATUS_MAP.get((status or "").strip().upper())
+
+
+# ---------------------------------------------------------------------------
+# source scanning
+# ---------------------------------------------------------------------------
+
+def _read_jsonl(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            out.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return out
+
+
+def _claim_statuses(ws: Path) -> list[str]:
+    """Block-scoped claim status extraction (stdlib-only, mirrors kunglao_status)."""
+    p = ws / "claim-register.yaml"
+    if not p.exists():
+        return []
+    statuses: list[str] = []
+    in_claim = False
+    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+        s = line.strip()
+        if s.startswith("- id:"):
+            in_claim = True
+        elif in_claim and s.startswith("status:"):
+            statuses.append(s.split(":", 1)[1].strip().strip("'\""))
+            in_claim = False
+    return statuses
+
+
+def _worker_events(ws: Path) -> list[str]:
+    """Classify worker status files by the REAL contract:
+
+    - append-only log lines ("[HH:MM] step: ... | status: in-progress" or a
+      dedicated "status: done" line — both shapes per worker_pulse:67)
+    - FIRST status line == in-progress -> worker_started (the worker contract's
+      opening line is literally "step: started ...")
+    - LAST status line wins (lib_kunglao): in-progress -> step (fresh) or
+      stuck (heartbeat stale > STUCK_SECONDS); done -> completed;
+      blocked -> failed
+    """
+    runs = ws / "runs"
+    if not runs.is_dir():
+        return []
+    now = time.time()
+    out: list[str] = []
+    for p in sorted(runs.glob("worker-status-*.md")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+            mtime = p.stat().st_mtime
+        except OSError:
+            continue
+        statuses = [m.group(1).strip().lower() for line in text.splitlines()
+                    if (m := STATUS_RE.search(line))]
+        if not statuses:
+            continue
+        first, last = statuses[0], statuses[-1]
+        if first == "in-progress":
+            out.append(WORKER_STARTED)
+        if last == "in-progress":
+            out.append(WORKER_STUCK if now - mtime > STUCK_SECONDS else WORKER_STEP)
+        else:
+            kind = WORKER_STATUS_MAP.get(last)
+            if kind:
+                out.append(kind)
+    return out
+
+
+def _blocker_events(ws: Path) -> list[str]:
+    """Classify blockers by the REAL lifecycle (no `state:` frontmatter exists):
+
+    - blockers/*.md without "INVALIDATED" marker = active blocker
+      (convergence_check._active_blockers)
+    - blockers/*.md with INVALIDATED marker, or any file under
+      blockers/.resolved/ = resolved (stale_blocker_prune moves + marks)
+    """
+    bdir = ws / "blockers"
+    if not bdir.is_dir():
+        return []
+    out: list[str] = []
+    for p in sorted(bdir.glob("*.md")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "INVALIDATED" in text.upper():
+            out.append(BLOCKER_RESOLVED)
+        else:
+            out.append(BLOCKER_OPENED)
+    resolved_dir = bdir / ".resolved"
+    if resolved_dir.is_dir():
+        for p in sorted(resolved_dir.glob("*.md")):
+            if p.is_file():
+                out.append(BLOCKER_RESOLVED)
+    return out
+
+
+def _gate_blocked_count(ws: Path) -> int:
+    """Failure-analysis gate BLOCKED entries — the same source priority.py
+    consumes for its failure-blocked dispatch set (failure_analysis_gate.
+    scan_workspace); a claim with a failed attempt and no current analysis
+    is BLOCKED by the gate. 0 on any error (scan is best-effort)."""
+    try:
+        import failure_analysis_gate as fag
+        return sum(1 for b in fag.scan_workspace(Path(ws))
+                   if b.get("state") == "BLOCKED")
+    except Exception:
+        return 0
+
+
+def classify_workspace(ws: Path) -> dict[str, int]:
+    """Scan all pre-existing sources; return {event_type: count}.
+
+    State-derived views (claim register statuses, blocker files, gate scan)
+    count each CURRENT state once; streams count every row. Pure read-only —
+    creates no files. Every taxonomy class is always present (0 when unseen).
+    """
+    counts: Counter = Counter()
+
+    for p in [ws / "ledger.jsonl"]:
+        for row in _read_jsonl(p):
+            kind = classify_event(row, "ledger")
+            if kind:
+                counts[kind] += 1
+    logs = (ws / "runs" / "logs")
+    if logs.is_dir():
+        for p in sorted(logs.glob("kunglao-*.jsonl")):
+            for row in _read_jsonl(p):
+                kind = classify_event(row, "ledger")
+                if kind:
+                    counts[kind] += 1
+    for row in _read_jsonl(ws / ".convergence_ledger.jsonl"):
+        kind = classify_event(row, "convergence")
+        if kind:
+            counts[kind] += 1
+
+    for kind in _worker_events(ws):
+        counts[kind] += 1
+    for st in _claim_statuses(ws):
+        kind = classify_claim_status(st)
+        if kind:
+            counts[kind] += 1
+    for kind in _blocker_events(ws):
+        counts[kind] += 1
+    counts[GATE_BLOCKED] += _gate_blocked_count(ws)
+
+    runs = ws / "runs"
+    if runs.is_dir():
+        for p in sorted(runs.glob("verify-redteam-*.md")):
+            if p.is_file():
+                counts[REDTEAM_VERDICT] += 1
+    # stable contract: every taxonomy class always present (0 when unseen)
+    return {t: counts.get(t, 0) for t in ALL_EVENT_TYPES}
+
+
+# ---------------------------------------------------------------------------
+# Claude-native interface outputs
+# ---------------------------------------------------------------------------
+
+_ALERT_TYPES = (WORKER_STUCK, WORKER_FAILED, BLOCKER_OPENED, GATE_BLOCKED,
+                OUTCOME_FAILED, CLAIM_DEAD)
+
+
+def statusline_json(ws: Path) -> dict:
+    """Compact statusline payload for the Claude native interface."""
+    counts = classify_workspace(ws)
+    alerts = [f"{kind}={counts[kind]}" for kind in _ALERT_TYPES if counts.get(kind)]
+    return {"schema": "kunglao-event-statusline/1", "workspace": str(ws),
+            "counts": counts, "alerts": alerts}
+
+
+def round_digest_text(ws: Path) -> str:
+    """Short per-round digest (mechanical, no LLM, <=10 lines)."""
+    counts = classify_workspace(ws)
+    now = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    lines = [f"round digest | {now} | workspace: {ws}"]
+    top = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+    lines.append(f"events: {top or '(none)'}")
+    alerts = [f"{kind}={counts[kind]}" for kind in _ALERT_TYPES if counts.get(kind)]
+    lines.append(f"alerts: {'; '.join(alerts) or '(none)'}")
+    return "\n".join(lines) + "\n"
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(
+        prog="event_taxonomy.py",
+        description="25-class event taxonomy over kunglao sources (#309/#287)")
+    ap.add_argument("workspace", help="workspace root")
+    ap.add_argument("--json", action="store_true",
+                    help="print statusline JSON instead of the round digest")
+    ap.add_argument("--reproduce", action="store_true",
+                    help="print field=value input lines (kunglao_verify parseable)")
+    args = ap.parse_args(argv)
+    ws = Path(args.workspace)
+    if args.reproduce:
+        print(f"workspace={ws}")
+        return 0
+    if args.json:
+        print(json.dumps(statusline_json(ws), ensure_ascii=False, indent=2))
+    else:
+        print(round_digest_text(ws), end="")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

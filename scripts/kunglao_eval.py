@@ -545,6 +545,17 @@ def run_episode(case: dict, arm: str, fault: str | None = None, *, seed: int = 0
 
     wall_ms = int((time.time() - started) * 1000)
     transcript = {"dispatches": state.dispatches, "tool_calls": adapter.calls}
+    # #309: collect symbol/type recovery claims from symbol_recovery facts so
+    # score_episode can add naming/type quality dimensions (additive — cases
+    # without such facts carry empty dicts, unchanged receipt otherwise).
+    recovered_symbols: dict[str, str] = {}
+    recovered_types: dict[str, dict] = {}
+    for facts in state.evidence.values():
+        for f in facts or []:
+            for k, v in (f.get("symbols") or {}).items():
+                recovered_symbols[str(k)] = v
+            for k, v in (f.get("types") or {}).items():
+                recovered_types[str(k)] = dict(v) if isinstance(v, dict) else v
     result = {
         "schema": "kunglao-episode-result/1",
         "case_id": case.get("case_id", "?"),
@@ -554,6 +565,8 @@ def run_episode(case: dict, arm: str, fault: str | None = None, *, seed: int = 0
         "seed": seed,
         "assessor": assessor,
         "injected_facts": injected_facts,
+        "recovered_symbols": recovered_symbols,
+        "recovered_types": recovered_types,
         "digests": {"case": _sha256(_canonical(case)),
                     "code": code_digest(),
                     "env": env_digest()},
@@ -729,6 +742,18 @@ def score_episode(case: dict, oracle: dict, result: dict) -> dict:
     dims["time_ms"] = result.get("wall_ms", 0)
     dims["tool_calls"] = budgets.get("tool_calls_used", 0)
     dims["tokens"] = budgets.get("tokens_used", 0)
+
+    # #309: naming/type recovery quality dimensions — present only when the
+    # oracle carries expected_symbols/expected_types (backward compatible:
+    # oracles without them keep the pre-change dimension set).
+    if oracle.get("expected_symbols"):
+        from recov_metrics import naming_dimension
+        dims["naming_quality"] = naming_dimension(
+            oracle["expected_symbols"], result.get("recovered_symbols", {}) or {})
+    if oracle.get("expected_types"):
+        from recov_metrics import type_dimension
+        dims["type_quality"] = type_dimension(
+            oracle["expected_types"], result.get("recovered_types", {}) or {})
 
     fails = [n for n, d in dims.items() if isinstance(d, dict) and d.get("pass") is False]
     uncompleted = [cid for cid, want in expected.items()
