@@ -76,7 +76,7 @@ def _check_digest() -> dict:
         return {"name": "digest_builds", "passed": False, "detail": f"error: {exc}"}
 
 
-TEST_SUITE_TIMEOUT = 1800  # full suite ≈ 5 min locally; CI runners are slower
+TEST_SUITE_TIMEOUT = 300  # suite ≈ 2.5 min on CI; 5 min budget for slower runners
 
 
 def _check_test_suite() -> dict:
