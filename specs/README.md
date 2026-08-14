@@ -35,7 +35,7 @@ and is authoritative.
 
 - Behavior change that is **legitimate** (new contract allows it) → follow
   the freeze ritual: RED test → change the spec →
-  `python tools/capture_golden.py --refresh` → same commit.
+  `python tools/auxiliary/capture_golden.py --refresh` → same commit.
 - Behavior change that is **unexpected** (regression) → `--refresh` is not
   allowed; fix the implementation instead.
 
