@@ -312,13 +312,16 @@ across samples.** Rules:
    as `--binary PATH` or argv, (b) the only sample-specific constant is
    the input, (c) the output schema (stdout/file) is fixed.
 3. **Reusable tools belong in the toolshelf** — `tools/<category>/`
-   （crypto/static/ghidra/frida/t2/auxiliary，见 `tools/_INDEX.md`），并登记
+   （crypto/static/ghidra/auxiliary/pipelines，见 `tools/_INDEX.md`；Frida 动态
+   走 MCP `mcp__frida__*` + VM 通道、hook 模板在 `templates/frida/`，T2 模拟
+   走外部 skill /malware-framework——均不落本地脚本），并登记
    `tools/_INDEX.yaml`。建议槽位：
    - `tools/static/pe_headers.py` — parse PE header + section table (any binary)
    - `tools/static/byte_grep.py` — xxd-style byte-pattern search with offset/RVA
    - `tools/static/capstone_dump.py` — disasm helper (any .bin)
-   - `tools/frida/frida_attach_hooks.js` — generic Interceptor counter
-     template, accepts hook list as JSON arg
+   - `templates/frida/<hook>.js.tmpl` — generic Interceptor counter/hook
+     templates (generate from `templates/frida/`, run via `mcp__frida__*`,
+     VM-only)
 4. **Naming**: `<verb>_<object>.py` (`byte_grep.py`, `frida_attach.py`).
    Do NOT prefix with fact ID or claim ID (`f046_frida_*.py` is forbidden
    — that's a code smell, not a description).
@@ -334,7 +337,7 @@ across samples.** Rules:
    script. CLI spec checklist → `references/cli-script-checklist.md`.
 
 Why this matters: a fresh worker on the next sample should be able to run
-`tools/frida/frida_attach.py --binary <sha> --hook <addr>` and get useful
+`python tools/static/pe_analyze.py --binary <sha> imports` and get useful
 output, without first reading 200 lines of sample-specific code.
 
 ## Return format (your final message — 3 lines, no prose padding)
