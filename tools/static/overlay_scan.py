@@ -58,6 +58,14 @@ from _common import (  # noqa: E402
 )
 from lib_disasm import load_pe  # noqa: E402  (VA/offset core reuse, issue #284)
 
+# UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
+# decode(errors="replace")) must not crash a GBK console — stdout unified on
+# UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
+
 RELOC_TYPE_NAMES = {0: "ABSOLUTE", 3: "HIGHLOW", 10: "DIR64"}
 MAX_RELOC_BLOCK = 0x10000
 MAX_PCLNTAB_SEARCH = 10 * 1024 * 1024

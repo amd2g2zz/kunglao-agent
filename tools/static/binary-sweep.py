@@ -38,6 +38,14 @@ from common import (  # noqa: E402
     sha256,
 )
 
+# UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
+# decode(errors="replace")) must not crash a GBK console — stdout unified on
+# UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
+
 URL = re.compile(rb"https?://[a-zA-Z0-9./_:%?=&@#~+\-,;()\[\]!$]{4,300}")
 IPV4 = re.compile(rb"\b(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?\b")
 DOMAIN = re.compile(

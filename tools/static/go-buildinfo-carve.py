@@ -38,6 +38,14 @@ from common import (  # noqa: E402
     sha256,
 )
 
+# UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
+# decode(errors="replace")) must not crash a GBK console — stdout unified on
+# UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
+
 MARKER = b"Go buildinf"
 GO_VER_RE = re.compile(rb"go(1\.\d+\.?\d*)")
 PATH_RE = re.compile(rb"path\t([^\r\n]+)")

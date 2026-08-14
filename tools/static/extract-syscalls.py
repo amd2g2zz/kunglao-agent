@@ -39,6 +39,14 @@ from common import (  # noqa: E402
     sha256,
 )
 
+# UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
+# decode(errors="replace")) must not crash a GBK console — stdout unified on
+# UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
+
 # Windows NT syscall number -> name map (x64), per the source script.
 SYSCALL_MAP = {
     0x08: "NtAdjustPrivilegesToken", 0x0B: "NtAllocateVirtualMemory",

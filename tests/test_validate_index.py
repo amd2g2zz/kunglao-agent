@@ -57,7 +57,10 @@ def _errors(data) -> list[str]:
 def _run_cli(index_path: Path) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(VALIDATOR), str(index_path)],
-        capture_output=True, text=True, timeout=60,
+        # tools emit UTF-8 (#317 unified stdout); decode as UTF-8, not the
+        # GBK locale default, or multi-byte chars crash the reader thread
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=60,
     )
 
 

@@ -112,6 +112,18 @@ tick proceeds on file state (`worker-status-*.md` freshness,
 gate. Do not design the tick loop around monitor results, and never block a
 scheduled action waiting for the monitor process to produce output.
 
+## Subagent-model switch caveat (A4, #317)
+
+**Operator note, not a code defect**: after switching `SUBAGENT_MODEL` (the
+subagent model env setting) to a GLM-family model, the proxy layer may reject
+subagent sessions with `400 [1210]` — on both fresh sessions and resume. The
+dispatch chain then fails at the transport level, indistinguishable from a
+kunglao bug at first glance. Check step for the run manual: after ANY
+subagent-model switch, smoke-test one dispatch (e.g. `/kunglao-agent verify
+<fact_id>` or a trivial claim dispatch) and confirm the subagent session
+starts; only then enter the convergence loop. If 400 [1210] appears, revert
+the model setting — it is a proxy-side rejection, not a kunglao defect.
+
 ## Specialist bootstrap tolerance + dual-probe protocol (v1.9.30, 2026-08-05)
 
 **Incident (C-332, 2026-08-05):** a freshly-dispatched verdict-scorer was

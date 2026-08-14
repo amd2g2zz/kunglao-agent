@@ -599,9 +599,10 @@ def print_no_match(query: str, entries: list[Entry]) -> None:
 def main(argv: list[str]) -> int:
     # _INDEX.md is UTF-8 with CJK scene labels; force UTF-8 stdout so piped
     # output (agents, CI) round-trips on Windows consoles regardless of the
-    # active code page.
+    # active code page. errors="replace" per the #317 unified-stdout contract
+    # (belt-and-braces for unpaired surrogates).
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
 
