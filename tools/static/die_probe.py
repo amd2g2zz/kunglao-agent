@@ -39,9 +39,19 @@ import subprocess
 import sys
 from pathlib import Path
 
-# r2-278-1c H1 (die_probe gap): this tool does NOT import _common, so the shared
-# UTF-8 stdout guard does not apply — an emoji/non-ASCII --out filename crashes
-# on GBK consoles. Same unified UTF-8 policy as tools/static/_common.py.
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+
+# issue #319 dedup: the {"error","exit_code"} stderr emitter has a single
+# source — tools/static/common.error. Reuse it instead of a local _error().
+from common import error  # noqa: E402
+
+# r2-278-1c H1 (die_probe gap): this tool does NOT import _common (byte-scan
+# helpers); it imports common only for the single error emitter (issue #319
+# dedup). The shared UTF-8 stdout guard therefore still lives here — an
+# emoji/non-ASCII --out filename crashes on GBK consoles without it.
+# Same unified UTF-8 policy as tools/static/_common.py.
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):
@@ -60,11 +70,6 @@ PACKER_NAMES = (
     "pecompact", "pelock", "winupack", "kkrunchy", "exestealth",
     "nspack", "pepack", "rlpack", "yzpack", "petite",
 )
-
-
-def _error(code: int, message: str) -> None:
-    print(json.dumps({"error": message, "exit_code": code}), file=sys.stderr)
-    sys.exit(code)
 
 
 def resolve_die(die_arg: str | None, env: dict | None = None) -> Path | None:
@@ -187,18 +192,21 @@ def main(argv: list[str] | None = None) -> int:
 
     target = Path(args.binary)
     if not target.is_file():
-        _error(2, f"target missing: {target}. "
-                  f"Check the path and re-run: python die_probe.py --binary {target}")
+        error(f"target missing: {target}. "
+              f"Check the path and re-run: python die_probe.py --binary {target}",
+              2)
 
     die = resolve_die(args.die)
     if die is None:
-        _error(2, "DIE (diec) not found. Install Detect-It-Easy and pass the "
-                  "executable explicitly, e.g. "
-                  "python die_probe.py --binary <pe> --die D:/tools/die/diec.exe "
-                  "— or set KUNGLAO_DIE=<path-to-diec.exe> in the environment.")
+        error("DIE (diec) not found. Install Detect-It-Easy and pass the "
+              "executable explicitly, e.g. "
+              "python die_probe.py --binary <pe> --die D:/tools/die/diec.exe "
+              "— or set KUNGLAO_DIE=<path-to-diec.exe> in the environment.",
+              2)
     if not Path(die).is_file():
-        _error(2, f"--die {die} does not exist. Install Detect-It-Easy and pass "
-                  f"the diec executable: --die <path-to-diec.exe>")
+        error(f"--die {die} does not exist. Install Detect-It-Easy and pass "
+              f"the diec executable: --die <path-to-diec.exe>",
+              2)
 
     calls = {label: run_diec(die, target, flags, args.timeout) for label, flags in FLAG_CALLS}
     detects, entropy = calls["diec -j <path>"], calls["diec -j -e <path>"]
@@ -237,8 +245,9 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 Path(args.out).write_text(text, encoding="utf-8")
             except OSError as exc:
-                _error(2, f"cannot write --out {args.out}: {exc}. "
-                          f"Check the directory and re-run with a writable --out path.")
+                error(f"cannot write --out {args.out}: {exc}. "
+                      f"Check the directory and re-run with a writable --out path.",
+                      2)
         else:
             print(text)
 

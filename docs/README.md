@@ -7,13 +7,18 @@ This directory is the central repository for kunglao-agent design documentation.
 | Directory | Contents | Audience |
 |-----------|----------|----------|
 | `design/` | Design specifications, module-level design, engineering research | Architects, implementers tracing design intent |
-| `devlog/` | Development logs, audit records, fix investigations, plans, baselines | Maintainers, post-incident review |
-| `archive/` | Superseded or obsolete documents (retained for history) | Historical reference only |
+| `devlog/` | Development logs, audit records, fix investigations, plans (`devlog/baselines/`, `devlog/superpowers/`) | Maintainers, post-incident review |
+| `superpowers/` | Global development plans (`superpowers/plans/`) | Maintainers, planning |
+
+> 2026-08-14 (#319): `docs/refactor/` 已于 #263 并入 `design/`/`devlog/`;
+> `archive/` 不再存在 — 本表按实际目录重列。
 
 ## Quick links
 
 - [design/](design/) -- `design-spec.md`, `module-design.md`, `loop-engineering.md`
 - [devlog/](devlog/) -- audit logs, fix records, refactor plans, baselines, superpowers plans
+- [superpowers/](superpowers/) -- global dev plans (GLOBAL-DEV-PLAN-B3/B4)
+- `templates-inventory.md` -- script-template classification framework (issue #278)
 - Root `DESIGN.md` -- current authoritative design document
 
 ## Relationship to references/

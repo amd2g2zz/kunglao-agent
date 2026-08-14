@@ -3,13 +3,18 @@
 > **修订 2026-08-06 (issue #1 cleanup-routing-module)**: 路由层(method_router / method_topk / method_router_register / method-graph)经实验证伪 CUT,本契约已移除全部路由段。priority_ratio 段保留当前实现(旧 0.35·Δdisc 公式),VoI 代理重写见 issue #2(`phase4-voi-priority`)。
 
 来源文档(冻结源, 引文带行号):
-- `docs/refactor/module-design.md` — §M1 全部 (L89-171); M1.1 划分 L93-100; M1.2 签名 L102-127; M1.3 schema L129-139; M1.4 状态机 L141-158; M1.5 错误处理 L160-164; M1.6 测试点 L166-170
-- 同目录 `docs/refactor/design-spec.md` — §3.2 比值键算法(含 2026-08-06 VoI 代理定稿)
+- `docs/design/module-design.md` — §M1 全部 (L112-207); M1.1 划分 L114-125; M1.2 签名 L126-159; M1.3 schema L160-172; M1.4 状态机 L173-192; M1.5 错误处理 L193-199; M1.6 测试点 L200-205
+- 同目录 `docs/design/design-spec.md` — §3.2 比值键算法(L129, 含 2026-08-06 VoI 代理定稿)
 - 现成可复用(不改): `scripts/convergence_check.py::decide`(5 分支矩阵, golden F-01..F-16)、`scripts/priority.py::rank_claims`(legacy 加法权重)、`scripts/ask_for_direction_gate.py`(selfcheck 反问部分已实现)
+
+> 2026-08-14 (#319 去重): 源文档随 docs 树合一迁至 `docs/design/`(旧树已删,
+> 见 git 历史), 行号按当前文件重核。注: 现 `docs/design/module-design.md`
+> M1.2 含 resource_selector/feedback_updater(2026-08-06 修订), 与本契约
+> "路由已移除"的冻结签名集不同 — 即 #319 审计发现的两树内容漂移。
 
 ---
 
-## 1. 函数签名(冻结, M1.2 原文 L102-127, 路由已移除)
+## 1. 函数签名(冻结, M1.2 原文 L126-159, 路由已移除)
 
 ```python
 def convergence_matrix(open_count, partial_count, free_slots, blocked_count) -> Decision:
@@ -37,7 +42,7 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
 
 | 设计签名 | 本阶段落地 | 备注 |
 |---|---|---|
-| `convergence_matrix(...)` | **不新建** — `convergence_check.decide(ws)` 已实现同矩阵(5 分支顺序一致, L241-259)且 golden 冻结 | M1.6 L168 "行为快照已有" |
+| `convergence_matrix(...)` | **不新建** — `convergence_check.decide(ws)` 已实现同矩阵(5 分支顺序一致, L241-259)且 golden 冻结 | M1.6 L202 "行为快照已有" |
 | `priority_ratio(claims, deps, evidence)` | `scripts/priority_ratio.py::priority_ratio` | 纯函数; failure-blocked 过滤由调用方(kunglao-decide)做(签名无 ws) |
 | `explore_gate(count, threshold)` | `scripts/explore_gate.py::explore_gate(count, threshold=EXPLORE_THRESHOLD)` | `EXPLORE_THRESHOLD = 5` |
 | `selfcheck(text)` | `scripts/kunglao-decide.py::selfcheck(text)` 组合 `ask_for_direction_gate.find_violations`(反问) + `worker_budget.detect_self_cap`(自加 cap) | ask_for_direction_gate 已实现, 只补测试 |
@@ -65,7 +70,7 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
 
 ## 2. 输出 schema 引用
 
-- 冻结结构: `schemas/decide-output.json`(M1.3 L131-138 逐字段)
+- 冻结结构: `schemas/decide-output.json`(M1.3 L163-170 逐字段)
 - 必需 9 字段: `decision`(enum 5 值) / `exit_code`(0-4) / `top_actions[]`(items: claim_id, action, score, skill) / `blocked[]` / `failure_blocked[]` / `stale[]` / `drifts[]` / `explore_mode`(bool) / `selfcheck[]`
 - 附加字段(additionalProperties 允许, 非冻结必需): `open_count`, `partial_count`, `free_slots`, `error`
 - 字段映射(契约空白):
@@ -95,7 +100,7 @@ decide(ws):
 
 - `k = free_slots = max(0, 3 - active_workers)`(convergence_check L231)
 - DISPATCH_VERIFIER / SATURATED / CONVERGED: `top_actions=[]`, 其余字段照 convergence_check 映射
-- 脚本异常(M1.5 L164): 记 ledger(failure_recorded) + 返回 `BLOCKED`(exit 4) + `error` 字段 — **不误报收敛**
+- 脚本异常(M1.5 L198): 记 ledger(failure_recorded) + 返回 `BLOCKED`(exit 4) + `error` 字段 — **不误报收敛**
 
 ## 4. 测试点(M1.6 + 本阶段 RED 清单, 路由测试点已移除)
 
