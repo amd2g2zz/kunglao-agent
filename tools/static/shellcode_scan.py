@@ -36,7 +36,7 @@ _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
-from _common import (  # noqa: E402
+from common import (  # noqa: E402
     PEB_ACCESS_PATTERNS,
     ascii_strings,
     find_all,

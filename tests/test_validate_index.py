@@ -4,7 +4,9 @@
 Pins the tools/_INDEX.yaml contract to a machine validator (tools/validate_index.py):
 
 - name:        unique, non-empty (lowercase kebab-case)
-- category:    one of crypto|static|ghidra|dynamic|pipeline|aux
+- category:    one of crypto|static|ghidra|dynamic|auxiliary|pipelines
+               (#340: category id == tools/<category>/ directory name; the
+               legacy ids aux/pipeline were renamed auxiliary/pipelines)
 - capability:  "<domain>:<operation>" tag (e.g. crypto:decode), non-empty
 - tier:        T1|T2|T3   (static tool / emulation / VM-dynamic)
 - cost_tier:   probe|cheap|deep
@@ -95,6 +97,24 @@ class TestPass:
         del entry["when_not"]
         assert _errors({"tools": [entry]}) == []
 
+    @pytest.mark.parametrize("category", [
+        "crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines",
+    ])
+    def test_every_category_id_passes(self, category: str) -> None:
+        """#340: category ids == directory names — full enum must validate."""
+        entry = _valid_entry()
+        entry["category"] = category
+        assert _errors({"tools": [entry]}) == []
+
+    @pytest.mark.parametrize("legacy", ["aux", "pipeline"])
+    def test_legacy_category_ids_fail(self, legacy: str) -> None:
+        """#340 renamed aux→auxiliary / pipeline→pipelines: the legacy ids
+        must be rejected so the id==dirname alignment cannot drift back."""
+        entry = _valid_entry()
+        entry["category"] = legacy
+        errs = _errors({"tools": [entry]})
+        assert any("'category'" in e for e in errs), errs
+
     def test_cli_exit_zero_on_valid_file(self, tmp) -> None:
         idx = tmp / "index.yaml"
         idx.write_text("tools: []\n", encoding="utf-8")
@@ -126,7 +146,8 @@ class TestFail:
         errs = _errors({"tools": [a, b]})
         assert any("name" in e and "duplicate" in e.lower() for e in errs), errs
 
-    @pytest.mark.parametrize("bad", ["cryptography", "Crypto", "re", "", "unknown"])
+    @pytest.mark.parametrize("bad",
+                             ["cryptography", "Crypto", "re", "", "unknown"])
     def test_invalid_category_fails(self, bad: str) -> None:
         entry = _valid_entry()
         entry["category"] = bad

@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-# UTF-8 stdout unification (same pattern as tools/static/_common.py)
+# UTF-8 stdout unification (same pattern as tools/static/common.py (ex-_common.py, merged #340))
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):

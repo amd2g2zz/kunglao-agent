@@ -1,6 +1,6 @@
-# aux 领域索引(工具层)
+# auxiliary 领域索引(工具层)
 
-> 领域: 辅助/杂项工具(哈希、编码、文件元数据、运维测量)。worker 被派发到辅助性小任务时先读本文件, 再按需加载。契约字段含义见 [README.md](README.md), 机器契约见 [_INDEX.yaml](_INDEX.yaml)。注意: 类目 id 为 `aux`, 目录名为 `auxiliary`(Windows 保留设备名 `AUX` 无法作目录名)。
+> 领域: 辅助/杂项工具(哈希、编码、文件元数据、运维测量)。worker 被派发到辅助性小任务时先读本文件, 再按需加载。契约字段含义见 [README.md](README.md), 机器契约见 [_INDEX.yaml](_INDEX.yaml)。类目 id 与目录名一致(`tools/auxiliary/`, #340); 沿革: 旧 id 为 `aux`, 因 `aux` 是 Windows 保留设备名无法作目录名, #340 改 id 随目录。
 
 ## 工具清单
 
@@ -19,7 +19,7 @@
 - **用途**: 审计 workspace 的 legacy PROVEN claim(BLIND 签名维度 + 索引溯源性)。
 - **用法**:
   ```bash
-  python tools/audit_legacy_proven.py <workspace> --json
+  python tools/auxiliary/audit_legacy_proven.py <workspace> --json
   ```
 - **输入**: workspace 根(位置参数, 必填; 读 claim-register.yaml + facts/_INDEX.md); 可选 `--output/--out`(JSON 落盘)/`--json`(stdout JSON)。
 - **输出**: legacy PROVEN claim 审计 JSON/摘要(缺省输出 audit-<ws>-<ts>.json)。
@@ -31,7 +31,7 @@
 - **用途**: 按 CASES 清单重采 golden master 基线(合成工作区 + CLI 参数)。
 - **用法**:
   ```bash
-  python tools/capture_golden.py --refresh
+  python tools/auxiliary/capture_golden.py --refresh
   ```
 - **输入**: CASES 清单(脚本内合成工作区 + CLI 参数); 可选 `--out <DIR>`(缺省 tests/fixtures/golden)。
 - **输出**: tests/fixtures/golden/{manifest.yaml, F-NN/expected/stdout.txt}。
@@ -43,7 +43,7 @@
 - **用途**: 测量 PROVEN claim 的 BLIND 盲验覆盖率。
 - **用法**:
   ```bash
-  python tools/measure_blind_coverage.py <workspace> --json
+  python tools/auxiliary/measure_blind_coverage.py <workspace> --json
   ```
 - **输入**: workspace 根(位置参数, 必填; 读 claim-register.yaml + facts/*.md 的 verifier_sign_off); 可选 `--out`/`--reliability`。
 - **输出**: BLIND 覆盖率 JSON(PROVEN/blind_signed/unverified/coverage)。
@@ -55,7 +55,7 @@
 - **用途**: 逐文件 token 估算 workspace 状态文件清单, 输出冷启动基线。
 - **用法**:
   ```bash
-  python tools/measure_cold_start.py <workspace> --out <out.json>
+  python tools/auxiliary/measure_cold_start.py <workspace> --out <out.json>
   ```
 - **输入**: workspace 根(位置参数, 必填; 读 claim-register.yaml/_INDEX/ledger/progress 等状态文件); 可选 `--rounds`。
 - **输出**: docs/baselines/cold-start-tokens.json(逐文件 token 估算, 缺省路径)。

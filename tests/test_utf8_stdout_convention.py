@@ -18,8 +18,8 @@ patch — the contract therefore demands the full
 tools/static/c_normalize.py).
 
 CLI definition: a .py under tools/ that runs as an entry point (contains an
-``if __name__ == "__main__"`` block). Pure helper modules (common.py,
-_common.py, lib_disasm.py, algorithms.py, __init__.py — imported by CLIs
+``if __name__ == "__main__"`` block). Pure helper modules (static/common.py,
+_lib/lib_disasm.py, crypto/algorithms.py, __init__.py — imported by CLIs
 and covered transitively) have no __main__ and are exempt automatically.
 """
 from __future__ import annotations

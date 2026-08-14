@@ -4,7 +4,9 @@
 Validates the machine-readable tool index against the contract:
 
   name:         unique, non-empty (lowercase kebab-case tool id)
-  category:     one of crypto|static|ghidra|dynamic|pipeline|aux
+  category:     one of crypto|static|ghidra|dynamic|auxiliary|pipelines
+                (#340: category id == tools/<category>/ directory name; the
+                only dir-less exception is dynamic — external MCP capability)
   capability:   "<domain>:<operation>" tag (e.g. crypto:decode), non-empty
   tier:         T1|T2|T3   (T1 static tool / T2 emulation / T3 VM-dynamic)
   cost_tier:    probe|cheap|deep
@@ -37,7 +39,7 @@ try:
 except (AttributeError, ValueError):
     pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 
-CATEGORIES = ("crypto", "static", "ghidra", "dynamic", "pipeline", "aux")
+CATEGORIES = ("crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines")
 TIERS = ("T1", "T2", "T3")
 COST_TIERS = ("probe", "cheap", "deep")
 REQUIRED_FIELDS = ("name", "category", "capability", "tier", "cost_tier",

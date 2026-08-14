@@ -8,7 +8,7 @@ RVA lists as literals): given a PE and a list of RVAs/VAs, dump capstone
 disassembly at each site; optional x64 prolog scan and printable-string
 extraction.
 
-REUSES tools/lib_disasm.py (issue #284): load_pe / va_to_offset / capstone_for
+REUSES tools/_lib/lib_disasm.py (issue #284, home per #340): load_pe / va_to_offset / capstone_for
 are imported — the VA->file-offset core is not duplicated.
 
 #277 contract: parameterized (--binary / --rvas / --vas), read-only +
@@ -38,11 +38,11 @@ from pathlib import Path
 _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
-_TOOLS_DIR = _THIS_DIR.parent
-if str(_TOOLS_DIR) not in sys.path:
-    sys.path.insert(0, str(_TOOLS_DIR))
+_LIB_DIR = _THIS_DIR.parent / "_lib"   # shared cross-category lib home (#340)
+if str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))
 
-from _common import ascii_strings, x64_prolog_offsets  # noqa: E402
+from common import ascii_strings, x64_prolog_offsets  # noqa: E402
 from lib_disasm import capstone_for, load_pe, va_to_offset  # noqa: E402
 
 # UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from

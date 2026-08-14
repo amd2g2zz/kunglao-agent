@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""tools/capture_golden.py — 阶段 0: golden master 采集器.
+"""tools/auxiliary/capture_golden.py — 阶段 0: golden master 采集器.
 
 对每个待锁定的 CLI 用例: 在合成工作区运行命令 → 落盘 expected stdout(逐字节)。
 采集即冻结: 这是重构前的行为基线, 后续任何阶段不得静默修改 expected/
 (行为合法改变走 specs/README.md 的变更流程)。
 
 用法:
-  python tools/capture_golden.py            # 采集全部用例
-  python tools/capture_golden.py --refresh  # 重新采集(仅用于契约变更流程)
+  python tools/auxiliary/capture_golden.py            # 采集全部用例
+  python tools/auxiliary/capture_golden.py --refresh  # 重新采集(仅用于契约变更流程)
 
 输出: tests/fixtures/golden/{manifest.yaml, F-NN/{ws/, cmd.json, expected/stdout.txt}}
 """
@@ -30,7 +30,7 @@ try:
 except (AttributeError, ValueError):
     pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]  # repo root (tools/auxiliary/ → #340)
 SCRIPTS = ROOT / "scripts"
 GOLDEN = ROOT / "tests" / "fixtures" / "golden"
 

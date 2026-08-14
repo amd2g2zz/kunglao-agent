@@ -20,7 +20,7 @@ files:
   references/decision-rights.md: 91b0344885a200ebf0f0561607fd9e18e506b7b45968cf1cacc13238ce0071c1
   references/downstream-contract.md: 4665e25d99dbac0a610e3b682a6b252fdb0e6df2749fe6269c3ef7141f4c91b0
   references/dynamic-re-tool-priority.md: 05a52c124b23ffb1bbdaeabbde162e57846efab130fc9a6e89e02c5429075aa1
-  references/excerpt-lint.md: ced0b184ddc3e721599809eb3797a4739df927d98f73987f024b56dd8978653a
+  references/excerpt-lint.md: ae0c1ea36b2087099044095e2f400c9154eb053f1d2b1a170da81477988ddbb0
   references/failure-modes-lifecycle.md: 816aebeb9c55c044c406f2d1f6bd681d16907ca667134f7b925d595090f7624d
   references/failure-modes-monitoring.md: 1a493a1540a6dab0bba9a6c4ad1a82190166c9cb51b1707bd83352892ccb7ea0
   references/failure-modes-state.md: 922cdcbbc7b73e80ac25795b8470c2a602aad16e3cb8318a5cf7e97d4d18123c
@@ -61,7 +61,7 @@ files:
   references/re-library/tools-crypto.md: 537aaaac5d0757a768403d79243a59ccf3d2511be32e51a73afe686da00b5648
   references/re-library/tools-dynamic.md: af6d0539a253366cf76b3266922bc4551478ebe32576fc216b68d91d0ea5f7de
   references/re-library/tools.md: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
-  references/schema.md: 8042275cb038b7a12f1dca0aa25e9cbf7934c5f8dc9cad1505b0ec48b466adb5
+  references/schema.md: 7e7e97005892d24fec5800cad12f1bb6aee8e554478fe82cbd65a407c0f4d112
   references/search-policy.md: 5a4a88cdfab1e8493a23cd531fddd3078ef9ad261a3d627f0f5a8871848e66c4
   references/state-mapping.md: 2898e976b58d717641e01e56e2459808f1ad082f6cba7f0c0446ea76d7a98b06
   references/tool-inventory.md: 65b778132ac2310f0b507d8dacde254db069f90b256e86a6849d01159e953e8e

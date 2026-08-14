@@ -26,8 +26,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 TOOLS = ROOT / "tools"
 sys_path_added = False
-if str(TOOLS) not in __import__("sys").path:
-    __import__("sys").path.insert(0, str(TOOLS))
+# #340: build_evidence_index lives in tools/pipelines/
+if str(TOOLS / "pipelines") not in __import__("sys").path:
+    __import__("sys").path.insert(0, str(TOOLS / "pipelines"))
     sys_path_added = True
 
 

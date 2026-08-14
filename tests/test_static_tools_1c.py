@@ -26,7 +26,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "tools" / "static"
 TOOLS = ROOT / "tools"
-for sub in ("scripts", "hooks", "tools", "tools/static"):
+for sub in ("scripts", "hooks", "tools", "tools/static", "tools/_lib"):
     if str(ROOT / sub) not in sys.path:
         sys.path.insert(0, str(ROOT / sub))
 

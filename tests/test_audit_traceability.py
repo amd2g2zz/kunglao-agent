@@ -22,9 +22,12 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / "tools"
 SCRIPTS = ROOT / "scripts"
 sys_path_added = False
-if str(TOOLS) not in __import__("sys").path:
-    __import__("sys").path.insert(0, str(TOOLS))
-    sys_path_added = True
+# #340: audit_legacy_proven lives in tools/auxiliary/, build_evidence_index
+# in tools/pipelines/ — both are needed for this module's imports.
+for _sub in ("auxiliary", "pipelines"):
+    if str(TOOLS / _sub) not in __import__("sys").path:
+        __import__("sys").path.insert(0, str(TOOLS / _sub))
+        sys_path_added = True
 
 import audit_legacy_proven as alp
 

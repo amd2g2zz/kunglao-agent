@@ -20,10 +20,10 @@ of evidence/_index.json entries (P3 metric).
 Exit 0 always — this is a measurement tool, not a gate.
 
 Usage:
-  python tools/measure_blind_coverage.py <workspace>
-  python tools/measure_blind_coverage.py <workspace> --json
-  python tools/measure_blind_coverage.py <workspace> --json --out cov.json
-  python tools/measure_blind_coverage.py <workspace> --reliability
+  python tools/auxiliary/measure_blind_coverage.py <workspace>
+  python tools/auxiliary/measure_blind_coverage.py <workspace> --json
+  python tools/auxiliary/measure_blind_coverage.py <workspace> --json --out cov.json
+  python tools/auxiliary/measure_blind_coverage.py <workspace> --reliability
 
 #277 CLI contract: --json emits machine JSON (stdout or --out FILE). Exit 0
 always — this is a measurement tool, not a gate.
@@ -36,7 +36,8 @@ import sys
 from pathlib import Path
 
 # scripts/ is on sys.path via pytest.ini pythonpath; for standalone CLI add it.
-_SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+# #340: this script lives in tools/auxiliary/ — repo root is parents[2].
+_SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 _TOOLS = Path(__file__).resolve().parent
 for _p in (_SCRIPTS, _TOOLS):
     if str(_p) not in sys.path:

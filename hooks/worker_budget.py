@@ -830,7 +830,15 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
 # would false-positive REJECT normal dispatches. Stopworded out of the trigger
 # set; the remaining keywords (crypto/ghidra/recon/decompile/vtable/...) are
 # distinctive enough to be safe signals.
-_TOOLFIRST_STOPWORDS = frozenset({'static', 'pipeline', 'aux', 'annotate', 'decode'})
+# #340: category ids renamed aux→auxiliary / pipeline→pipelines (id == dir
+# name); _load_tool_index_keywords derives keywords from those ids, so the
+# plural forms joined the trigger set — a dispatch citing the REAL paths
+# (tools/pipelines/build_evidence_index.py, tools/auxiliary/...) would
+# REJECT without a marker. Both plural forms stopworded; the legacy
+# singulars stay (capability domains aux:*/pipeline:* still emit them).
+_TOOLFIRST_STOPWORDS = frozenset(
+    {'static', 'pipeline', 'pipelines', 'aux', 'auxiliary',
+     'annotate', 'decode'})
 
 # One-off diagnostic exemption: CJK phrases are substring-matched (no word
 # concept to bound), ASCII phrases are word-bounded so 'one-off' inside a

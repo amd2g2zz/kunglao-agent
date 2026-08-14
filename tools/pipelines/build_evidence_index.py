@@ -8,7 +8,7 @@
 source_reliability = Admiralty 评级(A-F × 1-6),机械默认按 type + --rel 可覆盖。
 派生不进 index → P2 provenance gate 拒"引派生"的 fact(派生 path 不在 index → invalid)。
 
-用法: python build_evidence_index.py <workspace> [--write] [--out FILE] [--rel reliability_map.yaml]
+用法: python tools/pipelines/build_evidence_index.py <workspace> [--write] [--out FILE] [--rel reliability_map.yaml]
 
 #277 CLI contract: JSON is the default machine output (stdout, or --out FILE);
 --write persists evidence/_index.json + _INDEX.md under the workspace. Exit

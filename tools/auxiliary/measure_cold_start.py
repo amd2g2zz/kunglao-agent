@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/measure_cold_start.py — 阶段 0: 冷启动 token 基线测量器.
+"""tools/auxiliary/measure_cold_start.py — 阶段 0: 冷启动 token 基线测量器.
 
 测量协议(冻结, 阶段 6/9 复用同一脚本):
   固定输入文件清单(claim-register.yaml / _INDEX / digest / ledger / progress 尾部)
@@ -32,7 +32,7 @@ try:
 except (AttributeError, ValueError):
     pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]  # repo root (tools/auxiliary/ → #340)
 BASELINES = ROOT / "docs" / "baselines"
 OUT = BASELINES / "cold-start-tokens.json"
 

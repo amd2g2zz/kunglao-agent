@@ -25,12 +25,20 @@ worker 先读 `tools/_index-static.md`(16 个工具的 6 段契约条目: 用途
 |---|---|---|
 | `pe_analyze.py` | `pe-analyze` | PE trunk 解析: headers/sections/imports/exports/resources/overlay/pdb/tls/signature 子命令 |
 | `overlay_scan.py` | `overlay-scan` | 覆盖区 3-in-1: `--mode reloc\|true\|mz`(reloc 表 / true-overlay / MZ 内嵌 PE) |
-| `disasm_dump.py` | `disasm-dump` | 指定 RVA/VA 的 capstone 指令清单(复用 `tools/lib_disasm.py` 的 VA→offset 核心) |
+| `disasm_dump.py` | `disasm-dump` | 指定 RVA/VA 的 capstone 指令清单(复用 `tools/_lib/lib_disasm.py` 的 VA→offset 核心) |
 | `shellcode_scan.py` | `shellcode-scan` | shellcode blob 检测: 入口反汇编/代码区扫描/序言/PEB 访问/字符串 |
 | `die_probe.py` | `die-probe` | DIE 5-call merge 探测包装(die 缺失 exit 2 + 安装指引) |
-| `_common.py` | — | 共享字节扫描助手(签名/字符串/序言/熵/pclntab), 无副作用可导入, 不登记索引 |
 
-其余登记工具: `yara-scan.py` + `yara-gen.py`(issue #313, 吸收 findcrypt-yara 规则资产至 `yara-rules/`)、`c_normalize.py` + `opaque_pred.py`(issue #306, 反编译 C 后处理)、根层 `tools/disasm_constant_check.py`(issue #284)。
+其余登记工具: `yara-scan.py` + `yara-gen.py`(issue #313, 吸收 findcrypt-yara 规则资产至 `yara-rules/`)、`c_normalize.py` + `opaque_pred.py`(issue #306, 反编译 C 后处理)、`disasm_constant_check.py`(issue #284; #340 起由 tools/ 根层归位本目录)。
+
+## 共享模块(#340 合并)
+
+`common.py` 是 static 类目的**唯一**共享模块(#340 结构规则: 一类目一个共享模块)。#340 将原双模块合并为一个并保留全部公共面:
+
+- CLI 管道(原 `common.py`): `error`/`add_common_flags`/`read_bytes`/`read_text`/`parse_int`/`sha256`/`parse_line`/`report`/`negative` + `EXIT_*`/`L1_FIELD_RE`(#277 契约)。
+- 字节扫描助手(原 `_common.py`, #278 PR-1c): `EXE_SIGNATURES`/`X64_PROLOG_PATTERNS`/`PEB_ACCESS_PATTERNS`/`find_all`/`signature_hits`/`ascii_strings`/`x64_prolog_offsets`/`byte_entropy`/`uniform_variance`/`scan_valid_pclntab`。
+
+`tools/_lib/lib_disasm.py`(跨类目共享库单点)提供 PE/capstone VA→offset 核心, 不在本目录。
 
 lzma-raw 不再单独吸收: `tools/crypto/crypto-tool.py` 的 `lzma-raw` 子命令(`algorithms.lzma_raw_decompress`, dict_size/lc/lp/pb/size 全参数化)已覆盖同能力, 避免重复。
 

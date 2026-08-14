@@ -54,7 +54,7 @@ file. A scaling operand in `KNOWN_UNIT_SCALES` (1000/1024/100/8/60/3600/...) is
 | Layer | Tool | Input | Catches |
 |---|---|---|---|
 | Excerpt-TEXT (front-line, this) | `scripts/fixture_excerpt_lint.py` (#58) | raw `.c` text, no binary | unannotated `*1000` / speculated `sVarN` at authoring time |
-| Byte-exact (back-line) | `tools/disasm_constant_check.py` (#50) | sample PE + VA-anchored assertions + capstone | a `*1000` claim with NO imul/<K> at the VA (disasm disproves the multiply) |
+| Byte-exact (back-line) | `tools/static/disasm_constant_check.py` (#50) | sample PE + VA-anchored assertions + capstone | a `*1000` claim with NO imul/<K> at the VA (disasm disproves the multiply) |
 | Expected-value | fact-expected-value-binding (#49) | a fact's `expected:` value map | report listing diverging from the fact's bound expected values |
 
 #50 and #58 both flag the a2b5e25c `*1000` — by design, at different layers:
@@ -83,7 +83,7 @@ documented `*1000` failure, quietly on clean faithful excerpts.
 
 - `~/.claude/rules/common/numeric-fidelity.md` — the `unit:` caliber rule (this
   lint is its excerpt-layer enforcement).
-- `tools/disasm_constant_check.py` (#50) — byte-exact checker (back-line).
+- `tools/static/disasm_constant_check.py` (#50) — byte-exact checker (back-line).
 - fact-expected-value-binding (#49) — expected-value binding.
 - `openspec/changes/fixture-excerpt-lint/` — full SDD (proposal/design/spec/tasks).
 - malware-veri-notes fixture spec — may reference/invoke this lint in a future

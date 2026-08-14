@@ -19,7 +19,7 @@ contract.md 头部写:
 
 `tests/fixtures/golden/expected/` 是重构前的行为基线, 权威。
 
-- 用例行为**合法改变**(新契约允许) → 走冻结仪式: RED 测试 → 改 spec → `python tools/capture_golden.py --refresh` 重新采集 → 同 commit。
+- 用例行为**合法改变**(新契约允许) → 走冻结仪式: RED 测试 → 改 spec → `python tools/auxiliary/capture_golden.py --refresh` 重新采集 → 同 commit。
 - 用例行为**非预期改变**(回归) → 不允许 --refresh, 必须修复实现。
 
 ## 阶段 0 明确不做的决定(防反复)
