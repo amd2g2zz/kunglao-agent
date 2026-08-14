@@ -10,7 +10,7 @@ F2/F3, wf_5c50b792-f7c); ledger SIGNATURE ROTATION can: if the
 decision-relevant signature is identical for N consecutive rows, the loop is
 spinning, not converging.
 
-Design (openspec/changes/drift-detection/design.md D1-D3):
+Design (openspec/archive/drift-detection/design.md D1-D3):
   D1 signature = (decision, open_ids, partial_count, active_workers,
      blockers, facts_total) — ts excluded (a fresh timestamp on an identical
      snapshot is the F2/F3 false-alive signal, not progress), open_count

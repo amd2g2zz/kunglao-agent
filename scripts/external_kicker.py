@@ -17,7 +17,7 @@ has been repairing the wrong file — the T1 zombie root cause. This kicker
 re-registers hooks at the PROJECT level, preserving every other key
 (env secrets byte-for-byte).
 
-Design (see openspec/changes/external-kicker/design.md D1-D6):
+Design (see openspec/archive/external-kicker/design.md D1-D6):
   D1 dead-session detection: `session_is_dead` — heartbeat missing OR both
      `last_tick_ts` (loop renew tick) and `activity_ts` (heartbeat_touch hook,
      every tool call) stale beyond `stale_minutes` (default 10). Both stale =

@@ -4,7 +4,7 @@
 All claim-status consumers import the sets defined here instead of
 re-defining them, so a new status (e.g. DEAD for the DLQ) is added in ONE
 place and every consumer picks it up. See
-`openspec/changes/status-defs-safety-net/` for the full design.
+`openspec/archive/status-defs-safety-net/` for the full design.
 
 Sets
 ----

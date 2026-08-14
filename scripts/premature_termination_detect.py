@@ -31,7 +31,7 @@ mechanical layers, NOT a duplicate of either:
 
 #54 does NOT duplicate signature_rotation (#43) or build_anchor (#44): different
 input (declaration text, not ledger rows), different time (declaration, not
-loop-iteration). See openspec/changes/premature-termination-detect/design.md.
+loop-iteration). See openspec/archive/premature-termination-detect/design.md.
 
 Heuristic, not semantic: regex/keyword patterns only. No LLM call, no network.
 The detector reads NO workspace state — only the `transcript` text and the
