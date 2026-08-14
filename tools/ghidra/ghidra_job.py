@@ -61,7 +61,7 @@ from pathlib import Path
 from typing import NoReturn
 
 try:
-    sys.stdout.reconfigure(errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):
     pass  # captured stream without reconfigure (pytest capsys)
 

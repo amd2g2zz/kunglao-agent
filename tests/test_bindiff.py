@@ -417,6 +417,23 @@ FAKE_WRITER_BAT = (
     "exit /b 0\r\n"
 )
 
+FAKE_WRITER_SH = (
+    # POSIX twin of FAKE_WRITER_BAT: parse --out <path>, write {} there.
+    # Handles both --out=PATH (POSIX exec passes the token whole) and
+    # `--out PATH` two-token form (kept for parity with the batch parser).
+    "#!/bin/sh\n"
+    "out=\n"
+    "while [ $# -gt 0 ]; do\n"
+    "  case \"$1\" in\n"
+    "    --out=*) out=${1#--out=}; shift ;;\n"
+    "    --out) out=$2; shift 2 ;;\n"
+    "    *) shift ;;\n"
+    "  esac\n"
+    "done\n"
+    "if [ -n \"$out\" ]; then printf '{}\\n' > \"$out\"; fi\n"
+    "exit 0\n"
+)
+
 FAKE_LOOP_BAT = (
     "@echo off\r\n"
     ":loop\r\n"
@@ -424,11 +441,30 @@ FAKE_LOOP_BAT = (
     "goto loop\r\n"
 )
 
+FAKE_LOOP_SH = (
+    # POSIX twin of FAKE_LOOP_BAT: sleep forever until cancelled.
+    "#!/bin/sh\n"
+    "while true; do sleep 1; done\n"
+)
 
-def make_fake_ghidra(tmp_path, bat_text=FAKE_WRITER_BAT) -> Path:
+
+def make_fake_ghidra(tmp_path, bat_text=FAKE_WRITER_BAT,
+                     sh_text=FAKE_WRITER_SH) -> Path:
+    """Fake Ghidra install with a platform-runnable analyzeHeadless.
+
+    analyze_headless_path() prefers analyzeHeadless.bat when present, but a
+    .bat cannot execute on POSIX — write the platform-appropriate script
+    (extensionless + chmod 0o755 on POSIX) so the job completes (writer) or
+    loops (loop) identically on both platforms.
+    """
     ghidra = tmp_path / "ghidra"
     (ghidra / "support").mkdir(parents=True)
-    (ghidra / "support" / "analyzeHeadless.bat").write_text(bat_text, encoding="utf-8")
+    if os.name == "nt":
+        (ghidra / "support" / "analyzeHeadless.bat").write_text(bat_text, encoding="utf-8")
+    else:
+        sh = ghidra / "support" / "analyzeHeadless"
+        sh.write_text(sh_text, encoding="utf-8")
+        sh.chmod(0o755)
     return ghidra
 
 

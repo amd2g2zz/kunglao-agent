@@ -37,7 +37,7 @@ import sys
 from pathlib import Path
 
 try:
-    sys.stdout.reconfigure(errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):
     pass
 

@@ -141,6 +141,13 @@ def build_workspace(tmp_path: Path, *, f022: bool = False) -> Path:
     _write(ws / "facts" / "F017.md", OLD_F017_FM)
     if f022:
         _write(ws / "test-scope" / "sample_enc.bin", b"\x00encrypted")
+        # Recompute-script artifact referenced by the curated F022
+        # FACT_MIGRATION_MAP entry (provenance_override recompute_script
+        # path) — on POSIX the drive-absolute path resolves relative to ws,
+        # same shape as the other fixture evidence files, so its
+        # content_sha256 is derived from these bytes.
+        rel = "C:/Users/hr/.claude/skills/kunglao-agent/tools/crypto/crypto-tool.py"
+        _write(ws.joinpath(*rel.split("/")), b"# crypto-tool placeholder\n")
         _write(ws / "facts" / "F022.md", F022_BODY_ONLY)
     _write(ws / "facts" / "_INDEX.md",
            "# Facts Index\n\n## Status: 3 PROVEN / 0 PARTIAL\n\n"

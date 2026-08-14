@@ -14,6 +14,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+# yara-python is the optional scan engine — the CLIs degrade gracefully
+# (exit 2 + guidance) without it, so the whole module skips here (same
+# guarded-import policy as z3-solver in tests/test_opaque_pred.py).
+pytest.importorskip("yara", reason="yara-python not installed")
+
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "tools" / "static"
 L1_LINE_RE = re.compile(r"^([A-Za-z_][\w.]*)\s*[:=]\s*(.+)$")
