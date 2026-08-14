@@ -346,6 +346,227 @@ def check_cross_workflow_redteam(fact: dict, ws: Path) -> tuple[bool, str]:
 
 
 # ===========================================================================
+# #332 machine-check oracle contract (可执行预言机契约, 2026-08-14)
+# ===========================================================================
+#
+# CrackMeBench lesson (#330): an independent verifier and the maker can share
+# the same static-analysis blind spot — conclusion comparison then passes
+# everything. Every verification record must therefore terminate in at least
+# one MACHINE check: a byte/execution-level comparison with an explicit
+# command + expected/actual/passed. A record with no machine_check, or with
+# passed=false, fails validation — STAMP must not promote to PROVEN.
+#
+# Canonical record shape (in runs/verify-redteam-*.md):
+#   ## MACHINE-CHECK (oracle contract #332)
+#   ```machine_check
+#   [{"command": "xxd -p -s 0x0 -l 2 bins/<sha>", "expected": "4d5a",
+#     "actual": "4d5a", "passed": true}]
+#   ```
+# Exception path (pure-CTI-class claims only — mapping-table exception list):
+#   ```machine_check
+#   {"machine_check": "none", "reason": "...", "claim_kind": "cti_correlation"}
+#   ```
+# Mapping table: references/machine_check_map.yaml (single source of truth;
+# mirrored by references/machine-check-contract.md, parity-tested).
+
+MACHINE_CHECK_KEYS = ("command", "expected", "actual", "passed")
+MACHINE_CHECK_TOOLS = READONLY_TOOLS | {
+    "disasm_constant_check", "disasm_constant_check.py", "vmr-shell", "x64dbg",
+    "frida", "ghidra", "pefile", "capstone", "objdump", "gdb",
+}
+MACHINE_CHECK_MARKERS = ("=", "!=", "assert", "0x", "|", "-s ")
+_DEFAULT_MC_MAP = Path(__file__).resolve().parent.parent / "references" / "machine_check_map.yaml"
+_MC_FENCE_RE = re.compile(
+    r"```\s*(machine[-_]check)\b[^\n]*\n(.*?)```", re.IGNORECASE | re.DOTALL)
+_MC_INLINE_RE = re.compile(
+    r"^\s*machine[-_]check\s*:\s*(.+?)\s*$", re.IGNORECASE | re.MULTILINE)
+
+
+def load_machine_check_map(path: Path | None = None) -> dict:
+    """#332 mapping table (references/machine_check_map.yaml). Missing or
+    unparseable file → {} — fail closed: no claim kinds, no exceptions."""
+    p = Path(path) if path is not None else _DEFAULT_MC_MAP
+    try:
+        import yaml
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _lenient_json(raw: str):
+    """JSON with LLM-shaped noise tolerated: // comments, trailing commas."""
+    text = re.sub(r"//[^\n]*", "", raw)
+    text = re.sub(r",\s*([}\]])", r"\1", text)
+    return json.loads(text)
+
+
+def parse_machine_checks(text: str | None) -> list[dict]:
+    """Extract machine_check entries from a verification record.
+
+    Accepts the canonical ```machine_check fence (JSON array or object) and
+    the inline `machine_check: {json}` prefix line. Unparseable blocks are
+    skipped (the contract check then reports the record as missing the check).
+    """
+    entries: list[dict] = []
+    if not text:
+        return entries
+    for _tag, body in _MC_FENCE_RE.findall(text):
+        try:
+            data = _lenient_json(body)
+        except json.JSONDecodeError:
+            continue
+        items = data if isinstance(data, list) else [data]
+        entries.extend(i for i in items if isinstance(i, dict))
+    for m in _MC_INLINE_RE.finditer(text):
+        try:
+            data = _lenient_json(m.group(1))
+        except json.JSONDecodeError:
+            continue
+        items = data if isinstance(data, list) else [data]
+        entries.extend(i for i in items if isinstance(i, dict))
+    return entries
+
+
+def _command_is_machine_level(cmd: str) -> bool:
+    """machine_check command must be an executable tool + comparison, not prose."""
+    tokens = cmd.split()
+    if not tokens:
+        return False
+    first = tokens[0].lower()
+    if first.endswith(".exe"):
+        first = first[:-4]
+    elif first.endswith(".py"):
+        first = first[:-3]
+    first = re.sub(r"^[./\\]+", "", first)
+    if first in MACHINE_CHECK_TOOLS:
+        return True
+    return any(mk in cmd for mk in MACHINE_CHECK_MARKERS)
+
+
+def validate_machine_check_entry(entry: dict) -> tuple[bool, str]:
+    """One machine_check entry must carry all four fields; command must be
+    byte/execution-level. passed is structural here — the CONTRACT rejects
+    passed=false, not this entry-level validator."""
+    for key in MACHINE_CHECK_KEYS:
+        if key not in entry:
+            return False, f"machine_check missing required field {key!r}"
+    command, expected, actual = (str(entry[k]) for k in ("command", "expected", "actual"))
+    if not command.strip() or not expected.strip() or not actual.strip():
+        return False, "machine_check command/expected/actual must be non-empty"
+    if not isinstance(entry["passed"], bool):
+        return False, "machine_check passed must be a strict boolean (true/false)"
+    if not _command_is_machine_level(command):
+        return False, ("machine_check command must be a byte/execution-level "
+                       f"check (tool + comparison), not prose: {command!r}")
+    return True, "machine_check entry valid"
+
+
+def _validate_exception(entry: dict, claim_kinds: list[str] | None,
+                        mc_map: dict) -> tuple[bool, str]:
+    """machine_check: none exception path — only mapping-table exception list."""
+    kind = str(entry.get("claim_kind", "")).strip()
+    reason = str(entry.get("reason", "")).strip()
+    if not kind:
+        return False, "machine_check: none must declare claim_kind"
+    if not reason:
+        return False, "machine_check: none must declare reason"
+    kinds = mc_map.get("claim_kinds") or {}
+    if kind not in kinds:
+        return False, (f"machine_check: none claim_kind {kind!r} not in the "
+                       "mapping table (references/machine_check_map.yaml)")
+    if not kinds[kind].get("exception_allowed"):
+        return False, (f"claim kind {kind!r} is not in the exception-allowed "
+                       "list — a machine_check is required")
+    if claim_kinds is not None and kind not in claim_kinds:
+        return False, (f"claim kind {kind!r} not eligible for this fact's "
+                       f"boundary_type (eligible: {claim_kinds})")
+    return True, f"exception allowed for claim kind {kind}: {reason}"
+
+
+def check_machine_check_contract(record_text: str | None,
+                                 claim_kinds: list[str] | None = None,
+                                 mc_map: dict | None = None) -> tuple[bool, str]:
+    """#332 schema validation of a verification record.
+
+    ok iff the record carries ≥1 structurally valid machine_check entry with
+    passed=true, or a machine_check:none exception accepted for this claim
+    context. Any entry with passed=false, any invalid entry, and any
+    non-allowed exception declaration fail the record (STAMP stays STAMP).
+    claim_kinds=None → exceptions judged against the mapping table alone;
+    claim_kinds=[] → exceptions disabled (fail closed).
+    """
+    map_ = mc_map if mc_map is not None else load_machine_check_map()
+    entries = parse_machine_checks(record_text)
+    if not entries:
+        return False, ("verification record has no machine_check — oracle "
+                       "contract #332 requires ≥1 machine_check {command, "
+                       "expected, actual, passed} (or an allowed "
+                       "machine_check: none + reason)")
+    checks, exceptions = [], []
+    for e in entries:
+        (exceptions if e.get("machine_check") == "none" else checks).append(e)
+    for e in exceptions:
+        ok, reason = _validate_exception(e, claim_kinds, map_)
+        if not ok:
+            return False, reason
+    for e in checks:
+        ok, reason = validate_machine_check_entry(e)
+        if not ok:
+            return False, reason
+        if e.get("passed") is False:
+            return False, f"machine_check failed (passed=false): {e.get('command')!r}"
+    if checks:
+        return True, f"{len(checks)} machine_check(s) passed (byte/execution-level)"
+    if exceptions:
+        return True, "machine_check: none exception accepted — " + str(exceptions[0].get("reason"))
+    return False, "verification record has no machine_check entries"
+
+
+def machine_check_map_coverage(seen_types: list[str],
+                               mc_map: dict | None = None) -> tuple[int, int, float]:
+    """Coverage stat for the acceptance criterion: how many fact boundary_types
+    in a workspace are covered by the mapping table (≥80% required)."""
+    map_ = mc_map if mc_map is not None else load_machine_check_map()
+    btm = map_.get("boundary_type_map") or {}
+    total = len(seen_types)
+    covered = sum(1 for t in seen_types if t in btm)
+    pct = (covered / total * 100.0) if total else 100.0
+    return covered, total, pct
+
+
+def machine_check_gate(ws: Path, fact_id: str, claim_id: str, fact: dict,
+                       mc_map: dict | None = None) -> dict:
+    """#332 gate: locate the redteam verification record for this fact/claim and
+    enforce the machine_check oracle contract. The most recent record wins.
+    Returns {ok, reason, record, entries} — ok=False means no promotion."""
+    map_ = mc_map if mc_map is not None else load_machine_check_map()
+    bt = str(fact.get("boundary_type", "")).strip()
+    kinds = (map_.get("boundary_type_map") or {}).get(bt, [])
+    runs = ws / "runs"
+    records: list[tuple[Path, str]] = []
+    if runs.is_dir():
+        for p in sorted(runs.glob("verify-redteam-*.md")):
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            cites = ((claim_id and claim_id in p.name) or (fact_id and fact_id in p.name)
+                     or (claim_id and claim_id in text) or (fact_id and fact_id in text))
+            if cites:
+                records.append((p, text))
+    if not records:
+        return {"ok": False, "record": None, "entries": [],
+                "reason": (f"no redteam verification record (runs/verify-redteam-*.md) "
+                           f"citing {claim_id or fact_id} — machine_check cannot be "
+                           "established, STAMP must not promote")}
+    p, text = max(records, key=lambda t: t[0].stat().st_mtime)
+    ok, reason = check_machine_check_contract(text, claim_kinds=kinds, mc_map=map_)
+    return {"ok": ok, "record": str(p), "entries": parse_machine_checks(text),
+            "reason": reason}
+
+
+# ===========================================================================
 
 def parse_reproduce(reproduce: str) -> list[str]:
     """reproduce → argv: 白名单工具开头 → 原样 argv(python 换 sys.executable);
@@ -474,6 +695,12 @@ def build_redteam_prompt(claim_id: str, ws: Path) -> str:
         "State your OWN finding FIRST, then compare. Report EVERY divergence "
         "(even minor) as DIFF. Five angles: reproducibility, adversarial "
         "alternatives, counter-evidence, scope overreach, numeric fidelity.\n"
+        "MACHINE-CHECK (oracle contract #332): end your report with a "
+        "```machine_check fenced block — [{\"command\": ..., \"expected\": ..., "
+        "\"actual\": ..., \"passed\": true|false}] — at least one byte/execution-"
+        "level check per load-bearing conclusion; passed=false forbids "
+        "CONFIRMED. machine_check: none + reason only for exception-allowed "
+        "claim kinds (references/machine_check_map.yaml).\n"
         "Verdict: CONFIRMED | REFUTED | UNVERIFIED-WITH-GAP — with concrete "
         "gaps + reproduce commands."
     )
@@ -545,6 +772,8 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
 
     l1 = l1_mechanical(fact, fixture)
 
+    machine_check = None  # #332 oracle gate result (set on L2 CONFIRMED path)
+
     if not lint_ok:
         l2 = {"verdict": "NOT-RUN", "gaps": ["lint gate rejected: " + lint_reason]}
         overall = "REJECTED"
@@ -558,7 +787,17 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
         v2, gaps = l2_redteam(claim_id, ws, dispatcher=l2_dispatcher)
         l2 = {"verdict": v2, "gaps": gaps}
         if v2 == "CONFIRMED" and anchor_check({"l1": l1, "anchors": anchors}):
-            overall = "VERIFIED"
+            # #332 oracle contract: CONFIRMED alone is not enough — the redteam
+            # verification record must terminate in a machine check.
+            machine_check = machine_check_gate(ws, fact_id, claim_id, fact)
+            if machine_check["ok"]:
+                overall = "VERIFIED"
+            else:
+                overall = "PARTIAL"
+                l2["gaps"].append("machine_check oracle contract (#332): "
+                                  + machine_check["reason"])
+                warnings.append({"code": "MACHINE_CHECK_FAILED",
+                                 "reason": machine_check["reason"]})
         elif v2 == "REFUTED":
             overall = "REJECTED"
         else:
@@ -604,6 +843,8 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
            "anchors": anchors, "overall": overall, "lint": lint, "warnings": warnings}
     if disasm is not None:
         out["disasm"] = disasm
+    if machine_check is not None:
+        out["machine_check"] = machine_check
     runs = ws / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     (runs / f"verify-{fact_id}-{utc_now().replace(':', '')}.json").write_text(

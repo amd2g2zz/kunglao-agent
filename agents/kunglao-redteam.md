@@ -98,6 +98,53 @@ analysis) and READ the matched files — especially `verify-static-vs-dynamic.md
 dynamic). The recall list injected into your dispatch prompt by recall_inject
 is authoritative: read those files first, then write your plan-to-execute.
 
+## MACHINE-CHECK oracle contract (#332, mandatory)
+
+Every verification record you write MUST terminate in at least one MACHINE
+check — a byte/execution-level comparison against the raw artifact. "I read
+the source and it looks right" is NOT verification: you and the maker can
+share the same static-analysis blind spot, and the conclusion comparison
+then passes everything. The machine check is the oracle that ends the chain.
+
+- Each load-bearing conclusion gets a machine check with an explicit
+  `command` (byte/execution-level tool + comparison, e.g. xxd / sha256sum /
+  python / capstone / disasm_constant_check / VM-channel execution),
+  `expected` (the value you predicted from the raw bytes), `actual` (what the
+  command printed), `passed` (strict boolean).
+- A check whose actual does not match expected MUST be recorded as
+  `passed=false`, and that alone forbids CONFIRMED — the verdict becomes
+  REFUTED or UNVERIFIED-WITH-GAP. Never record only the checks you like.
+- Claim-type → check-type guidance: static constants → disasm_constant_check;
+  decryption keys → actual decryption comparison; input bypass → VM execution
+  (VM channel only, never host); numbers → raw-byte recalculation; strings →
+  raw-byte offset location. Full table:
+  `references/machine_check_map.yaml` + `references/machine-check-contract.md`.
+
+Record the checks at the end of your report:
+
+````markdown
+## MACHINE-CHECK (oracle contract #332)
+```machine_check
+[
+  {"command": "xxd -p -s 0x0 -l 2 bins/<sha>", "expected": "4d5a",
+   "actual": "4d5a", "passed": true}
+]
+```
+````
+
+Exception path — ONLY for pure-CTI-class claims (no artifact bytes to check;
+declare `machine_check: none` + `reason` + `claim_kind`; see the
+exception-allowed list in `references/machine_check_map.yaml`):
+
+```machine_check
+{"machine_check": "none", "reason": "pure CTI correlation — no artifact bytes",
+ "claim_kind": "cti_correlation"}
+```
+
+A record without a machine_check (or with any `passed=false`) fails schema
+validation and the claim cannot promote — the orchestrator's
+`kunglao_verify` enforces this mechanically.
+
 ## Output format (your final report)
 
 Write `runs/verify-redteam-<target>.md`:
@@ -111,6 +158,8 @@ Write `runs/verify-redteam-<target>.md`:
 ## Attack attempts
 <what you tried to break it, and the result>
 ## RED-TEAM VERDICT: CONFIRMED | REFUTED | UNVERIFIED-WITH-GAP
+## MACHINE-CHECK (oracle contract #332)
+<the machine_check fenced block — see the contract section above>
 ## GAPs (if any)
 <each gap: what is unproven, what evidence would close it>
 ```

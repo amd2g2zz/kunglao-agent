@@ -1,0 +1,51 @@
+# machine_check_map.yaml — issue #332 executable-oracle contract mapping
+# (single source of truth; loaded by scripts/kunglao_verify.py
+# load_machine_check_map). The human-facing mirror of this table lives in
+# references/machine-check-contract.md and is kept in sync mechanically by
+# tests/test_machine_check_contract.py::test_map_parity_with_contract_doc —
+# edit BOTH files together, or the parity test fails.
+#
+# claim_kinds:         claim kind → machine check type. exception_allowed=true
+#                      permits `machine_check: none` + reason for that kind
+#                      (pure-CTI-class claims — no artifact bytes to check).
+# boundary_type_map:   boundary_type → claim kinds a verifier may use for the
+#                      exception path (a none-declaration must name a kind
+#                      that is BOTH exception_allowed AND listed here for the
+#                      fact's boundary_type; unknown boundary_type → no
+#                      exceptions, fail closed).
+# check_tool_markers:  machine-executable heuristic — a machine_check command
+#                      must start with one of these tools or contain one of
+#                      the comparison markers (prose like "I read the source"
+#                      is rejected).
+
+claim_kinds:
+  static_constant:  {check_type: disasm_constant_check, exception_allowed: false}
+  decryption_key:   {check_type: decrypt_compare,        exception_allowed: false}
+  input_bypass:     {check_type: vm_execution,           exception_allowed: false}
+  numeric:          {check_type: byte_recalc,            exception_allowed: false}
+  string:           {check_type: byte_offset_locate,     exception_allowed: false}
+  structure:        {check_type: byte_parse,             exception_allowed: false}
+  negative_result:  {check_type: bounded_search,         exception_allowed: false}
+  capability:       {check_type: vm_execution,           exception_allowed: false}
+  cti_correlation:  {check_type: none,                   exception_allowed: true}
+  attribution:      {check_type: none,                   exception_allowed: true}
+  external_source:  {check_type: none,                   exception_allowed: true}
+
+boundary_type_map:
+  confirmed:              [static_constant, decryption_key, input_bypass, numeric, string, structure, capability]
+  capability_not_executed: [capability, input_bypass]
+  link_not_closed:        [capability, static_constant]
+  source_derived:         [cti_correlation, external_source]
+  numeric:                [numeric]
+  observation:            [static_constant, decryption_key, input_bypass, numeric, string, structure, negative_result, capability]
+  coordinate:             [numeric, string]
+  pure_negative:          [negative_result]
+  contradiction:          [numeric, string]
+  positive_observation:   [static_constant, decryption_key, input_bypass, numeric, string, structure, negative_result, capability]
+
+check_tool_markers:
+  tools: [xxd, od, hexdump, cat, strings, file, grep, egrep, fgrep, sed, awk,
+          sha256sum, md5sum, sha1sum, wc, head, tail, sort, uniq,
+          python, python3, py, disasm_constant_check, disasm_constant_check.py,
+          vmr-shell, x64dbg, frida, ghidra, pefile, capstone, objdump, gdb]
+  markers: ['=', '!=', 'assert', '0x', '|', '-s ']

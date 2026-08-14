@@ -11,7 +11,7 @@ files:
   references/_index-platforms.md: 1a89e780858cbf1cbe051af5b769f3f29a3f9d6739ccc25137ee7cc838e69dd2
   references/_index-resources.md: 04db4c8e7cb2196b8fafe16c28d3f9b98df6cd9354d09d59e6a24d62929b065d
   references/_index-tools.md: 52cc8bef03be8b995519bdd4b59d76e1c60b0199c8fd9c6d3d8d645ef8a6a979
-  references/_INDEX.md: 024bf0aff8ffa15f9320be07db49fe00fe1e9f83f272b81f388bb0351f8091dc
+  references/_INDEX.md: 5abff645cb919267bf0912ec0a853739bd8707f733bd8b99249bdb1ee7f76c7f
   references/archive/long-horizon-architecture-2026-07.md: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
   references/case-book.md: 699041f78c3c4cc679dfc9b27eac6bcc50b73e1561456d3e8c15110d790cb353
   references/cli-script-checklist.md: 32d7fb1fb48a5e28e129b1f011420fdbad0d4c5c33f05f3036607e36675d5aca
@@ -26,6 +26,7 @@ files:
   references/failure-modes-state.md: b8e234f172056b75c328b14848aebab0d7472251c28e7f8987e56aff989a0ea9
   references/failure-modes.md: a70b8dfca0e8a11c7cc07e6e7cc01b8ed7327f0956256f547e8740442c5dbc3d
   references/guardrails.md: 96af80dc87ba7092c56d8eecc41d08565377b2731fe3cc0838c150c921c67d80
+  references/machine-check-contract.md: db58ddb1de65a35748678090158c9ad617148b464804c20786bab0406cd48b2b
   references/malware-phase-routing.md: 00e6484afaa85da42ed5cdc2c919b3d9b22ca173da37ac4c6da0d691b0ced7f2
   references/memory-protocol.md: fe3f58ba5edaea2ce71eb3552b15f58486ca222319229ebdd319b59c750090ed
   references/method-constraints.md: ed4900f487ece51be11dbae65974ef70aad990927a6fb5a8111d8f04647d7f46
@@ -60,7 +61,7 @@ files:
   references/re-library/tools-crypto.md: 537aaaac5d0757a768403d79243a59ccf3d2511be32e51a73afe686da00b5648
   references/re-library/tools-dynamic.md: af6d0539a253366cf76b3266922bc4551478ebe32576fc216b68d91d0ea5f7de
   references/re-library/tools.md: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
-  references/schema.md: 345f505cc045e2afb293e3b20574983adfa62d021d1f4b7892cf0d90c51bbba3
+  references/schema.md: 8042275cb038b7a12f1dca0aa25e9cbf7934c5f8dc9cad1505b0ec48b466adb5
   references/search-policy.md: 5a4a88cdfab1e8493a23cd531fddd3078ef9ad261a3d627f0f5a8871848e66c4
   references/state-mapping.md: 2898e976b58d717641e01e56e2459808f1ad082f6cba7f0c0446ea76d7a98b06
   references/tool-inventory.md: 65b778132ac2310f0b507d8dacde254db069f90b256e86a6849d01159e953e8e
