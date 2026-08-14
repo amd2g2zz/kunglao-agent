@@ -1,0 +1,20 @@
+schema: plan-recipe/1
+id: crypto-decrypt
+title: 密码层解密 (crypto-decrypt)
+description: >-
+  用于 crypto:decode 信号样本 (crypt32/bcrypt/advapi import 或高熵区段):
+  ghidra-recon 定位加密 API 调用点, crypto-tool 按算法子命令解密,
+  disasm-constant-check 校验明文层落点。
+steps:
+  - tool: ghidra-recon
+    input: 样本
+    output: 加密 API 调用点定位 (CryptDecrypt/BCrypt 等)
+  - tool: crypto-tool
+    input: 密文字节 + 算法子命令 (chacha|xor-add|rolling-xor|rsa-unpad)
+    output: 明文层 + --reproduce 参数
+  - tool: disasm-constant-check
+    input: 明文层 + 代码清单 (VA 锚点断言)
+    output: byte-exact 断言校验 JSON
+fallback: [ghidra-decompile-functions, crypto:decode]
+verify: crypto-verify
+reuse_check: 同算法 + 同参数已解出明文层时复用, 不重复解密

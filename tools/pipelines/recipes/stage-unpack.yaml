@@ -1,0 +1,20 @@
+schema: plan-recipe/1
+id: stage-unpack
+title: 分阶段解包 (stage-unpack)
+description: >-
+  用于 overlay / packer 标记样本: 先静态侦察定位打包层, 再用 crypto-tool
+  的压缩子命令 (lzss|lzma-raw|rolling-xor) 分层解开, 最后以
+  disasm-constant-check 做 byte-exact 校验。
+steps:
+  - tool: ghidra-recon
+    input: 样本 + packer/overlay 标记
+    output: packer 判定 + 区段/overlay 布局
+  - tool: crypto-tool
+    input: 压缩/变换层字节 (--in, 子命令 lzss|lzma-raw|rolling-xor)
+    output: 解包层字节 + --reproduce 参数
+  - tool: disasm-constant-check
+    input: 解包层 + 代码清单 (VA 锚点断言)
+    output: byte-exact 断言校验 JSON
+fallback: [ghidra-decompile-functions, ghidra:recon]
+verify: unpack-verify
+reuse_check: 同 sha256 样本已有解包产物时直接复用, 不重复解包

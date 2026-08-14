@@ -1,0 +1,19 @@
+schema: plan-recipe/1
+id: iat-chain
+title: 导入表调用链 (iat-chain)
+description: >-
+  用于 iat 意图样本: ghidra-recon 解析 IAT/import 表, ghidra-scan-pointer
+  以 xref 模式扫描 IAT 指针命中, disasm-constant-check 锚定调用断言。
+steps:
+  - tool: ghidra-recon
+    input: 样本
+    output: IAT/import 表解析
+  - tool: ghidra-scan-pointer
+    input: IAT 地址窗口 (--mode xref)
+    output: IAT xref / 8-byte 指针扫描命中
+  - tool: disasm-constant-check
+    input: IAT 调用断言 + 代码清单
+    output: byte-exact 断言校验 JSON
+fallback: [ghidra:xref-scan, ghidra:recon]
+verify: iat-verify
+reuse_check: 同 sha256 样本已有 IAT 解析 + xref 产物时复用
