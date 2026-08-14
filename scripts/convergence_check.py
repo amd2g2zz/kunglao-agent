@@ -47,6 +47,11 @@ from pathlib import Path
 import yaml
 
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES
+# RETRACTED lives in retract_claim.py (retraction domain owner, #331):
+# status_defs.TERMINAL is frozen for this change. TERMINAL_WITH_RETRACTED is
+# the dispatch-facing terminal set; RETRACTED is a withdrawn verdict, NOT an
+# open claim and NOT an orphan (a retracted claim answers no question by design).
+from retract_claim import RETRACTED, TERMINAL_WITH_RETRACTED
 
 WORKER_CAP = 3
 STUCK_MINUTES = 20
@@ -127,11 +132,14 @@ def _scan_active_workers(workspace: Path):
 
 
 def _open_claims(reg: dict):
-    """Return claims that are non-terminal (need work)."""
+    """Return claims that are non-terminal (need work).
+
+    RETRACTED is terminal (#331): a withdrawn claim needs no work and must
+    never be re-dispatched."""
     out = []
     for c in (reg.get("claims") or []):
         status = (c.get("status") or "UNKNOWN").upper()
-        if status not in TERMINAL and status not in IN_PROGRESS_STATUSES:
+        if status not in TERMINAL_WITH_RETRACTED and status not in IN_PROGRESS_STATUSES:
             out.append({"id": c.get("id"), "status": status, "blocked": bool(c.get("blocked"))})
     return out
 
@@ -202,6 +210,10 @@ def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) 
     and that's fine).
 
     Returns list of {"id": ..., "status": ...} dicts for orphan terminal claims.
+
+    RETRACTED claims are excluded: a withdrawn claim answers no question by
+    design (#331) — flagging it as an orphan would BLOCK convergence on
+    claims the orchestrator already removed from the delivered set.
     """
     if primary_question_ids is not None and not primary_question_ids:
         # Workspace has primary_questions: [] (feature not used) — skip orphan check
@@ -209,7 +221,7 @@ def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) 
     out = []
     for c in (reg.get("claims") or []):
         status = (c.get("status") or "UNKNOWN").upper()
-        if status not in TERMINAL:
+        if status not in TERMINAL or status == RETRACTED:
             continue
         aq = c.get("answers_question")
         if not aq:
@@ -272,7 +284,9 @@ def _note_layer_gaps(workspace: Path, pq_ids: set, reg: dict) -> list:
     for c in (reg.get("claims") or []):
         cid = c.get("id")
         aq = c.get("answers_question")
-        if cid and aq:
+        # #331: a RETRACTED claim no longer answers its question — a
+        # passes-note on it must not satisfy the note-layer gate.
+        if cid and aq and (c.get("status") or "").upper() != RETRACTED:
             claim_answers[str(cid).strip()] = str(aq).strip()
     answered = set()
     for p in (workspace / "notes").glob("*.md"):

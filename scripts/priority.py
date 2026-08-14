@@ -46,6 +46,11 @@ import yaml
 
 import cost_estimate
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES
+# RETRACTED lives in retract_claim.py (retraction domain owner, #331):
+# status_defs.TERMINAL is frozen for this change. A retracted claim is a
+# withdrawn verdict — never ranked; its reopened dependents dispatch normally
+# (a RETRACTED parent counts as terminal for the depends_on gate).
+from retract_claim import TERMINAL_WITH_RETRACTED
 
 NEXT_TIER_CHEAP = {0: 1.0, 1: 0.5, 2: 0.2}
 DEFAULT_WEIGHTS = {'value': 0.4, 'leverage': 0.3, 'cheapness': 0.2, 'novelty': 0.05, 'outcome': 0.05}
@@ -67,7 +72,9 @@ def _is_open(c):
     # v1.9.16: IN_PROGRESS = dispatched to a worker, NOT dispatchable (was
     # treated as open -> priority re-recommended in-flight claims -> orchestrator
     # saw a full queue, dispatched nothing, left slots empty).
-    return c.get('status') not in TERMINAL and c.get('status') not in IN_PROGRESS_STATUSES
+    # #331: RETRACTED is terminal (via TERMINAL_WITH_RETRACTED) — a withdrawn
+    # verdict must never enter the rank.
+    return c.get('status') not in TERMINAL_WITH_RETRACTED and c.get('status') not in IN_PROGRESS_STATUSES
 
 
 def _transitive_unlocks(cid, depends_on, by_id, open_set):
@@ -233,7 +240,7 @@ def gate_allows(reg, next_tier):
         return True
     threshold = next_tier - 1
     for c in (reg or {}).get('claims', []) or []:
-        if c.get('status') in TERMINAL:
+        if c.get('status') in TERMINAL_WITH_RETRACTED:
             continue
         if int(c.get('evidence_tier_attempted', 0)) < threshold:
             return False

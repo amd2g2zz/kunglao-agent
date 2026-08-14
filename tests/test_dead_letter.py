@@ -93,6 +93,29 @@ def test_detect_dirty_statuses(tmp_path):
     assert dl.detect_dirty_statuses(tmp_path) == ["C-4"]
 
 
+# ---------- #331: RETRACTED never enters the dead-letter flow ----------
+
+def test_retracted_is_legal_not_dirty(tmp_path):
+    """RETRACTED is a legal status literal — --dirty must not flag retracted claims (#331)."""
+    _mk_reg(tmp_path, [
+        {"id": "C-1", "status": "RETRACTED", "retract_reason": "refuted"},
+        {"id": "C-2", "status": "PASS-"},
+    ])
+    assert dl.detect_dirty_statuses(tmp_path) == ["C-2"], \
+        "RETRACTED is legal (terminal); only the dirty literal PASS- must be flagged"
+
+
+def test_scan_excludes_retracted(tmp_path):
+    """RETRACTED with attempts>=3 is NOT exhausted — retraction is terminal, the
+    DLQ must never surface it (mark_dead would overwrite RETRACTED->DEAD)."""
+    _mk_reg(tmp_path, [
+        {"id": "C-7", "status": "RETRACTED", "promotion_attempts": 5},
+        {"id": "C-8", "status": "OPEN", "promotion_attempts": 3},
+    ])
+    assert dl.scan(tmp_path) == ["C-8"], \
+        "RETRACTED must be excluded from the exhausted set; only the OPEN claim reports"
+
+
 # ---------- direct-run harness (pytest collects these too) ----------
 
 if __name__ == "__main__":
@@ -119,6 +142,8 @@ if __name__ == "__main__":
         ("test_mark_dead_rejects_unknown", test_mark_dead_rejects_unknown),
         ("test_scan_finds_exhausted_open", test_scan_finds_exhausted_open),
         ("test_detect_dirty_statuses", test_detect_dirty_statuses),
+        ("test_retracted_is_legal_not_dirty", test_retracted_is_legal_not_dirty),
+        ("test_scan_excludes_retracted", test_scan_excludes_retracted),
     ]:
         run(n, f)
 
