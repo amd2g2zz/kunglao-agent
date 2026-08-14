@@ -1344,7 +1344,7 @@ def pre_check(payload: dict, paths: dict) -> int:
         # gate closes the recurring 'dispatch without monitoring' failure.
         ('heartbeat', check_heartbeat_alive(paths['state'])),
         # v1.9.29: plan drift + convergence health wired in as mechanical
-        # gates (R1/R3 of research-tree r3). FAIL_OPEN inside the checks.
+        # gates (historical research-tree r3, R1/R3). FAIL_OPEN inside the checks.
         ('drift', check_plan_drift(paths)),
         ('health', check_convergence_health(paths)),
         # v1.9.29 (#38): stuck-worker backtrack gate — closes the

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "kunglao-agent/schemas/decide-output.json",
   "title": "kunglao-decide output (M1.3 frozen)",
-  "description": "M1 DECIDE 输出契约(冻结, worker_pulse 解析)。源: .research-tree-alignment/kong-agent-module-design.md M1.3 (L129-139)。",
+  "description": "M1 DECIDE 输出契约(冻结, worker_pulse 解析)。源: docs/design/archive/module-design.md M1.3 (L129-139)。",
   "type": "object",
   "required": [
     "decision",
