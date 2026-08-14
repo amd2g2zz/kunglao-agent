@@ -17,3 +17,5 @@
 | `call-site-args` | `category: static · capability: static:callsite-args · tier: T1 · cost_tier: cheap · input: 反汇编文本 + --window/--abi → output: 调用点参数清单(regs/stack/pushed)` | 从反汇编文本提取调用点参数时读; 需精确数据流时用 ghidra-recon/模拟执行 |
 
 <!-- 骨架: 每登记一个 static 工具到 _INDEX.yaml,在此追加一行,格式同上。 -->
+| `yara-scan` | `category: static · capability: static:yara-scan · tier: T1 · cost_tier: cheap · input: 二进制+规则文件 → output: 命中清单` | 规则式字节扫描(家族/IOC 证据)时; yara-python 缺失不用 |
+| `yara-gen` | `category: static · capability: static:yara-gen · tier: T1 · cost_tier: probe · input: 特征模式+meta → output: YARA 规则文本` | 从分析发现生成检测规则时 |
