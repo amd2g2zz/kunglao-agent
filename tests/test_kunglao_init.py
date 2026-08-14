@@ -126,12 +126,16 @@ def test_claudemd_contains_sample_info(init_ws: Path) -> None:
 
 
 def test_claudemd_contains_rules_requirement(init_ws: Path) -> None:
-    """#265: CLAUDE.md contains required rules reading instructions."""
+    """#356 W2: the hallucinated ~/.claude/rules/common/ reference section is
+    GONE from generated CLAUDE.md (those files don't exist on a fresh clone;
+    the rules themselves are carried by SKILL.md + references/). The
+    maker-checker behavior baseline stays as a Hard-constraints bullet."""
     _run_init(init_ws)
     text = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "maker-checker.md" in text, "CLAUDE.md missing maker-checker rules reference"
-    assert "numeric-fidelity.md" in text, "CLAUDE.md missing numeric-fidelity rules reference"
-    assert "kunglao-convergence-loop.md" in text, "CLAUDE.md missing convergence-loop rules reference"
+    assert "~/.claude/rules/common/" not in text, \
+        "CLAUDE.md still references the hallucinated ~/.claude/rules/common/ section"
+    assert "maker-checker" in text.lower(), \
+        "CLAUDE.md missing maker-checker behavior baseline (hard constraints)"
 
 
 def test_claudemd_contains_hard_constraints(init_ws: Path) -> None:
@@ -250,5 +254,5 @@ def test_claudemd_documents_env_and_script_discipline(init_ws: Path) -> None:
     assert "KUNGLAO_VM_HOST" in text, "CLAUDE.md missing KUNGLAO_VM_HOST doc"
     assert "GHIDRA_HOME" in text, "CLAUDE.md missing GHIDRA_HOME doc"
     assert "scripts/" in text, "CLAUDE.md missing scripts/ CLI discipline"
-    assert "ad-hoc" in text or "内联" in text, \
+    assert "ad-hoc" in text, \
         "CLAUDE.md must ban ad-hoc inline execution"

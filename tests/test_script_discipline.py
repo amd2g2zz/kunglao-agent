@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """Issue #277 — 脚本纪律契约: 工具逻辑落为可复用 CLI 脚本, 禁命令行内联执行.
 
-Mechanical gate scanning `scripts/` and `templates/CLAUDE.md.tmpl`:
+Mechanical gate scanning `scripts/` and `templates/CLAUDE.md.base.tmpl`:
 
 - Reusable logic must NOT be inlined as `python -c "..."` or a heredoc
   `<<'EOF'` / `<<EOF` in command lines. Exempt only when the line is a
   comment, an explicit one-off diagnostic (allow marker), or prose that
   *states the prohibition* (forbidden / 禁止 ...).
-- `templates/CLAUDE.md.tmpl` must carry the discipline vocabulary
-  (可复用逻辑 / ad-hoc / 内联).
+- `templates/CLAUDE.md.base.tmpl` must carry the discipline vocabulary
+  (reusable / ad-hoc / inline; #356 W2 all-English).
 - `SKILL.md` and `agents/kunglao-worker.md` must carry the same dispatch
   contract wording (reusable logic -> parameterized CLI in `scripts/`;
   existing CLI preferred; no inline execution).
@@ -22,7 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
-TEMPLATE = ROOT / "templates" / "CLAUDE.md.tmpl"
+TEMPLATE = ROOT / "templates" / "CLAUDE.md.base.tmpl"
 SKILL = ROOT / "SKILL.md"
 WORKER = ROOT / "agents" / "kunglao-worker.md"
 CHECKLIST = ROOT / "references" / "cli-script-checklist.md"
@@ -44,7 +44,7 @@ _ALLOW_MARKERS = ("一次性", "one-off", "one shot", "diagnostic only", "# allo
 
 
 def _scanned_files() -> list[Path]:
-    """Every text file under scripts/ (py/md/sh/ps1/bat) plus templates/CLAUDE.md.tmpl."""
+    """Every text file under scripts/ (py/md/sh/ps1/bat) plus templates/CLAUDE.md.base.tmpl."""
     files = [
         p
         for p in sorted(SCRIPTS.rglob("*"))
@@ -81,7 +81,7 @@ def _inline_violations() -> list[str]:
 
 
 def test_no_inline_reusable_logic_in_scripts_or_template() -> None:
-    """scripts/ + templates/CLAUDE.md.tmpl must not inline reusable logic."""
+    """scripts/ + templates/CLAUDE.md.base.tmpl must not inline reusable logic."""
     hits = _inline_violations()
     assert not hits, (
         "inline reusable-logic execution found (use a parameterized CLI in "
@@ -90,10 +90,15 @@ def test_no_inline_reusable_logic_in_scripts_or_template() -> None:
 
 
 def test_template_has_script_discipline_keywords() -> None:
-    """templates/CLAUDE.md.tmpl carries the discipline vocabulary."""
+    """templates/CLAUDE.md.base.tmpl carries the discipline vocabulary.
+
+    #356 W2: the template is all-English — 'ad-hoc' + 'inline' carry the
+    ban; the pre-#356 Chinese keywords (可复用逻辑/内联) were retired with
+    the 4-variant template rewrite.
+    """
     text = TEMPLATE.read_text(encoding="utf-8")
-    for kw in ("可复用逻辑", "ad-hoc", "内联"):
-        assert kw in text, f"CLAUDE.md.tmpl missing script-discipline keyword: {kw}"
+    for kw in ("reusable", "ad-hoc", "inline"):
+        assert kw in text, f"CLAUDE.md.base.tmpl missing script-discipline keyword: {kw}"
 
 
 def test_skill_has_script_discipline_contract() -> None:

@@ -373,16 +373,56 @@ def write_project_type(ws: Path, project_type: str) -> bool:
 
 
 def template_for_type(project_type: str) -> Path:
-    """Select CLAUDE.md template by project type."""
-    tmpl = SKILL_DIR / "templates" / f"CLAUDE.md.{project_type}.tmpl"
-    if tmpl.exists():
-        return tmpl
-    # Fallback to the generic template
+    """#356 W2: single-source base template (OS delta injected at render)."""
+    del project_type  # one template for all types; OS section via OS_SECTIONS
     return CLAUDEMD_TMPL
 
 
-CLAUDEMD_TMPL = Path(__file__).resolve().parent.parent / "templates" / "CLAUDE.md.tmpl"
+CLAUDEMD_TMPL = Path(__file__).resolve().parent.parent / "templates" / "CLAUDE.md.base.tmpl"
 SKILL_DIR = Path(__file__).resolve().parent.parent
+
+# #356 W2: per-OS constraint blocks injected into the base template's
+# <TYPE_SECTION> slot at render time. Single handwritten source (base.tmpl) +
+# these deltas replace the 4 pre-#356 template files (copy-drift defect).
+OS_SECTIONS: dict[str, str] = {
+    "windows": """## Hard constraints (windows)
+
+- **x64dbg**: only `connect_remote(host=..., ...)` — never `start_session` / `connect_to_session` / `connect_to_instance` / `terminate_session`.
+- **VM required**: `KUNGLAO_VM_HOST` must be set and VM must be reachable for T2+ analysis.
+""",
+    "linux": """## Hard constraints (linux)
+
+- **gdbserver**: primary remote debugger for Linux ELF targets on VM.
+- **VM required**: `KUNGLAO_VM_HOST` must be set and VM must be reachable for T2+ analysis.
+- **eBPF tracing**: requires kernel >= 6.0 (`uname -r`). Not available on older kernels — this is a WARN gate, not a hard blocker. Other analysis paths proceed normally.
+""",
+    "android": """## Hard constraints (android)
+
+- **ADB required (root dependency)**: `adb devices` must show at least one device. ADB missing means frida-server/android_server discovery impossible; all downstream dynamic checks cascade from ADB.
+- **Device root required**: `adb shell su -c id` must return uid=0. Non-rooted devices cannot run frida-server or perform dynamic analysis. This is a HARD gate.
+- **Debug flag (HARD, init-enforced)**: manifest debuggable or `am set-debug-app` / setprop. Must be set and read back for verification — kunglao-init's toolchain check verifies `adb shell getprop ro.debuggable` returns 1; if not settable, init refuses (exit 4) with fix guidance.
+- **frida-server (HARD, init-enforced; renamed + custom port)**: Device-side binary must NOT use the default name; custom port (default convention: 1337). kunglao-init verifies it via `adb forward tcp:<port>` + TCP connect; unreachable means init refuses with deployment guidance.
+- **GitNexus required**: `gitnexus --version` must succeed. Post-decompile graph building is a mandatory step in the Android flow.
+- **IDA android_server (HARD, init-enforced)**: Must be present on device for IDA remote debugging. kunglao-init verifies it via `adb forward tcp:23946` + TCP connect; unreachable means init refuses with deployment guidance.
+- **eBPF tracing (WARN)**: Requires Android SDK >= 31 (getprop ro.build.version.sdk). SDK < 31 means eBPF unavailable (not blocking).
+- **unidbg (WARN, fallback)**: Requires java + unidbg library. Only used when static+debug+frida all fail. AND-gated: frida data sufficient + decompilation done + still stuck.
+
+## Android analysis flow
+
+```
+APK -> aapt/apktool unpack -> jadx DEX->Java
+    -> gitnexus analyze(decompiled output dir, build knowledge graph; serve/graph data as analysis artifact)
+    -> static analysis(graph-assisted class/call-chain/malicious-logic-entry location)
+    -> dynamic needed: ADB -> root -> debug flag -> frida(renamed+port) or android_server
+    -> stuck fallback: frida hook + unidbg hybrid (AND three conditions)
+```
+""",
+}
+
+
+def os_section(project_type: str | None) -> str:
+    """OS constraint block for <TYPE_SECTION>; unknown/None -> empty."""
+    return OS_SECTIONS.get(project_type or "", "")
 
 
 def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
@@ -395,11 +435,8 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
     target = ws / "CLAUDE.md"
     if target.exists() and target.read_text(encoding="utf-8").strip():
         return None
-    # Select template by type (#304)
-    if project_type:
-        tmpl_path = template_for_type(project_type)
-    else:
-        tmpl_path = CLAUDEMD_TMPL
+    # Single-source base template (#356 W2); OS delta injected at render
+    tmpl_path = CLAUDEMD_TMPL
     if not tmpl_path.exists():
         return None
     tmpl = tmpl_path.read_text(encoding="utf-8")
@@ -413,6 +450,8 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
 
     text = (
         tmpl
+        .replace("<TYPE_SECTION>", os_section(project_type))
+        .replace("<TYPE>", project_type or "windows")
         .replace("<SAMPLE_SHA1>", sample_name)
         .replace("<SAMPLE_SHA256>", sample_sha)
         .replace("<SAMPLE_TYPE>", "(detected at analysis time)")

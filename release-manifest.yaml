@@ -43,11 +43,9 @@ assets:
     - templates/state/failure-registry.yaml
     - templates/state/task-oracle.yaml
     - templates/state/task_spec.yaml
-    # #316: per-OS workspace CLAUDE.md templates (MCP supply tables)
-    - templates/CLAUDE.md.windows.tmpl
-    - templates/CLAUDE.md.linux.tmpl
-    - templates/CLAUDE.md.android.tmpl
-    - templates/CLAUDE.md.tmpl
+    # #356 W2: single-source workspace CLAUDE.md template (OS delta injected
+    # by kunglao-init at render; replaces the 4 pre-#356 variant templates)
+    - templates/CLAUDE.md.base.tmpl
     # #336: ICD-203 fact frontmatter template (merged after #320 snapshot)
     - templates/fact-frontmatter.md
     # #335/#278: frida + scripts templates (template_gen.py inputs)

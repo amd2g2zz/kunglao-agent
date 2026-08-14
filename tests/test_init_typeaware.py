@@ -325,42 +325,41 @@ def test_init_with_type_is_complete(init_ws: Path):
         "workspace with marker + type should be complete"
 
 
-# ---------- five-layer analysis principle in templates ----------
+# ---------- five-layer analysis principle in the single-source template ----------
 
 def test_template_contains_five_layer_principle():
-    """All three type templates contain the five-layer analysis principle."""
-    for tmpl_name in ("CLAUDE.md.windows.tmpl", "CLAUDE.md.linux.tmpl",
-                      "CLAUDE.md.android.tmpl"):
-        tmpl = TEMPLATES / tmpl_name
-        assert tmpl.exists(), f"template {tmpl_name} missing"
-        text = tmpl.read_text(encoding="utf-8")
-        # Five-layer principle keywords
-        assert "static" in text.lower(), f"{tmpl_name}: missing 'static' layer"
-        assert "debug" in text.lower(), f"{tmpl_name}: missing 'debug' layer"
-        assert "simulate" in text.lower() or "unidbg" in text.lower(), \
-            f"{tmpl_name}: missing simulation layer"
+    """#356 W2: the single-source base template carries the five-layer
+    analysis principle (absorbed back from the retired OS variants)."""
+    tmpl = TEMPLATES / "CLAUDE.md.base.tmpl"
+    assert tmpl.exists(), "template CLAUDE.md.base.tmpl missing"
+    text = tmpl.read_text(encoding="utf-8")
+    # Five-layer principle keywords
+    assert "static" in text.lower(), "base template: missing 'static' layer"
+    assert "debug" in text.lower(), "base template: missing 'debug' layer"
+    assert "simulate" in text.lower() or "unidbg" in text.lower(), \
+        "base template: missing simulation layer"
 
 
-# ---------- CLAUDE.md contains env var table ----------
+# ---------- env var table in the single-source template ----------
 
-def test_windows_template_env_vars():
-    """Windows template documents KUNGLAO_VM_HOST, GHIDRA_HOME."""
-    tmpl = TEMPLATES / "CLAUDE.md.windows.tmpl"
+def test_base_template_env_vars():
+    """Base template documents KUNGLAO_VM_HOST, GHIDRA_HOME (#356 W2)."""
+    tmpl = TEMPLATES / "CLAUDE.md.base.tmpl"
     text = tmpl.read_text(encoding="utf-8")
     assert "KUNGLAO_VM_HOST" in text
     assert "GHIDRA_HOME" in text
 
 
-def test_android_template_env_vars():
-    """Android template documents ADB-related vars."""
-    tmpl = TEMPLATES / "CLAUDE.md.android.tmpl"
-    text = tmpl.read_text(encoding="utf-8")
-    assert "ADB" in text or "adb" in text
-
-
-def test_linux_template_env_vars():
-    """Linux template documents KUNGLAO_VM_HOST, GHIDRA_HOME."""
-    tmpl = TEMPLATES / "CLAUDE.md.linux.tmpl"
-    text = tmpl.read_text(encoding="utf-8")
-    assert "KUNGLAO_VM_HOST" in text
-    assert "GHIDRA_HOME" in text
+def test_android_os_section_env_vars():
+    """Android OS section (injected) documents ADB-related constraints."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "kunglao_init_os", SCRIPTS / "kunglao-init.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    android = mod.os_section("android")
+    assert "adb" in android.lower(), "android OS section missing adb constraints"
+    linux = mod.os_section("linux")
+    assert "gdbserver" in linux, "linux OS section missing gdbserver"
+    windows = mod.os_section("windows")
+    assert "x64dbg" in windows, "windows OS section missing x64dbg"
