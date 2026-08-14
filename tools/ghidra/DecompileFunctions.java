@@ -9,6 +9,13 @@
 //   --strings=a,b,...         search string definition + xrefs
 //   --out=<abs path>          JSON report (absolute; parent dirs auto-created)
 //   --window=<bytes>          disasm bytes before/after each target (default 0x80)
+//   --context                 (issue #306) per address target, additionally emit
+//                             caller/callee ~10-line decompiled snippets, xref'd
+//                             strings inside the function body, and already-recovered
+//                             (non-auto) names of those functions — the LLM reading
+//                             context recipe (kong analyzer.py:208-348 technique,
+//                             fresh implementation). Default output is unchanged
+//                             without this flag.
 //
 // Output JSON schema: ghidra_decompile.v1 with program / image_base.
 
@@ -28,11 +35,22 @@ import ghidra.program.model.symbol.Symbol;
 import ghidra.program.model.symbol.SymbolTable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 public class DecompileFunctions extends GhidraJsonScript {
+
+    private static final int SNIPPET_LINES = 10;
+    private static final int RELATIVE_LIMIT = 5;
+    private static final int STRING_LIMIT = 50;
+    // Ghidra auto-generated function-name prefixes — anything else counts as
+    // an already-recovered (user/script-applied) name.
+    private static final String[] AUTO_NAME_PREFIXES = {
+        "FUN_", "LAB_", "DAT_", "SUB_", "thunk_"
+    };
 
     @Override
     public void run() throws Exception {
@@ -40,6 +58,7 @@ public class DecompileFunctions extends GhidraJsonScript {
         List<Long> addresses = new ArrayList<>();
         List<String> strings = new ArrayList<>();
         long window = 0x80;
+        boolean contextEnabled = false;
         for (String arg : args) {
             if (arg.startsWith("--addresses=")) {
                 for (String part : arg.substring("--addresses=".length()).split(",")) {
@@ -60,6 +79,9 @@ public class DecompileFunctions extends GhidraJsonScript {
             else if (arg.startsWith("--window=")) {
                 window = Long.decode(arg.substring("--window=".length()));
             }
+            else if (arg.equals("--context") || arg.equals("--context=true")) {
+                contextEnabled = true;
+            }
         }
         String outPath = getArg(args, "out",
             System.getProperty("java.io.tmpdir") + "/decompile_functions.json");
@@ -70,7 +92,7 @@ public class DecompileFunctions extends GhidraJsonScript {
             targets.add(searchString(query));
         }
         for (long value : addresses) {
-            targets.add(analyzeAddress(space.getAddress(value), window));
+            targets.add(analyzeAddress(space.getAddress(value), window, contextEnabled));
         }
 
         Map<String, Object> root = new LinkedHashMap<>();
@@ -82,7 +104,8 @@ public class DecompileFunctions extends GhidraJsonScript {
         println("DecompileFunctions: wrote " + outPath);
     }
 
-    private Map<String, Object> analyzeAddress(Address addr, long window) {
+    private Map<String, Object> analyzeAddress(Address addr, long window,
+                                               boolean contextEnabled) {
         FunctionManager functionManager = currentProgram.getFunctionManager();
         Map<String, Object> target = new LinkedHashMap<>();
         target.put("kind", "address");
@@ -115,7 +138,163 @@ public class DecompileFunctions extends GhidraJsonScript {
         target.put("symbols", symbols);
         target.put("decompiled_c", decompile(function));
         target.put("disasm_window", disasmWindow(function, addr, window));
+        if (contextEnabled) {
+            try {
+                target.put("context", buildContext(function));
+            }
+            catch (Exception e) {
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("error", "context assembly failed: " + e.getMessage());
+                target.put("context", err);
+            }
+        }
         return target;
+    }
+
+    // --context mode (issue #306): caller/callee snippets + xref'd strings +
+    // already-recovered names, collected mechanically; the Python wrapper
+    // assembles the LLM-ready document from these fields.
+    private Map<String, Object> buildContext(Function function) {
+        Map<String, Object> context = new LinkedHashMap<>();
+
+        List<Map<String, Object>> callers = new ArrayList<>();
+        Map<Long, Boolean> seenCallers = new HashMap<>();
+        ReferenceIterator refsTo = currentProgram.getReferenceManager()
+            .getReferencesTo(function.getEntryPoint());
+        while (refsTo.hasNext() && callers.size() < RELATIVE_LIMIT) {
+            Reference reference = refsTo.next();
+            Function caller = currentProgram.getFunctionManager()
+                .getFunctionContaining(reference.getFromAddress());
+            if (caller == null
+                || caller.getEntryPoint().equals(function.getEntryPoint())) {
+                continue;
+            }
+            long entry = caller.getEntryPoint().getOffset();
+            if (seenCallers.containsKey(entry)) {
+                continue;
+            }
+            seenCallers.put(entry, true);
+            callers.add(snippetEntry(caller));
+        }
+        context.put("callers", callers);
+
+        List<Map<String, Object>> callees = new ArrayList<>();
+        Map<Long, Boolean> seenCallees = new HashMap<>();
+        java.util.Iterator<Instruction> instructions =
+            currentProgram.getListing().getInstructions(function.getBody(), true);
+        while (instructions.hasNext() && callees.size() < RELATIVE_LIMIT) {
+            Instruction instruction = instructions.next();
+            for (Reference reference : instruction.getReferencesFrom()) {
+                Function callee = currentProgram.getFunctionManager()
+                    .getFunctionAt(reference.getToAddress());
+                if (callee == null
+                    || callee.getEntryPoint().equals(function.getEntryPoint())) {
+                    continue;
+                }
+                long entry = callee.getEntryPoint().getOffset();
+                if (seenCallees.containsKey(entry)) {
+                    continue;
+                }
+                seenCallees.put(entry, true);
+                callees.add(snippetEntry(callee));
+                if (callees.size() >= RELATIVE_LIMIT) {
+                    break;
+                }
+            }
+        }
+        context.put("callees", callees);
+
+        List<Map<String, Object>> xrefStrings = new ArrayList<>();
+        // r1-306: collect strings REFERENCED FROM the function (e.g. .rdata
+        // literals targeted by instructions in the body) — not data defined
+        // inside the body itself.
+        Map<String, Boolean> seenXrefStrings = new HashMap<>();
+        ReferenceManager refMgr = currentProgram.getReferenceManager();
+        for (Address fromAddr : function.getBody().getAddresses(true)) {
+            for (Reference ref : refMgr.getReferencesFrom(fromAddr)) {
+                if (xrefStrings.size() >= STRING_LIMIT) {
+                    break;
+                }
+                Address toAddr = ref.getToAddress();
+                Data data = currentProgram.getListing().getDataAt(toAddr);
+                if (data == null || !(data.getValue() instanceof String)) {
+                    continue;
+                }
+                String key = toAddr.toString();
+                if (seenXrefStrings.containsKey(key)) {
+                    continue;
+                }
+                seenXrefStrings.put(key, true);
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("address", formatAddress(toAddr));
+                item.put("value", String.valueOf(data.getValue()));
+                xrefStrings.add(item);
+            }
+            if (xrefStrings.size() >= STRING_LIMIT) {
+                break;
+            }
+        }
+        context.put("xref_strings", xrefStrings);
+
+        List<Map<String, Object>> recoveredNames = new ArrayList<>();
+        Map<Long, Boolean> seenNames = new HashMap<>();
+        for (List<Map<String, Object>> group : Arrays.asList(callers, callees)) {
+            for (Map<String, Object> item : group) {
+                String name = String.valueOf(item.get("function"));
+                long entry;
+                try {
+                    entry = Long.decode(String.valueOf(item.get("address")));
+                }
+                catch (NumberFormatException e) {
+                    continue;
+                }
+                if (seenNames.containsKey(entry)) {
+                    continue;
+                }
+                seenNames.put(entry, true);
+                boolean auto = false;
+                for (String prefix : AUTO_NAME_PREFIXES) {
+                    if (name.startsWith(prefix)) {
+                        auto = true;
+                        break;
+                    }
+                }
+                if (!auto) {
+                    Map<String, Object> nm = new LinkedHashMap<>();
+                    nm.put("address", item.get("address"));
+                    nm.put("name", name);
+                    recoveredNames.add(nm);
+                }
+            }
+        }
+        context.put("recovered_names", recoveredNames);
+        return context;
+    }
+
+    private Map<String, Object> snippetEntry(Function function) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("address", formatAddress(function.getEntryPoint()));
+        item.put("function", function.getName());
+        item.put("snippet", headLines(decompile(function), SNIPPET_LINES));
+        return item;
+    }
+
+    private String headLines(String text, int limit) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        String[] lines = text.split("\n", -1);
+        if (lines.length <= limit) {
+            return text;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < limit; i++) {
+            if (i > 0) {
+                sb.append("\n");
+            }
+            sb.append(lines[i]);
+        }
+        return sb.toString();
     }
 
     private Map<String, Object> searchString(String query) {

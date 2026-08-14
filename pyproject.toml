@@ -13,6 +13,7 @@ dependencies = [
     "pefile>=2023.2.7",
     "capstone>=5.0",
     "jsonschema>=4.0",
+    "z3-solver>=4.12",  # opaque-pred (issue #306): guarded import, degrade path exit 2
 ]
 
 # Dev tooling lives in a PEP 735 dependency group, NOT an optional extra:

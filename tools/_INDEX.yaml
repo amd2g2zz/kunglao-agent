@@ -49,7 +49,7 @@ tools:
     capability: ghidra:decompile
     tier: T1
     cost_tier: deep
-    input_output: {input: 样本 + --addresses/--strings/--window, output: JSON(per-target decompiled C + disasm window + string xrefs)}
+    input_output: {input: 样本 + --addresses/--strings/--window/--context, output: JSON(per-target decompiled C + disasm window + string xrefs; --context 增 caller/callee ~10 行片段 + xref 串 + 已恢复命名, ghidra_context.v1)}
     when_not: 批量全量反汇编不用; 需要 vtable 恢复时用 ghidra-vtable-struct
 
   - name: ghidra-vtable-struct
@@ -189,6 +189,23 @@ tools:
     cost_tier: probe
     input_output: {input: 样本 PE(--binary) + DIE 可执行文件(--die/$KUNGLAO_DIE), output: DIE 5-call merge JSON(语言/编译器/加壳/熵/资源); die 缺失 exit 2 + 安装指引}
     when_not: DIE 未安装且不允许安装时不用
+
+  # -- static: 反编译 C 后处理 (issue #306 吸收, C 文本层) --
+  - name: c-normalize
+    category: static
+    capability: static:decompile-normalize
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 反编译 C 文本(--in 或 stdin) + --heuristics, output: 规范化 C(modulo 惯用法 x-(x/N)*N→x%N / 死赋值删除; --heuristics 开 undefined4/8 类型启发) + rule_hits/diff stats; exit 0 变换/1 无变换/2 错误}
+    when_not: 语义级反混淆或表达式真值判定不用, 用 opaque-pred
+
+  - name: opaque-pred
+    category: static
+    capability: static:opaque-predicate
+    tier: T1
+    cost_tier: probe
+    input_output: {input: C 表达式(--expr "...")或表达式对(--simplify "lhs -> rhs"), output: always_true/always_false/unknown + 简化常量 或 MBA 重写建议(z3 32-bit 语义); z3 缺失 exit 2 + 安装指引}
+    when_not: 非单表达式真值/MBA 等价判定不用; z3-solver 未装且不允许安装时不用
 
   # -- pipeline: 证据索引构建 (issue #284 登记) --
   - name: build-evidence-index

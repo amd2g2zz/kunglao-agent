@@ -23,6 +23,14 @@ Tool -> postScript mapping (the 5 absorbed tools, #293):
   ghidra-evidence-annotations  -> GhidraEvidenceAnnotations.java
   ghidra-scan-pointer          -> GhidraScanPointer.java
 
+--context mode (issue #306): passing ``--context`` with
+``--tool ghidra-decompile-functions`` forwards the flag to
+DecompileFunctions.java, which additionally collects per-address caller/callee
+snippets, xref'd strings and recovered names.  After the run, the wrapper
+assembles those fields into one LLM-ready ``ghidra_context.v1`` document
+(``build_context_document``) and prints it to stdout.  Runs without
+``--context`` behave exactly as before (backward compatible).
+
 Usage:
   python tools/ghidra/run_ghidra_postscript.py \
       --tool ghidra-recon --binary <abs-sample-path> --out <abs-output.json> \
@@ -38,6 +46,7 @@ missing / analyzeHeadless non-zero).
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -181,6 +190,140 @@ def split_forwarded(extra: list[str]) -> list[tuple[str, str]]:
 
 
 # ---------------------------------------------------------------------------
+# --context assembly (issue #306, kong analyzer.py:208-348 technique — fresh
+# implementation against this tool's ghidra_decompile.v1 JSON output shape)
+# ---------------------------------------------------------------------------
+
+CONTEXT_SCHEMA = "ghidra_context.v1"
+CONTEXT_SNIPPET_LINES = 10
+CONTEXT_RELATIVE_LIMIT = 5
+
+_CONTEXT_FORWARD_TRUE = ("true", "1", "yes")
+
+
+def context_requested(post_args: list[tuple[str, str]]) -> bool:
+    """True when the forwarded args enable --context for the postScript."""
+    return dict(post_args).get("context", "").lower() in _CONTEXT_FORWARD_TRUE
+
+
+def _cap_snippet(snippet: str, limit: int = CONTEXT_SNIPPET_LINES) -> str:
+    """Cap a decompiled-C snippet at `limit` lines (defensive; the postScript
+    already caps at 10)."""
+    if not isinstance(snippet, str):
+        return ""
+    lines = snippet.splitlines()
+    if len(lines) <= limit:
+        return snippet
+    return "\n".join(lines[:limit])
+
+
+def _cap_items(items: list[dict], limit: int = CONTEXT_RELATIVE_LIMIT) -> list[dict]:
+    out: list[dict] = []
+    for item in items or []:
+        if len(out) >= limit:
+            break
+        if not isinstance(item, dict):
+            continue
+        out.append({**item, "snippet": _cap_snippet(item.get("snippet", ""))})
+    return out
+
+
+def _render_document(entry: dict) -> str:
+    """Markdown document for LLM consumption: decompilation + snippets +
+    xref'd strings + recovered names (kong analyzer._build_prompt shape)."""
+    fn = entry.get("function") or "?"
+    addr = entry.get("address") or "?"
+    context = entry["context"]
+    parts = [f"## Target Function: {fn} ({addr})", "",
+             "### Decompilation", "```c", entry.get("decompiled_c") or "",
+             "```"]
+    strings = context.get("xref_strings") or []
+    if strings:
+        parts += ["", "### Referenced Strings"]
+        for s in strings:
+            parts.append(f'- "{s.get("value")}"')
+    callees = context.get("callees") or []
+    if callees:
+        parts += ["", "### Called Functions"]
+        for c in callees:
+            parts.append(f"#### {c.get('function')} ({c.get('address')})")
+            parts += ["```c", c.get("snippet") or "", "```"]
+    callers = context.get("callers") or []
+    if callers:
+        parts += ["", "### Calling Functions"]
+        for c in callers:
+            parts.append(f"#### {c.get('function')} ({c.get('address')})")
+            parts += ["```c", c.get("snippet") or "", "```"]
+    names = context.get("recovered_names") or []
+    if names:
+        parts += ["", "### Recovered Names"]
+        for n in names:
+            parts.append(f"- {n.get('name')} ({n.get('address')})")
+    return "\n".join(parts)
+
+
+def build_context_document(artifact: dict) -> dict:
+    """Assemble the LLM-ready context document from a ghidra_decompile.v1
+    artifact (the tool's JSON output shape).  Per address target: decompiled C
+    + caller/callee snippets (capped at 10 lines / 5 entries) + xref'd strings
+    + recovered names, plus a rendered markdown `document`.  String targets
+    pass through unchanged.
+
+    Raises ValueError when `targets` is missing (not a decompile artifact).
+    """
+    targets = artifact.get("targets")
+    if not isinstance(targets, list):
+        raise ValueError(
+            "artifact has no 'targets' list — not a ghidra_decompile.v1 "
+            "artifact (was --context run against a decompile-functions "
+            "--out file?)")
+    doc_targets: list[dict] = []
+    for target in targets:
+        if not isinstance(target, dict):
+            doc_targets.append(target)
+            continue
+        if target.get("kind") != "address" or "decompiled_c" not in target:
+            doc_targets.append(target)  # string targets: untouched
+            continue
+        raw = target.get("context") or {}
+        context = {
+            "callers": _cap_items(raw.get("callers") or []),
+            "callees": _cap_items(raw.get("callees") or []),
+            "xref_strings": raw.get("xref_strings") or [],
+            "recovered_names": raw.get("recovered_names") or [],
+        }
+        entry = {
+            "kind": target.get("kind"),
+            "address": target.get("address"),
+            "function": target.get("function"),
+            "entry": target.get("entry"),
+            "decompiled_c": target.get("decompiled_c"),
+            "context": context,
+        }
+        entry["document"] = _render_document(entry)
+        doc_targets.append(entry)
+    return {
+        "schema": CONTEXT_SCHEMA,
+        "program": artifact.get("program"),
+        "image_base": artifact.get("image_base"),
+        "target_count": len(doc_targets),
+        "targets": doc_targets,
+    }
+
+
+def emit_context_document(out_path: Path) -> None:
+    """Load the decompile artifact and print the assembled context document
+    to stdout; warn (do not crash the run) when the artifact is unreadable."""
+    try:
+        artifact = json.loads(out_path.read_text(encoding="utf-8"))
+        document = build_context_document(artifact)
+        print(json.dumps(document, ensure_ascii=False))
+    except (OSError, ValueError) as exc:
+        print(f"warning: --context assembly failed for {out_path}: {exc}",
+              file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -293,6 +436,8 @@ def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -
     if args.out:
         if out_path.is_file():
             print(f"artifact: {out_path}")
+            if context_requested(post_args):
+                emit_context_document(out_path)
         else:
             print(f"warning: --out artifact not found after run: {out_path}", file=sys.stderr)
     return 0
