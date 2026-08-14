@@ -3,6 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
+  references/_INDEX.md: 5abff645cb919267bf0912ec0a853739bd8707f733bd8b99249bdb1ee7f76c7f
   references/_index-anti-analysis.md: beb3d0ab06ae7939ba571cadb88479e0ba7019e9b57a161654591dbd0b2e8827
   references/_index-languages.md: 94b3d878dc633053c88d7501b003e5039008ec5ce3c1217ed3de8a1e3b581cfd
   references/_index-methodology.md: cdaf7a916791c08231040b0a64c350cd878d911a5e36d9c994e0297d19f5e228
@@ -11,7 +12,6 @@ files:
   references/_index-platforms.md: 1a89e780858cbf1cbe051af5b769f3f29a3f9d6739ccc25137ee7cc838e69dd2
   references/_index-resources.md: 04db4c8e7cb2196b8fafe16c28d3f9b98df6cd9354d09d59e6a24d62929b065d
   references/_index-tools.md: 52cc8bef03be8b995519bdd4b59d76e1c60b0199c8fd9c6d3d8d645ef8a6a979
-  references/_INDEX.md: 5abff645cb919267bf0912ec0a853739bd8707f733bd8b99249bdb1ee7f76c7f
   references/archive/long-horizon-architecture-2026-07.md: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
   references/case-book.md: 699041f78c3c4cc679dfc9b27eac6bcc50b73e1561456d3e8c15110d790cb353
   references/cli-script-checklist.md: 867e354255bf69fb71caff0193681e3c05d88c1a5e863a5d252d5261dea7cc46
@@ -19,7 +19,7 @@ files:
   references/convergence-loop.md: 6ef0a4f0c3b48fc632cd6cc8ebd3010ebc803863e782c416411149464cbbcb86
   references/decision-rights.md: 91b0344885a200ebf0f0561607fd9e18e506b7b45968cf1cacc13238ce0071c1
   references/downstream-contract.md: 4665e25d99dbac0a610e3b682a6b252fdb0e6df2749fe6269c3ef7141f4c91b0
-  references/dynamic-re-tool-priority.md: 05a52c124b23ffb1bbdaeabbde162e57846efab130fc9a6e89e02c5429075aa1
+  references/dynamic-re-tool-priority.md: 3450cff3be69acb5b89f5e5b8560681404bbb318105e000ea733f20c035bb6ec
   references/excerpt-lint.md: ae0c1ea36b2087099044095e2f400c9154eb053f1d2b1a170da81477988ddbb0
   references/failure-modes-lifecycle.md: 816aebeb9c55c044c406f2d1f6bd681d16907ca667134f7b925d595090f7624d
   references/failure-modes-monitoring.md: 1a493a1540a6dab0bba9a6c4ad1a82190166c9cb51b1707bd83352892ccb7ea0

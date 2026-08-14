@@ -85,8 +85,10 @@ LIVE_ROOTS = [
     "references", "agents", "docs/design", "specs", ".github",
 ]
 LIVE_FILES = [
-    "README.md", "SKILL.md", "AGENTS.md", "DESIGN.md", "conftest.py",
+    "README.md", "SKILL.md", "AGENTS.md", "conftest.py",
     "pytest.ini", "release-manifest.yaml", "pyproject.toml",
+    # #355: root DESIGN.md moved to docs/design/archive/DESIGN.md (covered
+    # by the docs/design LIVE_ROOT scan above).
 ]
 _SCAN_SUFFIXES = (".py", ".yaml", ".yml", ".md", ".json", ".toml", ".ini")
 

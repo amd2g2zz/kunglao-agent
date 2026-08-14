@@ -4,7 +4,7 @@
 
 依据(层 1 master spec, 摘录带行号, 不转录):
 - `kong-agent-module-design.md`(master): L25-26 store_atomic 原子写 / L31 store_claim(claim-register.yaml 读写,人类可审) / L48 record_event 幂等 / L56 Claim schema / L77-79 M0.4 错误处理 / L224 hooks 段幂等重建 / L448 kunglao.py 唯一编排入口、特殊操作用独立 CLI(kunglao-init/verify/eval...)
-- `DESIGN.md` §7(工作树可执行 spec): L98 所有步幂等(存在且非空则跳过,不 clobber) / L104 0.3 hook 安装幂等 / L105 0.4 scaffold 幂等 / L110 0.9 claim 种子
+- `docs/design/archive/DESIGN.md` §7(工作树可执行 spec; #355: 原 `DESIGN.md` 移至 docs/design/archive/): L98 所有步幂等(存在且非空则跳过,不 clobber) / L104 0.3 hook 安装幂等 / L105 0.4 scaffold 幂等 / L110 0.9 claim 种子
 
 ## 1. 函数签名
 
