@@ -32,18 +32,23 @@ from pathlib import Path
 import yaml
 
 from status_defs import (
-    TERMINAL,
     ACTIVE_STATUSES,
     PARTIAL_STATUSES,
     IN_PROGRESS_STATUSES,
 )
+# #331: RETRACTED is a legal terminal status (retraction domain owner:
+# retract_claim.py). It must be legal for --dirty AND excluded from scan() —
+# a retracted claim is withdrawn, not exhausted; surfacing it would induce
+# mark_dead to overwrite RETRACTED -> DEAD.
+from retract_claim import TERMINAL_WITH_RETRACTED
 
 # Legacy pseudo-statuses used by convergence_check.NON_PROVEN_ANSWER — not in
 # status_defs (they describe "claimed-but-unverified", not a claim lifecycle
 # state) but a dirty-status linter must recognize them as legal literals.
 _LEGACY_PSEUDO = {"STAMP", "UNVERIFIED"}
 _LEGAL_STATUSES = (
-    TERMINAL | ACTIVE_STATUSES | PARTIAL_STATUSES | IN_PROGRESS_STATUSES | _LEGACY_PSEUDO
+    TERMINAL_WITH_RETRACTED | ACTIVE_STATUSES | PARTIAL_STATUSES
+    | IN_PROGRESS_STATUSES | _LEGACY_PSEUDO
 )
 
 
@@ -73,12 +78,14 @@ def scan(workspace: Path) -> list:
 
     The dangling set — claims the DLQ should consider killing. Read-only.
     Claims already DEAD (or any terminal status) short-circuit and are excluded.
+    RETRACTED is excluded too (#331): retraction is a terminal verdict, not
+    execution exhaustion — the DLQ must never overwrite it with DEAD.
     """
     claims, _, _ = _load_reg(workspace)
     out = []
     for c in claims:
         status = (c.get("status") or "UNKNOWN").upper()
-        if status in TERMINAL:
+        if status in TERMINAL_WITH_RETRACTED:
             continue
         try:
             attempts = int(c.get("promotion_attempts") or 0)
