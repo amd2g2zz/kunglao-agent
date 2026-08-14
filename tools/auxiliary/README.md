@@ -1,3 +1,5 @@
+# tools/auxiliary — 辅助工具家
+
 ## 工具
 
 ### sanitize.py — 样本派生文本净化 CLI (#307 / #333)
