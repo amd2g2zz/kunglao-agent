@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""priority_ratio.py — M1 DECIDE VoI 代理动作排序 (issue #2, design-spec §3.2).
+"""priority_ratio.py — M1 DECIDE VoI-proxy action ranking (issue #2, design-spec §3.2).
 
-VoI 代理 / 成本 (纯机械, 零 LLM 调用):
+VoI proxy / cost (purely mechanical, zero LLM calls):
   score(a) = [0.45·L(a) + 0.30·D(a) + 0.25·N(a)] / cost(a)
 
-分量(契约空白, specs/phase-4/contract.md §1):
-  L(a) = leverage: |下游 OPEN claim| 归一化 (claim_deps depends_on 反边); claim 有 terminal fact → 0
-  D(a) = discriminator: 活 competitor_group(≥2 OPEN)=1.0 / answers_question=0.5 / else=0.2
-  N(a) = novelty: 1 − min(1, 同 action 类别已产 terminal fact 数 / NOVELTY_BASE)
-  cost(a) = TIER_COST[action_tier] = {1:1.0, 2:3.0, 3:10.0}  (高 tier 深推 → 比值降)
+Components (contract gaps, specs/phase-4/contract.md §1):
+  L(a) = leverage: |downstream OPEN claims| normalized (claim_deps depends_on reverse edges); claim with a terminal fact → 0
+  D(a) = discriminator: live competitor_group(≥2 OPEN)=1.0 / answers_question=0.5 / else=0.2
+  N(a) = novelty: 1 − min(1, terminal facts already produced in the same action category / NOVELTY_BASE)
+  cost(a) = TIER_COST[action_tier] = {1:1.0, 2:3.0, 3:10.0}  (deeper higher tier → lower ratio)
 
-LLM 永不进分数: 打分纯函数 (claims, deps, evidence) → 同输入同输出 (test_scoring_is_deterministic_pure)。
-LLM 仅在 claim-seed (写假设/判别组) 与结果 (写 fact) 两接缝; 排序零 LLM。
+The LLM never enters the score: scoring is a pure function (claims, deps,
+evidence) → same input, same output (test_scoring_is_deterministic_pure).
+The LLM only touches the two seams — claim seeding (writing hypotheses/
+discriminator groups) and results (writing facts); ranking is zero-LLM.
 
-用法:
+Usage:
   python priority_ratio.py <workspace> [--json]
 """
 from __future__ import annotations
@@ -31,12 +33,12 @@ from status_defs import TERMINAL, IN_PROGRESS_STATUSES
 
 WEIGHTS = {"L": 0.45, "D": 0.30, "N": 0.25}
 TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
-NOVELTY_BASE = 3  # 同类别 3 个 terminal fact → N=0 (饱和)
+NOVELTY_BASE = 3  # 3 terminal facts in a category → N=0 (saturated)
 
 
 @dataclass(frozen=True)
 class EvidenceView:
-    """证据视图(facts/_INDEX 派生, 不可变)."""
+    """Evidence view (derived from facts/_INDEX, immutable)."""
 
     terminal_fact_claims: frozenset[str] = frozenset()
     verified_fact_count: int = 0
@@ -45,15 +47,18 @@ class EvidenceView:
 
     @classmethod
     def from_workspace(cls, ws: Path) -> "EvidenceView":
-        """解析 facts/_INDEX.md 行 "F<id> | <status> | <claim_id> | <conclusion>".
+        """Parse facts/_INDEX.md lines "F<id> | <status> | <claim_id> | <conclusion>".
 
-        terminal_fact_claims: 状态含 TERMINAL 任一 token 的 fact 所引用的 claim;
-        verified_fact_count:  状态含 PROVEN/VERIFIED 的 fact 数(explore_gate 输入);
-        fact_count_by_category: 留空 — priority_ratio 从 (claims, terminal_fact_claims) 派生
-                                (本视图无 claim statement, 无法自分类)。
+        terminal_fact_claims: claims cited by facts whose status contains any
+        TERMINAL token;
+        verified_fact_count:  count of facts whose status contains
+        PROVEN/VERIFIED (explore_gate input);
+        fact_count_by_category: left empty — priority_ratio derives it from
+        (claims, terminal_fact_claims) (this view has no claim statements,
+        so it cannot self-classify).
         """
         index = ws / "facts" / "_INDEX.md"
-        if not index.exists():  # fixture 布局回退
+        if not index.exists():  # fixture-layout fallback
             index = ws / "_INDEX.md"
         if not index.exists():
             return cls()
@@ -77,7 +82,7 @@ class EvidenceView:
 
 @dataclass(frozen=True)
 class Action:
-    """可派发动作(M1.3 top_actions 的评分形态; skill 由 worker 自选 — routing CUT issue #1)."""
+    """A dispatchable action (the scored shape of M1.3 top_actions; skill is the worker's own choice — routing CUT issue #1)."""
 
     claim_id: str
     action: str
@@ -96,11 +101,11 @@ class Action:
 
 
 def is_open(claim: dict) -> bool:
-    """非 terminal 且非 IN_PROGRESS(与 priority.py L60-64 同规则)."""
+    """Not terminal and not IN_PROGRESS (same rule as priority.py L60-64)."""
     return claim.get("status") not in TERMINAL and claim.get("status") not in IN_PROGRESS_STATUSES
 
 
-# ---------- action 分类 (不变, 供 novelty region + worker 提示) ----------
+# ---------- action classification (unchanged, feeds the novelty region + worker hints) ----------
 
 _KEYWORD_MAP: list[tuple[tuple[str, ...], str]] = [
     (("c2", "mpd", "pegasus", "dead-drop", "dead drop", "c2 配置"), "c2_config_extract"),
@@ -115,9 +120,10 @@ DEFAULT_ACTION = "evidence_collection"
 
 
 def classify_action(claim: dict) -> str:
-    """statement + answers_question 关键词 → 动作类别; 未命中 → evidence_collection.
+    """statement + answers_question keywords → action category; no hit → evidence_collection.
 
-    计分制: 每类累计命中关键词次数, 取最高; 平局按 _KEYWORD_MAP 顺序。
+    Scoring: each category accumulates keyword hit counts, the highest
+    wins; ties broken by _KEYWORD_MAP order.
     """
     text = " ".join([
         str(claim.get("statement", "")),
@@ -131,25 +137,25 @@ def classify_action(claim: dict) -> str:
     return best
 
 
-# ---------- VoI 分量 ----------
+# ---------- VoI components ----------
 
 def action_tier(claim: dict) -> int:
-    """动作 tier = min(evidence_tier_attempted + 1, 3)。"""
+    """Action tier = min(evidence_tier_attempted + 1, 3)."""
     return min(int(claim.get("evidence_tier_attempted", 0)) + 1, 3)
 
 
 def action_cost(claim: dict) -> float:
-    """cost = TIER_COST[tier]; 高 tier(深推/VM)比值的分母大 → score 降。"""
+    """cost = TIER_COST[tier]; a higher tier (deep dive/VM) enlarges the ratio's denominator → lower score."""
     return TIER_COST[action_tier(claim)]
 
 
 def cheapness(claim: dict) -> float:
-    """explore 模式排序用: 1/cost (T1 高 → 铺开优先)。与 action_cost 互为倒数。"""
+    """For explore-mode ranking: 1/cost (high T1 → breadth first). The reciprocal of action_cost."""
     return 1.0 / action_cost(claim)
 
 
 def _reverse_deps(depends_on: dict) -> dict[str, list[str]]:
-    """depends_on {child: [parents]} → 反边 {parent: [dependents]}。"""
+    """depends_on {child: [parents]} → reverse edges {parent: [dependents]}."""
     rev: dict[str, list[str]] = {}
     for child, parents in (depends_on or {}).items():
         for p in parents:
@@ -158,7 +164,7 @@ def _reverse_deps(depends_on: dict) -> dict[str, list[str]]:
 
 
 def _active_competitor_groups(claims: list[dict], competitor_groups: dict) -> set:
-    """活 group = ≥2 个 OPEN 成员。"""
+    """A live group = ≥2 OPEN members."""
     open_ids = {c.get("id") for c in claims if c.get("id") and is_open(c)}
     active: set = set()
     for g, members in (competitor_groups or {}).items():
@@ -168,7 +174,7 @@ def _active_competitor_groups(claims: list[dict], competitor_groups: dict) -> se
 
 
 def _discriminator(claim: dict, active_groups: set) -> float:
-    """D: 活 competitor_group=1.0 / answers_question=0.5 / else=0.2。"""
+    """D: live competitor_group=1.0 / answers_question=0.5 / else=0.2."""
     cg = claim.get("competitor_group")
     if cg and cg in active_groups:
         return 1.0
@@ -178,10 +184,11 @@ def _discriminator(claim: dict, active_groups: set) -> float:
 
 
 def _fact_count_by_category(claims: list[dict], evidence: EvidenceView) -> dict[str, int]:
-    """action_cat → terminal fact 计数。
+    """action_cat → terminal fact count.
 
-    若 evidence.fact_count_by_category 非空(测试注入)则直接用;
-    否则从 (claims, evidence.terminal_fact_claims) 派生: 每个 terminal claim 的 action 类别 +1。
+    Uses evidence.fact_count_by_category directly when non-empty (test
+    injection); otherwise derives from (claims, evidence.terminal_fact_claims):
+    +1 for each terminal claim's action category.
     """
     if evidence.fact_count_by_category:
         return dict(evidence.fact_count_by_category)
@@ -196,17 +203,17 @@ def _fact_count_by_category(claims: list[dict], evidence: EvidenceView) -> dict[
 
 
 def _novelty(action_cat: str, fact_counts: dict[str, int]) -> float:
-    """N = 1 − min(1, 同类已产 fact 数 / NOVELTY_BASE)。未探过 → 1.0; 饱和 → 0.0。"""
+    """N = 1 − min(1, facts already produced in the category / NOVELTY_BASE). Unexplored → 1.0; saturated → 0.0."""
     n = fact_counts.get(action_cat, 0)
     return 1.0 - min(1.0, n / NOVELTY_BASE)
 
 
 def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> list[Action]:
-    """VoI 代理 / 成本 排序 (纯机械, 零 LLM)。
+    """VoI proxy / cost ranking (purely mechanical, zero LLM).
 
-    输入: claims(claim-register claims[]), deps(claim_deps.yaml {depends_on, competitor_groups}),
-          evidence(EvidenceView, 含 terminal_fact_claims)
-    输出: 排序后的 Action 列表 (score 降序, 同分取 cost 小者, 再按 claim_id)
+    Input: claims (claim-register claims[]), deps (claim_deps.yaml {depends_on, competitor_groups}),
+          evidence (EvidenceView, with terminal_fact_claims)
+    Output: the sorted Action list (score descending, ties broken by lower cost, then by claim_id)
     """
     depends_on = (deps or {}).get("depends_on", {}) or {}
     competitor_groups = (deps or {}).get("competitor_groups", {}) or {}
@@ -216,7 +223,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
     fact_counts = _fact_count_by_category(claims, evidence)
     terminal = evidence.terminal_fact_claims
 
-    # dispatchable 候选: OPEN + attempts<3 + depends_on 全 terminal
+    # dispatchable candidates: OPEN + attempts<3 + all depends_on terminal
     candidates: list[dict] = []
     for c in claims:
         cid = c.get("id")
@@ -229,7 +236,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
             continue
         candidates.append(c)
 
-    # leverage 计数 (per candidate): 下游 OPEN dependent 数; terminal claim → 0
+    # leverage count (per candidate): downstream OPEN dependents; terminal claim → 0
     lev_raw: dict[str, int] = {}
     for c in candidates:
         cid = c["id"]
@@ -254,15 +261,15 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
             tier=action_tier(c), attempts=int(c.get("promotion_attempts", 0)),
             leverage=round(L, 3), discriminator=D, novelty=round(N, 3), cost=cost,
         ))
-    # 同分 ε → cost 小者 (机械裁决, 不问 LLM); 再按 claim_id 稳定
+    # score tie within ε → lower cost wins (mechanical ruling, no LLM); then stable by claim_id
     actions.sort(key=lambda a: (-a.score, a.cost, a.claim_id))
     return actions
 
 
-# ---------- 兼容旧调用方 (kunglao-decide._cheapness_order 用) ----------
+# ---------- legacy caller compatibility (used by kunglao-decide._cheapness_order) ----------
 
 def next_tier_cost(claim: dict) -> float:
-    """[已废, 保留兼容] 旧 NEXT_TIER_CHEAP 语义。新代码用 action_cost / cheapness。"""
+    """[Deprecated, kept for compatibility] the old NEXT_TIER_CHEAP semantics. New code uses action_cost / cheapness."""
     return cheapness(claim)
 
 
@@ -271,7 +278,7 @@ def _load_yaml(path: Path) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="priority_ratio.py", description="VoI 代理动作排序")
+    ap = argparse.ArgumentParser(prog="priority_ratio.py", description="VoI-proxy action ranking")
     ap.add_argument("workspace", help="workspace root")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)

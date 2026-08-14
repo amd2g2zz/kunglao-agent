@@ -1,25 +1,32 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""shell_defaults.py — 可复用 CLI: 幂等管理 shell 环境默认行 (#276).
+"""shell_defaults.py — reusable CLI: idempotent management of shell environment default lines (#276).
 
-Issue #276: 2026-08-12 事故根因是 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 污染
-process scope。本 CLI 把「shell 环境默认行管理」落为通用可复用工具 —— 参数化
-(--var/--value/--profile/--shell 全可注入, 无硬编码), 供 kunglao-init 等调用,
-禁止把逻辑内联在 init 里。
+Issue #276: the root cause of the 2026-08-12 incident was
+CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 polluting the process scope. This
+CLI turns "shell environment default-line management" into a generic
+reusable tool — fully parameterized (--var/--value/--profile/--shell all
+injectable, no hardcoding) for kunglao-init and friends to call; inlining
+the logic inside init is forbidden.
 
 CLI:
     python shell_defaults.py check  --var <NAME> --profile <PATH> [--shell powershell|bash] [--json]
     python shell_defaults.py apply  --var <NAME> --value <V> --profile <PATH> [--shell powershell|bash] [--json]
     python shell_defaults.py remove --var <NAME> --profile <PATH> [--shell powershell|bash] [--json]
 
-语义:
-  - 行格式:  powershell `$env:NAME = "V"` / bash `export NAME="V"`
-  - truthy 值 (1/true/yes/on, 不区分大小写) 检测与告警 —— 污染态
-  - apply 幂等: 已含目标行 -> unchanged(跳过); truthy/其它值行 -> rewritten(改写成目标值);
-    无行 -> appended(追加, 带注释); 结果收敛为唯一目标行
-  - remove: 删除目标行 + 其 shell_defaults 注释; 无行时 no-op
-  - exit code 区分状态: check 0=OK / 1=TRUTHY / 2=ABSENT; apply/remove 0=成功; 错误 3
-  - 输出: 人类可读文本, 或 --json 单行 JSON
+Semantics:
+  - line formats: powershell `$env:NAME = "V"` / bash `export NAME="V"`
+  - truthy values (1/true/yes/on, case-insensitive) detected and warned
+    about — the polluted state
+  - apply is idempotent: target line already present -> unchanged (skip);
+    a truthy/other-value line -> rewritten (to the target value);
+    no line -> appended (with comment); the result converges to the single
+    target line
+  - remove: deletes the target line + its shell_defaults comment; no-op
+    when absent
+  - exit codes distinguish states: check 0=OK / 1=TRUTHY / 2=ABSENT;
+    apply/remove 0=success; error 3
+  - output: human-readable text, or --json single-line JSON
 """
 from __future__ import annotations
 
@@ -35,26 +42,27 @@ COMMENT_MARK = "# shell_defaults:"
 
 
 def is_truthy(value: str | None) -> bool:
-    """Truthy 值判定: 1/true/yes/on, 不区分大小写, 空白容忍."""
+    """Truthy-value check: 1/true/yes/on, case-insensitive, whitespace-tolerant."""
     return value is not None and value.strip().lower() in TRUTHY_VALUES
 
 
 def target_line(var: str, value: str, shell: str) -> str:
-    """目标行文本: powershell `$env:NAME = "V"` / bash `export NAME="V"`."""
+    """Target line text: powershell `$env:NAME = "V"` / bash `export NAME="V"`."""
     if shell == "bash":
         return f'export {var}="{value}"'
     return f'$env:{var} = "{value}"'
 
 
 def comment_line(var: str, value: str) -> str:
-    """随行注释 (remove 可识别并清除)."""
+    """Trailing comment (recognizable and removable by remove)."""
     return f"{COMMENT_MARK} {var}={value} (managed - edit via shell_defaults.py)"
 
 
 def extract_value(line: str, var: str, shell: str) -> str | None:
-    """从行中提取 var 的赋值值; 该行未设置 var 时返回 None.
+    """Extract the value assigned to var from a line; None when the line does not set var.
 
-    容忍: 前导空白、引号(双/单)、行尾内联注释 (空白 + #)、未引号值.
+    Tolerates: leading whitespace, quotes (double/single), trailing inline
+    comments (whitespace + #), unquoted values.
     """
     if shell == "bash":
         m = re.match(rf"^\s*export\s+{re.escape(var)}\s*=\s*(.*)$", line)
@@ -69,7 +77,7 @@ def extract_value(line: str, var: str, shell: str) -> str | None:
 
 
 def read_lines(profile: Path) -> list[str]:
-    """读 profile 行 (保留行尾); 文件不存在视为空."""
+    """Read profile lines (line endings preserved); a missing file counts as empty."""
     if not profile.exists():
         return []
     return profile.read_text(encoding="utf-8").splitlines(keepends=True)
@@ -83,7 +91,7 @@ def _write(profile: Path, lines: list[str]) -> None:
 # ---------- subcommands ----------
 
 def check(profile: Path, var: str, shell: str) -> dict:
-    """读状态: OK(非 truthy 值在册) / TRUTHY(truthy 值在册) / ABSENT(无行)."""
+    """Read status: OK (a non-truthy value on record) / TRUTHY (a truthy value on record) / ABSENT (no line)."""
     for line in read_lines(profile):
         value = extract_value(line, var, shell)
         if value is not None:
@@ -94,7 +102,7 @@ def check(profile: Path, var: str, shell: str) -> dict:
 
 
 def apply(profile: Path, var: str, value: str, shell: str) -> dict:
-    """幂等写默认: 目标行在册 -> unchanged; 其它值行 -> rewritten; 无行 -> appended+注释."""
+    """Idempotent default write: target line on record -> unchanged; other-value line -> rewritten; no line -> appended+comment."""
     lines = read_lines(profile)
     target = target_line(var, value, shell)
     for i, line in enumerate(lines):
@@ -116,7 +124,7 @@ def apply(profile: Path, var: str, value: str, shell: str) -> dict:
 
 
 def remove(profile: Path, var: str, shell: str) -> dict:
-    """删除 var 行及其 shell_defaults 注释; 无行时 no-op (幂等)."""
+    """Delete the var line and its shell_defaults comment; no-op when absent (idempotent)."""
     if not profile.exists():
         return {"removed": False, "var": var, "profile": str(profile)}
     prefix = f"{COMMENT_MARK} {var}="
@@ -160,23 +168,23 @@ def _print_result(result: dict, text: str, json_mode: bool) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="shell_defaults",
-        description="幂等管理 shell 环境默认行 (check/apply/remove, powershell+bash)",
+        description="idempotent shell environment default-line management (check/apply/remove, powershell+bash)",
     )
     sub = ap.add_subparsers(dest="command", required=True)
 
     def _common(p: argparse.ArgumentParser) -> None:
-        p.add_argument("--var", required=True, help="环境变量名")
-        p.add_argument("--profile", required=True, help="profile 文件路径 (可注入)")
+        p.add_argument("--var", required=True, help="environment variable name")
+        p.add_argument("--profile", required=True, help="profile file path (injectable)")
         p.add_argument("--shell", choices=("powershell", "bash"), default=None,
-                       help="行格式 (默认按平台推断)")
-        p.add_argument("--json", action="store_true", help="输出 JSON")
+                       help="line format (default inferred from platform)")
+        p.add_argument("--json", action="store_true", help="output JSON")
 
-    p_check = sub.add_parser("check", help="读状态: OK / TRUTHY / ABSENT")
+    p_check = sub.add_parser("check", help="read status: OK / TRUTHY / ABSENT")
     _common(p_check)
-    p_apply = sub.add_parser("apply", help="写默认行 (幂等)")
+    p_apply = sub.add_parser("apply", help="write the default line (idempotent)")
     _common(p_apply)
-    p_apply.add_argument("--value", required=True, help="目标值")
-    p_remove = sub.add_parser("remove", help="删除默认行 (幂等)")
+    p_apply.add_argument("--value", required=True, help="target value")
+    p_remove = sub.add_parser("remove", help="delete the default line (idempotent)")
     _common(p_remove)
 
     args = ap.parse_args(argv)

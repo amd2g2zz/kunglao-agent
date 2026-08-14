@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""kunglao-record — M4 RECORD 独立 CLI 入口 (phase 5, E5.1).
+"""kunglao-record — M4 RECORD standalone CLI entry (phase 5, E5.1).
 
-用法: python kunglao-record.py <ws> --event '<json>'
+Usage: python kunglao-record.py <ws> --event '<json>'
 
-实现见 scripts/kunglao_record.py — 模块名不带连字符, 供 `from kunglao_record import ...`
-(frozen test tests/test_verify_record_monitor.py 直接导入).
+Implementation in scripts/kunglao_record.py — module name without hyphens,
+so `from kunglao_record import ...` works (frozen test
+tests/test_verify_record_monitor.py imports it directly).
 """
 import sys
 

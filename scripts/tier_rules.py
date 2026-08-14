@@ -12,7 +12,7 @@ tier_for_claim(claim: dict) -> int
   - T2: static-depth analysis (disassembly / decoding / API analysis)
   - T1: everything else (default — strings/metadata scans stay T1)
 
-Conservative by design (宁低勿高): a miss costs one cheap static pass; an
+Conservative by design (宁低勿高 — better low than high): a miss costs one cheap static pass; an
 over-assignment costs a full VM cycle. Signals are substring matches on the
 claim's intent text (statement / verification_intent / promotion_gate /
 boundary_type / summary / task).
@@ -35,7 +35,7 @@ T3_SIGNALS = (
     "inject", "injection", "runtime", "dynamic", "sandbox",
     "trace", "dump", "hook", "run the sample", "sample execution",
     "execute the sample", "executing the sample", "emulat",
-    # chinese — 动态执行/注入/调试/沙箱/转储/挂钩/执行链
+    # chinese — dynamic execution / injection / debugging / sandbox / dump / hooking / execution-chain terms
     "动态", "运行", "注入", "调试", "沙箱", "转储", "挂钩", "执行链",
 )
 

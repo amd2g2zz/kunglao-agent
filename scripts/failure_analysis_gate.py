@@ -629,7 +629,8 @@ def main() -> int:
     if args.claim_id:
         # #41 fix (orchestrator verification): forward --library so BLOCKED
         # guidance includes similar_lessons — previously dropped here, so the
-        # acceptance criterion "BLOCKED 输出含 3 相似 lesson" failed via CLI.
+        # acceptance criterion "BLOCKED output contains 3 similar lessons"
+        # (原验收口径 "BLOCKED 输出含 3 相似 lesson") failed via CLI.
         r = check_claim(workspace, args.claim_id, library=args.library)
         if r["state"] == "BLOCKED":
             _emit_failure_blocked(workspace, r)
