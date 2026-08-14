@@ -5,7 +5,7 @@ Extracted from hook_activation.py (T-2 split) — the --wire-up job.
 
 Issue #258 (2026-08-12): hook deployment is PROJECT-scoped. The pre-#258
 hardcoded `Path.home()/.claude/settings.json` wrote hooks globally; in a
-worktree (C:/Users/hr/.claude/.wt-*/) that binds the hook commands to a path
+worktree (<HOME>/.claude/.wt-*/) that binds the hook commands to a path
 that dies with the worktree — deleting the worktree silently killed all 8
 hooks and blocked every session's tool calls. Project-level deployment makes
 hooks live and die WITH the workspace: no global pollution, no stale
@@ -45,7 +45,7 @@ def _canonical_hooks_dir() -> Path:
     Issue #269: hook commands are absolute paths into the CANONICAL skill
     install (~/.claude/skills/kunglao-agent/hooks), never this module's own
     location. This script may be run from a dev worktree
-    (C:/Users/hr/.claude/wt-*/); a worktree-bound command dies with the
+    (<HOME>/.claude/wt-*/); a worktree-bound command dies with the
     worktree — the #228 incident: 8 hooks went silent at once when the
     referenced path was deleted. When this module IS deployed at the canonical
     location (the normal production case), the two coincide and `here` wins.

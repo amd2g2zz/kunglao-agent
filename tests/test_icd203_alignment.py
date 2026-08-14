@@ -143,11 +143,10 @@ def build_workspace(tmp_path: Path, *, f022: bool = False) -> Path:
         _write(ws / "test-scope" / "sample_enc.bin", b"\x00encrypted")
         # Recompute-script artifact referenced by the curated F022
         # FACT_MIGRATION_MAP entry (provenance_override recompute_script
-        # path) — on POSIX the drive-absolute path resolves relative to ws,
-        # same shape as the other fixture evidence files, so its
-        # content_sha256 is derived from these bytes.
-        rel = "C:/Users/hr/.claude/skills/kunglao-agent/tools/crypto/crypto-tool.py"
-        _write(ws.joinpath(*rel.split("/")), b"# crypto-tool placeholder\n")
+        # path) — #356 W3: the curated path is now derived from
+        # migrate_facts.SKILL_ROOT (= this repo), pointing at the REAL
+        # tools/crypto/crypto-tool.py; content_sha256 derives from the
+        # actual shipped script, no fixture placeholder needed.
         _write(ws / "facts" / "F022.md", F022_BODY_ONLY)
     _write(ws / "facts" / "_INDEX.md",
            "# Facts Index\n\n## Status: 3 PROVEN / 0 PARTIAL\n\n"

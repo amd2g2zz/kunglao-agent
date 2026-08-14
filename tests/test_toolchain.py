@@ -650,3 +650,29 @@ def test_toolchain_cli_garbage_port_no_traceback(kunglao_ws):
     assert "Traceback" not in r.stderr, \
         f"garbage port must not traceback: {r.stderr}"
     assert r.returncode in (0, 1, 2), f"unexpected exit {r.returncode}"
+
+
+# ---------- #356 W3: KUNGLAO_VM_SHELL_PORT env-configurable ----------
+
+def test_vm_shell_port_env_configurable(monkeypatch):
+    """#356 W3: VM_SHELL_PORT reads KUNGLAO_VM_SHELL_PORT (same defensive
+    _parse_port pattern as FRIDA_PORT): valid override honored, garbage and
+    out-of-range fall back to the 9876 default, unset = 9876."""
+    import importlib
+    import toolchain as tc
+
+    monkeypatch.setenv("KUNGLAO_VM_SHELL_PORT", "7654")
+    importlib.reload(tc)
+    assert tc.VM_SHELL_PORT == 7654, "valid override must be honored"
+
+    monkeypatch.setenv("KUNGLAO_VM_SHELL_PORT", "not-a-port")
+    importlib.reload(tc)
+    assert tc.VM_SHELL_PORT == 9876, "garbage env must fall back to 9876"
+
+    monkeypatch.setenv("KUNGLAO_VM_SHELL_PORT", "99999")
+    importlib.reload(tc)
+    assert tc.VM_SHELL_PORT == 9876, "out-of-range port must fall back to 9876"
+
+    monkeypatch.delenv("KUNGLAO_VM_SHELL_PORT", raising=False)
+    importlib.reload(tc)
+    assert tc.VM_SHELL_PORT == 9876, "default port must be 9876"

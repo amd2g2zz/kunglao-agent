@@ -59,7 +59,9 @@ def _parse_port(raw: str | None, default: int) -> int:
 
 
 FRIDA_PORT = _parse_port(os.environ.get("KUNGLAO_FRIDA_PORT"), 1337)
-VM_SHELL_PORT = 9876
+# #356 W3: VM shell port env-configurable (was bare 9876 constant), same
+# defensive parse as FRIDA_PORT — default unchanged.
+VM_SHELL_PORT = _parse_port(os.environ.get("KUNGLAO_VM_SHELL_PORT"), 9876)
 ANDROID_SERVER_PORT = 23946  # IDA android_server default listener port
 
 # #304 amendment (comment 304-5289955958): per-item friendly install commands.
