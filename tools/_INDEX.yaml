@@ -133,6 +133,45 @@ tools:
     cost_tier: cheap
     input_output: {input: 反汇编文本 + --window/--abi x64|x86, output: 调用点参数清单(address/target/regs/stack/pushed)}
     when_not: 需要寄存器级数据流精确恢复时不用, 用 ghidra-recon 或模拟执行
+  - name: pe-analyze
+    category: static
+    capability: static:pe-parse
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 样本 PE(--binary) + 子命令(headers|sections|imports|exports|resources|overlay|pdb|tls|signature|all), output: 对应 PE 表/数据 JSON + --reproduce field=value}
+    when_not: 需要指令级反汇编或函数级视图时不用, 用 disasm-dump / ghidra-recon
+
+  - name: overlay-scan
+    category: static
+    capability: static:overlay-scan
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 样本 PE(--binary) + --mode reloc|true|mz|all, output: 覆盖区表征 JSON(reloc 表/熵/Go 证据/内嵌 PE 命中)}
+    when_not: 无 PE 覆盖区(overlay)或无内嵌载荷怀疑时不用
+
+  - name: disasm-dump
+    category: static
+    capability: static:disasm
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 样本 PE(--binary) + --rvas/--vas 列表 + 可选 --prologs/--strings, output: 每址 capstone 指令清单 JSON(VA→文件偏移复用 tools/lib_disasm.py)}
+    when_not: 需要函数级语义/反编译时不用, 用 ghidra-recon / ghidra-decompile-functions
+
+  - name: shellcode-scan
+    category: static
+    capability: static:shellcode-scan
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 二进制 blob/PE(--binary) + --scan/--entry/--prologs/--peb/--strings, output: shellcode 候选区域 + 特征 JSON(PEB 访问/序言/字符串/入口反汇编)}
+    when_not: 非 shellcode/blob 检测任务不用
+
+  - name: die-probe
+    category: static
+    capability: static:identify
+    tier: T1
+    cost_tier: probe
+    input_output: {input: 样本 PE(--binary) + DIE 可执行文件(--die/$KUNGLAO_DIE), output: DIE 5-call merge JSON(语言/编译器/加壳/熵/资源); die 缺失 exit 2 + 安装指引}
+    when_not: DIE 未安装且不允许安装时不用
 
   # -- pipeline: 证据索引构建 (issue #284 登记) --
   - name: build-evidence-index

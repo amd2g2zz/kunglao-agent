@@ -11,8 +11,9 @@ Exit codes: 0 = ok (matches, or valid query with no match), 2 = usage error,
 3 = index missing/unreadable.
 
 Expectations below are PINNED to the real tools/_INDEX.yaml content
-(12 entries @ origin/dev 5e1d817): 1 probe / 8 cheap / 3 deep, all tier T1.
-If the index grows, update these pins deliberately.
+(17 entries @ fix/278-static-1c, +5 static CLIs from PR-1c): 2 probe /
+12 cheap / 3 deep, all tier T1. If the index grows, update these pins
+deliberately.
 """
 from __future__ import annotations
 
@@ -76,7 +77,7 @@ def test_tier_t1_returns_all_entries():
     r = run_cli("--tier", "T1", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 18
+    assert out["count"] == 23
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +88,7 @@ def test_cost_max_cheap_excludes_deep():
     r = run_cli("--cost-max", "cheap", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 15
+    assert out["count"] == 20
     assert all(t["cost_tier"] in ("probe", "cheap") for t in out["tools"])
     names = {t["name"] for t in out["tools"]}
     assert not (names & DEEP_TOOLS)
@@ -97,8 +98,8 @@ def test_cost_max_probe_returns_only_probe():
     r = run_cli("--cost-max", "probe", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 1
-    assert out["tools"][0]["name"] == "measure-cold-start"
+    assert out["count"] == 2
+    assert {t["name"] for t in out["tools"]} == {"measure-cold-start", "die-probe"}
 
 
 # ---------------------------------------------------------------------------

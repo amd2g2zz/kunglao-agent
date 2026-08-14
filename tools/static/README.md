@@ -20,3 +20,17 @@ field=value、错误带指引），不是工具，不登记索引。
 lzma-raw 不再单独吸收：`tools/crypto/crypto-tool.py` 的 `lzma-raw` 子命令
 （`algorithms.lzma_raw_decompress`，dict_size/lc/lp/pb/size 全参数化）已覆盖同
 能力，避免重复。
+
+## 已吸收工具 (issue #278 PR-1c)
+
+| 文件 | 工具 | 职责 |
+|---|---|---|
+| `pe_analyze.py` | `pe-analyze` | PE trunk 解析: headers/sections/imports/exports/resources/overlay/pdb/tls/signature 子命令 |
+| `overlay_scan.py` | `overlay-scan` | 覆盖区 3-in-1: `--mode reloc|true|mz` (reloc 表 / true-overlay / MZ 内嵌 PE) |
+| `disasm_dump.py` | `disasm-dump` | 指定 RVA/VA 的 capstone 指令清单 (复用 `tools/lib_disasm.py` 的 VA→offset 核心) |
+| `shellcode_scan.py` | `shellcode-scan` | shellcode blob 检测: 入口反汇编/代码区扫描/序言/PEB 访问/字符串 |
+| `die_probe.py` | `die-probe` | DIE 5-call merge 探测包装 (die 缺失 exit 2 + 安装指引) |
+| `_common.py` | — | 共享字节扫描助手(签名/字符串/序言/熵/pclntab), 无副作用可导入 |
+
+契约(#277): 全部参数化、只读幂等、三态退出码(0 成功 / 1 负发现 / 2 错误)、
+`--json` 默认输出 + `--reproduce` field=value 行(kunglao L1 机械门)。
