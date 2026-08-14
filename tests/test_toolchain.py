@@ -44,13 +44,33 @@ def fake_bin(tmp_path: Path) -> Path:
     return fb
 
 
+def _write_adb_wrapper(fake_bin: Path, stub: Path) -> None:
+    """Write a platform-appropriate adb wrapper that executes `stub`.
+
+    Windows: adb.bat (shutil.which resolves .bat via PATHEXT). POSIX: an
+    extensionless executable `adb` script — shutil.which requires the
+    exact name plus the exec bit there.
+    """
+    if os.name == "nt":
+        (fake_bin / "adb.bat").write_text(
+            f"@echo off\r\npython \"{stub}\" %*\r\n", encoding="utf-8")
+    else:
+        adb = fake_bin / "adb"
+        adb.write_text(
+            f"#!/bin/sh\nexec \"{sys.executable}\" \"{stub}\" \"$@\"\n",
+            encoding="utf-8",
+        )
+        adb.chmod(0o755)
+
+
 @pytest.fixture
 def fake_adb_script(tmp_path: Path, fake_bin: Path) -> Path:
-    """Create a fake adb (adb.bat -> adb_stub.py) that responds to
+    """Create a fake adb (wrapper -> adb_stub.py) that responds to
     'devices' / 'shell su -c id' / 'shell getprop ro.build.version.sdk'.
 
-    shutil.which('adb') must resolve to adb.bat ONLY — an extensionless
-    'adb' file is not executable on Windows and would shadow the wrapper.
+    The wrapper is platform-aware: adb.bat on Windows (extensionless files
+    are not executable there), an extensionless executable `adb` script on
+    POSIX (shutil.which only resolves the exact name there).
     """
     stub = fake_bin / "adb_stub.py"
     stub.write_text(
@@ -80,10 +100,7 @@ def fake_adb_script(tmp_path: Path, fake_bin: Path) -> Path:
         "sys.exit(0)\n",
         encoding="utf-8",
     )
-    (fake_bin / "adb.bat").write_text(
-        f"@echo off\r\npython \"{stub}\" %*\r\n",
-        encoding="utf-8",
-    )
+    _write_adb_wrapper(fake_bin, stub)
     return stub
 
 
@@ -102,6 +119,17 @@ def _run_toolchain(ws: Path, extra: list[str] | None = None,
     base_env = {k: v for k, v in os.environ.items()
                 if k not in ("GHIDRA_HOME", "KUNGLAO_VM_HOST")}
     base_env["PYTHONIOENCODING"] = "utf-8"
+    # Hermetic MCP probe: without this the probe reads the real ~/.claude.json
+    # (present on dev machines, absent on CI) — HARD-tier MCP results would
+    # depend on the runner. Pin to a fake registering the HARD servers, same
+    # pattern as tests/test_mcp_supply.py.
+    fake_claude = ws.parent / "fake-claude.json"
+    if not fake_claude.exists():
+        fake_claude.write_text(json.dumps({
+            "mcpServers": {name: {} for name in (
+                "ghidra", "sequential-thinking", "x64dbg", "gitnexus")},
+        }), encoding="utf-8")
+    base_env["KUNGLAO_CLAUDE_JSON"] = str(fake_claude)
     if env:
         base_env.update(env)
     return subprocess.run(argv, capture_output=True, text=True, timeout=60,
@@ -135,10 +163,7 @@ def _rewrite_adb_stub(fake_bin: Path, *, uid: str = "0", debuggable: str = "1",
     lines.append("sys.exit(0)")
     stub = fake_bin / "adb_stub.py"
     stub.write_text("\n".join(lines), encoding="utf-8")
-    (fake_bin / "adb.bat").write_text(
-        f"@echo off\r\npython \"{stub}\" %*\r\n",
-        encoding="utf-8",
-    )
+    _write_adb_wrapper(fake_bin, stub)
     return stub
 
 
@@ -359,14 +384,27 @@ def test_exit_2_warn_only(fake_bin, kunglao_ws, monkeypatch):
     frida/android_server -> every HARD item passes; unidbg (WARN tier) keeps
     the overall at WARN -> exit code 2."""
     import socket as socket_mod
-    # .bat wrappers so Windows shutil.which finds the fake tools
+    # Platform-aware wrappers so shutil.which finds the fake tools on both
+    # Windows (.bat via PATHEXT) and POSIX (extensionless + exec bit).
     for tool in ("aapt", "jadx", "apktool"):
-        (fake_bin / f"{tool}.bat").write_text("@echo off\r\nexit /b 0\r\n",
-                                              encoding="utf-8")
+        if os.name == "nt":
+            (fake_bin / f"{tool}.bat").write_text("@echo off\r\nexit /b 0\r\n",
+                                                  encoding="utf-8")
+        else:
+            path = fake_bin / tool
+            path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            path.chmod(0o755)
     gn_stub = fake_bin / "gn_stub.py"
     gn_stub.write_text("print('gitnexus version 1.0')\n", encoding="utf-8")
-    (fake_bin / "gitnexus.bat").write_text(
-        f"@echo off\r\npython \"{gn_stub}\" %*\r\n", encoding="utf-8")
+    if os.name == "nt":
+        (fake_bin / "gitnexus.bat").write_text(
+            f"@echo off\r\npython \"{gn_stub}\" %*\r\n", encoding="utf-8")
+    else:
+        gn = fake_bin / "gitnexus"
+        gn.write_text(
+            f"#!/bin/sh\nexec \"{sys.executable}\" \"{gn_stub}\" \"$@\"\n",
+            encoding="utf-8")
+        gn.chmod(0o755)
     _rewrite_adb_stub(fake_bin)
     # decompiler: GHIDRA_HOME + analyzeHeadless.bat
     (fake_bin / "analyzeHeadless.bat").write_text("@echo off\r\n", encoding="utf-8")
@@ -456,7 +494,14 @@ def test_pass_items_have_no_fix(kunglao_ws, monkeypatch):
     """PASS items do not carry guidance noise (fix is None)."""
     fake = kunglao_ws / "fake-docker-bin"
     fake.mkdir()
-    (fake / "docker.bat").write_text("@echo off\r\n", encoding="utf-8")
+    # Platform-aware: shutil.which resolves docker.bat on Windows, an
+    # extensionless executable file on POSIX.
+    if os.name == "nt":
+        (fake / "docker.bat").write_text("@echo off\r\n", encoding="utf-8")
+    else:
+        docker = fake / "docker"
+        docker.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        docker.chmod(0o755)
     monkeypatch.setenv("PATH", str(fake))  # replace, not prepend
     r = _run_toolchain(kunglao_ws, ["--type", "windows", "--json"])
     data = json.loads(r.stdout)
