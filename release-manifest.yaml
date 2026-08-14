@@ -67,4 +67,4 @@ router_subcommands:
   - record
   - health
 
-test_command: "python -m pytest -q"   # the standard test command (pytest.ini testpaths = scripts tests)
+test_command: "python -m pytest -q"   # the standard test command (pytest.ini testpaths = tests)

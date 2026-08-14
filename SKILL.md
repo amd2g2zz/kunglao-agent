@@ -88,7 +88,8 @@ Invoke `/kunglao-agent [request]` — the parameter is the user request, either 
    | `analysis` (alias `analyze`) | enter the convergence loop (dispatch/verify/update) — default for unrecognized input and empty `$ARGUMENTS` |
    | `verify [fact_id]` | run only the M3 verify chain (L1 mechanical + L2 redteam) |
    | `resume` (alias `continue`) | continue an existing workspace idempotently (no re-scaffold) |
-   | `decide` `tick` `record` `health` `monitor` `digest` `eval` | mechanical CLI passthrough to the kunglao CLI family (`scripts/kunglao.py` subcommands) |
+   | `decide` `tick` `verify` `record` `health` | mechanical CLI passthrough — `scripts/kunglao.py` subcommands |
+   | `monitor` `digest` `eval` | mechanical CLI passthrough — standalone CLIs (`scripts/kunglao-monitor.py` / `kunglao-digest.py` / `kunglao-eval.py`), not kunglao.py subcommands |
 
 2. Natural-language request: map by intent keywords (init/workspace/scaffold → `init`; analyze/converge/loop/deep analysis/run → `analysis`; verify/F-NNN → `verify`; health/status/monitor → `health`; unrecognized → `analysis`).
 3. Empty `$ARGUMENTS` → `analysis`.

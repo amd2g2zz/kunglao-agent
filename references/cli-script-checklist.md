@@ -1,8 +1,10 @@
 # CLI script spec checklist (issue #277)
 
 > Script-discipline contract: any reusable tool logic lives as a parameterized
-> CLI script in `<SKILL_DIR>/scripts/` (or `scripts/re/` for worker tools) —
-> never as `python -c "..."` / heredoc `<<'EOF'` inline execution. A new script
+> CLI script — worker-facing analysis tools in `<SKILL_DIR>/tools/<category>/`
+> (registered in `tools/_INDEX.yaml`, see §0), skill infrastructure CLIs in
+> `<SKILL_DIR>/scripts/` — never as `python -c "..."` / heredoc `<<'EOF'`
+> inline execution. A new script
 > is acceptable only if it satisfies every line below. Canonical exemplar:
 > `scripts/shell_defaults.py` (idempotent shell env-default management —
 > `--var/--value/--profile/--shell`, check/apply/remove, exit codes, `--json`).

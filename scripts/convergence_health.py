@@ -205,7 +205,7 @@ def assess(ledger: list) -> dict:
     open_delta = last_open - first_open
     rounds = len(ledger)
 
-    # v1.9.30: a converged loop is NOT spinning. SPINNING/STALLED mean open
+    # v1.9.29: a converged loop is NOT spinning. SPINNING/STALLED mean open
     # work is flat — the loop finished (open_count=0) and then sat idle across
     # sessions is a completed state, not a stuck one. Without this guard, a
     # finished loop's trailing CONVERGED snapshots trigger flatline >= 8 and

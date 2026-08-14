@@ -1,4 +1,4 @@
-# kong-agent gitignore — scoped to this skill only
+# kunglao-agent gitignore — scoped to this skill only
 # Compiled Python
 __pycache__/
 *.pyc

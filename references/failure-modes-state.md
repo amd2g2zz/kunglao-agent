@@ -1,5 +1,5 @@
 ---
-name: kong-agent-failure-modes-state
+name: kunglao-agent-failure-modes-state
 description: State (F14-F18): plan-files / blockers / drift (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配) and the dispatcher needs the matching F-row + enforcement script.
 metadata:
   type: reference
