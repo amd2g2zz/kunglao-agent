@@ -153,9 +153,11 @@ Manual fallback (script unavailable): scan `claim-register.yaml` for OPEN/PARTIA
 
 The shape is fixed: `[T<N> tools=<comma-separated>] claim <C-NN> <task>`, parsed by `hooks/worker_budget.py` (enforces ≤3 workers, per-claim cap, constraints, time, tier gate). T1 = cheap (grep/strings/DIE/decompile), T2 = medium (emulation), T3 = expensive (VM/Frida). The worker fills `runs/worker-status-<id>.md` and, when done, `facts/F<NNN>.md`. After a worker returns: read both files, classify, update `claim-register.yaml`, re-run `priority.py`, dispatch the new top. Example: `[T1 tools=grep,xxd] claim C-007 grep chemistry strings in main.main`.
 
-**Plan-to-execute**: write `runs/plan-C<NN>.md` BEFORE dispatching claim C-NN — the worker_budget plan gate REJECTS any dispatch without a plan on disk (or with an empty-shell plan carrying no content) or a plan path in the dispatch prompt (the plan phase exposes inferences before execution). The dispatch prompt must also carry `facts-snapshot:` (e.g. `facts-snapshot: 9 facts at <ts>`) or the dispatch is REJECTED; rank-#1 deviation requires `reasoning:` in the prompt (check_priority audit REJECTS without).
+**Plan-to-execute**: write `runs/plan-C<NN>.md` BEFORE dispatching claim C-NN — the worker_budget plan gate REJECTS any dispatch without a plan on disk (or with an empty-shell plan carrying no content) or a plan path in the dispatch prompt (the plan phase exposes inferences before execution). The plan declares `agent_type: <agent executing this plan>` (route_capability recommendation). The dispatch prompt must also carry `facts-snapshot:` (e.g. `facts-snapshot: 9 facts at <ts>`) or the dispatch is REJECTED; rank-#1 deviation requires `reasoning:` in the prompt (check_priority audit REJECTS without).
 
 **Tool-first**: before dispatching a claim whose task matches a registered `tools/_INDEX.yaml` category/capability keyword (e.g. crypto decode -> `crypto-tool`), the dispatch prompt must carry `tool-catalog: <tool-name>` (or an explicit `tool-catalog: none (reasoning: ...)` opt-out) — the worker_budget toolfirst gate REJECTS a matching dispatch without it, closing the gap where a passing plan gate still let a worker hand-roll a script instead of trying the registered CLI.
+
+**Specialist-first (mechanical)**: before dispatching, run `python <SKILL_DIR>/scripts/route_capability.py --features-file <probe.json> --claim <C-NN> --workspace <WORKSPACE> --json` and inject the route output into the dispatch prompt — `agent_type: <recommended specialist>` plus the recommended tool chain. The recommendation is deterministic: claim task domain x sample features against the mechanical trigger table (the `triggers:` frontmatter of each `agents/*.md`, pipeline-ordered). Dispatch the recommended specialist (`go-symbols` -> `ghidra-light` -> `pefile-signature`/`floss-filter` -> `verdict-scorer`); if you deviate (e.g. `kunglao-worker` for a specialist-type claim), the prompt MUST carry `agent-reasoning: <why>` — the worker_budget agenttype gate REJECTS a mismatch without it (deviation recorded, not silent). No specialist fits -> `kunglao-worker` silently allowed. Role agents (kunglao-redteam / kunglao-init-worker) are protocol-position dispatches and skip the gate.
 
 **Isolation-first**: never enable agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never set; no teammates spawned — teammates are separate Claude instances sharing a task list and mailbox, which breaks subagent isolation). Workers are isolated subagents: they report only to the orchestrator and never message each other. SendMessage orchestrator↔worker pings remain the sanctioned channel: `[ping HH:MM] step? stuck? eta?` and worker replies — not a team feature. Delivery = TaskStop: TaskStop a delivered worker (`status: done`/`blocked` + artifacts verified) before any further dispatch/verify action. Checklist → `references/operational-mechanics.md` "Delivery = TaskStop".
 
@@ -166,7 +168,7 @@ The shape is fixed: `[T<N> tools=<comma-separated>] claim <C-NN> <task>`, parsed
 ### The 5 behaviors
 
 1. **Self-recovery on tool failure** — L1 same-MCP-other-mode / L2 read skill setup.sh / L3 dispatch env-fix worker; escalate only after L1-L3 fail.
-2. **Specialist agents first** — ghidra-light, floss-filter, pefile-signature, go-symbols, verdict-scorer; general-purpose only when no specialist fits.
+2. **Specialist agents first** — ghidra-light, floss-filter, pefile-signature, go-symbols, verdict-scorer; general-purpose only when no specialist fits. Mechanical: the worker_budget agenttype gate compares the dispatched agent against `route_capability.py`'s recommendation (trigger table in agents/*.md frontmatter) and REJECTS a deviation without `agent-reasoning:` in the prompt.
 3. **Cost is informational, never a stop reason** — cost warnings are noise; write `cost_override=true` to `analysis_state.txt` on request.
 4. **Poll every worker, don't wait** — `cat worker-status-*.md` for ALL workers each turn; a stuck worker is your signal to intervene.
 5. **The false-completion trap** — committing / updating `_INDEX.md` / writing progress.txt RECORDS state, doesn't CHANGE it. Open-claim count is the truth.
@@ -264,7 +266,7 @@ Read `references/failure-modes.md` (index) for all 18 F-rows and their enforceme
 | Pings only the last-dispatched worker (F3) | Enumerate ALL registered workers each tick | heartbeat_tick.py |
 | Doesn't re-plan after worker return (F4) | Re-read worker output + re-run `priority.py` | priority audit |
 | Dead-worker / zombie wait (F5) | Cross-check active_workers + TaskList | `--reconcile` |
-| General-purpose instead of stage agent (F6) | Use the stage-specific agent for the claim | worker_budget pre_check |
+| General-purpose instead of stage agent (F6) | Use the stage-specific agent for the claim | worker_budget agenttype gate |
 | Inference written as fact | Plan before dispatch | plan-to-execute gate |
 | `expected` self-computed by maker | F3 anchor source gate | kunglao_verify lint |
 | Plan stale vs reality | Drift reality check | plan_drift_detector.py |

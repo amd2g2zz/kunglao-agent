@@ -62,6 +62,18 @@ try:
 except Exception:  # pragma: no cover - hook stays usable if priority.py is moved
     _PRIORITY_AVAILABLE = False
 
+# ---------- issue #310: specialist trigger table (imports route_capability) ----------
+try:
+    from route_capability import (
+        load_specialist_table as _load_specialist_table,
+        recommend_agent_type as _recommend_agent_type,
+    )
+    _AGENTTYPE_AVAILABLE = True
+except Exception:  # pragma: no cover - hook stays usable if the router is moved
+    _AGENTTYPE_AVAILABLE = False
+
+GENERIC_WORK_AGENT = 'kunglao-worker'
+
 
 def _load_yaml(path):
     if not path or not Path(path).exists():
@@ -925,6 +937,124 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
     return (True, 'no tool-catalog keyword match')
 
 
+# ---------- issue #310: agenttype gate (specialist-first as a MECHANICAL check) ----------
+# Behavior #2 "specialist-first" was an orchestrator soft constraint: a
+# kunglao-worker could silently take a ghidra-type claim (route_capability has
+# a specialist recommendation for it) and complete it with the full tool rack
+# — no failure signal, the specialist's dedicated prompt/strategy/evidence
+# format diluted. Same anti-spoof shape as devreason (v1.9.24): dispatch agent
+# type != route recommendation -> REJECT unless the prompt records
+# `agent-reasoning:`; deviation-with-reasoning passes and is logged. No
+# specialist fits -> silent (kunglao-worker allowed). Role agents
+# (kunglao-redteam / kunglao-init-worker) are dispatched by protocol position,
+# not claim routing -> silent. FAIL_OPEN whenever the router/register/table is
+# unavailable — a broken gate must not block dispatch.
+
+_FEATURE_PROBE_RELS = ('runs/feature-probe.json', 'evidence/feature-probe.json')
+_DIE_LANGUAGE_MARKERS = ('go', 'rust', 'c++', '.net', 'c#', 'delphi')
+
+
+def _scan_die_language_values(data: dict) -> str | None:
+    """DIE JSON shape detects[].values[].name — first known language token."""
+    detects = data.get('detects')
+    if not isinstance(detects, list):
+        return None
+    for det in detects:
+        if not isinstance(det, dict):
+            continue
+        for v in det.get('values') or []:
+            if not isinstance(v, dict):
+                continue
+            name = str(v.get('name') or '').lower()
+            for marker in _DIE_LANGUAGE_MARKERS:
+                if marker in name:
+                    return marker
+    return None
+
+
+def _load_workspace_features(ws) -> dict:
+    """#310: sample features for the router — a captured feature_probe JSON
+    (runs/ or evidence/feature-probe.json) or the language field of
+    evidence/die.json. {} when absent/unreadable (routing falls back to claim
+    intent alone; never raises)."""
+    if not ws:
+        return {}
+    ws = Path(ws)
+    for rel in _FEATURE_PROBE_RELS:
+        p = ws / rel
+        if p.is_file():
+            try:
+                data = json.loads(p.read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict):
+                return data
+    die = ws / 'evidence' / 'die.json'
+    if not die.is_file():
+        return {}
+    try:
+        data = json.loads(die.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    lang = data.get('language')
+    if not lang:
+        detect = data.get('detect')
+        if isinstance(detect, dict):
+            lang = detect.get('language')
+    if not lang:
+        lang = _scan_die_language_values(data)
+    return {'language': lang} if lang else {}
+
+
+def check_agent_type(paths: dict, desc: str, prompt: str,
+                     agent_name: str) -> tuple[bool, str]:
+    """Issue #310: dispatch agent type vs route_capability recommendation.
+
+    Returns (ok, reason). ok=False means REJECT the dispatch — the claim's
+    task domain (statement) x sample features recommend a specialist agent
+    that the dispatched agent is not, and the prompt records no
+    `agent-reasoning:` deviation.
+    """
+    _, _, cid = parse_dispatch(desc)
+    if not cid or not agent_name:
+        return (True, 'no claim id or no agent name — agenttype skipped')
+    if not _AGENTTYPE_AVAILABLE:
+        return (True, 'route_capability unavailable — agenttype skipped')
+    specialists = _load_specialist_table()
+    if not specialists:
+        return (True, 'no specialist table — agenttype skipped')
+    specialist_names = {s['name'] for s in specialists}
+    if agent_name not in specialist_names and agent_name != GENERIC_WORK_AGENT:
+        return (True, f'{agent_name} is a role agent — claim routing not applied')
+    register = paths.get('register')
+    if not register:
+        return (True, 'no register path — agenttype skipped')
+    claim = read_claim(Path(register), cid)
+    if not claim or not claim.get('statement'):
+        return (True, f'claim {cid} not in register — agenttype skipped')
+    features = _load_workspace_features(paths.get('workspace'))
+    rec, _rationale = _recommend_agent_type(
+        features, claim.get('statement', ''), specialists)
+    if rec is None:
+        return (True, 'no specialist fits — kunglao-worker allowed')
+    if agent_name == rec:
+        return (True, f'agent_type matches recommended specialist {rec}')
+    if 'agent-reasoning:' in (prompt or '').lower():
+        print(f'AGENTTYPE (deviation recorded): {agent_name} dispatched for '
+              f'claim {cid}; route_capability recommends {rec} '
+              f'(agent-reasoning present)', file=sys.stderr)
+        return (True, f'deviation from {rec} recorded via agent-reasoning')
+    return (False, (
+        f'specialist-first violation (#310): route_capability recommends '
+        f'{rec} for claim {cid} but the dispatch sends {agent_name}. Add '
+        f'`agent-reasoning: <why {agent_name} instead of {rec}>` to the '
+        f'dispatch prompt, or dispatch {rec} — the deviation must be '
+        f'recorded, not silently mixed.'
+    ))
+
+
 # ---------- issue #270: REJECT guidance via hookSpecificOutput.additionalContext ----------
 # #235 added corrective guidance to env_check_gate only; worker_budget's 12
 # pre_check gates (+ snapshot + devreason) REJECTed bare — `print REJECT + exit
@@ -1064,6 +1194,21 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             're-dispatch.'
         ),
     },
+    'agenttype': {
+        'additionalContext': (
+            'specialist-first gate (#310): route_capability recommends a '
+            'specialist agent for this claim (claim task domain x sample '
+            'features vs the mechanical trigger table in agents/*.md '
+            'frontmatter) but the dispatch sends a different work agent. Fix: '
+            'run python <skill>/scripts/route_capability.py --features-file '
+            '<probe.json> --claim <C-NN> --workspace <ws> --json, dispatch the '
+            'recommended agent_type (ghidra-light / go-symbols / floss-filter '
+            '/ pefile-signature / verdict-scorer), or add '
+            '`agent-reasoning: <why this agent instead of the recommended '
+            'specialist>` to the dispatch prompt — the deviation must be '
+            'recorded, not silently mixed — then re-dispatch.'
+        ),
+    },
     'snapshot': {
         'additionalContext': (
             'anti state-loss marker missing (§1c v1.9.24). Fix: count facts/ '
@@ -1177,6 +1322,7 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
 def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
     prompt = payload.get('tool_input', {}).get('prompt', '')
+    agent_name = payload.get('tool_input', {}).get('name') or ''
     tier, tools, cid = parse_dispatch(desc)
     checks = [
         ('workers', check_workers_lt_3(paths)),
@@ -1209,6 +1355,11 @@ def pre_check(payload: dict, paths: dict) -> int:
         # where a passing plan gate still let a worker hand-roll a script
         # instead of trying crypto-tool.py for a crypto-decode task.
         ('toolfirst', check_tool_first(paths, desc, prompt)),
+        # v1.9.33 (#310): agenttype gate — specialist-first as a mechanical
+        # check. route_capability recommends the specialist for the claim
+        # (task domain x sample features); a deviating dispatch REJECTS
+        # without `agent-reasoning:` (same anti-spoof shape as devreason).
+        ('agenttype', check_agent_type(paths, desc, prompt, agent_name)),
     ]
     for name, (ok, msg) in checks:
         if not ok:
@@ -1238,7 +1389,7 @@ def pre_check(payload: dict, paths: dict) -> int:
         print(f'PRIORITY (deviated w/ reasoning): {pmsg}', file=sys.stderr)
     elif pmsg:
         print(f'PRIORITY: {pmsg}', file=sys.stderr)
-    worker_id = payload.get('tool_input', {}).get('name') or f'w{int(time.time())}'
+    worker_id = agent_name or f'w{int(time.time())}'
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',

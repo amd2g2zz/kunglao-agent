@@ -1,6 +1,25 @@
 ---
 name: ghidra-light
 description: "Stage 4 light static reconnaissance via Ghidra. For local-file samples with detected language Go/Rust/OLLVM/C/C++/.NET. **Two-tier strategy**: (1) try Ghidra MCP bridge if a GUI instance with a real project is online; (2) AUTONOMOUSLY fall back to Ghidra analyzeHeadless (no GUI required) — create a project, import the binary, run a postScript to export function list + imports + xrefs to suspicious APIs, parse the JSON output. Writes evidence/static-ghidra.json. Pure local; uses Bash + Ghidra's headless analyzer at `<GHIDRA_HOME>/support/analyzeHeadless.bat` (env-discovered, never hardcoded)."
+# issue #310 mechanical trigger table — parsed by scripts/route_capability.py
+# (claim task domain x sample features -> recommended agent; worker_budget
+# agenttype gate). pipeline_order = precedence when several specialists fit.
+triggers:
+  pipeline_order: 4
+  intent:
+    must_any:
+      - 'decompile'
+      - 'disassemble'
+      - 'xref'
+      - 'ghidra'
+      - 'static analysis'
+      - 'static recon'
+      - '反编译'
+      - '反汇编'
+    exclude:
+      - '\.net'
+      - 'c#'
+  features: {}
 allowedTools:
   - Read
   - Grep

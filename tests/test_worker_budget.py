@@ -671,7 +671,7 @@ def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
 REJECT_NAMES = [
     'workers', 'cap', 'tools', 'hostchan', 'deadline', 'tier',
     'selfcap', 'heartbeat', 'drift', 'health', 'backtrack', 'plan',
-    'toolfirst', 'snapshot', 'devreason',
+    'toolfirst', 'agenttype', 'snapshot', 'devreason',
 ]
 
 # per-REJECT keyword that proves the guidance is concrete (names the mechanism),
@@ -690,6 +690,7 @@ REJECT_FIX_KEYWORDS = {
     'backtrack': 'backtrack',
     'plan': 'plan-C',
     'toolfirst': 'tool-catalog',
+    'agenttype': 'agent-reasoning',
     'snapshot': 'facts-snapshot',
     'devreason': 'reasoning',
 }
@@ -870,7 +871,20 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     scenarios.append(('devreason', 'reasoning',
                       lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
 
-    assert len(scenarios) == 11
+    # 12 agenttype — #310: claim statement recommends ghidra-light but the
+    # dispatch sends kunglao-worker with no `agent-reasoning:` (specialist-first
+    # as a mechanical gate; role agents and name-less payloads skip it)
+    ws = _healthy_ws(tmp_path / 'agenttype')
+    _write_register(ws / 'claim-register.yaml', [
+        {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 1,
+         'statement': 'decompile and disassemble the main function'}])
+    payload = _budget_payload(desc='[T1 tools=grep] claim C-001 do the task')
+    payload['tool_input']['name'] = 'kunglao-worker'
+    scenarios.append(('agenttype', 'agent-reasoning',
+                      lambda ws=ws: wb.pre_check(payload, _paths_for(ws))))
+
+    assert len(scenarios) == 12
     for name, keyword, run in scenarios:
         _assert_reject_guidance(capsys, run(), name, keyword)
 
