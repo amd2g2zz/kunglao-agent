@@ -52,4 +52,5 @@
 | `disasm_constant_check.py` | static | 反汇编常量 byte-exact 校验 | 校验反汇编断言时 |
 | `measure_blind_coverage.py` | aux | 盲验覆盖率测量 | 评估盲验覆盖时 |
 | `measure_cold_start.py` | aux | 冷启动测量 | 评估冷启动成本时 |
+| `auxiliary/sanitize.py` | aux | 样本内容 prompt 注入 sanitize(零宽/同形字/指令标记) | 样本派生文本喂给 LLM worker 前 |
 | `ghidra/run_ghidra_postscript.py` | ghidra | analyzeHeadless 封装(调 5 件 postScript 工具) | 需要 headless 运行 Ghidra 工具时 |

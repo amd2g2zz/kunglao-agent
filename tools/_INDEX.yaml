@@ -234,3 +234,12 @@ tools:
     cost_tier: probe
     input_output: {input: workspace 状态文件清单(claim-register.yaml/_INDEX/ledger/progress 等), output: docs/baselines/cold-start-tokens.json(逐文件 token 估算)}
     when_not: 非冷启动基线测量时不使用
+
+  # -- aux: 样本内容 prompt 注入 sanitize (issue #307 登记) --
+  - name: sanitize-text
+    category: aux
+    capability: aux:sanitize
+    tier: T1
+    cost_tier: probe
+    input_output: {input: 样本派生文本(--in/标准输入) + --mode zero-width|homoglyph|markers|full + --report-only, output: 净化文本或 JSON(zwx_count/homoglyph_count/marker_count/suspicious/sha256) + --reproduce field=value}
+    when_not: 文本不经 LLM worker 消费时不使用
