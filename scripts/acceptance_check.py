@@ -76,11 +76,15 @@ def _check_digest() -> dict:
         return {"name": "digest_builds", "passed": False, "detail": f"error: {exc}"}
 
 
+TEST_SUITE_TIMEOUT = 1800  # full suite ≈ 5 min locally; CI runners are slower
+
+
 def _check_test_suite() -> dict:
     try:
         r = subprocess.run([sys.executable, "-m", "pytest", "-q", "--tb=no", "-p", "no:cacheprovider",
                             "--ignore=tests/test_acceptance.py"],
-                           cwd=str(ROOT), capture_output=True, text=True, timeout=60)
+                           cwd=str(ROOT), capture_output=True, text=True,
+                           timeout=TEST_SUITE_TIMEOUT)
         last = (r.stdout or "").strip().splitlines()[-1] if r.stdout else ""
         return {"name": "test_suite_green", "passed": r.returncode == 0, "detail": last[:120]}
     except Exception as exc:
