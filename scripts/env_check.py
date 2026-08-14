@@ -47,8 +47,7 @@ VM_PORTS = [9876, 1337]
 _ghidra_home = os.environ.get("GHIDRA_HOME")
 GHIDRA_DEFAULT = Path(_ghidra_home) / "support" / "analyzeHeadless.bat" if _ghidra_home else None
 # Mirror of scripts/wire_up_settings.py registration (PreToolUse Agent/Bash +
-# PostToolUse Agent). agent_watch.py is a monitoring hook that wire_up_settings
-# never registers — requiring it here would FAIL correctly-wired machines.
+# PostToolUse Agent).
 HOOK_FILES = ["worker_budget.py", "dispatch_gate.py", "env_check_gate.py",
               "heartbeat_touch.py", "worker_pulse.py", "state_anchor.py"]
 

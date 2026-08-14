@@ -15,7 +15,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         M5 MONITOR (tick)                           │
-│   heartbeat二分 · loop_state对账 · agent_watch · convergence_health │
+│   heartbeat二分 · loop_state对账 · convergence_health │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │ 每 tick(5min, cron) 或事件驱动
                                 ▼
@@ -54,11 +54,11 @@
 | `kong-select` | 资源选择(独立 CLI: 多路召回+融合排序+组合选择+反馈更新)【修订 2026-08-06 新增】 | 无(新增) | ⏳ |
 | `kong-verify` | 验证(独立 CLI, L1 机械 + L2 redteam 派发) | blind_gate+normalize_trace+content_hash | ⏳ |
 | `kong-record` | 记账(独立 CLI, ledger 幂等) | update_index+reconcile_intents+progress_report | ⏳ |
-| `kong-monitor` | 对账/健康(独立 CLI) | heartbeat_tick+agent_watch+convergence_health | ⏳ |
+| `kong-monitor` | 对账/健康(独立 CLI) | heartbeat_tick+convergence_health | ⏳ |
 | `kong-digest` | digest 机械生成(独立 CLI) | 无(新增) | ⏳ |
 | `kong-init` | 初始化(独立 CLI, 防二次, §6.7) | Phase 0 手动 | ⏳ |
 | `kong-eval` | 评测(独立 CLI, 三臂) | 无(新增) | ⏳ |
-| `loop_state.py` | TEMP mtime → loop-state.json 对账 | agent_watch + 3 账本 | ✅ E2.1/E2.2 |
+| `loop_state.py` | TEMP mtime → loop-state.json 对账 | 3 账本 | ✅ E2.1/E2.2 |
 | `lib_kong.py` | workspace 解析/DISPATCH_RE/激活检查 | 三处复制 | ✅ E2.4 |
 | `heartbeat_touch.py` | activity_ts 观察(语义二分) | 旧 last_tick_ts 污染 | ✅ E2.3 |
 | `worker_budget.py` | M2 机械门(8 项) | 保留 | 保留 |
@@ -83,7 +83,7 @@
 | **M2 ACT** | worker_budget + dispatch_gate(注入) + worker_pulse(通知) | 机械执行门(≤3 worker/tier/VM-only/self-cap/heartbeat/自提升防) |
 | **M3 VERIFY** | blind_gate + normalize_trace + content_hash + **kong-redteam(对抗)** + verify-note 契约 | L1 机械重跑 → **L2 kong-redteam 攻击性对抗验证**(§3.4) |
 | **M4 RECORD** | update_index + reconcile_intents + stale_blocker_prune + progress_report + claim 状态迁移 | ledger 写入(幂等); 状态迁移; summary_of_work 聚合 |
-| **M5 MONITOR** | heartbeat_tick + heartbeat_loop_prompt + hooks_selfcheck + hook_activation + active_intervention + backtrack_gate + agent_watch + convergence_health | tick 原子入口; 心跳/对账/卡死检测/健康 |
+| **M5 MONITOR** | heartbeat_tick + heartbeat_loop_prompt + hooks_selfcheck + hook_activation + active_intervention + backtrack_gate + convergence_health | tick 原子入口; 心跳/对账/卡死检测/健康 |
 
 ## 2.3 删除/保留裁决(基于真实代码核实)
 
@@ -106,7 +106,6 @@
 每 tick(5min, cron 或 worker 完成事件触发):
   1. MONITOR:  heartbeat-check(查 tick_ts, 35min 门)
                loop_state.reconcile(TEMP mtime → loop-state.json)
-               agent_watch(active/stale/gone)
                convergence_health(HEALTHY/STALLED/SPINNING)
   2. DECIDE:   decision = convergence_matrix(open, partial, free_slots, blocked)
                if DISPATCH:
@@ -370,7 +369,7 @@ python kong-monitor <ws>  # 独立 CLI: 对账/健康(可单独调试)
    - 全 done? → 收敛判定 + §6.3 checklist
 2. 输出: 一句话状态 + 下一步建议(LLM 只读这一行)
 ```
-**tick 步骤**: heartbeat-check → loop_state.reconcile → agent_watch → active_intervention(help_request 响应检查)→ backtrack_gate(卡死检测)→ convergence_health。
+**tick 步骤**: heartbeat-check → loop_state.reconcile → active_intervention(help_request 响应检查)→ backtrack_gate(卡死检测)→ convergence_health。
 **心跳语义**: tick_ts(cron 证明)/ activity_ts(观察), 门只查 tick_ts(§3.7)。
 
 ---

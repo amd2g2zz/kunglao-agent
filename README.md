@@ -129,7 +129,7 @@ The tool shelf: reusable analysis logic is absorbed as **registered tools** (mac
 
 Host emulation (T2) is deliberately NOT a shelf tool: qiling-based emulation is provided by the external `/malware-framework` skill (90+ profile-driven stubs, verified on real x86/x64 samples) — kunglao workers invoke it per the analysis principle's emulation layers instead of re-wrapping qiling.
 
-Routing is deterministic: `route_capability.py` maps sample features + claim intent to a recommended tool chain (`tool-search.py` as the zero-token catalog fallback). Workers must check the index before writing new scripts (`toolfirst` gate).
+Tool selection is deterministic: `tools/tool-search.py` queries the machine index (`tools/_INDEX.yaml`) by capability tag and cost budget (zero-token catalog). Workers must check the index before writing new scripts (`toolfirst` gate, enforced by `worker_budget.py`).
 
 Trust gates (the components behind "verified"):
 

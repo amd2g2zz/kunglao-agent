@@ -1,8 +1,7 @@
 # tools/pipelines — 组合 recipe 模板 (issue #278 P4-b)
 
 `recipes/*.yaml` 是 **plan 生成模板 (templates), 不是执行器**。本 PR 只交付
-模板 + 能力路由器 (`scripts/route_capability.py`); recipe 的实例化
-(instantiation) 是未来接线工作, 不在本 PR 范围内。
+模板; recipe 的实例化 (instantiation) 是未来接线工作, 不在本 PR 范围内。
 
 ## Recipe schema (schema: plan-recipe/1)
 
@@ -47,11 +46,9 @@ reuse_check: 同 sha256 样本已有解包产物时直接复用, 不重复解包
 实例化 = 由 recipe 生成 `runs/plan-C<NN>.md` (claim 计划文件, 遵循现有
 runs/plan-C<NN>.md 填充模板角色): 每步展开为计划条目 (工具 + 输入 + 输出),
 `fallback` 展开为回退分支, `verify` 展开为验证 gate, `reuse_check` 展开为
-复用检查。接线由后续 issue 完成; 当前消费方只有
-`scripts/route_capability.py --list-recipes` (目录化读取, 只读)。
+复用检查。接线由后续 issue 完成; 当前无生产消费方 (目录化读取仅由
+`tests/test_recipes.py` 契约测试覆盖)。
 
 ## 约束
 
 - 模板是纯数据: 无执行器代码, 不注册进 `tools/_INDEX.yaml`, 不创建新状态格式。
-- `scripts/route_capability.py` 的规则→能力映射与上表路由信号一致
-  (见其 docstring 的 feature→capability 规则表)。

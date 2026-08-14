@@ -5,8 +5,8 @@ Every `.py` in this directory is classified by role and by where it is
 referenced. The reference map below is the definitive answer to "who uses
 this script?" — used to keep documentation, hooks, CI, and tests in sync.
 
-- **Total scripts**: 73 (70 at #230 close; +1 `references_recall.py` by #229,
-  +1 `shell_defaults.py` by #276, +1 `template_gen.py` by #278).
+- **Total scripts**: 72 (74 cataloged at #278 close; −2 by #318 dead-code
+  removal — see issue #318 for the deletion list).
 - **Orphans**: 0 — every script has at least one live reference
   (tests/ count as references; a script referenced only by tests is
   categorized `TEST`, not orphan).
@@ -119,10 +119,3 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `release_check_selfcheck.py` | release-check self-verification | CI |
 | `check_global_rule_subset.py` | global-rule subset compliance check | CI, tests |
 | `structural_check.py` | repo structure + broken-link + index drift check | CI, tests |
-
-## Test support (referenced by tests/ only)
-
-| Script | Role | Referenced from |
-| --- | --- | --- |
-| `fact_graph.py` | fact graph utilities | tests |
-| `test_v1_8_enforcement_gates.py` | smoke launcher for the v1.8.x enforcement suite (suite itself in tests/) | CLI (SKILL.md smoke command) |
