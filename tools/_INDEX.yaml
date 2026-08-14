@@ -85,6 +85,55 @@ tools:
     input_output: {input: fact/report 代码清单 + PE 二进制(VA 锚点断言), output: byte-exact 断言校验 JSON(ok/mismatches/errors/skipped)}
     when_not: 无需 VA 锚点常量校验或没有二进制样本时不用
 
+  # -- static: 6 个零依赖静态 CLI (issue #278 PR-1b 吸收) --
+  - name: extract-syscalls
+    category: static
+    capability: static:syscall-extract
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 样本字节(--mode bin)或反汇编文本(--mode text), output: syscall stub 清单(location/number/name) + --reproduce field=value}
+    when_not: 非 x64 syscall stub 扫描任务时不用
+
+  - name: stack-strings
+    category: static
+    capability: static:stack-strings
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 样本字节 + --start/--end/--min-len/--dword, output: "[rsp+disp] 栈构造字符串清单(slot/value/writes)"}
+    when_not: 无 mov byte/dword [rsp+disp] 栈写入模式时不用
+
+  - name: binary-sweep
+    category: static
+    capability: static:byte-sweep
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 样本字节 + --kind url|ipv4|domain|all 或 --pattern 自定义字节正则, output: 字节级模式命中清单(kind/offset/value)}
+    when_not: 需要 PE 节表感知的结构化字符串提取时不用, 用 die/floss 流程
+
+  - name: strings-classify
+    category: static
+    capability: static:strings-classify
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 样本字节 + --min-len/--encoding ascii|utf16le|both, output: 字符串分类清单(entropy/printable_ratio/base64/hex) + inventory 统计}
+    when_not: 已用 floss 全量提取且无需熵/可解码分类时不用
+
+  - name: go-buildinfo-carve
+    category: static
+    capability: static:buildinfo-carve
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 样本字节 + --window/--zero-run, output: Go buildinfo blob 清单(offset/go_version/path/mod_count/dep_count/size)}
+    when_not: 非 Go 样本时不用(先 die 确认语言)
+
+  - name: call-site-args
+    category: static
+    capability: static:callsite-args
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 反汇编文本 + --window/--abi x64|x86, output: 调用点参数清单(address/target/regs/stack/pushed)}
+    when_not: 需要寄存器级数据流精确恢复时不用, 用 ghidra-recon 或模拟执行
+
   # -- pipeline: 证据索引构建 (issue #284 登记) --
   - name: build-evidence-index
     category: pipeline
