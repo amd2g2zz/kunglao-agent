@@ -40,15 +40,21 @@ def _run_init(ws: Path, extra: list[str] | None = None,
     """运行 kunglao-init (hermetic):
     --profile-root 默认指向 tmp(绝不触碰生产 profile);
     flag 默认 "0"(#276 默认禁用态; 外层会话可能被 2026-08-12 flag=1 污染),
-    传 flag=None 表示子进程 env 不携带该变量."""
+    传 flag=None 表示子进程 env 不携带该变量。
+    --skip-toolchain: #304 修正后 toolchain 门禁在 scaffold 前置 —
+    本文件的测试聚焦防重/幂等/漂移行为, 门禁语义由 test_init_toolchain_gate.py 专测."""
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
+    if "--skip-toolchain" not in argv:
+        argv.append("--skip-toolchain")
     if profile_root is None:
         profile_root = ws.parent / "profile-root"
     argv += ["--profile-root", str(profile_root)]
     env = {k: v for k, v in os.environ.items() if k != FLAG_NAME}
+    env["PYTHONIOENCODING"] = "utf-8"  # kunglao-init emits UTF-8 (toolchain import reconfigures stdout)
     if flag is not None:
         env[FLAG_NAME] = flag
-    return subprocess.run(argv, capture_output=True, text=True, timeout=120, env=env)
+    return subprocess.run(argv, capture_output=True, text=True, timeout=120, env=env,
+                           errors="replace")
 
 
 def test_kunglao_init_script_exists() -> None:

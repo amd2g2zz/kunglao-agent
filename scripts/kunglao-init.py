@@ -3,7 +3,29 @@
 """kunglao-init — workspace 初始化 + 防二次初始化 (phase 3.5, E-init.1-4).
 
 独立 CLI(非 kunglao.py 子命令, module-design L448):
-    python kunglao-init.py <workspace> [--force] [--hooks-json <path>] [--profile-root <path>]
+    python kunglao-init.py <workspace> [--type windows|linux|android] [--force]
+        [--hooks-json <path>] [--profile-root <path>]
+
+#304 type-aware extension:
+    --type explicit > magic sniff (MZ/ELF/PK+classes.dex on bins/ first file)
+    > interactive input() confirm with sniff default
+    类型落盘 analysis_state.txt project_type=<type>; 模板按型选择
+    Init-completeness = [initialized] marker AND project_type declared
+
+#304 修正(comment 304-5289955958): 工具链验证 = 验证优先 + 提醒人类 + 拒绝 + 清理
+    流程: Phase 0 flag 守卫 → 续接检查 → 无样本友好提示(exit 5) → 类型判定 →
+    toolchain.check 前置(HARD 项) → FAIL: 逐项安装命令 + 拒绝(exit 4) + 清理
+    清理只移除本次运行自己创建的条目(cleanup_scaffold, created 清单) —
+    非本次创建的一律不删(真实 facts/ 内容必须存活, F2)。
+    PASS 才 scaffold + [initialized]。
+    --skip-toolchain 为测试/运维逃生口; 生产路径不跳过。
+
+#304 修正 2 (review F1): [initialized] 标记存在但缺 project_type 的 pre-#304
+    workspace → 不再直接 resume exit 0(env_check_gate 会永久拒绝, 无机械修复
+    路径), 而是写 project_type(显式 > 状态 > 嗅探 > 确认)后再 exit 0。
+
+Init-completeness 谓词(F6): scripts/init_state.py 单一来源, 本文件引用。
+
 
 Phase 0 (#276): 环境守卫 — CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS 默认 0 化。
     - 进程 env 该 flag 为 truthy(1/true/yes/on) → HARD 拒绝 scaffold(exit 3),
@@ -42,6 +64,7 @@ import os
 import re
 import shutil
 import sys
+from collections.abc import Collection
 from pathlib import Path
 
 # #276: 可复用 CLI 管理 shell 环境默认行(禁止内联)。按仓库惯例先注入 scripts/ 到
@@ -50,6 +73,9 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 import shell_defaults  # noqa: E402
+import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
+# F6 (#304 review): init-completeness predicate = single source in init_state.py
+from init_state import VALID_TYPES, is_init_complete, read_project_type  # noqa: E402
 
 MARKER = "[initialized]"
 SEED_MIN = 3
@@ -58,6 +84,14 @@ HASH_RE = re.compile(r"state_hash=([0-9a-f]{64})")
 
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"  # #276: 默认 0 化
 AGENT_TEAMS_STATE_LINE = "agent_teams_flag=0 (default disabled)"
+
+# #304 amendment exit codes (callers branch on codes, not stderr text):
+RC_OK = 0
+RC_ERROR = 1        # generic (argparse / fatal verify)
+RC_FATAL_VERIFY = 2  # post-init idempotency verify failed
+RC_FLAG_REJECT = 3   # Phase 0 (#276) agent-teams flag truthy
+RC_TOOLCHAIN_REFUSE = 4  # toolchain HARD FAIL — human must install, no scaffold
+RC_NO_SAMPLE = 5     # bins/ empty — friendly prompt (请将样本放入 bins/)
 
 SCAFFOLD_DIRS = ("facts", "blockers", "runs")
 SCAFFOLD_FILES = {
@@ -90,8 +124,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="workspace 初始化 + 防二次初始化(独立 CLI, 非 kunglao.py 子命令)",
     )
     parser.add_argument("workspace", help="目标 workspace 路径(含 bins/ claim-register.yaml 等)")
+    parser.add_argument("--type", choices=VALID_TYPES, default=None,
+                        help="project type: windows|linux|android (#304)")
     parser.add_argument("--force", action="store_true",
                         help="重建: 先备份 claim-register 再重新初始化")
+    parser.add_argument("--skip-toolchain", action="store_true",
+                        help="跳过 toolchain 前置门禁(#304 修正的测试/运维逃生口; "
+                             "生产路径不跳过)")
     parser.add_argument("--hooks-json", metavar="PATH", default=None,
                         help="hooks 部署目标 settings.json 副本; 默认 <workspace>/.claude/settings.json 若存在, 绝不写 HOME")
     parser.add_argument("--profile-root", metavar="PATH", default=None,
@@ -244,11 +283,107 @@ def detect_sample(ws: Path) -> tuple[str, str]:
     return sample.name, sha
 
 
+def sniff_type(ws: Path) -> str | None:
+    """Magic sniff: read first bins/ file headers → windows|linux|android or None."""
+    bins = ws / "bins"
+    if not bins.is_dir():
+        return None
+    files = sorted(p for p in bins.iterdir() if p.is_file())
+    if not files:
+        return None
+    sample = files[0]
+    try:
+        header = sample.read_bytes()[:512]
+    except OSError:
+        return None
+    # PK zip (APK) + classes.dex marker
+    if header[:4] == b"PK\x03\x04" and b"classes.dex" in header:
+        return "android"
+    # ELF
+    if header[:4] == b"\x7fELF":
+        return "linux"
+    # PE (MZ)
+    if header[:2] == b"MZ":
+        return "windows"
+    return None
+
+
+def prompt_type(default: str | None = None) -> str:
+    """Interactive type prompt (only human step in init-worker flow)."""
+    hint = f" [{default}]" if default else ""
+    while True:
+        try:
+            raw = input(f"Project type{hint} (windows|linux|android): ").strip().lower()
+        except EOFError:
+            if default:
+                return default
+            print("kunglao-init: ERROR cannot determine type (non-interactive, no --type, no sniff)",
+                  file=sys.stderr)
+            sys.exit(1)
+        if raw and raw in VALID_TYPES:
+            return raw
+        if not raw and default and default in VALID_TYPES:
+            return default
+        print(f"Invalid type: {raw!r}. Choose: windows, linux, android")
+
+
+def resolve_type(ws: Path, explicit: str | None) -> str:
+    """Type resolution: explicit > sniff > interactive confirm.
+    Returns the resolved type string.
+    """
+    if explicit:
+        return explicit
+    sniffed = sniff_type(ws)
+    if sniffed:
+        # Sniff succeeded — confirm with user
+        try:
+            raw = input(f"Detected type: {sniffed}. Confirm? [Y/n]: ").strip().lower()
+            if raw in ("n", "no"):
+                return prompt_type(default=sniffed)
+        except EOFError:
+            pass  # Non-interactive: accept sniff
+        return sniffed
+    # No sniff result — interactive prompt
+    return prompt_type()
+
+
+def write_project_type(ws: Path, project_type: str) -> bool:
+    """Write project_type=<type> to analysis_state.txt. Returns True if written."""
+    p = ws / "analysis_state.txt"
+    text = p.read_text(encoding="utf-8") if p.exists() else ""
+    if "project_type=" in text:
+        # Already has project_type — update it
+        lines = text.splitlines()
+        new_lines = []
+        for line in lines:
+            if line.strip().startswith("project_type="):
+                new_lines.append(f"project_type={project_type}")
+            else:
+                new_lines.append(line)
+        atomic_write(p, "\n".join(new_lines))
+        return True
+    # Append
+    if text and not text.endswith("\n"):
+        text += "\n"
+    atomic_write(p, text + f"project_type={project_type}\n")
+    return True
+
+
+def template_for_type(project_type: str) -> Path:
+    """Select CLAUDE.md template by project type."""
+    tmpl = SKILL_DIR / "templates" / f"CLAUDE.md.{project_type}.tmpl"
+    if tmpl.exists():
+        return tmpl
+    # Fallback to the generic template
+    return CLAUDEMD_TMPL
+
+
 CLAUDEMD_TMPL = Path(__file__).resolve().parent.parent / "templates" / "CLAUDE.md.tmpl"
 SKILL_DIR = Path(__file__).resolve().parent.parent
 
 
-def write_claudemd(ws: Path, sample_name: str, sample_sha: str) -> Path | None:
+def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
+                  project_type: str | None = None) -> Path | None:
     """Write CLAUDE.md from template with project info filled in.
 
     Idempotent: if CLAUDE.md exists and is non-empty, skip (do not clobber).
@@ -257,9 +392,14 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str) -> Path | None:
     target = ws / "CLAUDE.md"
     if target.exists() and target.read_text(encoding="utf-8").strip():
         return None
-    if not CLAUDEMD_TMPL.exists():
+    # Select template by type (#304)
+    if project_type:
+        tmpl_path = template_for_type(project_type)
+    else:
+        tmpl_path = CLAUDEMD_TMPL
+    if not tmpl_path.exists():
         return None
-    tmpl = CLAUDEMD_TMPL.read_text(encoding="utf-8")
+    tmpl = tmpl_path.read_text(encoding="utf-8")
 
     # Detect venv path
     venv_candidate = ws / ".venv"
@@ -384,14 +524,28 @@ def resume(ws: Path, text: str) -> int:
     return 0
 
 
-def initialize(ws: Path, hooks_json: Path | None) -> int:
+def initialize(ws: Path, hooks_json: Path | None,
+                project_type: str | None = None) -> int:
     """Phase 2 全新初始化 + Phase 3 幂等校验."""
     scaffold(ws)
     if ensure_agent_teams_state(ws):
         print(f"kunglao-init: analysis_state {AGENT_TEAMS_STATE_LINE}")
     sample, sample_sha = detect_sample(ws)
-    # Write CLAUDE.md from template (idempotent: skip if exists)
-    write_claudemd(ws, sample, sample_sha)
+
+    # #304: Resolve and write project type
+    if project_type is None:
+        # Try to read existing type from analysis_state.txt
+        existing_type = read_project_type(ws)
+        if existing_type:
+            project_type = existing_type
+        else:
+            # No type yet — resolve
+            project_type = resolve_type(ws, None)
+    write_project_type(ws, project_type)
+    print(f"kunglao-init: project_type={project_type}")
+
+    # Write CLAUDE.md from type-specific template (idempotent: skip if exists)
+    write_claudemd(ws, sample, sample_sha, project_type=project_type)
     draft = claim_register_text(sample, sample_sha, state_hash="")
     digest = compute_state_hash(ws, register_text=draft)
     reg = ws / "claim-register.yaml"
@@ -414,8 +568,17 @@ def initialize(ws: Path, hooks_json: Path | None) -> int:
 
 
 def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
-        profile_root: Path | None = None) -> int:
-    """状态机入口: Phase 0 环境守卫 → 防重检查 → (续接 | --force 备份+重建 | 全新初始化)."""
+        profile_root: Path | None = None,
+        project_type: str | None = None,
+        skip_toolchain: bool = False) -> int:
+    """状态机入口 (#304 修正流程, comment 304-5289955958):
+
+    Phase 0 环境守卫 → 防重检查(续接; 缺 project_type 则升级补写后 exit 0,
+    F1) → 无样本友好提示 → 类型判定(显式 > 嗅探 > 确认) →
+    **toolchain.check 前置**(HARD FAIL → 逐项安装指引 + 拒绝 + 清理本次运行
+    创建的产物; 既有内容一律保留, F2) →
+    PASS 才 scaffold + 标记 [initialized] + project_type。
+    """
     guard_rc, guard_log = guard_agent_teams(profile_root)
     if guard_rc != 0:
         for line in guard_log:  # HARD REJECT 指引走 stderr
@@ -428,17 +591,131 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
     if reg.exists() and not force:
         text = reg.read_text(encoding="utf-8")
         if MARKER in text:
-            return resume(ws, text)
+            if is_init_complete(ws):
+                return resume(ws, text)
+            # F1 (#304 review): marker present but project_type missing
+            # (pre-#304 workspace). resume() alone would exit 0 forever and
+            # env_check_gate would keep rejecting — no mechanical repair path.
+            # Write the missing type (explicit > state > sniff > confirm)
+            # and exit 0; register/marker/seeds untouched.
+            if project_type is None:
+                existing = read_project_type(ws)
+                if existing and existing in VALID_TYPES:
+                    project_type = existing
+                else:
+                    project_type = resolve_type(ws, None)
+            write_project_type(ws, project_type)
+            print(
+                f"kunglao-init: upgraded {ws} — wrote project_type={project_type} "
+                f"(pre-#304 workspace: [initialized] without project_type)"
+            )
+            return 0
     if force and reg.exists():
         backup = backup_register(reg)
         print(f"kunglao-init: --force backup -> {backup}")
-    return initialize(ws, hooks_json)
+
+    # #304: no-sample cold start -> friendly prompt, refuse (exit 5)
+    sample, sample_sha = detect_sample(ws)
+    if sample == "unknown" or not sample_sha:
+        print(
+            "kunglao-init: 未发现分析对象 — 请将样本放入 bins/ 或指定路径, "
+            "然后重新运行 kunglao-init.py <ws> --type <windows|linux|android>.",
+            file=sys.stderr,
+        )
+        return RC_NO_SAMPLE
+
+    # Type resolution BEFORE any file is written (explicit > state > sniff > confirm)
+    if project_type is None:
+        existing = read_project_type(ws)
+        if existing and existing in VALID_TYPES:
+            project_type = existing
+        else:
+            project_type = resolve_type(ws, None)
+
+    # #304: toolchain.check BEFORE scaffold — HARD FAIL => refuse + cleanup.
+    # Verify-first: a refused init leaves no half-initialized state behind.
+    if not skip_toolchain:
+        report = toolchain.check(ws, project_type)
+        if report.overall_status == toolchain.Status.FAIL:
+            return refuse_toolchain(ws, report)
+
+    return initialize(ws, hooks_json, project_type=project_type)
+
+
+def cleanup_scaffold(ws: Path, created: "Collection[Path] | None" = None
+                     ) -> tuple[list[str], list[str]]:
+    """#304 修正 (F2): 只删除本次运行自己创建的 scaffold 条目(created 清单)。
+
+    非本次创建的一律不删 — 已有文件 / 非空目录拒绝删除并列入 preserved
+    (真实 facts/ 内容必须存活; 与成功 --force 保留 facts 的行为对称)。
+    bins/、CLAUDE.md、claim-register.yaml、.claude/、.venv/ 不在候选集内。
+
+    Returns (removed, preserved) 路径名列表。
+    """
+    created_set = {Path(p).resolve() for p in (created or ())}
+    removed: list[str] = []
+    preserved: list[str] = []
+    for name in SCAFFOLD_FILES:
+        p = (ws / name).resolve()
+        if p not in created_set:
+            if p.exists():
+                preserved.append(name)  # 已有文件拒绝删除
+            continue
+        try:
+            p.unlink()
+            removed.append(name)
+        except OSError:
+            preserved.append(name)
+    for name in SCAFFOLD_DIRS:
+        d = (ws / name).resolve()
+        if d not in created_set:
+            if d.is_dir() and any(d.iterdir()):
+                preserved.append(name + "/")  # 非空目录拒绝删除
+            continue
+        if d.is_dir():
+            shutil.rmtree(d, ignore_errors=True)
+            removed.append(name + "/")
+    return removed, preserved
+
+
+def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
+    """#304 修正: HARD FAIL → 逐项友好安装命令(人类安装) + 拒绝 + 清理。
+
+    - exit RC_TOOLCHAIN_REFUSE(4), 不写 [initialized] 标记
+    - 逐项打印 [FAIL] name + detail + fix(安装命令)
+    - 清理本次运行创建的 scaffold 产物(若有); 既有内容一律保留并提示(F2)
+    """
+    hard_fails = [
+        i for i in report.items
+        if i.status == toolchain.Status.FAIL and i.tier == toolchain.Tier.HARD
+    ]
+    removed, preserved = cleanup_scaffold(ws)
+    print(
+        f"kunglao-init: REFUSE — toolchain HARD 检查未通过 "
+        f"(type={report.project_type}), 请在安装缺失工具后重新运行 "
+        f"kunglao-init.py {ws} --type {report.project_type}.",
+        file=sys.stderr,
+    )
+    for item in hard_fails:
+        print(f"  [FAIL] {item.name}: {item.detail}", file=sys.stderr)
+        fix = toolchain.FIXES.get(item.name)
+        if fix:
+            print(f"      fix: {fix}", file=sys.stderr)
+    if removed:
+        print(f"kunglao-init: 已移除本次运行创建的产物: {', '.join(removed)}",
+              file=sys.stderr)
+    if preserved:
+        print(f"kunglao-init: 保留既有内容(非本次创建, 不删除): {', '.join(preserved)}",
+              file=sys.stderr)
+    print("kunglao-init: NOT initialized(未写 [initialized] 标记)", file=sys.stderr)
+    return RC_TOOLCHAIN_REFUSE
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     return run(Path(args.workspace), force=args.force, hooks_json=args.hooks_json,
-               profile_root=args.profile_root)
+               profile_root=args.profile_root, project_type=args.type,
+               skip_toolchain=args.skip_toolchain)
 
 
 if __name__ == "__main__":

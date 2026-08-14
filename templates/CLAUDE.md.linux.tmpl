@@ -1,0 +1,91 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Workspace type
+
+Kunglao-agent malware RE workspace -- not a software project. The "code" is state files, facts, and worker runs analyzing a malware sample.
+
+## Sample under analysis
+
+| Field | Value |
+|-------|-------|
+| SHA1 (filename) | `<SAMPLE_SHA1>` |
+| SHA256 | `<SAMPLE_SHA256>` |
+| Type | `<SAMPLE_TYPE>` |
+| Path | `<SAMPLE_PATH>` |
+
+## Skill & orchestrator
+
+Analysis is driven by `/kunglao-agent` (skill at `<SKILL_DIR>`).
+
+**Key scripts** (invoke from workspace root with `.venv` activated):
+```bash
+source .venv/Scripts/activate
+python <SKILL_DIR>/scripts/convergence_check.py .
+python <SKILL_DIR>/scripts/priority.py .
+python <SKILL_DIR>/scripts/convergence_health.py .
+python <SKILL_DIR>/scripts/failure_analysis_gate.py . <C-NN>
+```
+
+**Hook activation** (30-min TTL, renew via `/loop`):
+```bash
+python <SKILL_DIR>/scripts/hook_activation.py . --renew
+```
+
+## State files (read every turn, disk is truth)
+
+| File | Purpose |
+|------|---------|
+| `claim-register.yaml` | All claims + status (OPEN/PARTIALLY-VERIFIED/PROVEN/DEFERRED) |
+| `claim_deps.yaml` | Claim dependency graph |
+| `task_spec.yaml` | Analysis contract (depth, scope, constraints, success criteria) |
+| `analysis_state.txt` | Cognition baseline (venv, sample hash, toolchain, worker list) |
+| `global_plan.txt` | High-level analysis plan |
+| `facts/_INDEX.md` | Fact index with PARTIAL/PROVEN markers |
+| `blockers/` | Active blocker files |
+| `runs/` | Worker status files + `.heartbeat.json` |
+
+**Facts** go in `facts/F<NNN>.md` with byte-anchored, reproducible evidence.
+
+## Five-layer analysis principle
+
+1. **Static-first closed loop** -- Complete the full static analysis before introducing dynamic tools. If static analysis can fully answer the claim, stop there. Never introduce dynamic tools for a claim that static analysis can close.
+2. **Deobfuscation for efficiency** -- Use symbolic execution / emulation to strip obfuscation layers (opaque predicates, indirect jump resolution, constant concretization, decoding layer还原). Feed products back to static analysis. Deobfuscation豁免缺口声明门禁 (it is a static-support action).
+3. **Debug to fill gaps** -- Only use debugging when static analysis (including post-deobfuscation) remains incomplete. Dispatch must carry a "static gap list" explaining what static could not resolve.
+4. **Simulation as fallback** -- When static + debug data still cannot resolve -> unidbg hybrid (frida live args feed simulation, per-function verification). AND gate: frida data sufficient + ida/ghidra decompilation done + still stuck.
+5. **Last resort: environment repair** -- When layers 1-4 all fail: build/repair the environment (version matching, emulator/sandbox setup, library environment completion). Goal = full-flow observability.
+
+## Hard constraints (Linux)
+
+- **Dynamic tools VM-only**: gdbserver, Frida, sample execution must run on VM. Never launch/debug/inject on host.
+- **VM required**: `KUNGLAO_VM_HOST` must be set and VM must be reachable for T2+ analysis.
+- **gdbserver**: primary remote debugger for Linux ELF targets on VM.
+- **eBPF tracing**: requires kernel >= 6.0 (`uname -r`). Not available on older kernels -- this is a WARN gate, not a hard blocker. Other analysis paths proceed normally.
+- **Orchestrator does not analyze**: the orchestrator monitors/dispatches/verifies only. Decompile, strings, grep, emulation, debugging -> workers.
+- **Maker-checker**: worker=maker, orchestrator=checker. Facts must be independently verified before promotion to PROVEN.
+- **No mid-iteration user questions**: decide + record reasoning + continue.
+
+## Environment variables
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `0` (default disabled) | Agent-team dispatch channel. MUST stay `0`/unset -- truthy values (1/true/yes/on) route subagent dispatches through the teammate channel (2026-08-12 incident). `kunglao-init` sets it to `0` in the session and in your PowerShell profile(s); `scripts/shell_defaults.py` manages profile default lines. |
+| `KUNGLAO_VM_HOST` | unset | VM lease host for dynamic analysis (vmr-shell port 9876 / Frida port 1337). Unset = dynamic analysis (T3) blocked; static analysis may proceed. |
+| `GHIDRA_HOME` | unset | Ghidra install root; `support/analyzeHeadless.bat` must exist under it for decompilation. |
+
+## Tool script discipline
+
+**分析所需的任何可复用逻辑必须落为 `<SKILL_DIR>/scripts/` 下的参数化 CLI 脚本**(无硬编码路径、跨工作区可复用),禁止 ad-hoc 命令行内联执行(`python -c` / heredoc);已有 CLI 优先复用(如 `scripts/shell_defaults.py` 管理 shell 环境默认行、`scripts/env_check.py` 检查环境就绪)。单次一次性命令可用 Bash 执行,但任何「下次还可能再用」的逻辑一律先落脚本再调用。
+
+## Required rules (read every session)
+
+Read these rules from `~/.claude/rules/common/` at the start of every session -- they define behavior baselines that apply even when the kunglao-agent skill is not loaded:
+
+- **maker-checker.md** -- maker/checker separation: workers make, the orchestrator checks, no self-stamping.
+- **numeric-fidelity.md** -- counting-basis fidelity: every numeric fact must declare its counting unit; multi-basis numbers must not be collapsed to a single figure.
+- **kunglao-convergence-loop.md** -- orchestrator convergence loop: monitor/dispatch/verify cycle, worker polling, false-completion trap avoidance.
+
+## Python venv
+
+Path: `<VENV_PATH>`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts.
