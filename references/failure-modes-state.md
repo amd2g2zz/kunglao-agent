@@ -48,7 +48,7 @@ during S3 hardening — distinct failure modes where the code itself is wrong.
 | Local state copy drift (TERMINAL 5-value) | F1: claim-status guard had local copy of 5-value list, diverged from canonical | `grep -rn "OPEN\|CLOSED\|DEFERRED" scripts/ --include="*.py" \| grep -v status_defs` |
 | Read-modify-write race | F8: blind_gate read YAML, modified in memory, wrote back — concurrent workers could clobber | `grep -rn "yaml.load\|yaml.safe_load\|yaml.dump" scripts/ --include="*.py"` |
 | Schema-output mismatch | F1/F2: script produced fields not in declared schema; consumers silently ignored extra fields | `grep -rn "json.dumps\|yaml.dump" scripts/ --include="*.py"` |
-| Phantom entry | F8/#123: memory_capture existed in paused_hooks but not ALL_HOOKS — ghost reference | `grep -rn "ALL_HOOKS\|paused\|HARD_PAUSE" scripts/ --include="*.py"` |
+| Phantom entry | F8/#123: memory_capture existed in paused_hooks but not ALL_HOOKS — ghost reference (memory_capture itself was removed with the memory/ subsystem in #355; the incident pattern remains the lesson) | `grep -rn "ALL_HOOKS\|paused\|HARD_PAUSE" scripts/ --include="*.py"` |
 
 ### Checklist for Future Audits
 

@@ -33,7 +33,7 @@ precedent), NOT re-derived and NOT a hooks mirror: the drift signal is
 semantically coupled between this cure layer (warn at ROTATION_WINDOW) and
 the recovery layer (external_kicker kicks at DRIFT_ESCALATE_ROWS); a single
 source guarantees the cure-first window contract cannot fork. See
-openspec/changes/state-anchor-hook/design.md (D3 / R1).
+openspec/archive/state-anchor-hook/design.md (D3 / R1).
 
 Output shape (mirrors worker_pulse emission):
   {"hookSpecificOutput": {"hookEventName": "PostToolUse",

@@ -241,6 +241,10 @@ def _adb_forward_probe(adb: str, port: int, timeout: int = 2) -> tuple[bool, str
         except socket.timeout:
             # Service accepted and held the connection open (no data yet) — present.
             return True, f"listening on device port {port} (via adb forward)"
+        except ConnectionResetError:
+            # Peer sent RST during recv (e.g. stub listeners with backlog-only
+            # sockets) — not a crash: report not reachable, don't kill the CLI.
+            return False, f"connection reset on port {port} — service not reachable"
         if data == b"":
             return False, (
                 f"connection closed by device on port {port} — "

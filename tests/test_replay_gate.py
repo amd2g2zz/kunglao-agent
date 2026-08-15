@@ -3,9 +3,10 @@
 
 - The SKILL.md contract must not promise checks the code does not
   perform (research F1, issue #205).
-- Pinned digests must match files on disk (issue #192: 6/6 manifest
-  digests drifted from eval fixtures, so verify_manifest() failed
-  closed and held-out evaluation could never produce a receipt).
+- Pinned digests must match files on disk (issue #192; #355: the memory
+  corpus manifest pins were removed with the memory/ subsystem —
+  references/_INDEX.yaml pins remain, guarded by structural_check).
+- The dead memory/ subsystem stays removed (#355).
 - structural_check error lines must be grep-parseable (issue #193).
 - No broken links in references/ (issue #194: 3 broken links in
   references/re-library/ made structural_check.py fail on every run).
@@ -38,26 +39,20 @@ def test_converged_row_does_not_reference_removed_tools():
     assert "handoff-check.py" not in _skill_md()
 
 
-def test_candidate_corpus_digests_match_files():
-    """Every sha256 pinned in memory/candidates/corpus/manifest.json must
-    match the file on disk (research: 6/6 mismatched → held-out evaluation
-    INCONCLUSIVE)."""
-    import hashlib
-    import json
+def test_memory_subsystem_fully_removed():
+    """#355 removed the dead memory/ subsystem (zero runtime consumers).
+    Guard against reintroduction: no tree dir, no live name references
+    (frozen openspec/archive + docs archives are exempt)."""
+    import subprocess
 
-    manifest = json.loads(
-        (ROOT / "memory/candidates/corpus/manifest.json").read_text(encoding="utf-8")
+    assert not (ROOT / "memory").exists(), "memory/ tree must stay removed"
+    r = subprocess.run(
+        ["git", "grep", "-lE", r"memory/staging|memory/longterm|memory/scripts",
+         "--", ".", ":!openspec/archive", ":!docs", ":!CHANGELOG.md",
+         ":!tests/test_replay_gate.py"],
+        cwd=ROOT, capture_output=True, text=True,
     )
-    mismatches = []
-    for rel, expected in manifest.get("files", {}).items():
-        p = ROOT / rel
-        if not p.exists():
-            mismatches.append(f"{rel}: missing")
-            continue
-        actual = hashlib.sha256(p.read_bytes()).hexdigest()
-        if actual != expected:
-            mismatches.append(f"{rel}: manifest={expected[:12]} actual={actual[:12]}")
-    assert not mismatches, f"digest drift: {mismatches}"
+    assert r.stdout.strip() == "", f"live memory-subsystem refs remain:\n{r.stdout}"
 
 
 def test_structural_check_error_lines_are_prefixed():

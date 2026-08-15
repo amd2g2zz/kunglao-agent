@@ -9,9 +9,10 @@ complete AND harmless:
 1. The deleted files no longer exist.
 2. release-manifest.yaml no longer declares any of them.
 3. No live reference remains in code or live docs. Historical records
-   (openspec/ change records, docs/superpowers/ plans, docs/devlog/,
-   docs/refactor/, memory/, references/archive/) are exempt — they record
-   past decisions, not current claims.
+   (openspec/ change records, docs/design/archive/, references/archive/)
+   are exempt — they record past decisions, not current claims. (#355
+   removed the docs/superpowers/ plans, docs/devlog/, docs/refactor/ and
+   memory/ trees entirely.)
 4. The deliberately-KEPT neighbors survive (over-deletion guard):
    - tools/tool-search.py + tools/pipelines/recipes/ — independent catalog
      query + plan templates (#318 retention decision: "可能留作工具");
@@ -76,15 +77,18 @@ DEAD_NAMES = [
 ]
 
 # Live surface scanned for residue: code + manifest + live docs. Historical
-# records (openspec/ changes, docs/superpowers/ plans, docs/devlog/,
-# docs/refactor/, memory/) are intentionally excluded.
+# records (openspec/ changes, docs/design/archive/, references/archive/)
+# are intentionally excluded (#355 removed the former docs/superpowers/,
+# docs/devlog/, docs/refactor/ and memory/ trees).
 LIVE_ROOTS = [
     "scripts", "hooks", "tools", "tests", "data", "schemas",
     "references", "agents", "docs/design", "specs", ".github",
 ]
 LIVE_FILES = [
-    "README.md", "SKILL.md", "AGENTS.md", "DESIGN.md", "conftest.py",
+    "README.md", "SKILL.md", "AGENTS.md", "conftest.py",
     "pytest.ini", "release-manifest.yaml", "pyproject.toml",
+    # #355: root DESIGN.md moved to docs/design/archive/DESIGN.md (covered
+    # by the docs/design LIVE_ROOT scan above).
 ]
 _SCAN_SUFFIXES = (".py", ".yaml", ".yml", ".md", ".json", ".toml", ".ini")
 

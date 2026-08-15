@@ -1,3 +1,0 @@
-REVIEWER=r3-security-review
-VERDICT=APPROVED
-Maker-checker hardening, no new trust surfaces: F3 blocks the "producer self-computes the expected" tautology that made L1 verification vacuous — the producing script cannot vouch for its own output constant. F6 closes the unverified-transcription path (F001-F003 mal-recon shape) by requiring a kunglao-redteam record before cross-workflow facts enter the fact base; lint-notes.py mirror adds the same CROSS_WORKFLOW_NO_REDTEAM warning and guards the string-provenance form against a TypeError crash. Gate runs no untrusted code (script sources are read as text only) and introduces no new host/VM tool paths.

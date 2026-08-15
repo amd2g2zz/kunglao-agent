@@ -7,7 +7,7 @@ templates/scripts/*.tmpl with explicit parameters into a runnable analysis
 script. The absorption half (inventorying + migrating the 236 field scripts
 under D:\\works\\samples) is BLOCKED on the unreachable Windows host; the
 classification framework the absorption pass will fill in lives in
-docs/templates-inventory.md.
+templates/README.md.
 
 Template catalog (name -> templates/scripts/<name>.py.tmpl):
 
@@ -58,7 +58,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATES_DIR = ROOT / "templates" / "scripts"
 
 # template name -> required params (order = display/error order). This map is
-# the single source of truth for the CLI contract; docs/templates-inventory.md
+# the single source of truth for the CLI contract; templates/README.md
 # mirrors it for humans.
 REQUIRED_PARAMS: dict[str, tuple[str, ...]] = {
     "stage-unpack": ("sample_path", "sample_sha256", "offsets", "stage_names", "output_dir"),
@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Deterministic script-template generator (issue #278). "
                     "Catalog: " + ", ".join(sorted(REQUIRED_PARAMS)),
         epilog="Templates live in templates/scripts/*.tmpl; required params "
-               "per template are enforced (exit 3). See docs/templates-inventory.md.",
+               "per template are enforced (exit 3). See templates/README.md.",
     )
     parser.add_argument("--template", required=True,
                         help="template name: " + " | ".join(sorted(REQUIRED_PARAMS)))

@@ -1,29 +1,55 @@
-# specs/ — 可执行 spec 层(阶段 0 建立)
+# specs/ — Executable Spec Layer
 
-## 双层 spec 规则
+Two-layer spec rule (revised 2026-08-15, issue #355 — the old layer-1
+dependency on an untracked `.research-tree-alignment/` directory broke
+fresh clones and is retired):
 
-- **层 1 master spec(只读)**: `.research-tree-alignment/` 的
-  `kong-agent-refactor-plan.md`(目标/验收) / `kong-agent-design-spec.md`(架构/算法) /
-  `kong-agent-module-design.md`(子模块契约)。冲突仲裁: design-spec 为准。
-- **层 2 可执行 spec(本目录 + schemas/)**: 每阶段 `phase-N/contract.md` 从
-  module-design.md **摘录**(带出处行号, 不转录) + `schemas/*.json`(JSON Schema 即代码)。
+- **Layer 1 — frozen design sources (read-only)**: the historical master
+  specs live at `docs/design/archive/` (`design-spec.md` — architecture and
+  algorithms; `module-design.md` — submodule contracts; the refactor plan
+  is preserved in git history). These are HISTORICAL records of the
+  pre-v0.1 `kong-agent` era, kept for citation traceability. For current
+  behavior, the authoritative sources are `CHANGELOG.md` (v0.1 delivery
+  record + internal version mapping), root `SKILL.md` (operative runtime
+  contract), and `openspec/archive/` (delivered change proposals).
+- **Layer 2 — executable specs (this directory + schemas/)**: each phase's
+  `phase-N/contract.md` excerpts (with source line numbers, no
+  retranscription) from the layer-1 master docs, plus `schemas/*.json`
+  (JSON Schema as code).
 
-## 冻结仪式(每阶段 Step 0)
+## Freeze ritual (Step 0 of every phase)
 
-contract.md 头部写:
-`FROZEN @ phase-N, 变更条件: ① 先写一条 RED 测试证明现状不满足新契约 ② 改 contract.md + schemas/ ③ 同步回写 master 三份文档之一 ④ 同一 commit 内完成`
+Every contract.md header carries:
+`FROZEN @ phase-N, change conditions: ① first write a RED test proving the
+current state violates the new contract ② change contract.md + schemas/
+③ write the change back into one of the layer-1 master documents ④ all in
+the same commit`
 
-**契约变更的唯一合法入口 = RED 测试。** 没有测试背书, spec 不许改。
+**The only legitimate entry point for a contract change is a RED test.**
+Without test backing, specs do not move.
 
-## golden master 变更流程
+## Golden master change flow
 
-`tests/fixtures/golden/expected/` 是重构前的行为基线, 权威。
+`tests/fixtures/golden/expected/` is the pre-refactor behavioral baseline
+and is authoritative.
 
-- 用例行为**合法改变**(新契约允许) → 走冻结仪式: RED 测试 → 改 spec → `python tools/auxiliary/capture_golden.py --refresh` 重新采集 → 同 commit。
-- 用例行为**非预期改变**(回归) → 不允许 --refresh, 必须修复实现。
+- Behavior change that is **legitimate** (new contract allows it) → follow
+  the freeze ritual: RED test → change the spec →
+  `python tools/auxiliary/capture_golden.py --refresh` → same commit.
+- Behavior change that is **unexpected** (regression) → `--refresh` is not
+  allowed; fix the implementation instead.
 
-## 阶段 0 明确不做的决定(防反复)
+## Phase-0 standing decisions (guard against relitigation)
 
-1. **旧测试零迁移**: 10 个 test_*.py 留在 `scripts/`, 用 pytest.ini `testpaths = scripts tests` 双目录覆盖; `if __name__ == "__main__"` 直跑模式保留(手动运行兼容)。
-2. **不引入 OpenSpec**: 契约是 CLI stdout JSON + YAML 状态文件, 非 HTTP API; 双层 spec 零转录。若多人协作评审期需要 change 生命周期再评估。
-3. **时间戳归一化**: golden 重放对 `(ISO-UTC)` 时间戳做 `<TS>` 归一化(采集/重放跨秒), 其余逐字节。
+1. **Zero migration of legacy tests**: the pre-existing `test_*.py` files
+   stay where they are, covered by pytest's `testpaths`; direct-run
+   `if __name__ == "__main__"` mode remains (manual-run compatibility).
+2. **Change lifecycle**: OpenSpec (`openspec/changes/` →
+   `openspec/archive/` on delivery) is the change-tracking mechanism —
+   adopted after the phase-0 evaluation. (The original phase-0 note
+   rejected OpenSpec for the CLI-stdout-JSON contract surface; the repo
+   adopted it anyway for change-proposal lifecycle, which is what it
+   actually tracks.)
+3. **Timestamp normalization**: golden replay normalizes `(ISO-UTC)`
+   timestamps to `<TS>` (capture/replay crossing second boundaries);
+   everything else is byte-exact.

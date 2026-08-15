@@ -40,7 +40,7 @@ mechanical checkers, NOT a duplicate of either:
 unannotated scaling op in the text (needs only text). Defense in depth. #58 does
 NOT duplicate #50 (different input: text vs binary+VA; different time: authoring
 vs byte-verification) or #49 (no expected-value map comparison). See
-openspec/changes/fixture-excerpt-lint/design.md (D1 layering table).
+openspec/archive/fixture-excerpt-lint/design.md (D1 layering table).
 
 Heuristic, not semantic: regex/keyword patterns only. The recall/precision
 tradeoff is documented in design.md (D5): the lint fires loudly on the documented

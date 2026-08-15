@@ -1,5 +1,13 @@
 # kunglao-agent DESIGN (v1.8.2)
 
+> **HISTORICAL (2026-08-15, #355)**: this document is the design rationale
+> of the pre-v0.1 internal-iteration era (v1.8.x). The operative contract
+> is `SKILL.md`; the delivery record is `CHANGELOG.md` (see its
+> internal-version mapping table for the v1.8.x markers this document
+> carries). Kept for design archaeology and § cross-references from
+> references/ (e.g. references/dynamic-re-tool-priority.md cites the §9
+> rule 5 anti-pattern); no longer updated.
+
 > **NOTE (2026-08-11)**: DESIGN lags SKILL.md (operative contract per §17) — reconcile before relying on it. §8 C0's note-layer gate is now enforced mechanically by `scripts/convergence_check.py` (`_note_layer_gaps`, commit e2f2432). C0's spec says notes carry `answers_question` directly; the live convention links via `note.claim_id → claim.answers_question` — the gate implements the live chain.
 
 v1.8.2 在 v1.8.1 自打脸补丁基础上加 6 个 orchestrator 在-session 反复违反的失败模式(F1 傻等 / F2 忘记心跳 / F3 只 ping 最后启动 / F4 不根据 subagent 返回重规划 / F5 死锁僵尸等待 / F6 弃用专业 agent 用 general-purpose),落进 SKILL.md §6-pre 紧凑表;新增 §7 self-cap-safe-prose(防 _SELF_CAP_RE 把 SKILL.md 自身的 prose 当 self-cap reject)+ B1c blocker type(worker died without notification)+ §6e priority 3 硬约束(`general-purpose` <50-line dispatch 即 §6e 违规)。**Mirror rule**: SKILL.md 是 operative contract,DESIGN.md 是 design rationale + changelog;两者 § 编号要一致(本版本新增 §6-pre + §7,DESIGN.md 此处不重写 prose,只增交叉引用)。

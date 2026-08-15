@@ -2,7 +2,7 @@
 """RED — dispatch contract isolation-first + TaskStop-on-delivery (issue #88).
 
 Regression tests for the isolation-first dispatch contract
-(openspec/changes/isolation-first-dispatch-contract/). Corrected scope
+(openspec/archive/isolation-first-dispatch-contract/). Corrected scope
 (2026-08-12 user: "SendMessage我不认为有问题"): SendMessage orchestrator↔worker
 pings are RETAINED (sanctioned heartbeat channel); only TEAM features are
 banned (no CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, no teammates, no team setup,

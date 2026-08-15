@@ -3,12 +3,12 @@
 > **修订 2026-08-06 (issue #1 cleanup-routing-module)**: 路由层(method_router / method_topk / method_router_register / method-graph)经实验证伪 CUT,本契约已移除全部路由段。priority_ratio 段保留当前实现(旧 0.35·Δdisc 公式),VoI 代理重写见 issue #2(`phase4-voi-priority`)。
 
 来源文档(冻结源, 引文带行号):
-- `docs/design/module-design.md` — §M1 全部 (L112-207); M1.1 划分 L114-125; M1.2 签名 L126-159; M1.3 schema L160-172; M1.4 状态机 L173-192; M1.5 错误处理 L193-199; M1.6 测试点 L200-205
-- 同目录 `docs/design/design-spec.md` — §3.2 比值键算法(L129, 含 2026-08-06 VoI 代理定稿)
+- `docs/design/archive/module-design.md` — §M1 全部 (L112-207); M1.1 划分 L114-125; M1.2 签名 L126-159; M1.3 schema L160-172; M1.4 状态机 L173-192; M1.5 错误处理 L193-199; M1.6 测试点 L200-205
+- 同目录 `docs/design/archive/design-spec.md` — §3.2 比值键算法(L129, 含 2026-08-06 VoI 代理定稿)
 - 现成可复用(不改): `scripts/convergence_check.py::decide`(5 分支矩阵, golden F-01..F-16)、`scripts/priority.py::rank_claims`(legacy 加法权重)、`scripts/ask_for_direction_gate.py`(selfcheck 反问部分已实现)
 
 > 2026-08-14 (#319 去重): 源文档随 docs 树合一迁至 `docs/design/`(旧树已删,
-> 见 git 历史), 行号按当前文件重核。注: 现 `docs/design/module-design.md`
+> 见 git 历史), 行号按当前文件重核。注: 现 `docs/design/archive/module-design.md`
 > M1.2 含 resource_selector/feedback_updater(2026-08-06 修订), 与本契约
 > "路由已移除"的冻结签名集不同 — 即 #319 审计发现的两树内容漂移。
 

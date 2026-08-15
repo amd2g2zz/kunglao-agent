@@ -1,6 +1,6 @@
 
 **Heuristic**: are you about to use x64dbg / Frida / vmr-shell? If yes, use the **VM-channel** only (mcp__x64dbg__connect_remote to <VM_IP>:27066/27067, or rev-frida via VM frida-server <VM_IP>:1337; `<VM_IP>` = the live lease from env discovery — `KUNGLAO_VM_HOST` / vmr-shell discovery, never a cached address). **DO NOT** call mcp__x64dbg__start_session (host-channel) or mcp__frida__spawn/attach on host - that loads the sample on the host machine, bypassing the workspace safety boundary (Hard prohibition #5).
-# Dynamic-RE Worker Dispatch Checklist (DESIGN §8.6, v1.8.1)
+# Dynamic-RE Worker Dispatch Checklist (DESIGN §8.6, v1.8.1; DESIGN.md now at docs/design/archive/DESIGN.md)
 
 > **Upstream contract** (see SKILL.md §"VM-channel launch sequence" + §Hard prohibitions #5 + §"Downstream contract for skill maintainers"): any x64dbg / Frida MCP call must be VM-channel, lead with `mcp__x64dbg__connect_remote`. The kunglao-agent `HOST_FORBIDDEN_TOOLS` hook denies every dispatch that lists `start_session` / `connect_to_session` / `terminate_session` / `connect_to_instance` / frida `spawn` / frida `attach`. There is no per-engagement opt-out — the rule is structural.
 
@@ -21,7 +21,7 @@
      3. confirm VM `netstat -an` shows `0.0.0.0:27066` + `0.0.0.0:27067` LISTENING
      4. `mcp__x64dbg__connect_remote(host=<VM_IP>, req_rep_port=27066, pub_sub_port=27067)`
      5. drive breakpoints / step via the other `mcp__x64dbg__*` tools
-   - **Do NOT ask the user for the path or report "x96dbg.exe not installed"** (DESIGN.md L190 anti-pattern). Path + ports + bind are all known above. If `connect_remote` fails, the VM x64dbg isn't listening — launch it via vmr-shell (step 1), don't punt to the user with A/B/C options.
+   - **Do NOT ask the user for the path or report "x96dbg.exe not installed"** (anti-pattern, historical DESIGN.md §9 rule 5 — now at docs/design/archive/DESIGN.md). Path + ports + bind are all known above. If `connect_remote` fails, the VM x64dbg isn't listening — launch it via vmr-shell (step 1), don't punt to the user with A/B/C options.
 2. **`rev-frida`** — hook the API by name; capture call counts + serialized args
 3. **`vmr-shell`** — detonate sample in VM; tcpdump / procmon / regshot for OS-level IO
 4. **`malware-framework` (Qiling)** — unicorn emulation (often NEGATIVE for Go runtime; 初筛 only)
