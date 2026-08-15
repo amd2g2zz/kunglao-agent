@@ -98,6 +98,9 @@ import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-befor
 # F6 (#304 review): init-completeness predicate = single source in init_state.py
 from init_state import VALID_TYPES, is_init_complete, read_project_type  # noqa: E402
 import mcp_probe  # noqa: E402  (#316: MCP supply manifest/scaffold single source of truth)
+# #362: CLAUDE.md renders through the shared {{param}} engine (single
+# rendering system with scripts/template_gen.py — leftover detection included)
+import template_render  # noqa: E402
 
 MARKER = "[initialized]"
 SEED_MIN = 3
@@ -397,12 +400,6 @@ def write_project_type(ws: Path, project_type: str) -> bool:
     return True
 
 
-def template_for_type(project_type: str) -> Path:
-    """#356 W2: single-source base template (OS delta injected at render)."""
-    del project_type  # one template for all types; OS section via OS_SECTIONS
-    return CLAUDEMD_TMPL
-
-
 CLAUDEMD_TMPL = Path(__file__).resolve().parent.parent / "templates" / "CLAUDE.md.base.tmpl"
 SKILL_DIR = Path(__file__).resolve().parent.parent
 
@@ -454,6 +451,10 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
                   project_type: str | None = None) -> Path | None:
     """Write CLAUDE.md from template with project info filled in.
 
+    #362: renders through the shared template_render engine ({{param}}
+    single-pass + fail-closed leftover detection — an unfilled placeholder
+    is a TemplateRenderError, never a silent partial file).
+
     Idempotent: if CLAUDE.md exists and is non-empty, skip (do not clobber).
     Returns the written path or None if skipped.
     """
@@ -470,21 +471,22 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
     venv_candidate = ws / ".venv"
     venv_path = str(venv_candidate) if venv_candidate.exists() else ".venv/"
 
-    # Detect Python version
-    py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    params = {
+        "type_section": os_section(project_type),
+        "type": project_type or "windows",
+        "sample_sha1": sample_name,
+        "sample_sha256": sample_sha,
+        "sample_type": "(detected at analysis time)",
+        "sample_path": f"bins/{sample_name}",
+        "skill_dir": str(SKILL_DIR),
+        "venv_path": venv_path,
+    }
+    text = template_render.render_strict(
+        tmpl, params, source=str(tmpl_path))
 
-    text = (
-        tmpl
-        .replace("<TYPE_SECTION>", os_section(project_type))
-        .replace("<TYPE>", project_type or "windows")
-        .replace("<SAMPLE_SHA1>", sample_name)
-        .replace("<SAMPLE_SHA256>", sample_sha)
-        .replace("<SAMPLE_TYPE>", "(detected at analysis time)")
-        .replace("<SAMPLE_PATH>", f"bins/{sample_name}")
-        .replace("<SKILL_DIR>", str(SKILL_DIR))
-        .replace("<VENV_PATH>", venv_path)
-    )
-    # Append Python version note to the venv section
+    # Append Python version note to the venv section (post-render step:
+    # the version is runtime state, not a template parameter)
+    py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     text = text.replace(
         "Activate before running scripts.",
         f"Activate before running scripts. Python {py_version}."
@@ -673,6 +675,9 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
     refuse + cleanup of artifacts created by this run; existing content is
     always preserved, F2) →
     only on PASS: scaffold + [initialized] marker + project_type.
+
+    #362: template render defects (unfilled {{placeholder}}) surface as a
+    clear stderr message + exit RC_ERROR — never a silent partial CLAUDE.md.
     """
     guard_rc, guard_log = guard_agent_teams(profile_root)
     if guard_rc != 0:
@@ -735,7 +740,23 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
         if report.overall_status == toolchain.Status.FAIL:
             return refuse_toolchain(ws, report)
 
-    return initialize(ws, hooks_json, project_type=project_type, no_mcp=no_mcp)
+    # #362: template defect (unfilled {{placeholder}}) → hard error, not a
+    # silent partial CLAUDE.md. Clean up this run's scaffold entries so a
+    # refused init leaves no half-initialized state (verify-first symmetry).
+    try:
+        return initialize(ws, hooks_json, project_type=project_type, no_mcp=no_mcp)
+    except template_render.TemplateRenderError as exc:
+        removed, preserved = cleanup_scaffold(ws)
+        print(f"kunglao-init: TEMPLATE DEFECT — {exc}", file=sys.stderr)
+        print("kunglao-init: NOT initialized (no [initialized] marker written)",
+              file=sys.stderr)
+        if removed:
+            print(f"kunglao-init: removed this run's scaffold entries: "
+                  f"{', '.join(removed)}", file=sys.stderr)
+        if preserved:
+            print(f"kunglao-init: kept pre-existing content: "
+                  f"{', '.join(preserved)}", file=sys.stderr)
+        return RC_ERROR
 
 
 def cleanup_scaffold(ws: Path, created: "Collection[Path] | None" = None

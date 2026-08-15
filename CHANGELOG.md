@@ -6,6 +6,25 @@
 
 ## [Unreleased]
 
+### Changed (renderer unification, #362)
+
+- CLAUDE.md 渲染引擎统一 — scripts/template_render.py 成为 {{param}} 单次替换 +
+  残留占位符检测的唯一引擎；template_gen.py（CLI/目录/退出码不变）与
+  kunglao-init write_claudemd 共用同一原语；CLAUDE.md.base.tmpl 占位符
+  `<UPPERCASE>` → `{{lowercase}}` 迁移（渲染产物字节等价，golden 三型验证）(#362)
+
+### Fixed (renderer + env wiring, #362)
+
+- 未填占位符不再静默 — 渲染后残留 `{{...}}` 触发 TemplateRenderError（run() 转
+  stderr + exit 1 + 本次 scaffold 清理），杜绝半成品 CLAUDE.md (#362)
+- .env 端口接线 — KUNGLAO_VM_SHELL_PORT / KUNGLAO_FRIDA_PORT 接入 env_check stdlib
+  解析（os.environ 优先，.env 兜底），VM_PORTS 由解析值派生（原硬编码 [9876,
+  1337] 与 toolchain 口径不一致）；KUNGLAO_CLAUDE_JSON / KUNGLAO_DIE 在
+  .env.example 注明"仅 shell export 生效，.env 不读取" (#362)
+- 死代码 — kunglao-init.py template_for_type() 零调用方，删除 (#362)
+- 残留断言泛化 — test_init_injected_claudemd_has_no_placeholder_residue 由枚举
+  7 占位符改为正则扫描（同时捕获遗留 `<>` 与新 `{{}}` 形态）(#362)
+
 ### Fixed (pre-release defect batch, #356)
 
 - W1 tools/_INDEX.yaml 28 个工具条目补一行 description（英文，15-40 字符：干什么 +

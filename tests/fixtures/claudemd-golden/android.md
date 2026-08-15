@@ -10,30 +10,30 @@ Kunglao-agent malware RE workspace — not a software project. The "code" is sta
 
 | Field | Value |
 |-------|-------|
-| SHA1 (filename) | `{{sample_sha1}}` |
-| SHA256 | `{{sample_sha256}}` |
-| Type | `{{sample_type}}` |
-| Path | `{{sample_path}}` |
+| SHA1 (filename) | `sample.exe` |
+| SHA256 | `a200cb881c3739ce4c6d854e189c608b6f8a41e364769b96bafda8d5a1a9d229` |
+| Type | `(detected at analysis time)` |
+| Path | `bins/sample.exe` |
 
 ## Skill & orchestrator
 
-Analysis is driven by `/kunglao-agent` (skill at `{{skill_dir}}`).
+Analysis is driven by `/kunglao-agent` (skill at `/kunglao/skill-sentinel`).
 
 **Key scripts** (invoke from workspace root with `.venv` activated):
 ```bash
 source .venv/Scripts/activate
-python {{skill_dir}}/scripts/convergence_check.py .
-python {{skill_dir}}/scripts/priority.py .
-python {{skill_dir}}/scripts/convergence_health.py .
-python {{skill_dir}}/scripts/failure_analysis_gate.py . <C-NN>
+python /kunglao/skill-sentinel/scripts/convergence_check.py .
+python /kunglao/skill-sentinel/scripts/priority.py .
+python /kunglao/skill-sentinel/scripts/convergence_health.py .
+python /kunglao/skill-sentinel/scripts/failure_analysis_gate.py . <C-NN>
 ```
 
 **Hook activation** (30-min TTL, renew via `/loop`):
 ```bash
-python {{skill_dir}}/scripts/hook_activation.py . --renew
+python /kunglao/skill-sentinel/scripts/hook_activation.py . --renew
 ```
 
-**Environment readiness**: `python {{skill_dir}}/scripts/env_check.py .` (PASS/FAIL per check; exit 0 = all pass).
+**Environment readiness**: `python /kunglao/skill-sentinel/scripts/env_check.py .` (PASS/FAIL per check; exit 0 = all pass).
 
 ## State files (read every turn, disk is truth)
 
@@ -65,7 +65,27 @@ python {{skill_dir}}/scripts/hook_activation.py . --renew
 - **Maker-checker**: worker=maker, orchestrator=checker. Facts must be independently verified before promotion to PROVEN.
 - **No stopping for self-answerable questions**: within the analysis loop, do not halt for questions you can answer yourself — attempt self-repair for environment failures and record the decision for decidable items. Schema ambiguity and directional choices (which change what the user asked for) must still be surfaced to the user.
 
-{{type_section}}
+## Hard constraints (android)
+
+- **ADB required (root dependency)**: `adb devices` must show at least one device. ADB missing means frida-server/android_server discovery impossible; all downstream dynamic checks cascade from ADB.
+- **Device root required**: `adb shell su -c id` must return uid=0. Non-rooted devices cannot run frida-server or perform dynamic analysis. This is a HARD gate.
+- **Debug flag (HARD, init-enforced)**: manifest debuggable or `am set-debug-app` / setprop. Must be set and read back for verification — kunglao-init's toolchain check verifies `adb shell getprop ro.debuggable` returns 1; if not settable, init refuses (exit 4) with fix guidance.
+- **frida-server (HARD, init-enforced; renamed + custom port)**: Device-side binary must NOT use the default name; custom port (default convention: 1337). kunglao-init verifies it via `adb forward tcp:<port>` + TCP connect; unreachable means init refuses with deployment guidance.
+- **GitNexus required**: `gitnexus --version` must succeed. Post-decompile graph building is a mandatory step in the Android flow.
+- **IDA android_server (HARD, init-enforced)**: Must be present on device for IDA remote debugging. kunglao-init verifies it via `adb forward tcp:23946` + TCP connect; unreachable means init refuses with deployment guidance.
+- **eBPF tracing (WARN)**: Requires Android SDK >= 31 (getprop ro.build.version.sdk). SDK < 31 means eBPF unavailable (not blocking).
+- **unidbg (WARN, fallback)**: Requires java + unidbg library. Only used when static+debug+frida all fail. AND-gated: frida data sufficient + decompilation done + still stuck.
+
+## Android analysis flow
+
+```
+APK -> aapt/apktool unpack -> jadx DEX->Java
+    -> gitnexus analyze(decompiled output dir, build knowledge graph; serve/graph data as analysis artifact)
+    -> static analysis(graph-assisted class/call-chain/malicious-logic-entry location)
+    -> dynamic needed: ADB -> root -> debug flag -> frida(renamed+port) or android_server
+    -> stuck fallback: frida hook + unidbg hybrid (AND three conditions)
+```
+
 
 ## Success criteria
 
@@ -73,13 +93,13 @@ Key behaviors are verifiable, not aspirational. Each check names where the proof
 
 - A fact may only be promoted to PROVEN with an independent verifier sign-off record — provable via `facts/_INDEX.md` (verifier column) and the fact file's verify section.
 - Every numeric fact declares its counting unit; multi-basis numbers are never collapsed — provable by reading any `facts/F*.md` numeric claim.
-- Every claim in `claim-register.yaml` has a status and evidence tier — provable by `python {{skill_dir}}/scripts/lint_facts.py <ws>` returning zero errors.
+- Every claim in `claim-register.yaml` has a status and evidence tier — provable by `python /kunglao/skill-sentinel/scripts/lint_facts.py <ws>` returning zero errors.
 - Environment failures are self-repaired before analysis dispatch — provable via `runs/.env-check.json` showing overall PASS (or a blocker file explaining why not).
 - Tool selection goes through `tools/_INDEX.yaml` (capability + description) before writing a new script — provable by the `tool-catalog:` marker in worker dispatch records.
 
 ## MCP servers (supply manifest — #316)
 
-Analysis correctness depends on registered MCP servers — a fresh machine deployed per kunglao docs must register these (user-level `claude mcp add ...`, or fill real entries in the workspace `.mcp.json` scaffold). Mechanical check: `python {{skill_dir}}/scripts/mcp_probe.py . --type {{type}}` (exit 1 = HARD missing).
+Analysis correctness depends on registered MCP servers — a fresh machine deployed per kunglao docs must register these (user-level `claude mcp add ...`, or fill real entries in the workspace `.mcp.json` scaffold). Mechanical check: `python /kunglao/skill-sentinel/scripts/mcp_probe.py . --type android` (exit 1 = HARD missing).
 
 | MCP server | Tier | Scope | Purpose | Registration |
 |------------|------|-------|---------|--------------|
@@ -109,8 +129,8 @@ Deployment variables live in the workspace `.env` (see `.env.example` for the an
 
 ## Tool script discipline
 
-Any reusable analysis logic must land as a parameterized CLI script under `{{skill_dir}}/scripts/` (no hardcoded paths, reusable across workspaces). ad-hoc inline execution (`python -c` / heredoc) is forbidden; prefer reusing an existing CLI (e.g. `scripts/shell_defaults.py` for shell environment default lines, `scripts/env_check.py` for environment readiness). One-off commands may run via Bash, but any logic you might reuse must first become a script.
+Any reusable analysis logic must land as a parameterized CLI script under `/kunglao/skill-sentinel/scripts/` (no hardcoded paths, reusable across workspaces). ad-hoc inline execution (`python -c` / heredoc) is forbidden; prefer reusing an existing CLI (e.g. `scripts/shell_defaults.py` for shell environment default lines, `scripts/env_check.py` for environment readiness). One-off commands may run via Bash, but any logic you might reuse must first become a script.
 
 ## Python venv
 
-Path: `{{venv_path}}`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts.
+Path: `.venv/`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts. Python 3.11.0.

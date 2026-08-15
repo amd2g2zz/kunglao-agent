@@ -80,16 +80,20 @@ def test_base_carries_required_sections():
 
 def test_base_sample_and_venv_placeholders():
     text = BASE_TMPL.read_text(encoding="utf-8")
-    for ph in ("<SAMPLE_SHA1>", "<SAMPLE_SHA256>", "<SAMPLE_TYPE>",
-               "<SAMPLE_PATH>", "<SKILL_DIR>", "<VENV_PATH>", "<TYPE>"):
+    # #362: placeholders migrated <UPPERCASE> -> {{lowercase}} (shared
+    # template_gen engine convention). Syntax update only — content
+    # assertions unchanged.
+    for ph in ("{{sample_sha1}}", "{{sample_sha256}}", "{{sample_type}}",
+               "{{sample_path}}", "{{skill_dir}}", "{{venv_path}}",
+               "{{type}}"):
         assert ph in text, f"base template missing placeholder {ph}"
 
 
 def test_base_mcp_table_type_placeholder():
-    """MCP table row check command uses the <TYPE> placeholder (init injects)."""
+    """MCP table row check command uses the {{type}} placeholder (init injects)."""
     text = BASE_TMPL.read_text(encoding="utf-8")
-    assert "mcp_probe.py . --type <TYPE>" in text, \
-        "MCP probe command must carry the <TYPE> injection placeholder"
+    assert "mcp_probe.py . --type {{type}}" in text, \
+        "MCP probe command must carry the {{type}} injection placeholder"
 
 
 def test_base_references_workspace_env_file():
@@ -189,12 +193,20 @@ def test_init_injects_os_section(init_ws: Path, project_type: str, marker: str):
 
 
 def test_init_injected_claudemd_has_no_placeholder_residue(init_ws: Path):
+    """#362 hardening: generic residue scan instead of an enumerated
+    placeholder list — catches BOTH the legacy <UPPERCASE> form and the
+    post-#362 {{lowercase}} form, including placeholders that did not
+    exist when this test was written. Prose tokens <NNN> (fact filename
+    pattern) and <C-NN> (claim id) are literal documentation, not
+    placeholders — allowlisted."""
     r = _run_init(init_ws, "windows")
     assert r.returncode == 0, r.stderr
     claude = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
-    for ph in ("<SAMPLE_SHA1>", "<SAMPLE_SHA256>", "<SAMPLE_TYPE>",
-               "<SAMPLE_PATH>", "<SKILL_DIR>", "<VENV_PATH>", "<TYPE>"):
-        assert ph not in claude, f"placeholder residue in rendered CLAUDE.md: {ph}"
+    legacy = [p for p in re.findall(r"<[A-Z][A-Z0-9_]+>", claude)
+              if p != "<NNN>"]  # <NNN> = fact filename prose, not a placeholder
+    assert legacy == [], f"legacy placeholder residue in rendered CLAUDE.md: {legacy}"
+    braced = re.findall(r"\{\{[a-z_]+\}\}", claude)
+    assert braced == [], f"{{{{param}}}} residue in rendered CLAUDE.md: {braced}"
 
 
 def test_init_claudemd_keeps_common_sections(init_ws: Path):
