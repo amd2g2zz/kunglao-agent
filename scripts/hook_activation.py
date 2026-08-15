@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """hook_activation.py - selective hook activation for kunglao-agent (core).
 
-User pain point: "kunglao-agent 需要安装hook，但是只有被激活的时候hook才生效，
+User pain point (verbatim, in Chinese): "kunglao-agent 需要安装hook，但是只有被激活的时候hook才生效，
 否则会产生大量噪声给 kunglao-agent"
+("kunglao-agent needs hooks installed, but they must only take effect when
+activated, otherwise they generate heavy noise for kunglao-agent")
 
 kunglao-agent has 7+ enforcement hooks (active_intervention, cost_gate,
 backtrack_gate, reuse_gate, etc.). Running ALL of them on EVERY
@@ -33,7 +35,7 @@ Usage:
   python hook_activation.py <workspace> --renew          # refresh expiry (kunglao-agent Phase 0)
   python hook_activation.py <workspace> --is-active dispatch_gate
   python hook_activation.py <workspace> --wire-up        # register hooks in <workspace>/.claude/settings.json (PROJECT-level, #258)
-  python hook_activation.py <workspace> --heartbeat-off  # CONVERGED 后停心跳 (issue #237)
+  python hook_activation.py <workspace> --heartbeat-off  # stop heartbeat after CONVERGED (issue #237)
 
 T-2 split (2026-08-11): the --wire-up / --reconcile / --heartbeat-* jobs now
 live in wire_up_settings.py / reconcile_workers.py / heartbeat.py; main()

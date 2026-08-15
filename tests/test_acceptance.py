@@ -10,7 +10,7 @@ import acceptance_check as ac
 def test_acceptance_overall_passes():
     report = ac.run_acceptance()
     failed = [c["name"] for c in report["checks"] if not c["passed"]]
-    assert report["overall_passed"], f"验收失败项: {failed}"
+    assert report["overall_passed"], f"acceptance failures: {failed}"
 
 
 def test_acceptance_has_five_checks():
@@ -18,7 +18,7 @@ def test_acceptance_has_five_checks():
     names = {c["name"] for c in report["checks"]}
     must = {"oracle_10_10", "cli_surface_8", "priority_voi_formula",
             "digest_builds", "test_suite_green"}
-    assert must <= names, f"缺验收项: {must - names}"
+    assert must <= names, f"missing acceptance item(s): {must - names}"
 
 
 def test_test_suite_green_timeout_fits_full_suite():

@@ -212,7 +212,7 @@ class TestHumanIndexConsistency:
         for fname, names in self._human_rows().items():
             for n in sorted(names - machine - mcp_channel):
                 ghosts.append(f"{fname}: `{n}` (no machine entry in tools/_INDEX.yaml)")
-        assert not ghosts, "人类索引有未登记项(删行或登记对应工具):\n" + "\n".join(ghosts)
+        assert not ghosts, "human index has unregistered entries (delete the line or register the tool):\n" + "\n".join(ghosts)
 
     def test_mcp_channel_exemptions_are_real(self):
         """The MCP exemption may not leak: every exempted name must actually

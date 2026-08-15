@@ -60,7 +60,7 @@ _NEGATIVE_EXISTENCE_PATTERNS = (
 )
 # ---- #56: environmental-negative-evidence BASIS vocabulary ----
 # #48 recognized only `0 hits`/`0 occurrences`; the F040 incident's
-# 无调用捕获 ("no call captured") trigger and sibling phrasings also indicate
+# the CJK "no call captured" trigger and sibling phrasings also indicate
 # a dynamic miss under env fault. Used by the env-fault diagnostic.
 _ENV_NEGATIVE_BASIS_PATTERNS = (
     r"\b0 hits\b", r"\b0 occurrences\b",
@@ -299,7 +299,7 @@ def _has_zero_hits(text: str) -> bool:
 
 def _has_env_negative_basis(text: str) -> bool:
     """#56 — broadened environmental-negative-evidence basis: BP 0 hits /
-    0 occurrences / no call captured / no calls observed / 无调用捕获. The
+    0 occurrences / no call captured / no calls observed (CJK variant included). The
     F040 incident's self-report vocabulary extends beyond literal `0 hits`."""
     return any(re.search(p, text.lower()) for p in _ENV_NEGATIVE_BASIS_PATTERNS)
 

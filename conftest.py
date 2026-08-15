@@ -1,9 +1,9 @@
-"""阶段 0 共享 fixture: 后续所有阶段(SDD 契约测试)复用.
+"""Phase 0 shared fixtures: reused by all later phases (SDD contract tests).
 
-- ws_factory:       tmp 工作区构造器(claim-register.yaml / runs / facts/_INDEX / claim_deps.yaml / task_spec.yaml)
-- contract_validator: schemas/*.json 注册表(jsonschema 校验封装)
-- golden_master:   manifest 重放辅助
-- isolated_home:   monkeypatch HOME → tmp(防 hooks 部署测试写生产 settings.json)
+- ws_factory:       tmp workspace builder (claim-register.yaml / runs / facts/_INDEX / claim_deps.yaml / task_spec.yaml)
+- contract_validator: schemas/*.json registry (jsonschema validation wrapper)
+- golden_master:   manifest replay helper
+- isolated_home:   monkeypatch HOME → tmp (prevents hook-deployment tests from writing the production settings.json)
 """
 from __future__ import annotations
 
@@ -16,13 +16,14 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "schemas"
 
 
-# ---------- tmp fixture: 兼容旧测试 main() 直跑签名 ----------
+# ---------- tmp fixture: compatible with legacy tests' main() direct-run signature ----------
 
 @pytest.fixture
 def tmp(tmp_path) -> Path:
-    """旧 test_*.py 用 `def test_x(tmp: Path)` + main() 直跑(TemporaryDirectory 传 Path).
+    """Legacy test_*.py use `def test_x(tmp: Path)` + a main() direct run (TemporaryDirectory passing a Path).
 
-    pytest 下注入内置 tmp_path(同为 Path), 两模式签名一致, 零测试文件改动.
+    Under pytest the built-in tmp_path is injected (also a Path), so both
+    modes share the signature with zero test-file changes.
     """
     return tmp_path
 

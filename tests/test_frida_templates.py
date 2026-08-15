@@ -1,24 +1,28 @@
 # -*- coding: utf-8 -*-
-"""#278 P3 — templates/frida CFG 模板契约测试.
+"""#278 P3 — templates/frida CFG template contract tests.
 
-RED 断言（模板落地前应全红）:
-  (a) cfg-hook.js.tmpl 占位符集合恰为 5 个规定键, 无其他 {{...}} 键;
-      cfg-analyze.py.tmpl 占位符集合恰为 3 个规定键
-  (b) 全参数替换后的 hook 是括号平衡的 JS 骨架（字符串/注释剥离 + 计数器,
-      非 JS 解析器）
-  (c) cfg-analyze.py.tmpl 用合成 trace fixture 替换后, 以 venv python 运行:
-      edges.csv 去重且按 (caller,target) 字典序排序; summary.md 含 top caller
-  (d) analyzer 两次运行（仅 header started_ts 不同）输出逐字节一致, 且
-      summary.md 不含 started_ts（#277 无时间戳契约, 对真实 hook header
-      形状生效）
-  (e) templates/frida/README.md 含 VM-only 警告 + 硬禁令 #5
-  (f) 三个模板文件不含宿主绝对路径与真实 IP
+RED assertions (all red before the templates land):
+  (a) cfg-hook.js.tmpl placeholder set is exactly the 5 specified keys, no
+      other {{...}} keys; cfg-analyze.py.tmpl placeholder set is exactly the
+      3 specified keys
+  (b) the fully-substituted hook is a bracket-balanced JS skeleton
+      (string/comment stripping + counters, not a JS parser)
+  (c) cfg-analyze.py.tmpl, substituted with a synthetic trace fixture and run
+      under the venv python: edges.csv deduplicated and sorted
+      lexicographically by (caller,target); summary.md contains top caller
+  (d) two analyzer runs (differing only in header started_ts) produce
+      byte-identical output, and summary.md contains no started_ts (#277
+      no-timestamp contract, effective against the real hook header shape)
+  (e) templates/frida/README.md carries the VM-only warning + hard
+      prohibition #5
+  (f) the three template files contain no host absolute paths or real IPs
 
-契约口径:
-  * hook 记录字段 = caller(返回地址)/target/args_count/thread_id/ts,
-    与 analyzer 输入字段(caller/target/ts + 可选扩展)一致
-  * analyzer 输出 edges.csv(header caller,target,calls) + summary.md,
-    Top callers 节每行格式 `- <caller>: <n> calls`
+Contract:
+  * hook record fields = caller (return address) / target / args_count /
+    thread_id / ts, consistent with the analyzer input fields
+    (caller/target/ts + optional extensions)
+  * analyzer output edges.csv (header caller,target,calls) + summary.md,
+    Top callers section one line per entry: `- <caller>: <n> calls`
 """
 from __future__ import annotations
 
@@ -50,7 +54,7 @@ SAMPLE_SHA = "aa" * 32
 # ---------- helpers ----------
 
 def _render(text: str, **params: str) -> str:
-    """单遍替换所有 {{KEY}} 占位符（未提供的键原样保留）。"""
+    """Single-pass substitution of all {{KEY}} placeholders (unprovided keys kept verbatim)."""
     return _PLACEHOLDER.sub(lambda m: params.get(m.group(1), m.group(0)), text)
 
 
@@ -59,7 +63,7 @@ def _placeholder_keys(text: str) -> set[str]:
 
 
 def _strip_js_strings_and_comments(text: str) -> str:
-    """剥离单/双/反引号字符串与行/块注释（简易状态机, 非 JS 解析器）。"""
+    """Strip single/double/backtick strings and line/block comments (simple state machine, not a JS parser)."""
     out: list[str] = []
     i, n = 0, len(text)
     while i < n:
@@ -91,7 +95,7 @@ def _strip_js_strings_and_comments(text: str) -> str:
 
 
 def _is_balanced(text: str) -> bool:
-    """括号/花括号/方括号计数平衡（字符串与注释已剥离）。"""
+    """Bracket/brace/bracket counts balance (strings and comments already stripped)."""
     stack: list[str] = []
     pairs = {")": "(", "}": "{", "]": "["}
     for ch in _strip_js_strings_and_comments(text):
@@ -113,10 +117,11 @@ def _run_analyzer(script: Path) -> subprocess.CompletedProcess[str]:
 
 
 def _write_fixture_trace(path: Path, started_ts: int = 1000) -> None:
-    """合成 trace (JSON lines): header + caller/target/ts + 扩展字段.
+    """Synthetic trace (JSON lines): header + caller/target/ts + extensions.
 
-    header 与真实 hook 形状一致——cfg-hook.js.tmpl 必写 started_ts;
-    该时间戳不得泄漏进 analyzer 输出（#277 无时间戳契约）。
+    The header matches the real hook shape — cfg-hook.js.tmpl always writes
+    started_ts; that timestamp must not leak into the analyzer output (#277
+    no-timestamp contract).
     """
     lines = [
         {"header": {"sample_sha256": SAMPLE_SHA, "target_module": "sample.dll",
@@ -135,13 +140,13 @@ def _write_fixture_trace(path: Path, started_ts: int = 1000) -> None:
 # ---------- (a) placeholder contract ----------
 
 def test_hook_placeholders_exactly_five_specified_keys():
-    """(a) cfg-hook.js.tmpl 占位符集合恰为规定的 5 个键, 无其他 {{...}}."""
+    """(a) cfg-hook.js.tmpl placeholder set is exactly the 5 specified keys, no other {{...}}."""
     text = HOOK_TMPL.read_text(encoding="utf-8")
     assert _placeholder_keys(text) == HOOK_PLACEHOLDERS
 
 
 def test_analyzer_placeholders_exactly_three_specified_keys():
-    """(a 扩展) cfg-analyze.py.tmpl 占位符集合恰为规定的 3 个键."""
+    """(a extended) cfg-analyze.py.tmpl placeholder set is exactly the 3 specified keys."""
     text = ANALYZE_TMPL.read_text(encoding="utf-8")
     assert _placeholder_keys(text) == ANALYZE_PLACEHOLDERS
 
@@ -149,7 +154,7 @@ def test_analyzer_placeholders_exactly_three_specified_keys():
 # ---------- (b) substituted hook sanity ----------
 
 def test_substituted_hook_balanced_and_no_leftover(tmp_path: Path):
-    """(b) 全参数替换后: 无残留占位符, 括号/花括号/方括号平衡."""
+    """(b) after full substitution: no leftover placeholders; brackets/braces/brackets balance."""
     rendered = _render(
         HOOK_TMPL.read_text(encoding="utf-8"),
         TARGET_MODULE="sample.dll",
@@ -165,7 +170,7 @@ def test_substituted_hook_balanced_and_no_leftover(tmp_path: Path):
 # ---------- (c) analyzer end-to-end ----------
 
 def test_analyzer_edges_sorted_and_summary_top_caller(tmp_path: Path):
-    """(c) 替换后运行: edges.csv 去重+字典序, summary.md 含 top caller."""
+    """(c) run after substitution: edges.csv deduplicated + lexicographic; summary.md contains top caller."""
     trace = tmp_path / "trace.jsonl"
     _write_fixture_trace(trace)
     out_dir = tmp_path / "out"
@@ -192,7 +197,7 @@ def test_analyzer_edges_sorted_and_summary_top_caller(tmp_path: Path):
     assert data == sorted(data), "edges.csv not sorted by (caller, target)"
 
     summary = (out_dir / "summary.md").read_text(encoding="utf-8")
-    # fixture: caller 0x7ffa2222 共 4 次调用, 为 top caller
+    # fixture: caller 0x7ffa2222 has 4 calls total — the top caller
     assert "- 0x7ffa2222: 4 calls" in summary, "summary.md missing top caller line"
     assert SAMPLE_SHA in summary
 
@@ -200,8 +205,8 @@ def test_analyzer_edges_sorted_and_summary_top_caller(tmp_path: Path):
 # ---------- (d) determinism ----------
 
 def test_analyzer_deterministic_byte_identical(tmp_path: Path):
-    """(d) 同一 trace 两次采集、仅 header started_ts 不同 → 输出逐字节一致,
-    且 summary.md 不含 started_ts（真实 hook header 形状下的无时间戳契约）."""
+    """(d) same trace collected twice, differing only in header started_ts → byte-identical output,
+    and summary.md contains no started_ts (no-timestamp contract under the real hook header shape)."""
     trace = tmp_path / "trace.jsonl"
     script = tmp_path / "cfg-analyze.py"
     script.write_text(
@@ -232,18 +237,18 @@ def test_analyzer_deterministic_byte_identical(tmp_path: Path):
 # ---------- (e) README VM-only warning ----------
 
 def test_readme_vm_only_warning_and_prohibition(tmp_path: Path):
-    """(e) README.md 含 VM-only 警告与硬禁令 #5."""
-    del tmp_path  # 无文件系统副作用, 纯文本断言
+    """(e) README.md carries the VM-only warning and hard prohibition #5."""
+    del tmp_path  # no filesystem side effects — pure text assertions
     text = README.read_text(encoding="utf-8")
-    assert "硬禁令 #5" in text, "README missing hard prohibition #5 mention"
-    assert "仅限 VM" in text and "宿主" in text, "README missing VM-only channel warning"
+    assert "hard prohibition #5" in text, "README missing hard prohibition #5 mention"
+    assert "VM channel only" in text and "host" in text, "README missing VM-only channel warning"
 
 
 # ---------- (f) no host paths / real IPs ----------
 
 @pytest.mark.parametrize("path", [HOOK_TMPL, ANALYZE_TMPL, README])
 def test_templates_have_no_host_absolute_paths_or_real_ips(path: Path):
-    """(f) 模板不含宿主绝对路径与真实 IP（VM 参数由占位符/<> 表示）."""
+    """(f) templates contain no host absolute paths or real IPs (VM params are placeholders/<...>)."""
     text = path.read_text(encoding="utf-8")
     assert not _ABS_PATH.search(text), f"{path.name} contains a host absolute path"
     assert not _IP.search(text), f"{path.name} contains a real IPv4 address"

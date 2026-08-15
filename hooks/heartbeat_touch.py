@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""v1.9.36 — heartbeat touch hook (root-cause fix for '整个属于心跳的BUG').
+"""v1.9.36 — heartbeat touch hook (root-cause fix for the "the whole thing is a heartbeat BUG" user report, 原文 Chinese).
 
 Problem: heartbeat liveness depended on the ORCHESTRATOR processing the cron
 /loop prompt and running `--renew`. Any busy/compacted/context-limited phase
@@ -43,8 +43,9 @@ def main() -> int:
             data = json.loads(hb.read_text(encoding="utf-8"))
             data["activity_ts"] = utc_now()
             data.setdefault("last_tick_ts", data["activity_ts"])  # legacy readers
-            # F2 (#14): 原子写 (tmp→replace) 替 bare write_text, 消除 RC3 并发竞态
-            # (orchestrator + N worker 并发触发此 hook 时无写丢失)。
+            # F2 (#14): atomic write (tmp→replace) replaces bare write_text,
+            # eliminating the RC3 concurrent race (no lost writes when the
+            # orchestrator + N workers trigger this hook concurrently).
             tmp = hb.with_suffix(hb.suffix + ".tmp")
             tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
             tmp.replace(hb)

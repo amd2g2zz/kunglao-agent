@@ -9,7 +9,7 @@ scripts/env_check.py catches the flag at Phase 0, but a polluted session can
 skip Phase 0 entirely — this hook is the mechanical backstop that fires ON the
 Agent tool itself, at the exact point a worker would be dispatched.
 
-#276 (default 0 化): only TRUTHY values (1/true/yes/on, case-insensitive)
+#276 (defaults to 0): only TRUTHY values (1/true/yes/on, case-insensitive)
 trigger the hard REJECT; 0/false/off/empty are the clean default state and pass
 through silently — matching scripts/env_check.py check_flag semantics.
 
@@ -53,11 +53,11 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 import init_state  # noqa: E402
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
-TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: only truthy rejects; 0/false/空 pass
+TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: only truthy rejects; 0/false/empty pass
 
 
 def _is_truthy(value: str | None) -> bool:
-    """Truthy 判定: 1/true/yes/on, 不区分大小写 (#276 默认 0 化语义)."""
+    """Truthy check: 1/true/yes/on, case-insensitive (#276 default-off semantics)."""
     return value is not None and value.strip().lower() in TRUTHY_VALUES
 
 

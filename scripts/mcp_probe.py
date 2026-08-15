@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """mcp_probe.py — MCP supply probe (#316).
 
-单一事实源 (single source of truth) for the RE MCP manifest: which MCP servers
+Single source of truth for the RE MCP manifest: which MCP servers
 the analysis pipeline needs, per project type, with tier (HARD blocks / WARN
 informational) and a `claude mcp add ...` registration command per item.
 
@@ -17,7 +17,7 @@ kunglao-init: a strictly valid JSON document (comments as `_comment` keys —
 `//` comments are NOT portable across .mcp.json parsers) whose `mcpServers`
 map is empty (a scaffold must never shadow a working user-level registration
 with a broken command) and whose `mcp_manifest` carries the per-type list
-with 用途/来源/注册命令模板 per item.
+with purpose/source/register-command-template per item.
 
 CLI: mcp_probe.py <workspace> [--type windows|linux|android] [--json]
                      [--reproduce] [--claude-json PATH]
@@ -47,13 +47,13 @@ class MCPItem:
     """One manifest entry: a required/optional MCP server."""
     name: str                 # canonical lowercase server name
     tier: str                 # "HARD" (blocks analysis) | "WARN" (informational)
-    purpose: str              # 用途
-    source: str               # 来源 (package / bridge binary)
-    register: str             # 注册命令模板 (`claude mcp add ...`)
+    purpose: str              # what the server is used for
+    source: str               # where it comes from (package / bridge binary)
+    register: str             # registration command template (`claude mcp add ...`)
     types: tuple[str, ...]    # applicable project types
 
 
-# Per-type 必配/可选清单 (issue #316 task 1). Group order is part of the
+# Per-type required/optional list (issue #316 task 1). Group order is part of the
 # scaffold contract — tests/test_mcp_supply.py pins it.
 MANIFEST_GROUPS: dict[str, list[str]] = {
     "required_all_types": ["ghidra", "sequential-thinking"],
@@ -66,45 +66,45 @@ MANIFEST_GROUPS: dict[str, list[str]] = {
 MANIFEST: tuple[MCPItem, ...] = (
     MCPItem(
         name="ghidra", tier="HARD", types=ALL_TYPES,
-        purpose="Ghidra 反编译/静态分析",
-        source="bridge-mcp-ghidra (stdio 桥接)",
+        purpose="Ghidra decompilation / static analysis",
+        source="bridge-mcp-ghidra (stdio bridge)",
         register="claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe",
     ),
     MCPItem(
         name="sequential-thinking", tier="HARD", types=ALL_TYPES,
-        purpose="结构化推理",
+        purpose="structured reasoning",
         source="@modelcontextprotocol/server-sequential-thinking",
         register="claude mcp add sequential-thinking -- "
                  "npx -y @modelcontextprotocol/server-sequential-thinking",
     ),
     MCPItem(
         name="x64dbg", tier="HARD", types=("windows",),
-        purpose="Windows T3 动态调试 (VM 远程)",
+        purpose="Windows T3 dynamic debugging (VM remote)",
         source="x64dbg-automate-mcp",
         register="claude mcp add x64dbg -- x64dbg-automate-mcp",
     ),
     MCPItem(
         name="volatility", tier="WARN", types=("windows",),
-        purpose="内存取证 (memory forensics)",
+        purpose="memory forensics",
         source="volatility_mcp_server.py",
         register="claude mcp add volatility -- python <path>/volatility_mcp_server.py",
     ),
     MCPItem(
         name="ida-pro-vm", tier="WARN", types=ALL_TYPES,
-        purpose="IDA 远程分析 (选 IDA 时)",
+        purpose="IDA remote analysis (when IDA is chosen)",
         source="IDA MCP (http transport)",
         register="claude mcp add --transport http ida-pro-vm <ida-mcp-url>",
     ),
     MCPItem(
         name="gitnexus", tier="HARD", types=("android",),
-        purpose="Android 建图流程 (post-decompile graph)",
-        source="gitnexus mcp (先 npm i -g gitnexus)",
+        purpose="Android graph building (post-decompile graph)",
+        source="gitnexus mcp (npm i -g gitnexus first)",
         register="claude mcp add gitnexus -- gitnexus mcp",
     ),
     MCPItem(
         name="virustotal", tier="WARN", types=ALL_TYPES,
-        purpose="CTI 情报 (家族归属假设)",
-        source="@burtthecoder/mcp-virustotal (需 VT_API_KEY)",
+        purpose="CTI intelligence (family-attribution hypothesis)",
+        source="@burtthecoder/mcp-virustotal (needs VT_API_KEY)",
         register="claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal",
     ),
 )
@@ -215,7 +215,7 @@ def build_scaffold_json() -> dict:
 
     `mcpServers` is empty on purpose: a scaffold must not register broken
     placeholder commands that would shadow a working user-level registration.
-    `mcp_manifest` carries the per-type list (用途/来源/注册命令模板).
+    `mcp_manifest` carries the per-type list (purpose/source/register template).
     """
     return {
         "_comment": (
@@ -228,8 +228,8 @@ def build_scaffold_json() -> dict:
         "mcpServers": {},
         "mcp_manifest": {
             "_comment": (
-                "Per-type 必配/可选 MCP 清单. 与 scripts/mcp_probe.py MANIFEST "
-                "保持一致 (tests/test_mcp_supply.py pins equality)."
+                "Per-type required/optional MCP list. Kept in sync with "
+                "scripts/mcp_probe.py MANIFEST (tests/test_mcp_supply.py pins equality)."
             ),
             **{
                 group: [

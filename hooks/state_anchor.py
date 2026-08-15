@@ -5,7 +5,7 @@
 WHY: v1.9's convergence loop is reliable only as long as the orchestrator
 REMEMBERS the current mechanical state every turn. When it forgets (absorbed
 in a worker report, compacted, context-limited) there is no backstop — the
-loop drifts and "kunglao-agent 笨了" returns as a mystery. worker_pulse (#38)
+loop drifts and "kunglao-agent got dumb" (user's words, 原文 Chinese: kunglao-agent 笨了) returns as a mystery. worker_pulse (#38)
 fires only on dispatch-prefix Agent calls; external_kicker (#39/#43) recovers
 DEAD or alive-but-stuck sessions. Between them lies context rot (research F5:
 the deterministic Executive must own belief — know / change / commit / forget

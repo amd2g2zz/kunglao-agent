@@ -101,7 +101,7 @@ def pyproject_version(path: Path) -> str:
 
 
 def reverse_scan(root: Path, manifest: dict) -> list[str]:
-    """存在→declared reverse scan (issue #320): every shipped file under
+    """Exists→declared reverse scan (issue #320): every shipped file under
     agents/ hooks/ templates/ tools/ must be declared in the manifest's
     assets.<section> — undeclared assets FAIL with fix guidance.
 

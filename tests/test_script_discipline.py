@@ -97,8 +97,9 @@ def test_template_has_script_discipline_keywords() -> None:
     the 4-variant template rewrite.
     """
     text = TEMPLATE.read_text(encoding="utf-8")
+    # #356 W2 + #357: all-English template; vocabulary is reusable/ad-hoc/inline.
     for kw in ("reusable", "ad-hoc", "inline"):
-        assert kw in text, f"CLAUDE.md.base.tmpl missing script-discipline keyword: {kw}"
+        assert kw in text.lower(), f"CLAUDE.md.base.tmpl missing script-discipline keyword: {kw}"
 
 
 def test_skill_has_script_discipline_contract() -> None:

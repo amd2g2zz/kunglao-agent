@@ -51,8 +51,8 @@ def test_scan_registers_raw_excludes_derivation(tmp_path):
     assert any("x64dbg-c206-capture" in p for p in paths)
     assert any("full_trace" in p for p in paths)
     assert any("yara-packer" in p for p in paths)
-    assert not any("summary.json" in p for p in paths), "派生 summary.json 不应进 index"
-    assert not any("verdict.json" in p for p in paths), "派生 verdict.json 不应进 index"
+    assert not any("summary.json" in p for p in paths), "derived summary.json must not enter the index"
+    assert not any("verdict.json" in p for p in paths), "derived verdict.json must not enter the index"
 
 
 def test_eid_path_resolves_and_sha256_matches(tmp_path):
@@ -70,7 +70,7 @@ def test_entry_has_required_fields(tmp_path):
     idx = bei.build_index(ws)
     for e in idx["entries"]:
         for k in ("eid", "path", "sha256", "size", "type"):
-            assert k in e, f"缺字段 {k}: {e}"
+            assert k in e, f"missing field {k}: {e}"
     eids = [e["eid"] for e in idx["entries"]]
     assert len(eids) == len(set(eids)), "eid 唯一"
 

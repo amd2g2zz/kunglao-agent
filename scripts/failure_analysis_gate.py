@@ -2,9 +2,13 @@
 # -*- coding: utf-8 -*-
 """failure_analysis_gate.py - force method reasoning after a failed attempt (v1.9.3).
 
-THE PROBLEM THIS SOLVES (user's exact words):
+THE PROBLEM THIS SOLVES (user's exact words, in Chinese):
   "目前我们要分析 c2 的网络协议,但是目前失败了,你能说没有网络协议行为,
    然后不分析吗?但是之前的分析办法可能存在问题,这个就需要分析,然后优化"
+  ("we need to analyze the C2 network protocol, but it failed so far — can
+   you declare there is no network-protocol behavior and stop analyzing?
+   But the previous analysis method may itself be flawed; that needs
+   analysis and improvement")
 
 A failed analysis attempt is NOT evidence the behavior is absent. It is evidence
 the METHOD failed — possibly. The orchestrator must NOT collapse "method failed"
@@ -333,13 +337,13 @@ def _write_lesson(lib: Path, signature: str, topic: str,
     lines = ["---", yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).strip(), "---", ""]
     lines.append(f"# Lesson — {topic}")
     lines.append("")
-    lines.append("## 失败签名 (failure signature)")
+    lines.append("## Failure signature")
     lines.append(f"- method_assumption: {fm['method_assumption']}")
     lines.append(f"- assumption_validity: {fm['assumption_validity']}")
     lines.append(f"- next_method: {fm['next_method']}")
     lines.append(f"- claim topic: {topic}")
     lines.append("")
-    lines.append("## 已验证结论 (what actually happened)")
+    lines.append("## What actually happened (verified conclusions)")
     for cid, entry in sorted(entries):
         lines.append(f"- {cid} ({entry.get('outcome', '')}): {entry.get('what_happened', '')}")
     lines.append("")
@@ -629,7 +633,9 @@ def main() -> int:
     if args.claim_id:
         # #41 fix (orchestrator verification): forward --library so BLOCKED
         # guidance includes similar_lessons — previously dropped here, so the
-        # acceptance criterion "BLOCKED 输出含 3 相似 lesson" failed via CLI.
+        # acceptance criterion "BLOCKED output contains 3 similar lessons"
+        # (original acceptance wording, in Chinese: "BLOCKED output
+        # contains 3 similar lessons") failed via CLI.
         r = check_claim(workspace, args.claim_id, library=args.library)
         if r["state"] == "BLOCKED":
             _emit_failure_blocked(workspace, r)

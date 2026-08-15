@@ -1,22 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""kunglao_verify — M3 VERIFY 实现模块 (phase 5, E5.1).
+"""kunglao_verify — M3 VERIFY implementation module (phase 5, E5.1).
 
-独立 CLI 入口: scripts/kunglao-verify.py(薄包装, 本模块含全部逻辑)。
+Standalone CLI entry: scripts/kunglao-verify.py (thin wrapper; this module
+holds all the logic).
 
-- l1_mechanical: parse reproduce → run(只读白名单) → 比对 expected → PASS/FAIL
-      * assignment-class expected WITH value assertions: 逐字段 byte-exact 比对 (D2, #49)
-      * otherwise: 整块 sha256 比对 (原 M3.2 行为)
-- check_assignment_expected: assignment-class 必须绑定 value assertions, 否则 lint-reject (D1/D3, #49)
-- check_expected_anchor_source: expected 不得由产出脚本自算 — recompute_script
-      源码内嵌 expected 即重言式验证, lint-reject (#238 F3, 2026-08-12 adapt-final.py)
-- check_cross_workflow_redteam: provenance=cross_workflow 的 fact 必须带
-      kunglao-redteam 记录, 缺失为 WARN 不阻断 (#238 F6)
-- l2_redteam:    kunglao-redteam 派发封装接口(默认 NOT-RUN; 测试用 dispatcher stub 注入)
-- anchor_check:  PASS 必须带 anchors(byte_offset/cmd/expected); 无锚不提升
-- verify:        M3.4 状态机组合 → 写 runs/verify-<fact_id>-<ts>.json
+- l1_mechanical: parse reproduce → run (read-only whitelist) → compare
+      against expected → PASS/FAIL
+      * assignment-class expected WITH value assertions: per-field
+        byte-exact comparison (D2, #49)
+      * otherwise: whole-block sha256 comparison (original M3.2 behavior)
+- check_assignment_expected: assignment-class must bind value assertions,
+      otherwise lint-reject (D1/D3, #49)
+- check_expected_anchor_source: expected must not be self-computed by the
+      producing script — a recompute_script whose source embeds expected
+      is tautological verification, lint-reject (#238 F3, 2026-08-12
+      adapt-final.py)
+- check_cross_workflow_redteam: facts with provenance=cross_workflow must
+      carry a kunglao-redteam record; missing → WARN, not blocking
+      (#238 F6)
+- l2_redteam:    kunglao-redteam dispatch wrapper interface (NOT-RUN by
+      default; tests inject a dispatcher stub)
+- anchor_check:  PASS must carry anchors (byte_offset/cmd/expected); no
+      anchor, no promotion
+- verify:        M3.4 state-machine composition → writes
+      runs/verify-<fact_id>-<ts>.json
 
-输出契约: schemas/verify-output.json (M3.3 冻结, module-design §M3.3 L270-280)。
+Output contract: schemas/verify-output.json (M3.3 frozen, module-design
+§M3.3 L270-280).
 """
 from __future__ import annotations
 
@@ -30,7 +41,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-# ---- 只读白名单(M3.2 L251 "只读白名单: python/xxd/grep/sha256sum 等, 禁止写") ----
+# ---- read-only whitelist (M3.2 L251 "read-only whitelist: python/xxd/grep/sha256sum etc., writes forbidden") ----
 READONLY_TOOLS = {
     "python", "python3", "py",
     "xxd", "od", "hexdump", "cat", "strings", "file",
@@ -40,37 +51,39 @@ READONLY_TOOLS = {
 CMD_TIMEOUT_SEC = 15
 REPRODUCE_MAX_CHARS = 2000
 
-# python -c 路径的写操作静态拒绝: 任何写意图 → FAIL(不降级为 PASS)
+# python -c path static write rejection: any write intent → FAIL (never downgraded to PASS)
 _PY_WRITE_RE = re.compile(
     r"open\([^)]*['\"][wa]|\.write\(|"
     r"os\.(remove|unlink|mkdir|rmdir|system|popen|rename|truncate|replace)|"
     r"shutil\.|subprocess\.|pathlib\.[A-Za-z_]+\([^)]*\)\.(write_text|write_bytes|mkdir|unlink|rename)",
     re.IGNORECASE,
 )
-# shell 风格重定向拒绝(xxd/grep/... 路径)
+# shell-style redirection rejection (xxd/grep/... path)
 _SHELL_WRITE_RE = re.compile(r">\s*[\w\"'/\\]|>>|\|\s*tee\b", re.IGNORECASE)
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 L2_VERDICTS = ("CONFIRMED", "REFUTED", "UNVERIFIED-WITH-GAP", "NOT-RUN")
 
 # ---- assignment-class value-assertion gate (a2b5e25c / GitHub #49) ----
-# 一个"裸 ="(不属于 ==, !=, >=, <=, :=)即标记 assignment-class — field 赋值语义,
-# 而非纯 API 调用序列。纯 API 序列与裸 hex/sha 字面量无此 '=', 走原 sha256 路径。
+# A "bare =" (not part of ==, !=, >=, <=, :=) marks assignment-class —
+# field-assignment semantics, not a pure API call sequence. Pure API
+# sequences and bare hex/sha literals lack this '=' and take the original
+# sha256 path.
 _ASSIGN_EQ_RE = re.compile(r"(?<![<>=!:])=(?![=])")
-# field=value 解析器: 捕获 (field, value); value 在 ; , = 或换行处终止。
+# field=value parser: captures (field, value); value terminates at ; , = or newline.
 _VALUE_ASSERTION_RE = re.compile(r"([A-Za-z_][\w.]*)\s*=\s*([^;,=\n]+)")
-# reproduce 输出行解析器: 接受 field=value 或 field: value。
+# reproduce output-line parser: accepts field=value or field: value.
 _ACTUAL_ASSERTION_RE = re.compile(r"^([A-Za-z_][\w.]*)\s*[:=]\s*(.+)$")
-# 不算具体 value 绑定的 RHS 占位符。
+# RHS placeholders that do not count as concrete value bindings.
 _VALUE_PLACEHOLDERS = {"??", "?", "TBD", "TODO", "N/A", "NULL", "null", ""}
 
 
 def utc_now() -> str:
-    """UTC ISO-8601 秒级, Z 后缀."""
+    """UTC ISO-8601 seconds precision, Z suffix."""
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _parse_frontmatter(text: str) -> dict:
-    """极简 frontmatter: '---' 围栏内逐行 'key: value'(去引号). 失败返回 {}."""
+    """Minimal frontmatter: line-by-line 'key: value' inside a '---' fence (quotes stripped). Returns {} on failure."""
     out: dict[str, str] = {}
     if not text.startswith("---"):
         return out
@@ -87,7 +100,7 @@ def _parse_frontmatter(text: str) -> dict:
 
 
 def load_fact(ws: Path, fact_id: str) -> dict | None:
-    """读 facts/<fact_id>.md frontmatter; 文件缺失 → None."""
+    """Read facts/<fact_id>.md frontmatter; missing file → None."""
     p = ws / "facts" / f"{fact_id}.md"
     if not p.exists():
         return None
@@ -97,13 +110,13 @@ def load_fact(ws: Path, fact_id: str) -> dict | None:
 
 
 def _find_claim_id(fact: dict) -> str:
-    """frontmatter claim_id 优先; 缺失 → C-UNKNOWN(契约空白决策, schema 允许)."""
+    """frontmatter claim_id wins; missing → C-UNKNOWN (contract-gap decision, schema allows it)."""
     cid = str(fact.get("claim_id", "")).strip()
     return cid if cid else "C-UNKNOWN"
 
 
 def _expected_hash(expected: str) -> str:
-    """expected 为 64-hex → 直接当 sha256; 否则 sha256(expected 去除空白)."""
+    """expected is 64-hex → use directly as sha256; otherwise sha256(expected with whitespace removed)."""
     exp = expected.strip()
     if _SHA256_RE.match(exp):
         return exp
@@ -115,21 +128,23 @@ def _expected_hash(expected: str) -> str:
 # ===========================================================================
 
 def is_assignment_class(expected: str) -> bool:
-    """D4 分类器: expected 是否含赋值指示符?
+    """D4 classifier: does expected contain an assignment indicator?
 
-    一个"裸 ="(非 ==, !=, >=, <=, :=)即判定为 assignment-class。纯 API 调用序列
-    (calls Foo(a, b)) 与裸 hex/sha 字面量 (0x5a4d, 64-hex) 无此 '=', 不属
-    assignment-class — 它们继续走原整块 sha256 路径。
+    A "bare =" (not ==, !=, >=, <=, :=) marks it as assignment-class. Pure
+    API call sequences (calls Foo(a, b)) and bare hex/sha literals
+    (0x5a4d, 64-hex) lack this '=', so they are not assignment-class —
+    they keep the original whole-block sha256 path.
     """
     return bool(_ASSIGN_EQ_RE.search(expected))
 
 
 def parse_value_assertions(expected: str) -> list[tuple[str, str]]:
-    """从 assignment-class expected 中抽取具体的 field=value 断言。
+    """Extract concrete field=value assertions from an assignment-class expected.
 
-    返回有序 (field, value) 对列表。占位符 RHS (??, TBD, 空串) 不算具体绑定,
-    被 skip — 这样 check_assignment_expected 能把 "全是 field=??" 的 expected
-    判为"缺乏具体 value 断言"而拒绝。
+    Returns an ordered list of (field, value) pairs. Placeholder RHS
+    (??, TBD, empty string) does not count as a concrete binding and is
+    skipped — so check_assignment_expected can reject an expected that is
+    "all field=??" as "lacking concrete value assertions".
     """
     pairs: list[tuple[str, str]] = []
     for m in _VALUE_ASSERTION_RE.finditer(expected):
@@ -141,7 +156,7 @@ def parse_value_assertions(expected: str) -> list[tuple[str, str]]:
 
 
 def _parse_actual_assertions(stdout: bytes) -> dict[str, str]:
-    """把 reproduce 输出解析成 {field: value}; 每行一个 field[:=]value。"""
+    """Parse reproduce output into {field: value}; one field[:=]value per line."""
     actual: dict[str, str] = {}
     for line in stdout.decode("utf-8", errors="replace").splitlines():
         s = line.strip()
@@ -154,7 +169,7 @@ def _parse_actual_assertions(stdout: bytes) -> dict[str, str]:
 
 
 def _values_equal(a: str, b: str) -> bool:
-    """比较两个 value 字符串: 整数/hex 归一化后比; 否则精确字符串比。"""
+    """Compare two value strings: ints/hex compared after normalization; otherwise exact string equality."""
     a, b = a.strip(), b.strip()
     try:
         return int(a, 0) == int(b, 0)
@@ -165,11 +180,13 @@ def _values_equal(a: str, b: str) -> bool:
 def compare_value_assertions(
     expected_assertions, actual_stdout
 ) -> tuple[bool, list[tuple[str, str, str]]]:
-    """D2: 逐字段把 expected value 断言对照 reproduce 实际输出。
+    """D2: compare expected value assertions field-by-field against actual reproduce output.
 
-    返回 (all_match, mismatches)。每个 mismatch = (field, expected, actual);
-    actual 为观测值, 或 field 缺席时的 '<missing from reproduce output>'。
-    全部断言都匹配才 PASS — 避免"整块 sha256 模糊通过"掩盖单字段反转 (a2b5e25c)。
+    Returns (all_match, mismatches). Each mismatch = (field, expected,
+    actual); actual is the observed value, or '<missing from reproduce
+    output>' when the field is absent. PASS only when every assertion
+    matches — prevents "whole-block sha256 fuzzy pass" from masking a
+    single-field inversion (a2b5e25c).
     """
     actual = _parse_actual_assertions(actual_stdout)
     mismatches: list[tuple[str, str, str]] = []
@@ -182,10 +199,12 @@ def compare_value_assertions(
 
 
 def check_assignment_expected(fact: dict, *, grace: bool = False) -> tuple[bool, str]:
-    """Lint gate (D1/D3): assignment-class expected 必须绑定具体 value 断言。
+    """Lint gate (D1/D3): assignment-class expected must bind concrete value assertions.
 
-    没有 byte-exact 目标的 fact 不应被提升到 PROVEN/VERIFIED。返回 (ok, reason):
-    ok=False 阻断提升。grace=True 时把拒绝降级为非阻断 WARN (一次性迁移周期用)。
+    A fact without byte-exact targets must not be promoted to
+    PROVEN/VERIFIED. Returns (ok, reason): ok=False blocks promotion.
+    grace=True downgrades the rejection to a non-blocking WARN (for the
+    one-time migration window).
     """
     expected = str(fact.get("expected", ""))
     if not is_assignment_class(expected):
@@ -204,22 +223,27 @@ def check_assignment_expected(fact: dict, *, grace: bool = False) -> tuple[bool,
 # #238 F3/F6: expected-anchor provenance gate + cross-workflow redteam record
 # ===========================================================================
 #
-# F3 (2026-08-12 adapt-final.py 事故): orchestrator 跑自己的脚本、自算 expected
-#   sha256 — L1 比对变成"脚本输出 vs 脚本自身常量"的自比。expected 必须独立于
-#   产出脚本: 若 expected 或其 sha256 出现在 provenance recompute_script 源码
-#   中 → lint 拒绝(重言式验证)。
-# F6 (F001-F003 转述事故): 来自外部工作流(mal-recon 等)的转述证据进入 fact
-#   base 前必须过 kunglao-redteam 抽验; 无 redteam 记录 → WARN(不阻断提升)。
+# F3 (2026-08-12 adapt-final.py incident): the orchestrator ran its own
+#   script and self-computed the expected sha256 — the L1 comparison
+#   became "script output vs the script's own constant". expected must be
+#   independent of the producing script: if expected or its sha256 appears
+#   in the provenance recompute_script source → lint reject (tautological
+#   verification).
+# F6 (F001-F003 transcription incident): transcribed evidence from
+#   external workflows (mal-recon etc.) must pass a kunglao-redteam spot
+#   check before entering the fact base; no redteam record → WARN (does
+#   not block promotion).
 
 _INLINE_PROV_ENTRY_RE = re.compile(r"\{([^{}]*)\}")
 CROSS_WORKFLOW_MARKER = "cross_workflow"
 
 
 def _prov_recompute_paths(fact: dict) -> list[str]:
-    """provenance 中 role=recompute_script 的 path/url 列表(重读原始 frontmatter).
+    """List of path/url with role=recompute_script in provenance (re-reads the raw frontmatter).
 
-    load_fact 的 flat parser 不解析 YAML 列表, 这里从 fact 文件原文抽取
-    "- {role: recompute_script, path: ...}" 与 "provenance: [{...}]" 两种形态。
+    load_fact's flat parser does not parse YAML lists, so extract both the
+    "- {role: recompute_script, path: ...}" and "provenance: [{...}]"
+    shapes from the raw fact file text here.
     """
     p = fact.get("_path")
     if not p:
@@ -239,7 +263,7 @@ def _prov_recompute_paths(fact: dict) -> list[str]:
 
 
 def _resolve_script(script_path: str, fact: dict) -> Path | None:
-    """脚本路径解析: 相对 fact 所在 workspace 根; 找不到再按原样尝试."""
+    """Script path resolution: relative to the fact's workspace root; if not found, try as-is."""
     p = Path(script_path)
     if p.is_absolute():
         return p if p.exists() else None
@@ -249,18 +273,20 @@ def _resolve_script(script_path: str, fact: dict) -> Path | None:
 
 
 def _embedded_token(src_norm: str, token: str) -> bool:
-    """token 在源码(空白已归一)中以独立 token 出现(非更长常量/标识符的子串)."""
+    """Whether token appears in the source (whitespace-normalized) as a standalone token (not a substring of a longer constant/identifier)."""
     if not token:
         return False
     return bool(re.search(r"(?<![A-Za-z0-9])" + re.escape(token) + r"(?![A-Za-z0-9])", src_norm))
 
 
 def check_expected_anchor_source(fact: dict) -> tuple[bool, str]:
-    """F3 (#238): expected 不得由产出脚本自算 — 重言式验证拒绝.
+    """F3 (#238): expected must not be self-computed by the producing script — tautological-verification reject.
 
-    provenance 中 role=recompute_script(产出该 fact 证据的脚本)若源码内嵌
-    expected 值或其 sha256, 则 expected 不是独立锚点。返回 (False, reason)
-    阻断提升。脚本缺失 → 放行(L1 reproduce 会以 exit code 单独 FAIL)。
+    If a provenance entry with role=recompute_script (the script that
+    produced the fact's evidence) embeds the expected value or its sha256
+    in its source, expected is not an independent anchor. Returns
+    (False, reason) to block promotion. Missing script → allow through
+    (L1 reproduce will FAIL separately on the exit code).
     """
     expected = str(fact.get("expected", "")).strip()
     if not expected:
@@ -286,7 +312,7 @@ def check_expected_anchor_source(fact: dict) -> tuple[bool, str]:
 
 
 def _is_cross_workflow(fact: dict) -> bool:
-    """provenance=cross_workflow 标记检测: 顶层字符串或 role 条目两种形态."""
+    """Detect the provenance=cross_workflow marker: top-level string or role-entry shapes."""
     prov = fact.get("provenance")
     if isinstance(prov, str) and prov.strip().lower() == CROSS_WORKFLOW_MARKER:
         return True
@@ -295,7 +321,7 @@ def _is_cross_workflow(fact: dict) -> bool:
                and str(p.get("role", "")).strip().lower() == CROSS_WORKFLOW_MARKER
                for p in prov):
             return True
-    # role-entry 形态经 load_fact 的 flat parser 进不来 — 从原文检测兜底
+    # role-entry shape cannot come through load_fact's flat parser — detect from raw text as a fallback
     p = fact.get("_path")
     if p:
         try:
@@ -310,12 +336,15 @@ def _is_cross_workflow(fact: dict) -> bool:
 
 
 def check_cross_workflow_redteam(fact: dict, ws: Path) -> tuple[bool, str]:
-    """F6 (#238): provenance=cross_workflow 的 fact 必须带 kunglao-redteam 记录.
+    """F6 (#238): facts with provenance=cross_workflow must carry a kunglao-redteam record.
 
-    跨工作流(mal-recon 等)转述证据进入 fact base 前必须过 redteam 抽验。
-    记录 = frontmatter redteam_verdict ∈ {CONFIRMED, PASS} /
-    runs/verify-redteam-*.md(含 fid) / runs/verify-<fid>-*.json(l2.verdict=CONFIRMED)。
-    无记录 → (False, reason), 调用方按 WARNING 处理(不阻断提升)。
+    Transcribed evidence from external workflows (mal-recon etc.) must
+    pass a redteam spot check before entering the fact base.
+    Record = frontmatter redteam_verdict ∈ {CONFIRMED, PASS} /
+    runs/verify-redteam-*.md (citing the fid) / runs/verify-<fid>-*.json
+    (l2.verdict=CONFIRMED).
+    No record → (False, reason); the caller treats it as WARNING (does
+    not block promotion).
     """
     if not _is_cross_workflow(fact):
         return True, "not a cross_workflow fact"
@@ -346,7 +375,7 @@ def check_cross_workflow_redteam(fact: dict, ws: Path) -> tuple[bool, str]:
 
 
 # ===========================================================================
-# #332 machine-check oracle contract (可执行预言机契约, 2026-08-14)
+# #332 machine-check oracle contract (executable oracle contract, 2026-08-14)
 # ===========================================================================
 #
 # CrackMeBench lesson (#330): an independent verifier and the maker can share
@@ -569,8 +598,8 @@ def machine_check_gate(ws: Path, fact_id: str, claim_id: str, fact: dict,
 # ===========================================================================
 
 def parse_reproduce(reproduce: str) -> list[str]:
-    """reproduce → argv: 白名单工具开头 → 原样 argv(python 换 sys.executable);
-    否则整串按 python -c 单行执行. 空/超长/不可分词 → ValueError."""
+    """reproduce → argv: starts with a whitelisted tool → argv as-is (python swapped for sys.executable);
+    otherwise the whole string runs as a single python -c line. Empty/oversized/untokenizable → ValueError."""
     if not reproduce or not reproduce.strip():
         raise ValueError("reproduce command is empty")
     if len(reproduce) > REPRODUCE_MAX_CHARS:
@@ -591,9 +620,10 @@ def parse_reproduce(reproduce: str) -> list[str]:
 
 def run_reproduce(reproduce: str, cwd: Path | None = None,
                   timeout: int = CMD_TIMEOUT_SEC) -> tuple[bytes | None, str]:
-    """执行 reproduce → (stdout_bytes, detail). 白名单外工具/写操作/超时/缺失 → (None, reason).
+    """Execute reproduce → (stdout_bytes, detail). Non-whitelisted tool/write op/timeout/missing → (None, reason).
 
-    任何失败返回 None — 调用方判 FAIL, 绝不降级为 PASS(M3.5 L297).
+    Any failure returns None — the caller marks FAIL, never downgraded to
+    PASS (M3.5 L297).
     """
     try:
         argv = parse_reproduce(reproduce)
@@ -615,12 +645,14 @@ def run_reproduce(reproduce: str, cwd: Path | None = None,
 
 
 def l1_mechanical(fact: dict, fixture: Path | None = None) -> dict:
-    """L1 机械层(M3.2 L251): 重跑 reproduce → 比对 expected → PASS/FAIL.
+    """L1 mechanical layer (M3.2 L251): rerun reproduce → compare against expected → PASS/FAIL.
 
-    两条比对路径(#49 D2):
-    - assignment-class expected 且带 value 断言: 逐字段 byte-exact 比对 reproduce 输出。
-    - 其它(非 assignment-class, 或裸 hex/sha): 整块 sha256 比对(原 M3.2 行为)。
-    actual_sha256 始终填充(verify-output schema 契约要求)。
+    Two comparison paths (#49 D2):
+    - assignment-class expected WITH value assertions: per-field byte-exact
+      comparison against reproduce output.
+    - otherwise (non-assignment-class, or bare hex/sha): whole-block
+      sha256 comparison (original M3.2 behavior).
+    actual_sha256 is always filled (verify-output schema contract).
     """
     reproduce = str(fact.get("reproduce", ""))
     expected = str(fact.get("expected", ""))
@@ -646,7 +678,8 @@ def l1_mechanical(fact: dict, fixture: Path | None = None) -> dict:
             return {"verdict": "FAIL", "actual_sha256": actual_sha256,
                     "cmd": reproduce, "expected_sha256": exp_hash,
                     "detail": f"value-assertion mismatch: {mm}"}
-        # assignment-class 但无具体断言 — 应已被 lint gate 拦截; 兜底再 FAIL 一次。
+        # assignment-class without concrete assertions — the lint gate should
+        # have caught it; belt-and-braces FAIL here too.
         return {"verdict": "FAIL", "actual_sha256": actual_sha256,
                 "cmd": reproduce, "expected_sha256": exp_hash,
                 "detail": "assignment-class expected lacks concrete value assertions"}
@@ -659,7 +692,7 @@ def l1_mechanical(fact: dict, fixture: Path | None = None) -> dict:
 
 
 def anchor_check(verdict: dict) -> bool:
-    """M3.2 L263: PASS 必须带 anchors(byte_offset/cmd/expected); 无锚 → False(拒提升)."""
+    """M3.2 L263: PASS must carry anchors (byte_offset/cmd/expected); no anchor → False (promotion refused)."""
     if verdict.get("l1", {}).get("verdict") != "PASS":
         return False
     anchors = verdict.get("anchors") or []
@@ -672,16 +705,17 @@ def anchor_check(verdict: dict) -> bool:
 
 
 def needs_semantic(fact: dict) -> bool:
-    """该 fact 是否需要 L2 语义对抗验证? 默认 False(L1 机械 PASS 即 VERIFIED, M3.4 L288)."""
+    """Does this fact need L2 semantic adversarial verification? Default False (L1 mechanical PASS means VERIFIED, M3.4 L288)."""
     flag = str(fact.get("needs_semantic", "")).strip().lower()
     return flag in ("true", "yes", "1") or fact.get("boundary_type") == "subjective_interpretation"
 
 
 def build_redteam_prompt(claim_id: str, ws: Path) -> str:
-    """BLIND 派发 prompt(M3.6 L304 "盲验证: 输入不含 maker 结论").
+    """BLIND dispatch prompt (M3.6 L304 "blind verification: the input carries no maker conclusion").
 
-    绝不携带 maker 上下文: 无目标 fact 内容、无 notes/、无 worker-status.
-    kunglao-redteam 独立 subagent 用: 自证先于对比; 每分歧记 DIFF.
+    Never carries maker context: no target fact content, no notes/, no
+    worker-status. For the independent kunglao-redteam subagent: self-
+    derivation before comparison; every divergence logged as DIFF.
     """
     return (
         f"RED-TEAM CHECK claim {claim_id} in workspace {ws}.\n"
@@ -707,7 +741,7 @@ def build_redteam_prompt(claim_id: str, ws: Path) -> str:
 
 
 def prompt_is_blind(prompt: str, ws: Path, claim_id: str) -> bool:
-    """机械 BLIND 断言: prompt 不含目标 claim 相关 fact 的正文行与文件路径."""
+    """Mechanical BLIND assertion: the prompt contains no body lines or file paths of facts tied to the target claim."""
     facts_dir = ws / "facts"
     if facts_dir.exists():
         for p in sorted(facts_dir.glob("*.md")):
@@ -724,11 +758,12 @@ def prompt_is_blind(prompt: str, ws: Path, claim_id: str) -> bool:
 
 
 def l2_redteam(claim_id: str, ws: Path, dispatcher=None) -> tuple[str, list[str]]:
-    """L2 对抗层派发封装接口(M3.2 L254) → (verdict, gaps).
+    """L2 adversarial-layer dispatch wrapper interface (M3.2 L254) → (verdict, gaps).
 
-    dispatcher: Callable[[str, Path], tuple[str, list[str]]] — 真实派发由
-    orchestrator 用 build_redteam_prompt 的 BLIND prompt 派发 kunglao-redteam
-    subagent; 测试注入 stub. 未注入 → NOT-RUN(不静默 PASS, M3.5 L298).
+    dispatcher: Callable[[str, Path], tuple[str, list[str]]] — the real
+    dispatch is the orchestrator's: it dispatches the kunglao-redteam
+    subagent with build_redteam_prompt's BLIND prompt; tests inject a
+    stub. Not injected → NOT-RUN (never a silent PASS, M3.5 L298).
     """
     if dispatcher is None:
         return ("NOT-RUN", ["L2 redteam dispatcher not configured — real dispatch "
@@ -744,10 +779,12 @@ def l2_redteam(claim_id: str, ws: Path, dispatcher=None) -> tuple[str, list[str]
 
 def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
            binary_path: Path | None = None) -> dict:
-    """M3.4 状态机(L282-293): lint → L1 → (需语义才 L2 + anchor_check).
+    """M3.4 state machine (L282-293): lint → L1 → (L2 + anchor_check only when semantics needed).
 
-    #49: assignment-class lint gate 先跑 — 缺 value 断言即 REJECTED(不提升)。
-    grace=True 时 lint 仅 WARN, 不阻断(一次性迁移)。输出写 runs/verify-<fact_id>-<ts>.json。
+    #49: the assignment-class lint gate runs first — missing value
+    assertions → REJECTED (no promotion).
+    grace=True makes lint WARN only, non-blocking (one-time migration).
+    Output written to runs/verify-<fact_id>-<ts>.json.
     """
     fact = load_fact(ws, fact_id)
     if fact is None:
@@ -756,15 +793,15 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
     claim_id = _find_claim_id(fact)
     anchors = fact.get("anchors", [])
 
-    # 组合 lint 门: #49 assignment-class 绑定 + #238 F3 expected 锚点来源。
-    # 任一拒绝 → lint_ok=False(REJECTED, 不提升)。
+    # Combined lint gate: #49 assignment-class binding + #238 F3 expected
+    # anchor source. Any rejection → lint_ok=False (REJECTED, no promotion).
     ok1, r1 = check_assignment_expected(fact, grace=grace)
     ok2, r2 = check_expected_anchor_source(fact)
     lint_ok = ok1 and ok2
     lint_reason = r1 if lint_ok else " | ".join(r for ok, r in ((ok1, r1), (ok2, r2)) if not ok)
     lint = {"ok": lint_ok, "reason": lint_reason, "grace": grace}
 
-    # #238 F6: cross_workflow 无 redteam 记录 → WARN(进 warnings, 不阻断)
+    # #238 F6: cross_workflow without a redteam record → WARN (into warnings, non-blocking)
     warnings: list[dict] = []
     cw_ok, cw_reason = check_cross_workflow_redteam(fact, ws)
     if not cw_ok:
@@ -866,7 +903,7 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
 
 
 def _grace_scan(ws: Path) -> int:
-    """--grace-scan: 列出 assignment-class 但缺 value 断言的 fact(迁移目标)。"""
+    """--grace-scan: list facts that are assignment-class but lack value assertions (migration targets)."""
     facts_dir = ws / "facts"
     affected: list[dict] = []
     if facts_dir.exists():
@@ -885,7 +922,7 @@ def _grace_scan(ws: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """独立 CLI: python kunglao-verify.py <ws> <fact_id> [--json] [--grace] | <ws> --grace-scan."""
+    """Standalone CLI: python kunglao-verify.py <ws> <fact_id> [--json] [--grace] | <ws> --grace-scan."""
     ap = argparse.ArgumentParser(
         description="kunglao-verify — M3 VERIFY (L1 mechanical + L2 redteam + assignment-class lint)")
     ap.add_argument("ws", type=Path, help="workspace root")

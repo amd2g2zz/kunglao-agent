@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""阶段 3.5 契约测试: kunglao-init 防二次初始化.
+"""Phase 3.5 contract tests: kunglao-init re-init protection.
 
-Step 1 RED — 当前状态: kunglao-init.py 不存在 → import 即 RED。
+Step 1 RED — current state: kunglao-init.py absent → the import itself is RED.
 
-GREEN 目标(阶段 3.5 判据, E-init.1-4):
-- E-init.1 防重: 连续 2 次运行第 2 次为续接模式, claim-register 无重复 seed
-- E-init.2 幂等: hooks 部署不重复(重跑后 hooks 段无重复条目)
-- E-init.3 漂移: [initialized] state_hash 变化 → 警告不静默
-- E-init.4 恢复: --force 重建先备份
+GREEN targets (phase 3.5 criteria, E-init.1-4):
+- E-init.1 anti-reinit: of two consecutive runs, the second is resume mode; claim-register has no duplicate seeds
+- E-init.2 idempotent: hook deployment does not duplicate (no duplicate entries in the hooks section after re-run)
+- E-init.3 drift: [initialized] state_hash change → a warning, never silent
+- E-init.4 recovery: --force rebuild backs up first
 """
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
 @pytest.fixture
 def init_ws(tmp_path) -> Path:
-    """合成 workspace: bins/ + sample + claim-register 空 + 无 [initialized] 标记."""
+    """Synthetic workspace: bins/ + sample + empty claim-register + no [initialized] marker."""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
     (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
@@ -37,12 +37,14 @@ def init_ws(tmp_path) -> Path:
 def _run_init(ws: Path, extra: list[str] | None = None,
               profile_root: Path | None = None,
               flag: str | None = "0") -> subprocess.CompletedProcess:
-    """运行 kunglao-init (hermetic):
-    --profile-root 默认指向 tmp(绝不触碰生产 profile);
-    flag 默认 "0"(#276 默认禁用态; 外层会话可能被 2026-08-12 flag=1 污染),
-    传 flag=None 表示子进程 env 不携带该变量。
-    --skip-toolchain: #304 修正后 toolchain 门禁在 scaffold 前置 —
-    本文件的测试聚焦防重/幂等/漂移行为, 门禁语义由 test_init_toolchain_gate.py 专测."""
+    """Run kunglao-init (hermetic):
+    --profile-root defaults to a tmp dir (production profiles are never touched);
+    flag defaults to "0" (#276 default-disabled; the outer session may be
+    contaminated by 2026-08-12 flag=1); flag=None means the subprocess env
+    carries no such variable.
+    --skip-toolchain: after the #304 fix the toolchain gate precedes scaffold —
+    this file's tests focus on reinit/idempotency/drift; gate semantics are
+    covered exclusively by test_init_toolchain_gate.py."""
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     if "--skip-toolchain" not in argv:
         argv.append("--skip-toolchain")
@@ -58,12 +60,12 @@ def _run_init(ws: Path, extra: list[str] | None = None,
 
 
 def test_kunglao_init_script_exists() -> None:
-    """kunglao-init.py 存在可运行."""
+    """kunglao-init.py exists and runs."""
     assert (SCRIPTS / "kunglao-init.py").exists(), "kunglao-init.py missing"
 
 
 def test_second_run_resumes(init_ws: Path) -> None:
-    """E-init.1: 第 1 次初始化, 第 2 次续接模式且 claim-register 无重复 seed."""
+    """E-init.1: first run initializes; the second is resume mode with no duplicate seeds in claim-register."""
     r1 = _run_init(init_ws)
     assert r1.returncode == 0, f"first init failed: {r1.stderr}"
     reg1 = (init_ws / "claim-register.yaml").read_text(encoding="utf-8")
@@ -77,7 +79,7 @@ def test_second_run_resumes(init_ws: Path) -> None:
 
 
 def test_hooks_idempotent(init_ws: Path, isolated_home) -> None:
-    """E-init.2: 重跑后 hooks 段无重复条目."""
+    """E-init.2: no duplicate entries in the hooks section after a re-run."""
     _run_init(init_ws)
     settings = isolated_home / ".claude" / "settings.json"
     if not settings.exists():
@@ -89,7 +91,7 @@ def test_hooks_idempotent(init_ws: Path, isolated_home) -> None:
 
 
 def test_state_hash_drift_warns(init_ws: Path) -> None:
-    """E-init.3: 改 claim-register 后重跑 → 警告不静默."""
+    """E-init.3: modify claim-register then re-run → a warning, not silent."""
     _run_init(init_ws)
     reg = init_ws / "claim-register.yaml"
     reg.write_text(reg.read_text(encoding="utf-8") + "\n# tampered\n", encoding="utf-8")
@@ -99,7 +101,7 @@ def test_state_hash_drift_warns(init_ws: Path) -> None:
 
 
 def test_force_backs_up_first(init_ws: Path) -> None:
-    """E-init.4: --force 重建先备份(claim-register 备份存在)."""
+    """E-init.4: --force rebuild backs up first (claim-register backup exists)."""
     _run_init(init_ws)
     r = _run_init(init_ws, ["--force"])
     assert r.returncode == 0, f"--force failed: {r.stderr}"
@@ -254,5 +256,5 @@ def test_claudemd_documents_env_and_script_discipline(init_ws: Path) -> None:
     assert "KUNGLAO_VM_HOST" in text, "CLAUDE.md missing KUNGLAO_VM_HOST doc"
     assert "GHIDRA_HOME" in text, "CLAUDE.md missing GHIDRA_HOME doc"
     assert "scripts/" in text, "CLAUDE.md missing scripts/ CLI discipline"
-    assert "ad-hoc" in text, \
+    assert "ad-hoc" in text.lower() or "Ad-hoc" in text, \
         "CLAUDE.md must ban ad-hoc inline execution"

@@ -14,7 +14,7 @@ Estimate shape for a claim at evidence tier `eta` (0..2):
 The estimator feeds priority.py's cheapness term. Conservative blending
 keeps the tier heuristic as the CAP: blended = min(tier_cheapness,
 cheapness_est) — an estimate can only make a claim look MORE expensive,
-never cheaper than the tier says (issue: "保守: 保留 tier 作下限").
+never cheaper than the tier says (issue, in Chinese: "保守: 保留 tier 作下限" — "conservative: keep the tier as the lower bound").
 
 Sample features come from <workspace>/sample_features.yaml:
     n_functions: 142

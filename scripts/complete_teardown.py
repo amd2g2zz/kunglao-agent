@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 """complete_teardown.py - 1-call search operator chain returning a fact bundle.
 
-User said: 'kunglao-agent是一个逆向agent,为了解决问题我把逆向问题抽象为搜索问题,
-逆向的步骤就是再探索,为了更好的探索你肯定要提供更多的探索工具'.
-Also: '我们要的是样本完整拆解'.
+User said (verbatim, in Chinese): 'kunglao-agent是一个逆向agent,为了解决问题我把逆向问题抽象为搜索问题,
+逆向的步骤就是再探索,为了更好的探索你肯定要提供更多的探索工具'
+("kunglao-agent is a RE agent; to solve problems I abstract RE as search,
+the RE steps are exploration, and better exploration needs more exploration
+tools").
+Also: '我们要的是样本完整拆解' ("what we want is a complete teardown of the
+sample").
 
 This script composes 5 cheap search operators (v1.8.15 inventory) into
 1 call and returns a coherent fact bundle, not 5 separate fact files:

@@ -1,58 +1,78 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""kunglao-init — workspace 初始化 + 防二次初始化 (phase 3.5, E-init.1-4).
+"""kunglao-init — workspace initialization + re-init protection (phase 3.5, E-init.1-4).
 
-独立 CLI(非 kunglao.py 子命令, module-design L448):
+Standalone CLI (not a kunglao.py subcommand, module-design L448):
     python kunglao-init.py <workspace> [--type windows|linux|android] [--force]
         [--hooks-json <path>] [--profile-root <path>]
 
 #304 type-aware extension:
     --type explicit > magic sniff (MZ/ELF/PK+classes.dex on bins/ first file)
     > interactive input() confirm with sniff default
-    类型落盘 analysis_state.txt project_type=<type>; 模板按型选择
+    The type is persisted to analysis_state.txt project_type=<type>; the
+    template is chosen by type.
     Init-completeness = [initialized] marker AND project_type declared
 
-#304 修正(comment 304-5289955958): 工具链验证 = 验证优先 + 提醒人类 + 拒绝 + 清理
-    流程: Phase 0 flag 守卫 → 续接检查 → 无样本友好提示(exit 5) → 类型判定 →
-    toolchain.check 前置(HARD 项) → FAIL: 逐项安装命令 + 拒绝(exit 4) + 清理
-    清理只移除本次运行自己创建的条目(cleanup_scaffold, created 清单) —
-    非本次创建的一律不删(真实 facts/ 内容必须存活, F2)。
-    PASS 才 scaffold + [initialized]。
-    --skip-toolchain 为测试/运维逃生口; 生产路径不跳过。
+#304 amendment (comment 304-5289955958): toolchain verification =
+    verify-first + notify the human + refuse + cleanup.
+    Flow: Phase 0 flag guard → resume check → no-sample friendly prompt
+    (exit 5) → type determination → toolchain.check preflight (HARD items)
+    → on FAIL: per-item install commands + refuse (exit 4) + cleanup.
+    Cleanup removes ONLY entries created by this run (cleanup_scaffold,
+    created list) — anything not created by this run is never deleted
+    (real facts/ content must survive, F2).
+    Only on PASS: scaffold + [initialized].
+    --skip-toolchain is the test/ops escape hatch; the production path
+    never skips.
 
-#304 修正 2 (review F1): [initialized] 标记存在但缺 project_type 的 pre-#304
-    workspace → 不再直接 resume exit 0(env_check_gate 会永久拒绝, 无机械修复
-    路径), 而是写 project_type(显式 > 状态 > 嗅探 > 确认)后再 exit 0。
+#304 amendment 2 (review F1): a pre-#304 workspace whose [initialized]
+    marker exists but lacks project_type → no longer a direct resume exit 0
+    (env_check_gate would reject it forever with no mechanical repair
+    path); instead write project_type (explicit > state > sniff >
+    confirm) then exit 0.
 
-Init-completeness 谓词(F6): scripts/init_state.py 单一来源, 本文件引用。
+Init-completeness predicate (F6): single source in scripts/init_state.py;
+this file imports it.
 
 
-Phase 0 (#276): 环境守卫 — CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS 默认 0 化。
-    - 进程 env 该 flag 为 truthy(1/true/yes/on) → HARD 拒绝 scaffold(exit 3),
-      修复指引: unset 后重启会话, 勿用 teammate 通道
-    - unset/0 → 会话内 os.environ[flag]="0" + analysis_state.txt 写
-      agent_teams_flag=0 (default disabled)
-    - 纳入设置: 通过 shell_defaults.apply 确保现存用户 PowerShell profile
-      (Documents/PowerShell 与 Documents/WindowsPowerShell) 含
-      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=0, 动作记录到 init 输出
-      (--profile-root 可注入, 测试用; 默认 Path.home())
+Phase 0 (#276): environment guard — CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
+    defaults to 0 (disabled).
+    - flag truthy in process env (1/true/yes/on) → HARD refuse to
+      scaffold (exit 3), repair guidance: unset then restart the session;
+      do not use the teammate channel
+    - unset/0 → in-session os.environ[flag]="0" + analysis_state.txt
+      records agent_teams_flag=0 (default disabled)
+    - Persisted settings: shell_defaults.apply ensures an existing user
+      PowerShell profile (Documents/PowerShell and
+      Documents/WindowsPowerShell) contains
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=0; actions are logged to init
+      output (--profile-root injectable for tests; default Path.home())
 
-三阶段防重状态机:
-    Phase 1 存在性检查: claim-register.yaml 含 `[initialized]` 标记 → 续接模式
-        - state_hash 无漂移 → exit 0, 输出 "resume"
-        - state_hash 漂移(外部编辑) → stderr WARNING(drift), 仍 exit 0 续接
-    Phase 2 全新初始化: scaffold(analysis_state.txt / global_plan.txt / runs/ 等)
-        + 3-5 条样本级 seed claims(C-001 样本概览 / C-002 家族归属 / C-003 打包器)
-        + hooks 幂等部署
-    Phase 3 幂等校验: 标记存在 + seed 计数; 重跑不重复 seed / 不重复部署 hooks
+Three-phase re-init-protected state machine:
+    Phase 1 existence check: claim-register.yaml contains the
+    `[initialized]` marker → resume mode
+        - state_hash unchanged → exit 0, output "resume"
+        - state_hash drifted (external edit) → stderr WARNING (drift),
+          still exit 0 resume
+    Phase 2 fresh initialization: scaffold (analysis_state.txt /
+    global_plan.txt / runs/ etc.)
+        + 3-5 sample-level seed claims (C-001 sample overview / C-002
+        family attribution / C-003 packer)
+        + idempotent hook deployment
+    Phase 3 idempotency verify: marker present + seed count; a rerun does
+    not re-seed / re-deploy hooks
 
-state_hash = sha256(claim-register.yaml 内容(state_hash 字段归一化) + facts/_INDEX.md
-            内容 + facts/ 目录文件清单按名排序拼接) — 记入 [initialized] 标记。
+state_hash = sha256(claim-register.yaml content (state_hash field
+            normalized) + facts/_INDEX.md content + facts/ file listing
+            concatenated sorted by name) — recorded in the [initialized]
+            marker.
 
-hooks 部署边界(硬约束): 绝不写生产 ~/.claude/settings.json。只写:
-    - `--hooks-json <path>` 指定的 settings.json 副本(不存在则创建), 或
-    - <workspace>/.claude/settings.json(若存在)
-    两者皆无 → 跳过部署(输出说明), 不碰 HOME。
+Hook deployment boundary (hard constraint): NEVER write the production
+~/.claude/settings.json. Write only:
+    - a settings.json copy specified by `--hooks-json <path>` (created if
+      absent), or
+    - <workspace>/.claude/settings.json (if it exists)
+    Neither → skip deployment (log an explanation), never touch HOME.
 """
 from __future__ import annotations
 
@@ -67,8 +87,9 @@ import sys
 from collections.abc import Collection
 from pathlib import Path
 
-# #276: 可复用 CLI 管理 shell 环境默认行(禁止内联)。按仓库惯例先注入 scripts/ 到
-# sys.path 再 import 兄弟模块(兼容 `python -m` 等非直跑调用方式)。
+# #276: reusable CLI manages shell environment default lines (no inline
+# execution). Per repo convention, inject scripts/ into sys.path before
+# importing sibling modules (compatible with `python -m` style invocations).
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
@@ -76,14 +97,14 @@ import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
 # F6 (#304 review): init-completeness predicate = single source in init_state.py
 from init_state import VALID_TYPES, is_init_complete, read_project_type  # noqa: E402
-import mcp_probe  # noqa: E402  (#316: MCP supply manifest/scaffold 单一事实源)
+import mcp_probe  # noqa: E402  (#316: MCP supply manifest/scaffold single source of truth)
 
 MARKER = "[initialized]"
 SEED_MIN = 3
 HOOK_FILES = ("worker_budget.py",)  # DESIGN §7 0.3: PreToolUse + PostToolUse → worker_budget
 HASH_RE = re.compile(r"state_hash=([0-9a-f]{64})")
 
-FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"  # #276: 默认 0 化
+FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"  # #276: defaults to 0 (disabled)
 AGENT_TEAMS_STATE_LINE = "agent_teams_flag=0 (default disabled)"
 
 # #304 amendment exit codes (callers branch on codes, not stderr text):
@@ -92,12 +113,12 @@ RC_ERROR = 1        # generic (argparse / fatal verify)
 RC_FATAL_VERIFY = 2  # post-init idempotency verify failed
 RC_FLAG_REJECT = 3   # Phase 0 (#276) agent-teams flag truthy
 RC_TOOLCHAIN_REFUSE = 4  # toolchain HARD FAIL — human must install, no scaffold
-RC_NO_SAMPLE = 5     # bins/ empty — friendly prompt (请将样本放入 bins/)
+RC_NO_SAMPLE = 5     # bins/ empty — friendly prompt (place a sample into bins/)
 
 SCAFFOLD_DIRS = ("facts", "blockers", "runs")
 SCAFFOLD_FILES = {
     "analysis_state.txt": (
-        "# analysis_state — kunglao-init scaffold(空结构段, DESIGN §7 0.4)\n"
+        "# analysis_state — kunglao-init scaffold (empty-structure stubs, DESIGN §7 0.4)\n"
         f"{AGENT_TEAMS_STATE_LINE}\n"
     ),
     "global_plan.txt": "# global_plan — kunglao-init v1 stub\n",
@@ -108,12 +129,12 @@ SCAFFOLD_FILES = {
 
 
 def utc_now() -> str:
-    """UTC ISO-8601 秒级, Z 后缀(与 hooks_selfcheck 同款)."""
+    """UTC ISO-8601 seconds precision, Z suffix (same shape as hooks_selfcheck)."""
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def atomic_write(path: Path, text: str) -> None:
-    """M0.2 store_atomic: 写 temp → rename(崩溃安全)."""
+    """M0.2 store_atomic: write temp → rename (crash-safe)."""
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(text, encoding="utf-8")
     tmp.replace(path)
@@ -122,32 +143,33 @@ def atomic_write(path: Path, text: str) -> None:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="kunglao-init",
-        description="workspace 初始化 + 防二次初始化(独立 CLI, 非 kunglao.py 子命令)",
+        description="workspace initialization + re-init protection (standalone CLI, not a kunglao.py subcommand)",
     )
-    parser.add_argument("workspace", help="目标 workspace 路径(含 bins/ claim-register.yaml 等)")
+    parser.add_argument("workspace", help="target workspace path (holds bins/, claim-register.yaml, etc.)")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
                         help="project type: windows|linux|android (#304)")
     parser.add_argument("--force", action="store_true",
-                        help="重建: 先备份 claim-register 再重新初始化")
+                        help="rebuild: back up claim-register first, then re-initialize")
     parser.add_argument("--skip-toolchain", action="store_true",
-                        help="跳过 toolchain 前置门禁(#304 修正的测试/运维逃生口; "
-                             "生产路径不跳过)")
+                        help="skip the toolchain preflight gate (test/ops escape "
+                             "hatch from the #304 amendment; the production "
+                             "path never skips)")
     parser.add_argument("--hooks-json", metavar="PATH", default=None,
-                        help="hooks 部署目标 settings.json 副本; 默认 <workspace>/.claude/settings.json 若存在, 绝不写 HOME")
+                        help="target settings.json copy for hook deployment; default <workspace>/.claude/settings.json if present, never write HOME")
     parser.add_argument("--profile-root", metavar="PATH", default=None,
-                        help="profile 根目录(默认 Path.home(); 测试可注入; #276)")
+                        help="profile root directory (default Path.home(); injectable for tests; #276)")
     parser.add_argument("--no-mcp", action="store_true",
-                        help="跳过工作区 .mcp.json scaffold (#316)")
+                        help="skip workspace .mcp.json scaffold (#316)")
     return parser.parse_args(argv)
 
 
 def is_truthy(value: str | None) -> bool:
-    """Truthy 判定: 1/true/yes/on, 不区分大小写 (#276 默认 0 化语义)."""
+    """Truthy check: 1/true/yes/on, case-insensitive (#276 default-off semantics)."""
     return value is not None and value.strip().lower() in ("1", "true", "yes", "on")
 
 
 def profile_candidates(profile_root: Path | None = None) -> list[Path]:
-    """用户 PowerShell profile 候选(Documents/PowerShell 与 Documents/WindowsPowerShell)."""
+    """User PowerShell profile candidates (Documents/PowerShell and Documents/WindowsPowerShell)."""
     root = Path(profile_root) if profile_root is not None else Path.home()
     docs = root / "Documents"
     return [
@@ -157,12 +179,14 @@ def profile_candidates(profile_root: Path | None = None) -> list[Path]:
 
 
 def guard_agent_teams(profile_root: Path | None = None) -> tuple[int, list[str]]:
-    """Phase 0 (#276): flag 环境守卫.
+    """Phase 0 (#276): flag environment guard.
 
-    - 进程 env 该 flag truthy → HARD 拒绝(exit 3), 不 scaffold, 附修复指引:
-      unset 后重启会话; 勿用 teammate 通道
-    - unset/0 → 会话内 os.environ[flag]="0" + 现存 PowerShell profile 经
-      shell_defaults.apply 纳入 CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=0
+    - flag truthy in process env → HARD refuse (exit 3), no scaffold, with
+      repair guidance: unset then restart the session; do not use the
+      teammate channel
+    - unset/0 → in-session os.environ[flag]="0" + existing PowerShell
+      profile gets CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=0 via
+      shell_defaults.apply
     Returns (exit_code, log_lines).
     """
     log: list[str] = []
@@ -190,7 +214,7 @@ def guard_agent_teams(profile_root: Path | None = None) -> tuple[int, list[str]]
 
 
 def ensure_agent_teams_state(ws: Path) -> bool:
-    """analysis_state.txt 记录 agent_teams_flag=0 (default disabled); 缺失则追加."""
+    """Record agent_teams_flag=0 (default disabled) in analysis_state.txt; append if missing."""
     p = ws / "analysis_state.txt"
     text = p.read_text(encoding="utf-8") if p.exists() else ""
     if "agent_teams_flag=" in text:
@@ -203,20 +227,21 @@ def ensure_agent_teams_state(ws: Path) -> bool:
 
 
 def normalize_marker(text: str) -> str:
-    """归一化 [initialized] 标记里的 state_hash 字段(自一致性哈希)."""
+    """Normalize the state_hash field inside the [initialized] marker (self-consistency hash)."""
     return HASH_RE.sub("state_hash=", text)
 
 
 def extract_hash(text: str) -> str | None:
-    """从 [initialized] 标记读出记录的 state_hash."""
+    """Read the recorded state_hash out of the [initialized] marker."""
     m = HASH_RE.search(text)
     return m.group(1) if m else None
 
 
 def compute_state_hash(ws: Path, register_text: str | None = None) -> str:
-    """state_hash = sha256(claim-register 归一化内容 + facts/_INDEX.md 内容 + facts/ 文件清单).
+    """state_hash = sha256(claim-register normalized content + facts/_INDEX.md content + facts/ file manifest).
 
-    文件清单 = facts/ 下文件名按名排序拼接(design 契约口径).
+    The manifest = fact filenames under facts/ concatenated sorted by name
+    (design contract wording).
     """
     h = hashlib.sha256()
     if register_text is not None:
@@ -236,27 +261,27 @@ def compute_state_hash(ws: Path, register_text: str | None = None) -> str:
 
 
 def seed_claims(sample: str) -> list[dict]:
-    """3-5 条样本级 seed claims(DESIGN §7 0.9): C-001 概览 / C-002 归属 / C-003 打包器."""
+    """3-5 sample-level seed claims (DESIGN §7 0.9): C-001 overview / C-002 attribution / C-003 packer."""
     return [
         {"id": "C-001", "status": "OPEN", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
-         "title": f"样本概览 — {sample} 的语言/架构/打包器静态识别"},
+         "title": f"Sample overview — static identification of {sample}'s language/architecture/packer"},
         {"id": "C-002", "status": "OPEN", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": ["C-001"],
-         "title": f"家族归属 — {sample} 的家族/行为类(CTI 假设, 需 artifact 指纹升 confirmed)"},
+         "title": f"Family attribution — {sample}'s family/behavior class (CTI hypothesis; artifact fingerprint needed to raise to confirmed)"},
         {"id": "C-003", "status": "OPEN", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": ["C-001"],
-         "title": f"打包器/混淆 — {sample} 是否加壳或 garble 控制流混淆"},
+         "title": f"Packer/obfuscation — whether {sample} is packed or uses garble control-flow obfuscation"},
     ]
 
 
 def claim_register_text(sample: str, sample_sha: str, state_hash: str) -> str:
-    """完整 claim-register.yaml 文本: [initialized] 标记头 + seed claims 体."""
+    """Full claim-register.yaml text: [initialized] marker header + seed claims body."""
     claims = seed_claims(sample)
     lines = [
         f"# [initialized] kunglao-init state_hash={state_hash} seeds={len(claims)} sample={sample}",
         f"# sha256={sample_sha} ts={utc_now()}",
-        "# kunglao-init seed claims — 样本级起点 claim (DESIGN §7 0.9)",
+        "# kunglao-init seed claims — sample-level starting claims (DESIGN §7 0.9)",
         "claims:",
     ]
     for c in claims:
@@ -271,7 +296,7 @@ def claim_register_text(sample: str, sample_sha: str, state_hash: str) -> str:
 
 
 def detect_sample(ws: Path) -> tuple[str, str]:
-    """bins/ 下第一个文件(按名排序)作为样本: (文件名, sha256). 缺样本 → ("unknown", "")."""
+    """First file under bins/ (sorted by name) as the sample: (filename, sha256). No sample → ("unknown", "")."""
     bins = ws / "bins"
     if not bins.is_dir():
         return "unknown", ""
@@ -470,7 +495,7 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
 
 
 def scaffold(ws: Path) -> list[Path]:
-    """幂等 scaffold(DESIGN §7 0.4): 目录 mkdir; 文件存在且非空则跳过(不 clobber)."""
+    """Idempotent scaffold (DESIGN §7 0.4): mkdir dirs; skip existing non-empty files (no clobber)."""
     created: list[Path] = []
     for name in SCAFFOLD_DIRS:
         d = ws / name
@@ -488,11 +513,12 @@ def scaffold(ws: Path) -> list[Path]:
 
 
 def scaffold_mcp(ws: Path) -> str:
-    """#316: 工作区 .mcp.json scaffold (MCP 供给清单模板).
+    """#316: workspace .mcp.json scaffold (MCP supply manifest template).
 
-    幂等: 文件已存在 → 不覆盖 (返回 "exists"); 否则写入 mcp_probe 构建的
-    合法 JSON (mcpServers 留空, mcp_manifest 携带 per-type 清单 + 每项
-    用途/来源/注册命令模板)。
+    Idempotent: file already exists → do not overwrite (return "exists");
+    otherwise write the valid JSON built by mcp_probe (mcpServers left
+    empty, mcp_manifest carries the per-type list + each item's
+    purpose/source/register command template).
     """
     target = ws / ".mcp.json"
     if target.exists():
@@ -503,7 +529,7 @@ def scaffold_mcp(ws: Path) -> str:
 
 
 def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path) -> tuple[list, bool]:
-    """同 matcher 下已有同名 hook 命令 → 跳过(幂等); 否则追加."""
+    """Same-named hook command already present under the matcher → skip (idempotent); else append."""
     new = [e for e in entries if e.get("matcher") == matcher]
     other = [e for e in entries if e.get("matcher") != matcher]
     command = f"python {(hook_dir / hook_file).as_posix()}"
@@ -516,13 +542,13 @@ def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path) -> tupl
 
 
 def _patch_settings(path: Path) -> int:
-    """把 kunglao hook 合并进 settings.json(保其他键), 返回新增条目数."""
+    """Merge the kunglao hook into settings.json (other keys preserved); return count of added entries."""
     existing: dict = {}
     if path.exists():
         try:
             existing = json.loads(path.read_text(encoding="utf-8"))
         except ValueError as exc:
-            raise RuntimeError(f"settings.json 无法解析: {path} ({exc})") from exc
+            raise RuntimeError(f"settings.json unparseable: {path} ({exc})") from exc
     hooks = existing.get("hooks") or {}
     pre = hooks.get("PreToolUse") or []
     post = hooks.get("PostToolUse") or []
@@ -547,9 +573,10 @@ def _patch_settings(path: Path) -> int:
 
 
 def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
-    """hooks 幂等部署(E-init.2)。目标: --hooks-json 副本, 或 <ws>/.claude/settings.json(若存在).
+    """Idempotent hook deployment (E-init.2). Target: the --hooks-json copy, or <ws>/.claude/settings.json (if present).
 
-    默认不部署到 HOME — 两者皆无则跳过并说明.
+    HOME is never a deployment target by default — if neither exists,
+    skip with an explanation.
     """
     if hooks_json is not None:
         target = Path(hooks_json).resolve()
@@ -563,7 +590,7 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
 
 
 def backup_register(path: Path) -> Path:
-    """--force 重建前备份 claim-register(E-init.4): claim-register.yaml.bak-<ts>."""
+    """Back up claim-register before a --force rebuild (E-init.4): claim-register.yaml.bak-<ts>."""
     ts = utc_now().replace(":", "-")
     backup = path.with_name(f"{path.name}.bak-{ts}")
     shutil.copy2(path, backup)
@@ -571,7 +598,7 @@ def backup_register(path: Path) -> Path:
 
 
 def resume(ws: Path, text: str) -> int:
-    """Phase 1 续接模式: 无漂移 exit 0; 漂移 → stderr WARNING 仍 exit 0."""
+    """Phase 1 resume mode: no drift → exit 0; drift → stderr WARNING, still exit 0."""
     recorded = extract_hash(text)
     current = compute_state_hash(ws)
     if recorded and current != recorded:
@@ -583,7 +610,7 @@ def resume(ws: Path, text: str) -> int:
 
 def initialize(ws: Path, hooks_json: Path | None,
                 project_type: str | None = None, no_mcp: bool = False) -> int:
-    """Phase 2 全新初始化 + Phase 3 幂等校验."""
+    """Phase 2 fresh initialization + Phase 3 idempotency verify."""
     scaffold(ws)
     if ensure_agent_teams_state(ws):
         print(f"kunglao-init: analysis_state {AGENT_TEAMS_STATE_LINE}")
@@ -637,17 +664,19 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
         profile_root: Path | None = None,
         project_type: str | None = None,
         skip_toolchain: bool = False, no_mcp: bool = False) -> int:
-    """状态机入口 (#304 修正流程, comment 304-5289955958):
+    """State-machine entry (#304 amended flow, comment 304-5289955958):
 
-    Phase 0 环境守卫 → 防重检查(续接; 缺 project_type 则升级补写后 exit 0,
-    F1) → 无样本友好提示 → 类型判定(显式 > 嗅探 > 确认) →
-    **toolchain.check 前置**(HARD FAIL → 逐项安装指引 + 拒绝 + 清理本次运行
-    创建的产物; 既有内容一律保留, F2) →
-    PASS 才 scaffold + 标记 [initialized] + project_type。
+    Phase 0 environment guard → re-init check (resume; if project_type is
+    missing, upgrade by writing it then exit 0, F1) → no-sample friendly
+    prompt → type determination (explicit > sniff > confirm) →
+    **toolchain.check preflight** (HARD FAIL → per-item install guidance +
+    refuse + cleanup of artifacts created by this run; existing content is
+    always preserved, F2) →
+    only on PASS: scaffold + [initialized] marker + project_type.
     """
     guard_rc, guard_log = guard_agent_teams(profile_root)
     if guard_rc != 0:
-        for line in guard_log:  # HARD REJECT 指引走 stderr
+        for line in guard_log:  # HARD REJECT guidance goes to stderr
             print(line, file=sys.stderr)
         return guard_rc
     for line in guard_log:
@@ -684,8 +713,9 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
     sample, sample_sha = detect_sample(ws)
     if sample == "unknown" or not sample_sha:
         print(
-            "kunglao-init: 未发现分析对象 — 请将样本放入 bins/ 或指定路径, "
-            "然后重新运行 kunglao-init.py <ws> --type <windows|linux|android>.",
+            "kunglao-init: no analysis target found — place a sample into bins/ "
+            "or specify a path, then re-run "
+            "kunglao-init.py <ws> --type <windows|linux|android>.",
             file=sys.stderr,
         )
         return RC_NO_SAMPLE
@@ -710,13 +740,16 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
 
 def cleanup_scaffold(ws: Path, created: "Collection[Path] | None" = None
                      ) -> tuple[list[str], list[str]]:
-    """#304 修正 (F2): 只删除本次运行自己创建的 scaffold 条目(created 清单)。
+    """#304 amendment (F2): delete ONLY scaffold entries created by this run (created list).
 
-    非本次创建的一律不删 — 已有文件 / 非空目录拒绝删除并列入 preserved
-    (真实 facts/ 内容必须存活; 与成功 --force 保留 facts 的行为对称)。
-    bins/、CLAUDE.md、claim-register.yaml、.claude/、.venv/ 不在候选集内。
+    Anything not created by this run is never deleted — pre-existing
+    files / non-empty directories are refused deletion and listed in
+    preserved (real facts/ content must survive; symmetric with --force
+    preserving facts on success).
+    bins/, CLAUDE.md, claim-register.yaml, .claude/, .venv/ are not in
+    the candidate set.
 
-    Returns (removed, preserved) 路径名列表。
+    Returns (removed, preserved) lists of path names.
     """
     created_set = {Path(p).resolve() for p in (created or ())}
     removed: list[str] = []
@@ -725,7 +758,7 @@ def cleanup_scaffold(ws: Path, created: "Collection[Path] | None" = None
         p = (ws / name).resolve()
         if p not in created_set:
             if p.exists():
-                preserved.append(name)  # 已有文件拒绝删除
+                preserved.append(name)  # pre-existing file, refuse deletion
             continue
         try:
             p.unlink()
@@ -736,7 +769,7 @@ def cleanup_scaffold(ws: Path, created: "Collection[Path] | None" = None
         d = (ws / name).resolve()
         if d not in created_set:
             if d.is_dir() and any(d.iterdir()):
-                preserved.append(name + "/")  # 非空目录拒绝删除
+                preserved.append(name + "/")  # non-empty directory, refuse deletion
             continue
         if d.is_dir():
             shutil.rmtree(d, ignore_errors=True)
@@ -745,11 +778,12 @@ def cleanup_scaffold(ws: Path, created: "Collection[Path] | None" = None
 
 
 def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
-    """#304 修正: HARD FAIL → 逐项友好安装命令(人类安装) + 拒绝 + 清理。
+    """#304 amendment: HARD FAIL → per-item friendly install commands (human installs) + refuse + cleanup.
 
-    - exit RC_TOOLCHAIN_REFUSE(4), 不写 [initialized] 标记
-    - 逐项打印 [FAIL] name + detail + fix(安装命令)
-    - 清理本次运行创建的 scaffold 产物(若有); 既有内容一律保留并提示(F2)
+    - exit RC_TOOLCHAIN_REFUSE(4), no [initialized] marker written
+    - print [FAIL] name + detail + fix (install command) per item
+    - clean up scaffold artifacts created by this run (if any); existing
+      content is always preserved and reported (F2)
     """
     hard_fails = [
         i for i in report.items
@@ -757,8 +791,8 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
     ]
     removed, preserved = cleanup_scaffold(ws)
     print(
-        f"kunglao-init: REFUSE — toolchain HARD 检查未通过 "
-        f"(type={report.project_type}), 请在安装缺失工具后重新运行 "
+        f"kunglao-init: REFUSE — toolchain HARD check failed "
+        f"(type={report.project_type}); install the missing tools, then re-run "
         f"kunglao-init.py {ws} --type {report.project_type}.",
         file=sys.stderr,
     )
@@ -768,12 +802,12 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
         if fix:
             print(f"      fix: {fix}", file=sys.stderr)
     if removed:
-        print(f"kunglao-init: 已移除本次运行创建的产物: {', '.join(removed)}",
+        print(f"kunglao-init: removed artifacts created by this run: {', '.join(removed)}",
               file=sys.stderr)
     if preserved:
-        print(f"kunglao-init: 保留既有内容(非本次创建, 不删除): {', '.join(preserved)}",
+        print(f"kunglao-init: preserved pre-existing content (not created by this run, not deleted): {', '.join(preserved)}",
               file=sys.stderr)
-    print("kunglao-init: NOT initialized(未写 [initialized] 标记)", file=sys.stderr)
+    print("kunglao-init: NOT initialized (no [initialized] marker written)", file=sys.stderr)
     return RC_TOOLCHAIN_REFUSE
 
 

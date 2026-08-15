@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""digest_build.py — digest 机械生成 (issue #3, design-spec §3.6).
+"""digest_build.py — mechanical digest generation (issue #3, design-spec §3.6).
 
-六节 markdown digest (2-4KB), 纯机械无 LLM, 供冷启动注入替代全量 progress.txt 读取。
-数字保真: facts 的 unit 字段原样带入 sec_c (numeric-fidelity.md)。
-完整性: 新增 verified fact 1 轮内进 digest (build_digest 重算即反映)。
+A six-section markdown digest (2-4KB), purely mechanical with no LLM,
+injected at cold start instead of reading the full progress.txt.
+Numeric fidelity: facts' unit fields carried verbatim into sec_c
+(numeric-fidelity.md).
+Completeness: a newly verified fact enters the digest within 1 round
+(build_digest recomputation reflects it).
 
-用法:
-  python digest_build.py <workspace>            # 写 runs/digest.md
-  python digest_build.py <workspace> --stdout   # 仅打印
+Usage:
+  python digest_build.py <workspace>            # write runs/digest.md
+  python digest_build.py <workspace> --stdout   # print only
 """
 from __future__ import annotations
 
@@ -37,7 +40,7 @@ def _read_text(path: Path) -> str:
 
 
 def _facts_index(ws: Path) -> list[dict]:
-    """解析 facts/_INDEX.md 'F-NN | status | claim | conclusion | unit'。fixture 回退 <ws>/_INDEX.md。"""
+    """Parse facts/_INDEX.md 'F-NN | status | claim | conclusion | unit'. Fixture fallback <ws>/_INDEX.md."""
     index = ws / "facts" / "_INDEX.md"
     if not index.exists():
         index = ws / "_INDEX.md"
@@ -66,7 +69,7 @@ def _failure_rules(ws: Path) -> list[dict]:
 
 
 def build_digest(ws: Path) -> str:
-    """六节机械 digest。无 LLM; 同 ws 重算仅 head 时间戳变 (纯函数除时间戳外)。"""
+    """Six-section mechanical digest. No LLM; recomputing on the same ws changes only the head timestamp (pure function apart from the timestamp)."""
     task_spec = _load_yaml(ws / "task_spec.yaml")
     claims = _claims(ws)
     facts = _facts_index(ws)
@@ -83,7 +86,7 @@ def build_digest(ws: Path) -> str:
     L.append(f"workspace: {ws} | cold-start digest (mechanical, no LLM)")
     L.append("")
 
-    # ---- sec_a: task_spec 主问题/约束 (3-5 行) ----
+    # ---- sec_a: task_spec primary questions/constraints (3-5 lines) ----
     L.append("## sec_a — task_spec")
     pqs = task_spec.get("primary_questions") or []
     if pqs:
@@ -97,7 +100,7 @@ def build_digest(ws: Path) -> str:
             L.append(f"- {key}: {v}")
     L.append("")
 
-    # ---- sec_b: claims 索引 ----
+    # ---- sec_b: claims index ----
     L.append("## sec_b — claims index")
     L.append("C-NN | status | conclusion | anchor")
     for c in claims:
@@ -111,8 +114,8 @@ def build_digest(ws: Path) -> str:
         L.append("(no claims)")
     L.append("")
 
-    # ---- sec_c: verified facts (unit 原样带入, 数字保真) ----
-    L.append("## sec_c — verified facts (unit 字段原样, 数字口径保真)")
+    # ---- sec_c: verified facts (unit carried verbatim, numeric fidelity) ----
+    L.append("## sec_c — verified facts (unit verbatim, numeric fidelity)")
     L.append("F-NN | boundary | conclusion | unit")
     for f in facts:
         L.append(f"{f['id']} | {f['status']} | {f['conclusion']} | unit={f['unit']}")
@@ -120,7 +123,7 @@ def build_digest(ws: Path) -> str:
         L.append("(no facts)")
     L.append("")
 
-    # ---- sec_d: 架构性结论 (保留推理链, 不压成单句) ----
+    # ---- sec_d: architectural conclusions (reasoning chain preserved, not compressed to one line) ----
     L.append("## sec_d — architectural conclusions (reasoning chain preserved)")
     proven = [c for c in claims if c.get("status") in ("PROVEN", "VERIFIED")]
     if proven:
@@ -130,7 +133,7 @@ def build_digest(ws: Path) -> str:
         L.append("- (no terminal conclusions yet)")
     L.append("")
 
-    # ---- sec_e: 失败规则 (结构化 WHEN/THEN/anchor) ----
+    # ---- sec_e: failure rules (structured WHEN/THEN/anchor) ----
     L.append("## sec_e — failure rules (structured)")
     if rules:
         for r in rules:
@@ -142,7 +145,7 @@ def build_digest(ws: Path) -> str:
         L.append("- (no failure rules yet)")
     L.append("")
 
-    # ---- sec_f: 指针表 ----
+    # ---- sec_f: pointer table ----
     L.append("## sec_f — pointers (on-demand read)")
     for name in ("progress.txt", "claim-register.yaml", "facts/_INDEX.md",
                  "failure-registry.yaml", "task_spec.yaml"):
@@ -160,7 +163,7 @@ def build_digest(ws: Path) -> str:
 
 
 def write_digest(ws: Path) -> Path:
-    """写 runs/digest.md, 返回路径。"""
+    """Write runs/digest.md, return the path."""
     out = ws / DIGEST_PATH
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(build_digest(ws), encoding="utf-8")
@@ -168,7 +171,7 @@ def write_digest(ws: Path) -> Path:
 
 
 def digest_completeness(ws: Path) -> bool:
-    """新增 verified fact 是否已进 digest。"""
+    """Whether a newly verified fact is already in the digest."""
     md = build_digest(ws)
     for f in _facts_index(ws):
         if f["id"] not in md:
@@ -177,9 +180,9 @@ def digest_completeness(ws: Path) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="digest_build.py", description="digest 机械生成")
+    ap = argparse.ArgumentParser(prog="digest_build.py", description="mechanical digest generation")
     ap.add_argument("workspace", help="workspace root")
-    ap.add_argument("--stdout", action="store_true", help="仅打印, 不写盘")
+    ap.add_argument("--stdout", action="store_true", help="print only, do not write")
     args = ap.parse_args(argv)
     ws = Path(args.workspace)
     if args.stdout:

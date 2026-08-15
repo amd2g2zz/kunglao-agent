@@ -1,23 +1,31 @@
 # -*- coding: utf-8 -*-
-"""tests/test_index_docs_contract.py — issue #339: tools/ 索引文档契约.
+"""tests/test_index_docs_contract.py — issue #339: tools/ index-doc contract.
 
-设计前提(issue #339): worker 读 tools/_INDEX.md(类目表) → tools/_index-<category>.md
-(每工具契约条目) → tools/_INDEX.yaml(机器契约) 即可构造调用, 不需要打开 .py 源码。
-任何让 agent 必须读源码才能用的文档都是缺陷 —— 本测试机械断言这一前提。
+Design premise (issue #339): a worker reads tools/_INDEX.md (category table)
+-> tools/_index-<category>.md (per-tool contract entry) ->
+tools/_INDEX.yaml (machine contract) and can already construct the call —
+no need to open any .py source. Any doc that forces the agent to read source
+to use it is a defect — this test mechanically asserts that premise.
 
-契约:
-1. tools/_INDEX.yaml 每个注册工具(共 28)在对应类目索引 md 有契约条目(H3 `### <name>`)
-2. 条目含 6 必填段: 用途 / 用法 / 输入 / 输出 / exit code / when_not
-3. 用法段是可直接复制的命令(围栏代码块, 首行 `python tools/...` 或 `mcp__`),
-   且 python 命令指向的脚本路径真实存在(可解析命令形式)
-4. exit code 段提及三态数字(0/1/2)
-5. 格式: 每个 tools/ 内 md 恰好 1 个 H1, 禁止 H4+(条目即 H3)
-6. golden invocation 抽查 3 工具: crypto-tool / yara-scan / sanitize-text
-   —— 文档中的用法必须能直接构造出调用
-7. 空壳处置(#339 A): tools/frida/ 与 tools/t2/ 不得存在(真空壳已删);
-   tools/pipelines/ 含 recipes/*.yaml 真实人造物; 动态/T2 能力由外部提供
-   (mcp__frida__* + mcp__x64dbg__* 在 dynamic 索引中指向明确,
-   T2 模拟指向 /malware-framework 外部 skill)
+Contract:
+1. Every registered tool in tools/_INDEX.yaml (28 total) has a contract entry
+   (H3 `### <name>`) in its category index md
+2. An entry has 6 required segments: 用途 (purpose) / 用法 (usage) / 输入
+   (inputs) / 输出 (outputs) / exit code / when_not — segment headings are
+   pinned in Chinese (REQUIRED_SEGMENTS); do not translate without also
+   rewriting the tools/ index docs
+3. The usage segment is a directly copyable command (fenced code block whose
+   first line is `python tools/...` or `mcp__`), and the script path the
+   python command points at really exists (resolvable command form)
+4. The exit-code segment mentions the three-state numbers (0/1/2)
+5. Format: every md under tools/ has exactly 1 H1; H4+ forbidden (entries are H3)
+6. Golden-invocation spot check of 3 tools: crypto-tool / yara-scan /
+   sanitize-text — the documented usage must directly construct a working call
+7. Empty-shell disposition (#339 A): tools/frida/ and tools/t2/ must not
+   exist (true shells deleted); tools/pipelines/ contains recipes/*.yaml real
+   artifacts; dynamic/T2 capability is externally provided (mcp__frida__* +
+   mcp__x64dbg__* clearly pointed in the dynamic index; T2 simulation points
+   at the external skill /malware-framework)
 """
 from __future__ import annotations
 
@@ -32,7 +40,7 @@ TOOLS = ROOT / "tools"
 
 REQUIRED_SEGMENTS = ("用途", "用法", "输入", "输出", "exit code", "when_not")
 
-# (类目目录名 == 类目 id, #340: _index-<category>.md 文件名与 id 一致)
+# (category dir name == category id, #340: _index-<category>.md filename matches the id)
 CATEGORY_READMES = [
     ("crypto", "crypto"),
     ("static", "static"),
@@ -41,7 +49,7 @@ CATEGORY_READMES = [
     ("pipelines", "pipelines"),
 ]
 
-# golden invocation 抽查(工具名, 用法首行必须包含的片段)
+# golden-invocation spot checks (tool name, fragment the usage first line must contain)
 GOLDEN_INVOCATIONS = [
     ("crypto-tool", ["python tools/crypto/crypto-tool.py", "--in"]),
     ("yara-scan", ["python tools/static/yara-scan.py", "--binary"]),
@@ -63,7 +71,7 @@ def _category_md_text(category: str) -> str:
 
 
 def _entry_block(text: str, name: str) -> str:
-    """从 `### <name>` 标题到下一个 `### ` 标题(或 EOF)之间的文本."""
+    """Text between the `### <name>` heading and the next `### ` heading (or EOF)."""
     m = re.search(rf"^### {re.escape(name)}\s*$", text, re.M)
     assert m, f"no contract entry `### {name}` found"
     rest = text[m.end():]
@@ -72,7 +80,7 @@ def _entry_block(text: str, name: str) -> str:
 
 
 def _usage_first_line(entry: str) -> str:
-    """提取用法段的围栏代码块首行(命令形式)."""
+    """Extract the first line of the usage segment's fenced code block (command form)."""
     m = re.search(
         r"\*\*用法\*\*[^\n]*\n\s*```\w*\n\s*([^\n]+)", entry)
     assert m, "usage segment must be a fenced code block"
@@ -83,7 +91,7 @@ def _all_tools_md() -> list[Path]:
     return sorted(TOOLS.rglob("*.md"))
 
 
-# ---------- 1. 注册工具 → 类目 md 契约条目 ----------
+# ---------- 1. registered tool -> category-md contract entry ----------
 
 def test_yaml_registry_has_28_tools() -> None:
     tools = _yaml_tools()
@@ -143,7 +151,7 @@ def test_every_entry_mentions_exit_code() -> None:
     assert not violations, f"entries without exit-code digits: {violations}"
 
 
-# ---------- 2. MD 格式规范(#339 C): 标题层级 ----------
+# ---------- 2. MD format rules (#339 C): heading levels ----------
 
 def test_every_tools_md_has_exactly_one_h1_and_no_h4() -> None:
     violations = []
@@ -168,7 +176,7 @@ def test_category_readmes_state_relation_to_index_md() -> None:
     assert not missing, f"category READMEs not stating index relation: {missing}"
 
 
-# ---------- 3. golden invocation 抽查(issue #339 C) ----------
+# ---------- 3. golden-invocation spot checks (issue #339 C) ----------
 
 def test_golden_invocations_present_in_docs() -> None:
     for tool in _yaml_tools():
@@ -184,7 +192,7 @@ def test_golden_invocations_present_in_docs() -> None:
             )
 
 
-# ---------- 4. 空壳目录处置(#339 A) ----------
+# ---------- 4. empty-shell directory disposition (#339 A) ----------
 
 def test_vacuum_shell_dirs_removed() -> None:
     assert not (TOOLS / "frida").exists(), (
@@ -212,10 +220,10 @@ def test_external_capability_pointers_are_explicit() -> None:
         "tools/_INDEX.md must point T2 emulation to the external /malware-framework skill")
 
 
-# ---------- 5. 契约条目模板必填段(格式断言, issue #339 C 补) ----------
+# ---------- 5. contract-entry template required segments (format assertion, #339 C addendum) ----------
 
 def test_entry_template_segments_order() -> None:
-    """条目模板段顺序固定: 用途 → 用法 → 输入 → 输出 → exit code → when_not."""
+    """Entry-template segment order is fixed: purpose -> usage -> inputs -> outputs -> exit code -> when_not."""
     violations = []
     for tool in _yaml_tools():
         text = _category_md_text(tool["category"])

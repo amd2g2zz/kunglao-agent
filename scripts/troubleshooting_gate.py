@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """troubleshooting_gate.py - enforce pre-cap troubleshooting checklist.
 
-User pain point: "VM network不通 折腾一下午, 最后告诉我 VM 是坏的, 其实只要 ping 一下".
+User pain point (verbatim, in Chinese): "VM network不通 折腾一下午, 最后告诉我 VM 是坏的, 其实只要 ping 一下"
+("VM network down — wrestled with it all afternoon only to be told the VM
+is broken, when a single ping would have settled it").
 kunglao-agent's worker_budget.py::check_promotion_attempts caps promotion_attempts at 3,
 then forces DEFERRED. But there's no enforcement that the worker actually
 checked basic infrastructure health before declaring the claim unpromotable.

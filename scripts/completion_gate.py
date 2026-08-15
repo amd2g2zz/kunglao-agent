@@ -4,7 +4,7 @@
 
 WHY: termination judgment has been pure LLM discretion — the 2026-08-11
 session (#54's cleanest specimen) declared "task complete" with 6 items still
-open and ZERO user sign-off, by self-inventing a "备注级（记录即可）" tier and
+open and ZERO user sign-off, by self-inventing a "note-only (just record it)" tier and
 "deferred" labels neither present in the user's instruction. #54 DETECTS the
 fingerprints in the closing declaration; THIS module is the GATE that refuses
 the session permission to end until a pre-registered task-oracle.yaml is
@@ -72,7 +72,7 @@ _COMPREHENSIVE_RE = re.compile(
 # D7: self-invented tier terms in a defer reason. Under a comprehensive task,
 # a defer carrying one of these is treated as self-invented (the #54 F2
 # fingerprint applied to defer records) and pushed to exit 2 even if
-# authorized_by looks user-like. A genuine user defer ("不用查") has none.
+# authorized_by looks user-like. A genuine user defer ("don't investigate", in the original Chinese 不用查) has none.
 TIER_TERMS = [
     "备注级", "记录即可", "deferred", "defer", "low-priority", "low priority",
     "nice-to-have", "nice to have", "out-of-scope", "out of scope",

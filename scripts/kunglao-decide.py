@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""kunglao-decide.py — M1 DECIDE 独立 CLI (design-spec §6.7.5 L568, module-design.md M1.3-M1.5).
+"""kunglao-decide.py — M1 DECIDE standalone CLI (design-spec §6.7.5 L568, module-design.md M1.3-M1.5).
 
-组合: convergence_check.decide(5 分支矩阵, golden F-01..F-16 冻结)
-    + explore_gate(探索判定) + priority_ratio(比值键)
-    + selfcheck(反问/自加 cap 行为契约扫描)。
-输出: DecideOutput(M1.3 冻结 schema, schemas/decide-output.json), exit_code 0-4 同 convergence_check。
+Combines: convergence_check.decide (5-branch matrix, golden F-01..F-16 frozen)
+    + explore_gate (exploration verdict) + priority_ratio (ratio key)
+    + selfcheck (counter-question / self-cap behavior-contract scan).
+Output: DecideOutput (M1.3 frozen schema, schemas/decide-output.json); exit_code 0-4 same as convergence_check.
 
-用法:
+Usage:
   python kunglao-decide.py <ws> [--json] [--scan-text <text>]
 """
 from __future__ import annotations
@@ -32,15 +32,16 @@ import ask_for_direction_gate as afdg
 
 try:
     import worker_budget as wb
-except ImportError:  # hooks 不可导入时不崩: 自加 cap 扫描降级为仅反问
+except ImportError:  # must not crash when hooks are unimportable: self-cap scan degrades to counter-question only
     wb = None
 
 EXPLORE_THRESHOLD = eg.EXPLORE_THRESHOLD
 
 
 def selfcheck(text: str) -> list[str]:
-    """行为契约扫描(M1.1 L99): 反问/self-redirect(ask_for_direction_gate, 已实现)
-    + 自加 cap 时间帽(worker_budget.detect_self_cap)。返回违规描述列表."""
+    """Behavior-contract scan (M1.1 L99): counter-questions / self-redirect
+    (ask_for_direction_gate, implemented) + self-imposed time caps
+    (worker_budget.detect_self_cap). Returns a list of violation descriptions."""
     violations: list[str] = []
     for vtype, _pat, match in afdg.find_violations(text):
         violations.append(f"ask-for-direction Type {vtype}: {match!r}")
@@ -49,7 +50,7 @@ def selfcheck(text: str) -> list[str]:
             found, offenders = wb.detect_self_cap(text)
             if found:
                 violations.extend(f"self-imposed time cap: {o!r}" for o in offenders)
-        except Exception as exc:  # 扫描器异常不阻塞决策
+        except Exception as exc:  # a scanner exception must not block the decision
             violations.append(f"self-cap scan error: {exc}")
     return violations
 
@@ -59,7 +60,7 @@ def _load_yaml(path: Path) -> dict:
 
 
 def _cheapness_order(claims: list[dict], deps: dict) -> list[pr.Action]:
-    """探索模式(design-spec §3.2 L132-134): 同 dispatchable 过滤, score = cheapness 降序(T1 铺开)."""
+    """Explore mode (design-spec §3.2 L132-134): same dispatchable filter; score = cheapness descending (T1 spread)."""
     by_id = {c.get("id"): c for c in claims if c.get("id")}
     depends_on = (deps or {}).get("depends_on", {}) or {}
     terminal_ids = {cid for cid, c in by_id.items() if not pr.is_open(c)}
@@ -85,7 +86,7 @@ def _cheapness_order(claims: list[dict], deps: dict) -> list[pr.Action]:
 
 
 def _conservative_blocked(ws: Path, exc: Exception) -> dict:
-    """M1.5 L164: 脚本异常 → 保守 BLOCKED(不误报收敛).
+    """M1.5 L164: script exception → conservative BLOCKED (never falsely report convergence).
 
     Intentionally does NOT write to the convergence ledger: on the exception
     path we have no reliable open_count / partial_count / facts_total, and writing
@@ -102,10 +103,11 @@ def _conservative_blocked(ws: Path, exc: Exception) -> dict:
 
 
 def decide(ws: Path, scan_text: str | None = None) -> dict:
-    """组合 decide(M1.4 状态机); 异常 → 保守 BLOCKED.
+    """Composed decide (M1.4 state machine); exception → conservative BLOCKED.
 
-    路由层经实验证伪 CUT(issue #1): LLM worker 自选/自换工具,
-    路由 ~0 价值。top_actions 的 skill 字段恒 None, 由 worker 自选。
+    The routing layer was experimentally falsified and CUT (issue #1): LLM
+    workers self-select / self-swap tools, routing is ~zero value. The
+    top_actions skill field is always None; the worker self-selects.
 
     Three decide layers with intentionally different schemas (issue #97):
       1. convergence_check.decide() — base convergence matrix.
@@ -135,7 +137,7 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
             "blocked": [c["id"] for c in base["open_claims"] if c.get("blocked")],
             "failure_blocked": list(base["failure_blocked"]),
             "stale": [w["worker"] for w in base["stuck_workers"]],
-            "drifts": [],  # 阶段 4 不计算(plan_drift_detector 为独立 gate)
+            "drifts": [],  # not computed in phase 4 (plan_drift_detector is a separate gate)
             "explore_mode": False,
             "selfcheck": selfcheck(scan_text) if scan_text else [],
             "open_count": base["open_count"],
@@ -161,7 +163,7 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
                 "skill": None,  # routing CUT (issue #1); worker self-selects tools
             })
         return out
-    except Exception as exc:  # noqa: BLE001 — 决策入口兜底
+    except Exception as exc:  # noqa: BLE001 — last-resort guard at the decide entry
         return _conservative_blocked(ws, exc)
 
 
@@ -187,10 +189,10 @@ def _human(out: dict) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="kunglao-decide.py", description="kunglao-agent M1 decide (独立 CLI)")
+    ap = argparse.ArgumentParser(prog="kunglao-decide.py", description="kunglao-agent M1 decide (standalone CLI)")
     ap.add_argument("workspace", help="workspace root")
     ap.add_argument("--json", action="store_true", help="machine-readable DecideOutput")
-    ap.add_argument("--scan-text", default=None, help="orchestrator 输出文本, 供 selfcheck 扫描")
+    ap.add_argument("--scan-text", default=None, help="orchestrator output text for the selfcheck scan")
     args = ap.parse_args(argv)
 
     out = decide(Path(args.workspace), scan_text=args.scan_text)

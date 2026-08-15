@@ -15,7 +15,7 @@ import kunglao_eval as ke
 def test_oracle_selfcheck_10_10():
     """oracle 自检 10/10: 10 个已知答案例全过。"""
     results = ke.oracle_selfcheck()
-    assert len(results) == 10, f"应有 10 个 oracle case, 实际 {len(results)}"
+    assert len(results) == 10, f"expected 10 oracle cases, got {len(results)}"
     failures = [r for r in results if not r["passed"]]
     assert not failures, f"oracle 失败: {[r['name'] + ': ' + r['reason'] for r in failures]}"
 
@@ -46,7 +46,7 @@ def test_arm_configs_defined():
 def test_arm_config_unknown_rejected():
     try:
         ke.run_arm("D")
-        assert False, "未知 arm 应报错"
+        assert False, "unknown arm should raise"
     except (ValueError, KeyError):
         pass
 
@@ -54,7 +54,7 @@ def test_arm_config_unknown_rejected():
 def test_fault_injection_types_defined():
     """五类故障注入类型定义 (plan §7)。"""
     for ftype in ("throttle", "implicit_fail", "explicit_fail", "impossible", "adversarial"):
-        assert ftype in ke.FAULT_TYPES, f"缺故障类型: {ftype}"
+        assert ftype in ke.FAULT_TYPES, f"missing fault type: {ftype}"
 
 
 def test_impossible_fault_detected():

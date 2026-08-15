@@ -1,37 +1,48 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""write_gate — 写侧门禁审计器 (issue #236).
+"""write_gate — write-side gate auditor (issue #236).
 
-2026-08-12 组合故障链 (self-synthesis + self-stamping + fake blocker) 暴露:
-所有 kunglao 机械门禁都是读侧 (dispatch 纪律 / verify 锚点 / 收敛判定);
-写侧 — 状态如何生成: verify_status 盖章、expected 锚点来源、defer 理由 —
-是裸的。本模块补齐写侧机械约束, 与读侧门禁对称。审计对象按仓库真实
-schema (references/schema.md, references/guardrails.md §1b):
+The 2026-08-12 combined fault chain (self-synthesis + self-stamping +
+fake blocker) exposed that every kunglao mechanical gate was read-side
+(dispatch discipline / verify anchors / convergence decisions); the
+write side — how state comes to exist: verify_status stamping, expected
+anchor provenance, defer reasons — was bare. This module adds the
+write-side mechanical constraints, symmetric with the read-side gates.
+Audit targets follow the repo's real schemas (references/schema.md,
+references/guardrails.md §1b):
 
-- R1 maker-checker 盖章回验:
-  * notes/*.md 带 verify_status=passes 的 note 必须存在独立验证者记录 —
-    runs/*-verify-*.md 引用该 note id 且内容含正向裁决 (passes/CONFIRMED)
-    (guardrails §1b: 只有独立 verifier subagent 可写 verify_status;
-    2026-08-12 create-runs.py 直接把 notes 的 pending 盖章为 passes,
-    无任何验证记录 — 本规则捕获该形状)。
-  * facts/*.md 带 status ∈ {PROVEN, VERIFIED} 的 fact 必须携带独立验证者
-    证据: verifier_sign_off (verifier_id ≠ 生产者: register worker_id /
-    provenance recompute_script), 或 verified_by_run 且其命名的记录实际
-    存在, 或 runs/ 下的 verify 记录 (verify-redteam-*.md 含 CONFIRMED 且
-    引用该 fact / verify-<fid>-*.json overall=VERIFIED 或 l2=CONFIRMED,
-    与 kunglao_verify.py L603-610 输出形状一致)。
-- R2 独立 expected 锚点: 携带 expected/output hash 的 fact, verified_by_run
-  解析到与 provenance recompute_script 同一脚本 → 生产者自锚
-  (adapt-final.py 模式, 脚本自算 expected 即重言式验证) → 违规。
-- R3 defer_reason 可回查: claim-register.yaml 中 defer_reason 引用的
-  decision-rights 行号必须命中 references/decision-rights.md 实际存在的行
-  (解析文件, 不硬编码行数); 引用不存在的行 = fake blocker 向量。
-  仅识别决策引用形态 ("decision-rights row N" / "治理行 N" /
-  "决策矩阵 N" / 行尾孤立的 "row N"), 避免 "row 5 of PE header table"
-  之类的非决策引用误报。
+- R1 maker-checker stamp re-verification:
+  * a notes/*.md note with verify_status=passes must have an independent
+    verifier record — a runs/*-verify-*.md citing the note id with a
+    positive verdict in its content (passes/CONFIRMED)
+    (guardrails §1b: only an independent verifier subagent may write
+    verify_status; on 2026-08-12 create-runs.py stamped notes' pending
+    directly to passes with no verification record — this rule catches
+    that shape).
+  * a facts/*.md fact with status ∈ {PROVEN, VERIFIED} must carry
+    independent-verifier evidence: verifier_sign_off (verifier_id ≠
+    producer: register worker_id / provenance recompute_script), or
+    verified_by_run whose named record actually exists, or a verify
+    record under runs/ (verify-redteam-*.md containing CONFIRMED and
+    citing the fact / verify-<fid>-*.json overall=VERIFIED or
+    l2=CONFIRMED, matching the kunglao_verify.py L603-610 output shape).
+- R2 independent expected anchor: a fact carrying an expected/output
+  hash whose verified_by_run resolves to the same script as its
+  provenance recompute_script → producer self-anchoring (the
+  adapt-final.py pattern — a script self-computing expected is
+  tautological verification) → violation.
+- R3 defer_reason traceability: a decision-rights row number cited by a
+  defer_reason in claim-register.yaml must hit a row that actually
+  exists in references/decision-rights.md (parsed from the file, no
+  hardcoded row counts); citing a nonexistent row = fake-blocker vector.
+  Only decision-reference shapes are recognized ("decision-rights row N"
+  / "治理行 N" / "决策矩阵 N" / a bare trailing "row N"), avoiding
+  false positives on non-decision references like "row 5 of PE header
+  table".
 
-仅标准库, 确定性。输出: 机器可读违规列表 + 人类文本; --json 模式。
-exit 0 干净 / 1 违规 / 2 用法错误。
+Stdlib only, deterministic. Output: machine-readable violation list +
+human text; --json mode.
+exit 0 clean / 1 violations / 2 usage error.
 """
 from __future__ import annotations
 
@@ -41,29 +52,29 @@ import re
 import sys
 from pathlib import Path
 
-# fact 状态中"已盖章"的取值 (references/schema.md fact.status 的 terminal 子集)
+# fact statuses counting as "stamped" (terminal subset of references/schema.md fact.status)
 FACT_VERIFIED_STATUSES = ("PROVEN", "VERIFIED")
-# 携带"产出锚点"的字段 (R2 适用条件)
+# fields carrying a "produced anchor" (R2 applicability condition)
 EXPECTED_FIELDS = ("expected", "expected_sha256", "output", "output_sha256")
-# 验证记录中的正向裁决 token (内容感知 — "F-1: FAILED" 不算独立验证)
+# positive-verdict tokens in verification records (content-aware — "F-1: FAILED" is not independent verification)
 POSITIVE_VERDICT_RE = re.compile(r"\b(?:CONFIRMED|passes)\b", re.IGNORECASE)
 _SCRIPT_EXTENSIONS = (".py", ".sh", ".ps1", ".rb", ".js")
 
-# verifier_sign_off 块 (blind_gate.py 同形: yaml 围栏或裸块, 取 verifier_id/verdict)
+# verifier_sign_off block (same shape as blind_gate.py: yaml fence or bare block, takes verifier_id/verdict)
 _SIGNOFF_BLOCK_RE = re.compile(
     r"verifier_sign_off:\s*\n(.*?)(?:\n\n|\n```|\Z)", re.DOTALL)
 _SIGNOFF_FIELD_RE = re.compile(
     r"^\s*(verifier_id|verdict)\s*:\s*['\"]?([^'\"\n]+)", re.MULTILINE)
-# provenance 内联条目 (kunglao_verify.py F3 gate 同形)
+# provenance inline entries (same shape as the kunglao_verify.py F3 gate)
 _INLINE_PROV_ENTRY_RE = re.compile(r"\{([^{}]*)\}")
 
-# "row N" 引用 — 仅决策引用形态 (R3, 防 "row 5 of PE header" 误报)
+# "row N" references — decision-reference shapes only (R3; avoids "row 5 of PE header" false positives)
 _CONTEXT_ROW_RE = re.compile(
     r"decision[- ]?(?:rights|matrix)\s+row\s+#?(\d+)"
     r"|治理行\s*[:：]?\s*#?(\d+)"
     r"|决策矩阵\s*[:：]?\s*(?:row\s*)?#?(\d+)",
     re.IGNORECASE)
-# 行尾孤立的 "row N" (前后无描述文字); (?<![-\w]) 排除 "arrow 5"
+# bare trailing "row N" (no descriptive text around it); (?<![-\w]) excludes "arrow 5"
 _STANDALONE_ROW_RE = re.compile(
     r"(?<![-\w])row\s+#?(\d+)\s*$", re.IGNORECASE | re.MULTILINE)
 
@@ -72,11 +83,11 @@ _DEFER_REASON_LINE_RE = re.compile(r"^\s*defer_reason:\s*(.+)$", re.MULTILINE)
 
 
 # ===========================================================================
-# frontmatter / actor 解析
+# frontmatter / actor parsing
 # ===========================================================================
 
 def _parse_frontmatter(text: str) -> dict:
-    """极简 frontmatter: '---' 围栏内逐行 'key: value'(去引号). 失败返回 {}."""
+    """Minimal frontmatter: line-by-line 'key: value' inside a '---' fence (quotes stripped). Returns {} on failure."""
     out: dict[str, str] = {}
     if not text.startswith("---"):
         return out
@@ -93,7 +104,7 @@ def _parse_frontmatter(text: str) -> dict:
 
 
 def _path_of(value: str, ws: Path) -> Path | None:
-    """从值(裸路径或命令串)中提取脚本路径, 相对 ws 解析; 无路径形态 → None."""
+    """Extract a script path from a value (bare path or command string), resolved relative to ws; no path shape → None."""
     for tok in value.split():
         t = tok.strip().strip("\"'")
         if not t:
@@ -105,10 +116,11 @@ def _path_of(value: str, ws: Path) -> Path | None:
 
 
 def _same_actor(a: str, b: str, ws: Path) -> bool:
-    """两 actor 是否同一实体: 精确串等 或 解析为同一脚本路径.
+    """Whether two actors are the same entity: exact string equality or resolution to the same script path.
 
-    脚本形态 (带扩展名/路径分隔符) 的双方还按 basename 比较 — 覆盖
-    "adapt_final.py" vs "scripts/re/adapt_final.py" 的裸名/带路径写法.
+    Script-shaped values (with extension/path separators) are additionally
+    compared by basename — covering "adapt_final.py" vs
+    "scripts/re/adapt_final.py" bare-name/prefixed spellings.
     """
     na, nb = a.strip().strip("\"'").lower(), b.strip().strip("\"'").lower()
     if na == nb:
@@ -122,7 +134,7 @@ def _same_actor(a: str, b: str, ws: Path) -> bool:
 
 
 def _parse_signoff(text: str) -> dict:
-    """从 fact 原文抽取 verifier_sign_off 块的 {verifier_id, verdict}."""
+    """Extract the verifier_sign_off block's {verifier_id, verdict} from the raw fact text."""
     m = _SIGNOFF_BLOCK_RE.search(text)
     if not m:
         return {}
@@ -133,7 +145,7 @@ def _parse_signoff(text: str) -> dict:
 
 
 def _prov_recompute_paths(text: str) -> list[str]:
-    """fact 的产出脚本路径列表 (provenance role=recompute_script, F3 同形)."""
+    """The fact's producing-script path list (provenance role=recompute_script, same shape as F3)."""
     fm = text.split("---", 2)[1] if text.startswith("---") else text
     paths: list[str] = []
     for entry in _INLINE_PROV_ENTRY_RE.findall(fm):
@@ -145,7 +157,7 @@ def _prov_recompute_paths(text: str) -> list[str]:
 
 
 def _register_worker_id(ws: Path, claim_id: str) -> str | None:
-    """claim-register.yaml 中该 claim 的 worker_id / last_dispatched_worker."""
+    """The claim's worker_id / last_dispatched_worker from claim-register.yaml."""
     reg = ws / "claim-register.yaml"
     if not reg.exists() or not claim_id:
         return None
@@ -167,11 +179,11 @@ def _register_worker_id(ws: Path, claim_id: str) -> str | None:
 
 
 # ===========================================================================
-# 验证记录 (notes / facts 各自形状)
+# verification records (notes / facts each have their own shapes)
 # ===========================================================================
 
 def _note_verify_record(ws: Path, note_id: str) -> tuple[bool, str]:
-    """note 的独立验证记录: runs/*-verify-*.md 引用该 note 且含正向裁决."""
+    """The note's independent verification record: a runs/*-verify-*.md citing the note with a positive verdict."""
     runs = ws / "runs"
     if not runs.is_dir():
         return False, "no runs/ directory"
@@ -190,9 +202,9 @@ def _note_verify_record(ws: Path, note_id: str) -> tuple[bool, str]:
 
 
 def _fact_runs_records(fid: str, ws: Path) -> tuple[bool, str]:
-    """fact 的 runs/ 验证记录 (内容感知): redteam md 需 CONFIRMED + 引用 fact;
-    verify-<fid>-*.json 需 overall=VERIFIED 或 l2 CONFIRMED
-    (kunglao_verify.py L603-610 输出形状)."""
+    """The fact's runs/ verification record (content-aware): redteam md needs CONFIRMED + a fact citation;
+    verify-<fid>-*.json needs overall=VERIFIED or l2 CONFIRMED
+    (kunglao_verify.py L603-610 output shape)."""
     runs = ws / "runs"
     if not runs.is_dir():
         return False, "no runs/ directory"
@@ -219,10 +231,11 @@ def _fact_runs_records(fid: str, ws: Path) -> tuple[bool, str]:
 
 
 def _verified_by_run_evidence(vbr: str, fid: str, ws: Path) -> tuple[bool, str]:
-    """verified_by_run 必须指向实际存在的记录 (MEDIUM#2: 裸字符串不算).
+    """verified_by_run must point to a record that actually exists (MEDIUM#2: a bare string does not count).
 
-    vbr 为路径/文件名形态 → 命名的记录必须在 runs/ 存在且含正向裁决;
-    vbr 为验证者身份 → 该身份必须留有引用该 fact 的 runs 记录.
+    vbr in path/filename shape → the named record must exist in runs/ with
+    a positive verdict; vbr as a verifier identity → that identity must
+    have a runs/ record citing the fact.
     """
     runs = ws / "runs"
     if not runs.is_dir():
@@ -246,11 +259,11 @@ def _verified_by_run_evidence(vbr: str, fid: str, ws: Path) -> tuple[bool, str]:
 
 
 # ===========================================================================
-# R1: maker-checker — 盖章需独立验证者 (notes + facts)
+# R1: maker-checker — stamping requires an independent verifier (notes + facts)
 # ===========================================================================
 
 def _check_note(ws: Path, p: Path) -> list[dict]:
-    """note 带 verify_status=passes 必须存在独立验证记录 (guardrails §1b)."""
+    """A note with verify_status=passes must have an independent verification record (guardrails §1b)."""
     text = p.read_text(encoding="utf-8", errors="replace")
     fm = _parse_frontmatter(text)
     if str(fm.get("verify_status", "")).strip().lower() != "passes":
@@ -266,7 +279,7 @@ def _check_note(ws: Path, p: Path) -> list[dict]:
 
 
 def _check_fact(ws: Path, p: Path) -> list[dict]:
-    """fact 带 status ∈ {PROVEN, VERIFIED} 必须携带独立验证者证据 (R1+R2)."""
+    """A fact with status ∈ {PROVEN, VERIFIED} must carry independent-verifier evidence (R1+R2)."""
     text = p.read_text(encoding="utf-8", errors="replace")
     fm = _parse_frontmatter(text)
     status = str(fm.get("status", "")).strip().upper()
@@ -324,11 +337,11 @@ def _check_fact(ws: Path, p: Path) -> list[dict]:
 
 
 # ===========================================================================
-# R3: defer_reason 可回查 — "row N" 引用必须命中 decision-rights.md
+# R3: defer_reason traceability — "row N" references must hit decision-rights.md
 # ===========================================================================
 
 def decision_rows_from_text(text: str) -> set[int]:
-    """解析 decision-rights.md 表格实际存在的行号 (首列为数字的 '| n | ...' 行)."""
+    """Parse the row numbers actually present in the decision-rights.md table ('| n | ...' rows whose first column is numeric)."""
     rows: set[int] = set()
     for line in text.splitlines():
         m = re.match(r"^\|\s*(\d+)\s*\|", line.strip())
@@ -338,7 +351,7 @@ def decision_rows_from_text(text: str) -> set[int]:
 
 
 def parse_decision_rights(path: Path) -> set[int]:
-    """读文件 → 行号集合; 文件缺失 → 空集 (无治理层的工作区不审计)."""
+    """Read the file → the set of row numbers; missing file → empty set (workspaces without a governance layer are not audited)."""
     try:
         return decision_rows_from_text(
             path.read_text(encoding="utf-8", errors="replace"))
@@ -347,12 +360,13 @@ def parse_decision_rights(path: Path) -> set[int]:
 
 
 def extract_row_references(text: str) -> list[int]:
-    """抽取 decision-rights 行号引用 — 仅决策引用形态, 避免误报.
+    """Extract decision-rights row references — decision-reference shapes only, avoiding false positives.
 
-    两种形态: (1) 决策上下文引用 "decision-rights row N" / "治理行 N" /
-    "决策矩阵 N"; (2) 行尾孤立的 "row N" (无后续描述文字, 如
-    "blocked on row 99"). "row 5 of PE header table" 不命中 (行号后有
-    描述文字且无决策上下文).
+    Two shapes: (1) decision-context references "decision-rights row N" /
+    "治理行 N" / "决策矩阵 N"; (2) a bare trailing "row N" (no descriptive
+    text after it, e.g. "blocked on row 99"). "row 5 of PE header table"
+    does not match (descriptive text follows the number and there is no
+    decision context).
     """
     out: list[int] = []
     for m in _CONTEXT_ROW_RE.finditer(text):
@@ -363,7 +377,7 @@ def extract_row_references(text: str) -> list[int]:
 
 
 def _defer_reason_of_block(block: str) -> str | None:
-    """claim 块内 defer_reason 值 (单行, 去引号); 无 → None."""
+    """The defer_reason value inside a claim block (single line, quotes stripped); absent → None."""
     dm = _DEFER_REASON_LINE_RE.search(block)
     if not dm:
         return None
@@ -371,7 +385,7 @@ def _defer_reason_of_block(block: str) -> str | None:
 
 
 def extract_claim_defer_reason(register_text: str, claim_id: str) -> str | None:
-    """从 claim-register.yaml 原文抽取指定 claim 的 defer_reason."""
+    """Extract the given claim's defer_reason from the raw claim-register.yaml text."""
     for m in _CLAIM_BLOCK_RE.finditer(register_text):
         if m.group(1).strip().strip("\"'") == claim_id:
             return _defer_reason_of_block(m.group(2))
@@ -384,7 +398,7 @@ def _fmt_rows(rows: set[int]) -> str:
 
 def defer_reason_violations(claim_id: str, reason: str,
                             rows: set[int]) -> list[dict]:
-    """单条 defer_reason 的引用校验: 命中不存在的行 → 违规记录列表."""
+    """Reference check for one defer_reason: citing a nonexistent row → violation record list."""
     bad = [n for n in extract_row_references(reason) if n not in rows]
     return [{"rule": "R3", "file": "claim-register.yaml", "claim_id": claim_id,
              "row": n,
@@ -394,7 +408,7 @@ def defer_reason_violations(claim_id: str, reason: str,
 
 
 def check_workspace_defer_reasons(ws: Path) -> list[dict]:
-    """扫描 claim-register.yaml 全部携带 defer_reason 的 claim (R3)."""
+    """Scan claim-register.yaml for all claims carrying a defer_reason (R3)."""
     reg_path = ws / "claim-register.yaml"
     if not reg_path.exists():
         return []
@@ -410,11 +424,11 @@ def check_workspace_defer_reasons(ws: Path) -> list[dict]:
 
 
 # ===========================================================================
-# 审计入口 + CLI
+# audit entry + CLI
 # ===========================================================================
 
 def audit_workspace(ws: Path) -> list[dict]:
-    """全工作区写侧审计: R1+R2 (notes/ + facts/) + R3 (claim-register.yaml)."""
+    """Whole-workspace write-side audit: R1+R2 (notes/ + facts/) + R3 (claim-register.yaml)."""
     violations: list[dict] = []
     notes_dir = ws / "notes"
     if notes_dir.is_dir():
@@ -433,8 +447,8 @@ def audit_workspace(ws: Path) -> list[dict]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI: write_gate.py <ws> [--json]. 0 干净 / 1 违规 / 2 用法错误."""
-    ap = argparse.ArgumentParser(description="write_gate — 写侧门禁审计器 (#236)")
+    """CLI: write_gate.py <ws> [--json]. 0 clean / 1 violations / 2 usage error."""
+    ap = argparse.ArgumentParser(description="write_gate — write-side gate auditor (#236)")
     ap.add_argument("ws", nargs="?", type=Path, help="workspace root")
     ap.add_argument("--json", action="store_true",
                     help="machine-readable JSON output")

@@ -96,7 +96,7 @@ class Entry:
 
 @dataclass(frozen=True)
 class Scene:
-    """One row of the scenario->domain map: 场景 | Domain(表达式)."""
+    """One row of the scenario->domain map: scenario-label | domain (expression)."""
 
     label: str
     primary: tuple[str, ...]             # resolved file paths
@@ -222,7 +222,7 @@ def _tokenize(text: str) -> tuple[str, ...]:
 def _parse_domain_index(path: Path) -> dict[str, tuple[str, str]]:
     """Parse one _index-<domain>.md into {rel_path: (summary, when)}.
 
-    Rows are markdown links: | [name.md](re-library/name.md) | 摘要 | 何时读 |.
+    Rows are markdown links: | [name.md](re-library/name.md) | summary | when-to-read |.
     """
     out: dict[str, tuple[str, str]] = {}
     if not path.is_file():

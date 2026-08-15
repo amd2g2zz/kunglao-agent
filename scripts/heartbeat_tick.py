@@ -97,7 +97,7 @@ def main() -> int:
     hb = report["heartbeat"].get("stdout", "")[:120]
     rc_renew = report["renew"].get("rc", -1)
     rc_hb = report["heartbeat"].get("rc", -1)
-    action = report["action_taken"] or "(EMPTY — 必须填充:派发/验证/解决/重激活了什么)"
+    action = report["action_taken"] or "(EMPTY — must be filled: what was dispatched/verified/resolved/reactivated)"
     print(f"heartbeat_tick: {sc} | renew_rc={rc_renew} | {hb}")
     print(f"action_taken: {action}")
     print(f"report: {out}")

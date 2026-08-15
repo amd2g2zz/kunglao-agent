@@ -23,7 +23,7 @@ CLIS = [
 
 def test_all_clis_exist():
     for cli in CLIS:
-        assert (SCRIPTS / cli).exists(), f"缺 CLI: {cli}"
+        assert (SCRIPTS / cli).exists(), f"missing CLI: {cli}"
 
 
 def test_all_clis_help_exit_zero():
@@ -38,4 +38,4 @@ def test_all_clis_help_exit_zero():
 def test_no_kong_named_cli_remains():
     leftover = [p.name for p in SCRIPTS.glob("kong-*.py") if "kong-refactor" not in p.name]
     legacy = [n for n in leftover if n != "kong.py"]
-    assert not legacy, f"残留 kong-* CLI (应已 rename): {legacy}"
+    assert not legacy, f"stale kong-* CLIs (should have been renamed): {legacy}"

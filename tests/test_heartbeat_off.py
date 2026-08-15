@@ -56,15 +56,15 @@ def test_unconverged_rejects_and_keeps_heartbeat(tmp_path):
     """OPEN claim → convergence DISPATCH → off 被拒, .heartbeat.json 保留。"""
     ws = _make_ws(tmp_path / "ws", claims=[{"id": "C-001", "status": "OPEN"}])
     r = _run_off(ws)
-    assert r.returncode != 0, f"未收敛必须拒绝: stdout={r.stdout!r} stderr={r.stderr!r}"
-    assert (ws / "runs" / ".heartbeat.json").exists(), "拒绝时不得删心跳"
+    assert r.returncode != 0, f"unconverged must refuse: stdout={r.stdout!r} stderr={r.stderr!r}"
+    assert (ws / "runs" / ".heartbeat.json").exists(), "heartbeat must not be deleted on refusal"
 
 
 def test_unconverged_rejects_with_guidance(tmp_path):
     """拒绝时 stderr 带机械收敛依据引导(双端约束核心)。"""
     ws = _make_ws(tmp_path / "ws", claims=[{"id": "C-001", "status": "OPEN"}])
     r = _run_off(ws)
-    assert GUIDANCE in r.stderr, f"stderr 缺引导文案: {r.stderr!r}"
+    assert GUIDANCE in r.stderr, f"stderr missing guidance text: {r.stderr!r}"
 
 
 def test_converged_deletes_heartbeat(tmp_path):
@@ -72,7 +72,7 @@ def test_converged_deletes_heartbeat(tmp_path):
     ws = _make_ws(tmp_path / "ws", claims=[])
     r = _run_off(ws)
     assert r.returncode == 0, f"CONVERGED 应允许 off: stdout={r.stdout!r} stderr={r.stderr!r}"
-    assert not (ws / "runs" / ".heartbeat.json").exists(), "心跳应被删除"
+    assert not (ws / "runs" / ".heartbeat.json").exists(), "heartbeat should be deleted"
     assert "收敛完成,心跳停止" in r.stdout
 
 
@@ -88,7 +88,7 @@ def test_off_without_registered_heartbeat_is_noop(tmp_path):
     """未注册心跳时 off 是幂等 no-op(不报错)。"""
     ws = _make_ws(tmp_path / "ws", claims=[], heartbeat=False)
     r = _run_off(ws)
-    assert r.returncode == 0, f"无心跳应 no-op: stderr={r.stderr!r}"
+    assert r.returncode == 0, f"no heartbeat should no-op: stderr={r.stderr!r}"
 
 
 def test_heartbeat_off_function_direct(tmp_path):
@@ -96,7 +96,7 @@ def test_heartbeat_off_function_direct(tmp_path):
     from scripts import heartbeat
     ws = _make_ws(tmp_path / "ws", claims=[{"id": "C-001", "status": "OPEN"}])
     rc = heartbeat.heartbeat_off(ws)
-    assert rc != 0, "未收敛直接调用也必须拒绝"
+    assert rc != 0, "direct unconverged invocation must also refuse"
     assert (ws / "runs" / ".heartbeat.json").exists()
 
 
@@ -115,7 +115,7 @@ def test_tick_report_has_action_taken(tmp_path, monkeypatch, capsys):
     assert rc == 0
     report = json.loads((ws / "runs" / ".heartbeat-tick.json").read_text(encoding="utf-8"))
     assert "action_taken" in report, "tick 报告必须含 action_taken 字段"
-    assert report["action_taken"] == "", "默认空字符串, 由 orchestrator 填充"
+    assert report["action_taken"] == "", "default empty string, filled by the orchestrator"
     assert "action_taken" in capsys.readouterr().out, "tick stdout 必须输出该字段"
 
 
@@ -123,11 +123,11 @@ def test_prompt_is_imperative(tmp_path):
     """cron prompt 由'建议'改'命令': 每个决策必须绑定推进动作, 无动作=空转故障。"""
     from scripts.heartbeat_loop_prompt import build_prompt
     p = build_prompt(str(tmp_path / "ws"))
-    assert "必须派发 priority.py 第一名" in p, "DISPATCH 必须派发"
-    assert "空转故障" in p, "无动作 = 空转故障"
-    assert "自恢复" in p, "BLOCKED 必须自恢复"
-    assert "重激活" in p, "DEFERRED 必须检查可否重激活"
-    assert "--heartbeat-off" in p, "收敛后必须先 --heartbeat-off 停心跳"
+    assert "必须派发 priority.py 第一名" in p, "DISPATCH must dispatch"
+    assert "空转故障" in p, "no action = idle fault"
+    assert "自恢复" in p, "BLOCKED must self-recover"
+    assert "重激活" in p, "DEFERRED must check reactivation"
+    assert "--heartbeat-off" in p, "after convergence, --heartbeat-off must stop the heartbeat first"
     assert "handoff-check" in p, "CONVERGED 后先 handoff-check PASS 再 off"
     assert "§6.3" in p
 

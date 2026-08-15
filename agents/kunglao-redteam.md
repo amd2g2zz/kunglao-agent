@@ -185,7 +185,7 @@ parameter:
   static-*, unpack, sibling samples). **BLIND: never read
   `evidence/verdict.json` or `evidence/verdict-verification.json`** — that is
   the maker's conclusion; reading it breaks blindness (the entire point of
-  maker-checker: `产出者不得自验`).
+  maker-checker: `the producer never verifies its own output`).
 - `task_spec.yaml` — `primary_questions[]` (the coverage unit)
 - `facts/*.md` + `facts/_INDEX.md` — the PROVEN fact base (read the markdown,
   never the verdict summary)
