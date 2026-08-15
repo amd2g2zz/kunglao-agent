@@ -4,13 +4,25 @@
 - contract_validator: schemas/*.json registry (jsonschema validation wrapper)
 - golden_master:   manifest replay helper
 - isolated_home:   monkeypatch HOME → tmp (prevents hook-deployment tests from writing the production settings.json)
+- load_lock_factory / load_sensitive_registry: #369 cross-process serialization
+  of the load-sensitive test family (machine-local flock; see bottom section)
 """
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+
+try:  # POSIX only; Windows dev/CI is single-tenant and unaffected (#369)
+    import fcntl
+    _HAVE_FLOCK = hasattr(fcntl, "flock")
+except ImportError:  # pragma: no cover - Windows
+    _HAVE_FLOCK = False
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "schemas"
@@ -128,3 +140,94 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     return home
+
+
+# ---------- #369: load-sensitive serialization (cross-process file lock) ----------
+#
+# The tick-chain / static-tools family fails only when concurrent pytest runs
+# (multi-agent worktrees on one machine) execute these modules at the same
+# time: subprocess spawn storms stretch wall-clock mtime windows (e.g. the
+# 5s freshness assert in test_external_kicker) and the nested acceptance
+# suite's subprocess timeout. Marked modules hold a machine-local flock for
+# their whole duration, so no two sensitive modules ever co-run — within one
+# run (tests are sequential) and across concurrent runs/worktrees.
+
+LOAD_SENSITIVE_MODULES = frozenset({
+    "test_drift_detection",       # tick-chain: mtime-based lock/worker windows
+    "test_external_kicker",       # tick-chain: 5s lock-freshness wall-clock window
+    "test_static_tools_1b",       # static-tools: per-test subprocess spawn storm
+    "test_env_check",             # tick-chain adjacent (issue #369 audited set)
+    "test_env_check_gate",        # real subprocess.run probes (timeout=60 each)
+    "test_env_ports_wiring",      # tick-chain adjacent (issue #369 audited set)
+})
+LOAD_SENSITIVE_LOCK_NAME = "kunglao-pytest-load-sensitive.lock"
+LOAD_SENSITIVE_ACQUIRE_TIMEOUT_S = 600.0  # generous: several queued suites under load
+
+
+@contextmanager
+def load_sensitive_lock(path=None, timeout: float = LOAD_SENSITIVE_ACQUIRE_TIMEOUT_S):
+    """Cross-process mutual exclusion via flock on a machine-local file.
+
+    The lock file lives in the system temp dir (per-user on macOS, shared
+    /tmp per machine on Linux) — NOT in the repo, so concurrent worktrees
+    of the same user contend on ONE lock. flock is bound to the open file
+    description: the kernel releases it when the holding process dies, so
+    there is no stale-lock handling. No-op where flock is unavailable.
+    """
+    if not _HAVE_FLOCK:  # pragma: no cover - Windows
+        yield
+        return
+    lock_path = Path(path) if path is not None else Path(tempfile.gettempdir()) / LOAD_SENSITIVE_LOCK_NAME
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    acquired = False
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        f"load-sensitive lock not acquired within {timeout}s: {lock_path}")
+                time.sleep(0.05)
+        yield
+    finally:
+        if acquired:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def pytest_collection_modifyitems(config, items):
+    """Apply the load_sensitive marker via the module registry (single source
+    of truth here — no per-file edits needed in the sensitive test modules)."""
+    for item in items:
+        module = getattr(item, "module", None)
+        if module is not None and module.__name__.rsplit(".", 1)[-1] in LOAD_SENSITIVE_MODULES:
+            item.add_marker(pytest.mark.load_sensitive)
+
+
+@pytest.fixture
+def load_lock_factory():
+    """Raw lock factory for unit-testing the serialization mechanism (#369).
+    Pass an explicit `path` (tmp) — the default is the real machine lock."""
+    return load_sensitive_lock
+
+
+@pytest.fixture
+def load_sensitive_registry():
+    """The frozenset of module names that must never co-run (#369)."""
+    return LOAD_SENSITIVE_MODULES
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _serialize_load_sensitive(request):
+    """Hold the machine-local lock for the whole sensitive module (#369)."""
+    module = getattr(request, "module", None)
+    name = module.__name__.rsplit(".", 1)[-1] if module is not None else ""
+    if name not in LOAD_SENSITIVE_MODULES or not _HAVE_FLOCK:
+        yield
+        return
+    with load_sensitive_lock():
+        yield
