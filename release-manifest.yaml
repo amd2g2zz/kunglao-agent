@@ -110,6 +110,9 @@ assets:
     # #147 / report §4.5.4: a run must bind to the exact knowledge-base
     # revision. SKILL.md + references/ digests land in the receipt.
     - SKILL.md
+    # #366: metadata-only plugin manifest — version 0.1.0 must be visible
+    # to the plugin manager; identity fields only, no component wiring (#364).
+    - .claude-plugin/plugin.json
   references:
     # Directory entry is digested via sha256_dir by release_receipt.
     - references/

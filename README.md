@@ -14,9 +14,19 @@ The python modules in this repo are the skill's internal organs — called by ho
 
 ## Quick start
 
-### 1. Install the skill
+### 1. Install
 
-In Claude Code:
+Two paths ship with v0.1 (the repo carries `.claude-plugin/plugin.json`, version `0.1.0`, identity metadata only).
+
+**(a) Plugin install** — load the repo directly as a Claude Code plugin:
+
+```
+claude --plugin-dir /path/to/kunglao-agent
+```
+
+The plugin manager lists `kunglao-agent` at version `0.1.0`. The manifest declares no components (skills/hooks/commands) yet — the full plugin migration, including marketplace distribution via `/plugin marketplace add amd2g2zz/kunglao-agent` (which additionally requires shipping `.claude-plugin/marketplace.json`), is tracked in #364.
+
+**(b) Skill-dir install (legacy)** — in Claude Code:
 
 ```
 /install-github-repo amd2g2zz/kunglao-agent
@@ -31,7 +41,7 @@ uv sync --locked
 cp agents/kunglao-worker.md agents/kunglao-redteam.md ~/.claude/agents/
 ```
 
-Do NOT add a `.claude-plugin/` directory — it converts the skill into a plugin and breaks bare `/kunglao-agent` invocation.
+A skills-dir clone that keeps `.claude-plugin/` loads as a skills-directory plugin (`kunglao-agent@skills-dir`) from the next session instead of a plain skill; bare `/kunglao-agent` still resolves via the loader fallback. Delete `.claude-plugin/` after cloning to keep the plain-skill identity.
 
 ### 2. Start analysis
 
