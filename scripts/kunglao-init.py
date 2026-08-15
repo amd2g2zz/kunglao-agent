@@ -107,6 +107,17 @@ SEED_MIN = 3
 HOOK_FILES = ("worker_budget.py",)  # DESIGN §7 0.3: PreToolUse + PostToolUse → worker_budget
 HASH_RE = re.compile(r"state_hash=([0-9a-f]{64})")
 
+# #367: review-gate pre-commit template + its install-time key placeholder.
+# The template must never ship a real key path (the pre-#367 template
+# hardcoded the author's Windows user path — dead gate everywhere else);
+# the human-run --install-git-hooks stamps the installing user's absolute
+# key path into the .git/hooks/pre-commit copy ONCE, at install time. The
+# stamped literal preserves #147 anti-forgery: a commit-time HOME/USERPROFILE
+# redirection cannot alter it.
+REVIEW_HOOK_TEMPLATE = _SCRIPT_DIR.parent / ".claude" / "git-hooks" / "pre-commit"
+REVIEW_KEY_PLACEHOLDER = "__KUNGLAO_REVIEW_KEY__"
+REVIEW_KEY_NAME = "kunglao-review.key"
+
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"  # #276: defaults to 0 (disabled)
 AGENT_TEAMS_STATE_LINE = "agent_teams_flag=0 (default disabled)"
 
@@ -163,6 +174,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="profile root directory (default Path.home(); injectable for tests; #276)")
     parser.add_argument("--no-mcp", action="store_true",
                         help="skip workspace .mcp.json scaffold (#316)")
+    parser.add_argument("--install-git-hooks", action="store_true",
+                        help="install the review-gate pre-commit hook (#367): copy "
+                             ".claude/git-hooks/pre-commit to .git/hooks/pre-commit with "
+                             "this user's key path stamped in place of the placeholder")
     return parser.parse_args(argv)
 
 
@@ -599,6 +614,55 @@ def backup_register(path: Path) -> Path:
     return backup
 
 
+def install_git_hooks(ws: Path, home: Path | None = None) -> tuple[bool, str]:
+    """#367: install the review-gate pre-commit hook with install-time stamping.
+
+    Copies the tracked template (.claude/git-hooks/pre-commit) to
+    <ws>/.git/hooks/pre-commit, substituting the installer's
+    $HOME/.claude/kunglao-review.key (resolved ONCE, here — by the human
+    running the installer) for the __KUNGLAO_REVIEW_KEY__ placeholder, and
+    chmod +x. The stamped path is a literal in the installed hook: commit-time
+    HOME/USERPROFILE redirection cannot alter it (#147 anti-forgery
+    preserved). Fail-closed: if the key is absent the hook is still
+    installed (its placeholder-residue/missing-key branches block commits
+    until a key exists); the human is guided to review_gate.py key-init.
+
+    Returns (installed, message).
+    """
+    git_dir = ws / ".git"
+    if not git_dir.is_dir():
+        return False, (f"no git repository at {ws} — --install-git-hooks "
+                       "needs .git/hooks/ to install into")
+    if not REVIEW_HOOK_TEMPLATE.is_file():
+        return False, f"template missing: {REVIEW_HOOK_TEMPLATE}"
+    home = Path(home) if home is not None else Path.home()
+    key_path = (home / ".claude" / REVIEW_KEY_NAME).resolve()
+    text = REVIEW_HOOK_TEMPLATE.read_text(encoding="utf-8")
+    if REVIEW_KEY_PLACEHOLDER not in text:
+        return False, (f"template carries no {REVIEW_KEY_PLACEHOLDER} "
+                       "placeholder — refusing to install an unstampable hook")
+    # The comparison guard uses the placeholder BOTH sides: replace only the
+    # ASSIGNMENT (right side of key=...), never the [ "$key" = ... ] literal —
+    # replacing all occurrences would neuter the installed copy's own
+    # unstamped-hook fail-closed branch into a tautology.
+    stamped = re.sub(
+        rf'key="{REVIEW_KEY_PLACEHOLDER}"',
+        f'key="{key_path.as_posix()}"',
+        text, count=1)
+    if REVIEW_KEY_PLACEHOLDER in re.search(
+            r'key="[^"\n]*"', stamped).group(0):
+        return False, "internal error: stamp failed (placeholder not replaced)"
+    target = git_dir / "hooks" / "pre-commit"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(target, stamped)
+    target.chmod(0o755)
+    msg = f"review-gate pre-commit installed -> {target} (key path stamped: {key_path.as_posix()})"
+    if not key_path.is_file():
+        msg += (f"; key ABSENT — create it (human-run): "
+                f"python scripts/review_gate.py key-init {key_path.as_posix()}")
+    return True, msg
+
+
 def resume(ws: Path, text: str) -> int:
     """Phase 1 resume mode: no drift → exit 0; drift → stderr WARNING, still exit 0."""
     recorded = extract_hash(text)
@@ -665,7 +729,8 @@ def initialize(ws: Path, hooks_json: Path | None,
 def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
         profile_root: Path | None = None,
         project_type: str | None = None,
-        skip_toolchain: bool = False, no_mcp: bool = False) -> int:
+        skip_toolchain: bool = False, no_mcp: bool = False,
+        install_git_hooks_flag: bool = False) -> int:
     """State-machine entry (#304 amended flow, comment 304-5289955958):
 
     Phase 0 environment guard → re-init check (resume; if project_type is
@@ -678,6 +743,11 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
 
     #362: template render defects (unfilled {{placeholder}}) surface as a
     clear stderr message + exit RC_ERROR — never a silent partial CLAUDE.md.
+
+    #367: --install-git-hooks installs the review-gate pre-commit hook with
+    install-time key-path stamping; it runs on EVERY exit path after the
+    flag guard (resume and fresh alike — hook install is orthogonal to
+    scaffolding). Install failure (non-git workspace) is a HARD refuse.
     """
     guard_rc, guard_log = guard_agent_teams(profile_root)
     if guard_rc != 0:
@@ -687,6 +757,14 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
     for line in guard_log:
         print(line)
     ws = Path(ws).resolve()
+
+    # #367: hook install first — it must also run for resume-mode workspaces
+    if install_git_hooks_flag:
+        installed, msg = install_git_hooks(ws)
+        print(f"kunglao-init: {msg}")
+        if not installed:
+            return RC_ERROR
+
     reg = ws / "claim-register.yaml"
     if reg.exists() and not force:
         text = reg.read_text(encoding="utf-8")
@@ -836,7 +914,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     return run(Path(args.workspace), force=args.force, hooks_json=args.hooks_json,
                profile_root=args.profile_root, project_type=args.type,
-               skip_toolchain=args.skip_toolchain, no_mcp=args.no_mcp)
+               skip_toolchain=args.skip_toolchain, no_mcp=args.no_mcp,
+               install_git_hooks_flag=args.install_git_hooks)
 
 
 if __name__ == "__main__":

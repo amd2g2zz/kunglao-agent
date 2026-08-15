@@ -12,9 +12,19 @@ py="python"
 command -v "$py" >/dev/null 2>&1 || py="python3"
 command -v "$py" >/dev/null 2>&1 || { echo "REVIEW GATE BLOCKED: no python interpreter found"; exit 1; }
 # explicit absolute keyfile (NOT env-resolved: USERPROFILE/HOME redirection
-# would let a subagent self-mint+approve via a fake-home key)
-key="C:/Users/hr/.claude/kunglao-review.key"
-[ -f "$key" ] || { echo "REVIEW GATE BLOCKED: review key missing at $key"; exit 1; }
+# would let a subagent self-mint+approve via a fake-home key).
+# __KUNGLAO_REVIEW_KEY__ is an install-time placeholder: the human-run
+# installer (kunglao-init --install-git-hooks) stamps the installing user's
+# real absolute key path ONCE into the installed .git/hooks/pre-commit copy.
+key="__KUNGLAO_REVIEW_KEY__"
+if [ "$key" = "__KUNGLAO_REVIEW_KEY__" ]; then
+  echo "REVIEW GATE BLOCKED: hook not installed — this is the tracked template"
+  echo "  (unstamped placeholder key path). Install it with:"
+  echo "  python scripts/kunglao-init.py <workspace> --install-git-hooks"
+  echo "  (stamps your \$HOME/.claude/kunglao-review.key at install time; anti-forgery: the path stays a literal, never env-resolved at commit time)"
+  exit 1
+fi
+[ -f "$key" ] || { echo "REVIEW GATE BLOCKED: review key missing at $key"; echo "  create it: python scripts/review_gate.py key-init $key"; exit 1; }
 # log-file output avoids MSYS2 SIGPIPE exit-status loss when stdout is piped
 "$py" "$repo/scripts/review_gate.py" check "$repo" "$out" "$branch" "$key" >"$log" 2>&1
 rc=$?

@@ -46,18 +46,25 @@ def _write_settings(target_root: Path) -> Path:
     """Deploy a settings.json carrying all wire-up hooks under target_root —
     makes check ④ pass. target_root=ws -> PROJECT level (the #258/#269
     deployment target); target_root=isolated_home -> user-global (used by the
-    negative regression test)."""
+    negative regression test). #372: derives from the registry (all 8 files,
+    recall_inject under Pre/Agent, completion_gate under Stop)."""
     settings = target_root / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True)
+    pre_agent = ["worker_budget.py", "dispatch_gate.py", "env_check_gate.py",
+                 "recall_inject.py"]
     pre = [{"matcher": "Agent", "hooks": [
         {"type": "command", "command": f"python C:/skills/hooks/{h}"}]}
-        for h in HOOK_FILES if h in ("worker_budget.py", "dispatch_gate.py", "env_check_gate.py")]
+        for h in pre_agent]
     post = [{"matcher": "Agent", "hooks": [
         {"type": "command", "command": f"python C:/skills/hooks/{h}"}]}
-        for h in HOOK_FILES if h in ("worker_pulse.py", "state_anchor.py")]
+        for h in ("worker_budget.py", "worker_pulse.py", "state_anchor.py")]
     pre.append({"matcher": "Bash", "hooks": [
         {"type": "command", "command": "python C:/skills/hooks/heartbeat_touch.py"}]})
-    settings.write_text(json.dumps({"hooks": {"PreToolUse": pre, "PostToolUse": post}}),
+    stop = [{"hooks": [
+        {"type": "command", "command": "python C:/skills/hooks/completion_gate.py"}]}]
+    settings.write_text(json.dumps({"hooks": {"PreToolUse": pre,
+                                              "PostToolUse": post,
+                                              "Stop": stop}}),
                         encoding="utf-8")
     return settings
 

@@ -47,9 +47,11 @@ Before merge, all PRs must pass the 1-reviewer gate enforced by
   (>=1 distinct reviewer, diff sha256 match).
 - A pre-commit hook (`review_gate.py check`) blocks commits without a valid
   gate token for the branch. The single gate source is the tracked template
-  `.claude/git-hooks/pre-commit`, installed by copying it to
-  `.git/hooks/pre-commit` (the legacy 3-review-file gate under
-  `.claude/hooks/` is retired).
+  `.claude/git-hooks/pre-commit`, installed by
+  `python scripts/kunglao-init.py <workspace> --install-git-hooks` (stamps the
+  installing user's key path into `.git/hooks/pre-commit` at install time —
+  never copy the template by hand: an unstamped copy fail-closes every
+  commit; the legacy 3-review-file gate under `.claude/hooks/` is retired).
 
 ## Key constraints
 

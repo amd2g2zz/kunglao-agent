@@ -38,6 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import init_state  # noqa: E402  # F6 (#304 review): shared init-completeness predicate
+import wire_up_settings  # noqa: E402  # #372: hook registry single source
 
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: truthy = FAIL; 0/false/off/空 = PASS
@@ -101,10 +102,10 @@ def load_dotenv(ws: Path) -> dict:
             merged[key] = value.strip()
     # os.environ wins — .env is the fallback, never an override
     return {**merged, **{k: v for k, v in os.environ.items() if k in merged}}
-# Mirror of scripts/wire_up_settings.py registration (PreToolUse Agent/Bash +
-# PostToolUse Agent).
-HOOK_FILES = ["worker_budget.py", "dispatch_gate.py", "env_check_gate.py",
-              "heartbeat_touch.py", "worker_pulse.py", "state_anchor.py"]
+# #372: the deployed-hook set IS wire_up_settings' registry (the writer) —
+# never a hand-mirrored list (the pre-#372 mirror listed 6 while 8 were
+# registered, making a recall_inject/completion_gate silent drop invisible).
+HOOK_FILES = wire_up_settings.WIRE_UP_HOOK_FILES
 
 
 def utc_now() -> str:
@@ -211,8 +212,12 @@ def check_hooks(ws: Path) -> tuple[bool, str]:
     s = _load_json(settings)
     pre = s.get("hooks", {}).get("PreToolUse", []) or []
     post = s.get("hooks", {}).get("PostToolUse", []) or []
+    # #372: Stop must be scanned too — completion_gate.py is a Stop hook; a
+    # Pre/Post-only scan can never verify it (the blind spot that hid the
+    # 6-vs-8 mirror drift).
+    stop = s.get("hooks", {}).get("Stop", []) or []
     cmds = []
-    for entry in pre + post:
+    for entry in pre + post + stop:
         for h in entry.get("hooks", []) or []:
             cmds.append(str(h.get("command", "")))
     missing = [h for h in HOOK_FILES if not any(h in c for c in cmds)]

@@ -24,6 +24,23 @@ import json
 import sys
 from pathlib import Path
 
+# #372: THE hook registry — every consumer derives from this frozenset.
+# Pre-#372 env_check.py mirrored the list by hand and drifted (6 vs the 8
+# files wire_up_settings actually registers — recall_inject/completion_gate
+# silently invisible to the env_check deployment gate). The registrations
+# below MUST keep this set in sync; tests/test_hook_registry_singlesource.py
+# pins the set-equality so drift is loud.
+WIRE_UP_HOOK_FILES = frozenset({
+    "env_check_gate.py",       # PreToolUse/Agent — hard environment gate (#233)
+    "worker_budget.py",        # Pre+PostToolUse/Agent — budget/tier enforcement
+    "dispatch_gate.py",        # PreToolUse/Agent — dispatch contract gate
+    "recall_inject.py",        # PreToolUse/Agent — runtime knowledge recall (#268)
+    "heartbeat_touch.py",      # PreToolUse/Bash — liveness refresh on any tool use
+    "worker_pulse.py",         # PostToolUse/Agent — completion pulse
+    "state_anchor.py",         # PostToolUse/Agent — per-turn state re-anchor (#44)
+    "completion_gate.py",      # Stop — code-owned completion gate (#55)
+})
+
 
 def _settings_target(workspace: Path | None) -> Path:
     """Project-level settings.json target (never the user-global, #258).

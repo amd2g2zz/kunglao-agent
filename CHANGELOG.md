@@ -25,6 +25,28 @@
   schema 修订 + specs/phase-4/contract.md 与 module-design.md M1.3 回写，
   同一提交）。openspec/archive/fix-97 的"恒不 INVALID"判断仅覆盖异常→
   BLOCKED 路径，存档不改。
+### Fixed (pre-release security batch, #367)
+
+- Review-gate pre-commit key path no longer hardcodes the author's machine —
+  the tracked template `.claude/git-hooks/pre-commit` carries the
+  `__KUNGLAO_REVIEW_KEY__` placeholder; the human-run installer
+  `kunglao-init --install-git-hooks` stamps the installing user's absolute
+  key path into `.git/hooks/pre-commit` once at install time (#147
+  anti-forgery preserved: the stamped path is a literal, never env-resolved
+  at commit time); an unstamped copy fail-closes with install guidance;
+  missing key guides `review_gate.py key-init`; hardcode scan extended to
+  the whole tracked tree (git grep, allowlisted historical references only)
+  (#367)
+
+### Fixed (hook registry single-source, #372)
+
+- env_check hook mirror drift — HOOK_FILES (6) hand-copied from
+  wire_up_settings registrations (8 distinct files); recall_inject (#268)
+  and completion_gate were invisible to the env_check deployment gate. Now
+  env_check.HOOK_FILES IS wire_up_settings.WIRE_UP_HOOK_FILES (frozenset,
+  single source) and check_hooks scans the Stop section too (completion_gate
+  is a Stop hook); set-equality + Stop-scan tests added; SKILL.md count
+  corrected 6 → 8 (#372)
 
 ### Changed (renderer unification, #362)
 
