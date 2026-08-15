@@ -14,7 +14,7 @@ RED-first contract (SDD+TDD):
 2. kunglao-init 可选 scaffold <ws>/.mcp.json: 缺失才生成 (幂等, 已存在不覆盖),
    --no-mcp 跳过; 内容与 mcp_probe.MANIFEST 单一事实源一致 (合法 JSON, _comment 注释)。
 3. 文档表与 manifest 一致: templates/CLAUDE.md.{windows,linux,android}.tmpl +
-   templates/CLAUDE.md.tmpl + README.md Internals 均含 MCP 表, 行格式
+   templates/CLAUDE.md.base.tmpl + README.md Internals 均含 MCP 表, 行格式
    `| `name` | tier |` 与本文件 pin 一致。
 """
 from __future__ import annotations
@@ -390,36 +390,34 @@ def test_toolchain_mcp_fix_guidance_in_human_output(fake_claude_json, ws):
 # ---------- docs tables vs manifest ----------
 
 def test_per_os_templates_exist_with_mcp_table():
-    for t in ("windows", "linux", "android"):
-        p = TEMPLATES / f"CLAUDE.md.{t}.tmpl"
-        assert p.exists(), f"missing per-OS template {p.name} (#304 delivery)"
-        text = p.read_text(encoding="utf-8")
-        assert "MCP" in text
+    """#356 W2: the single-source base template carries the MCP table;
+    per-OS renders are produced by kunglao-init injection (see
+    tests/test_claudemd_single_source.py)."""
+    p = TEMPLATES / "CLAUDE.md.base.tmpl"
+    assert p.exists(), "missing templates/CLAUDE.md.base.tmpl (#356 W2)"
+    text = p.read_text(encoding="utf-8")
+    assert "MCP" in text
 
 
 def test_docs_tables_match_manifest():
-    """三模板 + CLAUDE.md.tmpl + README 的 MCP 表与 MANIFEST 一致
-    (行前缀 pin: `| `name` | tier |`)."""
-    templates = {
-        t: (TEMPLATES / f"CLAUDE.md.{t}.tmpl").read_text(encoding="utf-8")
-        for t in ("windows", "linux", "android")
-    }
-    generic = (TEMPLATES / "CLAUDE.md.tmpl").read_text(encoding="utf-8")
+    """base template + README 的 MCP 表与 MANIFEST 一致
+    (行前缀 pin: `| `name` | tier |`).
+
+    #356 W2: the base template is the single table (superset — per-type
+    rows are filtered nowhere; the mcp_probe --type flag does the
+    per-type gating at check time)."""
+    generic = (TEMPLATES / "CLAUDE.md.base.tmpl").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     for item in mcp_probe.MANIFEST:
         row_prefix = f"| `{item.name}` | {item.tier} |"
         assert row_prefix in readme, f"README MCP table missing {item.name}"
-        assert row_prefix in generic, f"CLAUDE.md.tmpl MCP table missing {item.name}"
-        for t in item.types:
-            assert row_prefix in templates[t], \
-                f"CLAUDE.md.{t}.tmpl MCP table missing {item.name}"
+        assert row_prefix in generic, f"CLAUDE.md.base.tmpl MCP table missing {item.name}"
     # 反向: 模板表不夹带 manifest 之外的行 (避免口径漂移)
     import re
-    for t, text in templates.items():
-        rows = re.findall(r"^\| `([a-z0-9-]+)` \| (HARD|WARN) \|", text, re.M)
-        manifest_names = {i.name for i in mcp_probe.MANIFEST if t in i.types}
-        assert set(rows) == {(n, _item(n).tier) for n in manifest_names}, \
-            f"{t} template table drift: {rows}"
+    rows = re.findall(r"^\| `([a-z0-9-]+)` \| (HARD|WARN) \|", generic, re.M)
+    manifest_names = {i.name: i.tier for i in mcp_probe.MANIFEST}
+    assert set(rows) == set(manifest_names.items()), \
+        f"base template table drift: {rows}"
 
 
 def test_readme_mentions_probe_and_scaffold():

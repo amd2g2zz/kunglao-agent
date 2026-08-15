@@ -247,3 +247,41 @@ def test_templates_have_no_host_absolute_paths_or_real_ips(path: Path):
     text = path.read_text(encoding="utf-8")
     assert not _ABS_PATH.search(text), f"{path.name} contains a host absolute path"
     assert not _IP.search(text), f"{path.name} contains a real IPv4 address"
+
+
+# ---------- (g) Frida 17 API contract (#356 W5) ----------
+
+def test_hook_uses_frida17_module_api():
+    """(#356 W5) cfg-hook.js.tmpl must not use the Frida-16-only
+    two-argument Module.getExportByName(mod, name) — the project baseline
+    is frida >= 17, where the form is
+    Process.getModuleByName(mod).getExportByName(name). Comments may
+    mention the old API (explaining the migration); code may not."""
+    text = HOOK_TMPL.read_text(encoding="utf-8")
+    code = _strip_js_strings_and_comments(text)
+    assert "Module.getExportByName(" not in code, \
+        "Frida-16-only Module.getExportByName(mod, name) remains in code (#356 W5)"
+    assert "Process.getModuleByName(" in code, \
+        "Frida 17 form Process.getModuleByName(mod).getExportByName(name) missing"
+
+
+def test_hook_keeps_null_safety_try_catch():
+    """(#356 W5) the export lookup keeps its null-safety try/catch — a
+    missing export must warn and skip, never crash the hook script."""
+    text = HOOK_TMPL.read_text(encoding="utf-8")
+    code = _strip_js_strings_and_comments(text)
+    m = re.search(r"Process\.getModuleByName\(", code)
+    assert m, "Frida 17 lookup not found (precondition)"
+    # the lookup sits inside a try block with a catch that warns + returns
+    try_block = code[max(0, m.start() - 400):m.end() + 600]
+    assert "try {" in try_block and "catch" in try_block, \
+        "export lookup must stay wrapped in try/catch null-safety"
+    assert "console.warn" in text, "missing export must warn, not crash"
+
+
+def test_hook_header_declares_frida17_requirement():
+    """(#356 W5) header comment must state Requires: frida >= 17."""
+    text = HOOK_TMPL.read_text(encoding="utf-8")
+    header = text[:text.index("'use strict';")] if "'use strict';" in text else text[:2000]
+    assert re.search(r"Requires:\s*frida\s*>=\s*17", header), \
+        "header must declare 'Requires: frida >= 17'"

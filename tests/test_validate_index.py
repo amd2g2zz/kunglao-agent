@@ -11,6 +11,8 @@ Pins the tools/_INDEX.yaml contract to a machine validator (tools/validate_index
 - tier:        T1|T2|T3   (static tool / emulation / VM-dynamic)
 - cost_tier:   probe|cheap|deep
 - input_output: non-empty input→output contract (str or {input, output})
+- description: non-empty English one-liner (15-40 chars: what it does + when
+               to choose it) — issue #356 W1 (agent tool selection aid)
 - when_not:    optional — when NOT to use the tool
 
 Validator contract:
@@ -47,6 +49,7 @@ def _valid_entry() -> dict:
         "tier": "T1",
         "cost_tier": "cheap",
         "input_output": {"input": "密文字节串", "output": "明文层"},
+        "description": "Decodes ChaCha layers; pick for byte-exact verify",
         "when_not": "非 ChaCha 流加密时不用",
     }
 
@@ -127,6 +130,7 @@ class TestPass:
 class TestFail:
     @pytest.mark.parametrize("field", [
         "name", "category", "capability", "tier", "cost_tier", "input_output",
+        "description",
     ])
     def test_missing_required_field_fails(self, field: str) -> None:
         entry = _valid_entry()
@@ -138,6 +142,22 @@ class TestFail:
         entry = _valid_entry()
         entry["name"] = ""
         assert _errors({"tools": [entry]})
+
+    # ---------- description contract (#356 W1) ----------
+
+    @pytest.mark.parametrize("bad", ["", "   "])
+    def test_empty_description_fails(self, bad: str) -> None:
+        """#356 W1: description is required and must be non-blank."""
+        entry = _valid_entry()
+        entry["description"] = bad
+        errs = _errors({"tools": [entry]})
+        assert any("description" in e for e in errs), errs
+
+    def test_non_string_description_fails(self) -> None:
+        entry = _valid_entry()
+        entry["description"] = 42
+        errs = _errors({"tools": [entry]})
+        assert any("description" in e for e in errs), errs
 
     def test_duplicate_name_fails(self) -> None:
         a = _valid_entry()
@@ -203,3 +223,43 @@ class TestFail:
         r = _run_cli(idx)
         assert r.returncode == 1, r.stdout
         assert r.stderr  # an error list / parse message is printed
+
+
+# ---------- shipped index contract (#356 W1) ----------
+
+class TestShippedIndex:
+    """The shipped tools/_INDEX.yaml must satisfy the #356 W1 additions:
+
+    - every entry carries a non-empty description
+    - each description is a length-bounded English one-liner
+      (15-40 chars: what it does + when to choose it) — guidance, enforced
+      loosely: ASCII-only and within [15, 40] characters.
+    """
+
+    def test_shipped_index_passes_validator(self) -> None:
+        r = _run_cli(INDEX_YAML)
+        assert r.returncode == 0, r.stderr
+
+    def test_shipped_every_tool_has_description(self) -> None:
+        import yaml
+        data = yaml.safe_load(INDEX_YAML.read_text(encoding="utf-8"))
+        tools = data.get("tools", [])
+        assert tools, "shipped index unexpectedly empty"
+        missing = [t.get("name", f"tools[{i}]")
+                   for i, t in enumerate(tools)
+                   if not (isinstance(t.get("description"), str)
+                           and t["description"].strip())]
+        assert not missing, f"tools missing description: {missing}"
+
+    def test_shipped_descriptions_english_and_bounded(self) -> None:
+        import yaml
+        data = yaml.safe_load(INDEX_YAML.read_text(encoding="utf-8"))
+        bad = []
+        for t in data.get("tools", []):
+            d = t.get("description", "")
+            if not d.isascii():
+                bad.append(f"{t.get('name')}: non-ASCII description {d!r}")
+            elif not 15 <= len(d.strip()) <= 40:
+                bad.append(f"{t.get('name')}: length {len(d.strip())} outside [15,40]: {d!r}")
+        assert not bad, "\n".join(bad)
+

@@ -67,3 +67,6 @@ analysis_space/
 
 # pytest cache
 .pytest_cache/
+
+# Deployment secrets/topology (per-machine; .env.example is the template)
+.env

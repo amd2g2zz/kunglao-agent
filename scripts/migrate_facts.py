@@ -58,6 +58,12 @@ except ImportError:  # pragma: no cover
 
 SAMPLE_HASH = "865e8eb489b2935b745502026a81e1ef9a6ad6b9"  # workspace sample filename
 
+# #356 W3: skill root derived from this file — the pre-#356 F022 entry
+# hardcoded the original author's absolute install path. Kept as a
+# module-level derivation so every curated reference stays machine-agnostic.
+SKILL_ROOT = Path(__file__).resolve().parent.parent
+_CRYPTO_TOOL = (SKILL_ROOT / "tools" / "crypto" / "crypto-tool.py").as_posix()
+
 # ---------- curated migration map (workspace facts) ----------
 # extra_provenance: list of (role, path, credibility) — credibility None → default
 # excerpt: appended as "## Code excerpt" (quoted from the committed recompute
@@ -312,12 +318,11 @@ FACT_MIGRATION_MAP = {
                         "比对通过且结构自洽确认"),
         provenance_override=[
             ("sample_raw", "test-scope/sample_enc.bin", "A1"),
-            ("recompute_script",
-             "C:/Users/hr/.claude/skills/kunglao-agent/tools/crypto/crypto-tool.py", "A2"),
+            ("recompute_script", _CRYPTO_TOOL, "A2"),
         ],
         extension_override={
             "claim": "C-022 加密层识别与明文恢复 (test-scope/sample_enc.bin)",
-            "reproduce": ("python C:/Users/hr/.claude/skills/kunglao-agent/tools/crypto/crypto-tool.py "
+            "reproduce": (f"python {_CRYPTO_TOOL} "
                           "xor-add --mode decrypt --key 1 --in ../test-scope/sample_enc.bin --reproduce"),
             "expected": "output_sha256=fd92b2d9418444e7b3fa93fdff5cc0cd63442fd21ed9c3c916fe88c526edc190",
             "verified": "pending",

@@ -48,6 +48,29 @@ VM_HOST = os.environ.get("KUNGLAO_VM_HOST", "")
 VM_PORTS = [9876, 1337]
 _ghidra_home = os.environ.get("GHIDRA_HOME")
 GHIDRA_DEFAULT = Path(_ghidra_home) / "support" / "analyzeHeadless.bat" if _ghidra_home else None
+
+
+def load_dotenv(ws: Path) -> dict:
+    """#356 W4: stdlib .env parser (no python-dotenv dependency).
+
+    Reads <ws>/.env KEY=VALUE lines (comments/blank lines skipped; lines
+    without '=' skipped best-effort) and returns the EFFECTIVE view:
+    real os.environ entries always win, .env only fills gaps.
+    """
+    envf = Path(ws) / ".env"
+    if not envf.is_file():
+        return {}
+    merged: dict[str, str] = {}
+    for raw in envf.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        if key:
+            merged[key] = value.strip()
+    # os.environ wins — .env is the fallback, never an override
+    return {**merged, **{k: v for k, v in os.environ.items() if k in merged}}
 # Mirror of scripts/wire_up_settings.py registration (PreToolUse Agent/Bash +
 # PostToolUse Agent).
 HOOK_FILES = ["worker_budget.py", "dispatch_gate.py", "env_check_gate.py",
@@ -230,6 +253,16 @@ def read_sample_sha256(ws: Path) -> str | None:
 # ---------- main ----------
 
 def run(ws: Path) -> tuple[int, dict]:
+    # #356 W4: workspace .env fallback — real environment wins, then <ws>/.env.
+    # Module-level VM_HOST/GHIDRA_DEFAULT re-bound here (tests monkeypatch
+    # them directly, so the lookup stays attribute-based).
+    dotenv = load_dotenv(ws)
+    global VM_HOST, GHIDRA_DEFAULT  # noqa: PLW0603 — rebind per-run
+    if not os.environ.get("KUNGLAO_VM_HOST") and dotenv.get("KUNGLAO_VM_HOST"):
+        VM_HOST = dotenv["KUNGLAO_VM_HOST"]
+    if not os.environ.get("GHIDRA_HOME") and dotenv.get("GHIDRA_HOME"):
+        _home = dotenv["GHIDRA_HOME"]
+        GHIDRA_DEFAULT = Path(_home) / "support" / "analyzeHeadless.bat"
     checks = {
         "init_complete": check_init_complete(ws),
         "agent_teams_flag": check_flag(),
