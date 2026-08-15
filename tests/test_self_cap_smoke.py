@@ -8,6 +8,9 @@ Validates both directions:
 
 Run: python -m pytest tests/test_self_cap_smoke.py -q
 Exit: 0 if all pass, 1 if any fail.
+
+Tests assert their failure lists (return-based tests were vacuous under
+pytest — a returned non-None list never fails a test, #368).
 """
 from __future__ import annotations
 
@@ -90,7 +93,7 @@ def test_must_trigger():
         print(f"  [{status}] {label}: '{desc[:60]}'  found={found}")
         if not found:
             failures.append((label, desc))
-    return failures
+    assert not failures, f"{len(failures)}/{len(MUST_TRIGGER)} MUST_TRIGGER cases missed _SELF_CAP_RE: {failures}"
 
 
 def test_must_not_trigger():
@@ -102,7 +105,7 @@ def test_must_not_trigger():
         print(f"  [{status}] '{desc[:60]}'  found={found}")
         if found:
             failures.append(desc)
-    return failures
+    assert not failures, f"{len(failures)}/{len(MUST_NOT_TRIGGER)} SKILL.md §7 paraphrase cases false-positived: {failures}"
 
 
 def test_negation_allowlist():
@@ -114,7 +117,7 @@ def test_negation_allowlist():
         print(f"  [{status}] '{desc[:60]}'  found={found}")
         if found:
             failures.append(desc)
-    return failures
+    assert not failures, f"{len(failures)}/{len(NEGATION_ALLOWLIST)} negation-allowlist cases failed to suppress: {failures}"
 
 
 def test_check_no_self_cap_integration():
@@ -149,7 +152,7 @@ def test_check_no_self_cap_integration():
         fails.append("case_c")
     task_spec_neg.unlink()
 
-    return fails
+    assert not fails, f"check_no_self_cap integration failures: {fails}"
 
 
 # ===== Main =====
@@ -159,22 +162,27 @@ def main() -> int:
     print("kunglao-agent _SELF_CAP_RE smoke suite (v1.8.2)")
     print("=" * 70)
 
-    fail1 = test_must_trigger()
-    fail2 = test_must_not_trigger()
-    fail3 = test_negation_allowlist()
-    fail4 = test_check_no_self_cap_integration()
+    suites = [
+        ("MUST_TRIGGER", test_must_trigger),
+        ("MUST_NOT_TRIGGER", test_must_not_trigger),
+        ("negation_allowlist", test_negation_allowlist),
+        ("check_no_self_cap_integration", test_check_no_self_cap_integration),
+    ]
+    failed = []
+    for name, fn in suites:
+        try:
+            fn()
+        except AssertionError as e:
+            failed.append((name, str(e)))
 
     print("\n" + "=" * 70)
-    total_failures = len(fail1) + len(fail2) + len(fail3) + len(fail4)
-    if total_failures == 0:
+    if not failed:
         total_cases = len(MUST_TRIGGER) + len(MUST_NOT_TRIGGER) + len(NEGATION_ALLOWLIST) + 3
         print(f"ALL_OK ({total_cases} cases passed)")
         return 0
-    print(f"FAILURES: {total_failures}")
-    if fail1: print(f"  MUST_TRIGGER misses: {fail1}")
-    if fail2: print(f"  MUST_NOT_TRIGGER FPs: {fail2}")
-    if fail3: print(f"  Negation misses: {fail3}")
-    if fail4: print(f"  Integration fails: {fail4}")
+    print(f"FAILURES: {len(failed)}")
+    for name, msg in failed:
+        print(f"  {name}: {msg}")
     return 1
 
 

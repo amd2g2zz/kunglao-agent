@@ -12,16 +12,24 @@ Validates the 5 core loop scripts that previously had ZERO test coverage:
 These snapshots lock behavior BEFORE the refactor (Phase 2/3 equivalence baseline).
 Style: tmp_path + synthetic fixtures (same as test_v1_8_enforcement_gates.py).
 
+check() raises AssertionError on failure so pytest sees real assertions
+(#368: the old counter-based check() only printed, so failures never failed).
+
 Run: python -m pytest tests/test_kunglao_core_loop.py -q
 Exit 0 if all pass, 1 if any fail.
 """
 from __future__ import annotations
 
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(SCRIPT_DIR))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+# pytest resolves scripts/ via pytest.ini pythonpath; the insert keeps the
+# documented standalone run (`python tests/test_kunglao_core_loop.py`) importable.
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+import yaml
 
 import convergence_check as cc
 import convergence_health as ch
@@ -29,25 +37,32 @@ import claim_expiry as ce
 
 PASS = 0
 FAIL = 1
-_tests = 0
-_failed = 0
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
-    global _tests, _failed
-    _tests += 1
-    if not cond:
-        _failed += 1
-        print(f"  FAIL {name} {detail}")
+    assert cond, f"{name} {detail}".strip()
 
 
 def make_claim_reg(ws: Path, claims: list[dict]) -> Path:
-    """Write a synthetic claim-register.yaml with the given claims."""
+    """Write a synthetic claim-register.yaml with the given claims.
+
+    Optional `extra`: {field: value} lines appended to the claim entry
+    (e.g. created_at for claim_expiry staleness tests).
+    """
     reg = ws / "claim-register.yaml"
-    reg.write_text("claims:\n" + "\n".join(
-        f"- id: {c['id']}\n  status: {c['status']}\n  boundary_type: {c.get('boundary_type', 'positive_observation')}\n  evidence_tier_attempted: {c.get('tier', 0)}\n  promotion_attempts: {c.get('attempts', 0)}\n  depends_on: {c.get('depends_on', '[]')}"
-        for c in claims
-    ), encoding="utf-8")
+    lines = ["claims:"]
+    for c in claims:
+        lines.append(
+            f"- id: {c['id']}\n  status: {c['status']}\n"
+            f"  boundary_type: {c.get('boundary_type', 'positive_observation')}\n"
+            f"  evidence_tier_attempted: {c.get('tier', 0)}\n"
+            f"  promotion_attempts: {c.get('attempts', 0)}\n"
+            f"  depends_on: {c.get('depends_on', '[]')}"
+        )
+        for field, value in c.get("extra", {}).items():
+            lines.append(f"  {field}: {value}")
+        lines.append("")
+    reg.write_text("\n".join(lines), encoding="utf-8")
     return reg
 
 
@@ -137,30 +152,56 @@ def test_convergence_health(tmp: Path) -> None:
 def test_claim_expiry(tmp: Path) -> None:
     ws = tmp / "ce"
     ws.mkdir(parents=True)
-    from datetime import datetime, timezone, timedelta
-    # Old claim (no activity) should be flagged STALE
-    reg = make_claim_reg(ws, [
-        {"id": "C-old", "status": "OPEN", "tier": 1},
-        {"id": "C-new", "status": "OPEN", "tier": 1},
+
+    def iso(dt: datetime) -> str:
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    now = datetime.now(tz=timezone.utc)
+    # Timestamps are quoted: unquoted ISO scalars load as datetime objects
+    # (YAML 1.1 resolver) and last_activity_for skips them — the system's own
+    # writer (claim_expiry._write_yaml via yaml.safe_dump) emits quoted strings.
+    make_claim_reg(ws, [
+        {"id": "C-old", "status": "OPEN", "tier": 1, "extra": {"created_at": f"'{iso(now - timedelta(hours=48))}'"}},
+        {"id": "C-new", "status": "OPEN", "tier": 1, "extra": {"created_at": f"'{iso(now - timedelta(hours=1))}'"}},
     ])
-    # claim_expiry checks workspace for stale OPEN claims
-    try:
-        rc = ce.check(ws, stale_hours=24)
-        check("ce.stale_detected", rc in (0, 1), f"rc={rc}")
-    except (TypeError, AttributeError) as e:
-        # interface may differ; assert basic import + presence
-        check("ce.imports", True, f"interface note: {e}")
+
+    def reg_claims() -> dict[str, dict]:
+        reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
+        return {c["id"]: c for c in reg["claims"]}
+
+    # Dry run (default): detection only — register must stay untouched
+    rc = ce.check(ws, stale_hours=24)
+    check("ce.dry_run_rc", rc == 0, f"rc={rc}")
+    check("ce.dry_run_no_write", {k: c["status"] for k, c in reg_claims().items()}
+          == {"C-old": "OPEN", "C-new": "OPEN"}, str(reg_claims()))
+
+    # Apply: only the >24h-idle claim flips to STALE (with reason); fresh stays OPEN
+    rc = ce.check(ws, stale_hours=24, apply=True)
+    claims = reg_claims()
+    check("ce.apply_rc", rc == 0, f"rc={rc}")
+    check("ce.stale_marked", claims["C-old"]["status"] == "STALE", str(claims))
+    check("ce.stale_reason", bool(claims["C-old"].get("stale_reason")), str(claims["C-old"]))
+    check("ce.fresh_kept_open", claims["C-new"]["status"] == "OPEN", str(claims))
 
 
 def main() -> int:
     import tempfile
+    suites = [
+        ("test_convergence_check", test_convergence_check, "cc-t"),
+        ("test_convergence_health", test_convergence_health, "ch-t"),
+        ("test_claim_expiry", test_claim_expiry, "ce-t"),
+    ]
+    failed = 0
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        test_convergence_check(tmp / "cc-t")
-        test_convergence_health(tmp / "ch-t")
-        test_claim_expiry(tmp / "ce-t")
-    print(f"test_kunglao_core_loop: {_tests} tests, {_failed} failed")
-    return FAIL if _failed else PASS
+        for name, fn, sub in suites:
+            try:
+                fn(tmp / sub)
+            except AssertionError as e:
+                failed += 1
+                print(f"  FAIL {name}: {e}")
+    print(f"test_kunglao_core_loop: {len(suites)} tests, {failed} failed")
+    return FAIL if failed else PASS
 
 
 if __name__ == "__main__":
