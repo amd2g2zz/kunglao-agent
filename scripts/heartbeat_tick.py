@@ -36,8 +36,17 @@ import sys
 import datetime
 from pathlib import Path
 
+import hook_activation as ha
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/ (scripts/ -> root)
 SCRIPTS = SKILL_DIR / "scripts"
+
+# Renewal-margin early warning (issue #365): a tick chain that is ALIVE but
+# cadence-mismatched with the 30-min TTL renews just before expiry — the one
+# silent-gate case no other anomaly surfaces. 10 min = a third of the TTL:
+# enough lead time to act before the NEXT tick misses the renewal entirely.
+RENEW_MARGIN_LOW_MINUTES = 10
+RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
 
 
 def utc_now() -> str:
@@ -74,6 +83,23 @@ def run(script: str, ws: Path, *extra: str) -> dict:
         return {"rc": -1, "stdout": f"EXC {exc}"}
 
 
+def _renew_margin_low(ws: Path) -> bool:
+    """True when < RENEW_MARGIN_LOW_MINUTES of the current activation remains.
+
+    Fail-open by design (#365): missing/corrupt state, unparseable expiry —
+    return False (no warning). The margin check must never fail the tick.
+    """
+    try:
+        expires = ha.read_state(ws).get("expires_at")
+        if not expires:
+            return False
+        exp = datetime.datetime.fromisoformat(str(expires).replace("Z", "+00:00"))
+        margin = exp - datetime.datetime.now(datetime.timezone.utc)
+        return margin < datetime.timedelta(minutes=RENEW_MARGIN_LOW_MINUTES)
+    except Exception:
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     """argv: explicit CLI args (defaults to sys.argv[1:]) — lets the kunglao.py
     router pass the caller's workspace instead of the router's own argv
@@ -88,6 +114,12 @@ def main(argv: list[str] | None = None) -> int:
 
     report["selfcheck"] = run("hooks_selfcheck.py", ws)
     report["reconcile"] = run("hook_activation.py", ws, "--reconcile")
+    # step 6 — renew, with pre-renewal margin warning (#365): measured BEFORE
+    # --renew overwrites expires_at. Diagnostic only: the renew always runs,
+    # healthy margin stays silent (field + line appear only when low).
+    if _renew_margin_low(ws):
+        report["renew_margin_low"] = True
+        print(RENEW_MARGIN_LOW_LINE)
     report["renew"] = run("hook_activation.py", ws, "--renew")
     report["heartbeat"] = run("hook_activation.py", ws, "--heartbeat-check")
 
