@@ -35,30 +35,30 @@ def build_prompt(ws: str, interval: str = "5m") -> str:
     h = str(skill_dir / "scripts" / "hook_activation.py")
     tk = str(skill_dir / "scripts" / "heartbeat_tick.py")
     cc = str(skill_dir / "scripts" / "convergence_check.py")
-    return f"""/loop {interval} kunglao-agent 心跳（自注册 + 监视 + 校验一体）：
+    return f"""/loop {interval} kunglao-agent heartbeat (self-registration + monitoring + verification in one):
 
-[启动动作 — 循环首次触发时执行一次]
-python {h} {ws} --heartbeat-on   # 注册心跳（写 runs/.heartbeat.json）— 监视从此是文件状态
+[Startup action — run once on the loop's first trigger]
+python {h} {ws} --heartbeat-on   # register the heartbeat (writes runs/.heartbeat.json) — monitoring is file state from here on
 
-[每 tick 监视（5 分钟间隔）]
-0. python {tk} {ws}              # v1.9.38 一键 tick：selfcheck + reconcile + renew + heartbeat-check
-                                 # （机械步骤全部折叠为 1 命令，exit=1 时才需要人工处理）
-1. 读 runs/.heartbeat-tick.json 报告：exit=0 → 只需认知步骤（ping 活跃 worker / 处理完成 worker）
-2. 对每个活跃 worker 发智能 ping（§6.1a）：SendMessage "[ping HH:MM] step? stuck? eta?"
-   → 结构化回复 append 到 runs/.ping-log.jsonl
-   （隔离边界 #88：无 agent team；SendMessage orchestrator→worker ping 是 sanctioned channel，
-    worker 之间互不 messaging）
-3. python {cc} {ws} 决策 → 命令式执行（每个决策必须产生收敛推进动作；无动作 = 空转故障）：
-   DISPATCH   → 必须派发 priority.py 第一名，不得空转
-   BLOCKED    → 必须自恢复（resolve / stale_blocker_prune）或重激活失败 claim
-   DEFERRED   → 必须检查可否重激活（如 VM 已可达 → 恢复 claim 并派发）
-   SATURATED  → 必须轮询全部活跃 worker（不许空等）
-   CONVERGED  → 先跑 §6.3 checklist（5 项）+ 独立验证（blind_gate sign-off 抽验
-              + kunglao-verify.py L1 重跑）+ handoff-check PASS
-              → 再 python {h} {ws} --heartbeat-off 停心跳（未收敛不可清理，删除将断派发）
-4. 完成 worker → 验证 facts → 合入 master → 更新 claim-register + _INDEX
-5. 按 §6.2 用 malware-veri-notes 记录笔记；每次 tick 结束必须能说出"这轮推进了什么"（填进
-   runs/.heartbeat-tick.json 的 action_taken，空字段 = 空转故障）"""
+[Per-tick monitoring (5-minute interval)]
+0. python {tk} {ws}              # v1.9.38 one-command tick: selfcheck + reconcile + renew + heartbeat-check
+                                 # (all mechanical steps folded into 1 command; manual handling only when exit=1)
+1. Read the runs/.heartbeat-tick.json report: exit=0 → only cognitive steps remain (ping active workers / handle finished workers)
+2. Smart-ping every active worker (§6.1a): SendMessage "[ping HH:MM] step? stuck? eta?"
+   → append structured replies to runs/.ping-log.jsonl
+   (isolation boundary #88: no agent teams; the orchestrator→worker SendMessage ping is the sanctioned channel,
+    workers never message each other)
+3. python {cc} {ws} decision → imperative execution (every decision MUST produce a convergence-advancing action; no action = idle fault):
+   DISPATCH   → MUST dispatch priority.py #1, no idling allowed
+   BLOCKED    → MUST self-recover (resolve / stale_blocker_prune) or reactivate the failed claim
+   DEFERRED   → MUST check whether reactivation is possible (e.g. VM reachable again → restore the claim and dispatch)
+   SATURATED  → MUST poll all active workers (no idle waiting)
+   CONVERGED  → run the §6.3 checklist (5 items) + independent verification (blind_gate sign-off spot-check
+              + kunglao-verify.py L1 re-run) + handoff-check PASS first
+              → then python {h} {ws} --heartbeat-off stops the heartbeat (no cleanup before convergence — deletion breaks dispatch)
+4. Finished worker → verify facts → merge to master → update claim-register + _INDEX
+5. Record notes with malware-veri-notes per §6.2; at the end of every tick you MUST be able to state "what this round advanced" (fill it into
+   runs/.heartbeat-tick.json's action_taken; an empty field = idle fault)"""
 
 
 def main() -> int:

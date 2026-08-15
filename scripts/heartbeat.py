@@ -82,9 +82,11 @@ def heartbeat_off(workspace: Path, force: bool = False) -> int:
         except Exception:
             converged = False
         if not converged:
-            print("未收敛不可清理:心跳是派发门禁凭证,删除将断分析"
-                  "(dispatch 会被 check_heartbeat_alive 拒)。先派发/重激活到 "
-                  "CONVERGED(convergence_check.py 确认),或显式 --force。",
+            print("Not converged — teardown forbidden: the heartbeat is the dispatch "
+                  "gate credential; deleting it breaks analysis (dispatch would be "
+                  "rejected by check_heartbeat_alive). Dispatch/reactivate to "
+                  "CONVERGED (confirmed by convergence_check.py) first, or pass "
+                  "explicit --force.",
                   file=sys.stderr)
             return 1
     path = workspace / "runs" / ".heartbeat.json"
@@ -94,5 +96,5 @@ def heartbeat_off(workspace: Path, force: bool = False) -> int:
     except OSError as exc:
         print(f"FAIL: cannot remove {path} ({exc})", file=sys.stderr)
         return 1
-    print("收敛完成,心跳停止;如需重启 --heartbeat-on")
+    print("Convergence complete, heartbeat stopped; to restart use --heartbeat-on")
     return 0

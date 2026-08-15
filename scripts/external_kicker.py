@@ -606,13 +606,16 @@ def build_resume_prompt(ws, *,
     facts_total = _facts_total(ws, snapshot)
 
     if open_ids:
-        next_step = ("按 scripts/priority.py 的 rank_claims 派发 top claim "
-                     "(<=3 workers cap + tier gate); 完成 worker 后验证 facts → "
-                     "更新 claim-register + _INDEX")
+        next_step = ("dispatch top claim via scripts/priority.py rank_claims "
+                     "(<=3 workers cap + tier gate); worker done → verify facts → "
+                     "update claim-register + _INDEX")
     else:
-        next_step = ("CONVERGED, verify report — 无 open claims; 先跑 convergence "
-                     "checklist (blind_gate sign-off 抽验 + kunglao-verify.py L1 重跑 "
-                     "+ --heartbeat-check) 再宣告完成")
+        # English skeleton is longer than the original Chinese one; keep it
+        # under every viable cap (empty state: no claims to truncate, so the
+        # skeleton itself must fit — see test_empty_workspace_prompt_obeys_char_cap)
+        next_step = ("CONVERGED, verify report — no open claims; run the convergence "
+                     "checklist (blind_gate spot-check + kunglao-verify.py "
+                     "L1 re-run + --heartbeat-check) before declaring completion")
 
     def _assemble(ids: list[str], dropped: int) -> str:
         ids_text = ", ".join(ids) if ids else "(none)"
@@ -623,16 +626,16 @@ def build_resume_prompt(ws, *,
         blocker_text = ", ".join(blockers) if blockers else "(none)"
         partial_text = ", ".join(partials) if partials else "(none)"
         return (
-            f"你正在收敛循环第 {round_n} 轮 — fired-predicate resume (#45): "
-            f"由 logged mechanical state 构造, 绝不读 dying session 的 narrative.\n"
-            f"ledger 末行快照: ts={ts}, decision={decision}\n"
-            f"当前 open claims ({len(ids)}/{total}): {ids_text}{marker}\n"
-            f"active workers (in-progress worker-status-*.md): {worker_text}\n"
+            f"Convergence loop round {round_n} — fired-predicate resume (#45): "
+            f"from logged mechanical state; never read the dying session's narrative.\n"
+            f"ledger last snapshot: ts={ts}, decision={decision}\n"
+            f"open claims ({len(ids)}/{total}): {ids_text}{marker}\n"
+            f"active workers: {worker_text}\n"
             f"blockers ({len(blockers)}): {blocker_text}\n"
             f"facts_total: {facts_total}\n"
             f"partial facts ({len(partials)}): {partial_text}\n"
             f"\n"
-            f"下一步: {next_step}"
+            f"Next step: {next_step}"
         )
 
     prompt = _assemble(shown, truncated)

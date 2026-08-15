@@ -100,7 +100,7 @@ def _guidance(ws: Path, flag_val: str) -> str:
         f"(2026-08-12 incident: 400 [1210] everywhere, 19 facts self-stamped). "
         f"kunglao #88 forbids the flag: REMOVED, SHALL NOT be re-enabled "
         f"(cold-start-contract.md Phase 0).\n"
-        f"Alternative: 用 Task 工具派发独立 worker,不进入 teammate 通道.\n"
+        f"Alternative: dispatch an independent worker via the Agent tool; do not enter the teammate channel.\n"
         f"Fix: unset {FLAG_NAME} in the launching shell, then RESTART the "
         f"session; re-run python {SKILL_DIR}/scripts/env_check.py {ws} and "
         f"get OVERALL=PASS before any further dispatch."

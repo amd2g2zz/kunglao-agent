@@ -319,7 +319,7 @@ def test_tick_kill_session_then_kick(tmp_path):
     rc = tick(ws, settings_path=settings_path, dry_run=True)
     assert rc == 0
     prompt = (runs / KICKER_PROMPT_FILE).read_text(encoding="utf-8")
-    assert prompt.startswith("你正在收敛循环第")   # fired-predicate resume prompt (#45)
+    assert prompt.startswith("Convergence loop round")   # fired-predicate resume prompt (#45)
     rec = json.loads((runs / KICKER_LAST_FILE).read_text(encoding="utf-8"))
     assert rec["kick_ts"] and rec["pid"] == 0 and rec["prompt_file"]
     s = json.loads(settings_path.read_text(encoding="utf-8"))

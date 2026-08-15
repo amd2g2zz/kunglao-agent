@@ -54,7 +54,7 @@ def test_flag_set_rejects_with_guidance(tmp_path):
     # guidance carries the three points: problem / alternative / fix
     assert "teammate" in ctx, "problem: teammate-channel routing must be named"
     assert "400" in ctx, "problem: 2026-08-12 400 [1210] evidence must be named"
-    assert "通道" in ctx, "alternative: independent-worker path must be named"
+    assert "Agent tool" in ctx, "alternative: independent-worker path must be named"
     assert "unset" in ctx, "fix: unset + restart must be named"
     assert str(ws) in ctx, "guidance should name the workspace"
 
