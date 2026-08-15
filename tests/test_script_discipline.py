@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Issue #277 — 脚本纪律契约: 工具逻辑落为可复用 CLI 脚本, 禁命令行内联执行.
+"""Issue #277 — script-discipline contract: tool logic becomes a reusable CLI script; inline CLI execution is forbidden.
 
 Mechanical gate scanning `scripts/` and `templates/CLAUDE.md.base.tmpl`:
 
@@ -93,7 +93,7 @@ def test_template_has_script_discipline_keywords() -> None:
     """templates/CLAUDE.md.base.tmpl carries the discipline vocabulary.
 
     #356 W2: the template is all-English — 'ad-hoc' + 'inline' carry the
-    ban; the pre-#356 Chinese keywords (可复用逻辑/内联) were retired with
+    ban; the pre-#356 Chinese keywords (reusable-logic/inline) were retired with
     the 4-variant template rewrite.
     """
     text = TEMPLATE.read_text(encoding="utf-8")

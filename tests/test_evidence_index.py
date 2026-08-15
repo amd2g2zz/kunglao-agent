@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """tests/test_evidence_index.py — evidence index builder (P1 + P3 ICD-203 source reliability).
 
-RED: build_evidence_index 扫 raw 证据(排除派生),eid→path+sha256 可溯。
-P3: 每条 entry 带 source_reliability(Admiralty A-F/1-6)。
+RED: build_evidence_index scans raw evidence (excluding derived), eid→path+sha256 traceable.
+P3: each entry carries source_reliability (Admiralty A-F/1-6).
 """
 from __future__ import annotations
 
@@ -21,9 +21,9 @@ def _write(p: Path, content: bytes | str) -> None:
 def _fixture(ws: Path) -> Path:
     _write(ws / "evidence" / "x64dbg-c206-capture.txt", "capture line1\ncapture line2\n")
     _write(ws / "evidence" / "yara-packer-C003.json", '{"packer": "upx"}')
-    _write(ws / "evidence" / "verdict.json", '{"verdict": "malware"}')  # 派生
+    _write(ws / "evidence" / "verdict.json", '{"verdict": "malware"}')  # derived
     _write(ws / "analysis_artifacts" / "vm_runtime" / "full_trace.txt", "TRACE " * 100)
-    _write(ws / "analysis_artifacts" / "vm_runtime" / "summary.json", '{"net": 0}')  # 派生
+    _write(ws / "analysis_artifacts" / "vm_runtime" / "summary.json", '{"net": 0}')  # derived
     return ws
 
 
@@ -60,9 +60,9 @@ def test_eid_path_resolves_and_sha256_matches(tmp_path):
     idx = bei.build_index(ws)
     for e in idx["entries"]:
         p = ws / e["path"]
-        assert p.exists(), f"path 不存在: {e['path']}"
+        assert p.exists(), f"path missing: {e['path']}"
         actual = hashlib.sha256(p.read_bytes()).hexdigest()
-        assert e["sha256"] == actual, f"hash 不匹配: {e['path']}"
+        assert e["sha256"] == actual, f"hash mismatch: {e['path']}"
 
 
 def test_entry_has_required_fields(tmp_path):
@@ -72,7 +72,7 @@ def test_entry_has_required_fields(tmp_path):
         for k in ("eid", "path", "sha256", "size", "type"):
             assert k in e, f"missing field {k}: {e}"
     eids = [e["eid"] for e in idx["entries"]]
-    assert len(eids) == len(set(eids)), "eid 唯一"
+    assert len(eids) == len(set(eids)), "eids unique"
 
 
 def test_write_index_json_and_md(tmp_path):
@@ -112,12 +112,12 @@ def test_source_reliability_field_exists(tmp_path):
     idx = bei.build_index(ws)
     assert len(idx["entries"]) > 0, "fixture should produce entries"
     for e in idx["entries"]:
-        assert "source_reliability" in e, f"缺 source_reliability: {e}"
+        assert "source_reliability" in e, f"missing source_reliability: {e}"
         val = e["source_reliability"]
-        assert isinstance(val, str), f"source_reliability 应为 str: {val}"
-        assert len(val) == 2, f"source_reliability 应为 2 字符(如 A1): {val}"
-        assert val[0] in "ABCDEF", f"source_reliability 首字符应 A-F: {val}"
-        assert val[1] in "123456", f"source_reliability 次字符应 1-6: {val}"
+        assert isinstance(val, str), f"source_reliability should be str: {val}"
+        assert len(val) == 2, f"source_reliability should be 2 chars (e.g. A1): {val}"
+        assert val[0] in "ABCDEF", f"source_reliability first char should be A-F: {val}"
+        assert val[1] in "123456", f"source_reliability second char should be 1-6: {val}"
 
 
 def test_mechanical_defaults_by_type(tmp_path):

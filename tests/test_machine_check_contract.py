@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""RED tests for issue #332 — executable oracle contract (可执行预言机契约).
+"""RED tests for issue #332 — executable oracle contract.
 
 Pins the contract additions to the kunglao-agent repo:
 - Every verification record (kunglao-redteam output) must carry at least one
@@ -12,7 +12,7 @@ Pins the contract additions to the kunglao-agent repo:
   matches the fact's boundary_type (pure-CTI-class claims).
 - Mapping table (references/machine_check_map.yaml) is the single source of
   truth; references/machine-check-contract.md mirrors it and a parity test
-  keeps them in sync (maker-checker: 机械门禁优先).
+  keeps them in sync (maker-checker: the mechanical gate wins).
 - verify() gates the L2 CONFIRMED path: machine_check contract failure
   downgrades overall to PARTIAL (no promotion).
 

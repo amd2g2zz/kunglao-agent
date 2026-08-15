@@ -41,7 +41,7 @@ import init_state  # noqa: E402  # F6 (#304 review): shared init-completeness pr
 import wire_up_settings  # noqa: E402  # #372: hook registry single source
 
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
-TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: truthy = FAIL; 0/false/off/空 = PASS
+TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: truthy = FAIL; 0/false/off/empty = PASS
 # Issue #228: NO machine-specific default. Unset = not configured — the check
 # FAILs with guidance instead of silently pointing at one operator's lab VM /
 # Ghidra install (a wrong default on any other machine is worse than a FAIL).
@@ -120,7 +120,7 @@ def _load_json(p: Path) -> dict:
 
 
 def is_truthy(value: str | None) -> bool:
-    """Truthy 判定: 1/true/yes/on, 不区分大小写 (#276 默认 0 化语义)."""
+    """Truthy check: 1/true/yes/on, case-insensitive (#276 default-to-0 semantics)."""
     return value is not None and value.strip().lower() in TRUTHY_VALUES
 
 

@@ -1,26 +1,34 @@
 # -*- coding: utf-8 -*-
-"""tests/test_tools_structure_340.py — issue #340: tools/ 目录结构规范化.
+"""tests/test_tools_structure_340.py — issue #340: tools/ directory structure normalization.
 
-Target-structure contract (documented in tools/README.md "结构规则(#340)"):
+Target-structure contract (documented in tools/README.md "Structure rules (#340)"):
 
-R1 根层归位: tools/ 根层只允许 (a) 索引/文档文件(_INDEX.md/_INDEX.yaml/
-   _index-*.md/README.md), (b) 两个 toolshelf 元工具(tool-search.py /
-   validate_index.py — 操作 tools/ 自身而非样本, 文档化例外), (c) 目录。
-   一切注册工具脚本一律住在 `tools/<category>/`; 跨类目共享库一律住在
-   `tools/_lib/`(共享库单点)。
-R2 类目 id == 目录名: _INDEX.yaml 的每个 category 值必须同名于
-   tools/<category>/ 目录; 唯一例外 dynamic(能力由 MCP + VM 通道提供,
-   #339 已删真空壳目录且禁止重建)。旧 id aux/pipeline 不得残留。
-R3 一类目一共享模块: static 类目的共享助手模块只有一个(common.py);
-   双模块(_common.py)不得回归。
-R4 双 common 合并保留全部公共面: 合并后 common.py 必须同时暴露两个
-   旧模块的全部公共名(CLI plumbing + byte-scan helpers)。
-R5 __pycache__ 不入库: .gitignore 覆盖 tools/ 任意深度的 __pycache__
-   与 *.pyc(git check-ignore 机械验证)。
-R6 迁移后 import 全链路: 每个被移动 CLI 在新位置以 --help 应答 exit 0;
-   tool-search 全量可用(查询结果计数 == 注册表条数)。
-R7 旧路径引用清零: 活文档/代码/清单不得再引用旧根层路径与旧类目文件名
-   (openspec/changes/ 是冻结的历史变更记录, 豁免; docs/devlog/ 已于 #355 删除)。
+R1 root-level placement: the tools/ root may only hold (a) index/doc files
+   (_INDEX.md/_INDEX.yaml/_index-*.md/README.md), (b) the two toolshelf
+   meta-tools (tool-search.py / validate_index.py — they operate on tools/
+   itself, not on samples, documented exception), (c) directories.
+   Every registered tool script lives in `tools/<category>/`; cross-category
+   shared libraries live in `tools/_lib/` (single point for shared code).
+R2 category id == directory name: each category value in _INDEX.yaml must
+   match the tools/<category>/ directory name; the only exception is
+   dynamic (its capability is provided by MCP + VM channels, #339 deleted
+   the empty shell directory and forbids recreating it). Legacy ids
+   aux/pipeline must not remain.
+R3 one shared module per category: the static category has exactly one
+   shared helper module (common.py); a second module (_common.py) must not
+   regress.
+R4 merged common keeps the full public surface: after the merge common.py
+   must expose every public name of both old modules (CLI plumbing +
+   byte-scan helpers).
+R5 no __pycache__ in the repo: .gitignore covers __pycache__ and *.pyc at
+   any depth under tools/ (verified mechanically via git check-ignore).
+R6 full import path after migration: each moved CLI answers --help with
+   exit 0 from its new location; tool-search works end to end (query result
+   count == registry entry count).
+R7 zero stale references to old paths: live docs/code/manifests must not
+   reference old root-level paths or old category filenames
+   (openspec/changes/ is a frozen historical change record, exempt;
+   docs/devlog/ was removed by #355).
 """
 from __future__ import annotations
 
@@ -84,15 +92,15 @@ def _yaml_data() -> dict:
     return yaml.safe_load((TOOLS / "_INDEX.yaml").read_text(encoding="utf-8"))
 
 
-# ---------- R1: 根层归位 ----------
+# ---------- R1: root-level placement ----------
 
 def test_tools_root_holds_only_index_docs_and_meta_tools() -> None:
-    """tools/ 根层 .py 集合 == {tool-search.py, validate_index.py}(元工具例外),
-    其余一切 .py 一律入类目目录或 _lib/。"""
+    """The tools/ root .py set == {tool-search.py, validate_index.py} (meta-tool
+    exception), every other .py belongs in a category directory or _lib/."""
     root_py = {p.name for p in TOOLS.glob("*.py")}
     assert root_py == META_TOOLS, (
-        f"tools/ 根层 .py 必须恰好是元工具 {sorted(META_TOOLS)}, "
-        f"实得: {sorted(root_py)} — 注册工具脚本须归位类目目录, 共享库归位 _lib/")
+        f"tools/ root .py must be exactly the meta-tools {sorted(META_TOOLS)}, "
+        f"got: {sorted(root_py)} — registered tool scripts belong in category dirs, shared libs in _lib/")
 
 
 def test_moved_tools_exist_at_new_locations_only() -> None:
@@ -102,7 +110,7 @@ def test_moved_tools_exist_at_new_locations_only() -> None:
     assert not stale, f"old locations still have leftovers (migration incomplete): {stale}"
 
 
-# ---------- R2: 类目 id == 目录名 ----------
+# ---------- R2: category id == directory name ----------
 
 def test_every_category_matches_directory_name() -> None:
     categories = {t["category"] for t in _yaml_data()["tools"]}
@@ -110,7 +118,7 @@ def test_every_category_matches_directory_name() -> None:
         c for c in categories
         if c != "dynamic" and not (TOOLS / c).is_dir())
     assert not offenders, (
-        f"类目 id 与目录名不对齐(且非 dynamic 外部能力例外): {offenders}")
+        f"category id and directory name out of alignment (beyond the dynamic external-capability exception): {offenders}")
 
 
 def test_legacy_category_ids_are_gone() -> None:
@@ -118,11 +126,11 @@ def test_legacy_category_ids_are_gone() -> None:
     assert "aux" not in categories, "stale category id `aux` — should be auxiliary"
     assert "pipeline" not in categories, "stale category id `pipeline` — should be pipelines"
     assert "auxiliary" in categories and "pipelines" in categories, (
-        "auxiliary/pipelines 类目 id 缺失")
+        "auxiliary/pipelines category ids missing")
 
 
 def test_category_index_files_align_with_ids() -> None:
-    """每个类目(含 dynamic)的 _index-<category>.md 存在; 旧文件名不残留。"""
+    """Each category (incl. dynamic) has its _index-<category>.md present; no stale old filenames remain."""
     categories = {t["category"] for t in _yaml_data()["tools"]} | {"dynamic"}
     missing = [c for c in sorted(categories)
                if not (TOOLS / f"_index-{c}.md").is_file()]
@@ -136,22 +144,22 @@ def test_validator_categories_pin_new_enum() -> None:
     import validate_index as vi  # noqa: E402
     assert vi.CATEGORIES == (
         "crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines"), (
-        f"validate_index.CATEGORIES 必须为 id==dirname 枚举, 实得: {vi.CATEGORIES}")
+        f"validate_index.CATEGORIES must be the id==dirname enum, got: {vi.CATEGORIES}")
     data = {"tools": [{"name": "t-a", "category": "auxiliary",
                        "capability": "aux:sanitize", "tier": "T1",
                        "cost_tier": "probe", "input_output": "x",
                        "description": "minimal fixture entry"}]}  # #356 W1: description required
-    assert vi.validate_index(data) == [], "auxiliary 应为合法类目"
+    assert vi.validate_index(data) == [], "auxiliary should be a legal category"
     data["tools"][0]["category"] = "pipelines"
-    assert vi.validate_index(data) == [], "pipelines 应为合法类目"
+    assert vi.validate_index(data) == [], "pipelines should be a legal category"
 
 
-# ---------- R3/R4: 一类目一共享模块 + 合并保留全部公共面 ----------
+# ---------- R3/R4: one shared module per category + merged common keeps the full public surface ----------
 
 def test_static_has_single_shared_module() -> None:
-    assert (TOOLS / "static" / "common.py").is_file(), "static 共享模块 common.py 缺失"
+    assert (TOOLS / "static" / "common.py").is_file(), "static shared module common.py missing"
     assert not (TOOLS / "static" / "_common.py").exists(), (
-        "tools/static/_common.py 残留 — 双共享模块不得回归(#340 合并)")
+        "tools/static/_common.py still present — dual shared modules must not regress (#340 merge)")
 
 
 def test_merged_common_exposes_full_union_surface() -> None:
@@ -168,7 +176,7 @@ def test_no_static_cli_imports_the_retired_module() -> None:
         p.name for p in (TOOLS / "static").glob("*.py")
         if re.search(r"^\s*(from|import)\s+_common\b",
                      p.read_text(encoding="utf-8"), re.M)]
-    assert not offenders, f"static CLI 仍 import 已合并的 _common: {offenders}"
+    assert not offenders, f"static CLI still imports the merged-away _common: {offenders}"
 
 
 # ---------- R5: __pycache__ gitignore ----------
@@ -179,11 +187,11 @@ def test_pycache_is_gitignored_at_any_depth() -> None:
         ["git", "-C", str(ROOT), "check-ignore", "-q", str(probe)],
         capture_output=True)
     assert r.returncode == 0, (
-        f"{probe} 未被 gitignore 覆盖(check-ignore exit {r.returncode}) — "
-        ".gitignore 须含 __pycache__/ 与 *.pyc 且对 tools/ 任意深度生效")
+        f"{probe} not covered by gitignore (check-ignore exit {r.returncode}) — "
+        ".gitignore must contain __pycache__/ and *.pyc and apply at any depth under tools/")
 
 
-# ---------- R6: import 全链路 + tool-search 全量可用 ----------
+# ---------- R6: full import path + tool-search end-to-end availability ----------
 
 def _run(script: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -215,7 +223,7 @@ def test_tool_search_full_catalog_query_works() -> None:
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
     assert out["count"] == registered, (
-        f"tool-search 全量查询计数 {out['count']} != 注册条数 {registered}")
+        f"tool-search full-catalog query count {out['count']} != registered count {registered}")
 
 
 def test_validator_passes_on_shipped_index() -> None:
@@ -223,7 +231,7 @@ def test_validator_passes_on_shipped_index() -> None:
     assert r.returncode == 0, r.stderr
 
 
-# ---------- R7: 旧路径引用清零 ----------
+# ---------- R7: zero stale references to old paths ----------
 
 def test_no_legacy_path_references_in_live_surfaces() -> None:
     offenders = []
@@ -254,8 +262,8 @@ def test_manifest_declares_new_paths_and_drops_old() -> None:
     declared = set(manifest["assets"]["tools"])
     missing = [new for new in MOVED_TOOLS if new not in declared]
     stale = [old for old in MOVED_TOOLS.values() if old in declared]
-    assert not missing, f"manifest 未声明新路径: {missing}"
-    assert not stale, f"manifest 仍声明旧路径: {stale}"
+    assert not missing, f"manifest does not declare new paths: {missing}"
+    assert not stale, f"manifest still declares old paths: {stale}"
 
 
 def test_manifest_declares_merged_common_only() -> None:
@@ -265,15 +273,15 @@ def test_manifest_declares_merged_common_only() -> None:
     assert "tools/static/_common.py" not in declared
 
 
-# ---------- README 结构规则文档化 ----------
+# ---------- README documents the structure rules ----------
 
 def test_readme_documents_structure_rules() -> None:
     text = (TOOLS / "README.md").read_text(encoding="utf-8")
     for marker in (
-        "tools/_lib",            # 共享库单点
+        "tools/_lib",            # shared-library single point
         "id == directory name",  # category alignment rule (R2) — R3 #357 English marker
-        "tool-search.py",        # 元工具例外文档化
+        "tool-search.py",        # meta-tool exception documented
         "validate_index.py",
-        "__pycache__",           # gitignore 规则(R5)
+        "__pycache__",           # gitignore rule (R5)
     ):
-        assert marker in text, f"tools/README.md 缺结构规则标记: {marker!r}"
+        assert marker in text, f"tools/README.md missing structure-rule marker: {marker!r}"

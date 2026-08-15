@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_crypto_tool.py — issue #285 crypto-tool CLI 契约.
+"""tests/test_crypto_tool.py — issue #285 crypto-tool CLI contract.
 
 Covers: per-subcommand --help, --reproduce field=value output (kunglao L1
 mechanical-gate format), exit codes (0 success / 1 negative / 2 error),

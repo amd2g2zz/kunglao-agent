@@ -15,7 +15,7 @@ complete AND harmless:
    memory/ trees entirely.)
 4. The deliberately-KEPT neighbors survive (over-deletion guard):
    - tools/tool-search.py + tools/pipelines/recipes/ — independent catalog
-     query + plan templates (#318 retention decision: "可能留作工具");
+     query + plan templates (#318 retention decision: "kept as a possible tool");
    - scripts/kunglao_log.py — only the kunglao-log.py wrapper was dead
      (and it never existed in git);
    - tests/test_v1_8_enforcement_gates.py — the canonical suite; the SKILL.md
@@ -32,7 +32,7 @@ SELF = Path(__file__).resolve()
 
 # Files deleted by #318 (the kunglao-log.py wrapper is guarded although it
 # never existed in git — belt and braces against reintroduction).
-# #310 复活 route_capability(带 agenttype 消费方 worker_budget),#318 删除当时为死代码,复活后不再属删除清单
+# #310 revived route_capability (with agenttype consumer worker_budget); #318 deleted what was dead code then, post-revival no longer on the removal list
 DELETED = [
     "hooks/agent_watch.py",
     "scripts/feature_probe.py",

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_audit_traceability.py — P5 issue #26: 经索引溯 46 假 PROVEN.
+"""tests/test_audit_traceability.py — P5 issue #26: trace the 46 fake PROVEN via the index.
 
 RED tests for the index-traceability dimension of audit_legacy_proven.
 

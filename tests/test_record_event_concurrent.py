@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """tests/test_record_event_concurrent.py -- Issue #96 F8: record_event
-全量重写 ledger 并发竞态导致事件丢失.
+Whole-ledger rewrite race under concurrency causes event loss.
 
-RED phase: 两 event 同时 record_event 不同 event_id 到同一 ledger,
-验证两者都保留(当前 fail, 全量重写丢后写者).
+RED phase: two events record_event different event_ids onto the same ledger concurrently,
+verify both survive (currently fail; whole-ledger rewrite loses the later writer).
 """
 from __future__ import annotations
 

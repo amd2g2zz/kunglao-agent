@@ -394,7 +394,7 @@ def test_cli_check_forwards_library_into_blocked_output(tmp_path):
 
     Regression: check_claim(workspace, cid) dropped the library kwarg, so
     _print_blocked never surfaced similar_lessons and the acceptance
-    criterion 'BLOCKED 输出含 3 相似 lesson' failed via the CLI even though
+    criterion 'BLOCKED output contains 3 similar lessons' failed via the CLI even though
     the function-level tests passed."""
     import subprocess
     import sys as _sys

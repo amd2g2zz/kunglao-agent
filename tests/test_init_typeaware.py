@@ -34,9 +34,9 @@ def _run_init(ws: Path, extra: list[str] | None = None,
               profile_root: Path | None = None,
               flag: str | None = "0",
               stdin_data: str | None = None) -> subprocess.CompletedProcess:
-    """Run kunglao-init hermetically. --skip-toolchain by default (#304 修正:
-    toolchain 门禁在 scaffold 前置, 由 test_init_toolchain_gate.py 专测 —
-    本文件的测试聚焦类型判定/模板选择/完成度)."""
+    """Run kunglao-init hermetically. --skip-toolchain by default (#304 fix:
+    the toolchain gate runs before the scaffold, covered separately by test_init_toolchain_gate.py —
+    this file's tests focus on type detection/template selection/completeness)."""
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     if "--skip-toolchain" not in argv:
         argv.append("--skip-toolchain")

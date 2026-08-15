@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""tests/test_digest.py — digest 机械生成 (issue #3, design-spec §3.6).
+"""tests/test_digest.py — digest mechanical generation (issue #3, design-spec §3.6).
 
-RED: build_digest 产出六节 markdown, 2-4KB, 数字保真, 完整性。
+RED: build_digest produces six-section markdown, 2-4KB, numbers faithful, complete.
 """
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import digest_build as db
 
 
 def _scaffold_ws(tmp_path: Path) -> Path:
-    """合成 workspace: task_spec + claim-register + facts/_INDEX + progress + failure-registry."""
+    """Synthetic workspace: task_spec + claim-register + facts/_INDEX + progress + failure-registry."""
     (tmp_path / "task_spec.yaml").write_text(
         "primary_questions:\n  - q1: sample family attribution\n  - q2: C2 config\n"
         "scope: static + dynamic\nconstraints: VM-only execution\ndepth: full teardown\n",
@@ -29,7 +29,7 @@ def _scaffold_ws(tmp_path: Path) -> Path:
     (tmp_path / "progress.txt").write_text(
         "[2026-08-06] C-001 PROVEN; next: C-002 C2 extract\n", encoding="utf-8")
     (tmp_path / "failure-registry.yaml").write_text(
-        "rules:\n  - when: VT sandbox says Vidar\n    then: 必须二进制内找硬编码指纹\n    anchor: C-020 eBPF case\n",
+        "rules:\n  - when: VT sandbox says Vidar\n    then: must find hardcoded fingerprints in the binary\n    anchor: C-020 eBPF case\n",
         encoding="utf-8")
     return tmp_path
 
@@ -43,7 +43,7 @@ def test_digest_has_six_sections(tmp_path):
 
 
 def test_digest_size_upper_bound(tmp_path):
-    """digest 必须 ≤ 4096 bytes (冷启动上限)。下限 ≥2048 仅对真实 workspace 成立 (E6.1 测)。"""
+    """digest must be <= 4096 bytes (cold-start ceiling). The >=2048 floor only holds for a real workspace (tested in E6.1)."""
     ws = _scaffold_ws(tmp_path)
     md = db.build_digest(ws)
     n = len(md.encode("utf-8"))
@@ -58,14 +58,14 @@ def test_digest_writes_to_runs(tmp_path):
 
 
 def test_numeric_fidelity_unit_carried(tmp_path):
-    """facts 的 unit 字段原样带入 sec_c (数字口径保真, design-spec §3.6 / numeric-fidelity.md)。"""
+    """facts' unit fields carry into sec_c verbatim (number calibration fidelity, design-spec §3.6 / numeric-fidelity.md)."""
     ws = _scaffold_ws(tmp_path)
     md = db.build_digest(ws)
     assert "811" in md and "774" in md
 
 
 def test_completeness_new_verified_fact_in_digest(tmp_path):
-    """新增 verified fact 必须 1 轮内进 digest (完整性, 防 extraction gap)。"""
+    """A newly verified fact must enter the digest within 1 round (completeness, prevents extraction gap)."""
     ws = _scaffold_ws(tmp_path)
     md_before = db.build_digest(ws)
     assert "F-002" in md_before
@@ -76,7 +76,7 @@ def test_completeness_new_verified_fact_in_digest(tmp_path):
 
 
 def test_digest_no_llm_pure_mechanical(tmp_path):
-    """build_digest 纯机械 (无 LLM): 除 head 时间戳外两次产出一致。"""
+    """build_digest is purely mechanical (no LLM): two runs produce identical output except the head timestamp."""
     ws = _scaffold_ws(tmp_path)
     a = db.build_digest(ws)
     b = db.build_digest(ws)
@@ -84,7 +84,7 @@ def test_digest_no_llm_pure_mechanical(tmp_path):
 
 
 def test_failure_registry_structured(tmp_path):
-    """sec_e 失败规则结构化 (WHEN/THEN/anchor), 非自由文本。"""
+    """sec_e failure rules are structured (WHEN/THEN/anchor), not free text."""
     ws = _scaffold_ws(tmp_path)
     md = db.build_digest(ws)
     assert "WHEN" in md
@@ -92,7 +92,7 @@ def test_failure_registry_structured(tmp_path):
 
 
 def test_digest_handles_empty_workspace(tmp_path):
-    """空 workspace 不崩, 产出仍六节。"""
+    """Empty workspace does not crash; output still has six sections."""
     md = db.build_digest(tmp_path)
     for marker in ["## head", "## sec_a", "## sec_b", "## sec_c",
                    "## sec_d", "## sec_e", "## sec_f"]:

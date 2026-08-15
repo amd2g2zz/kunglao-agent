@@ -17,7 +17,7 @@ This script applies a deterministic, idempotent migration:
       PARTIALLY-VERIFIED → status INFERRED, verify_status partial, confidence medium
       PROVEN            → status PROVEN,  verify_status passes,  confidence high
       pure_negative     → status NEGATIVE, verify_status partial, confidence high,
-                          confidence_zh 不支持, promotion_gate emptied
+                          confidence_zh unsupported, promotion_gate emptied
   - promotion_gate: verification command → real promotion condition (curated)
   - provenance entries: adds content_sha256 (computed from the artifact) +
     credibility (Admiralty A1-F6, role/path defaults, curated overrides)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_crypto_algorithms.py — issue #285 crypto 算法库单元测试.
+"""tests/test_crypto_algorithms.py — issue #285 crypto algorithm library unit tests.
 
 TDD contract:
   * ChaCha20 RFC 8439 A.1 test vector #1 -> first block 76b8e0ad...

@@ -6,22 +6,22 @@ TDD RED phase: these tests define the contract BEFORE implementation.
 RED runs (expected fails until retract_claim.py exists):
   - test_retract_sets_retracted_with_metadata
   - test_retract_propagates_single_level
-  - test_retract_cascades_three_levels        (爆炸半径: A→B→C 全重开)
-  - test_retract_idempotent                   (重复撤回不重复传播)
+  - test_retract_cascades_three_levels        (blast radius: A→B→C all reopened)
+  - test_retract_idempotent                   (repeated retraction does not re-propagate)
   - test_retract_excludes_already_open_and_dead_dependents
   - test_retract_writes_ledger_operator_action
-  - test_retract_does_not_touch_failure_registry (撤回≠执行失败)
+  - test_retract_does_not_touch_failure_registry (retraction != execution failure)
   - test_convergence_check_treats_retracted_as_terminal
   - test_priority_excludes_retracted
   - test_priority_reopened_dependents_dispatchable
-  - test_anchors_gate_blocks_retracted_fact    (门禁拦截)
+  - test_anchors_gate_blocks_retracted_fact    (gate blocks)
   - test_anchors_gate_passes_clean_facts
   - test_dry_run_writes_nothing
 
 Issue #331 acceptance:
-  - 3 级依赖链 A→B→C: 撤回 A → B/C 全重开; 再撤回(A 幂等) → 无变化
-  - 收敛检查对 RETRACTED 正确判定; 报告引用 RETRACTED fact 被门禁拦
-  - 传播/幂等/级联/门禁拦截各至少 1 例
+  - 3-level dependency chain A→B→C: retract A → B/C all reopen; retract again (A idempotent) → no change
+  - convergence check judges RETRACTED correctly; report referencing a RETRACTED fact is blocked by the gate
+  - propagation/idempotency/cascade/gate-blocking each with at least 1 case
 Run: python -m pytest tests/test_retract_claim.py -q
 """
 import sys

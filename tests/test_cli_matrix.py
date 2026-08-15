@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_cli_matrix.py — 9 独立 CLI 收敛 (issue #5, plan §8; #316 +mcp_probe)。"""
+"""tests/test_cli_matrix.py — 9 independent CLI convergence (issue #5, plan §8; #316 +mcp_probe)."""
 from __future__ import annotations
 
 import subprocess
@@ -17,7 +17,7 @@ CLIS = [
     "kunglao-init.py",
     "kunglao-eval.py",
     "kunglao-digest.py",
-    "mcp_probe.py",  # #316: MCP supply probe (manifest clis 第 9 项)
+    "mcp_probe.py",  # #316: MCP supply probe (manifest CLIs, item 9)
 ]
 
 

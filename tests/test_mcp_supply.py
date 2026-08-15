@@ -1,21 +1,26 @@
 # -*- coding: utf-8 -*-
-"""Tests for #316 — MCP 供给机制化: 探针 + .mcp.json scaffold + 文档表.
+"""Tests for #316 — MCP supply mechanism: probe + .mcp.json scaffold + docs table.
 
 RED-first contract (SDD+TDD):
 
-1. scripts/mcp_probe.py — 单一事实源 manifest + 注册探针:
-   - 探测 ~/.claude.json (global mcpServers + projects.*.mcpServers) 与
-     <ws>/.mcp.json 的 mcpServers 注册, 名称匹配不区分大小写。
-   - 按类型清单: 全型必配 ghidra/sequential-thinking (HARD);
+1. scripts/mcp_probe.py — single-source-of-truth manifest + registration probe:
+   - Probes mcpServers registrations in ~/.claude.json (global mcpServers +
+     projects.*.mcpServers) and <ws>/.mcp.json; name matching is
+     case-insensitive.
+   - Per-type checklist: all types require ghidra/sequential-thinking (HARD);
      windows(T3) x64dbg (HARD) + volatility (WARN);
-     选 IDA: ida-pro-vm (WARN, 全型); android: gitnexus (HARD); CTI: virustotal (WARN)。
-   - 缺失 HARD → exit 1 + 注册指引 (`claude mcp add ...`); 仅 WARN 缺失 → exit 2;
-     全齐 → exit 0。CLI 契约: --json / --reproduce (同 toolchain.py)。
-2. kunglao-init 可选 scaffold <ws>/.mcp.json: 缺失才生成 (幂等, 已存在不覆盖),
-   --no-mcp 跳过; 内容与 mcp_probe.MANIFEST 单一事实源一致 (合法 JSON, _comment 注释)。
-3. 文档表与 manifest 一致: templates/CLAUDE.md.{windows,linux,android}.tmpl +
-   templates/CLAUDE.md.base.tmpl + README.md Internals 均含 MCP 表, 行格式
-   `| `name` | tier |` 与本文件 pin 一致。
+     optional IDA: ida-pro-vm (WARN, all types); android: gitnexus (HARD);
+     CTI: virustotal (WARN).
+   - Missing HARD → exit 1 + registration guidance (`claude mcp add ...`);
+     only WARN missing → exit 2; all present → exit 0. CLI contract:
+     --json / --reproduce (same as toolchain.py).
+2. kunglao-init optionally scaffolds <ws>/.mcp.json: generated only when
+   missing (idempotent, never overwrites an existing one), --no-mcp skips;
+   content matches the mcp_probe.MANIFEST single source of truth (valid
+   JSON, _comment annotation).
+3. Docs table matches the manifest: templates/CLAUDE.md.{windows,linux,android}.tmpl +
+   templates/CLAUDE.md.base.tmpl + README.md Internals all carry the MCP
+   table, row format `| `name` | tier |` pinned by this file.
 """
 from __future__ import annotations
 
@@ -63,9 +68,10 @@ def run_mcp_probe(ws: Path, *args: str,
 def run_init(ws: Path, *extra: str) -> subprocess.CompletedProcess:
     """Hermetic kunglao-init run (profile-root in tmp; never touches real profiles).
 
-    --skip-toolchain: #304 修正后 toolchain 门禁在 scaffold 前置 — 本文件的
-    测试聚焦 .mcp.json scaffold 行为, 门禁语义由 #304 的 test_init_toolchain_gate.py
-    专测 (与 tests/test_kunglao_init.py 的 _run_init 同一约定).
+    --skip-toolchain: after the #304 fix the toolchain gate runs before the
+    scaffold — this file's tests focus on .mcp.json scaffold behavior; gate
+    semantics are covered separately by #304's test_init_toolchain_gate.py
+    (same _run_init convention as tests/test_kunglao_init.py).
     """
     env = _base_env()
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *extra]
@@ -141,7 +147,7 @@ def _item(name: str) -> mcp_probe.MCPItem:
 def test_manifest_all_types_required_hard():
     for name in ("ghidra", "sequential-thinking"):
         item = _item(name)
-        assert item.tier == "HARD", f"{name} must be HARD (全型必配)"
+        assert item.tier == "HARD", f"{name} must be HARD (required for all types)"
         assert set(item.types) == {"windows", "linux", "android"}, \
             f"{name} applies to all types"
 
@@ -186,7 +192,7 @@ def test_probe_all_registered_exit0(fake_claude_json, ws):
 
 
 def test_probe_missing_hard_exit1_with_guidance(fake_claude_json, ws):
-    """验收: 未注册 ghidra MCP 的模拟环境 → 探针报错 + 指引."""
+    """Acceptance: simulated environment without a registered ghidra MCP → probe reports error + guidance."""
     fake_claude_json.write_text("{}", encoding="utf-8")
     r = run_mcp_probe(ws, "--type", "windows")
     assert r.returncode == 1, "HARD missing must exit 1"
@@ -206,7 +212,7 @@ def test_probe_missing_warn_only_exit2(fake_claude_json, ws):
 
 
 def test_probe_workspace_mcp_json_case_insensitive(fake_claude_json, ws):
-    """workspace .mcp.json 注册被识别; 名称匹配不区分大小写."""
+    """workspace .mcp.json registrations are recognized; name matching is case-insensitive."""
     fake_claude_json.write_text("{}", encoding="utf-8")
     (ws / ".mcp.json").write_text(json.dumps({
         "mcpServers": {
@@ -229,7 +235,7 @@ def test_probe_workspace_mcp_json_case_insensitive(fake_claude_json, ws):
 
 
 def test_probe_project_scoped_claude_json(fake_claude_json, ws):
-    """~/.claude.json projects.*.mcpServers (project scope) 也算注册."""
+    """~/.claude.json projects.*.mcpServers (project scope) also count as registered."""
     write_claude_json(
         fake_claude_json,
         servers={"ghidra": reg("ghidra"), "sequential-thinking": reg("st"),
@@ -286,7 +292,7 @@ def test_probe_reads_type_from_analysis_state(fake_claude_json, ws):
 
 
 def test_probe_missing_claude_json_fails_open(fake_claude_json, ws):
-    """~/.claude.json 不存在/损坏 → 视为零注册, 不崩溃."""
+    """~/.claude.json missing/corrupt → treated as zero registrations, no crash."""
     assert not fake_claude_json.exists()
     r = run_mcp_probe(ws, "--type", "windows")
     assert r.returncode == 1  # all HARD missing
@@ -316,14 +322,14 @@ def test_init_scaffolds_mcp_json(init_ws):
 
 
 def test_init_mcp_json_idempotent_rerun(init_ws):
-    """验收: init 生成 .mcp.json 幂等 (重跑不重复)."""
+    """Acceptance: init generates .mcp.json idempotently (rerun adds no duplicates)."""
     assert run_init(init_ws).returncode == 0
     first = (init_ws / ".mcp.json").read_bytes()
     assert run_init(init_ws).returncode == 0  # second run resumes
     second = (init_ws / ".mcp.json").read_bytes()
     assert first == second, "rerun must not touch .mcp.json (byte-identical)"
     data = json.loads(second.decode("utf-8"))
-    # 无重复: json.loads 已保证键唯一; 再核对 manifest 名称唯一
+    # No duplicates: json.loads already guarantees unique keys; additionally verify manifest name uniqueness
     entries = [e["name"] for g in data["mcp_manifest"].values()
                if isinstance(g, list) for e in g]
     assert len(entries) == len(set(entries))
@@ -337,7 +343,7 @@ def test_init_no_mcp_flag_skips(init_ws):
 
 
 def test_init_does_not_overwrite_existing_mcp_json(init_ws):
-    """已存在 → 不覆盖 (幂等)."""
+    """Existing file → not overwritten (idempotent)."""
     target = init_ws / ".mcp.json"
     target.write_text('{"mcpServers": {"custom": {"command": "x", "args": []}}}\n',
                       encoding="utf-8")
@@ -347,7 +353,7 @@ def test_init_does_not_overwrite_existing_mcp_json(init_ws):
 
 
 def test_scaffold_manifest_matches_source():
-    """scaffold 的 mcp_manifest 与 mcp_probe.MANIFEST 单一事实源逐字段一致."""
+    """The scaffolded mcp_manifest matches mcp_probe.MANIFEST field by field (single source of truth)."""
     scaffold = mcp_probe.build_scaffold_json()["mcp_manifest"]
     groups = mcp_probe.MANIFEST_GROUPS
     assert set(groups) == set(k for k in scaffold if k != "_comment")
@@ -400,8 +406,8 @@ def test_per_os_templates_exist_with_mcp_table():
 
 
 def test_docs_tables_match_manifest():
-    """base template + README 的 MCP 表与 MANIFEST 一致
-    (行前缀 pin: `| `name` | tier |`).
+    """The base template + README MCP tables match MANIFEST
+    (row-prefix pin: `| `name` | tier |`).
 
     #356 W2: the base template is the single table (superset — per-type
     rows are filtered nowhere; the mcp_probe --type flag does the
@@ -412,7 +418,7 @@ def test_docs_tables_match_manifest():
         row_prefix = f"| `{item.name}` | {item.tier} |"
         assert row_prefix in readme, f"README MCP table missing {item.name}"
         assert row_prefix in generic, f"CLAUDE.md.base.tmpl MCP table missing {item.name}"
-    # 反向: 模板表不夹带 manifest 之外的行 (避免口径漂移)
+    # Reverse direction: the template table must not carry rows beyond the manifest (avoid calibration drift)
     import re
     rows = re.findall(r"^\| `([a-z0-9-]+)` \| (HARD|WARN) \|", generic, re.M)
     manifest_names = {i.name: i.tier for i in mcp_probe.MANIFEST}

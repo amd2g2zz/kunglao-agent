@@ -131,7 +131,7 @@ def test_partial_scaffold_preserved_on_refusal(gate_ws):
     assert (gate_ws / "global_plan.txt").exists(), "pre-existing plan file deleted"
     assert (gate_ws / "facts" / "F001.md").exists(), "pre-existing fact deleted"
     assert (gate_ws / "blockers").exists(), "pre-existing dir deleted"
-    assert "保留" in r.stderr or "preserv" in r.stderr.lower(), \
+    assert "preserv" in r.stderr.lower(), \
         f"cleanup must notify protected pre-existing content: {r.stderr}"
     # User content preserved
     assert user_claude.exists(), "user CLAUDE.md must survive cleanup"
@@ -284,7 +284,7 @@ def test_library_refuse_returns_4_no_scaffold(tmp_path, monkeypatch):
 # ---------- 4. no-sample cold start friendly prompt ----------
 
 def test_no_sample_friendly_prompt(tmp_path):
-    """bins/ empty -> friendly prompt (请将样本放入 bins/), non-zero exit,
+    """bins/ empty -> friendly prompt (place a sample into bins/), non-zero exit,
     no scaffold."""
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)

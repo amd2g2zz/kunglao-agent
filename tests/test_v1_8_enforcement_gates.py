@@ -377,7 +377,7 @@ def main() -> int:
         "test_ask_for_direction_type_c_allowed",
         "test_ask_for_direction_clean_text",
         "test_ask_for_direction_3_strike_hard_pause",
-        # E3.3: F1-F18 回归矩阵补充
+        # E3.3: F1-F18 regression matrix additions
         "test_f1_idle_with_free_slots",
         "test_f5_dead_worker_zombie",
         "test_f14_stale_blocker",
@@ -406,7 +406,7 @@ def main() -> int:
     return 1
 
 
-# ---------- E3.3: F1-F18 回归矩阵补充(缺失的机械可测 F 行) ----------
+# ---------- E3.3: F1-F18 regression matrix additions (missing mechanically-testable F rows) ----------
 
 def test_f1_idle_with_free_slots():
     """F1: Idles with slots free — convergence_check must say DISPATCH (exit 1)."""
@@ -432,10 +432,10 @@ def test_f5_dead_worker_zombie():
         (ws / "claim-register.yaml").write_text(
             "claims:\n- id: C-1\n  status: OPEN\n  boundary_type: positive_observation\n  evidence_tier_attempted: 0\n  promotion_attempts: 0\n  depends_on: []",
             encoding="utf-8")
-        # 僵尸: 状态文件存在但 status=done(已完成未清)
+        # zombie: state file exists but status=done (done, not yet cleared)
         (ws / "runs" / "worker-status-w1.md").write_text("## Status\nstatus: done\n", encoding="utf-8")
         d = cc.decide(ws)
-        # done 的 worker 不应占用槽 -> 应有 free slot -> DISPATCH
+        # a done worker should not hold a slot -> should have free slot -> DISPATCH
         assert d["decision"] == "DISPATCH", f"F5: zombie done-worker should free slot, got {d['decision']}"
         assert d["active_workers"] == 0, f"F5: active_workers should be 0 for done worker, got {d['active_workers']}"
     print("  [OK ] F5 zombie-done-worker frees slot")
@@ -456,7 +456,7 @@ def test_f14_stale_blocker():
             stale = sbp.find_stale(ws)
             assert len(stale) >= 1, "F14: stale blocker should be found"
         except (TypeError, AttributeError):
-            # 接口可能不同, 验证模块可 import 即可
+            # interfaces may differ; verifying the module imports is enough
             pass
     print("  [OK ] F14 stale-blocker-for-closed-claim detectable")
 
@@ -469,9 +469,9 @@ def test_f15_stale_claim_expiry():
         (ws / "claim-register.yaml").write_text(
             "claims:\n- id: C-old\n  status: OPEN\n  boundary_type: positive_observation\n  evidence_tier_attempted: 0\n  promotion_attempts: 0\n  depends_on: []\n- id: C-new\n  status: OPEN\n  boundary_type: positive_observation\n  evidence_tier_attempted: 0\n  promotion_attempts: 0\n  depends_on: []",
             encoding="utf-8")
-        # C-old 无 last_read_at/activity -> 应被 flag stale
+        # C-old has no last_read_at/activity -> should be flagged stale
         rc = ce.check(ws, stale_hours=24)
-        # rc 0=no stale, 1=stale found — 这里 C-old 无活动时间应 stale
+        # rc 0=no stale, 1=stale found — here C-old with no activity time should be stale
         assert rc in (0, 1), f"F15: claim_expiry check rc={rc}"
     print("  [OK ] F15 stale-claim expiry check runs")
 
@@ -481,7 +481,7 @@ def test_f17_plan_drift():
     import plan_drift_detector as pdd
     with tempfile.TemporaryDirectory() as tmp:
         ws = Path(tmp)
-        # claim 存在但不在 global_plan.txt -> ORPHAN_CLAIM drift
+        # claim exists but not in global_plan.txt -> ORPHAN_CLAIM drift
         (ws / "claim-register.yaml").write_text(
             "claims:\n- id: C-201\n  status: OPEN\n  boundary_type: positive_observation\n  evidence_tier_attempted: 0\n  promotion_attempts: 0\n  depends_on: []",
             encoding="utf-8")

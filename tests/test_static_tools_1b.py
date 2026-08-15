@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_static_tools_1b.py — issue #278 PR-1b tools/static 6-CLI 契约.
+"""tests/test_static_tools_1b.py — issue #278 PR-1b tools/static 6-CLI contract.
 
 Covers per tool: --help renders, parameterized input via tmp files, three-state
 exit codes (0 ok / 1 negative / 2 error), --reproduce field=value lines

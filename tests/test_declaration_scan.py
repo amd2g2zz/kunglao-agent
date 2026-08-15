@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""tests/test_declaration_scan.py — issue #320 声明体系修复 (SDD+TDD).
+"""tests/test_declaration_scan.py — issue #320 declaration-system fix (SDD+TDD).
 
 Four consistency contracts under test:
 
-1. Reverse scan (存在→declared): every shipped file under
+1. Reverse scan (exists→declared): every shipped file under
    agents/ hooks/ templates/ tools/ must be declared in
    release-manifest.yaml — doc/index-class files (README.md, _INDEX.md,
    _INDEX.yaml, _index-*.md) and runtime/hidden files are exempt.
@@ -12,7 +12,7 @@ Four consistency contracts under test:
    disk (re-pin via scripts/re_pin_references.py after any references/ edit).
 3. scripts/README.md catalogs every scripts/*.py (inventory map completeness).
 4. Human tool index rows (tools/_index-<category>.md) each have a machine
-   entry in tools/_INDEX.yaml and vice versa (人类索引 = 机器索引).
+   entry in tools/_INDEX.yaml and vice versa (human index = machine index).
 """
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def _repo_manifest() -> dict:
     return yaml.safe_load((ROOT / "release-manifest.yaml").read_text(encoding="utf-8"))
 
 
-# ---------- 1. reverse scan (存在→declared) ----------
+# ---------- 1. reverse scan (exists→declared) ----------
 
 class TestReverseScan:
     def test_undeclared_file_flagged(self, tmp_path):
@@ -56,7 +56,7 @@ class TestReverseScan:
             tmp_path, _mini_manifest("agents", ["agents/declared.md"]))
         assert any("agents/undeclared.md" in e for e in errors), errors
         assert any("release-manifest.yaml" in e for e in errors), (
-            "error must carry the fix guidance (补 release-manifest.yaml)")
+            "error must carry the fix guidance (add to release-manifest.yaml)")
 
     def test_fully_declared_tree_passes(self, tmp_path):
         _write(tmp_path, "agents/a.md")
@@ -192,7 +192,7 @@ class TestHumanIndexConsistency:
 
     @staticmethod
     def _mcp_channel_names() -> set[str]:
-        """Names whose 契约条目 usage line starts with `mcp__` (#339 format
+        """Names whose contract-entry usage line starts with `mcp__` (#339 format
         contract: usage first line `python tools/...` or `mcp__`) — externally
         provided MCP-channel tools, deliberately NOT registered in
         tools/_INDEX.yaml (e.g. _index-dynamic.md x64dbg/frida)."""

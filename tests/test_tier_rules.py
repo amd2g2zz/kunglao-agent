@@ -12,7 +12,7 @@ tier_for_claim(claim: dict) -> int:
   - VM / dynamic / execution / injection / runtime verification intent -> T3
   - static-depth analysis (disassembly / decoding / API analysis)      -> T2
   - everything else                                                     -> T1
-Rules are deliberately conservative (宁低勿高): a miss costs one cheap static
+Rules are deliberately conservative (better low than high): a miss costs one cheap static
 pass; an over-assignment costs a full VM cycle.
 """
 import sys

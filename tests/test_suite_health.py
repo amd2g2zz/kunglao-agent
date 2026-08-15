@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""阶段 0 契约测试: pytest 套件健康 + golden master 基建.
+"""Phase 0 contract tests: pytest suite health + golden master infrastructure.
 
-Step 0/1 RED — 当前状态:
-- test_claim_status_guard.py 在 pytest 收集时报 ModuleNotFoundError(无 pytest.ini pythonpath)
-- golden master 尚未采集(manifest/fixtures 不存在) → 重放全部 RED
+Step 0/1 RED — current state:
+- test_claim_status_guard.py raises ModuleNotFoundError at pytest collection (no pytest.ini pythonpath)
+- golden master not yet captured (manifest/fixtures absent) → all replays RED
 
-GREEN 目标(阶段 0 判据):
-- 从 kunglao-agent/ 根跑 `uv run pytest` 收集零 ERROR 全绿
-- 29/29 golden 用例可重放(逐字节比对 expected)
+GREEN target (phase 0 criteria):
+- running `uv run pytest` from the kunglao-agent/ root collects with zero ERRORs, all green
+- 29/29 golden cases replayable (byte-for-byte comparison against expected)
 """
 from __future__ import annotations
 
@@ -23,10 +23,10 @@ GOLDEN = ROOT / "tests" / "fixtures" / "golden"
 MANIFEST = GOLDEN / "manifest.yaml"
 
 
-# ---------- 套件健康 ----------
+# ---------- suite health ----------
 
 def test_collection_no_error() -> None:
-    """pytest 收集全量测试文件无 ERROR(含 test_claim_status_guard.py 的 hooks import)."""
+    """pytest collection of the full test-file set has no ERROR (incl. test_claim_status_guard.py's hooks import)."""
     r = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
         cwd=ROOT, capture_output=True, text=True, timeout=120,
@@ -35,7 +35,7 @@ def test_collection_no_error() -> None:
 
 
 def test_claim_status_guard_importable() -> None:
-    """hooks/worker_budget.py 在任意 CWD 可导入(pythonpath 修复)."""
+    """hooks/worker_budget.py importable from any CWD (pythonpath fix)."""
     r = subprocess.run(
         [sys.executable, "-c", "import sys; sys.path.insert(0,'.'); import worker_budget; print('ok')"],
         cwd=ROOT / "hooks", capture_output=True, text=True, timeout=60,
@@ -105,7 +105,7 @@ def _tree_digest(root: Path) -> str:
 
 @pytest.mark.parametrize("case", _load_manifest(), ids=lambda c: c["id"])
 def test_golden_replay(case: dict) -> None:
-    """逐字节重放 golden 用例, 输出须与采集的 expected 一致.
+    """Replay golden cases byte for byte; output must match the captured expected.
 
     Replay runs against a TEMPORARY COPY of the fixture ws dir — the CLI
     appends ledger rows, so running against the fixture itself would mutate
@@ -147,7 +147,7 @@ def test_golden_replay(case: dict) -> None:
             f"exit {r.returncode} != {case['expected_exit']}\nstdout={r.stdout[:500]}\nstderr={r.stderr[:500]}"
     else:
         exp = expected.read_text(encoding="utf-8")
-        # 时间戳归一化: 采集与重放跨秒, progress_report 等含当前 UTC 时间
+        # Timestamp normalization: capture and replay cross seconds; progress_report etc. carry current UTC time
         exp_norm = re.sub(r"\(20\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ\)", "(<TS>)", exp)
         act_norm = re.sub(r"\(20\d\d-\d\d-\d\dT\d\d:\d\d:\d\dZ\)", "(<TS>)", r.stdout)
         assert act_norm == exp_norm, f"stdout differs:\n--- expected ---\n{exp_norm}\n--- actual ---\n{act_norm}"

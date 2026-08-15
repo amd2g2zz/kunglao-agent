@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""tests/test_audit_legacy_proven.py — M4 issue #16: 46 假 PROVEN 审计工具.
+"""tests/test_audit_legacy_proven.py — M4 issue #16: audit tool for 46 fake PROVEN.
 
-RED: fixture(混合 verified/unverified PROVEN)→ 审计正确分类
-RED: 空 workspace 不崩
-RED: 无 facts/_INDEX → 全 PROVEN 判 unverified
+RED: fixture (mixed verified/unverified PROVEN) → audit classifies correctly
+RED: empty workspace does not crash
+RED: no facts/_INDEX → all PROVEN judged unverified
 """
 from __future__ import annotations
 

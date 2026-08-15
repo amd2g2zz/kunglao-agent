@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_dedup_319.py — issue #319 合并去重批: 机械不变量锁.
+"""tests/test_dedup_319.py — issue #319 merge/dedup batch: mechanical invariant locks.
 
 Four audit-confirmed duplicate/fork structures, each locked by a mechanical
 invariant so the dedup state cannot regress:

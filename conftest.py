@@ -41,11 +41,11 @@ def tmp(tmp_path) -> Path:
 
 
 
-# ---------- ws_factory: tmp 工作区构造 ----------
+# ---------- ws_factory: tmp workspace builder ----------
 
 @pytest.fixture
 def ws_factory(tmp_path):
-    """构造最小合成工作区; ws_factory() 返回新工作区, 每调用独立 tmp 目录."""
+    """Build a minimal synthetic workspace; ws_factory() returns a fresh workspace, each call in its own tmp dir."""
 
     def _make(claims: list[dict] | None = None, with_deps: bool = False,
               with_index: bool = False, with_runs: bool = True) -> Path:
@@ -74,13 +74,13 @@ def ws_factory(tmp_path):
     return _make
 
 
-# ---------- contract_validator: schemas/*.json 注册表 ----------
+# ---------- contract_validator: schemas/*.json registry ----------
 
 @pytest.fixture
 def contract_validator():
-    """校验任意对象是否符合 schemas/<name>.json.
+    """Validate that an arbitrary object conforms to schemas/<name>.json.
 
-    用法: contract_validator("decide-output", obj) -> None(不符抛 AssertionError)
+    Usage: contract_validator("decide-output", obj) -> None (raises AssertionError on violation)
     """
     import jsonschema
 
@@ -105,11 +105,11 @@ def contract_validator():
     return _validate
 
 
-# ---------- golden_master: manifest 重放辅助 ----------
+# ---------- golden_master: manifest replay helper ----------
 
 @pytest.fixture
 def golden_master():
-    """按 manifest.yaml 注册表重放 golden 用例(逐字节比对)."""
+    """Replay golden cases per the manifest.yaml registry (byte-for-byte comparison)."""
 
     def _replay(case_id: str) -> str:
         import os
@@ -130,11 +130,11 @@ def golden_master():
     return _replay
 
 
-# ---------- isolated_home: 防写生产 settings.json ----------
+# ---------- isolated_home: protect the production settings.json from writes ----------
 
 @pytest.fixture
 def isolated_home(tmp_path, monkeypatch):
-    """把 HOME/USERPROFILE 指向 tmp, 任何 settings.json 读写落在隔离区."""
+    """Point HOME/USERPROFILE at tmp so every settings.json read/write lands in the sandbox."""
     home = tmp_path / "fake-home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))

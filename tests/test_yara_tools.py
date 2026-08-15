@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_yara_tools.py — issue #313: yara-scan / yara-gen 契约.
+"""tests/test_yara_tools.py — issue #313: yara-scan / yara-gen contract.
 
 Covers: hits/no-hits exit codes, real CRC32-table hit from the bundled
 rules, yara-gen round-trip self-consistency (generated rule + yara-scan on
