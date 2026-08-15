@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+### Fixed (router runtime + decide INVALID enum, #370/#371)
+
+- kunglao.py 路由器 3/5 子命令运行时修复 (#370) — `tick` 忽略 workspace
+  （裸 `hbt.main()` 把 sys.argv[1] 字面量 "tick" 当 workspace 路径）改为
+  `hbt.main([str(ws)])` 显式 argv 注入（向后兼容的可选参数， 对齐
+  kunglao_verify/kunglao_record 路由模式）；`decide` 人类模式与 `health`
+  嵌套 argparse 重解析路由器 argv 导致 SystemExit 2 — 改为直接组合
+  `cc.decide/_human` 与 `ch._read_ledger/assess/_human` 模块函数。新增
+  tests/test_router_runtime.py（6 测试, 先 RED 后 GREEN）：tick 写
+  `runs/.heartbeat-tick.json` 到调用方 workspace 且不再于 cwd 旁生成伪
+  tick/ 目录；decide 打印真实决策表；health 打印健康行（无 ledger 时
+  exit 3 NO_DATA）。
+- decide-output.json enum 补 INVALID (#371) — task_spec primary_questions
+  非空畸形（#77 fail-closed）时 convergence_check.decide() 正常返回
+  INVALID，kunglao-decide 逐字透传（L134），而冻结 enum 缺该值 → CLI 发出
+  违约输出。INVALID 复用 exit 4（冻结 0-4 退出面）；冻结仪式（RED 测试 +
+  schema 修订 + specs/phase-4/contract.md 与 module-design.md M1.3 回写，
+  同一提交）。openspec/archive/fix-97 的"恒不 INVALID"判断仅覆盖异常→
+  BLOCKED 路径，存档不改。
+
 ### Changed (renderer unification, #362)
 
 - CLAUDE.md 渲染引擎统一 — scripts/template_render.py 成为 {{param}} 单次替换 +

@@ -71,7 +71,7 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
 ## 2. 输出 schema 引用
 
 - 冻结结构: `schemas/decide-output.json`(M1.3 L163-170 逐字段)
-- 必需 9 字段: `decision`(enum 5 值) / `exit_code`(0-4) / `top_actions[]`(items: claim_id, action, score, skill) / `blocked[]` / `failure_blocked[]` / `stale[]` / `drifts[]` / `explore_mode`(bool) / `selfcheck[]`
+- 必需 9 字段: `decision`(enum 6 值 — #371 补 INVALID: task_spec primary_questions 非空畸形(#77 fail-closed)时 convergence_check 的正常返回, 复用 exit 4) / `exit_code`(0-4) / `top_actions[]`(items: claim_id, action, score, skill) / `blocked[]` / `failure_blocked[]` / `stale[]` / `drifts[]` / `explore_mode`(bool) / `selfcheck[]`
 - 附加字段(additionalProperties 允许, 非冻结必需): `open_count`, `partial_count`, `free_slots`, `error`
 - 字段映射(契约空白):
   - `blocked` = open_claims 中 `blocked=True` 的 id

@@ -161,7 +161,7 @@ def decide(ws: Path) -> DecideOutput:
 
 ```json
 {
-  "decision": "DISPATCH|DISPATCH_VERIFIER|SATURATED|BLOCKED|CONVERGED",
+  "decision": "DISPATCH|DISPATCH_VERIFIER|SATURATED|BLOCKED|CONVERGED|INVALID",
   "exit_code": 0|1|2|3|4,
   "top_actions": [{"claim_id": "C-001", "action": "c2_config_extract", "score": 0.87, "skill": "ghidra-re",
                     "resources": ["ghidra-re", "rev-frida", "floss"]}],   # 【修订 2026-08-06: 组合资源, 依赖序】
@@ -169,6 +169,10 @@ def decide(ws: Path) -> DecideOutput:
   "explore_mode": false, "selfcheck": []
 }
 ```
+【修订 2026-08-15 (#371): enum 补 INVALID — task_spec primary_questions 非空畸形(#77
+fail-closed)时 convergence_check.decide() 的正常返回, kunglao-decide 逐字透传; 复用
+exit 4(冻结 0-4 退出面, worker_pulse 只按 returncode 0-4 解析)。原"恒不 INVALID"的
+判断(见 fix-97 design)只覆盖了异常→保守 BLOCKED 路径, 漏了 INVALID 是正常返回的路径。】
 
 ## M1.4 状态机
 
