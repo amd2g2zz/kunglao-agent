@@ -1,38 +1,38 @@
-# dynamic 领域索引(工具层)
+# dynamic domain index (tool layer)
 
-> 领域: VM 动态调试/运行时分析。worker 被派发到动态调试(x64dbg/Frida)类任务时先读本文件, 再按需加载。动态工具一律 VM-only(192.168.20.128)。契约字段含义见 [README.md](README.md), 机器契约见 [_INDEX.yaml](_INDEX.yaml)。
+> Domain: VM dynamic debugging / runtime analysis. When a worker is dispatched to dynamic-debugging (x64dbg/Frida) tasks, read this file first, then load on demand. Dynamic tools are VM-only (192.168.20.128), always. Contract field meanings are in [README.md](README.md); the machine contract is [_INDEX.yaml](_INDEX.yaml).
 >
-> 本域工具由 **MCP + VM 通道**提供, 不在 `_INDEX.yaml` 注册(非本地 .py 脚本): x64dbg 经 `mcp__x64dbg__*`, Frida 经 `mcp__frida__*`(VM `192.168.20.128:1337`)。Frida hook 模板在 `templates/frida/`。
+> This domain's tools are provided over **MCP + VM channels** and are NOT registered in `_INDEX.yaml` (they are not local .py scripts): x64dbg via `mcp__x64dbg__*`, Frida via `mcp__frida__*` (VM `192.168.20.128:1337`). Frida hook templates live in `templates/frida/`.
 
-## 工具清单
+## Tool catalog
 
-| 工具 | 用途(一句话) | 何时读 / 何时不用 |
+| Tool | Purpose (one-liner) | When to read / when not |
 |---|---|---|
-| `x64dbg-remote` | VM 侧 x64dbg 远程调试(寄存器/内存/断点/单步) | 需要单步/断点动态验证时读; 纯静态可解的问题不用(VM 成本高) |
-| `frida-remote` | VM 侧 Frida 插桩(hook/API 调用捕获/反 hook 检测) | 需要运行时 hook/插桩验证时读; 宿主通道禁止(硬禁令) |
+| `x64dbg-remote` | VM-side x64dbg remote debugging (registers/memory/breakpoints/single-step) | Read when single-step/breakpoint dynamic validation is needed; not for problems solvable statically (VM cost is high) |
+| `frida-remote` | VM-side Frida instrumentation (hook/API call capture/anti-hook detection) | Read when runtime hook/instrumentation validation is needed; the host channel is forbidden (hard ban) |
 
-## 契约条目
+## Contract entries
 
 ### x64dbg-remote
 
-- **用途**: 经 MCP 远程连接 VM 上的 x64dbg, 做运行时寄存器/内存/调用栈验证。
+- **用途**: Remotely connect to x64dbg on the VM over MCP for runtime register/memory/call-stack validation.
 - **用法**:
   ```bash
-  mcp__x64dbg__connect_remote(host=192.168.20.128)   # 仅 connect_remote; start_session/connect_to_session/connect_to_instance/terminate_session 宿主禁止
+  mcp__x64dbg__connect_remote(host=192.168.20.128)   # connect_remote only; start_session/connect_to_session/connect_to_instance/terminate_session are forbidden on the host
   ```
-- **输入**: VM 侧已 attach 的进程(连接后按 MCP 工具参数读寄存器/内存/断点)。
-- **输出**: 运行时寄存器/内存/调用栈读数(工具返回)。
-- **exit code**: N/A(MCP 调用; 失败表现为调用错误/超时, 无 shell exit code)。
-- **when_not**: 纯静态可解的问题不用; 宿主通道一律禁止(CLAUDE.md 硬约束)。
+- **输入**: A process already attached on the VM side (after connecting, read registers/memory/breakpoints via MCP tool arguments).
+- **输出**: Runtime register/memory/call-stack readings (tool return values).
+- **exit code**: N/A (MCP call; failure surfaces as a call error/timeout, no shell exit code).
+- **when_not**: Not for problems solvable statically; the host channel is forbidden across the board (CLAUDE.md hard constraint).
 
 ### frida-remote
 
-- **用途**: 经 MCP 在 VM 上 spawn/attach 目标进程并注入 Frida hook 脚本。
+- **用途**: Spawn/attach the target process on the VM over MCP and inject a Frida hook script.
 - **用法**:
   ```bash
-  mcp__frida__spawn   # 或 mcp__frida__attach(VM-only: 192.168.20.128:1337)
+  mcp__frida__spawn   # or mcp__frida__attach (VM-only: 192.168.20.128:1337)
   ```
-- **输入**: VM 目标进程/二进制 + hook 脚本(模板经 `templates/frida/` 生成)。
-- **输出**: hook 命中的运行时数据(调用计数/参数/返回值)。
-- **exit code**: N/A(MCP 调用; 失败表现为调用错误/超时, 无 shell exit code)。
-- **when_not**: 静态分析可解的问题不用; 宿主通道一律禁止(硬禁令 #5)。
+- **输入**: VM target process/binary + hook script (generated from `templates/frida/` templates).
+- **输出**: Runtime data from hook hits (call counts/arguments/return values).
+- **exit code**: N/A (MCP call; failure surfaces as a call error/timeout, no shell exit code).
+- **when_not**: Not for problems solvable by static analysis; the host channel is forbidden across the board (hard ban #5).

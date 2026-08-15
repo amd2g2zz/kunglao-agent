@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""tools/auxiliary/capture_golden.py — 阶段 0: golden master 采集器.
+"""tools/auxiliary/capture_golden.py — phase 0: golden master capture tool.
 
-对每个待锁定的 CLI 用例: 在合成工作区运行命令 → 落盘 expected stdout(逐字节)。
-采集即冻结: 这是重构前的行为基线, 后续任何阶段不得静默修改 expected/
-(行为合法改变走 specs/README.md 的变更流程)。
+For every CLI case to be locked: run the command in a synthetic workspace → persist expected stdout (byte-exact).
+Capture is freeze: this is the pre-refactor behavior baseline; no later phase may silently modify expected/
+(legitimate behavior changes go through the change process in specs/README.md).
 
-用法:
-  python tools/auxiliary/capture_golden.py            # 采集全部用例
-  python tools/auxiliary/capture_golden.py --refresh  # 重新采集(仅用于契约变更流程)
+Usage:
+  python tools/auxiliary/capture_golden.py            # capture all cases
+  python tools/auxiliary/capture_golden.py --refresh  # re-capture (contract-change flow only)
 
-输出: tests/fixtures/golden/{manifest.yaml, F-NN/{ws/, cmd.json, expected/stdout.txt}}
+Output: tests/fixtures/golden/{manifest.yaml, F-NN/{ws/, cmd.json, expected/stdout.txt}}
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ GOLDEN = ROOT / "tests" / "fixtures" / "golden"
 
 
 def make_ws(case_dir: Path, claims: list[dict], extra: dict | None = None) -> Path:
-    """构造合成工作区(与 tests/conftest.py::ws_factory 同构)."""
+    """Build a synthetic workspace (isomorphic to tests/conftest.py::ws_factory)."""
     ws = case_dir / "ws"
     shutil.rmtree(ws, ignore_errors=True)
     (ws / "runs").mkdir(parents=True)
@@ -57,7 +57,7 @@ def make_ws(case_dir: Path, claims: list[dict], extra: dict | None = None) -> Pa
 
 
 CASES: list[dict] = [
-    # ---- F1-F18 回归矩阵: 核心循环 5 分支 (convergence_check) ----
+    # ---- F1-F18 regression matrix: core-loop 5 branches (convergence_check) ----
     dict(id="F-01", script="convergence_check.py", expected_exit=1,
          claims=[dict(id="C-1", status="OPEN")], args=["--json"],
          intent="F1 idle+free-slot -> DISPATCH"),
@@ -81,7 +81,7 @@ CASES: list[dict] = [
          claims=[dict(id="C-1", status="OPEN")], args=["--json"],
          extra={"runs/worker-status-w1.md": "## Status\nstatus: done\n"},
          intent="F6 zombie-done-worker frees slot -> DISPATCH"),
-    # ---- 循环健康 (convergence_health) ----
+    # ---- loop health (convergence_health) ----
     dict(id="F-07", script="convergence_health.py", expected_exit=None,
          claims=[], args=["--json"],
          extra={".convergence_ledger.jsonl":
@@ -90,7 +90,7 @@ CASES: list[dict] = [
                                     "active_workers": 0, "blockers": [], "facts_total": 0}) + "\n"
                        for i in range(5))},
          intent="F7 health HEALTHY trending-down"),
-    # ---- claim 过期 / 计划漂移 / 陈旧 blocker ----
+    # ---- claim expiry / plan drift / stale blocker ----
     dict(id="F-08", script="claim_expiry.py", expected_exit=None,
          claims=[dict(id="C-old", status="OPEN"), dict(id="C-new", status="OPEN")],
          args=["--stale-hours", "24"],
@@ -103,15 +103,15 @@ CASES: list[dict] = [
          claims=[dict(id="C-1", status="PROVEN")],
          extra={"blockers/B1c-2026-08-01-w1.md": "blocker for C-1 (now PROVEN)\n"},
          intent="F10 stale-blocker-for-closed-claim"),
-    # ---- 进度报告 ----
+    # ---- progress reporting ----
     dict(id="F-11", script="progress_report.py", expected_exit=None,
          claims=[dict(id="C-1", status="OPEN"), dict(id="C-2", status="PROVEN")],
          intent="F11 progress report"),
-    # ---- 故障分析门 / 自帽烟测 ----
+    # ---- failure-analysis gate / self smoke test ----
     dict(id="F-12", script="failure_analysis_gate.py", expected_exit=None,
          claims=[dict(id="C-1", status="OPEN", promotion_attempts=1)],
          intent="F12 failure-analysis gate scan"),
-    # ---- 内容哈希 / trace 归一化 ----
+    # ---- content hash / trace normalization ----
     dict(id="F-13", script="content_hash.py", expected_exit=0,
          claims=[],
          extra={"claim.txt": "Decode PE optional header magic bytes\n",
@@ -126,7 +126,7 @@ CASES: list[dict] = [
              {"name": "WinHttpConnect", "args": ["0x7ff600002000", 8]},
          ]})},
          intent="F14 normalize dynamic trace"),
-    # ---- 意图对账 / _INDEX 维护 ----
+    # ---- intent reconciliation / _INDEX maintenance ----
     dict(id="F-15", script="reconcile_intents.py", expected_exit=0,
          claims=[dict(id="C-1", status="OPEN")],
          argv_override=["{script}", "{ws}/analysis_state.txt", "{ws}/facts"],
@@ -145,7 +145,7 @@ def _argv(case: dict, ws: Path) -> list[str]:
     script = SCRIPTS / case["script"]
     if "argv_override" in case:
         argv = [str(x).format(script=str(script), ws=str(ws)) for x in case["argv_override"]]
-        # Windows 不能直接 exec .py: 首位补 python 解释器
+        # Windows cannot exec .py directly: prepend the python interpreter
         if argv and argv[0].endswith(".py"):
             argv.insert(0, sys.executable)
         return argv
@@ -154,8 +154,8 @@ def _argv(case: dict, ws: Path) -> list[str]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="capture golden master baselines (阶段 0)")
-    ap.add_argument("--refresh", action="store_true", help="re-capture (spec 变更流程用)")
+    ap = argparse.ArgumentParser(description="capture golden master baselines (phase 0)")
+    ap.add_argument("--refresh", action="store_true", help="re-capture (for the spec change process)")
     ap.add_argument("--out", metavar="DIR", default=str(GOLDEN),
                     help="golden output dir (default: tests/fixtures/golden, #277)")
     args = ap.parse_args()

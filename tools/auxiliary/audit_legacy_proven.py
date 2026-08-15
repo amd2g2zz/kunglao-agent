@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""tools/auxiliary/audit_legacy_proven.py — M4 issue #16 + P5 issue #26: PROVEN 审计工具.
+"""tools/auxiliary/audit_legacy_proven.py — M4 issue #16 + P5 issue #26: PROVEN audit tool.
 
-读 workspace 的 claim-register.yaml + facts/_INDEX.md, 列全部 PROVEN claim,
-按两个独立维度分类:
+Reads the workspace's claim-register.yaml + facts/_INDEX.md, lists every PROVEN claim,
+and classifies along two independent dimensions:
 
-BLIND 签字维度 (issue #16):
-  - verified:               至少一条 fact 在 _INDEX 中有 "BLIND" 签字
-  - has-evidence-no-signoff: 有 VERIFIED-BY-* (verifier 工作过) 但无 BLIND
-  - unverified:             仅 PROVEN, 无任何 verifier 痕迹
+BLIND sign-off dimension (issue #16):
+  - verified:               at least one fact carries a "BLIND" sign-off in _INDEX
+  - has-evidence-no-signoff: has VERIFIED-BY-* (a verifier worked) but no BLIND
+  - unverified:             PROVEN only, no verifier trace at all
 
-索引溯源性维度 (issue #26 / P5):
-  - has-raw-evidence:       fact provenance 引了 evidence/_index.json 的原始条目(path+hash 校验)
-  - derivation-only:        provenance 仅引派生(不在索引)或路径不存在
-  - unverifiable:           无 provenance、无 fact 文件、或无索引可溯
+Index-traceability dimension (issue #26 / P5):
+  - has-raw-evidence:       fact provenance cites a raw evidence/_index.json entry (path+hash validated)
+  - derivation-only:        provenance cites only derived artifacts (not in the index) or a nonexistent path
+  - unverifiable:           no provenance, no fact file, or nothing traceable in the index
 
-用法:
+Usage:
   python tools/auxiliary/audit_legacy_proven.py <workspace>
   python tools/auxiliary/audit_legacy_proven.py <workspace> --output audit.json
   python tools/auxiliary/audit_legacy_proven.py <workspace> --json        # JSON → stdout

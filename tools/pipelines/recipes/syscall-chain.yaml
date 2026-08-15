@@ -1,20 +1,21 @@
 schema: plan-recipe/1
 id: syscall-chain
-title: 系统调用链 (syscall-chain)
+title: Syscall chain (syscall-chain)
 description: >-
-  用于动态意图样本 (vm/run/execute/detona 或 syscall 关键词): ghidra-recon
-  定位 syscall 调用点, ghidra-decompile-functions 反编译调用点,
-  disasm-constant-check 锚定 syscall 号断言。
+  For samples with dynamic intent (vm/run/execute/detonate or syscall
+  keywords): ghidra-recon locates syscall call sites,
+  ghidra-decompile-functions decompiles the call sites, and
+  disasm-constant-check anchors the syscall-number assertions.
 steps:
   - tool: ghidra-recon
-    input: 样本
-    output: syscall 调用点 + Nt* API 定位
+    input: sample
+    output: syscall call sites + Nt* API locations
   - tool: ghidra-decompile-functions
-    input: 调用点地址 (--addresses)
-    output: syscall stub 反编译 + disasm 窗口
+    input: call-site addresses (--addresses)
+    output: syscall stub decompilation + disasm window
   - tool: disasm-constant-check
-    input: 反编译清单 + syscall 号断言
-    output: byte-exact 断言校验 JSON
+    input: decompiled listing + syscall-number assertions
+    output: byte-exact assertion validation JSON
 fallback: [ghidra-scan-pointer, ghidra:xref-scan]
 verify: syscall-verify
-reuse_check: 已有同 VA 的 syscall 链反编译证据时复用
+reuse_check: reuse when syscall-chain decompilation evidence for the same VAs already exists

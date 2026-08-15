@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """build_evidence_index.py — evidence index builder (P1+P3, PRD evidence-integrity-icd203).
 
-扫 workspace 的 raw 证据(evidence/ + analysis_artifacts/),注册进 evidence/_index.json
-(权威)+ _INDEX.md(生成)。派生(summary.json/correlated.json/verdict.json)不算证据,排除。
+Scans the workspace's raw evidence (evidence/ + analysis_artifacts/) and registers it into evidence/_index.json
+(authoritative) + _INDEX.md (generated). Derived artifacts (summary.json/correlated.json/verdict.json) are not evidence and are excluded.
 
-每条:{eid, path(ws-relative, /), sha256, size, type, source_reliability}。
-source_reliability = Admiralty 评级(A-F × 1-6),机械默认按 type + --rel 可覆盖。
-派生不进 index → P2 provenance gate 拒"引派生"的 fact(派生 path 不在 index → invalid)。
+Each entry: {eid, path (ws-relative, /), sha256, size, type, source_reliability}.
+source_reliability = Admiralty rating (A-F x 1-6), mechanically defaulted by type, overridable via --rel.
+Derived artifacts stay out of the index -> the P2 provenance gate rejects facts citing derived artifacts (a derived path not in the index -> invalid).
 
-用法: python tools/pipelines/build_evidence_index.py <workspace> [--write] [--out FILE] [--rel reliability_map.yaml]
+Usage: python tools/pipelines/build_evidence_index.py <workspace> [--write] [--out FILE] [--rel reliability_map.yaml]
 
 #277 CLI contract: JSON is the default machine output (stdout, or --out FILE);
 --write persists evidence/_index.json + _INDEX.md under the workspace. Exit
@@ -131,7 +131,7 @@ def _assign_reliability(entries: list[dict], rel_map: dict | None = None) -> Non
 
 
 def build_index(ws: Path, rel_map: dict | None = None) -> dict:
-    """扫 ws 的 raw 证据,返回 {entries: [...]}。派生排除。
+    """Scan the ws raw evidence, return {entries: [...]}. Derived artifacts excluded.
 
     rel_map: optional override dict {"E001": "A1", "by_type": {"cti": "B2"}}.
     """
@@ -165,7 +165,7 @@ def build_index(ws: Path, rel_map: dict | None = None) -> dict:
 
 def _render_md(idx: dict) -> str:
     L = ["# Evidence Index", "",
-         "| eid | path | sha256(前12) | size | type | source_reliability |",
+         "| eid | path | sha256(first 12) | size | type | source_reliability |",
          "|---|---|---|---|---|---|"]
     for e in idx["entries"]:
         L.append(
@@ -195,7 +195,7 @@ def _load_rel_map(path: str) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="build_evidence_index.py", description="证据索引构建")
+    ap = argparse.ArgumentParser(prog="build_evidence_index.py", description="evidence index builder")
     ap.add_argument("workspace", help="workspace root")
     ap.add_argument("--write", action="store_true",
                     help="write evidence/_index.json + _INDEX.md under the workspace")

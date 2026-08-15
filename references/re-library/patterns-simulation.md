@@ -1,25 +1,25 @@
-# 逆向分析模式 — 模拟执行与加载器 (Simulation & Execution Patterns)
+# RE Analysis Patterns — Simulation & Execution
 
-> 通用逆向技巧汇编:自定义虚拟机/仿真器逆向、shellcode 与多级加载器执行分析、内存中代码解密与运行时密钥提取。
-> 以恶意样本分析为主要用例(加壳/混淆样本、内存加载 shellcode、自解密 loader、无导入的 API 解析型样本)。
-> 本文档的"目标数据"指样本中需要恢复的字符串、密钥或受保护内容。
+> A compilation of general RE techniques: custom VM/emulator reversing, shellcode and multi-stage loader execution analysis, in-memory code decryption and runtime key extraction.
+> Primary use case is malware sample analysis (packed/obfuscated samples, in-memory shellcode loading, self-decrypting loaders, import-less API-resolving samples).
+> "Target data" in this document means the strings, keys, or protected content in the sample that must be recovered.
 
 ## Table of Contents
-- [隐藏仿真器指令 + LD_PRELOAD 密钥提取](#hidden-emulator-opcodes--ld_preload-key-extraction)
-- [侧信道 S 盒 — 静态参数提取](#spectre-rsb-spn-cipher--static-parameter-extraction)
-- [图像 XOR 掩码恢复(平滑度评分)](#image-xor-mask-recovery-via-smoothness)
-- [数据段 shellcode — mmap RWX](#shellcode-in-data-section-via-mmap-rwx)
-- [递归 execve 减法链](#recursive-execve-subtraction)
-- [逐字节块密码攻击](#byte-at-a-time-block-cipher-attack)
-- [数学收敛位图分类器](#mathematical-convergence-bitmap)
-- [Windows PE XOR 位图提取 + OCR](#windows-pe-xor-bitmap-extraction--ocr)
-- [两阶段加载器:RC4 门控 + VM 约束](#two-stage-loader-rc4-gate--vm-constraints)
-- [内核模块迷宫交互分析](#kernel-module-maze-solving)
-- [多线程 VM 通道同步](#multi-threaded-vm-with-channel-synchronization)
-- [被植入后门的共享库检测(字符串比对)](#backdoored-shared-library-detection-via-string-diffing)
-- [自定义 binfmt 内核模块 + RC4 扁平二进制](#custom-binfmt-kernel-module-with-rc4-flat-binaries)
-- [哈希解析导入 / 无导入勒索软件](#hash-resolved-imports--no-import-ransomware)
-- [ELF section header 破坏型反分析](#elf-section-header-corruption-for-anti-analysis)
+- [Hidden emulator opcodes + LD_PRELOAD key extraction](#hidden-emulator-opcodes--ld_preload-key-extraction)
+- [Side-channel S-box — static parameter extraction](#spectre-rsb-spn-cipher--static-parameter-extraction)
+- [Image XOR mask recovery (smoothness scoring)](#image-xor-mask-recovery-via-smoothness)
+- [Shellcode in the data section — mmap RWX](#shellcode-in-data-section-via-mmap-rwx)
+- [Recursive execve subtraction chain](#recursive-execve-subtraction)
+- [Byte-at-a-time block cipher attack](#byte-at-a-time-block-cipher-attack)
+- [Mathematical convergence bitmap classifier](#mathematical-convergence-bitmap)
+- [Windows PE XOR bitmap extraction + OCR](#windows-pe-xor-bitmap-extraction--ocr)
+- [Two-stage loader: RC4 gate + VM constraints](#two-stage-loader-rc4-gate--vm-constraints)
+- [Kernel-module maze interaction analysis](#kernel-module-maze-solving)
+- [Multi-threaded VM with channel synchronization](#multi-threaded-vm-with-channel-synchronization)
+- [Backdoored shared-library detection (string diffing)](#backdoored-shared-library-detection-via-string-diffing)
+- [Custom binfmt kernel module + RC4 flat binaries](#custom-binfmt-kernel-module-with-rc4-flat-binaries)
+- [Hash-resolved imports / import-less ransomware](#hash-resolved-imports--no-import-ransomware)
+- [ELF section-header corruption anti-analysis](#elf-section-header-corruption-for-anti-analysis)
 
 ---
 
@@ -51,7 +51,7 @@ gcc -shared -fPIC -ldl -lssl hook.c -o hook.so
 LD_PRELOAD=./hook.so ./emulator rom.ch8
 ```
 
-**来源:** 0xFun 2026
+**Source:** 0xFun 2026
 
 ---
 
@@ -76,7 +76,7 @@ for i in range(8):
 
 **Lesson:** Side-channel implementations embed lookup tables in memory. Extract statically.
 
-**来源:** 0xFun 2026
+**Source:** 0xFun 2026
 
 ---
 
@@ -106,7 +106,7 @@ for region in regions:
 
 **Search space:** 256 candidates × N regions = trivial. Smoothness is a reliable scoring metric for natural images.
 
-**来源:** VuwCTF 2025
+**Source:** VuwCTF 2025
 
 ---
 
@@ -118,7 +118,7 @@ for region in regions:
 
 **Analysis:** Extract data section, apply XOR key (try 3-byte rotating), disassemble result.
 
-**来源:** VuwCTF 2025
+**Source:** VuwCTF 2025
 
 ---
 
@@ -128,7 +128,7 @@ for region in regions:
 
 **Solution:** Find base case and work backward. Often a mathematical relationship like `N * M + remainder`.
 
-**来源:** VuwCTF 2025
+**Source:** VuwCTF 2025
 
 ---
 
@@ -140,7 +140,7 @@ for region in regions:
 
 **Detection:** Change one input byte → only corresponding output byte changes. This means zero cross-byte diffusion = trivially breakable.
 
-**来源:** UTCTF 2024
+**Source:** UTCTF 2024
 
 ---
 
@@ -185,7 +185,7 @@ for r in range(len(bits) // WIDTH):
 
 **Key insight:** The binary is a mathematical classifier, not a plaintext checker. The target data is in the visual pattern of classifications, not in the binary's output. Reverse-engineer the math, apply to all coordinates, and visualize as bitmap.
 
-**来源:** EHAX 2026
+**Source:** EHAX 2026
 
 ---
 
@@ -228,7 +228,7 @@ print(result.stdout)
 
 **Key insight:** When a binary renders text and compares pixels, the expected pixel data is the target text rendered as an image. Extract it directly from the binary data section without needing to understand the rendering logic. OCR with a charset whitelist improves accuracy for target-text characters.
 
-**来源:** srdnlenCTF 2026
+**Source:** srdnlenCTF 2026
 
 ---
 
@@ -265,7 +265,7 @@ username = rc4(b"s3cr3t_k3y_v1", bytes.fromhex("46f5289437bc009c17817e997ae82bfb
 
 **Key insight:** Multi-stage loaders often use simple crypto (RC4) for the first gate and more complex validation (custom VM) for the second. The VM memory may be uninitialized (all zeros), drastically simplifying constraint extraction since memory-dependent operations become constants.
 
-**来源:** srdnlenCTF 2026
+**Source:** srdnlenCTF 2026
 
 ---
 
@@ -317,7 +317,7 @@ void dfs(int fd, int x, int y, int z) {
 
 **Key insight:** For kernel modules, injecting test binaries into initramfs and probing ioctls dynamically is faster than static RE of stripped kernel modules. Keep solver binary minimal (raw syscalls, no libc) for fast upload.
 
-**来源:** DiceCTF 2026
+**Source:** DiceCTF 2026
 
 ---
 
@@ -360,7 +360,7 @@ def solve_flag(scramble_vals, lookup_table, initial_state, target_state):
 
 **Key insight:** Multi-threaded VMs require tracing data flow across thread boundaries. Channel-based communication creates a pipeline — identify each thread's role (input, transform, validate, output) by watching which channels it reads/writes. Constants that affect computation may come from unexpected sources (futex return values, thread IDs).
 
-**来源:** DiceCTF 2026
+**Source:** DiceCTF 2026
 
 ---
 
@@ -394,7 +394,7 @@ gdb /lib/libc/libc.so.6
 
 **Key insight:** When a binary behaves differently under GDB vs. normal execution, check `ldd` for non-standard library paths. Suid binaries drop privileges under debuggers, so a backdoored libc can detect this via `getuid`/`geteuid` syscalls and change program behavior accordingly. The `strings | diff` approach quickly reveals injected data without full disassembly.
 
-**来源:** Hack.lu CTF 2012
+**Source:** Hack.lu CTF 2012
 
 ---
 
@@ -438,7 +438,7 @@ decrypted = cipher.decrypt(encrypted)
 
 **Key insight:** The flat binary has no ELF headers, so standard tools won't recognize it. You must extract the load address from the kernel module (look for the `vm_mmap` call's address argument) and import the decrypted blob at that address in your disassembler. RC4 keys in kernel modules are often stored as immediate values in `mov` or `movabs` instructions rather than in data sections.
 
-**来源:** BSidesSF 2026 "Private Binary"
+**Source:** BSidesSF 2026 "Private Binary"
 
 ---
 
@@ -512,7 +512,7 @@ print(pt.decode())
 
 **Safety:** Always run suspected ransomware in a Docker container or VM. Mount only copies of the encrypted files, never originals.
 
-**来源:** BSidesSF 2026 "Ran Somewhere"
+**Source:** BSidesSF 2026 "Ran Somewhere"
 
 ---
 
@@ -553,7 +553,7 @@ readelf -l stubborn_elf
 
 **When to recognize:** `readelf -S` crashes or shows garbage. `file` command identifies it as ELF. `readelf -l` (lowercase L, program headers) works fine. The binary runs normally despite tool failures.
 
-**来源:** BSidesSF 2026 "stubborn-elf"
+**Source:** BSidesSF 2026 "stubborn-elf"
 
 ---
 

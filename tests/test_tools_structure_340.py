@@ -271,7 +271,7 @@ def test_readme_documents_structure_rules() -> None:
     text = (TOOLS / "README.md").read_text(encoding="utf-8")
     for marker in (
         "tools/_lib",            # 共享库单点
-        "id == 目录名",           # 类目对齐规则(R2)
+        "id == directory name",  # category alignment rule (R2) — R3 #357 English marker
         "tool-search.py",        # 元工具例外文档化
         "validate_index.py",
         "__pycache__",           # gitignore 规则(R5)

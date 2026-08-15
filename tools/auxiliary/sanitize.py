@@ -181,7 +181,7 @@ MARKER_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 #        real console output uses 0x30-0x3F finals (ESC 7/8) that strict
 #        ECMA-48 Fe (0x40-0x7E) would miss
 # C1 single-byte controls (U+0080-U+009F) are out of scope (not produced by
-# Ghidra/yara console output; issue #333 明确不做 GBK/mojibake 同理不涉编码)。
+# Ghidra/yara console output; issue #333 explicitly excludes GBK/mojibake handling, so no encoding involvement here).
 ANSI_ESCAPE_RE: re.Pattern[str] = re.compile(
     r"\x1b"
     r"(?:"

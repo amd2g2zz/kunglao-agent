@@ -1,118 +1,118 @@
-# 国际搜索引擎深度搜索指南
+# International Search Engine Deep Search Guide
 
-## 🔍 Google 深度搜索
+## 🔍 Google Deep Search
 
-### 1.1 基础高级搜索操作符
+### 1.1 Basic advanced search operators
 
-| 操作符 | 功能 | 示例 | URL |
+| Operator | Function | Example | URL |
 |--------|------|------|-----|
-| `""` | 精确匹配 | `"machine learning"` | `https://www.google.com/search?q=%22machine+learning%22` |
-| `-` | 排除关键词 | `python -snake` | `https://www.google.com/search?q=python+-snake` |
-| `OR` | 或运算 | `machine learning OR deep learning` | `https://www.google.com/search?q=machine+learning+OR+deep+learning` |
-| `*` | 通配符 | `machine * algorithms` | `https://www.google.com/search?q=machine+*+algorithms` |
-| `()` | 分组 | `(apple OR microsoft) phones` | `https://www.google.com/search?q=(apple+OR+microsoft)+phones` |
-| `..` | 数字范围 | `laptop $500..$1000` | `https://www.google.com/search?q=laptop+%24500..%241000` |
+| `""` | Exact match | `"machine learning"` | `https://www.google.com/search?q=%22machine+learning%22` |
+| `-` | Exclude keyword | `python -snake` | `https://www.google.com/search?q=python+-snake` |
+| `OR` | OR operation | `machine learning OR deep learning` | `https://www.google.com/search?q=machine+learning+OR+deep+learning` |
+| `*` | Wildcard | `machine * algorithms` | `https://www.google.com/search?q=machine+*+algorithms` |
+| `()` | Grouping | `(apple OR microsoft) phones` | `https://www.google.com/search?q=(apple+OR+microsoft)+phones` |
+| `..` | Number range | `laptop $500..$1000` | `https://www.google.com/search?q=laptop+%24500..%241000` |
 
-### 1.2 站点与文件搜索
+### 1.2 Site and file search
 
-| 操作符 | 功能 | 示例 |
+| Operator | Function | Example |
 |--------|------|------|
-| `site:` | 站内搜索 | `site:github.com python projects` |
-| `filetype:` | 文件类型 | `filetype:pdf annual report` |
-| `inurl:` | URL包含 | `inurl:login admin` |
-| `intitle:` | 标题包含 | `intitle:"index of" mp3` |
-| `intext:` | 正文包含 | `intext:password filetype:txt` |
-| `cache:` | 查看缓存 | `cache:example.com` |
-| `related:` | 相关网站 | `related:github.com` |
-| `info:` | 网站信息 | `info:example.com` |
+| `site:` | Search within a site | `site:github.com python projects` |
+| `filetype:` | File type | `filetype:pdf annual report` |
+| `inurl:` | URL contains | `inurl:login admin` |
+| `intitle:` | Title contains | `intitle:"index of" mp3` |
+| `intext:` | Body contains | `intext:password filetype:txt` |
+| `cache:` | View cache | `cache:example.com` |
+| `related:` | Related sites | `related:github.com` |
+| `info:` | Site information | `info:example.com` |
 
-### 1.3 时间筛选参数
+### 1.3 Time filter parameters
 
-| 参数 | 含义 | URL示例 |
+| Parameter | Meaning | URL example |
 |------|------|---------|
-| `tbs=qdr:h` | 过去1小时 | `https://www.google.com/search?q=news&tbs=qdr:h` |
-| `tbs=qdr:d` | 过去24小时 | `https://www.google.com/search?q=news&tbs=qdr:d` |
-| `tbs=qdr:w` | 过去1周 | `https://www.google.com/search?q=news&tbs=qdr:w` |
-| `tbs=qdr:m` | 过去1月 | `https://www.google.com/search?q=news&tbs=qdr:m` |
-| `tbs=qdr:y` | 过去1年 | `https://www.google.com/search?q=news&tbs=qdr:y` |
-| `tbs=cdr:1,cd_min:1/1/2024,cd_max:12/31/2024` | 自定义日期范围 | 2024年全年 |
+| `tbs=qdr:h` | Past hour | `https://www.google.com/search?q=news&tbs=qdr:h` |
+| `tbs=qdr:d` | Past 24 hours | `https://www.google.com/search?q=news&tbs=qdr:d` |
+| `tbs=qdr:w` | Past week | `https://www.google.com/search?q=news&tbs=qdr:w` |
+| `tbs=qdr:m` | Past month | `https://www.google.com/search?q=news&tbs=qdr:m` |
+| `tbs=qdr:y` | Past year | `https://www.google.com/search?q=news&tbs=qdr:y` |
+| `tbs=cdr:1,cd_min:1/1/2024,cd_max:12/31/2024` | Custom date range | All of 2024 |
 
-### 1.4 语言和地区筛选
+### 1.4 Language and region filters
 
-| 参数 | 功能 | 示例 |
+| Parameter | Function | Example |
 |------|------|------|
-| `hl=en` | 界面语言 | `https://www.google.com/search?q=test&hl=en` |
-| `lr=lang_zh-CN` | 搜索结果语言 | `https://www.google.com/search?q=test&lr=lang_zh-CN` |
-| `cr=countryCN` | 国家/地区 | `https://www.google.com/search?q=test&cr=countryCN` |
-| `gl=us` | 地理位置 | `https://www.google.com/search?q=test&gl=us` |
+| `hl=en` | Interface language | `https://www.google.com/search?q=test&hl=en` |
+| `lr=lang_zh-CN` | Result language | `https://www.google.com/search?q=test&lr=lang_zh-CN` |
+| `cr=countryCN` | Country/region | `https://www.google.com/search?q=test&cr=countryCN` |
+| `gl=us` | Geolocation | `https://www.google.com/search?q=test&gl=us` |
 
-### 1.5 特殊搜索类型
+### 1.5 Special search types
 
-| 类型 | URL | 说明 |
+| Type | URL | Notes |
 |------|-----|------|
-| 图片搜索 | `https://www.google.com/search?q={keyword}&tbm=isch` | `tbm=isch` 表示图片 |
-| 新闻搜索 | `https://www.google.com/search?q={keyword}&tbm=nws` | `tbm=nws` 表示新闻 |
-| 视频搜索 | `https://www.google.com/search?q={keyword}&tbm=vid` | `tbm=vid` 表示视频 |
-| 地图搜索 | `https://www.google.com/search?q={keyword}&tbm=map` | `tbm=map` 表示地图 |
-| 购物搜索 | `https://www.google.com/search?q={keyword}&tbm=shop` | `tbm=shop` 表示购物 |
-| 图书搜索 | `https://www.google.com/search?q={keyword}&tbm=bks` | `tbm=bks` 表示图书 |
-| 学术搜索 | `https://scholar.google.com/scholar?q={keyword}` | Google Scholar |
+| Image search | `https://www.google.com/search?q={keyword}&tbm=isch` | `tbm=isch` means images |
+| News search | `https://www.google.com/search?q={keyword}&tbm=nws` | `tbm=nws` means news |
+| Video search | `https://www.google.com/search?q={keyword}&tbm=vid` | `tbm=vid` means videos |
+| Maps search | `https://www.google.com/search?q={keyword}&tbm=map` | `tbm=map` means maps |
+| Shopping search | `https://www.google.com/search?q={keyword}&tbm=shop` | `tbm=shop` means shopping |
+| Books search | `https://www.google.com/search?q={keyword}&tbm=bks` | `tbm=bks` means books |
+| Scholar search | `https://scholar.google.com/scholar?q={keyword}` | Google Scholar |
 
-### 1.6 Google 深度搜索示例
+### 1.6 Google deep search examples
 
 ```javascript
-// 1. 搜索GitHub上的Python机器学习项目
+// 1. Search GitHub for Python machine learning projects
 web_fetch({"url": "https://www.google.com/search?q=site:github.com+python+machine+learning"})
 
-// 2. 搜索2024年的PDF格式机器学习教程
+// 2. Search for 2024 machine learning tutorials in PDF
 web_fetch({"url": "https://www.google.com/search?q=machine+learning+tutorial+filetype:pdf&tbs=cdr:1,cd_min:1/1/2024"})
 
-// 3. 搜索标题包含"tutorial"的Python相关页面
+// 3. Search Python pages whose titles contain "tutorial"
 web_fetch({"url": "https://www.google.com/search?q=intitle:tutorial+python"})
 
-// 4. 搜索过去一周的新闻
+// 4. Search news from the past week
 web_fetch({"url": "https://www.google.com/search?q=AI+breakthrough&tbs=qdr:w&tbm=nws"})
 
-// 5. 搜索中文内容（界面英文，结果中文）
+// 5. Search Chinese content (English interface, Chinese results)
 web_fetch({"url": "https://www.google.com/search?q=人工智能&lr=lang_zh-CN&hl=en"})
 
-// 6. 搜索特定价格范围的笔记本电脑
+// 6. Search laptops in a specific price range
 web_fetch({"url": "https://www.google.com/search?q=laptop+%241000..%242000+best+rating"})
 
-// 7. 搜索排除Wikipedia的结果
+// 7. Search excluding Wikipedia results
 web_fetch({"url": "https://www.google.com/search?q=python+programming+-wikipedia"})
 
-// 8. 搜索学术文献
+// 8. Search academic literature
 web_fetch({"url": "https://scholar.google.com/scholar?q=deep+learning+optimization"})
 
-// 9. 搜索缓存页面（查看已删除内容）
+// 9. Search cached pages (view deleted content)
 web_fetch({"url": "https://webcache.googleusercontent.com/search?q=cache:example.com"})
 
-// 10. 搜索相关网站
+// 10. Search related sites
 web_fetch({"url": "https://www.google.com/search?q=related:stackoverflow.com"})
 ```
 
 ---
 
-## 🦆 DuckDuckGo 深度搜索
+## 🦆 DuckDuckGo Deep Search
 
-### 2.1 DuckDuckGo 特色功能
+### 2.1 DuckDuckGo feature highlights
 
-| 功能 | 语法 | 示例 |
+| Feature | Syntax | Example |
 |------|------|------|
-| **Bangs 快捷** | `!缩写` | `!g python` → Google搜索 |
-| **密码生成** | `password` | `https://duckduckgo.com/?q=password+20` |
-| **颜色转换** | `color` | `https://duckduckgo.com/?q=+%23FF5733` |
-| **短链接** | `shorten` | `https://duckduckgo.com/?q=shorten+example.com` |
-| **二维码生成** | `qr` | `https://duckduckgo.com/?q=qr+hello+world` |
-| **生成UUID** | `uuid` | `https://duckduckgo.com/?q=uuid` |
-| **Base64编解码** | `base64` | `https://duckduckgo.com/?q=base64+hello` |
+| **Bangs shortcuts** | `!abbr` | `!g python` -> Google search |
+| **Password generation** | `password` | `https://duckduckgo.com/?q=password+20` |
+| **Color conversion** | `color` | `https://duckduckgo.com/?q=+%23FF5733` |
+| **Link shortening** | `shorten` | `https://duckduckgo.com/?q=shorten+example.com` |
+| **QR code generation** | `qr` | `https://duckduckgo.com/?q=qr+hello+world` |
+| **UUID generation** | `uuid` | `https://duckduckgo.com/?q=uuid` |
+| **Base64 encode/decode** | `base64` | `https://duckduckgo.com/?q=base64+hello` |
 
-### 2.2 DuckDuckGo Bangs 完整列表
+### 2.2 DuckDuckGo Bangs complete list
 
-#### 搜索引擎
+#### Search engines
 
-| Bang | 跳转目标 | 示例 |
+| Bang | Target | Example |
 |------|---------|------|
 | `!g` | Google | `!g python tutorial` |
 | `!b` | Bing | `!b weather` |
@@ -120,9 +120,9 @@ web_fetch({"url": "https://www.google.com/search?q=related:stackoverflow.com"})
 | `!sp` | Startpage | `!sp privacy` |
 | `!brave` | Brave Search | `!brave tech` |
 
-#### 编程开发
+#### Programming and development
 
-| Bang | 跳转目标 | 示例 |
+| Bang | Target | Example |
 |------|---------|------|
 | `!gh` | GitHub | `!gh tensorflow` |
 | `!so` | Stack Overflow | `!so javascript error` |
@@ -132,258 +132,258 @@ web_fetch({"url": "https://www.google.com/search?q=related:stackoverflow.com"})
 | `!docs` | DevDocs | `!docs python` |
 | `!docker` | Docker Hub | `!docker nginx` |
 
-#### 知识百科
+#### Knowledge and encyclopedias
 
-| Bang | 跳转目标 | 示例 |
+| Bang | Target | Example |
 |------|---------|------|
 | `!w` | Wikipedia | `!w machine learning` |
-| `!wen` | Wikipedia英文 | `!wen artificial intelligence` |
+| `!wen` | English Wikipedia | `!wen artificial intelligence` |
 | `!wt` | Wiktionary | `!wt serendipity` |
 | `!imdb` | IMDb | `!imdb inception` |
 
-#### 购物价格
+#### Shopping and prices
 
-| Bang | 跳转目标 | 示例 |
+| Bang | Target | Example |
 |------|---------|------|
 | `!a` | Amazon | `!a wireless headphones` |
 | `!e` | eBay | `!e vintage watch` |
 | `!ali` | AliExpress | `!ali phone case` |
 
-#### 地图位置
+#### Maps and places
 
-| Bang | 跳转目标 | 示例 |
+| Bang | Target | Example |
 |------|---------|------|
 | `!m` | Google Maps | `!m Beijing` |
 | `!maps` | OpenStreetMap | `!maps Paris` |
 
-### 2.3 DuckDuckGo 搜索参数
+### 2.3 DuckDuckGo search parameters
 
-| 参数 | 功能 | 示例 |
+| Parameter | Function | Example |
 |------|------|------|
-| `kp=1` | 严格安全搜索 | `https://duckduckgo.com/html/?q=test&kp=1` |
-| `kp=-1` | 关闭安全搜索 | `https://duckduckgo.com/html/?q=test&kp=-1` |
-| `kl=cn` | 中国区域 | `https://duckduckgo.com/html/?q=news&kl=cn` |
-| `kl=us-en` | 美国英文 | `https://duckduckgo.com/html/?q=news&kl=us-en` |
-| `ia=web` | 网页结果 | `https://duckduckgo.com/?q=test&ia=web` |
-| `ia=images` | 图片结果 | `https://duckduckgo.com/?q=test&ia=images` |
-| `ia=news` | 新闻结果 | `https://duckduckgo.com/?q=test&ia=news` |
-| `ia=videos` | 视频结果 | `https://duckduckgo.com/?q=test&ia=videos` |
+| `kp=1` | Strict safe search | `https://duckduckgo.com/html/?q=test&kp=1` |
+| `kp=-1` | Safe search off | `https://duckduckgo.com/html/?q=test&kp=-1` |
+| `kl=cn` | China region | `https://duckduckgo.com/html/?q=news&kl=cn` |
+| `kl=us-en` | US English | `https://duckduckgo.com/html/?q=news&kl=us-en` |
+| `ia=web` | Web results | `https://duckduckgo.com/?q=test&ia=web` |
+| `ia=images` | Image results | `https://duckduckgo.com/?q=test&ia=images` |
+| `ia=news` | News results | `https://duckduckgo.com/?q=test&ia=news` |
+| `ia=videos` | Video results | `https://duckduckgo.com/?q=test&ia=videos` |
 
-### 2.4 DuckDuckGo 深度搜索示例
+### 2.4 DuckDuckGo deep search examples
 
 ```javascript
-// 1. 使用Bang跳转到Google搜索
+// 1. Use a Bang to jump to Google search
 web_fetch({"url": "https://duckduckgo.com/html/?q=!g+machine+learning"})
 
-// 2. 直接搜索GitHub上的项目
+// 2. Search GitHub projects directly
 web_fetch({"url": "https://duckduckgo.com/html/?q=!gh+react"})
 
-// 3. 查找Stack Overflow答案
+// 3. Find Stack Overflow answers
 web_fetch({"url": "https://duckduckgo.com/html/?q=!so+python+list+comprehension"})
 
-// 4. 生成密码
+// 4. Generate a password
 web_fetch({"url": "https://duckduckgo.com/?q=password+16"})
 
-// 5. Base64编码
+// 5. Base64 encode
 web_fetch({"url": "https://duckduckgo.com/?q=base64+hello+world"})
 
-// 6. 颜色代码转换
+// 6. Color code conversion
 web_fetch({"url": "https://duckduckgo.com/?q=%23FF5733"})
 
-// 7. 搜索YouTube视频
+// 7. Search YouTube videos
 web_fetch({"url": "https://duckduckgo.com/html/?q=!yt+python+tutorial"})
 
-// 8. 查看Wikipedia
+// 8. View Wikipedia
 web_fetch({"url": "https://duckduckgo.com/html/?q=!w+artificial+intelligence"})
 
-// 9. 亚马逊商品搜索
+// 9. Amazon product search
 web_fetch({"url": "https://duckduckgo.com/html/?q=!a+laptop"})
 
-// 10. 生成二维码
+// 10. Generate a QR code
 web_fetch({"url": "https://duckduckgo.com/?q=qr+https://github.com"})
 ```
 
 ---
 
-## 🔎 Brave Search 深度搜索
+## 🔎 Brave Search Deep Search
 
-### 3.1 Brave Search 特色功能
+### 3.1 Brave Search feature highlights
 
-| 功能 | 参数 | 示例 |
+| Feature | Parameter | Example |
 |------|------|------|
-| **独立索引** | 无依赖Google/Bing | 自有爬虫索引 |
-| **Goggles** | 自定义搜索规则 | 创建个性化过滤器 |
-| **Discussions** | 论坛讨论搜索 | 聚合Reddit等论坛 |
-| **News** | 新闻聚合 | 独立新闻索引 |
+| **Independent index** | No Google/Bing dependency | Own crawler index |
+| **Goggles** | Custom search rules | Create personal filters |
+| **Discussions** | Forum discussion search | Aggregates Reddit and other forums |
+| **News** | News aggregation | Independent news index |
 
-### 3.2 Brave Search 参数
+### 3.2 Brave Search parameters
 
-| 参数 | 功能 | 示例 |
+| Parameter | Function | Example |
 |------|------|------|
-| `tf=pw` | 本周 | `https://search.brave.com/search?q=news&tf=pw` |
-| `tf=pm` | 本月 | `https://search.brave.com/search?q=tech&tf=pm` |
-| `tf=py` | 本年 | `https://search.brave.com/search?q=AI&tf=py` |
-| `safesearch=strict` | 严格安全 | `https://search.brave.com/search?q=test&safesearch=strict` |
-| `source=web` | 网页搜索 | 默认 |
-| `source=news` | 新闻搜索 | `https://search.brave.com/search?q=tech&source=news` |
-| `source=images` | 图片搜索 | `https://search.brave.com/search?q=cat&source=images` |
-| `source=videos` | 视频搜索 | `https://search.brave.com/search?q=music&source=videos` |
+| `tf=pw` | This week | `https://search.brave.com/search?q=news&tf=pw` |
+| `tf=pm` | This month | `https://search.brave.com/search?q=tech&tf=pm` |
+| `tf=py` | This year | `https://search.brave.com/search?q=AI&tf=py` |
+| `safesearch=strict` | Strict safety | `https://search.brave.com/search?q=test&safesearch=strict` |
+| `source=web` | Web search | Default |
+| `source=news` | News search | `https://search.brave.com/search?q=tech&source=news` |
+| `source=images` | Image search | `https://search.brave.com/search?q=cat&source=images` |
+| `source=videos` | Video search | `https://search.brave.com/search?q=music&source=videos` |
 
-### 3.3 Brave Search Goggles（自定义过滤器）
+### 3.3 Brave Search Goggles (custom filters)
 
-Goggles 允许创建自定义搜索规则：
+Goggles let you create custom search rules:
 
 ```
-$discard  // 丢弃所有
-$boost,site=stackoverflow.com  // 提升Stack Overflow
-$boost,site=github.com  // 提升GitHub
-$boost,site=docs.python.org  // 提升Python文档
+$discard  // discard everything
+$boost,site=stackoverflow.com  // boost Stack Overflow
+$boost,site=github.com  // boost GitHub
+$boost,site=docs.python.org  // boost Python docs
 ```
 
-### 3.4 Brave Search 深度搜索示例
+### 3.4 Brave Search deep search examples
 
 ```javascript
-// 1. 本周科技新闻
+// 1. This week's tech news
 web_fetch({"url": "https://search.brave.com/search?q=technology&tf=pw&source=news"})
 
-// 2. 本月AI发展
+// 2. This month's AI developments
 web_fetch({"url": "https://search.brave.com/search?q=artificial+intelligence&tf=pm"})
 
-// 3. 图片搜索
+// 3. Image search
 web_fetch({"url": "https://search.brave.com/search?q=machine+learning&source=images"})
 
-// 4. 视频教程
+// 4. Video tutorials
 web_fetch({"url": "https://search.brave.com/search?q=python+tutorial&source=videos"})
 
-// 5. 使用独立索引搜索
+// 5. Search with the independent index
 web_fetch({"url": "https://search.brave.com/search?q=privacy+tools"})
 ```
 
 ---
 
-## 📊 WolframAlpha 知识计算搜索
+## 📊 WolframAlpha knowledge computation search
 
-### 4.1 WolframAlpha 数据类型
+### 4.1 WolframAlpha data types
 
-| 类型 | 查询示例 | URL |
+| Type | Query example | URL |
 |------|---------|-----|
-| **数学计算** | `integrate x^2 dx` | `https://www.wolframalpha.com/input?i=integrate+x%5E2+dx` |
-| **单位换算** | `100 miles to km` | `https://www.wolframalpha.com/input?i=100+miles+to+km` |
-| **货币转换** | `100 USD to CNY` | `https://www.wolframalpha.com/input?i=100+USD+to+CNY` |
-| **股票数据** | `AAPL stock` | `https://www.wolframalpha.com/input?i=AAPL+stock` |
-| **天气查询** | `weather in Beijing` | `https://www.wolframalpha.com/input?i=weather+in+Beijing` |
-| **人口数据** | `population of China` | `https://www.wolframalpha.com/input?i=population+of+China` |
-| **化学元素** | `properties of gold` | `https://www.wolframalpha.com/input?i=properties+of+gold` |
-| **营养成分** | `nutrition of apple` | `https://www.wolframalpha.com/input?i=nutrition+of+apple` |
-| **日期计算** | `days between Jan 1 2020 and Dec 31 2024` | 日期间隔计算 |
-| **时区转换** | `10am Beijing to New York` | 时区转换 |
-| **IP地址** | `8.8.8.8` | IP信息查询 |
-| **条形码** | `scan barcode 123456789` | 条码信息 |
-| **飞机航班** | `flight AA123` | 航班信息 |
+| **Math** | `integrate x^2 dx` | `https://www.wolframalpha.com/input?i=integrate+x%5E2+dx` |
+| **Unit conversion** | `100 miles to km` | `https://www.wolframalpha.com/input?i=100+miles+to+km` |
+| **Currency conversion** | `100 USD to CNY` | `https://www.wolframalpha.com/input?i=100+USD+to+CNY` |
+| **Stock data** | `AAPL stock` | `https://www.wolframalpha.com/input?i=AAPL+stock` |
+| **Weather** | `weather in Beijing` | `https://www.wolframalpha.com/input?i=weather+in+Beijing` |
+| **Population data** | `population of China` | `https://www.wolframalpha.com/input?i=population+of+China` |
+| **Chemical elements** | `properties of gold` | `https://www.wolframalpha.com/input?i=properties+of+gold` |
+| **Nutrition** | `nutrition of apple` | `https://www.wolframalpha.com/input?i=nutrition+of+apple` |
+| **Date arithmetic** | `days between Jan 1 2020 and Dec 31 2024` | Date interval computation |
+| **Timezone conversion** | `10am Beijing to New York` | Timezone conversion |
+| **IP addresses** | `8.8.8.8` | IP information lookup |
+| **Barcodes** | `scan barcode 123456789` | Barcode information |
+| **Flights** | `flight AA123` | Flight information |
 
-### 4.2 WolframAlpha 深度搜索示例
+### 4.2 WolframAlpha deep search examples
 
 ```javascript
-// 1. 计算积分
+// 1. Compute an integral
 web_fetch({"url": "https://www.wolframalpha.com/input?i=integrate+sin%28x%29+from+0+to+pi"})
 
-// 2. 解方程
+// 2. Solve an equation
 web_fetch({"url": "https://www.wolframalpha.com/input?i=solve+x%5E2-5x%2B6%3D0"})
 
-// 3. 货币实时汇率
+// 3. Live currency rate
 web_fetch({"url": "https://www.wolframalpha.com/input?i=100+USD+to+CNY"})
 
-// 4. 股票实时数据
+// 4. Live stock data
 web_fetch({"url": "https://www.wolframalpha.com/input?i=Apple+stock+price"})
 
-// 5. 城市天气
+// 5. City weather
 web_fetch({"url": "https://www.wolframalpha.com/input?i=weather+in+Shanghai+tomorrow"})
 
-// 6. 国家统计信息
+// 6. Country statistics
 web_fetch({"url": "https://www.wolframalpha.com/input?i=GDP+of+China+vs+USA"})
 
-// 7. 化学计算
+// 7. Chemistry computation
 web_fetch({"url": "https://www.wolframalpha.com/input?i=molar+mass+of+H2SO4"})
 
-// 8. 物理常数
+// 8. Physical constants
 web_fetch({"url": "https://www.wolframalpha.com/input?i=speed+of+light"})
 
-// 9. 营养信息
+// 9. Nutrition information
 web_fetch({"url": "https://www.wolframalpha.com/input?i=calories+in+banana"})
 
-// 10. 历史日期
+// 10. Historical dates
 web_fetch({"url": "https://www.wolframalpha.com/input?i=events+on+July+20+1969"})
 ```
 
 ---
 
-## 🔧 Startpage 隐私搜索
+## 🔧 Startpage privacy search
 
-### 5.1 Startpage 特色功能
+### 5.1 Startpage feature highlights
 
-| 功能 | 说明 | URL |
+| Feature | Notes | URL |
 |------|------|-----|
-| **代理浏览** | 匿名访问搜索结果 | 点击"匿名查看" |
-| **无追踪** | 不记录搜索历史 | 默认开启 |
-| **EU服务器** | 受欧盟隐私法保护 | 数据在欧洲 |
-| **代理图片** | 图片代理加载 | 隐藏IP |
+| **Proxy browsing** | Anonymously visit results | Click "Anonymous View" |
+| **No tracking** | Search history not recorded | On by default |
+| **EU servers** | Protected by EU privacy law | Data in Europe |
+| **Image proxy** | Images loaded via proxy | Hides IP |
 
-### 5.2 Startpage 参数
+### 5.2 Startpage parameters
 
-| 参数 | 功能 | 示例 |
+| Parameter | Function | Example |
 |------|------|------|
-| `cat=web` | 网页搜索 | 默认 |
-| `cat=images` | 图片搜索 | `...&cat=images` |
-| `cat=video` | 视频搜索 | `...&cat=video` |
-| `cat=news` | 新闻搜索 | `...&cat=news` |
-| `language=english` | 英文结果 | `...&language=english` |
-| `time=day` | 过去24小时 | `...&time=day` |
-| `time=week` | 过去一周 | `...&time=week` |
-| `time=month` | 过去一月 | `...&time=month` |
-| `time=year` | 过去一年 | `...&time=year` |
-| `nj=0` | 关闭 family filter | `...&nj=0` |
+| `cat=web` | Web search | Default |
+| `cat=images` | Image search | `...&cat=images` |
+| `cat=video` | Video search | `...&cat=video` |
+| `cat=news` | News search | `...&cat=news` |
+| `language=english` | English results | `...&language=english` |
+| `time=day` | Past 24 hours | `...&time=day` |
+| `time=week` | Past week | `...&time=week` |
+| `time=month` | Past month | `...&time=month` |
+| `time=year` | Past year | `...&time=year` |
+| `nj=0` | Family filter off | `...&nj=0` |
 
-### 5.3 Startpage 深度搜索示例
+### 5.3 Startpage deep search examples
 
 ```javascript
-// 1. 隐私搜索
+// 1. Privacy search
 web_fetch({"url": "https://www.startpage.com/sp/search?query=privacy+tools"})
 
-// 2. 图片隐私搜索
+// 2. Privacy image search
 web_fetch({"url": "https://www.startpage.com/sp/search?query=nature&cat=images"})
 
-// 3. 本周新闻（隐私模式）
+// 3. This week's news (privacy mode)
 web_fetch({"url": "https://www.startpage.com/sp/search?query=tech+news&time=week&cat=news"})
 
-// 4. 英文结果搜索
+// 4. English-results search
 web_fetch({"url": "https://www.startpage.com/sp/search?query=machine+learning&language=english"})
 ```
 
 ---
 
-## 🌍 综合搜索策略
+## 🌍 Combined search strategy
 
-### 6.1 按搜索目标选择引擎
+### 6.1 Choosing an engine by search goal
 
-| 搜索目标 | 首选引擎 | 备选引擎 | 原因 |
+| Search goal | Preferred engine | Alternatives | Reason |
 |---------|---------|---------|------|
-| **学术研究** | Google Scholar | Google, Brave | 学术资源索引 |
-| **编程开发** | Google | GitHub(DuckDuckGo bang) | 技术文档全面 |
-| **隐私敏感** | DuckDuckGo | Startpage, Brave | 不追踪用户 |
-| **实时新闻** | Brave News | Google News | 独立新闻索引 |
-| **知识计算** | WolframAlpha | Google | 结构化数据 |
-| **中文内容** | Google HK | Bing | 中文优化好 |
-| **欧洲视角** | Qwant | Startpage | 欧盟合规 |
-| **环保支持** | Ecosia | DuckDuckGo | 搜索植树 |
-| **无过滤** | Brave | Startpage | 无偏见结果 |
+| **Academic research** | Google Scholar | Google, Brave | Academic resource indexing |
+| **Programming** | Google | GitHub (DuckDuckGo bang) | Comprehensive technical docs |
+| **Privacy-sensitive** | DuckDuckGo | Startpage, Brave | No user tracking |
+| **Real-time news** | Brave News | Google News | Independent news index |
+| **Knowledge computation** | WolframAlpha | Google | Structured data |
+| **Chinese content** | Google HK | Bing | Good Chinese optimization |
+| **European perspective** | Qwant | Startpage | EU compliance |
+| **Eco-friendly** | Ecosia | DuckDuckGo | Plants trees per search |
+| **Unfiltered** | Brave | Startpage | Unbiased results |
 
-### 6.2 多引擎交叉验证
+### 6.2 Multi-engine cross-validation
 
 ```javascript
-// 策略：同一关键词多引擎搜索，对比结果
+// Strategy: search the same keyword across engines, compare results
 const keyword = "climate change 2024";
 
-// 获取不同视角
+// Get different perspectives
 const searches = [
   { engine: "Google", url: `https://www.google.com/search?q=${keyword}&tbs=qdr:m` },
   { engine: "Brave", url: `https://search.brave.com/search?q=${keyword}&tf=pm` },
@@ -391,100 +391,100 @@ const searches = [
   { engine: "Ecosia", url: `https://www.ecosia.org/search?q=${keyword}` }
 ];
 
-// 分析不同引擎的结果差异
+// Analyze the differences between engine results
 ```
 
-### 6.3 时间敏感搜索策略
+### 6.3 Time-sensitive search strategy
 
-| 时效性要求 | 引擎选择 | 参数设置 |
+| Timeliness need | Engine choice | Parameter settings |
 |-----------|---------|---------|
-| **实时（小时级）** | Google News, Brave News | `tbs=qdr:h`, `tf=pw` |
-| **近期（天级）** | Google, Brave | `tbs=qdr:d`, `time=day` |
-| **本周** | 所有引擎 | `tbs=qdr:w`, `tf=pw` |
-| **本月** | 所有引擎 | `tbs=qdr:m`, `tf=pm` |
-| **历史** | Google Scholar | 学术档案 |
+| **Real-time (hourly)** | Google News, Brave News | `tbs=qdr:h`, `tf=pw` |
+| **Recent (daily)** | Google, Brave | `tbs=qdr:d`, `time=day` |
+| **This week** | All engines | `tbs=qdr:w`, `tf=pw` |
+| **This month** | All engines | `tbs=qdr:m`, `tf=pm` |
+| **Historical** | Google Scholar | Academic archives |
 
-### 6.4 专业领域深度搜索
+### 6.4 Domain-specific deep search
 
-#### 技术开发
+#### Technical development
 
 ```javascript
-// GitHub 项目搜索
+// GitHub project search
 web_fetch({"url": "https://duckduckgo.com/html/?q=!gh+tensorflow+stars:%3E1000"})
 
-// Stack Overflow 问题
+// Stack Overflow questions
 web_fetch({"url": "https://duckduckgo.com/html/?q=!so+python+memory+leak"})
 
-// MDN 文档
+// MDN docs
 web_fetch({"url": "https://duckduckgo.com/html/?q=!mdn+javascript+async+await"})
 
-// PyPI 包
+// PyPI packages
 web_fetch({"url": "https://duckduckgo.com/html/?q=!pypi+requests"})
 
-// npm 包
+// npm packages
 web_fetch({"url": "https://duckduckgo.com/html/?q=!npm+express"})
 ```
 
-#### 学术研究
+#### Academic research
 
 ```javascript
-// Google Scholar 论文
+// Google Scholar papers
 web_fetch({"url": "https://scholar.google.com/scholar?q=deep+learning+2024"})
 
-// 搜索PDF论文
+// Search PDF papers
 web_fetch({"url": "https://www.google.com/search?q=machine+learning+filetype:pdf+2024"})
 
-// arXiv 论文
+// arXiv papers
 web_fetch({"url": "https://duckduckgo.com/html/?q=site:arxiv.org+quantum+computing"})
 ```
 
-#### 金融投资
+#### Finance and investment
 
 ```javascript
-// 股票实时数据
+// Live stock data
 web_fetch({"url": "https://www.wolframalpha.com/input?i=AAPL+stock"})
 
-// 汇率转换
+// Currency conversion
 web_fetch({"url": "https://www.wolframalpha.com/input?i=EUR+to+USD"})
 
-// 搜索财报PDF
+// Search earnings-report PDFs
 web_fetch({"url": "https://www.google.com/search?q=Apple+Q4+2024+earnings+filetype:pdf"})
 ```
 
-#### 新闻时事
+#### Current news
 
 ```javascript
-// Google新闻
+// Google News
 web_fetch({"url": "https://www.google.com/search?q=breaking+news&tbm=nws&tbs=qdr:h"})
 
-// Brave新闻
+// Brave News
 web_fetch({"url": "https://search.brave.com/search?q=world+news&source=news"})
 
-// DuckDuckGo新闻
+// DuckDuckGo News
 web_fetch({"url": "https://duckduckgo.com/html/?q=tech+news&ia=news"})
 ```
 
 ---
 
-## 🛠️ 高级搜索技巧汇总
+## 🛠️ Advanced search technique summary
 
-### URL编码工具函数
+### URL encoding utility
 
 ```javascript
-// URL编码关键词
+// URL-encode a keyword
 function encodeKeyword(keyword) {
   return encodeURIComponent(keyword);
 }
 
-// 示例
+// Example
 const keyword = "machine learning";
 const encoded = encodeKeyword(keyword); // "machine%20learning"
 ```
 
-### 批量搜索模板
+### Batch search template
 
 ```javascript
-// 多引擎批量搜索函数
+// Multi-engine batch search function
 function generateSearchUrls(keyword) {
   const encoded = encodeURIComponent(keyword);
   return {
@@ -500,14 +500,14 @@ function generateSearchUrls(keyword) {
   };
 }
 
-// 使用示例
+// Usage example
 const urls = generateSearchUrls("artificial intelligence");
 ```
 
-### 时间筛选快捷函数
+### Time-filter helper
 
 ```javascript
-// Google时间筛选URL生成
+// Google time-filter URL generator
 function googleTimeSearch(keyword, period) {
   const periods = {
     hour: 'qdr:h',
@@ -519,133 +519,133 @@ function googleTimeSearch(keyword, period) {
   return `https://www.google.com/search?q=${encodeURIComponent(keyword)}&tbs=${periods[period]}`;
 }
 
-// 使用示例
+// Usage example
 const recentNews = googleTimeSearch("AI breakthrough", "week");
 ```
 
 ---
 
-## 📝 完整搜索示例集
+## 📝 Complete search example collection
 
 ```javascript
-// ==================== 技术开发 ====================
+// ==================== Technical development ====================
 
-// 1. 搜索GitHub上高Star的Python项目
+// 1. Search GitHub for high-star Python projects
 web_fetch({"url": "https://www.google.com/search?q=site:github.com+python+stars:%3E1000"})
 
-// 2. Stack Overflow最佳答案
+// 2. Best Stack Overflow answers
 web_fetch({"url": "https://duckduckgo.com/html/?q=!so+best+way+to+learn+python"})
 
-// 3. MDN文档查询
+// 3. MDN documentation lookup
 web_fetch({"url": "https://duckduckgo.com/html/?q=!mdn+promises"})
 
-// 4. 搜索npm包
+// 4. Search npm packages
 web_fetch({"url": "https://duckduckgo.com/html/?q=!npm+axios"})
 
-// ==================== 学术研究 ====================
+// ==================== Academic research ====================
 
-// 5. Google Scholar论文
+// 5. Google Scholar papers
 web_fetch({"url": "https://scholar.google.com/scholar?q=transformer+architecture"})
 
-// 6. 搜索PDF论文
+// 6. Search PDF papers
 web_fetch({"url": "https://www.google.com/search?q=attention+is+all+you+need+filetype:pdf"})
 
-// 7. arXiv最新论文
+// 7. Latest arXiv papers
 web_fetch({"url": "https://duckduckgo.com/html/?q=site:arxiv.org+abs+quantum"})
 
-// ==================== 新闻时事 ====================
+// ==================== Current news ====================
 
-// 8. Google最新新闻（过去1小时）
+// 8. Latest Google News (past hour)
 web_fetch({"url": "https://www.google.com/search?q=breaking+news&tbs=qdr:h&tbm=nws"})
 
-// 9. Brave本周科技新闻
+// 9. This week's tech news on Brave
 web_fetch({"url": "https://search.brave.com/search?q=technology&tf=pw&source=news"})
 
-// 10. DuckDuckGo新闻
+// 10. DuckDuckGo News
 web_fetch({"url": "https://duckduckgo.com/html/?q=world+news&ia=news"})
 
-// ==================== 金融投资 ====================
+// ==================== Finance and investment ====================
 
-// 11. 股票实时数据
+// 11. Live stock data
 web_fetch({"url": "https://www.wolframalpha.com/input?i=Tesla+stock"})
 
-// 12. 货币汇率
+// 12. Currency rate
 web_fetch({"url": "https://www.wolframalpha.com/input?i=1+BTC+to+USD"})
 
-// 13. 公司财报PDF
+// 13. Company earnings PDF
 web_fetch({"url": "https://www.google.com/search?q=Microsoft+annual+report+2024+filetype:pdf"})
 
-// ==================== 知识计算 ====================
+// ==================== Knowledge computation ====================
 
-// 14. 数学计算
+// 14. Math computation
 web_fetch({"url": "https://www.wolframalpha.com/input?i=derivative+of+x%5E3+sin%28x%29"})
 
-// 15. 单位换算
+// 15. Unit conversion
 web_fetch({"url": "https://www.wolframalpha.com/input?i=convert+100+miles+to+kilometers"})
 
-// 16. 营养信息
+// 16. Nutrition information
 web_fetch({"url": "https://www.wolframalpha.com/input?i=protein+in+chicken+breast"})
 
-// ==================== 隐私保护搜索 ====================
+// ==================== Privacy-protecting search ====================
 
-// 17. DuckDuckGo隐私搜索
+// 17. DuckDuckGo privacy search
 web_fetch({"url": "https://duckduckgo.com/html/?q=privacy+tools"})
 
-// 18. Startpage匿名搜索
+// 18. Startpage anonymous search
 web_fetch({"url": "https://www.startpage.com/sp/search?query=secure+messaging"})
 
-// 19. Brave无追踪搜索
+// 19. Brave tracker-free search
 web_fetch({"url": "https://search.brave.com/search?q=encryption+software"})
 
-// ==================== 高级组合搜索 ====================
+// ==================== Advanced combined search ====================
 
-// 20. Google多条件精确搜索
+// 20. Google multi-condition exact search
 web_fetch({"url": "https://www.google.com/search?q=%22machine+learning%22+site:github.com+filetype:pdf+2024"})
 
-// 21. 排除特定站点的搜索
+// 21. Search excluding specific sites
 web_fetch({"url": "https://www.google.com/search?q=python+tutorial+-wikipedia+-w3schools"})
 
-// 22. 价格范围搜索
+// 22. Price-range search
 web_fetch({"url": "https://www.google.com/search?q=laptop+%24800..%241200+best+review"})
 
-// 23. 使用Bangs快速跳转
+// 23. Quick jump with Bangs
 web_fetch({"url": "https://duckduckgo.com/html/?q=!g+site:medium.com+python"})
 
-// 24. 图片搜索（Google）
+// 24. Image search (Google)
 web_fetch({"url": "https://www.google.com/search?q=beautiful+landscape&tbm=isch"})
 
-// 25. 学术引用搜索
+// 25. Academic citation search
 web_fetch({"url": "https://scholar.google.com/scholar?q=author:%22Geoffrey+Hinton%22"})
 ```
 
 ---
 
-## 🔐 隐私保护最佳实践
+## 🔐 Privacy best practices
 
-### 搜索引擎隐私级别
+### Search engine privacy levels
 
-| 引擎 | 追踪级别 | 数据保留 | 加密 | 推荐场景 |
+| Engine | Tracking level | Data retention | Encryption | Recommended use |
 |------|---------|---------|------|---------|
-| **DuckDuckGo** | 无追踪 | 无保留 | 是 | 日常隐私搜索 |
-| **Startpage** | 无追踪 | 无保留 | 是 | 需要Google结果但保护隐私 |
-| **Brave** | 无追踪 | 无保留 | 是 | 独立索引，无偏见 |
-| **Qwant** | 无追踪 | 无保留 | 是 | 欧盟合规要求 |
-| **Google** | 高度追踪 | 长期保留 | 是 | 需要个性化结果 |
-| **Bing** | 中度追踪 | 长期保留 | 是 | 微软服务集成 |
+| **DuckDuckGo** | No tracking | None | Yes | Everyday private search |
+| **Startpage** | No tracking | None | Yes | Google results with privacy |
+| **Brave** | No tracking | None | Yes | Independent index, unbiased |
+| **Qwant** | No tracking | None | Yes | EU compliance needs |
+| **Google** | Heavy tracking | Long-term | Yes | Personalized results needed |
+| **Bing** | Moderate tracking | Long-term | Yes | Microsoft service integration |
 
-### 隐私搜索建议
+### Privacy search recommendations
 
-1. **日常使用**: DuckDuckGo 或 Brave
-2. **需要Google结果但保护隐私**: Startpage
-3. **学术研究**: Google Scholar（学术用途追踪较少）
-4. **敏感查询**: 使用Tor浏览器 + DuckDuckGo onion服务
-5. **跨设备同步**: 避免登录搜索引擎账户
+1. **Everyday use**: DuckDuckGo or Brave
+2. **Google results with privacy**: Startpage
+3. **Academic research**: Google Scholar (less tracking for academic use)
+4. **Sensitive queries**: Tor Browser + DuckDuckGo onion service
+5. **Cross-device sync**: avoid signing into search-engine accounts
 
 ---
 
-## 📚 参考资料
+## 📚 References
 
-- [Google搜索操作符完整列表](https://support.google.com/websearch/answer/...)
-- [DuckDuckGo Bangs完整列表](https://duckduckgo.com/bang)
-- [Brave Search文档](https://search.brave.com/help/...)
-- [WolframAlpha示例](https://www.wolframalpha.com/examples/)
+- [Google search operators complete list](https://support.google.com/websearch/answer/...)
+- [DuckDuckGo Bangs complete list](https://duckduckgo.com/bang)
+- [Brave Search docs](https://search.brave.com/help/...)
+- [WolframAlpha examples](https://www.wolframalpha.com/examples/)

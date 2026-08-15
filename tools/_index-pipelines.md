@@ -1,23 +1,23 @@
-# pipelines 领域索引(工具层)
+# pipelines domain index (tool layer)
 
-> 领域: 证据索引/报告管线工具。worker 被派发到证据登记、索引构建、报告生成类任务时先读本文件, 再按需加载。契约字段含义见 [README.md](README.md), 机器契约见 [_INDEX.yaml](_INDEX.yaml)。plan 编排模板(recipe)在 `tools/pipelines/recipes/*.yaml`(纯数据模板, 非执行器, 见 `tools/pipelines/README.md`)。
+> Domain: evidence-index/report pipeline tools. When a worker is dispatched to evidence registration, index building, or report generation tasks, read this file first, then load on demand. Contract field meanings are in [README.md](README.md); the machine contract is [_INDEX.yaml](_INDEX.yaml). Plan orchestration templates (recipes) live in `tools/pipelines/recipes/*.yaml` (pure data templates, not an executor — see `tools/pipelines/README.md`).
 
-## 工具清单
+## Tool catalog
 
-| 工具 | 用途(一句话) | 何时读 / 何时不用 |
+| Tool | Purpose (one-liner) | When to read / when not |
 |---|---|---|
-| `build-evidence-index` | 证据索引构建器(evidence/_index.json + _INDEX.md) | 证据落盘后需要登记索引时读; 纯分析不做登记时不用 |
+| `build-evidence-index` | Evidence index builder (evidence/_index.json + _INDEX.md) | Read when evidence has landed and needs index registration; not for pure analysis without registration |
 
-## 契约条目
+## Contract entries
 
 ### build-evidence-index
 
-- **用途**: 扫描 workspace 的 evidence/ + analysis_artifacts/, 构建证据索引(evidence/_index.json + _INDEX.md)。
+- **用途**: Scan the workspace's evidence/ + analysis_artifacts/ and build the evidence index (evidence/_index.json + _INDEX.md).
 - **用法**:
   ```bash
   python tools/pipelines/build_evidence_index.py <workspace> --write
   ```
-- **输入**: workspace 根(位置参数, 必填) + `--write`(落盘开关); 可选 `--out`/`--rel`。
-- **输出**: evidence/_index.json + _INDEX.md(eid/path/sha256/source_reliability)。
-- **exit code**: 0 成功 / 2 错误(workspace 缺失等)。
-- **when_not**: 纯分析不做证据登记时不用。
+- **输入**: Workspace root (positional, required) + `--write` (persist switch); optional `--out`/`--rel`.
+- **输出**: evidence/_index.json + _INDEX.md (eid/path/sha256/source_reliability).
+- **exit code**: 0 success / 2 error (missing workspace etc.).
+- **when_not**: Not needed for pure analysis without evidence registration.

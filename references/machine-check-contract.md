@@ -1,34 +1,40 @@
-# Machine-Check Oracle Contract (#332) — 可执行预言机契约
+# Machine-Check Oracle Contract (#332) — executable oracle contract
 
-> 单源真值映射表: `references/machine_check_map.yaml`(由
-> `scripts/kunglao_verify.py::load_machine_check_map` 加载)。本文档为契约说明;
-> 下方的映射表镜像由
-> `tests/test_machine_check_contract.py::test_map_parity_with_contract_doc`
-> 机械比对 YAML — **两处必须同步修改**, 否则 parity 测试失败。
+> Single source of truth: `references/machine_check_map.yaml` (loaded by
+> `scripts/kunglao_verify.py::load_machine_check_map`). This document is the
+> contract narrative; the mapping-table mirror below is mechanically compared
+> against the YAML by
+> `tests/test_machine_check_contract.py::test_map_parity_with_contract_doc` —
+> **both places must be changed together**, or the parity test fails.
 
-## 为什么
+## Why
 
-CrackMeBench 调研 (#330): 代理会 over-trust 反编译输出。独立 verifier 与
-maker 可能踩进**同一条静态分析错误路径** — 此时"独立推导 + 结论比对"全过,
-验证形同虚设。验证必须终止于**机器检查**: 字节/执行级的 expected/actual 比较,
-"提交物被预言机接受"才算数。'我读了源码觉得对' 不是验证。
+CrackMeBench research (#330): agents over-trust decompiler output. An
+independent verifier and the maker can fall into **the same static-analysis
+error path** — at which point "independent derivation + conclusion comparison"
+passes everything and verification is theater. Verification must terminate in
+a **machine check**: a byte/execution-level expected/actual comparison; "the
+deliverable was accepted by the oracle" is what counts. "I read the source
+and it looks right" is not verification.
 
-## 契约
+## Contract
 
-每条 verifier 验证记录(kunglao-redteam 输出)必须含**至少一条**:
+Every verifier verification record (kunglao-redteam output) must contain
+**at least one**:
 
 ```json
-{"command": "<字节/执行级检查命令>", "expected": "<期望值>",
- "actual": "<实际观测值>", "passed": true}
+{"command": "<byte/execution-level check command>", "expected": "<expected value>",
+ "actual": "<observed value>", "passed": true}
 ```
 
-- `command` 必须是可执行的字节/执行级检查(工具 + 比较), 散文式
-  "I read the source and it looks right" 不通过。
-- `passed` 必须是严格布尔。**任何一条 `passed=false` → 整条记录验证不通过**
-  (STAMP 不得升级 PROVEN)。
-- 缺 machine_check → 验证不通过。
+- `command` must be an executable byte/execution-level check (tool +
+  comparison); prose like "I read the source and it looks right" does not
+  pass.
+- `passed` must be a strict boolean. **Any single `passed=false` → the whole
+  record fails verification** (STAMP must not promote to PROVEN).
+- Missing machine_check → verification fails.
 
-### 记录格式 (runs/verify-redteam-\*.md)
+### Record format (runs/verify-redteam-\*.md)
 
 ````markdown
 ## MACHINE-CHECK (oracle contract #332)
@@ -40,9 +46,9 @@ maker 可能踩进**同一条静态分析错误路径** — 此时"独立推导 
 ```
 ````
 
-也接受单行形态: `machine_check: {"command": ..., "expected": ..., "actual": ..., "passed": true}`。
+A single-line form is also accepted: `machine_check: {"command": ..., "expected": ..., "actual": ..., "passed": true}`.
 
-### 例外路径 (仅纯 CTI 类)
+### Exception path (pure-CTI classes only)
 
 ```markdown
 ```machine_check
@@ -51,21 +57,22 @@ maker 可能踩进**同一条静态分析错误路径** — 此时"独立推导 
 ```
 ```
 
-例外被接受当且仅当: `claim_kind` 在映射表的 `exception_allowed` 清单内 **且**
-与 fact 的 `boundary_type` 匹配(见下方 boundary_type 对照)。`reason` 必填。
-未知 boundary_type → 例外禁用(fail closed)。
+The exception is accepted if and only if: `claim_kind` is in the map's
+`exception_allowed` list **AND** matches the fact's `boundary_type` (see the
+boundary_type table below). `reason` is required. Unknown boundary_type →
+exception disabled (fail closed).
 
-## 校验接入
+## Validation hooks
 
-| 入口 | 行为 |
+| Entry point | Behavior |
 |---|---|
-| `kunglao_verify.check_machine_check_contract(record_text, claim_kinds, mc_map)` | 记录级 schema 校验 (ok, reason) |
-| `kunglao_verify.machine_check_gate(ws, fact_id, claim_id, fact)` | 定位 runs/verify-redteam-\*.md(最新一份)并执行契约校验 |
-| `kunglao_verify.verify()` | L2 CONFIRMED 分支强制过 gate; 失败 → `overall=PARTIAL` + warning `MACHINE_CHECK_FAILED`(STAMP 不提升) |
-| `kunglao_verify.machine_check_map_coverage(seen_types)` | 映射表覆盖统计(验收 ≥80%) |
-| `kunglao_verify.validate_machine_check_entry(entry)` | 单条 entry 结构校验(4 字段/布尔/非空/机器级命令) |
+| `kunglao_verify.check_machine_check_contract(record_text, claim_kinds, mc_map)` | Record-level schema validation (ok, reason) |
+| `kunglao_verify.machine_check_gate(ws, fact_id, claim_id, fact)` | Locates runs/verify-redteam-\*.md (the latest one) and runs the contract check |
+| `kunglao_verify.verify()` | The L2 CONFIRMED branch is forced through the gate; failure → `overall=PARTIAL` + warning `MACHINE_CHECK_FAILED` (no STAMP promotion) |
+| `kunglao_verify.machine_check_map_coverage(seen_types)` | Mapping coverage statistics (acceptance ≥80%) |
+| `kunglao_verify.validate_machine_check_entry(entry)` | Per-entry structure validation (4 fields/boolean/non-empty/machine-level command) |
 
-## 映射表 (claim kind → machine check type)
+## Mapping table (claim kind → machine check type)
 
 | claim kind | machine check type | exception allowed |
 |---|---|---|
@@ -81,18 +88,19 @@ maker 可能踩进**同一条静态分析错误路径** — 此时"独立推导 
 | attribution | none | yes |
 | external_source | none | yes |
 
-- **static_constant** → `disasm_constant_check`(VA 常数字节级比对)
-- **decryption_key** → 实际解密比对(key 派生 + 密文 → 明文字节)
-- **input_bypass** → VM 执行(192.168.20.128 通道; host 禁 sample 执行)
-- **numeric** → 原始字节重算(numeric-fidelity 反向校验)
-- **string** → 原始字节偏移定位(xxd/grep 定位 + 偏移断言)
-- **structure** → 字节级结构解析(pefile/capstone 字段比对)
-- **negative_result** → 有界搜索(bounded search 再跑一次, 0-hit 只证有界)
-- **capability** → VM 执行或字节级调用链解析
-- **cti_correlation / attribution / external_source** → 纯 CTI/外部来源类, 例外允许
-  `machine_check: none`; 但有源 artifact(报告 JSON/样本)时仍应做源字节重检
+- **static_constant** → `disasm_constant_check` (byte-level comparison of the VA constant)
+- **decryption_key** → actual decryption comparison (key derivation + ciphertext → plaintext bytes)
+- **input_bypass** → VM execution (192.168.20.128 channel; sample execution on the host is forbidden)
+- **numeric** → raw-byte recomputation (reverse numeric-fidelity check)
+- **string** → raw-byte offset location (xxd/grep locate + offset assertion)
+- **structure** → byte-level structure parsing (pefile/capstone field comparison)
+- **negative_result** → bounded search (re-run the bounded search; 0-hit only proves boundedness)
+- **capability** → VM execution or byte-level call-chain resolution
+- **cti_correlation / attribution / external_source** → pure CTI/external-source classes; the
+  `machine_check: none` exception is allowed; but when a sourced artifact
+  (report JSON/sample) exists, a source-byte recheck should still be done
 
-## boundary_type → claim kinds (例外资格)
+## boundary_type → claim kinds (exception eligibility)
 
 | boundary_type | eligible claim kinds |
 |---|---|
@@ -107,5 +115,5 @@ maker 可能踩进**同一条静态分析错误路径** — 此时"独立推导 
 | contradiction | numeric, string |
 | positive_observation | static_constant, decryption_key, input_bypass, numeric, string, structure, negative_result, capability |
 
-(与 `machine_check_map.yaml::boundary_type_map` 一致; 覆盖 schema 全部 9 类 +
-workspace 遗留 `positive_observation`。)
+(Consistent with `machine_check_map.yaml::boundary_type_map`; covers all 9
+schema classes plus the workspace-legacy `positive_observation`.)

@@ -9,7 +9,7 @@ Round 6 had slots < 3 and 2 OPEN claims, but the agent was waiting for the
 user to "give direction". The user left for 40 minutes. Don't do that. If
 you have free slots and open claims, your default next action is to dispatch.
 
-**Addresses M1** (被动傻等). v1.9 fix: the convergence loop (the every-turn
+**Addresses M1** (passive idling). v1.9 fix: the convergence loop (the every-turn
 check prevents this — open claims + free slots → must dispatch).
 
 ## Case 2 — Calling analysis tools directly
@@ -20,7 +20,7 @@ that violated §1b maker-checker (the orchestrator stamped its own work). The
 fix is structural: analysis MCPs return evidence that the orchestrator did NOT
 gather. Delegate.
 
-**Addresses M8** (机械执行). See SKILL.md "Tool-use boundary" guardrail + the
+**Addresses M8** (mechanical execution). See SKILL.md "Tool-use boundary" guardrail + the
 specialist-first dispatch policy (behavior #2).
 
 ## Case 3 — Re-issuing the same dispatch after it failed
@@ -30,7 +30,7 @@ prompt 3 more times before giving up. The right response on the first failure
 is to ask the worker for a `## backtrack` decision (continue / retry-different
 / escalate / redispatch), not to re-issue.
 
-**Addresses M2** (放弃修环境) + **M7** (重复工作). v1.9 fix: behavior #1
+**Addresses M2** (giving up on fixing the environment) + **M7** (duplicate work). v1.9 fix: behavior #1
 self-recovery chain (L1 same-MCP-other-mode / L2 read setup.sh / L3 dispatch
 env-fix worker) + failure-analysis gate (you must record WHY the method failed
 before re-dispatch).
@@ -42,7 +42,7 @@ default is to dispatch the next open claim. Asking the user interrupts their
 flow. Save questions for genuinely unrecoverable situations (e.g. contradicting
 CTI, or zero OPEN claims and an empty fact base).
 
-**Addresses M1** (被动傻等). v1.9 fix: every-turn convergence check tells you
+**Addresses M1** (passive idling). v1.9 fix: every-turn convergence check tells you
 the answer without asking.
 
 ## Case 5 — Stale plan vs reality
@@ -52,5 +52,5 @@ The user said "the plan and the actual state don't match". Plan files
 or abandon claims. After every such change, run `scripts/plan_drift_detector.py`
 and resolve the 5 drift types it reports.
 
-**Addresses M6** (状态漂移). v1.9 fix: convergence_check.py surface-level
+**Addresses M6** (state drift). v1.9 fix: convergence_check.py surface-level
 check of open/blocked claims per turn; health check detects flatline.

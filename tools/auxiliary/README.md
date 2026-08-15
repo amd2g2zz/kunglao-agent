@@ -1,27 +1,27 @@
-# tools/auxiliary — 辅助工具家
+# tools/auxiliary — auxiliary tool home
 
-## 工具
+## Tools
 
-| 文件 | 工具 | 职责 |
+| File | Tool | Responsibility |
 |---|---|---|
-| `sanitize.py` | `sanitize-text` | 样本派生文本 prompt 注入净化 CLI(#307/#333, 见下) |
-| `audit_legacy_proven.py` | `audit-legacy-proven` | legacy PROVEN claim 审计(BLIND 签名维度 + 索引溯源性; #340 起由 tools/ 根层归位) |
-| `capture_golden.py` | `capture-golden` | golden master 基线采集(#340 起归位) |
-| `measure_blind_coverage.py` | `measure-blind-coverage` | BLIND 盲验覆盖率测量(#340 起归位) |
-| `measure_cold_start.py` | `measure-cold-start` | 冷启动 token 基线测量(#340 起归位) |
+| `sanitize.py` | `sanitize-text` | prompt-injection sanitization CLI for sample-derived text (#307/#333, see below) |
+| `audit_legacy_proven.py` | `audit-legacy-proven` | legacy PROVEN claim audit (BLIND signature dimension + index traceability; homed here from the tools/ root layer since #340) |
+| `capture_golden.py` | `capture-golden` | golden master baseline capture (homed here since #340) |
+| `measure_blind_coverage.py` | `measure-blind-coverage` | BLIND blind-verification coverage measurement (homed here since #340) |
+| `measure_cold_start.py` | `measure-cold-start` | cold-start token baseline measurement (homed here since #340) |
 
-`audit_legacy_proven.py` 惰性复用 `tools/pipelines/build_evidence_index.py` 的索引构建器(跨类目 import, 自行把 `tools/pipelines/` 加上 `sys.path`)。
+`audit_legacy_proven.py` lazily reuses the index builder from `tools/pipelines/build_evidence_index.py` (cross-category import; it adds `tools/pipelines/` to `sys.path` itself).
 
-### sanitize.py — 样本派生文本净化 CLI (#307 / #333)
+### sanitize.py — sample-derived text sanitization CLI (#307 / #333)
 
-确定性文本净化,供样本派生内容进入 LLM worker 上下文前调用。
+Deterministic text sanitization, invoked before sample-derived content enters an LLM worker's context.
 
-- `--mode zero-width|homoglyph|markers` — 单注入面净化(零宽字符 / 同形字 / 指令标记)
-- `--mode ansi` — 剥离 ANSI escape 序列(CSI/OSC/DCS/Fe)与 C0 控制字符(保留 `\n` `\t`,含 DEL),输出 `ansi_count`/`ctrl_count` + 前后 sha256(#333;`full` 不含此 pass,保持 #307 full 语义不变)
-- 默认(full)= 三个注入面全做;`--json` / `--reproduce` / `--report-only` 输出契约见模块 docstring
+- `--mode zero-width|homoglyph|markers` — single injection-surface sanitization (zero-width characters / homoglyphs / instruction markers)
+- `--mode ansi` — strips ANSI escape sequences (CSI/OSC/DCS/Fe) and C0 control characters (keeps `\n` `\t`, includes DEL), emitting `ansi_count`/`ctrl_count` + before/after sha256 (#333; `full` does not include this pass, keeping #307 full semantics unchanged)
+- default (full) = all three injection surfaces; output contract for `--json` / `--reproduce` / `--report-only` is in the module docstring
 
-接入点(worker 读取工具输出进入上下文前)由 #310 合并后单独跟进,见 issue #333。
+The integration point (before a worker reads tool output into context) is tracked separately after the #310 merge — see issue #333.
 
-## 与索引文档的关系
+## Relation to the index docs
 
-worker 先读 `tools/_index-auxiliary.md`（auxiliary 域 5 件工具的 6 段契约条目： 用途/用法/输入/输出/exit code/when_not， 用法可直接复制）；本 README 只说明家内文件分工与目录沿革。机器契约见 `tools/_INDEX.yaml`。类目 id 与目录名一致（#340；旧 id `aux` 是 Windows 保留设备名，无法作目录名，故改 id 随目录）。
+A worker reads `tools/_index-auxiliary.md` first (the 6-segment contract entries for the auxiliary domain's 5 tools: 用途/用法/输入/输出/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and directory history. The machine contract is `tools/_INDEX.yaml`. The category id matches the directory name (#340; the old id `aux` is a Windows reserved device name and cannot be a directory name, so the id was renamed with the directory).

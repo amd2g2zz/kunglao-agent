@@ -1,30 +1,30 @@
-# 逆向分析模式 — 动态调试与分析 (Debugging & Dynamic Analysis Patterns)
+# RE Analysis Patterns — Debugging & Dynamic Analysis
 
-> 通用逆向技巧汇编:符号化/约束求解、动态调试(GDB/断点/跟踪)、自定义 VM 分析、架构特定固件、侧信道与隐藏逻辑发现。
-> 以恶意样本分析为主要用例(隐藏校验逻辑、反分析绕过、指令级混淆、网络过滤规则分析)。
-> 本文档的"目标数据"指样本中需要恢复的字符串、密钥或受保护内容。
+> A compilation of general RE techniques: symbolic/constraint solving, dynamic debugging (GDB/breakpoints/tracing), custom VM analysis, architecture-specific firmware, side channels and hidden-logic discovery.
+> Primary use case is malware sample analysis (hidden validation logic, anti-analysis bypasses, instruction-level obfuscation, network filter rule analysis).
+> "Target data" in this document means the strings, keys, or protected content in the sample that must be recovered.
 
 ## Table of Contents
-- [Z3 求解单行 Python 布尔电路](#z3-for-single-line-python-boolean-circuit)
-- [滑窗 popcount 差分传播](#sliding-window-popcount-differential-propagation)
-- [键盘 LED 摩尔斯码 ioctl 侧信道](#morse-code-from-keyboard-leds-via-ioctl)
-- [C++ 析构函数隐藏校验](#c-destructor-hidden-validation)
-- [系统调用副作用内存破坏](#syscall-side-effect-memory-corruption)
-- [MFC 对话框事件处理器定位](#mfc-dialog-event-handler-location)
-- [VM 顺序密钥链暴力破解](#vm-sequential-key-chain-brute-force)
-- [无终结符 BWT 逆变换](#burrows-wheeler-transform-inversion-without-terminator)
-- [OpenType 字体连字隐藏信息](#opentype-font-ligature-exploitation-for-hidden-messages)
-- [GLSL Shader VM 自修改代码](#glsl-shader-vm-with-self-modifying-code)
-- [指令计数器作为加密状态](#instruction-counter-as-cryptographic-state)
-- [线程竞争条件 + 有符号整数溢出](#thread-race-condition-with-signed-integer-overflow)
-- [ESP32/Xtensa 固件逆向(ROM 符号表)](#esp32xtensa-firmware-reversing-with-rom-symbol-map)
-- [批量样本自动化分析(objdump 模式提取)](#batch-crackme-automation-via-objdump-pattern-extraction)
-- [Fork+Pipe+死分支反分析](#fork--pipe--dead-branch-anti-analysis)
-- [时间锁定二进制(日期密钥)](#time-locked-binary-with-date-based-key)
-- [图像像素中嵌入的 ARM 代码](#arm-code-in-image-pixels-via-unicornjs)
-- [x86 16-bit MBR psadbw 约束求解](#x86-16-bit-mbr-psadbw-constraint-solving)
-- [TensorFlow DNN 反演(sigmoid 逐层求逆)](#tensorflow-dnn-inversion-by-inverting-sigmoid-layers)
-- [BPF 过滤器分析(JIT 编译为 x64)](#bpf-filter-analysis-via-jit-compilation-to-x64-assembly)
+- [Z3 solving a single-line Python boolean circuit](#z3-for-single-line-python-boolean-circuit)
+- [Sliding-window popcount differential propagation](#sliding-window-popcount-differential-propagation)
+- [Morse code from keyboard LEDs via ioctl side channel](#morse-code-from-keyboard-leds-via-ioctl)
+- [C++ destructor hidden validation](#c-destructor-hidden-validation)
+- [Syscall side-effect memory corruption](#syscall-side-effect-memory-corruption)
+- [MFC dialog event-handler location](#mfc-dialog-event-handler-location)
+- [VM sequential key-chain brute force](#vm-sequential-key-chain-brute-force)
+- [Burrows-Wheeler transform inversion without terminator](#burrows-wheeler-transform-inversion-without-terminator)
+- [OpenType font ligature exploitation for hidden messages](#opentype-font-ligature-exploitation-for-hidden-messages)
+- [GLSL shader VM with self-modifying code](#glsl-shader-vm-with-self-modifying-code)
+- [Instruction counter as cryptographic state](#instruction-counter-as-cryptographic-state)
+- [Thread race condition with signed integer overflow](#thread-race-condition-with-signed-integer-overflow)
+- [ESP32/Xtensa firmware reversing (ROM symbol map)](#esp32xtensa-firmware-reversing-with-rom-symbol-map)
+- [Batch sample automation (objdump pattern extraction)](#batch-crackme-automation-via-objdump-pattern-extraction)
+- [Fork+Pipe+dead-branch anti-analysis](#fork--pipe--dead-branch-anti-analysis)
+- [Time-locked binary (date-based key)](#time-locked-binary-with-date-based-key)
+- [ARM code embedded in image pixels](#arm-code-in-image-pixels-via-unicornjs)
+- [x86 16-bit MBR psadbw constraint solving](#x86-16-bit-mbr-psadbw-constraint-solving)
+- [TensorFlow DNN inversion (inverting sigmoid layers)](#tensorflow-dnn-inversion-by-inverting-sigmoid-layers)
+- [BPF filter analysis (JIT-compiled to x64)](#bpf-filter-analysis-via-jit-compilation-to-x64-assembly)
 
 ---
 
@@ -62,7 +62,7 @@ if s.check() == sat:
 
 **Detection:** Single-line Python with 1000+ semicolons, walrus operators, bitwise operations, and a final comparison to 0 or True.
 
-**来源:** BearCatCTF 2026
+**Source:** BearCatCTF 2026
 
 ---
 
@@ -111,7 +111,7 @@ for start_val in range(0x10000):
 
 **Detection:** Binary computing popcount/hamming weight on fixed-size windows. Expected value array with length ≈ input_bits - window_size + 1. Values in array are small integers (0 to window_size).
 
-**来源:** BearCatCTF 2026
+**Source:** BearCatCTF 2026
 
 ---
 
@@ -152,7 +152,7 @@ morse_map = {'.-':'A', '-...':'B', '-.-.':'C', '-..':'D', '.':'E',
 
 **Key insight:** `KDSETLED` controls physical keyboard LEDs on Linux (`/dev/console`). The binary must run with console access. Use `strace -e ioctl` to capture all LED state changes without needing physical observation. Timing between calls determines dot vs dash.
 
-**来源:** PlaidCTF 2013
+**Source:** PlaidCTF 2013
 
 ---
 
@@ -176,7 +176,7 @@ __cxa_atexit(destructor_func, object_ptr, dso_handle);
 
 **Key insight:** When `main()` appears trivial or incomplete, check destructors of global/static C++ objects. The `.fini_array` section and `__cxa_atexit` registrations reveal hidden post-main logic.
 
-**来源:** Defcamp 2015
+**Source:** Defcamp 2015
 
 ---
 
@@ -199,7 +199,7 @@ The `rt_sigprocmask` syscall writes a `sigset_t` structure to its output pointer
 
 **Key insight:** Audit how input validation functions interact with syscalls. Character-to-syscall mappings in hex conversion routines can produce unintended memory writes via kernel-space operations.
 
-**来源:** Hack.lu 2015
+**Source:** Hack.lu 2015
 
 ---
 
@@ -220,7 +220,7 @@ bp user32!SendMessageW ".if (poi(@esp+8)==0x111) {} .else {gc}"
 
 **Key insight:** MFC applications route messages through dispatch tables. Identify the `AFX_MSGMAP` structure to enumerate all handled messages without runtime analysis.
 
-**来源:** WhiteHat 2015
+**Source:** WhiteHat 2015
 
 ---
 
@@ -271,7 +271,7 @@ int solve_block(uint32_t old_key, uint32_t expected_key, unsigned char *out) {
 
 **Key insight:** When a transformation is intentionally non-invertible (iterated hash-like function), brute-force is the intended solution. OpenMP parallelization is critical — 287 blocks x 16.7M candidates each takes minutes parallelized vs hours single-threaded. The sequential key dependency means blocks must be solved in order, but each individual block search is embarrassingly parallel.
 
-**来源:** Midnight Flag 2026
+**Source:** Midnight Flag 2026
 
 ---
 
@@ -315,7 +315,7 @@ def bwt_with_xor_rounds(encrypted_hex, num_rounds):
 
 **Key insight:** Standard BWT uses a terminating character (like '$') to mark the original string's position. Without it, BWT inversion produces n candidates (one per rotation). Use domain-specific constraints (binary format, XOR round structure, known plaintext prefix) to identify the correct candidate.
 
-**来源:** ASIS CTF Finals 2016
+**Source:** ASIS CTF Finals 2016
 
 ---
 
@@ -361,7 +361,7 @@ def decode_font_ligatures(font_path, encoded_text):
 
 **Key insight:** Custom fonts with GSUB ligature tables create a cipher where displayed characters differ from their glyph mappings. The `fonttools` library's `ttx` command dumps the font to XML, making ligature substitution tables easily readable. Each ligature maps an input character sequence to a different output glyph.
 
-**来源:** Hack The Vote 2016
+**Source:** Hack The Vote 2016
 
 ---
 
@@ -413,7 +413,7 @@ Image.fromarray(vram, mode='L').save('output.png')
 
 **Detection:** WebGL/shader sample with a PNG "program" file where rendering produces garbled output. Look for custom opcode tables in GLSL source.
 
-**来源:** ApoorvCTF 2026
+**Source:** ApoorvCTF 2026
 
 ---
 
@@ -479,7 +479,7 @@ for pos in range(FLAG_LEN):
 - GDB scripting: set breakpoint after each byte's transformation, compare output
 - Static analysis: count instructions manually to compute counter values, then invert transforms algebraically (error-prone due to counter accumulation)
 
-**来源:** MetaCTF Flash 2026 "Who's Counting?"
+**Source:** MetaCTF Flash 2026 "Who's Counting?"
 
 ---
 
@@ -505,7 +505,7 @@ def race():
 
 **Key insight:** `cdqe` (Convert Doubleword to Quadword Extension) sign-extends 32-bit EAX into 64-bit RAX. When the attack code reads a 32-bit damage value and sign-extends it, `0xFFFFFFFF` becomes `-1`. Subtracting a negative number adds to HP, but if HP is already at `INT64_MAX`, the addition overflows to negative, killing the target.
 
-**来源:** Codegate 2017
+**Source:** Codegate 2017
 
 ---
 
@@ -530,7 +530,7 @@ r2 -a xtensa -b 32 firmware.bin
 
 **Key insight:** ESP32's Xtensa architecture lacks mainstream RE tool support, but the ESP-IDF SDK provides ROM linker scripts mapping every ROM function address to its name. Loading these as symbols in radare2 immediately resolves hundreds of function calls. Cross-referencing with public ESP-IDF example code identifies application-level patterns (HTTP handlers, WiFi callbacks) even in stripped firmware.
 
-**来源:** Insomni'hack 2017
+**Source:** Insomni'hack 2017
 
 ---
 
@@ -562,7 +562,7 @@ EOF
 
 **Key insight:** Mass sample collections (100s-1000s of binaries) have identical structure with per-binary constants. Script `objdump` disassembly parsing to extract immediates and arithmetic sequences, then reverse-compute the key algebraically. No execution or emulation needed.
 
-**来源:** DEF CON 2017
+**Source:** DEF CON 2017
 
 ---
 
@@ -589,7 +589,7 @@ open('binary_patched','wb').write(data)
 
 **Key insight:** Fork+pipe creates a parent-child relationship where the parent provides data and exits. Dead branches (comparisons that always evaluate to false) hide the real validation logic. `strace` reveals the fork/pipe/read pattern; patching the comparison constant reaches the hidden code path.
 
-**来源:** RCTF 2017
+**Source:** RCTF 2017
 
 ---
 
@@ -617,7 +617,7 @@ sudo ntpdate pool.ntp.org
 
 **Key insight:** Time-based keys use culturally significant dates. Always check for date comparisons in reversed code and try setting the system clock or using faketime before attempting deeper analysis.
 
-**来源:** Hack.lu CTF 2017
+**Source:** Hack.lu CTF 2017
 
 ---
 
@@ -649,7 +649,7 @@ for insn in md.disasm(arm_code, 0x0):
 
 **Key insight:** Multi-layer obfuscation: ARM code in image pixels, base64 encoded, emulated via UnicornJS at runtime. Identify the emulator library first to know which ISA to reverse — the library name reveals the architecture.
 
-**来源:** Hack.lu CTF 2017
+**Source:** Hack.lu CTF 2017
 
 ---
 
@@ -694,7 +694,7 @@ def solve_psadbw_group(known_constants, expected_sum, printable_range=(0x20, 0x7
 
 **Key insight:** `psadbw` creates sum-of-absolute-difference equations — not purely linear but solvable with constrained brute-force when bytes are limited to printable ASCII. Each 2-byte group is independent, keeping the search space to 95^2 = ~9000 candidates per group.
 
-**来源:** CSAW CTF 2017
+**Source:** CSAW CTF 2017
 
 ---
 
@@ -721,7 +721,7 @@ flag = ''.join(chr(int(round(1.0 / v[j]))) for j in range(len(v)))
 
 **Detection:** Binary with TensorFlow or custom DNN implementation. Look for sigmoid/tanh calls, matrix multiplications, and hardcoded float arrays (weights/biases) in `.rodata`. Square weight matrices (N x N) indicate the network is invertible.
 
-**来源:** N1CTF 2018
+**Source:** N1CTF 2018
 
 ---
 
@@ -744,7 +744,7 @@ dig @target -p 3333 'M4d!bKn3~l' TXT
 
 **Detection:** Binary using `setsockopt` with `SO_ATTACH_FILTER`, raw socket creation (`socket(AF_PACKET, ...)`), or embedded `struct sock_fprog` structures. BPF programs appear as arrays of `struct sock_filter` (8 bytes each: opcode, jt, jf, k).
 
-**来源:** Midnight Sun CTF 2018
+**Source:** Midnight Sun CTF 2018
 
 ---
 

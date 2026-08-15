@@ -78,7 +78,7 @@ required on every kunglao fact, validated for key presence by
   this mapping when reconciling register statuses with fact statuses.
 - `handoff-check.py` (malware-veri-notes, live dir): integration hook is a
   one-liner — run `lint_facts.py <workspace>` before the notes gate; lint
-  failure = 不合格 (wrapper is independent until then).
+  failure = non-conforming (wrapper is independent until then).
 - Fact FILE renaming to `F<NNN>-<slug>.md` (the canonical layout per
   convergence_check v1.9.8 note) needs coordinated register/worker/prompt
   updates; #336 slugs the frontmatter `id` only. New facts should use the

@@ -100,5 +100,5 @@
 | `re-library/platforms.md` | platforms | Platform-specific reversing (macOS/iOS, IoT, CAN bus). | When analyzing binaries for non-desktop platforms. |
 | `re-library/tools-advanced.md` | tools | Advanced RE tooling: unpackers, diffing, symbolic exec. | When facing heavily packed/obfuscated binaries. |
 | `re-library/tools-crypto.md` | tools | Encryption/encoding/hashing tool quick-reference. | When needing to identify/decode/crack encrypted data. |
-| `re-library/tools-dynamic.md` | tools | Dynamic analysis tooling (Frida, angr, lldb, x64dbg, Qiling). | When performing runtime analysis or function hooking. |
+| `re-library/tools-dynamic.md` | tools | Dynamic analysis tooling (Frida, angr, lldb, x64dbg, Qiling). | When performing runtime/dynamic analysis or function hooking. |
 | `re-library/tools.md` | tools | Core static RE tools (GDB, Radare2, Ghidra, Unicorn). | When setting up a reversing workspace. |

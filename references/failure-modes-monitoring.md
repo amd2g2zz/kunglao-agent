@@ -1,6 +1,6 @@
 ---
 name: kunglao-agent-failure-modes-monitoring
-description: Monitoring (F7-F13): worker help / self-doubt / state discipline (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配) and the dispatcher needs the matching F-row + enforcement script.
+description: Monitoring (F7-F13): worker help / self-doubt / state discipline (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配 — user shorthand for dumb/stuck/mismatch) and the dispatcher needs the matching F-row + enforcement script.
 metadata:
   type: reference
   parent: failure-modes.md
@@ -9,13 +9,13 @@ metadata:
 # Monitoring (F7-F13): worker help / self-doubt / state discipline
 
 Failure modes covering orchestrator discipline during in-flight work:
-  - F7: orchestrator 视而不见 subagent 求助 (passive when worker asks help)
-  - F8: 自信但错 (self-confident false PROVEN)
-  - F9: 成本警告被打断 (cost warning interrupts workflow)
-  - F10: hook 全开噪声 (no selective activation)
-  - F11: 不会回退 (stuck -> still trying)
-  - F12: 重复工作 (no reuse of existing facts)
-  - F13: 反问 (orchestrator asks 'should I dispatch?')
+  - F7: orchestrator turns a blind eye to worker help requests (passive when a worker asks for help)
+  - F8: confident but wrong (self-confident false PROVEN)
+  - F9: interrupted by cost warning (cost warning interrupts the workflow)
+  - F10: all hooks on, noisy (no selective activation)
+  - F11: cannot backtrack (stuck -> still trying)
+  - F12: duplicate work (no reuse of existing facts)
+  - F13: asks back (反问 — orchestrator asks 'should I dispatch?')
 
 
 ## Full F-row table (this domain only)

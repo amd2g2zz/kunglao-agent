@@ -1,23 +1,23 @@
-# crypto 领域索引(工具层)
+# crypto domain index (tool layer)
 
-> 领域: 加解密/编解码/哈希工具。worker 被派发到加密识别/解码/哈希类任务时先读本文件, 再按需加载。契约字段含义见 [README.md](README.md), 机器契约见 [_INDEX.yaml](_INDEX.yaml)。
+> Domain: encryption/decryption/encoding/hashing tools. When a worker is dispatched to cipher-identification/decoding/hash tasks, read this file first, then load on demand. Contract field meanings are in [README.md](README.md); the machine contract is [_INDEX.yaml](_INDEX.yaml).
 
-## 工具清单
+## Tool catalog
 
-| 工具 | 用途(一句话) | 何时读 / 何时不用 |
+| Tool | Purpose (one-liner) | When to read / when not |
 |---|---|---|
-| `crypto-tool` | 8 算法加解密/解码 CLI(chacha/xor-add/rolling-xor/lzss/lzma-raw/rsa-unpad/go-byte-transform/va-to-off) | 识别到加密/编码/压缩层时读; 非本 8 算法族方案不用 |
+| `crypto-tool` | 8-algorithm encrypt/decrypt/decode CLI (chacha/xor-add/rolling-xor/lzss/lzma-raw/rsa-unpad/go-byte-transform/va-to-off) | Read when an encryption/encoding/compression layer is identified; not for schemes outside these 8 algorithm families |
 
-## 契约条目
+## Contract entries
 
 ### crypto-tool
 
-- **用途**: 对密文字节串执行 8 算法族之一(chacha/xor-add/rolling-xor/lzss/lzma-raw/rsa-unpad/go-byte-transform/va-to-off)的解密/变换, 输出明文层。
+- **用途**: Apply one of the 8 algorithm families (chacha/xor-add/rolling-xor/lzss/lzma-raw/rsa-unpad/go-byte-transform/va-to-off) to a ciphertext byte string and emit the plaintext layer.
 - **用法**:
   ```bash
-  python tools/crypto/crypto-tool.py chacha --in <密文文件> --key <32字节hex> --nonce <12字节hex>
+  python tools/crypto/crypto-tool.py chacha --in <ciphertext-file> --key <32-byte-hex> --nonce <12-byte-hex>
   ```
-- **输入**: 密文字节串(`--in <PATH>` 或 `--in-hex <HEX>`) + 子命令(8 算法之一; chacha 需 `--key`/`--nonce`); 可选 `--json` / `--reproduce` / `--self-check`。
-- **输出**: 明文/变换后字节(默认文本, `--json` 单 JSON 对象; `--reproduce` 输出 field=value 行供 L1 机械门)。
-- **exit code**: 0 成功 / 1 负发现(试解未命中) / 2 错误(用法或环境缺失, 带指引)。
-- **when_not**: 非本 8 算法族的加密方案不用; 先用 `--self-check` 校验环境(与 _INDEX.yaml when_not 一致)。
+- **输入**: Ciphertext byte string (`--in <PATH>` or `--in-hex <HEX>`) + subcommand (one of the 8 algorithms; chacha needs `--key`/`--nonce`); optional `--json` / `--reproduce` / `--self-check`.
+- **输出**: Plaintext/transformed bytes (text by default; `--json` emits a single JSON object; `--reproduce` emits field=value lines for the L1 mechanical gate).
+- **exit code**: 0 success / 1 negative finding (trial decryption missed) / 2 error (usage or missing environment, with guidance).
+- **when_not**: Not for encryption schemes outside the 8 algorithm families; run `--self-check` first to validate the environment (consistent with _INDEX.yaml when_not).

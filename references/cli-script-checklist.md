@@ -9,38 +9,21 @@
 > `scripts/shell_defaults.py` (idempotent shell env-default management —
 > `--var/--value/--profile/--shell`, check/apply/remove, exit codes, `--json`).
 
-## 0. 先查目录 (issue #294)
+## 0. 先查目录 — check the catalog first (issue #294)
 
-写任何新脚本前, 先按顺序查:
+Before writing any new script, check in this order:
 
-1. `tools/_INDEX.md` — 6 类能力域表, 找任务所属领域(crypto/static/ghidra/dynamic/pipeline/aux)
-2. `tools/_index-<category>.md` — 该域的一行式契约骨架, 看是否已有工具覆盖同一 capability
-3. `tools/_INDEX.yaml` — 机器契约, 确认工具名/子命令/输入输出
+1. `tools/_INDEX.md` — the 6-category capability-domain table; find the task's domain (crypto/static/ghidra/dynamic/pipeline/aux)
+2. `tools/_index-<category>.md` — the domain's one-line contract skeletons; see whether an existing tool already covers the same capability
+3. `tools/_INDEX.yaml` — the machine contract; confirm tool name/subcommands/input-output
 
-有匹配工具 → **优先用其 CLI 试解**(参考各工具 `--help` / `input_output` 契约),
-不写新脚本。无匹配才进入下面 1-8 条写新脚本。`hooks/worker_budget.py` 的
-`toolfirst` gate 会核对 dispatch 是否带 `tool-catalog: <name>` 或
-`tool-catalog: none (reasoning: <why not>)` 标记 —— 命中已注册工具的能力
-关键词却无标记会被 REJECT。
+Matching tool found → **prefer solving it with that tool's CLI** (see each tool's `--help` / `input_output` contract); do not write a new script. Only when nothing matches do you proceed to items 1-8 below to write one. The `toolfirst` gate in `hooks/worker_budget.py` checks that every dispatch carries a `tool-catalog: <name>` or `tool-catalog: none (reasoning: <why not>)` marker — hitting a registered tool's capability keywords without the marker gets REJECTed.
 
-**编码 / 命名硬约定 (issue #317, #314 A1-A3 — 缺一即被机械测试拦下):**
+**Hard encoding / naming conventions (issues #317, #314 A1-A3 — missing any one is caught by a mechanical test):**
 
-4. **UTF-8 stdout 必配**: 新 CLI(带 `if __name__ == "__main__":` 的 .py)必须在
-   `import sys` 后立即执行 `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`,
-   外包 `try/except (AttributeError, ValueError): pass`。原因: 输出含 U+FFFD
-   (decode errors="replace" 的产物)或任何非 ASCII 时, GBK 控制台无法编码 →
-   裸 UnicodeEncodeError traceback + exit 1, 破坏 "structured error, never a
-   traceback" 契约(1b/1c/2b 三批独立踩中)。统一 UTF-8, 不是 errors="replace"
-   补丁。机械强制: `tests/test_utf8_stdout_convention.py` 扫描 tools/ 全部 CLI,
-   缺失即红。
-5. **测试 helper 解码必配**: 测试 helper 的 `subprocess.run` 必须带
-   `encoding="utf-8", errors="replace"`(不要裸用 `text=True` —— 其默认按
-   locale/GBK 解码; 工具统一 UTF-8 后, GBK 解码多字节字符 → reader thread
-   UnicodeDecodeError, stdout=None; 1c 踩中)。
-6. **目录命名避开 Windows 保留设备名**: 工具目录必须用 `tools/auxiliary/`,
-   不能用 `tools/aux/`(AUX 是 Windows 保留设备名, git 无法跟踪该路径; #307
-   刚踩, 已有 rename 先例)。机械强制: `tests/test_windows_reserved_names.py`
-   扫描仓库全部路径组件(CON/PRN/AUX/NUL/COM1-9/LPT1-9)。
+4. **UTF-8 stdout is mandatory**: every new CLI (a .py with `if __name__ == "__main__":`) must, right after `import sys`, run `sys.stdout.reconfigure(encoding="utf-8", errors="replace")`, wrapped in `try/except (AttributeError, ValueError): pass`. Reason: when the output contains U+FFFD (a decode errors="replace" artifact) or any non-ASCII, a GBK console cannot encode it → a bare UnicodeEncodeError traceback + exit 1, breaking the "structured error, never a traceback" contract (hit independently by three batches: 1b/1c/2b). Standardize on UTF-8; this is not an errors="replace" patch. Mechanical enforcement: `tests/test_utf8_stdout_convention.py` scans every CLI under tools/; a missing call turns red.
+5. **Test helper decoding is mandatory**: a test helper's `subprocess.run` must carry `encoding="utf-8", errors="replace"` (do not use bare `text=True` — it decodes by locale/GBK by default; once tools are uniformly UTF-8, GBK decoding of multi-byte characters → reader-thread UnicodeDecodeError, stdout=None; hit by 1c).
+6. **Directory naming avoids Windows reserved device names**: the tool directory must be `tools/auxiliary/`, not `tools/aux/` (AUX is a Windows reserved device name; git cannot track that path; #307 just hit this, and a rename precedent exists). Mechanical enforcement: `tests/test_windows_reserved_names.py` scans every path component in the repo (CON/PRN/AUX/NUL/COM1-9/LPT1-9).
 
 ## 1. Parameterized, never hardcoded
 

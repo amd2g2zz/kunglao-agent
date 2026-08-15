@@ -1,18 +1,18 @@
-# 逆向分析模式 — 解码与去混淆 (Decode & Deobfuscation Patterns)
+# RE Analysis Patterns — Decode & Deobfuscation
 
-> 通用逆向技巧汇编:自解密/多层解密、字符串去混淆(.rodata XOR 等)、嵌入数据提取、ROP 链混淆分析、约束求解(格基/GF(2^8))。
-> 以恶意样本分析为主要用例(加壳/多层自解密 loader、混淆字符串、ROPfuscation、授权校验绕过)。
-> 本文档的"目标数据"指样本中需要恢复的字符串、密钥或受保护内容。
+> A compilation of general RE techniques: self-decryption/multi-layer decryption, string deobfuscation (.rodata XOR etc.), embedded data extraction, ROP chain obfuscation analysis, constraint solving (lattice/GF(2^8)).
+> Primary use case is malware sample analysis (packed/multi-layer self-decrypting loaders, obfuscated strings, ROPfuscation, license-check bypasses).
+> "Target data" in this document means the strings, keys, or protected content in the sample that must be recovered.
 
 ## Table of Contents
-- [多层自解密二进制](#multi-layer-self-decrypting-binary)
-- [嵌入 ZIP + XOR 授权解密](#embedded-zip--xor-license-decryption)
-- [.rodata XOR 栈字符串去混淆](#stack-string-deobfuscation-from-rodata-xor-blob)
-- [前缀哈希暴力破解](#prefix-hash-brute-force)
-- [CVP/LLL 格基求解约束整数校验](#cvplll-lattice-for-constrained-integer-validation)
-- [决策树函数混淆](#decision-tree-function-obfuscation)
-- [GF(2^8) 高斯消元求解](#gf28-gaussian-elimination-for-flag-recovery)
-- [修改版二进制中的 ROP 链混淆](#rop-chain-obfuscation-in-modified-binary)
+- [Multi-layer self-decrypting binary](#multi-layer-self-decrypting-binary)
+- [Embedded ZIP + XOR license decryption](#embedded-zip--xor-license-decryption)
+- [.rodata XOR stack-string deobfuscation](#stack-string-deobfuscation-from-rodata-xor-blob)
+- [Prefix hash brute force](#prefix-hash-brute-force)
+- [CVP/LLL lattice solving for constrained integer validation](#cvplll-lattice-for-constrained-integer-validation)
+- [Decision-tree function obfuscation](#decision-tree-function-obfuscation)
+- [GF(2^8) Gaussian elimination solving](#gf28-gaussian-elimination-for-flag-recovery)
+- [ROP chain obfuscation in a modified binary](#rop-chain-obfuscation-in-modified-binary)
 
 ---
 
@@ -64,7 +64,7 @@ for (int candidate = 0; candidate < 65536; candidate++) {
 - BSS may extend beyond ELF MemSiz via kernel brk mapping — map extra space
 - SHA-NI instructions work even when not advertised in `/proc/cpuinfo`
 
-**来源:** DiceCTF 2026
+**Source:** DiceCTF 2026
 
 ---
 
@@ -118,7 +118,7 @@ print(flag.decode())
 
 **Lesson:** When a binary has named symbols (`EMBEDDED_*`, `ENCRYPTED_*`), extract data directly from the binary without execution. XOR with known plaintext (the license) is trivially reversible.
 
-**来源:** MetaCTF 2026
+**Source:** MetaCTF 2026
 
 ---
 
@@ -158,7 +158,7 @@ print(flag.decode())
 - `0xA97288ED` (related hash constant)
 - `rol32()` with shift `i & 7`
 
-**来源:** Nullcon 2026
+**Source:** Nullcon 2026
 
 ---
 
@@ -181,7 +181,7 @@ for pos in range(1, len(target_hashes)):
 
 **Detection:** Binary outputs multiple hash lines. Changing last character only changes last hash. Different input lengths produce different numbers of output lines.
 
-**来源:** Nullcon 2026
+**Source:** Nullcon 2026
 
 ---
 
@@ -253,7 +253,7 @@ solution = M_mod.solve(v_mod)  # Returns target characters
 
 **Detection:** Binary performs matrix-like operations on grouped input, compares against 64-bit constants, and a brute-force search space is too large (e.g., 256^4 per group × 12 groups).
 
-**来源:** HTB ShadowLabyrinth
+**Source:** HTB ShadowLabyrinth
 
 ---
 
@@ -298,7 +298,7 @@ for func in fm.getFunctions(True):
 
 **Detection:** Binary with hundreds of similarly-structured functions, 3-5 input position references per function, branching to two other functions or a common leaf.
 
-**来源:** HTB WonderSMS
+**Source:** HTB WonderSMS
 
 ---
 
@@ -358,7 +358,7 @@ flag = bytes(aug[i][N] for i in range(N))
 
 **Detection:** Binary with a large matrix in `.rodata` (N² bytes), XOR-based row operations, constants `0x1b` or `0x11b`, and target length matching sqrt of matrix size.
 
-**来源:** ApoorvCTF 2026
+**Source:** ApoorvCTF 2026
 
 ---
 
@@ -412,7 +412,7 @@ flag = bytes(v ^ md5_key[i % 16] for i, v in enumerate(embedded_values))
 
 **Key insight:** ROP chain obfuscation ("ROPfuscation") hides algorithms in chains of return-oriented gadgets. The chain looks incomprehensible as raw addresses but becomes analyzable when you: (a) dump each gadget's disassembly, (b) filter repetitions and skip regions, (c) annotate register effects. The chain is functionally equivalent to normal code — it just uses `ret` instead of sequential execution. Large chains (100K+ gadgets) often contain unrolled loops that compress to ~1000 lines of pseudocode.
 
-**来源:** PlaidCTF 2016
+**Source:** PlaidCTF 2016
 
 ---
 

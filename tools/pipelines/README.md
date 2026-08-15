@@ -1,46 +1,46 @@
-# tools/pipelines — 组合 recipe 模板 + 证据索引工具
+# tools/pipelines — composition recipe templates + evidence index tool
 
-本目录是 `pipelines` 类目的工具家, 含 `recipes/*.yaml`: **plan 生成模板(templates), 不是执行器**。recipe 是纯数据(声明"哪些已注册工具按什么顺序组链"), 执行由各已注册工具(`tools/_INDEX.yaml`)承担, 实例化(生成 `runs/plan-C<NN>.md`)是后续接线工作。#340 起, pipelines 类目的注册工具 `build_evidence_index.py`(`build-evidence-index`)也归位本目录 — "recipe 无本地执行器"的设计约束只针对 recipe 实例化, 不排斥注册工具入类目目录(#340 结构规则: 工具脚本一律入类目目录)。
+This directory is the `pipelines` category's tool home, containing `recipes/*.yaml`: **plan-generation templates, not an executor**. A recipe is pure data (declaring "which registered tools chain in what order"); execution is carried by the individual registered tools (`tools/_INDEX.yaml`), and instantiation (generating `runs/plan-C<NN>.md`) is future wire-in work. Since #340, the pipelines category's registered tool `build_evidence_index.py` (`build-evidence-index`) is also homed here — the design constraint "recipes have no local executor" targets recipe instantiation only and does not bar registered tools from the category directory (#340 structure rule: tool scripts always live in their category directory).
 
-## 与索引文档的关系
+## Relation to the index docs
 
-worker 先读 `tools/_index-pipelines.md`(pipelines 域工具契约条目, 如 `build-evidence-index`); 本 README 说明 recipe 的 schema 与目录。机器契约见 `tools/_INDEX.yaml`(recipe 是纯数据模板, 不注册)。
+A worker reads `tools/_index-pipelines.md` first (pipelines-domain tool contract entries, e.g. `build-evidence-index`); this README explains the recipe schema and directory. The machine contract is `tools/_INDEX.yaml` (recipes are pure-data templates, not registered).
 
 ## Recipe schema (schema: plan-recipe/1)
 
 ```yaml
 schema: plan-recipe/1
-id: stage-unpack                       # 唯一 recipe id, kebab-case
-title: 分阶段解包 (stage-unpack)        # 人类可读标题
-description: >-                        # 何时使用 + 干什么
-steps:                                 # 主链: 顺序执行 (>=1)
-  - tool: ghidra-recon                 # 工具名 (tools/_INDEX.yaml) 或能力查询
-    input: 样本 + packer/overlay 标记   # 本步输入 (可含参数)
-    output: packer 判定 + 区段布局       # 本步输出
-fallback: [ghidra-decompile-functions, ghidra:recon]   # 主链失败时的回退链
-verify: unpack-verify                  # 校验 hook 名 (记录步骤前必须通过)
-reuse_check: 同 sha256 样本已有解包产物时直接复用, 不重复解包
+id: stage-unpack                       # unique recipe id, kebab-case
+title: Staged unpacking (stage-unpack)  # human-readable title
+description: >-                        # when to use + what it does
+steps:                                 # main chain: executed in order (>=1)
+  - tool: ghidra-recon                 # tool name (tools/_INDEX.yaml) or capability query
+    input: sample + packer/overlay markers   # this step's input (may carry arguments)
+    output: packer verdict + section layout   # this step's output
+fallback: [ghidra-decompile-functions, ghidra:recon]   # fallback chain if the main chain fails
+verify: unpack-verify                  # verification hook name (must pass before the plan advances)
+reuse_check: reuse existing unpack artifacts for a same-sha256 sample instead of unpacking again
 ```
 
-- `steps[].tool` 与 `fallback[]` 条目: **工具名**(必须登记在 `tools/_INDEX.yaml`)或**能力查询**(`domain:op`, 与 `tools/tool-search.py --capability` 同语义: 精确/前缀匹配)。能力查询在实例化时经 tool-search 解析为具体工具; 本仓库暂无工具的能力(如 `languages:go`)以查询形式保留在链中。
-- `verify`: 校验 hook 名称 — 实例化时生成 runs/plan-C<NN>.md 的验证步骤, hook 未通过则计划不得推进(fail-closed)。当前仅声明名称, 不实现 hook。
-- `reuse_check`: 复用判据描述 — 实例化时生成"先查复用"步骤, 已有产物则跳过本 recipe。
-- 校验: `tests/test_recipes.py` 强制 schema 键完整性 + 词汇表一致性(所有 tool/fallback 条目必须命中真实 index)。
+- `steps[].tool` and `fallback[]` entries: **tool names** (must be registered in `tools/_INDEX.yaml`) or **capability queries** (`domain:op`, same semantics as `tools/tool-search.py --capability`: exact/prefix match). Capability queries are resolved to concrete tools via tool-search at instantiation; capabilities this repo does not yet have a tool for (e.g. `languages:go`) stay in the chain as queries.
+- `verify`: verification hook name — instantiated as the verification step of runs/plan-C<NN>.md; if the hook does not pass, the plan must not advance (fail-closed). Currently only the name is declared; the hook is not implemented.
+- `reuse_check`: reuse-criterion description — instantiated as a "check reuse first" step; if artifacts already exist, this recipe is skipped.
+- Validation: `tests/test_recipes.py` enforces schema-key completeness + vocabulary consistency (every tool/fallback entry must hit the real index).
 
 ## Recipe catalog
 
-| id | 何时使用 (路由信号) | 实例化产物 |
+| id | When to use (routing signal) | Instantiation artifact |
 | --- | --- | --- |
-| `stage-unpack` | overlay 标记 / packer 标记 (string_density + packer markers) | 解包链 plan: ghidra-recon 定位打包层 → crypto-tool 压缩子命令分层解开 → disasm-constant-check 校验 |
-| `crypto-decrypt` | crypto:decode 信号 (crypt32/bcrypt/advapi import 或高熵区段) | 解密链 plan: 加密 API 定位 → crypto-tool 算法解密 → 明文层校验 |
-| `syscall-chain` | 动态意图 (vm/run/execute/detonate 或 syscall 关键词) | syscall 链 plan: 调用点定位 → 反编译 stub → syscall 号断言校验 |
-| `iat-chain` | iat 意图 (import/IAT 关键词) | IAT 链 plan: IAT 解析 → xref 指针扫描 → 调用断言校验 |
-| `go-recovery` | languages:go 标记 (go.buildinfo / runtime.* hints) | Go 恢复 plan: pclntab 定位 → go-byte-transform 恢复符号 → 恢复层校验 |
+| `stage-unpack` | overlay markers / packer markers (string_density + packer markers) | unpack-chain plan: ghidra-recon locates the packing layer → crypto-tool compression subcommands peel layers → disasm-constant-check validates |
+| `crypto-decrypt` | crypto:decode signal (crypt32/bcrypt/advapi imports or a high-entropy section) | decrypt-chain plan: locate crypto APIs → crypto-tool algorithm decrypt → validate the plaintext layer |
+| `syscall-chain` | dynamic intent (vm/run/execute/detonate or syscall keywords) | syscall-chain plan: locate call sites → decompile stubs → syscall-number assertion validation |
+| `iat-chain` | iat intent (import/IAT keywords) | IAT-chain plan: parse the IAT → xref pointer scan → call assertion validation |
+| `go-recovery` | languages:go markers (go.buildinfo / runtime.* hints) | Go-recovery plan: locate pclntab → go-byte-transform recovers symbols → validate the recovered layer |
 
-## 实例化 (future wire-in)
+## Instantiation (future wire-in)
 
-实例化 = 由 recipe 生成 `runs/plan-C<NN>.md`(claim 计划文件, 遵循现有 runs/plan-C<NN>.md 填充模板角色): 每步展开为计划条目(工具 + 输入 + 输出), `fallback` 展开为回退分支, `verify` 展开为验证 gate, `reuse_check` 展开为复用检查。接线由后续 issue 完成; 当前无生产消费方(目录化读取仅由 `tests/test_recipes.py` 契约测试覆盖)。
+Instantiation = generating `runs/plan-C<NN>.md` from a recipe (the claim plan file, following the existing runs/plan-C<NN>.md fill-in template role): each step expands to a plan entry (tool + input + output), `fallback` expands to fallback branches, `verify` expands to a verification gate, `reuse_check` expands to a reuse check. The wire-in lands in a later issue; there is no production consumer today (catalog reads are covered only by the `tests/test_recipes.py` contract test).
 
-## 约束
+## Constraints
 
-- 模板是纯数据: 无执行器代码, 不注册进 `tools/_INDEX.yaml`, 不创建新状态格式。
+- Templates are pure data: no executor code, not registered in `tools/_INDEX.yaml`, no new state format created.

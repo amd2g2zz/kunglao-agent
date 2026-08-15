@@ -4,7 +4,7 @@
 
 > **Upstream contract** (see SKILL.md §"VM-channel launch sequence" + §Hard prohibitions #5 + §"Downstream contract for skill maintainers"): any x64dbg / Frida MCP call must be VM-channel, lead with `mcp__x64dbg__connect_remote`. The kunglao-agent `HOST_FORBIDDEN_TOOLS` hook denies every dispatch that lists `start_session` / `connect_to_session` / `terminate_session` / `connect_to_instance` / frida `spawn` / frida `attach`. There is no per-engagement opt-out — the rule is structural.
 
-## Tool priority (call-site stepping 类)
+## Tool priority (call-site stepping class)
 
 1. **`mcp__x64dbg__*`** — set_breakpoint on entry → step_into → read_memory / get_register to capture params
    - **⚠️ TWO MODES — pick the right one (safety-critical, corrected 2026-07-28):**
@@ -24,7 +24,7 @@
    - **Do NOT ask the user for the path or report "x96dbg.exe not installed"** (anti-pattern, historical DESIGN.md §9 rule 5 — now at docs/design/archive/DESIGN.md). Path + ports + bind are all known above. If `connect_remote` fails, the VM x64dbg isn't listening — launch it via vmr-shell (step 1), don't punt to the user with A/B/C options.
 2. **`rev-frida`** — hook the API by name; capture call counts + serialized args
 3. **`vmr-shell`** — detonate sample in VM; tcpdump / procmon / regshot for OS-level IO
-4. **`malware-framework` (Qiling)** — unicorn emulation (often NEGATIVE for Go runtime; 初筛 only)
+4. **`malware-framework` (Qiling)** — unicorn emulation (often NEGATIVE for Go runtime; first-pass triage only)
 
 ## Why x64dbg first for call-site stepping
 

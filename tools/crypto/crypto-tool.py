@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""tools/crypto/crypto-tool.py — issue #285 crypto 算法库 CLI.
+"""tools/crypto/crypto-tool.py — issue #285 crypto algorithm-library CLI.
 
 One subcommand per algorithm over the sibling library (algorithms.py), with a
 uniform I/O and reporting contract:
@@ -276,7 +276,7 @@ def _build_parser():
 
     ap = argparse.ArgumentParser(
         prog="crypto-tool.py",
-        description="Crypto 算法库 CLI (issue #285): 8 algorithms, pure, idempotent.")
+        description="Crypto algorithm-library CLI (issue #285): 8 algorithms, pure, idempotent.")
     ap.add_argument("--self-check", action="store_true",
                     help="run every algorithm's roundtrip/known-vector self-check")
     ap.add_argument("--json", action="store_true",

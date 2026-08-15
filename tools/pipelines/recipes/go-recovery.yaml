@@ -1,20 +1,21 @@
 schema: plan-recipe/1
 id: go-recovery
-title: Go 符号恢复 (go-recovery)
+title: Go symbol recovery (go-recovery)
 description: >-
-  用于 languages:go 标记样本 (go.buildinfo / runtime.* hints): ghidra-recon
-  定位 go.buildinfo/pclntab, crypto-tool 的 go-byte-transform 子命令恢复
-  函数名/字符串层, disasm-constant-check 校验恢复层落点。
+  For samples with languages:go markers (go.buildinfo / runtime.* hints):
+  ghidra-recon locates go.buildinfo/pclntab, crypto-tool's go-byte-transform
+  subcommand recovers the function-name/string layer, and
+  disasm-constant-check validates the recovered layer's landing points.
 steps:
   - tool: ghidra-recon
-    input: 样本
-    output: go.buildinfo/pclntab 定位 + go findings
+    input: sample
+    output: go.buildinfo/pclntab locations + go findings
   - tool: crypto-tool
-    input: go 变换字节 (子命令 go-byte-transform)
-    output: 恢复的函数名/字符串层
+    input: go-transformed bytes (subcommand go-byte-transform)
+    output: recovered function-name/string layer
   - tool: disasm-constant-check
-    input: 恢复层 + 代码清单 (VA 锚点断言)
-    output: byte-exact 断言校验 JSON
+    input: recovered layer + code listing (VA-anchored assertions)
+    output: byte-exact assertion validation JSON
 fallback: [ghidra-decompile-functions, ghidra:recon]
 verify: go-verify
-reuse_check: 已有同样本 go 符号恢复产物时复用
+reuse_check: reuse when go symbol-recovery artifacts for the same sample already exist

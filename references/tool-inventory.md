@@ -24,20 +24,20 @@ the situation it was built for.
 | `scripts/plan_drift_detector.py` | "I re-planned / decomposed / abandoned claims since the last plan-file edit" — **v1.9.29 (mechanical)**: `worker_budget.py` PreToolUse REJECTS any dispatch on detected drift (exit ≥1) |
 | `scripts/hook_activation.py` | "I want some of the gates to pause (HARD_PAUSE tier)" — selective activation |
 | `hooks/worker_pulse.py` | PostToolUse hook — auto-injects the convergence snapshot when a worker completes (so you can't forget the check) |
-| `scripts/ask_for_direction_gate.py` | "I just emitted text as the orchestrator" — scan for反问 patterns |
+| `scripts/ask_for_direction_gate.py` | "I just emitted text as the orchestrator" — scan for asks-back (反问) patterns |
 | `mcp__context7-mcp__resolve-library-id` + `get-library-docs` | "I'm about to dispatch a worker for an API/struct I don't fully know" |
 | `mcp__sequential-thinking` | "This decision has 3+ steps with branching logic" |
 | `mcp__web_reader__webReader` | "I need clean markdown from an external URL" |
 
 ### kunglao CLI family (unified surface)
 
-8 CLIs in `scripts/` (Phase 3/5 收敛). `kunglao.py` is the unified entry point
+8 CLIs in `scripts/` (Phase 3/5 convergence). `kunglao.py` is the unified entry point
 composing script pure functions; the rest are focused entry points / thin wrappers:
 
 | CLI | Role |
 | --- | --- |
 | `kunglao.py` | unified entry point — subcommands composing existing script functions (JSON + exit codes frozen) |
-| `kunglao-init.py` | workspace 初始化 + 防二次初始化 |
+| `kunglao-init.py` | workspace init + re-init guard |
 | `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + explore_gate + priority_ratio |
 | `kunglao-verify.py` | M3 VERIFY entry (impl in `kunglao_verify.py`) |
 | `kunglao-record.py` | M4 RECORD entry (impl in `kunglao_record.py`) |

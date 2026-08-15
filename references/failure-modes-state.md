@@ -1,6 +1,6 @@
 ---
 name: kunglao-agent-failure-modes-state
-description: State (F14-F18): plan-files / blockers / drift (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配) and the dispatcher needs the matching F-row + enforcement script.
+description: State (F14-F18): plan-files / blockers / drift (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配 — user shorthand for dumb/stuck/mismatch) and the dispatcher needs the matching F-row + enforcement script.
 metadata:
   type: reference
   parent: failure-modes.md
@@ -9,9 +9,9 @@ metadata:
 # State (F14-F18): plan-files / blockers / drift
 
 Failure modes covering plan-state consistency:
-  - F14: stale blocker 不清理 (closed-claim blocker still in active list)
-  - F15: stale claim 不降权 (OPEN hours old, equal priority)
-  - F16: 没 visual progress indicator
+  - F14: stale blocker never cleaned (closed-claim blocker still in the active list)
+  - F15: stale claim not down-weighted (OPEN for hours, equal priority)
+  - F16: no visual progress indicator
   - F17: plan ↔ reality drift (re-plan / decompose / abandon, files lag)
   - F18: state management overall (integrates F14-F17)
 

@@ -276,7 +276,7 @@ instead of leaking host-channel attempts.
 
 **Incident (C-331 + C-333, 2026-08-05):** two VM-session workers showed
 `completed` TaskOutput (facts written, all deliverables landed) but **stayed
-in the running-agents list** — each a zombie holding a slot. #88 的枚举(TaskStop)
+in the running-agents list** — each a zombie holding a slot. the #88 enumeration (TaskStop)
 catches them, but the ROOT CAUSE is that **VM-session
 workers leak subtasks**: x64dbg `connect_remote` handles / vmr-server
 sessions / background VM polls are not released when the worker's main task

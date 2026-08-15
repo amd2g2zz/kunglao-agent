@@ -1,20 +1,21 @@
 schema: plan-recipe/1
 id: crypto-decrypt
-title: 密码层解密 (crypto-decrypt)
+title: Crypto-layer decryption (crypto-decrypt)
 description: >-
-  用于 crypto:decode 信号样本 (crypt32/bcrypt/advapi import 或高熵区段):
-  ghidra-recon 定位加密 API 调用点, crypto-tool 按算法子命令解密,
-  disasm-constant-check 校验明文层落点。
+  For samples with a crypto:decode signal (crypt32/bcrypt/advapi imports or a
+  high-entropy section): ghidra-recon locates crypto API call sites,
+  crypto-tool decrypts via the algorithm subcommand, and
+  disasm-constant-check validates the plaintext layer's landing points.
 steps:
   - tool: ghidra-recon
-    input: 样本
-    output: 加密 API 调用点定位 (CryptDecrypt/BCrypt 等)
+    input: sample
+    output: crypto API call-site locations (CryptDecrypt/BCrypt etc.)
   - tool: crypto-tool
-    input: 密文字节 + 算法子命令 (chacha|xor-add|rolling-xor|rsa-unpad)
-    output: 明文层 + --reproduce 参数
+    input: ciphertext bytes + algorithm subcommand (chacha|xor-add|rolling-xor|rsa-unpad)
+    output: plaintext layer + --reproduce arguments
   - tool: disasm-constant-check
-    input: 明文层 + 代码清单 (VA 锚点断言)
-    output: byte-exact 断言校验 JSON
+    input: plaintext layer + code listing (VA-anchored assertions)
+    output: byte-exact assertion validation JSON
 fallback: [ghidra-decompile-functions, crypto:decode]
 verify: crypto-verify
-reuse_check: 同算法 + 同参数已解出明文层时复用, 不重复解密
+reuse_check: reuse when the same algorithm + arguments already produced a plaintext layer; do not decrypt twice

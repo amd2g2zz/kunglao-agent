@@ -1,67 +1,67 @@
 # tools/ Domain Index — progressive disclosure entry point
 
-> Orchestrator: read this file once per round, pick a category, dispatch the worker; the worker reads `_index-<category>.md` (per-tool contract entries: 用途/用法/输入/输出/exit code/when_not — 可直接复制调用), then loads `_INDEX.yaml` for the machine contract. Full per-category catalog below the category table.
+> Orchestrator: read this file once per round, pick a category, dispatch the worker; the worker reads `_index-<category>.md` (per-tool contract entries: 用途/用法/输入/输出/exit code/when_not — directly copyable invocations), then loads `_INDEX.yaml` for the machine contract. Full per-category catalog below the category table.
 
 ## Category table
 
 | Category | Index file | Tool shelf (examples) | Purpose |
 |---|---|---|---|
-| crypto | `_index-crypto.md` | crypto-tool | 加解密/编解码/哈希工具 |
-| static | `_index-static.md` | die-probe, pe-analyze, yara-scan | 静态识别/特征提取工具 |
-| ghidra | `_index-ghidra.md` | ghidra-recon, ghidra-decompile-functions, ghidra-vtable-struct, ghidra-evidence-annotations, ghidra-scan-pointer | Ghidra 反汇编/函数级分析 |
-| dynamic | `_index-dynamic.md` | x64dbg-remote, frida-remote | VM 动态调试/运行时分析(无本地目录, MCP 提供) |
-| pipelines | `_index-pipelines.md` | build-evidence-index | 证据索引/报告管线 |
-| auxiliary | `_index-auxiliary.md` | sanitize-text, measure-cold-start | 辅助/杂项工具 |
+| crypto | `_index-crypto.md` | crypto-tool | encryption/decryption/encoding/hashing tools |
+| static | `_index-static.md` | die-probe, pe-analyze, yara-scan | static identification/trait-extraction tools |
+| ghidra | `_index-ghidra.md` | ghidra-recon, ghidra-decompile-functions, ghidra-vtable-struct, ghidra-evidence-annotations, ghidra-scan-pointer | Ghidra disassembly/function-level analysis |
+| dynamic | `_index-dynamic.md` | x64dbg-remote, frida-remote | VM dynamic debugging/runtime analysis (no local directory, MCP-provided) |
+| pipelines | `_index-pipelines.md` | build-evidence-index | evidence index/report pipeline |
+| auxiliary | `_index-auxiliary.md` | sanitize-text, measure-cold-start | auxiliary/miscellaneous tools |
 
 | Scenario | Category |
 |---|---|
-| 新样本快速识别(语言/编译器/加壳) | static |
-| 加密/编码/哈希识别与解码 | crypto |
-| 函数级反汇编 / 导入 / xref / 结构恢复 | ghidra |
-| 运行时动态验证(单步/断点/hook, VM-only) | dynamic |
-| 证据登记 / 索引构建 / 报告生成 | pipelines |
-| 哈希 / 文件元数据 / 小杂务 | auxiliary |
+| Fast identification of a new sample (language/compiler/packer) | static |
+| Encryption/encoding/hash identification and decoding | crypto |
+| Function-level disassembly / imports / xrefs / structure recovery | ghidra |
+| Runtime dynamic validation (single-step/breakpoints/hooks, VM-only) | dynamic |
+| Evidence registration / index building / report generation | pipelines |
+| Hashing / file metadata / small chores | auxiliary |
 
-## 外部能力(不在本 toolshelf, 不注册 `_INDEX.yaml`)
+## External capabilities (not on this toolshelf, not registered in `_INDEX.yaml`)
 
-| 能力 | 提供方 | 入口 |
+| Capability | Provider | Entry point |
 |---|---|---|
-| Frida 动态插桩(hook/attach) | MCP `mcp__frida__*` + VM 通道 `192.168.20.128:1337` | `_index-dynamic.md`; hook 模板在 `templates/frida/` |
-| x64dbg 远程调试 | MCP `mcp__x64dbg__*`(仅 `connect_remote`; 宿主禁止其余) | `_index-dynamic.md` |
-| T2 仿真/模拟执行(Qiling/unicorn) | 外部 skill `/malware-framework` | 见 [README.md](README.md) 分类结构 |
-| plan 编排模板(recipe) | `tools/pipelines/recipes/*.yaml`(纯数据模板, 非执行器) | `tools/pipelines/README.md` |
+| Frida dynamic instrumentation (hook/attach) | MCP `mcp__frida__*` + VM channel `192.168.20.128:1337` | `_index-dynamic.md`; hook templates in `templates/frida/` |
+| x64dbg remote debugging | MCP `mcp__x64dbg__*` (`connect_remote` only; everything else forbidden on the host) | `_index-dynamic.md` |
+| T2 emulation/simulated execution (Qiling/unicorn) | external skill `/malware-framework` | see the directory layout in [README.md](README.md) |
+| plan orchestration templates (recipes) | `tools/pipelines/recipes/*.yaml` (pure-data templates, not an executor) | `tools/pipelines/README.md` |
 
 ## Per-category index files
 
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
-| `_index-crypto.md` | crypto | crypto 工具契约条目(每工具 H3 条目: 用途/用法/输入/输出/exit code/when_not) | worker 被派发到加密识别/解码/哈希任务时 |
-| `_index-static.md` | static | static 工具契约条目(同上模板) | worker 被派发到静态 triage 任务时 |
-| `_index-ghidra.md` | ghidra | ghidra 工具契约条目(同上模板) | worker 被派发到函数级反汇编任务时 |
-| `_index-dynamic.md` | dynamic | VM 动态工具契约条目(MCP 提供, 同上模板) | worker 被派发到动态调试任务时 |
-| `_index-pipelines.md` | pipelines | pipelines 工具契约条目(同上模板) | worker 被派发到证据登记/报告任务时 |
-| `_index-auxiliary.md` | auxiliary | auxiliary 工具契约条目(同上模板) | worker 需要哈希/文件元数据等小任务时 |
+| `_index-crypto.md` | crypto | crypto tool contract entries (per-tool H3 entry: 用途/用法/输入/输出/exit code/when_not) | when a worker is dispatched to cipher-identification/decoding/hash tasks |
+| `_index-static.md` | static | static tool contract entries (same template) | when a worker is dispatched to static triage tasks |
+| `_index-ghidra.md` | ghidra | ghidra tool contract entries (same template) | when a worker is dispatched to function-level disassembly tasks |
+| `_index-dynamic.md` | dynamic | VM dynamic tool contract entries (MCP-provided, same template) | when a worker is dispatched to dynamic-debugging tasks |
+| `_index-pipelines.md` | pipelines | pipelines tool contract entries (same template) | when a worker is dispatched to evidence-registration/report tasks |
+| `_index-auxiliary.md` | auxiliary | auxiliary tool contract entries (same template) | when a worker needs small tasks like hashing/file metadata |
 
 ## Top-level tools files
 
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
-| `_INDEX.yaml` | machine-contract | 工具机器索引(schema `tools-index/1`): name/category/capability/tier/cost_tier/input_output/when_not,由 `validate_index.py` 校验 | 需要机器可读的工具注册表/被 gate 调用时 |
-| `README.md` | docs | 工具家说明: 结构规则(#340) + 分类结构 + 契约字段含义 + MD 格式规范 + 如何登记新工具 | 理解分类 / 登记 / 修改契约字段时 |
-| `tool-search.py` | gate(meta) | `_INDEX.yaml` 确定性查询 CLI(零 LLM/零网络; 根层元工具例外, 见 README 结构规则) | 按能力标签/预算查工具时 |
-| `validate_index.py` | gate(meta) | `_INDEX.yaml` 机器契约校验器(exit 0=通过 / 1=失败,可被 gate 调用; 根层元工具例外) | 校验索引、接入 gate 时 |
+| `_INDEX.yaml` | machine-contract | machine tool index (schema `tools-index/1`): name/category/capability/tier/cost_tier/input_output/when_not, validated by `validate_index.py` | when a machine-readable tool registry is needed / for gate calls |
+| `README.md` | docs | toolshelf guide: structure rules (#340) + directory layout + contract-field meanings + MD format rules + how to register a new tool | when understanding the layout / registering / changing contract fields |
+| `tool-search.py` | gate(meta) | deterministic query CLI over `_INDEX.yaml` (zero LLM/zero network; root-layer meta-tool exception, see README structure rules) | when looking up tools by capability tag/budget |
+| `validate_index.py` | gate(meta) | machine-contract validator for `_INDEX.yaml` (exit 0=pass / 1=fail, gate-callable; root-layer meta-tool exception) | when validating the index or wiring it into a gate |
 
-## tools/ scripts(按类目目录归位, #340)
+## tools/ scripts (placed in category directories, #340)
 
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
-| `crypto/crypto-tool.py` | crypto | 8 算法加解密/解码 CLI(chacha/xor-add/rolling-xor/lzss/lzma-raw/rsa-unpad/go-byte-transform/va-to-off) | 加密/编码/压缩层识别与试解时 |
-| `auxiliary/audit_legacy_proven.py` | auxiliary | 审计 legacy PROVEN fact 状态 | 需要清理旧事实状态时 |
-| `pipelines/build_evidence_index.py` | pipelines | 证据索引构建器(evidence/_index.json + _INDEX.md) | 证据落盘后登记索引时 |
-| `auxiliary/capture_golden.py` | auxiliary | golden 用例采集 | 更新 golden fixtures 时 |
-| `static/disasm_constant_check.py` | static | 反汇编常量 byte-exact 校验 | 校验反汇编断言时 |
-| `auxiliary/measure_blind_coverage.py` | auxiliary | 盲验覆盖率测量 | 评估盲验覆盖时 |
-| `auxiliary/measure_cold_start.py` | auxiliary | 冷启动测量 | 评估冷启动成本时 |
-| `auxiliary/sanitize.py` | auxiliary | 样本内容 prompt 注入 sanitize(零宽/同形字/指令标记) | 样本派生文本喂给 LLM worker 前 |
-| `ghidra/run_ghidra_postscript.py` | ghidra | analyzeHeadless 封装(调 5 件 postScript 工具) | 需要 headless 运行 Ghidra 工具时 |
-| `_lib/lib_disasm.py` | shared-lib | 跨类目共享库: PE/capstone VA→offset 核心(不注册索引) | 新反汇编工具复用 VA→offset 时 |
+| `crypto/crypto-tool.py` | crypto | 8-algorithm encrypt/decrypt/decode CLI (chacha/xor-add/rolling-xor/lzss/lzma-raw/rsa-unpad/go-byte-transform/va-to-off) | when identifying/trial-decrypting an encryption/encoding/compression layer |
+| `auxiliary/audit_legacy_proven.py` | auxiliary | audits legacy PROVEN fact states | when cleaning up old fact states |
+| `pipelines/build_evidence_index.py` | pipelines | evidence index builder (evidence/_index.json + _INDEX.md) | when registering the index after evidence lands |
+| `auxiliary/capture_golden.py` | auxiliary | golden case capture | when updating golden fixtures |
+| `static/disasm_constant_check.py` | static | byte-exact disassembly constant validation | when validating disassembly assertions |
+| `auxiliary/measure_blind_coverage.py` | auxiliary | blind-verification coverage measurement | when evaluating blind-verification coverage |
+| `auxiliary/measure_cold_start.py` | auxiliary | cold-start measurement | when evaluating cold-start cost |
+| `auxiliary/sanitize.py` | auxiliary | prompt-injection sanitization of sample content (zero-width/homoglyph/instruction markers) | before feeding sample-derived text to an LLM worker |
+| `ghidra/run_ghidra_postscript.py` | ghidra | analyzeHeadless wrapper (invokes the 5 postScript tools) | when the Ghidra tools must run headless |
+| `_lib/lib_disasm.py` | shared-lib | cross-category shared library: PE/capstone VA→offset core (not registered in the index) | when a new disassembly tool reuses VA→offset |

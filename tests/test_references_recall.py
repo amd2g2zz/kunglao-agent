@@ -287,10 +287,13 @@ class TestCli:
         assert "score=" in r.stdout
         assert "re-library/malware-analysis.md" in r.stdout
 
-    def test_cli_cjk_scored_query_exit_zero(self) -> None:
+    def test_cli_cjk_query_handled_on_english_index(self) -> None:
+        """R3 #357: the real index is now all-English, so a CJK query no
+        longer scores a match — but it must still tokenize cleanly (UTF-8
+        contract) and exit 1 via the no-match path, not crash."""
         r = _cli("解码")
-        assert r.returncode == 0
-        assert "re-library/tools-crypto.md" in r.stdout
+        assert r.returncode == 1
+        assert "no match" in r.stdout
 
     def test_cli_no_match_exit_one_lists_categories(self) -> None:
         r = _cli("zzz-nonsense")

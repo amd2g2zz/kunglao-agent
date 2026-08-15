@@ -15,7 +15,7 @@ re-implemented for the kunglao CLI contract.  Two halves:
     ``diff-summary``            match statistics
     ``diff-list-functions``     categories: identical/changed/added/removed
     ``diff-function <addr>``    lenses: callee changes + bodyBytesChanged
-                                (bodyBytesChanged is the 恒检 lens — always
+                                (bodyBytesChanged is the always-check lens — always
                                 present for matched functions)
 
 Usage:

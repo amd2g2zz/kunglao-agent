@@ -1,49 +1,49 @@
-# tools/static — 静态分析工具家
+# tools/static — static analysis tool home
 
-本目录是 `static` 类目的工具家: 存放纯本地静态分析 CLI — PE 解析、字符串与熵提取、syscall/栈字符串/覆盖区扫描、反汇编比对与清单校验等。当前登记 16 个工具(见 `tools/_INDEX.yaml`)。
+This directory is the `static` category's tool home: purely local static-analysis CLIs — PE parsing, string and entropy extraction, syscall/stack-string/overlay scanning, disassembly comparison and listing validation, and more. 16 tools are currently registered (see `tools/_INDEX.yaml`).
 
-## 与索引文档的关系
+## Relation to the index docs
 
-worker 先读 `tools/_index-static.md`(16 个工具的 6 段契约条目: 用途/用法/输入/输出/exit code/when_not, 用法可直接复制); 本 README 只说明家内文件分工与吸收沿革。机器契约见 `tools/_INDEX.yaml`。
+A worker reads `tools/_index-static.md` first (the 6-segment contract entries for the 16 tools: 用途/用法/输入/输出/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and absorption history. The machine contract is `tools/_INDEX.yaml`.
 
-## 已吸收工具 (issue #278 PR-1b, 6 个零依赖 CLI)
+## Absorbed tools (issue #278 PR-1b, 6 zero-dependency CLIs)
 
-| 工具 | 来源脚本 | 一句话契约 |
+| Tool | Source script | One-line contract |
 |---|---|---|
-| `extract-syscalls.py` | `2026-06-10/scripts/extract_syscalls.py` | x64 syscall stub 提取(`mov eax, imm; syscall` / `mov r10, rcx` 回溯 + NT 名称表) |
-| `stack-strings.py` | `2026-06-10/scripts/check_stack_strings.py` | `mov byte/dword [rsp+disp], imm` 栈构造字符串重建 |
-| `binary-sweep.py` | `2026-07-01/scripts/binary_sweep.py` | URL/IPv4/域名/自定义字节正则扫描, 带文件偏移 |
-| `strings-classify.py` | `2026-06-10/scripts/analyze_decrypted.py` + `2026-07-01/scripts/floss_filter.py` | 字符串熵/可打印/可解码(base64/hex)分类 |
-| `go-buildinfo-carve.py` | `2026-06-10/evidence/pe-analysis/verify_go_buildinfo.py` + `2026-06-10/scripts/gap_determinative.py` | Go buildinfo 定位与解析(版本/path/deps) |
-| `call-site-args.py` | `2026-06-10/scripts/analysis/build_xpsplog_payload_evidence.py` + `2026-06-10/scripts/analysis/qiling_npwzwmc64_realargs_native_probe.py` | 反汇编文本调用点参数提取(x64 寄存器/栈槽/x86 push) |
+| `extract-syscalls.py` | `2026-06-10/scripts/extract_syscalls.py` | x64 syscall stub extraction (`mov eax, imm; syscall` / `mov r10, rcx` backtrack + NT name table) |
+| `stack-strings.py` | `2026-06-10/scripts/check_stack_strings.py` | `mov byte/dword [rsp+disp], imm` stack-built string reconstruction |
+| `binary-sweep.py` | `2026-07-01/scripts/binary_sweep.py` | URL/IPv4/domain/custom byte-regex scanning, with file offsets |
+| `strings-classify.py` | `2026-06-10/scripts/analyze_decrypted.py` + `2026-07-01/scripts/floss_filter.py` | string entropy/printability/decodability (base64/hex) classification |
+| `go-buildinfo-carve.py` | `2026-06-10/evidence/pe-analysis/verify_go_buildinfo.py` + `2026-06-10/scripts/gap_determinative.py` | Go buildinfo location and parsing (version/path/deps) |
+| `call-site-args.py` | `2026-06-10/scripts/analysis/build_xpsplog_payload_evidence.py` + `2026-06-10/scripts/analysis/qiling_npwzwmc64_realargs_native_probe.py` | call-site argument extraction from disassembly text (x64 registers/stack slots/x86 pushes) |
 
-`common.py` 是共享 CLI 管道(#277 契约: 0/1/2 三态退出码、`--json`、`--reproduce` field=value、错误带指引), 不是工具, 不登记索引。
+`common.py` is the shared CLI plumbing (#277 contract: 0/1/2 three-state exit codes, `--json`, `--reproduce` field=value, errors with guidance); it is not a tool and is not registered in the index.
 
-## 已吸收工具 (issue #278 PR-1c)
+## Absorbed tools (issue #278 PR-1c)
 
-| 文件 | 工具 | 职责 |
+| File | Tool | Responsibility |
 |---|---|---|
-| `pe_analyze.py` | `pe-analyze` | PE trunk 解析: headers/sections/imports/exports/resources/overlay/pdb/tls/signature 子命令 |
-| `overlay_scan.py` | `overlay-scan` | 覆盖区 3-in-1: `--mode reloc\|true\|mz`(reloc 表 / true-overlay / MZ 内嵌 PE) |
-| `disasm_dump.py` | `disasm-dump` | 指定 RVA/VA 的 capstone 指令清单(复用 `tools/_lib/lib_disasm.py` 的 VA→offset 核心) |
-| `shellcode_scan.py` | `shellcode-scan` | shellcode blob 检测: 入口反汇编/代码区扫描/序言/PEB 访问/字符串 |
-| `die_probe.py` | `die-probe` | DIE 5-call merge 探测包装(die 缺失 exit 2 + 安装指引) |
+| `pe_analyze.py` | `pe-analyze` | PE trunk parsing: headers/sections/imports/exports/resources/overlay/pdb/tls/signature subcommands |
+| `overlay_scan.py` | `overlay-scan` | overlay 3-in-1: `--mode reloc\|true\|mz` (reloc table / true-overlay / embedded MZ PE) |
+| `disasm_dump.py` | `disasm-dump` | capstone instruction listing for given RVAs/VAs (reuses the VA→offset core of `tools/_lib/lib_disasm.py`) |
+| `shellcode_scan.py` | `shellcode-scan` | shellcode blob detection: entry disassembly/code-region scanning/prologues/PEB access/strings |
+| `die_probe.py` | `die-probe` | DIE 5-call merge probe wrapper (missing die → exit 2 + install guidance) |
 
-其余登记工具: `yara-scan.py` + `yara-gen.py`(issue #313, 吸收 findcrypt-yara 规则资产至 `yara-rules/`)、`c_normalize.py` + `opaque_pred.py`(issue #306, 反编译 C 后处理)、`disasm_constant_check.py`(issue #284; #340 起由 tools/ 根层归位本目录)。
+Other registered tools: `yara-scan.py` + `yara-gen.py` (issue #313, absorbing the findcrypt-yara rule assets into `yara-rules/`), `c_normalize.py` + `opaque_pred.py` (issue #306, decompiled-C post-processing), `disasm_constant_check.py` (issue #284; homed in this directory from the tools/ root layer since #340).
 
-## 共享模块(#340 合并)
+## Shared module (#340 merge)
 
-`common.py` 是 static 类目的**唯一**共享模块(#340 结构规则: 一类目一个共享模块)。#340 将原双模块合并为一个并保留全部公共面:
+`common.py` is the static category's **single** shared module (#340 structure rule: one shared module per category). #340 merged the original two modules into one and kept the whole public surface:
 
-- CLI 管道(原 `common.py`): `error`/`add_common_flags`/`read_bytes`/`read_text`/`parse_int`/`sha256`/`parse_line`/`report`/`negative` + `EXIT_*`/`L1_FIELD_RE`(#277 契约)。
-- 字节扫描助手(原 `_common.py`, #278 PR-1c): `EXE_SIGNATURES`/`X64_PROLOG_PATTERNS`/`PEB_ACCESS_PATTERNS`/`find_all`/`signature_hits`/`ascii_strings`/`x64_prolog_offsets`/`byte_entropy`/`uniform_variance`/`scan_valid_pclntab`。
+- CLI plumbing (original `common.py`): `error`/`add_common_flags`/`read_bytes`/`read_text`/`parse_int`/`sha256`/`parse_line`/`report`/`negative` + `EXIT_*`/`L1_FIELD_RE` (#277 contract).
+- byte-scan helpers (original `_common.py`, #278 PR-1c): `EXE_SIGNATURES`/`X64_PROLOG_PATTERNS`/`PEB_ACCESS_PATTERNS`/`find_all`/`signature_hits`/`ascii_strings`/`x64_prolog_offsets`/`byte_entropy`/`uniform_variance`/`scan_valid_pclntab`.
 
-`tools/_lib/lib_disasm.py`(跨类目共享库单点)提供 PE/capstone VA→offset 核心, 不在本目录。
+`tools/_lib/lib_disasm.py` (the cross-category shared-library single point) provides the PE/capstone VA→offset core and does not live in this directory.
 
-lzma-raw 不再单独吸收: `tools/crypto/crypto-tool.py` 的 `lzma-raw` 子命令(`algorithms.lzma_raw_decompress`, dict_size/lc/lp/pb/size 全参数化)已覆盖同能力, 避免重复。
+lzma-raw is no longer absorbed separately: the `lzma-raw` subcommand of `tools/crypto/crypto-tool.py` (`algorithms.lzma_raw_decompress`, dict_size/lc/lp/pb/size fully parameterized) already covers the same capability, avoiding duplication.
 
-## 契约要点(#277)
+## Contract essentials (#277)
 
-- 全部参数化、只读幂等、三态退出码: 0 成功 / 1 负发现(跑了无结果) / 2 错误(坏参数/不可读输入, 带指引)。
-- `--json` 默认输出单 JSON 对象 + `--reproduce` field=value 行(kunglao L1 机械门)。
-- 每工具的用法/exit code 细则以 `tools/_index-static.md` 契约条目为准。
+- All fully parameterized, read-only idempotent, three-state exit codes: 0 success / 1 negative finding (ran, no result) / 2 error (bad arguments/unreadable input, with guidance).
+- `--json` default output is a single JSON object + `--reproduce` field=value lines (kunglao L1 mechanical gate).
+- Per-tool usage/exit-code specifics defer to the contract entries in `tools/_index-static.md`.
