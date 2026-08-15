@@ -4,7 +4,7 @@ This directory is the `static` category's tool home: purely local static-analysi
 
 ## Relation to the index docs
 
-A worker reads `tools/_index-static.md` first (the 6-segment contract entries for the 16 tools: 用途/用法/输入/输出/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and absorption history. The machine contract is `tools/_INDEX.yaml`.
+A worker reads `tools/_index-static.md` first (the 6-segment contract entries for the 16 tools: Purpose/Usage/Inputs/Outputs/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and absorption history. The machine contract is `tools/_INDEX.yaml`.
 
 ## Absorbed tools (issue #278 PR-1b, 6 zero-dependency CLIs)
 

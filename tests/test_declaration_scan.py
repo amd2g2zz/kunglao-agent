@@ -193,7 +193,7 @@ class TestHumanIndexConsistency:
     @staticmethod
     def _mcp_channel_names() -> set[str]:
         """Names whose 契约条目 usage line starts with `mcp__` (#339 format
-        contract: 用法首行 `python tools/...` 或 `mcp__`) — externally
+        contract: usage first line `python tools/...` or `mcp__`) — externally
         provided MCP-channel tools, deliberately NOT registered in
         tools/_INDEX.yaml (e.g. _index-dynamic.md x64dbg/frida)."""
         names: set[str] = set()

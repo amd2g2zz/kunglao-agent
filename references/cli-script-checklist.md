@@ -9,7 +9,7 @@
 > `scripts/shell_defaults.py` (idempotent shell env-default management —
 > `--var/--value/--profile/--shell`, check/apply/remove, exit codes, `--json`).
 
-## 0. 先查目录 — check the catalog first (issue #294)
+## 0. Check the catalog first (issue #294)
 
 Before writing any new script, check in this order:
 

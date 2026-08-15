@@ -145,13 +145,13 @@ MCP supply (#316): analysis correctness depends on registered MCP servers, so th
 
 | MCP server | Tier | Scope | Purpose | Registration |
 |------------|------|-------|---------|--------------|
-| `ghidra` | HARD | 全型必配 | Ghidra 反编译/静态分析 | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
-| `sequential-thinking` | HARD | 全型必配 | 结构化推理 | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
-| `x64dbg` | HARD | Windows T3 动态 | 动态调试 (VM 远程) | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
-| `volatility` | WARN | Windows T3 | 内存取证 (memory forensics) | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
-| `ida-pro-vm` | WARN | 选 IDA 时 | IDA 远程分析 | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
-| `gitnexus` | HARD | Android 建图流程 | Post-decompile 知识图谱 | `claude mcp add gitnexus -- gitnexus mcp` |
-| `virustotal` | WARN | CTI | 情报 (家族归属假设) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
+| `ghidra` | HARD | required, all types | Ghidra decompilation/static analysis | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
+| `sequential-thinking` | HARD | required, all types | structured reasoning | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
+| `x64dbg` | HARD | Windows T3 dynamic | dynamic debugging (VM remote) | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
+| `volatility` | WARN | Windows T3 | memory forensics | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
+| `ida-pro-vm` | WARN | when IDA chosen | remote IDA analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `gitnexus` | HARD | Android graph building | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
+| `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
 
 Trust gates (the components behind "verified"):
 

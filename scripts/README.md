@@ -61,7 +61,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | Script | Role | Referenced from |
 | --- | --- | --- |
 | `active_intervention.py` | stuck-worker intervention decisions | lib(1), tests |
-| `ask_for_direction_gate.py` | orchestrator 反问-pattern gate | lib(1), tests |
+| `ask_for_direction_gate.py` | orchestrator ask-back-pattern gate | lib(1), tests |
 | `backtrack_gate.py` | stuck worker backtrack decision | hooks, lib(1), tests |
 | `blind_gate.py` | blind-verification gate on promotion | hooks, lib(1), tests |
 | `calibration_gate.py` | calibration/confidence gate | tests |
@@ -77,7 +77,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `troubleshooting_gate.py` | report completeness gate | tests |
 | `review_gate.py` | review evidence mint/check (key-init/mint/check) | tests, docs |
 | `report_consistency_check.py` | report↔evidence consistency check | tests, docs |
-| `write_gate.py` | 写侧门禁审计器 (#236) — maker-checker 盖章回验 + 独立锚点 + defer 引用可回查 | lib(1), tests |
+| `write_gate.py` | write-side gate auditor (#236) — maker-checker stamp re-verification + independent anchors + defer references re-checkable | lib(1), tests |
 
 ## State & lifecycle (claim/ledger/blocker maintenance)
 

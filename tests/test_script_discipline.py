@@ -137,7 +137,8 @@ def test_worker_has_tool_first_contract() -> None:
 
 def test_checklist_has_tool_first_section() -> None:
     """Issue #294: references/cli-script-checklist.md must instruct checking
-    tools/_INDEX before any new script is written ("## 0. 先查目录")."""
+    tools/_INDEX before any new script is written ("## 0. Check the catalog first")."""
     text = CHECKLIST.read_text(encoding="utf-8")
-    assert "先查目录" in text, "cli-script-checklist.md missing '## 0. 先查目录' section"
+    assert "Check the catalog first" in text, (
+        "cli-script-checklist.md missing '## 0. Check the catalog first' section")
     assert "tools/_INDEX" in text, "cli-script-checklist.md missing tools/_INDEX reference"

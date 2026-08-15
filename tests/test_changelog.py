@@ -37,7 +37,7 @@ def test_changelog_declares_v0_1_0():
 
 def test_changelog_has_internal_version_mapping():
     text = _changelog_text()
-    assert "内部版本映射" in text, "missing internal-version mapping section"
+    assert "Internal version mapping" in text, "missing internal-version mapping section"
     # The mapping must cover the top historical markers (v1.9.29/v1.9.24) and
     # state that they belong to v0.1 scope.
     assert "v1.9.29" in text and "v1.9.24" in text

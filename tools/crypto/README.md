@@ -10,7 +10,7 @@ This directory is the `crypto` category's tool home: local CLIs for cryptography
 
 ## Relation to the index docs
 
-A worker reads `tools/_index-crypto.md` first (the 6-segment contract entry for `crypto-tool`: 用途/用法/输入/输出/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and history. The machine contract is `tools/_INDEX.yaml`.
+A worker reads `tools/_index-crypto.md` first (the 6-segment contract entry for `crypto-tool`: Purpose/Usage/Inputs/Outputs/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and history. The machine contract is `tools/_INDEX.yaml`.
 
 ## Contract essentials
 

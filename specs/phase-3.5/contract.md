@@ -1,94 +1,114 @@
-# Phase 3.5 契约 — kunglao-init(workspace 初始化 + 防二次初始化)
+# Phase 3.5 Contract — kunglao-init (workspace initialization + re-init guard)
 
-`FROZEN @ phase-3.5, 变更条件: ① 先写一条 RED 测试证明现状不满足新契约 ② 改 contract.md + schemas/ ③ 同步回写 master 三份文档之一 ④ 同一 commit 内完成`
+`FROZEN @ phase-3.5, change conditions: ① first write a RED test proving the
+current state does not satisfy the new contract ② change contract.md +
+schemas/ ③ write back into one of the three master docs ④ all within the same
+commit`
 
-依据(层 1 master spec, 摘录带行号, 不转录):
-- `kong-agent-module-design.md`(master): L25-26 store_atomic 原子写 / L31 store_claim(claim-register.yaml 读写,人类可审) / L48 record_event 幂等 / L56 Claim schema / L77-79 M0.4 错误处理 / L224 hooks 段幂等重建 / L448 kunglao.py 唯一编排入口、特殊操作用独立 CLI(kunglao-init/verify/eval...)
-- `docs/design/archive/DESIGN.md` §7(工作树可执行 spec; #355: 原 `DESIGN.md` 移至 docs/design/archive/): L98 所有步幂等(存在且非空则跳过,不 clobber) / L104 0.3 hook 安装幂等 / L105 0.4 scaffold 幂等 / L110 0.9 claim 种子
+Basis (layer-1 master spec, excerpts with line numbers, not transcribed):
+- `kong-agent-module-design.md` (master): L25-26 store_atomic atomic write / L31 store_claim (claim-register.yaml read/write, human-auditable) / L48 record_event idempotent / L56 Claim schema / L77-79 M0.4 error handling / L224 hooks section idempotent rebuild / L448 kunglao.py the single orchestration entry, special operations via standalone CLIs (kunglao-init/verify/eval...)
+- `docs/design/archive/DESIGN.md` §7 (executable work-tree spec; #355: the former `DESIGN.md` moved to docs/design/archive/): L98 every step idempotent (skip if exists and non-empty, no clobber) / L104 0.3 hook install idempotent / L105 0.4 scaffold idempotent / L110 0.9 claim seeding
 
-## 1. 函数签名
+## 1. Function signatures
 
-`scripts/kunglao-init.py` — **独立 CLI, 非 kunglao.py 子命令**(module-design L448: "唯一编排入口; 不解析子命令(特殊操作用独立 CLI: kunglao-init/verify/eval...)")。
+`scripts/kunglao-init.py` — **standalone CLI, not a kunglao.py subcommand**
+(module-design L448: "single orchestration entry; no subcommand parsing
+(special operations via standalone CLIs: kunglao-init/verify/eval...)").
 
 ```
 python kunglao-init.py <workspace> [--force] [--hooks-json <path>]
 ```
 
-| 函数 | 签名 | 职责(对应 master 出处) |
+| Function | Signature | Responsibility (master provenance) |
 |---|---|---|
-| `main` | `main(argv=None) -> int` | argparse 入口, 调 run, sys.exit 包裹 |
-| `run` | `run(ws: Path, force: bool=False, hooks_json: Path\|None=None) -> int` | 状态机入口: Phase 1 防重检查 → 续接 / --force 备份+重建 / 全新初始化 |
-| `resume` | `resume(ws: Path, text: str) -> int` | 续接模式: 重算 state_hash, 漂移 → stderr WARNING(exit 0) |
-| `initialize` | `initialize(ws: Path, hooks_json: Path\|None) -> int` | Phase 2 scaffold + seed + hooks 幂等部署; Phase 3 校验 |
-| `atomic_write` | `atomic_write(path: Path, text: str) -> None` | temp → rename 原子写(module-design L25-26 store_atomic) |
-| `compute_state_hash` | `compute_state_hash(ws: Path, register_text: str\|None=None) -> str` | sha256(claim-register 归一化内容 + facts/_INDEX.md 内容 + facts/ 文件清单按名排序拼接) |
-| `normalize_marker` / `extract_hash` | `(text: str) -> str / str\|None` | [initialized] 标记的 state_hash 字段归一化/读取(自一致性哈希) |
-| `seed_claims` | `seed_claims(sample: str) -> list[dict]` | 3-5 条样本级 seed: C-001 样本概览 / C-002 家族归属 / C-003 打包器(DESIGN L110 0.9) |
-| `claim_register_text` | `claim_register_text(sample, sample_sha, state_hash) -> str` | claim-register.yaml 全文: [initialized] 标记头 + claims 体(Claim schema: module-design L56) |
-| `detect_sample` | `detect_sample(ws: Path) -> tuple[str, str]` | bins/ 首文件(按名排序) → (文件名, sha256), 缺失 → ("unknown","") |
-| `scaffold` | `scaffold(ws: Path) -> list[Path]` | 建 facts/ blockers/ runs/ + analysis_state.txt / global_plan.txt / claim_deps.yaml / facts/_INDEX.md / task_spec_snapshot.yaml; 存在且非空则跳过(DESIGN L105, L98) |
-| `deploy_hooks` | `deploy_hooks(ws: Path, hooks_json: Path\|None) -> dict` | hooks 幂等部署(E-init.2, DESIGN L104); 目标选择见 §2 |
-| `_patch_settings` | `_patch_settings(path: Path) -> int` | 合并 hooks 段入 settings.json(保其他键), 返回新增条数 |
-| `_ensure` | `_ensure(entries, matcher, hook_file, hook_dir) -> tuple[list, bool]` | 同 matcher 已有同名 hook 命令 → 跳过(幂等); 否则追加 |
-| `backup_register` | `backup_register(path: Path) -> Path` | --force 重建前备份: `claim-register.yaml.bak-<ts>`(E-init.4) |
+| `main` | `main(argv=None) -> int` | argparse entry, calls run, wrapped in sys.exit |
+| `run` | `run(ws: Path, force: bool=False, hooks_json: Path\|None=None) -> int` | state-machine entry: Phase 1 re-init check → resume / --force backup+rebuild / fresh initialization |
+| `resume` | `resume(ws: Path, text: str) -> int` | resume mode: recompute state_hash, drift → stderr WARNING (exit 0) |
+| `initialize` | `initialize(ws: Path, hooks_json: Path\|None) -> int` | Phase 2 scaffold + seed + idempotent hooks deployment; Phase 3 validation |
+| `atomic_write` | `atomic_write(path: Path, text: str) -> None` | temp → rename atomic write (module-design L25-26 store_atomic) |
+| `compute_state_hash` | `compute_state_hash(ws: Path, register_text: str\|None=None) -> str` | sha256(claim-register normalized content + facts/_INDEX.md content + facts/ file list concatenated name-sorted) |
+| `normalize_marker` / `extract_hash` | `(text: str) -> str / str\|None` | normalize/read the state_hash field of the [initialized] marker (self-consistency hash) |
+| `seed_claims` | `seed_claims(sample: str) -> list[dict]` | 3-5 sample-level seeds: C-001 sample overview / C-002 family attribution / C-003 packer (DESIGN L110 0.9) |
+| `claim_register_text` | `claim_register_text(sample, sample_sha, state_hash) -> str` | full claim-register.yaml text: [initialized] marker header + claims body (Claim schema: module-design L56) |
+| `detect_sample` | `detect_sample(ws: Path) -> tuple[str, str]` | first file in bins/ (name-sorted) → (filename, sha256), missing → ("unknown","") |
+| `scaffold` | `scaffold(ws: Path) -> list[Path]` | create facts/ blockers/ runs/ + analysis_state.txt / global_plan.txt / claim_deps.yaml / facts/_INDEX.md / task_spec_snapshot.yaml; skip if exists and non-empty (DESIGN L105, L98) |
+| `deploy_hooks` | `deploy_hooks(ws: Path, hooks_json: Path\|None) -> dict` | idempotent hooks deployment (E-init.2, DESIGN L104); target selection in §2 |
+| `_patch_settings` | `_patch_settings(path: Path) -> int` | merge the hooks section into settings.json (other keys preserved), return the number of entries added |
+| `_ensure` | `_ensure(entries, matcher, hook_file, hook_dir) -> tuple[list, bool]` | same matcher already has a hook command with the same name → skip (idempotent); otherwise append |
+| `backup_register` | `backup_register(path: Path) -> Path` | backup before --force rebuild: `claim-register.yaml.bak-<ts>` (E-init.4) |
 
-错误处理(module-design L77-79): 读失败不崩溃(缺文件走分支); settings.json 解析失败 → 显式 RuntimeError; 写走 atomic_write(L25)。
+Error handling (module-design L77-79): read failures do not crash (missing
+files take the branch path); settings.json parse failure → explicit
+RuntimeError; writes go through atomic_write (L25).
 
-## 2. 输出
+## 2. Output
 
-**状态文件 `claim-register.yaml`(module-design L31: 人类可审)**: 首行注释含 `[initialized]` 标记 + `state_hash=<hex>` + `seeds=N` + `sample=<name>`; 体为 seed claims(id/status/boundary_type/evidence_tier_attempted/promotion_attempts/depends_on, 对应 L56 Claim schema, 附 title 行)。
+**State file `claim-register.yaml` (module-design L31: human-auditable)**:
+first comment line carries the `[initialized]` marker + `state_hash=<hex>` +
+`seeds=N` + `sample=<name>`; the body is the seed claims (id/status/
+boundary_type/evidence_tier_attempted/promotion_attempts/depends_on, matching
+the L56 Claim schema, with a title line).
 
-**stdout(机器可读, 每条一行)**:
-- 全新初始化: `kunglao-init: initialized <ws> (seed_claims=3 sample=<name>)` + `kunglao-init: state_hash=<hex>` + hooks 行(见下)
-- 续接模式: `kunglao-init: resume — <ws> already initialized`(exit 0)
+**stdout (machine-readable, one line each)**:
+- fresh init: `kunglao-init: initialized <ws> (seed_claims=3 sample=<name>)` + `kunglao-init: state_hash=<hex>` + hooks line (below)
+- resume mode: `kunglao-init: resume — <ws> already initialized` (exit 0)
 - --force: `kunglao-init: --force backup -> <backup-path>`
-- hooks: 部署 → `kunglao-init: hooks -> <target> (<n> entries, idempotent)`; 跳过 → `kunglao-init: hooks skipped — <reason>`
+- hooks: deployed → `kunglao-init: hooks -> <target> (<n> entries, idempotent)`; skipped → `kunglao-init: hooks skipped — <reason>`
 
-**stderr**: 漂移 → `kunglao-init: WARNING state drift detected (recorded <old>, computed <new>) — external edits present`(含 "drift"/"warn", 测试断言点); 校验失败 → `FATAL`。
+**stderr**: drift → `kunglao-init: WARNING state drift detected (recorded
+<old>, computed <new>) — external edits present` (contains "drift"/"warn",
+the test assertion point); validation failure → `FATAL`.
 
-**exit code**: 0 = 成功(含续接/漂移告警后继续); 2 = Phase 3 校验失败(标记缺失或 seed < 3)。
+**exit code**: 0 = success (including resume / continuing after a drift
+warning); 2 = Phase 3 validation failure (marker missing or seed < 3).
 
-**hooks 部署边界(硬约束)**: 绝不写生产 `~/.claude/settings.json`。目标仅: ① `--hooks-json <path>` 指定副本(不存在则创建); ② `<workspace>/.claude/settings.json`(若存在); 两者皆无 → 跳过并说明。条目格式与 hook_activation.py 一致:`{"type":"command","command":"python <hooks-dir>/worker_budget.py"}`(POSIX 路径, PreToolUse+PostToolUse matcher=Agent, DESIGN L104)。
+**Hooks deployment boundary (hard constraint)**: NEVER write the production
+`~/.claude/settings.json`. Targets only: ① a copy named by `--hooks-json
+<path>` (created if absent); ② `<workspace>/.claude/settings.json` (if it
+exists); with neither → skip with a stated reason. Entry format matches
+hook_activation.py: `{"type":"command","command":"python
+<hooks-dir>/worker_budget.py"}` (POSIX paths,
+PreToolUse+PostToolUse matcher=Agent, DESIGN L104).
 
-## 3. 状态机
+## 3. State machine
 
 ```
 run(ws):
   reg = ws/claim-register.yaml
-  ├─ reg 存在 且 非 --force:
-  │    └─ 含 [initialized] → resume(ws, text)        # Phase 1 存在性检查
-  │         ├─ extract state_hash → 重算 compute_state_hash(ws)
-  │         ├─ 不相等 → stderr WARNING drift(不静默, module-design L224 精神: 检测→告警)
-  │         └─ 输出 resume → exit 0(不触碰任何文件, seed 不重复)
-  ├─ --force 且 reg 存在 → backup_register() → 输出备份路径
-  └─ initialize(ws, hooks_json)                      # Phase 2 全新初始化
-       ├─ scaffold(幂等: 存在且非空跳过, DESIGN L98/L105)
-       ├─ detect_sample(bins/ 首文件)
-       ├─ claim-register 草案(空 hash) → compute_state_hash → 写 [initialized] 标记(自一致)
-       ├─ deploy_hooks(幂等, DESIGN L104)
-       └─ Phase 3 校验: 标记存在 + seed 计数 ≥ 3 → exit 0 / 失败 → exit 2
+  ├─ reg exists and not --force:
+  │    └─ contains [initialized] → resume(ws, text)        # Phase 1 existence check
+  │         ├─ extract state_hash → recompute compute_state_hash(ws)
+  │         ├─ not equal → stderr WARNING drift (not silent; module-design L224 spirit: detect → warn)
+  │         └─ print resume → exit 0 (touch no files, seeds not repeated)
+  ├─ --force and reg exists → backup_register() → print backup path
+  └─ initialize(ws, hooks_json)                             # Phase 2 fresh initialization
+       ├─ scaffold (idempotent: exists and non-empty → skip, DESIGN L98/L105)
+       ├─ detect_sample (first file in bins/)
+       ├─ draft claim-register (empty hash) → compute_state_hash → write [initialized] marker (self-consistent)
+       ├─ deploy_hooks (idempotent, DESIGN L104)
+       └─ Phase 3 validation: marker present + seed count ≥ 3 → exit 0 / failure → exit 2
 ```
 
-四条路径:
-1. **首次**: scaffold → 写 seed 注册表(3 条)+ 标记 → hooks(有目标则部署) → exit 0
-2. **续接**: 标记命中 → 重算哈希比对 → 无漂移 resume / 有漂移 WARNING 后仍 resume → exit 0, 注册表逐字节不变
-3. **漂移**: 外部编辑 claim-register 后重跑 → 归一化哈希不匹配 → stderr 含 "drift"/"warn", exit 0(不覆盖)
-4. **--force**: 先 `claim-register*.bak*` 备份 → 重建注册表(新 state_hash)→ hooks 幂等(0 新增)→ exit 0
+Four paths:
+1. **First run**: scaffold → write seed register (3 claims) + marker → hooks (deployed if a target exists) → exit 0
+2. **Resume**: marker hit → recompute hash and compare → no drift, resume / drift, WARNING then still resume → exit 0, register byte-for-byte unchanged
+3. **Drift**: rerun after externally editing the claim-register → normalized hash mismatch → stderr contains "drift"/"warn", exit 0 (no overwrite)
+4. **--force**: first `claim-register*.bak*` backup → rebuild register (new state_hash) → hooks idempotent (0 added) → exit 0
 
-## 4. 测试点(tests/test_kunglao_init.py)
+## 4. Test points (tests/test_kunglao_init.py)
 
-| 测试 | 判据(E-init) | 覆盖路径 |
+| Test | Criteria (E-init) | Path covered |
 |---|---|---|
-| `test_kunglao_init_script_exists` | 文件存在可运行 | — |
-| `test_second_run_resumes` | 首次 `[initialized]` 标记 + seed 写入; 二次运行续接且 `id: C-` 计数不变 | 路径 1→2 |
-| `test_hooks_idempotent` | 重跑不重复部署 hooks(未部署则 skip 放行) | 路径 2(部署目标缺省时 skip) |
-| `test_state_hash_drift_warns` | 改注册表后重跑输出含 "drift"/"warn" | 路径 3 |
-| `test_force_backs_up_first` | --force 重建前生成 `claim-register*.bak*` | 路径 4 |
+| `test_kunglao_init_script_exists` | file exists and is runnable | — |
+| `test_second_run_resumes` | first run writes the `[initialized]` marker + seeds; second run resumes with the `id: C-` count unchanged | path 1→2 |
+| `test_hooks_idempotent` | rerun does not double-deploy hooks (skip passthrough when nothing to deploy) | path 2 (skip when no default deploy target) |
+| `test_state_hash_drift_warns` | after editing the register, rerun output contains "drift"/"warn" | path 3 |
+| `test_force_backs_up_first` | --force produces `claim-register*.bak*` before rebuilding | path 4 |
 
-## 5. 完成判据
+## 5. Completion criteria
 
-- [ ] `python -m pytest -q -p no:cacheprovider`(kunglao-agent/ 下): 5 个 kunglao-init 测试全过(含设计允许的 skip), 原有 138 通过用例零回归
-- [ ] 状态机四路径(首次/续接/漂移/--force)行为与 §3 一致, 漂移告警含 "drift"/"warn"
-- [ ] state_hash 口径 = sha256(claim-register 归一化 + facts/_INDEX.md + facts/ 文件清单按名排序拼接), 自一致性(写标记后重算不变)
-- [ ] hooks 绝不写 `~/.claude/settings.json`; `--hooks-json` 副本与 workspace `.claude/settings.json` 幂等合并
-- [ ] 不触碰: bins/ 二进制内容(只读文件名/哈希)、生产 settings.json、hooks/ 目录
+- [ ] `python -m pytest -q -p no:cacheprovider` (under kunglao-agent/): all 5 kunglao-init tests pass (including design-permitted skips), zero regression in the pre-existing 138 passing cases
+- [ ] the four state-machine paths (first/resume/drift/--force) behave per §3, drift warning contains "drift"/"warn"
+- [ ] state_hash formula = sha256(claim-register normalized + facts/_INDEX.md + facts/ file list concatenated name-sorted), self-consistent (recomputing after writing the marker is unchanged)
+- [ ] hooks never write `~/.claude/settings.json`; `--hooks-json` copy and workspace `.claude/settings.json` merge idempotently
+- [ ] never touched: bins/ binary content (read filenames/hashes only), production settings.json, hooks/ directory

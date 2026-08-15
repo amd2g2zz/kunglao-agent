@@ -8,7 +8,7 @@
 After being dispatched a task, a worker reads in this order and **never needs to open any .py source**:
 
 1. `tools/_INDEX.md` (category table) → pick a category;
-2. `tools/_index-<category>.md` (per-tool contract entries: 用途/用法/输入/输出/exit code/when_not) → copy the usage command to construct the call;
+2. `tools/_index-<category>.md` (per-tool contract entries: Purpose/Usage/Inputs/Outputs/exit code/when_not) → copy the usage command to construct the call;
 3. `tools/_INDEX.yaml` (machine contract, consumed by gates/scripts).
 
 This README is the **toolshelf guide** (for registrants/maintainers); it does not carry tool contracts.
@@ -105,11 +105,11 @@ Validation rules are in `validate_index.py` (name unique / category within the 6
 
 1. **Heading levels**: each file has exactly 1 `#` (H1, the file title); sections use `##` (H2); each per-tool contract entry uses `###` (H3, the heading is the tool name); H4 and deeper are forbidden.
 2. **Contract-entry template** (each `_index-<category>.md` entry, fixed segment order):
-   - **用途**: one sentence
-   - **用法**:
+   - **Purpose**: one sentence
+   - **Usage**:
      (fenced code block: a directly copyable command with all required arguments; first line `python tools/...` or `mcp__...`)
-   - **输入**: input shape and required arguments
-   - **输出**: output shape (JSON/listing/file)
+   - **Inputs**: input shape and required arguments
+   - **Outputs**: output shape (JSON/listing/file)
    - **exit code**: three-state semantics (0 success / 1 negative finding / 2 error; a few tools define their own, see the entry)
    - **when_not**: consistent with _INDEX.yaml's when_not
 3. **Tables**: only for overview listings (category table/tool catalog); usage commands never go into tables (they go into fenced code blocks); no line breaks or unescaped `|` inside cells.

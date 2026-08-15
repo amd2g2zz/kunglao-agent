@@ -5,7 +5,7 @@ The schema is defined by `malware-veri-notes/references/frontmatter-schema.md`
 (live skill dir, not this repo). This template is the kunglao-side projection:
 the 12 mandatory fields of the schema, plus the documented kunglao extension
 layer. Validation: `python scripts/lint_facts.py <WORKSPACE>` — a fact that
-fails lint is 不合格 and must not enter the fact base.
+fails lint is unqualified and must not enter the fact base.
 
 ## 12 mandatory schema fields
 

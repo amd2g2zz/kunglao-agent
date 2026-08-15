@@ -12,7 +12,7 @@ Contract under test:
   - diff-summary: match statistics from a bindiff.v1 artifact
   - diff-list-functions: categories identical/changed/added/removed
   - diff-function <addr>: lenses callees + bodyBytesChanged (always present for
-    matched functions — the 恒检 lens)
+    matched functions — the always-checked lens)
   - --base/--target dual-sample input, --json/--reproduce, exit 0/1/2
 """
 from __future__ import annotations
@@ -342,7 +342,7 @@ class TestDiffFunction:
         assert data["query_addr"] == "0x501100"
         assert data["category"] == "changed"
         lenses = data["lenses"]
-        assert lenses["body_bytes_changed"] is True   # 恒检 lens always present
+        assert lenses["body_bytes_changed"] is True   # always-checked lens always present
         assert "FUN_00501050" in lenses["callees_added"][0]
         assert "FUN_00401000" in lenses["callees_removed"][0]
         assert lenses["callees_common"] == 1

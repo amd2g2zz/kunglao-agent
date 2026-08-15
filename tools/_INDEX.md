@@ -1,6 +1,6 @@
 # tools/ Domain Index — progressive disclosure entry point
 
-> Orchestrator: read this file once per round, pick a category, dispatch the worker; the worker reads `_index-<category>.md` (per-tool contract entries: 用途/用法/输入/输出/exit code/when_not — directly copyable invocations), then loads `_INDEX.yaml` for the machine contract. Full per-category catalog below the category table.
+> Orchestrator: read this file once per round, pick a category, dispatch the worker; the worker reads `_index-<category>.md` (per-tool contract entries: Purpose/Usage/Inputs/Outputs/exit code/when_not — directly copyable invocations), then loads `_INDEX.yaml` for the machine contract. Full per-category catalog below the category table.
 
 ## Category table
 
@@ -35,7 +35,7 @@
 
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
-| `_index-crypto.md` | crypto | crypto tool contract entries (per-tool H3 entry: 用途/用法/输入/输出/exit code/when_not) | when a worker is dispatched to cipher-identification/decoding/hash tasks |
+| `_index-crypto.md` | crypto | crypto tool contract entries (per-tool H3 entry: Purpose/Usage/Inputs/Outputs/exit code/when_not) | when a worker is dispatched to cipher-identification/decoding/hash tasks |
 | `_index-static.md` | static | static tool contract entries (same template) | when a worker is dispatched to static triage tasks |
 | `_index-ghidra.md` | ghidra | ghidra tool contract entries (same template) | when a worker is dispatched to function-level disassembly tasks |
 | `_index-dynamic.md` | dynamic | VM dynamic tool contract entries (MCP-provided, same template) | when a worker is dispatched to dynamic-debugging tasks |

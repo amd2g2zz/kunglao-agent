@@ -15,24 +15,24 @@
 
 ### x64dbg-remote
 
-- **用途**: Remotely connect to x64dbg on the VM over MCP for runtime register/memory/call-stack validation.
-- **用法**:
+- **Purpose**: Remotely connect to x64dbg on the VM over MCP for runtime register/memory/call-stack validation.
+- **Usage**:
   ```bash
   mcp__x64dbg__connect_remote(host=192.168.20.128)   # connect_remote only; start_session/connect_to_session/connect_to_instance/terminate_session are forbidden on the host
   ```
-- **输入**: A process already attached on the VM side (after connecting, read registers/memory/breakpoints via MCP tool arguments).
-- **输出**: Runtime register/memory/call-stack readings (tool return values).
+- **Inputs**: A process already attached on the VM side (after connecting, read registers/memory/breakpoints via MCP tool arguments).
+- **Outputs**: Runtime register/memory/call-stack readings (tool return values).
 - **exit code**: N/A (MCP call; failure surfaces as a call error/timeout, no shell exit code).
 - **when_not**: Not for problems solvable statically; the host channel is forbidden across the board (CLAUDE.md hard constraint).
 
 ### frida-remote
 
-- **用途**: Spawn/attach the target process on the VM over MCP and inject a Frida hook script.
-- **用法**:
+- **Purpose**: Spawn/attach the target process on the VM over MCP and inject a Frida hook script.
+- **Usage**:
   ```bash
   mcp__frida__spawn   # or mcp__frida__attach (VM-only: 192.168.20.128:1337)
   ```
-- **输入**: VM target process/binary + hook script (generated from `templates/frida/` templates).
-- **输出**: Runtime data from hook hits (call counts/arguments/return values).
+- **Inputs**: VM target process/binary + hook script (generated from `templates/frida/` templates).
+- **Outputs**: Runtime data from hook hits (call counts/arguments/return values).
 - **exit code**: N/A (MCP call; failure surfaces as a call error/timeout, no shell exit code).
 - **when_not**: Not for problems solvable by static analysis; the host channel is forbidden across the board (hard ban #5).

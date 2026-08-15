@@ -12,7 +12,7 @@
 //   - CombinedFunctionAndDataReferenceProgramCorrelator -> changed functions
 //     (a modified body can still match via call/data references)
 //
-// Every kept pair carries the 恒检 lenses: body_bytes_changed (byte compare
+// Every kept pair carries the always-checked lenses: body_bytes_changed (byte compare
 // of both function bodies) + callees_added/callees_removed/callees_common.
 // Output: bindiff.v1 JSON (schema/program/image_base meta + summary +
 // per-function category entries) written to the --out path.
@@ -316,7 +316,7 @@ public class GhidraBindiff extends GhidraJsonScript {
         return functions;
     }
 
-    /** 恒检 lens: byte-compare both function bodies (always computed). */
+    /** Always-checked lens: byte-compare both function bodies (always computed). */
     private boolean bodyBytesChanged(Program baseProgram, Function baseFn,
             Program targetProgram, Function targetFn) {
         return !Arrays.equals(collectBodyBytes(baseProgram, baseFn),

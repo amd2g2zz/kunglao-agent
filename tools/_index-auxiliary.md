@@ -16,60 +16,60 @@
 
 ### audit-legacy-proven
 
-- **用途**: Audit a workspace's legacy PROVEN claims (BLIND signature dimension + index traceability).
-- **用法**:
+- **Purpose**: Audit a workspace's legacy PROVEN claims (BLIND signature dimension + index traceability).
+- **Usage**:
   ```bash
   python tools/auxiliary/audit_legacy_proven.py <workspace> --json
   ```
-- **输入**: Workspace root (positional, required; reads claim-register.yaml + facts/_INDEX.md); optional `--output/--out` (persist JSON)/`--json` (stdout JSON).
-- **输出**: Legacy PROVEN claim audit JSON/summary (default output audit-<ws>-<ts>.json).
+- **Inputs**: Workspace root (positional, required; reads claim-register.yaml + facts/_INDEX.md); optional `--output/--out` (persist JSON)/`--json` (stdout JSON).
+- **Outputs**: Legacy PROVEN claim audit JSON/summary (default output audit-<ws>-<ts>.json).
 - **exit code**: 0 success / 2 error (workspace does not exist).
 - **when_not**: Not needed when no legacy PROVEN claims require audit cleanup.
 
 ### capture-golden
 
-- **用途**: Re-capture golden master baselines per the CASES list (synthetic workspaces + CLI arguments).
-- **用法**:
+- **Purpose**: Re-capture golden master baselines per the CASES list (synthetic workspaces + CLI arguments).
+- **Usage**:
   ```bash
   python tools/auxiliary/capture_golden.py --refresh
   ```
-- **输入**: The CASES list (synthetic workspaces + CLI arguments in-script); optional `--out <DIR>` (default tests/fixtures/golden).
-- **输出**: tests/fixtures/golden/{manifest.yaml, F-NN/expected/stdout.txt}.
+- **Inputs**: The CASES list (synthetic workspaces + CLI arguments in-script); optional `--out <DIR>` (default tests/fixtures/golden).
+- **Outputs**: tests/fixtures/golden/{manifest.yaml, F-NN/expected/stdout.txt}.
 - **exit code**: 0 success / 2 error (argument error, argparse).
 - **when_not**: `--refresh` re-capture is only for contract-change flows; not for routine analysis.
 
 ### measure-blind-coverage
 
-- **用途**: Measure the BLIND blind-verification coverage of PROVEN claims.
-- **用法**:
+- **Purpose**: Measure the BLIND blind-verification coverage of PROVEN claims.
+- **Usage**:
   ```bash
   python tools/auxiliary/measure_blind_coverage.py <workspace> --json
   ```
-- **输入**: Workspace root (positional, required; reads claim-register.yaml + verifier_sign_off from facts/*.md); optional `--out`/`--reliability`.
-- **输出**: BLIND coverage JSON (PROVEN/blind_signed/unverified/coverage).
+- **Inputs**: Workspace root (positional, required; reads claim-register.yaml + verifier_sign_off from facts/*.md); optional `--out`/`--reliability`.
+- **Outputs**: BLIND coverage JSON (PROVEN/blind_signed/unverified/coverage).
 - **exit code**: 0 done / 2 error (argument error, argparse).
 - **when_not**: Not needed when blind-verification coverage is not being evaluated.
 
 ### measure-cold-start
 
-- **用途**: Per-file token estimation over the workspace state-file inventory; emits the cold-start baseline.
-- **用法**:
+- **Purpose**: Per-file token estimation over the workspace state-file inventory; emits the cold-start baseline.
+- **Usage**:
   ```bash
   python tools/auxiliary/measure_cold_start.py <workspace> --out <out.json>
   ```
-- **输入**: Workspace root (positional, required; reads claim-register.yaml/_INDEX/ledger/progress and other state files); optional `--rounds`.
-- **输出**: docs/baselines/cold-start-tokens.json (per-file token estimates, default path).
+- **Inputs**: Workspace root (positional, required; reads claim-register.yaml/_INDEX/ledger/progress and other state files); optional `--rounds`.
+- **Outputs**: docs/baselines/cold-start-tokens.json (per-file token estimates, default path).
 - **exit code**: 0 success / 2 error (missing workspace).
 - **when_not**: Not for non-cold-start-baseline measurement.
 
 ### sanitize-text
 
-- **用途**: Prompt-injection sanitization of sample-derived text: zero-width character/homoglyph/instruction-marker detection and removal (the mandatory gate before feeding an LLM worker).
-- **用法**:
+- **Purpose**: Prompt-injection sanitization of sample-derived text: zero-width character/homoglyph/instruction-marker detection and removal (the mandatory gate before feeding an LLM worker).
+- **Usage**:
   ```bash
   python tools/auxiliary/sanitize.py --in <sample-derived-text> --mode full --json
   ```
-- **输入**: Sample-derived text (`--in` or stdin) + `--mode zero-width|homoglyph|markers|full`; optional `--report-only`/`--sentinel-prefix`.
-- **输出**: Sanitized text or JSON (zwx_count/homoglyph_count/marker_count/suspicious/sha256) + `--reproduce` field=value lines.
+- **Inputs**: Sample-derived text (`--in` or stdin) + `--mode zero-width|homoglyph|markers|full`; optional `--report-only`/`--sentinel-prefix`.
+- **Outputs**: Sanitized text or JSON (zwx_count/homoglyph_count/marker_count/suspicious/sha256) + `--reproduce` field=value lines.
 - **exit code**: 0 positive finding (injection detected) / 1 negative finding (nothing detected) / 2 error.
 - **when_not**: Not needed when the text is not consumed by an LLM worker.

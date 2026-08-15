@@ -10,10 +10,10 @@ to use it is a defect — this test mechanically asserts that premise.
 Contract:
 1. Every registered tool in tools/_INDEX.yaml (28 total) has a contract entry
    (H3 `### <name>`) in its category index md
-2. An entry has 6 required segments: 用途 (purpose) / 用法 (usage) / 输入
-   (inputs) / 输出 (outputs) / exit code / when_not — segment headings are
-   pinned in Chinese (REQUIRED_SEGMENTS); do not translate without also
-   rewriting the tools/ index docs
+2. An entry has 6 required segments: Purpose / Usage / Inputs / Outputs /
+   exit code / when_not (REQUIRED_SEGMENTS) — the segment names are shared
+   vocabulary between tools/_index-*.md and this test; doc and pin must move
+   in the same commit
 3. The usage segment is a directly copyable command (fenced code block whose
    first line is `python tools/...` or `mcp__`), and the script path the
    python command points at really exists (resolvable command form)
@@ -38,7 +38,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ROOT / "tools"
 
-REQUIRED_SEGMENTS = ("用途", "用法", "输入", "输出", "exit code", "when_not")
+REQUIRED_SEGMENTS = ("Purpose", "Usage", "Inputs", "Outputs", "exit code", "when_not")
 
 # (category dir name == category id, #340: _index-<category>.md filename matches the id)
 CATEGORY_READMES = [
@@ -82,7 +82,7 @@ def _entry_block(text: str, name: str) -> str:
 def _usage_first_line(entry: str) -> str:
     """Extract the first line of the usage segment's fenced code block (command form)."""
     m = re.search(
-        r"\*\*用法\*\*[^\n]*\n\s*```\w*\n\s*([^\n]+)", entry)
+        r"\*\*Usage\*\*[^\n]*\n\s*```\w*\n\s*([^\n]+)", entry)
     assert m, "usage segment must be a fenced code block"
     return m.group(1).strip()
 

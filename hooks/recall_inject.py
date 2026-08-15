@@ -47,6 +47,11 @@ SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 RECALL_SCRIPT = SKILL_DIR / "scripts" / "references_recall.py"
 RECALL_TIMEOUT = 5.0          # recall must never hold dispatch hostage
 FILES_PER_QUERY = 3           # top hits only — guidance stays compact
+# NOTE (#357): ranking below is token-overlap scoring, which is
+# language-sensitive — translating a recall data source (references/_INDEX.md,
+# references/_index-<domain>.md) shifts scores. Guarded by
+# tests/test_recall_inject.py + tests/test_vm_claim_injects_recall_guidance.py
+# (the recall-ranking pin); move data source and pin in the same commit.
 MAX_FILES = 8                 # global cap across all queries
 
 # dispatch_gate's exact claim-dispatch shape — mirror it so the hook fires on

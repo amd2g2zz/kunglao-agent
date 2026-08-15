@@ -24,4 +24,4 @@ The integration point (before a worker reads tool output into context) is tracke
 
 ## Relation to the index docs
 
-A worker reads `tools/_index-auxiliary.md` first (the 6-segment contract entries for the auxiliary domain's 5 tools: 用途/用法/输入/输出/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and directory history. The machine contract is `tools/_INDEX.yaml`. The category id matches the directory name (#340; the old id `aux` is a Windows reserved device name and cannot be a directory name, so the id was renamed with the directory).
+A worker reads `tools/_index-auxiliary.md` first (the 6-segment contract entries for the auxiliary domain's 5 tools: Purpose/Usage/Inputs/Outputs/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and directory history. The machine contract is `tools/_INDEX.yaml`. The category id matches the directory name (#340; the old id `aux` is a Windows reserved device name and cannot be a directory name, so the id was renamed with the directory).

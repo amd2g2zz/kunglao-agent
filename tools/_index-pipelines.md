@@ -12,12 +12,12 @@
 
 ### build-evidence-index
 
-- **用途**: Scan the workspace's evidence/ + analysis_artifacts/ and build the evidence index (evidence/_index.json + _INDEX.md).
-- **用法**:
+- **Purpose**: Scan the workspace's evidence/ + analysis_artifacts/ and build the evidence index (evidence/_index.json + _INDEX.md).
+- **Usage**:
   ```bash
   python tools/pipelines/build_evidence_index.py <workspace> --write
   ```
-- **输入**: Workspace root (positional, required) + `--write` (persist switch); optional `--out`/`--rel`.
-- **输出**: evidence/_index.json + _INDEX.md (eid/path/sha256/source_reliability).
+- **Inputs**: Workspace root (positional, required) + `--write` (persist switch); optional `--out`/`--rel`.
+- **Outputs**: evidence/_index.json + _INDEX.md (eid/path/sha256/source_reliability).
 - **exit code**: 0 success / 2 error (missing workspace etc.).
 - **when_not**: Not needed for pure analysis without evidence registration.

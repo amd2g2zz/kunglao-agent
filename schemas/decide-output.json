@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "kunglao-agent/schemas/decide-output.json",
   "title": "kunglao-decide output (M1.3 frozen)",
-  "description": "M1 DECIDE 输出契约(冻结, worker_pulse 解析)。源: docs/design/archive/module-design.md M1.3 (L129-139)。",
+  "description": "M1 DECIDE output contract (frozen, worker_pulse parses it). Source: docs/design/archive/module-design.md M1.3 (L129-139).",
   "type": "object",
   "required": [
     "decision",
@@ -34,9 +34,9 @@
         "required": ["claim_id", "action", "score", "skill"],
         "properties": {
           "claim_id": { "type": "string" },
-          "action": { "type": "string", "description": "动作类型 = method-graph.yaml 节点 id" },
+          "action": { "type": "string", "description": "action type = method-graph.yaml node id" },
           "score": { "type": "number" },
-          "skill": { "type": ["string", "null"], "description": "method_router 选定的 skill; 路由 escalate 时为 null" }
+          "skill": { "type": ["string", "null"], "description": "skill selected by method_router; null when routing escalates" }
         },
         "additionalProperties": true
       }
@@ -44,31 +44,31 @@
     "blocked": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "open 且 blocked 的 claim id"
+      "description": "claim ids that are open and blocked"
     },
     "failure_blocked": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "failed attempt 且无当前 failure_analysis 的 claim id"
+      "description": "claim ids with a failed attempt and no current failure_analysis"
     },
     "stale": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "stuck worker 名(>20min 无状态更新)"
+      "description": "stuck worker names (>20min without a status update)"
     },
     "drifts": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "plan/state 漂移(阶段 4 不计算, 恒 [] — 见 contract.md 契约空白)"
+      "description": "plan/state drift (not computed in phase 4, always [] — see contract.md contract blank)"
     },
     "explore_mode": {
       "type": "boolean",
-      "description": "true = verified_fact_count < EXPLORE_THRESHOLD(5), top_actions 按 cheapness 铺开 T1"
+      "description": "true = verified_fact_count < EXPLORE_THRESHOLD (5); top_actions spread T1 by cheapness"
     },
     "selfcheck": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "行为契约扫描违规(反问/自加 cap); 无 --scan-text 时为 []"
+      "description": "behavior-contract scan violations (ask-back/self-cap); [] without --scan-text"
     },
     "escalations": {
       "type": "array",
@@ -81,12 +81,12 @@
           "reason": { "type": "string" }
         }
       },
-      "description": "method_router 图断 escalates(附加字段, 非冻结必需)"
+      "description": "method_router graph edge escalates (additional field, not frozen-required)"
     },
     "open_count": { "type": "integer" },
     "partial_count": { "type": "integer" },
     "free_slots": { "type": "integer" },
-    "error": { "type": "string", "description": "异常时保守 BLOCKED 的错误描述(附加字段)" }
+    "error": { "type": "string", "description": "error description for the conservative BLOCKED on exceptions (additional field)" }
   },
   "additionalProperties": true
 }
