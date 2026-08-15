@@ -74,8 +74,12 @@ def run(script: str, ws: Path, *extra: str) -> dict:
         return {"rc": -1, "stdout": f"EXC {exc}"}
 
 
-def main() -> int:
-    ws = _resolve_ws(sys.argv[1] if len(sys.argv) > 1 else None)
+def main(argv: list[str] | None = None) -> int:
+    """argv: explicit CLI args (defaults to sys.argv[1:]) — lets the kunglao.py
+    router pass the caller's workspace instead of the router's own argv
+    (issue #370: bare main() resolved the subcommand token "tick" as the ws)."""
+    args = sys.argv[1:] if argv is None else argv
+    ws = _resolve_ws(args[0] if args else None)
     # action_taken (issue #237): the tick MUST produce a convergence action or a
     # mechanical convergence argument. The orchestrator fills this field after
     # reading the report — what it dispatched / verified / solved / reactivated.

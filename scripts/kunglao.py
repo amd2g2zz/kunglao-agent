@@ -44,14 +44,21 @@ def cmd_decide(args) -> int:
         d = cc.decide(ws)
         print(json.dumps(d, ensure_ascii=False, indent=2))
         return d["exit_code"]
-    return cc.main()
+    # Human mode: render cc.decide() via convergence_check's own _human —
+    # never call cc.main(), whose argparse would re-parse the ROUTER's argv
+    # (["decide", <ws>]) and SystemExit 2 (issue #370).
+    d = cc.decide(ws)
+    print(cc._human(d))
+    return d["exit_code"]
 
 
 def cmd_tick(args) -> int:
     """M5 tick: heartbeat_tick chain (selfcheck/reconcile/renew/heartbeat-check).
     E3.2: output must match legacy heartbeat_tick.py chain."""
     ws = Path(args.workspace).resolve()
-    return hbt.main() if hasattr(hbt, "main") else 0
+    # Explicit argv injection (issue #370): a bare hbt.main() read sys.argv[1],
+    # i.e. the router's subcommand token "tick", as the workspace path.
+    return hbt.main([str(ws)])
 
 
 def cmd_verify(args) -> int:
@@ -83,9 +90,19 @@ def cmd_record(args) -> int:
 
 
 def cmd_health(args) -> int:
+    """M5 health: compose convergence_health's module functions directly —
+    never ch.main(), whose argparse would re-parse the ROUTER's argv
+    (["health", <ws>]) and SystemExit 2 (issue #370)."""
     import convergence_health as ch
     ws = Path(args.workspace).resolve()
-    return ch.main() if hasattr(ch, "main") else 0
+    ledger = ch._read_ledger(ws)
+    if not ledger:
+        print(f"FAIL: no {ch.LEDGER_NAME} under {ws} (run convergence_check.py first)",
+              file=sys.stderr)
+        return ch.EXIT_NO_DATA
+    r = ch.assess(ledger)
+    print(ch._human(r))
+    return r["exit_code"]
 
 
 def main() -> int:

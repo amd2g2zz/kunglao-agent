@@ -130,3 +130,37 @@ class TestSchemaFieldIntegrity:
         out = _run_kd(ws)
         for required in ("top_actions", "blocked", "stale", "drifts", "explore_mode", "selfcheck"):
             assert required in out, f"kd.decide() must produce '{required}'"
+
+
+class TestKunglaoDecideInvalid:
+    """Issue #371: INVALID is a NORMAL convergence_check.decide() return (non-empty
+    malformed task_spec primary_questions — issue #77 fail-closed path), copied
+    verbatim by kunglao-decide.decide() L134. The frozen decide-output.json enum
+    lacked INVALID, so the composite CLI emitted contract-violating output on an
+    untested path. INVALID reuses EXIT_BLOCKED=4 (convergence_check.py L29 —
+    frozen exit surface 0-4 that worker_pulse parses); the schema enum, not the
+    exit mapping, was wrong. Freeze ritual (specs/README): this RED test +
+    schema amendment in the same commit."""
+
+    def test_kd_invalid_vs_schema_passes(self, tmp_path, contract_validator):
+        """RED before fix: kd --json on a malformed task_spec emits
+        decision=INVALID → schema enum violation. GREEN: validates."""
+        ws = _make_ws(tmp_path, claims=[])
+        # non-string primary_questions item → _parse_primary_questions error →
+        # decide() escalates INVALID (exit 4), never CONVERGED/exit 0
+        (ws / "task_spec.yaml").write_text(
+            "primary_questions:\n  - 42\n", encoding="utf-8")
+        out = _run_kd(ws)
+        assert out["decision"] == "INVALID"
+        assert out["exit_code"] == 4
+        contract_validator("decide-output", out)
+
+    def test_cc_invalid_vs_correct_schema_passes(self, tmp_path, contract_validator):
+        """Cross-check: the raw cc output for the same workspace already
+        validates (convergence-check-output.json has INVALID since issue #77)."""
+        ws = _make_ws(tmp_path, claims=[])
+        (ws / "task_spec.yaml").write_text(
+            "primary_questions:\n  - 42\n", encoding="utf-8")
+        out = _run_cc(ws)
+        assert out["decision"] == "INVALID"
+        contract_validator("convergence-check-output", out)

@@ -18,13 +18,14 @@
   "properties": {
     "decision": {
       "type": "string",
-      "enum": ["DISPATCH", "DISPATCH_VERIFIER", "SATURATED", "BLOCKED", "CONVERGED"]
+      "enum": ["DISPATCH", "DISPATCH_VERIFIER", "SATURATED", "BLOCKED", "CONVERGED", "INVALID"],
+      "description": "INVALID (#371): non-empty malformed task_spec primary_questions (issue #77 fail-closed path) — a normal convergence_check return copied verbatim; never dispatches against an undefined convergence target."
     },
     "exit_code": {
       "type": "integer",
       "minimum": 0,
       "maximum": 4,
-      "description": "0=CONVERGED 1=DISPATCH 2=DISPATCH_VERIFIER 3=SATURATED 4=BLOCKED"
+      "description": "0=CONVERGED 1=DISPATCH 2=DISPATCH_VERIFIER 3=SATURATED 4=BLOCKED; INVALID reuses 4 (frozen 0-4 exit surface parsed by worker_pulse — see convergence_check.py exit-code contract)"
     },
     "top_actions": {
       "type": "array",
