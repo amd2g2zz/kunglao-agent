@@ -39,37 +39,64 @@ from external_kicker import (  # noqa: E402
 )
 
 
-NOW = datetime.now(timezone.utc)
-
-
 def ts(minutes_ago: int) -> str:
-    return (NOW - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # #375: compute AT CALL TIME — production code (external_kicker.tick,
+    # lib_kunglao.workers_progressing) compares these stamps against its own
+    # real clock; a module-frozen NOW ages "fresh" fixtures past
+    # DEFAULT_STALE_MINUTES in long suite runs.
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
+
+
+# ---------- #375 regression pins: ts() semantics = call-time clock ----------
+
+def test_ts_relative_to_call_time():
+    """#375: two ts(0) calls a second apart must differ — ts() reads the clock
+    at CALL time, not module import (strftime second resolution makes the
+    1.2 s gap deterministic). A module-frozen NOW ages synthetic "fresh"
+    fixtures past DEFAULT_STALE_MINUTES while long suites run."""
+    first = ts(0)
+    time.sleep(1.2)
+    assert ts(0) != first
+
+
+def test_fresh_heartbeat_never_ages_via_fixture_clock():
+    """#375 time-immunity invariant: a heartbeat stamped ts(0) is alive no
+    matter when the real clock reads it (within the suite run's lifetime)."""
+    hb = {"last_tick_ts": ts(0), "activity_ts": ts(0)}
+    assert session_is_dead(hb, datetime.now(timezone.utc), 10) is False
 
 
 # ---------- session_is_dead (D1) ----------
+# #375: `now` is computed inside each test so it stays consistent with the
+# per-call ts() fixtures (a module-frozen NOW would go stale mid-suite).
 
 def test_session_is_dead_missing_heartbeat():
-    assert session_is_dead(None, NOW, 10) is True
+    assert session_is_dead(None, datetime.now(timezone.utc), 10) is True
 
 
 def test_session_is_dead_fresh_last_tick_alive():
+    now = datetime.now(timezone.utc)
     hb = {"last_tick_ts": ts(2), "activity_ts": ts(120)}
-    assert session_is_dead(hb, NOW, 10) is False
+    assert session_is_dead(hb, now, 10) is False
 
 
 def test_session_is_dead_fresh_activity_alive():
+    now = datetime.now(timezone.utc)
     hb = {"last_tick_ts": ts(120), "activity_ts": ts(2)}
-    assert session_is_dead(hb, NOW, 10) is False
+    assert session_is_dead(hb, now, 10) is False
 
 
 def test_session_is_dead_both_stale():
+    now = datetime.now(timezone.utc)
     hb = {"last_tick_ts": ts(120), "activity_ts": ts(120)}
-    assert session_is_dead(hb, NOW, 10) is True
+    assert session_is_dead(hb, now, 10) is True
 
 
 def test_session_is_dead_unparseable_or_absent_fields():
-    assert session_is_dead({"last_tick_ts": "not-a-timestamp"}, NOW, 10) is True
-    assert session_is_dead({"started_ts": ts(240)}, NOW, 10) is True
+    now = datetime.now(timezone.utc)
+    assert session_is_dead({"last_tick_ts": "not-a-timestamp"}, now, 10) is True
+    assert session_is_dead({"started_ts": ts(240)}, now, 10) is True
 
 
 # ---------- ensure_project_hooks (D2) ----------

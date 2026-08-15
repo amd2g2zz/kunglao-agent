@@ -45,15 +45,20 @@ def load_scripts_lib() -> ModuleType:
 _lib = load_scripts_lib()
 ROTATION_WINDOW = _lib.ROTATION_WINDOW
 
-NOW = datetime.now(timezone.utc)
-
-
 def ts(minutes_ago: int = 0) -> str:
-    return (NOW - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # #375: compute AT CALL TIME — ledger `ts` is excluded from rotation
+    # signatures, and expires_at / worker mtimes are compared against the
+    # real clock by hook_activation.is_active_strict and
+    # lib_kunglao.workers_progressing.
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
 
 
 def future_iso(minutes: int = 30) -> str:
-    return (NOW + timedelta(minutes=minutes)).isoformat(timespec="seconds").replace("+00:00", "Z")
+    # #375: same per-call rule as ts() — expires_at is checked against
+    # datetime.now() at hook-run time, not at test-module import.
+    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat(
+        timespec="seconds").replace("+00:00", "Z")
 
 
 def snap(decision="DISPATCH", open_ids=None, *, open_count=None,
@@ -86,11 +91,13 @@ def write_register(ws: Path, claims: list) -> Path:
 
 
 def write_worker(ws: Path, minutes_ago: int, name="w1", status="in-progress") -> Path:
+    # #375: stamp + mtime AT CALL TIME (workers_progressing compares mtimes
+    # against its own real clock).
     runs = ws / "runs"
     runs.mkdir(exist_ok=True)
     p = runs / f"worker-status-{name}.md"
     p.write_text(f"[{ts()}] step: x | status: {status}\n", encoding="utf-8")
-    t = (NOW - timedelta(minutes=minutes_ago)).timestamp()
+    t = (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).timestamp()
     os.utime(p, (t, t))
     return p
 

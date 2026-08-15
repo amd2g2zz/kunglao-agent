@@ -20,11 +20,12 @@ sys.path.insert(0, str(SCRIPTS))
 
 import feedback as fb  # noqa: E402
 
-NOW = datetime.now(timezone.utc)
-
-
 def ts(minutes_ago: int = 0) -> str:
-    return (NOW - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # #375: compute AT CALL TIME — feedback.check_stale compares entry ages
+    # against its own real clock; a module-frozen NOW under-ages "stale"
+    # fixtures (4 * TICK_INTERVAL_MIN) in long suite runs.
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
 
 
 def make_entry(**overrides) -> dict:
