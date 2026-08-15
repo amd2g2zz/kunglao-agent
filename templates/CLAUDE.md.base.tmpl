@@ -10,30 +10,30 @@ Kunglao-agent malware RE workspace — not a software project. The "code" is sta
 
 | Field | Value |
 |-------|-------|
-| SHA1 (filename) | `<SAMPLE_SHA1>` |
-| SHA256 | `<SAMPLE_SHA256>` |
-| Type | `<SAMPLE_TYPE>` |
-| Path | `<SAMPLE_PATH>` |
+| SHA1 (filename) | `{{sample_sha1}}` |
+| SHA256 | `{{sample_sha256}}` |
+| Type | `{{sample_type}}` |
+| Path | `{{sample_path}}` |
 
 ## Skill & orchestrator
 
-Analysis is driven by `/kunglao-agent` (skill at `<SKILL_DIR>`).
+Analysis is driven by `/kunglao-agent` (skill at `{{skill_dir}}`).
 
 **Key scripts** (invoke from workspace root with `.venv` activated):
 ```bash
 source .venv/Scripts/activate
-python <SKILL_DIR>/scripts/convergence_check.py .
-python <SKILL_DIR>/scripts/priority.py .
-python <SKILL_DIR>/scripts/convergence_health.py .
-python <SKILL_DIR>/scripts/failure_analysis_gate.py . <C-NN>
+python {{skill_dir}}/scripts/convergence_check.py .
+python {{skill_dir}}/scripts/priority.py .
+python {{skill_dir}}/scripts/convergence_health.py .
+python {{skill_dir}}/scripts/failure_analysis_gate.py . <C-NN>
 ```
 
 **Hook activation** (30-min TTL, renew via `/loop`):
 ```bash
-python <SKILL_DIR>/scripts/hook_activation.py . --renew
+python {{skill_dir}}/scripts/hook_activation.py . --renew
 ```
 
-**Environment readiness**: `python <SKILL_DIR>/scripts/env_check.py .` (PASS/FAIL per check; exit 0 = all pass).
+**Environment readiness**: `python {{skill_dir}}/scripts/env_check.py .` (PASS/FAIL per check; exit 0 = all pass).
 
 ## State files (read every turn, disk is truth)
 
@@ -65,7 +65,7 @@ python <SKILL_DIR>/scripts/hook_activation.py . --renew
 - **Maker-checker**: worker=maker, orchestrator=checker. Facts must be independently verified before promotion to PROVEN.
 - **No stopping for self-answerable questions**: within the analysis loop, do not halt for questions you can answer yourself — attempt self-repair for environment failures and record the decision for decidable items. Schema ambiguity and directional choices (which change what the user asked for) must still be surfaced to the user.
 
-<TYPE_SECTION>
+{{type_section}}
 
 ## Success criteria
 
@@ -73,13 +73,13 @@ Key behaviors are verifiable, not aspirational. Each check names where the proof
 
 - A fact may only be promoted to PROVEN with an independent verifier sign-off record — provable via `facts/_INDEX.md` (verifier column) and the fact file's verify section.
 - Every numeric fact declares its counting unit; multi-basis numbers are never collapsed — provable by reading any `facts/F*.md` numeric claim.
-- Every claim in `claim-register.yaml` has a status and evidence tier — provable by `python <SKILL_DIR>/scripts/lint_facts.py <ws>` returning zero errors.
+- Every claim in `claim-register.yaml` has a status and evidence tier — provable by `python {{skill_dir}}/scripts/lint_facts.py <ws>` returning zero errors.
 - Environment failures are self-repaired before analysis dispatch — provable via `runs/.env-check.json` showing overall PASS (or a blocker file explaining why not).
 - Tool selection goes through `tools/_INDEX.yaml` (capability + description) before writing a new script — provable by the `tool-catalog:` marker in worker dispatch records.
 
 ## MCP servers (supply manifest — #316)
 
-Analysis correctness depends on registered MCP servers — a fresh machine deployed per kunglao docs must register these (user-level `claude mcp add ...`, or fill real entries in the workspace `.mcp.json` scaffold). Mechanical check: `python <SKILL_DIR>/scripts/mcp_probe.py . --type <TYPE>` (exit 1 = HARD missing).
+Analysis correctness depends on registered MCP servers — a fresh machine deployed per kunglao docs must register these (user-level `claude mcp add ...`, or fill real entries in the workspace `.mcp.json` scaffold). Mechanical check: `python {{skill_dir}}/scripts/mcp_probe.py . --type {{type}}` (exit 1 = HARD missing).
 
 | MCP server | Tier | Scope | Purpose | Registration |
 |------------|------|-------|---------|--------------|
@@ -109,8 +109,8 @@ Deployment variables live in the workspace `.env` (see `.env.example` for the an
 
 ## Tool script discipline
 
-Any reusable analysis logic must land as a parameterized CLI script under `<SKILL_DIR>/scripts/` (no hardcoded paths, reusable across workspaces). ad-hoc inline execution (`python -c` / heredoc) is forbidden; prefer reusing an existing CLI (e.g. `scripts/shell_defaults.py` for shell environment default lines, `scripts/env_check.py` for environment readiness). One-off commands may run via Bash, but any logic you might reuse must first become a script.
+Any reusable analysis logic must land as a parameterized CLI script under `{{skill_dir}}/scripts/` (no hardcoded paths, reusable across workspaces). ad-hoc inline execution (`python -c` / heredoc) is forbidden; prefer reusing an existing CLI (e.g. `scripts/shell_defaults.py` for shell environment default lines, `scripts/env_check.py` for environment readiness). One-off commands may run via Bash, but any logic you might reuse must first become a script.
 
 ## Python venv
 
-Path: `<VENV_PATH>`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts.
+Path: `{{venv_path}}`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts.
