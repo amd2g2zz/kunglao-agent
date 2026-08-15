@@ -124,6 +124,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `wire_up_settings.py` | hook settings registration (lib for hook_activation) | hooks, lib(1), tests |
 | `shell_defaults.py` | reusable CLI: idempotent shell env-default line management (check/apply/remove, powershell+bash; #276) | lib(1), tests |
 | `template_gen.py` | deterministic script-template generator CLI (templates/scripts/*.tmpl; exit 2/3/4/5, #278) | templates, tests, docs |
+| `template_render.py` | shared {{param}} render + leftover-detection engine (single source for template_gen + kunglao-init, #362) | lib(2), tests |
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
 | `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |

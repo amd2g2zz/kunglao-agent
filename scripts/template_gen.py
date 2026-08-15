@@ -54,6 +54,14 @@ import sys
 import time
 from pathlib import Path
 
+# #362: rendering primitives live in the shared template_render module
+# (single engine for scripts templates AND kunglao-init CLAUDE.md). This
+# file keeps the CLI/catalog/exit codes; only the primitives moved.
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+from template_render import leftover_placeholders, render  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TEMPLATES_DIR = ROOT / "templates" / "scripts"
 
@@ -66,7 +74,6 @@ REQUIRED_PARAMS: dict[str, tuple[str, ...]] = {
     "disasm-pipeline": ("sample_path", "sample_sha256", "entry_points", "output_dir"),
 }
 
-_PLACEHOLDER = re.compile(r"\{\{([A-Za-z0-9_]+)\}\}")
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -75,20 +82,6 @@ EXIT_USAGE = 2
 EXIT_MISSING_PARAMS = 3
 EXIT_EXISTS = 4
 EXIT_TEMPLATE_DEFECT = 5
-
-
-def render(template_text: str, params: dict[str, str]) -> str:
-    """Replace every {{KEY}} placeholder with params[KEY] (single pass,
-    verbatim — substituted values are never re-scanned). Placeholders with no
-    matching key are left intact so leftover_placeholders() can report them."""
-    def _sub(m: re.Match[str]) -> str:
-        return params.get(m.group(1), m.group(0))
-    return _PLACEHOLDER.sub(_sub, template_text)
-
-
-def leftover_placeholders(text: str) -> list[str]:
-    """Placeholder keys still present after rendering (template defect)."""
-    return sorted(set(_PLACEHOLDER.findall(text)))
 
 
 def header(template: str, ts: str) -> str:
