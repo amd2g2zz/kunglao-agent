@@ -117,10 +117,12 @@ def test_base_tmpl_uses_double_brace_placeholders():
                "{{sample_sha256}}", "{{sample_type}}", "{{sample_path}}",
                "{{skill_dir}}", "{{venv_path}}"):
         assert ph in text, f"base.tmpl missing {ph} placeholder"
-    # The old <UPPERCASE> injection placeholders must be gone. Prose <NNN>
-    # (fact filename pattern) is NOT a placeholder and stays.
+    # The old <UPPERCASE> injection placeholders must be gone. Prose tokens
+    # like <NNN> (fact filename pattern) / <C-NN> (claim id) are NOT
+    # placeholders — they stay as literal text.
     import re
-    legacy = re.findall(r"<[A-Z][A-Z0-9_]*>", text)
+    legacy = [p for p in re.findall(r"<[A-Z][A-Z0-9_]*>", text)
+              if p not in ("<NNN>",)]
     assert legacy == [], f"legacy <UPPERCASE> placeholders remain: {legacy}"
 
 

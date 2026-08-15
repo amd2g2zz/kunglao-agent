@@ -86,8 +86,22 @@ def test_resolve_ports_env_garbage_ignored(clean_ports, monkeypatch, tmp_path):
 def test_run_rebinds_ports_from_dotenv(clean_ports, monkeypatch, tmp_path):
     """run() rebinds VM_PORTS from the resolved values (mirrors the
     VM_HOST/GHIDRA_HOME rebind), so check_vm probes the configured ports.
-    No real sockets: an unreachable host makes check_vm FAIL, and the
-    failure detail names the .env-configured port numbers."""
+    No real sockets: socket.create_connection is captured — the assertion is
+    exactly which (host, port) pairs the reachability probe dialed."""
+    dialed: list[tuple[str, int]] = []
+
+    class _FakeSocket:
+        def __enter__(self):
+            return self
+        def __exit__(self, *exc):
+            return False
+
+    def _fake_connect(addr, timeout=None):
+        dialed.append(addr)
+        raise OSError("unreachable (test stub)")  # deterministic FAIL path
+
+    monkeypatch.setattr(env_check.socket, "create_connection", _fake_connect)
+
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     (ws / ".env").write_text(
@@ -98,13 +112,18 @@ def test_run_rebinds_ports_from_dotenv(clean_ports, monkeypatch, tmp_path):
     monkeypatch.delenv("KUNGLAO_VM_HOST", raising=False)
     monkeypatch.setattr(env_check, "VM_HOST", "", raising=False)
 
-    rc, report = env_check.run(ws)
-    vm = report["checks"]["vm_reachability"]
+    rc = env_check.run(ws)
+    assert rc == 1  # overall FAIL (host unreachable stub) — expected
+    assert env_check.VM_PORTS == [11111, 22222], \
+        "run() must rebind VM_PORTS from the .env-configured ports"
+    assert dialed == [("10.255.255.1", 11111), ("10.255.255.1", 22222)], \
+        f"check_vm probed wrong endpoints: {dialed}"
+    import json
+    snap = json.loads((ws / "runs" / ".env-check.json")
+                      .read_text(encoding="utf-8"))
+    vm = snap["checks"]["vm_reachability"]
     assert vm["status"] == "FAIL"
-    assert "11111" in vm["detail"], \
-        "check_vm must probe the .env-configured shell port"
-    assert "22222" in vm["detail"], \
-        "check_vm must probe the .env-configured frida port"
+    assert "11111" in vm["detail"] and "22222" in vm["detail"]
 
 
 # ---------- .env.example documentation ----------
@@ -120,7 +139,10 @@ def test_env_example_documents_claude_json_shell_only():
 def test_env_example_documents_die_shell_only():
     text = ENV_EXAMPLE.read_text(encoding="utf-8")
     assert "KUNGLAO_DIE" in text
-    die_line = next(ln for ln in text.splitlines()
-                    if ln.startswith("#") and "KUNGLAO_DIE" not in ln
-                    and "DIE" in ln)
-    assert "shell" in die_line.lower()
+    # the annotation line directly above the KUNGLAO_DIE= entry
+    lines = text.splitlines()
+    idx = next(i for i, ln in enumerate(lines) if ln.strip() == "KUNGLAO_DIE=")
+    annotation = "\n".join(lines[max(0, idx - 2):idx])
+    assert "shell" in annotation.lower(), (
+        f".env.example must state KUNGLAO_DIE is shell-export-only, got: "
+        f"{annotation!r}")

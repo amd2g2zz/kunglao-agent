@@ -46,8 +46,38 @@ TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: truthy = FAIL; 0/false/off/�
 # Ghidra install (a wrong default on any other machine is worse than a FAIL).
 VM_HOST = os.environ.get("KUNGLAO_VM_HOST", "")
 VM_PORTS = [9876, 1337]
+# #362: default port pair (vmr-shell, frida) — overridden per-run by
+# resolve_ports() from KUNGLAO_VM_SHELL_PORT / KUNGLAO_FRIDA_PORT (env first,
+# workspace .env fallback; mirrors scripts/toolchain.py's defensive parse).
+DEFAULT_SHELL_PORT = 9876
+DEFAULT_FRIDA_PORT = 1337
 _ghidra_home = os.environ.get("GHIDRA_HOME")
 GHIDRA_DEFAULT = Path(_ghidra_home) / "support" / "analyzeHeadless.bat" if _ghidra_home else None
+
+
+def _parse_port(raw: str | None, default: int) -> int:
+    """Defensive port parse (same semantics as toolchain._parse_port):
+    int(raw) in [1, 65535], else default — garbage never crashes the check."""
+    try:
+        value = int((raw or "").strip() or str(default))
+    except ValueError:
+        return default
+    return value if 1 <= value <= 65535 else default
+
+
+def resolve_ports(ws: Path) -> list[int]:
+    """#362: [VM_SHELL_PORT, FRIDA_PORT] from env-first, .env-fallback
+    resolution (same precedence as load_dotenv: os.environ wins, the
+    workspace .env fills gaps)."""
+    dotenv = load_dotenv(ws)
+    shell = (os.environ.get("KUNGLAO_VM_SHELL_PORT")
+             or dotenv.get("KUNGLAO_VM_SHELL_PORT"))
+    frida = (os.environ.get("KUNGLAO_FRIDA_PORT")
+             or dotenv.get("KUNGLAO_FRIDA_PORT"))
+    return [
+        _parse_port(shell, DEFAULT_SHELL_PORT),
+        _parse_port(frida, DEFAULT_FRIDA_PORT),
+    ]
 
 
 def load_dotenv(ws: Path) -> dict:
@@ -257,12 +287,14 @@ def run(ws: Path) -> tuple[int, dict]:
     # Module-level VM_HOST/GHIDRA_DEFAULT re-bound here (tests monkeypatch
     # them directly, so the lookup stays attribute-based).
     dotenv = load_dotenv(ws)
-    global VM_HOST, GHIDRA_DEFAULT  # noqa: PLW0603 — rebind per-run
+    global VM_HOST, GHIDRA_DEFAULT, VM_PORTS  # noqa: PLW0603 — rebind per-run
     if not os.environ.get("KUNGLAO_VM_HOST") and dotenv.get("KUNGLAO_VM_HOST"):
         VM_HOST = dotenv["KUNGLAO_VM_HOST"]
     if not os.environ.get("GHIDRA_HOME") and dotenv.get("GHIDRA_HOME"):
         _home = dotenv["GHIDRA_HOME"]
         GHIDRA_DEFAULT = Path(_home) / "support" / "analyzeHeadless.bat"
+    # #362: reachability probe ports derive from env/.env (toolchain parity)
+    VM_PORTS = resolve_ports(ws)
     checks = {
         "init_complete": check_init_complete(ws),
         "agent_teams_flag": check_flag(),
