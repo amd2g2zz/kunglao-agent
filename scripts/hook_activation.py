@@ -48,6 +48,13 @@ Issue #258 (2026-08-12): --wire-up deploys to the PROJECT-level
 (the pre-#258 default bound hooks to a worktree path that died with the
 worktree; 8 hooks went silent at once). wire_up_settings(global_opt_in=True)
 is the ONLY escape hatch, explicit opt-in with a stderr warning.
+
+Issue #410 (2026-08-17): hooks may live in EITHER project-level target —
+<workspace>/.claude/settings.json (the --wire-up deployment target) or the
+workspace-parent <workspace-parent>/.claude/settings.json (the external_kicker
+D2 dead-session-recovery read/write target). env_check accepts both; the
+target set derives from wire_up_settings.hook_deployment_targets (single
+source). --wire-up still writes the workspace-level file (#258).
 """
 from __future__ import annotations
 

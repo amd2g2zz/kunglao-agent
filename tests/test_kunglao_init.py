@@ -311,3 +311,106 @@ def test_claudemd_documents_env_and_script_discipline(init_ws: Path) -> None:
     assert "scripts/" in text, "CLAUDE.md missing scripts/ CLI discipline"
     assert "ad-hoc" in text.lower() or "Ad-hoc" in text, \
         "CLAUDE.md must ban ad-hoc inline execution"
+
+
+# ---------- #411: workspace-path shape validation ----------
+
+RC_NO_SAMPLE = 5     # bins/ empty — friendly prompt (place a sample into bins/)
+RC_PATH_SHAPE = 6    # target is a sample dir / file, not a workspace root — refuse
+
+
+def _snapshot(ws: Path) -> set[str]:
+    """Recursive relative-path snapshot of every entry under ws (dirs + files)."""
+    if not ws.is_dir():
+        return set()
+    return {str(p.relative_to(ws)) for p in ws.rglob("*")}
+
+
+def test_init_refuses_sample_dir_without_bins(tmp_path: Path) -> None:
+    """#411: init on a sample directory (has bin/ but NO bins/) refuses with
+    guidance, exits non-zero, and writes ZERO files (no .claude/, no
+    claim-register, nothing)."""
+    sample_dir = tmp_path / "sample-root"
+    (sample_dir / "bin").mkdir(parents=True)
+    (sample_dir / "bin" / "malware.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    before = _snapshot(sample_dir)
+    r = _run_init(sample_dir)
+    assert r.returncode == RC_PATH_SHAPE, \
+        f"init on a sample dir must refuse with {RC_PATH_SHAPE}: {r.returncode}: {r.stdout}{r.stderr}"
+    assert "bins/" in (r.stdout + r.stderr), \
+        f"refusal must point at bins/: {r.stderr}"
+    assert _snapshot(sample_dir) == before, \
+        f"init on a sample dir must write ZERO files; created: {_snapshot(sample_dir) - before}"
+
+
+def test_init_refuses_sample_dir_itself_named_bin(tmp_path: Path) -> None:
+    """#411 observed case: init called ON the sample container (a directory
+    literally named bin/, e.g. ~/Downloads/Sysdiag/bin) must refuse and write
+    NOTHING — .claude/ must never land inside the sample dir."""
+    container = tmp_path / "Sysdiag" / "bin"
+    container.mkdir(parents=True)
+    (container / "malware.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    before = _snapshot(tmp_path)
+    r = _run_init(container)
+    assert r.returncode == RC_PATH_SHAPE, \
+        f"init on the sample container must refuse with {RC_PATH_SHAPE}: {r.returncode}: {r.stdout}{r.stderr}"
+    assert "bins/" in (r.stdout + r.stderr), \
+        f"refusal must point at bins/: {r.stderr}"
+    assert _snapshot(tmp_path) == before, \
+        f"init on the sample container must write ZERO files; created: {_snapshot(tmp_path) - before}"
+    assert not (container / ".claude").exists(), ".claude/ must never be created inside the sample dir"
+
+
+def test_init_refuses_sample_file(tmp_path: Path) -> None:
+    """#411: init on a sample FILE (not a directory) refuses — a file cannot be
+    a workspace root."""
+    sample = tmp_path / "malware.exe"
+    sample.write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    before = _snapshot(tmp_path)
+    r = _run_init(sample)
+    assert r.returncode == RC_PATH_SHAPE, \
+        f"init on a sample file must refuse with {RC_PATH_SHAPE}: {r.returncode}: {r.stdout}{r.stderr}"
+    assert _snapshot(tmp_path) == before, \
+        f"init on a sample file must write ZERO files; created: {_snapshot(tmp_path) - before}"
+
+
+def test_init_accepts_workspace_with_bins(tmp_path: Path) -> None:
+    """#411: init on a valid workspace (bins/ present) proceeds normally."""
+    ws = tmp_path / "ws"
+    (ws / "bins").mkdir(parents=True)
+    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    r = _run_init(ws)
+    assert r.returncode == 0, f"init on a valid workspace must proceed: {r.stderr}"
+    assert (ws / "claim-register.yaml").exists(), "valid workspace must initialize"
+
+
+def test_init_accepts_creatable_empty_dir(tmp_path: Path) -> None:
+    """#411: init on a new empty directory (can hold bins/) is NOT a path-shape
+    refusal — it proceeds to the normal cold-start gate (no-sample prompt,
+    exit 5), never the sample-dir refusal (exit 6)."""
+    ws = tmp_path / "fresh-ws"
+    ws.mkdir()
+    r = _run_init(ws, ["--type", "windows"])
+    assert r.returncode == RC_NO_SAMPLE, \
+        f"empty dir must reach the no-sample cold-start gate ({RC_NO_SAMPLE}), not be shape-refused: {r.returncode}: {r.stdout}{r.stderr}"
+    assert "place a sample into bins/" in r.stderr, \
+        f"cold-start prompt missing: {r.stderr}"
+    assert "sample directory" not in r.stderr, \
+        f"empty dir is not a sample dir — must not be shape-refused: {r.stderr}"
+
+
+def test_bins_wins_over_bin_sniff(tmp_path: Path) -> None:
+    """#411: when a directory has both bin/ (sample dir) and bins/ (workspace),
+    init treats it as a workspace — the type sniffer reads bins/ ONLY."""
+    ws = tmp_path / "ws"
+    (ws / "bin").mkdir(parents=True)
+    (ws / "bin" / "malware.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)  # decoy
+    (ws / "bins").mkdir()
+    (ws / "bins" / "sample.elf").write_bytes(b"\x7fELF" + b"\x00" * 64)
+    r = _run_init(ws, ["--type", "windows"])
+    assert r.returncode == 0, f"init must proceed (bins/ workspace): {r.stderr}"
+    assert (ws / "claim-register.yaml").exists()
+    assert (ws / "CLAUDE.md").exists()
+    text = (ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "sample.elf" in text, "CLAUDE.md must reference the bins/ sample, not the bin/ decoy"
+    assert "malware.exe" not in text, "sniffer must ignore bin/ (decoy) and only read bins/"

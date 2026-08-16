@@ -45,6 +45,36 @@ WIRE_UP_HOOK_FILES = frozenset({
 })
 
 
+# #410: THE deployment-target registry — where kunglao hooks are written and
+# read. --wire-up writes the WORKSPACE-level file (the #258 PROJECT-scoped
+# target), while the external_kicker's dead-session recovery reads/re-writes
+# the WORKSPACE-PARENT file (D2: the gitignored settings carrying env secrets
+# + mcpServers + block_malware_exec). env_check must accept BOTH — before
+# #410 it checked only the ws-level file while the kicker re-registered the
+# parent-level one, so a parent-wired workspace was reported 'hooks missing'
+# (FAIL) with 'leave unwired' guidance — a self-contradiction. Every consumer
+# derives its target set from this tuple (never a hand-mirrored path list);
+# tests/test_hook_registry_singlesource.py pins the pair.
+HOOK_DEPLOYMENT_TARGETS = (
+    lambda ws: Path(ws).resolve() / ".claude" / "settings.json",          # #258 --wire-up target
+    lambda ws: Path(ws).resolve().parent / ".claude" / "settings.json",   # external_kicker D2 target
+)
+
+
+def hook_deployment_targets(ws: Path | None) -> tuple[Path, Path]:
+    """Resolve the project-level settings.json targets for a workspace.
+
+    Issue #410: single source for hook deployment targets — the writer
+    (wire_up_settings._settings_target / external_kicker D2) and the checker
+    (env_check.check_hooks) must agree on where hooks live. Applies the
+    HOOK_DEPLOYMENT_TARGETS registry and returns both project-level
+    candidates, ws-level first (the #258 --wire-up target), then the
+    workspace-parent (external_kicker D2 read/write target).
+    """
+    w = Path(ws).resolve()
+    return tuple(fn(w) for fn in HOOK_DEPLOYMENT_TARGETS)
+
+
 def derive_hook_subset(registry: Iterable[str], include: Iterable[str],
                        skip: Iterable[str], owner: str) -> frozenset[str]:
     """#381: validate a deliberate hook subset's tables against the registry.
@@ -96,6 +126,10 @@ def _settings_target(workspace: Path | None) -> Path:
     - workspace None  -> <cwd>/.claude/settings.json (cwd probe: an existing
       .claude/settings.json or a claim-register.yaml workspace root in cwd;
       else the file is created at <cwd>/.claude/settings.json)
+
+    This is the #410 ws-level target — the first entry of the deployment
+    registry (HOOK_DEPLOYMENT_TARGETS / hook_deployment_targets); the
+    workspace-parent target lives with the external_kicker (D2).
     """
     if workspace is not None:
         return Path(workspace).resolve() / ".claude" / "settings.json"

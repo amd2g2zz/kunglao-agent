@@ -6,7 +6,78 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
+## [0.1.1] - 2026-08-17
+
+### Added
+- Subcommand UX + guided entry (#413): plugin moved to the official skills/ layout (#413)
+- /kunglao-agent main entry — prints a subcommand menu on no args and WAITS, never silently runs; unknown subcommand prints the menu plus `unknown: <x>` (#413)
+- /kunglao-agent:init skill — workspace initialization flow, argument-hint `<workspace> [--type windows|linux|android]` (#413)
+- /kunglao-agent:analysis skill — convergence-loop entry, argument-hint `<workspace>` (#413)
+- /kunglao-agent:help skill — subcommand usage list; the full convergence contract moved to skills/kunglao-agent/SKILL.md (#413)
+- argument-hint frontmatter on every skill, shown at autocomplete; README gained a Command Reference table covering all four commands (#413)
+- MCP-first tool-supply (#407): decompiler passes on ida-pro-vm|ghidra MCP registration; CLI (GHIDRA_HOME/idat64) is fallback only; decompiler check deduplicated across windows/linux/android manifests (#407)
+- ask-then-install (#408): init prompts to install missing tools; consent auto-installs per-platform (pip/brew/choco/apt) + registers related MCP + re-probes; IDA never auto-installed (existing MCP URL registered on consent); --assume-yes for CI/headless (#408)
+- New scripts/toolchain_install.py — per-item install commands by platform, mocked-install tests (#408)
+- Release manifest + docs repointed to the moved main skill; structural checks updated (#413)
+
+### Fixed
+- Platform de-hardcoding (#409): analyzeHeadless resolved by sys.platform (.bat on Windows, extensionless on POSIX); venv python resolved by platform from the SKILL-root venv (uv run --project is authoritative) — no more false FAILs on macOS.
+- Hook deployment/check unification (#410): env_check accepts workspace-parent settings.json; unwired hooks are WARN/ASK, not FAIL.
+- Init workspace-path validation (#411): a sample directory passed as the workspace is refused (exit RC_PATH_SHAPE) with guidance; .claude/ stays at the workspace root; sniff reads bins/ only.
+- Init never produces analysis conclusions (#412): seed claims are structural facts only; no family/verdict before the operator defines the task.
+- Exit-code semantics audit (#414): RC matrix pinned by test; argparse usage errors normalized 2→1; cleanup removes only this-run artifacts.
+- Test-suite validity audit (#394): redundant/meaningless tests removed/merged (before/after counts in the PR).
+
 ## [Unreleased]
+
+
+### Fixed (platform de-hardcoding, #409)
+
+- analyzeHeadless path is now platform-correct in scripts/toolchain.py
+  (windows/linux/android manifests) and scripts/env_check.py: Windows
+  resolves `support/analyzeHeadless.bat`, macOS/Linux resolve
+  `support/analyzeHeadless` (no extension) — the previous hardcoded .bat
+  constant made the probe always False on POSIX (observed on macOS with
+  GHIDRA_HOME set), so Ghidra was never detected there. New shared resolver
+  `scripts/platform_paths.py` (#409)
+- venv python in scripts/env_check.py check ⑤ now probes the SKILL-root
+  venv (`uv run --project <skill_root>` is authoritative, #389) resolved by
+  sys.platform — `Scripts/python.exe` on Windows, `bin/python` on POSIX —
+  instead of the workspace `ws/.venv/Scripts/python.exe` Windows layout that
+  always FAILed on macOS (#409)
+86b479a (fix(#409): platform de-hardcoding — analyzeHeadless(.bat) + skill-root venv by sys.platform)
+
+### Fixed (kunglao-init exit-code semantics, #414)
+
+- kunglao-init exit paths audited against the documented RC constants
+  (0/1/2/3/4/5) and pinned by a per-mode RC matrix test: argparse usage errors
+  no longer exit 2 (which collided with RC_FATAL_VERIFY) — normalized to the
+  documented generic RC_ERROR=1; the template-defect cleanup path now removes
+  exactly this run's scaffold entries (it previously passed no created
+  manifest, so nothing was cleaned and this-run artifacts were mislabelled
+  "pre-existing"); the misleading "existing content is always preserved"
+  comments now state that cleanup removes only this run's artifacts while
+  pre-existing content is never deleted. SKILL.md / kunglao-init-worker /
+  README branch on the documented RCs, including the previously-undocumented
+  exit 3 (agent-teams flag reject) (#414)
+
+
+### Added (subcommand UX + guided entry, #413)
+
+- The plugin moved to the official `skills/` subdirectory layout (#413).
+- `/kunglao-agent:init` skill — workspace initialization flow, argument-hint `<workspace> [--type windows|linux|android]` (#413).
+- `/kunglao-agent:analysis` skill — convergence-loop entry, argument-hint `<workspace>` (#413).
+- `/kunglao-agent:help` skill — subcommand usage list (#413).
+- The full convergence contract moved to `skills/kunglao-agent/SKILL.md` (#413).
+- The root `SKILL.md` is now a thin command router (#413).
+- `/kunglao-agent` with no arguments prints a subcommand menu and WAITS — never silently runs (#413).
+- An unknown subcommand prints the menu plus `unknown: <x>` (#413).
+- `argument-hint` frontmatter on every skill, shown at autocomplete (#413).
+- README gained a Command Reference table covering all four commands (#413).
+- Contract tests for the subcommand routing + menu behavior, TDD RED-first (#413).
+- `release-manifest.yaml`, `structural_check.py`, `check_global_rule_subset.py`, and docs repointed to the moved main skill (#413).
+>>>>>>> 3eca5a0 
+(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table)
 
 ### Removed (plan-template dead end, #352)
 
@@ -40,6 +111,18 @@ release (see the mapping table at the end).
   specs/phase-4/contract.md and module-design.md M1.3 write-back, in the same
   commit). The "never INVALID" assertion in openspec/archive/fix-97 only
   covered the exception → BLOCKED path; the archive stays untouched.
+### Fixed (init workspace-path shape, #411)
+
+- `kunglao-init` now validates the workspace path shape before writing
+  anything: a sample directory passed as the workspace — either a directory
+  named `bin/`/`bins/` (e.g. `~/Downloads/Sysdiag/bin`) or one containing a
+  `bin/` subdir with no `bins/` — is refused with guidance (exit 6,
+  `RC_PATH_SHAPE`) and ZERO files written; `.claude/` and every scaffold
+  entry stay under the workspace root. The type sniffer / sample detector
+  read `bins/` (plural) only, never `bin/`. Valid workspace roots (`bins/`
+  or `claim-register.yaml`) and creatable directories proceed unchanged.
+  Tests: path-shape cases in tests/test_kunglao_init.py (#411)
+
 ### Fixed (pre-release security batch, #367)
 
 - Review-gate pre-commit key path no longer hardcodes the author's machine —

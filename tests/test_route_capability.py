@@ -163,24 +163,30 @@ def test_unknown_claim_exit_3(tmp_path):
 # regexes match the claim text (no exclude hit) OR whose feature conditions
 # match the sample features wins; none -> agent_type null (kunglao-worker).
 
-def test_agent_type_go_features_route_go_symbols():
-    feats = dict(ARM, import_hints=["go.buildinfo", "runtime.main"])
-    out = route_json("--features", json.dumps(feats),
-                     "--claim-text", "analyze the binary", "--json")
-    assert out["agent_type"] == "go-symbols"
-    assert out["agent_rationale"]
+# (features, claim_text, expected_agent_type, requires_rationale) — routing
+# table: each features+claim combo must route to exactly the expected
+# specialist. The go-symbols feature case also requires a rationale.
+ROUTING_CASES = [
+    (dict(ARM, import_hints=["go.buildinfo", "runtime.main"]),
+     "analyze the binary", "go-symbols", True),
+    ({"language": "Go"}, "identify functions", "go-symbols", False),
+    (X86, "decompile and disassemble main", "ghidra-light", False),
+    (X86, "extract strings from the sample", "floss-filter", False),
+    (dict(ARM, import_hints=["upx0", "upx1"]), "analyze the file",
+     "pefile-signature", False),
+    (X86, "produce the final verdict", "verdict-scorer", False),
+    (X86, "decompile the Go binary", "go-symbols", False),
+]
 
 
-def test_agent_type_die_language_go_routes_go_symbols():
-    out = route_json("--features", json.dumps({"language": "Go"}),
-                     "--claim-text", "identify functions", "--json")
-    assert out["agent_type"] == "go-symbols"
-
-
-def test_agent_type_decompile_claim_routes_ghidra_light():
-    out = route_json("--features", json.dumps(X86),
-                     "--claim-text", "decompile and disassemble main", "--json")
-    assert out["agent_type"] == "ghidra-light"
+def test_agent_type_routing_table():
+    for feats, claim_text, expected, requires_rationale in ROUTING_CASES:
+        out = route_json("--features", json.dumps(feats),
+                         "--claim-text", claim_text, "--json")
+        assert out["agent_type"] == expected, \
+            f"features={feats!r} claim={claim_text!r} → {out['agent_type']!r}, want {expected!r}"
+        if requires_rationale:
+            assert out["agent_rationale"]
 
 
 def test_agent_type_dotnet_decompile_not_ghidra_light():
@@ -190,37 +196,10 @@ def test_agent_type_dotnet_decompile_not_ghidra_light():
     assert out["agent_type"] != "ghidra-light"
 
 
-def test_agent_type_strings_claim_routes_floss_filter():
-    out = route_json("--features", json.dumps(X86),
-                     "--claim-text", "extract strings from the sample", "--json")
-    assert out["agent_type"] == "floss-filter"
-
-
-def test_agent_type_packer_hints_route_pefile_signature():
-    feats = dict(ARM, import_hints=["upx0", "upx1"])
-    out = route_json("--features", json.dumps(feats),
-                     "--claim-text", "analyze the file", "--json")
-    assert out["agent_type"] == "pefile-signature"
-
-
-def test_agent_type_verdict_claim_routes_verdict_scorer():
-    out = route_json("--features", json.dumps(X86),
-                     "--claim-text", "produce the final verdict", "--json")
-    assert out["agent_type"] == "verdict-scorer"
-
-
 def test_agent_type_no_signal_is_null():
     out = route_json("--features", json.dumps(NEUTRAL),
                      "--claim-text", "analyze the file", "--json")
     assert out["agent_type"] is None
-
-
-def test_agent_type_go_intent_precedes_ghidra():
-    # "decompile the Go binary" matches both go-symbols and ghidra-light intent
-    # — pipeline_order prefers symbol recovery first (unstrip precedes decompile).
-    out = route_json("--features", json.dumps(X86),
-                     "--claim-text", "decompile the Go binary", "--json")
-    assert out["agent_type"] == "go-symbols"
 
 
 def test_specialist_table_parsed_from_agents_dir():

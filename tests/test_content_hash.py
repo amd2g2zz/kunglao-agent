@@ -29,15 +29,10 @@ def test_length_is_17():
     assert len(fact_id('c', 'r', 'e')) == 17
 
 
-def test_different_claim_different_id():
+def test_different_inputs_different_id():
+    # each input field feeds the hash — changing any one must change the id
     assert fact_id('claim_a', 'r', 'e') != fact_id('claim_b', 'r', 'e')
-
-
-def test_different_reproduce_different_id():
     assert fact_id('c', 'repro_a', 'e') != fact_id('c', 'repro_b', 'e')
-
-
-def test_different_expected_different_id():
     assert fact_id('c', 'r', 'exp_a') != fact_id('c', 'r', 'exp_b')
 
 

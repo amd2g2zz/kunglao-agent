@@ -310,7 +310,8 @@ def main() -> int:
 
     # Auto-detect paths
     script_dir = Path(__file__).resolve().parent
-    skill_md = args.skill or script_dir.parent / "SKILL.md"
+    # #413: the main skill moved to skills/kunglao-agent/SKILL.md.
+    skill_md = args.skill or script_dir.parent / "skills" / "kunglao-agent" / "SKILL.md"
     global_rule = args.global_rule or script_dir.parent / "rules" / "kunglao-convergence-loop.md"
 
     if not skill_md.exists():

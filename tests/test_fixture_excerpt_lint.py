@@ -114,24 +114,20 @@ def test_sVar_arithmetic_on_temps_not_flagged():
     assert report["violation_count"] == 0, report
 
 
-def test_sVar_field_access_speculated():
-    # count is a semantic field name (not generic) → speculation.
-    report = fel.lint("sVar1 = param_1->count;\n")
-    r3 = [v for v in report["violations"] if v["rule"] == "R3"]
-    assert len(r3) == 1, r3
+# R3-speculation sources: Ghidra generic temps assigned from a field /
+# concrete literal / generic register name are all speculation.
+R3_SPECULATION_CASES = [
+    "sVar1 = param_1->count;\n",
+    "sVar1 = 0x100;\n",
+    "unaff_EAX = bitrate;\n",
+]
 
 
-def test_sVar_concrete_literal_speculated():
-    report = fel.lint("sVar1 = 0x100;\n")
-    r3 = [v for v in report["violations"] if v["rule"] == "R3"]
-    assert len(r3) == 1, r3
-
-
-def test_unaff_lhs_treated_as_unresolved():
-    # unaff_EAX is Ghidra's generic name for an unaffected register — same rule.
-    report = fel.lint("unaff_EAX = bitrate;\n")
-    r3 = [v for v in report["violations"] if v["rule"] == "R3"]
-    assert len(r3) == 1, r3
+def test_sVar_speculation_sources_flagged():
+    for excerpt in R3_SPECULATION_CASES:
+        report = fel.lint(excerpt)
+        r3 = [v for v in report["violations"] if v["rule"] == "R3"]
+        assert len(r3) == 1, f"expected exactly 1 R3 for {excerpt!r}: {r3}"
 
 
 # ---------------------------------------------------------------------------

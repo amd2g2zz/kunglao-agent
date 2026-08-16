@@ -39,7 +39,7 @@ RELEASE_MANIFEST = ROOT / "release-manifest.yaml"
 CHANGELOG = ROOT / "CHANGELOG.md"
 README = ROOT / "README.md"
 
-EXPECTED_VERSION = "0.1"
+EXPECTED_VERSION = "0.1.1"
 # The #366 field set: identity metadata only (issue body scope item 1).
 REQUIRED_FIELDS = {"name", "description", "version", "author", "homepage", "license"}
 # Component-path fields that would change runtime behavior (#364, not #366).
@@ -106,8 +106,8 @@ def test_version_triple_equality():
 
     py = pyproject["project"]["version"]
     rel = release["version"]
-    cl = re.search(r"^## \[0\.1\]", changelog, re.MULTILINE)
-    assert cl, "CHANGELOG missing the [0.1] header"
+    cl = re.search(r"^## \[0\.1\.1\]", changelog, re.MULTILINE)
+    assert cl, "CHANGELOG missing the [0.1.1] header"
 
     assert py == rel == manifest["version"] == EXPECTED_VERSION, (
         f"version drift: pyproject={py} release-manifest={rel} "

@@ -163,17 +163,11 @@ class TestAdmiraltyAchDiamond:
 class TestVerdictSemantics:
     """The unified agent must preserve the established verdict vocabulary."""
 
-    def test_confirmed_present(self, agent_text: str) -> None:
-        assert "CONFIRMED" in agent_text
+    VERDICT_TERMS = ["CONFIRMED", "REFUTED", "UNVERIFIED-WITH-GAP", "DIFF"]
 
-    def test_refuted_present(self, agent_text: str) -> None:
-        assert "REFUTED" in agent_text
-
-    def test_unverified_with_gap_present(self, agent_text: str) -> None:
-        assert "UNVERIFIED-WITH-GAP" in agent_text
-
-    def test_diff_present(self, agent_text: str) -> None:
-        assert "DIFF" in agent_text
+    def test_verdict_vocabulary_preserved(self, agent_text: str) -> None:
+        for term in self.VERDICT_TERMS:
+            assert term in agent_text, f"verdict term {term!r} missing from kunglao-redteam.md"
 
 
 # ---------------------------------------------------------------------------

@@ -393,6 +393,95 @@ def test_toolchain_mcp_fix_guidance_in_human_output(fake_claude_json, ws):
     assert "claude mcp add ghidra" in r.stdout, "human output must carry registration guidance"
 
 
+# ---------- #407: MCP-first decompiler check ----------
+
+def test_toolchain_decompiler_mcp_first_ida_pro_vm(fake_claude_json, ws):
+    """#407: ida-pro-vm registered (ghidra absent) -> decompiler PASS via MCP,
+    and the mcp:ghidra supply item is satisfied by the ida-pro-vm provider."""
+    write_claude_json(fake_claude_json, {
+        "sequential-thinking": reg("st"),
+        "ida-pro-vm": reg("ida"),
+    })
+    r = run_toolchain(ws, "--type", "windows", "--json")
+    assert r.returncode in (0, 1, 2), r.stdout + r.stderr
+    out = json.loads(r.stdout)
+    decomp = next(c for c in out["checks"] if c["name"] == "decompiler")
+    assert decomp["status"] == "PASS", decomp
+    assert "via MCP (ida-pro-vm)" in decomp["detail"], decomp
+    mcp_ghidra = next(c for c in out["checks"] if c["name"] == "mcp:ghidra")
+    assert mcp_ghidra["status"] == "PASS", \
+        f"ghidra supply must be satisfied by the ida-pro-vm provider: {mcp_ghidra}"
+
+
+def test_toolchain_decompiler_mcp_first_ghidra(fake_claude_json, ws):
+    """#407: ghidra MCP registered -> decompiler PASS via MCP."""
+    write_claude_json(fake_claude_json, {
+        "ghidra": reg("ghidra"),
+        "sequential-thinking": reg("st"),
+    })
+    r = run_toolchain(ws, "--type", "windows", "--json")
+    assert r.returncode in (0, 1, 2), r.stdout + r.stderr
+    out = json.loads(r.stdout)
+    decomp = next(c for c in out["checks"] if c["name"] == "decompiler")
+    assert decomp["status"] == "PASS", decomp
+    assert "via MCP (ghidra)" in decomp["detail"], decomp
+
+
+def test_toolchain_decompiler_mcp_beats_cli_fallback(fake_claude_json, ws,
+                                                     monkeypatch):
+    """#407: MCP registration is the PRIMARY signal; CLI (GHIDRA_HOME) is
+    the fallback — an MCP registration wins even when GHIDRA_HOME is set."""
+    write_claude_json(fake_claude_json, {
+        "ghidra": reg("ghidra"),
+        "sequential-thinking": reg("st"),
+    })
+    monkeypatch.setenv("GHIDRA_HOME", "D:/ghidra_12.1.2_PUBLIC")
+    r = run_toolchain(ws, "--type", "windows", "--json")
+    out = json.loads(r.stdout)
+    decomp = next(c for c in out["checks"] if c["name"] == "decompiler")
+    assert decomp["status"] == "PASS", decomp
+    assert "via MCP" in decomp["detail"], \
+        f"MCP must be the primary decompiler signal: {decomp}"
+
+
+def test_toolchain_decompiler_fail_with_install_guidance(fake_claude_json, ws):
+    """#407: neither MCP nor CLI decompiler -> FAIL with ask-to-install
+    guidance referencing the #408 installer."""
+    fake_claude_json.write_text("{}", encoding="utf-8")
+    r = run_toolchain(ws, "--type", "windows", "--json")
+    assert r.returncode == 1, r.stdout + r.stderr
+    out = json.loads(r.stdout)
+    decomp = next(c for c in out["checks"] if c["name"] == "decompiler")
+    assert decomp["status"] == "FAIL", decomp
+    assert decomp["fix"] and "install" in decomp["fix"].lower(), decomp["fix"]
+    assert "#408" in decomp["fix"], decomp["fix"]
+
+
+# ---------- #407: ida-pro-vm tier semantics (mcp_probe) ----------
+
+def test_ida_pro_vm_tier_sole_decompiler_provider_hard(fake_claude_json, ws):
+    """#407: ida-pro-vm is HARD when it is the sole decompiler provider
+    (ghidra absent); the ghidra supply item is satisfied via ida-pro-vm."""
+    write_claude_json(fake_claude_json, {"ida-pro-vm": reg("ida")})
+    checks = mcp_probe.check_mcp(ws, "linux", claude_json=fake_claude_json)
+    by_name = {c.name: c for c in checks}
+    assert by_name["ida-pro-vm"].tier == "HARD"
+    assert by_name["ida-pro-vm"].status == "PASS"
+    assert by_name["ghidra"].status == "PASS"
+    assert "ida-pro-vm" in by_name["ghidra"].detail
+
+
+def test_ida_pro_vm_tier_warn_when_ghidra_present(fake_claude_json, ws):
+    """#407: ida-pro-vm keeps the WARN default when ghidra MCP is registered."""
+    write_claude_json(fake_claude_json, {
+        "ida-pro-vm": reg("ida"), "ghidra": reg("ghidra"),
+    })
+    checks = mcp_probe.check_mcp(ws, "linux", claude_json=fake_claude_json)
+    by_name = {c.name: c for c in checks}
+    assert by_name["ida-pro-vm"].tier == "WARN"
+    assert by_name["ida-pro-vm"].status == "PASS"
+
+
 # ---------- docs tables vs manifest ----------
 
 def test_per_os_templates_exist_with_mcp_table():

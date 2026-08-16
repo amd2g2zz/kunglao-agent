@@ -19,26 +19,15 @@ from pathlib import Path
 
 import yaml
 
-from status_defs import TERMINAL, PARTIAL_STATUSES, IN_PROGRESS_STATUSES
+from status_defs import PARTIAL_STATUSES, IN_PROGRESS_STATUSES
 from priority import rank_claims, DEFAULT_WEIGHTS
 from convergence_check import _open_claims
 
 
 # --- REQ-001: DEAD membership in TERMINAL ---
-
-def test_dead_in_terminal():
-    assert "DEAD" in TERMINAL, (
-        f"DEAD missing from TERMINAL (#36 regression); "
-        f"current TERMINAL={sorted(TERMINAL)}"
-    )
-
-
-def test_terminal_is_8_valued_with_dead():
-    assert TERMINAL == {
-        "PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED",
-        "STALE", "SUPERSEDED", "DEAD",
-    }
-
+# The 8-valued TERMINAL equality is pinned in tests/test_status_defs.py
+# (test_terminal_is_8_valued_with_superseded_and_dead); DEAD membership is a
+# redundant re-derivation of that pin.
 
 def test_dead_not_partial_not_in_progress():
     assert "DEAD" not in PARTIAL_STATUSES
@@ -58,16 +47,6 @@ def test_priority_skips_dead():
     )
 
 
-def test_priority_still_ranks_open():
-    """Sanity: a genuinely OPEN claim IS ranked (no over-exclusion)."""
-    reg = {"claims": [{"id": "C-099", "status": "OPEN",
-                       "promotion_attempts": 0,
-                       "evidence_tier_attempted": 0}]}
-    deps = {"depends_on": {}}
-    rows = rank_claims(reg, deps, DEFAULT_WEIGHTS, leverage_v2=False)
-    assert len(rows) == 1 and rows[0]["id"] == "C-099"
-
-
 # --- REQ-003: convergence_check._open_claims excludes DEAD ---
 
 def test_convergence_excludes_dead():
@@ -75,13 +54,6 @@ def test_convergence_excludes_dead():
     assert _open_claims(reg) == [], (
         f"DEAD counted as open (#36 regression): {_open_claims(reg)}"
     )
-
-
-def test_convergence_still_includes_open():
-    """Sanity: a genuinely OPEN claim IS counted (no over-exclusion)."""
-    reg = {"claims": [{"id": "C-099", "status": "OPEN"}]}
-    open_claims = _open_claims(reg)
-    assert len(open_claims) == 1 and open_claims[0]["id"] == "C-099"
 
 
 # --- REQ-004: worker_pulse quarantined flag ---

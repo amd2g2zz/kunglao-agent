@@ -6,7 +6,7 @@
 
 schema_version: "1.0"
 project: kunglao-agent
-version: "0.1"             # MUST equal pyproject.toml [project].version (receipt-checked)
+version: "0.1.1"             # MUST equal pyproject.toml [project].version (receipt-checked)
 requires_python: ">=3.10"
 
 dependencies:
@@ -103,8 +103,13 @@ assets:
     - tools/validate_index.py
   knowledge:
     # #147 / report §4.5.4: a run must bind to the exact knowledge-base
-    # revision. SKILL.md + references/ digests land in the receipt.
-    - SKILL.md
+    # revision. The main skill (skills/kunglao-agent/SKILL.md) + the per-command
+    # skills + references/ digests land in the receipt.
+    - skills/kunglao-agent/SKILL.md
+    - skills/init/SKILL.md
+    - skills/analysis/SKILL.md
+    - skills/help/SKILL.md
+    - SKILL.md  # root command-router (skill-dir install entry point, #413)
     # #366: metadata-only plugin manifest — version 0.1 must be visible
     # to the plugin manager; identity fields only, no component wiring (#364).
     - .claude-plugin/plugin.json

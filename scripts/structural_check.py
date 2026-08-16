@@ -10,9 +10,14 @@ def check_re_library_orphans(root):
     refs_text = ''
     for p in root.glob('references/*.md'):
         refs_text += p.read_text(encoding='utf-8')
-    skill = (root / 'SKILL.md').read_text(encoding='utf-8') if (root / 'SKILL.md').exists() else ''
+    # #413: the main skill moved to skills/kunglao-agent/SKILL.md (the root
+    # SKILL.md is now a thin command router); scan both for re-library refs.
+    skill_text = ''
+    for p in (root / 'skills' / 'kunglao-agent' / 'SKILL.md', root / 'SKILL.md'):
+        if p.exists():
+            skill_text += p.read_text(encoding='utf-8')
     index = (root / 'references' / 'INDEX.md').read_text(encoding='utf-8') if (root / 'references' / 'INDEX.md').exists() else ''
-    all_refs = refs_text + skill + index
+    all_refs = refs_text + skill_text + index
     orphans = []
     for p in sorted(re_lib.glob('*.md')):
         if p.name not in all_refs:

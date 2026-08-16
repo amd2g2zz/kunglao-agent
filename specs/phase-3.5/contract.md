@@ -28,8 +28,8 @@ python kunglao-init.py <workspace> [--force] [--hooks-json <path>]
 | `atomic_write` | `atomic_write(path: Path, text: str) -> None` | temp → rename atomic write (module-design L25-26 store_atomic) |
 | `compute_state_hash` | `compute_state_hash(ws: Path, register_text: str\|None=None) -> str` | sha256(claim-register normalized content + facts/_INDEX.md content + facts/ file list concatenated name-sorted) |
 | `normalize_marker` / `extract_hash` | `(text: str) -> str / str\|None` | normalize/read the state_hash field of the [initialized] marker (self-consistency hash) |
-| `seed_claims` | `seed_claims(sample: str) -> list[dict]` | 3-5 sample-level seeds: C-001 sample overview / C-002 family attribution / C-003 packer (DESIGN L110 0.9) |
-| `claim_register_text` | `claim_register_text(sample, sample_sha, state_hash) -> str` | full claim-register.yaml text: [initialized] marker header + claims body (Claim schema: module-design L56) |
+| `seed_claims` | `seed_claims(sample: str, project_type: str, sample_sha: str) -> list[dict]` | 3 structural seeds (scaffold facts only, #412): C-001 sample artifact identity / C-002 project type / C-003 sample sha256. Init performs NO analysis — family/verdict/attribution guesses forbidden; task_spec-driven claim seeding happens at loop entry (DESIGN L110 0.9) |
+| `claim_register_text` | `claim_register_text(sample, sample_sha, state_hash, project_type) -> str` | full claim-register.yaml text: [initialized] marker header + structural seed claims body (Claim schema: module-design L56) |
 | `detect_sample` | `detect_sample(ws: Path) -> tuple[str, str]` | first file in bins/ (name-sorted) → (filename, sha256), missing → ("unknown","") |
 | `scaffold` | `scaffold(ws: Path) -> list[Path]` | create facts/ blockers/ runs/ + analysis_state.txt / global_plan.txt / claim_deps.yaml / facts/_INDEX.md / task_spec_snapshot.yaml; skip if exists and non-empty (DESIGN L105, L98) |
 | `deploy_hooks` | `deploy_hooks(ws: Path, hooks_json: Path\|None) -> dict` | idempotent hooks deployment (E-init.2, DESIGN L104); target selection in §2 |
@@ -45,12 +45,14 @@ RuntimeError; writes go through atomic_write (L25).
 
 **State file `claim-register.yaml` (module-design L31: human-auditable)**:
 first comment line carries the `[initialized]` marker + `state_hash=<hex>` +
-`seeds=N` + `sample=<name>`; the body is the seed claims (id/status/
-boundary_type/evidence_tier_attempted/promotion_attempts/depends_on, matching
-the L56 Claim schema, with a title line).
+`seeds=N` + `sample=<name>`; the body is the structural seed claims
+(id/status/boundary_type/evidence_tier_attempted/promotion_attempts/
+depends_on, matching the L56 Claim schema, with a title line). #412: seed
+claims are scaffold facts only (artifact identity / project type / sample
+hash) — no analysis conclusions.
 
 **stdout (machine-readable, one line each)**:
-- fresh init: `kunglao-init: initialized <ws> (seed_claims=3 sample=<name>)` + `kunglao-init: state_hash=<hex>` + hooks line (below)
+- fresh init: `kunglao-init: initialized <ws> (scaffold=3 structural seeds project_type=<type>)` + `kunglao-init: state_hash=<hex>` + hooks line (below) — the exit line lists what init did (scaffold/env/type), never a sample-content summary (#412)
 - resume mode: `kunglao-init: resume — <ws> already initialized` (exit 0)
 - --force: `kunglao-init: --force backup -> <backup-path>`
 - hooks: deployed → `kunglao-init: hooks -> <target> (<n> entries, idempotent)`; skipped → `kunglao-init: hooks skipped — <reason>`

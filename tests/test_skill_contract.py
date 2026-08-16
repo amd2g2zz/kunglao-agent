@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "SKILL.md"
+SKILL = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
 SECTIONS = [
     "Phase 0 Environment Probe",
     "Phase 1 Activate",
@@ -72,33 +72,22 @@ def test_skill_md_links_resolve():
     assert not broken, f"broken links: {broken}"
 
 
-def test_skill_md_no_narrative_phrases():
+# (pattern, label) — forbidden substrings/regexes in the SKILL.md body.
+# Each was a separate test asserting the same `not found` shape.
+FORBIDDEN_PATTERNS = [
+    (NARRATIVE, "self-narrative phrases"),
+    (DESIGN_REF, "DESIGN.md reference"),
+    (ISSUE_NUMBER, "issue numbers"),
+    (VERSION_TAG, "version tags"),
+    (SKILL_COMMIT_POLICY, "commit policy text"),
+]
+
+
+def test_skill_md_no_forbidden_patterns():
     body = _body()
-    hits = [w for w in NARRATIVE if w in body]
-    assert not hits, f"self-narrative phrases remain: {hits}"
-
-
-def test_skill_md_no_design_md_reference():
-    """SKILL.md must not reference DESIGN.md (developer doc, not runtime)."""
-    body = _body()
-    assert not DESIGN_REF.search(body), "DESIGN.md reference found in SKILL.md body"
-
-
-def test_skill_md_no_issue_numbers():
-    """SKILL.md must not contain issue numbers (e.g. #88, #233)."""
-    body = _body()
-    hits = ISSUE_NUMBER.findall(body)
-    assert not hits, f"issue numbers found in SKILL.md body: {hits}"
-
-
-def test_skill_md_no_version_tags():
-    """SKILL.md must not contain version tags (e.g. v1.9.x)."""
-    body = _body()
-    hits = VERSION_TAG.findall(body)
-    assert not hits, f"version tags found in SKILL.md body: {hits}"
-
-
-def test_skill_md_no_skill_commit_policy():
-    """SKILL.md must not contain repo governance text (commit policy)."""
-    body = _body()
-    assert not SKILL_COMMIT_POLICY.search(body), "commit policy text found in SKILL.md body"
+    for pattern, label in FORBIDDEN_PATTERNS:
+        if isinstance(pattern, list):
+            hits = [w for w in pattern if w in body]
+            assert not hits, f"{label} remain: {hits}"
+        else:
+            assert not pattern.search(body), f"{label} found in SKILL.md body"

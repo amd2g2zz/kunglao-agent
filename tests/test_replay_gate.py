@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _skill_md() -> str:
-    return (ROOT / "SKILL.md").read_text(encoding="utf-8")
+    return (ROOT / "skills" / "kunglao-agent" / "SKILL.md").read_text(encoding="utf-8")
 
 
 def test_converged_contract_names_real_limitations():
@@ -132,6 +132,10 @@ def test_release_manifest_declares_skill_and_references():
         (ROOT / "release-manifest.yaml").read_text(encoding="utf-8")
     )
     assets = manifest.get("assets", {})
-    assert "SKILL.md" in assets.get("knowledge", []), assets.get("knowledge")
+    knowledge = assets.get("knowledge", [])
+    # #413: the main skill moved to skills/kunglao-agent/SKILL.md (root SKILL.md
+    # is the thin command router). Both are knowledge assets.
+    assert "skills/kunglao-agent/SKILL.md" in knowledge, knowledge
+    assert "SKILL.md" in knowledge, knowledge
     refs = assets.get("references", [])
     assert any("references/re-library" in r or r == "references/" for r in refs), refs

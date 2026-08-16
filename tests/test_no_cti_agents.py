@@ -28,15 +28,11 @@ _SELF = Path(__file__).resolve().relative_to(ROOT)
 class TestCtiAgentsRemoved:
     """B4-1: CTI agent files must not exist."""
 
-    def test_cti_correlator_md_absent(self) -> None:
-        assert not (AGENTS_DIR / "cti-correlator.md").exists(), (
-            "agents/cti-correlator.md must be deleted (CTI agent, not RE)"
-        )
-
-    def test_shodan_host_md_absent(self) -> None:
-        assert not (AGENTS_DIR / "shodan-host.md").exists(), (
-            "agents/shodan-host.md must be deleted (CTI agent, not RE)"
-        )
+    def test_cti_agent_files_absent(self) -> None:
+        for name in _BANNED:
+            assert not (AGENTS_DIR / f"{name}.md").exists(), (
+                f"agents/{name}.md must be deleted (CTI agent, not RE)"
+            )
 
 
 class TestNoCtiReferences:
@@ -100,7 +96,7 @@ class TestNoCtiReferences:
 class TestSkillMdCtiBoundary:
     """B4-4: SKILL.md must reflect the RE-only boundary (no CTI/OSINT/attribution)."""
 
-    SKILL_MD = ROOT / "SKILL.md"
+    SKILL_MD = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
 
     @pytest.mark.parametrize("token", _BANNED + ["CTI cold-start"])
     def test_skill_md_no_cti_tokens(self, token: str) -> None:

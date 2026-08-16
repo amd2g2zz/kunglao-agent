@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+import platform_paths  # pytest.ini pythonpath = . hooks scripts tools
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
@@ -177,6 +179,16 @@ def _local_listener(port: int):
         return None
 
 
+def _write_fake_headless(root: Path) -> Path:
+    """Write a fake analyzeHeadless at the PLATFORM-correct name under
+    root/support (#409: .bat on Windows, no extension on POSIX)."""
+    support = root / "support"
+    support.mkdir(parents=True, exist_ok=True)
+    headless = support / platform_paths.analyze_headless_name()
+    headless.write_text("@echo off\r\n", encoding="utf-8")
+    return headless
+
+
 # ---------- basic CLI tests ----------
 
 def test_toolchain_script_exists():
@@ -205,8 +217,8 @@ def test_windows_all_pass(fake_bin, kunglao_ws, monkeypatch):
     """Windows type with all tools present -> PASS per item, exit 0."""
     monkeypatch.setenv("PATH", str(fake_bin), prepend=os.pathsep)
     monkeypatch.setenv("GHIDRA_HOME", str(fake_bin))
-    # Create fake analyzeHeadless
-    (fake_bin / "analyzeHeadless.bat").write_text("@echo off\r\n", encoding="utf-8")
+    # Create fake analyzeHeadless at the PLATFORM-correct name (#409)
+    _write_fake_headless(fake_bin)
     r = _run_toolchain(kunglao_ws, ["--type", "windows"])
     # Should have PASS items; overall exit 0 if no HARD failures
     # Note: VM check will FAIL since no real VM, but that's expected
@@ -230,7 +242,7 @@ def test_linux_binutils_checked(fake_bin, kunglao_ws, monkeypatch):
     """Linux type checks for readelf/objdump in PATH."""
     monkeypatch.setenv("PATH", str(fake_bin), prepend=os.pathsep)
     monkeypatch.setenv("GHIDRA_HOME", str(fake_bin))
-    (fake_bin / "analyzeHeadless.bat").write_text("@echo off\r\n", encoding="utf-8")
+    _write_fake_headless(fake_bin)
     r = _run_toolchain(kunglao_ws, ["--type", "linux"])
     # Should check readelf, objdump
     assert "readelf" in r.stdout.lower() or "objdump" in r.stdout.lower()
@@ -290,10 +302,12 @@ def test_android_ebpf_sdk31_pass_with_fake_adb(fake_adb_script, fake_bin,
 
 
 def test_android_native_so_makes_decompiler_hard(fake_bin, kunglao_ws, monkeypatch):
-    """Sample with .so + no decompiler -> decompiler check FAIL (HARD)."""
+    """Sample with .so + no decompiler (neither MCP nor CLI) ->
+    decompiler check FAIL (HARD)."""
     empty = kunglao_ws / "empty-bin"
     empty.mkdir()
     monkeypatch.setenv("PATH", str(empty), prepend=os.pathsep)
+    _only_st_claude_json(kunglao_ws)
     (kunglao_ws / "bins").mkdir(exist_ok=True)
     (kunglao_ws / "bins" / "libnative.so").write_bytes(b"\x7fELF" + b"\x00" * 64)
     r = _run_toolchain(kunglao_ws, ["--type", "android", "--json"])
@@ -406,8 +420,8 @@ def test_exit_2_warn_only(fake_bin, kunglao_ws, monkeypatch):
             encoding="utf-8")
         gn.chmod(0o755)
     _rewrite_adb_stub(fake_bin)
-    # decompiler: GHIDRA_HOME + analyzeHeadless.bat
-    (fake_bin / "analyzeHeadless.bat").write_text("@echo off\r\n", encoding="utf-8")
+    # decompiler: GHIDRA_HOME + analyzeHeadless (platform-correct name, #409)
+    _write_fake_headless(fake_bin)
     monkeypatch.setenv("GHIDRA_HOME", str(fake_bin))
 
     frida_sock = socket_mod.create_server(("127.0.0.1", 0))
@@ -437,6 +451,38 @@ def test_exit_1_hard_fail(kunglao_ws, monkeypatch):
     monkeypatch.setenv("PATH", str(empty), prepend=os.pathsep)
     r = _run_toolchain(kunglao_ws, ["--type", "windows"])
     assert r.returncode == 1, f"HARD fail should be exit 1, got {r.returncode}"
+
+
+# ---------- #409: platform de-hardcoding (analyzeHeadless by sys.platform) ----------
+
+def test_linux_ghidra_resolves_platform_headless(fake_bin, kunglao_ws, monkeypatch):
+    """#409: on POSIX the toolchain must look for support/analyzeHeadless
+    WITHOUT the .bat extension — GHIDRA_HOME + platform-correct name -> the
+    ghidra check PASSes; a .bat-only install must NOT satisfy the probe."""
+    import toolchain as tc
+    # POSIX: extensionless analyzeHeadless exists -> PASS
+    ah = _write_fake_headless(fake_bin)
+    assert platform_paths.analyze_headless(fake_bin) == ah
+    assert ah.name == platform_paths.analyze_headless_name()
+    assert tc.platform_paths.analyze_headless(fake_bin) == ah
+
+    # Windows-only .bat must NOT satisfy the probe on POSIX
+    if os.name != "nt":
+        wrong = fake_bin / "support" / "analyzeHeadless.bat"
+        wrong.write_text("", encoding="utf-8")
+        assert tc.platform_paths.analyze_headless(fake_bin) != wrong, \
+            "a .bat must not be picked on POSIX"
+
+
+def test_analyze_headless_name_matches_platform():
+    """#409: analyze_headless_name() returns .bat on Windows, no extension on POSIX."""
+    name = platform_paths.analyze_headless_name()
+    if os.name == "nt":
+        assert name == "analyzeHeadless.bat"
+    else:
+        assert name == "analyzeHeadless"
+    assert platform_paths.analyze_headless(Path("fake")) == \
+        Path("fake") / "support" / name
 
 
 # ---------- Cascade error messages ----------
@@ -676,3 +722,85 @@ def test_vm_shell_port_env_configurable(monkeypatch):
     monkeypatch.delenv("KUNGLAO_VM_SHELL_PORT", raising=False)
     importlib.reload(tc)
     assert tc.VM_SHELL_PORT == 9876, "default port must be 9876"
+
+
+# ---------- #407: MCP-first decompiler check (dedup + CLI fallback) ----------
+
+def _only_st_claude_json(ws: Path) -> None:
+    """Overwrite the hermetic fake-claude.json to register NO decompiler MCP
+    (only sequential-thinking) so the CLI/decompiler probe is isolated."""
+    (ws.parent / "fake-claude.json").write_text(json.dumps({
+        "mcpServers": {"sequential-thinking": {}},
+    }), encoding="utf-8")
+
+
+def test_decompiler_check_single_helper():
+    """#407 L1: the decompiler probe is deduplicated — one shared helper
+    replaces the triple copy; platform checkers no longer carry their own
+    GHIDRA_HOME/analyzeHeadless/idat64 logic."""
+    import inspect
+    import toolchain as tc
+    assert hasattr(tc, "_check_decompiler"), "missing shared decompiler helper"
+    src = (inspect.getsource(tc._check_windows)
+           + inspect.getsource(tc._check_linux)
+           + inspect.getsource(tc._check_android))
+    assert "analyzeHeadless" not in src, \
+        "platform checkers must not duplicate the decompiler probe"
+    assert "idat64" not in src, \
+        "platform checkers must not duplicate the decompiler probe"
+    assert "_check_decompiler(" in src, \
+        "platform checkers must call the shared decompiler helper"
+
+
+def test_decompiler_cli_ghidra_fallback(fake_bin, kunglao_ws, monkeypatch):
+    """#407: CLI (GHIDRA_HOME + analyzeHeadless, platform-correct name #409)
+    remains a working fallback when no decompiler MCP is registered."""
+    _only_st_claude_json(kunglao_ws)
+    (fake_bin / "support").mkdir(exist_ok=True)
+    headless = fake_bin / "support" / platform_paths.analyze_headless_name()
+    headless.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    headless.chmod(0o755)
+    r = _run_toolchain(kunglao_ws, ["--type", "windows", "--json"],
+                       env={"GHIDRA_HOME": str(fake_bin)})
+    data = json.loads(r.stdout)
+    ghidra = next(c for c in data["checks"] if c["name"] == "ghidra")
+    assert ghidra["status"] == "PASS", ghidra
+    assert "analyzeHeadless" in ghidra["detail"], ghidra
+
+
+def test_decompiler_cli_ida_fallback(fake_bin, kunglao_ws, monkeypatch):
+    """#407: CLI idat64 on PATH remains a fallback decompiler signal."""
+    _only_st_claude_json(kunglao_ws)
+    if os.name == "nt":
+        (fake_bin / "idat64.exe").write_text("", encoding="utf-8")
+    else:
+        (fake_bin / "idat64").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        (fake_bin / "idat64").chmod(0o755)
+    monkeypatch.setenv("PATH", str(fake_bin), prepend=os.pathsep)
+    r = _run_toolchain(kunglao_ws, ["--type", "windows", "--json"])
+    data = json.loads(r.stdout)
+    ida = next(c for c in data["checks"] if c["name"] == "ida")
+    assert ida["status"] == "PASS", ida
+    assert "idat64" in ida["detail"], ida
+
+
+def test_android_native_so_decompiler_passes_via_mcp(fake_bin, kunglao_ws,
+                                                     monkeypatch):
+    """#407: sample with native .so + ida-pro-vm MCP registered -> decompiler
+    PASS (via MCP), not the native-so HARD FAIL."""
+    _only_st_claude_json(kunglao_ws)
+    (kunglao_ws.parent / "fake-claude.json").write_text(json.dumps({
+        "mcpServers": {
+            "sequential-thinking": {},
+            "gitnexus": {},
+            "ida-pro-vm": {},
+        },
+    }), encoding="utf-8")
+    monkeypatch.setenv("PATH", str(fake_bin), prepend=os.pathsep)
+    (kunglao_ws / "bins").mkdir(exist_ok=True)
+    (kunglao_ws / "bins" / "libnative.so").write_bytes(b"\x7fELF" + b"\x00" * 64)
+    r = _run_toolchain(kunglao_ws, ["--type", "android", "--json"])
+    data = json.loads(r.stdout)
+    decomp = next(c for c in data["checks"] if c["name"] == "decompiler")
+    assert decomp["status"] == "PASS", decomp
+    assert "via MCP (ida-pro-vm)" in decomp["detail"], decomp

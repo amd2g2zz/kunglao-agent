@@ -227,7 +227,7 @@ def test_f6_warning_does_not_reject_overall(tmp_path):
 
 # ---------- F2: SKILL.md read/write boundary (wording pins) ----------
 
-SKILL = ROOT / "SKILL.md"
+SKILL = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
 
 
 def test_f2_skill_md_states_read_write_boundary():

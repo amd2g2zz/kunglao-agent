@@ -178,22 +178,14 @@ def test_anchor_fail_open_never_raises(ws):
 
 # ===== (d) non-agent tool -> skip (empty output, rc 0) =====
 
-def test_hook_skips_non_agent_tool_bash(ws, capsys):
-    write_ledger(ws, [snap("DISPATCH", ["C-001"])])
-    activate(ws)
-    mod = _hook()
-    rc = mod.process_event({"tool_name": "Bash", "cwd": str(ws)})
-    assert rc == 0
-    assert capsys.readouterr().out == ""
-
-
-def test_hook_skips_non_agent_tool_read(ws, capsys):
-    write_ledger(ws, [snap("DISPATCH", ["C-001"])])
-    activate(ws)
-    mod = _hook()
-    rc = mod.process_event({"tool_name": "Read", "cwd": str(ws)})
-    assert rc == 0
-    assert capsys.readouterr().out == ""
+def test_hook_skips_non_agent_tools(ws, capsys):
+    for tool in ("Bash", "Read"):
+        write_ledger(ws, [snap("DISPATCH", ["C-001"])])
+        activate(ws)
+        mod = _hook()
+        rc = mod.process_event({"tool_name": tool, "cwd": str(ws)})
+        assert rc == 0
+        assert capsys.readouterr().out == ""
 
 
 # ===== Agent-tool completion injects additionalContext (worker_pulse shape) =====

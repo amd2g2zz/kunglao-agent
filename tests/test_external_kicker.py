@@ -241,25 +241,21 @@ def _write_status(runs: Path, name: str, status: str, minutes_old: int) -> Path:
     return p
 
 
-def test_has_fresh_workers_fresh_inprogress(tmp_path):
-    runs = tmp_path / "runs"
-    runs.mkdir()
-    _write_status(runs, "worker-status-1.md", "in-progress", 2)
-    assert has_fresh_workers(runs, FRESH_WORKER_MINUTES) is True
+# (status, minutes_old, expected) — has_fresh_workers cases.
+FRESH_WORKER_CASES = [
+    ("in-progress", 2, True),
+    ("in-progress", 120, False),
+    ("done", 1, False),
+]
 
 
-def test_has_fresh_workers_stale_inprogress(tmp_path):
-    runs = tmp_path / "runs"
-    runs.mkdir()
-    _write_status(runs, "worker-status-1.md", "in-progress", 120)
-    assert has_fresh_workers(runs, FRESH_WORKER_MINUTES) is False
-
-
-def test_has_fresh_workers_done_file(tmp_path):
-    runs = tmp_path / "runs"
-    runs.mkdir()
-    _write_status(runs, "worker-status-1.md", "done", 1)
-    assert has_fresh_workers(runs, FRESH_WORKER_MINUTES) is False
+def test_has_fresh_workers(tmp_path):
+    for i, (status, minutes_old, expected) in enumerate(FRESH_WORKER_CASES):
+        runs = tmp_path / f"runs-{i}"
+        runs.mkdir()
+        _write_status(runs, "worker-status-1.md", status, minutes_old)
+        assert has_fresh_workers(runs, FRESH_WORKER_MINUTES) is expected, \
+            f"status={status!r} minutes_old={minutes_old}"
 
 
 def test_has_fresh_workers_no_runs_dir(tmp_path):

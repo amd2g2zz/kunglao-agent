@@ -95,6 +95,8 @@ def test_no_reference_to_legacy_precommit_path():
     for p in ROOT.rglob("*"):
         if not p.is_file() or ".git" in p.parts or ".review-gate" in p.parts:
             continue  # runtime dirs (.git, review-gate evidence) are not repo content
+        if ".devfleet-worktrees" in p.parts:
+            continue  # git-worktree scratch dir (gitignored, not repo content)
         if p.resolve() == self_file:
             continue  # this test states the prohibition itself
         if p.suffix not in (".md", ".py", ".yaml", ".txt", ".sh", ".tmpl"):

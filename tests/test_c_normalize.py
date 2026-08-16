@@ -54,13 +54,18 @@ GENERIC_C = (
 # =====================================================================
 
 class TestModuloIdiom:
-    def test_plain_decimal_divisor(self):
-        src = "uVar1 = uVar1 - (uVar1 / 10) * 10;\n"
-        assert cn.normalize(src) == "uVar1 = uVar1 % 10;\n"
+    # (src, expected) — exact-equality modulo-folding cases.
+    MODULO_FOLD_CASES = [
+        ("uVar1 = uVar1 - (uVar1 / 10) * 10;\n", "uVar1 = uVar1 % 10;\n"),
+        ("x = x - (x / 0x1000) * 0x1000;\n", "x = x % 0x1000;\n"),
+        ("y = y + (y / 3) * -3;\n", "y = y % 3;\n"),
+        ("a=x-(x/7)*7;\n", "a=x % 7;\n"),
+        ("v = buf[i] - (buf[i] / 4) * 4;\n", "v = buf[i] % 4;\n"),
+    ]
 
-    def test_hex_divisor(self):
-        src = "x = x - (x / 0x1000) * 0x1000;\n"
-        assert cn.normalize(src) == "x = x % 0x1000;\n"
+    def test_modulo_idiom_folds_exactly(self):
+        for src, expected in self.MODULO_FOLD_CASES:
+            assert cn.normalize(src) == expected, src
 
     def test_cast_wrapped_whole_expression(self):
         # Ghidra emission for the cast-wrapped round-down idiom.
@@ -74,10 +79,6 @@ class TestModuloIdiom:
         out = cn.normalize(src)
         assert "(uint)((x) % 0x1000)" in out
 
-    def test_negative_multiplier_plus_form(self):
-        src = "y = y + (y / 3) * -3;\n"
-        assert cn.normalize(src) == "y = y % 3;\n"
-
     def test_multiple_divisors_in_one_input(self):
         src = ("a = x - (x/16)*16;\n"
                "b = y - (y / 8) * 8;\n")
@@ -85,42 +86,21 @@ class TestModuloIdiom:
         assert "x % 16" in out
         assert "y % 8" in out
 
-    def test_no_spaces_ghidra_emission(self):
-        src = "a=x-(x/7)*7;\n"
-        assert cn.normalize(src) == "a=x % 7;\n"
-
-    def test_array_subscript_expression(self):
-        src = "v = buf[i] - (buf[i] / 4) * 4;\n"
-        assert cn.normalize(src) == "v = buf[i] % 4;\n"
-
 
 class TestModuloNoFalsePositives:
-    def test_different_variables_unchanged(self):
-        src = "z = x - (y/16)*16;\n"
-        assert cn.normalize(src) == src
+    # (src, reason) — each must round-trip unchanged (no modulo folding).
+    UNCHANGED_INPUTS = [
+        ("z = x - (y/16)*16;\n", "different variables"),
+        ("z = x - (x/16)*15;\n", "divisor/multiplier mismatch"),
+        ("z = x - x/16*16;\n", "unparenthesized division"),
+        ("z = f(x) - (f(x)/16)*16;\n", "function call (double-eval hazard)"),
+        ("z = x - (x/16)*16 * y;\n", "multiplicative follow context"),
+        ("z = ax - (x/16)*16;\n", "identifier prefix boundary (ax != x)"),
+    ]
 
-    def test_divisor_multiplier_mismatch_unchanged(self):
-        src = "z = x - (x/16)*15;\n"
-        assert cn.normalize(src) == src
-
-    def test_unparenthesized_division_unchanged(self):
-        src = "z = x - x/16*16;\n"
-        assert cn.normalize(src) == src
-
-    def test_function_call_expression_unchanged(self):
-        # Side-effect hazard: double evaluation of f(x) is not safe to fold.
-        src = "z = f(x) - (f(x)/16)*16;\n"
-        assert cn.normalize(src) == src
-
-    def test_multiplicative_follow_context_unchanged(self):
-        # x % 16 * y != x - (x/16)*16*y — precedence would change semantics.
-        src = "z = x - (x/16)*16 * y;\n"
-        assert cn.normalize(src) == src
-
-    def test_identifier_prefix_boundary(self):
-        # Leading operand must be a full identifier: "ax" is not "x".
-        src = "z = ax - (x/16)*16;\n"
-        assert cn.normalize(src) == src
+    def test_no_false_positive_folding(self):
+        for src, reason in self.UNCHANGED_INPUTS:
+            assert cn.normalize(src) == src, reason
 
 
 # =====================================================================

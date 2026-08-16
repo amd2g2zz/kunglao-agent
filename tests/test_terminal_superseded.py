@@ -11,19 +11,14 @@ The two OPEN-sanity tests guard against over-exclusion.
 """
 from __future__ import annotations
 
-from status_defs import TERMINAL
 from priority import rank_claims, DEFAULT_WEIGHTS
 from convergence_check import _open_claims
 
 
 # --- REQ-001: SUPERSEDED membership in TERMINAL ---
-
-def test_superseded_in_terminal():
-    assert "SUPERSEDED" in TERMINAL, (
-        f"SUPERSEDED missing from TERMINAL (#59 regression); "
-        f"current TERMINAL={sorted(TERMINAL)}"
-    )
-
+# The 8-valued TERMINAL equality is pinned in tests/test_status_defs.py
+# (test_terminal_is_8_valued_with_superseded_and_dead); SUPERSEDED membership
+# is a redundant re-derivation of that pin.
 
 # --- REQ-002: priority.rank_claims excludes SUPERSEDED ---
 

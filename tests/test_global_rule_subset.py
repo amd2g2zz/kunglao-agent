@@ -18,7 +18,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "check_global_rule_subset.py"
-SKILL_MD = ROOT / "SKILL.md"
+SKILL_MD = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
 GLOBAL_RULE = ROOT / "rules" / "kunglao-convergence-loop.md"
 
 

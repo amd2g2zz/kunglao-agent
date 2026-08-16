@@ -63,6 +63,52 @@ def test_env_check_hook_files_is_the_registry() -> None:
     assert "completion_gate.py" in env_check.HOOK_FILES
 
 
+# ---------- #410: deployment-target single-source ----------
+
+def test_wire_up_settings_exports_hook_deployment_targets() -> None:
+    """The writer must export the deployment-target registry — the single
+    source of truth for where hooks are read/written (issue #410). Both
+    project-level targets that hooks can live in must be listed."""
+    targets = wire_up_settings.HOOK_DEPLOYMENT_TARGETS
+    assert isinstance(targets, tuple), "deployment targets must be an immutable tuple"
+    assert len(targets) == 2, (
+        "exactly two project-level targets: <ws>/.claude/settings.json (#258) "
+        "and <ws-parent>/.claude/settings.json (external_kicker D2, #410)")
+    assert all(callable(fn) for fn in targets), \
+        "each target must be a resolver callable (ws -> Path)"
+
+    ws_level, parent_level = [fn(Path("ws")) for fn in targets]
+    assert str(ws_level).endswith("ws/.claude/settings.json"), \
+        f"target[0] must resolve to the ws-level file: {ws_level}"
+    assert str(parent_level).endswith(".claude/settings.json"), \
+        f"target[1] must resolve to a workspace-parent file: {parent_level}"
+    assert parent_level.parent.parent == Path("ws").resolve().parent, \
+        "target[1] must be the PARENT of the workspace: <ws-parent>/.claude/settings.json"
+
+
+def test_hook_deployment_targets_helper_matches_registry() -> None:
+    """hook_deployment_targets(ws) is the callable registry applied — the
+    convenience helper env_check/external_kicker consume."""
+    ws = Path("ws")
+    resolved = wire_up_settings.hook_deployment_targets(ws)
+    assert resolved == (
+        Path("ws").resolve() / ".claude" / "settings.json",
+        Path("ws").resolve().parent / ".claude" / "settings.json",
+    )
+
+
+def test_external_kicker_default_settings_path_derives_from_registry() -> None:
+    """#410: the external_kicker's default project settings path must derive
+    from the wire_up_settings target registry, not a hand-written literal —
+    deployment target and check location must share one source (the #410
+    self-contradiction: external_kicker read <ws-parent>, env_check checked
+    <ws>)."""
+    ws = Path("ws")
+    assert external_kicker.default_settings_path(ws) == (
+        wire_up_settings.hook_deployment_targets(ws)[1]), (
+        "kicker default must match the registry's workspace-parent target (#410)")
+
+
 def test_check_hooks_scans_stop_section(tmp_path: Path) -> None:
     """check_hooks must collect commands from PreToolUse + PostToolUse AND
     Stop — completion_gate lives under Stop; a Pre/Post-only scan reports a
@@ -85,8 +131,11 @@ def test_check_hooks_scans_stop_section(tmp_path: Path) -> None:
     settings.write_text(json.dumps(
         {"hooks": {"PreToolUse": [pre, pre_bash], "PostToolUse": [post]}}),
         encoding="utf-8")
-    ok, msg = env_check.check_hooks(ws)
-    assert not ok, (
+    # #410: check_hooks is TRI-STATE — (status, msg) with status in
+    # PASS|WARN|FAIL. A partial deployment (a target file exists but the
+    # Stop hook completion_gate.py is missing) must be FAIL.
+    status, msg = env_check.check_hooks(ws)
+    assert status == "FAIL", (
         "a deployment missing the Stop hook completion_gate.py must FAIL "
         f"(Stop section must be scanned): {msg}")
     assert "completion_gate.py" in msg

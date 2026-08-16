@@ -107,47 +107,30 @@ def test_zero_open_completion_does_not_fire_F4():
 
 
 # ---------------------------------------------------------------------------
-# (c) Each fingerprint in isolation (4 tests, one per fingerprint).
+# (c) Each fingerprint in isolation (one loop over (id, transcript, task_text)).
 # ---------------------------------------------------------------------------
 
-def test_F1_self_anchoring_isolation():
-    transcript = "Substantive task complete. Stopping here is appropriate."
-    report = pt.detect(transcript, task_text="comprehensively re-analyze every gap")
-    by_id = {fp["id"]: fp for fp in report["fingerprints"]}
-    assert by_id["F1"]["fired"] is True
-    assert by_id["F2"]["fired"] is False
-    assert by_id["F3"]["fired"] is False
-    assert by_id["F4"]["fired"] is False
+# (fired_fingerprint, transcript, task_text) — each fires ONLY its own
+# fingerprint; every other fingerprint must stay quiet (isolation).
+ISOLATION_CASES = [
+    ("F1", "Substantive task complete. Stopping here is appropriate.",
+     "comprehensively re-analyze every gap"),
+    ("F2", "G4, G5, G6 marked 备注级（记录即可）.", None),
+    ("F3", "Cost ~$52.85 — informational.", None),
+    ("F4", "task complete. Items remaining, queued for later.", None),
+]
+ALL_FINGERPRINTS = ("F1", "F2", "F3", "F4")
 
 
-def test_F2_self_invented_tiering_isolation():
-    transcript = "G4, G5, G6 marked 备注级（记录即可）."
-    report = pt.detect(transcript)
-    by_id = {fp["id"]: fp for fp in report["fingerprints"]}
-    assert by_id["F2"]["fired"] is True
-    assert by_id["F1"]["fired"] is False
-    assert by_id["F3"]["fired"] is False
-    assert by_id["F4"]["fired"] is False
-
-
-def test_F3_cost_semantic_drift_isolation():
-    transcript = "Cost ~$52.85 — informational."
-    report = pt.detect(transcript)
-    by_id = {fp["id"]: fp for fp in report["fingerprints"]}
-    assert by_id["F3"]["fired"] is True
-    assert by_id["F1"]["fired"] is False
-    assert by_id["F2"]["fired"] is False
-    assert by_id["F4"]["fired"] is False
-
-
-def test_F4_false_completion_isolation():
-    transcript = "task complete. Items remaining, queued for later."
-    report = pt.detect(transcript)
-    by_id = {fp["id"]: fp for fp in report["fingerprints"]}
-    assert by_id["F4"]["fired"] is True
-    assert by_id["F1"]["fired"] is False
-    assert by_id["F2"]["fired"] is False
-    assert by_id["F3"]["fired"] is False
+def test_each_fingerprint_isolated():
+    for fired, transcript, task_text in ISOLATION_CASES:
+        report = pt.detect(transcript, task_text=task_text)
+        by_id = {fp["id"]: fp for fp in report["fingerprints"]}
+        assert by_id[fired]["fired"] is True, f"{fired} must fire for: {transcript!r}"
+        for other in ALL_FINGERPRINTS:
+            if other != fired:
+                assert by_id[other]["fired"] is False, \
+                    f"{other} must NOT fire for: {transcript!r}"
 
 
 # ---------------------------------------------------------------------------

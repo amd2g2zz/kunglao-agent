@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 TEMPLATE = ROOT / "templates" / "CLAUDE.md.base.tmpl"
-SKILL = ROOT / "SKILL.md"
+SKILL = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
 WORKER = ROOT / "agents" / "kunglao-worker.md"
 CHECKLIST = ROOT / "references" / "cli-script-checklist.md"
 INDEX = ROOT / "references" / "_INDEX.md"

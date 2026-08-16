@@ -685,6 +685,19 @@ def build_resume_prompt(ws, *,
 
 # ---------- orchestration ----------
 
+def default_settings_path(workspace: Path) -> Path:
+    """D2 project-level settings.json default — the workspace-PARENT target.
+
+    Issue #410: this MUST derive from the wire_up_settings deployment-target
+    registry, not a hand-written literal. The pre-#410 self-contradiction:
+    the kicker read/re-wrote <workspace-parent>/.claude/settings.json while
+    env_check checked only <ws>/.claude/settings.json — a parent-wired
+    workspace was reported 'hooks missing' (FAIL) with 'leave unwired'
+    guidance. Both now resolve the SAME registry (hook_deployment_targets[1]).
+    """
+    return wire_up_settings.hook_deployment_targets(workspace)[1]
+
+
 def tick(workspace: Path, *,
          tick_interval_min: int = DEFAULT_TICK_INTERVAL_MIN,
          stale_minutes: int = DEFAULT_STALE_MINUTES,
@@ -733,7 +746,7 @@ def tick(workspace: Path, *,
             print("kicker: skip — fresh in-progress worker status files (session mid-dispatch)")
             return 0
         # 3. project-level hooks re-registration, env-preserving (D2)
-        spath = settings_path or workspace.parent / ".claude" / "settings.json"
+        spath = settings_path or default_settings_path(workspace)
         current = {}
         if spath.exists():
             try:
@@ -799,8 +812,9 @@ def main(argv: list[str] | None = None) -> int:
                         help=f"tick interval in minutes; MUST be < {ACTIVATION_TTL_MINUTES} "
                              f"(activation TTL); default {DEFAULT_TICK_INTERVAL_MIN}")
     parser.add_argument("--settings", default=None,
-                        help="project-level settings.json path (default: "
-                             "<workspace-parent>/.claude/settings.json)")
+                        help="project-level settings.json path (default: the "
+                             "workspace-parent target from the wire_up_settings "
+                             "deployment registry — hook_deployment_targets[1], #410)")
     parser.add_argument("--claude-bin", default="claude", help="claude CLI binary")
     parser.add_argument("--stale-minutes", type=int, default=DEFAULT_STALE_MINUTES,
                         help="both heartbeat signals stale beyond this = session dead")

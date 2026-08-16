@@ -14,7 +14,7 @@ reference value; one-shot fix logs and session-plan residue were removed
 
 Current authoritative sources:
 
-- Runtime operative contract — `SKILL.md` (repo root)
+- Runtime operative contract — `skills/kunglao-agent/SKILL.md` (the root `SKILL.md` is the thin command router, #413)
 - Release record — `CHANGELOG.md` (repo root)
 - Change history — `openspec/archive/` (delivered change proposals)
 

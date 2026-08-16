@@ -166,30 +166,22 @@ class TestFail:
         errs = _errors({"tools": [a, b]})
         assert any("name" in e and "duplicate" in e.lower() for e in errs), errs
 
-    @pytest.mark.parametrize("bad",
-                             ["cryptography", "Crypto", "re", "", "unknown"])
-    def test_invalid_category_fails(self, bad: str) -> None:
-        entry = _valid_entry()
-        entry["category"] = bad
-        assert _errors({"tools": [entry]})
+    # (field, bad_value) — each invalid value must be rejected by the validator.
+    INVALID_FIELD_VALUES = [
+        ("category", "cryptography"), ("category", "Crypto"), ("category", "re"),
+        ("category", ""), ("category", "unknown"),
+        ("tier", "T0"), ("tier", "t1"), ("tier", "T4"), ("tier", "T"), ("tier", ""),
+        ("cost_tier", "free"), ("cost_tier", "CHEAP"), ("cost_tier", "ultra-deep"),
+        ("cost_tier", "x"), ("cost_tier", ""),
+        ("input_output", ""), ("input_output", "   "), ("input_output", {}),
+        ("input_output", {"input": ""}),
+    ]
 
-    @pytest.mark.parametrize("bad", ["T0", "t1", "T4", "T", ""])
-    def test_invalid_tier_fails(self, bad: str) -> None:
-        entry = _valid_entry()
-        entry["tier"] = bad
-        assert _errors({"tools": [entry]})
-
-    @pytest.mark.parametrize("bad", ["free", "CHEAP", "ultra-deep", "x", ""])
-    def test_invalid_cost_tier_fails(self, bad: str) -> None:
-        entry = _valid_entry()
-        entry["cost_tier"] = bad
-        assert _errors({"tools": [entry]})
-
-    @pytest.mark.parametrize("bad", ["", "   ", {}, {"input": ""}])
-    def test_empty_input_output_fails(self, bad) -> None:
-        entry = _valid_entry()
-        entry["input_output"] = bad
-        assert _errors({"tools": [entry]})
+    def test_invalid_field_values_fail(self) -> None:
+        for field, bad in self.INVALID_FIELD_VALUES:
+            entry = _valid_entry()
+            entry[field] = bad
+            assert _errors({"tools": [entry]}), f"field={field!r} value={bad!r} must fail"
 
     def test_capability_must_be_domain_operation(self) -> None:
         entry = _valid_entry()

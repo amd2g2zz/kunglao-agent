@@ -49,30 +49,20 @@ def _parse_reproduce(stdout: str) -> dict:
 # =====================================================================
 
 class TestParser:
-    def test_parses_constants_hex_vars_ops(self):
-        node = op.parse_expr("(x + 1) * (x + 1)")
-        assert op.node_to_c(node) == "((x + 1) * (x + 1))"
+    # (expr, expected_c) — parse + node_to_c round-trip table.
+    PARSE_CASES = [
+        ("(x + 1) * (x + 1)", "((x + 1) * (x + 1))"),
+        ("x + y * 3", "(x + (y * 3))"),
+        ("x + 1 << 2", "((x + 1) << 2)"),
+        ("x & 1 == 1", "(x & (1 == 1))"),
+        ("!(-x)", "(!(-x))"),
+        ("x ^ 0xff", "(x ^ 255)"),
+    ]
 
-    def test_precedence_mul_binds_tighter_than_add(self):
-        node = op.parse_expr("x + y * 3")
-        assert op.node_to_c(node) == "(x + (y * 3))"
-
-    def test_precedence_shift_vs_plus(self):
-        node = op.parse_expr("x + 1 << 2")
-        assert op.node_to_c(node) == "((x + 1) << 2)"
-
-    def test_comparison_binds_tighter_than_bitand(self):
-        # C precedence: == binds tighter than &, so x & 1 == 1 is x & (1 == 1).
-        node = op.parse_expr("x & 1 == 1")
-        assert op.node_to_c(node) == "(x & (1 == 1))"
-
-    def test_unary_minus_and_not(self):
-        node = op.parse_expr("!(-x)")
-        assert op.node_to_c(node) == "(!(-x))"
-
-    def test_hex_and_binary_literals(self):
-        node = op.parse_expr("x ^ 0xff")
-        assert op.node_to_c(node) == "(x ^ 255)"
+    def test_parse_roundtrips_to_c(self):
+        for expr, expected in self.PARSE_CASES:
+            node = op.parse_expr(expr)
+            assert op.node_to_c(node) == expected, expr
 
     def test_parse_error_unbalanced_paren(self):
         with pytest.raises(op.ParseError):

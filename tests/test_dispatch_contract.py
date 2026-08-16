@@ -63,7 +63,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "SKILL.md"
+SKILL = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
 
 # ---------------------------------------------------------------------------
 # stale Task-tool reference patterns (spec REQ-1, D6)

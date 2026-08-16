@@ -82,72 +82,28 @@ def test_rules_file_lte_150_lines() -> None:
 
 # ---------- 9-point outline markers ----------
 
+# (marker, required substrings) — each #N outline requirement the distilled
+# rules file must satisfy. Merged into one loop: a missing marker fails with
+# its name in the assertion message (same detection as the former 9 tests).
+OUTLINE_MARKERS = [
+    ("identity", ["orchestrator", "not an analyst"]),
+    ("first-tool-invariant", ["first tool of every round", "convergence_check"]),
+    ("decision-table", ["DISPATCH", "DISPATCH_VERIFIER", "SATURATED", "BLOCKED", "CONVERGED"]),
+    ("five-behaviors", ["self-recovery", "specialist-first", "cost-is-noise",
+                        "poll-workers", "false-completion-trap"]),
+    ("maker-checker", ["maker-checker", "worker=maker"]),
+    ("tool-boundary", ["Never call analysis tools directly", "ghidra", "x64dbg", "frida"]),
+    ("hard-prohibitions", ["asking the user", "cascade", "declare done", "OPEN"]),
+    ("file-map", ["claim-register.yaml", "facts/_INDEX.md", ".convergence_ledger.jsonl", "scripts/"]),
+    ("pointers", ["SKILL.md", "references/"]),
+]
 
-def test_identity_orchestrator_present() -> None:
-    """#1 outline: identity — kunglao-agent is an RE orchestrator, not an analyst."""
+
+def test_outline_markers_present() -> None:
     text = _text()
-    assert "orchestrator" in text
-    assert "not an analyst" in text
-
-
-def test_first_tool_invariant_present() -> None:
-    """#2 outline: every round's first tool = convergence_check."""
-    text = _text()
-    assert "first tool of every round" in text
-    assert "convergence_check" in text
-
-
-def test_convergence_decision_table_present() -> None:
-    """#3 outline: DISPATCH / DISPATCH_VERIFIER / SATURATED / BLOCKED / CONVERGED."""
-    text = _text()
-    for token in ("DISPATCH", "DISPATCH_VERIFIER", "SATURATED", "BLOCKED", "CONVERGED"):
-        assert token in text, f"decision-table token missing: {token}"
-
-
-def test_five_behaviors_present() -> None:
-    """#4 outline: 5 behaviors, one line each."""
-    text = _text()
-    for label in ("self-recovery", "specialist-first", "cost-is-noise",
-                  "poll-workers", "false-completion-trap"):
-        assert label in text, f"behavior label missing: {label}"
-
-
-def test_maker_checker_split_present() -> None:
-    """#5 outline: worker=maker, orchestrator=checker, no self-stamp."""
-    text = _text()
-    assert "maker-checker" in text
-    assert "worker=maker" in text
-
-
-def test_tool_boundary_present() -> None:
-    """#6 outline: never call analysis tools (ghidra/x64dbg/frida) directly."""
-    text = _text()
-    assert "Never call analysis tools directly" in text
-    for tool in ("ghidra", "x64dbg", "frida"):
-        assert tool in text, f"boundary tool missing: {tool}"
-
-
-def test_hard_prohibitions_present() -> None:
-    """#7 outline: no mid-iteration asking the user / no cascade abort / no declare-done with OPEN claims."""
-    text = _text()
-    assert "asking the user" in text
-    assert "cascade" in text
-    assert "declare done" in text
-    assert "OPEN" in text
-
-
-def test_file_map_present() -> None:
-    """#8 outline: claim-register.yaml / facts/_INDEX.md / .convergence_ledger.jsonl / scripts/."""
-    text = _text()
-    for path in ("claim-register.yaml", "facts/_INDEX.md", ".convergence_ledger.jsonl", "scripts/"):
-        assert path in text, f"file-map entry missing: {path}"
-
-
-def test_pointers_present() -> None:
-    """#9 outline: full contract lives in SKILL.md + references/."""
-    text = _text()
-    assert "SKILL.md" in text
-    assert "references/" in text
+    for marker, substrings in OUTLINE_MARKERS:
+        for sub in substrings:
+            assert sub in text, f"outline marker '{marker}' missing '{sub}'"
 
 
 # ---------- distill != copy ----------

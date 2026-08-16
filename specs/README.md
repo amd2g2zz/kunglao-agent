@@ -10,8 +10,9 @@ fresh clones and is retired):
   is preserved in git history). These are HISTORICAL records of the
   pre-v0.1 `kong-agent` era, kept for citation traceability. For current
   behavior, the authoritative sources are `CHANGELOG.md` (v0.1 delivery
-  record + internal version mapping), root `SKILL.md` (operative runtime
-  contract), and `openspec/archive/` (delivered change proposals).
+  record + internal version mapping), `skills/kunglao-agent/SKILL.md`
+  (operative runtime contract — the root `SKILL.md` is the thin command
+  router, #413), and `openspec/archive/` (delivered change proposals).
 - **Layer 2 — executable specs (this directory + schemas/)**: each phase's
   `phase-N/contract.md` excerpts (with source line numbers, no
   retranscription) from the layer-1 master docs, plus `schemas/*.json`

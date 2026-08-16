@@ -66,12 +66,26 @@ type-aware initialization + toolchain readiness.
    in the status file.
 3. **Run init (it gates itself)** —
    `python <SKILL_DIR>/scripts/kunglao-init.py <ws> --type <t>`
-   kunglao-init runs `toolchain.check` BEFORE scaffold (#304 amendment). Outcomes:
+   kunglao-init runs `toolchain.check` BEFORE scaffold (#304 amendment).
+   Exit codes are the documented RC contract (#414) — branch on the code,
+   never on stderr text:
    - exit 0 → verify `project_type=<t>` in `analysis_state.txt`, marker
      present, CLAUDE.md rendered from the type-specific template. Done path.
-   - exit 4 (REFUSE) → HARD toolchain FAIL: capture the per-item
+   - exit 1 (RC_ERROR) → generic failure: argparse usage error or a template
+     defect (unfilled `{{placeholder}}`, no `[initialized]` marker written).
+     Read stderr; a usage error means the invocation was wrong (fix the
+     command), a template defect means the skill's CLAUDE.md template is
+     broken (report it — never dispatch analysis on a partial workspace).
+   - exit 2 (RC_FATAL_VERIFY) → post-init idempotency verify failed: the
+     `[initialized]` marker or seed claims are missing right after init.
+     Report it; do NOT treat the workspace as initialized.
+   - exit 3 (RC_FLAG_REJECT) → the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
+     flag is truthy in the environment. Relay the unset-and-restart guidance
+     to the operator as a blocker; no scaffold was written.
+   - exit 4 (RC_TOOLCHAIN_REFUSE) → HARD toolchain FAIL: capture the per-item
      `[FAIL] ... fix:` lines and go to step 4 (human install, NOT you).
-   - exit 5 → no sample: relay "place a sample into bins/ or specify a path" to the operator.
+   - exit 5 (RC_NO_SAMPLE) → no sample: relay "place a sample into bins/ or
+     specify a path" to the operator.
 4. **Relay install guidance to the human (NOT agent repair)** — write
    `blockers/B-<n>.md` carrying the refusal output verbatim: each missing
    HARD item + its exact install command + root-cause cascade (ADB missing →

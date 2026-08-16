@@ -34,38 +34,23 @@ def claim(**overrides) -> dict:
     return c
 
 
-# ---------- RED 1: VM/dynamic intent -> T3 ----------
+# ---------- RED 1-3: intent -> tier mapping table ----------
 
-def test_vm_execution_intent_is_t3():
-    assert tier_for_claim(claim(statement="在 VM 中动态执行样本, 观察注入后的内存变化")) == 3
-
-
-def test_x64dbg_runtime_trace_intent_is_t3():
-    assert tier_for_claim(claim(statement="use x64dbg to trace the sample's runtime behavior on the VM")) == 3
-
-
-def test_frida_injection_intent_is_t3():
-    assert tier_for_claim(claim(statement="frida inject into the process and hook the decrypt function")) == 3
-
-
-def test_chinese_dynamic_keywords_t3():
-    assert tier_for_claim(claim(statement="验证样本运行时行为: 沙箱中执行, 调试挂钩点")) == 3
+# (statement, expected_tier): VM/dynamic -> 3, static-depth -> 2, plain -> 1.
+INTENT_TIERS = [
+    ("在 VM 中动态执行样本, 观察注入后的内存变化", 3),
+    ("use x64dbg to trace the sample's runtime behavior on the VM", 3),
+    ("frida inject into the process and hook the decrypt function", 3),
+    ("验证样本运行时行为: 沙箱中执行, 调试挂钩点", 3),
+    ("反汇编入口函数, 分析调用链", 2),
+    ("decode the embedded config and analyze the import table / API calls", 2),
+    ("扫描样本字符串与 PE 元数据", 1),
+]
 
 
-# ---------- RED 2: static-depth intent -> T2 ----------
-
-def test_disassembly_intent_is_t2():
-    assert tier_for_claim(claim(statement="反汇编入口函数, 分析调用链")) == 2
-
-
-def test_decode_api_analysis_intent_is_t2():
-    assert tier_for_claim(claim(statement="decode the embedded config and analyze the import table / API calls")) == 2
-
-
-# ---------- RED 3: plain static / metadata -> T1 (default, conservative) ----------
-
-def test_strings_scan_is_t1():
-    assert tier_for_claim(claim(statement="扫描样本字符串与 PE 元数据")) == 1
+def test_intent_maps_to_tier():
+    for statement, expected in INTENT_TIERS:
+        assert tier_for_claim(claim(statement=statement)) == expected, statement
 
 
 def test_missing_intent_defaults_t1():

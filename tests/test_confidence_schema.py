@@ -58,21 +58,9 @@ def test_invalid_values_rejected(bad):
 # =====================================================================
 # RED3: legacy 3-tier → 7-tier mapping
 # =====================================================================
-
-def test_legacy_confirmed_maps_to_almost_certain():
-    from confidence_schema import map_legacy_confidence
-    assert map_legacy_confidence("confirmed") == "almost_certain"
-
-
-def test_legacy_highly_likely_maps_to_very_likely():
-    from confidence_schema import map_legacy_confidence
-    assert map_legacy_confidence("highly_likely") == "very_likely"
-
-
-def test_legacy_suspected_maps_to_roughly_even():
-    from confidence_schema import map_legacy_confidence
-    assert map_legacy_confidence("suspected") == "roughly_even"
-
+# The three legacy mappings are asserted via normalize_confidence below
+# (test_normalize_legacy_returns_7tier); map_legacy_confidence is exercised
+# for the reject + pass-through edges only.
 
 def test_map_legacy_rejects_unknown():
     from confidence_schema import map_legacy_confidence

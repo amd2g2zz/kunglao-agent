@@ -1,24 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Issue #93 regression tests: skill arguments = the user REQUEST, not a workspace path.
+"""Issue #93 regression tests — amended by #413 for the subcommand-UX contract.
 
-Guards three facts (SDD design D1/D2/D3, issue #93 — user correction on #90):
-1. SKILL.md frontmatter declares `arguments: [request]` + `argument-hint: [request]`
-   and does NOT declare `workspace` — the plain-skill loader's named-argument
-   surface for `/kunglao-agent [subcommand | natural-language need]`.
-2. SKILL.md body `## Arguments` section consumes `$ARGUMENTS` as a two-form
-   intent contract: exact subcommand (`init` / `analysis` / `verify` / `resume` /
-   mechanical passthrough) OR natural-language request mapped by intent keywords;
-   workspace is NEVER a parameter (Phase 0 auto-detection); empty → `analysis`.
-3. The repo root ships a metadata-only `.claude-plugin/plugin.json` (#366,
-   user decision 2026-08-15 — version 0.1 must be plugin-manager-visible).
-   The manifest declares identity fields ONLY: component paths (skills/
-   hooks/commands) are what broke bare `/kunglao-agent` (regression 7f5f179,
-   2026-08-10, `skills: ["./"]` wiring) and stay out until #364 (v1.0).
+Original #93 guards (kept where still true):
+1. The main skill frontmatter declares `arguments: [request]` and does NOT
+   declare `workspace` — the plain-skill loader's named-argument surface for
+   `/kunglao-agent [subcommand | natural-language need]`.
+3. The repo root ships a metadata-only `.claude-plugin/plugin.json` (#366).
 
-RED on baseline (2d695a8, #90 workspace semantics): 3.1 fails (frontmatter says
-`workspace`, not `request`), 3.2 fails (Arguments section states "first argument
-is the workspace path"; no subcommand set / mapping rule), 3.3 passes trivially
-(it guards the future).
+#413 changes (#93 fact 2, and the #93 D1 hint):
+- The main skill now lives at `skills/kunglao-agent/SKILL.md` (one skill
+  directory per command, plugin namespace = `plugin:skill`).
+- `argument-hint` is the subcommand menu (`init <workspace> | analysis
+  <workspace> | help`) instead of `[request]` — hints show at autocomplete.
+- The body `## Arguments` section still consumes `$ARGUMENTS` as a two-form
+  intent contract (subcommand OR natural-language need), workspace is still
+  NEVER a parameter, but the empty-`$ARGUMENTS` default CHANGED from
+  "silently run analysis" to "print the subcommand menu and WAIT" (#413).
 """
 from __future__ import annotations
 
@@ -28,7 +25,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "SKILL.md"
+SKILL = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
 
 
 def _frontmatter() -> dict:
@@ -58,7 +55,7 @@ def _arguments_section() -> str:
 
 
 def test_skill_frontmatter_declares_request_argument() -> None:
-    """D1: frontmatter declares `arguments: [request]` (NOT workspace) + argument-hint."""
+    """D1 (#93): frontmatter declares `arguments: [request]` (NOT workspace)."""
     fm = _frontmatter()
     arguments = fm.get("arguments")
     assert arguments is not None, "frontmatter missing `arguments` key"
@@ -68,27 +65,32 @@ def test_skill_frontmatter_declares_request_argument() -> None:
         f"`arguments` must NOT contain 'workspace' (workspace is auto-detected in Phase 0), got: {arguments}"
     hint = fm.get("argument-hint")
     assert hint is not None, "frontmatter missing `argument-hint` key"
-    assert "request" in hint, f"`argument-hint` must reference 'request', got: {hint}"
+
+
+def test_skill_frontmatter_hint_lists_subcommands() -> None:
+    """D1 (#413): the autocomplete hint advertises the subcommand menu."""
+    hint = str(_frontmatter().get("argument-hint", ""))
+    for token in ("init", "analysis", "help"):
+        assert token in hint, f"argument-hint must advertise the {token} subcommand, got: {hint}"
 
 
 def test_skill_body_arguments_intent_contract() -> None:
-    """D2: body `## Arguments` consumes $ARGUMENTS as subcommand or natural-language need."""
+    """D2 (#93 + #413): body `## Arguments` consumes $ARGUMENTS as a two-form
+    intent contract — subcommand OR natural-language need; empty → menu + WAIT."""
     section = _arguments_section()
     assert "$ARGUMENTS" in section, "Arguments section must reference the $ARGUMENTS placeholder"
-    # subcommand set: the four semantic subcommands named in the contract
-    assert "init" in section, "Arguments section must list the `init` subcommand"
-    assert "analysis" in section, "Arguments section must list the `analysis` subcommand"
-    assert "verify" in section, "Arguments section must list the `verify` subcommand"
-    assert "resume" in section, "Arguments section must list the `resume` subcommand"
+    # subcommand set: the semantic subcommands named in the contract
+    for sub in ("init", "analysis", "verify", "resume"):
+        assert sub in section, f"Arguments section must list the `{sub}` subcommand"
     # natural-language mapping rule: keyword -> subcommand
     assert "keyword" in section.lower() or "intent" in section.lower(), \
         "Arguments section must state the natural-language intent-mapping rule"
     # workspace is NEVER a parameter (Phase 0 auto-detection)
     assert "never a parameter" in section.lower() or "workspace is not a parameter" in section.lower(), \
         "Arguments section must state that workspace is never a parameter (Phase 0 auto-detection)"
-    # empty -> default analysis loop
-    assert "empty" in section.lower() and "analysis" in section, \
-        "Arguments section must state the empty-$ARGUMENTS default (analysis)"
+    # #413: empty $ARGUMENTS prints the menu and WAITs — it does NOT silently run
+    assert "wait" in section.lower(), "Arguments section must say to WAIT on empty $ARGUMENTS"
+    assert "menu" in section.lower(), "Arguments section must print the subcommand menu on empty $ARGUMENTS"
 
 
 def test_repo_claude_plugin_is_metadata_only() -> None:

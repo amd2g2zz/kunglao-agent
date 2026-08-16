@@ -31,15 +31,6 @@ def test_terminal_is_8_valued_with_superseded_and_dead():
     }
 
 
-def test_stale_is_terminal():
-    assert "STALE" in status_defs.TERMINAL
-
-
-def test_all_5_valued_consumers_agree_on_subset():
-    five = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED", "DEFERRED"}
-    assert five <= status_defs.TERMINAL
-
-
 # ---------- auxiliary sets ----------
 
 def test_partial_statuses_match_existing_semantics():
@@ -95,16 +86,13 @@ ALL_CONSUMERS = [(SCRIPTS, f) for f in CONSUMERS] + [(HOOKS, f) for f in HOOK_CO
 
 
 @pytest.mark.parametrize("dirpath,fname", ALL_CONSUMERS)
-def test_consumer_has_no_own_status_set(dirpath, fname):
+def test_consumer_uses_shared_status_module(dirpath, fname):
+    """Consumer scripts must import status_defs and must NOT redefine the
+    status sets themselves (single source of truth, #34)."""
     text = (dirpath / fname).read_text(encoding="utf-8")
     assert "TERMINAL_STATUS = {" not in text, f"{fname} still defines TERMINAL_STATUS"
     assert "TERMINAL = {" not in text, f"{fname} still defines TERMINAL"
     assert "PARTIAL_STATUSES = {" not in text, f"{fname} still defines PARTIAL_STATUSES"
-
-
-@pytest.mark.parametrize("dirpath,fname", ALL_CONSUMERS)
-def test_consumer_imports_shared_module(dirpath, fname):
-    text = (dirpath / fname).read_text(encoding="utf-8")
     assert "status_defs" in text, f"{fname} does not import status_defs"
     assert "from status_defs import" in text, f"{fname} does not use 'from status_defs import'"
 

@@ -162,6 +162,12 @@ def registered_names(claude_json: Path | None, ws: Path) -> dict[str, list[str]]
 
 # ---------- check ----------
 
+# #407: decompiler supply is MCP-first — a registered `ida-pro-vm` satisfies
+# the HARD `ghidra` item (the decompiler need is met by IDA) and promotes
+# ida-pro-vm to HARD when it is the sole decompiler provider (ghidra absent);
+# otherwise ida-pro-vm keeps its WARN default.
+
+
 def read_project_type(ws: Path) -> str | None:
     """Read project_type from analysis_state.txt (same contract as toolchain.py)."""
     state = ws / "analysis_state.txt"
@@ -176,7 +182,12 @@ def read_project_type(ws: Path) -> str | None:
 
 def check_mcp(ws: Path, project_type: str,
               claude_json: Path | None = None) -> list[MCPCheck]:
-    """Probe the manifest items applicable to project_type."""
+    """Probe the manifest items applicable to project_type.
+
+    #407: decompiler supply is MCP-first — a registered `ida-pro-vm` satisfies
+    the HARD `ghidra` item (detail names the provider), and `ida-pro-vm` is
+    promoted to HARD when it is the sole decompiler provider (ghidra absent).
+    """
     if project_type not in VALID_TYPES:
         raise ValueError(
             f"Invalid project type: {project_type!r}. "
@@ -186,25 +197,40 @@ def check_mcp(ws: Path, project_type: str,
     if claude_json is None:
         claude_json = claude_json_path()
     found = registered_names(claude_json, ws)
+    ghidra_registered = "ghidra" in found
+    ida_pro_vm_registered = "ida-pro-vm" in found
     checks: list[MCPCheck] = []
     for item in MANIFEST:
         if project_type not in item.types:
             continue
         sources = found.get(item.name)
-        if sources:
+        tier = item.tier
+        if item.name == "ida-pro-vm" and not ghidra_registered:
+            # #407: ida-pro-vm is the sole decompiler provider -> HARD.
+            tier = "HARD"
+        if item.name == "ghidra" and not sources and ida_pro_vm_registered:
+            # #407: the HARD ghidra supply item is satisfied by the IDA MCP
+            # decompiler provider — an operator with only ida-pro-vm must not
+            # be reported "ghidra missing".
             checks.append(MCPCheck(
                 name=item.name, status="PASS", tier=item.tier,
+                detail="satisfied via ida-pro-vm (MCP decompiler provider)",
+            ))
+            continue
+        if sources:
+            checks.append(MCPCheck(
+                name=item.name, status="PASS", tier=tier,
                 detail=f"registered ({', '.join(sources)})",
             ))
-        else:
-            checks.append(MCPCheck(
-                name=item.name,
-                status="FAIL" if item.tier == "HARD" else "WARN",
-                tier=item.tier,
-                detail=f"not registered in ~/.claude.json or workspace .mcp.json "
-                       f"({item.purpose})",
-                fix=item.register,
-            ))
+            continue
+        checks.append(MCPCheck(
+            name=item.name,
+            status="FAIL" if tier == "HARD" else "WARN",
+            tier=tier,
+            detail=f"not registered in ~/.claude.json or workspace .mcp.json "
+                   f"({item.purpose})",
+            fix=item.register,
+        ))
     return checks
 
 

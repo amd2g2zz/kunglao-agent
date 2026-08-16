@@ -15,15 +15,29 @@ PASS/FAIL per check + exit code (0 = all pass, 1 = any FAIL). Writes
 Checks:
   1. AGENT_TEAMS flag — process/User/Machine scope (decides session teammate behavior)
   2. VM reachability   — TCP 9876 (vmr-shell) + 1337 (Frida), 2s timeout each
-  3. Ghidra            — analyzeHeadless.bat exists (path from GHIDRA_HOME env; unset = FAIL with guidance)
-  4. Hook deployment   — <ws>/.claude/settings.json has the kunglao hooks
-                         wire_up_settings registers (PROJECT-level, #258/#269)
-  5. venv + sample     — .venv python exists w/ cryptography+yaml; sample sha256
+  3. Ghidra            — analyzeHeadless(.bat) exists (path from GHIDRA_HOME env;
+                         platform-correct name, #409; unset = FAIL with guidance)
+  4. Hook deployment   — kunglao hooks registered in EITHER project-level target:
+                         <ws>/.claude/settings.json (the #258 --wire-up target)
+                         OR <ws-parent>/.claude/settings.json (the #410
+                         external_kicker D2 target). TRI-STATE: PASS (all
+                         registry hooks in either target) / WARN (no target
+                         wired — per-workspace optional, static analysis
+                         proceeds) / FAIL (partial deployment — some registry
+                         hooks dropped, the #258/#372 silent-drop class).
+                         Deployment targets resolve from the wire_up_settings
+                         registry (hook_deployment_targets) — never a mirror.
+  5. venv + sample     — SKILL-root venv python exists w/ cryptography+yaml
+                         (#409: uv run --project <skill_root> is authoritative,
+                         not ws/.venv); sample sha256
 
 FAIL grading (gate logic lives in hooks/env_check_gate.py):
   - flag check is HARD — a polluted session must not dispatch at all
   - VM/Ghidra/hook FAIL are recoverable (static analysis can proceed) — gate
     injects guidance instead of aborting
+  - hook WARN (unwired) is NOT a failure — hooks are per-workspace optional
+    (#410); the report says WARN and overall stays PASS unless another check
+    FAILs
 """
 from __future__ import annotations
 
@@ -39,7 +53,10 @@ from pathlib import Path
 
 import init_state  # noqa: E402  # F6 (#304 review): shared init-completeness predicate
 import wire_up_settings  # noqa: E402  # #372: hook registry single source
+# #409: platform-correct analyzeHeadless name + venv python location.
+import platform_paths  # noqa: E402
 
+SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/ skill root
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: truthy = FAIL; 0/false/off/empty = PASS
 # Issue #228: NO machine-specific default. Unset = not configured — the check
@@ -53,7 +70,7 @@ VM_PORTS = [9876, 1337]
 DEFAULT_SHELL_PORT = 9876
 DEFAULT_FRIDA_PORT = 1337
 _ghidra_home = os.environ.get("GHIDRA_HOME")
-GHIDRA_DEFAULT = Path(_ghidra_home) / "support" / "analyzeHeadless.bat" if _ghidra_home else None
+GHIDRA_DEFAULT = platform_paths.analyze_headless(_ghidra_home) if _ghidra_home else None
 
 
 def _parse_port(raw: str | None, default: int) -> int:
@@ -198,44 +215,75 @@ def check_ghidra() -> tuple[bool, str]:
             f"Set GHIDRA_HOME or install Ghidra — decompilation degraded.")
 
 
-def check_hooks(ws: Path) -> tuple[bool, str]:
-    """kunglao hooks registered in the PROJECT settings.json
-    (<ws>/.claude/settings.json) — the deployment target since #258.
+def check_hooks(ws: Path) -> tuple[str, str]:
+    """kunglao hooks registered in a PROJECT-level settings.json — TRI-STATE.
 
-    #269: this previously read the user-global ~/.claude/settings.json, which
-    is NOT a deployment target since #258 — a correctly wired PROJECT-level
-    deployment was misreported as 'hooks missing'. The user-global file can
-    still be checked by hooks_selfcheck (warning-only, migration guidance)."""
-    settings = ws / ".claude" / "settings.json"
-    if not settings.exists():
-        return False, f"no settings.json at {settings} — run hook_activation.py --wire-up"
-    s = _load_json(settings)
-    pre = s.get("hooks", {}).get("PreToolUse", []) or []
-    post = s.get("hooks", {}).get("PostToolUse", []) or []
-    # #372: Stop must be scanned too — completion_gate.py is a Stop hook; a
-    # Pre/Post-only scan can never verify it (the blind spot that hid the
-    # 6-vs-8 mirror drift).
-    stop = s.get("hooks", {}).get("Stop", []) or []
-    cmds = []
-    for entry in pre + post + stop:
-        for h in entry.get("hooks", []) or []:
-            cmds.append(str(h.get("command", "")))
-    missing = [h for h in HOOK_FILES if not any(h in c for c in cmds)]
-    if missing:
-        return (False,
-                f"hooks missing from settings.json: {', '.join(missing)}. "
-                f"Fix: python <skill>/scripts/hook_activation.py <ws> --wire-up")
-    # activation state (soft — 30-min TTL expected during a live loop)
-    state = _load_json(ws / ".hook_state.json")
-    active = state.get("active_hooks", []) or []
-    act = f" — {len(active)} active hook(s)" if active else " (not activated — hooks sleep)"
-    return True, f"{len(HOOK_FILES)} hooks registered{act}"
+    #410: hooks may live in EITHER project-level target — <ws>/.claude/
+    settings.json (the #258/#269 --wire-up deployment target) OR the
+    workspace-parent <ws-parent>/.claude/settings.json (the external_kicker
+    D2 read/write target). Pre-#410 only the ws-level file was scanned, so a
+    parent-wired workspace was misreported as 'hooks missing' (FAIL) with
+    'leave unwired' guidance — a self-contradiction.
+
+    Returns (status, detail) with status in PASS|WARN|FAIL:
+      - PASS: every registry hook is present in one of the two targets.
+      - WARN: no target is wired (neither file exists, or neither carries any
+        registry hook). Hooks are per-workspace OPTIONAL (#410) — static
+        analysis proceeds; the report records the --wire-up guidance but
+        never FAILs.
+      - FAIL: a PARTIAL deployment — a target file exists and carries SOME
+        registry hook but is missing others. A dropped hook inside a wired
+        set is the #258/#372 silent-drop class (a settings rewrite that
+        silently dropped hooks), NOT 'unwired' — the FAIL stays loud.
+
+    #269: the user-global ~/.claude/settings.json is NOT a deployment target
+    (checked by hooks_selfcheck, warning-only) and can never satisfy this
+    check. #372: Stop is scanned too — completion_gate.py is a Stop hook; a
+    Pre/Post-only scan can never verify it. Targets derive from the
+    wire_up_settings registry (hook_deployment_targets) — never a mirror.
+    """
+    settings_paths = wire_up_settings.hook_deployment_targets(ws)
+    found: list[str] = []
+    for sp in settings_paths:
+        if not sp.exists():
+            continue
+        s = _load_json(sp)
+        cmds = []
+        for event in ("PreToolUse", "PostToolUse", "Stop"):
+            for entry in s.get("hooks", {}).get(event, []) or []:
+                for h in entry.get("hooks", []) or []:
+                    cmds.append(str(h.get("command", "")))
+        found.extend(h for h in HOOK_FILES if any(h in c for c in cmds))
+    present = set(found)
+    if present == set(HOOK_FILES):
+        # activation state (soft — 30-min TTL expected during a live loop)
+        state = _load_json(ws / ".hook_state.json")
+        active = state.get("active_hooks", []) or []
+        act = f" — {len(active)} active hook(s)" if active else " (not activated — hooks sleep)"
+        return "PASS", f"{len(HOOK_FILES)} hooks registered{act}"
+    if not present:
+        # no target wired at all — hooks are per-workspace optional (#410)
+        return ("WARN",
+                "no kunglao hooks wired in either project target "
+                "(<ws>/.claude/settings.json or <ws-parent>/.claude/settings.json) — "
+                "per-workspace optional; run python <skill>/scripts/hook_activation.py "
+                "<ws> --wire-up to deploy")
+    missing = sorted(set(HOOK_FILES) - present)
+    return ("FAIL",
+            f"hooks missing from settings.json: {', '.join(missing)}. "
+            f"Fix: python <skill>/scripts/hook_activation.py <ws> --wire-up")
 
 
 def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
-    """venv python with cryptography+yaml; sample sha256 vs task_spec if present."""
+    """SKILL-root venv python with cryptography+yaml; sample sha256 vs
+    task_spec if present.
+
+    #409: the authoritative interpreter is the SKILL-root venv (uv run
+    --project <skill_root>) resolved by sys.platform (Scripts/python.exe |
+    bin/python) — NOT the workspace .venv (which may not exist; the old
+    ws/.venv/Scripts/python.exe constant always FAILed on macOS)."""
     problems = []
-    venv_py = ws / ".venv" / "Scripts" / "python.exe"
+    venv_py = platform_paths.venv_python(SKILL_DIR / ".venv")
     if venv_py.exists():
         try:
             r = subprocess.run([str(venv_py), "-c", "import cryptography, yaml"],
@@ -245,7 +293,7 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
         except Exception as exc:
             problems.append(f"venv probe failed: {exc}")
     else:
-        problems.append(f"no .venv at {venv_py}")
+        problems.append(f"no venv python at {venv_py} (skill root: {SKILL_DIR})")
     if sample_sha256 and sample_sha256 != "UNSET":
         for cand in (ws / "bins").glob("*"):
             if cand.is_file():
@@ -287,6 +335,12 @@ def read_sample_sha256(ws: Path) -> str | None:
 
 # ---------- main ----------
 
+def _norm(ok: bool, msg: str) -> tuple[str, str]:
+    """Normalize a binary (ok, msg) check to the (status, msg) tri-state
+    shape — PASS|FAIL, never WARN (only check_hooks produces WARN, #410)."""
+    return ("PASS" if ok else "FAIL"), msg
+
+
 def run(ws: Path) -> tuple[int, dict]:
     # #356 W4: workspace .env fallback — real environment wins, then <ws>/.env.
     # Module-level VM_HOST/GHIDRA_DEFAULT re-bound here (tests monkeypatch
@@ -297,23 +351,25 @@ def run(ws: Path) -> tuple[int, dict]:
         VM_HOST = dotenv["KUNGLAO_VM_HOST"]
     if not os.environ.get("GHIDRA_HOME") and dotenv.get("GHIDRA_HOME"):
         _home = dotenv["GHIDRA_HOME"]
-        GHIDRA_DEFAULT = Path(_home) / "support" / "analyzeHeadless.bat"
+        GHIDRA_DEFAULT = platform_paths.analyze_headless(_home)
     # #362: reachability probe ports derive from env/.env (toolchain parity)
     VM_PORTS = resolve_ports(ws)
     checks = {
-        "init_complete": check_init_complete(ws),
-        "agent_teams_flag": check_flag(),
-        "vm_reachability": check_vm(),
-        "ghidra": check_ghidra(),
-        "hooks_deployed": check_hooks(ws),
-        "venv_sample": check_venv_sample(ws, read_sample_sha256(ws)),
+        "init_complete": _norm(*check_init_complete(ws)),
+        "agent_teams_flag": _norm(*check_flag()),
+        "vm_reachability": _norm(*check_vm()),
+        "ghidra": _norm(*check_ghidra()),
+        "hooks_deployed": check_hooks(ws),  # TRI-STATE: PASS|WARN|FAIL (#410)
+        "venv_sample": _norm(*check_venv_sample(ws, read_sample_sha256(ws))),
     }
     report = {
         "ts": utc_now(),
         "workspace": str(ws.resolve()),
-        "checks": {name: {"status": "PASS" if ok else "FAIL", "detail": msg}
-                   for name, (ok, msg) in checks.items()},
-        "overall": "PASS" if all(ok for ok, _ in checks.values()) else "FAIL",
+        "checks": {name: {"status": status, "detail": detail}
+                   for name, (status, detail) in checks.items()},
+        # #410: WARN is NOT a failure — unwired hooks are per-workspace
+        # optional, so overall is FAIL only when some check FAILs.
+        "overall": "PASS" if all(st != "FAIL" for st, _ in checks.values()) else "FAIL",
     }
     out = ws / "runs" / ".env-check.json"
     try:
@@ -321,8 +377,8 @@ def run(ws: Path) -> tuple[int, dict]:
         out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     except OSError as exc:
         print(f"WARN: cannot write {out}: {exc}", file=sys.stderr)
-    for name, (ok, msg) in checks.items():
-        print(f"[{'PASS' if ok else 'FAIL'}] {name}: {msg}")
+    for name, (status, detail) in checks.items():
+        print(f"[{status}] {name}: {detail}")
     print(f"OVERALL: {report['overall']}  (snapshot: {out})")
     return 0 if report["overall"] == "PASS" else 1
 

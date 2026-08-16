@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL = ROOT / "SKILL.md"
+SKILL = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
 REFERENCES = ROOT / "references"
 MAX_LINES = 500
 MAX_DEPTH = 3  # max nesting depth of reference chains

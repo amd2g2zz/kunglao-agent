@@ -1,6 +1,6 @@
 [project]
 name = "kunglao-agent"
-version = "0.1"
+version = "0.1.1"
 description = "Convergence-driven reverse-engineering orchestrator — Claude Code skill (issue #80 release contract)"
 readme = "README.md"
 requires-python = ">=3.10"

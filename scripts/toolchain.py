@@ -35,6 +35,10 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 SKILL_DIR = _SCRIPT_DIR.parent
 
+# #409: platform-correct analyzeHeadless name (support/analyzeHeadless(.bat))
+# + venv python location (Scripts/python.exe | bin/python) — single source.
+import platform_paths  # noqa: E402  (same dir, sys.path injected above)
+
 # #316: MCP supply probe (registry: ~/.claude.json + workspace .mcp.json).
 # Single manifest source: scripts/mcp_probe.py MANIFEST — shared with the
 # kunglao-init .mcp.json scaffold and the CLAUDE.md/README doc tables.
@@ -74,8 +78,8 @@ FIXES: dict[str, str] = {
     "file": "install binutils (file) and add to PATH",
     "readelf": "install binutils (readelf) and add to PATH",
     "objdump": "install binutils (objdump) and add to PATH",
-    "decompiler": "set GHIDRA_HOME=<Ghidra install root> (support/analyzeHeadless.bat must exist) or install IDA",
-    "ghidra": "set GHIDRA_HOME=<Ghidra install root> (support/analyzeHeadless.bat must exist)",
+    "decompiler": "install a decompiler — follow the #408 installer (set GHIDRA_HOME=<Ghidra install root> with support/analyzeHeadless(.bat), or install IDA with idat64 on PATH, or register the ghidra/ida-pro-vm MCP via `claude mcp add`)",
+    "ghidra": "set GHIDRA_HOME=<Ghidra install root> (support/analyzeHeadless must exist, platform-correct name #409)",
     "ida": "install IDA and add idat64 to PATH",
     "vm_reachable": "set KUNGLAO_VM_HOST=<live VM lease IP> (vmr-shell discovery) and ensure ports are open",
     "remote_debugger": "fix the root cause first: make the VM reachable (set KUNGLAO_VM_HOST), then deploy the remote debugger on the VM",
@@ -273,6 +277,73 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str) -> None:
         ))
 
 
+# ---------- #407: MCP-first decompiler check (deduplicated, one helper) ----------
+
+# Registry keys checked by mcp_probe.registered_names (user ~/.claude.json +
+# workspace .mcp.json). A registered MCP decompiler is the PRIMARY signal;
+# CLI (GHIDRA_HOME/analyzeHeadless, idat64 on PATH) is only a fallback.
+_DECOMPILER_MCP_NAMES = ("ghidra", "ida-pro-vm")
+
+
+def _check_decompiler(report: ToolchainReport, ws: Path,
+                      has_native_so: bool | None = None) -> None:
+    """Append the decompiler availability check (#407).
+
+    MCP-first: `ghidra` OR `ida-pro-vm` registered (probe ~/.claude.json +
+    workspace .mcp.json via mcp_probe.registered_names) -> PASS "via MCP (<name>)".
+    CLI fallback: GHIDRA_HOME/support/analyzeHeadless(.bat) or idat64 on PATH.
+    Neither -> decompiler FAIL with ask-to-install guidance referencing the
+    #408 installer.
+
+    `has_native_so` encodes the android tier nuance: None (windows/linux) and
+    True (android with native .so) -> HARD FAIL; False (android pure-DEX)
+    -> WARN (HARD tier, non-blocking).
+    """
+    registered = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+    for name in _DECOMPILER_MCP_NAMES:
+        if name in registered:
+            report.items.append(CheckResult(
+                name="decompiler", status=Status.PASS, tier=Tier.HARD,
+                detail=f"via MCP ({name})",
+            ))
+            return
+
+    ghidra_home = _env_get("GHIDRA_HOME")
+    ah = (platform_paths.analyze_headless(ghidra_home)
+          if ghidra_home else None)
+    ida = _shutil_which("idat64")
+    if _file_exists(ah):
+        report.items.append(CheckResult(
+            name="ghidra", status=Status.PASS, tier=Tier.HARD,
+            detail=f"analyzeHeadless at {ah}",
+        ))
+        return
+    if ida:
+        report.items.append(CheckResult(
+            name="ida", status=Status.PASS, tier=Tier.HARD,
+            detail=f"idat64 at {ida}",
+        ))
+        return
+
+    if has_native_so is False:
+        report.items.append(CheckResult(
+            name="decompiler", status=Status.WARN, tier=Tier.HARD,
+            detail="No decompiler found (need Ghidra, IDA, or a ghidra/ida-pro-vm "
+                   "MCP registration) — WARN for pure-DEX samples; HARD if sample "
+                   "has .so (see the #408 installer)",
+        ))
+    else:
+        report.items.append(CheckResult(
+            name="decompiler", status=Status.FAIL, tier=Tier.HARD,
+            detail=("Sample has native .so — decompiler REQUIRED for native code"
+                    if has_native_so
+                    else "No decompiler found (need Ghidra, IDA, or a "
+                         "ghidra/ida-pro-vm MCP registration — see the #408 "
+                         "installer)"),
+            root_cause="decompiler" if has_native_so else None,
+        ))
+
+
 # ---------- Windows manifest ----------
 
 def _check_windows(report: ToolchainReport, ws: Path) -> None:
@@ -305,25 +376,8 @@ def _check_windows(report: ToolchainReport, ws: Path) -> None:
                 detail=f"{tool} not found in PATH",
             ))
 
-    # T1: Ghidra or IDA
-    ghidra_home = _env_get("GHIDRA_HOME")
-    ah = Path(ghidra_home) / "support" / "analyzeHeadless.bat" if ghidra_home else None
-    ida = _shutil_which("idat64")
-    if _file_exists(ah):
-        report.items.append(CheckResult(
-            name="ghidra", status=Status.PASS, tier=Tier.HARD,
-            detail=f"analyzeHeadless at {ah}",
-        ))
-    elif ida:
-        report.items.append(CheckResult(
-            name="ida", status=Status.PASS, tier=Tier.HARD,
-            detail=f"idat64 at {ida}",
-        ))
-    else:
-        report.items.append(CheckResult(
-            name="decompiler", status=Status.FAIL, tier=Tier.HARD,
-            detail="No decompiler found (need Ghidra or IDA)",
-        ))
+    # T1: Ghidra or IDA (#407: MCP-first, CLI fallback — one shared helper)
+    _check_decompiler(report, ws)
 
     # T2: VM reachability (vmr-shell 9876 + frida custom port, default 1337)
     vm_host = _env_get("KUNGLAO_VM_HOST")
@@ -395,25 +449,8 @@ def _check_linux(report: ToolchainReport, ws: Path) -> None:
                 detail=f"{tool} not found in PATH",
             ))
 
-    # T1: Ghidra or IDA
-    ghidra_home = _env_get("GHIDRA_HOME")
-    ah = Path(ghidra_home) / "support" / "analyzeHeadless.bat" if ghidra_home else None
-    ida = _shutil_which("idat64")
-    if _file_exists(ah):
-        report.items.append(CheckResult(
-            name="ghidra", status=Status.PASS, tier=Tier.HARD,
-            detail=f"analyzeHeadless at {ah}",
-        ))
-    elif ida:
-        report.items.append(CheckResult(
-            name="ida", status=Status.PASS, tier=Tier.HARD,
-            detail=f"idat64 at {ida}",
-        ))
-    else:
-        report.items.append(CheckResult(
-            name="decompiler", status=Status.FAIL, tier=Tier.HARD,
-            detail="No decompiler found (need Ghidra or IDA)",
-        ))
+    # T1: Ghidra or IDA (#407: MCP-first, CLI fallback — one shared helper)
+    _check_decompiler(report, ws)
 
     # T2: VM reachability (vmr-shell 9876 + frida custom port, default 1337)
     vm_host = _env_get("KUNGLAO_VM_HOST")
@@ -578,31 +615,8 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
             detail="gitnexus not found — post-decompile graph building requires it",
         ))
 
-    # T1: Ghidra or IDA (native .so decompilation; tier depends on sample)
-    ghidra_home = _env_get("GHIDRA_HOME")
-    ah = Path(ghidra_home) / "support" / "analyzeHeadless.bat" if ghidra_home else None
-    ida = _shutil_which("idat64")
-    has_native = _probe_native_so(ws)
-    if _file_exists(ah):
-        report.items.append(CheckResult(
-            name="ghidra", status=Status.PASS, tier=Tier.HARD,
-            detail=f"analyzeHeadless at {ah}",
-        ))
-    elif ida:
-        report.items.append(CheckResult(
-            name="ida", status=Status.PASS, tier=Tier.HARD,
-            detail=f"idat64 at {ida}",
-        ))
-    elif has_native:
-        report.items.append(CheckResult(
-            name="decompiler", status=Status.FAIL, tier=Tier.HARD,
-            detail="Sample has native .so — decompiler (Ghidra or IDA) REQUIRED for native code",
-        ))
-    else:
-        report.items.append(CheckResult(
-            name="decompiler", status=Status.WARN, tier=Tier.HARD,
-            detail="No decompiler found — WARN for pure-DEX samples; HARD if sample has .so",
-        ))
+    # T1: Ghidra or IDA (native .so decompilation; #407 MCP-first helper)
+    _check_decompiler(report, ws, has_native_so=_probe_native_so(ws))
 
     # T2: ADB (root dependency)
     adb = _shutil_which("adb")

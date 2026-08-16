@@ -66,6 +66,8 @@ uv run --project <repo> <repo>/scripts/kunglao-init.py <workspace> --type window
 
 Options: `--skip-toolchain` (skip the toolchain preflight — test/ops escape hatch), `--no-mcp` (skip the workspace `.mcp.json` scaffold), `--install-git-hooks` (install the review-gate pre-commit hook), `--force` (re-init after backing up the claim register).
 
+Init exit codes (documented RC contract, #414): `0` success/resume, `1` generic error (usage error / template defect), `2` post-init idempotency verify failed, `3` agent-teams flag reject (unset `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and restart the session), `4` toolchain HARD FAIL — human must install the missing tools, `5` no sample in `bins/`. Branch on the exit code, never on stderr text.
+
 Init confirms the project type, scaffolds the workspace, writes the type-appropriate `CLAUDE.md`, and runs per-type toolchain probes (Android: ADB + rooted device + renamed frida-server on a custom port; Linux: Ghidra-or-IDA + remote debugger; Windows: Ghidra-or-IDA + VM). Hard failures are reported with root-cause guidance; a workspace that is not initialized is refused work.
 
 ### 3. Start the session
@@ -76,7 +78,26 @@ In Claude Code, in the workspace directory:
 /kunglao-agent
 ```
 
-or just describe the task — the skill auto-triggers on phrases like *"analyze this sample"* / *"分析这个样本"* / *"不收敛"*. The skill then runs the loop and delivers the report; you monitor through conversation.
+`/kunglao-agent` with no arguments prints the command menu and waits for a
+subcommand — it never silently runs. The subcommands are documented in the
+[Command Reference](#command-reference) below. Alternatively, just describe
+the task — the skill auto-triggers on phrases like *"analyze this sample"* /
+*"分析这个样本"* / *"不收敛"*. The skill then runs the loop and delivers the
+report; you monitor through conversation.
+
+## Command Reference
+
+Every `/kunglao-agent` command, its arguments, and an example:
+
+| Command | Arguments | Purpose | Example |
+|---|---|---|---|
+| `/kunglao-agent` | `init <ws>` / `analysis <ws>` / `help` | command menu — with no args prints the menu and waits; unknown subcommands print the menu + `unknown: <x>` | `/kunglao-agent` |
+| `/kunglao-agent:init` | `<workspace> [--type windows\|linux\|android]` | initialize a workspace (scaffold + CLAUDE.md + sample mount + task_spec intake + hooks) | `/kunglao-agent:init ~/cases/synth-dropper --type windows` |
+| `/kunglao-agent:analysis` | `<workspace>` | enter the convergence loop on an initialized workspace | `/kunglao-agent:analysis ~/cases/synth-dropper` |
+| `/kunglao-agent:help` | none | print the subcommand usage list | `/kunglao-agent:help` |
+
+The namespaced form (`/kunglao-agent:init`) is the plugin-manager surface;
+the main skill also accepts the subcommand form (`/kunglao-agent init <ws>`).
 
 ## A worked analysis case
 

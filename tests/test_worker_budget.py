@@ -218,16 +218,6 @@ def test_check_workers_lt_3_reject(tmp_path):
     assert not ok and '3' in msg
 
 
-def test_check_workers_lt_3_from_status_files(tmp_path):
-    """#37: the gate counts status files (single source of truth), not state cache."""
-    ws = tmp_path / 'ws'
-    _write_status(ws, 'w1', 'in-progress')
-    _write_status(ws, 'w2', 'in-progress')
-    _write_status(ws, 'w3', 'in-progress')
-    ok, msg = check_workers_lt_3({'workspace': str(ws)})
-    assert not ok and '3' in msg
-
-
 def test_check_workers_lt_3_empty_state_cache(tmp_path):
     """#37: an empty [active_workers] cache must NOT fool the gate into over-allowing."""
     ws = tmp_path / 'ws'

@@ -31,6 +31,15 @@ Standalone CLI (not a kunglao.py subcommand, module-design L448):
     path); instead write project_type (explicit > state > sniff >
     confirm) then exit 0.
 
+#411 workspace-path shape gate: before any write (including hook install)
+    the resolved workspace is classified (workspace_shape) — an existing
+    workspace root (bins/ or claim-register.yaml), a creatable directory,
+    or a refuse case. A sample directory (has bin/ but NO bins/) or a file
+    passed as the workspace → REFUSE (exit 6, RC_PATH_SHAPE) with guidance,
+    ZERO files written; .claude/ and every scaffold entry stay under the
+    workspace root. The type sniffer and sample detector read bins/ ONLY
+    (never bin/).
+
 Init-completeness predicate (F6): single source in scripts/init_state.py;
 this file imports it.
 
@@ -56,8 +65,9 @@ Three-phase re-init-protected state machine:
           still exit 0 resume
     Phase 2 fresh initialization: scaffold (analysis_state.txt /
     global_plan.txt / runs/ etc.)
-        + 3-5 sample-level seed claims (C-001 sample overview / C-002
-        family attribution / C-003 packer)
+        + 3 structural seed claims (C-001 sample artifact identity /
+        C-002 project type / C-003 sample hash — scaffold facts only,
+        #412: init performs NO analysis)
         + idempotent hook deployment
     Phase 3 idempotency verify: marker present + seed count; a rerun does
     not re-seed / re-deploy hooks
@@ -95,6 +105,9 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
+# #408: ask-then-install — interactive install prompts + MCP registration +
+# re-probe (graceful degrade on decline; --assume-yes for CI/headless).
+import toolchain_install  # noqa: E402
 # F6 (#304 review): init-completeness predicate = single source in init_state.py
 from init_state import VALID_TYPES, is_init_complete, read_project_type  # noqa: E402
 import mcp_probe  # noqa: E402  (#316: MCP supply manifest/scaffold single source of truth)
@@ -131,6 +144,7 @@ RC_FATAL_VERIFY = 2  # post-init idempotency verify failed
 RC_FLAG_REJECT = 3   # Phase 0 (#276) agent-teams flag truthy
 RC_TOOLCHAIN_REFUSE = 4  # toolchain HARD FAIL — human must install, no scaffold
 RC_NO_SAMPLE = 5     # bins/ empty — friendly prompt (place a sample into bins/)
+RC_PATH_SHAPE = 6    # #411: target is a sample dir / file, not a workspace root — refuse with guidance
 
 SCAFFOLD_DIRS = ("facts", "blockers", "runs")
 SCAFFOLD_FILES = {
@@ -181,7 +195,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="install the review-gate pre-commit hook (#367): copy "
                              ".claude/git-hooks/pre-commit to .git/hooks/pre-commit with "
                              "this user's key path stamped in place of the placeholder")
-    return parser.parse_args(argv)
+    parser.add_argument("--assume-yes", action="store_true",
+                        help="#408: consent to every ask-then-install prompt "
+                             "(CI/headless; non-interactive stdin declines by default)")
+    try:
+        return parser.parse_args(argv)
+    except SystemExit as exc:
+        # #414: argparse exits 2 on usage errors by default — that collides
+        # with RC_FATAL_VERIFY=2, so a caller would read a trivial invocation
+        # mistake as a post-init idempotency-verify failure. Normalize the
+        # usage-exit to the documented generic RC_ERROR=1. A --help exit (0)
+        # is untouched.
+        if exc.code == RC_FATAL_VERIFY:
+            raise SystemExit(RC_ERROR) from exc
+        raise
 
 
 def is_truthy(value: str | None) -> bool:
@@ -281,28 +308,37 @@ def compute_state_hash(ws: Path, register_text: str | None = None) -> str:
     return h.hexdigest()
 
 
-def seed_claims(sample: str) -> list[dict]:
-    """3-5 sample-level seed claims (DESIGN §7 0.9): C-001 overview / C-002 attribution / C-003 packer."""
+def seed_claims(sample: str, project_type: str, sample_sha: str) -> list[dict]:
+    """3 structural seed claims (scaffold facts only, #412: no analysis).
+
+    C-001 sample artifact identity / C-002 project type / C-003 sample
+    sha256. Init performs NO analysis — family/verdict/attribution/
+    capability guesses are forbidden here (issue #412); the operator
+    defines the analysis task (primary_questions) after init, and claim
+    seeding from task_spec happens in the loop (DESIGN §7 0.9).
+    """
     return [
         {"id": "C-001", "status": "OPEN", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
-         "title": f"Sample overview — static identification of {sample}'s language/architecture/packer"},
+         "title": f"Sample artifact identity — {sample} (filename; sha256 in C-003)"},
         {"id": "C-002", "status": "OPEN", "boundary_type": "positive_observation",
-         "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": ["C-001"],
-         "title": f"Family attribution — {sample}'s family/behavior class (CTI hypothesis; artifact fingerprint needed to raise to confirmed)"},
+         "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
+         "title": f"Project type — {project_type} (scaffold decision)"},
         {"id": "C-003", "status": "OPEN", "boundary_type": "positive_observation",
-         "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": ["C-001"],
-         "title": f"Packer/obfuscation — whether {sample} is packed or uses garble control-flow obfuscation"},
+         "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
+         "title": f"Sample sha256 — {sample_sha}"},
     ]
 
 
-def claim_register_text(sample: str, sample_sha: str, state_hash: str) -> str:
-    """Full claim-register.yaml text: [initialized] marker header + seed claims body."""
-    claims = seed_claims(sample)
+def claim_register_text(sample: str, sample_sha: str, state_hash: str,
+                        project_type: str) -> str:
+    """Full claim-register.yaml text: [initialized] marker header + structural seed claims body."""
+    claims = seed_claims(sample, project_type, sample_sha)
     lines = [
         f"# [initialized] kunglao-init state_hash={state_hash} seeds={len(claims)} sample={sample}",
         f"# sha256={sample_sha} ts={utc_now()}",
-        "# kunglao-init seed claims — sample-level starting claims (DESIGN §7 0.9)",
+        "# kunglao-init structural seed claims — scaffold facts only "
+        "(artifact identity / project type / sample hash; #412: no analysis conclusions)",
         "claims:",
     ]
     for c in claims:
@@ -314,6 +350,86 @@ def claim_register_text(sample: str, sample_sha: str, state_hash: str) -> str:
         lines.append(f"  depends_on: {c['depends_on']}")
         lines.append(f"  title: \"{c['title']}\"")
     return "\n".join(lines) + "\n"
+
+
+# #411: workspace-path shape classification. A workspace root is a directory
+# that IS or CAN BE a kunglao workspace — the sample container is bins/
+# (plural), never bin/. A directory whose only sample-looking subdir is bin/
+# (singular) is the sample directory itself, not a workspace root.
+
+def workspace_shape(ws: Path) -> str:
+    """Classify a target path's workspace shape (#411).
+
+    Returns one of:
+      "workspace"  — existing workspace root (bins/ or claim-register.yaml present)
+      "creatable"  — not a workspace yet, but a directory that can hold bins/
+                     (also a non-existent path with no file suffix — fresh root)
+      "sample_dir" — the target is a sample container (named bin/bins) or has
+                     a bin/ subdir and no bins/: init must refuse — .claude/
+                     would land inside the sample dir
+      "file"       — target is a regular file, or a non-existent path named
+                     like a sample file (has a suffix): not a workspace
+    """
+    if ws.is_file():
+        return "file"
+    if ws.is_dir():
+        if (ws / "bins").is_dir() or (ws / "claim-register.yaml").is_file():
+            return "workspace"
+        # #411: a directory named bin/ or bins/ IS the sample container —
+        # running init on it would scatter .claude/ and scaffold files INTO
+        # the samples. Refuse (the workspace root is its parent).
+        if ws.name.lower() in ("bin", "bins"):
+            return "sample_dir"
+        if (ws / "bin").is_dir():
+            return "sample_dir"
+        return "creatable"
+    # Non-existent: a fresh path is fine when it can hold bins/. A path named
+    # like a sample file (has a suffix) is a misplaced sample, not a workspace.
+    if ws.suffix:
+        return "file"
+    return "creatable"
+
+
+def _assert_workspace_boundary(ws: Path) -> None:
+    """#411 (E-init.5): assert the workspace root is a directory — every
+    scaffold write (analysis_state.txt, claim-register.yaml, .claude/, .mcp.json,
+    runs/, ...) is an entry under ws. A file at the root would silently scatter
+    scaffold files INTO its parent, so fail fast instead."""
+    if ws.is_file():
+        raise AssertionError(
+            f"internal error: workspace root resolved to a file {ws} — "
+            "refusing to scaffold outside a workspace directory"
+        )
+
+
+def refuse_path_shape(ws: Path, shape: str) -> int:
+    """#411: print path-shape refusal guidance; exit RC_PATH_SHAPE. Nothing is written."""
+    if shape == "sample_dir":
+        print(
+            f"kunglao-init: REFUSE — {ws} is a SAMPLE DIRECTORY, not a workspace root. "
+            "A kunglao workspace holds samples under bins/ (plural); the target "
+            "has bin/ (singular) and no bins/. Run init on the workspace root and "
+            f"place the sample under {ws.parent / 'bins'} — never inside the sample dir.",
+            file=sys.stderr,
+        )
+    elif shape == "file":
+        print(
+            f"kunglao-init: REFUSE — {ws} is a FILE, not a workspace root. "
+            "Run init on the workspace directory that will hold bins/ "
+            "(place the sample into <ws>/bins/).",
+            file=sys.stderr,
+        )
+    else:  # defensive: unknown shape must still refuse, never scaffold
+        print(
+            f"kunglao-init: REFUSE — {ws} is not a workspace root (shape={shape}). "
+            "Run init on the workspace directory that holds (or will hold) bins/.",
+            file=sys.stderr,
+        )
+    print(
+        "kunglao-init: NOT initialized (no scaffold written, no .claude/ created)",
+        file=sys.stderr,
+    )
+    return RC_PATH_SHAPE
 
 
 def detect_sample(ws: Path) -> tuple[str, str]:
@@ -711,9 +827,18 @@ def resume(ws: Path, text: str) -> int:
 
 
 def initialize(ws: Path, hooks_json: Path | None,
-                project_type: str | None = None, no_mcp: bool = False) -> int:
-    """Phase 2 fresh initialization + Phase 3 idempotency verify."""
-    scaffold(ws)
+                project_type: str | None = None, no_mcp: bool = False,
+                created: "Collection[Path] | None" = None) -> int:
+    """Phase 2 fresh initialization + Phase 3 idempotency verify.
+
+    Returns the exit code (0 success / RC_FATAL_VERIFY verify-failure).
+    `created` is the scaffold manifest produced by scaffold() — the caller
+    (run) keeps it in its own frame so a mid-init failure (template defect)
+    can clean up exactly this run's artifacts; pre-existing content is never
+    in the manifest and therefore never deleted (L2, #414).
+    """
+    if created is None:
+        created = scaffold(ws)
     if ensure_agent_teams_state(ws):
         print(f"kunglao-init: analysis_state {AGENT_TEAMS_STATE_LINE}")
     sample, sample_sha = detect_sample(ws)
@@ -741,40 +866,46 @@ def initialize(ws: Path, hooks_json: Path | None,
             print("kunglao-init: .mcp.json created (MCP supply scaffold, #316)")
         else:
             print("kunglao-init: .mcp.json skipped (exists — idempotent, not overwritten)")
-    draft = claim_register_text(sample, sample_sha, state_hash="")
+    draft = claim_register_text(sample, sample_sha, state_hash="", project_type=project_type)
     digest = compute_state_hash(ws, register_text=draft)
     reg = ws / "claim-register.yaml"
-    atomic_write(reg, claim_register_text(sample, sample_sha, state_hash=digest))
+    atomic_write(reg, claim_register_text(sample, sample_sha, state_hash=digest, project_type=project_type))
 
     written = reg.read_text(encoding="utf-8")
     seed_count = written.count("id: C-")
     if MARKER not in written or seed_count < SEED_MIN:
         print("kunglao-init: FATAL verify failed — marker or seeds missing after init", file=sys.stderr)
-        return 2
+        return RC_FATAL_VERIFY
     hook_report = deploy_hooks(ws, hooks_json)
 
-    print(f"kunglao-init: initialized {ws} (seed_claims={seed_count} sample={sample})")
+    # #412: the exit message lists what init did (scaffold + env + type) and
+    # does NOT summarize sample content (no sample= in the output).
+    print(f"kunglao-init: initialized {ws} (scaffold={seed_count} structural seeds project_type={project_type})")
     print(f"kunglao-init: state_hash={digest}")
     if hook_report["deployed"]:
         print(f"kunglao-init: hooks -> {hook_report['target']} ({hook_report['added']} entries, idempotent)")
     else:
         print(f"kunglao-init: hooks skipped — {hook_report['reason']}")
-    return 0
+    return RC_OK
 
 
 def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
         profile_root: Path | None = None,
         project_type: str | None = None,
         skip_toolchain: bool = False, no_mcp: bool = False,
-        install_git_hooks_flag: bool = False) -> int:
+        install_git_hooks_flag: bool = False,
+        assume_yes: bool = False) -> int:
     """State-machine entry (#304 amended flow, comment 304-5289955958):
 
     Phase 0 environment guard → re-init check (resume; if project_type is
     missing, upgrade by writing it then exit 0, F1) → no-sample friendly
     prompt → type determination (explicit > sniff > confirm) →
-    **toolchain.check preflight** (HARD FAIL → per-item install guidance +
-    refuse + cleanup of artifacts created by this run; existing content is
-    always preserved, F2) →
+    **toolchain.check preflight** (HARD FAIL → #408 ask-then-install: per-item
+    install prompts; consent installs + registers MCP + re-probes; decline
+    degrades WARN/HARD per item. Items still HARD after the ask → per-item
+    install guidance + refuse + cleanup of artifacts created by this run;
+    cleanup removes ONLY this run's scaffold entries — pre-existing content
+    is never in the created manifest and therefore never deleted, F2) →
     only on PASS: scaffold + [initialized] marker + project_type.
 
     #362: template render defects (unfilled {{placeholder}}) surface as a
@@ -784,6 +915,13 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
     install-time key-path stamping; it runs on EVERY exit path after the
     flag guard (resume and fresh alike — hook install is orthogonal to
     scaffolding). Install failure (non-git workspace) is a HARD refuse.
+
+    #408: --assume-yes consents to every ask-then-install prompt (CI/headless).
+    Non-interactive stdin without it declines by default (no silent install).
+    #411: the workspace-path shape gate runs immediately after path
+    resolution, BEFORE the hook install and any scaffold write — a sample
+    directory passed as the workspace is refused (exit RC_PATH_SHAPE) with
+    guidance, and no file is ever written outside the workspace root.
     """
     guard_rc, guard_log = guard_agent_teams(profile_root)
     if guard_rc != 0:
@@ -793,6 +931,20 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
     for line in guard_log:
         print(line)
     ws = Path(ws).resolve()
+
+    # #411: workspace-path shape gate — BEFORE any write (including hook
+    # install). A sample directory passed as the workspace would place
+    # .claude/ and every scaffold file INSIDE the sample dir; refuse with
+    # guidance and write nothing. A valid workspace root (bins/ or
+    # claim-register.yaml) or a creatable directory passes through.
+    shape = workspace_shape(ws)
+    if shape != "workspace" and shape != "creatable":
+        return refuse_path_shape(ws, shape)
+
+    # #411 invariant (E-init.5): no scaffold file — including .claude/ — may
+    # be written outside the resolved workspace root. Fail fast on a defect
+    # rather than polluting a sibling directory.
+    _assert_workspace_boundary(ws)
 
     # #367: hook install first — it must also run for resume-mode workspaces
     if install_git_hooks_flag:
@@ -847,20 +999,38 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
         else:
             project_type = resolve_type(ws, None)
 
-    # #304: toolchain.check BEFORE scaffold — HARD FAIL => refuse + cleanup.
+    # #304: toolchain.check BEFORE scaffold — HARD FAIL => ask-then-install
+    # (#408), then refuse + cleanup only for items still HARD.
     # Verify-first: a refused init leaves no half-initialized state behind.
     if not skip_toolchain:
         report = toolchain.check(ws, project_type)
         if report.overall_status == toolchain.Status.FAIL:
-            return refuse_toolchain(ws, report)
+            # #408: interactive ask per missing item — consent installs +
+            # registers MCP + re-probes; decline degrades (WARN static /
+            # HARD decompiler). --assume-yes consents headlessly.
+            # Non-interactive stdin WITHOUT --assume-yes keeps the #304
+            # refusal: no silent install and no silent degrade-and-proceed
+            # without explicit consent.
+            interactive = getattr(sys.stdin, "isatty", lambda: False)()
+            if assume_yes or interactive:
+                resolved = toolchain_install.ask_then_install(
+                    report, ws, report.project_type, assume_yes=assume_yes)
+                if resolved.overall_status == toolchain.Status.FAIL:
+                    return refuse_toolchain(ws, resolved)
+            else:
+                return refuse_toolchain(ws, report)
 
     # #362: template defect (unfilled {{placeholder}}) → hard error, not a
-    # silent partial CLAUDE.md. Clean up this run's scaffold entries so a
-    # refused init leaves no half-initialized state (verify-first symmetry).
+    # silent partial CLAUDE.md. Clean up THIS RUN's scaffold entries (the
+    # created manifest) so a refused init leaves no half-initialized state
+    # (verify-first symmetry); anything not created by this run is never
+    # deleted (F2, #414).
+    created = scaffold(ws)
     try:
-        return initialize(ws, hooks_json, project_type=project_type, no_mcp=no_mcp)
+        return initialize(ws, hooks_json, project_type=project_type,
+                          no_mcp=no_mcp, created=created)
     except template_render.TemplateRenderError as exc:
-        removed, preserved = cleanup_scaffold(ws)
+        removed, preserved = cleanup_scaffold(ws, created=created)
         print(f"kunglao-init: TEMPLATE DEFECT — {exc}", file=sys.stderr)
         print("kunglao-init: NOT initialized (no [initialized] marker written)",
               file=sys.stderr)
@@ -868,7 +1038,7 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
             print(f"kunglao-init: removed this run's scaffold entries: "
                   f"{', '.join(removed)}", file=sys.stderr)
         if preserved:
-            print(f"kunglao-init: kept pre-existing content: "
+            print(f"kunglao-init: kept pre-existing content (not created by this run, not deleted): "
                   f"{', '.join(preserved)}", file=sys.stderr)
         return RC_ERROR
 
@@ -917,8 +1087,9 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
 
     - exit RC_TOOLCHAIN_REFUSE(4), no [initialized] marker written
     - print [FAIL] name + detail + fix (install command) per item
-    - clean up scaffold artifacts created by this run (if any); existing
-      content is always preserved and reported (F2)
+    - clean up scaffold artifacts created by this run (if any); cleanup
+      removes ONLY this run's artifacts — pre-existing content is never
+      deleted and is reported as preserved (F2)
     """
     hard_fails = [
         i for i in report.items
@@ -951,7 +1122,8 @@ def main(argv: list[str] | None = None) -> int:
     return run(Path(args.workspace), force=args.force, hooks_json=args.hooks_json,
                profile_root=args.profile_root, project_type=args.type,
                skip_toolchain=args.skip_toolchain, no_mcp=args.no_mcp,
-               install_git_hooks_flag=args.install_git_hooks)
+               install_git_hooks_flag=args.install_git_hooks,
+               assume_yes=args.assume_yes)
 
 
 if __name__ == "__main__":

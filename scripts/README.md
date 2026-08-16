@@ -5,9 +5,9 @@ Every `.py` in this directory is classified by role and by where it is
 referenced. The reference map below is the definitive answer to "who uses
 this script?" — used to keep documentation, hooks, CI, and tests in sync.
 
-- **Total scripts**: 91 (72 cataloged at #318 close; +15 by #236/#271/#287/
-  #304/#309/#316; +4 by #310/#331/#336 merged after the #320 snapshot —
-  per-script provenance in the tables below).
+- **Total scripts**: 92 (72 cataloged at #318 close; +15 by #236/#271/#287/
+  #304/#309/#316; +4 by #310/#331/#336 merged after the #320 snapshot;
+  +1 by #409 — per-script provenance in the tables below).
 - **Orphans**: 0 — every script has at least one live reference
   (tests/ count as references; a script referenced only by tests is
   categorized `TEST`, not orphan).
@@ -129,6 +129,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
 | `toolchain.py` | type-aware toolchain probe matrix (#304) | lib(1), tests, docs |
+| `toolchain_install.py` | ask-then-install: per-item install commands by platform + MCP registration + re-probe (#408) | CLI, lib(1), tests |
+| `platform_paths.py` | platform-correct analyzeHeadless + venv python resolution (#409) | lib(2), tests |
 | `chunker.py` | length-measured batch chunking (#309) | tests |
 | `cost_estimate.py` | pre-dispatch cost estimator (#309) | lib(1), tests |
 | `event_taxonomy.py` | 25-class event taxonomy (#309) | tests |
