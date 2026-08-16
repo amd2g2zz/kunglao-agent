@@ -157,9 +157,10 @@ def test_claim_expiry(tmp: Path) -> None:
         return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     now = datetime.now(tz=timezone.utc)
-    # Timestamps are quoted: unquoted ISO scalars load as datetime objects
-    # (YAML 1.1 resolver) and last_activity_for skips them — the system's own
-    # writer (claim_expiry._write_yaml via yaml.safe_dump) emits quoted strings.
+    # Timestamps are quoted because the system's own writer
+    # (claim_expiry._write_yaml via yaml.safe_dump) emits quoted strings;
+    # unquoted ISO scalars (datetime objects, YAML 1.1 resolver) are covered
+    # by test_claim_expiry_yaml_datetime (#380).
     make_claim_reg(ws, [
         {"id": "C-old", "status": "OPEN", "tier": 1, "extra": {"created_at": f"'{iso(now - timedelta(hours=48))}'"}},
         {"id": "C-new", "status": "OPEN", "tier": 1, "extra": {"created_at": f"'{iso(now - timedelta(hours=1))}'"}},
@@ -184,12 +185,55 @@ def test_claim_expiry(tmp: Path) -> None:
     check("ce.fresh_kept_open", claims["C-new"]["status"] == "OPEN", str(claims))
 
 
+# ---------- claim_expiry: unquoted ISO timestamps (datetime objects, #380) ----------
+def test_claim_expiry_yaml_datetime(tmp: Path) -> None:
+    """#380: unquoted ISO scalars load as datetime objects (YAML 1.1 resolver)
+    and used to be silently skipped by last_activity_for — a hand-edited
+    register with unquoted timestamps never went STALE. datetime and
+    quoted-string forms must age identically."""
+    ws = tmp / "ce-dt"
+    ws.mkdir(parents=True)
+
+    def iso(dt: datetime) -> str:
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    now = datetime.now(tz=timezone.utc)
+    make_claim_reg(ws, [
+        # Unquoted: yaml.safe_load resolves these scalars to datetime objects
+        {"id": "C-old-unq", "status": "OPEN", "tier": 1, "extra": {"created_at": iso(now - timedelta(hours=48))}},
+        {"id": "C-new-unq", "status": "OPEN", "tier": 1, "extra": {"created_at": iso(now - timedelta(hours=1))}},
+        # Quoted controls: identical staleness behavior expected
+        {"id": "C-old-q", "status": "OPEN", "tier": 1, "extra": {"created_at": f"'{iso(now - timedelta(hours=48))}'"}},
+        {"id": "C-new-q", "status": "OPEN", "tier": 1, "extra": {"created_at": f"'{iso(now - timedelta(hours=1))}'"}},
+    ])
+
+    def reg_claims() -> dict[str, dict]:
+        reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
+        return {c["id"]: c for c in reg["claims"]}
+
+    # Fixture sanity: the unquoted form really parsed as datetime (bug precondition)
+    check("ce_dt.fixture_is_datetime",
+          isinstance(reg_claims()["C-old-unq"]["created_at"], datetime),
+          str(type(reg_claims()["C-old-unq"]["created_at"])))
+
+    rc = ce.check(ws, stale_hours=24, apply=True)
+    claims = reg_claims()
+    check("ce_dt.apply_rc", rc == 0, f"rc={rc}")
+    check("ce_dt.unquoted_stale", claims["C-old-unq"]["status"] == "STALE", str(claims["C-old-unq"]))
+    check("ce_dt.unquoted_reason", bool(claims["C-old-unq"].get("stale_reason")), str(claims["C-old-unq"]))
+    check("ce_dt.unquoted_fresh_open", claims["C-new-unq"]["status"] == "OPEN", str(claims["C-new-unq"]))
+    check("ce_dt.quoted_stale", claims["C-old-q"]["status"] == "STALE", str(claims["C-old-q"]))
+    check("ce_dt.quoted_reason", bool(claims["C-old-q"].get("stale_reason")), str(claims["C-old-q"]))
+    check("ce_dt.quoted_fresh_open", claims["C-new-q"]["status"] == "OPEN", str(claims["C-new-q"]))
+
+
 def main() -> int:
     import tempfile
     suites = [
         ("test_convergence_check", test_convergence_check, "cc-t"),
         ("test_convergence_health", test_convergence_health, "ch-t"),
         ("test_claim_expiry", test_claim_expiry, "ce-t"),
+        ("test_claim_expiry_yaml_datetime", test_claim_expiry_yaml_datetime, "ce-dt-t"),
     ]
     failed = 0
     with tempfile.TemporaryDirectory() as td:
