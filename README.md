@@ -2,33 +2,44 @@
 
 A Claude Code skill that runs a convergence-driven reverse-engineering loop: it takes a malware sample to a byte-proven, independently-verified fact base, enforced by mechanical gates.
 
-[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.11%2B-blue)](.) [![license](https://img.shields.io/badge/license-MIT-lightgrey)](.)
+[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-MIT-lightgrey)](.)
 
 ---
 
-## Interface
+## What this is
 
-**The only interface is Claude Code.** kunglao-agent is not a CLI with an agent wrapper — it is a skill. You do not type python commands; you talk to Claude Code and read its reports. Everything mechanical (convergence decisions, dispatch gates, verification, environment checks) runs inside the skill: hooks invoked by Claude Code, subagents dispatched by Claude Code, artifacts written to the workspace.
+kunglao-agent is a Claude Code skill for malware reverse engineering. You drop a sample into a workspace, say what you need to know, and the skill runs a convergence loop: specialist workers analyze (static first), an independent verifier re-derives every fact blind from raw evidence, and mechanical gates decide when the analysis is done. The deliverable is a fact base where every claim is byte-anchored, independently verified, and evidence-indexed — trust is enforced by machinery, not convention.
 
-The python modules in this repo are the skill's internal organs — called by hooks, agents, and CI. They are documented under [Internals](#internals) for developers who extend the system, not as a user interface.
+The only interface is Claude Code: you talk to it and read its reports. The Python modules in this repo are the skill's internal organs, called by hooks, agents, and CI — documented under [Internals](#internals) for developers who extend the system, not as a user interface.
+
+## Prerequisites
+
+- **Python 3.10+ and [uv](https://docs.astral.sh/uv)** — hooks never invoke bare `python`: on machines where `python` resolves to Python 2.x every registered hook dies with the interpreter (#389). All hook commands run via `uv run --project <skill_root>`. **Python 2 is not supported.**
+- **`uv sync --locked`** — restore the pinned project venv before anything else (see [Quick start](#quick-start)).
+- **Ghidra or IDA** — one static-analysis suite for decompilation.
+- **A VM** — required for T3 dynamic analysis (Windows / Linux / Android guest, matching the sample's project type). Samples never run on the host.
+- **MCP servers** — registered by `kunglao-init` (ghidra, sequential-thinking, x64dbg, ...); see the MCP supply table under [Internals](#internals).
 
 ## Quick start
 
 ### 1. Install
 
-**Prerequisite — uv** (https://docs.astral.sh/uv). Hooks never invoke bare `python`: on machines where `python` is Python 2.x (Homebrew macOS, some Linux distros) every registered hook dies with the interpreter (#389). All hook commands run via `uv run --project <skill_root>` against the skill's own project venv (Python 3.11+ per pyproject), and the review-gate pre-commit hook gets the skill root stamped at install time. Install the project venv first with `uv sync --locked` (install step (b) below).
+**Primary path — the marketplace** (v0.1 ships `.claude-plugin/marketplace.json`): from any directory, in Claude Code:
 
-Two paths ship with v0.1 (the repo carries `.claude-plugin/plugin.json`, version `0.1`, identity metadata only).
+```
+/plugin marketplace add amd2g2zz/kunglao-agent
+/plugin install kunglao-agent@kunglao-agent
+```
 
-**(a) Plugin install** — load the repo directly as a Claude Code plugin:
+**Direct plugin path** — load the repo as a plugin, no marketplace:
 
 ```
 claude --plugin-dir /path/to/kunglao-agent
 ```
 
-The plugin manager lists `kunglao-agent` at version `0.1`. The manifest declares no components (skills/hooks/commands) yet — the full plugin migration, including marketplace distribution via `/plugin marketplace add amd2g2zz/kunglao-agent` (which additionally requires shipping `.claude-plugin/marketplace.json`), is tracked in #364.
+The plugin manager lists `kunglao-agent` at version `0.1`. The shipped `.claude-plugin/plugin.json` manifest is metadata-only — identity fields, no component wiring yet (tracked in #364) — so for today's working skill surface use the skill-dir path below.
 
-**(b) Skill-dir install (legacy)** — in Claude Code:
+**Skill-dir path** — in Claude Code:
 
 ```
 /install-github-repo amd2g2zz/kunglao-agent
@@ -43,25 +54,48 @@ uv sync --locked
 cp agents/kunglao-worker.md agents/kunglao-redteam.md ~/.claude/agents/
 ```
 
-A skills-dir clone that keeps `.claude-plugin/` loads as a skills-directory plugin (`kunglao-agent@skills-dir`) from the next session instead of a plain skill; bare `/kunglao-agent` still resolves via the loader fallback. Delete `.claude-plugin/` after cloning to keep the plain-skill identity.
+### 2. Initialize a workspace
 
-### 2. Start analysis
+One fresh workspace per sample engagement:
 
-In Claude Code, in a fresh workspace directory, either:
+```bash
+uv run --project <repo> <repo>/scripts/kunglao-init.py <workspace> --type windows   # or linux | android
+```
+
+Options: `--skip-toolchain` (skip the toolchain preflight — test/ops escape hatch), `--no-mcp` (skip the workspace `.mcp.json` scaffold), `--install-git-hooks` (install the review-gate pre-commit hook), `--force` (re-init after backing up the claim register).
+
+Init confirms the project type, scaffolds the workspace, writes the type-appropriate `CLAUDE.md`, and runs per-type toolchain probes (Android: ADB + rooted device + renamed frida-server on a custom port; Linux: Ghidra-or-IDA + remote debugger; Windows: Ghidra-or-IDA + VM). Hard failures are reported with root-cause guidance; a workspace that is not initialized is refused work.
+
+### 3. Start the session
+
+In Claude Code, in the workspace directory:
 
 ```
 /kunglao-agent
 ```
 
-or just describe the task — the skill auto-triggers on phrases like *"analyze this sample"* / *"分析这个样本"* / *"不收敛"*.
+or just describe the task — the skill auto-triggers on phrases like *"analyze this sample"* / *"分析这个样本"* / *"不收敛"*. The skill then runs the loop and delivers the report; you monitor through conversation.
 
-The skill then does the rest on its own:
+## A worked analysis case
 
-1. **Initialize the workspace** — an init subagent confirms the project type (Windows / Linux / Android; explicit statement beats sample-magic sniffing beats interactive confirmation), scaffolds the workspace, writes the type-appropriate CLAUDE.md, and runs the per-type minimum toolchain probes (Android: ADB + rooted device + renamed frida-server on a custom port + GitNexus; Linux: Ghidra-or-IDA + remote debugger; Windows: Ghidra-or-IDA + VM). Hard failures are reported with root-cause guidance; a workspace that is not initialized is refused work.
-2. **Run the convergence loop** — dispatch specialist workers (static first), verify their facts blind, loop until `CONVERGED`.
-3. **Deliver the report** — a fact base where every claim is byte-anchored, independently verified, and evidence-indexed.
+*The walkthrough below is a representative, synthetic session on a small, deliberately simple sample. It shows the shape of an engagement, not a measured result — for measured outcomes see [Real-world results](#real-world-results).*
 
-While it runs, you monitor through conversation — ask the skill for status, or let it report. Workers surface as status lines; the final deliverable is the verified fact base.
+**Setup.** A small Windows dropper lands in `~/cases/synth-dropper`. The operator initializes the workspace:
+
+```
+uv run --project ~/kunglao-agent ~/kunglao-agent/scripts/kunglao-init.py ~/cases/synth-dropper --type windows
+```
+
+`kunglao-init` scaffolds the workspace, writes the workspace `CLAUDE.md`, probes the toolchain (Ghidra present, VM reachable), and scaffolds `.mcp.json`. The operator runs `/kunglao-agent` and states the task: *"what does this binary do, and where does it phone home?"*
+
+**The loop.** The orchestrator opens `task_spec.yaml` with the primary questions (capability, persistence, network). Each tick is one mechanical decision:
+
+1. `DISPATCH` — a static worker is dispatched first with an explicit contract (`[T1 tools=pe_analyze,strings-classify] claim C-001`). It writes facts: PE structure, imports mapped to capability classes, embedded strings, overlay scan.
+2. `DISPATCH_VERIFIER` — for each fact, the redteam verifier re-derives the answer blind from the raw artifact (never reading the maker's conclusion) and signs off `CONFIRMED`; the fact reaches `PROVEN`.
+3. `SATURATED` / `BLOCKED` ticks poll stuck workers or resolve blockers — the loop never idles with open claims.
+4. `CONVERGED` — every primary question answered with byte-proof, zero orphan claims. The loop exits 0 and builds the report.
+
+**Deliverables.** `claim-register.yaml` (every claim terminal), `facts/` (each fact byte-anchored, with provenance and a reproduce command), `evidence/_index.json` (every fact traceable to a raw artifact), and the final report. Every tick is recorded as a ledger line in `runs/` — the session's audit trail.
 
 ## What you get
 
@@ -101,15 +135,15 @@ Every tick is one mechanical decision:
 | `BLOCKED` | 4 | resolve blockers (self-recovery L1→L2→L3), re-check |
 | `CONVERGED` | 0 | every primary question answered with byte-proof; build the report |
 
-Dispatch carries an explicit contract — `[T1 tools=grep,xxd] claim C-007 <task>` — enforced by the `worker_budget` hook: ≤3 concurrent workers, per-claim cap, tier gate (T1 static / T2 emulation / T3 VM), live heartbeat, plan-with-content, `facts-snapshot:` marker, `tool-catalog:` marker when the task matches a registered tool, and a declared static-gap list for T2/T3 work. The agent-team channel is mechanically rejected.
+Dispatch carries an explicit contract — `[T1 tools=grep,xxd] claim C-007 <task>` — enforced by the `worker_budget` hook: ≤3 concurrent workers, per-claim cap, tier gate (T1 static / T2 emulation / T3 VM), live heartbeat, plan-with-content, a declared static-gap list for T2/T3 work.
 
 ## Analysis principle
 
-Five layers, in order of preference — static first, and only escalate when the layer above is genuinely insufficient:
+Five layers, in order of preference — static first, escalate only when the layer above is genuinely insufficient:
 
 1. **Static closure** — complete the analysis statically if at all possible; a task that closes statically never touches dynamic tooling.
-2. **Deobfuscation via emulation** — symbolic/emulated execution strips obfuscation layers (opaque predicates, indirect jumps, computed constants, encoded blobs) and feeds the result back into static analysis. This serves static; it is not a replacement.
-3. **Debug to fill declared gaps** — dynamic debugging (x64dbg / gdbserver / frida) is a complement, not a default: it is used only for gaps static analysis (after deobfuscation) cannot close, and each T2/T3 dispatch must declare the static gap it addresses.
+2. **Deobfuscation via emulation** — emulated execution strips obfuscation (opaque predicates, indirect jumps, computed constants, encoded blobs) and feeds the result back into static analysis. This serves static; it is not a replacement.
+3. **Debug to fill declared gaps** — dynamic debugging (x64dbg / gdbserver / frida) is a complement, not a default: each T2/T3 dispatch must declare the static gap it addresses.
 4. **Emulation fallback** — when static + debug data are complete but the logic still resists (e.g. black-box crypto), a hybrid frida-hook + unidbg emulation is used, gated on all three: frida data collected, ida/ghidra decompilation done, still stuck.
 5. **Environment construction** — the worst case: build/patch an environment (matching OS version, re-signed APK, sandbox, JNI environment) so the sample runs completely and is observable end to end.
 
@@ -129,7 +163,7 @@ Five layers, in order of preference — static first, and only escalate when the
 
 ## Internals
 
-The tool shelf: reusable analysis logic is absorbed as **registered tools** (machine contract `tools/_INDEX.yaml`, validated by `tools/validate_index.py`; human indexes `tools/_index-<category>.md`).
+The tool shelf: reusable analysis logic is absorbed as **registered tools** (machine contract `tools/_INDEX.yaml`, validated by `tools/validate_index.py`; human indexes `tools/_index-<category>.md`). Workers must check the index before writing new scripts (`toolfirst` gate); `tools/tool-search.py` queries it by capability tag and cost budget.
 
 | Category | Tools |
 |---|---|
@@ -139,11 +173,9 @@ The tool shelf: reusable analysis logic is absorbed as **registered tools** (mac
 | `pipeline` | evidence-index builders + plan recipes (stage-unpack / crypto-decrypt / syscall-chain / iat-chain / go-recovery) |
 | `aux` | legacy-PROVEN audit / golden capture / blind-coverage / cold-start metrics |
 
-Host emulation (T2) is deliberately NOT a shelf tool: qiling-based emulation is provided by the external `/malware-framework` skill (90+ profile-driven stubs, verified on real x86/x64 samples) — kunglao workers invoke it per the analysis principle's emulation layers instead of re-wrapping qiling.
+Host emulation (T2) is deliberately NOT a shelf tool: qiling-based emulation is provided by the external `/malware-framework` skill, which kunglao workers invoke per the analysis principle instead of re-wrapping qiling.
 
-Tool selection is deterministic: `tools/tool-search.py` queries the machine index (`tools/_INDEX.yaml`) by capability tag and cost budget (zero-token catalog). Workers must check the index before writing new scripts (`toolfirst` gate, enforced by `worker_budget.py`).
-
-MCP supply (#316): analysis correctness depends on registered MCP servers, so the skill manages its own supply manifest + probe + scaffold instead of relying on machine-scattered user config. The single manifest source is `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `python scripts/mcp_probe.py <ws> --type <windows|linux|android>` (exit 1 = HARD missing, 2 = WARN missing only).
+MCP supply: the single manifest source is `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android>` (exit 1 = HARD missing, 2 = WARN missing only).
 
 | MCP server | Tier | Scope | Purpose | Registration |
 |------------|------|-------|---------|--------------|
@@ -188,18 +220,13 @@ SDD (OpenSpec) + TDD: one issue → one PR → one branch → one worktree, merg
 
 ```bash
 git worktree add .worktrees/<name> -b <name> dev
-# RED: failing test → GREEN: minimal implementation → refactor
-python -m pytest -q
+uv sync --locked
+uv run python -m pytest -q                    # RED → GREEN → refactor
+uv run python scripts/release_receipt.py --check
 gh pr create --base dev
 ```
 
-The release contract is revision-owned: `pyproject.toml` + `uv.lock` (pinned deps), `release-manifest.yaml` (declared asset inventory), `release_receipt.py` (observed inventory: per-asset sha256, CLI `--help` exit codes, test results). CI runs it on every PR:
-
-```bash
-uv sync --locked
-uv run python scripts/release_receipt.py --check
-uv run python -m pytest -q
-```
+The release contract is revision-owned: `pyproject.toml` + `uv.lock` (pinned deps), `release-manifest.yaml` (declared asset inventory), `release_receipt.py` (observed inventory: per-asset sha256, CLI `--help` exit codes, test results). CI runs it on every PR. Depth lives in `docs/` (design, loop engineering), `specs/`, and `AGENTS.md`.
 
 ## Limitations
 

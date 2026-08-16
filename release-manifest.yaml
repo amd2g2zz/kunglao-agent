@@ -113,6 +113,10 @@ assets:
     # #366: metadata-only plugin manifest — version 0.1 must be visible
     # to the plugin manager; identity fields only, no component wiring (#364).
     - .claude-plugin/plugin.json
+    # #352: marketplace catalog — v0.1 ships it; users add the marketplace
+    # via `/plugin marketplace add amd2g2zz/kunglao-agent` and install the
+    # single listed plugin (schema: code.claude.com plugin-marketplaces).
+    - .claude-plugin/marketplace.json
   references:
     # Directory entry is digested via sha256_dir by release_receipt.
     - references/

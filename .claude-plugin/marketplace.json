@@ -1,0 +1,24 @@
+{
+  "name": "kunglao-agent",
+  "owner": {
+    "name": "amd2g2zz",
+    "url": "https://github.com/amd2g2zz"
+  },
+  "description": "kunglao-agent: a Claude Code skill that runs a convergence-driven reverse-engineering loop — malware sample to byte-proven, verified fact base.",
+  "plugins": [
+    {
+      "name": "kunglao-agent",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/amd2g2zz/kunglao-agent"
+      },
+      "description": "A Claude Code skill that runs a convergence-driven reverse-engineering loop: it takes a malware sample to a byte-proven, independently-verified fact base, enforced by mechanical gates.",
+      "version": "0.1",
+      "author": {
+        "name": "amd2g2zz"
+      },
+      "homepage": "https://github.com/amd2g2zz/kunglao-agent",
+      "license": "MIT"
+    }
+  ]
+}

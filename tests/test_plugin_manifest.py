@@ -151,3 +151,108 @@ def test_plugin_manifest_declared_in_release_manifest():
         "release-manifest.yaml assets.knowledge must declare "
         ".claude-plugin/plugin.json (declaration-scan contract, #366)"
     )
+
+# ---------- marketplace.json (v0.1 ships it, issue #352) ----------
+
+MARKETPLACE = ROOT / ".claude-plugin" / "marketplace.json"
+GITHUB_URL = "https://github.com/amd2g2zz/kunglao-agent"
+
+# Schema source: https://code.claude.com/docs/en/plugin-marketplaces
+# ("Marketplace schema"). Top-level REQUIRED: name, owner (object, name
+# required), plugins. Plugin entry REQUIRED: name, source; the standard
+# metadata fields (description/version/author/homepage/license) are optional
+# per-entry. `source` must be a schema-conformant source spec — a git URL is
+# encoded as {"source": "url", "url": ...}, never as a bare string (a bare
+# string is a relative-path source).
+MARKETPLACE_REQUIRED_TOP = {"name", "owner", "plugins"}
+MARKETPLACE_REQUIRED_OWNER = {"name"}
+MARKETPLACE_REQUIRED_ENTRY = {"name", "source"}
+
+
+def _marketplace() -> dict:
+    assert MARKETPLACE.exists(), \
+        ".claude-plugin/marketplace.json missing (v0.1 ships it, issue #352)"
+    return json.loads(MARKETPLACE.read_text(encoding="utf-8"))
+
+
+def test_marketplace_exists_with_identity():
+    mp = _marketplace()
+    assert mp["name"] == "kunglao-agent", "marketplace name (kebab-case id)"
+    assert mp["owner"]["name"] == "amd2g2zz", "marketplace owner"
+
+
+def test_marketplace_schema_required_fields_present():
+    """Schema pin: every field the plugin-marketplaces schema marks REQUIRED
+    is present at its level (top / owner / plugin entry)."""
+    mp = _marketplace()
+    assert MARKETPLACE_REQUIRED_TOP <= set(mp), (
+        f"marketplace keys {sorted(set(mp))} missing required "
+        f"{sorted(MARKETPLACE_REQUIRED_TOP - set(mp))}"
+    )
+    assert MARKETPLACE_REQUIRED_OWNER <= set(mp["owner"])
+    assert len(mp["plugins"]) == 1, "v0.1 marketplace ships exactly one plugin"
+    assert MARKETPLACE_REQUIRED_ENTRY <= set(mp["plugins"][0])
+
+
+def test_marketplace_plugin_entry_matches_plugin_json():
+    """The marketplace entry mirrors the shipped metadata-only manifest
+    (#366): same identity, version pinned to 0.1, source is the GitHub URL
+    in schema-conformant url-source form."""
+    mp = _marketplace()
+    m = _manifest()
+    entry = mp["plugins"][0]
+    assert entry["name"] == "kunglao-agent"
+    assert entry["source"] == {"source": "url", "url": GITHUB_URL}, (
+        "plugin source must be the GitHub URL as a url-type source spec"
+    )
+    assert entry["version"] == EXPECTED_VERSION
+    assert isinstance(entry["description"], str) and entry["description"].strip()
+    assert entry["description"] == m["description"], (
+        "marketplace description must be the README opening one-liner "
+        "(same string as plugin.json)"
+    )
+    assert entry["author"]["name"] == m["author"]["name"]
+    assert entry["homepage"] == m["homepage"]
+    assert entry["license"] == m["license"]
+
+
+def test_marketplace_declared_in_release_manifest():
+    """Declaration-scan contract: shipped assets get receipt digests. The
+    marketplace catalog is shipped knowledge, declared under assets.knowledge
+    next to plugin.json."""
+    release = yaml.safe_load(RELEASE_MANIFEST.read_text(encoding="utf-8"))
+    declared = release["assets"].get("knowledge", [])
+    assert ".claude-plugin/marketplace.json" in declared, (
+        "release-manifest.yaml assets.knowledge must declare "
+        ".claude-plugin/marketplace.json (declaration-scan contract, #352)"
+    )
+
+
+# ---------- README: project-intro rewrite pins (issue #352) ----------
+
+def test_readme_documents_marketplace_install_path():
+    """The marketplace add command is the primary install path (verified
+    against https://code.claude.com/docs/en/plugin-marketplaces —
+    `/plugin marketplace add owner/repo`)."""
+    text = README.read_text(encoding="utf-8")
+    assert "/plugin marketplace add amd2g2zz/kunglao-agent" in text, \
+        "README must document the marketplace add command as the primary path"
+
+
+def test_readme_states_python310_and_rejects_python2():
+    text = README.read_text(encoding="utf-8")
+    assert "Python 3.10" in text, "README must state the Python 3.10+ floor"
+    assert "Python 2 is not supported" in text, (
+        "README must state plainly that Python 2 is not supported"
+    )
+
+
+def test_readme_has_worked_analysis_case():
+    """The missing 案例分析: a walkthrough section labeled as synthetic."""
+    text = README.read_text(encoding="utf-8")
+    assert "## A worked analysis case" in text, \
+        "README must carry the worked analysis walkthrough section"
+    assert "synthetic" in text, (
+        "the worked case must be labeled representative/synthetic, "
+        "not presented as a real measured result"
+    )
