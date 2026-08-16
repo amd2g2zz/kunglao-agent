@@ -21,16 +21,21 @@ stamping:
 from __future__ import annotations
 
 import os
+import re
+import shutil
 import stat
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / ".claude" / "git-hooks" / "pre-commit"
 INIT = ROOT / "scripts" / "kunglao-init.py"
 
 PLACEHOLDER = "__KUNGLAO_REVIEW_KEY__"
+SKILL_ROOT_PLACEHOLDER = "__KUNGLAO_SKILL_ROOT__"
 
 
 # ---------------------------------------------------------------------------
@@ -46,6 +51,30 @@ def test_template_carries_placeholder_not_real_key_path() -> None:
         "stamping (#367)")
     # a stamped absolute path of the installing user must NOT be pre-baked
     assert "C:/Users/" not in text, "template must not ship any real user path"
+
+
+def test_template_runs_gate_via_uv_with_skill_root_placeholder() -> None:
+    """#389: the template must invoke the gate via `uv run --project
+    <skill_root>` — hooks must not invoke bare python (it can resolve to 2.x:
+    this machine's /usr/local/bin/python is 2.7.17, killing the gate with the
+    misleading "evidence invalid or stale"). The skill root is stamped at
+    install time (#367 stamp-once pattern), and missing uv must fail closed."""
+    text = TEMPLATE.read_text(encoding="utf-8")
+    assert SKILL_ROOT_PLACEHOLDER in text, (
+        f"template must carry the {SKILL_ROOT_PLACEHOLDER} placeholder")
+    assert ('uv run --project "$skill_root" "$skill_root/scripts/review_gate.py" check'
+            in text), (
+        "template must invoke review_gate.py via uv run --project with an "
+        "absolute script path")
+    assert "command -v uv" in text, "missing uv must fail closed (#389)"
+    assert "py=" not in text, (
+        "no bare-python interpreter selection remains (#389: hooks run uv)")
+
+
+def test_uv_resolvable_on_this_machine() -> None:
+    """#389 machine-behavior: the gate's runtime (uv) must be resolvable here
+    (bare `python` on this machine is 2.7.17 — the repro)."""
+    assert shutil.which("uv"), "uv must be resolvable on this machine"
 
 
 def test_installed_hook_with_placeholder_residue_fails_closed(tmp_path: Path) -> None:
@@ -142,6 +171,17 @@ def test_install_git_hooks_stamps_real_key_path(tmp_path: Path) -> None:
     expected = (home / ".claude" / "kunglao-review.key").as_posix()
     assert expected in text, (
         f"installed hook must embed the real absolute key path {expected}: {text}")
+    # #389: the skill root is stamped the same way — the gate runs via
+    # `uv run --project <skill_root>` where skill_root is the installer's own
+    # skill root (this repo when kunglao-init runs from it).
+    ms = re.search(r'^skill_root="(.*)"$', text, re.M)
+    assert ms, "installed hook must keep the skill_root=\"...\" assignment shape"
+    assert SKILL_ROOT_PLACEHOLDER not in ms.group(1), (
+        "the stamped skill_root assignment must carry the real path")
+    assert ROOT.as_posix() in text, (
+        f"installed hook must embed the real skill root {ROOT.as_posix()}: {text}")
+    assert 'uv run --project "$skill_root" "$skill_root/scripts/review_gate.py" check' in text, (
+        f"installed hook must invoke the gate via uv (#389): {text}")
     mode = stat.S_IMODE(hook.stat().st_mode)
     assert mode & stat.S_IXUSR, f"installed hook must be executable (mode {mode:o})"
 
@@ -163,7 +203,8 @@ def test_install_git_hooks_without_key_prints_key_init_guidance(
         f"missing key is guidance, not failure: {r.stdout}{r.stderr}")
     out = r.stdout + r.stderr
     assert "review_gate.py" in out and "key-init" in out, (
-        f"must guide `python scripts/review_gate.py key-init <path>`: {out}")
+        f"must guide `uv run --project <skill> <skill>/scripts/review_gate.py "
+        f"key-init <path>` (#389): {out}")
     hook = ws / ".git" / "hooks" / "pre-commit"
     assert hook.exists(), "hook installs regardless; the hook itself fails closed"
 

@@ -31,11 +31,11 @@ State file schema (memory/.hook_state.json):
   }
 
 Usage:
-  python hook_activation.py <workspace> [--set-active h1,h2] [--set-paused h3] [--phase X]
-  python hook_activation.py <workspace> --renew          # refresh expiry (kunglao-agent Phase 0)
-  python hook_activation.py <workspace> --is-active dispatch_gate
-  python hook_activation.py <workspace> --wire-up        # register hooks in <workspace>/.claude/settings.json (PROJECT-level, #258)
-  python hook_activation.py <workspace> --heartbeat-off  # stop heartbeat after CONVERGED (issue #237)
+  uv run --project <skill_root> <skill_root>/scripts/hook_activation.py <workspace> [--set-active h1,h2] [--set-paused h3] [--phase X]
+  uv run --project <skill_root> <skill_root>/scripts/hook_activation.py <workspace> --renew          # refresh expiry (kunglao-agent Phase 0)
+  uv run --project <skill_root> <skill_root>/scripts/hook_activation.py <workspace> --is-active dispatch_gate
+  uv run --project <skill_root> <skill_root>/scripts/hook_activation.py <workspace> --wire-up        # register hooks in <workspace>/.claude/settings.json (PROJECT-level, #258)
+  uv run --project <skill_root> <skill_root>/scripts/hook_activation.py <workspace> --heartbeat-off  # stop heartbeat after CONVERGED (issue #237)
 
 T-2 split (2026-08-11): the --wire-up / --reconcile / --heartbeat-* jobs now
 live in wire_up_settings.py / reconcile_workers.py / heartbeat.py; main()

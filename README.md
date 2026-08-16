@@ -16,6 +16,8 @@ The python modules in this repo are the skill's internal organs — called by ho
 
 ### 1. Install
 
+**Prerequisite — uv** (https://docs.astral.sh/uv). Hooks never invoke bare `python`: on machines where `python` is Python 2.x (Homebrew macOS, some Linux distros) every registered hook dies with the interpreter (#389). All hook commands run via `uv run --project <skill_root>` against the skill's own project venv (Python 3.11+ per pyproject), and the review-gate pre-commit hook gets the skill root stamped at install time. Install the project venv first with `uv sync --locked` (install step (b) below).
+
 Two paths ship with v0.1 (the repo carries `.claude-plugin/plugin.json`, version `0.1`, identity metadata only).
 
 **(a) Plugin install** — load the repo directly as a Claude Code plugin:

@@ -7,26 +7,38 @@ branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || { echo "REVIEW GATE B
 out="$repo/.review-gate/$(printf '%s' "$branch" | tr '/' '-').json"
 mkdir -p "$repo/.review-gate"
 log="$repo/.review-gate/hook.log"
-# python3 fallback for POSIX; python on Windows
-py="python"
-command -v "$py" >/dev/null 2>&1 || py="python3"
-command -v "$py" >/dev/null 2>&1 || { echo "REVIEW GATE BLOCKED: no python interpreter found"; exit 1; }
+# __KUNGLAO_SKILL_ROOT__ is an install-time placeholder: the human-run
+# installer (kunglao-init --install-git-hooks) stamps the deployed skill's
+# absolute root path ONCE into the installed .git/hooks/pre-commit copy.
+# The gate runs via `uv run --project <skill_root>` (#389: hooks must not
+# invoke bare python — it can resolve to Python 2.x, e.g. this machine's
+# /usr/local/bin/python -> 2.7.17, which kills the gate with the misleading
+# "evidence invalid or stale"). Running from the stamped skill root also
+# removes the old $repo/scripts/ dependency (the workspace is NOT the skill
+# repo — a second #389 E2E finding).
+skill_root="__KUNGLAO_SKILL_ROOT__"
+if [ "$skill_root" = "__KUNGLAO_SKILL_ROOT__" ]; then
+  echo "REVIEW GATE BLOCKED: hook not installed — this is the tracked template"
+  echo "  (unstamped placeholder skill root). Install it with:"
+  echo "  uv run --project <skill_root> <skill_root>/scripts/kunglao-init.py <workspace> --install-git-hooks"
+  echo "  (stamps the skill root and your \$HOME/.claude/kunglao-review.key at install time)"
+  exit 1
+fi
+command -v uv >/dev/null 2>&1 || { echo "REVIEW GATE BLOCKED: uv not found — install it: https://docs.astral.sh/uv/"; exit 1; }
 # explicit absolute keyfile (NOT env-resolved: USERPROFILE/HOME redirection
 # would let a subagent self-mint+approve via a fake-home key).
-# __KUNGLAO_REVIEW_KEY__ is an install-time placeholder: the human-run
-# installer (kunglao-init --install-git-hooks) stamps the installing user's
-# real absolute key path ONCE into the installed .git/hooks/pre-commit copy.
+# __KUNGLAO_REVIEW_KEY__ is an install-time placeholder, stamped the same way
+# as the skill root above.
 key="__KUNGLAO_REVIEW_KEY__"
 if [ "$key" = "__KUNGLAO_REVIEW_KEY__" ]; then
   echo "REVIEW GATE BLOCKED: hook not installed — this is the tracked template"
   echo "  (unstamped placeholder key path). Install it with:"
-  echo "  python scripts/kunglao-init.py <workspace> --install-git-hooks"
-  echo "  (stamps your \$HOME/.claude/kunglao-review.key at install time; anti-forgery: the path stays a literal, never env-resolved at commit time)"
+  echo "  uv run --project <skill_root> <skill_root>/scripts/kunglao-init.py <workspace> --install-git-hooks"
   exit 1
 fi
-[ -f "$key" ] || { echo "REVIEW GATE BLOCKED: review key missing at $key"; echo "  create it: python scripts/review_gate.py key-init $key"; exit 1; }
+[ -f "$key" ] || { echo "REVIEW GATE BLOCKED: review key missing at $key"; echo "  create it: uv run --project $skill_root $skill_root/scripts/review_gate.py key-init $key"; exit 1; }
 # log-file output avoids MSYS2 SIGPIPE exit-status loss when stdout is piped
-"$py" "$repo/scripts/review_gate.py" check "$repo" "$out" "$branch" "$key" >"$log" 2>&1
+uv run --project "$skill_root" "$skill_root/scripts/review_gate.py" check "$repo" "$out" "$branch" "$key" >"$log" 2>&1
 rc=$?
 cat "$log"
 if [ $rc -ne 0 ]; then

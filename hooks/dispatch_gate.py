@@ -24,7 +24,7 @@ failure_analysis_gate's BLOCKED set → inject guidance. Otherwise → exit 0
 Wiring (in .claude/settings.json PreToolUse, Agent matcher — kunglao-agent
 dispatches via the Agent tool):
   {"matcher": "Agent", "hooks": [{"type": "command",
-    "command": "python <skill_root>/hooks/dispatch_gate.py"}]}
+    "command": "uv run --project <skill_root> <skill_root>/hooks/dispatch_gate.py"}]}
 """
 from __future__ import annotations
 
@@ -141,7 +141,7 @@ def main() -> int:
                 f"dispatch_gate: {claim_id} is failure-blocked — a prior attempt "
                 f"failed and no failure_analysis is recorded. Per SKILL.md "
                 f"'A failed attempt is not a negative result', run:\n"
-                f"  python {SKILL_DIR}/scripts/failure_analysis_gate.py {ws} {claim_id}\n"
+                f"  uv run --project {SKILL_DIR} {SKILL_DIR}/scripts/failure_analysis_gate.py {ws} {claim_id}\n"
                 f"answer the 3 questions (method_assumption / assumption_validity / "
                 f"next_method), then re-dispatch — or dispatch a different claim. "
                 f"A failed attempt is evidence the METHOD failed, not that the "

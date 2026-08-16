@@ -165,9 +165,16 @@ def wire_up_settings(workspace: Path | None = None, global_opt_in: bool = False)
     def _entry(hook_file: str) -> dict:
         # POSIX path (forward slashes): hooks run via `sh -c` — Windows
         # backslash paths get their backslashes eaten as escape chars
-        # (C:\Users\... -> C:Users...).
+        # (C:\Users\... -> C:Users...). #389: hooks run via
+        # `uv run --project <skill_root>` — bare python can resolve to 2.x
+        # (this machine: /usr/local/bin/python -> 2.7.17) and kill every
+        # registered hook; uv uses the skill's own project venv (python 3.11+).
+        # skill_root is the CANONICAL skill install root (#269), never this
+        # module's location.
+        skill_root = hook_dir.parent
         p = (hook_dir / hook_file).as_posix()
-        return {"type": "command", "command": f"python {p}"}
+        return {"type": "command",
+                "command": f"uv run --project {skill_root.as_posix()} {p}"}
 
     def _ensure(entries: list, matcher: str, hook_file: str) -> tuple[list, bool]:
         new = [e for e in entries if e.get("matcher") == matcher]

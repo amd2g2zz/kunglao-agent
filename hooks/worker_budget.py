@@ -1088,7 +1088,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
         'additionalContext': (
             'per-claim cost cap reached: promotion_attempts >= 3. Fix: STOP '
             're-dispatching this claim — re-dispatch keeps rejecting by design. '
-            'Run python <skill>/scripts/failure_analysis_gate.py <ws> <claim> '
+            'Run uv run --project <skill> <skill>/scripts/failure_analysis_gate.py <ws> <claim> '
             '(answer the 3 questions), record the next method, then re-dispatch '
             '— or mark the claim DEFERRED / supersede it.'
         ),
@@ -1147,7 +1147,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
         'additionalContext': (
             'heartbeat NOT registered / STALE — dispatching without monitoring '
             'is the #1 recurring failure. Fix BEFORE dispatching: run '
-            'python <skill>/scripts/hook_activation.py <ws> --heartbeat-on, '
+            'uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on, '
             'then register the cron (CronCreate */5 * * * * with the heartbeat '
             'loop prompt, or /loop 5m) so monitoring ticks before the worker '
             'starts.'
@@ -1156,7 +1156,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     'drift': {
         'additionalContext': (
             'plan drift detected (plan files lag reality). Fix: run '
-            'python <skill>/scripts/plan_drift_detector.py <ws> --active-only '
+            'uv run --project <skill> <skill>/scripts/plan_drift_detector.py <ws> --active-only '
             'to list the drifted items, then update global_plan.txt and/or '
             'runs/plan-C*.md to match what the run actually does (new claim, '
             'dropped step, superseded plan) — record the deviation reasoning — '
@@ -1166,7 +1166,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     'health': {
         'additionalContext': (
             'convergence loop unhealthy (STALLED / SPINNING). Fix: run '
-            'python <skill>/scripts/convergence_health.py <ws> for the '
+            'uv run --project <skill> <skill>/scripts/convergence_health.py <ws> for the '
             'diagnostic — STALLED: re-prime the loop (workers/heartbeat alive? '
             'claim actually in progress?); SPINNING: STOP dispatching and '
             'reconcile what is being re-done (usually a missing '
@@ -1179,7 +1179,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             '"## backtrack" block to the stuck worker\'s '
             'runs/worker-status-*.md (decision: redispatch / escalate / '
             'retry_different + reason + new_approach), or resolve the stall '
-            'directly, then re-run python <skill>/scripts/backtrack_gate.py '
+            'directly, then re-run uv run --project <skill> <skill>/scripts/backtrack_gate.py '
             '<ws> to confirm clean before re-dispatching.'
         ),
     },
@@ -1209,7 +1209,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'specialist agent for this claim (claim task domain x sample '
             'features vs the mechanical trigger table in agents/*.md '
             'frontmatter) but the dispatch sends a different work agent. Fix: '
-            'run python <skill>/scripts/route_capability.py --features-file '
+            'run uv run --project <skill> <skill>/scripts/route_capability.py --features-file '
             '<probe.json> --claim <C-NN> --workspace <ws> --json, dispatch the '
             'recommended agent_type (ghidra-light / go-symbols / floss-filter '
             '/ pefile-signature / verdict-scorer), or add '
@@ -1316,7 +1316,7 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
     if not hb.exists():
         return (False,
                 'heartbeat NOT registered. BEFORE dispatching, run:\n'
-                '  python <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n'
+                '  uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n'
                 '  CronCreate */5 * * * * <heartbeat_loop_prompt.py output>\n'
                 '§6.1b v1.9.28: dispatching a task != monitoring started.')
     age, last_str = _age(hb)

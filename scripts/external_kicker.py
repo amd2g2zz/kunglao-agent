@@ -189,8 +189,13 @@ def ensure_project_hooks(settings: dict, hook_dir: str) -> tuple[dict, int]:
     """
     def _canonical(matcher: str, hook_file: str) -> dict:
         p = (Path(hook_dir) / hook_file).as_posix()  # POSIX: hooks run via sh -c
+        # #389: hooks run via `uv run --project <skill_root>` — bare python
+        # can resolve to 2.x (this machine: /usr/local/bin/python -> 2.7.17)
+        # and kill every re-registered hook; uv uses the skill's project venv.
+        skill_root = Path(hook_dir).parent.as_posix()
         return {"matcher": matcher,
-                "hooks": [{"type": "command", "command": f"python {p}"}]}
+                "hooks": [{"type": "command",
+                           "command": f"uv run --project {skill_root} {p}"}]}
 
     hooks = dict(settings.get("hooks") or {})
     appended = 0

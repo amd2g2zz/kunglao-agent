@@ -41,7 +41,7 @@ workers get no reminder (silent by default).
 Wiring (in .claude/settings.json PostToolUse, Agent matcher — alongside
 worker_budget):
   {"matcher": "Agent", "hooks": [{"type": "command",
-    "command": "python <skill_root>/hooks/worker_pulse.py"}]}
+    "command": "uv run --project <skill_root> <skill_root>/hooks/worker_pulse.py"}]}
 """
 from __future__ import annotations
 

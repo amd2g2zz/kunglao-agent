@@ -11,6 +11,7 @@ GREEN targets (phase 3.5 criteria, E-init.1-4):
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -88,6 +89,58 @@ def test_hooks_idempotent(init_ws: Path, isolated_home) -> None:
     _run_init(init_ws)
     after = settings.read_text(encoding="utf-8")
     assert after == before, "second init modified settings.json (not idempotent)"
+
+
+# ---------- #389 F2: init-only re-run upgrades legacy bare-python entries ----------
+
+def _seed_hooks_json(init_ws: Path, pre_command: str, post_command: str) -> Path:
+    """settings.json copy carrying one Agent worker_budget entry per event."""
+    target = init_ws / "seeded-settings.json"
+    target.write_text(json.dumps({"hooks": {
+        "PreToolUse": [{"matcher": "Agent",
+                        "hooks": [{"type": "command", "command": pre_command}]}],
+        "PostToolUse": [{"matcher": "Agent",
+                         "hooks": [{"type": "command", "command": post_command}]}],
+    }}, indent=2, ensure_ascii=False), encoding="utf-8")
+    return target
+
+
+def test_init_rerun_upgrades_legacy_bare_python_hook(init_ws: Path, isolated_home) -> None:
+    """#389 F2: init hook deployment REPLACES a legacy bare-python
+    worker_budget entry with the uv form — the same-name skip must not leave
+    the stale entry (bare python is 2.x on this machine)."""
+    hook_file = ROOT / "hooks" / "worker_budget.py"
+    uv_form = f"uv run --project {ROOT.as_posix()} {hook_file.as_posix()}"
+    legacy = f"python {hook_file.as_posix()}"
+    hooks_json = _seed_hooks_json(init_ws, legacy, legacy)
+    r = _run_init(init_ws, ["--hooks-json", str(hooks_json)])
+    assert r.returncode == 0, f"init failed: {r.stderr}"
+    data = json.loads(hooks_json.read_text(encoding="utf-8"))
+    for event in ("PreToolUse", "PostToolUse"):
+        entries = data["hooks"][event]
+        assert len(entries) == 1, f"{event}: replaced entry must stay in place (no append): {entries}"
+        assert entries[0]["hooks"][0]["command"] == uv_form, \
+            f"{event}: legacy entry not upgraded: {entries[0]['hooks'][0]['command']}"
+
+
+def test_init_rerun_keeps_uv_form_hook_untouched(init_ws: Path, isolated_home) -> None:
+    """#389 F2 pin: an already-uv worker_budget entry survives re-running the
+    init hook deployment byte-identical (fixed point, no duplicate append)."""
+    hook_file = ROOT / "hooks" / "worker_budget.py"
+    uv_form = f"uv run --project {ROOT.as_posix()} {hook_file.as_posix()}"
+    hooks_json = _seed_hooks_json(init_ws, uv_form, uv_form)
+    r1 = _run_init(init_ws, ["--hooks-json", str(hooks_json)])
+    assert r1.returncode == 0, f"init failed: {r1.stderr}"
+    after_first = hooks_json.read_text(encoding="utf-8")
+    # --force: an init-only re-run on an initialized workspace resumes and
+    # never reaches deploy_hooks; the rebuild path re-runs it.
+    r2 = _run_init(init_ws, ["--force", "--hooks-json", str(hooks_json)])
+    assert r2.returncode == 0, f"second init failed: {r2.stderr}"
+    assert hooks_json.read_text(encoding="utf-8") == after_first, \
+        "re-run modified a healthy uv-form entry (not idempotent)"
+    data = json.loads(hooks_json.read_text(encoding="utf-8"))
+    assert len(data["hooks"]["PreToolUse"]) == 1, "PreToolUse duplicated on re-run"
+    assert len(data["hooks"]["PostToolUse"]) == 1, "PostToolUse duplicated on re-run"
 
 
 def test_state_hash_drift_warns(init_ws: Path) -> None:

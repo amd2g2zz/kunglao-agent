@@ -33,7 +33,7 @@ Design (mirrors dispatch_gate / env_check_gate, inject-only):
 Wiring (in .claude/settings.json PreToolUse, Agent matcher — registered
 idempotently by scripts/wire_up_settings.py alongside dispatch_gate):
   {"matcher": "Agent", "hooks": [{"type": "command",
-    "command": "python <skill_root>/hooks/recall_inject.py"}]}
+    "command": "uv run --project <skill_root> <skill_root>/hooks/recall_inject.py"}]}
 """
 from __future__ import annotations
 

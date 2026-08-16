@@ -117,6 +117,9 @@ HASH_RE = re.compile(r"state_hash=([0-9a-f]{64})")
 REVIEW_HOOK_TEMPLATE = _SCRIPT_DIR.parent / ".claude" / "git-hooks" / "pre-commit"
 REVIEW_KEY_PLACEHOLDER = "__KUNGLAO_REVIEW_KEY__"
 REVIEW_KEY_NAME = "kunglao-review.key"
+# #389: the review-gate hook runs via `uv run --project <skill_root>` — the
+# skill root is stamped at install time (same stamp-once pattern as the key).
+SKILL_ROOT_PLACEHOLDER = "__KUNGLAO_SKILL_ROOT__"
 
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"  # #276: defaults to 0 (disabled)
 AGENT_TEAMS_STATE_LINE = "agent_teams_flag=0 (default disabled)"
@@ -546,15 +549,28 @@ def scaffold_mcp(ws: Path) -> str:
 
 
 def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path) -> tuple[list, bool]:
-    """Same-named hook command already present under the matcher → skip (idempotent); else append."""
+    """Same-named hook command already present under the matcher → skip (idempotent); else append.
+
+    #389: hooks run via `uv run --project <skill_root>` — bare python can
+    resolve to 2.x and kill every registered hook; uv uses the skill venv.
+    Same-name is not enough: a legacy bare-python entry with the same name
+    must be REPLACED in place (position kept, no duplicate append) — the
+    fixed-point pattern shared with external_kicker._canonical.
+    """
+    skill_root = hook_dir.parent.as_posix()
+    command = f"uv run --project {skill_root} {(hook_dir / hook_file).as_posix()}"
+    canonical = {"matcher": matcher, "hooks": [{"type": "command", "command": command}]}
     new = [e for e in entries if e.get("matcher") == matcher]
     other = [e for e in entries if e.get("matcher") != matcher]
-    command = f"python {(hook_dir / hook_file).as_posix()}"
-    for e in new:
+    for idx, e in enumerate(new):
         for h in e.get("hooks", []):
             if h.get("command", "").replace("\\", "/").rsplit("/", 1)[-1] == hook_file:
-                return other + new, False
-    new.append({"matcher": matcher, "hooks": [{"type": "command", "command": command}]})
+                if h.get("command", "") == command:
+                    return other + new, False  # canonical form already — fixed point
+                replaced = list(new)
+                replaced[idx] = canonical  # legacy form → replace in place
+                return other + replaced, False
+    new.append(canonical)
     return other + new, True
 
 
@@ -618,11 +634,17 @@ def install_git_hooks(ws: Path, home: Path | None = None) -> tuple[bool, str]:
     """#367: install the review-gate pre-commit hook with install-time stamping.
 
     Copies the tracked template (.claude/git-hooks/pre-commit) to
-    <ws>/.git/hooks/pre-commit, substituting the installer's
-    $HOME/.claude/kunglao-review.key (resolved ONCE, here — by the human
-    running the installer) for the __KUNGLAO_REVIEW_KEY__ placeholder, and
-    chmod +x. The stamped path is a literal in the installed hook: commit-time
-    HOME/USERPROFILE redirection cannot alter it (#147 anti-forgery
+    <ws>/.git/hooks/pre-commit, substituting two install-time placeholders:
+      - the installer's $HOME/.claude/kunglao-review.key (resolved ONCE,
+        here — by the human running the installer) for the
+        __KUNGLAO_REVIEW_KEY__ placeholder;
+      - this script's skill root (_SCRIPT_DIR.parent) for the
+        __KUNGLAO_SKILL_ROOT__ placeholder — #389: the gate runs via
+        `uv run --project <skill_root>`, which removes both the bare-python
+        2.x hazard and the $repo/scripts/ dependency (the workspace is not
+        the skill repo).
+    The stamped paths are literals in the installed hook: commit-time
+    HOME/USERPROFILE redirection cannot alter them (#147 anti-forgery
     preserved). Fail-closed: if the key is absent the hook is still
     installed (its placeholder-residue/missing-key branches block commits
     until a key exists); the human is guided to review_gate.py key-init.
@@ -637,29 +659,43 @@ def install_git_hooks(ws: Path, home: Path | None = None) -> tuple[bool, str]:
         return False, f"template missing: {REVIEW_HOOK_TEMPLATE}"
     home = Path(home) if home is not None else Path.home()
     key_path = (home / ".claude" / REVIEW_KEY_NAME).resolve()
+    skill_root = _SCRIPT_DIR.parent.resolve()
     text = REVIEW_HOOK_TEMPLATE.read_text(encoding="utf-8")
-    if REVIEW_KEY_PLACEHOLDER not in text:
-        return False, (f"template carries no {REVIEW_KEY_PLACEHOLDER} "
-                       "placeholder — refusing to install an unstampable hook")
-    # The comparison guard uses the placeholder BOTH sides: replace only the
-    # ASSIGNMENT (right side of key=...), never the [ "$key" = ... ] literal —
-    # replacing all occurrences would neuter the installed copy's own
-    # unstamped-hook fail-closed branch into a tautology.
+    for placeholder in (REVIEW_KEY_PLACEHOLDER, SKILL_ROOT_PLACEHOLDER):
+        if placeholder not in text:
+            return False, (f"template carries no {placeholder} "
+                           "placeholder — refusing to install an unstampable hook")
+    # The comparison guards use the placeholder BOTH sides: replace only the
+    # ASSIGNMENTS (right side of key=... / skill_root=...), never the
+    # [ "$key" = ... ] / [ "$skill_root" = ... ] literals — replacing all
+    # occurrences would neuter the installed copy's own unstamped-hook
+    # fail-closed branches into tautologies.
     stamped = re.sub(
         rf'key="{REVIEW_KEY_PLACEHOLDER}"',
         f'key="{key_path.as_posix()}"',
         text, count=1)
+    stamped = re.sub(
+        rf'skill_root="{SKILL_ROOT_PLACEHOLDER}"',
+        f'skill_root="{skill_root.as_posix()}"',
+        stamped, count=1)
     if REVIEW_KEY_PLACEHOLDER in re.search(
             r'key="[^"\n]*"', stamped).group(0):
-        return False, "internal error: stamp failed (placeholder not replaced)"
+        return False, "internal error: key stamp failed (placeholder not replaced)"
+    if SKILL_ROOT_PLACEHOLDER in re.search(
+            r'skill_root="[^"\n]*"', stamped).group(0):
+        return False, "internal error: skill-root stamp failed (placeholder not replaced)"
     target = git_dir / "hooks" / "pre-commit"
     target.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(target, stamped)
     target.chmod(0o755)
-    msg = f"review-gate pre-commit installed -> {target} (key path stamped: {key_path.as_posix()})"
+    msg = (f"review-gate pre-commit installed -> {target} "
+           f"(skill root stamped: {skill_root.as_posix()}; "
+           f"key path stamped: {key_path.as_posix()})")
     if not key_path.is_file():
         msg += (f"; key ABSENT — create it (human-run): "
-                f"python scripts/review_gate.py key-init {key_path.as_posix()}")
+                f"uv run --project {skill_root.as_posix()} "
+                f"{skill_root.as_posix()}/scripts/review_gate.py key-init "
+                f"{key_path.as_posix()}")
     return True, msg
 
 

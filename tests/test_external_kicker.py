@@ -9,6 +9,7 @@ kill->kick E2E is a documented manual step in the PR).
 """
 import json
 import os
+import shutil
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -121,13 +122,30 @@ def test_ensure_project_hooks_exact_commands(tmp_path):
     hook_dir = str(tmp_path / "hooks")
     out, _ = ensure_project_hooks({}, hook_dir)
     commands = [h["command"] for ev in out["hooks"].values() for e in ev for h in e["hooks"]]
+    # #389: hooks run via `uv run --project <skill_root>` (user directive —
+    # bare `python` can resolve to 2.x and kill every hook; this machine's
+    # /usr/local/bin/python is 2.7.17). Script paths stay absolute inside the
+    # skill's hooks dir (#269); the project root is the skill root.
+    skill_root = Path(hook_dir).parent.as_posix()
     assert commands == [
-        f"python {Path(hook_dir).as_posix()}/worker_budget.py",
-        f"python {Path(hook_dir).as_posix()}/dispatch_gate.py",
-        f"python {Path(hook_dir).as_posix()}/heartbeat_touch.py",
-        f"python {Path(hook_dir).as_posix()}/worker_budget.py",
-        f"python {Path(hook_dir).as_posix()}/worker_pulse.py",
+        f"uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_budget.py",
+        f"uv run --project {skill_root} {Path(hook_dir).as_posix()}/dispatch_gate.py",
+        f"uv run --project {skill_root} {Path(hook_dir).as_posix()}/heartbeat_touch.py",
+        f"uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_budget.py",
+        f"uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_pulse.py",
     ]
+
+
+def test_ensure_project_hooks_uv_on_this_machine(tmp_path):
+    """#389 machine-behavior: the built hook commands must run via uv (bare
+    `python` is 2.x here — the repro), and uv must be resolvable on this
+    machine."""
+    assert shutil.which("uv"), "uv must be resolvable on this machine"
+    out, _ = ensure_project_hooks({}, str(tmp_path / "hooks"))
+    commands = [h["command"] for ev in out["hooks"].values() for e in ev for h in e["hooks"]]
+    assert commands, "ensure_project_hooks must emit hook commands"
+    assert all(c.startswith("uv run --project ") for c in commands), commands
+    assert not any(c.split()[0] in ("python", "python3") for c in commands), commands
 
 
 def test_ensure_project_hooks_replaces_legacy_backslash_entry(tmp_path):

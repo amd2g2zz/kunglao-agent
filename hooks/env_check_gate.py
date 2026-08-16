@@ -37,7 +37,7 @@ Design (mirrors dispatch_gate.py, narrow + low-IO):
 Wiring (in ~/.claude/settings.json PreToolUse, Agent matcher — registered by
 scripts/wire_up_settings.py):
   {"matcher": "Agent", "hooks": [{"type": "command",
-    "command": "python <skill_root>/hooks/env_check_gate.py"}]}
+    "command": "uv run --project <skill_root> <skill_root>/hooks/env_check_gate.py"}]}
 """
 from __future__ import annotations
 
@@ -73,7 +73,7 @@ def _check_init_complete(ws: Path) -> tuple[bool, str]:
     if ok:
         return True, ""
     return False, (
-        f"{detail}. Run: python {SKILL_DIR}/scripts/kunglao-init.py {ws} "
+        f"{detail}. Run: uv run --project {SKILL_DIR} {SKILL_DIR}/scripts/kunglao-init.py {ws} "
         f"--type <windows|linux|android>"
     )
 
@@ -102,7 +102,7 @@ def _guidance(ws: Path, flag_val: str) -> str:
         f"(cold-start-contract.md Phase 0).\n"
         f"Alternative: dispatch an independent worker via the Agent tool; do not enter the teammate channel.\n"
         f"Fix: unset {FLAG_NAME} in the launching shell, then RESTART the "
-        f"session; re-run python {SKILL_DIR}/scripts/env_check.py {ws} and "
+        f"session; re-run uv run --project {SKILL_DIR} {SKILL_DIR}/scripts/env_check.py {ws} and "
         f"get OVERALL=PASS before any further dispatch."
     )
 

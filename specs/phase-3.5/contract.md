@@ -66,9 +66,10 @@ warning); 2 = Phase 3 validation failure (marker missing or seed < 3).
 `~/.claude/settings.json`. Targets only: ① a copy named by `--hooks-json
 <path>` (created if absent); ② `<workspace>/.claude/settings.json` (if it
 exists); with neither → skip with a stated reason. Entry format matches
-hook_activation.py: `{"type":"command","command":"python
-<hooks-dir>/worker_budget.py"}` (POSIX paths,
-PreToolUse+PostToolUse matcher=Agent, DESIGN L104).
+hook_activation.py: `{"type":"command","command":"uv run --project
+<skill_root> <skill_root>/hooks/worker_budget.py"}` (POSIX paths,
+PreToolUse+PostToolUse matcher=Agent, DESIGN L104; #389: hooks run via uv,
+never bare python).
 
 ## 3. State machine
 

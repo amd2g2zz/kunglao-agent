@@ -9,7 +9,9 @@ worktree path that died with the worktree — 8 hooks went silent at once).
 from __future__ import annotations
 
 import json
+import os
 import pathlib
+import shutil
 import sys
 from pathlib import Path
 
@@ -118,13 +120,36 @@ def test_wire_up_hook_paths_point_to_canonical_skill(tmp_path, fake_home):
     wire_up_settings(workspace=ws)
     settings = json.loads((ws / ".claude" / "settings.json").read_text(encoding="utf-8"))
     canonical = (fake_home / ".claude" / "skills" / "kunglao-agent" / "hooks").as_posix()
+    skill_root = (fake_home / ".claude" / "skills" / "kunglao-agent").as_posix()
     ws_posix = ws.as_posix()
     for cmd in _collect_commands(settings):
-        hook_path = cmd.removeprefix("python ").replace("\\", "/")
-        assert hook_path.startswith(canonical), \
+        # #389: commands are `uv run --project <skill_root> <script path>` —
+        # uv replaces bare python (2.x risk); the script path stays absolute
+        # inside the canonical skill hooks dir (#269).
+        assert cmd.startswith(f"uv run --project {skill_root} "), \
+            f"hook command must invoke uv with the canonical skill root: {cmd}"
+        script_path = cmd.replace("\\", "/").split()[-1]
+        assert script_path.startswith(canonical), \
             f"hook command must point into the canonical skill hooks dir: {cmd}"
-        assert ws_posix not in hook_path, \
+        assert ws_posix not in script_path, \
             f"hook command must never be workspace/worktree-bound: {cmd}"
+
+
+def test_wire_up_commands_use_uv_on_this_machine(tmp_path, fake_home):
+    """#389 machine-behavior: the wired commands must run via uv (bare
+    `python` here is 2.7.17 — the repro — and kills every registered hook),
+    and uv must actually be resolvable on this machine."""
+    assert shutil.which("uv"), "uv must be resolvable on this machine"
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    sys.path.insert(0, str(SCRIPTS))
+    from wire_up_settings import wire_up_settings
+    wire_up_settings(workspace=ws)
+    settings = json.loads((ws / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    cmds = _collect_commands(settings)
+    assert cmds, "wire_up must emit hook commands"
+    assert all(c.startswith("uv run --project ") for c in cmds), cmds
+    assert not any(c.split()[0] in ("python", "python3") for c in cmds), cmds
 
 
 def test_wire_up_cwd_probe(tmp_path, fake_home, monkeypatch):
@@ -177,10 +202,12 @@ def _write_project_settings(ws: Path, hook_files: list[str] | None = None) -> Pa
     p = ws / ".claude" / "settings.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     pre = [{"matcher": "Agent", "hooks": [
-        {"type": "command", "command": f"python {SKILL_HOOKS / hf}"}
+        {"type": "command",
+         "command": f"uv run --project {ROOT.as_posix()} {SKILL_HOOKS / hf}"}
         for hf in hook_files]},
         {"matcher": "Bash", "hooks": [
-            {"type": "command", "command": f"python {SKILL_HOOKS / 'heartbeat_touch.py'}"}]}]
+            {"type": "command",
+             "command": f"uv run --project {ROOT.as_posix()} {SKILL_HOOKS / 'heartbeat_touch.py'}"}]}]
     p.write_text(json.dumps({"hooks": {"PreToolUse": pre, "PostToolUse": []}}),
                  encoding="utf-8")
     return p
