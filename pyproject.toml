@@ -3,7 +3,7 @@ name = "kunglao-agent"
 version = "0.1"
 description = "Convergence-driven reverse-engineering orchestrator — Claude Code skill (issue #80 release contract)"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 # Declared set = modules actually imported by scripts/ hooks/ tools/ tests/
 # (verified by tests/test_release_receipt.py::test_pyproject_declares_imported_dependencies).
@@ -22,6 +22,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    # tomllib is 3.11+ stdlib; tests run on the 3.10 floor so the tomli
+    # backfill is a dev-only dependency (issue #352).
+    "tomli>=2.0; python_version < '3.11'",
 ]
 
 # NOTE: pytest configuration lives in pytest.ini (single source of truth).

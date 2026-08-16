@@ -88,7 +88,7 @@ def test_all_declared_assets_exist_in_repo():
 
 def test_pyproject_declares_imported_dependencies():
     text = PYPROJECT.read_text(encoding="utf-8")
-    assert 'requires-python = ">=3.11"' in text
+    assert 'requires-python = ">=3.10"' in text
     for dep in ("PyYAML", "pefile", "capstone", "jsonschema", "pytest"):
         assert dep in text, f"pyproject missing dependency {dep}"
     assert _manifest()["version"] in text, "pyproject version != manifest version"

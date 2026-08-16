@@ -24,7 +24,10 @@ from __future__ import annotations
 
 import json
 import re
-import tomllib
+try:  # tomllib is 3.11+ stdlib; tomli backfill keeps tests on the 3.10 floor (#352)
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 from pathlib import Path
 
 import yaml

@@ -7,7 +7,7 @@
 schema_version: "1.0"
 project: kunglao-agent
 version: "0.1"             # MUST equal pyproject.toml [project].version (receipt-checked)
-requires_python: ">=3.11"
+requires_python: ">=3.10"
 
 dependencies:
   # Runtime deps actually imported by the codebase (see pyproject.toml).
