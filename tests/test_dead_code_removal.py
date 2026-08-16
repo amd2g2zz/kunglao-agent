@@ -14,8 +14,8 @@ complete AND harmless:
    removed the docs/superpowers/ plans, docs/devlog/, docs/refactor/ and
    memory/ trees entirely.)
 4. The deliberately-KEPT neighbors survive (over-deletion guard):
-   - tools/tool-search.py + tools/pipelines/recipes/ — independent catalog
-     query + plan templates (#318 retention decision: "kept as a possible tool");
+   - tools/tool-search.py — independent catalog query (#318 retention
+     decision: "kept as a possible tool");
    - scripts/kunglao_log.py — only the kunglao-log.py wrapper was dead
      (and it never existed in git);
    - tests/test_v1_8_enforcement_gates.py — the canonical suite; the SKILL.md
@@ -52,7 +52,6 @@ DELETED = [
 KEPT = [
     "tools/tool-search.py",
     "tests/test_tool_search.py",
-    "tests/test_recipes.py",
     "scripts/kunglao_log.py",
     "tests/test_kunglao_log.py",
     "tests/test_v1_8_enforcement_gates.py",
@@ -186,9 +185,14 @@ def test_kept_neighbors_survive() -> None:
     assert not missing, f"retained assets were over-deleted: {missing}"
 
 
-def test_recipes_catalog_kept() -> None:
-    """The five plan recipes stay (retained with tool-search per #318)."""
-    recipes = sorted((ROOT / "tools" / "pipelines" / "recipes").glob("*.yaml"))
-    assert {p.stem for p in recipes} == {
-        "crypto-decrypt", "go-recovery", "iat-chain", "stage-unpack", "syscall-chain",
-    }
+def test_recipes_dead_end_removed() -> None:
+    """#352: the plan-template dead end is deleted — recipes dirs + its
+    contract test must be gone (the #318 retention decision is superseded:
+    zero runtime consumers, only tests + an unreachable CLI surface)."""
+    assert not (ROOT / "tools" / "pipelines" / "recipes").exists(), (
+        "tools/pipelines/recipes/ must be deleted (#352: zero runtime consumers)")
+    assert not (ROOT / "pipelines" / "recipes").exists(), (
+        "pipelines/recipes/ must be deleted (#352: #282 placeholder for the "
+        "same dead end)")
+    assert not (ROOT / "tests" / "test_recipes.py").exists(), (
+        "tests/test_recipes.py must be deleted with the recipes (#352)")

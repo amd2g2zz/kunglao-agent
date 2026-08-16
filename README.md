@@ -170,7 +170,7 @@ The tool shelf: reusable analysis logic is absorbed as **registered tools** (mac
 | `crypto` | `crypto-tool` — 8 algorithms, stdlib-only: `chacha` (RFC + non-RFC), `xor-add`, `rolling-xor`, `lzss`, `lzma-raw`, `rsa-unpad`, `go-byte-transform`, `va-to-off`; all support `--reproduce` |
 | `ghidra` | 5 analyzeHeadless postScripts: recon / decompile-functions / vtable-struct / evidence-annotations / scan-pointer |
 | `static` | disasm-constant-check + syscall / stack-strings / overlay / PE / shellcode scanning CLIs |
-| `pipeline` | evidence-index builders + plan recipes (stage-unpack / crypto-decrypt / syscall-chain / iat-chain / go-recovery) |
+| `pipelines` | `build-evidence-index` — evidence index builder (evidence/_index.json + _INDEX.md) |
 | `aux` | legacy-PROVEN audit / golden capture / blind-coverage / cold-start metrics |
 
 Host emulation (T2) is deliberately NOT a shelf tool: qiling-based emulation is provided by the external `/malware-framework` skill, which kunglao workers invoke per the analysis principle instead of re-wrapping qiling.

@@ -22,10 +22,11 @@ Contract:
 6. Golden-invocation spot check of 3 tools: crypto-tool / yara-scan /
    sanitize-text — the documented usage must directly construct a working call
 7. Empty-shell disposition (#339 A): tools/frida/ and tools/t2/ must not
-   exist (true shells deleted); tools/pipelines/ contains recipes/*.yaml real
-   artifacts; dynamic/T2 capability is externally provided (mcp__frida__* +
-   mcp__x64dbg__* clearly pointed in the dynamic index; T2 simulation points
-   at the external skill /malware-framework)
+   exist (true shells deleted); tools/pipelines/ contains the real registered
+   tool build_evidence_index.py (#352 deleted the plan-template dead end —
+   zero runtime consumers); dynamic/T2 capability is externally provided
+   (mcp__frida__* + mcp__x64dbg__* clearly pointed in the dynamic index; T2
+   simulation points at the external skill /malware-framework)
 """
 from __future__ import annotations
 
@@ -205,10 +206,12 @@ def test_vacuum_shell_dirs_removed() -> None:
 
 
 def test_pipelines_dir_has_real_artifacts() -> None:
-    recipes = TOOLS / "pipelines" / "recipes"
-    assert recipes.is_dir(), "tools/pipelines/recipes/ must exist"
-    yamls = sorted(p.name for p in recipes.glob("*.yaml"))
-    assert len(yamls) == 5, f"expected 5 plan-recipe templates, got {yamls}"
+    """tools/pipelines/ must hold the real registered tool (#352 removed the
+    plan templates — zero runtime consumers; build-evidence-index remains)."""
+    tool = TOOLS / "pipelines" / "build_evidence_index.py"
+    assert tool.is_file(), "tools/pipelines/build_evidence_index.py must exist"
+    assert not (TOOLS / "pipelines" / "recipes").exists(), (
+        "tools/pipelines/recipes/ must be deleted (#352)")
 
 
 def test_external_capability_pointers_are_explicit() -> None:

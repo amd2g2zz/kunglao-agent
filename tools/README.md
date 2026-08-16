@@ -60,7 +60,7 @@ tools/
 ├── static/                # static category: static CLIs + shared common.py (#340 dual-module merge) + yara-rules/
 ├── ghidra/                # ghidra category: run_ghidra_postscript.py + postScript Java sources + job_store.py
 ├── auxiliary/             # auxiliary category: sanitize/audit/capture/measure tools
-└── pipelines/             # pipelines category: build_evidence_index.py + recipes/*.yaml plan templates
+└── pipelines/             # pipelines category: build_evidence_index.py
 ```
 
 6 capability domains:
@@ -79,13 +79,12 @@ tools/
 - **Frida dynamic instrumentation**: MCP `mcp__frida__*` + VM channel `192.168.20.128:1337`; hook templates in `templates/frida/`.
 - **x64dbg remote debugging**: MCP `mcp__x64dbg__*` (`connect_remote` only; all other calls forbidden on the host).
 - **T2 emulation/simulated execution** (Qiling/unicorn): external skill `/malware-framework`.
-- **plan orchestration templates**: `tools/pipelines/recipes/*.yaml` (pure-data recipes; instantiation wiring is future work).
 
 ### Vacuum-shell disposition record (#339)
 
 - `tools/frida/` (README only, no .py/.tmpl/.js/.yaml artifacts) → deleted; Frida capability is provided over MCP + VM channels, templates in `templates/frida/`.
 - `tools/t2/` (README only) → deleted; T2 emulation capability is provided by the external skill `/malware-framework`.
-- `tools/pipelines/` (README + 5 `recipes/*.yaml`) → kept; these are real artifacts (plan-recipe/1 templates).
+- `tools/pipelines/` (README + build_evidence_index.py) → kept (#352 deleted the 5 plan-generation templates — zero runtime consumers; the registered tool remains).
 
 ## Contract field meanings (each `_INDEX.yaml` entry)
 

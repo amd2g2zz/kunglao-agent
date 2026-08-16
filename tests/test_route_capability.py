@@ -5,8 +5,9 @@ Deterministic feature→capability router (same family as priority.py /
 feature_probe.py / tool-search.py). Inputs: feature_probe JSON (via
 --features-file or inline --features), claim context (--claim <id> [--register]
 or --claim-text), optional --workspace for state reads. Output: JSON/text
-{recommendation: {chain, confidence, alternatives}, rationale} or
---list-recipes catalog. The router creates NO new state files.
+{recommendation: {chain, confidence, alternatives}, rationale}. The router
+creates NO new state files (#352 removed the --list-recipes catalog surface —
+zero runtime consumers).
 
 Confidence formula (documented in the script docstring): max fired rule
 strength + 0.05 per claim/feature corroboration, capped 0.95; exact-signal
@@ -33,9 +34,6 @@ ARM = {"machine": "ARM64", "overlay": False, "entropy": 3.0,
        "string_density": 0.1, "import_hints": []}
 NEUTRAL = {"machine": "ARM64", "overlay": False, "entropy": 1.0,
            "string_density": 0.0, "import_hints": []}
-
-RECIPE_IDS = {"stage-unpack", "crypto-decrypt", "syscall-chain",
-              "iat-chain", "go-recovery"}
 
 
 def run_cli(*args):
@@ -244,12 +242,10 @@ def test_specialist_table_parsed_from_agents_dir():
 
 
 # ---------------------------------------------------------------------------
-# --list-recipes
+# #352: --list-recipes catalog surface removed (absence guard)
 # ---------------------------------------------------------------------------
 
-def test_list_recipes_lists_five():
+def test_list_recipes_flag_removed():
+    """#352: the recipe catalog surface is gone — the flag must not exist."""
     r = run_cli("--list-recipes", "--json")
-    assert r.returncode == 0, r.stderr
-    out = json.loads(r.stdout)
-    assert out["count"] == 5
-    assert {rec["id"] for rec in out["recipes"]} == RECIPE_IDS
+    assert r.returncode == 2  # argparse: unrecognized argument

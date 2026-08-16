@@ -67,7 +67,7 @@ Run the steps in order; any FAIL blocks the next step.
 
 1. **Probe the Python venv**: check activation (`$env:VIRTUAL_ENV` / `sys.prefix != sys.base_prefix` / `.venv` exists). Activated → record `venv=<path>` in `analysis_state.txt`. Not activated and `.venv/` missing → create it (`python -m venv .venv`), install dependencies (cryptography, pyyaml) into that venv only, verify with `python -c "import cryptography, yaml"`.
 
-2. **Probe the toolchain**: confirm the directory layout — `scripts/`, `hooks/`, `templates/` (`state/` state templates, `scripts/` script templates, `frida/` Frida templates), `tools/` (tool homes: `crypto/` `static/` `ghidra/` `frida/` `t2/` `auxiliary/`), `pipelines/recipes/` (plan orchestration recipes) — exist (`ls <SKILL_DIR>/scripts/`); Python + dependency libraries available; `convergence_check.py` executes.
+2. **Probe the toolchain**: confirm the directory layout — `scripts/`, `hooks/`, `templates/` (`state/` state templates, `scripts/` script templates, `frida/` Frida templates), `tools/` (tool homes: `crypto/` `static/` `ghidra/` `frida/` `t2/` `auxiliary/` `pipelines/`) — exist (`ls <SKILL_DIR>/scripts/`); Python + dependency libraries available; `convergence_check.py` executes.
 
 3. **Establish the cognition baseline**: write environment conclusions to `analysis_state.txt` (venv path, Python version, toolchain readiness, verified sample sha256, fixtures list). Every later cold start reads this baseline — do not re-probe.
 

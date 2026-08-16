@@ -47,8 +47,6 @@ with no registered tool stay as capability queries. agent_type = recommended
 specialist agent (issue #310) from the mechanical trigger table parsed out of
 the `triggers:` frontmatter of agents/*.md — claim task domain x sample
 features; None when no specialist fits (kunglao-worker allowed).
---list-recipes catalogs tools/pipelines/recipes/*.yaml (templates for plan
-generation, not executed here).
 
 Exit codes: 0 ok / 2 usage / 3 missing inputs.
 
@@ -57,7 +55,6 @@ Usage:
   python scripts/route_capability.py --features '{"machine":"AMD64"}' \
       --claim-text "decrypt" --json
   python scripts/route_capability.py --claim C-1 --workspace ws --json
-  python scripts/route_capability.py --list-recipes --json
 """
 from __future__ import annotations
 
@@ -96,8 +93,6 @@ CLAIM_KEYWORDS = {
 DYNAMIC_INTENT = ("vm", "run", "execute", "detonate")
 
 DEFAULT_INDEX = Path(__file__).resolve().parent.parent / "tools" / "_INDEX.yaml"
-DEFAULT_RECIPES_DIR = Path(__file__).resolve().parent.parent / "tools" / \
-    "pipelines" / "recipes"
 DEFAULT_TOOL_SEARCH = Path(__file__).resolve().parent.parent / "tools" / \
     "tool-search.py"
 DEFAULT_AGENTS_DIR = Path(__file__).resolve().parent.parent / "agents"
@@ -385,17 +380,6 @@ def route(features: dict, claim_text: str, index_path: Path,
             "agent_rationale": agent_rationale}
 
 
-def load_recipes(recipes_dir: Path) -> list[dict]:
-    """Catalog recipes: {id, title, description} per yaml, sorted by name."""
-    recipes = []
-    for p in sorted(recipes_dir.glob("*.yaml")):
-        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-        recipes.append({"id": data.get("id", p.stem),
-                        "title": data.get("title", ""),
-                        "description": data.get("description", "")})
-    return recipes
-
-
 def format_text(result: dict) -> str:
     rec = result["recommendation"]
     lines = [f"recommendation: chain=[{', '.join(rec['chain'])}] "
@@ -471,28 +455,6 @@ def _load_features(args: argparse.Namespace):
     return features, 0
 
 
-def _list_recipes(args: argparse.Namespace) -> int:
-    recipes_dir = Path(args.recipes_dir) if args.recipes_dir \
-        else DEFAULT_RECIPES_DIR
-    if not recipes_dir.is_dir():
-        print(f"error: recipes dir not found: {recipes_dir}", file=sys.stderr)
-        return 3
-    try:
-        recipes = load_recipes(recipes_dir)
-    except (OSError, yaml.YAMLError) as exc:
-        print(f"error: cannot read recipes in {recipes_dir}: {exc}",
-              file=sys.stderr)
-        return 3
-    if args.json:
-        print(json.dumps({"count": len(recipes), "recipes": recipes},
-                         ensure_ascii=False, indent=2))
-    else:
-        print(f"{len(recipes)} plan recipes:")
-        for rec in recipes:
-            print(f"  {rec['id']} — {rec['title']}")
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="deterministic feature→capability router "
@@ -517,20 +479,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--agents-dir", default=None,
                     help="agents dir with specialist trigger frontmatter "
                          "(default: agents/)")
-    ap.add_argument("--list-recipes", action="store_true",
-                    help="catalog tools/pipelines/recipes/*.yaml instead of "
-                         "routing")
-    ap.add_argument("--recipes-dir", default=None,
-                    help="recipes dir override (with --list-recipes)")
     ap.add_argument("--json", action="store_true",
                     help="emit JSON instead of text lines")
     args = ap.parse_args(argv)
 
-    if args.list_recipes:
-        return _list_recipes(args)
     if not args.features_file and not args.features:
-        print("error: --features-file or --features required "
-              "(or --list-recipes)", file=sys.stderr)
+        print("error: --features-file or --features required", file=sys.stderr)
         return 2
 
     features, code = _load_features(args)

@@ -8,6 +8,14 @@ release (see the mapping table at the end).
 
 ## [Unreleased]
 
+### Removed (plan-template dead end, #352)
+
+- 5 plan-generation templates under tools/pipelines/ — crypto-decrypt /
+  go-recovery / iat-chain / stage-unpack / syscall-chain — plus the
+  route_capability plan-catalog CLI surface and their contract test.
+  Audit: zero runtime consumers (read only by tests + an unreachable CLI
+  path); worker dispatch uses recommend_agent_type only (#352)
+
 ### Fixed (router runtime + decide INVALID enum, #370/#371)
 
 - kunglao.py router runtime fixes for 3 of 5 subcommands (#370) — `tick`
@@ -135,7 +143,6 @@ throughout by mechanical gates.
 - Crypto algorithm library, 8 algorithms + CLI — deduplicated 15+ scattered algorithm-identification logic (#285)
 - yara-scan / yara-gen — rule-based scanning and detection-rule generation (#313)
 - Frida dynamic templates + script generation templates — cfg-analyze/cfg-hook + decryption/disasm/stage-unpack, Windows path escaping made executable (#335)
-- 5 pipeline recipes — crypto-decrypt/go-recovery/iat-chain/stage-unpack/syscall-chain (#287)
 - capability router + deterministic tool lookup — sample feature probing routes to tools (#302)
 - Decompilation-artifact post-processing — C normalizer + z3 opaque-predicate resolution (#306)
 - Runtime knowledge recall — recall_inject hook injects references by claim features (#268)

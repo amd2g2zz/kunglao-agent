@@ -29,7 +29,6 @@
 | Frida dynamic instrumentation (hook/attach) | MCP `mcp__frida__*` + VM channel `192.168.20.128:1337` | `_index-dynamic.md`; hook templates in `templates/frida/` |
 | x64dbg remote debugging | MCP `mcp__x64dbg__*` (`connect_remote` only; everything else forbidden on the host) | `_index-dynamic.md` |
 | T2 emulation/simulated execution (Qiling/unicorn) | external skill `/malware-framework` | see the directory layout in [README.md](README.md) |
-| plan orchestration templates (recipes) | `tools/pipelines/recipes/*.yaml` (pure-data templates, not an executor) | `tools/pipelines/README.md` |
 
 ## Per-category index files
 

@@ -1,6 +1,6 @@
 # pipelines domain index (tool layer)
 
-> Domain: evidence-index/report pipeline tools. When a worker is dispatched to evidence registration, index building, or report generation tasks, read this file first, then load on demand. Contract field meanings are in [README.md](README.md); the machine contract is [_INDEX.yaml](_INDEX.yaml). Plan orchestration templates (recipes) live in `tools/pipelines/recipes/*.yaml` (pure data templates, not an executor — see `tools/pipelines/README.md`).
+> Domain: evidence-index/report pipeline tools. When a worker is dispatched to evidence registration, index building, or report generation tasks, read this file first, then load on demand. Contract field meanings are in [README.md](README.md); the machine contract is [_INDEX.yaml](_INDEX.yaml).
 
 ## Tool catalog
 
