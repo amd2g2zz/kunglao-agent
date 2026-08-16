@@ -112,7 +112,7 @@ release (see the mapping table at the end).
   (16-only) → Process.getModuleByName(mod).getExportByName(name), header
   comment notes Requires: frida >= 17 (#356)
 
-## [0.1] - 2026-08-14
+## [0.1] - 2026-08-16
 
 First public release: a convergence-driven reverse-engineering orchestration
 skill — with Claude Code as the only interface, it drives a malicious sample
@@ -135,7 +135,7 @@ throughout by mechanical gates.
 - plan-to-execute and tool-first gates — claim dispatch must carry an executable plan; text hitting tool capability keywords forces the tool path (#294)
 - specialist-first dispatch gate — agenttype mechanical validation, specialists before generalists (#310)
 - Executable oracle contract — verifier verification records must contain a machine_check (#332)
-- Three-type toolchain matrix + tools/_INDEX per-domain index — tool home directory, validate_index, per-domain registration and structural-integrity CI (#283)
+- tools/_INDEX per-domain index — tool home directory, validate_index, per-domain registration and structural-integrity CI (#283)
 - Static analysis toolset, 12 tools — binary-sweep/disasm-dump/stack-strings/go-buildinfo-carve/pe_analyze etc. (#278)
 - Ghidra toolset — 5 Java scripts + postScript wrappers absorbed into tools/ghidra/ (#293)
 - Ghidra async job protocol + binary diff — long tasks moved to background jobs + Bindiff (#308)

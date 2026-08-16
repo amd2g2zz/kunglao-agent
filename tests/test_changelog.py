@@ -29,7 +29,7 @@ def _changelog_text() -> str:
 def test_changelog_declares_v0_1():
     text = _changelog_text()
     assert "# Changelog" in text, "missing top-level Changelog heading"
-    assert "## [0.1] - 2026-08-14" in text, "missing [0.1] - 2026-08-14 section"
+    assert "## [0.1] - 2026-08-16" in text, "missing [0.1] - 2026-08-16 section"
     v01 = text.split("## [0.1]", 1)[1]
     for sub in ("### Added", "### Changed", "### Fixed"):
         assert sub in v01, f"missing {sub} subsection under [0.1]"
