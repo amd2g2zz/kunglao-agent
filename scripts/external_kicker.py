@@ -60,6 +60,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import wire_up_settings
+
 # D6: activation TTL from hook_activation.py DEFAULT_TTL_MINUTES — the tick
 # interval MUST stay below it or the TTL-expiry→next-tick gap silently closes
 # the gates (issue requirement).
@@ -81,8 +83,14 @@ KICKER_LOCK_FILE = ".kicker.lock"
 KICKER_PROMPT_FILE = ".kicker-prompt.txt"
 KICKER_LAST_FILE = ".kicker-last.json"
 
-# D2: the 5 entries wire_up_settings registers — same matchers, same command
-# shape (single hook per entry), same basename-dedupe semantic.
+# D2: the 5 entries the kicker re-registers — same matchers, same command
+# shape (single hook per entry), same basename-dedupe semantic. A DELIBERATE
+# narrow subset of the hook registry (wire_up_settings.WIRE_UP_HOOK_FILES):
+# the dead-session bootstrap chain. The (event, matcher) pairs stay explicit
+# — matchers are semantic (worker_budget fires Pre+Post, heartbeat_touch is
+# Bash-scoped). #381: the entry FILE SET is pinned to the registry via
+# wire_up_settings.derive_hook_subset at import — a registry rename/growth
+# raises loudly here instead of silently re-registering a stale set.
 KUNGLAO_HOOK_ENTRIES = [
     ("PreToolUse", "Agent", "worker_budget.py"),
     ("PreToolUse", "Agent", "dispatch_gate.py"),
@@ -90,6 +98,27 @@ KUNGLAO_HOOK_ENTRIES = [
     ("PostToolUse", "Agent", "worker_budget.py"),
     ("PostToolUse", "Agent", "worker_pulse.py"),
 ]
+
+# The registry files the kicker deliberately does NOT re-register: they are
+# deployment gates/injectors restored by hooks_selfcheck's full --wire-up
+# rebuild (step 0 of every tick) once the fresh session starts, and their
+# absence is gated by env_check's full-registry scan. Listed explicitly so
+# registry growth forces a conscious update here (#381).
+_KICKER_SKIP_FILES = frozenset({
+    "env_check_gate.py",    # env hard-gate — full --wire-up restores it
+    "recall_inject.py",     # recall injector — full --wire-up restores it
+    "state_anchor.py",      # state re-anchor — full --wire-up restores it
+    "completion_gate.py",   # Stop completion gate — full --wire-up restores it
+})
+_KICKER_ENTRY_FILES = frozenset(f for _, _, f in KUNGLAO_HOOK_ENTRIES)
+
+# #381 module-load contract check: the entry file set must exactly account
+# for the registry — drift raises HERE, on every import (tests and
+# production ticks alike), with the offending names in the message.
+wire_up_settings.derive_hook_subset(
+    wire_up_settings.WIRE_UP_HOOK_FILES,
+    include=_KICKER_ENTRY_FILES, skip=_KICKER_SKIP_FILES,
+    owner="external_kicker KUNGLAO_HOOK_ENTRIES")
 
 _STATUS_RE = re.compile(r"status:\s*(\S+)")
 

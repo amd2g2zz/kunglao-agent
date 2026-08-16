@@ -21,7 +21,8 @@ Steps executed (idempotent, all safe to re-run):
   7. heartbeat-check  — assert last_tick_ts < 35 min old
 
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
-1 = heartbeat stale or project hooks missing (LLM must act).
+1 = heartbeat stale, project hooks missing, or selfcheck failed (LLM must act;
+the report's per-step stderr tails carry the failure text).
 
 The report carries `action_taken` (issue #237): the orchestrator fills what
 convergence action this tick produced (dispatched/verified/solved/reactivated);
@@ -78,9 +79,14 @@ def run(script: str, ws: Path, *extra: str) -> dict:
             [sys.executable, str(SCRIPTS / script), str(ws), *extra],
             capture_output=True, text=True, timeout=60,
         )
-        return {"rc": r.returncode, "stdout": r.stdout.strip()[-300:]}
+        # stdout AND stderr tails both ride the report (#381): a crashed step
+        # (e.g. hooks_selfcheck import-time registry drift) prints its
+        # traceback to stderr — stdout-only storage dropped the failure text,
+        # leaving an rc=1 step mute in the report.
+        return {"rc": r.returncode, "stdout": r.stdout.strip()[-300:],
+                "stderr": r.stderr.strip()[-300:]}
     except Exception as exc:
-        return {"rc": -1, "stdout": f"EXC {exc}"}
+        return {"rc": -1, "stdout": f"EXC {exc}", "stderr": ""}
 
 
 def _renew_margin_low(ws: Path) -> bool:
@@ -131,13 +137,16 @@ def main(argv: list[str] | None = None) -> int:
 
     sc = report["selfcheck"].get("stdout", "")[:80]
     hb = report["heartbeat"].get("stdout", "")[:120]
+    rc_sc = report["selfcheck"].get("rc", -1)
     rc_renew = report["renew"].get("rc", -1)
     rc_hb = report["heartbeat"].get("rc", -1)
     action = report["action_taken"] or "(EMPTY — must be filled: what was dispatched/verified/resolved/reactivated)"
-    print(f"heartbeat_tick: {sc} | renew_rc={rc_renew} | {hb}")
+    print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | {hb}")
     print(f"action_taken: {action}")
     print(f"report: {out}")
-    return 0 if rc_hb == 0 and rc_renew == 0 else 1
+    # #381: selfcheck rc weighs in — a crashed selfcheck (registry drift at
+    # import, failed rebuild) must fail the tick, not ride it silently.
+    return 0 if rc_hb == 0 and rc_renew == 0 and rc_sc == 0 else 1
 
 
 if __name__ == "__main__":

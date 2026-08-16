@@ -14,6 +14,7 @@ tests/test_router_runtime.py, issue #370) against a scratch workspace.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TICK = ROOT / "scripts" / "heartbeat_tick.py"
+SCRIPTS = TICK.parent
 
 # Exact stdout line pinned by the issue body (#365).
 WARN_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
@@ -109,3 +111,64 @@ class TestRenewMarginLow:
         assert "renew_margin_low" not in report
         assert "[hooks] renewal margin low" not in stdout
         assert report["renew"]["rc"] == 0
+
+
+def _drifted_scratch_skill(tmp_path: Path) -> Path:
+    """Scratch copy of the tick chain scripts with a registry rename (#381).
+
+    scratch/scripts/wire_up_settings.py says heartbeat_touch_v2.py while
+    hooks_selfcheck's chain table still names heartbeat_touch.py — the exact
+    import-time ValueError a conscious-mirror gap produces. The tick resolves
+    SCRIPTS from its own __file__, so running the scratch copy drives the REAL
+    subprocess drift (no monkeypatch can reach a child process).
+    """
+    skill = tmp_path / "scratch_skill"
+    (skill / "scripts").mkdir(parents=True)
+    for f in ("heartbeat_tick.py", "hook_activation.py", "hooks_selfcheck.py",
+              "wire_up_settings.py", "reconcile_workers.py", "heartbeat.py"):
+        shutil.copy2(SCRIPTS / f, skill / "scripts" / f)
+    wu = skill / "scripts" / "wire_up_settings.py"
+    wu.write_text(
+        wu.read_text(encoding="utf-8").replace(
+            "heartbeat_touch.py", "heartbeat_touch_v2.py"),
+        encoding="utf-8")
+    return skill
+
+
+class TestTickSelfcheckFailure:
+    def test_tick_report_carries_selfcheck_failure(self, tmp_path):
+        """#381 F1: a drifted registry makes hooks_selfcheck crash at import —
+        the tick must surface that failure, not report success.
+
+        Pre-fix behavior: run() stores only the subprocess stdout tail, so the
+        ValueError traceback (stderr) is dropped from the report, and main()
+        weighs only renew/heartbeat rc — the crashed selfcheck leaves the tick
+        exiting 0. Silent drift through the tick path while the direct CLI is
+        loud. The ws is seeded healthy (fresh heartbeat + empty analysis
+        state) so selfcheck is the ONLY failing step: exit 1 must come from
+        the selfcheck, not from an unrelated stale heartbeat.
+        """
+        skill = _drifted_scratch_skill(tmp_path)
+        ws = _make_ws(tmp_path)
+        (ws / "analysis_state.txt").write_text("", encoding="utf-8")
+        (ws / "runs" / ".heartbeat.json").write_text(json.dumps({
+            "started_ts": _iso(datetime.now(timezone.utc)),
+            "last_tick_ts": _iso(datetime.now(timezone.utc))}),
+            encoding="utf-8")
+        r = subprocess.run(
+            [sys.executable, str(skill / "scripts" / "heartbeat_tick.py"), str(ws)],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=120,
+        )
+        report = json.loads(
+            (ws / "runs" / ".heartbeat-tick.json").read_text(encoding="utf-8"))
+        assert report["selfcheck"]["rc"] != 0, (
+            "a registry drift that crashes hooks_selfcheck must be visible "
+            f"in the report: {report['selfcheck']}")
+        assert "heartbeat_touch.py" in report["selfcheck"].get("stderr", ""), (
+            "the selfcheck failure text (stderr tail) must ride the report — "
+            "stdout-only storage drops the ValueError traceback: "
+            f"{report['selfcheck']}")
+        assert r.returncode == 1, (
+            "a failed selfcheck must fail the tick (exit 1 = LLM must act), "
+            f"not report success: rc={r.returncode}")

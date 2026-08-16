@@ -30,12 +30,37 @@ import sys
 import datetime
 from pathlib import Path
 
-KONG_HOOK_FILES = [
-    "heartbeat_touch.py",
-    "worker_budget.py",
-    "dispatch_gate.py",
-    "worker_pulse.py",
-]
+import wire_up_settings
+
+# #381: KONG_HOOK_FILES is a DELIBERATE narrow subset of the hook registry
+# (wire_up_settings.WIRE_UP_HOOK_FILES) — the mechanical liveness chain this
+# self-repair verifies (the 4 hooks from the v1.9.37 'heartbeat lost'
+# incident). The other registry files (env_check_gate/recall_inject/
+# state_anchor/completion_gate) are deployment gates whose drops env_check's
+# full-registry scan catches. Derived from the registry via
+# wire_up_settings.derive_hook_subset: a registry rename/growth raises
+# loudly at import instead of this script silently checking a stale 4.
+_KONG_CHAIN_FILES = (
+    "heartbeat_touch.py",   # liveness refresh on any tool use
+    "worker_budget.py",     # budget/tier enforcement
+    "dispatch_gate.py",     # dispatch contract gate
+    "worker_pulse.py",      # completion pulse
+)
+_KONG_SKIP_FILES = frozenset({
+    "env_check_gate.py",    # env hard-gate — env_check scans it
+    "recall_inject.py",     # recall injector — env_check scans it
+    "state_anchor.py",      # state re-anchor — env_check scans it
+    "completion_gate.py",   # Stop completion gate — env_check scans it
+})
+
+# #381: validate the subset tables against the registry (raises on drift) —
+# then build the ordered list from the chain tuple, which keeps this
+# script's historical check order.
+wire_up_settings.derive_hook_subset(
+    wire_up_settings.WIRE_UP_HOOK_FILES,
+    include=_KONG_CHAIN_FILES, skip=_KONG_SKIP_FILES,
+    owner="hooks_selfcheck KONG_HOOK_FILES")
+KONG_HOOK_FILES = list(_KONG_CHAIN_FILES)
 # User-global settings: NOT a deployment target since #258. Checked only to warn
 # about leftover kunglao hooks that should be migrated to the project level.
 USER_SETTINGS = Path.home() / ".claude" / "settings.json"
