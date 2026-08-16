@@ -1,9 +1,11 @@
-# kunglao-agent 背景知识（2026-08 安全重组外移）
+# kunglao-agent background knowledge (2026-08 safe-relocation move-out)
 
-> 本文件收纳 SKILL.md 中"背景知识/契约细节"类内容，SKILL.md 只留操作指针。
-> 安全重组原则：只外移不删除、只重组不重写、契约零改动（v1.9.23）。
+> This file collects the "background knowledge / contract detail" content
+> from SKILL.md; SKILL.md keeps only operational pointers.
+> Safe-relocation principles: move out but never delete, reorganize but never
+> rewrite, zero contract change (v1.9.23).
 
-## How a search session usually goes（迭代形状）
+## How a search session usually goes (iteration shape)
 
 You start with 1-2 seed questions (e.g. "is this packed?" / "where's
 the entry point?"). A search operator returns partial matches + new
@@ -26,7 +28,7 @@ That is the shape of a successful search. Your job is to recognize
 this shape when you're in the middle of it, and to not panic when
 iteration 3 looks nothing like iteration 8.
 
-## §6.1a 智能 ping 协议详细版（v1.9.21）
+## §6.1a smart ping protocol — detailed (v1.9.21)
 
 Pings must be SHORT and STRUCTURED so the reply is machine-parseable
 and feeds kunglao-agent's own improvement loop. Request format — one line,
@@ -42,11 +44,11 @@ Aggregate the log every 3rd tick (`python scripts/convergence_health.py` +
 `.ping-log.jsonl` view) to catch system-level drift, not just per-worker
 liveness.
 
-## §6.3 closeout checklist 详细版（v1.9.17，过早收敛防）
+## §6.3 closeout checklist — detailed (v1.9.17, premature-convergence guard)
 
 `CONVERGED` (no OPEN claims) means the CLAIM LOOP is done — NOT that the
 analysis is complete. Before declaring the session finished or writing "分析
-完成", walk this checklist; ANY unmet item means the session continues:
+完成" (analysis complete), walk this checklist; ANY unmet item means the session continues:
 
 1. **Verifier sign-off** — every note with `verify_status: pending` has a
    completed independent-verifier run (runs/*-verify-*.md with VERDICT).
@@ -68,28 +70,28 @@ analysis is complete. Before declaring the session finished or writing "分析
 A CONVERGED claim loop with unchecked items is NOT a finished analysis —
 it is a stalled delivery pipeline. When in doubt, err toward continuing.
 
-## §1d.2 worktree 源码挂载注意
+## §1d.2 worktree source-mount caveat
 
 Worker worktrees (`git worktree add`) check out only committed files — any
 gitignored source dirs (`mal-recon/*/work/` JAR decompile output, `javap/`,
 `.venv/`) are ABSENT from the worktree. When dispatching a worker that needs
 such sources, state the main-repo path explicitly in the dispatch prompt
-(e.g. "sources at `D:/works/samples/<date>/mal-recon/<sha>/work/sources/` —
+(e.g. "sources at `<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/mal-recon/<sha>/work/sources/` —
 worktree lacks it, use the main-repo copy"). Workers that hit a missing path
 must fall back to the main-repo copy and record the substitution in their
 status file, never block on it.
 
-## §1d.3 superseded-path 禁行声明（v1.9.19）
+## §1d.3 superseded-path ban declaration (v1.9.19)
 
 When a dispatch was stopped and RE-dispatched because the worker followed a
 superseded method (e.g. VM detonation replaced by Docker+jdb-mcp), the NEW
 dispatch prompt MUST open with an explicit prohibition of the dead path:
-`⚠️ 唯一合法路径：<new method>. 严禁 <old method>——上一 worker 因走 <old method> 被终止`.
+`⚠️ ONLY legal path: <new method>. FORBIDDEN: <old method> — the previous worker was terminated for taking <old method>`.
 Workers inherit stale context from the killed predecessor; without the
 explicit ban they re-walk the dead path (observed: C-010 worker "reverting
 VM snapshot" 40 min after VM path was cancelled).
 
-## Case book（完整故事 → references/case-book.md）
+## Case book (full stories → references/case-book.md)
 
 Five real failure modes, one line each. Full stories + v1.9 fix mapping →
 `references/case-book.md`.

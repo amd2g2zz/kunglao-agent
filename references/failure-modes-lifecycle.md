@@ -1,6 +1,6 @@
 ---
-name: kong-agent-failure-modes-lifecycle
-description: Lifecycle (F1-F6): dispatch / heartbeat / worker routing (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配) and the dispatcher needs the matching F-row + enforcement script.
+name: kunglao-agent-failure-modes-lifecycle
+description: Lifecycle (F1-F6): dispatch / heartbeat / worker routing (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配 — user shorthand for dumb/stuck/mismatch) and the dispatcher needs the matching F-row + enforcement script.
 metadata:
   type: reference
   parent: failure-modes.md
@@ -31,10 +31,10 @@ Failure modes covering the orchestrator's core dispatch loop:
 ## Run all enforcement gates (orchestrator /loop heartbeat)
 
 ```bash
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/progress_report.py <ws> && \
-  python C:/Users/hr/.claude/skills/kunglao-agent/scripts/stale_blocker_prune.py <ws> --dry-run && \
-  python C:/Users/hr/.claude/skills/kunglao-agent/scripts/claim_expiry.py <ws> && \
-  python C:/Users/hr/.claude/skills/kunglao-agent/scripts/plan_drift_detector.py <ws>
+python scripts/progress_report.py <ws> && \
+  python scripts/stale_blocker_prune.py <ws> --dry-run && \
+  python scripts/claim_expiry.py <ws> && \
+  python scripts/plan_drift_detector.py <ws>
 ```
 
 ---
@@ -76,7 +76,7 @@ report, exit 0 clean / 1 fired / 2 unreadable input.
 | PT3 | cost-semantic drift | "$52.85 — informational" in the declaration | cost figure + informational qualifier in one sentence (behavior #3 violation) |
 | PT4 | false completion | "task complete" + "Deferred (#10 #11 #12) — queued" | completion declaration + open-items-remaining signal (zero-open phrasing excluded) |
 
-Acceptance: all 4 fire on the issue #54 现象段 regression fixture; 0 fire on a
+Acceptance: all 4 fire on the issue #54 symptom-section regression fixture; 0 fire on a
 clean genuine completion. The detector is DETECTION only — the hard Stop-hook
 gate is #55's scope (completion_gate.py + task-oracle.yaml), which consumes
 this detector's JSON report.

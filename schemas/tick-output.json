@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "tick-output.json",
-  "title": "M5 MONITOR 输出契约(冻结 @ phase-5, module-design.md §M5.3)",
-  "description": "kunglao-monitor 的 JSON 输出。heartbeat 二分 + loop 对账 + agent watch + 健康判定。",
+  "title": "M5 MONITOR output contract (FROZEN @ phase-5, module-design.md §M5.3)",
+  "description": "JSON output of kunglao-monitor. Heartbeat binary check + loop reconciliation + agent watch + health assessment.",
   "type": "object",
   "required": ["ts", "heartbeat", "active_workers", "stale_agents", "gone_events", "help_requests", "stuck", "health", "next"],
   "properties": {

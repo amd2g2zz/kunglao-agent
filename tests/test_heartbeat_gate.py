@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 """tests/test_heartbeat_gate.py — heartbeat liveness gate F1 (#14, PRD M3).
 
-RED: gate 读 max(last_tick_ts, activity_ts) — tool 活跃(activity_ts)即使 cron 不 tick 也应 alive。
+RED: gate reads max(last_tick_ts, activity_ts) — an active tool (activity_ts) should be alive even if cron never ticked.
 """
 from __future__ import annotations
 
@@ -31,28 +32,28 @@ def _make_hb(ws: Path, last_tick_ts: str, activity_ts: str | None = None) -> Pat
 
 
 def test_activity_ts_keeps_gate_alive(tmp_path):
-    """F1 核心:cron 不 tick(last_tick 120min 前)但 tool 活跃(activity 1min 前)→ alive。"""
+    """F1 core: cron not ticking (last_tick 120min ago) but tool active (activity 1min ago) → alive."""
     state = _make_hb(tmp_path, last_tick_ts=_mins_ago(120), activity_ts=_mins_ago(1))
     alive, msg = wb.check_heartbeat_alive(state)
-    assert alive, f"应 alive(activity_ts fresh): {msg}"
+    assert alive, f"should be alive (activity_ts fresh): {msg}"
 
 
 def test_both_stale_rejected(tmp_path):
-    """两字段都 stale(120min)→ STALE(正确拒绝保留)。"""
+    """both fields stale (120min) → STALE (correctly refuses to keep)."""
     state = _make_hb(tmp_path, last_tick_ts=_mins_ago(120), activity_ts=_mins_ago(120))
     alive, msg = wb.check_heartbeat_alive(state)
-    assert not alive, "两字段都 stale 应拒绝"
+    assert not alive, "both fields stale must reject"
 
 
 def test_cron_only_still_alive(tmp_path):
-    """回归:cron tick 新(两字段都 1min 前)→ 仍 alive。"""
+    """Regression: fresh cron tick (both fields 1min ago) → still alive."""
     state = _make_hb(tmp_path, last_tick_ts=_mins_ago(1), activity_ts=_mins_ago(1))
     alive, _ = wb.check_heartbeat_alive(state)
     assert alive
 
 
 def test_no_activity_field_legacy_still_works(tmp_path):
-    """legacy .heartbeat.json 无 activity_ts 字段 → 按 last_tick_ts 判(向后兼容)。"""
+    """legacy .heartbeat.json without activity_ts field → judged by last_tick_ts (backward compatible)."""
     state = _make_hb(tmp_path, last_tick_ts=_mins_ago(1), activity_ts=None)
     alive, _ = wb.check_heartbeat_alive(state)
     assert alive

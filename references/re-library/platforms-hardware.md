@@ -1,4 +1,4 @@
-# CTF Reverse - Hardware and Advanced Architecture Reversing
+# Hardware and Advanced Architecture Reversing
 
 HD44780 LCD GPIO reconstruction, RISC-V advanced extensions and debugging, ARM64/AArch64 reversing and exploitation.
 
@@ -9,9 +9,9 @@ HD44780 LCD GPIO reconstruction, RISC-V advanced extensions and debugging, ARM64
   - [Privileged Modes](#privileged-modes)
   - [RISC-V Debugging](#risc-v-debugging)
 - [ARM64/AArch64 Reversing and Exploitation](#arm64aarch64-reversing-and-exploitation)
-- [MIPS64 Cavium OCTEON Coprocessor 2 Crypto (SEC-T CTF 2017)](#mips64-cavium-octeon-coprocessor-2-crypto-sec-t-ctf-2017)
-- [EFM32 ARM Microcontroller MMIO AES (SEC-T CTF 2017)](#efm32-arm-microcontroller-mmio-aes-sec-t-ctf-2017)
-- [MBR/Bootloader Reversing with QEMU + GDB (Square CTF 2017)](#mbrbootloader-reversing-with-qemu--gdb-square-ctf-2017)
+- [MIPS64 Cavium OCTEON Coprocessor 2 Crypto](#mips64-cavium-octeon-coprocessor-2-crypto)
+- [EFM32 ARM Microcontroller MMIO AES](#efm32-arm-microcontroller-mmio-aes)
+- [MBR/Bootloader Reversing with QEMU + GDB](#mbrbootloader-reversing-with-qemu--gdb)
 
 ---
 
@@ -101,7 +101,7 @@ riscv64-linux-gnu-gdb -ex 'target remote :1234' ./binary
 
 ## ARM64/AArch64 Reversing and Exploitation
 
-AArch64 (ARM 64-bit) appears in mobile apps, cloud servers (AWS Graviton), Apple Silicon, and CTF challenges. Key differences from x86-64 affect both reversing and exploitation.
+AArch64 (ARM 64-bit) appears in mobile apps, cloud servers (AWS Graviton), Apple Silicon, and embedded/firmware targets. Key differences from x86-64 affect both reversing and exploitation.
 
 **Setup and emulation:**
 
@@ -193,7 +193,7 @@ elf = ELF('./arm64_binary')
 
 ---
 
-## MIPS64 Cavium OCTEON Coprocessor 2 Crypto (SEC-T CTF 2017)
+## MIPS64 Cavium OCTEON Coprocessor 2 Crypto
 
 Cavium OCTEON network processors implement hardware AES and SHA256 via MIPS Coprocessor 2 (CP2) using `dmtc2` (move to CP2) and `dmfc2` (move from CP2) instructions. These look like ordinary register moves to a disassembler but drive the hardware crypto engine.
 
@@ -224,7 +224,7 @@ dmtc2  rN, 0x0105   ; ...next quadword
 
 ---
 
-## EFM32 ARM Microcontroller MMIO AES (SEC-T CTF 2017)
+## EFM32 ARM Microcontroller MMIO AES
 
 Silicon Labs EFM32 Cortex-M binary — a flat binary loaded at 0x1000 in Thumb mode.
 
@@ -264,7 +264,7 @@ plaintext = cipher.decrypt(ciphertext)
 
 ---
 
-## MBR/Bootloader Reversing with QEMU + GDB (Square CTF 2017)
+## MBR/Bootloader Reversing with QEMU + GDB
 
 Boot a floppy/disk image in QEMU with the GDB stub enabled, then attach GDB for full source-level debugging of 16-bit real mode or 32-bit protected mode bootloader code.
 

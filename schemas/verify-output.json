@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "verify-output.json",
-  "title": "M3 VERIFY 输出契约(冻结 @ phase-5, module-design.md §M3.3)",
-  "description": "kunglao-verify 的 JSON 输出。L1 机械层重跑 reproduce 比对 sha256; L2 对抗层 kunglao-redteam 派发; anchors 数字保真。",
+  "title": "M3 VERIFY output contract (FROZEN @ phase-5, module-design.md §M3.3)",
+  "description": "JSON output of kunglao-verify. L1 mechanical layer re-runs reproduce and compares sha256; L2 adversarial layer dispatches kunglao-redteam; anchors keep numeric fidelity.",
   "type": "object",
   "required": ["fact_id", "claim_id", "l1", "l2", "anchors", "overall"],
   "properties": {

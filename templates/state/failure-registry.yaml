@@ -1,0 +1,13 @@
+# failure-registry.yaml — structured failure memory (issue #3, design-spec §3.6 sec_e)
+# Machine-parseable; prepend new rules (positional bias counteracts Lost-in-the-Middle).
+# digest_build.py carries sec_e verbatim (structured WHEN/THEN/anchor, not free text).
+rules:
+  # - when: <trigger: tool failure mode / CTI misattribution / anti-analysis trap>
+  #   then: <must-do / must-not-do>
+  #   anchor: <evidence anchor: claim-id / file:line / historical case>
+  - when: VT sandbox family label
+    then: must find a hardcoded family fingerprint in the binary (botnet_id / dead strings / config blob); a sandbox label alone must not raise to confirmed
+    anchor: C-020 eBPF rootkit case (sandbox misattribution)
+  - when: static scan of all 5 suspicious WinAPI categories yields 0 hits
+    then: do not read as benign; Frida-hook syscall.SyscallN to capture runtime reflection targets
+    anchor: Vidar Go reflective-loader pattern

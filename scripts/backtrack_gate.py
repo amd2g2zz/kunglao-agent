@@ -1,7 +1,10 @@
+# -*- coding: utf-8 -*-
 """backtrack_gate.py - detect workers stuck > N min without progress.
 
-User pain point: "kunglao-agent 不会回退 - 遇到了问题以及很长时间了, 但是还在做
-无意义的尝试" (gets stuck in repetitive failed attempts without backing off).
+User pain point (verbatim, in Chinese): "kunglao-agent 不会回退 - 遇到了问题以及很长时间了, 但是还在做
+无意义的尝试" ("kunglao-agent never backs off — a problem has persisted for a
+long time yet it keeps making pointless attempts") (gets stuck in
+repetitive failed attempts without backing off).
 
 When a worker has been in_progress for > N min (configurable, default 20) WITHOUT
 its status file mtime updating, it is "stuck". This gate REQUIRES a `## backtrack`

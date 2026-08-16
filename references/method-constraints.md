@@ -33,9 +33,8 @@ needed for one-off overrides or workers other than `kunglao-worker`.
 
 ## Cross-reference
 
-- Kong-agent SKILL.md §6a (this file is the backing reference)
+- kunglao-agent SKILL.md §6a (this file is the backing reference)
 - kunglao-worker agent system prompt (the worker-side mirror of these constraints)
 - references/re-library/anti-analysis.md (anti-analysis bypass ladders when
   constraints conflict with target anti-RE)
-- memory/kong-agent-verifier-mechanism.md (5 failure types caught by §1b
-  verifier pass — each maps to one of the NEW 2026-07-30 rows above)
+- references/guardrails.md §1b (verifier mechanism — the 5 failure types caught by the §1b verifier pass, each mapping to one of the NEW 2026-07-30 rows above)

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """confidence_schema — ICD-203 7-tier probability ladder (PRD P4, issue #27).
 
 ICD-203 Tradecraft #2 requires a 7-tier probability ladder. The legacy

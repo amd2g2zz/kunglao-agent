@@ -20,16 +20,26 @@ on:
 jobs:
   release-check:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Issue #352: the floor is 3.10 and MUST be exercised in CI; 3.11
+        # keeps coverage of the version most dev machines actually run.
+        # Jobs run in parallel, so the matrix adds no wall-clock time.
+        python-version: ["3.10", "3.11"]
     steps:
     - uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.11"
+        python-version: ${{ matrix.python-version }}
 
     - name: Install uv (documented dependency manager)
       run: python -m pip install uv
+
+    - name: CI YAML selfcheck (issue #147)
+      run: uv run python scripts/release_check_selfcheck.py
 
     - name: Install dependencies (locked)
       run: uv sync --locked
@@ -43,12 +53,18 @@ jobs:
     - name: Run standard test command
       run: uv run python -m pytest -q --junitxml=.pytest-result.xml
 
+    - name: Oracle self-check (issue #121)
+      run: uv run python scripts/kunglao_eval.py --oracle-selfcheck
+
     - name: Generate release receipt
       run: uv run python scripts/release_receipt.py --pytest-junit .pytest-result.xml --out release-receipt.json
 
     - name: Upload release receipt
       uses: actions/upload-artifact@v4
       with:
-        name: release-receipt-${{ github.sha }}
+        name: release-receipt-${{ matrix.python-version }}-${{ github.sha }}
         path: release-receipt.json
         if-no-files-found: error
+
+    - name: Structural integrity check (issue #141)
+      run: uv run python scripts/structural_check.py .

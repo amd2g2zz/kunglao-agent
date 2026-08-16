@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """normalize_trace — dynamic VERIFY trace normalization (DESIGN §12).
 
 Dynamic claims (Qiling emulation / Frida hook) produce traces whose pointer

@@ -1,6 +1,6 @@
 # Multi Search Engine
 
-多搜索引擎集成，支持17个引擎。
+Multi search engine integration, 17 engines supported.
 
 ---
 name: multi-search-engine

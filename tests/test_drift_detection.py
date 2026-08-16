@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — tests for scripts/lib_kunglao.py drift detection + external_kicker.should_kick (#43).
 
 Drift = alive-but-stuck: heartbeat fresh + ledger writing + zero state
@@ -5,9 +6,9 @@ progress. Time-based dead-session detection (external_kicker.session_is_dead)
 cannot see it (F2/F3 regime shift, wf_5c50b792-f7c); ledger SIGNATURE
 ROTATION can.
 
-All I/O is SYNTHETIC: pytest tmp_path only. The real
-.convergence_ledger.jsonl (D:/works/samples/2026-07-01/malware-analysis-
-workspace/) is never read or written — it is only the FORMAT reference
+All I/O is SYNTHETIC: pytest tmp_path only. The live workspace
+(`<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/malware-analysis-workspace/`) is
+never read or written — it is only the FORMAT reference
 (ts, decision, open_count, open_ids, partial_count, active_workers,
 blockers, facts_total).
 """
@@ -55,11 +56,13 @@ workers_progressing = _lib.workers_progressing
 sys.path.insert(0, str(SCRIPTS))
 from external_kicker import should_kick, tick  # noqa: E402
 
-NOW = datetime.now(timezone.utc)
-
-
 def ts(minutes_ago: int = 0) -> str:
-    return (NOW - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # #375: compute AT CALL TIME — ledger `ts` is excluded from signatures
+    # (test_rotation_ignores_ts_only_differences), so per-call stamps are
+    # safe for rotation and keep heartbeat fixtures fresh against the real
+    # clock in production code (external_kicker.tick).
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
 
 
 def row(decision: str = "DISPATCH_VERIFIER", **overrides) -> dict:
@@ -88,12 +91,16 @@ def write_ledger(ws: Path, rows: list[dict]) -> Path:
 
 def write_worker_status(ws: Path, minutes_ago: int, name: str = "w1",
                         status: str = "in-progress") -> Path:
-    """Synthetic in-progress status file with a controlled mtime."""
+    """Synthetic in-progress status file with a controlled mtime.
+
+    #375: both the stamp and the mtime are computed AT CALL TIME —
+    lib_kunglao.workers_progressing (and external_kicker.has_fresh_workers)
+    compare mtimes against their own real clock."""
     runs = ws / "runs"
     runs.mkdir(exist_ok=True)
     p = runs / f"worker-status-{name}.md"
     p.write_text(f"[{ts()}] step: x | status: {status}\n", encoding="utf-8")
-    t = (NOW - timedelta(minutes=minutes_ago)).timestamp()
+    t = (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).timestamp()
     os.utime(p, (t, t))
     return p
 
@@ -110,7 +117,7 @@ def ws(tmp_path) -> Path:
 def test_drift_detected_frozen_3_rows_no_worker(ws):
     write_ledger(ws, [row() for _ in range(3)])
     assert signature_rotation(ws) == 3
-    assert workers_progressing(ws, now=NOW) is False
+    assert workers_progressing(ws, now=datetime.now(timezone.utc)) is False
     assert drift_detected(ws) is True
 
 
@@ -119,7 +126,7 @@ def test_drift_detected_frozen_3_rows_no_worker(ws):
 def test_drift_detected_exempts_fresh_worker(ws):
     write_ledger(ws, [row() for _ in range(3)])
     write_worker_status(ws, minutes_ago=5)
-    assert workers_progressing(ws, now=NOW) is True
+    assert workers_progressing(ws, now=datetime.now(timezone.utc)) is True
     assert drift_detected(ws) is False
 
 
@@ -162,7 +169,7 @@ def test_should_kick_fresh_worker_blocks_escalation(ws):
 def test_should_kick_done_worker_does_not_block(ws):
     write_ledger(ws, [row() for _ in range(6)])
     write_worker_status(ws, minutes_ago=5, status="done")
-    assert workers_progressing(ws, now=NOW) is False
+    assert workers_progressing(ws, now=datetime.now(timezone.utc)) is False
     assert should_kick(ws) is True
 
 
@@ -211,26 +218,29 @@ def test_rotation_corrupt_tail_row_uses_last_valid_reference(ws):
 
 def test_workers_progressing_stale_in_progress_file(ws):
     write_worker_status(ws, minutes_ago=45)
-    assert workers_progressing(ws, now=NOW) is False
+    assert workers_progressing(ws, now=datetime.now(timezone.utc)) is False
 
 
 def test_workers_progressing_no_files(ws):
-    assert workers_progressing(ws, now=NOW) is False
+    assert workers_progressing(ws, now=datetime.now(timezone.utc)) is False
 
 
 def test_workers_progressing_done_file(ws):
     write_worker_status(ws, minutes_ago=5, status="done")
-    assert workers_progressing(ws, now=NOW) is False
+    assert workers_progressing(ws, now=datetime.now(timezone.utc)) is False
 
 
 def test_workers_progressing_scans_worktree_runs(ws):
     wt_runs = ws.parent / ".wt-01" / "malware-analysis-workspace" / "runs"
     wt_runs.mkdir(parents=True)
+    # v1.9.13 worktree-isolation contract: only .wt-* dirs carrying the
+    # .kunglao-worktree marker are scanned
+    (ws.parent / ".wt-01" / ".kunglao-worktree").write_text("", encoding="utf-8")
     p = wt_runs / "worker-status-wt1.md"
     p.write_text(f"[{ts()}] step: x | status: in-progress\n", encoding="utf-8")
-    t = (NOW - timedelta(minutes=5)).timestamp()
+    t = (datetime.now(timezone.utc) - timedelta(minutes=5)).timestamp()
     os.utime(p, (t, t))
-    assert workers_progressing(ws, now=NOW) is True
+    assert workers_progressing(ws, now=datetime.now(timezone.utc)) is True
 
 
 # ---------- constants wiring ----------
@@ -259,6 +269,19 @@ def write_heartbeat(ws: Path, minutes_ago: int = 0) -> Path:
     p.write_text(json.dumps({"last_tick_ts": stamp, "activity_ts": stamp}),
                  encoding="utf-8")
     return p
+
+
+def test_write_heartbeat_stamps_call_time_now(ws):
+    """#375 freshness invariant at write time: a minutes_ago=0 heartbeat is
+    within ~2 minutes of the REAL now when tick() later reads it against its
+    own clock (scripts/external_kicker.py computes now itself). A module-
+    frozen NOW aged these stamps past DEFAULT_STALE_MINUTES in long runs."""
+    p = write_heartbeat(ws)
+    hb = json.loads(p.read_text(encoding="utf-8"))
+    stamped = datetime.strptime(hb["last_tick_ts"], "%Y-%m-%dT%H:%M:%SZ").replace(
+        tzinfo=timezone.utc)
+    age = datetime.now(timezone.utc) - stamped
+    assert timedelta(0) <= age <= timedelta(minutes=2)
 
 
 def read_receipt(ws: Path) -> dict | None:

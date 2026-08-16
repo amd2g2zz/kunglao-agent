@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 """progress_report.py - emit a single-line progress summary for kunglao-agent.
 
-User pain point: "进度管理" - no visual progress indicator.
+User pain point (verbatim, in Chinese): "进度管理" ("progress management") - no visual progress indicator.
 
 This script reads claim-register.yaml and emits a compact, scannable
 progress report:

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Issue #93 regression tests: skill arguments = the user REQUEST, not a workspace path.
 
 Guards three facts (SDD design D1/D2/D3, issue #93 — user correction on #90):
@@ -8,9 +9,11 @@ Guards three facts (SDD design D1/D2/D3, issue #93 — user correction on #90):
    intent contract: exact subcommand (`init` / `analysis` / `verify` / `resume` /
    mechanical passthrough) OR natural-language request mapped by intent keywords;
    workspace is NEVER a parameter (Phase 0 auto-detection); empty → `analysis`.
-3. The repo root has NO `.claude-plugin/` — a plugin.json converts the skill
-   into a `skills-directory` plugin identity in the next session and breaks
-   bare `/kunglao-agent` (regression 7f5f179, 2026-08-10).
+3. The repo root ships a metadata-only `.claude-plugin/plugin.json` (#366,
+   user decision 2026-08-15 — version 0.1 must be plugin-manager-visible).
+   The manifest declares identity fields ONLY: component paths (skills/
+   hooks/commands) are what broke bare `/kunglao-agent` (regression 7f5f179,
+   2026-08-10, `skills: ["./"]` wiring) and stay out until #364 (v1.0).
 
 RED on baseline (2d695a8, #90 workspace semantics): 3.1 fails (frontmatter says
 `workspace`, not `request`), 3.2 fails (Arguments section states "first argument
@@ -88,8 +91,25 @@ def test_skill_body_arguments_intent_contract() -> None:
         "Arguments section must state the empty-$ARGUMENTS default (analysis)"
 
 
-def test_repo_has_no_claude_plugin_dir() -> None:
-    """D3: repo root has no `.claude-plugin/` — plugin-ification breaks bare /kunglao-agent."""
-    assert not (ROOT / ".claude-plugin").exists(), \
-        "repo root must NOT contain .claude-plugin/ (regression 7f5f179: converts the skill " \
-        "into a skills-directory plugin identity and breaks bare /kunglao-agent)"
+def test_repo_claude_plugin_is_metadata_only() -> None:
+    """D3 (#366 amendment): `.claude-plugin/plugin.json` ships metadata-only.
+
+    Identity fields (name/description/version/author/homepage/license) are
+    required so v0.1 is visible to the plugin manager; any component
+    wiring (skills/hooks/commands paths) re-triggers the 7f5f179 breakage
+    (skills-directory plugin identity in the next session breaks bare
+    /kunglao-agent) and is deferred to #364.
+    """
+    import json
+    plugin_dir = ROOT / ".claude-plugin"
+    assert plugin_dir.is_dir(), ".claude-plugin/ missing (issue #366 v0.1 deliverable)"
+    manifest = json.loads((plugin_dir / "plugin.json").read_text(encoding="utf-8"))
+    assert manifest["name"] == "kunglao-agent"
+    assert manifest["version"], "plugin.json version missing"
+    forbidden = {"skills", "commands", "agents", "hooks", "mcpServers",
+                 "lspServers", "outputStyles", "workflows"}
+    wired = sorted(forbidden & set(manifest))
+    assert not wired, (
+        f"plugin.json declares component fields {wired} — behavioral surface is "
+        f"#364 (v1.0), out of #366 minimal scope (regression 7f5f179)"
+    )

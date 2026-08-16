@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — tests for scripts/completion_gate.py + hooks/completion_gate.py (#55).
 
 The code-owned completion gate makes "done" a CODE verdict. judge(oracle)
@@ -395,14 +396,32 @@ def test_stop_activated_blocks_exit1(tmp_path):
 
 
 def test_stop_stop_hook_active_passthrough(tmp_path):
-    """Anti-loop: stop_hook_active=True → pass (don't trap the agent)."""
+    """Anti-loop (#199): stop_hook_active=True passes ONLY when the oracle
+    records a sanctioned second stop (adjudication.second_stop + PASS)."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    oracle = _regression_oracle()
+    oracle["adjudication"] = {"stop_hook_active": {
+        "second_stop": True, "last_decision": "PASS"}}
+    _write_oracle_yaml(ws, "task-oracle.yaml", oracle)
+    _activated_state(ws)
+    rc, out = _hook_stdout(ws, stop_hook_active=True)
+    assert rc == 0
+    assert out.strip() == ""
+
+
+def test_stop_stop_hook_active_without_sanction_blocks(tmp_path):
+    """Anti-loop (#199): stop_hook_active=True WITHOUT a sanctioned PASS on
+    record must block (the unconditional pass-through is gone)."""
     ws = tmp_path / "ws"
     ws.mkdir()
     _write_oracle_yaml(ws, "task-oracle.yaml", _regression_oracle())
     _activated_state(ws)
     rc, out = _hook_stdout(ws, stop_hook_active=True)
-    assert rc == 0
-    assert out.strip() == ""
+    assert rc != 0
+    decision = json.loads(out)
+    assert decision["decision"] == "block"
+    assert "second stop without oracle sanction" in decision["reason"]
 
 
 def test_stop_malformed_oracle_blocks_exit3(tmp_path):
@@ -418,14 +437,19 @@ def test_stop_malformed_oracle_blocks_exit3(tmp_path):
     assert ("anchor" in decision["reason"].lower()) or ("task_text" in decision["reason"].lower())
 
 
-def test_stop_activated_no_oracle_passthrough(tmp_path):
-    """D9: activated + no oracle file → pass-through (gate is opt-in via oracle)."""
+def test_stop_activated_no_oracle_blocks(tmp_path):
+    """#200: activated + no oracle file → block exit 3 (a kunglao workspace
+    must be pre-anchored at Phase 0; the old no-oracle pass-through was the
+    replay #4 fail-open half). D9 pass-through now applies only to
+    directories with NO workspace markers."""
     ws = tmp_path / "ws"
     ws.mkdir()
     _activated_state(ws)
     rc, out = _hook_stdout(ws, stop_hook_active=False)
-    assert rc == 0
-    assert out.strip() == ""
+    assert rc != 0
+    decision = json.loads(out)
+    assert decision["decision"] == "block"
+    assert "task-oracle" in decision["reason"]
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +457,12 @@ def test_stop_activated_no_oracle_passthrough(tmp_path):
 # ---------------------------------------------------------------------------
 
 def _patch_home(tmp_path, monkeypatch):
-    """Mirror tests/test_state_anchor.py — never touch real ~/.claude."""
+    """Mirror tests/test_state_anchor.py — never touch real ~/.claude.
+
+    Since #258 the wire-up target is PROJECT-level (<ws>/.claude/settings.json);
+    the fake home stays as the regression probe that the user-global settings
+    are never written.
+    """
     import pathlib
     fake_home = tmp_path / "fake-home"
     (fake_home / ".claude").mkdir(parents=True, exist_ok=True)
@@ -448,10 +477,14 @@ def test_all_hooks_contains_completion_gate():
 
 def test_wire_up_registers_stop_completion_gate(tmp_path, monkeypatch):
     fake_home = _patch_home(tmp_path, monkeypatch)
+    ws = tmp_path / "ws"
+    ws.mkdir()
     from wire_up_settings import wire_up_settings
-    wire_up_settings()
-    settings_path = fake_home / ".claude" / "settings.json"
-    assert settings_path.exists(), "wire_up_settings must write settings.json"
+    wire_up_settings(workspace=ws)
+    settings_path = ws / ".claude" / "settings.json"
+    assert settings_path.exists(), "wire_up_settings must write the PROJECT settings.json"
+    assert not (fake_home / ".claude" / "settings.json").exists(), \
+        "wire_up_settings must NOT write the user-global settings (#258)"
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     stop = settings.get("hooks", {}).get("Stop", [])
     found = False
@@ -465,10 +498,13 @@ def test_wire_up_registers_stop_completion_gate(tmp_path, monkeypatch):
 
 def test_wire_up_stop_idempotent(tmp_path, monkeypatch):
     fake_home = _patch_home(tmp_path, monkeypatch)
+    ws = tmp_path / "ws"
+    ws.mkdir()
     from wire_up_settings import wire_up_settings
-    wire_up_settings()
-    wire_up_settings()  # re-run — must be a fixed point
-    settings_path = fake_home / ".claude" / "settings.json"
+    wire_up_settings(workspace=ws)
+    wire_up_settings(workspace=ws)  # re-run — must be a fixed point
+    settings_path = ws / ".claude" / "settings.json"
+    assert not (fake_home / ".claude" / "settings.json").exists()
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     stop = settings.get("hooks", {}).get("Stop", [])
     n = 0

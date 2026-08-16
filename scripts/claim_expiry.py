@@ -1,6 +1,8 @@
+# -*- coding: utf-8 -*-
 """claim_expiry.py - mark long-untouched OPEN claims as STALE (priority demotion).
 
-User pain point: "状态管理很差 - 一些任务以及过期了"
+User pain point (verbatim, in Chinese): "状态管理很差 - 一些任务以及过期了"
+("poor state management — some tasks have already expired")
 
 When an OPEN claim hasn't had any activity (no status file update, no
 dispatch, no fact written) for > N hours, it's "stale" — the worker may
@@ -58,7 +60,13 @@ def last_activity_for(claim: dict) -> datetime | None:
         v = claim.get(field)
         if v:
             try:
-                candidates.append(parse_iso(v))
+                if isinstance(v, datetime):
+                    # YAML 1.1 resolves unquoted ISO scalars to datetime
+                    # objects (#380); normalize tz-naive ones to UTC so they
+                    # can participate in age math instead of being skipped.
+                    candidates.append(v if v.tzinfo else v.replace(tzinfo=timezone.utc))
+                else:
+                    candidates.append(parse_iso(v))
             except (ValueError, TypeError):
                 continue
     return max(candidates) if candidates else None

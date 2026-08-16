@@ -1,4 +1,4 @@
-# CTF Reverse - Patterns & Techniques
+# Patterns & Techniques
 
 ## Table of Contents
 - [Custom VM Reversing](#custom-vm-reversing)
@@ -6,7 +6,7 @@
   - [Common VM Patterns](#common-vm-patterns)
   - [RVA-Based Opcode Dispatching](#rva-based-opcode-dispatching)
   - [State Machine VMs (90K+ states)](#state-machine-vms-90k-states)
-  - [Custom VM Reverse Engineering via Fuzzing and Instruction Set Discovery (hxp CTF 2017)](#custom-vm-reverse-engineering-via-fuzzing-and-instruction-set-discovery-hxp-ctf-2017)
+  - [Custom VM Reverse Engineering via Fuzzing and Instruction Set Discovery](#custom-vm-reverse-engineering-via-fuzzing-and-instruction-set-discovery)
 - [Anti-Debugging Techniques](#anti-debugging-techniques)
   - [Common Checks](#common-checks)
   - [Bypass Technique](#bypass-technique)
@@ -47,7 +47,7 @@
 - [Malware Anti-Analysis Bypass via Patching](#malware-anti-analysis-bypass-via-patching)
 - [Multi-Stage Shellcode Loaders](#multi-stage-shellcode-loaders)
 - [Timing Side-Channel Attack](#timing-side-channel-attack)
-- [Multi-Thread Anti-Debug with Decoy + Signal Handler Mixed Boolean-Arithmetic (ApoorvCTF 2026)](#multi-thread-anti-debug-with-decoy--signal-handler-mixed-boolean-arithmetic-apoorvctf-2026)
+- [Multi-Thread Anti-Debug with Decoy + Signal Handler Mixed Boolean-Arithmetic](#multi-thread-anti-debug-with-decoy--signal-handler-mixed-boolean-arithmetic)
 - [INT3 Patch + Coredump Brute-Force Oracle (Pwn2Win 2016)](#int3-patch--coredump-brute-force-oracle-pwn2win-2016)
 - [Signal Handler Chain + LD_PRELOAD Oracle (Nuit du Hack 2016)](#signal-handler-chain--ld_preload-oracle-nuit-du-hack-2016)
 - [printf Format String VM Decompilation to Z3 (SECCON 2017)](#printf-format-string-vm-decompilation-to-z3-seccon-2017)
@@ -101,7 +101,7 @@ while (!agenda.isEmpty()) {
 
 **Key insight:** Custom VMs appear when the challenge bundles a bytecode blob alongside a dispatcher loop. Reverse the opcode switch table first, then write a disassembler to lift the bytecode before attempting to understand the algorithm.
 
-### Custom VM Reverse Engineering via Fuzzing and Instruction Set Discovery (hxp CTF 2017)
+### Custom VM Reverse Engineering via Fuzzing and Instruction Set Discovery
 
 Methodical black-box approach to reversing unknown VM bytecode when static analysis of the dispatch loop is too complex:
 
@@ -121,7 +121,7 @@ Example discovered ISA (variable-length 6-11 bit):
 ```
 
 **Step 4: Build assembler/disassembler.**
-Write tools to assemble and disassemble the discovered ISA, then disassemble the challenge bytecode to understand its algorithm.
+Write tools to assemble and disassemble the discovered ISA, then disassemble the target bytecode to understand its algorithm.
 
 **Step 5: Implement missing primitives.**
 If the ISA lacks expected operations, synthesize them from available instructions. Example: implementing XTEA decryption using only AND/OR/NOT (no native XOR or ADD):
@@ -555,7 +555,7 @@ loop_middle:
 
 ## Position-Based Transformation Reversing
 
-**Pattern (PascalCTF 2026):** Binary transforms input by adding/subtracting position index.
+**Pattern:** Binary transforms input by adding/subtracting position index.
 
 **Reversing:**
 ```python
@@ -567,6 +567,8 @@ for i, b in enumerate(expected):
     else:
         flag += chr(b + i)   # Odd: input = output + i
 ```
+
+**References:** PascalCTF 2026
 
 ---
 
@@ -687,7 +689,7 @@ for pos in range(flag_length):
 
 ---
 
-## Multi-Thread Anti-Debug with Decoy + Signal Handler Mixed Boolean-Arithmetic (ApoorvCTF 2026)
+## Multi-Thread Anti-Debug with Decoy + Signal Handler Mixed Boolean-Arithmetic
 
 **Pattern (A Golden Experience Requiem):** Multi-threaded binary with layered anti-analysis: Thread 1 performs decoy operations (fake AES + deliberate crash via `ud2`), Thread 2 does the real flag computation in a SIGSEGV signal handler using Mixed Boolean Arithmetic (MBA), Thread 3 erases memory to prevent post-mortem analysis.
 
@@ -742,6 +744,8 @@ print(''.join(flag))
 - `ud2` instruction (deliberate illegal instruction)
 - `rdtsc` instructions for timing checks
 - SHA-256 constants (0x6a09e667...) used as lookup tables, not for hashing
+
+**References:** ApoorvCTF 2026
 
 ---
 

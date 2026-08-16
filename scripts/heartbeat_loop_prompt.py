@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """heartbeat_loop_prompt.py — v1.9.26: generate the FULL /loop heartbeat prompt.
 
 Why: the heartbeat must be BORN registered. The orchestrator used to create
@@ -14,8 +15,12 @@ Usage:
 Output: the prompt to pass to `/loop <interval> <prompt>` (or CronCreate).
 The prompt's FIRST action is `hook_activation.py <ws> --heartbeat-on`
 (registration is born with the loop), then per-tick monitoring (reconcile /
-status poll / smart ping / convergence / renew) and the CONVERGED gate
-(heartbeat-check must pass before declaring done).
+status poll / smart ping / convergence / renew). Since v1.9.29 (issue #237)
+the convergence decision is a COMMAND, not a suggestion: DISPATCH must dispatch
+priority.py #1, BLOCKED must self-recover/reactivate, DEFERRED must check
+reactivation — no action in a tick = idle fault. CONVERGED only after
+§6.3 checklist + handoff-check PASS, then `--heartbeat-off` stops the loop
+(guarded: unconverged teardown is rejected).
 
 Pure stdlib. Exit 0.
 """
@@ -26,26 +31,34 @@ from pathlib import Path
 
 
 def build_prompt(ws: str, interval: str = "5m") -> str:
-    h = "C:/Users/hr/.claude/skills/kunglao-agent/scripts/hook_activation.py"
-    tk = "C:/Users/hr/.claude/skills/kunglao-agent/scripts/heartbeat_tick.py"
-    return f"""/loop {interval} kunglao-agent 心跳（自注册 + 监视 + 校验一体）：
+    skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/ (scripts/ -> root)
+    h = str(skill_dir / "scripts" / "hook_activation.py")
+    tk = str(skill_dir / "scripts" / "heartbeat_tick.py")
+    cc = str(skill_dir / "scripts" / "convergence_check.py")
+    return f"""/loop {interval} kunglao-agent heartbeat (self-registration + monitoring + verification in one):
 
-[启动动作 — 循环首次触发时执行一次]
-python {h} {ws} --heartbeat-on   # 注册心跳（写 runs/.heartbeat.json）— 监视从此是文件状态
+[Startup action — run once on the loop's first trigger]
+python {h} {ws} --heartbeat-on   # register the heartbeat (writes runs/.heartbeat.json) — monitoring is file state from here on
 
-[每 tick 监视（5 分钟间隔）]
-0. python {tk} {ws}              # v1.9.38 一键 tick：selfcheck + reconcile + renew + heartbeat-check
-                                 # （机械步骤全部折叠为 1 命令，exit=1 时才需要人工处理）
-1. 读 runs/.heartbeat-tick.json 报告：exit=0 → 只需认知步骤（ping 活跃 worker / 处理完成 worker）
-2. 对每个活跃 worker 发智能 ping（§6.1a）：SendMessage "[ping HH:MM] step? stuck? eta?"
-   → 结构化回复 append 到 runs/.ping-log.jsonl
-   （隔离边界 #88：无 agent team；SendMessage orchestrator→worker ping 是 sanctioned channel，
-    worker 之间互不 messaging）
-3. python C:/Users/hr/.claude/skills/kunglao-agent/scripts/convergence_check.py {ws} 决策：
-   DISPATCH→priority.py 派发；SATURATED→继续轮询；CONVERGED→先跑 §6.3 checklist（5 项）
-   + 双签（doubt_checker + 随机抽验 1 fact）+ --heartbeat-check 通过才宣告完成
-4. 完成 worker → 验证 facts → 合入 master → 更新 claim-register + _INDEX
-5. 按 §6.2 用 malware-veri-notes 记录笔记；保持推进不空转"""
+[Per-tick monitoring (5-minute interval)]
+0. python {tk} {ws}              # v1.9.38 one-command tick: selfcheck + reconcile + renew + heartbeat-check
+                                 # (all mechanical steps folded into 1 command; manual handling only when exit=1)
+1. Read the runs/.heartbeat-tick.json report: exit=0 → only cognitive steps remain (ping active workers / handle finished workers)
+2. Smart-ping every active worker (§6.1a): SendMessage "[ping HH:MM] step? stuck? eta?"
+   → append structured replies to runs/.ping-log.jsonl
+   (isolation boundary #88: no agent teams; the orchestrator→worker SendMessage ping is the sanctioned channel,
+    workers never message each other)
+3. python {cc} {ws} decision → imperative execution (every decision MUST produce a convergence-advancing action; no action = idle fault):
+   DISPATCH   → MUST dispatch priority.py #1, no idling allowed
+   BLOCKED    → MUST self-recover (resolve / stale_blocker_prune) or reactivate the failed claim
+   DEFERRED   → MUST check whether reactivation is possible (e.g. VM reachable again → restore the claim and dispatch)
+   SATURATED  → MUST poll all active workers (no idle waiting)
+   CONVERGED  → run the §6.3 checklist (5 items) + independent verification (blind_gate sign-off spot-check
+              + kunglao-verify.py L1 re-run) + handoff-check PASS first
+              → then python {h} {ws} --heartbeat-off stops the heartbeat (no cleanup before convergence — deletion breaks dispatch)
+4. Finished worker → verify facts → merge to master → update claim-register + _INDEX
+5. Record notes with malware-veri-notes per §6.2; at the end of every tick you MUST be able to state "what this round advanced" (fill it into
+   runs/.heartbeat-tick.json's action_taken; an empty field = idle fault)"""
 
 
 def main() -> int:

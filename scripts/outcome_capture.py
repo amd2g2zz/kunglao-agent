@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """outcome_capture.py - external-checker verification results -> ledger OUTCOME rows (#35).
 
 R6 premise: the sensing layer has no outcome signal. verify-note / red-team

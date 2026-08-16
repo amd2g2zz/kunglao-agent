@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """worker_budget — Pre+Post ToolUse hook on Agent (DESIGN §11).
 
 Enforces 5 dispatch gates + worker accounting:
@@ -39,7 +40,7 @@ KNOWN_TOOLS = ('vmr-shell', 'rev-frida', 'malware-framework')
 # `mcp__x64dbg__connect_remote(host=VM_IP, ...)`, after the VM-side x64dbg is
 # launched via vmr-shell. `mcp__frida__spawn` / `mcp__frida__attach` if invoked
 # with a host PID likewise run the sample on the host. Use rev-frida via the
-# VM-resident frida-server (192.168.20.128:1337) instead. See
+# VM-resident frida-server (<VM_IP>:1337) instead. See
 # `references/dynamic-re-tool-priority.md` for the launch sequence.
 HOST_FORBIDDEN_TOOLS = (
     'mcp__x64dbg__start_session',
@@ -60,6 +61,18 @@ try:
     _PRIORITY_AVAILABLE = True
 except Exception:  # pragma: no cover - hook stays usable if priority.py is moved
     _PRIORITY_AVAILABLE = False
+
+# ---------- issue #310: specialist trigger table (imports route_capability) ----------
+try:
+    from route_capability import (
+        load_specialist_table as _load_specialist_table,
+        recommend_agent_type as _recommend_agent_type,
+    )
+    _AGENTTYPE_AVAILABLE = True
+except Exception:  # pragma: no cover - hook stays usable if the router is moved
+    _AGENTTYPE_AVAILABLE = False
+
+GENERIC_WORK_AGENT = 'kunglao-worker'
 
 
 def _load_yaml(path):
@@ -113,7 +126,7 @@ def check_convergence_health(paths):
 
 
 def check_backtrack_gate(paths):
-    """v1.9.30: stuck-worker backtrack gate wired into PreToolUse (#38).
+    """v1.9.29: stuck-worker backtrack gate wired into PreToolUse (#38).
     Mirrors check_plan_drift / check_convergence_health: runs the existing
     backtrack_gate.py via _run_py (20s timeout) and FAIL_OPEN on any
     subprocess/workspace resolution failure — the hook stays usable.
@@ -149,7 +162,7 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid):
     the top-ranked dispatchable one. `deviated=True` means the dispatch
     departed from rank #1 and a `reasoning:` field is HARD-REQUIRED in the
     dispatch prompt (pre_check rejects without it — anti-spoof: prevents
-    "假装按优先级" dispatches that skip the recorded-deviation discipline).
+    "pretend-priority" dispatches that skip the recorded-deviation discipline).
     """
     if not _PRIORITY_AVAILABLE or not dispatched_cid:
         return (True, '', False)
@@ -242,8 +255,6 @@ def tool_to_constraint(tool: str) -> str | None:
     """Map a tool name to the task_spec constraint key it requires, or None."""
     if tool in VM_TOOLS or tool.startswith('mcp__x64dbg'):
         return 'vm_detonation'
-    if tool.startswith('mcp__virustotal'):
-        return 'external_cti_query'
     return None
 
 
@@ -696,6 +707,559 @@ def check_no_self_cap(description: str, task_spec_path: Path) -> tuple[bool, str
     return (True, f'self-cap within budget {allowed_minutes} min')
 
 
+# ---------- plan-to-execute gate (issue #239) ----------
+# kunglao-worker.md golden rule #3 (PLAN FIRST, execute second) existed but
+# had ZERO mechanical enforcement: pre_check never required a plan and
+# reconcile_workers only recognized plan-redteam-*.md. 2026-08-12 accident:
+# F006-F008 were callgraph INFERENCES written as facts — a mandatory plan
+# forces the inference to be declared in the plan phase, before execution,
+# where the orchestrator can catch it.
+
+# #294: the plan-first gate (#239) only checked file EXISTENCE — an empty-shell
+# template (goal:/preflight:/steps:/fallback: with every field bare, no content)
+# passed the gate. The Swiss-army test (C-022, 2026-08-13) showed workers can
+# satisfy `check_worker_plan` with a shell plan and then hand-roll scripts
+# instead of discovering tools/_INDEX. This regex matches a field label with
+# NOTHING after the colon (whitespace-only rest of line) — used to detect the
+# all-fields-bare shape without penalizing plans that just leave ONE field
+# terse (goal: decode strings / preflight: (empty) is still real intent).
+_BARE_FIELD_RE = re.compile(
+    r'^\s*(goal|preflight|steps|fallback)\s*:\s*$', re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _plan_is_empty_shell(text: str) -> bool:
+    """#294: True iff the plan file has NO content beyond bare field labels.
+
+    Strips every `goal:`/`preflight:`/`steps:`/`fallback:` line that has
+    nothing after the colon, then strips blank lines. If anything survives
+    (a filled-in field, extra prose, a step description), the plan is real.
+    """
+    # H1 (#294): a UTF-8 BOM (PowerShell/Notepad utf8 output) before `goal:`
+    # would make `﻿goal:` look like content — strip it explicitly in
+    # addition to the utf-8-sig read in check_worker_plan.
+    text = text.lstrip('﻿')
+    remaining = []
+    for line in text.splitlines():
+        if _BARE_FIELD_RE.match(line):
+            continue
+        if line.strip():
+            remaining.append(line)
+    return not remaining
+
+
+def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[bool, str]:
+    """Issue #239/#294: a claim dispatch REQUIRES its worker plan, WITH CONTENT.
+
+    The dispatched claim C-NN must already have `runs/plan-C<NN>*.md` on disk
+    (orchestrator wrote it pre-dispatch — real-world naming is plan-c005.md,
+    claim only, no suffix), OR the dispatch prompt must reference a plan path
+    for THAT claim (timing relaxation: the plan may be written in the same
+    turn, e.g. "write runs/plan-C001-strings.md first, then execute"). A plan
+    path for a DIFFERENT claim in the prompt does NOT relax.
+
+    #294: an on-disk plan that is an empty-shell template (every field label
+    present but bare — `goal:\\npreflight:\\nsteps:\\nfallback:` with nothing
+    filled in) does NOT satisfy the gate — it is existence without content.
+    The prompt-relaxation path is unaffected (the file may not exist yet).
+
+    Returns (ok, reason). ok=False means REJECT the dispatch.
+    """
+    if not cid:
+        return (True, 'no target claim')
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return (True, '')  # FAIL_OPEN — mirrors check_workers_lt_3
+    key = cid.replace('-', '')  # C-001 -> C001 (claim key inside plan names)
+    runs = Path(ws) / 'runs'
+    if runs.is_dir():
+        # uppercase + lowercase variants (Windows globs are case-insensitive,
+        # POSIX are not — cover both so the gate is portable)
+        hits = []
+        for pat in (f'plan-{key}.md', f'plan-{key}-*.md',
+                    f'plan-{key.lower()}.md', f'plan-{key.lower()}-*.md'):
+            hits.extend(sorted(runs.glob(pat)))
+        if hits:
+            plan_path = hits[0]
+            try:
+                # utf-8-sig: strips a UTF-8 BOM so a PowerShell/Notepad-written
+                # template cannot smuggle '﻿goal:' past the empty-shell check.
+                plan_text = plan_path.read_text(encoding='utf-8-sig', errors='replace')
+            except OSError:
+                # unreadable (locked / directory shadowing the name) — fail
+                # OPEN with an honest note; a misleading empty-shell reject
+                # would blame the worker for a system error.
+                return (True, f'plan file exists (unreadable, content not '
+                              f'verified): {plan_path.name}')
+            if _plan_is_empty_shell(plan_text):
+                return (False, (
+                    f'{plan_path.name} is an empty-shell template (goal/preflight/'
+                    f'steps/fallback all bare, no content) — fill in the plan '
+                    f'FIRST (kunglao-worker.md golden rule #3), then re-dispatch'
+                ))
+            return (True, f'plan file exists: {plan_path.name}')
+    if prompt:
+        m = re.search(
+            rf'plan-[{key[0]}{key[0].lower()}]{re.escape(key[1:])}'
+            r'(?:\.md|[-_][A-Za-z0-9._-]*\.md)',
+            prompt,
+        )
+        if m:
+            return (True, f'plan path referenced in dispatch prompt: {m.group(0)}')
+    return (False, (f'no runs/plan-{key}*.md for claim {cid} and the dispatch '
+                    f'prompt does not reference a plan path for it — write the '
+                    f'plan FIRST (kunglao-worker.md golden rule #3: PLAN FIRST, '
+                    f'execute second)'))
+
+
+# ---------- tool-first gate (issue #294) ----------
+# The plan-to-execute gate (#239, hardened above) only forced a PLAN to exist —
+# it never checked that the plan actually looked for a registered tool before
+# committing to hand-written logic. The Swiss-army test (C-022, 2026-08-13)
+# showed a worker with a passing plan gate still wrote its own crypto-decode
+# script instead of trying tools/crypto/crypto-tool.py, because nothing in the
+# dispatch contract required it to check tools/_INDEX.yaml first. This gate
+# closes that gap MECHANICALLY: if the dispatch text (description + prompt)
+# contains a keyword that maps to a registered tool's category/capability, the
+# dispatch must carry a `tool-catalog: <name>` marker (or an explicit
+# `tool-catalog: none (reasoning: ...)` opt-out) — otherwise REJECT. No keyword
+# match -> silent pass (avoids false positives on unrelated claims).
+
+# H2 (#294): generic category/capability words are routine prose too
+# ('static overview of imports' is an adjective, not a disasm tool) — they
+# would false-positive REJECT normal dispatches. Stopworded out of the trigger
+# set; the remaining keywords (crypto/ghidra/recon/decompile/vtable/...) are
+# distinctive enough to be safe signals.
+# #340: category ids renamed aux→auxiliary / pipeline→pipelines (id == dir
+# name); _load_tool_index_keywords derives keywords from those ids, so the
+# plural forms joined the trigger set — a dispatch citing the REAL paths
+# (tools/pipelines/build_evidence_index.py, tools/auxiliary/...) would
+# REJECT without a marker. Both plural forms stopworded; the legacy
+# singulars stay (capability domains aux:*/pipeline:* still emit them).
+_TOOLFIRST_STOPWORDS = frozenset(
+    {'static', 'pipeline', 'pipelines', 'aux', 'auxiliary',
+     'annotate', 'decode'})
+
+# One-off diagnostic exemption: CJK phrases are substring-matched (no word
+# concept to bound), ASCII phrases are word-bounded so 'one-off' inside a
+# longer word cannot trigger, and BOTH are negation-aware — "not a one-off
+# diagnostic" must NOT count as an exemption (reviewer r1-294 finding).
+_TOOLFIRST_DIAGNOSTIC_SUBSTRINGS = ('一次性诊断', '一次性')
+_TOOLFIRST_DIAGNOSTIC_RE = re.compile(
+    r'\bone-off\b|\bone shot\b|\bdiagnostic only\b|\bdiagnostic-only\b',
+    re.IGNORECASE,
+)
+_NEGATION_RE = re.compile(r'\b(?:not|no)\b|不是|非')
+
+# H2/CJK (#294): ASCII-only word boundaries, not `\b` — Python's \b treats CJK
+# chars as word chars, so a CJK-attached phrase like "decode-the-crypto-layer" (解码crypto层) would silently bypass the gate; and
+# 'crypto' inside 'cryptography' must NOT match. (?<![A-Za-z0-9_])…(?![A-Za-z0-9_])
+# gives exactly that.
+_ASCII_BOUNDARY = r'(?<![A-Za-z0-9_]){kw}(?![A-Za-z0-9_])'
+
+
+def _load_tool_index_keywords(skill_root: Path) -> dict[str, str]:
+    """#294: map a lowercase keyword -> tool name, from tools/_INDEX.yaml.
+
+    Keywords are the category and the two halves of `capability` ("<domain>:
+    <operation>") for every registered tool — e.g. crypto-tool contributes
+    {'crypto': 'crypto-tool', 'decode': 'crypto-tool'}. Multiple tools sharing
+    a keyword keep the first-registered tool (informational only; the gate
+    only needs ONE candidate name to cite in its REJECT message).
+    """
+    index_path = skill_root / 'tools' / '_INDEX.yaml'
+    if not index_path.exists():
+        return {}
+    try:
+        data = yaml.safe_load(index_path.read_text(encoding='utf-8')) or {}
+    except yaml.YAMLError:
+        return {}
+    out: dict[str, str] = {}
+    for entry in (data.get('tools') or []):
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get('name')
+        if not name:
+            continue
+        category = str(entry.get('category') or '').strip().lower()
+        if category and category not in out:
+            out[category] = name
+        capability = str(entry.get('capability') or '')
+        domain, _, op = capability.partition(':')
+        for kw in (domain.strip().lower(), op.strip().lower()):
+            if kw and kw not in out:
+                out[kw] = name
+    return out
+
+
+def _is_diagnostic_exempt(text: str) -> bool:
+    """#294: True iff the text declares a one-off diagnostic (case-insensitive,
+    word-bounded for ASCII, negation-aware: 'not a one-off diagnostic' is NOT
+    an exemption)."""
+    for marker in _TOOLFIRST_DIAGNOSTIC_SUBSTRINGS:
+        if marker in text:
+            # CJK negation (不是一次性 — "not one-off") in the 16 chars before the marker
+            idx = text.find(marker)
+            prev = text[max(0, idx - 16):idx]
+            if not _NEGATION_RE.search(prev):
+                return True
+    for m in _TOOLFIRST_DIAGNOSTIC_RE.finditer(text):
+        prev = text[max(0, m.start() - 16):m.start()]
+        if not _NEGATION_RE.search(prev):
+            return True
+    return False
+
+
+def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
+    """Issue #294: a dispatch touching a registered tool's domain must cite it.
+
+    Scans `desc + prompt` for tools/_INDEX.yaml category/capability keywords
+    (ASCII-bounded, case-insensitive, stopworded). No match -> pass silently
+    (FAIL_OPEN on ambiguity — this gate only fires on a positive keyword hit).
+    A one-off diagnostic declaration exempts the dispatch. Otherwise the text
+    MUST contain `tool-catalog:` (either naming the matched tool or an
+    explicit `none (reasoning: ...)` opt-out) or the dispatch is REJECTED.
+
+    Returns (ok, reason). ok=False means REJECT the dispatch.
+    """
+    text = f'{desc}\n{prompt}'
+    text_lower = text.lower()
+    if 'tool-catalog:' in text_lower:
+        return (True, 'tool-catalog marker present')
+    if _is_diagnostic_exempt(text):
+        return (True, 'one-off diagnostic — tool-first exempt')
+    keywords = _load_tool_index_keywords(_SKILL_ROOT)
+    if not keywords:
+        return (True, 'no tools/_INDEX.yaml keywords to match — tool-first skipped')
+    for kw, tool_name in keywords.items():
+        if kw in _TOOLFIRST_STOPWORDS:
+            continue
+        if re.search(_ASCII_BOUNDARY.format(kw=re.escape(kw)), text_lower):
+            return (False, (
+                f"dispatch text matches registered tool '{tool_name}' "
+                f"(keyword '{kw}') but carries no `tool-catalog:` marker. Add "
+                f"`tool-catalog: {tool_name}` if you will try it, or "
+                f"`tool-catalog: none (reasoning: <why not>)` if it genuinely "
+                f"does not apply, then re-dispatch."
+            ))
+    return (True, 'no tool-catalog keyword match')
+
+
+# ---------- issue #310: agenttype gate (specialist-first as a MECHANICAL check) ----------
+# Behavior #2 "specialist-first" was an orchestrator soft constraint: a
+# kunglao-worker could silently take a ghidra-type claim (route_capability has
+# a specialist recommendation for it) and complete it with the full tool rack
+# — no failure signal, the specialist's dedicated prompt/strategy/evidence
+# format diluted. Same anti-spoof shape as devreason (v1.9.24): dispatch agent
+# type != route recommendation -> REJECT unless the prompt records
+# `agent-reasoning:`; deviation-with-reasoning passes and is logged. No
+# specialist fits -> silent (kunglao-worker allowed). Role agents
+# (kunglao-redteam / kunglao-init-worker) are dispatched by protocol position,
+# not claim routing -> silent. FAIL_OPEN whenever the router/register/table is
+# unavailable — a broken gate must not block dispatch.
+
+_FEATURE_PROBE_RELS = ('runs/feature-probe.json', 'evidence/feature-probe.json')
+_DIE_LANGUAGE_MARKERS = ('go', 'rust', 'c++', '.net', 'c#', 'delphi')
+
+
+def _scan_die_language_values(data: dict) -> str | None:
+    """DIE JSON shape detects[].values[].name — first known language token."""
+    detects = data.get('detects')
+    if not isinstance(detects, list):
+        return None
+    for det in detects:
+        if not isinstance(det, dict):
+            continue
+        for v in det.get('values') or []:
+            if not isinstance(v, dict):
+                continue
+            name = str(v.get('name') or '').lower()
+            for marker in _DIE_LANGUAGE_MARKERS:
+                if marker in name:
+                    return marker
+    return None
+
+
+def _load_workspace_features(ws) -> dict:
+    """#310: sample features for the router — a captured feature_probe JSON
+    (runs/ or evidence/feature-probe.json) or the language field of
+    evidence/die.json. {} when absent/unreadable (routing falls back to claim
+    intent alone; never raises)."""
+    if not ws:
+        return {}
+    ws = Path(ws)
+    for rel in _FEATURE_PROBE_RELS:
+        p = ws / rel
+        if p.is_file():
+            try:
+                data = json.loads(p.read_text(encoding='utf-8'))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict):
+                return data
+    die = ws / 'evidence' / 'die.json'
+    if not die.is_file():
+        return {}
+    try:
+        data = json.loads(die.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    lang = data.get('language')
+    if not lang:
+        detect = data.get('detect')
+        if isinstance(detect, dict):
+            lang = detect.get('language')
+    if not lang:
+        lang = _scan_die_language_values(data)
+    return {'language': lang} if lang else {}
+
+
+def check_agent_type(paths: dict, desc: str, prompt: str,
+                     agent_name: str) -> tuple[bool, str]:
+    """Issue #310: dispatch agent type vs route_capability recommendation.
+
+    Returns (ok, reason). ok=False means REJECT the dispatch — the claim's
+    task domain (statement) x sample features recommend a specialist agent
+    that the dispatched agent is not, and the prompt records no
+    `agent-reasoning:` deviation.
+    """
+    _, _, cid = parse_dispatch(desc)
+    if not cid or not agent_name:
+        return (True, 'no claim id or no agent name — agenttype skipped')
+    if not _AGENTTYPE_AVAILABLE:
+        return (True, 'route_capability unavailable — agenttype skipped')
+    specialists = _load_specialist_table()
+    if not specialists:
+        return (True, 'no specialist table — agenttype skipped')
+    specialist_names = {s['name'] for s in specialists}
+    if agent_name not in specialist_names and agent_name != GENERIC_WORK_AGENT:
+        return (True, f'{agent_name} is a role agent — claim routing not applied')
+    register = paths.get('register')
+    if not register:
+        return (True, 'no register path — agenttype skipped')
+    claim = read_claim(Path(register), cid)
+    if not claim or not claim.get('statement'):
+        return (True, f'claim {cid} not in register — agenttype skipped')
+    features = _load_workspace_features(paths.get('workspace'))
+    rec, _rationale = _recommend_agent_type(
+        features, claim.get('statement', ''), specialists)
+    if rec is None:
+        return (True, 'no specialist fits — kunglao-worker allowed')
+    if agent_name == rec:
+        return (True, f'agent_type matches recommended specialist {rec}')
+    if 'agent-reasoning:' in (prompt or '').lower():
+        print(f'AGENTTYPE (deviation recorded): {agent_name} dispatched for '
+              f'claim {cid}; route_capability recommends {rec} '
+              f'(agent-reasoning present)', file=sys.stderr)
+        return (True, f'deviation from {rec} recorded via agent-reasoning')
+    return (False, (
+        f'specialist-first violation (#310): route_capability recommends '
+        f'{rec} for claim {cid} but the dispatch sends {agent_name}. Add '
+        f'`agent-reasoning: <why {agent_name} instead of {rec}>` to the '
+        f'dispatch prompt, or dispatch {rec} — the deviation must be '
+        f'recorded, not silently mixed.'
+    ))
+
+
+# ---------- issue #270: REJECT guidance via hookSpecificOutput.additionalContext ----------
+# #235 added corrective guidance to env_check_gate only; worker_budget's 12
+# pre_check gates (+ snapshot + devreason) REJECTed bare — `print REJECT + exit
+# 2` with no hint on how to fix, and the user reported "the hook still just
+# rejects outright without giving any hint" (原文 Chinese, 2026-08-13).
+# Every REJECT now ALSO emits a
+# hookSpecificOutput.additionalContext JSON on stdout with a concrete fix path
+# (same dual channel as dispatch_gate.py:137-151 / env_check_gate.py:104-113).
+# REJECT semantics are unchanged: exit 2 + stderr `REJECT <name>` summary.
+# additionalContext is per-check, concrete and executable — never boilerplate.
+
+REJECT_FIXES: dict[str, dict[str, str]] = {
+    'workers': {
+        'additionalContext': (
+            'active workers >= MAX_WORKERS (3) — slot-full, the loop has no '
+            'capacity for another worker. Fix: wait for an active worker to '
+            'finish (runs/worker-status-*.md last status line = done), or '
+            'TaskStop the stuck/retired worker to release a slot, then '
+            're-dispatch.'
+        ),
+    },
+    'cap': {
+        'additionalContext': (
+            'per-claim cost cap reached: promotion_attempts >= 3. Fix: STOP '
+            're-dispatching this claim — re-dispatch keeps rejecting by design. '
+            'Run uv run --project <skill> <skill>/scripts/failure_analysis_gate.py <ws> <claim> '
+            '(answer the 3 questions), record the next method, then re-dispatch '
+            '— or mark the claim DEFERRED / supersede it.'
+        ),
+    },
+    'tools': {
+        'additionalContext': (
+            'a dispatched tool requires a task_spec constraint that is '
+            'forbidden. Fix: dispatch with tools whose constraints are allowed '
+            'only — vm_detonation=forbidden means static tools '
+            '(grep / xxd / mcp__ghidra__*) and NO vmr-shell / rev-frida / '
+            'mcp__x64dbg__*. To use VM tools, get user authorisation and set '
+            'task_spec.constraints.vm_detonation: allowed first, then re-dispatch.'
+        ),
+    },
+    'hostchan': {
+        'additionalContext': (
+            'host-channel dynamic tool forbidden (SKILL.md §hard prohibitions '
+            '#5 — sample must never execute on the host). Fix: only '
+            'mcp__x64dbg__connect_remote(host=192.168.20.128) is allowed — launch the '
+            'VM-side x64dbg via vmr-shell first, then connect_remote; or '
+            'rev-frida against the VM frida-server (192.168.20.128:1337). '
+            'Never start_session / connect_to_session / connect_to_instance / '
+            'terminate_session / frida spawn / frida attach.'
+        ),
+    },
+    'deadline': {
+        'additionalContext': (
+            'time budget exhausted (now >= deadline_ts). Fix: the run is over '
+            'budget — either close the run out (write closeout, mark claims '
+            'accordingly), or get user approval to extend: write a new '
+            'deadline_ts in analysis_state.txt (or raise '
+            'task_spec.time_budget_minutes) and re-dispatch after the '
+            'extension is in place.'
+        ),
+    },
+    'tier': {
+        'additionalContext': (
+            'tier gate: tier=N dispatch requires every open claim at '
+            'evidence_tier_attempted >= N-1. Fix: complete the lower-tier '
+            'evidence first — raise the open claim\'s evidence_tier_attempted '
+            'in claim-register.yaml by doing that tier\'s work (static/CTI '
+            'before VM), then re-dispatch the tier=N claim.'
+        ),
+    },
+    'selfcap': {
+        'additionalContext': (
+            'self-imposed time cap in the dispatch description but '
+            'task_spec.time_budget_minutes=0/unset (contract: no budget until '
+            'convergence). Fix: remove the cap wording from the dispatch '
+            'description ("no self-cap" / "until closed"), or set '
+            'task_spec.time_budget_minutes > 0 to authorise a ceiling — '
+            'then re-dispatch.'
+        ),
+    },
+    'heartbeat': {
+        'additionalContext': (
+            'heartbeat NOT registered / STALE — dispatching without monitoring '
+            'is the #1 recurring failure. Fix BEFORE dispatching: run '
+            'uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on, '
+            'then register the cron (CronCreate */5 * * * * with the heartbeat '
+            'loop prompt, or /loop 5m) so monitoring ticks before the worker '
+            'starts.'
+        ),
+    },
+    'drift': {
+        'additionalContext': (
+            'plan drift detected (plan files lag reality). Fix: run '
+            'uv run --project <skill> <skill>/scripts/plan_drift_detector.py <ws> --active-only '
+            'to list the drifted items, then update global_plan.txt and/or '
+            'runs/plan-C*.md to match what the run actually does (new claim, '
+            'dropped step, superseded plan) — record the deviation reasoning — '
+            'and re-check before re-dispatching.'
+        ),
+    },
+    'health': {
+        'additionalContext': (
+            'convergence loop unhealthy (STALLED / SPINNING). Fix: run '
+            'uv run --project <skill> <skill>/scripts/convergence_health.py <ws> for the '
+            'diagnostic — STALLED: re-prime the loop (workers/heartbeat alive? '
+            'claim actually in progress?); SPINNING: STOP dispatching and '
+            'reconcile what is being re-done (usually a missing '
+            'verify/promote step) — collapse the spin, then resume.'
+        ),
+    },
+    'backtrack': {
+        'additionalContext': (
+            'stuck worker(s) without a valid backtrack decision. Fix: append a '
+            '"## backtrack" block to the stuck worker\'s '
+            'runs/worker-status-*.md (decision: redispatch / escalate / '
+            'retry_different + reason + new_approach), or resolve the stall '
+            'directly, then re-run uv run --project <skill> <skill>/scripts/backtrack_gate.py '
+            '<ws> to confirm clean before re-dispatching.'
+        ),
+    },
+    'plan': {
+        'additionalContext': (
+            'plan-first gate (kunglao-worker.md golden rule #3: PLAN FIRST, '
+            'execute second). Fix: write runs/plan-C<NN>.md '
+            '(goal / preflight / steps / fallback) for claim C-<NN> BEFORE '
+            'dispatching, or reference the plan path in the dispatch prompt '
+            'when writing it in the same turn — then re-dispatch.'
+        ),
+    },
+    'toolfirst': {
+        'additionalContext': (
+            'tool-first gate (#294): the dispatch text matches a registered '
+            'tools/_INDEX.yaml entry but carries no `tool-catalog:` marker. '
+            'Fix: read <skill>/tools/_INDEX.md -> pick the matching '
+            '_index-<category>.md entry -> add `tool-catalog: <tool-name>` to '
+            'the dispatch prompt (or `tool-catalog: none (reasoning: <why '
+            'not>)` if the registered tool genuinely does not apply) — then '
+            're-dispatch.'
+        ),
+    },
+    'agenttype': {
+        'additionalContext': (
+            'specialist-first gate (#310): route_capability recommends a '
+            'specialist agent for this claim (claim task domain x sample '
+            'features vs the mechanical trigger table in agents/*.md '
+            'frontmatter) but the dispatch sends a different work agent. Fix: '
+            'run uv run --project <skill> <skill>/scripts/route_capability.py --features-file '
+            '<probe.json> --claim <C-NN> --workspace <ws> --json, dispatch the '
+            'recommended agent_type (ghidra-light / go-symbols / floss-filter '
+            '/ pefile-signature / verdict-scorer), or add '
+            '`agent-reasoning: <why this agent instead of the recommended '
+            'specialist>` to the dispatch prompt — the deviation must be '
+            'recorded, not silently mixed — then re-dispatch.'
+        ),
+    },
+    'snapshot': {
+        'additionalContext': (
+            'anti state-loss marker missing (§1c v1.9.24). Fix: count facts/ '
+            'first, then start the dispatch prompt with '
+            '"facts-snapshot: N facts at <ts>" (e.g. '
+            '"facts-snapshot: 9 facts at 2026-08-13T00:00Z") — the marker '
+            'makes the pre-dispatch checkpoint verifiable — then re-dispatch.'
+        ),
+    },
+    'devreason': {
+        'additionalContext': (
+            'priority deviation without justification (anti-spoof v1.9.24). '
+            'Fix: add "reasoning: <why C-<NN> instead of the ranked #1 '
+            'C-<MM>>" to the dispatch prompt, or dispatch the top-ranked claim '
+            'instead — the deviation must be recorded, not silently skipped.'
+        ),
+    },
+}
+
+
+def _reject(name: str, msg: str, paths: dict) -> int:
+    """REJECT with guidance (issue #270): stderr summary + stdout JSON
+    hookSpecificOutput.additionalContext. Exit 2 semantics unchanged."""
+    print(f'REJECT {name}: {msg}', file=sys.stderr)
+    entry = REJECT_FIXES.get(name)
+    if not entry:
+        return 2
+    fix = entry['additionalContext']
+    fix = fix.replace('<skill>', str(_SKILL_ROOT)).replace('<ws>',
+                                                           paths.get('workspace') or '<ws>')
+    print(json.dumps({
+        'hookSpecificOutput': {
+            'hookEventName': 'PreToolUse',
+            'additionalContext': (
+                f'worker_budget REJECT {name}: {msg}\n\n'
+                f'How to fix:\n{fix}'
+            ),
+        },
+    }, ensure_ascii=False))
+    return 2
+
+
 # ---------- hook entry ----------
 
 def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
@@ -715,15 +1279,17 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
     from datetime import datetime, timedelta, timezone
     if not state_path.exists():
         return True, 'no kunglao-agent workspace — heartbeat gate skipped'
-    # heartbeat 属 skill 监控, 不在分析工作区: 先查 cwd 侧, 再 fallback 到 skill 安装目录
+    # the heartbeat belongs to skill-level monitoring, not the analysis workspace: check the cwd side first, then fall back to the skill install dir
     hb = state_path.parent / 'runs' / '.heartbeat.json'
     _skill = Path(__file__).resolve().parents[1]
     hb_skill = _skill / 'runs' / '.heartbeat.json'
 
     def _age(hb_path: Path):
-        # F1 (#14): liveness = max(last_tick_ts, activity_ts) — tool 活跃(activity_ts)
-        # 即使 cron 不 tick(last_tick_ts stale)也算 alive。修 v1.9.36 语义分裂
-        # (hook bump activity_ts 但 gate 只读 last_tick_ts → fix 没修 gate)。
+        # F1 (#14): liveness = max(last_tick_ts, activity_ts) — tool activity
+        # (activity_ts) counts as alive even when the cron does not tick
+        # (last_tick_ts stale). Fixes the v1.9.36 semantic split (the hook
+        # bumped activity_ts but the gate only read last_tick_ts → the fix
+        # never reached the gate).
         try:
             data = json.loads(hb_path.read_text(encoding='utf-8'))
             parsed = []
@@ -741,7 +1307,7 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
         except Exception:
             return None, ''
 
-    # workspace 心跳缺失或过期 → 用 skill 目录的新心跳(skill 监控统一注册点)
+    # workspace heartbeat missing or expired → use the fresh heartbeat from the skill dir (unified skill-monitoring registration point)
     ws_age, ws_last = _age(hb) if hb.exists() else (None, '')
     if ws_age is None or ws_age > timedelta(minutes=35):
         sk_age, sk_last = _age(hb_skill) if hb_skill.exists() else (None, '')
@@ -750,7 +1316,7 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
     if not hb.exists():
         return (False,
                 'heartbeat NOT registered. BEFORE dispatching, run:\n'
-                '  python <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n'
+                '  uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n'
                 '  CronCreate */5 * * * * <heartbeat_loop_prompt.py output>\n'
                 '§6.1b v1.9.28: dispatching a task != monitoring started.')
     age, last_str = _age(hb)
@@ -766,6 +1332,8 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
 
 def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
+    prompt = payload.get('tool_input', {}).get('prompt', '')
+    agent_name = payload.get('tool_input', {}).get('name') or ''
     tier, tools, cid = parse_dispatch(desc)
     checks = [
         ('workers', check_workers_lt_3(paths)),
@@ -779,43 +1347,60 @@ def pre_check(payload: dict, paths: dict) -> int:
         # gate closes the recurring 'dispatch without monitoring' failure.
         ('heartbeat', check_heartbeat_alive(paths['state'])),
         # v1.9.29: plan drift + convergence health wired in as mechanical
-        # gates (R1/R3 of research-tree r3). FAIL_OPEN inside the checks.
+        # gates (historical research-tree r3, R1/R3). FAIL_OPEN inside the checks.
         ('drift', check_plan_drift(paths)),
         ('health', check_convergence_health(paths)),
-        # v1.9.30 (#38): stuck-worker backtrack gate — closes the
+        # v1.9.29 (#38): stuck-worker backtrack gate — closes the
         # built-but-not-wired gap (backtrack_gate.py existed but was never
         # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
         ('backtrack', check_backtrack_gate(paths)),
+        # v1.9.31 (#239): plan-to-execute gate — a claim dispatch REQUIRES
+        # runs/plan-C<NN>*.md on disk OR a plan path for that claim in the
+        # dispatch prompt (timing relaxation). Closes the 2026-08-12
+        # F006-F008 accident: inference written as facts — the plan phase
+        # exposes it before execution.
+        ('plan', check_worker_plan(paths, cid, prompt)),
+        # v1.9.32 (#294): tool-first gate — a dispatch whose text matches a
+        # registered tools/_INDEX.yaml keyword must cite it (`tool-catalog:`)
+        # or explicitly opt out with reasoning. Closes the Swiss-army-test gap
+        # where a passing plan gate still let a worker hand-roll a script
+        # instead of trying crypto-tool.py for a crypto-decode task.
+        ('toolfirst', check_tool_first(paths, desc, prompt)),
+        # v1.9.33 (#310): agenttype gate — specialist-first as a mechanical
+        # check. route_capability recommends the specialist for the claim
+        # (task domain x sample features); a deviating dispatch REJECTS
+        # without `agent-reasoning:` (same anti-spoof shape as devreason).
+        ('agenttype', check_agent_type(paths, desc, prompt, agent_name)),
     ]
     for name, (ok, msg) in checks:
         if not ok:
-            print(f'REJECT {name}: {msg}', file=sys.stderr)
-            return 2
+            return _reject(name, msg, paths)
     # §1c v1.9.24 — facts-snapshot marker HARD-REQUIRED (anti state-loss spoof).
     # The orchestrator claims it "ls facts/ before dispatch" (§1c) — make it
     # verifiable: the dispatch prompt must carry `facts-snapshot:` (e.g.
     # "facts-snapshot: 9 facts at <ts>") or the dispatch is REJECTED.
     desc = payload.get('tool_input', {}).get('prompt', '')
     if 'facts-snapshot:' not in desc:
-        print(f'REJECT snapshot: dispatch prompt lacks `facts-snapshot:` marker '
-              f'(§1c v1.9.24 — checkpoint state before dispatch).', file=sys.stderr)
-        return 2
+        return _reject('snapshot',
+                       'dispatch prompt lacks `facts-snapshot:` marker '
+                       '(§1c v1.9.24 — checkpoint state before dispatch).', paths)
     # best-first priority audit — v1.9.24: DEVIATION REASONING IS HARD-REQUIRED.
     # check_priority returns (ok, msg, deviated). If the dispatch deviates from
     # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
-    # otherwise the dispatch is REJECTED (prevents "假装按优先级" spoofing:
+    # otherwise the dispatch is REJECTED (prevents "pretend-priority" spoofing:
     # dispatching a different claim without recording why).
     _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), paths.get('task_spec'), cid)
     if deviated:
         desc = payload.get('tool_input', {}).get('prompt', '')
         if 'reasoning:' not in desc:
-            print(f'REJECT devreason: dispatch deviates from priority #1 but has no `reasoning:` field '
-                  f'(v1.9.24 anti-spoof). PRIORITY: {pmsg}', file=sys.stderr)
-            return 2
+            return _reject('devreason',
+                           'dispatch deviates from priority #1 but has no '
+                           '`reasoning:` field (v1.9.24 anti-spoof). '
+                           f'PRIORITY: {pmsg}', paths)
         print(f'PRIORITY (deviated w/ reasoning): {pmsg}', file=sys.stderr)
     elif pmsg:
         print(f'PRIORITY: {pmsg}', file=sys.stderr)
-    worker_id = payload.get('tool_input', {}).get('name') or f'w{int(time.time())}'
+    worker_id = agent_name or f'w{int(time.time())}'
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',

@@ -1,380 +1,246 @@
 # kunglao-agent
 
-> **Convergence-driven reverse-engineering orchestrator** — an autonomous loop that takes a malware sample to a byte-proven, independently-verified fact base, with a non-lossy evidence chain.
->
-> Formerly `kong-agent`. Built on Claude Code (skills + agents + hooks).
+A Claude Code skill that runs a convergence-driven reverse-engineering loop: it takes a malware sample to a byte-proven, independently-verified fact base, enforced by mechanical gates.
 
-[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.11%2B-blue)](.) [![license](https://img.shields.io/badge/license-MIT-lightgrey)](.)
+[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-MIT-lightgrey)](.)
 
 ---
 
-## Why
+## What this is
 
-Most "agent" RE tools are **notification-driven** — they act when poked (worker notification / user prompt), then idle with open claims and free slots. Every "it's stuck / 傻等 / not converging" complaint traces to this. kunglao-agent inverts it: the loop is **convergence-driven**. Every tick it mechanically asks *"should I dispatch, or am I converged/saturated/blocked?"* and acts on the answer. The orchestrator is a daemon, not a one-shot.
+kunglao-agent is a Claude Code skill for malware reverse engineering. You drop a sample into a workspace, say what you need to know, and the skill runs a convergence loop: specialist workers analyze (static first), an independent verifier re-derives every fact blind from raw evidence, and mechanical gates decide when the analysis is done. The deliverable is a fact base where every claim is byte-anchored, independently verified, and evidence-indexed — trust is enforced by machinery, not convention.
 
-The deeper problem it solves: **autonomous output is untrustworthy by default**. An LLM maker self-stamps `PROVEN`, cites a derivation instead of raw evidence, declares `CONVERGED` without answering the primary questions. kunglao-agent makes the two trust preconditions **mechanically enforceable**:
+The only interface is Claude Code: you talk to it and read its reports. The Python modules in this repo are the skill's internal organs, called by hooks, agents, and CI — documented under [Internals](#internals) for developers who extend the system, not as a user interface.
 
-1. **Verified convergence** — `PROVEN` ≡ passed an independent BLIND verifier; `CONVERGED` ≡ all primary questions answered with byte-proof + zero orphan claims + zero false-flatline.
-2. **Evidence integrity** — every fact's provenance traces through an evidence index to a **complete raw artifact** (capture / trace / dump / binary); derivations (`summary.json`, `correlated.json`) cannot impersonate evidence; ICD-203 tradecraft conformance (source reliability, 7-tier probability, recorded dissents).
+## Prerequisites
 
----
+- **Python 3.10+ and [uv](https://docs.astral.sh/uv)** — hooks never invoke bare `python`: on machines where `python` resolves to Python 2.x every registered hook dies with the interpreter (#389). All hook commands run via `uv run --project <skill_root>`. **Python 2 is not supported.**
+- **`uv sync --locked`** — restore the pinned project venv before anything else (see [Quick start](#quick-start)).
+- **Ghidra or IDA** — one static-analysis suite for decompilation.
+- **A VM** — required for T3 dynamic analysis (Windows / Linux / Android guest, matching the sample's project type). Samples never run on the host.
+- **MCP servers** — registered by `kunglao-init` (ghidra, sequential-thinking, x64dbg, ...); see the MCP supply table under [Internals](#internals).
 
-## What it does
+## Quick start
 
-Given a mounted sample (`bins/<sha256>`) + a task spec, kunglao-agent runs an autonomous loop:
+### 1. Install
+
+**Primary path — the marketplace** (v0.1 ships `.claude-plugin/marketplace.json`): from any directory, in Claude Code:
 
 ```
-mount sample → seed claims (from primary questions) → convergence loop:
-  every tick: convergence_check → DISPATCH / DISPATCH_VERIFIER / SATURATED / BLOCKED / CONVERGED
-  DISPATCH:  priority_ratio ranks open claims (VoI proxy / cost) → dispatch specialist worker
-  worker (maker): gathers byte evidence → writes fact file
-  verifier (BLIND checker): forward-derives from raw evidence → pass only on exact match
-  gates: doubt_checker / provenance_gate / blind_gate / completeness_gate
-CONVERGED: report built on a byte-proven, independently-verified, evidence-indexed fact base
+/plugin marketplace add amd2g2zz/kunglao-agent
+/plugin install kunglao-agent@kunglao-agent
 ```
 
-It is **not** an analyst — it never decompiles/emulates/scans itself. It orchestrates specialist worker agents (ghidra-light, floss-filter, pefile-signature, cti-correlator, kunglao-worker) and an adversarial verifier (kunglao-redteam). Maker-checker holds: worker = maker, redteam = checker, **different agents**.
+**Direct plugin path** — load the repo as a plugin, no marketplace:
 
----
-
-## Key features
-
-| Feature | What it means |
-|---|---|
-| **Convergence-driven loop** | 5-branch decision matrix (`convergence_check.py`); never idles with open claims + free slots |
-| **VoI priority scoring** | `score = [0.45·L + 0.30·D + 0.25·N] / cost` — leverage (graph topology) + discriminator + novelty / tier cost. **Zero LLM in scoring** (pure mechanical) |
-| **BLIND maker-checker** | Verifier gets ONLY raw evidence + question; derives forward; pass on exact match. `PROVEN` requires sign-off, else auto-downgrade to `STAMP` |
-| **Verified convergence** | `CONVERGED` requires all primary questions PROVEN + zero orphan terminal claims + SPINNING flatline detection |
-| **Evidence index** | `evidence/_index.json` registers every raw artifact (eid → path + sha256 + type + source reliability). Derivations excluded — they are computations, not evidence |
-| **Provenance gate** | A fact citing a derivation (`summary.json`) instead of indexed raw → **rejected**. Kills the C-020 "summary-drifts-from-source" failure mode |
-| **ICD-203 tradecraft** | Admiralty source reliability per evidence (A1–F6); 7-tier probability ladder; BLIND `REFUTE` recorded as structured dissent |
-| **Heartbeat liveness** | Dispatch gate reads `max(last_tick, activity_ts)` — tool activity keeps the loop alive even when the cron isn't ticking |
-| **8 independent CLIs** | `kunglao.py` + `kunglao-decide / verify / record / monitor / digest / init / eval` — single-responsibility, no shared argparse |
-
----
-
-## Architecture
-
-```mermaid
-flowchart TD
-    subgraph Loop["Convergence loop (every tick)"]
-        CC["convergence_check<br/>5-branch matrix"]
-        CC -->|DISPATCH| PR["priority_ratio<br/>VoI / cost ranking"]
-        CC -->|DISPATCH_VERIFIER| VD["dispatch verifier"]
-        CC -->|CONVERGED| DONE["byte-proven fact base"]
-        PR --> WK["specialist worker<br/>(maker)"]
-        WK --> FACT["fact file<br/>+ evidence"]
-        FACT --> PG["provenance_gate<br/>cite raw via index"]
-        FACT --> BG["blind_gate<br/>BLIND verifier sign-off"]
-        BG -->|REFUTE| DIS["structured dissent"]
-        BG -->|no sign-off| STAMP["downgrade to STAMP"]
-        VD --> RT["kunglao-redteam<br/>(BLIND checker)"]
-        RT --> FACT
-    end
-    FACT --> IDX["evidence/_index.json<br/>eid to raw path + sha256 + reliability"]
-    IDX --> PG
+```
+claude --plugin-dir /path/to/kunglao-agent
 ```
 
-### The two trust layers
+The plugin manager lists `kunglao-agent` at version `0.1`. The shipped `.claude-plugin/plugin.json` manifest is metadata-only — identity fields, no component wiring yet (tracked in #364) — so for today's working skill surface use the skill-dir path below.
 
-**Layer 1 — Verified convergence** (`PROVEN` / `CONVERGED` are mechanically trustworthy):
+**Skill-dir path** — in Claude Code:
 
-| Gate | Enforces |
-|---|---|
-| `blind_gate` | `PROVEN` requires independent verifier sign-off; self-sign rejected; else `STAMP` |
-| `convergence_completeness` | `CONVERGED` requires primary_q all `PROVEN` + zero orphan terminal claims |
-| `convergence_health` | SPINNING flatline detection (count-based valve, can't be flooded) |
-| `heartbeat` (F1+F2) | Loop runs to true completion without false-death halts |
+```
+/install-github-repo amd2g2zz/kunglao-agent
+```
 
-**Layer 2 — Evidence integrity** (the evidence behind `PROVEN` is non-lossy + compliant):
-
-| Gate | Enforces |
-|---|---|
-| `evidence/_index` | Raw artifacts registered; derivations excluded |
-| `provenance_gate` | Fact must cite indexed raw (path + sha256); derivation-only → rejected |
-| source reliability | Every evidence entry carries Admiralty rating (mechanical default + verifier-check) |
-| confidence schema | 7-tier probability ladder (ICD-203 #2); legacy 3-tier auto-mapped |
-| dissent recording | BLIND `REFUTE` produces structured dissent (ICD-203 #8) |
-
----
-
-## Installation
-
-### Prerequisites
-
-| Requirement | Why | Version |
-|---|---|---|
-| **Claude Code** | kunglao-agent is a Claude Code skill (runs as the orchestrator loop) | latest |
-| **Python** | Scripts, hooks, gates, evidence tooling | 3.11+ |
-| **uv** | Python env + dependency management (`pyproject.toml` / `uv.lock`) | latest |
-| **git** | Worktree-based dev + state checkpointing | 2.30+ |
-| **Ghidra** (optional) | Static decompile/disasm via MCP bridge or `analyzeHeadless.bat` | 11+ |
-| **Analysis VM** (optional) | Dynamic dispatch (sample execution / Frida / x64dbg) — never on host | Windows 10/11 |
-
-### 1. Install the skill
-
-kunglao-agent is a Claude Code skill. Clone it into the skills directory:
+or, manually:
 
 ```bash
 git clone https://github.com/amd2g2zz/kunglao-agent.git ~/.claude/skills/kunglao-agent
 cd ~/.claude/skills/kunglao-agent
-uv sync --locked              # restore .venv from uv.lock — pyyaml / pefile / capstone / jsonschema
-```
-
-> Deploy as a plain skill (clone to `~/.claude/skills/kunglao-agent/`). Do NOT add a `.claude-plugin/` directory: that converts the skill into a `skills-directory` plugin in the next session and breaks bare `/kunglao-agent` invocation (regression 7f5f179, 2026-08-10).
-
-`uv sync --locked` requires only a clean clone: the dependency set is declared in
-`pyproject.toml` and pinned in `uv.lock`, both revision-owned (issue #80 release
-contract — see [Release contract](#release-contract)).
-
-Install the worker + verifier subagents (they live alongside, in `~/.claude/agents/`):
-
-```bash
-# kunglao-worker (maker) + kunglao-redteam (BLIND checker) ship with the repo
-cp agents/kunglao-worker.md ~/.claude/agents/
-cp agents/kunglao-redteam.md ~/.claude/agents/
-# optional specialists
-cp agents/ghidra-light.md floss-filter.md pefile-signature.md cti-correlator.md ~/.claude/agents/
-```
-
-### 2. Wire hooks (orchestrator-only, per workspace)
-
-The enforcement gates (worker_budget, heartbeat, dispatch_gate) are PreToolUse/PostToolUse hooks. They are **not** auto-installed — wire them explicitly per workspace:
-
-```bash
-python ~/.claude/skills/kunglao-agent/scripts/hook_activation.py <workspace> --wire-up      # idempotent hook registration
-python ~/.claude/skills/kunglao-agent/scripts/hook_activation.py <workspace> --heartbeat-on # register .heartbeat.json
-python ~/.claude/skills/kunglao-agent/scripts/hook_activation.py <workspace> --reconcile    # rebuild active_workers from worktrees
-```
-
-### 3. (Optional) MCP servers + VM
-
-| Capability | MCP server | Notes |
-|---|---|---|
-| Static decompile / xref / disasm | `ghidra` | bridge at `127.0.0.1:8089`; falls back to `analyzeHeadless.bat` |
-| Dynamic stepping | `x64dbg` | **VM-only** — `connect_remote(host=<VM IP>, ...)`; host channel forbidden |
-| Runtime hooking | `frida` | **VM-only** — `192.168.20.128:1337` |
-| CTI lookup | `virustotal` | needs `VT_API_KEY` |
-
-VM control goes through the `vmr-shell` skill (`VMR_SERVER_URL=http://192.168.20.128:9876`). Sample execution on the host is blocked by the `block_malware_exec` hook — this is intentional.
-
----
-
-## Release contract
-
-The checked-out revision IS the release artifact. Three revision-owned pieces make a clean clone reproducible (issue #80):
-
-- **`pyproject.toml` + `uv.lock`** — the dependency set actually imported by the codebase (`pyyaml` / `pefile` / `capstone` / `jsonschema`; `pytest` in the dev group), pinned by a committed lockfile. `uv sync --locked` is the documented install command.
-- **`release-manifest.yaml`** — the DECLARED inventory: version, dependencies, every shipped agent asset (`agents/*.md`), hook, template, the 8-CLI inventory, and the router subcommand surface. Adding a shipped asset without declaring it here fails CI.
-- **`scripts/release_receipt.py`** — the OBSERVED inventory: generates a machine-readable receipt (`release-receipt.json`) with revision, lockfile digest, per-asset sha256, CLI `--help` exit codes, and test result. Run it locally with `--check` for a fast manifest/CLI gate, or point it at a junit XML (`--pytest-junit`) to reuse a pytest run.
-
-CI (`.github/workflows/release-check.yml`) runs this on every PR/push to `dev`/`master`: `uv sync --locked` → `release_receipt.py --check` → the standard test command → uploads the receipt as a workflow artifact.
-
-**Test counts and "shipped" claims in this README are NOT hand-maintained** — the source of truth is the release receipt artifact on the latest CI run. Verify a fresh clone like CI does:
-
-```bash
 uv sync --locked
-uv run python scripts/release_receipt.py --check
-uv run python -m pytest -q
-uv run python scripts/kunglao_eval.py --oracle-selfcheck
+cp agents/kunglao-worker.md agents/kunglao-redteam.md ~/.claude/agents/
 ```
 
----
+### 2. Initialize a workspace
 
-## Usage
-
-### Workspace layout
-
-kunglao-agent operates on a **workspace** (one per sample engagement):
-
-```
-<workspace>/
-├── bins/<sha256>              # the sample (gitignored, never committed)
-├── task_spec.yaml             # primary_questions / scope / constraints / depth / success_criteria
-├── claim-register.yaml        # all claims (C-NN) with status (OPEN/PROVEN/STAMP/...)
-├── claim_deps.yaml            # claim DAG + competitor_groups (for ACH)
-├── facts/                     # byte-anchored facts (F-NNN-*.md) + _INDEX.md
-├── evidence/                  # raw evidence + _index.json (eid → path + sha256 + reliability)
-├── notes/                     # analysis notes (note-NNN.md)
-├── runs/                      # worker-status, ledgers, .heartbeat.json, digest.md
-└── CLAUDE.md                  # workspace rules (V1–V5: CTI non-truth, sandbox non-conclusion, ...)
-```
-
-### Initialize
+One fresh workspace per sample engagement:
 
 ```bash
-# scaffold a fresh workspace + mount sample + seed claims from task_spec primary_questions
-python scripts/kunglao-init.py <workspace>
+uv run --project <repo> <repo>/scripts/kunglao-init.py <workspace> --type windows   # or linux | android
 ```
 
-`kunglao-init` is idempotent (detects `[initialized]` marker; `--force` to rebuild with backup).
+Options: `--skip-toolchain` (skip the toolchain preflight — test/ops escape hatch), `--no-mcp` (skip the workspace `.mcp.json` scaffold), `--install-git-hooks` (install the review-gate pre-commit hook), `--force` (re-init after backing up the claim register).
 
-### Run the convergence loop
+Init confirms the project type, scaffolds the workspace, writes the type-appropriate `CLAUDE.md`, and runs per-type toolchain probes (Android: ADB + rooted device + renamed frida-server on a custom port; Linux: Ghidra-or-IDA + remote debugger; Windows: Ghidra-or-IDA + VM). Hard failures are reported with root-cause guidance; a workspace that is not initialized is refused work.
 
-In Claude Code, invoke the skill:
+### 3. Start the session
+
+In Claude Code, in the workspace directory:
 
 ```
 /kunglao-agent
 ```
 
-or describe the task — it auto-triggers on phrases like *"分析这个样本"* / *"kunglao-agent stuck"* / *"不收敛"*. The orchestrator then runs autonomously:
+or just describe the task — the skill auto-triggers on phrases like *"analyze this sample"* / *"分析这个样本"* / *"不收敛"*. The skill then runs the loop and delivers the report; you monitor through conversation.
 
-1. **Cold start** — reads `claim-register.yaml` + `facts/_INDEX.md` + digest (≤38K tokens, not full progress).
-2. **Every tick** — `convergence_check.py <workspace>` returns a decision:
+## A worked analysis case
 
-   | Decision | Exit | Orchestrator action |
-   |---|---|---|
-   | `DISPATCH` | 1 | `priority_ratio` ranks open claims → dispatch top specialist worker |
-   | `DISPATCH_VERIFIER` | 2 | dispatch BLIND verifier for partial facts |
-   | `SATURATED` | 3 | poll stuck workers, do not idle |
-   | `BLOCKED` | 4 | resolve blockers (self-recovery L1→L2→L3), then re-check |
-   | `CONVERGED` | 0 | loop done — write report |
+*The walkthrough below is a representative, synthetic session on a small, deliberately simple sample. It shows the shape of an engagement, not a measured result — for measured outcomes see [Real-world results](#real-world-results).*
 
-3. **Worker** (maker) gathers byte evidence → writes `facts/F-NNN.md` + `runs/worker-status-<id>.md`.
-4. **Verifier** (kunglao-redteam, BLIND) forward-derives from raw evidence → sign-off or `REFUTE` (→ dissent).
-5. **Gates** enforce: `provenance_gate` (cite raw not derivation), `blind_gate` (PROVEN needs sign-off), `completeness_gate` (CONVERGED needs all primary_q PROVEN + zero orphan).
-6. **Loop** until `CONVERGED` — output is a byte-proven, independently-verified, evidence-indexed fact base.
-
-### Monitor
-
-```bash
-# at-a-glance progress
-python scripts/progress_report.py <workspace>
-
-# is the loop actually converging, or spinning?
-python scripts/convergence_health.py <workspace>
-
-# worker status (all workers)
-cat <workspace>/runs/worker-status-w*.md
-
-# evidence coverage (BLIND + source reliability)
-python tools/measure_blind_coverage.py <workspace> --reliability
-```
-
-### Dispatch contract (when the orchestrator dispatches)
+**Setup.** A small Windows dropper lands in `~/cases/synth-dropper`. The operator initializes the workspace:
 
 ```
-[T1 tools=grep,xxd] claim C-007 <task>     # prefix parsed by worker_budget hook
+uv run --project ~/kunglao-agent ~/kunglao-agent/scripts/kunglao-init.py ~/cases/synth-dropper --type windows
 ```
-- `T1`/`T2`/`T3` = cheap / medium / expensive (emulation / VM)
-- `tools=` = the tools the worker may use (enforced)
-- Gates: ≤3 concurrent workers, per-claim cap, tier gate, heartbeat-alive, self-cap detection.
 
-### Example output
+`kunglao-init` scaffolds the workspace, writes the workspace `CLAUDE.md`, probes the toolchain (Ghidra present, VM reachable), and scaffolds `.mcp.json`. The operator runs `/kunglao-agent` and states the task: *"what does this binary do, and where does it phone home?"*
 
-A `PROVEN` fact (`facts/F061-c401-ep-recheck.md`):
+**The loop.** The orchestrator opens `task_spec.yaml` with the primary questions (capability, persistence, network). Each tick is one mechanical decision:
+
+1. `DISPATCH` — a static worker is dispatched first with an explicit contract (`[T1 tools=pe_analyze,strings-classify] claim C-001`). It writes facts: PE structure, imports mapped to capability classes, embedded strings, overlay scan.
+2. `DISPATCH_VERIFIER` — for each fact, the redteam verifier re-derives the answer blind from the raw artifact (never reading the maker's conclusion) and signs off `CONFIRMED`; the fact reaches `PROVEN`.
+3. `SATURATED` / `BLOCKED` ticks poll stuck workers or resolve blockers — the loop never idles with open claims.
+4. `CONVERGED` — every primary question answered with byte-proof, zero orphan claims. The loop exits 0 and builds the report.
+
+**Deliverables.** `claim-register.yaml` (every claim terminal), `facts/` (each fact byte-anchored, with provenance and a reproduce command), `evidence/_index.json` (every fact traceable to a raw artifact), and the final report. Every tick is recorded as a ledger line in `runs/` — the session's audit trail.
+
+## What you get
+
+A claim register and fact base where trust is mechanical, not conventional:
+
+- **Verified convergence** — `PROVEN` requires an independent BLIND verifier's exact-match sign-off; `CONVERGED` requires every primary question answered with byte-proof, zero orphan claims, no spinning.
+- **Evidence integrity** — every fact traces through `evidence/_index.json` to a raw artifact (capture / trace / dump / binary). Derived summaries are excluded by design.
+- **Maker-checker** — the worker (maker) writes facts; the redteam verifier (checker) re-derives the answer blind from raw evidence; they are different agents, always.
+
+### Example fact
 
 ```yaml
 id: F061
 status: VERIFIED-BY-W01-static-byte-recheck
-confidence: almost_certain        # ICD-203 7-tier (P4)
+confidence: almost_certain        # ICD-203 7-tier
 claim_id: C-401
 provenance:
   - {role: sample, path: bins/<sha>}
   - {role: capture_log, path: runs/c329-inner-pe.bin}   # cited via evidence/_index.json
 reproduce: |
   python -c "import struct; d=open('runs/c329-inner-pe.bin','rb').read(); ..."
-verifier_sign_off:                 # BLIND (M1) — required for PROVEN, else STAMP
+verifier_sign_off:
   verifier: kunglao-redteam
   verdict: CONFIRMED
-  derived_via: [struct.parse, pefile, capstone]   # ≥2 independent paths
+  derived_via: [struct.parse, pefile, capstone]
 ```
 
+## How the loop works
 
+Every tick is one mechanical decision:
 
-### CLI reference
+| Decision | Exit | What happens |
+|---|---|---|
+| `DISPATCH` | 1 | rank open claims by VoI/cost, dispatch the top specialist worker |
+| `DISPATCH_VERIFIER` | 2 | dispatch a BLIND verifier for a partial fact |
+| `SATURATED` | 3 | poll stuck workers — never idle with open claims and free slots |
+| `BLOCKED` | 4 | resolve blockers (self-recovery L1→L2→L3), re-check |
+| `CONVERGED` | 0 | every primary question answered with byte-proof; build the report |
 
-| CLI | Job |
+Dispatch carries an explicit contract — `[T1 tools=grep,xxd] claim C-007 <task>` — enforced by the `worker_budget` hook: ≤3 concurrent workers, per-claim cap, tier gate (T1 static / T2 emulation / T3 VM), live heartbeat, plan-with-content, a declared static-gap list for T2/T3 work.
+
+## Analysis principle
+
+Five layers, in order of preference — static first, escalate only when the layer above is genuinely insufficient:
+
+1. **Static closure** — complete the analysis statically if at all possible; a task that closes statically never touches dynamic tooling.
+2. **Deobfuscation via emulation** — emulated execution strips obfuscation (opaque predicates, indirect jumps, computed constants, encoded blobs) and feeds the result back into static analysis. This serves static; it is not a replacement.
+3. **Debug to fill declared gaps** — dynamic debugging (x64dbg / gdbserver / frida) is a complement, not a default: each T2/T3 dispatch must declare the static gap it addresses.
+4. **Emulation fallback** — when static + debug data are complete but the logic still resists (e.g. black-box crypto), a hybrid frida-hook + unidbg emulation is used, gated on all three: frida data collected, ida/ghidra decompilation done, still stuck.
+5. **Environment construction** — the worst case: build/patch an environment (matching OS version, re-signed APK, sandbox, JNI environment) so the sample runs completely and is observable end to end.
+
+## Real-world results
+
+- **NewSteamValve CDK scam dropper (2026-06-10)** — 601 imports / 16 DLLs mapped to 18 capability classes; 7198 functions / 2144 callgraph edges; 6 sections (no RWX, no overlay); 4143 obfuscated strings decoded (`XOR key=index+0x4d`); 7-stage killchain; verdict **MALICIOUS (9/12)** on 19 independently-verified facts.
+- **Numeric-fidelity enforcement (C-020 incident)** — a report collapsed a disassembly count's basis ("811 8-byte ELF slots / 774 Ghidra records, 37 LDDW folded" → "774") and mislabeled 70 `BPF_CALL` as 70 helper calls. The fix: every numeric fact declares its `unit:` basis; `handoff-check.py --anchors` and `manual_audit.py` reject anchors that drop it.
+- **Tool-first enforcement (C-022 test)** — a worker given an encrypted blob with zero hints hand-rolled a decode script; after the `toolfirst` gate landed, the same-shaped worker discovered `crypto-tool` via `tools/_INDEX.yaml` during its plan phase and ran the registered CLIs, documenting negative results per algorithm.
+
+## Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `0` | MUST stay `0`/unset — truthy values route dispatches through the teammate channel (rejected by `env_check_gate`) |
+| `KUNGLAO_VM_HOST` | unset | VM lease host for dynamic analysis (vmr-shell :9876 / Frida :1337) |
+| `GHIDRA_HOME` | unset | Ghidra install root (`support/analyzeHeadless.bat` under it) |
+
+## Internals
+
+The tool shelf: reusable analysis logic is absorbed as **registered tools** (machine contract `tools/_INDEX.yaml`, validated by `tools/validate_index.py`; human indexes `tools/_index-<category>.md`). Workers must check the index before writing new scripts (`toolfirst` gate); `tools/tool-search.py` queries it by capability tag and cost budget.
+
+| Category | Tools |
 |---|---|
-| `kunglao.py` | Orchestrator entry (subcommand router: `decide` / `tick` / `verify` / `record` / `health`) |
-| `kunglao-decide` | M1 DECIDE — convergence decision + VoI ranking |
-| `kunglao-verify` | M3 VERIFY — L1 mechanical + L2 BLIND verifier |
-| `kunglao-record` | M4 RECORD — ledger (idempotent event append) |
-| `kunglao-monitor` | M5 MONITOR — tick output / worker status |
-| `kunglao-digest` | Mechanical 6-section digest (cold-start compression) |
-| `kunglao-init` | Idempotent workspace init (anti-double-init) |
-| `kunglao-eval` | Eval harness (oracle 10/10 self-check + three-arm + fault injection) |
+| `crypto` | `crypto-tool` — 8 algorithms, stdlib-only: `chacha` (RFC + non-RFC), `xor-add`, `rolling-xor`, `lzss`, `lzma-raw`, `rsa-unpad`, `go-byte-transform`, `va-to-off`; all support `--reproduce` |
+| `ghidra` | 5 analyzeHeadless postScripts: recon / decompile-functions / vtable-struct / evidence-annotations / scan-pointer |
+| `static` | disasm-constant-check + syscall / stack-strings / overlay / PE / shellcode scanning CLIs |
+| `pipelines` | `build-evidence-index` — evidence index builder (evidence/_index.json + _INDEX.md) |
+| `aux` | legacy-PROVEN audit / golden capture / blind-coverage / cold-start metrics |
 
-Every CLI in this table is receipt-validated (see [Release contract](#release-contract)): existence + `--help` exit 0 are checked mechanically on each CI run.
+Host emulation (T2) is deliberately NOT a shelf tool: qiling-based emulation is provided by the external `/malware-framework` skill, which kunglao workers invoke per the analysis principle instead of re-wrapping qiling.
 
----
+MCP supply: the single manifest source is `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android>` (exit 1 = HARD missing, 2 = WARN missing only).
 
-## Project structure
+| MCP server | Tier | Scope | Purpose | Registration |
+|------------|------|-------|---------|--------------|
+| `ghidra` | HARD | required, all types | Ghidra decompilation/static analysis | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
+| `sequential-thinking` | HARD | required, all types | structured reasoning | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
+| `x64dbg` | HARD | Windows T3 dynamic | dynamic debugging (VM remote) | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
+| `volatility` | WARN | Windows T3 | memory forensics | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
+| `ida-pro-vm` | WARN | when IDA chosen | remote IDA analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `gitnexus` | HARD | Android graph building | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
+| `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
+
+Trust gates (the components behind "verified"):
+
+| Gate | Enforces |
+|---|---|
+| `blind_gate` | `PROVEN` requires independent BLIND verifier sign-off; self-sign rejected |
+| `provenance_gate` | facts cite indexed raw artifacts, not derived summaries |
+| `convergence_completeness` | `CONVERGED` requires all primary questions terminal + zero orphan claims |
+| `convergence_health` | SPINNING flatline detection (count-based, cannot be flooded) |
+| `handoff-check.py --anchors` | report anchors preserve the exact numeric counting basis of facts |
+| `review_gate.py` | repo commits require ≥1 independent reviewer + HMAC-signed evidence |
+| `env_check_gate` | hard-rejects dispatch while the agent-teams flag is truthy |
+
+Workspace layout (one workspace per sample engagement):
 
 ```
-kunglao-agent/
-├── SKILL.md                 # Operative contract (what the orchestrator does)
-├── DESIGN.md                # Full design
-├── scripts/                 # 55 modules: convergence_check, priority_ratio, blind_gate,
-│                            #   provenance_gate, heartbeat_*, convergence_health, ...
-├── hooks/                   # worker_budget (M2 gate), heartbeat_touch, dispatch_gate, ...
-├── tools/                   # build_evidence_index, audit_legacy_proven, measure_blind_coverage, ...
-├── tests/                   # TDD suite (RED → GREEN per feature; counts in release receipt)
-├── references/              # 19 protocol docs (convergence-loop, guardrails, RE library, ...)
-├── schemas/                 # Frozen JSON schemas (decide/verify/tick/event output)
-├── specs/                   # Per-phase contracts (phase-3.5/4/5)
-├── openspec/                # SDD change proposals + spec deltas
-├── docs/refactor/           # Design docs + research (loop-engineering, refactor-plan, ...)
-├── .claude/PRPs/prds/       # Product requirements (verified-convergence, evidence-integrity)
-└── templates/               # Workspace scaffolds (claim-register, task_spec, failure-registry)
+<workspace>/
+├── bins/<sha256>              # the sample (gitignored)
+├── task_spec.yaml             # primary_questions / scope / constraints / success_criteria
+├── claim-register.yaml        # claims C-NN with status (OPEN/PROVEN/STAMP/...)
+├── claim_deps.yaml            # claim DAG
+├── facts/                     # byte-anchored facts F-NNN.md + _INDEX.md
+├── evidence/                  # raw artifacts + _index.json (eid → path + sha256)
+├── runs/                      # worker-status, plans, ledgers, .heartbeat.json
+├── blockers/                  # failure-attribution records per claim
+└── CLAUDE.md                  # workspace rules, generated by kunglao-init
 ```
 
----
+## Development
 
-## Development workflow
-
-Built **SDD (OpenSpec) + TDD**, one-issue-one-PR-one-branch-one-worktree, merged to `dev` then released to `master`.
+SDD (OpenSpec) + TDD: one issue → one PR → one branch → one worktree, merged to `dev` then `master`. Every commit requires ≥1 independent reviewer sign-off minted through `review_gate.py` (HMAC).
 
 ```bash
-# Per feature:
 git worktree add .worktrees/<name> -b <name> dev
-openspec new change <name>           # scaffold change proposal
-# RED: write failing test → GREEN: minimal impl → refactor
-python -m pytest -q                  # baseline counts in the release receipt (CI artifact)
-openspec validate <name>
-gh pr create --base dev              # squash-merge, delete branch, close issue
+uv sync --locked
+uv run python -m pytest -q                    # RED → GREEN → refactor
+uv run python scripts/release_receipt.py --check
+gh pr create --base dev
 ```
 
-Every change has an OpenSpec proposal (`openspec/changes/<name>/`: proposal + design + tasks + spec delta). The two PRD-driven iterations:
+The release contract is revision-owned: `pyproject.toml` + `uv.lock` (pinned deps), `release-manifest.yaml` (declared asset inventory), `release_receipt.py` (observed inventory: per-asset sha256, CLI `--help` exit codes, test results). CI runs it on every PR. Depth lives in `docs/` (design, loop engineering), `specs/`, and `AGENTS.md`.
 
-- **verified-convergence** (`.claude/prds/verified-convergence.prd.md`) — 4 milestones, shipped
-- **evidence-integrity-icd203** (`.claude/PRPs/prds/evidence-integrity-icd203.prd.md`) — 5 phases, shipped
+## Limitations
 
----
+- 46 legacy `PROVEN` claims audited (10 have-raw / 18 derivation-only / 19 unverifiable) — re-verification is follow-up work
+- ICD-203 conformance is partial (tradecraft #1/#2/#5/#8/#9; full certification out of scope)
+- Dynamic analysis requires per-session authorization; sample execution is VM-only, host execution is blocked by a hook
+- Type-aware init (Windows/Linux/Android toolchain matrix) and the remaining script-absorption batch are in development (issues #304, #278)
 
-## Status
+## Safety
 
-**Shipped** (master):
-- ✅ 6-phase refactor (cleanup / VoI priority / digest / eval harness / 8-CLI convergence / acceptance)
-- ✅ verified-convergence (BLIND gate / completeness gate / heartbeat F1+F2 / legacy audit)
-- ✅ evidence-integrity (evidence index / provenance gate / source reliability / probability+dissent / re-verify audit)
-- ✅ release contract: revision-owned manifest + lockfile + agent assets, receipt-validated CLI surface, clean-env CI (test counts in the release receipt)
-
-**Known gaps (honest)**:
-- 46 legacy `PROVEN` claims audited (10 have-raw / 18 derivation-only / 19 unverifiable) — actual re-verification is follow-up work
-- ICD-203 conformance is partial (tradecraft #1/#2/#5/#8/#9 addressed; full certification out of scope)
-- `provenance_gate` parser needs hardening on real-workspace frontmatter YAML (has frontmatter-first fallback)
-- Dynamic dispatch (VM detonation / Frida) requires user authorization per session
-
----
-
-## Design docs & research
-
-- [`docs/refactor/loop-engineering.md`](docs/refactor/loop-engineering.md) — loop-engineering research (LangChain 4-loop / DSD 10-pattern / cobusgreyling), kunglao loop assessment, heartbeat bug code-level root cause
-- [`docs/refactor/refactor-plan.md`](docs/refactor/refactor-plan.md) — the v2.0 refactor plan (G1–G5 goals)
-- [`docs/refactor/design-spec.md`](docs/refactor/design-spec.md) / [`module-design.md`](docs/refactor/module-design.md) — architecture + module contracts
-- [`docs/refactor/audit-2026-08-10.md`](docs/refactor/audit-2026-08-10.md) — legacy PROVEN traceability audit
-
----
-
-## Safety constraints
-
-- **Samples never executed on host** — `block_malware_exec` PreToolUse hook enforces; VM-only via `vmr-shell`
-- **Bins / settings / hooks never committed** (`.gitignore`); secrets excluded
-- **Ground truth hierarchy**: raw artifact > local tool > sandbox > CTI. CTI is falsifiable claim, never truth (per CLAUDE.md V3)
-- **Maker-checker**: worker never self-verifies; verifier never reads the maker's conclusion
-
----
+- Samples never execute on the host — `block_malware_exec` hook enforces; VM-only via `vmr-shell`
+- Bins / settings / hooks never committed; secrets excluded
+- Ground truth hierarchy: raw artifact > local tool > sandbox > CTI (CTI is falsifiable claim, never truth)
+- Maker-checker: a worker never self-verifies; a verifier never reads the maker's conclusion
 
 ## License
 

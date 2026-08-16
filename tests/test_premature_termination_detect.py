@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — tests for scripts/premature_termination_detect.py (#54).
 
 Premature-termination = the orchestrator declares "task complete" with open

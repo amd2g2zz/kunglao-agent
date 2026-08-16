@@ -1,9 +1,9 @@
 {
   "argv": [
-    "C:\\Users\\hr\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\scripts\\convergence_health.py",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\tests\\fixtures\\golden\\F-07\\ws",
+    "{{PYTHON}}",
+    "{{ROOT}}\\scripts\\convergence_health.py",
+    "{{ROOT}}\\tests\\fixtures\\golden\\F-07\\ws",
     "--json"
   ],
-  "cwd": "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent"
+  "cwd": "{{ROOT}}"
 }

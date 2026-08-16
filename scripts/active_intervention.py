@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """active_intervention.py - enforce orchestrator responds to worker help requests.
 
 User pain point: "subagent reports problem, orchestrator pretends not to see,

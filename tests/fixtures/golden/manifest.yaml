@@ -5,176 +5,176 @@ cases:
   expected_exit: 1
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\convergence_check.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-01\ws
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\convergence_check.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-01\\ws"
     - --json
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    cwd: "{{ROOT}}"
 - id: F-02
   script: convergence_check.py
   intent: F2 converged no-open -> CONVERGED
   expected_exit: 0
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\convergence_check.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-02\ws
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\convergence_check.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-02\\ws"
     - --json
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    cwd: "{{ROOT}}"
 - id: F-03
   script: convergence_check.py
   intent: F3 saturated 3 workers -> SATURATED
   expected_exit: 3
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\convergence_check.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-03\ws
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\convergence_check.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-03\\ws"
     - --json
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    cwd: "{{ROOT}}"
 - id: F-04
   script: convergence_check.py
   intent: F4 blocked attempts>=3 -> BLOCKED
   expected_exit: 4
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\convergence_check.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-04\ws
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\convergence_check.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-04\\ws"
     - --json
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    cwd: "{{ROOT}}"
 - id: F-05
   script: convergence_check.py
   intent: F5 partial fact -> DISPATCH_VERIFIER
   expected_exit: 2
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\convergence_check.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-05\ws
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\convergence_check.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-05\\ws"
     - --json
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    cwd: "{{ROOT}}"
 - id: F-06
   script: convergence_check.py
   intent: F6 zombie-done-worker frees slot -> DISPATCH
   expected_exit: 1
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\convergence_check.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-06\ws
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\convergence_check.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-06\\ws"
     - --json
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    cwd: "{{ROOT}}"
 - id: F-07
   script: convergence_health.py
   intent: F7 health HEALTHY trending-down
   expected_exit: null
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\convergence_health.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-07\ws
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\convergence_health.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-07\\ws"
     - --json
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    cwd: "{{ROOT}}"
 - id: F-08
   script: claim_expiry.py
   intent: F8 stale-claim expiry check
   expected_exit: null
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\claim_expiry.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-08\ws
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\claim_expiry.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-08\\ws"
     - --stale-hours
     - '24'
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    cwd: "{{ROOT}}"
 - id: F-09
   script: plan_drift_detector.py
   intent: F9 plan-drift ORPHAN_CLAIM
   expected_exit: null
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\plan_drift_detector.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-09\ws
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\plan_drift_detector.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-09\\ws"
+    cwd: "{{ROOT}}"
 - id: F-10
   script: stale_blocker_prune.py
   intent: F10 stale-blocker-for-closed-claim
   expected_exit: null
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\stale_blocker_prune.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-10\ws
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\stale_blocker_prune.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-10\\ws"
+    cwd: "{{ROOT}}"
 - id: F-11
   script: progress_report.py
   intent: F11 progress report
   expected_exit: null
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\progress_report.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-11\ws
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\progress_report.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-11\\ws"
+    cwd: "{{ROOT}}"
 - id: F-12
   script: failure_analysis_gate.py
   intent: F12 failure-analysis gate scan
   expected_exit: null
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\failure_analysis_gate.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-12\ws
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\failure_analysis_gate.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-12\\ws"
+    cwd: "{{ROOT}}"
 - id: F-13
   script: content_hash.py
   intent: F13 content-hash idempotent
   expected_exit: 0
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\content_hash.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-13\ws/claim.txt
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-13\ws/reproduce.txt
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-13\ws/expected.txt
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\content_hash.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-13\\ws/claim.txt"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-13\\ws/reproduce.txt"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-13\\ws/expected.txt"
+    cwd: "{{ROOT}}"
 - id: F-14
   script: normalize_trace.py
   intent: F14 normalize dynamic trace
   expected_exit: 0
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\normalize_trace.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-14\ws/trace.json
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\normalize_trace.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-14\\ws/trace.json"
     - --tool
     - qiling
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    cwd: "{{ROOT}}"
 - id: F-15
   script: reconcile_intents.py
   intent: F15 intent reconciliation
   expected_exit: 0
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\reconcile_intents.py
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-15\ws/analysis_state.txt
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-15\ws/facts
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\reconcile_intents.py"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-15\\ws/analysis_state.txt"
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-15\\ws/facts"
+    cwd: "{{ROOT}}"
 - id: F-16
   script: update_index.py
   intent: F16 atomic _INDEX upsert
   expected_exit: 0
   cmd:
     argv:
-    - C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\scripts\update_index.py
+    - "{{PYTHON}}"
+    - "{{ROOT}}\\scripts\\update_index.py"
     - upsert
-    - C:\Users\hr\.claude\kong-refactor\kong-agent\tests\fixtures\golden\F-16\ws/facts/_INDEX.md
+    - "{{ROOT}}\\tests\\fixtures\\golden\\F-16\\ws/facts/_INDEX.md"
     - F-abc
     - OPEN
     - C-1
     - test
-    cwd: C:\Users\hr\.claude\kong-refactor\kong-agent
+    cwd: "{{ROOT}}"

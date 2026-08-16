@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — fired-predicate resume prompt (issue #45, RECOVER layer, F4).
 
 RED contract: `scripts/external_kicker.py::build_resume_prompt(ws, *,
@@ -7,9 +8,9 @@ over logged mechanical state — ledger last SNAPSHOT row, claim-register OPEN
 worker-status-*.md files — and must NEVER read progress.txt /
 analysis_state.txt narrative.
 
-All I/O is SYNTHETIC: pytest tmp_path workspaces only. The real workspace
-(D:/works/samples/2026-07-01) is never read or written; no claude process is
-spawned (the kick test uses dry_run=True).
+All I/O is SYNTHETIC: pytest tmp_path workspaces only. A live workspace
+(`<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/`) is never read or written; no claude
+process is spawned (the kick test uses dry_run=True).
 """
 import json
 from pathlib import Path
@@ -74,7 +75,7 @@ def test_prompt_contains_ledger_last_open_ids(tmp_path):
     assert "C-201" in prompt
     assert "C-003" in prompt
     # round number = count of SNAPSHOT rows; decision echoed
-    assert "你正在收敛循环第 2 轮" in prompt
+    assert "Convergence loop round 2" in prompt
     assert "DISPATCH" in prompt
 
 
@@ -154,7 +155,7 @@ def test_prompt_truncates_claims_by_priority(tmp_path):
     assert "truncated by priority" in prompt
     # the claims line lists exactly 5 ids
     claims_line = next(l for l in prompt.splitlines()
-                       if l.startswith("当前 open claims"))
+                       if l.startswith("open claims ("))
     import re
     assert len(re.findall(r"C-[A-Z\d]+", claims_line)) == 5
 
@@ -168,6 +169,22 @@ def test_prompt_obeys_char_cap(tmp_path):
     assert "truncated by priority" in prompt
 
 
+# ---------- RED 6b: empty workspace still obeys the char cap ----------
+
+def test_empty_workspace_prompt_obeys_char_cap(tmp_path):
+    ws = _ws(tmp_path)  # no ledger / register / facts / workers at all
+    from external_kicker import build_resume_prompt
+    prompt = build_resume_prompt(ws, max_chars=500)
+    # the CONVERGED directive must survive (never an empty prompt)
+    assert "CONVERGED, verify report" in prompt
+    assert len(prompt) <= 500
+    # headroom pin: the empty-state skeleton must sit >= 5 chars under the
+    # cap so a future prose tweak cannot silently re-break this corner
+    assert len(prompt) <= 495
+    # the production default cap is trivially satisfied, pinned for completeness
+    assert len(build_resume_prompt(ws, max_chars=4000)) <= 4000
+
+
 # ---------- RED 8/9: robustness — missing / malformed state ----------
 
 def test_prompt_missing_ledger_still_builds(tmp_path):
@@ -177,7 +194,7 @@ def test_prompt_missing_ledger_still_builds(tmp_path):
     prompt = build_resume_prompt(ws)
     assert prompt
     assert "C-777" in prompt
-    assert "你正在收敛循环第 0 轮" in prompt
+    assert "Convergence loop round 0" in prompt
 
 
 def test_prompt_skips_malformed_ledger_lines(tmp_path):
@@ -189,7 +206,7 @@ def test_prompt_skips_malformed_ledger_lines(tmp_path):
     from external_kicker import build_resume_prompt
     prompt = build_resume_prompt(ws)
     assert "C-555" in prompt
-    assert "你正在收敛循环第 1 轮" in prompt
+    assert "Convergence loop round 1" in prompt
 
 
 # ---------- RED 10: the kick stages the resume prompt ----------
@@ -203,5 +220,5 @@ def test_kick_stages_resume_prompt(tmp_path):
     prompt_file = ws / "runs" / ".kicker-prompt.txt"
     assert prompt_file.exists()
     text = prompt_file.read_text(encoding="utf-8")
-    assert text.startswith("你正在收敛循环第")
+    assert text.startswith("Convergence loop round")
     assert "C-201" in text

@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """kunglao_eval.py — eval harness module (issue #4, plan §7, design-spec §6.7.6).
 
-确定性核心: oracle 10/10 自检 (单独报告, 不并入 capability score)。
-#81: executable, evaluator-owned L2 red-team evaluation — 真实 bounded episodes
-跑在 injectable dispatcher/tool-adapter 边界上 (recorded transcript, 不跑真工具/
-真实样本), 五类故障注入实际改变 episode 并捕获状态迁移, evaluator 控制的 oracle
-独立打分, 收据 (JSON + MD) 可重放 (同输入 → 同 receipt_digest)。
-CLI 入口: scripts/kunglao-eval.py (薄包装)。
+Deterministic core: oracle 10/10 self-check (reported separately, not
+merged into the capability score).
+#81: executable, evaluator-owned L2 red-team evaluation — real bounded
+episodes run on the injectable dispatcher/tool-adapter boundary (recorded
+transcript; real tools/real samples never run), five fault-injection
+classes that actually change the episode and capture state transitions,
+an evaluator-controlled oracle scoring independently, and replayable
+receipts (JSON + MD; same input → same receipt_digest).
+CLI entry: scripts/kunglao-eval.py (thin wrapper).
 """
 from __future__ import annotations
 
@@ -30,41 +34,42 @@ from status_defs import TERMINAL
 
 ARM_CONFIGS = {
     "A": {"mechanisms_enabled": True, "single_agent": False,
-          "desc": "所有重构机制全开 (priority_ratio VoI + gates + digest + verify)"},
+          "desc": "all refactoring mechanisms on (priority_ratio VoI + gates + digest + verify)"},
     "B": {"mechanisms_enabled": False, "single_agent": False,
-          "desc": "全关基线 (legacy 加法权重 + 无 gate) — 对照"},
+          "desc": "all-off baseline (legacy additive weights + no gate) — the control"},
     "C": {"mechanisms_enabled": False, "single_agent": True,
-          "desc": "单 agent 无编排 (直接 LLM 跑) — 下界对照"},
+          "desc": "single agent, no orchestration (direct LLM run) — lower-bound control"},
 }
 
 FAULT_TYPES = {
-    "throttle": {"desc": "限流: 工具调用配额耗尽 → orchestrator 须换路"},
-    "implicit_fail": {"desc": "隐式失败: 工具返回空/错误但无异常 → 须识别非结论"},
-    "explicit_fail": {"desc": "显式失败: 工具抛异常 → 须 failure_analysis 不重派"},
-    "impossible": {"desc": "不可能: claim 无证据路径 → 须排除出 top_actions"},
-    "adversarial": {"desc": "对抗: 诱饵串/反分析 → 须识别非 benign 也非真 IOC"},
+    "throttle": {"desc": "throttling: tool-call quota exhausted → the orchestrator must switch paths"},
+    "implicit_fail": {"desc": "implicit failure: tool returns empty/error without raising → must be recognized as non-conclusive"},
+    "explicit_fail": {"desc": "explicit failure: tool raises → needs failure_analysis, no re-dispatch"},
+    "impossible": {"desc": "impossible: claim has no evidence path → must be excluded from top_actions"},
+    "adversarial": {"desc": "adversarial: decoy strings/anti-analysis → must be recognized as neither benign nor a real IOC"},
 }
 
-# #81: arm → 确定性 candidate policy
+# #81: arm → deterministic candidate policy
 POLICY_NAMES = {"A": "voi", "B": "legacy", "C": "naive"}
-# fault 注入会阻止完成 → 非完成不算 candidate correctness 错 (INCONCLUSIVE 而非 FAIL)
+# fault injection blocks completion → non-completion is not a candidate-correctness error (INCONCLUSIVE, not FAIL)
 FAULT_BLOCKING = ("throttle", "implicit_fail", "explicit_fail", "impossible")
 
 
 def run_arm(arm: str) -> dict:
     if arm not in ARM_CONFIGS:
-        raise ValueError(f"未知 arm: {arm}; 合法: {list(ARM_CONFIGS)}")
+        raise ValueError(f"unknown arm: {arm}; valid: {list(ARM_CONFIGS)}")
     return ARM_CONFIGS[arm]
 
 
 def inject_fault(ftype: str) -> dict:
-    """故障定义/验证函数。impossible 用真实 priority_ratio 验证排除 (历史行为)。
+    """Fault definition/verification functions. impossible is excluded via real priority_ratio verification (historical behavior).
 
-    其余四类故障在 #81 后必须在真实 episode 里注入 (run_episode fault=...) —
-    单独调用返回标签正是 #81 要消除的 scaffold 行为, 故 fail loud。
+    The other four fault classes, post-#81, must be injected inside a real
+    episode (run_episode fault=...) — a standalone call returning a label
+    is exactly the scaffold behavior #81 removed, so it fails loud.
     """
     if ftype not in FAULT_TYPES:
-        raise ValueError(f"未知故障类型: {ftype}; 合法: {list(FAULT_TYPES)}")
+        raise ValueError(f"unknown fault type: {ftype}; valid: {list(FAULT_TYPES)}")
     if ftype == "impossible":
         claims = [{"id": "IMP", "status": "OPEN", "statement": "impossible claim"}]
         deps = {"depends_on": {"IMP": ["BLOCKED-FOREVER"]}}
@@ -158,7 +163,7 @@ def _file_sha256(path: Path) -> str:
 
 
 def code_digest() -> str:
-    """code digest = 本模块 + 被 episode 真实调用的核心模块字节."""
+    """code digest = bytes of this module + the core modules the episode really calls."""
     parts = []
     for name in ("kunglao_eval.py", "priority_ratio.py", "kunglao_verify.py"):
         p = SCRIPT_DIR / name
@@ -176,7 +181,7 @@ def _token_estimate(args: dict) -> int:
 
 @dataclass(frozen=True)
 class Budget:
-    """工具调用预算 (calls = 调用数, tokens = 确定性估算 token)."""
+    """Tool-call budget (calls = call count, tokens = deterministic token estimate)."""
     max_calls: int
     max_tokens: int
 
@@ -188,15 +193,15 @@ class ToolResult:
     ok: bool
     payload: dict | None = None
     error: str | None = None
-    empty: bool = False  # 隐式失败指纹: ok 但无证据 (无异常)
+    empty: bool = False  # implicit-failure fingerprint: ok but no evidence (no exception)
 
 
 class ToolError(Exception):
-    """显式失败: 工具调用抛出的异常."""
+    """Explicit failure: exception raised by a tool call."""
 
 
 class BudgetExhausted(ToolError):
-    """throttle: 预算耗尽."""
+    """throttle: budget exhausted."""
 
 
 @dataclass
@@ -209,15 +214,16 @@ class DispatchResult:
 
 
 class ToolAdapter:
-    """工具边界 (产品 = MCP 工具; #81 harness = recorded, 不跑真工具)."""
+    """Tool boundary (product = MCP tools; #81 harness = recorded, real tools never run)."""
 
     def call(self, name: str, args: dict, recorded: ToolResult | None = None) -> ToolResult:
         raise NotImplementedError
 
 
 class RecordedToolAdapter(ToolAdapter):
-    """确定性 recorded 工具边界: 预算记账 + 故障钩子; 结果由 dispatcher 的
-    recorded transcript 提供. 永不执行真实工具/样本 (host-safe)."""
+    """Deterministic recorded tool boundary: budget accounting + fault hooks;
+    results come from the dispatcher's recorded transcript. Real
+    tools/samples are never executed (host-safe)."""
 
     def __init__(self, budget: Budget, *, fault: str | None = None,
                  fail_after: int | None = None, seed: int = 0):
@@ -240,28 +246,28 @@ class RecordedToolAdapter(ToolAdapter):
         if self.fault == "explicit_fail" and self.fail_after is not None and self.used_calls == self.fail_after:
             raise ToolError(f"explicit fault at tool call {self.used_calls}")
         if self.fault == "implicit_fail" and self.fail_after is not None and self.used_calls == self.fail_after:
-            # 工具"成功"但返回空 — 无异常, 无证据 (隐式失败指纹)
+            # tool "succeeded" but returned empty — no exception, no evidence (implicit-failure fingerprint)
             return ToolResult(name, args, ok=True, payload={"facts": []}, empty=True)
         return recorded if recorded is not None else ToolResult(
             name, args, ok=False, payload=None, error="no recorded result")
 
 
 class Dispatcher:
-    """worker 派发边界 (产品 = Agent tool 派发 subagent; #81 = recorded transcript)."""
+    """Worker dispatch boundary (product = Agent tool dispatching subagents; #81 = recorded transcript)."""
 
     def dispatch(self, claim_id: str, task: dict | None = None) -> DispatchResult:
         raise NotImplementedError
 
     def __call__(self, claim_id: str, ws=None) -> tuple[str, list[str]]:
-        """l2_redteam dispatcher 形状: (verdict, gaps)."""
+        """l2_redteam dispatcher shape: (verdict, gaps)."""
         raise NotImplementedError
 
 
 class RecordedDispatcher(Dispatcher):
-    """重放 fixture 的 recorded transcript (per claim 的 tool 脚本) → 确定性证据.
+    """Replays the fixture's recorded transcript (per-claim tool script) → deterministic evidence.
 
-    dispatch 抛 BudgetExhausted/ToolError → 故障分类结果; 返回的 evidence
-    由 adapter 记账后的 transcript 决定.
+    dispatch raising BudgetExhausted/ToolError → fault-classified result;
+    the returned evidence is decided by the adapter-accounted transcript.
     """
 
     def __init__(self, transcript: dict, adapter: RecordedToolAdapter):
@@ -297,7 +303,7 @@ class RecordedDispatcher(Dispatcher):
     def __call__(self, claim_id: str, ws=None) -> tuple[str, list[str]]:
         try:
             d = self.dispatch(claim_id, ws if isinstance(ws, dict) else None)
-        except Exception as exc:  # 注入失败
+        except Exception as exc:  # injected failure
             return ("UNVERIFIED-WITH-GAP", [f"recorded dispatch failed: {exc}"])
         if d.ok and d.evidence:
             return ("CONFIRMED", [])
@@ -307,7 +313,7 @@ class RecordedDispatcher(Dispatcher):
 
 
 class EpisodeState:
-    """episode 内存状态 (per-trial fresh — reset 是真实行为, 无共享可变状态)."""
+    """In-memory episode state (fresh per trial — reset is real behavior, no shared mutable state)."""
 
     def __init__(self, claims: dict[str, dict], deps: dict):
         self.claims = claims
@@ -371,7 +377,7 @@ def _eligible_voi(state: EpisodeState, dispatched: set[str]) -> list[dict]:
             continue
         if int(c.get("promotion_attempts", 0)) >= 3:
             continue
-        if cid in dispatched:  # no-repeat: 已派发未结论的 claim 不重复派 (premature/redundant 防护)
+        if cid in dispatched:  # no-repeat: a dispatched-but-unconcluded claim is not re-dispatched (premature/redundant guard)
             continue
         out.append(c)
     return out
@@ -388,7 +394,7 @@ def _policy_voi(state: EpisodeState, dispatched: set[str]) -> str | None:
 
 
 def _policy_legacy(state: EpisodeState, dispatched: set[str]) -> str | None:
-    """legacy 加法权重 (对照): 无 VoI, 无 dispatchability gate, 无 no-repeat."""
+    """legacy additive weights (control): no VoI, no dispatchability gate, no no-repeat."""
     best: str | None = None
     best_score = -1.0
     for c in state.claims.values():
@@ -413,7 +419,7 @@ def _policy_naive(state: EpisodeState, dispatched: set[str], claim_order: list[s
 
 def _apply_dispatch(state: EpisodeState, cid: str, dispatch: DispatchResult,
                     assessor: str) -> bool:
-    """把派发结果落为状态迁移; 返回 True 表示 episode 应立即停止."""
+    """Turn a dispatch result into a state transition; returning True means the episode should stop immediately."""
     if dispatch.failed_kind == "budget":
         state.transitions.append({"type": "budget_exhausted", "claim_id": cid,
                                   "detail": dispatch.error})
@@ -426,7 +432,7 @@ def _apply_dispatch(state: EpisodeState, cid: str, dispatch: DispatchResult,
         return False
     if dispatch.failed_kind == "implicit":
         if assessor == "naive":
-            # overclaiming 候选: 把"空结果"当成功 → 空证据结论 (scorer 记 overclaim)
+            # overclaiming candidate: treating an "empty result" as success → empty-evidence conclusion (scorer records an overclaim)
             state.transitions.append({"type": "implicit_fail_misread_as_success", "claim_id": cid})
             state.conclude(cid, [])
         else:
@@ -440,7 +446,7 @@ def _apply_dispatch(state: EpisodeState, cid: str, dispatch: DispatchResult,
         concluded = bool(supporting)
     else:
         supporting = dispatch.evidence
-        concluded = True  # naive: 只要有"成功"派发就结论
+        concluded = True  # naive: any "successful" dispatch concludes
     if concluded:
         ids = [f.get("fact_id", f"fact-{i}") for i, f in enumerate(supporting)]
         state.conclude(cid, ids)
@@ -449,14 +455,17 @@ def _apply_dispatch(state: EpisodeState, cid: str, dispatch: DispatchResult,
 
 def _apply_fault_injection(case: dict, state: EpisodeState, transcript: dict,
                            fault: str | None, claim_order: list[str]) -> list[str]:
-    """把 fault 实际注入 episode (状态迁移可测, 非标签).
+    """Actually inject the fault into the episode (state transitions observable, not a label).
 
-    - impossible: 给首个 claim 注入不可满足 parent → 真实 priority_ratio 排除
-      (claim 已带不可满足 parent 的 fixture 不再重复注入)
-    - adversarial: 向首个 claim 的 recorded transcript 前置一条诱饵事实
-      (无 anchor 的 strings 命中) → scorer 视为 decoy (injected_facts)
-    - throttle/implicit_fail/explicit_fail: 由 adapter 预算/故障钩子在调用时触发
-    返回注入的事实 id 列表 (injected_facts).
+    - impossible: inject an unsatisfiable parent on the first claim → real
+      priority_ratio exclusion (fixtures whose claim already carries an
+      unsatisfiable parent are not injected again)
+    - adversarial: prepend a decoy fact (an unanchored strings hit) to the
+      first claim's recorded transcript → the scorer treats it as a decoy
+      (injected_facts)
+    - throttle/implicit_fail/explicit_fail: triggered at call time by the
+      adapter's budget/fault hooks
+    Returns the list of injected fact ids (injected_facts).
     """
     injected: list[str] = []
     if fault == "impossible" and claim_order:
@@ -484,18 +493,18 @@ def _apply_fault_injection(case: dict, state: EpisodeState, transcript: dict,
 def run_episode(case: dict, arm: str, fault: str | None = None, *, seed: int = 0,
                 throttle_after: int | None = None, fail_after: int | None = None,
                 assessor: str = "anchored") -> dict:
-    """跑一个真实 bounded episode (确定性, 可重放).
+    """Run one real bounded episode (deterministic, replayable).
 
-    case:   fixture 的 public case.json (claims/deps/evidence_seed/transcript/budget)
-    arm:    A (VoI) / B (legacy) / C (naive) — 同一 loop, 仅 policy 不同
-    fault:  五类故障之一, 实际改变 episode (预算/工具行为), 非标签
+    case:   the fixture's public case.json (claims/deps/evidence_seed/transcript/budget)
+    arm:    A (VoI) / B (legacy) / C (naive) — same loop, only the policy differs
+    fault:  one of the five fault classes, actually changing the episode (budget/tool behavior), not a label
     """
     if arm not in ARM_CONFIGS:
-        raise ValueError(f"未知 arm: {arm}; 合法: {list(ARM_CONFIGS)}")
+        raise ValueError(f"unknown arm: {arm}; valid: {list(ARM_CONFIGS)}")
     if fault is not None and fault not in FAULT_TYPES:
-        raise ValueError(f"未知故障: {fault}; 合法: {list(FAULT_TYPES)}")
+        raise ValueError(f"unknown fault: {fault}; valid: {list(FAULT_TYPES)}")
     if assessor not in ("anchored", "naive"):
-        raise ValueError(f"未知 assessor: {assessor}; 合法: anchored|naive")
+        raise ValueError(f"unknown assessor: {assessor}; valid: anchored|naive")
 
     budget_cfg = case.get("budget", {}) or {}
     max_steps = max(1, int(budget_cfg.get("max_steps", 8)))
@@ -535,7 +544,7 @@ def run_episode(case: dict, arm: str, fault: str | None = None, *, seed: int = 0
         dispatched.add(cid)
         try:
             dispatch = dispatcher.dispatch(cid, case.get("task", {}))
-        except Exception as exc:  # 意外崩溃 → 显式失败处理
+        except Exception as exc:  # unexpected crash → explicit-failure handling
             dispatch = DispatchResult(cid, ok=False, evidence=[],
                                       error=f"dispatch crashed: {exc}", failed_kind="explicit")
         state.record_dispatch(cid, dispatch)
@@ -544,6 +553,17 @@ def run_episode(case: dict, arm: str, fault: str | None = None, *, seed: int = 0
 
     wall_ms = int((time.time() - started) * 1000)
     transcript = {"dispatches": state.dispatches, "tool_calls": adapter.calls}
+    # #309: collect symbol/type recovery claims from symbol_recovery facts so
+    # score_episode can add naming/type quality dimensions (additive — cases
+    # without such facts carry empty dicts, unchanged receipt otherwise).
+    recovered_symbols: dict[str, str] = {}
+    recovered_types: dict[str, dict] = {}
+    for facts in state.evidence.values():
+        for f in facts or []:
+            for k, v in (f.get("symbols") or {}).items():
+                recovered_symbols[str(k)] = v
+            for k, v in (f.get("types") or {}).items():
+                recovered_types[str(k)] = dict(v) if isinstance(v, dict) else v
     result = {
         "schema": "kunglao-episode-result/1",
         "case_id": case.get("case_id", "?"),
@@ -553,6 +573,8 @@ def run_episode(case: dict, arm: str, fault: str | None = None, *, seed: int = 0
         "seed": seed,
         "assessor": assessor,
         "injected_facts": injected_facts,
+        "recovered_symbols": recovered_symbols,
+        "recovered_types": recovered_types,
         "digests": {"case": _sha256(_canonical(case)),
                     "code": code_digest(),
                     "env": env_digest()},
@@ -579,8 +601,8 @@ def run_episode(case: dict, arm: str, fault: str | None = None, *, seed: int = 0
 
 
 def _stable_fields(result: dict) -> dict:
-    """receipt_digest 的稳定字段: 排除 wall_ms/timestamps/自身 digest/嵌套 time_ms
-    → 同输入同 digest (可重放; wall time 仅记录不参与摘要)."""
+    """Stable fields for receipt_digest: excludes wall_ms/timestamps/its own digest/nested time_ms
+    → same input, same digest (replayable; wall time is recorded but not part of the digest)."""
     out = copy.deepcopy(result)
     for k in ("wall_ms", "started_at", "finished_at", "receipt_digest"):
         out.pop(k, None)
@@ -637,8 +659,9 @@ def _failure_taxonomy(result: dict, fault: str | None, completion: str = "solvab
         tax.add("explicit_fail")
     if "implicit_fail_recognized" in types or "implicit_fail_misread_as_success" in types:
         tax.add("implicit_fail")
-    # no_action_available → impossible 仅当 fixture 本身不可完成 (solvable 的正常
-    # 收敛/decoy 停留 OPEN 不算 impossible)
+    # no_action_available → impossible only when the fixture itself is
+    # unsolvable (normal convergence of a solvable one / a decoy staying OPEN
+    # does not count as impossible)
     if completion == "impossible" and ("no_action_available" in types
                                        or "impossible_dep_injected" in types):
         tax.add("impossible")
@@ -648,7 +671,7 @@ def _failure_taxonomy(result: dict, fault: str | None, completion: str = "solvab
 
 
 def score_episode(case: dict, oracle: dict, result: dict) -> dict:
-    """evaluator 控制的 oracle 打分 (独立于 candidate; hidden oracle 输入)."""
+    """Evaluator-controlled oracle scoring (independent of the candidate; hidden oracle input)."""
     expected = oracle.get("expected_verdicts", {}) or {}
     injected = set(result.get("injected_facts", []) or [])
     decoys = set(oracle.get("decoy_fact_ids", []) or []) | injected
@@ -659,7 +682,7 @@ def score_episode(case: dict, oracle: dict, result: dict) -> dict:
     terminal = set(result.get("terminal_claims", []))
     fault_blocked = fault in FAULT_BLOCKING
     types = {t.get("type") for t in result.get("state_transitions", [])}
-    # 注入可观测性: 注入的 fault 必须产生状态迁移, 否则 trial 非绿 (防 scaffold 冒充)
+    # injection observability: an injected fault must produce a state transition, otherwise the trial is not green (anti-scaffold-impersonation)
     fault_effects = {
         "throttle": "budget_exhausted" in types,
         "implicit_fail": bool({"implicit_fail_recognized", "implicit_fail_misread_as_success"} & types),
@@ -670,7 +693,7 @@ def score_episode(case: dict, oracle: dict, result: dict) -> dict:
     injection_observed = fault is None or fault_effects.get(fault, True)
     dims: dict = {}
 
-    # correctness: 逐 claim 状态 vs oracle; fault 阻止完成 → 豁免 (非 candidate 错)
+    # correctness: per-claim status vs oracle; fault-blocked completion → exempted (not a candidate error)
     mismatches = []
     for cid, want in expected.items():
         got = final.get(cid, {}).get("status")
@@ -679,7 +702,7 @@ def score_episode(case: dict, oracle: dict, result: dict) -> dict:
     dims["correctness"] = {"pass": not mismatches,
                            "detail": "; ".join(mismatches) or "all claims match oracle"}
 
-    # invalid / redundant work: terminal 后重派 / 非 dispatchable claim 强派
+    # invalid / redundant work: re-dispatch after terminal / forced dispatch of a non-dispatchable claim
     invalid = []
     for d in result.get("transcript", {}).get("dispatches", []):
         cid = d.get("claim_id")
@@ -691,7 +714,7 @@ def score_episode(case: dict, oracle: dict, result: dict) -> dict:
     dims["invalid_work"] = {"count": len(invalid), "pass": not invalid,
                             "detail": "; ".join(invalid) or "no invalid work"}
 
-    # overclaims: 空证据结论 / 用诱饵事实结论
+    # overclaims: empty-evidence conclusions / conclusions built on decoy facts
     overclaims = []
     for cid, info in final.items():
         if info.get("status") != "PROVEN":
@@ -705,7 +728,7 @@ def score_episode(case: dict, oracle: dict, result: dict) -> dict:
     dims["overclaims"] = {"count": len(overclaims), "pass": not overclaims,
                           "detail": "; ".join(overclaims) or "no overclaims"}
 
-    # misses: 无 fault 时 dispatchable 且 oracle 期望 PROVEN 却未结论
+    # misses: without a fault, dispatchable claims the oracle expected PROVEN but left unconcluded
     misses = []
     if not fault_blocked:
         for cid, want in expected.items():
@@ -729,6 +752,18 @@ def score_episode(case: dict, oracle: dict, result: dict) -> dict:
     dims["tool_calls"] = budgets.get("tool_calls_used", 0)
     dims["tokens"] = budgets.get("tokens_used", 0)
 
+    # #309: naming/type recovery quality dimensions — present only when the
+    # oracle carries expected_symbols/expected_types (backward compatible:
+    # oracles without them keep the pre-change dimension set).
+    if oracle.get("expected_symbols"):
+        from recov_metrics import naming_dimension
+        dims["naming_quality"] = naming_dimension(
+            oracle["expected_symbols"], result.get("recovered_symbols", {}) or {})
+    if oracle.get("expected_types"):
+        from recov_metrics import type_dimension
+        dims["type_quality"] = type_dimension(
+            oracle["expected_types"], result.get("recovered_types", {}) or {})
+
     fails = [n for n, d in dims.items() if isinstance(d, dict) and d.get("pass") is False]
     uncompleted = [cid for cid, want in expected.items()
                    if want == "PROVEN" and final.get(cid, {}).get("status") != "PROVEN"]
@@ -745,10 +780,10 @@ def score_episode(case: dict, oracle: dict, result: dict) -> dict:
 
 
 def l2_redteam_capability(claim_id: str, ws, dispatcher=None) -> dict:
-    """真实 l2_redteam + 注入 dispatcher 的 L2 能力维度 (#81).
+    """L2 capability dimension using the real l2_redteam + an injected dispatcher (#81).
 
-    NOT-RUN / UNKNOWN(无效 verdict) / 注入失败 / 缺 dispatcher = 非证据,
-    永不构成 passing capability score.
+    NOT-RUN / UNKNOWN (invalid verdict) / injected failure / missing
+    dispatcher = non-evidence, never a passing capability score.
     """
     from kunglao_verify import l2_redteam
     try:
@@ -771,7 +806,7 @@ def l2_redteam_capability(claim_id: str, ws, dispatcher=None) -> dict:
 
 def capability_score(case: dict, oracle: dict, episode_result: dict,
                      l2_result: dict | None = None, selfcheck: list[dict] | None = None) -> dict:
-    """capability receipt 聚合: episode 各维度 + L2 能力维度 (非证据 → 永不绿)."""
+    """capability receipt aggregation: episode dimensions + the L2 capability dimension (non-evidence → never green)."""
     scored = score_episode(case, oracle, episode_result)
     dims = dict(scored["oracle"]["dimensions"])
     if l2_result is None:
@@ -870,8 +905,8 @@ def write_receipts(receipt: dict, outdir: Path, label: str) -> tuple[Path, Path]
 
 def run_fixture(case_id: str, arm: str, fault: str | None = None, *, outdir=None,
                 seed: int = 0, label_suffix: str = "", **kwargs) -> tuple[dict, tuple[Path, Path]]:
-    """端到端: episode → oracle 打分 → 真实 l2_redteam (注入 recorded dispatcher)
-    → capability receipt (JSON + MD) 落盘. label_suffix 供 --repeat 区分同 seed 复跑."""
+    """End-to-end: episode → oracle scoring → real l2_redteam (with injected recorded dispatcher)
+    → capability receipt (JSON + MD) written to disk. label_suffix lets --repeat distinguish reruns of the same seed."""
     case = load_case(case_id)
     oracle = load_oracle(case_id)
     result = run_episode(case, arm, fault, seed=seed, **kwargs)
@@ -940,7 +975,7 @@ def main(argv: list[str] | None = None) -> int:
             for arm in "ABC":
                 for fault in [None] + list(FAULT_TYPES):
                     for i in range(max(1, args.repeat)):
-                        # 同一 seed 重复 → 同一 receipt_digest (可重放性 CLI 实证)
+                        # same seed repeated → same receipt_digest (CLI-level replayability proof)
                         result, (jp, _mp) = run_fixture(case_id, arm, fault,
                                                         outdir=outdir,
                                                         seed=args.seed,

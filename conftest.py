@@ -1,38 +1,51 @@
-"""阶段 0 共享 fixture: 后续所有阶段(SDD 契约测试)复用.
+"""Phase 0 shared fixtures: reused by all later phases (SDD contract tests).
 
-- ws_factory:       tmp 工作区构造器(claim-register.yaml / runs / facts/_INDEX / claim_deps.yaml / task_spec.yaml)
-- contract_validator: schemas/*.json 注册表(jsonschema 校验封装)
-- golden_master:   manifest 重放辅助
-- isolated_home:   monkeypatch HOME → tmp(防 hooks 部署测试写生产 settings.json)
+- ws_factory:       tmp workspace builder (claim-register.yaml / runs / facts/_INDEX / claim_deps.yaml / task_spec.yaml)
+- contract_validator: schemas/*.json registry (jsonschema validation wrapper)
+- golden_master:   manifest replay helper
+- isolated_home:   monkeypatch HOME → tmp (prevents hook-deployment tests from writing the production settings.json)
+- load_lock_factory / load_sensitive_registry: #369 cross-process serialization
+  of the load-sensitive test family (machine-local flock; see bottom section)
 """
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+
+try:  # POSIX only; Windows dev/CI is single-tenant and unaffected (#369)
+    import fcntl
+    _HAVE_FLOCK = hasattr(fcntl, "flock")
+except ImportError:  # pragma: no cover - Windows
+    _HAVE_FLOCK = False
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "schemas"
 
 
-# ---------- tmp fixture: 兼容旧测试 main() 直跑签名 ----------
+# ---------- tmp fixture: compatible with legacy tests' main() direct-run signature ----------
 
 @pytest.fixture
 def tmp(tmp_path) -> Path:
-    """旧 test_*.py 用 `def test_x(tmp: Path)` + main() 直跑(TemporaryDirectory 传 Path).
+    """Legacy test_*.py use `def test_x(tmp: Path)` + a main() direct run (TemporaryDirectory passing a Path).
 
-    pytest 下注入内置 tmp_path(同为 Path), 两模式签名一致, 零测试文件改动.
+    Under pytest the built-in tmp_path is injected (also a Path), so both
+    modes share the signature with zero test-file changes.
     """
     return tmp_path
 
 
 
-# ---------- ws_factory: tmp 工作区构造 ----------
+# ---------- ws_factory: tmp workspace builder ----------
 
 @pytest.fixture
 def ws_factory(tmp_path):
-    """构造最小合成工作区; ws_factory() 返回新工作区, 每调用独立 tmp 目录."""
+    """Build a minimal synthetic workspace; ws_factory() returns a fresh workspace, each call in its own tmp dir."""
 
     def _make(claims: list[dict] | None = None, with_deps: bool = False,
               with_index: bool = False, with_runs: bool = True) -> Path:
@@ -61,13 +74,13 @@ def ws_factory(tmp_path):
     return _make
 
 
-# ---------- contract_validator: schemas/*.json 注册表 ----------
+# ---------- contract_validator: schemas/*.json registry ----------
 
 @pytest.fixture
 def contract_validator():
-    """校验任意对象是否符合 schemas/<name>.json.
+    """Validate that an arbitrary object conforms to schemas/<name>.json.
 
-    用法: contract_validator("decide-output", obj) -> None(不符抛 AssertionError)
+    Usage: contract_validator("decide-output", obj) -> None (raises AssertionError on violation)
     """
     import jsonschema
 
@@ -92,11 +105,11 @@ def contract_validator():
     return _validate
 
 
-# ---------- golden_master: manifest 重放辅助 ----------
+# ---------- golden_master: manifest replay helper ----------
 
 @pytest.fixture
 def golden_master():
-    """按 manifest.yaml 注册表重放 golden 用例(逐字节比对)."""
+    """Replay golden cases per the manifest.yaml registry (byte-for-byte comparison)."""
 
     def _replay(case_id: str) -> str:
         import os
@@ -117,13 +130,104 @@ def golden_master():
     return _replay
 
 
-# ---------- isolated_home: 防写生产 settings.json ----------
+# ---------- isolated_home: protect the production settings.json from writes ----------
 
 @pytest.fixture
 def isolated_home(tmp_path, monkeypatch):
-    """把 HOME/USERPROFILE 指向 tmp, 任何 settings.json 读写落在隔离区."""
+    """Point HOME/USERPROFILE at tmp so every settings.json read/write lands in the sandbox."""
     home = tmp_path / "fake-home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     return home
+
+
+# ---------- #369: load-sensitive serialization (cross-process file lock) ----------
+#
+# The tick-chain / static-tools family fails only when concurrent pytest runs
+# (multi-agent worktrees on one machine) execute these modules at the same
+# time: subprocess spawn storms stretch wall-clock mtime windows (e.g. the
+# 5s freshness assert in test_external_kicker) and the nested acceptance
+# suite's subprocess timeout. Marked modules hold a machine-local flock for
+# their whole duration, so no two sensitive modules ever co-run — within one
+# run (tests are sequential) and across concurrent runs/worktrees.
+
+LOAD_SENSITIVE_MODULES = frozenset({
+    "test_drift_detection",       # tick-chain: mtime-based lock/worker windows
+    "test_external_kicker",       # tick-chain: 5s lock-freshness wall-clock window
+    "test_static_tools_1b",       # static-tools: per-test subprocess spawn storm
+    "test_env_check",             # tick-chain adjacent (issue #369 audited set)
+    "test_env_check_gate",        # real subprocess.run probes (timeout=60 each)
+    "test_env_ports_wiring",      # tick-chain adjacent (issue #369 audited set)
+})
+LOAD_SENSITIVE_LOCK_NAME = "kunglao-pytest-load-sensitive.lock"
+LOAD_SENSITIVE_ACQUIRE_TIMEOUT_S = 600.0  # generous: several queued suites under load
+
+
+@contextmanager
+def load_sensitive_lock(path=None, timeout: float = LOAD_SENSITIVE_ACQUIRE_TIMEOUT_S):
+    """Cross-process mutual exclusion via flock on a machine-local file.
+
+    The lock file lives in the system temp dir (per-user on macOS, shared
+    /tmp per machine on Linux) — NOT in the repo, so concurrent worktrees
+    of the same user contend on ONE lock. flock is bound to the open file
+    description: the kernel releases it when the holding process dies, so
+    there is no stale-lock handling. No-op where flock is unavailable.
+    """
+    if not _HAVE_FLOCK:  # pragma: no cover - Windows
+        yield
+        return
+    lock_path = Path(path) if path is not None else Path(tempfile.gettempdir()) / LOAD_SENSITIVE_LOCK_NAME
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o644)
+    acquired = False
+    deadline = time.monotonic() + timeout
+    try:
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                acquired = True
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        f"load-sensitive lock not acquired within {timeout}s: {lock_path}")
+                time.sleep(0.05)
+        yield
+    finally:
+        if acquired:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def pytest_collection_modifyitems(config, items):
+    """Apply the load_sensitive marker via the module registry (single source
+    of truth here — no per-file edits needed in the sensitive test modules)."""
+    for item in items:
+        module = getattr(item, "module", None)
+        if module is not None and module.__name__.rsplit(".", 1)[-1] in LOAD_SENSITIVE_MODULES:
+            item.add_marker(pytest.mark.load_sensitive)
+
+
+@pytest.fixture
+def load_lock_factory():
+    """Raw lock factory for unit-testing the serialization mechanism (#369).
+    Pass an explicit `path` (tmp) — the default is the real machine lock."""
+    return load_sensitive_lock
+
+
+@pytest.fixture
+def load_sensitive_registry():
+    """The frozenset of module names that must never co-run (#369)."""
+    return LOAD_SENSITIVE_MODULES
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _serialize_load_sensitive(request):
+    """Hold the machine-local lock for the whole sensitive module (#369)."""
+    module = getattr(request, "module", None)
+    name = module.__name__.rsplit(".", 1)[-1] if module is not None else ""
+    if name not in LOAD_SENSITIVE_MODULES or not _HAVE_FLOCK:
+        yield
+        return
+    with load_sensitive_lock():
+        yield

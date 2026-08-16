@@ -1,10 +1,13 @@
+# -*- coding: utf-8 -*-
 """hook_activation.py - selective hook activation for kunglao-agent (core).
 
-User pain point: "kunglao-agent 需要安装hook，但是只有被激活的时候hook才生效，
+User pain point (verbatim, in Chinese): "kunglao-agent 需要安装hook，但是只有被激活的时候hook才生效，
 否则会产生大量噪声给 kunglao-agent"
+("kunglao-agent needs hooks installed, but they must only take effect when
+activated, otherwise they generate heavy noise for kunglao-agent")
 
-kunglao-agent has 7+ enforcement hooks (active_intervention, doubt_checker, cost_gate,
-backtrack_gate, reuse_gate, memory_capture, etc.). Running ALL of them on EVERY
+kunglao-agent has 7+ enforcement hooks (active_intervention, cost_gate,
+backtrack_gate, reuse_gate, etc.). Running ALL of them on EVERY
 orchestrator turn produces too much noise. This script implements selective
 activation: kunglao-agent decides per-hook whether it should fire, based on:
   - current cost_advice tier (from cost_gate.py)
@@ -22,21 +25,29 @@ State file schema (memory/.hook_state.json):
     "tier": "advisory | pause_non_essential | HARD_PAUSE | none",
     "phase": "DISPATCH | MONITOR | VERIFY | IDLE",
     "active_hooks": ["active_intervention", "cost_gate"],
-    "paused_hooks": ["memory_capture", "backtrack_gate"],
+    "paused_hooks": ["backtrack_gate"],
     "user_override": {"<hook_name>": "on" | "off"},
     "expires_at": "<ISO 8601 UTC — activation expires; renew with --renew>"
   }
 
 Usage:
-  python hook_activation.py <workspace> [--set-active h1,h2] [--set-paused h3] [--phase X]
-  python hook_activation.py <workspace> --renew          # refresh expiry (kunglao-agent Phase 0)
-  python hook_activation.py <workspace> --is-active dispatch_gate
+  uv run --project <skill_root> <skill_root>/scripts/hook_activation.py <workspace> [--set-active h1,h2] [--set-paused h3] [--phase X]
+  uv run --project <skill_root> <skill_root>/scripts/hook_activation.py <workspace> --renew          # refresh expiry (kunglao-agent Phase 0)
+  uv run --project <skill_root> <skill_root>/scripts/hook_activation.py <workspace> --is-active dispatch_gate
+  uv run --project <skill_root> <skill_root>/scripts/hook_activation.py <workspace> --wire-up        # register hooks in <workspace>/.claude/settings.json (PROJECT-level, #258)
+  uv run --project <skill_root> <skill_root>/scripts/hook_activation.py <workspace> --heartbeat-off  # stop heartbeat after CONVERGED (issue #237)
 
 T-2 split (2026-08-11): the --wire-up / --reconcile / --heartbeat-* jobs now
 live in wire_up_settings.py / reconcile_workers.py / heartbeat.py; main()
 dispatches to them. The public API below (read_state, write_state, is_active,
 is_active_strict, update_state, renew) is unchanged — 7 gate scripts + hooks
 import this module as `ha`.
+
+Issue #258 (2026-08-12): --wire-up deploys to the PROJECT-level
+<workspace>/.claude/settings.json — never the user-global ~/.claude/settings.json
+(the pre-#258 default bound hooks to a worktree path that died with the
+worktree; 8 hooks went silent at once). wire_up_settings(global_opt_in=True)
+is the ONLY escape hatch, explicit opt-in with a stderr warning.
 """
 from __future__ import annotations
 
@@ -55,13 +66,11 @@ DEFAULT_TTL_MINUTES = 30
 # (kunglao-worker.md hard rule).
 ALL_HOOKS = {
     "active_intervention",
-    "doubt_checker",
     "cost_gate",
     "backtrack_gate",
     "reuse_gate",
     "troubleshooting_gate",
     "search_gate",
-    "memory_capture",
     "dispatch_gate",
     "worker_pulse",
     "state_anchor",
@@ -69,12 +78,12 @@ ALL_HOOKS = {
 }
 
 TIER_DEFAULTS = {
-    "advisory": {"active": ["active_intervention", "cost_gate", "doubt_checker"],
-                  "paused": ["memory_capture"]},
+    "advisory": {"active": ["active_intervention", "cost_gate"],
+                  "paused": []},
     "pause_non_essential": {"active": ["active_intervention", "cost_gate"],
-                            "paused": ["memory_capture", "doubt_checker", "reuse_gate"]},
+                            "paused": ["reuse_gate"]},
     "HARD_PAUSE": {"active": ["cost_gate"],
-                   "paused": ["active_intervention", "memory_capture", "doubt_checker",
+                   "paused": ["active_intervention",
                               "reuse_gate", "backtrack_gate", "search_gate",
                               "troubleshooting_gate"]},
     "none": {"active": sorted(ALL_HOOKS),
@@ -242,10 +251,12 @@ def main() -> int:
     parser.add_argument("--renew", action="store_true",
                         help="refresh activation expiry (orchestrator-only; subagents forbidden)")
     parser.add_argument("--wire-up", action="store_true",
-                        help="register kunglao-agent hooks in ~/.claude/settings.json (PreToolUse "
-                             "worker_budget+dispatch_gate, PostToolUse worker_budget+worker_pulse, matcher "
-                             "Agent). Idempotent: merges into existing hooks config, preserves other keys. "
-                             "Called at Phase 0 by the orchestrator; fixes 'hooks never fired' recurrences.")
+                        help="register kunglao-agent hooks in <workspace>/.claude/settings.json "
+                             "(project-level; NOT global — issue #258: the pre-#258 default wrote "
+                             "the user-global settings, binding hooks to a worktree path that dies "
+                             "with the worktree). Idempotent: merges into existing hooks config, "
+                             "preserves other keys. Called at Phase 0 by the orchestrator; fixes "
+                             "'hooks never fired' recurrences.")
     parser.add_argument("--reconcile", action="store_true",
                         help="rebuild [active_workers] from the GROUND TRUTH — worker status "
                              "files in every .wt-*/ worktree (last status line == in-progress). Removes "
@@ -261,6 +272,16 @@ def main() -> int:
                              "<ws>/runs/.heartbeat.json exists and is < 35 min old (cron tick should "
                              "have refreshed it); exit 1 if missing/stale = monitoring is NOT running. "
                              "Call every heartbeat tick and before declaring CONVERGED.")
+    parser.add_argument("--heartbeat-off", action="store_true",
+                        help="STOP the heartbeat (converged teardown, issue #237 dual-constraint) — "
+                             "deletes <ws>/runs/.heartbeat.json ONLY when convergence_check.py returns "
+                             "CONVERGED (exit 0), else rejects with guidance. Cleaning up early breaks "
+                             "dispatch gating (check_heartbeat_alive); cleaning up late burns tokens on "
+                             "idle cron wakes. --force bypasses the guard (explicit override).")
+    parser.add_argument("--force", action="store_true",
+                        help="bypass --heartbeat-off preconditions (explicit operator override; "
+                             "only used when the orchestrator has a mechanical reason to stop "
+                             "an unconverged heartbeat)")
     args = parser.parse_args()
 
     workspace = Path(args.workspace)
@@ -268,8 +289,9 @@ def main() -> int:
     # T-2 split: delegated jobs live in focused modules
     if args.wire_up:
         from wire_up_settings import wire_up_settings
-        n = wire_up_settings()
-        print(f"OK: kunglao-agent hooks wired into settings.json ({n} entries)")
+        n = wire_up_settings(workspace=workspace)
+        target = workspace / ".claude" / "settings.json"
+        print(f"OK: kunglao-agent hooks wired into {target} ({n} entries)")
         return 0
 
     if args.heartbeat_on:
@@ -279,6 +301,10 @@ def main() -> int:
     if args.heartbeat_check:
         from heartbeat import heartbeat_check
         return heartbeat_check(workspace)
+
+    if args.heartbeat_off:
+        from heartbeat import heartbeat_off
+        return heartbeat_off(workspace, force=args.force)
 
     if args.reconcile:
         from reconcile_workers import reconcile_workers

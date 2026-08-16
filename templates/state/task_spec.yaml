@@ -1,0 +1,38 @@
+# task_spec.yaml — kunglao-agent input contract (Phase 0.4 fills this).
+# See DESIGN §2. The user's requirements drive the orchestrator's value function.
+
+primary_questions:            # MUST answer — convergence hard conditions C0/C0b
+  - id: q1
+    q: "<the question, e.g. does the sample belong to the Vidar family?>"
+    need: yes_no_with_evidence   # yes_no_with_evidence | protocol_description | model_selection
+    candidates: []               # only for need: model_selection — list of competing hypotheses
+
+  # example model_selection question (v1.7 competing hypotheses):
+  # - id: q3
+  #   q: "sample family attribution?"
+  #   need: model_selection
+  #   candidates: [vidar, wingo, gsb, loader_stub]
+
+scope:                         # filter for which claims enter the queue
+  in: []                        # e.g. [family_attribution, network, persistence]
+  out: []                       # e.g. [anti_analysis_strings, bitcoin_clipper]
+
+constraints:                   # workers must never break these — enforced by §11 PreToolUse hooks
+  vm_detonation: forbidden      # forbidden | allowed — vmr-shell requires allowed
+  time_budget_minutes: 120      # Phase 0.4 computes deadline_ts = now + this value
+  dynamic_re: allowed           # allowed | forbidden — master switch for emulation/Frida
+
+depth: standard                # triage | standard | deep
+
+success_criteria:
+  deliverable: fact_base        # currently fact_base only
+  must_include_ioc_table: false
+  confidence_floor: 倾向于       # confidence_zh enum (functional, lint_facts vocabulary): 可确认 | 表明 | 倾向于 | 可关联 | 不支持
+
+calibration:
+  # #147: every delivered claim MUST carry confidence + falsifier.
+  # The delivery gate (completion transaction) treats a claim without
+  # these fields as incomplete.
+  require_confidence: true
+  require_falsifier: true
+  confidence_scale: 0-1    # 0.3 = hypothesis floor; >=0.7 = direct-use

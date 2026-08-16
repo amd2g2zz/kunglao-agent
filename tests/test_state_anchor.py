@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """TDD RED — tests for hooks/state_anchor.py (issue #44, L1 PREVENT layer).
 
 state_anchor is a PostToolUse(Agent) hook that injects a compact mechanical-
@@ -5,9 +6,9 @@ state signature (<=500 chars) into additionalContext on every worker
 completion, plus a `⚠ STATE FLAT` drift warning when drift_detected (#43).
 FAIL_OPEN: any exception -> empty string, never raises.
 
-All I/O is SYNTHETIC: pytest tmp_path workspaces only. The real workspace
-(D:/works/samples/2026-07-01/malware-analysis-workspace/) is the FORMAT
-reference only — never read or written.
+All I/O is SYNTHETIC: pytest tmp_path workspaces only. The live workspace
+(`<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/malware-analysis-workspace/`) is the
+FORMAT reference only — never read or written.
 """
 import importlib.util
 import io
@@ -44,15 +45,20 @@ def load_scripts_lib() -> ModuleType:
 _lib = load_scripts_lib()
 ROTATION_WINDOW = _lib.ROTATION_WINDOW
 
-NOW = datetime.now(timezone.utc)
-
-
 def ts(minutes_ago: int = 0) -> str:
-    return (NOW - timedelta(minutes=minutes_ago)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # #375: compute AT CALL TIME — ledger `ts` is excluded from rotation
+    # signatures, and expires_at / worker mtimes are compared against the
+    # real clock by hook_activation.is_active_strict and
+    # lib_kunglao.workers_progressing.
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ")
 
 
 def future_iso(minutes: int = 30) -> str:
-    return (NOW + timedelta(minutes=minutes)).isoformat(timespec="seconds").replace("+00:00", "Z")
+    # #375: same per-call rule as ts() — expires_at is checked against
+    # datetime.now() at hook-run time, not at test-module import.
+    return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat(
+        timespec="seconds").replace("+00:00", "Z")
 
 
 def snap(decision="DISPATCH", open_ids=None, *, open_count=None,
@@ -85,11 +91,13 @@ def write_register(ws: Path, claims: list) -> Path:
 
 
 def write_worker(ws: Path, minutes_ago: int, name="w1", status="in-progress") -> Path:
+    # #375: stamp + mtime AT CALL TIME (workers_progressing compares mtimes
+    # against its own real clock).
     runs = ws / "runs"
     runs.mkdir(exist_ok=True)
     p = runs / f"worker-status-{name}.md"
     p.write_text(f"[{ts()}] step: x | status: {status}\n", encoding="utf-8")
-    t = (NOW - timedelta(minutes=minutes_ago)).timestamp()
+    t = (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).timestamp()
     os.utime(p, (t, t))
     return p
 
@@ -282,10 +290,11 @@ def test_rotation_below_window_does_not_warn(ws):
 
 # ===== wire-up: PostToolUse(Agent) registration + ALL_HOOKS membership =====
 #
-# Tested via wire_up_settings() with Path.home() monkeypatched to a temp dir
-# (env-var redirect is unreliable for Path.home() on Windows; the direct
-# setattr guarantees the real ~/.claude/settings.json is never touched — the
-# task's hard constraint). The .claude/ dir is pre-created so write_text lands.
+# Since #258 the wire-up target is PROJECT-level: wire_up_settings(workspace=ws)
+# writes <ws>/.claude/settings.json. Path.home() is still monkeypatched to a temp
+# dir (env-var redirect is unreliable for Path.home() on Windows) as the regression
+# probe that the user-global settings.json is NEVER written — the #258 hard
+# constraint.
 
 def _patch_home(tmp_path, monkeypatch):
     import pathlib
@@ -304,11 +313,15 @@ def test_all_hooks_contains_state_anchor():
 
 def test_wire_up_registers_state_anchor_postuse_agent(tmp_path, monkeypatch):
     fake_home = _patch_home(tmp_path, monkeypatch)
+    ws = tmp_path / "ws"
+    ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
     from wire_up_settings import wire_up_settings
-    wire_up_settings()
-    settings_path = fake_home / ".claude" / "settings.json"
-    assert settings_path.exists(), "wire_up_settings must write settings.json"
+    wire_up_settings(workspace=ws)
+    settings_path = ws / ".claude" / "settings.json"
+    assert settings_path.exists(), "wire_up_settings must write the PROJECT settings.json"
+    assert not (fake_home / ".claude" / "settings.json").exists(), \
+        "wire_up_settings must NOT write the user-global settings (#258)"
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     post = settings.get("hooks", {}).get("PostToolUse", [])
     found = False
@@ -324,11 +337,14 @@ def test_wire_up_registers_state_anchor_postuse_agent(tmp_path, monkeypatch):
 
 def test_wire_up_state_anchor_idempotent(tmp_path, monkeypatch):
     fake_home = _patch_home(tmp_path, monkeypatch)
+    ws = tmp_path / "ws"
+    ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
     from wire_up_settings import wire_up_settings
-    wire_up_settings()
-    wire_up_settings()  # re-run — must be a fixed point
-    settings_path = fake_home / ".claude" / "settings.json"
+    wire_up_settings(workspace=ws)
+    wire_up_settings(workspace=ws)  # re-run — must be a fixed point
+    settings_path = ws / ".claude" / "settings.json"
+    assert not (fake_home / ".claude" / "settings.json").exists()
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     post = settings.get("hooks", {}).get("PostToolUse", [])
     n = 0

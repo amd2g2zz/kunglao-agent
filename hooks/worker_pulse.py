@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """worker_pulse.py - convergence pulse injected after every worker completion (v1.9.8).
 
 WHY: v1.9's convergence loop is agent-invoked — the orchestrator must
 REMEMBER to run convergence_check.py every turn. When it forgets (or gets
 absorbed in processing a worker report), there is no backstop: the loop
-drifts, and "kunglao-agent 笨了" shows up again as a mystery. This hook makes
+drifts, and "kunglao-agent got dumb" (user's words, 原文 Chinese: kunglao-agent 笨了) shows up again as a mystery. This hook makes
 the convergence state arrive automatically: at the exact moment a worker
 completes (PostToolUse on Agent), the orchestrator receives a compact
 "where are we, what's next" pulse — zero effort, zero forgetting.
@@ -40,7 +41,7 @@ workers get no reminder (silent by default).
 Wiring (in .claude/settings.json PostToolUse, Agent matcher — alongside
 worker_budget):
   {"matcher": "Agent", "hooks": [{"type": "command",
-    "command": "python C:/Users/hr/.claude/skills/kunglao-agent/hooks/worker_pulse.py"}]}
+    "command": "uv run --project <skill_root> <skill_root>/hooks/worker_pulse.py"}]}
 """
 from __future__ import annotations
 
@@ -57,7 +58,7 @@ DISPATCH_RE = re.compile(
     re.IGNORECASE,
 )
 
-# v1.9.30 (#38): soft stale-worker detection for the non-dispatch PostToolUse
+# v1.9.29 (#38): soft stale-worker detection for the non-dispatch PostToolUse
 # path. A worker is in-progress iff the LAST `status:` line (most-recent-state
 # wins, same convention as lib_kunglao.scan_active_workers and
 # backtrack_gate.parse_status) lowercased + dash->underscore == "in_progress".
@@ -261,7 +262,7 @@ def main() -> int:
     if not _kunglao_active(ws):
         return 0  # not activated or expired — hooks sleep
     if not _was_dispatch(payload):
-        # v1.9.30 (#38): even on the non-dispatch path, surface mtime-stale
+        # v1.9.29 (#38): even on the non-dispatch path, surface mtime-stale
         # in-progress workers as a soft additionalContext. NEVER aborts
         # (rc=0); the hard REJECT is worker_budget.check_backtrack_gate.
         stale_msg = _check_stale_workers(ws)
@@ -285,7 +286,7 @@ def main() -> int:
     # cannot proceed past a blocked/saturated convergence state.
     if pulse and decision in ("BLOCKED", "SATURATED"):
         print(pulse, file=sys.stderr)
-        return 2
+        return 3  # BLOCKED — see hook_exit_codes.py
     if not pulse:
         if reminder:
             print(json.dumps({

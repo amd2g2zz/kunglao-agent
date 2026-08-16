@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""kunglao_record — M4 RECORD 实现模块 (phase 5, E5.1).
+# -*- coding: utf-8 -*-
+"""kunglao_record — M4 RECORD implementation module (phase 5, E5.1).
 
-独立 CLI 入口: scripts/kunglao-record.py(薄包装, 本模块含全部逻辑)。
+Standalone CLI entry: scripts/kunglao-record.py (thin wrapper; this module holds all the logic).
 
-- record_event: ledger.jsonl 幂等写入 (event_id = sha256(event_type + payload))
-- read_events:  按 event_type 读回
-- claim_migrator: claim 状态迁移合法性检查 (maker-checker:
-  非 orchestrator 写 terminal 状态 → 拒)
+- record_event: idempotent ledger.jsonl write (event_id = sha256(event_type + payload))
+- read_events:  read back by event_type
+- claim_migrator: claim state-transition legality check (maker-checker:
+  a non-orchestrator writing a terminal status → reject)
 
-输出契约: schemas/event.json (M0.3 Event schema, module-design §M0.3 L53-72)。
+Output contract: schemas/event.json (M0.3 Event schema, module-design §M0.3 L53-72).
 """
 from __future__ import annotations
 
@@ -25,10 +26,10 @@ LEDGER_NAME = "ledger.jsonl"
 EVENT_TYPES = ("fact_written", "fact_verified", "claim_promoted", "claim_refuted",
                "failure_recorded", "intent_opened", "intent_closed")
 # #34: unified 6-value TERMINAL from status_defs (was 5-value local copy
-# annotated "同集 worker_budget"; STALE now terminal — a stale claim needs
+# annotated "same set as worker_budget"; STALE now terminal — a stale claim needs
 # no further work, so claim_promoted on STALE is a real promotion)
 from status_defs import TERMINAL as TERMINAL_STATUSES
-# 与 hooks/worker_budget.py check_claim_status_change 豁免集一致 (L289)
+# Same exemption set as hooks/worker_budget.py check_claim_status_change (L289)
 ORCHESTRATOR_ACTORS = ("orchestrator", "main", "kunglao-orch")
 
 # #78: gates REQUIRED for terminal promotion (PROVEN). When a required gate is
@@ -57,27 +58,27 @@ def _required_gate_receipt(gate: str, exc: BaseException, claim_id: str) -> str:
 
 
 def utc_now() -> str:
-    """UTC ISO-8601 秒级, Z 后缀."""
+    """UTC ISO-8601 seconds precision, Z suffix."""
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _canonical(payload: dict) -> str:
-    """payload 确定性序列化(键排序, 紧凑) — 幂等键与 checksum 的字节基础."""
+    """Deterministic payload serialization (sorted keys, compact) — the byte basis for idempotency keys and checksums."""
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
 def event_id_of(event_type: str, payload: dict) -> str:
-    """event_id = sha256(event_type + canonical(payload)) — M0.3 L67/M4.2 L325 幂等键."""
+    """event_id = sha256(event_type + canonical(payload)) — the M0.3 L67/M4.2 L325 idempotency key."""
     return hashlib.sha256((event_type + _canonical(payload)).encode("utf-8")).hexdigest()
 
 
 def ledger_path(ws: Path) -> Path:
-    """账本路径: <ws>/ledger.jsonl(M4.1 L315 "ledger.jsonl 幂等写入")."""
+    """Ledger path: <ws>/ledger.jsonl (M4.1 L315 "idempotent ledger.jsonl write")."""
     return ws / LEDGER_NAME
 
 
 def read_events(ws: Path, event_type: str | None = None) -> list[dict]:
-    """读回 ledger 事件(M0.2 L49); event_type=None → 全部. 坏行跳过(不崩溃, M0.4 L76)."""
+    """Read back ledger events (M0.2 L49); event_type=None → all. Bad lines skipped (no crash, M0.4 L76)."""
     p = ledger_path(ws)
     if not p.exists():
         return []
@@ -96,13 +97,13 @@ def read_events(ws: Path, event_type: str | None = None) -> list[dict]:
 
 
 def _record_checksum(rec: dict) -> str:
-    """checksum = sha256(整条记录除 checksum 字段外的 canonical JSON)."""
+    """checksum = sha256 of the canonical JSON of the whole record minus the checksum field."""
     core = {k: v for k, v in rec.items() if k != "checksum"}
     return hashlib.sha256(_canonical(core).encode("utf-8")).hexdigest()
 
 
 def _atomic_write(path: Path, text: str) -> None:
-    """写 temp → rename(崩溃安全); 失败重试 1 次(M0.4 L78/L355 状态一致性优先)."""
+    """Write temp → rename (crash-safe); one retry on failure (M0.4 L78/L355 state-consistency first)."""
     tmp = path.with_name(path.name + ".tmp")
     try:
         tmp.write_text(text, encoding="utf-8")
@@ -168,7 +169,7 @@ _ledger_locks: dict[Path, threading.Lock] = {}
 
 
 def record_event(ws: Path, event: dict) -> int:
-    """幂等写入(M4.2 L325): 同 event_id 重复 → 返回已有 seq; 否则 append 返回新 seq.
+    """Idempotent write (M4.2 L325): a duplicate event_id → return the existing seq; otherwise append and return the new seq.
 
     Fix #96 (F8): uses os.open(O_APPEND) instead of full read-modify-write
     with _atomic_write, eliminating the concurrency race where two writers
@@ -213,7 +214,7 @@ def record_event(ws: Path, event: dict) -> int:
 
 
 def _set_claim_status(reg_path: Path, claim_id: str, new_status: str) -> bool:
-    """line-based 重写 claim-register.yaml 中目标 claim 块的 status: 字段."""
+    """Line-based rewrite of the status: field in the target claim block of claim-register.yaml."""
     lines = reg_path.read_text(encoding="utf-8").splitlines()
     out: list[str] = []
     in_block = False
@@ -256,12 +257,14 @@ def _extract_worker_id(register_text: str, claim_id: str) -> str | None:
 
 
 def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tuple[bool, str]:
-    """claim 状态迁移(合法性检查 + 落地, M4.2 L331).
+    """Claim state transition (legality check + persist, M4.2 L331).
 
-    maker-checker(worker_budget L282-319 同判据): 非 orchestrator 写 terminal
-    状态 → (False, reason), 不落地. orchestrator 写 terminal → 更新 register
-    + 记 ledger 事件(claim_promoted / claim_refuted). DEFERRED 无专属
-    event_type → 仅 register 更新(契约空白决策). 非 terminal 迁移 → register 更新.
+    maker-checker (same criteria as worker_budget L282-319): a
+    non-orchestrator writing a terminal status → (False, reason), nothing
+    persisted. Orchestrator writing terminal → update the register + log a
+    ledger event (claim_promoted / claim_refuted). DEFERRED has no dedicated
+    event_type → register update only (contract-gap decision). Non-terminal
+    transitions → register update.
 
     BLIND gate (issue #15 / PRD M1): orchestrator promoting to PROVEN must
     have a valid verifier_sign_off block in the claim's fact file. Without
@@ -284,6 +287,37 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             f"WORKER SELF-PROMOTION BLOCKED (maker-checker): actor={actor!r} tried "
             f"to write terminal status {new_status!r} for {claim_id}. Only the "
             f"orchestrator promotes after kunglao-redteam passes."))
+
+    # ---- #236 R3 (write-side gate): before writing DEFERRED, verify the
+    # decision-rights row cited by defer_reason actually exists — citing a
+    # nonexistent row = fake-blocker vector (the 2026-08-12 incident).
+    # Reference violation → refuse the write, register stays as-is.
+    # Workspace without references/decision-rights.md (no governance layer)
+    # → skip the check, original behavior unchanged.
+    if new_status == "DEFERRED":
+        try:
+            from write_gate import (defer_reason_violations,
+                                    extract_claim_defer_reason,
+                                    parse_decision_rights)
+        except Exception as exc:
+            return (False, f"BLOCKED: {claim_id} DEFERRED write requires "
+                           f"write-side gate R3; checker unavailable "
+                           f"({type(exc).__name__}): {exc} — register not "
+                           f"modified (fail closed)")
+        dr_path = ws / "references" / "decision-rights.md"
+        if dr_path.exists():
+            rows = parse_decision_rights(dr_path)
+            reason = extract_claim_defer_reason(register, claim_id)
+            if reason:
+                bad = defer_reason_violations(claim_id, reason, rows)
+                if bad:
+                    cited = ", ".join(str(b["row"]) for b in bad)
+                    rows_fmt = ", ".join(str(n) for n in sorted(rows))
+                    return (False, (f"DEFER REASON REJECTED (write-side gate "
+                                    f"R3): {claim_id} defer_reason cites "
+                                    f"nonexistent decision-rights row(s): "
+                                    f"{cited} (references/decision-rights.md "
+                                    f"has rows {rows_fmt or '(none)'})"))
 
     # ---- required gates (#78, fail closed): PROVEN requires the BLIND /
     # contradiction / inference verdicts.
@@ -345,6 +379,39 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             gate_msg += (f" [INFERENCE GATE: verifier runtime error "
                          f"({type(exc).__name__}: {exc}); degraded to STAMP "
                          f"(guardrails SS1b self_caveat allowed)]")
+        # ---- provenance gate (#147 wiring) ----
+        # The research replay showed check_provenance_gate exists but was NOT
+        # on the PROVEN path — summary-only facts were promoted. Every PROVEN
+        # promotion must carry raw provenance that resolves to evidence-index
+        # entries with matching hashes. Import failure = FAIL_CLOSED (same
+        # policy as the other REQUIRED_FOR_TERMINAL_STATE gates, #78).
+        # Gate scope: only when the workspace HAS an evidence index — a bare
+        # workspace without evidence machinery keeps its legacy promotion
+        # path (regression contract, test_fix_98_deadlock S9).
+        try:
+            from provenance_gate import check_provenance_gate
+        except Exception as exc:
+            return (False, _required_gate_receipt("provenance_gate", exc, claim_id))
+        try:
+            from blind_gate import find_fact_file
+            fact_file = find_fact_file(ws / "facts", claim_id)
+            if fact_file is None:
+                effective_status = STAMP
+                gate_msg += f" [PROVENANCE GATE: no fact file for {claim_id}]"
+            elif (ws / "evidence" / "_index.json").exists():
+                p_ok, p_reason = check_provenance_gate(fact_file, ws)
+                if not p_ok:
+                    # Evidence-integrity violation (bad ref / hash drift):
+                    # refuse the promotion — do NOT record a fake STAMP for a
+                    # workspace whose evidence machinery is present but says
+                    # the provenance does not resolve.
+                    return (False, f"PROVENANCE GATE: {p_reason} — "
+                                   f"refusing {claim_id} promotion")
+        except Exception as exc:
+            effective_status = STAMP
+            gate_msg += (f" [PROVENANCE GATE: verifier runtime error "
+                         f"({type(exc).__name__}: {exc}); degraded to STAMP "
+                         f"(guardrails SS1b self_caveat allowed)]")
 
     if not _set_claim_status(reg_path, claim_id, effective_status):
         return (False, f"could not rewrite status for {claim_id} in claim-register.yaml")
@@ -356,23 +423,31 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
     if event_type:
         record_event(ws, {"source_module": "claim_migrator", "event_type": event_type,
                           "payload": {"claim_id": claim_id, "status": effective_status}})
+    # #287 observability: mirror the register write to the structured event
+    # log. Guarded — logging must never break the migration.
+    try:
+        from kunglao_log import emit
+        emit(ws, actor=actor, action="claim_migrate", claim=claim_id,
+             artifact="claim-register.yaml", detail=effective_status)
+    except Exception:
+        pass
     return (True, f"claim {claim_id} → {effective_status} by {actor} (register updated"
                   + (f"; ledger {event_type}" if event_type else "")
                   + gate_msg)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """独立 CLI: python kunglao-record.py <ws> --event '<json>'.
+    """Standalone CLI: python kunglao-record.py <ws> --event '<json>'.
 
-    附加操作: --claim-migrate CLAIM_ID NEW_STATUS ACTOR; --read [EVENT_TYPE].
+    Additional actions: --claim-migrate CLAIM_ID NEW_STATUS ACTOR; --read [EVENT_TYPE].
     """
-    ap = argparse.ArgumentParser(description="kunglao-record — M4 RECORD (ledger 幂等写入 + claim 迁移)")
+    ap = argparse.ArgumentParser(description="kunglao-record — M4 RECORD (idempotent ledger writes + claim transitions)")
     ap.add_argument("ws", type=Path, help="workspace root")
     ap.add_argument("--event", help='event JSON: {"source_module":..., "event_type":..., "payload": {...}}')
     ap.add_argument("--claim-migrate", nargs=3, metavar=("CLAIM_ID", "NEW_STATUS", "ACTOR"),
-                    help="claim 状态迁移(合法性检查): claim_id new_status actor")
+                    help="claim state transition (legality check): claim_id new_status actor")
     ap.add_argument("--read", nargs="?", const="", default=None, metavar="EVENT_TYPE",
-                    help="读回事件(event_type 可选, 缺省全部)")
+                    help="read events back (event_type optional, default all)")
     args = ap.parse_args(argv)
     try:
         if args.claim_migrate:

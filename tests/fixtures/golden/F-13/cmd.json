@@ -1,10 +1,10 @@
 {
   "argv": [
-    "C:\\Users\\hr\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\scripts\\content_hash.py",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\tests\\fixtures\\golden\\F-13\\ws/claim.txt",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\tests\\fixtures\\golden\\F-13\\ws/reproduce.txt",
-    "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent\\tests\\fixtures\\golden\\F-13\\ws/expected.txt"
+    "{{PYTHON}}",
+    "{{ROOT}}\\scripts\\content_hash.py",
+    "{{ROOT}}\\tests\\fixtures\\golden\\F-13\\ws/claim.txt",
+    "{{ROOT}}\\tests\\fixtures\\golden\\F-13\\ws/reproduce.txt",
+    "{{ROOT}}\\tests\\fixtures\\golden\\F-13\\ws/expected.txt"
   ],
-  "cwd": "C:\\Users\\hr\\.claude\\kong-refactor\\kong-agent"
+  "cwd": "{{ROOT}}"
 }

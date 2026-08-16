@@ -1,4 +1,4 @@
-# kong-agent progress report (2026-08-06T06:45:43Z)
+# kunglao-agent progress report (2026-08-06T06:45:43Z)
 
 ## Claims: 2 total (1 terminal = 50% converged)
   - OPEN: 1

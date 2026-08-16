@@ -1,4 +1,4 @@
-# CTF Reverse - Platform-Specific Reversing
+# Platform-Specific Reversing
 
 macOS/iOS, embedded/IoT firmware, kernel driver, and automotive reverse engineering.
 
@@ -69,7 +69,7 @@ codesign --remove-signature binary
 codesign -f -s - binary
 ```
 
-**CTF relevance:** Patched binaries need re-signing to run on macOS. Ad-hoc signing (`-s -`) works for local testing.
+**RE relevance:** Patched binaries need re-signing to run on macOS. Ad-hoc signing (`-s -`) works for local testing.
 
 ### Objective-C Runtime RE
 
@@ -338,7 +338,7 @@ strings module.ko | grep -i "flag\|secret\|ioctl\|device"
 # Look for init_module / cleanup_module entry points
 ```
 
-**Common kernel module CTF patterns:**
+**Common kernel module patterns:**
 ```c
 // Device creation (creates /dev/challenge)
 alloc_chrdev_region(&dev, 0, 1, "challenge");
@@ -425,7 +425,7 @@ cansniffer can0                            # Filter/highlight changes
 canplayer -I logfile.log can0
 cansend can0 7DF#0201000000000000          # Send single frame (OBD-II request)
 
-# UDS (Unified Diagnostic Services) — common in automotive CTF
+# UDS (Unified Diagnostic Services) — common in automotive targets
 # Service 0x27: Security Access (seed-key authentication)
 # Service 0x2E: Write Data By Identifier
 # Service 0x31: Routine Control
@@ -436,7 +436,7 @@ cansend can0 7DF#0201000000000000          # Send single frame (OBD-II request)
 # Data: up to 8 bytes payload
 ```
 
-**CTF automotive patterns:**
+**Automotive analysis patterns:**
 - Seed-key bypass: Reverse the key derivation algorithm from ECU firmware
 - CAN message replay: Capture legitimate command, replay to unlock feature
 - Firmware extraction from ECU via UDS/KWP2000

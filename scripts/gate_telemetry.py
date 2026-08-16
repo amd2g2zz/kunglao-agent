@@ -1,10 +1,13 @@
-"""gate_telemetry.py — gate 触发埋点(实验 1: 砍/留判定数据采集).
+# -*- coding: utf-8 -*-
+"""gate_telemetry.py — gate trigger telemetry (experiment 1: keep/cut decision data).
 
-各 gate 的 check() 用 @telemetry 装饰, 每次调用记一行到 runs/gate-telemetry.jsonl:
+Each gate's check() is decorated with @telemetry; every call appends one
+line to runs/gate-telemetry.jsonl:
   {ts, gate, rc, rc_meaning, workspace}
-rc=0 通过, rc=1/2 拦截。无 runs/ 目录则跳过(测试环境不埋点)。
+rc=0 passes; rc=1/2 intercepted. Without a runs/ directory the write is
+skipped (test environments are not instrumented).
 
-用法:
+Usage:
   from gate_telemetry import telemetry
   @telemetry('reuse_gate')
   def check(...): ...
@@ -18,7 +21,7 @@ from pathlib import Path
 
 
 def telemetry(gate_name: str):
-    """装饰 gate 的 check 函数, 记录每次调用的 rc(埋点永不影响 gate 本身)."""
+    """Decorate a gate's check function; record each call's rc (telemetry never affects the gate itself)."""
 
     def deco(fn):
         @wraps(fn)

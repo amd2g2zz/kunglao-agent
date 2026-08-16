@@ -1,15 +1,134 @@
-"""wire_up_settings.py - register kunglao-agent hooks in the global settings.json.
+# -*- coding: utf-8 -*-
+"""wire_up_settings.py - register kunglao-agent hooks in the PROJECT settings.json.
 
 Extracted from hook_activation.py (T-2 split) — the --wire-up job.
+
+Issue #258 (2026-08-12): hook deployment is PROJECT-scoped. The pre-#258
+hardcoded `Path.home()/.claude/settings.json` wrote hooks globally; in a
+worktree (<HOME>/.claude/.wt-*/) that binds the hook commands to a path
+that dies with the worktree — deleting the worktree silently killed all 8
+hooks and blocked every session's tool calls. Project-level deployment makes
+hooks live and die WITH the workspace: no global pollution, no stale
+worktree-bound commands.
+
+Issue #269 (2026-08-13): hook COMMAND paths are absolute and point at the
+CANONICAL deployed skill install (~/.claude/skills/kunglao-agent/hooks) — the
+generation used `Path(__file__)` (the script's own location), so a --wire-up
+run from a dev worktree bound the commands to the worktree path, which dies
+with the worktree (#228 lesson). _canonical_hooks_dir() decouples the
+registered path from wherever this module happens to run.
 """
 from __future__ import annotations
 
 import json
+import sys
+from collections.abc import Iterable
 from pathlib import Path
 
+# #372: THE hook registry — every consumer derives from this frozenset.
+# Pre-#372 env_check.py mirrored the list by hand and drifted (6 vs the 8
+# files wire_up_settings actually registers — recall_inject/completion_gate
+# silently invisible to the env_check deployment gate). The registrations
+# below MUST keep this set in sync; tests/test_hook_registry_singlesource.py
+# pins the set-equality so drift is loud. Deliberate narrow subsets
+# (hooks_selfcheck.KONG_HOOK_FILES, external_kicker.KUNGLAO_HOOK_ENTRIES)
+# pin their file sets to this registry via derive_hook_subset() below (#381).
+WIRE_UP_HOOK_FILES = frozenset({
+    "env_check_gate.py",       # PreToolUse/Agent — hard environment gate (#233)
+    "worker_budget.py",        # Pre+PostToolUse/Agent — budget/tier enforcement
+    "dispatch_gate.py",        # PreToolUse/Agent — dispatch contract gate
+    "recall_inject.py",        # PreToolUse/Agent — runtime knowledge recall (#268)
+    "heartbeat_touch.py",      # PreToolUse/Bash — liveness refresh on any tool use
+    "worker_pulse.py",         # PostToolUse/Agent — completion pulse
+    "state_anchor.py",         # PostToolUse/Agent — per-turn state re-anchor (#44)
+    "completion_gate.py",      # Stop — code-owned completion gate (#55)
+})
 
-def wire_up_settings() -> int:
-    """Register kunglao-agent hooks in the global settings.json.
+
+def derive_hook_subset(registry: Iterable[str], include: Iterable[str],
+                       skip: Iterable[str], owner: str) -> frozenset[str]:
+    """#381: validate a deliberate hook subset's tables against the registry.
+
+    Subset mirrors (hooks_selfcheck's liveness chain, external_kicker's
+    re-registration set) are DELIBERATELY narrower than WIRE_UP_HOOK_FILES,
+    so they cannot be the registry by identity like env_check.HOOK_FILES.
+    Instead each subset owns two semantic tables — `include` (the files it
+    covers) and `skip` (the registry files it deliberately omits, with why) —
+    and this validator pins the FILE SETS to the registry with loud
+    invariants:
+
+      - every `include` file must exist in the registry (a registry rename
+        without a conscious mirror update raises);
+      - every registry file must be accounted for by `include` | `skip` (a
+        registry growth without a conscious table update raises);
+      - every `skip` file must exist in the registry (a skip entry naming a
+        file the registry no longer has is a stale deliberate omission);
+      - `include` and `skip` must not overlap (a file cannot be both covered
+        and deliberately omitted).
+
+    Called at import time in both consumer modules, so a drifted registry
+    fails loudly on every import instead of silently checking or
+    re-registering a stale file set. Pure — validates and returns the
+    `include` set as a frozenset, mutates nothing.
+    """
+    registry = frozenset(registry)
+    include = frozenset(include)
+    skip = frozenset(skip)
+    unknown = include - registry
+    unaccounted = registry - include - skip
+    stale_skip = skip - registry   # skip names a file the registry no longer has
+    overlap = include & skip       # covered AND deliberately omitted — contradiction
+    if unknown or unaccounted or stale_skip or overlap:
+        raise ValueError(
+            f"{owner}: hook-subset tables drifted from the registry — table "
+            f"files not in registry: {sorted(unknown)}; registry files in no "
+            f"table: {sorted(unaccounted)}; skip files absent from registry: "
+            f"{sorted(stale_skip)}; files in both include and skip: "
+            f"{sorted(overlap)}. Update the subset tables deliberately "
+            f"(issue #381).")
+    return include
+
+
+def _settings_target(workspace: Path | None) -> Path:
+    """Project-level settings.json target (never the user-global, #258).
+
+    - workspace given -> <workspace>/.claude/settings.json
+    - workspace None  -> <cwd>/.claude/settings.json (cwd probe: an existing
+      .claude/settings.json or a claim-register.yaml workspace root in cwd;
+      else the file is created at <cwd>/.claude/settings.json)
+    """
+    if workspace is not None:
+        return Path(workspace).resolve() / ".claude" / "settings.json"
+    cwd = Path.cwd().resolve()
+    return cwd / ".claude" / "settings.json"
+
+
+def _canonical_hooks_dir() -> Path:
+    """Canonical deployed skill hooks dir — where hook COMMAND paths must point.
+
+    Issue #269: hook commands are absolute paths into the CANONICAL skill
+    install (~/.claude/skills/kunglao-agent/hooks), never this module's own
+    location. This script may be run from a dev worktree
+    (<HOME>/.claude/wt-*/); a worktree-bound command dies with the
+    worktree — the #228 incident: 8 hooks went silent at once when the
+    referenced path was deleted. When this module IS deployed at the canonical
+    location (the normal production case), the two coincide and `here` wins.
+    """
+    here = Path(__file__).resolve().parent.parent / "hooks"
+    canonical = Path.home() / ".claude" / "skills" / "kunglao-agent" / "hooks"
+    return here if here == canonical else canonical
+
+
+def wire_up_settings(workspace: Path | None = None, global_opt_in: bool = False) -> int:
+    """Register kunglao-agent hooks in the PROJECT-level settings.json.
+
+    Deployment target (issue #258):
+      - workspace given  -> <workspace>/.claude/settings.json
+      - workspace None   -> <cwd>/.claude/settings.json (probe; created if absent)
+      - global_opt_in=True -> Path.home()/.claude/settings.json — EXPLICIT
+        opt-in only; the old default wrote the user-global settings, and in a
+        worktree that bound hooks to a worktree path that later died (the
+        #258 incident: 8 hooks silently dead, session tool calls blocked).
 
     Idempotent merge: reads current settings, appends our hook entries under
     PreToolUse/PostToolUse with matcher "Agent" (heartbeat_touch on matcher
@@ -18,7 +137,15 @@ def wire_up_settings() -> int:
     (same command path / basename), preserves every other key. Writes back with
     4-space indent. Returns the number of hook entries registered.
     """
-    settings_path = Path.home() / ".claude" / "settings.json"
+    if global_opt_in:
+        settings_path = Path.home() / ".claude" / "settings.json"
+        print(f"WARNING: wiring kunglao-agent hooks into the USER-GLOBAL "
+              f"{settings_path} — hooks must live in the project-level "
+              f".claude/settings.json (issue #258); global deployment is "
+              f"explicit opt-in ONLY.", file=sys.stderr)
+    else:
+        settings_path = _settings_target(workspace)
+
     existing = {}
     if settings_path.exists():
         try:
@@ -30,15 +157,24 @@ def wire_up_settings() -> int:
     pre = hooks.get("PreToolUse") or []
     post = hooks.get("PostToolUse") or []
 
-    # hook_dir: <skill>/hooks (this module lives in <skill>/scripts/)
-    hook_dir = Path(__file__).resolve().parent.parent / "hooks"
+    # hook_dir: the CANONICAL deployed skill hooks dir — NOT this module's
+    # own location (#269; running from a worktree must not bind hook commands
+    # to the worktree path, which dies with it — #228).
+    hook_dir = _canonical_hooks_dir()
 
     def _entry(hook_file: str) -> dict:
         # POSIX path (forward slashes): hooks run via `sh -c` — Windows
         # backslash paths get their backslashes eaten as escape chars
-        # (C:\Users\... -> C:Users...).
+        # (C:\Users\... -> C:Users...). #389: hooks run via
+        # `uv run --project <skill_root>` — bare python can resolve to 2.x
+        # (this machine: /usr/local/bin/python -> 2.7.17) and kill every
+        # registered hook; uv uses the skill's own project venv (python 3.11+).
+        # skill_root is the CANONICAL skill install root (#269), never this
+        # module's location.
+        skill_root = hook_dir.parent
         p = (hook_dir / hook_file).as_posix()
-        return {"type": "command", "command": f"python {p}"}
+        return {"type": "command",
+                "command": f"uv run --project {skill_root.as_posix()} {p}"}
 
     def _ensure(entries: list, matcher: str, hook_file: str) -> tuple[list, bool]:
         new = [e for e in entries if e.get("matcher") == matcher]
@@ -72,9 +208,19 @@ def wire_up_settings() -> int:
         return kept, True
 
     count = 0
+    # env_check_gate FIRST: the environment hard-gate (#233) must reject a
+    # teammate-polluted dispatch before any budget/state logic runs.
+    pre, added = _ensure(pre, "Agent", "env_check_gate.py")
+    count += added
     pre, added = _ensure(pre, "Agent", "worker_budget.py")
     count += added
     pre, added = _ensure(pre, "Agent", "dispatch_gate.py")
+    count += added
+    # recall_inject (#268): runtime knowledge recall injected into every claim
+    # dispatch. Inject-only (always exits 0 — recall must never block dispatch)
+    # and deliberately NOT activation-gated: knowledge helps whether or not the
+    # enforcement hooks are activated. Grouped with the dispatch injectors.
+    pre, added = _ensure(pre, "Agent", "recall_inject.py")
     count += added
     # heartbeat_touch on matcher=Bash — ANY tool activity refreshes
     # last_tick_ts, decoupling heartbeat liveness from orchestrator cognition.
@@ -101,6 +247,7 @@ def wire_up_settings() -> int:
     hooks["PostToolUse"] = post
     hooks["Stop"] = stop
     existing["hooks"] = hooks
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(
         json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"
     )

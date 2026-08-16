@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """lib_kunglao.py — kunglao-agent shared library (Phase 2 E2.4).
 
 Consolidates duplicated implementations across hooks:
@@ -104,7 +105,7 @@ def scan_active_workers(workspace: Path) -> tuple[int, list]:
     """Count active + stuck workers from runs/worker-status-*.md.
 
     Active = a worker whose LAST ``status:`` line is ``in-progress``. Scans the
-    workspace ``runs/`` dir plus every ``.wt-*/malware-analysis-workspace/runs``
+    workspace ``runs/`` dir plus every ``.wt-*/ with .kunglao-worktree marker``
     worktree dir (v1.9.13 worktree isolation: worker state lives in each worker's
     own worktree, not the main tree). Stuck = active files older than
     STUCK_MINUTES. OSError on glob/read/stat skips that file.
@@ -114,8 +115,10 @@ def scan_active_workers(workspace: Path) -> tuple[int, list]:
     status_line = re.compile(r"status:\s*(\S+)")
     dirs = [workspace / "runs"]
     try:
-        for wt in workspace.parent.glob(".wt-*/malware-analysis-workspace/runs"):
-            dirs.append(wt)
+        for wt in workspace.parent.glob(".wt-*/.kunglao-worktree"):
+            runs_dir = wt.parent / "malware-analysis-workspace" / "runs"
+            if runs_dir.exists():
+                dirs.append(runs_dir)
     except OSError:
         pass
     active = 0

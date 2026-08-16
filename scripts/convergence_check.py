@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """convergence_check.py - the "should I dispatch right now?" decision (v1.9).
 
 Companion to priority.py:
@@ -27,6 +28,7 @@ Exit codes (machine-readable for hooks):
   3 = SATURATED (busy, poll)
   4 = BLOCKED (open work but all blocked — escalate); INVALID (bad task_spec) reuses this
      so hooks that accept returncodes 0–4 keep parsing the JSON decision.
+  64 = MISSING_WORKSPACE (no claim-register.yaml found — caller passed wrong path)
 
 Usage:
   python scripts/convergence_check.py [workspace]          # human-readable
@@ -45,6 +47,11 @@ from pathlib import Path
 import yaml
 
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES
+# RETRACTED lives in retract_claim.py (retraction domain owner, #331):
+# status_defs.TERMINAL is frozen for this change. TERMINAL_WITH_RETRACTED is
+# the dispatch-facing terminal set; RETRACTED is a withdrawn verdict, NOT an
+# open claim and NOT an orphan (a retracted claim answers no question by design).
+from retract_claim import RETRACTED, TERMINAL_WITH_RETRACTED
 
 WORKER_CAP = 3
 STUCK_MINUTES = 20
@@ -77,7 +84,7 @@ def _scan_active_workers(workspace: Path):
     """Count in-flight + stuck workers from runs/worker-status-*.md.
 
     v1.9.13 (worktree isolation): worker state lives in EACH worker's git
-    worktree (.wt-*/malware-analysis-workspace/runs/), NOT the main workspace
+    worktree (.wt-*/ with .kunglao-worktree marker/), NOT the main workspace
     (merged status files are removed from the main tree). Scan the main
     workspace runs/ PLUS every .wt-*/ worktree runs/ dir.
 
@@ -91,8 +98,10 @@ def _scan_active_workers(workspace: Path):
     _status_line = _re.compile(r"status:\s*(\S+)")
     dirs = [workspace / "runs"]
     try:
-        for wt in workspace.parent.glob(".wt-*/malware-analysis-workspace/runs"):
-            dirs.append(wt)
+        for wt in workspace.parent.glob(".wt-*/.kunglao-worktree"):
+            runs_dir = wt.parent / "malware-analysis-workspace" / "runs"
+            if runs_dir.exists():
+                dirs.append(runs_dir)
     except OSError:
         pass
     active = 0
@@ -123,11 +132,14 @@ def _scan_active_workers(workspace: Path):
 
 
 def _open_claims(reg: dict):
-    """Return claims that are non-terminal (need work)."""
+    """Return claims that are non-terminal (need work).
+
+    RETRACTED is terminal (#331): a withdrawn claim needs no work and must
+    never be re-dispatched."""
     out = []
     for c in (reg.get("claims") or []):
         status = (c.get("status") or "UNKNOWN").upper()
-        if status not in TERMINAL and status not in IN_PROGRESS_STATUSES:
+        if status not in TERMINAL_WITH_RETRACTED and status not in IN_PROGRESS_STATUSES:
             out.append({"id": c.get("id"), "status": status, "blocked": bool(c.get("blocked"))})
     return out
 
@@ -198,6 +210,10 @@ def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) 
     and that's fine).
 
     Returns list of {"id": ..., "status": ...} dicts for orphan terminal claims.
+
+    RETRACTED claims are excluded: a withdrawn claim answers no question by
+    design (#331) — flagging it as an orphan would BLOCK convergence on
+    claims the orchestrator already removed from the delivered set.
     """
     if primary_question_ids is not None and not primary_question_ids:
         # Workspace has primary_questions: [] (feature not used) — skip orphan check
@@ -205,7 +221,7 @@ def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) 
     out = []
     for c in (reg.get("claims") or []):
         status = (c.get("status") or "UNKNOWN").upper()
-        if status not in TERMINAL:
+        if status not in TERMINAL or status == RETRACTED:
             continue
         aq = c.get("answers_question")
         if not aq:
@@ -268,7 +284,9 @@ def _note_layer_gaps(workspace: Path, pq_ids: set, reg: dict) -> list:
     for c in (reg.get("claims") or []):
         cid = c.get("id")
         aq = c.get("answers_question")
-        if cid and aq:
+        # #331: a RETRACTED claim no longer answers its question — a
+        # passes-note on it must not satisfy the note-layer gate.
+        if cid and aq and (c.get("status") or "").upper() != RETRACTED:
             claim_answers[str(cid).strip()] = str(aq).strip()
     answered = set()
     for p in (workspace / "notes").glob("*.md"):
@@ -432,6 +450,33 @@ def _append_ledger(workspace: Path, d: dict) -> None:
         pass
 
 
+def record_operator_action(workspace, action: str, actor: str = "orchestrator",
+                           claim_id: str = "", reason: str = "",
+                           before: str = "", after: str = "") -> None:
+    """Append an OPERATOR_ACTION row to the convergence ledger (#142).
+
+    Records who changed what and why: defer/override_proven/weight_change/claim_edit.
+    Writes directly to the ledger (not via _append_ledger which expects snapshot fields).
+    """
+    from status_defs import LedgerLineType
+    entry = {
+        "type": LedgerLineType.OPERATOR_ACTION,
+        "action": action,
+        "actor": actor,
+        "claim_id": claim_id,
+        "reason": reason,
+        "before": before,
+        "after": after,
+        "ts": utc_now().isoformat(timespec="seconds"),
+    }
+    try:
+        newline_char = chr(10)
+        with open(workspace / LEDGER_NAME, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + newline_char)
+    except OSError:
+        pass
+
+
 def _failure_blocked(workspace: Path) -> list:
     """Claims with a failed attempt but no current failure_analysis.
     These cannot be re-dispatched or marked NEGATIVE until reasoned about.
@@ -496,9 +541,52 @@ def decide(workspace: Path) -> dict:
                 f"lack a note with verify_status=passes (link: note.claim_id -> claim.answers_question). " \
                 f"Run verify-note.py before delivery."
         else:
-            decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
-                "Claim loop done — all open claims closed, partials verified, primary_questions PROVEN " \
-                "with verify_status=passes notes. STOP dispatch. Delivery requires handoff-check.py PASS."
+            # #147: discovery consumption — disclosed payloads must be
+            # obligations before CONVERGED is possible (replay #1: fact body
+            # said 'discovered shellcode, downstream payload not analyzed'
+            # and the run converged without the obligation).
+            discovery_reason = ""
+            try:
+                import obligation_discovery as od
+                discoveries = od.scan_discoveries(workspace / "facts",
+                                                  workspace / "claim-register.yaml")
+                if discoveries:
+                    names = ", ".join(d["trigger"] for d in discoveries)
+                    discovery_reason = (
+                        f"{len(discoveries)} unconsumed discovery(s) in {names} "
+                        f"— create child obligations or record materiality rejection")
+            except Exception as exc:
+                discovery_reason = f"discovery scan unavailable ({type(exc).__name__})"
+            if discovery_reason:
+                decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
+                    f"Cannot CONVERGE: {discovery_reason}"
+            else:
+                # #147: completion transaction — CONVERGED is not trusted on the
+                # register's word. Recompute global contradictions from facts/.
+                # Any contradiction downgrades the decision (replay #2). A
+                # workspace without a facts index has zero facts and cannot hold
+                # a contradiction.
+                contradiction_reason = ""
+                if (workspace / "facts" / "_INDEX.md").exists():
+                    try:
+                        import fact_contradiction_gate as fcg
+                        conflicts = fcg.scan_conflicts(workspace / "facts" / "_INDEX.md",
+                                                       workspace / "facts")
+                        if conflicts:
+                            pairs = "; ".join(
+                                f"{c['fact_a']} <-> {c['fact_b']}" for c in conflicts)
+                            contradiction_reason = f"GLOBAL CONTRADICTION: {pairs}"
+                    except Exception as exc:  # fail-closed: cannot verify → cannot converge
+                        contradiction_reason = f"contradiction scan unavailable ({type(exc).__name__})"
+                if contradiction_reason:
+                    decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
+                        f"Cannot CONVERGE: {contradiction_reason} — resolve via " \
+                        f"fact_contradiction_gate or supersedes links."
+                else:
+                    decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
+                        "Claim loop done — all open claims closed, partials verified, primary_questions PROVEN " \
+                        "with verify_status=passes notes, completion transaction clean (zero global " \
+                        "contradictions, zero unconsumed discoveries, PROVEN provenance). STOP dispatch; deliver"
     elif unblocked_open and free_slots:
         decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
             f"Run priority.py and dispatch the top claim. {len(unblocked_open)} unblocked open claim(s), {free_slots} free slot(s)."
@@ -507,7 +595,7 @@ def decide(workspace: Path) -> dict:
             f"Dispatch a verifier for {len(partials)} partial fact(s). Do NOT declare PROVEN without sign-off."
     elif unblocked_open and not free_slots:
         decision, exit_code, action = "SATURATED", EXIT_SATURATED, \
-            f"All {WORKER_CAP} slots busy with {len(unblocked_open)} open claim(s) queued. Poll workers — do not idle."
+            f"All {WORKER_CAP} slots busy with {len(unblocked_open)} open claim(s) queued. Poll workers — do not wait idly."
     elif failure_blocked_open:
         decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
             f"{len(failure_blocked_open)} claim(s) have a failed attempt with no failure_analysis: {failure_blocked_ids}. " \
@@ -585,6 +673,14 @@ def main() -> int:
 
     d = decide(workspace)
     _append_ledger(workspace, d)  # silent side channel for convergence_health.py
+    # #287 observability: mirror the convergence decision to the structured
+    # event log. Guarded — logging must never block the decision.
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="orchestrator", action="converge",
+             detail=d["decision"], exit=d["exit_code"])
+    except Exception:
+        pass
     if args.json:
         print(json.dumps(d, indent=2, ensure_ascii=False))
     else:

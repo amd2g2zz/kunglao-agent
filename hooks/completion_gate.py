@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """hooks/completion_gate.py — Stop-hook shim for the code-owned completion gate (#55).
 
 Thin wrapper around scripts/completion_gate.py::judge. Reads the Claude Code
@@ -40,11 +41,13 @@ ORACLE_FILE = "task-oracle.yaml"
 # ---------- workspace + activation (mirror hooks/state_anchor.py #44) ----------
 
 def _resolve_workspace(payload: dict) -> Path | None:
-    """First candidate with a task-oracle.yaml wins. The oracle is the gate's
-    primary input, so its presence is the correct workspace marker."""
+    """First candidate with a workspace MARKER wins. Markers: claim-register.yaml
+    or .hook_state.json — NOT the oracle file. (#200: an activated workspace
+    without an oracle must still be RESOLVED so the gate can block it; keying
+    on oracle presence silently passed it through.)"""
     cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
     for base in [cwd / "malware-analysis-workspace", cwd]:
-        if (base / ORACLE_FILE).exists():
+        if (base / "claim-register.yaml").exists() or (base / ".hook_state.json").exists():
             return base
     return None
 
@@ -80,17 +83,55 @@ def _load_judge():
 # ---------- the Stop-event core ----------
 
 def process_event(payload: dict) -> int:
-    """Testable core: anti-loop → workspace resolve → strict activation →
-    load oracle → judge → emit block decision or pass through. Returns rc."""
-    # anti-loop: stop_hook_active means the gate already blocked once; let the
-    # agent's second stop attempt through so the session is not trapped.
+    """Testable core: second-stop adjudication → workspace resolve → strict
+    activation → load oracle → judge → emit block decision or pass through.
+    Returns rc."""
+    # #147: second stop — persistent oracle adjudication. The shim no longer
+    # makes this decision: it reads the oracle's stop_hook_active block and
+    # only passes when the oracle records a sanctioned PASS. Anything else
+    # (no sanction on record, unreadable oracle) blocks — an unsanctioned
+    # second stop must not silently pass (#199).
     if payload.get("stop_hook_active"):
-        return 0
+        ws_early = _resolve_workspace(payload)
+        if ws_early is not None:
+            try:
+                import yaml as _yaml
+                oracle_early = _yaml.safe_load(
+                    (ws_early / ORACLE_FILE).read_text(encoding="utf-8"))
+                adj = (oracle_early or {}).get("adjudication", {}).get(
+                    "stop_hook_active", {})
+                if adj.get("second_stop") and adj.get("last_decision") == "PASS":
+                    return 0
+            except Exception:  # noqa: BLE001 — no sanction readable → block
+                pass
+        # No sanctioned PASS on record → block. (The plan sketch said "fall
+        # through to the normal judge path, which blocks while items remain
+        # unresolved", but judge() PASSES an oracle with zero open_items — the
+        # test fixture — so an explicit block is required to honor "second
+        # stop only passes with sanction".)
+        reason = ("second stop without oracle sanction — task-oracle.yaml "
+                  "must record adjudication.stop_hook_active with "
+                  "{second_stop: true, last_decision: PASS} to pass")
+        print(json.dumps({"decision": "block", "reason": reason},
+                         ensure_ascii=False))
+        return 1
     ws = _resolve_workspace(payload)
     if ws is None:
-        return 0  # no oracle file → pass-through (D9)
+        return 0  # no workspace markers → pass-through (D9)
     if not _kunglao_active(ws):
         return 0  # not activated → pass-through
+    if not (ws / ORACLE_FILE).exists():
+        # #200: activated + NO task oracle → block with exit 3 (D6 family: a
+        # kunglao workspace must be pre-anchored at Phase 0; missing oracle
+        # means the run was never anchored — refusing completion is the
+        # fail-closed half of the no-oracle pass-through that replay #4
+        # observed).
+        reason = ("no task-oracle.yaml in an activated workspace — the "
+                  "orchestrator must register the oracle at Phase 0 before "
+                  "completion can be judged")
+        print(json.dumps({"decision": "block", "reason": reason},
+                         ensure_ascii=False))
+        return 3
     try:
         import yaml
         oracle = yaml.safe_load((ws / ORACLE_FILE).read_text(encoding="utf-8"))

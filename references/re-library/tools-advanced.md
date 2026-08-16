@@ -1,4 +1,4 @@
-# CTF Reverse - Advanced Tools & Deobfuscation
+# Advanced Tools & Deobfuscation
 
 Advanced tooling for commercial packers/protectors, binary diffing, deobfuscation frameworks, emulation, and symbolic execution beyond angr.
 
@@ -7,10 +7,10 @@ Advanced tooling for commercial packers/protectors, binary diffing, deobfuscatio
   - [Recognition](#recognition)
   - [Approach](#approach)
   - [Tools](#tools)
-  - [CTF Strategy](#ctf-strategy)
+  - [Analysis Strategy](#analysis-strategy)
 - [Themida / WinLicense Analysis](#themida--winlicense-analysis)
   - [Themida Recognition](#themida-recognition)
-  - [Approach for CTF](#approach-for-ctf)
+  - [Practical Approach](#practical-approach)
 - [Binary Diffing](#binary-diffing)
   - [BinDiff](#bindiff)
   - [Diaphora](#diaphora)
@@ -23,7 +23,7 @@ Advanced tooling for commercial packers/protectors, binary diffing, deobfuscatio
 - [Manticore (Symbolic Execution)](#manticore-symbolic-execution)
 - [Rizin / Cutter](#rizin--cutter)
 - [RetDec (Retargetable Decompiler)](#retdec-retargetable-decompiler)
-- [Custom VM Bytecode Lifting to LLVM IR (Google CTF 2017)](#custom-vm-bytecode-lifting-to-llvm-ir-google-ctf-2017)
+- [Custom VM Bytecode Lifting to LLVM IR](#custom-vm-bytecode-lifting-to-llvm-ir)
 - [Advanced GDB Techniques](#advanced-gdb-techniques)
   - [Python Scripting](#python-scripting)
   - [Brute-Force with GDB Script](#brute-force-with-gdb-script)
@@ -35,15 +35,15 @@ Advanced tooling for commercial packers/protectors, binary diffing, deobfuscatio
 - [Patching Strategies](#patching-strategies)
   - [Binary Ninja Patching (Python API)](#binary-ninja-patching-python-api)
   - [LIEF (Library for Instrumenting Executable Formats)](#lief-library-for-instrumenting-executable-formats)
-- [GDB Constraint Extraction with ILP/LP Solver (BackdoorCTF 2017)](#gdb-constraint-extraction-with-ilplp-solver-backdoorctf-2017)
+- [GDB Constraint Extraction with ILP/LP Solver](#gdb-constraint-extraction-with-ilplp-solver)
 - [GDB Position-Encoded Input with Zero Flag Monitoring (EKOPARTY 2017)](#gdb-position-encoded-input-with-zero-flag-monitoring-ekoparty-2017)
-- [LD_PRELOAD to Dump Execute-Only Binary (BackdoorCTF 2017)](#ld_preload-to-dump-execute-only-binary-backdoorctf-2017)
+- [LD_PRELOAD to Dump Execute-Only Binary](#ld_preload-to-dump-execute-only-binary)
 
 ---
 
 ## VMProtect Analysis
 
-VMProtect virtualizes x86/x64 code into custom bytecode interpreted by a generated VM. One of the most challenging protectors in CTF.
+VMProtect virtualizes x86/x64 code into custom bytecode interpreted by a generated VM. One of the most challenging protectors encountered in RE.
 
 ### Recognition
 
@@ -82,9 +82,9 @@ readelf -S binary | grep ".vmp"
 - **VMPAttack** (IDA plugin): Automatically identifies VM handlers
 - **NoVmp**: Devirtualization via VTIL (open-source)
 - **VMProtect devirtualizer scripts**: Community IDA/Binary Ninja scripts
-- **Approach for CTF:** Often easier to trace specific operations (crypto, comparisons) than fully devirtualize
+- **Practical approach:** Often easier to trace specific operations (crypto, comparisons) than fully devirtualize
 
-### CTF Strategy
+### Analysis Strategy
 
 ```python
 # Trace VM execution dynamically to extract operations on flag
@@ -104,7 +104,7 @@ Interceptor.attach(vm_dispatch, {
 """
 ```
 
-**Key insight:** Full devirtualization is rarely needed for CTF. Focus on tracing what operations are performed on your input. Hook comparison/crypto functions called from within the VM.
+**Key insight:** Full devirtualization is rarely needed for most targets. Focus on tracing what operations are performed on your input. Hook comparison/crypto functions called from within the VM.
 
 ---
 
@@ -117,7 +117,7 @@ Similar to VMProtect but with additional anti-debug layers.
 - Extremely heavy anti-debug (kernel-level checks, driver installation)
 - Code mutation + virtualization + packing combined
 
-### Approach for CTF
+### Practical Approach
 1. **Dump unpacked code:** Let it run, dump process memory after unpacking
 2. **Bypass anti-debug:** ScyllaHide in x64dbg with Themida-specific preset
 3. **Fix imports:** Use Scylla plugin for IAT reconstruction
@@ -137,7 +137,7 @@ Similar to VMProtect but with additional anti-debug layers.
 
 ## Binary Diffing
 
-Critical for patch analysis, 1-day exploit development, and CTF challenges that provide two versions of a binary.
+Critical for patch analysis, 1-day exploit development, and comparing two versions of a binary (e.g., patched vs. original).
 
 ### BinDiff
 
@@ -168,7 +168,7 @@ Free, open-source alternative to BinDiff, runs as IDA plugin.
 # Ghidra version: diaphora_ghidra.py
 ```
 
-**Useful for CTF:** When challenge provides "patched" and "original" binaries, diff reveals the vulnerability or hidden functionality.
+**Useful when:** A sample ships both "patched" and "original" binaries — diffing reveals the vulnerability or hidden functionality.
 
 ---
 
@@ -271,7 +271,7 @@ ql.run()
 - Built-in debugger interface
 - Rootfs for library loading
 
-**CTF use cases:**
+**Use cases:**
 - Emulate binaries for foreign architectures (ARM, MIPS, RISC-V)
 - Bypass all anti-debug at once (no debugger artifacts)
 - Fuzz embedded/IoT firmware without hardware
@@ -399,7 +399,7 @@ retdec-decompiler --select-ranges 0x401000-0x401100 binary
 
 ---
 
-## Custom VM Bytecode Lifting to LLVM IR (Google CTF 2017)
+## Custom VM Bytecode Lifting to LLVM IR
 
 For complex custom VMs, transpile the VM bytecode to LLVM IR and use LLVM's optimization passes to simplify the code, then decompile the optimized IR.
 
@@ -417,6 +417,8 @@ For complex custom VMs, transpile the VM bytecode to LLVM IR and use LLVM's opti
 ```
 
 **Key insight:** LLVM's optimization passes (inlining, constant folding, dead code elimination) dramatically simplify lifted VM bytecode. A custom VM with 26 registers and 3 opcodes that produces 1300 lines of IL reduces to ~150 lines after `-O3`, revealing the underlying algorithm (e.g., Collatz sequence computation).
+
+**References:** Google CTF 2017
 
 ---
 
@@ -533,7 +535,7 @@ rr replay
 ### GDB Dashboard / GEF / pwndbg
 
 ```bash
-# pwndbg (most popular for CTF)
+# pwndbg (most popular for dynamic RE)
 # https://github.com/pwndbg/pwndbg
 git clone https://github.com/pwndbg/pwndbg && cd pwndbg && ./setup.sh
 
@@ -657,7 +659,7 @@ binary.write("patched")
 
 ---
 
-## GDB Constraint Extraction with ILP/LP Solver (BackdoorCTF 2017)
+## GDB Constraint Extraction with ILP/LP Solver
 
 When a binary enforces linear arithmetic relationships between input bytes, extract constraints automatically via GDB and solve with an ILP solver.
 
@@ -734,7 +736,7 @@ Maps each input byte to its required value in one pass without manual reversing.
 
 ---
 
-## LD_PRELOAD to Dump Execute-Only Binary (BackdoorCTF 2017)
+## LD_PRELOAD to Dump Execute-Only Binary
 
 A binary has execute-only permissions (mode `--x`, no read bit). The file cannot be read directly or with standard tools, but the kernel still maps it into memory on execution.
 

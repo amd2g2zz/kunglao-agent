@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """convergence_health.py - is the loop actually converging, or just spinning? (v1.9.2)
 
 Reads the ledger that convergence_check.py appends each turn and asks the
@@ -18,9 +19,11 @@ walk away" tool. STALLED/SPINNING come with a concrete next action.
 
 Why this exists: v1.9.0-1 made convergence-driven dispatch the default, but
 a busy loop can fake convergence (DISPATCH every turn, open_count never drops).
-Without a trajectory metric + detector, "傻等" just changes shape: busy spin
-instead of idle wait. The user asked: "怎么保证 kunglao-agent 是在收敛而不是
-再空转呢?" — honest answer: you can't guarantee it, but you CAN detect it
+Without a trajectory metric + detector, idle-waiting (the "just wait"
+pattern) merely changes shape: busy spin instead of idle wait. The user
+asked (verbatim, in Chinese): "怎么保证 kunglao-agent 是在收敛而不是再空转呢?"
+("how do you guarantee kunglao-agent is converging rather than spinning?")
+— honest answer: you can't guarantee it, but you CAN detect it
 and force intervention. This script is the detector.
 
 Usage:
@@ -204,7 +207,7 @@ def assess(ledger: list) -> dict:
     open_delta = last_open - first_open
     rounds = len(ledger)
 
-    # v1.9.30: a converged loop is NOT spinning. SPINNING/STALLED mean open
+    # v1.9.29: a converged loop is NOT spinning. SPINNING/STALLED mean open
     # work is flat — the loop finished (open_count=0) and then sat idle across
     # sessions is a completed state, not a stuck one. Without this guard, a
     # finished loop's trailing CONVERGED snapshots trigger flatline >= 8 and

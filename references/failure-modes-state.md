@@ -1,6 +1,6 @@
 ---
-name: kong-agent-failure-modes-state
-description: State (F14-F18): plan-files / blockers / drift (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配) and the dispatcher needs the matching F-row + enforcement script.
+name: kunglao-agent-failure-modes-state
+description: State (F14-F18): plan-files / blockers / drift (split from failure-modes.md for progressive disclosure). Load when the user reports a specific failure-mode pattern (e.g. 笨/卡/不匹配 — user shorthand for dumb/stuck/mismatch) and the dispatcher needs the matching F-row + enforcement script.
 metadata:
   type: reference
   parent: failure-modes.md
@@ -9,9 +9,9 @@ metadata:
 # State (F14-F18): plan-files / blockers / drift
 
 Failure modes covering plan-state consistency:
-  - F14: stale blocker 不清理 (closed-claim blocker still in active list)
-  - F15: stale claim 不降权 (OPEN hours old, equal priority)
-  - F16: 没 visual progress indicator
+  - F14: stale blocker never cleaned (closed-claim blocker still in the active list)
+  - F15: stale claim not down-weighted (OPEN for hours, equal priority)
+  - F16: no visual progress indicator
   - F17: plan ↔ reality drift (re-plan / decompose / abandon, files lag)
   - F18: state management overall (integrates F14-F17)
 
@@ -29,8 +29,30 @@ Failure modes covering plan-state consistency:
 ## Run all enforcement gates (orchestrator /loop heartbeat)
 
 ```bash
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/progress_report.py <ws> && \
-  python C:/Users/hr/.claude/skills/kunglao-agent/scripts/stale_blocker_prune.py <ws> --dry-run && \
-  python C:/Users/hr/.claude/skills/kunglao-agent/scripts/claim_expiry.py <ws> && \
-  python C:/Users/hr/.claude/skills/kunglao-agent/scripts/plan_drift_detector.py <ws>
+python scripts/progress_report.py <ws> && \
+  python scripts/stale_blocker_prune.py <ws> --dry-run && \
+  python scripts/claim_expiry.py <ws> && \
+  python scripts/plan_drift_detector.py <ws>
 ```
+
+## Implementation-Bug Class (S3 #132)
+
+The F1-F18 taxonomy covers **LLM behavior failures** (idle, re-dispatch,
+self-stamping). This section covers **script implementation bugs** discovered
+during S3 hardening — distinct failure modes where the code itself is wrong.
+
+### Patterns
+
+| Bug Class | Example | Grep Pattern |
+|---|---|---|
+| Local state copy drift (TERMINAL 5-value) | F1: claim-status guard had local copy of 5-value list, diverged from canonical | `grep -rn "OPEN\|CLOSED\|DEFERRED" scripts/ --include="*.py" \| grep -v status_defs` |
+| Read-modify-write race | F8: blind_gate read YAML, modified in memory, wrote back — concurrent workers could clobber | `grep -rn "yaml.load\|yaml.safe_load\|yaml.dump" scripts/ --include="*.py"` |
+| Schema-output mismatch | F1/F2: script produced fields not in declared schema; consumers silently ignored extra fields | `grep -rn "json.dumps\|yaml.dump" scripts/ --include="*.py"` |
+| Phantom entry | F8/#123: memory_capture existed in paused_hooks but not ALL_HOOKS — ghost reference (memory_capture itself was removed with the memory/ subsystem in #355; the incident pattern remains the lesson) | `grep -rn "ALL_HOOKS\|paused\|HARD_PAUSE" scripts/ --include="*.py"` |
+
+### Checklist for Future Audits
+
+1. **Single-source check**: every constant/enum has exactly one definition site; grep for duplicates
+2. **Schema contract check**: script output fields match declared schema keys exactly
+3. **Phantom reference check**: every hook/gate referenced in paused/active lists exists in the canonical registry
+4. **Race condition check**: state files that undergo read-modify-write have no concurrent writer paths

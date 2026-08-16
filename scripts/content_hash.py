@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """content_hash — fact_id = content-sha256 for idempotent fact writes.
 
 Used by WAL (DESIGN §14) and _INDEX (§13) to deduplicate re-dispatched work:

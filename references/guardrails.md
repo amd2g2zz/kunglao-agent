@@ -328,7 +328,7 @@ Priority:
 1. `kunglao-worker` (default) — contract baked into system prompt, dispatch
    prompt is SHORT (≤10 lines).
 2. Stage agents (`ghidra-light`/`go-symbols`/`pefile-signature`/
-   `floss-filter`/`cti-correlator`/`shodan-host`/`verdict-scorer`) — when
+   `floss-filter`/`verdict-scorer`) — when
    the claim IS exactly that stage.
 3. `general-purpose` (last resort) — only when neither fits AND the
    orchestrator is prepared to write the full contract preamble.
@@ -407,11 +407,11 @@ working path. See `method-constraints.md` for Go-specific frida rules.
 
 - **§1d.1 — skill/repo changes: confirm → commit → modify → merge.** Any
   change to kunglao-agent itself (or the analysis repo) follows this order:
-  (1) **确认** — inspect what exists (git status, diffs, stale/untracked
-  leftovers) before touching anything; (2) **提交现有变更** — commit
+  (1) **confirm** — inspect what exists (git status, diffs, stale/untracked
+  leftovers) before touching anything; (2) **commit existing changes** — commit
   pre-existing uncommitted changes first (they may be a prior session's
-  bugfixes); (3) **再修改** — make the new change as its own commit;
-  (4) **合入主分支** — merge the branch back. Never stack a new change on
+  bugfixes); (3) **modify** — make the new change as its own commit;
+  (4) **merge to the main branch** — merge the branch back. Never stack a new change on
   uncommitted leftovers; never mix unrelated changes in one commit.
 
 - **§1d.2 — worktree source-mount caveat.** Worker worktrees check out only
@@ -422,7 +422,7 @@ working path. See `method-constraints.md` for Go-specific frida rules.
 
 - **§1d.3 — superseded-path declaration (v1.9.19).** RE-dispatches after a
   method supersession MUST open with an explicit ban of the dead path
-  (`⚠️ 唯一合法路径：<new>. 严禁 <old>——上一 worker 因走 <old> 被终止`).
+  (`⚠️ ONLY legal path: <new>. FORBIDDEN: <old> — the previous worker was terminated for taking <old>`).
   **Full text + case → `references/optimization-2026-08.md` §1d.3.**
 
 - **§6.1 — heartbeat loop (mandatory, start at first dispatch).** The moment
@@ -445,24 +445,27 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   every worker (v1.9.20, active liveness)** — status-file timestamps are
   worker-written and lag; TaskOutput only says running/not_ready. Each tick,
   for EVERY active worker: `SendMessage(to=<worker>, "[heartbeat ping HH:MM]
-  ...请汇报当前步骤/卡点/预计剩余")` and `TaskOutput(task_id, block=false)`
+  report: current step / blocker / eta remaining")` and `TaskOutput(task_id, block=false)`
   as liveness cross-check. Pings are cheap (one message); they surface
   "lost worker re-walking a dead path" (see §1d.3) and "stuck on infra" BEFORE
   the 5/20-min thresholds. Never rely on passive reads alone. Never wait
   on notifications alone — a silent worker is a signal to intervene, not a
   reason to idle.
 
-- **§6.1b — heartbeat must be REGISTERED, not claimed (v1.9.25/26, 启动仿冒防).**
-  "监控已启动"是 orchestrator 目前无法自证的声称。**心跳注册融入 /loop
-  本身（v1.9.26）**：Phase 0 生成一体式心跳 prompt —
-  `python scripts/heartbeat_loop_prompt.py <ws>` — 其输出 prompt 的首动作即
-  `hook_activation.py <ws> --heartbeat-on`（写 `<ws>/runs/.heartbeat.json`），
-  后续每 tick 内建 reconcile / status poll / smart ping / convergence /
-  renew。一个 `/loop 5m <prompt>` 同时注册 + 监视 + 校验，无分离步骤。
-  每个心跳 tick 的 `--renew` 自动刷新 `last_tick_ts`；**宣告 CONVERGED 前
-  MUST 运行 `--heartbeat-check`** — exit 0 = 监视确实在跑；exit 1（文件缺失/
-  超 35 分钟未刷新）= 监视未启动或已停止，必须先启动再继续。启动/停止是
-  文件状态，不是自我宣称。
+- **§6.1b — heartbeat must be REGISTERED, not claimed (v1.9.25/26, anti-spoofed-startup).**
+  "监控已启动" ("monitoring started") is a claim the orchestrator currently
+  cannot self-verify. **Heartbeat registration is fused into /loop itself
+  (v1.9.26)**: Phase 0 generates a unified heartbeat prompt —
+  `python scripts/heartbeat_loop_prompt.py <ws>` — whose first action is
+  `hook_activation.py <ws> --heartbeat-on` (writes `<ws>/runs/.heartbeat.json`),
+  and every subsequent tick has reconcile / status poll / smart ping /
+  convergence / renew built in. One `/loop 5m <prompt>` registers + monitors +
+  verifies at the same time, with no separate steps. Each heartbeat tick's
+  `--renew` refreshes `last_tick_ts` automatically; **before declaring
+  CONVERGED you MUST run `--heartbeat-check`** — exit 0 = monitoring is really
+  running; exit 1 (file missing / not refreshed for >35 min) = monitoring
+  never started or has stopped; start it before continuing. Start/stop is
+  file state, not self-declaration.
 
 - **§6.1a — smart ping protocol (v1.9.21).** Pings must be SHORT and
   STRUCTURED (`[ping HH:MM] step? stuck? eta?` → `step=<x> | stuck=<none|what> | eta=<min>`),
@@ -488,7 +491,7 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   evidence, no note is written — but the tick that merges worker output MUST
   produce one.
 
-- **§6.3 — convergence ≠ completion: the closeout checklist (v1.9.17, 过早收敛防).**
+- **§6.3 — convergence ≠ completion: the closeout checklist (v1.9.17, premature-convergence guard).**
   `CONVERGED` (no OPEN claims) means the CLAIM LOOP is done — NOT that the
   analysis is complete. Walk the 5-item checklist before declaring done:
   (1) verifier sign-off per note, (2) notes for every fact family,
@@ -496,9 +499,10 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   (5) dynamic validation considered/authorized. ANY unmet item → session
   continues. **Full checklist + rationale → `references/optimization-2026-08.md` §6.3.**
   **v1.9.24 anti-spoof double-sign**: before declaring CONVERGED publicly,
-  (a) run `scripts/doubt_checker.py <ws>` (rejects PROVEN claims without
-  verifier sign-off) AND (b) re-run the reproduce command of ONE randomly
-  chosen fact — its expected/actual must still match byte-exact. Both gates
+  (a) run the sign-off gate (`scripts/blind_gate.py`-backed claim_migrator
+  rejects PROVEN claims without independent verifier sign-off) AND (b) re-run
+  `scripts/kunglao-verify.py <ws> <fact_id>` L1 on ONE randomly chosen fact —
+  its expected/actual must still match byte-exact. Both gates
   green = the convergence claim is real, not performed.
   **Numeric fidelity at handoff**: if report inputs (fact_anchors.md /
   evidence_map.json / evidence_boundaries.md) are generated from the fact

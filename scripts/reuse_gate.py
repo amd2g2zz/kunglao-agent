@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
 """reuse_gate.py - enforce reuse-before-recompute on every dispatch.
 
-User pain point: "考虑工作积累喜欢做一些一次性工作但是对后面分析没有太大帮助和复用性"
+User pain point (verbatim, in Chinese): "考虑工作积累喜欢做一些一次性工作但是对后面分析没有太大帮助和复用性"
+("for accumulating work: it likes one-off work that neither helps later
+analysis nor is reusable")
 
 Before dispatching a claim, this gate scans facts/ for related evidence
 (keyword match on claim statement + statement_keywords) and emits a list of

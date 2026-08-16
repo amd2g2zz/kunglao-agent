@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """blind_gate — independent-verifier (BLIND) sign-off gate for PROVEN promotions.
 
 PRD verified-convergence M1: every claim promoted to PROVEN must carry an
@@ -10,7 +11,7 @@ kunglao_record.claim_migrator (the formal promotion entry point) and
 hooks/worker_budget.compare_register_change (the bypass-catcher) lives in
 those modules.
 
-verifier_sign_off block format (reused from doubt_checker.py L70-84):
+verifier_sign_off block format (extracted by extract_verifier_signoff below):
     ```yaml
     verifier_sign_off:
       verifier_id: kunglao-redteam-w2
@@ -25,7 +26,7 @@ Self-stamp guard: verifier_id == claim's worker_id → NOT independent → STAMP
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -59,7 +60,7 @@ _NEGATIVE_EXISTENCE_PATTERNS = (
 )
 # ---- #56: environmental-negative-evidence BASIS vocabulary ----
 # #48 recognized only `0 hits`/`0 occurrences`; the F040 incident's
-# 无调用捕获 ("no call captured") trigger and sibling phrasings also indicate
+# the CJK "no call captured" trigger and sibling phrasings also indicate
 # a dynamic miss under env fault. Used by the env-fault diagnostic.
 _ENV_NEGATIVE_BASIS_PATTERNS = (
     r"\b0 hits\b", r"\b0 occurrences\b",
@@ -158,7 +159,7 @@ def record_dissent(
     of the fact file, preserving all existing content.
     """
     if ts is None:
-        ts = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     block = (
         f"\n```dissent\n"
         f"verifier_id: {verifier_id}\n"
@@ -298,7 +299,7 @@ def _has_zero_hits(text: str) -> bool:
 
 def _has_env_negative_basis(text: str) -> bool:
     """#56 — broadened environmental-negative-evidence basis: BP 0 hits /
-    0 occurrences / no call captured / no calls observed / 无调用捕获. The
+    0 occurrences / no call captured / no calls observed (CJK variant included). The
     F040 incident's self-report vocabulary extends beyond literal `0 hits`."""
     return any(re.search(p, text.lower()) for p in _ENV_NEGATIVE_BASIS_PATTERNS)
 

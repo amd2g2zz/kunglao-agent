@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """lib_kunglao.py — scripts-side shared library for kunglao-agent (#43).
 
 Drift detection (alive-but-stuck): the session's heartbeat stays fresh
@@ -9,7 +10,7 @@ F2/F3, wf_5c50b792-f7c); ledger SIGNATURE ROTATION can: if the
 decision-relevant signature is identical for N consecutive rows, the loop is
 spinning, not converging.
 
-Design (openspec/changes/drift-detection/design.md D1-D3):
+Design (openspec/archive/drift-detection/design.md D1-D3):
   D1 signature = (decision, open_ids, partial_count, active_workers,
      blockers, facts_total) — ts excluded (a fresh timestamp on an identical
      snapshot is the F2/F3 false-alive signal, not progress), open_count
@@ -109,7 +110,7 @@ def workers_progressing(ws, now: datetime | None = None,
     status file is mechanical evidence of movement (D3).
 
     Scan targets mirror convergence_check._scan_active_workers: workspace
-    runs/ PLUS every .wt-*/malware-analysis-workspace/runs worktree dir
+    runs/ PLUS every .wt-*/ with .kunglao-worktree marker worktree dir
     (v1.9.13 worktree isolation); the LAST `status:` line decides (lowercased);
     only `in-progress` counts; mtime YOUNGER than fresh_minutes. OSError on
     glob/read/stat skips that file.
@@ -120,8 +121,10 @@ def workers_progressing(ws, now: datetime | None = None,
     ws = Path(ws)
     dirs = [ws / "runs"]
     try:
-        for wt in ws.parent.glob(".wt-*/malware-analysis-workspace/runs"):
-            dirs.append(wt)
+        for wt in ws.parent.glob(".wt-*/.kunglao-worktree"):
+            runs_dir = wt.parent / "malware-analysis-workspace" / "runs"
+            if runs_dir.exists():
+                dirs.append(runs_dir)
     except OSError:
         pass
     for runs in dirs:

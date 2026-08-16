@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""cfg-analyze — CFG trace analyzer (template: templates/frida/cfg-analyze.py.tmpl, #278).
+
+Consumes the JSON-lines trace written by the frida hook template
+(templates/frida/cfg-hook.js.tmpl) and reduces it to a caller->callee edge
+list plus per-callee statistics.
+
+VM-ONLY INPUT ARTIFACT (hard prohibition #5): the trace is produced inside
+the analysis VM via the VM channel (<VM_IP>:1337); the host channel is
+forbidden. This analyzer only ever reads a trace file that the VM channel
+already exported — it never talks to the VM or to the host channel itself.
+
+Input:  TRACE_FILE   — JSON lines; optional 1st-line header object
+                       {"header": {...}} plus records
+                       {"caller": ..., "target": ..., optional args_count /
+                        thread_id / ts}. caller/target are required per record.
+Output: OUT_DIR/edges.csv  — header "caller,target,calls"; unique directed
+                              edges sorted by (caller, target)
+        OUT_DIR/summary.md  — sample sha256, totals, top callers (by call
+                              count), per-callee counts with top callers
+
+Determinism contract (#277): outputs contain NO timestamps and every list /
+count is sorted with explicit tie-breakers, so identical inputs always yield
+byte-identical outputs. Reruns overwrite the outputs (idempotent). The trace
+header is echoed into summary.md through a fixed whitelist (sample_sha256 /
+target_module / call_depth); timestamp-bearing keys such as started_ts are
+dropped, so two captures of the same sample at different times still
+produce identical summaries.
+
+WHAT THE ANALYST MUST FILL (all marked TODO in the body):
+  * resolve_symbol() — VM-side symbolication of caller addresses
+    (module + offset / export name) belongs here; the default passes
+    addresses through unchanged
+  * enrich_record() — optional per-record enrichment before aggregation
+    (e.g. argument values the hook marshaled)
+
+CLI:  python cfg-analyze.py
+Exit: 0 = edges.csv + summary.md written; 1 = trace unreadable; 2 = malformed
+      trace (bad JSON line or missing caller/target keys — line number
+      reported on stderr).
+"""
+from __future__ import annotations
+
+import csv
+import json
+import sys
+from pathlib import Path
+
+# ---- parameters (instantiated manually; see templates/frida/README.md) ----
+TRACE_FILE = r"{{TRACE_FILE}}"
+SAMPLE_SHA256 = "{{SAMPLE_SHA256}}"
+OUT_DIR = r"{{OUT_DIR}}"
+
+TOP_N = 10           # top callers listed in summary.md
+TOP_PER_CALLEE = 3   # top callers listed per callee in summary.md
+# Trace-header keys echoed into summary.md. Whitelist, not blacklist: any key
+# the hook adds later (e.g. another timestamp) is NOT reflected unless listed
+# here — this is what keeps outputs timestamp-free (#277).
+HEADER_ECHO_KEYS = ("sample_sha256", "target_module", "call_depth")
+REQUIRED_KEYS = ("caller", "target")
+
+
+def load_trace(path: Path) -> tuple[dict | None, list[dict]]:
+    """Parse JSON lines. Returns (header, records); no header -> (None, ...).
+
+    Raises ValueError with the 1-based line number on malformed lines or
+    records missing caller/target (mapped to exit 2 by main()).
+    """
+    header: dict | None = None
+    records: list[dict] = []
+    for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"line {lineno}: bad JSON ({e})") from e
+        if not isinstance(obj, dict):
+            raise ValueError(f"line {lineno}: record is not a JSON object")
+        if "header" in obj:
+            if lineno == 1 and header is None:
+                header = obj["header"]
+                continue
+            raise ValueError(f"line {lineno}: unexpected header object")
+        missing = [k for k in REQUIRED_KEYS if k not in obj]
+        if missing:
+            raise ValueError(f"line {lineno}: missing required keys {missing}")
+        records.append(obj)
+    return header, records
+
+
+def resolve_symbol(addr: str) -> str:
+    """TODO(analyst): VM-side symbolication — resolve a caller address to
+    module+offset or export name (keep it deterministic: sorted symbol
+    tables, fixed formatting). Default: identity passthrough."""
+    return addr
+
+
+def enrich_record(rec: dict) -> dict:
+    """TODO(analyst, optional): per-record enrichment before aggregation
+    (e.g. marshaled argument values from the hook). Must stay deterministic.
+    Default: identity passthrough."""
+    return rec
+
+
+def build_edges(records: list[dict]) -> dict[tuple[str, str], int]:
+    """caller->callee edge counts {(caller, target): calls}. Caller addresses
+    pass through resolve_symbol() so edges.csv and summary.md agree."""
+    edges: dict[tuple[str, str], int] = {}
+    for rec in records:
+        key = (resolve_symbol(str(rec["caller"])), str(rec["target"]))
+        edges[key] = edges.get(key, 0) + 1
+    return edges
+
+
+def project_counts(edges: dict[tuple[str, str], int], side: int) -> dict[str, int]:
+    """Aggregate edge call counts per caller (side=0) or per callee (side=1).
+    Derived from the edge set, so summary totals always match edges.csv."""
+    counts: dict[str, int] = {}
+    for edge, calls in edges.items():
+        name = edge[side]
+        counts[name] = counts.get(name, 0) + calls
+    return counts
+
+
+def top_entries(counts: dict[str, int], n: int) -> list[tuple[str, int]]:
+    """Top-n entries sorted by (-count, name) — deterministic order."""
+    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:n]
+
+
+def write_edges_csv(edges: dict[tuple[str, str], int], out_dir: Path) -> None:
+    """edges.csv — unique directed edges sorted by (caller, target)."""
+    path = out_dir / "edges.csv"
+    with path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f, lineterminator="\n")
+        writer.writerow(["caller", "target", "calls"])
+        for (caller, target), calls in sorted(edges.items()):
+            writer.writerow([caller, target, calls])
+
+
+def sanitized_header(header: dict | None) -> dict | None:
+    """Echo-whitelist for the trace header: only deterministic keys are
+    reflected into summary.md. Timestamp-bearing keys (e.g. started_ts, which
+    the hook template always writes) are dropped — #277 no-timestamp rule."""
+    if header is None:
+        return None
+    return {key: header[key] for key in HEADER_ECHO_KEYS if key in header}
+
+
+def write_summary(
+    header: dict | None,
+    records: list[dict],
+    edges: dict[tuple[str, str], int],
+    caller_counts: dict[str, int],
+    callee_counts: dict[str, int],
+    out_dir: Path,
+) -> None:
+    """summary.md — totals, top callers, per-callee counts. No timestamps
+    (trace header echoed through sanitized_header()'s whitelist only)."""
+    lines = [
+        "# CFG trace summary",
+        "",
+        f"- trace_file: {TRACE_FILE}",
+        f"- sample_sha256: {SAMPLE_SHA256}",
+    ]
+    clean_header = sanitized_header(header)
+    if clean_header:
+        lines.append(f"- trace_header: {json.dumps(clean_header, sort_keys=True)}")
+    lines += [
+        f"- total_records: {len(records)}",
+        f"- unique_edges: {len(edges)}",
+        f"- unique_callers: {len(caller_counts)}",
+        f"- unique_callees: {len(callee_counts)}",
+        "",
+        "## Top callers",
+        "",
+    ]
+    lines += [f"- {caller}: {count} calls" for caller, count in top_entries(caller_counts, TOP_N)]
+    lines += ["", "## Calls per callee", ""]
+    for callee, count in sorted(callee_counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        callers = top_entries(
+            {c: v for (c, t), v in edges.items() if t == callee}, TOP_PER_CALLEE
+        )
+        top = ", ".join(name for name, _ in callers)
+        lines.append(f"- {callee}: {count} calls (top callers: {top})")
+    (out_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> int:
+    trace = Path(TRACE_FILE)
+    if not trace.is_file():
+        print(f"ERROR trace file not found: {TRACE_FILE}", file=sys.stderr)
+        return 1
+    try:
+        header, records = load_trace(trace)
+    except ValueError as e:
+        print(f"ERROR malformed trace: {e}", file=sys.stderr)
+        return 2
+
+    records = [enrich_record(rec) for rec in records]
+    edges = build_edges(records)
+    caller_counts = project_counts(edges, 0)
+    callee_counts = project_counts(edges, 1)
+
+    out_dir = Path(OUT_DIR)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    write_edges_csv(edges, out_dir)
+    write_summary(header, records, edges, caller_counts, callee_counts, out_dir)
+    print(f"edges -> {out_dir / 'edges.csv'}")
+    print(f"summary -> {out_dir / 'summary.md'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

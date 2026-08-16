@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """failure_analysis_gate.py - force method reasoning after a failed attempt (v1.9.3).
 
-THE PROBLEM THIS SOLVES (user's exact words):
+THE PROBLEM THIS SOLVES (user's exact words, in Chinese):
   "目前我们要分析 c2 的网络协议,但是目前失败了,你能说没有网络协议行为,
    然后不分析吗?但是之前的分析办法可能存在问题,这个就需要分析,然后优化"
+  ("we need to analyze the C2 network protocol, but it failed so far — can
+   you declare there is no network-protocol behavior and stop analyzing?
+   But the previous analysis method may itself be flawed; that needs
+   analysis and improvement")
 
 A failed analysis attempt is NOT evidence the behavior is absent. It is evidence
 the METHOD failed — possibly. The orchestrator must NOT collapse "method failed"
@@ -97,6 +102,21 @@ REFLECT_ITEM_TYPE = "failure-lesson-candidate"
 
 def utc_now_iso() -> str:
     return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+
+
+def _emit_failure_blocked(workspace: Path, d: dict) -> None:
+    """#287 observability: log the gate trigger to the structured event log.
+
+    Guarded — logging must never break the gate (a failed analysis run keeps
+    its exit code and BLOCKED output even if the log write fails).
+    """
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="orchestrator", action="failure_blocked",
+             claim=d.get("claim_id"),
+             detail=f"status={d.get('status')} attempts={d.get('promotion_attempts')}")
+    except Exception:
+        pass
 
 
 def _resolve_ws(arg) -> Path:
@@ -317,13 +337,13 @@ def _write_lesson(lib: Path, signature: str, topic: str,
     lines = ["---", yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).strip(), "---", ""]
     lines.append(f"# Lesson — {topic}")
     lines.append("")
-    lines.append("## 失败签名 (failure signature)")
+    lines.append("## Failure signature")
     lines.append(f"- method_assumption: {fm['method_assumption']}")
     lines.append(f"- assumption_validity: {fm['assumption_validity']}")
     lines.append(f"- next_method: {fm['next_method']}")
     lines.append(f"- claim topic: {topic}")
     lines.append("")
-    lines.append("## 已验证结论 (what actually happened)")
+    lines.append("## What actually happened (verified conclusions)")
     for cid, entry in sorted(entries):
         lines.append(f"- {cid} ({entry.get('outcome', '')}): {entry.get('what_happened', '')}")
     lines.append("")
@@ -500,6 +520,19 @@ def search_lessons(query: str, library: Path | None = None, limit: int = 3) -> l
     return _score_lessons(query, Path(library) if library else LESSONS_DIR_DEFAULT, limit)
 
 
+def _failure_modes_recall() -> tuple[str, ...]:
+    """#268: on a BLOCKED row, recall the failure-modes reference files so the
+    orchestrator reads the matching failure-modes-{lifecycle,monitoring,state}
+    domain file. FAIL_OPEN: any recall failure -> () (recall never blocks the
+    gate). Reuses hooks/recall_inject.recall_files — the single recall path."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+        from recall_inject import recall_files
+        return recall_files("failure modes")
+    except Exception:  # noqa: BLE001 — recall is guidance, never a blocker
+        return ()
+
+
 def _print_blocked(d: dict) -> None:
     cid = d["claim_id"]
     print(f"=== BLOCKED: {cid} (status={d.get('status')}, attempts={d.get('promotion_attempts')}) ===")
@@ -528,6 +561,11 @@ def _print_blocked(d: dict) -> None:
         for s in sim:
             print(f"  - {s['file']} (score {s['score']}, outcome {s['outcome']}): "
                   f"{s['claim_topic']} — next: {s['next_method']}")
+
+    fm = _failure_modes_recall()
+    if fm:
+        print()
+        print("See failure-modes reference (recall #268): " + ", ".join(fm))
 
 
 def main() -> int:
@@ -595,8 +633,12 @@ def main() -> int:
     if args.claim_id:
         # #41 fix (orchestrator verification): forward --library so BLOCKED
         # guidance includes similar_lessons — previously dropped here, so the
-        # acceptance criterion "BLOCKED 输出含 3 相似 lesson" failed via CLI.
+        # acceptance criterion "BLOCKED output contains 3 similar lessons"
+        # (original acceptance wording, in Chinese: "BLOCKED output
+        # contains 3 similar lessons") failed via CLI.
         r = check_claim(workspace, args.claim_id, library=args.library)
+        if r["state"] == "BLOCKED":
+            _emit_failure_blocked(workspace, r)
         if args.json:
             print(json.dumps(r, indent=2, ensure_ascii=False))
         else:
@@ -620,6 +662,7 @@ def main() -> int:
     elif blocked:
         print(f"=== {len(blocked)} claim(s) BLOCKED (failed attempt, no current analysis) ===\n")
         for d in blocked:
+            _emit_failure_blocked(workspace, d)
             _print_blocked(d)
             print()
     else:

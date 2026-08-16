@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """state_anchor.py - per-turn mechanical state re-anchor (v1.9.#44, L1 PREVENT).
 
 WHY: v1.9's convergence loop is reliable only as long as the orchestrator
 REMEMBERS the current mechanical state every turn. When it forgets (absorbed
 in a worker report, compacted, context-limited) there is no backstop — the
-loop drifts and "kunglao-agent 笨了" returns as a mystery. worker_pulse (#38)
+loop drifts and "kunglao-agent got dumb" (user's words, 原文 Chinese: kunglao-agent 笨了) returns as a mystery. worker_pulse (#38)
 fires only on dispatch-prefix Agent calls; external_kicker (#39/#43) recovers
 DEAD or alive-but-stuck sessions. Between them lies context rot (research F5:
 the deterministic Executive must own belief — know / change / commit / forget
@@ -32,7 +33,7 @@ precedent), NOT re-derived and NOT a hooks mirror: the drift signal is
 semantically coupled between this cure layer (warn at ROTATION_WINDOW) and
 the recovery layer (external_kicker kicks at DRIFT_ESCALATE_ROWS); a single
 source guarantees the cure-first window contract cannot fork. See
-openspec/changes/state-anchor-hook/design.md (D3 / R1).
+openspec/archive/state-anchor-hook/design.md (D3 / R1).
 
 Output shape (mirrors worker_pulse emission):
   {"hookSpecificOutput": {"hookEventName": "PostToolUse",
@@ -41,7 +42,7 @@ Output shape (mirrors worker_pulse emission):
 Wiring (in .claude/settings.json PostToolUse, Agent matcher — alongside
 worker_pulse / worker_budget):
   {"matcher": "Agent", "hooks": [{"type": "command",
-    "command": "python C:/Users/hr/.claude/skills/kunglao-agent/hooks/state_anchor.py"}]}
+    "command": "uv run --project <skill_root> <skill_root>/hooks/state_anchor.py"}]}
 Registered idempotently by scripts/wire_up_settings.py + listed in
 scripts/hook_activation.py::ALL_HOOKS.
 

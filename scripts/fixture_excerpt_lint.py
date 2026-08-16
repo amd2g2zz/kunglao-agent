@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """fixture_excerpt_lint — condensed decompile excerpt conversion/speculation lint (#58).
 
 The a2b5e25c problem-1 root cause lived in a worker's CONDENSED Ghidra decompile
@@ -24,7 +25,7 @@ Two rules (regex heuristics only — no LLM, no binary, no network):
 LAYERING — this is #58's KEY PROPERTY. It is COMPLEMENTARY to the two existing
 mechanical checkers, NOT a duplicate of either:
 
-  #50 (tools/disasm_constant_check.py :: check_fact_disasm / check_report_listing)
+  #50 (tools/static/disasm_constant_check.py :: check_fact_disasm / check_report_listing)
       — BYTE-EXACT, BACK-LINE. Needs the sample binary + a VA anchor on each
       assertion; its `scaled` kind disproves a `*1000` by scanning capstone disasm
       for an imul/<K> at the VA. Runs AFTER VA-anchoring, against the binary.
@@ -39,7 +40,7 @@ mechanical checkers, NOT a duplicate of either:
 unannotated scaling op in the text (needs only text). Defense in depth. #58 does
 NOT duplicate #50 (different input: text vs binary+VA; different time: authoring
 vs byte-verification) or #49 (no expected-value map comparison). See
-openspec/changes/fixture-excerpt-lint/design.md (D1 layering table).
+openspec/archive/fixture-excerpt-lint/design.md (D1 layering table).
 
 Heuristic, not semantic: regex/keyword patterns only. The recall/precision
 tradeoff is documented in design.md (D5): the lint fires loudly on the documented

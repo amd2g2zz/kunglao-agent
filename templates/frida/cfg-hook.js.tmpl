@@ -1,0 +1,180 @@
+/**
+ * cfg-hook.js — Frida CFG capture hook (template: templates/frida/cfg-hook.js.tmpl, #278).
+ *
+ * Requires: frida >= 17 (module API: Process.getModuleByName(mod)
+ * .getExportByName(name); the two-argument Module.getExportByName form is
+ * Frida-16-only and was removed in 17 — #356 W5).
+ *
+ * Captures a caller->callee control-flow trace for the exports of
+ * {{TARGET_MODULE}}: every call to a target export records
+ * (caller, target, args_count, thread_id, ts) into a shared buffer; buffered
+ * records are flushed as JSON lines to {{OUTFILE}}.
+ *
+ * VM-ONLY ARTIFACT (hard prohibition #5): this script must ONLY ever run
+ * inside the analysis VM via the VM channel (<VM_IP>:1337). The host channel
+ * is forbidden — never run Frida hooks against host processes.
+ *
+ * Trace format (JSON lines, one object per line; consumed by the analyzer
+ * template templates/frida/cfg-analyze.py.tmpl):
+ *   1st line  {"header": {"sample_sha256", "target_module", "call_depth", "started_ts"}}
+ *   records   {"caller": "<caller ret addr>", "target": "<export name>",
+ *              "args_count": <n>, "thread_id": <n>, "ts": <ms epoch>}
+ *
+ * WHAT THE ANALYST MUST FILL / VERIFY (all marked TODO in the body):
+ *   * arg marshaling — by default only args_count is recorded; reading
+ *     argument VALUES needs per-export marshaling (pointer -> readUtf8String,
+ *     int -> hex, per this sample's calling convention)
+ *   * module load timing — if {{TARGET_MODULE}} is not loaded when this
+ *     script starts, replace the eager getExportByName loop with a delayed /
+ *     ensureInitialized attach for THIS target
+ *   * depth gating — the per-thread depth counter below is a working default
+ *     (onEnter +1 / onLeave -1); verify it against the target's callback and
+ *     exception paths before trusting the gating
+ *
+ * FLUSH PROTOCOL (required, not optional): Frida's JS runtime exposes NO
+ * script-unload callback — script.unload() destroys the VM and unflushed
+ * buffer contents are LOST. The VM driver MUST call
+ * script.exports_sync.flush() before session.detach(). Records are also
+ * flushed automatically every BATCH_SIZE records, so loss stays bounded.
+ */
+'use strict';
+
+// ---- parameters (instantiated manually; see templates/frida/README.md) ----
+var TARGET_MODULE = '{{TARGET_MODULE}}';
+var TARGET_EXPORTS = '{{TARGET_EXPORTS}}'
+    .split(',')
+    .map(function (s) { return s.trim(); })
+    .filter(Boolean);
+var CALL_DEPTH = parseInt('{{CALL_DEPTH}}', 10);
+var OUTFILE = '{{OUTFILE}}';
+var SAMPLE_SHA256 = '{{SAMPLE_SHA256}}';
+
+var BATCH_SIZE = 256;    // auto-flush every N buffered records (analyst may tune)
+var traceBuffer = [];    // shared record buffer, drained by flushBuffer()
+var traceFile = null;
+var attachedExports = 0;
+
+var threadDepth = {};    // thread_id -> current call nesting depth
+
+function openTraceFile() {
+    // 'w' truncates a previous trace at the same OUTFILE (idempotent rerun).
+    traceFile = new File(OUTFILE, 'w');
+    traceFile.write(JSON.stringify({
+        header: {
+            sample_sha256: SAMPLE_SHA256,
+            target_module: TARGET_MODULE,
+            call_depth: CALL_DEPTH,
+            started_ts: Date.now()
+        }
+    }) + '\n');
+}
+
+function flushBuffer() {
+    if (traceFile === null) {
+        traceFile = new File(OUTFILE, 'a');   // fallback: append-only
+    }
+    for (var i = 0; i < traceBuffer.length; i++) {
+        // JSON.stringify does the escaping; every record field is a plain
+        // string/number (addresses pre-converted via .toString()), so no
+        // Frida exotic objects reach the serializer.
+        traceFile.write(JSON.stringify(traceBuffer[i]) + '\n');
+    }
+    traceBuffer = [];
+}
+
+function record(caller, target, argsCount, threadId) {
+    traceBuffer.push({
+        caller: caller,
+        target: target,
+        args_count: argsCount,
+        thread_id: threadId,
+        ts: Date.now()
+    });
+    if (traceBuffer.length >= BATCH_SIZE) {
+        flushBuffer();
+    }
+}
+
+function shouldRecord(depth, target) {
+    // Depth gate: record only calls at nesting depth <= CALL_DEPTH.
+    // TODO(analyst): adjust this policy if the target re-enters exports from
+    // callbacks or worker threads (e.g. exempt specific exports from gating,
+    // or key the depth counter differently for async dispatch).
+    return depth <= CALL_DEPTH;
+}
+
+// TODO(analyst): arg marshaling — implement per-export argument VALUE capture
+// here and call it from onEnter. Skeleton only; do NOT enable as-is:
+//
+//   function marshalArgs(exportName, args) {
+//       // Verify this sample's calling convention BEFORE reading arguments.
+//       // Example for a wide-string-taking export:
+//       //   if (exportName === 'SomeExport') {
+//       //       return { text: args[0].readUtf16String() };
+//       //   }
+//       return null;   // null = values not marshaled; args_count still recorded
+//   }
+
+function hookExports() {
+    openTraceFile();
+    for (var i = 0; i < TARGET_EXPORTS.length; i++) {
+        (function (exportName) {
+            // TODO(analyst): if TARGET_MODULE loads lazily in THIS target,
+            // replace this eager lookup with a delayed / Module.ensureInitialized
+            // attach loop (see docstring).
+            var targetAddr;
+            try {
+                // Frida 17 form (#356 W5): the 16-only two-argument
+                // Module.getExportByName(mod, name) no longer exists.
+                targetAddr = Process.getModuleByName(TARGET_MODULE)
+                    .getExportByName(exportName);
+            } catch (e) {
+                console.warn('[cfg-hook] export not found: ' +
+                    TARGET_MODULE + '!' + exportName);
+                return;
+            }
+            Interceptor.attach(targetAddr, {
+                onEnter: function (args) {
+                    var threadId = this.threadId;
+                    var depth = (threadDepth[threadId] || 0) + 1;
+                    threadDepth[threadId] = depth;
+                    if (!shouldRecord(depth, exportName)) {
+                        return;
+                    }
+                    record(this.returnAddress.toString(), exportName,
+                        args.length, threadId);
+                    // TODO(analyst): call marshalArgs(exportName, args) here and
+                    // carry the marshaled values into record() (see docstring).
+                },
+                onLeave: function (retval) {
+                    var threadId = this.threadId;
+                    var depth = (threadDepth[threadId] || 1) - 1;
+                    if (depth <= 0) {
+                        delete threadDepth[threadId];
+                    } else {
+                        threadDepth[threadId] = depth;
+                    }
+                }
+            });
+            attachedExports += 1;
+        })(TARGET_EXPORTS[i]);
+    }
+    return attachedExports;
+}
+
+// ---- VM driver protocol ----
+// The driver MUST call script.exports_sync.flush() before session.detach()
+// (see FLUSH PROTOCOL in the docstring); stats() is for driver-side logging.
+rpc.exports = {
+    flush: flushBuffer,
+    stats: function () {
+        return {
+            buffered: traceBuffer.length,
+            attached_exports: attachedExports
+        };
+    }
+};
+
+hookExports();
+console.log('[cfg-hook] attached to ' + attachedExports + ' export(s) of ' +
+    TARGET_MODULE + '; trace -> ' + OUTFILE);

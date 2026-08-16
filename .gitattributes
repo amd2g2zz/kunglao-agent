@@ -1,0 +1,29 @@
+# LF normalization (issue #271)
+# Digest pins (references/_INDEX.yaml) are sha256 of LF bytes. Force LF on
+# every platform so pins match regardless of core.autocrlf / core.eol — a
+# CRLF checkout previously produced digest drift and failed
+# tests/test_replay_gate.py (#355: the memory/ corpus manifest pins were
+# removed with the memory/ subsystem).
+* text=auto eol=lf
+
+# Explicit binary guard: repo currently has no binaries, but never EOL-convert
+# or trailing-newline these classes if they are ever added.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.bmp binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.exe binary
+*.dll binary
+*.so binary
+*.pyc binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary

@@ -45,7 +45,6 @@ skill's setup.sh? Dispatched a worker to fix it?"
 
 - Static decompile → `ghidra-light` (never general-purpose for Ghidra work)
 - x64dbg stepping → the x64dbg-specialist worker (`kunglao-worker` with `tools=x64dbg`)
-- CTI correlation → `cti-correlator`
 - String extraction → `floss-filter`
 - Authenticode / packer → `pefile-signature`
 - Verdict scoring → `verdict-scorer`
@@ -118,7 +117,7 @@ the trajectory:
 
 Run every 3rd turn, and whenever "busy but stuck":
 ```bash
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/convergence_health.py <workspace>
+python scripts/convergence_health.py <workspace>
 ```
 
 ### SPINNING recovery — pick exactly ONE
@@ -147,7 +146,7 @@ the sample is C2-triggered; without injecting C2 config it sleeps. The METHOD
 
 Before re-dispatching OR marking a claim NEGATIVE, run:
 ```bash
-python C:/Users/hr/.claude/skills/kunglao-agent/scripts/failure_analysis_gate.py <workspace> <C-NN>
+python scripts/failure_analysis_gate.py <workspace> <C-NN>
 ```
 
 It refuses re-dispatch and demands three answers you generate from THIS

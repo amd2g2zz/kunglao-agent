@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 """RED tests for disasm-constant-byte-exact-checker (issue #50, a2b5e25c problem 1).
 
-TDD: these tests import tools/disasm_constant_check.py which does NOT exist
+TDD: these tests import tools/static/disasm_constant_check.py which does NOT exist
 yet → RED. Implementation makes them GREEN.
 
 Covers:
@@ -23,7 +24,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-for sub in ("scripts", "hooks", "tools"):
+for sub in ("scripts", "hooks", "tools", "tools/static", "tools/_lib"):
     if str(ROOT / sub) not in sys.path:
         sys.path.insert(0, str(ROOT / sub))
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """priority.py - kunglao-agent greedy best-first dispatch ranker (DESIGN section 8.5).
 
 This is the SINGLE SANCTIONED dispatch ranker (v1.9.29, R4). priority_ratio.py
@@ -43,10 +44,16 @@ import json, math, os, sys
 from pathlib import Path
 import yaml
 
+import cost_estimate
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES
+# RETRACTED lives in retract_claim.py (retraction domain owner, #331):
+# status_defs.TERMINAL is frozen for this change. A retracted claim is a
+# withdrawn verdict — never ranked; its reopened dependents dispatch normally
+# (a RETRACTED parent counts as terminal for the depends_on gate).
+from retract_claim import TERMINAL_WITH_RETRACTED
 
 NEXT_TIER_CHEAP = {0: 1.0, 1: 0.5, 2: 0.2}
-DEFAULT_WEIGHTS = {'value': 0.4, 'leverage': 0.3, 'cheapness': 0.2, 'novelty': 0.1}
+DEFAULT_WEIGHTS = {'value': 0.4, 'leverage': 0.3, 'cheapness': 0.2, 'novelty': 0.05, 'outcome': 0.05}
 
 
 def _load(p):
@@ -65,7 +72,9 @@ def _is_open(c):
     # v1.9.16: IN_PROGRESS = dispatched to a worker, NOT dispatchable (was
     # treated as open -> priority re-recommended in-flight claims -> orchestrator
     # saw a full queue, dispatched nothing, left slots empty).
-    return c.get('status') not in TERMINAL and c.get('status') not in IN_PROGRESS_STATUSES
+    # #331: RETRACTED is terminal (via TERMINAL_WITH_RETRACTED) — a withdrawn
+    # verdict must never enter the rank.
+    return c.get('status') not in TERMINAL_WITH_RETRACTED and c.get('status') not in IN_PROGRESS_STATUSES
 
 
 def _transitive_unlocks(cid, depends_on, by_id, open_set):
@@ -127,7 +136,18 @@ def _leverage_v1(cid, depends_on, by_id):
     return min(1.0, len(open_deps) / 3.0), len(open_deps), 0
 
 
-def rank_claims(reg, deps, weights, leverage_v2=True, ws=None):
+def rank_claims(reg, deps, weights, leverage_v2=True, ws=None, sample_features=None):
+    """Rank OPEN dispatchable claims. sample_features (from
+    <ws>/sample_features.yaml) enables #309 cost estimation: the cheapness
+    term becomes min(tier_cheapness, estimated_cheapness) — the estimate can
+    only make a claim look MORE expensive, never cheaper than the tier
+    heuristic (conservative; tier stays the cap). Without features the
+    result is VALUE-LEVEL compatible with pre-#309: every pre-existing key
+    keeps its pre-change value (score, ordering, cheapness, leverage,
+    novelty, next_tier, outcome); the new keys cheapness_tier/est_tokens/
+    est_calls are additive extensions. All verified consumers
+    (hooks/worker_budget.py, hooks/worker_pulse.py, scripts/external_kicker.py,
+    tests/test_rank_claims.py) read only pre-existing keys and are unaffected."""
     claims = (reg or {}).get('claims', []) or []
     by_id = {c.get('id'): c for c in claims if c.get('id')}
     depends_on = (deps or {}).get('depends_on', {}) or {}
@@ -143,6 +163,22 @@ def rank_claims(reg, deps, weights, leverage_v2=True, ws=None):
             import failure_analysis_gate as fag
             failure_blocked_ids = {b["claim_id"] for b in fag.scan_workspace(Path(ws)) if b.get("state") == "BLOCKED"}
         except (ImportError, NameError):
+            pass
+
+    # v1.9.30: per-claim OUTCOME history from verification ledger (#122)
+    outcome_scores = {}
+    if ws is not None:
+        try:
+            sys.path.insert(0, str(Path(ws).parent / "scripts"))
+            from outcome_capture import read_outcome_rows, aggregate_reward
+            sys.path.pop(0)
+            all_rows = read_outcome_rows(Path(ws))
+            for r in all_rows:
+                cid = r.get("claim_id", "")
+                result = r.get("result", "").strip().upper()
+                score = {"PASS": 1.0, "CONFIRMED": 1.0, "PARTIAL": 0.5, "UNVERIFIED": 0.5}.get(result, 0.0)
+                outcome_scores.setdefault(cid, []).append(score)
+        except Exception:
             pass
 
     rows = []
@@ -169,16 +205,31 @@ def rank_claims(reg, deps, weights, leverage_v2=True, ws=None):
             leverage, direct_n, _ = _leverage_v1(cid, depends_on, by_id)
             transit_n = 0
         eta = int(c.get('evidence_tier_attempted', 0))
-        cheapness = NEXT_TIER_CHEAP.get(eta, 0.1)
+        tier_cheapness = NEXT_TIER_CHEAP.get(eta, 0.1)
+        cheapness = tier_cheapness
+        est_tokens = None
+        est_calls = None
+        if sample_features:
+            est = cost_estimate.estimate_claim(c, sample_features)
+            cheapness = cost_estimate.blended_cheapness(tier_cheapness, est)
+            est_tokens = est['est_tokens']
+            est_calls = est['est_calls']
         next_tier = min(eta + 1, 3)
         novelty = 1.0 / (1 + int(c.get('promotion_attempts', 0)))
+        claim_outcome = outcome_scores.get(cid, [])
+        outcome_factor = sum(claim_outcome) / len(claim_outcome) if claim_outcome else 0.0
+        w_outcome = weights.get('outcome', 0.0)
         score = (weights['value'] * value + weights['leverage'] * leverage +
-                 weights['cheapness'] * cheapness + weights['novelty'] * novelty)
+                 weights['cheapness'] * cheapness + weights['novelty'] * novelty +
+                 w_outcome * outcome_factor)
         rows.append({'id': cid, 'score': round(score, 3), 'value': value,
                      'leverage': round(leverage, 2), 'leverage_direct': direct_n,
                      'leverage_transitive': transit_n,
-                     'cheapness': cheapness,
+                     'cheapness': round(cheapness, 3),
+                     'cheapness_tier': tier_cheapness,
+                     'est_tokens': est_tokens, 'est_calls': est_calls,
                      'novelty': round(novelty, 2), 'next_tier': next_tier,
+                     'outcome': round(outcome_factor, 2),
                      'statement': c.get('statement', '') or ''})
     rows.sort(key=lambda r: r['score'], reverse=True)
     return rows
@@ -189,7 +240,7 @@ def gate_allows(reg, next_tier):
         return True
     threshold = next_tier - 1
     for c in (reg or {}).get('claims', []) or []:
-        if c.get('status') in TERMINAL:
+        if c.get('status') in TERMINAL_WITH_RETRACTED:
             continue
         if int(c.get('evidence_tier_attempted', 0)) < threshold:
             return False
@@ -221,11 +272,16 @@ def main():
     deps = _load(ws / 'claim_deps.yaml')
     tspec = _load(ws / 'task_spec.yaml')
     weights = _weights(tspec)
-    rows = rank_claims(reg, deps, weights, leverage_v2=leverage_v2, ws=ws)
+    features = cost_estimate.load_features(ws)
+    rows = rank_claims(reg, deps, weights, leverage_v2=leverage_v2, ws=ws,
+                       sample_features=features)
     total_open = sum(1 for c in (reg or {}).get('claims', []) or [] if _is_open(c))
     if as_json:
         out = {'workspace': str(ws), 'weights': weights, 'n_open': total_open,
                'n_dispatchable': len(rows), 'leverage_v2': leverage_v2,
+               'cost_estimation': {'enabled': features is not None,
+                                   'features_file': cost_estimate.FEATURES_FILE},
+               'sample_features': features,
                'dispatchable': rows}
         print(json.dumps(out, ensure_ascii=False, indent=2))
         return 0
@@ -233,6 +289,10 @@ def main():
     print(f'kunglao-agent best-first dispatch queue  ({total_open} open, {len(rows)} dispatchable)  leverage={lev_label}')
     print(f'weights: value={weights["value"]} leverage={weights["leverage"]} '
           f'cheapness={weights["cheapness"]} novelty={weights["novelty"]}')
+    if features:
+        print(f'cost estimation: ON ({cost_estimate.FEATURES_FILE}): '
+              f'n_functions={features.get("n_functions")} '
+              f'decompiled_chars={features.get("decompiled_chars")}')
     if not rows:
         print('(no dispatchable claims - blocked by open deps, promotion cap>=3, or none open)')
         return 0

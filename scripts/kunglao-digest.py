@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""kunglao-digest — digest 机械生成 CLI (thin wrapper, issue #5, module见 digest_build.py)."""
+# -*- coding: utf-8 -*-
+"""kunglao-digest — digest mechanical-generation CLI (thin wrapper, issue #5; module: digest_build.py)."""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))

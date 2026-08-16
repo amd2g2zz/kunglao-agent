@@ -1,6 +1,31 @@
 ---
 name: pefile-signature
 description: "Read evidence/die.json + the local sample file. Extract Authenticode digital signature (subject/issuer/serial/validity/cert chain) via pefile + identify packer family via DIE + YARA packer signatures + write evidence/signature.json + evidence/packer-scan.json. Pure local."
+# issue #310 mechanical trigger table — parsed by scripts/route_capability.py
+# (claim task domain x sample features -> recommended agent; worker_budget
+# agenttype gate). Packer markers in import_hints are pefile-signature's domain.
+triggers:
+  pipeline_order: 2
+  intent:
+    must_any:
+      - 'authenticode'
+      - 'pe signature'
+      - 'digital signature'
+      - 'packer'
+      - 'packed'
+      - 'certificate'
+      - '签名'
+      - '加壳'
+    exclude: []
+  features:
+    import_hints:
+      any_contains:
+        - 'upx'
+        - 'aspack'
+        - 'pecompact'
+        - 'mpress'
+        - 'themida'
+        - 'vmprotect'
 allowedTools:
   - Read
   - Grep
@@ -24,7 +49,7 @@ You extract two things DIE doesn't natively provide:
 ## Inputs (passed by caller)
 
 - `die_json_path`: `evidence/die.json` (already-written DIE output)
-- `sample_path`: `<user input local file path>` (e.g., `D:\works\samples\2026-06-23\bins\488d2dd...`)
+- `sample_path`: `<user input local file path>` (e.g. `<WORKSPACE>/bins/<sha>` — no fixed layout)
 - `signature_output_path`: `evidence/signature.json`
 - `packer_output_path`: `evidence/packer-scan.json`
 - `project_venv_python`: `.venv/Scripts/python.exe` (pefile should be installed there; auto-install if missing)

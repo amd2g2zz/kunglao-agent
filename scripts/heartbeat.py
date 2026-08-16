@@ -1,11 +1,13 @@
-"""heartbeat.py - heartbeat register/verify as verifiable file state.
+# -*- coding: utf-8 -*-
+"""heartbeat.py - heartbeat register/verify/stop as verifiable file state.
 
 Extracted from hook_activation.py (T-2 split) — the --heartbeat-on /
---heartbeat-check jobs.
+--heartbeat-check / --heartbeat-off jobs.
 """
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -55,4 +57,44 @@ def heartbeat_check(workspace: Path) -> int:
         print(f"HEARTBEAT STALE: last tick {state.get('last_tick_ts')} ({int(age.total_seconds()//60)} min ago > {STALE_MINUTES})", file=sys.stderr)
         return 1
     print(f"OK: heartbeat alive (started {state.get('started_ts')}, last tick {state.get('last_tick_ts')})")
+    return 0
+
+
+def heartbeat_off(workspace: Path, force: bool = False) -> int:
+    """STOP the heartbeat — guarded teardown (issue #237 dual-constraint).
+
+    The heartbeat is a DISPATCH GATE credential: hooks gate dispatch on it
+    (check_heartbeat_alive), so deleting it while claims are still open breaks
+    the analysis. But leaving it running after CONVERGED makes the 5-min cron
+    wake the LLM forever and burn tokens with nothing to converge. The guard:
+    convergence_check.py must return CONVERGED (exit 0) before the credential
+    may be removed; `force=True` is the explicit operator override (--force).
+    """
+    if not force:
+        cc = Path(__file__).resolve().parent / "convergence_check.py"
+        try:
+            r = subprocess.run(
+                [sys.executable, str(cc), str(workspace)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                timeout=120,
+            )
+            converged = r.returncode == 0
+        except Exception:
+            converged = False
+        if not converged:
+            print("Not converged — teardown forbidden: the heartbeat is the dispatch "
+                  "gate credential; deleting it breaks analysis (dispatch would be "
+                  "rejected by check_heartbeat_alive). Dispatch/reactivate to "
+                  "CONVERGED (confirmed by convergence_check.py) first, or pass "
+                  "explicit --force.",
+                  file=sys.stderr)
+            return 1
+    path = workspace / "runs" / ".heartbeat.json"
+    try:
+        if path.exists():
+            path.unlink()
+    except OSError as exc:
+        print(f"FAIL: cannot remove {path} ({exc})", file=sys.stderr)
+        return 1
+    print("Convergence complete, heartbeat stopped; to restart use --heartbeat-on")
     return 0

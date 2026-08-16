@@ -1,6 +1,33 @@
 ---
 name: go-symbols
 description: "Stage 3.9 Go symbol recovery via unstrip (Go samples only, die.json language=Go). Runs unstrip --info / default / --format ghidra / --xref / --data-at, parses output, and WRITES evidence/unstrip-info.json + unstrip-symbols.json + unstrip-ghidra-apply.py + unstrip-ghidra-hints.json. The hints file carries prioritized_targets + itab_dispatch + struct_types + xref_map + garble_assist + annotations[] (the persistent mark-up plan ghidra-light applies to the Ghidra project). Heuristic not hardcoded - you classify functions, pick --data-at targets, and craft actionable annotations. Pure local. You DO have the Write tool - write the files yourself, do not return YAML to the caller."
+# issue #310 mechanical trigger table — parsed by scripts/route_capability.py.
+# Go symbol recovery precedes decompile: pipeline_order 1 wins over
+# ghidra-light (4) for Go samples.
+triggers:
+  pipeline_order: 1
+  intent:
+    must_any:
+      - 'go symbol'
+      - 'go-symbol'
+      - 'golang'
+      - 'go binary'
+      - 'go-binary'
+      - 'go sample'
+      - 'pclntab'
+      - 'unstrip'
+      - '符号恢复'
+    exclude:
+      - 'rust'
+      - '\.net'
+      - 'c#'
+  features:
+    language:
+      any_of:
+        - 'Go'
+    import_hints:
+      any_contains:
+        - 'go.buildinfo'
 allowedTools:
   - Read
   - Grep
@@ -24,7 +51,7 @@ Recover Go symbols/types/itabs from pclntab via unstrip (no decompile) -> emit a
 - `evidence_dir`: mal-recon/<sha1>/evidence/
 - `die_path`: evidence/die.json (confirm language=Go; else STOP with degraded note)
 - prior evidence for `--data-at` targets: `evidence/floss-filtered.json` (IOC/config string addrs), `evidence/cti-correlated.json`
-- `unstrip_bin`: default `D:/tools/unstrip/unstrip.exe` (Windows) / `unstrip`
+- `unstrip_bin`: no hardcoded default — `unstrip` on PATH, else the path recorded in workspace `analysis_state.txt` (toolchain baseline) or passed by the caller
 
 ## Pipeline
 1. **sequentialthinking preamble**: confirm Go; choose suspicious-name patterns; pick data addrs to probe with `--data-at`.

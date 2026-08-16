@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""explore_gate.py — M1 DECIDE 探索阶段判定 (module-design.md M1.2 L119-121, design-spec §3.2 L132-134).
+# -*- coding: utf-8 -*-
+"""explore_gate.py — M1 DECIDE exploration-phase gate (module-design.md M1.2 L119-121, design-spec §3.2 L132-134).
 
-count < threshold → 探索模式(按 cheapness 铺开 T1)。契约空白: EXPLORE_THRESHOLD = 5
-(verified facts 数)。
+count < threshold → explore mode (spread T1 by cheapness). Contract-gap
+freeze: EXPLORE_THRESHOLD = 5 (verified-fact count).
 
-用法:
+Usage:
   python explore_gate.py <verified_fact_count> [--threshold N]
-Exit: 0 = 探索模式(explore), 1 = 利用模式(exploit)。
+Exit: 0 = explore mode, 1 = exploit mode.
 """
 from __future__ import annotations
 
 import argparse
 import sys
 
-EXPLORE_THRESHOLD = 5  # 契约空白冻结: verified facts 阈值
+EXPLORE_THRESHOLD = 5  # contract-gap freeze: verified-fact threshold
 
 
 def explore_gate(verified_fact_count: int, threshold: int = EXPLORE_THRESHOLD) -> bool:
-    """count < threshold → 探索模式(True); 否则利用模式(False)."""
+    """count < threshold → explore mode (True); else exploit mode (False)."""
     if threshold < 0:
-        raise ValueError(f"explore_gate: threshold 必须 >= 0, 收到 {threshold}")
+        raise ValueError(f"explore_gate: threshold must be >= 0, got {threshold}")
     return verified_fact_count < threshold
 
 

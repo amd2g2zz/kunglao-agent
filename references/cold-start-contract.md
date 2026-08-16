@@ -49,6 +49,27 @@ Compare `task_spec.yaml` to `task_spec_snapshot.yaml` (written after each re-pla
   different"). It was set globally in `~/.claude/settings.json`, is REMOVED,
   and SHALL NOT be re-enabled. A session showing team directories or
   teammates means the isolation-first contract is violated.
+- **Mechanical enforcement (#233, 2026-08-13)**: the narrative ban now has a
+  mechanical path, in two layers:
+  1. `scripts/env_check.py` — Phase 0 gate. Check ① FAILs when the flag is
+     set in process/User/Machine scope; `OVERALL=PASS` is required before
+     analysis, and the snapshot `runs/.env-check.json` records the verdict.
+  2. `hooks/env_check_gate.py` — PreToolUse matcher=Agent hard gate. Reads
+     `os.environ` directly (zero IO, no activation check by design) and
+     REJECTs (exit 2 + stderr + additionalContext: problem / alternative /
+     fix) EVERY Agent dispatch while the flag is set in a kunglao workspace.
+  A dispatch that did fire means both layers were missing or bypassed —
+  treat it as the #88 violation: stop, unset the flag, restart the session.
+  Registered first in the PreToolUse Agent list by `wire_up_settings.py`.
+- **Settings rewrites can flip the flag back (#317, #314 A5 — operator note,
+  not a code defect)**: editors / toolchain rewrites of settings.json have
+  repeatedly reset the `env` block to
+  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`. Symptom: env_check ① FAIL +
+  `env_check_gate` hard-REJECTs every dispatch. Check step for the run
+  manual: after ANY settings.json rewrite, re-run
+  `scripts/env_check.py <ws>` and confirm ① `[PASS]` before the first
+  dispatch; a blocked dispatch means the flag flipped — unset it, restart
+  the session, re-run env_check.
 - **Phase 0 MUST run `--wire-up`** (hooks were silently absent from settings.json
   in multiple sessions — settings rewrites drop the hooks section; PostToolUse
   `remove_worker` never fires → zombie `[active_workers]` → false `3>=3` dispatch

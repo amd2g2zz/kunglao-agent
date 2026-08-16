@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """release_receipt.py — kunglao-agent release receipt generator (issue #80).
 
 The OBSERVED half of the release contract (the DECLARED half is
@@ -47,6 +48,18 @@ import yaml
 
 SCHEMA_VERSION = "1.0"
 
+# ---- reverse scan contract (issue #320) ----
+# Every shipped file under these directories must be declared in the manifest
+# (assets.<section>) — "adding a shipped asset without declaring it fails CI"
+# is enforced both ways: declared→exists AND exists→declared.
+SCAN_SECTIONS = ("agents", "hooks", "templates", "tools")
+# Doc/index-class files are governed by their own contracts (e.g.
+# tools/_INDEX.yaml + validate_index.py), not the release manifest.
+SCAN_WHITELIST_BASENAMES = {"README.md", "_INDEX.md", "_INDEX.yaml"}
+SCAN_WHITELIST_PREFIX = "_index-"
+# Runtime-generated / VCS-adjacent artifacts are not shipped assets.
+SCAN_SKIPPED_DIRS = {"__pycache__"}
+
 SUMMARY_RE = re.compile(
     r"(?P<failed>\d+) failed, (?P<passed>\d+) passed"
     r"(?:, (?P<skipped>\d+) skipped)?(?:, (?P<errors>\d+) error[s]?)? in .*"
@@ -87,6 +100,37 @@ def pyproject_version(path: Path) -> str:
     return m.group(1) if m else ""
 
 
+def reverse_scan(root: Path, manifest: dict) -> list[str]:
+    """Exists→declared reverse scan (issue #320): every shipped file under
+    agents/ hooks/ templates/ tools/ must be declared in the manifest's
+    assets.<section> — undeclared assets FAIL with fix guidance.
+
+    Exempt (doc/index-class): README.md, _INDEX.md, _INDEX.yaml, _index-*.md.
+    Skipped (runtime/generated): __pycache__ directories, dotfiles, *.pyc.
+    """
+    errors: list[str] = []
+    assets = manifest.get("assets", {})
+    for section in SCAN_SECTIONS:
+        declared = {str(p).replace("\\", "/") for p in assets.get(section, [])}
+        d = root / section
+        if not d.is_dir():
+            continue
+        for p in sorted(d.rglob("*")):
+            if not p.is_file() or p.suffix == ".pyc":
+                continue
+            if any(part in SCAN_SKIPPED_DIRS or part.startswith(".")
+                   for part in p.relative_to(root).parts):
+                continue
+            if (p.name in SCAN_WHITELIST_BASENAMES
+                    or p.name.startswith(SCAN_WHITELIST_PREFIX)):
+                continue
+            rel = p.relative_to(root).as_posix()
+            if rel not in declared:
+                errors.append(f"undeclared asset: {rel} -- add it to "
+                              f"release-manifest.yaml assets.{section}")
+    return errors
+
+
 def validate_manifest(manifest: dict, manifest_path: Path, errors: list[str]) -> None:
     """Declared contract vs tree: version agreement + every declared asset exists."""
     pyproject = Path("pyproject.toml")
@@ -104,6 +148,9 @@ def validate_manifest(manifest: dict, manifest_path: Path, errors: list[str]) ->
             if not p.exists():
                 errors.append(f"declared asset missing: {rel}")
 
+    # #320: reverse scan — every shipped asset exists in the manifest.
+    errors.extend(reverse_scan(Path("."), manifest))
+
     if not manifest.get("test_command"):
         errors.append("manifest test_command is empty")
 
@@ -112,7 +159,10 @@ def validate_manifest(manifest: dict, manifest_path: Path, errors: list[str]) ->
 
 def probe_help(cmd: list[str], timeout: int = 60) -> int:
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        # UTF-8 convention (#317/#320): child output is UTF-8 — locale
+        # decoding (GBK) crashes reader threads; decode as UTF-8.
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=timeout)
         return r.returncode
     except (subprocess.TimeoutExpired, OSError) as exc:
         return -1
@@ -155,7 +205,8 @@ def run_tests(command: str) -> dict:
     argv = command.split()
     if argv and argv[0] in ("python", "python3"):
         argv[0] = sys.executable  # PATH may lack a bare `python` (e.g. ubuntu runners)
-    r = subprocess.run(argv, capture_output=True, text=True, timeout=1500)
+    r = subprocess.run(argv, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=1500)
     tail = (r.stdout + r.stderr)[-4000:]
     m = SUMMARY_RE.search(tail) or PASSED_RE.search(tail)
     if not m:
@@ -165,7 +216,8 @@ def run_tests(command: str) -> dict:
     skipped = int(m.groupdict().get("skipped") or 0)
     collected = None
     coll = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q"],
-                          capture_output=True, text=True, timeout=300)
+                          capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", timeout=300)
     cm = COLLECTED_RE.search((coll.stdout + coll.stderr)[-2000:])
     if cm:
         collected = int(cm.group(1))
@@ -194,6 +246,12 @@ def build_receipt(manifest: dict, manifest_path: Path, revision: str,
             "agents": [asset(a) for a in manifest.get("assets", {}).get("agents", [])],
             "hooks": [asset(h) for h in manifest.get("assets", {}).get("hooks", [])],
             "templates": [asset(t) for t in manifest.get("assets", {}).get("templates", [])],
+            "tools": [asset(t) for t in manifest.get("assets", {}).get("tools", [])],
+            "knowledge": [asset(k) for k in manifest.get("assets", {}).get("knowledge", [])],
+            "references": [
+                {"path": r, "sha256": sha256_dir(Path(r)) if Path(r).is_dir() else sha256(Path(r))}
+                for r in manifest.get("assets", {}).get("references", [])
+            ],
             "openspec_changes": [
                 {"path": f"openspec/changes/{n}", "sha256": sha256_dir(Path("openspec") / "changes" / n)}
                 for n in openspec
@@ -234,7 +292,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.revision:
         revision = args.revision
     else:
-        r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
+        r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
+                           text=True, encoding="utf-8", errors="replace")
         revision = r.stdout.strip() if r.returncode == 0 else "unknown"
 
     test_result = None

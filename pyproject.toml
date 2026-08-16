@@ -1,11 +1,11 @@
 [project]
 name = "kunglao-agent"
-version = "1.9.29"
+version = "0.1"
 description = "Convergence-driven reverse-engineering orchestrator — Claude Code skill (issue #80 release contract)"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "MIT" }
-# Declared set = modules actually imported by scripts/ hooks/ tools/ tests/ memory/scripts/
+# Declared set = modules actually imported by scripts/ hooks/ tools/ tests/
 # (verified by tests/test_release_receipt.py::test_pyproject_declares_imported_dependencies).
 # cryptography/requests are NOT imported anywhere — do not add them back without an import.
 dependencies = [
@@ -13,6 +13,7 @@ dependencies = [
     "pefile>=2023.2.7",
     "capstone>=5.0",
     "jsonschema>=4.0",
+    "z3-solver>=4.12",  # opaque-pred (issue #306): guarded import, degrade path exit 2
 ]
 
 # Dev tooling lives in a PEP 735 dependency group, NOT an optional extra:
@@ -21,6 +22,9 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    # tomllib is 3.11+ stdlib; tests run on the 3.10 floor so the tomli
+    # backfill is a dev-only dependency (issue #352).
+    "tomli>=2.0; python_version < '3.11'",
 ]
 
 # NOTE: pytest configuration lives in pytest.ini (single source of truth).

@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
 """status_defs — single source of truth for claim status sets (safety net #34).
 
 All claim-status consumers import the sets defined here instead of
 re-defining them, so a new status (e.g. DEAD for the DLQ) is added in ONE
 place and every consumer picks it up. See
-`openspec/changes/status-defs-safety-net/` for the full design.
+`openspec/archive/status-defs-safety-net/` for the full design.
 
 Sets
 ----
@@ -82,6 +83,7 @@ class LedgerLineType:
 
     SNAPSHOT = "snapshot"
     OUTCOME = "outcome"
+    OPERATOR_ACTION = "operator_action"
 
 
 def ledger_line_type(row: dict) -> str:

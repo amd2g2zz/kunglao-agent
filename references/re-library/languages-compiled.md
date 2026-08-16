@@ -1,4 +1,4 @@
-# CTF Reverse - Compiled Language Reversing (Go, Rust)
+# Compiled Language Reversing (Go, Rust)
 
 ## Table of Contents
 - [Go Binary Reversing](#go-binary-reversing)
@@ -18,9 +18,9 @@
 - [Kotlin / JVM Binary Reversing](#kotlin--jvm-binary-reversing)
   - [JVM Bytecode (Android/Server)](#jvm-bytecode-androidserver)
   - [Kotlin/Native](#kotlinnative)
-- [D Language Binary Reversing (CSAW CTF 2016)](#d-language-binary-reversing-csaw-ctf-2016)
-- [Haskell Binary Reversing via STG Closures and hsdecomp (hxp CTF 2017, Codegate 2018)](#haskell-binary-reversing-via-stg-closures-and-hsdecomp-hxp-ctf-2017-codegate-2018)
-- [Haskell Binary RE via GHC CMM Intermediate Language (N1CTF 2018)](#haskell-binary-re-via-ghc-cmm-intermediate-language-n1ctf-2018)
+- [D Language Binary Reversing](#d-language-binary-reversing)
+- [Haskell Binary Reversing via STG Closures and hsdecomp](#haskell-binary-reversing-via-stg-closures-and-hsdecomp)
+- [Haskell Binary RE via GHC CMM Intermediate Language](#haskell-binary-re-via-ghc-cmm-intermediate-language)
 - [C++ Binary Reversing (Quick Reference)](#c-binary-reversing-quick-reference)
   - [vtable Reconstruction](#vtable-reconstruction)
   - [RTTI (Run-Time Type Information)](#rtti-run-time-type-information)
@@ -30,7 +30,7 @@
 
 ## Go Binary Reversing
 
-Go binaries are increasingly common in CTF challenges due to Go's popularity for CLI tools, network services, and malware.
+Go binaries are increasingly common in RE work — malware, CLI tools, and network services — thanks to Go's popularity for exactly those kinds of programs.
 
 ### Recognition
 
@@ -157,7 +157,7 @@ gdb ./binary
 - `fmt.Sprintf` → formatted string building
 - Look for format strings in `.rodata`: `"%s%d"`, `"%x"`
 
-**Common stdlib patterns in CTF:**
+**Common stdlib patterns:**
 ```go
 // Crypto operations → look for these in strings/imports:
 // "crypto/aes", "crypto/cipher", "crypto/sha256", "encoding/hex", "encoding/base64"
@@ -204,7 +204,7 @@ strings binary | grep "embed"
 3. Register with the C2 server using the patched binary (mTLS certs are embedded or in distfiles)
 4. Enumerate clients via API: `GET /api/clients` or iterate known endpoints
 5. List and download files from each client's GCS bucket or file store
-6. Grep downloaded files for the flag
+6. Grep downloaded files for the target data
 
 ```bash
 # Extract Go build info
@@ -232,7 +232,7 @@ chmod +x client_patched
 
 ## Rust Binary Reversing
 
-Rust binaries are common in modern CTFs, especially for crypto, systems, and security tooling challenges.
+Rust binaries are common in modern RE targets, especially for crypto, systems, and security tooling.
 
 ### Rust Recognition
 
@@ -353,7 +353,7 @@ swift demangle 's14MyApp0A8ClassC10checkInput6resultSbSS_tF'
 
 ## Kotlin / JVM Binary Reversing
 
-Kotlin compiles to JVM bytecode or native (via Kotlin/Native). Common in Android and server-side CTF.
+Kotlin compiles to JVM bytecode or native (via Kotlin/Native). Common in Android apps and server-side targets.
 
 ### JVM Bytecode (Android/Server)
 
@@ -406,7 +406,7 @@ strings binary | grep "konan"
 
 ---
 
-## D Language Binary Reversing (CSAW CTF 2016)
+## D Language Binary Reversing
 
 D language binaries have unique symbol mangling different from C++. Template instantiation at compile-time produces many function variants.
 
@@ -441,11 +441,13 @@ def reverse_d_cipher(encrypted, num_functions=500):
     return bytes(result)
 ```
 
-**Key insight:** D binaries are rare in CTFs but identifiable by `_D` symbol prefixes and Phobos library references. The compile-time template system means D functions may be duplicated hundreds of times with different parameters — look for patterns like `enc!("N")` where N varies.
+**Key insight:** D binaries are rare in real-world samples but identifiable by `_D` symbol prefixes and Phobos library references. The compile-time template system means D functions may be duplicated hundreds of times with different parameters — look for patterns like `enc!("N")` where N varies.
+
+**References:** CSAW CTF 2016
 
 ---
 
-### Haskell Binary Reversing via STG Closures and hsdecomp (hxp CTF 2017, Codegate 2018)
+### Haskell Binary Reversing via STG Closures and hsdecomp
 
 GHC-compiled Haskell binaries use the STG (Spineless Tagless G-machine) execution model, making them notoriously difficult to reverse due to lazy evaluation, closures, and thunks. The STG machine turns everything into closure calls rather than direct function calls.
 
@@ -473,7 +475,7 @@ objcopy --dump-section .text=main_code reference
 ```
 
 **Monkey-patching technique:**
-When decompilation fails or closures are opaque, compile a minimal Haskell program with the same GHC version, extract the compiled `Main_main_info` closure code, and patch it into the challenge binary. This forces evaluation of hidden closures and prints their results by replacing the main entry point with a known evaluator.
+When decompilation fails or closures are opaque, compile a minimal Haskell program with the same GHC version, extract the compiled `Main_main_info` closure code, and patch it into the target binary. This forces evaluation of hidden closures and prints their results by replacing the main entry point with a known evaluator.
 
 ```haskell
 -- reference.hs: minimal program that evaluates and prints the target closure
@@ -490,7 +492,7 @@ main = print targetClosure  -- replace with the closure you want to evaluate
 
 ---
 
-### Haskell Binary RE via GHC CMM Intermediate Language (N1CTF 2018)
+### Haskell Binary RE via GHC CMM Intermediate Language
 
 GHC-compiled Haskell binaries are nearly impossible to decompile with IDA due to the STG execution model. When a `.cmm` (C-- intermediate) file is available or recoverable, read it to understand thunks, closures, and lazy evaluation semantics. For exponentially-growing recursive structures, compute segment sizes with memoization and use binary search instead of materializing the full string.
 
@@ -519,7 +521,7 @@ def char_at(n, offset):
 
 **Key insight:** GHC's CMM (C minus minus) intermediate representation preserves enough structure to identify algorithms. For recursive string constructions that double in size each level, compute segment sizes with memoization and binary-search for target indices instead of materializing the exponentially-growing string.
 
-**Detection:** Haskell binary (see recognition above) with a `.cmm` file included in the challenge distribution. Look for recursive closure applications that produce string-like data with exponential growth.
+**Detection:** Haskell binary (see recognition above) with a `.cmm` file included in the analysis material. Look for recursive closure applications that produce string-like data with exponential growth.
 
 **References:** N1CTF 2018
 
@@ -527,7 +529,7 @@ def char_at(n, offset):
 
 ## C++ Binary Reversing (Quick Reference)
 
-While C++ RE is well-covered by general tools, these patterns are CTF-specific:
+While C++ RE is well-covered by general tools, these patterns recur across targets:
 
 ### vtable Reconstruction
 

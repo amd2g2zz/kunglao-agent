@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """external_kicker.py — OS-level dead-session recovery for kunglao-agent (#39).
 
 Problem (T1 obs 4, 2026-08-05): the heartbeat/loop depends on a LIVING Claude
@@ -8,7 +9,7 @@ expires, the mechanical gates in worker_budget.py silently close, and dispatch
 is blocked until a HUMAN starts a new session. Recovery must not depend on
 presence.
 
-Root-cause finding (2026-08-11, 坑 7): wire_up_settings.py:20 writes hooks to
+Root-cause finding (2026-08-11, pit 7): wire_up_settings.py:20 writes hooks to
 the USER-level ~/.claude/settings.json, but the 6 hooks that actually fire
 live in the PROJECT-level .claude/settings.json of the workspace parent
 (gitignored, carries env secrets + mcpServers + block_malware_exec). --wire-up
@@ -16,7 +17,7 @@ has been repairing the wrong file — the T1 zombie root cause. This kicker
 re-registers hooks at the PROJECT level, preserving every other key
 (env secrets byte-for-byte).
 
-Design (see openspec/changes/external-kicker/design.md D1-D6):
+Design (see openspec/archive/external-kicker/design.md D1-D6):
   D1 dead-session detection: `session_is_dead` — heartbeat missing OR both
      `last_tick_ts` (loop renew tick) and `activity_ts` (heartbeat_touch hook,
      every tool call) stale beyond `stale_minutes` (default 10). Both stale =
@@ -59,6 +60,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import wire_up_settings
+
 # D6: activation TTL from hook_activation.py DEFAULT_TTL_MINUTES — the tick
 # interval MUST stay below it or the TTL-expiry→next-tick gap silently closes
 # the gates (issue requirement).
@@ -80,8 +83,14 @@ KICKER_LOCK_FILE = ".kicker.lock"
 KICKER_PROMPT_FILE = ".kicker-prompt.txt"
 KICKER_LAST_FILE = ".kicker-last.json"
 
-# D2: the 5 entries wire_up_settings registers — same matchers, same command
-# shape (single hook per entry), same basename-dedupe semantic.
+# D2: the 5 entries the kicker re-registers — same matchers, same command
+# shape (single hook per entry), same basename-dedupe semantic. A DELIBERATE
+# narrow subset of the hook registry (wire_up_settings.WIRE_UP_HOOK_FILES):
+# the dead-session bootstrap chain. The (event, matcher) pairs stay explicit
+# — matchers are semantic (worker_budget fires Pre+Post, heartbeat_touch is
+# Bash-scoped). #381: the entry FILE SET is pinned to the registry via
+# wire_up_settings.derive_hook_subset at import — a registry rename/growth
+# raises loudly here instead of silently re-registering a stale set.
 KUNGLAO_HOOK_ENTRIES = [
     ("PreToolUse", "Agent", "worker_budget.py"),
     ("PreToolUse", "Agent", "dispatch_gate.py"),
@@ -89,6 +98,27 @@ KUNGLAO_HOOK_ENTRIES = [
     ("PostToolUse", "Agent", "worker_budget.py"),
     ("PostToolUse", "Agent", "worker_pulse.py"),
 ]
+
+# The registry files the kicker deliberately does NOT re-register: they are
+# deployment gates/injectors restored by hooks_selfcheck's full --wire-up
+# rebuild (step 0 of every tick) once the fresh session starts, and their
+# absence is gated by env_check's full-registry scan. Listed explicitly so
+# registry growth forces a conscious update here (#381).
+_KICKER_SKIP_FILES = frozenset({
+    "env_check_gate.py",    # env hard-gate — full --wire-up restores it
+    "recall_inject.py",     # recall injector — full --wire-up restores it
+    "state_anchor.py",      # state re-anchor — full --wire-up restores it
+    "completion_gate.py",   # Stop completion gate — full --wire-up restores it
+})
+_KICKER_ENTRY_FILES = frozenset(f for _, _, f in KUNGLAO_HOOK_ENTRIES)
+
+# #381 module-load contract check: the entry file set must exactly account
+# for the registry — drift raises HERE, on every import (tests and
+# production ticks alike), with the offending names in the message.
+wire_up_settings.derive_hook_subset(
+    wire_up_settings.WIRE_UP_HOOK_FILES,
+    include=_KICKER_ENTRY_FILES, skip=_KICKER_SKIP_FILES,
+    owner="external_kicker KUNGLAO_HOOK_ENTRIES")
 
 _STATUS_RE = re.compile(r"status:\s*(\S+)")
 
@@ -159,8 +189,13 @@ def ensure_project_hooks(settings: dict, hook_dir: str) -> tuple[dict, int]:
     """
     def _canonical(matcher: str, hook_file: str) -> dict:
         p = (Path(hook_dir) / hook_file).as_posix()  # POSIX: hooks run via sh -c
+        # #389: hooks run via `uv run --project <skill_root>` — bare python
+        # can resolve to 2.x (this machine: /usr/local/bin/python -> 2.7.17)
+        # and kill every re-registered hook; uv uses the skill's project venv.
+        skill_root = Path(hook_dir).parent.as_posix()
         return {"matcher": matcher,
-                "hooks": [{"type": "command", "command": f"python {p}"}]}
+                "hooks": [{"type": "command",
+                           "command": f"uv run --project {skill_root} {p}"}]}
 
     hooks = dict(settings.get("hooks") or {})
     appended = 0
@@ -353,8 +388,8 @@ def validate_interval(tick_interval_min: int) -> None:
 # removed): a kicked fresh session MUST resume from fired predicates over
 # LOGGED MECHANICAL STATE — the convergence ledger last snapshot, the claim
 # register, the facts index, the worker status files — and NEVER from the
-# dying session's narrative (progress.txt "我正在做...", analysis_state.txt
-# task fields are LLM self-descriptions, not events).
+# dying session's narrative (progress.txt "what I'm doing now..." lines,
+# analysis_state.txt task fields are LLM self-descriptions, not events).
 
 _RESUME_CLAIM_ID_RE = re.compile(r"^-\s+id:\s*(\S+)")
 _RESUME_CLAIM_STATUS_RE = re.compile(r"^\s+status:\s*(\S+)")
@@ -605,13 +640,16 @@ def build_resume_prompt(ws, *,
     facts_total = _facts_total(ws, snapshot)
 
     if open_ids:
-        next_step = ("按 scripts/priority.py 的 rank_claims 派发 top claim "
-                     "(<=3 workers cap + tier gate); 完成 worker 后验证 facts → "
-                     "更新 claim-register + _INDEX")
+        next_step = ("dispatch top claim via scripts/priority.py rank_claims "
+                     "(<=3 workers cap + tier gate); worker done → verify facts → "
+                     "update claim-register + _INDEX")
     else:
-        next_step = ("CONVERGED, verify report — 无 open claims; 先跑 convergence "
-                     "checklist (doubt_checker + 随机抽验 1 fact + --heartbeat-check) "
-                     "再宣告完成")
+        # English skeleton is longer than the original Chinese one; keep it
+        # under every viable cap (empty state: no claims to truncate, so the
+        # skeleton itself must fit — see test_empty_workspace_prompt_obeys_char_cap)
+        next_step = ("CONVERGED, verify report — no open claims; run the convergence "
+                     "checklist (blind_gate spot-check + kunglao-verify.py "
+                     "L1 re-run + --heartbeat-check) before declaring completion")
 
     def _assemble(ids: list[str], dropped: int) -> str:
         ids_text = ", ".join(ids) if ids else "(none)"
@@ -622,16 +660,16 @@ def build_resume_prompt(ws, *,
         blocker_text = ", ".join(blockers) if blockers else "(none)"
         partial_text = ", ".join(partials) if partials else "(none)"
         return (
-            f"你正在收敛循环第 {round_n} 轮 — fired-predicate resume (#45): "
-            f"由 logged mechanical state 构造, 绝不读 dying session 的 narrative.\n"
-            f"ledger 末行快照: ts={ts}, decision={decision}\n"
-            f"当前 open claims ({len(ids)}/{total}): {ids_text}{marker}\n"
-            f"active workers (in-progress worker-status-*.md): {worker_text}\n"
+            f"Convergence loop round {round_n} — fired-predicate resume (#45): "
+            f"from logged mechanical state; never read the dying session's narrative.\n"
+            f"ledger last snapshot: ts={ts}, decision={decision}\n"
+            f"open claims ({len(ids)}/{total}): {ids_text}{marker}\n"
+            f"active workers: {worker_text}\n"
             f"blockers ({len(blockers)}): {blocker_text}\n"
             f"facts_total: {facts_total}\n"
             f"partial facts ({len(partials)}): {partial_text}\n"
             f"\n"
-            f"下一步: {next_step}"
+            f"Next step: {next_step}"
         )
 
     prompt = _assemble(shown, truncated)

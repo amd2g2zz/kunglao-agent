@@ -1,0 +1,13 @@
+# methodology domain index (file level)
+> Domain: methodology and the malware application domain (the primary current use case). When a worker receives a malware sample analysis task, read this file first, then load on demand.
+| File | One-line summary | When to read |
+|---|---|---|
+| [field-notes.md](re-library/field-notes.md) | Field notes: binary-type quirks (.pyc/WASM/APK/Flutter/.NET/packed), anti-debugging bypasses, specialized RE patterns | After initial triage, moving into hands-on analysis of a specific sample type |
+| [malware-analysis.md](re-library/malware-analysis.md) | Six-phase malware analysis methodology: triage/static/dynamic/behavior extraction/IOC identification/anti-analysis bypass | End-to-end analysis of PE/ELF/Mach-O/APK/script samples |
+| [malware-analysis-workflow.md](re-library/malware-analysis-workflow.md) | Malware analysis workflow orchestration: routes by file type and phase to dedicated sub-workflows | Single entry-point orchestration when starting any malware analysis |
+| [malware-analysis-quickstart.md](re-library/malware-analysis-quickstart.md) | Analysis skill-suite installation and verification quick reference | First-time setup of the malware analysis skill suite and confirming it works |
+| [malware-triage.md](re-library/malware-triage.md) | Rapid initial assessment: 5-30 min/sample classification, threat rating, prioritization | A new sample arrives and needs quick classification and a go/no-go decision |
+| [malware-dynamic-analysis.md](re-library/malware-dynamic-analysis.md) | Sandbox dynamic analysis: Procmon/Wireshark/Sysmon/Process Hacker + pre-execution safety checklist | Moving from static analysis to runtime behavior observation/traffic capture/hypothesis testing |
+| [detection-engineer.md](re-library/detection-engineer.md) | Detection engineering: Sigma/Suricata/Snort rules, hunting queries, IOC defanging, STIX/OpenIOC formatting | Producing detection rules/hunting queries from analysis conclusions, or converting IOCs into shareable operational formats |
+| [malware-report-writer.md](re-library/malware-report-writer.md) | Analysis report writing: executive summary, structured conclusions, YARA rules, IOC formatting, delivery | Analysis wrap-up requiring a deliverable report (IOCs/detection rules/executive summary) |
+| [phishing-case-study.md](re-library/phishing-case-study.md) | Case study: same-topic PROVEN contradiction (F035 vs F040) and fact-base contamination — the origin of the global contradiction scan requirement | Same-topic keys hold conflicting PROVEN facts, or a run whose conclusions involve routing has completed |

@@ -1,0 +1,11 @@
+# task-oracle.yaml — pre-registered completion anchor (#55).
+# Registered at Phase 0 by the orchestrator; consumed by completion_gate.
+task_text: ""          # user's original goal, verbatim — empty = refuse (D6)
+open_items: []         # - id: X, closed_by: ...
+deferrals: []          # - item: X, authorized_by: <user>, reason: ...
+adjudication:
+  # #147: persistent second-stop anti-loop (replaces the shim pass-through).
+  stop_hook_active:
+    second_stop: false   # true = a previous block was already adjudicated
+    last_decision: ""    # BLOCK | PASS
+    last_decision_at: ""

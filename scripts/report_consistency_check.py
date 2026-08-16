@@ -1,8 +1,9 @@
+# -*- coding: utf-8 -*-
 """report_consistency_check — cross-chapter report-INTERNAL consistency checker (#57).
 
 Detects contradictions that live ENTIRELY INSIDE a report markdown (no binary
 read, no fact lookup). This is the report-INTERNAL sibling of #50
-(`tools/disasm_constant_check.py`, report↔binary byte-exact) and the
+(`tools/static/disasm_constant_check.py`, report↔binary byte-exact) and the
 cross-chapter sibling of the numeric-fidelity caliber rule
 (`~/.claude/rules/common/numeric-fidelity.md`). #50 catches a report listing
 that diverges from the PE bytes; numeric-fidelity catches a single number's
@@ -14,13 +15,16 @@ The a2b5e25c customer report (40 pages) had THREE internal contradiction
 groups that all slipped past P4 review (sliced per-chapter, no cross-chapter
 view), plus a negative-finding scope amplification:
 
-  group A — §3.3 "不经过通用的 HandleCommand" (NEG) vs §3.4 code title
-            `HandleCommand.func12` (POS) vs §4.1 "先经过 func12" (POS)
-  group B — §5.4 "命名管道或共享内存通道" vs §6.1.3 shared-memory code listing
-            (named pipe = zero evidence)
-  group C — §1.1 "不依赖系统注册表实现持久化" (NEG) vs §2.3 Run-key table (POS)
-  amplify — F035 config-storage negative (env vars 不落盘) restated as a
-            persistence-mechanism negative (持久化不依赖注册表)
+  group A — §3.3 "does not go through the generic HandleCommand" (NEG,
+            in the original Chinese) vs §3.4 code title `HandleCommand.func12`
+            (POS) vs §4.1 "goes through func12 first" (POS)
+  group B — §5.4 "named pipe or shared-memory channel" vs §6.1.3 shared-memory
+            code listing (named pipe = zero evidence)
+  group C — §1.1 "persistence does not rely on the system registry" (NEG) vs
+            §2.3 Run-key table (POS)
+  amplify — F035 config-storage negative (env vars are not written to disk)
+            restated as a persistence-mechanism negative (persistence does
+            not rely on the registry)
 
 Three checks, all heuristic (regex/keyword only — no LLM, no network, no
 binary):
@@ -28,7 +32,7 @@ binary):
   CC1  same-symbol polarity contradiction (group A). A function symbol
        (CamelCase identifier ≥5 chars, or `func\d+`) appears POSITIVE in one
        chapter and NEGATIVE in another. NEG = a routing negator within a
-       ±12-char window (`不经过|未经过|绕过|跳过|bypass|skip|not…through`);
+       ±12-char window (CJK negators 不经过/未经过/绕过/跳过, or `bypass|skip|not…through`);
        POS = mentioned without a negator.
   CC2  negative-finding scope amplification (amplify). A config-storage-
        caliber NEGATIVE in one chapter + a persistence-mechanism-caliber
@@ -36,7 +40,7 @@ binary):
        `amplifications`, NOT counted as a hard inconsistency (the mechanical
        check cannot judge intent — it surfaces the caliber drift for review).
   CC3  conflicting-conclusion divergence (groups B + C). Either a mechanism
-       topic (`注册表`/`registry`, `Run`/`Startup`, `持久化`/`persistence`)
+       topic (`注册表`(registry)/`registry`, `Run`/`Startup`, `持久化`(persistence)/`persistence`)
        flips polarity across chapters, OR two members of a configured
        exclusive-mechanism pair ({named-pipe, shared-memory}) are BOTH
        POSITIVE (exclusive transports cannot both be the channel).
@@ -94,7 +98,7 @@ _CONFLICT_MARKER_RE = re.compile(r"<!--\s*CONFLICT:|CONFLICT:", re.IGNORECASE)
 _WINDOW = 12
 
 # Routing negators (function-symbol polarity — CC1). Sourced from the fixture's
-# "不经过通用的 HandleCommand" + close paraphrases.
+# "does not go through the generic HandleCommand" (原文 Chinese) + close paraphrases.
 _ROUTING_NEGATORS = [
     r"不经过", r"未经过", r"不再经过", r"未经", r"绕过", r"跳过",
     r"不\s*走", r"bypass", r"skip", r"not\s+through",
@@ -102,7 +106,7 @@ _ROUTING_NEGATORS = [
 ]
 
 # Mechanism negators (mechanism-topic polarity — CC3). Sourced from the
-# fixture's "不依赖系统注册表实现持久化" + close paraphrases.
+# fixture's "persistence does not rely on the system registry" (原文 Chinese) + close paraphrases.
 _MECHANISM_NEGATORS = [
     r"不依赖", r"不使用", r"未使用", r"无需", r"不需要", r"不借助",
     r"不经过", r"不\s*走", r"does\s+not\s+(?:rely|use)", r"not\s+(?:rely|use)",

@@ -1,4 +1,4 @@
-# CTF Reverse - Language-Specific Techniques
+# Language-Specific Techniques
 
 ## Table of Contents
 - [Python Bytecode Reversing (dis.dis output)](#python-bytecode-reversing-disdis-output)
@@ -18,7 +18,7 @@
 - [Transpilation to C](#transpilation-to-c)
 - [Code Coverage Side-Channel Attack](#code-coverage-side-channel-attack)
 - [Functional Language Reversing (OPAL)](#functional-language-reversing-opal)
-- [Python Version-Specific Bytecode (VuwCTF 2025)](#python-version-specific-bytecode-vuwctf-2025)
+- [Python Version-Specific Bytecode](#python-version-specific-bytecode)
 - [Non-Bijective Substitution Cipher Reversing](#non-bijective-substitution-cipher-reversing)
 - [FRACTRAN Program Inversion (Boston Key Party 2016)](#fractran-program-inversion-boston-key-party-2016)
 
@@ -69,11 +69,13 @@ Decompiler fails with opcode errors.
 4. Patch target .pyc
 5. Decompile normally
 
-**Shortcut (Hack.lu CTF 2013):** If the challenge bundles its own modified Python interpreter (e.g., a custom `./py` binary), install `uncompyle2`/`uncompyle6` into that interpreter's environment and decompile using the challenge's own runtime. The modified interpreter understands its own opcode mapping, so standard decompilation tools work without manual opcode recovery.
+**Shortcut:** If the target bundles its own modified Python interpreter (e.g., a custom `./py` binary), install `uncompyle2`/`uncompyle6` into that interpreter's environment and decompile using the target's own runtime. The modified interpreter understands its own opcode mapping, so standard decompilation tools work without manual opcode recovery.
 
 **Tool selection by Python version:** `uncompyle6` supports Python 2.x–3.8. For Python 3.9+ bytecode, use [`pycdc`](https://github.com/zrax/pycdc) (compile from source: `git clone && cmake . && make`).
 
 **Key insight:** Opcode remapping breaks all standard decompilers. The fastest fix is to find the modified `opcode.pyc` in the PyInstaller bundle, diff it against the stock Python opcodes, and patch the target `.pyc` back to standard opcodes before decompiling.
+
+**References:** Hack.lu CTF 2013
 
 ---
 
@@ -426,9 +428,9 @@ for total_offset_S in range(256):
 
 ---
 
-## Python Version-Specific Bytecode (VuwCTF 2025)
+## Python Version-Specific Bytecode
 
-**Pattern (A New Machine):** Challenge targets specific Python version (e.g., 3.14.0 alpha).
+**Pattern (A New Machine):** Target requires a specific Python version (e.g., 3.14.0 alpha).
 
 **Key requirement:** Compile that exact Python version to disassemble bytecode — alpha/beta versions have different opcodes than stable releases.
 
@@ -446,6 +448,8 @@ cd Python-3.14.0a4 && ./configure && make -j$(nproc)
 import math
 flag = ''.join(chr(int(math.isqrt(v))) for v in expected_values)
 ```
+
+**References:** VuwCTF 2025
 
 ---
 

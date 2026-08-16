@@ -112,7 +112,19 @@ tick proceeds on file state (`worker-status-*.md` freshness,
 gate. Do not design the tick loop around monitor results, and never block a
 scheduled action waiting for the monitor process to produce output.
 
-## Specialist bootstrap tolerance + dual-probe protocol (v1.9.30, 2026-08-05)
+## Subagent-model switch caveat (A4, #317)
+
+**Operator note, not a code defect**: after switching `SUBAGENT_MODEL` (the
+subagent model env setting) to a GLM-family model, the proxy layer may reject
+subagent sessions with `400 [1210]` — on both fresh sessions and resume. The
+dispatch chain then fails at the transport level, indistinguishable from a
+kunglao bug at first glance. Check step for the run manual: after ANY
+subagent-model switch, smoke-test one dispatch (e.g. `/kunglao-agent verify
+<fact_id>` or a trivial claim dispatch) and confirm the subagent session
+starts; only then enter the convergence loop. If 400 [1210] appears, revert
+the model setting — it is a proxy-side rejection, not a kunglao defect.
+
+## Specialist bootstrap tolerance + dual-probe protocol (v1.9.29, 2026-08-05)
 
 **Incident (C-332, 2026-08-05):** a freshly-dispatched verdict-scorer was
 killed as "B1c dead" after 6 minutes with no status file. Its final output
@@ -128,7 +140,7 @@ misclassifies normal specialist bootstrap as death.
 - **kunglao-worker / generic**: 5 min silence → ping; 15 min → intervention;
   20+ min → backtrack/B1c. (These write status first by §1c.)
 - **Specialists (verdict-scorer, ghidra-light, floss-filter, pefile-signature,
-  go-symbols, cti-correlator)**: **10 min** bootstrap tolerance before the
+  go-symbols)**: **10 min** bootstrap tolerance before the
   first ping (their pre-status read/import phase is legitimately long);
   20 min → intervention; 30+ min → B1c. **Ping before kill — always.**
   A specialist killed mid-bootstrap loses its read work.
@@ -139,7 +151,7 @@ misclassifies normal specialist bootstrap as death.
    but **still appears in the running-agents list** is a **CANDIDATE**, not a
    zombie: its main task finished but a child (cleanup, SendMessage delivery,
    VM-session teardown) may still be closing out NORMALLY. **DO NOT TaskStop
-   on this signal alone** — apply the 3-strike rule (v1.9.30 §"Why 3 strikes"):
+   on this signal alone** — apply the 3-strike rule (v1.9.29 §"Why 3 strikes"):
    ping once (confirm it's finishing), ping twice if still listed, only
    TaskStop after **3 unanswered pings across 3+ ticks** with the agent still
    in the list AND no artifacts touched. "Completed output but still listed"
@@ -213,17 +225,21 @@ this section = paraphrastic absorption = self-reject.
 
 ## VM-channel launch sequence (before any x64dbg MCP call)
 
-The MCP bridge at `http://192.168.20.128:8745/mcp` is an in-VM service, but its
+The MCP bridge at `http://<VM_IP>:8745/mcp` is an in-VM service, but its
 `start_session` / `connect_to_session` tools bind to whatever lockfile the MCP
-process finds in its working directory — typically a stale `D:\迅雷下载\x64dbg\…`
-copy that is NOT the live VM x64dbg. **The only reliable first call is
+process finds in its working directory — typically a stale host-downloaded
+x64dbg copy that is NOT the live VM x64dbg. **The only reliable first call is
 `mcp__x64dbg__connect_remote`.** Use this sequence for every dynamic RE engagement:
 
 ```
 # Step 1 — confirm VM-side x64dbg is installed + configured for ZMQ bind
-#   Path: C:\Users\hr\Desktop\x64dbg\release\x64\x64dbg.exe
-#   Plugin: C:\Users\hr\Desktop\x64dbg\release\x64\plugins\x64dbg-automate.dp64
-#   ZMQ deps: C:\Users\hr\Desktop\x64dbg\release\x64\plugins\libzmq-mt-4_3_5.dll
+#   VM_IP: env discovery (KUNGLAO_VM_HOST / vmr-shell discover_vm_ip.sh) — DHCP
+#   lease changes every snapshot revert; never reuse a cached address.
+#   Path: <VM_X64DBG_DIR>\release\x64\x64dbg.exe
+#   Plugin: <VM_X64DBG_DIR>\release\x64\plugins\x64dbg-automate.dp64
+#   ZMQ deps: <VM_X64DBG_DIR>\release\x64\plugins\libzmq-mt-4_3_5.dll
+#   (<VM_X64DBG_DIR>/<VM_SAMPLES_DIR> are VM-provisioning examples — locate the
+#   live install via vmr-shell)
 #   [XAutomate] in x64dbg.ini: BindAddress=0.0.0.0, ReqRepPort=69BA (27066), PubSubPort=69BB (27067)
 #   If not installed → do NOT STOP. Per convergence-loop behavior #1, self-recover:
 #     L1: try connect_remote anyway (the bind may already be live from a prior session)
@@ -233,14 +249,14 @@ copy that is NOT the live VM x64dbg. **The only reliable first call is
 #   NEVER fall back to a host-side x64dbg install (Hard prohibition #5).
 
 # Step 2 — launch VM-side x64dbg with the target PE via vmr-shell
-vmr-shell exec-cmd 'start "x64dbg" "C:\Users\hr\Desktop\x64dbg\release\x64\x64dbg.exe" "C:\tools\<sha>.exe"'
+vmr-shell exec-cmd 'start "x64dbg" "<VM_X64DBG_DIR>\release\x64\x64dbg.exe" "<VM_SAMPLES_DIR>\<sha>.exe"'
 
 # Step 3 — confirm ZMQ ports listening on the VM
 vmr-shell exec-cmd 'netstat -an | findstr :27066'
 vmr-shell exec-cmd 'netstat -an | findstr :27067'
 
 # Step 4 — connect from host via MCP — this is THE entry point
-mcp__x64dbg__connect_remote(host="192.168.20.128", req_rep_port=27066, pub_sub_port=27067)
+mcp__x64dbg__connect_remote(host=<VM_IP>, req_rep_port=27066, pub_sub_port=27067)
 mcp__x64dbg__get_debugger_status   # must show "paused" before any further call
 
 # Step 5 — drive the VM-resident x64dbg via set_breakpoint / step_into / read_memory etc.
@@ -248,7 +264,7 @@ mcp__x64dbg__get_debugger_status   # must show "paused" before any further call
 
 **Anti-patterns (refused by `HOST_FORBIDDEN_TOOLS` if attempted anyway):**
 - `mcp__x64dbg__start_session(...)` — spawns x64dbg in MCP server's CWD, NOT our VM-resident install.
-- `mcp__x64dbg__connect_to_session(...)` — binds the stale `D:\迅雷下载\x64dbg\…` lockfile. Symptom: `set_breakpoint` returns 0 hits on a known address.
+- `mcp__x64dbg__connect_to_session(...)` — binds a stale host-downloaded x64dbg lockfile. Symptom: `set_breakpoint` returns 0 hits on a known address.
 - `list_sessions` returning empty ≠ bridge broken; it just means no lockfile. Re-prove liveness via `connect_remote` + `get_debugger_status` returning `paused`.
 
 **Why this section exists even though `HOST_FORBIDDEN_TOOLS` rejects host
@@ -256,12 +272,12 @@ calls:** the hook is a safety net; this section is the entry steer. Workers
 that read it before any x64dbg call pick the right tool on the first try
 instead of leaking host-channel attempts.
 
-## VM-worker session cleanup (v1.9.32, 2026-08-05) — zombie root cause
+## VM-worker session cleanup (v1.9.29, 2026-08-05) — zombie root cause
 
 **Incident (C-331 + C-333, 2026-08-05):** two VM-session workers showed
 `completed` TaskOutput (facts written, all deliverables landed) but **stayed
-in the running-agents list** — each a zombie holding a slot. v1.9.31's
-enumeration catches them (TaskStop), but the ROOT CAUSE is that **VM-session
+in the running-agents list** — each a zombie holding a slot. the #88 enumeration (TaskStop)
+catches them, but the ROOT CAUSE is that **VM-session
 workers leak subtasks**: x64dbg `connect_remote` handles / vmr-server
 sessions / background VM polls are not released when the worker's main task
 finishes.
@@ -276,10 +292,26 @@ finishes.
    worker's LAST action must still be cleanup: disconnect attempt → save
    data → report. Never leave a `go`-loop or reconnect-retry child running
    when the fact is written.
-4. Orchestrator double-check at every tick (v1.9.31): a worker whose
+4. Orchestrator double-check at every tick (#88): a worker whose
    TaskOutput reads `completed` but still appears in the running list is a
    zombie — TaskStop immediately, then **note in the ping-log which
    cleanup step it missed** so the pattern accumulates evidence.
 
 **Anti-pattern:** writing `status: done` while an x64dbg/VM child is still
 attached. The fact is done; the SESSION is not — finish the session first.
+
+## Worker self-drive (moved from SKILL.md §4.1, #226)
+
+A worker's "I can't" is not the end — LEARN → TRY → ESCALATE, three-tier
+self-drive (kunglao-worker.md §6d):
+
+1. **LEARN**: look it up — `WebSearch` / context7 / re-library.
+2. **TRY**: retry with ≥2 different methods using what you found.
+3. **ESCALATE**: only when all attempts fail, report a blocker — the blocker
+   MUST carry the lookup record (what sources were checked / what methods
+   were tried / where it is stuck).
+
+WebSearch is freely available to workers. A worker that reports "I can't"
+without lookup evidence = failure (W-27). Workers MUST mark uncertain
+evidence `confidence: low` + `unverified-part` — silent conclusions are
+forbidden (anti analysis-error).

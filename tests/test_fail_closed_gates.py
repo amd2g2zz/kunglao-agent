@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED->GREEN tests for fail-closed-verification-gates (#78).
 
 Issue #78: required verification gates must FAIL CLOSED when unavailable.

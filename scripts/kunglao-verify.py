@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""kunglao-verify — M3 VERIFY 独立 CLI 入口 (phase 5, E5.1).
+# -*- coding: utf-8 -*-
+"""kunglao-verify — M3 VERIFY standalone CLI entry (phase 5, E5.1).
 
-用法: python kunglao-verify.py <ws> <fact_id> [--json]
+Usage: python kunglao-verify.py <ws> <fact_id> [--json]
 
-实现见 scripts/kunglao_verify.py — 模块名不带连字符, 供 `from kunglao_verify import ...`
-(frozen test tests/test_verify_record_monitor.py 直接导入).
+Implementation in scripts/kunglao_verify.py — module name without hyphens,
+so `from kunglao_verify import ...` works (frozen test
+tests/test_verify_record_monitor.py imports it directly).
 """
 import sys
 

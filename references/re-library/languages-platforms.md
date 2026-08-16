@@ -1,18 +1,18 @@
-# CTF Reverse - Platform & Framework-Specific Techniques
+# Platform & Framework-Specific Techniques
 
 ## Table of Contents
 - [Rust serde_json Schema Recovery](#rust-serde_json-schema-recovery)
 - [Android JNI RegisterNatives Obfuscation (HTB WonderSMS)](#android-jni-registernatives-obfuscation-htb-wondersms)
-- [Android DEX Runtime Bytecode Patching via /proc/self/maps (Google CTF 2017)](#android-dex-runtime-bytecode-patching-via-procselfmaps-google-ctf-2017)
-- [Android Native .so Loading Bypass in New Project (Codegate CTF 2018)](#android-native-so-loading-bypass-in-new-project-codegate-ctf-2018)
+- [Android DEX Runtime Bytecode Patching via /proc/self/maps](#android-dex-runtime-bytecode-patching-via-procselfmaps)
+- [Android Native .so Loading Bypass in New Project](#android-native-so-loading-bypass-in-new-project)
 - [Frida Firebase Cloud Functions Bypass (BSidesSF 2026)](#frida-firebase-cloud-functions-bypass-bsidessf-2026)
-- [Verilog/Hardware Reverse Engineering (srdnlenCTF 2026)](#veriloghardware-reverse-engineering-srdnlenctf-2026)
+- [Verilog/Hardware Reverse Engineering](#veriloghardware-reverse-engineering)
 - [Prefix-by-Prefix Hash Reversal (Nullcon 2026)](#prefix-by-prefix-hash-reversal-nullcon-2026)
-- [Ruby/Perl Polyglot Constraint Satisfaction (BearCatCTF 2026)](#rubyperl-polyglot-constraint-satisfaction-bearcatctf-2026)
+- [Ruby/Perl Polyglot Constraint Satisfaction](#rubyperl-polyglot-constraint-satisfaction)
 - [Electron App + Native Binary Reversing (RootAccess2026)](#electron-app--native-binary-reversing-rootaccess2026)
 - [Node.js npm Package Runtime Introspection (RootAccess2026)](#nodejs-npm-package-runtime-introspection-rootaccess2026)
-- [Frida Android Certificate Pinning Bypass (h1702ctf 2017)](#frida-android-certificate-pinning-bypass-h1702ctf-2017)
-- [Android Anti-Debug: TracerPid, su Binary, System Properties (h1702ctf 2017)](#android-anti-debug-tracerpid-su-binary-system-properties-h1702ctf-2017)
+- [Frida Android Certificate Pinning Bypass](#frida-android-certificate-pinning-bypass)
+- [Android Anti-Debug: TracerPid, su Binary, System Properties](#android-anti-debug-tracerpid-su-binary-system-properties)
 - [Android Log-Based Key Extraction (HackIT 2017)](#android-log-based-key-extraction-hackit-2017)
 - [Native JNI Key Extraction via Memory Dump and Smali Patching (HackIT 2017)](#native-jni-key-extraction-via-memory-dump-and-smali-patching-hackit-2017)
 - [IBM AS/400 SAVF File EBCDIC Decoding (EKOPARTY 2017)](#ibm-as400-savf-file-ebcdic-decoding-ekoparty-2017)
@@ -25,7 +25,7 @@ For Go and Rust binary reversing, see [languages-compiled.md](languages-compiled
 
 ## Rust serde_json Schema Recovery
 
-**Pattern (Curly Crab, PascalCTF 2026):** Rust binary reads JSON from stdin, deserializes via serde_json, prints success/failure emoji.
+**Pattern (Curly Crab):** Rust binary reads JSON from stdin, deserializes via serde_json, prints success/failure emoji.
 
 **Approach:**
 1. Disassemble serde-generated `Visitor` implementations
@@ -38,7 +38,9 @@ For Go and Rust binary reversing, see [languages-compiled.md](languages-compiled
 {"pascal":"CTF","CTF":2026,"crab":{"I_":true,"cr4bs":1337,"crabby":{"l0v3_":["rust"],"r3vv1ng_":42}}}
 ```
 
-**Key insight:** Flag is the concatenation of JSON keys in schema order. Reading field names in order reveals the flag.
+**Key insight:** The target value is the concatenation of JSON keys in schema order. Reading field names in order reveals the expected value.
+
+**References:** PascalCTF 2026
 
 ---
 
@@ -82,7 +84,7 @@ ls extracted/lib/x86_64/  # Prefer this over arm64-v8a for static analysis
 
 ---
 
-## Android DEX Runtime Bytecode Patching via /proc/self/maps (Google CTF 2017)
+## Android DEX Runtime Bytecode Patching via /proc/self/maps
 
 Native JNI library patches Dalvik bytecode in memory at runtime: reads `/proc/self/maps` to find loaded DEX, `mprotect`s it writable, then XOR-patches specific bytecode offsets.
 
@@ -107,9 +109,11 @@ for i in range(patch_offset, patch_offset + 144):
 
 **Key insight:** Native libraries can modify DEX bytecode in memory via `/proc/self/maps` + `mprotect`, making static analysis of the APK alone insufficient. The XOR key and patch offsets must be extracted from the native `.so` to reconstruct the actual runtime DEX. Only works on Dalvik (API < 21), not ART.
 
+**References:** Google CTF 2017
+
 ---
 
-### Android Native .so Loading Bypass in New Project (Codegate CTF 2018)
+### Android Native .so Loading Bypass in New Project
 
 **Pattern:** Instead of reversing complex JNI validation logic, create a new Android Studio project with matching package name, class name, and native method signature. Load the original `.so` library and call the native function directly, completely bypassing all Java-level checks (random number validation, PIN entry, root detection, etc.).
 
@@ -129,7 +133,7 @@ public class Main4Activity extends AppCompatActivity {
 
 **Key insight:** JNI function names encode the package path and class name. Create a new Android project with matching package/class/method names, include the original `.so`, and call the native function directly. All Java-level validation (random checks, PIN entry, root detection) is bypassed entirely.
 
-**Detection:** APK with native `.so` library where the flag or secret is computed inside the native code and returned to Java. The Java layer has multiple validation gates (EditText checks, random number comparisons, device checks) before calling the native method.
+**Detection:** APK with native `.so` library where the secret or target value is computed inside the native code and returned to Java. The Java layer has multiple validation gates (EditText checks, random number comparisons, device checks) before calling the native method.
 
 **References:** Codegate CTF 2018
 
@@ -169,7 +173,7 @@ Java.perform(function() {
 
 ---
 
-## Verilog/Hardware Reverse Engineering (srdnlenCTF 2026)
+## Verilog/Hardware Reverse Engineering
 
 **Pattern (Rev Juice):** Verilog HDL source for a vending machine with hidden product unlocked by specific coin insertion and selection sequence.
 
@@ -197,15 +201,17 @@ TIMING = {
 # (H[19]+H[21]+H[56]+H[69]) mod 32 = 0
 ```
 
-**Key insight:** Hardware challenges require understanding the exact timing model — each operation takes a specific number of clock cycles, and shift registers record history at fixed tap positions. Work backward from the required tap values to determine what action must have occurred at each cycle. The solution is often a specific sequence notation (e.g., `I9C_SP6_CNL_I2C_SP2_I6C_SP6_SP6_SP5_CNL_I4C_SP1`).
+**Key insight:** Hardware/firmware targets require understanding the exact timing model — each operation takes a specific number of clock cycles, and shift registers record history at fixed tap positions. Work backward from the required tap values to determine what action must have occurred at each cycle. The solution is often a specific sequence notation (e.g., `I9C_SP6_CNL_I2C_SP2_I6C_SP6_SP6_SP5_CNL_I4C_SP1`).
 
 **Detection:** Look for `.v` or `.sv` (Verilog/SystemVerilog) files, `always @(posedge clk)` blocks, shift register patterns, and state machine `case` statements with hidden conditions gated on history values.
+
+**References:** srdnlenCTF 2026
 
 ---
 
 ## Prefix-by-Prefix Hash Reversal (Nullcon 2026)
 
-See [patterns-ctf-2.md](patterns-ctf-2.md#prefix-hash-brute-force-nullcon-2026) for the full technique. This section covers language-specific considerations.
+See [patterns-decode.md](patterns-decode.md#prefix-hash-brute-force) for the full technique. This section covers language-specific considerations.
 
 **Language-specific notes:**
 - Hash algorithm may be uncommon (MD2, custom) — don't need to identify it, just match outputs by running the binary
@@ -214,9 +220,9 @@ See [patterns-ctf-2.md](patterns-ctf-2.md#prefix-hash-brute-force-nullcon-2026) 
 
 ---
 
-## Ruby/Perl Polyglot Constraint Satisfaction (BearCatCTF 2026)
+## Ruby/Perl Polyglot Constraint Satisfaction
 
-**Pattern (Polly's Key):** A single file valid in both Ruby and Perl. Each language imposes different validation constraints on a 50-character key. Satisfy both simultaneously to decrypt the flag.
+**Pattern (Polly's Key):** A single file valid in both Ruby and Perl. Each language imposes different validation constraints on a 50-character key. Satisfy both simultaneously to decrypt the target data.
 
 **Polyglot structure exploits:**
 - Ruby: `=begin`...`=end` is a block comment
@@ -246,13 +252,15 @@ def reconstruct_from_inversions(chars, inv_counts):
 
 **Key insight:** Polyglot files exploit language-specific comment/block syntax to run different code in each interpreter. The constraints from both languages intersect to uniquely determine the key. Identify which code runs in which language by testing the file with both interpreters and comparing behavior.
 
-**Detection:** File that runs under multiple interpreters (`ruby file && perl file`). Challenge mentions "polyglot" or provides a file ending in `.rb` that also looks like Perl.
+**Detection:** File that runs under multiple interpreters (`ruby file && perl file`). Sample description mentions "polyglot" or provides a file ending in `.rb` that also looks like Perl.
+
+**References:** BearCatCTF 2026
 
 ---
 
 ## Electron App + Native Binary Reversing (RootAccess2026)
 
-**Pattern (Rootium Browser):** Electron desktop app bundles a native ELF/DLL binary for sensitive operations (vault, crypto, auth). The Electron layer is a wrapper; the real flag logic is in the native binary.
+**Pattern (Rootium Browser):** Electron desktop app bundles a native ELF/DLL binary for sensitive operations (vault, crypto, auth). The Electron layer is a wrapper; the real target logic is in the native binary.
 
 **Extraction workflow:**
 1. **Unpack Electron ASAR archive:**
@@ -302,7 +310,7 @@ def decrypt_flag(encrypted_flag, password):
 
 ## Node.js npm Package Runtime Introspection (RootAccess2026)
 
-**Pattern (RootAccess CLI):** Obfuscated npm package with RC4 encoding, control flow flattening, and flag split across multiple fragments. Static analysis is impractical — use runtime introspection instead.
+**Pattern (RootAccess CLI):** Obfuscated npm package with RC4 encoding, control flow flattening, and the target value split across multiple fragments. Static analysis is impractical — use runtime introspection instead.
 
 **Dynamic analysis approach:**
 ```javascript
@@ -342,11 +350,11 @@ console.log('Hidden methods:', hidden);
 
 **Key insight:** Heavily obfuscated JavaScript (control flow flattening, RC4 string encoding, dead code) makes static analysis prohibitively slow. Runtime introspection via `Object.getOwnPropertyNames()` reveals all methods including hidden ones. The module's own decryption runs automatically when loaded — just call the decoded functions directly.
 
-**Detection:** npm package with minified/obfuscated `dist/` directory, challenge says "reverse engineer the CLI tool", `package.json` with custom commands.
+**Detection:** npm package with minified/obfuscated `dist/` directory, sample description says "reverse engineer the CLI tool", `package.json` with custom commands.
 
 ---
 
-## Frida Android Certificate Pinning Bypass (h1702ctf 2017)
+## Frida Android Certificate Pinning Bypass
 
 APK uses OkHttp `CertificatePinner` for SSL pinning. Rather than setting up a MITM proxy or patching the APK, use Frida to directly invoke native JNI methods on loaded classes.
 
@@ -366,7 +374,7 @@ Calling `hName()` and `hVal()` returns the HTTP header name and value needed to 
 
 ---
 
-## Android Anti-Debug: TracerPid, su Binary, System Properties (h1702ctf 2017)
+## Android Anti-Debug: TracerPid, su Binary, System Properties
 
 Native ARM code implements three sequential anti-analysis checks:
 1. Read `/proc/self/status` and look for a non-zero `TracerPid` (debugger attached)
@@ -428,9 +436,9 @@ apktool b target_decompiled/ -o target_patched.apk
 
 ---
 
-## IBM AS/400 SAVF File EBCDIC Decoding (EKOPARTY 2017)
+## IBM AS/400 SAVF File EBCDIC Decoding
 
-IBM AS/400 SAVF (Save File) binary files use EBCDIC encoding rather than ASCII. The flag is interleaved with dummy text using a take-2-skip-2 pattern.
+IBM AS/400 SAVF (Save File) binary files use EBCDIC encoding rather than ASCII. The target text is interleaved with dummy text using a take-2-skip-2 pattern.
 
 ```python
 import codecs
@@ -448,13 +456,13 @@ flag = ''.join(ascii_data[i] for i in range(0, len(ascii_data), 4)
                if ascii_data[i].isupper() or ascii_data[i] == '_')
 ```
 
-**Key insight:** EBCDIC encoding is IBM mainframe-native. Examine character distribution after decoding to identify interleaving patterns. Filtering for uppercase letters and underscores is an effective shortcut for CTF flag formats.
+**Key insight:** EBCDIC encoding is IBM mainframe-native. Examine character distribution after decoding to identify interleaving patterns. Filtering for uppercase letters and underscores is an effective shortcut for common target-data formats.
 
 **References:** EKOPARTY CTF 2017
 
 ---
 
-## Intel SGX Enclave Reverse Engineering (Pwn2Win 2017)
+## Intel SGX Enclave Reverse Engineering
 
 Intel SGX enclave `.so` files expose an ECALL dispatch table. The enclave logic (including key derivation) is fully reversible with IDA since SGX code is standard x86-64.
 
@@ -463,7 +471,7 @@ Intel SGX enclave `.so` files expose an ECALL dispatch table. The enclave logic 
 2. Decompile ECALLs with IDA to identify the remote attestation protocol
 3. Implement the attestation protocol manually in Python using `sgx_crypto_wrapper`
 4. Key derivation: ECDH over P-256 followed by CMAC-AES-128 to derive the session key (SK)
-5. Decrypt the AES-128-GCM-encrypted flag blob using the derived SK
+5. Decrypt the AES-128-GCM-encrypted target blob using the derived SK
 
 ```python
 from cryptography.hazmat.primitives.asymmetric import ec

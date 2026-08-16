@@ -1,8 +1,9 @@
+# -*- coding: utf-8 -*-
 """RED tests for blind-verify-on-promotion (issue #15, PRD M1).
 
 TDD: these tests import modules/functions that do NOT exist yet
 (blind_gate, measure_blind_coverage) → RED. Implementation in
-scripts/blind_gate.py + tools/measure_blind_coverage.py makes them GREEN.
+scripts/blind_gate.py + tools/auxiliary/measure_blind_coverage.py makes them GREEN.
 
 Covers:
   RED1: PROVEN promotion without BLIND sign-off → auto-downgrade to STAMP
@@ -25,8 +26,9 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 TOOLS = ROOT / "tools"
-# scripts/ is on pythonpath via pytest.ini; tools/ is not — add for measure tool
-sys.path.insert(0, str(TOOLS))
+# scripts/ is on pythonpath via pytest.ini; #340: measure_blind_coverage lives
+# in tools/auxiliary/ — add it for the measure tool
+sys.path.insert(0, str(TOOLS / "auxiliary"))
 
 
 # ---------- helpers ----------

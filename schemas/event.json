@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "event.json",
-  "title": "M0.3 Event ledger record (冻结 @ phase-5, module-design.md §M0.3)",
-  "description": "kunglao-record ledger.jsonl 每行一条. event_id = sha256(event_type + canonical payload) 为幂等键; checksum = sha256(除 checksum 外整条 canonical JSON). ts 为本实现附加字段(账本可溯时间), 非 M0.3 dataclass 必需.",
+  "title": "M0.3 Event ledger record (FROZEN @ phase-5, module-design.md §M0.3)",
+  "description": "One record per kunglao-record ledger.jsonl line. event_id = sha256(event_type + canonical payload) is the idempotency key; checksum = sha256(canonical JSON of the whole record except checksum). ts is an additional field of this implementation (traceable ledger time), not required by the M0.3 dataclass.",
   "type": "object",
   "required": ["seq", "event_id", "source_module", "event_type", "payload", "checksum"],
   "properties": {

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""acceptance_check.py — 端到端验收 (issue #6, plan §2.3/§9).
+# -*- coding: utf-8 -*-
+"""acceptance_check.py — end-to-end acceptance (issue #6, plan §2.3/§9).
 
-静态验收: 验证重构核心机制就位 + 可运行 (动态真实样本 run 属生产 skill 职责, deferred)。
-输出: runs/e2e-acceptance-<ts>.json
+Static acceptance: verify the refactored core mechanisms are in place and
+runnable (dynamic real-sample runs belong to the production skill; deferred).
+Output: runs/e2e-acceptance-<ts>.json
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -75,11 +78,41 @@ def _check_digest() -> dict:
         return {"name": "digest_builds", "passed": False, "detail": f"error: {exc}"}
 
 
+TEST_SUITE_TIMEOUT = 300  # no-load floor: suite ≈ 2.5 min on CI; 5 min budget for slower runners
+TEST_SUITE_TIMEOUT_CEILING = 1200  # #369: load-scaled budget hard cap (20 min) — never unbounded
+TEST_SUITE_TIMEOUT_ENV = "KUNGLAO_TEST_SUITE_TIMEOUT"  # #369: explicit operator override (>= floor)
+
+
+def _test_suite_timeout_s(loadavg: float | None = None, cpu_count: int | None = None) -> int:
+    """#369: 300s is a NO-LOAD floor, not a fixed budget.
+
+    Under parallel machine load (multi-agent dev; load16-31 observed
+    2026-08-15 in #377's DEV run — the same suite stretched to 278s at
+    load≈26) test_suite_green flakes on the subprocess timeout, not on a
+    test failure. Scale the budget by 1-min load per core; the env override
+    wins (floored at TEST_SUITE_TIMEOUT); the load path is capped.
+    """
+    env = os.environ.get(TEST_SUITE_TIMEOUT_ENV, "").strip()
+    if env:
+        try:
+            return max(TEST_SUITE_TIMEOUT, int(env))
+        except ValueError:
+            pass  # garbage override: fall through to load scaling
+    try:
+        load = loadavg if loadavg is not None else os.getloadavg()[0]
+    except OSError:  # pragma: no cover - platforms without getloadavg
+        load = 0.0
+    cpus = cpu_count if cpu_count is not None else (os.cpu_count() or 1)
+    factor = max(1.0, load / cpus)
+    return min(TEST_SUITE_TIMEOUT_CEILING, int(TEST_SUITE_TIMEOUT * factor))
+
+
 def _check_test_suite() -> dict:
     try:
         r = subprocess.run([sys.executable, "-m", "pytest", "-q", "--tb=no", "-p", "no:cacheprovider",
                             "--ignore=tests/test_acceptance.py"],
-                           cwd=str(ROOT), capture_output=True, text=True, timeout=60)
+                           cwd=str(ROOT), capture_output=True, text=True,
+                           timeout=_test_suite_timeout_s())
         last = (r.stdout or "").strip().splitlines()[-1] if r.stdout else ""
         return {"name": "test_suite_green", "passed": r.returncode == 0, "detail": last[:120]}
     except Exception as exc:
@@ -97,7 +130,7 @@ def run_acceptance() -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="acceptance_check.py", description="端到端静态验收")
+    ap = argparse.ArgumentParser(prog="acceptance_check.py", description="end-to-end static acceptance")
     ap.add_argument("--write", action="store_true")
     args = ap.parse_args(argv)
     report = run_acceptance()

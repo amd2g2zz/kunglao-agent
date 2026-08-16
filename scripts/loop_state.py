@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""loop_state.py — M0 状态层对账原型 (Phase 2 E2.1/E2.2).
+# -*- coding: utf-8 -*-
+"""loop_state.py — M0 state-layer reconciliation prototype (Phase 2 E2.1/E2.2).
 
 Reconciler that derives a single loop-state view from the AUTHORITATIVE
 signal source: TEMP/claude/*/*/tasks/*.output mtime (agent lifecycle).
@@ -32,10 +33,11 @@ import glob as globmod
 import json
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
-STALE_MIN = 20          # mtime frozen > 20 min = STALE (matches agent_watch)
+STALE_MIN = 20          # mtime frozen > 20 min = STALE
 ACTIVE_WINDOW_MIN = 30  # only report agents with activity in the last 30 min
 
 
@@ -49,7 +51,7 @@ def scan_temp_agents() -> dict[str, dict]:
     Returns {agent_id: {path, mtime_ts, age_min, project, session}}.
     Stat-only; never reads transcript content.
     """
-    temp = Path(os.environ.get("TEMP", "C:/Users/hr/AppData/Local/Temp"))
+    temp = Path(os.environ.get("TEMP", tempfile.gettempdir()))
     pattern = str(temp / "claude" / "*" / "*" / "tasks" / "*.output")
     now = time.time()
     out: dict[str, dict] = {}
