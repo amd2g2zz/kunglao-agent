@@ -10,7 +10,7 @@ Guards three facts (SDD design D1/D2/D3, issue #93 — user correction on #90):
    mechanical passthrough) OR natural-language request mapped by intent keywords;
    workspace is NEVER a parameter (Phase 0 auto-detection); empty → `analysis`.
 3. The repo root ships a metadata-only `.claude-plugin/plugin.json` (#366,
-   user decision 2026-08-15 — version 0.1.0 must be plugin-manager-visible).
+   user decision 2026-08-15 — version 0.1 must be plugin-manager-visible).
    The manifest declares identity fields ONLY: component paths (skills/
    hooks/commands) are what broke bare `/kunglao-agent` (regression 7f5f179,
    2026-08-10, `skills: ["./"]` wiring) and stay out until #364 (v1.0).
@@ -95,7 +95,7 @@ def test_repo_claude_plugin_is_metadata_only() -> None:
     """D3 (#366 amendment): `.claude-plugin/plugin.json` ships metadata-only.
 
     Identity fields (name/description/version/author/homepage/license) are
-    required so v0.1.0 is visible to the plugin manager; any component
+    required so v0.1 is visible to the plugin manager; any component
     wiring (skills/hooks/commands paths) re-triggers the 7f5f179 breakage
     (skills-directory plugin identity in the next session breaks bare
     /kunglao-agent) and is deferred to #364.

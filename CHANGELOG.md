@@ -3,7 +3,7 @@
 All notable changes to this project are recorded here. Format follows
 [Keep a Changelog 1.1](https://keepachangelog.com/en/1.1.0/), and the
 versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
-used before v0.1 are development-era labels, folded into the v0.1.0 first
+used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
 ## [Unreleased]
@@ -104,7 +104,7 @@ release (see the mapping table at the end).
   (16-only) → Process.getModuleByName(mod).getExportByName(name), header
   comment notes Requires: frida >= 17 (#356)
 
-## [0.1.0] - 2026-08-14
+## [0.1] - 2026-08-14
 
 First public release: a convergence-driven reverse-engineering orchestration
 skill — with Claude Code as the only interface, it drives a malicious sample
@@ -192,7 +192,7 @@ throughout by mechanical gates.
 
 The v1.8.x / v1.9.x markers in pre-v0.1 in-repo code comments are
 development-era feature-provenance annotations ("this gate landed at
-v1.9.24"), not released versions. They all belong to the v0.1.0 first-release
+v1.9.24"), not released versions. They all belong to the v0.1 first-release
 scope, mapped as follows:
 
 | Internal marker | Representative features (not exhaustive) |

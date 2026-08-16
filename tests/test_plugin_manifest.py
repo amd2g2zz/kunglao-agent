@@ -2,7 +2,7 @@
 """tests/test_plugin_manifest.py — issue #366 minimal v0.1 plugin manifest (TDD).
 
 Contract: kunglao-agent v0.1 ships a metadata-only plugin manifest so version
-0.1.0 is visible to the Claude Code plugin manager. Scope is minimal by
+0.1 is visible to the Claude Code plugin manager. Scope is minimal by
 design (#366): identity fields only, NO component wiring (skills/hooks/
 commands — that migration is #364, v1.0 track).
 
@@ -10,7 +10,7 @@ Facts guarded here:
 1. .claude-plugin/plugin.json exists with name/description/version/author/
    homepage/license — exactly the #366 field set, no behavioral surface.
 2. Version triple-equality: pyproject.toml == release-manifest.yaml ==
-   plugin.json == CHANGELOG [0.1.0] (single source stays pyproject).
+   plugin.json == CHANGELOG [0.1] (single source stays pyproject).
 3. README.md documents BOTH install paths: plugin (skills-directory, via the
    manifest) and the existing skill-dir clone path.
 4. The manifest is metadata-only: it declares no component paths (the
@@ -36,7 +36,7 @@ RELEASE_MANIFEST = ROOT / "release-manifest.yaml"
 CHANGELOG = ROOT / "CHANGELOG.md"
 README = ROOT / "README.md"
 
-EXPECTED_VERSION = "0.1.0"
+EXPECTED_VERSION = "0.1"
 # The #366 field set: identity metadata only (issue body scope item 1).
 REQUIRED_FIELDS = {"name", "description", "version", "author", "homepage", "license"}
 # Component-path fields that would change runtime behavior (#364, not #366).
@@ -103,8 +103,8 @@ def test_version_triple_equality():
 
     py = pyproject["project"]["version"]
     rel = release["version"]
-    cl = re.search(r"^## \[0\.1\.0\]", changelog, re.MULTILINE)
-    assert cl, "CHANGELOG missing the [0.1.0] header"
+    cl = re.search(r"^## \[0\.1\]", changelog, re.MULTILINE)
+    assert cl, "CHANGELOG missing the [0.1] header"
 
     assert py == rel == manifest["version"] == EXPECTED_VERSION, (
         f"version drift: pyproject={py} release-manifest={rel} "

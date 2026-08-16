@@ -16,7 +16,7 @@ The python modules in this repo are the skill's internal organs — called by ho
 
 ### 1. Install
 
-Two paths ship with v0.1 (the repo carries `.claude-plugin/plugin.json`, version `0.1.0`, identity metadata only).
+Two paths ship with v0.1 (the repo carries `.claude-plugin/plugin.json`, version `0.1`, identity metadata only).
 
 **(a) Plugin install** — load the repo directly as a Claude Code plugin:
 
@@ -24,7 +24,7 @@ Two paths ship with v0.1 (the repo carries `.claude-plugin/plugin.json`, version
 claude --plugin-dir /path/to/kunglao-agent
 ```
 
-The plugin manager lists `kunglao-agent` at version `0.1.0`. The manifest declares no components (skills/hooks/commands) yet — the full plugin migration, including marketplace distribution via `/plugin marketplace add amd2g2zz/kunglao-agent` (which additionally requires shipping `.claude-plugin/marketplace.json`), is tracked in #364.
+The plugin manager lists `kunglao-agent` at version `0.1`. The manifest declares no components (skills/hooks/commands) yet — the full plugin migration, including marketplace distribution via `/plugin marketplace add amd2g2zz/kunglao-agent` (which additionally requires shipping `.claude-plugin/marketplace.json`), is tracked in #364.
 
 **(b) Skill-dir install (legacy)** — in Claude Code:
 
