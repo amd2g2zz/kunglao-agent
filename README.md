@@ -14,8 +14,7 @@ The only interface is Claude Code: you talk to it and read its reports. The Pyth
 
 ## Prerequisites
 
-- **Python 3.10+ and [uv](https://docs.astral.sh/uv)** — hooks never invoke bare `python`: on machines where `python` resolves to Python 2.x every registered hook dies with the interpreter (#389). All hook commands run via `uv run --project <skill_root>`. **Python 2 is not supported.**
-- **`uv sync --locked`** — restore the pinned project venv before anything else (see [Quick start](#quick-start)).
+- **Claude Code** — kunglao-agent runs entirely inside Claude Code; no CLI installation needed. The plugin carries its own pinned Python 3.10+ environment (managed by `uv`, but you never touch it — the plugin's hooks run it automatically). **Python 2 is not supported.**
 - **Ghidra or IDA** — one static-analysis suite for decompilation.
 - **A VM** — required for T3 dynamic analysis (Windows / Linux / Android guest, matching the sample's project type). Samples never run on the host.
 - **MCP servers** — registered by `kunglao-init` (ghidra, sequential-thinking, x64dbg, ...); see the MCP supply table under [Internals](#internals).
@@ -47,21 +46,19 @@ The plugin manager lists `kunglao-agent` at version `0.1`.
 /install-github-repo amd2g2zz/kunglao-agent
 ```
 
-or, manually:
+or, manually (the clone carries its pinned environment; first use in Claude Code runs it):
 
 ```bash
 git clone https://github.com/amd2g2zz/kunglao-agent.git ~/.claude/skills/kunglao-agent
-cd ~/.claude/skills/kunglao-agent
-uv sync --locked
 cp agents/kunglao-worker.md agents/kunglao-redteam.md ~/.claude/agents/
 ```
 
 ### 2. Initialize a workspace
 
-One fresh workspace per sample engagement:
+One fresh workspace per sample engagement — in Claude Code:
 
-```bash
-uv run --project <repo> <repo>/scripts/kunglao-init.py <workspace> --type windows   # or linux | android
+```
+/kunglao-agent:init <workspace> --type windows     # or linux | android
 ```
 
 Options: `--skip-toolchain` (skip the toolchain preflight — test/ops escape hatch), `--no-mcp` (skip the workspace `.mcp.json` scaffold), `--install-git-hooks` (install the review-gate pre-commit hook), `--force` (re-init after backing up the claim register).
@@ -106,7 +103,7 @@ the main skill also accepts the subcommand form (`/kunglao-agent init <ws>`).
 **Setup.** A small Windows dropper lands in `~/cases/synth-dropper`. The operator initializes the workspace:
 
 ```
-uv run --project ~/kunglao-agent ~/kunglao-agent/scripts/kunglao-init.py ~/cases/synth-dropper --type windows
+/kunglao-agent:init ~/cases/synth-dropper --type windows
 ```
 
 `kunglao-init` scaffolds the workspace, writes the workspace `CLAUDE.md`, probes the toolchain (Ghidra present, VM reachable), and scaffolds `.mcp.json`. The operator runs `/kunglao-agent` and states the task: *"what does this binary do, and where does it phone home?"*
@@ -198,7 +195,7 @@ The tool shelf: reusable analysis logic is absorbed as **registered tools** (mac
 
 Host emulation (T2) is deliberately NOT a shelf tool: qiling-based emulation is provided by the external `/malware-framework` skill, which kunglao workers invoke per the analysis principle instead of re-wrapping qiling.
 
-MCP supply: the single manifest source is `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `uv run python scripts/mcp_probe.py <ws> --type <windows|linux|android>` (exit 1 = HARD missing, 2 = WARN missing only).
+MCP supply: the single manifest source is `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `python scripts/mcp_probe.py <ws> --type <windows|linux|android>` (exit 1 = HARD missing, 2 = WARN missing only; run inside the plugin env, e.g. via `uv run --project <skill_root>`, or in the workspace's Claude Code session).
 
 | MCP server | Tier | Scope | Purpose | Registration |
 |------------|------|-------|---------|--------------|
