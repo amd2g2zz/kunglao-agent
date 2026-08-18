@@ -71,3 +71,6 @@ analysis_space/
 # Deployment secrets/topology (per-machine; .env.example is the template)
 .env
 .review/
+
+# Dev worktrees (parallel branch isolation; #472-class hygiene: never tracked)
+.worktrees/
