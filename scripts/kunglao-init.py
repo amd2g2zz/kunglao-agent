@@ -117,6 +117,10 @@ from hook_activation import DEFAULT_TTL_MINUTES as HOOK_TTL_MINUTES  # noqa: E40
 # #362: CLAUDE.md renders through the shared {{param}} engine (single
 # rendering system with scripts/template_gen.py — leftover detection included)
 import template_render  # noqa: E402
+# #445: hook-entry construction + post-write self-check derive from THE
+# canonical registration entry — init deploys a worker_budget subset but no
+# longer hand-rolls its own entry shape or skips verification.
+import hook_activation  # noqa: E402
 
 MARKER = "[initialized]"
 SEED_MIN = 3
@@ -148,6 +152,7 @@ RC_FLAG_REJECT = 3   # Phase 0 (#276) agent-teams flag truthy
 RC_TOOLCHAIN_REFUSE = 4  # toolchain HARD FAIL — human must install, no scaffold
 RC_NO_SAMPLE = 5     # bins/ empty — friendly prompt (place a sample into bins/)
 RC_PATH_SHAPE = 6    # #411: target is a sample dir / file, not a workspace root — refuse with guidance
+RC_HOOK_WIRING = 7   # #445: hook deployment self-check FAILED (written layer/coverage/shape mismatch) — init FAIL, never a WARN
 
 SCAFFOLD_DIRS = ("facts", "blockers", "runs")
 SCAFFOLD_FILES = {
@@ -675,15 +680,14 @@ def scaffold_mcp(ws: Path) -> str:
 def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path) -> tuple[list, bool]:
     """Same-named hook command already present under the matcher → skip (idempotent); else append.
 
-    #389: hooks run via `uv run --project <skill_root>` — bare python can
-    resolve to 2.x and kill every registered hook; uv uses the skill venv.
-    Same-name is not enough: a legacy bare-python entry with the same name
-    must be REPLACED in place (position kept, no duplicate append) — the
-    fixed-point pattern shared with external_kicker._canonical.
+    #389/#445: entry construction is delegated to THE canonical builder
+    (hook_activation.build_hook_entry — uv-form, POSIX path). Same-name is
+    not enough: a legacy bare-python entry with the same name must be
+    REPLACED in place (position kept, no duplicate append) — the
+    fixed-point pattern shared with external_kicker.
     """
-    skill_root = hook_dir.parent.as_posix()
-    command = f"uv run --project {skill_root} {(hook_dir / hook_file).as_posix()}"
-    canonical = {"matcher": matcher, "hooks": [{"type": "command", "command": command}]}
+    canonical = hook_activation.build_hook_entry(hook_dir, hook_file, matcher)
+    command = canonical["hooks"][0]["command"]
     new = [e for e in entries if e.get("matcher") == matcher]
     other = [e for e in entries if e.get("matcher") != matcher]
     for idx, e in enumerate(new):
@@ -698,7 +702,7 @@ def _ensure(entries: list, matcher: str, hook_file: str, hook_dir: Path) -> tupl
     return other + new, True
 
 
-def _patch_settings(path: Path) -> int:
+def _patch_settings(path: Path, hook_dir: Path) -> int:
     """Merge the kunglao hook into settings.json (other keys preserved); return count of added entries."""
     existing: dict = {}
     if path.exists():
@@ -709,7 +713,6 @@ def _patch_settings(path: Path) -> int:
     hooks = existing.get("hooks") or {}
     pre = hooks.get("PreToolUse") or []
     post = hooks.get("PostToolUse") or []
-    hook_dir = Path(__file__).resolve().parent.parent / "hooks"
     count = 0
     for event, matcher, hook_file in (
         ("PreToolUse", "Agent", HOOK_FILES[0]),
@@ -729,21 +732,49 @@ def _patch_settings(path: Path) -> int:
     return count
 
 
+def hook_deploy_rc(report: dict) -> int:
+    """#445: hook-deployment report -> init exit code.
+
+    A DEPLOYED registration whose post-write self-check FAILED is a FAIL
+    (RC_HOOK_WIRING) — never a warning + RC_OK (the issue's explicit
+    demand: hooks written to a layer that does not fire must stop init).
+    The nothing-written skip (no settings file present) stays benign —
+    nothing was written, so there is nothing to mis-layer.
+    """
+    if report.get("deployed") and not report.get("selfcheck", {}).get("ok"):
+        return RC_HOOK_WIRING
+    return RC_OK
+
+
 def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
     """Idempotent hook deployment (E-init.2). Target: the --hooks-json copy, or <ws>/.claude/settings.json (if present).
 
     HOME is never a deployment target by default — if neither exists,
     skip with an explanation.
+
+    #445: construction comes from hook_activation.build_hook_entry (the
+    canonical entry's single construction source) and every write is
+    followed by the canonical post-write self-check (layer vs fire layers /
+    coverage / command shape). Mismatch lands in the report as
+    selfcheck.ok=False and maps to RC_HOOK_WIRING via hook_deploy_rc —
+    init FAIL, not a WARN.
     """
+    hook_dir = Path(__file__).resolve().parent.parent / "hooks"
     if hooks_json is not None:
         target = Path(hooks_json).resolve()
+        layer = "operator-declared"  # the operator named the file explicitly
     else:
         target = ws / ".claude" / "settings.json"
+        layer = "project"
         if not target.exists():
             return {"deployed": False, "target": None,
                     "reason": "no <workspace>/.claude/settings.json (HOME settings never written)"}
-    added = _patch_settings(target)
-    return {"deployed": True, "target": str(target), "added": added}
+    added = _patch_settings(target, hook_dir)
+    selfcheck = hook_activation.selfcheck_registration(
+        target, expected_files=HOOK_FILES, hook_dir=hook_dir,
+        workspace=ws, layer=layer)
+    return {"deployed": True, "target": str(target), "added": added,
+            "selfcheck": selfcheck}
 
 
 def backup_register(path: Path) -> Path:
@@ -885,6 +916,11 @@ def initialize(ws: Path, hooks_json: Path | None,
         print("kunglao-init: FATAL verify failed — marker or seeds missing after init", file=sys.stderr)
         return RC_FATAL_VERIFY
     hook_report = deploy_hooks(ws, hooks_json)
+    rc = hook_deploy_rc(hook_report)  # #445: self-check mismatch FAILs init
+    if rc != RC_OK:
+        print(f"kunglao-init: hooks selfcheck FAILED — "
+              f"{hook_report.get('selfcheck', {}).get('mismatches')}", file=sys.stderr)
+        return rc
 
     # #412: the exit message lists what init did (scaffold + env + type) and
     # does NOT summarize sample content (no sample= in the output).

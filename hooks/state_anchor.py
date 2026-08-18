@@ -43,7 +43,8 @@ Wiring (in .claude/settings.json PostToolUse, Agent matcher — alongside
 worker_pulse / worker_budget):
   {"matcher": "Agent", "hooks": [{"type": "command",
     "command": "uv run --project <skill_root> <skill_root>/hooks/state_anchor.py"}]}
-Registered idempotently by scripts/wire_up_settings.py + listed in
+Registered idempotently by scripts/hook_activation.py --wire-up (registry:
+wire_up_settings.WIRE_UP_HOOK_FILES, #445) + listed in
 scripts/hook_activation.py::ALL_HOOKS.
 
 Pure read: reads ledger / claim-register / facts/_INDEX / worker-status +

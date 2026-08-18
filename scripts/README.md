@@ -43,7 +43,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4) | lib(3), tests |
 | `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |
-| `hook_activation.py` | hook wire-up + tier activation (--wire-up/--renew/--heartbeat-*) | hooks, CLI, lib(6), tests |
+| `hook_activation.py` | THE canonical hook registration entry (#445): register_hooks/--wire-up + post-write self-check + tier activation | hooks, CLI, lib(6), tests |
 | `env_check.py` | environment readiness gate (venv/toolchain/VM channel) | hooks, CLI, tests |
 | `heartbeat.py` | convergence-gated heartbeat bookkeeping (lib for hook_activation) | lib(1), tests |
 | `heartbeat_tick.py` | heartbeat tick runner (hook-invoked + kunglao.py) | hooks, lib(1), tests |
@@ -121,7 +121,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `normalize_trace.py` | dynamic trace normalization | tools, tests |
 | `fixture_excerpt_lint.py` | fixture excerpt lint (standalone CLI) | tests, docs |
 | `references_recall.py` | references scored-recall CLI over the layered index — scenario → primary/supplementary; keyword → top-K ranked rows with score (no file dumps); `--list-categories` / `--scene-map` | tests, docs |
-| `wire_up_settings.py` | hook settings registration (lib for hook_activation) | hooks, lib(1), tests |
+| `wire_up_settings.py` | hook REGISTRY + deprecated alias -> hook_activation.register_hooks (#445; retirement #446) | hooks, lib(1), tests |
 | `shell_defaults.py` | reusable CLI: idempotent shell env-default line management (check/apply/remove, powershell+bash; #276) | lib(1), tests |
 | `template_gen.py` | deterministic script-template generator CLI (templates/scripts/*.tmpl; exit 2/3/4/5, #278) | templates, tests, docs |
 | `template_render.py` | shared {{param}} render + leftover-detection engine (single source for template_gen + kunglao-init, #362) | lib(2), tests |

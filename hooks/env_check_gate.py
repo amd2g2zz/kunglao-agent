@@ -28,14 +28,15 @@ Design (mirrors dispatch_gate.py, narrow + low-IO):
     gone — but the init-completeness check still runs in kunglao workspaces.
   - Workspace resolution mirrors dispatch_gate._resolve_workspace: only
     kunglao-agent workspaces (claim-register.yaml present) are policed, so the
-    hook (wired in the GLOBAL settings.json via wire_up_settings.py) stays
-    silent in unrelated projects.
+    hook (wired in the PROJECT-level .claude/settings.json by
+    hook_activation.py --wire-up, the canonical registration entry #445)
+    stays silent in unrelated projects.
   - flag TRUTHY -> hard REJECT (exit 2 + stderr) + hookSpecificOutput.additionalContext
     guidance: problem / alternative / fix. The additionalContext structure
     mirrors dispatch_gate.py:137-142.
 
-Wiring (in ~/.claude/settings.json PreToolUse, Agent matcher — registered by
-scripts/wire_up_settings.py):
+Wiring (in .claude/settings.json PreToolUse, Agent matcher — registered by
+scripts/hook_activation.py --wire-up, #445):
   {"matcher": "Agent", "hooks": [{"type": "command",
     "command": "uv run --project <skill_root> <skill_root>/hooks/env_check_gate.py"}]}
 """

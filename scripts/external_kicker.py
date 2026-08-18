@@ -24,7 +24,8 @@ Design (see openspec/archive/external-kicker/design.md D1-D6):
      no session alive. Tick interval default 15 < 30-min TTL → kick always
      lands before the TTL expires → no silent gate window.
   D2 project-level hooks re-registration: `ensure_project_hooks` — pure dict
-     transform (5 kunglao entries, wire_up_settings._ensure shape), every
+     transform (5 kunglao entries, hook_activation.build_hook_entry shape
+     — #445 single construction source), every
      other key preserved (env secrets, mcpServers, permissions, other
      matchers' entries). Written atomically ONLY when changed. Never touches
      user-level settings.
@@ -61,6 +62,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import wire_up_settings
+# #445: THE canonical registration entry — this module is a DECLARED
+# SUBORDINATE of it (see REGISTRATION_RELATION below), not a peer entry.
+# Safe at module scope: hook_activation imports no sibling modules at
+# import time (lazy imports only), so no cycle exists in either direction.
+import hook_activation
 
 # D6: activation TTL from hook_activation.py DEFAULT_TTL_MINUTES — the tick
 # interval MUST stay below it or the TTL-expiry→next-tick gap silently closes
@@ -111,6 +117,27 @@ _KICKER_SKIP_FILES = frozenset({
     "completion_gate.py",   # Stop completion gate — full --wire-up restores it
 })
 _KICKER_ENTRY_FILES = frozenset(f for _, _, f in KUNGLAO_HOOK_ENTRIES)
+
+# #445: relationship of this module's writer to THE canonical registration
+# entry — declared, machine-readable, and pinned by
+# tests/test_hook_registration_entry.py. The kicker is NOT merged into the
+# canonical writer: it must write the WORKSPACE-PARENT target with a
+# deliberately narrow bootstrap subset while a session is dead. What IS
+# unified is the entry CONSTRUCTION (hook_activation.build_hook_entry) and
+# the registry pinning (derive_hook_subset above) — the two paths cannot
+# drift apart in command shape or file set.
+REGISTRATION_RELATION = {
+    "canonical_entry": hook_activation.CANONICAL_REGISTRATION_ENTRY,
+    "role": ("declared subordinate: dead-session bootstrap writer — "
+             "re-registers the minimal liveness chain while no session "
+             "lives; the full registry is restored by the canonical entry "
+             "once the kicked session starts"),
+    "target": ("workspace-parent .claude/settings.json "
+               "(wire_up_settings.hook_deployment_targets[1], #410)"),
+    "subset": ("KUNGLAO_HOOK_ENTRIES (5 entries), pinned to the registry "
+               "via wire_up_settings.derive_hook_subset (#381)"),
+    "construction": "hook_activation.build_hook_entry (single source, #445)",
+}
 
 # #381 module-load contract check: the entry file set must exactly account
 # for the registry — drift raises HERE, on every import (tests and
@@ -202,14 +229,10 @@ def ensure_project_hooks(settings: dict, hook_dir: str) -> tuple[dict, int]:
     the wire_up_settings.py:20 mis-wiring bug lives there.
     """
     def _canonical(matcher: str, hook_file: str) -> dict:
-        p = (Path(hook_dir) / hook_file).as_posix()  # POSIX: hooks run via sh -c
-        # #389: hooks run via `uv run --project <skill_root>` — bare python
-        # can resolve to 2.x (this machine: /usr/local/bin/python -> 2.7.17)
-        # and kill every re-registered hook; uv uses the skill's project venv.
-        skill_root = Path(hook_dir).parent.as_posix()
-        return {"matcher": matcher,
-                "hooks": [{"type": "command",
-                           "command": f"uv run --project {skill_root} {p}"}]}
+        # #445: construction delegated to THE canonical builder — no third
+        # hand-rolled entry shape (byte-identical output, test-pinned).
+        return hook_activation.build_hook_entry(Path(hook_dir), hook_file,
+                                                matcher)
 
     hooks = dict(settings.get("hooks") or {})
     appended = 0

@@ -60,7 +60,8 @@ Compare `task_spec.yaml` to `task_spec_snapshot.yaml` (written after each re-pla
      fix) EVERY Agent dispatch while the flag is set in a kunglao workspace.
   A dispatch that did fire means both layers were missing or bypassed —
   treat it as the #88 violation: stop, unset the flag, restart the session.
-  Registered first in the PreToolUse Agent list by `wire_up_settings.py`.
+  Registered first in the PreToolUse Agent list by `hook_activation.py
+--wire-up` (THE canonical registration entry, #445).
 - **Settings rewrites can flip the flag back (#317, #314 A5 — operator note,
   not a code defect)**: editors / toolchain rewrites of settings.json have
   repeatedly reset the `env` block to
@@ -74,7 +75,9 @@ Compare `task_spec.yaml` to `task_spec_snapshot.yaml` (written after each re-pla
   in multiple sessions — settings rewrites drop the hooks section; PostToolUse
   `remove_worker` never fires → zombie `[active_workers]` → false `3>=3` dispatch
   rejection + dead worker_pulse). `--wire-up` is idempotent and preserves other
-  settings keys. Verify: re-run prints `(0 entries)`.
+  settings keys, then self-checks the wiring (#445). Verify: re-run prints
+  `+ selfcheck PASS (layer=project)`; a `FAIL:` line means the write landed
+  on a layer that does not fire — fix before dispatching.
 - **Every heartbeat tick MUST run `--reconcile`** — ground-truth rebuild of
   `[active_workers]` from `.wt-*/` worker-status files (last status line ==
   in-progress). Self-heals accounting even when hooks are unwired. This is the
