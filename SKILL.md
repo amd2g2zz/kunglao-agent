@@ -49,15 +49,26 @@ kunglao-agent subcommands:
   /kunglao-agent:init      <workspace> [--type windows|linux|android]
                            initialize a workspace (scaffold + CLAUDE.md +
                            sample mount + task_spec intake + hooks)
+                           example: /kunglao-agent:init ~/cases/synth-dropper --type windows
 
-  /kunglao-agent:analysis  <workspace>
+  /kunglao-agent:analysis  <workspace>   (alias: analyze)
                            enter the convergence loop on an initialized
                            workspace
-
+                           example: /kunglao-agent:analysis ~/cases/synth-dropper
 
   /kunglao-agent:help      [no args]
                            print this usage list
-(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table)
+                           example: /kunglao-agent:help
+
+Next steps:
+  uninitialized workspace → /kunglao-agent:init
+  initialized workspace   → /kunglao-agent:analysis
+  unsure which command    → /kunglao-agent:help
+  partial arguments       → the subcommand prints its own guided prompt
+                           (see its SKILL.md "No arguments" section)
+(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table;
+ #456: zero-args guard below the router, per-command examples + next steps —
+ menu/hints render skills/subcommands.yaml, the single source)
 ```
 
 
@@ -75,9 +86,11 @@ kunglao-agent subcommands:
 - Unknown subcommand (not in the table, not natural language) → print the menu
   AND `unknown: <x>` — never guess, never silently run.
 
-The workspace is never a parameter: workspace detection runs in Phase 0 of the
-main contract. `<SKILL_DIR>` is the repo root (this file's parent), not
-`skills/kunglao-agent/`.
+The workspace is an explicit positional argument. When it is absent the
+subcommand runs its guided no-args prompt (see the "No arguments" section of
+`skills/init/SKILL.md` and `skills/analysis/SKILL.md`) — never a silent
+default, never a guess. `<SKILL_DIR>` is the repo root (this file's parent),
+not `skills/kunglao-agent/`.
 
 ## Examples
 

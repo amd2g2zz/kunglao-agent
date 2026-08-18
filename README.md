@@ -96,6 +96,12 @@ Every `/kunglao-agent` command, its arguments, and an example:
 The namespaced form (`/kunglao-agent:init`) is the plugin-manager surface;
 the main skill also accepts the subcommand form (`/kunglao-agent init <ws>`).
 
+Called with no arguments, `init` and `analysis` print a guided prompt —
+never guess, never a bare argparse-style error (see each skill's "No
+arguments" section); the menu's next-steps block maps operator state to a
+command (uninitialized → init, initialized → analysis, unsure → help). The
+menu and hints render `skills/subcommands.yaml`, the single source. (#456)
+
 ## A worked analysis case
 
 *The walkthrough below is a representative, synthetic session on a small, deliberately simple sample. It shows the shape of an engagement, not a measured result — for measured outcomes see [Real-world results](#real-world-results).*

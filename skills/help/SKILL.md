@@ -13,6 +13,11 @@ argument-hint: "[no args] — print the subcommand usage list"
 Prints the kunglao-agent subcommand menu. Every entry shows the command, its
 arguments, and an example.
 
+## No arguments
+
+`help` takes no arguments — zero args is its only form: print the subcommand
+usage list (the table below) and stop. There is no missing-argument case.
+
 ## Usage
 
 | Subcommand | Arguments | Purpose | Example |

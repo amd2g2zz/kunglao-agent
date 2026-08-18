@@ -6,7 +6,7 @@ description: >-
   task_spec.yaml, probes the toolchain, and activates hooks. One fresh
   workspace per sample engagement.
 arguments: [workspace]
-argument-hint: <workspace> [--type windows|linux|android]
+argument-hint: <workspace> [--type windows|linux|android] — no args → guided setup
 ---
 
 # kunglao-agent:init — workspace initialization
@@ -37,6 +37,26 @@ Repeat init on an existing workspace resumes idempotently from
 
 The workspace path is the only positional argument. `--type` selects the
 project type: `windows` (default) | `linux` | `android`.
+
+## No arguments
+
+An empty `$ARGUMENTS` never starts scaffolding and never guesses the cwd:
+print the guided prompt below and WAIT — one prompt, enumerated choices,
+never guess, no bare argparse-style error dump.
+
+- State that `<workspace>` is required and show the canonical invocation:
+  `/kunglao-agent:init <workspace> [--type windows|linux|android]`.
+- If the cwd already looks initialized (`claim-register.yaml` present), say
+  so: point to `/kunglao-agent:analysis` for the loop, or note that re-run
+  init resumes idempotently (never rebuild or overwrite).
+
+## Missing `--type`
+
+With a workspace but no `--type`, never silently default to `windows`:
+route into the #455 intake type-alignment sequence — a magic-number sniff is
+only a suggestion, the operator confirms the type before scaffolding, and
+an unresolved ambiguity is surfaced as a decision_pending item (#455's
+schema; not implemented here).
 
 ## Examples
 

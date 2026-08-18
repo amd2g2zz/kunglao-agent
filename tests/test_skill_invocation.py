@@ -85,9 +85,13 @@ def test_skill_body_arguments_intent_contract() -> None:
     # natural-language mapping rule: keyword -> subcommand
     assert "keyword" in section.lower() or "intent" in section.lower(), \
         "Arguments section must state the natural-language intent-mapping rule"
-    # workspace is NEVER a parameter (Phase 0 auto-detection)
-    assert "never a parameter" in section.lower() or "workspace is not a parameter" in section.lower(), \
-        "Arguments section must state that workspace is never a parameter (Phase 0 auto-detection)"
+    # #456: workspace is an EXPLICIT positional argument — absent → guided
+    # no-args prompt (never a silent default). The old #93 "never a
+    # parameter" sentence is the router self-contradiction #456 removes.
+    assert "explicit positional argument" in section.lower(), \
+        "Arguments section must state that workspace is an explicit positional argument (#456)"
+    assert "never a silent default" in section.lower(), \
+        "Arguments section must state the guided no-args fallback (never a silent default, #456)"
     # #413: empty $ARGUMENTS prints the menu and WAITs — it does NOT silently run
     assert "wait" in section.lower(), "Arguments section must say to WAIT on empty $ARGUMENTS"
     assert "menu" in section.lower(), "Arguments section must print the subcommand menu on empty $ARGUMENTS"
