@@ -299,6 +299,14 @@ def main() -> int:
         n = wire_up_settings(workspace=workspace)
         target = workspace / ".claude" / "settings.json"
         print(f"OK: kunglao-agent hooks wired into {target} ({n} entries)")
+        # #454: wiring != activation — the wired line must never read as
+        # armed. Wired hooks are DORMANT by design (v1.9.7 default-inactive:
+        # no .hook_state.json -> hooks sleep); activation is orchestrator-
+        # owned (Phase 0) and short-lived (TTL renewed by --renew).
+        print(f"NOTE: hooks wired but dormant — activation is orchestrator-"
+              f"owned (Phase 0, --tier/--set-active) with a "
+              f"{DEFAULT_TTL_MINUTES}-min TTL renewed by --renew; "
+              f"no .hook_state.json -> hooks sleep")
         return 0
 
     if args.heartbeat_on:

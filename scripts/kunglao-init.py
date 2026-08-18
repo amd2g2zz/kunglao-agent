@@ -111,6 +111,9 @@ import toolchain_install  # noqa: E402
 # F6 (#304 review): init-completeness predicate = single source in init_state.py
 from init_state import VALID_TYPES, is_init_complete, read_project_type  # noqa: E402
 import mcp_probe  # noqa: E402  (#316: MCP supply manifest/scaffold single source of truth)
+# #454: wiring≠activation — the hooks-deployed output names the activation
+# TTL window from the single source (never a second hardcoded 30).
+from hook_activation import DEFAULT_TTL_MINUTES as HOOK_TTL_MINUTES  # noqa: E402
 # #362: CLAUDE.md renders through the shared {{param}} engine (single
 # rendering system with scripts/template_gen.py — leftover detection included)
 import template_render  # noqa: E402
@@ -884,6 +887,14 @@ def initialize(ws: Path, hooks_json: Path | None,
     print(f"kunglao-init: state_hash={digest}")
     if hook_report["deployed"]:
         print(f"kunglao-init: hooks -> {hook_report['target']} ({hook_report['added']} entries, idempotent)")
+        # #454: wiring != activation — wired hooks are DORMANT by design
+        # (v1.9.7 default-inactive: no .hook_state.json -> hooks sleep). The
+        # wired line must never read as armed: activation is orchestrator-
+        # owned (Phase 0) and short-lived (TTL renewed by --renew).
+        print(f"kunglao-init: hooks wired but dormant — activation is "
+              f"orchestrator-owned (Phase 0, hook_activation.py --tier/--set-active) "
+              f"with a {HOOK_TTL_MINUTES}-min TTL renewed by --renew; "
+              f"no .hook_state.json -> hooks sleep")
     else:
         print(f"kunglao-init: hooks skipped — {hook_report['reason']}")
     return RC_OK

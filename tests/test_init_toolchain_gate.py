@@ -432,6 +432,16 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     monkeypatch.setenv("GHIDRA_HOME", str(ghidra_home))
     monkeypatch.delenv("KUNGLAO_VM_HOST", raising=False)
 
+    # #454: isolate the MCP registry — _check_decompiler is MCP-first and a
+    # machine with a user-global mcp:ghidra registration would short-circuit
+    # to `decompiler via MCP (ghidra)`, hiding the independent ghidra CLI
+    # item this test pins. Inject an EMPTY user registry (KUNGLAO_CLAUDE_JSON
+    # is mcp_probe.claude_json_path's documented test override); the
+    # workspace surface is already isolated (fresh tmp ws, no .mcp.json).
+    isolated_registry = tmp_path / "isolated-claude.json"
+    isolated_registry.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(isolated_registry))
+
     # PATH with the host tools so binutils/pefile-style probes are satisfiable
     empty = tmp_path / "empty-bin"
     empty.mkdir()
@@ -444,6 +454,33 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     assert ghidra.status == tc.Status.PASS, \
         f"platform-correct analyzeHeadless must PASS the ghidra check on this host: {ghidra}"
     assert platform_paths.analyze_headless_name() in ghidra.detail
+
+
+# ---------- #454: test isolation from the REAL user MCP registry ----------
+
+def test_platform_headless_isolated_from_user_global_ghidra_registration(
+        tmp_path, monkeypatch):
+    """#454 regression: on a machine whose user-level registry carries a
+    GLOBAL mcp:ghidra registration, the platform-headless test must still
+    walk its expected path (independent `ghidra` CLI item PASSes) — the test
+    must be isolated from the real user registry instead of assuming one.
+
+    Simulates the hostile machine deterministically (KUNGLAO_CLAUDE_JSON ->
+    fake registry with mcpServers.ghidra) and calls the target test as a
+    function: without in-test isolation, _check_decompiler is MCP-first, the
+    fake global registration short-circuits to `decompiler via MCP (ghidra)`
+    and the target test's "ghidra check missing" assertion raises."""
+    import json
+    hostile_root = tmp_path / "hostile-home"
+    hostile_root.mkdir()
+    fake_registry = hostile_root / ".claude.json"
+    fake_registry.write_text(json.dumps(
+        {"mcpServers": {"ghidra": {"type": "stdio", "command": "bridge.exe"}}}),
+        encoding="utf-8")
+    monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(fake_registry))
+    # Inner isolation (inside the target test) must override this outer
+    # hostile registry — same MonkeyPatch instance, LIFO undo at teardown.
+    test_init_gate_resolves_platform_headless(hostile_root, monkeypatch)
 
 
 def test_run_hard_fail_non_tty_without_assume_yes_refuses(tmp_path, monkeypatch):
