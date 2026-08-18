@@ -50,8 +50,14 @@ or, manually (the clone carries its pinned environment; first use in Claude Code
 
 ```bash
 git clone https://github.com/amd2g2zz/kunglao-agent.git ~/.claude/skills/kunglao-agent
-cp agents/kunglao-worker.md agents/kunglao-redteam.md ~/.claude/agents/
 ```
+
+`kunglao-init` deploys the workspace-level engineering environment itself
+(#478): hooks (`<ws>/.claude/settings.json`, created when absent — the old
+deadlock where a missing file silently skipped deployment is gone), the core
+subagents (`<ws>/.claude/agents/`: kunglao-worker / kunglao-redteam /
+kunglao-init-worker), and an `env-manifest.yaml` deployment ledger. The
+legacy manual `cp agents/*.md ~/.claude/agents/` step is no longer needed.
 
 ### 2. Initialize a workspace
 

@@ -148,6 +148,18 @@ import yaml  # noqa: E402  # #455: task_spec.yaml -> CLAUDE.md constraint sectio
 MARKER = "[initialized]"
 SEED_MIN = 3
 HOOK_FILES = ("worker_budget.py",)  # DESIGN §7 0.3: PreToolUse + PostToolUse → worker_budget
+
+# #478 deploy_env — the workspace engineering-environment layer (L1 hooks /
+# L2 subagents / L3 MCP record / L4 skills). CORE_AGENTS deploy for every
+# type; RE specialists stay orchestrator-dispatched (their routing table
+# moved into routing, #135), never workspace-copied. AGENTS_SRC/SKILLS_SRC
+# are the REPO's own tracked dirs — a workspace copy is the user's runtime
+# artifact.
+CORE_AGENTS = ("kunglao-worker.md", "kunglao-redteam.md",
+               "kunglao-init-worker.md")
+AGENTS_SRC = _SCRIPT_DIR.parent / "agents"
+SKILLS_SRC = _SCRIPT_DIR.parent / "skills"
+ENV_MANIFEST = "env-manifest.yaml"
 HASH_RE = re.compile(r"state_hash=([0-9a-f]{64})")
 
 # #367: review-gate pre-commit template + its install-time key placeholder.
@@ -246,6 +258,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="install the review-gate pre-commit hook (#367): copy "
                              ".claude/git-hooks/pre-commit to .git/hooks/pre-commit with "
                              "this user's key path stamped in place of the placeholder")
+    parser.add_argument("--no-hooks", action="store_true",
+                        help="#478: skip hook deployment entirely (the ONLY "
+                             "legal hooks skip; default deploys "
+                             "<ws>/.claude/settings.json + self-check)")
+    parser.add_argument("--skills", metavar="A,B", default=None,
+                        help="#478: deploy auxiliary skills (comma-separated "
+                             "names under skills/) to <ws>/.claude/skills/ — "
+                             "pure opt-in, nothing installed without the flag")
     parser.add_argument("--assume-yes", action="store_true",
                         help="#408: consent to every ask-then-install prompt "
                              "(CI/headless; non-interactive stdin declines by default)")
@@ -1160,6 +1180,170 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
             "selfcheck": selfcheck}
 
 
+def _deploy_agents(ws: Path) -> list[dict]:
+    """#478 L2: copy CORE_AGENTS repo -> <ws>/.claude/agents/, sha256-guarded.
+
+    Idempotent: target hash == source hash -> unchanged; differs -> update
+    (the repo source is the truth); absent -> create. Returns the manifest
+    component entries. Copy failures raise (OSError) — the caller maps to
+    RC_ERROR (fail fast, never a half-deployed agents dir).
+    """
+    import yaml as _yaml  # already module-level; local name for clarity
+    comps: list[dict] = []
+    dst_dir = ws / ".claude" / "agents"
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    for name in CORE_AGENTS:
+        src = AGENTS_SRC / name
+        if not src.is_file():
+            raise RuntimeError(
+                f"#478 L2: core agent source missing: {src} "
+                f"(repo layout defect — agents/ must carry {CORE_AGENTS})")
+        dst = dst_dir / name
+        digest = hashlib.sha256(src.read_bytes()).hexdigest()
+        status = "unchanged"
+        if not dst.exists() or hashlib.sha256(dst.read_bytes()).hexdigest() != digest:
+            atomic_write(dst, src.read_text(encoding="utf-8"))
+            status = "deployed"
+        comps.append({
+            "name": f"agent:{name.removesuffix('.md')}",
+            "path": f".claude/agents/{name}",
+            "sha256": digest,
+            "status": status,
+        })
+    return comps
+
+
+def _deploy_skills(ws: Path, skills: list[str] | None) -> dict:
+    """#478 L4: pure opt-in skill deployment (`--skills a,b`).
+
+    Copies <repo>/skills/<name>/ -> <ws>/.claude/skills/<name>/ recursively.
+    No flag -> nothing installed. Unknown name -> ValueError (caller maps
+    to RC_ERROR with the valid-names list — fail fast on typo'd flags).
+    Returns the manifest component entry.
+    """
+    dst_root = ws / ".claude" / "skills"
+    if not skills:
+        return {"name": "skills", "path": ".claude/skills/",
+                "status": "none", "detail": "opt-in (--skills a,b)"}
+    valid = sorted(d.name for d in SKILLS_SRC.iterdir() if d.is_dir())
+    unknown = [s for s in skills if s not in valid]
+    if unknown:
+        raise ValueError(
+            f"unknown --skills name(s): {', '.join(unknown)} "
+            f"(available: {', '.join(valid)})")
+    for name in skills:
+        src = SKILLS_SRC / name
+        dst = dst_root / name
+        if dst.exists():
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst)
+    return {"name": "skills", "path": ".claude/skills/",
+            "status": f"deployed({','.join(skills)})"}
+
+
+def _record_mcp(ws: Path, project_type: str) -> list[dict]:
+    """#478 L3: probe MCP supply via the SINGLE enumeration
+    (mcp_probe.registered_names / check_mcp — reused, never copied) and
+    RECORD the state. Registration is NEVER executed by init: the manifest
+    register commands carry <path>/<ida-url> placeholders only a human can
+    fill, and a broken auto-registration would shadow a working user-level
+    one (the exact hazard the empty-scaffold rule avoids). Interactive
+    consent (auto-register / custom path / skip) is #451's channel.
+    Degradation is WARN: recorded in the manifest + named on stderr —
+    never silent, never a FAIL RC (#474: registered != usable).
+
+    #478 review MEDIUM-1: ws must be passed explicitly — `Path(".")` made
+    the workspace-level .mcp.json lookup depend on process cwd (workspace
+    registrations were missed whenever init ran from another directory).
+    """
+    found = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+    comps: list[dict] = []
+    for check in mcp_probe.check_mcp(ws, project_type):
+        if check.status == "PASS":
+            comps.append({"name": f"mcp:{check.name}", "status": "pass",
+                          "detail": check.detail})
+            continue
+        comps.append({
+            "name": f"mcp:{check.name}", "status": "manual",
+            "tier": check.tier,
+            "detail": f"not registered — register: {check.fix}",
+        })
+        print(f"kunglao-init: mcp {check.tier}-missing {check.name} — "
+              f"manual registration recorded in {ENV_MANIFEST} "
+              f"(fix: {check.fix})", file=sys.stderr)
+    return comps
+
+
+def deploy_env(ws: Path, project_type: str, hooks_json: Path | None = None,
+               no_hooks: bool = False, skills: list[str] | None = None,
+               plugin_mode: bool = False) -> dict:
+    """#478: the workspace engineering-environment layer — L1 hooks /
+    L2 subagents / L3 MCP record / L4 skills + the env-manifest ledger.
+
+    Uniform contract per component: 落位 + probe 验证 + 登记 env manifest +
+    降级明示. Returns a report {"hook_report", "manifest"}; hook failures
+    surface through hook_report (the #445 RC_HOOK_WIRING channel — deploy
+    failure is hook-wiring failure, no new RC). plugin_mode=True is the
+    #364 seam: a plugin's hooks.json declares L1/L2, so init skips them
+    (behavior locked by test; no plugin form implemented here).
+    """
+    components: list[dict] = []
+    hook_report: dict = {"deployed": False,
+                         "reason": "--no-hooks (explicit opt-out)"}
+    if plugin_mode:
+        # #364 seam: L1/L2 belong to the plugin declaration — skipped.
+        hook_report = {"deployed": False,
+                       "reason": "plugin_mode (#364 seam: hooks.json owns L1/L2)"}
+        components.append({"name": "hooks", "status": "skipped",
+                           "detail": hook_report["reason"]})
+        components.append({"name": "agents", "status": "skipped",
+                           "detail": hook_report["reason"]})
+    elif no_hooks:
+        components.append({"name": "hooks", "status": "skipped",
+                           "detail": "--no-hooks (explicit opt-out)"})
+        components.extend(_deploy_agents(ws))
+    else:
+        # L1: create-then-deploy — the #478 deadlock fix. The scaffold
+        # never created .claude/, deploy_hooks required it to exist, so the
+        # default path ALWAYS skipped. Absence is no longer a legal default:
+        # create the minimal file, then deploy through the #445 canonical
+        # path (construction + self-check unchanged).
+        settings = ws / ".claude" / "settings.json"
+        if hooks_json is None and not settings.exists():
+            settings.parent.mkdir(parents=True, exist_ok=True)
+            atomic_write(settings, json.dumps({"hooks": {}}, indent=2))
+        hook_report = deploy_hooks(ws, hooks_json)
+        if hook_report.get("deployed"):
+            components.append({
+                "name": "hooks", "path": ".claude/settings.json",
+                "sha256": hashlib.sha256(
+                    Path(hook_report["target"]).read_bytes()).hexdigest(),
+                "status": "deployed",
+                "detail": f"selfcheck ok={hook_report['selfcheck'].get('ok')}",
+            })
+        else:
+            components.append({"name": "hooks", "status": "skipped",
+                               "detail": hook_report.get("reason", "?")})
+        components.extend(_deploy_agents(ws))
+    components.extend(_record_mcp(ws, project_type))
+    try:
+        components.append(_deploy_skills(ws, skills))
+    except ValueError as exc:
+        # fail fast AFTER recording the rest — but the run is RC_ERROR; the
+        # caller re-raises via the report.
+        return {"hook_report": hook_report, "manifest": None,
+                "skills_error": str(exc)}
+    manifest = {
+        "generated": utc_now(),
+        "project_type": project_type,
+        "components": components,
+    }
+    atomic_write(ws / ENV_MANIFEST,
+                 yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True))
+    return {"hook_report": hook_report, "manifest": manifest,
+            "skills_error": None}
+
+
 def backup_register(path: Path) -> Path:
     """Back up claim-register before a --force rebuild (E-init.4): claim-register.yaml.bak-<ts>."""
     ts = utc_now().replace(":", "-")
@@ -1252,7 +1436,10 @@ def initialize(ws: Path, hooks_json: Path | None,
                 project_type: str | None = None, no_mcp: bool = False,
                 created: "Collection[Path] | None" = None,
                 target: str | None = None,
-                target_object: str | None = None) -> int:
+                target_object: str | None = None,
+                no_hooks: bool = False,
+                skills: "list[str] | None" = None,
+                plugin_mode: bool = False) -> int:
     """Phase 2 fresh initialization + Phase 3 idempotency verify.
 
     Returns the exit code (0 success / RC_FATAL_VERIFY verify-failure).
@@ -1295,7 +1482,16 @@ def initialize(ws: Path, hooks_json: Path | None,
     if MARKER not in written or seed_count < SEED_MIN:
         print("kunglao-init: FATAL verify failed — marker or seeds missing after init", file=sys.stderr)
         return RC_FATAL_VERIFY
-    hook_report = deploy_hooks(ws, hooks_json)
+    # #478 deploy_env: the engineering-environment layer (hooks/agents/
+    # mcp-record/skills + env-manifest ledger). Hook failures keep the #445
+    # channel (RC_HOOK_WIRING); agents/skills copy failures are RC_ERROR.
+    env_report = deploy_env(ws, project_type, hooks_json=hooks_json,
+                            no_hooks=no_hooks, skills=skills,
+                            plugin_mode=plugin_mode)
+    if env_report.get("skills_error"):
+        print(f"kunglao-init: ERROR {env_report['skills_error']}", file=sys.stderr)
+        return RC_ERROR
+    hook_report = env_report["hook_report"]
     rc = hook_deploy_rc(hook_report)  # #445: self-check mismatch FAILs init
     if rc != RC_OK:
         print(f"kunglao-init: hooks selfcheck FAILED — "
@@ -1317,7 +1513,7 @@ def initialize(ws: Path, hooks_json: Path | None,
               f"with a {HOOK_TTL_MINUTES}-min TTL renewed by --renew; "
               f"no .hook_state.json -> hooks sleep")
     else:
-        print(f"kunglao-init: hooks skipped — {hook_report['reason']}")
+        print(f"kunglao-init: hooks skipped — {hook_report['reason']}")  # reachable ONLY via --no-hooks / plugin seam (#478)
     return RC_OK
 
 
@@ -1328,7 +1524,10 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         install_git_hooks_flag: bool = False,
         assume_yes: bool = False,
         target: str | None = None,
-        answers: dict[str, str] | None = None) -> int:
+        answers: dict[str, str] | None = None,
+        no_hooks: bool = False,
+        skills: list[str] | None = None,
+        plugin_mode: bool = False) -> int:
     """State-machine entry (#304 amended flow, comment 304-5289955958;
     #455 target alignment as intake step 0):
 
@@ -1489,7 +1688,9 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     try:
         return initialize(ws, hooks_json, project_type=project_type,
                           no_mcp=no_mcp, created=created,
-                          target=target_name, target_object=target_object)
+                          target=target_name, target_object=target_object,
+                          no_hooks=no_hooks, skills=skills,
+                          plugin_mode=plugin_mode)
     except template_render.TemplateRenderError as exc:
         removed, preserved = cleanup_scaffold(ws, created=created)
         print(f"kunglao-init: TEMPLATE DEFECT — {exc}", file=sys.stderr)
@@ -1590,13 +1791,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"kunglao-init: ERROR --resolve {args.resolve}: {exc}",
                   file=sys.stderr)
             return RC_ERROR
+    skills = ([s.strip() for s in args.skills.split(",") if s.strip()]
+              if args.skills else None)
     return run(Path(args.workspace) if args.workspace else None,
                force=args.force, hooks_json=args.hooks_json,
                profile_root=args.profile_root, project_type=args.type,
                skip_toolchain=args.skip_toolchain, no_mcp=args.no_mcp,
                install_git_hooks_flag=args.install_git_hooks,
                assume_yes=args.assume_yes,
-               target=args.target, answers=answers)
+               target=args.target, answers=answers,
+               no_hooks=args.no_hooks, skills=skills)
 
 
 if __name__ == "__main__":

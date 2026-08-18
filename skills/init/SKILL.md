@@ -43,8 +43,17 @@ analysis; a workspace that is not initialized is refused work.
    VM channel). Hard failures report root-cause guidance; the
    ask-then-install flow runs only under `--assume-yes` (stdin is not a user
    channel).
-7. **Activate hooks** — register the hook set via
-   `python <SKILL_DIR>/scripts/hook_activation.py <workspace> --wire-up`.
+7. **Deploy the engineering environment** (#478) — init itself deploys
+   hooks (creates `<ws>/.claude/settings.json` when absent, then registers
+   + self-checks; `--no-hooks` is the only skip), copies the core 3
+   subagents to `<ws>/.claude/agents/`, records the MCP supply state in
+   `env-manifest.yaml` (missing registrations become MANUAL entries with
+   their register command — init never runs `claude mcp add` itself), and
+   writes the deployment ledger. `--skills a,b` opts into auxiliary skill
+   deployment. Activation (which hooks FIRE) stays a separate
+   orchestrator act:
+   `python <SKILL_DIR>/scripts/hook_activation.py <workspace> --wire-up`
+   remains the canonical re-registration/repair entry (#445).
 
 Repeat init on an existing workspace resumes idempotently from
 `analysis_state.txt` + `claim-register.yaml` — never rebuild or overwrite.
@@ -53,7 +62,8 @@ The workspace path is a positional argument (omitted -> pending decision).
 `--type` selects the project type: `windows` | `linux` | `android` (no
 default — an undecided type pends, exit 8). `--target NAME` names the
 analysis target under `bins/`; containers additionally resolve
-`target_object`.
+`target_object`. `--no-hooks` skips hook deployment (the only legal skip);
+`--skills a,b` deploys named auxiliary skills (opt-in, default none).
 
 ## No arguments
 
