@@ -17,21 +17,24 @@ Design (openspec/archive/drift-detection/design.md D1-D3):
      excluded (derivable as len(open_ids)).
   D2 rotation counting: bounded tail read (window tracks the thresholds),
      corrupt rows skipped — a corrupt ledger line never crashes the gate.
-  D3 workers_progressing: scan targets mirror
-     convergence_check._scan_active_workers (main runs/ + .wt-*/ worktree
-     runs/, last `status:` line decides); freshness flips the stuck rule.
+  D3 workers_progressing: parsing + scan targets come from the canonical
+     worker-liveness protocol (hooks/lib_kunglao.iter_worker_states, #444 —
+     main runs/ + .wt-*/ worktree runs/, last `status:` token decides);
+     freshness flips the stuck rule.
 
 Sibling of hooks/lib_kunglao.py — the scripts namespace and the hooks
 namespace are separate sys.path domains (each script runs with its own
-directory at sys.path[0]); the repo convention is byte-for-byte mirrors
-across the boundary, not cross-imports.
+directory at sys.path[0]). hooks/lib_kunglao.py owns the worker-status
+protocol (#444 single parse point); this module loads it by path under the
+unique name lib_kunglao_hooks (the external_kicker.should_kick precedent —
+a bare `import lib_kunglao` is ambiguous because this file shares the name).
 
 Pure stdlib. Pure functions, no state.
 """
 from __future__ import annotations
 
 import json
-import re
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -47,7 +50,25 @@ LEDGER_FILE = ".convergence_ledger.jsonl"
 _SIGNATURE_FIELDS = ("decision", "open_ids", "partial_count",
                      "active_workers", "blockers", "facts_total")
 
-_STATUS_RE = re.compile(r"status:\s*(\S+)")
+def _worker_protocol():
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), loaded
+    by path under the unique name lib_kunglao_hooks. Raises on a missing file
+    (broken install — loud, never a silent local-copy fallback that would
+    resurrect the double representation this consolidates)."""
+    import importlib.util
+    name = "lib_kunglao_hooks"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        if not path.exists():
+            raise RuntimeError(
+                f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
+                "ship together; reinstall the kunglao-agent skill")
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
+    return lib
 
 
 def _tail_signatures(ws: Path, window: int) -> list[tuple]:
@@ -109,50 +130,19 @@ def workers_progressing(ws, now: datetime | None = None,
     than ROTATION_WINDOW while workers grind. A freshly-written in-progress
     status file is mechanical evidence of movement (D3).
 
-    Scan targets mirror convergence_check._scan_active_workers: workspace
-    runs/ PLUS every .wt-*/ with .kunglao-worktree marker worktree dir
-    (v1.9.13 worktree isolation); the LAST `status:` line decides (lowercased);
-    only `in-progress` counts; mtime YOUNGER than fresh_minutes. OSError on
-    glob/read/stat skips that file.
+    Parsing + scan targets are the canonical worker-liveness protocol
+    (hooks/lib_kunglao.iter_worker_states, #444 — the exact scan the
+    convergence decision uses: workspace runs/ PLUS every .wt-*/ with
+    .kunglao-worktree marker worktree dir, v1.9.13 worktree isolation, last
+    `status:` token decides); only `in-progress` counts; mtime YOUNGER than
+    fresh_minutes. OSError on glob/read/stat skips that file (protocol-level).
     """
     if now is None:
         now = datetime.now(tz=timezone.utc)
     cutoff = now - timedelta(minutes=fresh_minutes)
-    ws = Path(ws)
-    dirs = [ws / "runs"]
-    try:
-        for wt in ws.parent.glob(".wt-*/.kunglao-worktree"):
-            runs_dir = wt.parent / "malware-analysis-workspace" / "runs"
-            if runs_dir.exists():
-                dirs.append(runs_dir)
-    except OSError:
-        pass
-    for runs in dirs:
-        if not runs.exists():
-            continue
-        try:
-            files = list(runs.glob("worker-status-*.md"))
-        except OSError:
-            continue
-        for p in files:
-            try:
-                text = p.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            last_status = None
-            for line in text.splitlines():
-                m = _STATUS_RE.search(line)
-                if m:
-                    last_status = m.group(1).lower()
-            if last_status != "in-progress":
-                continue
-            try:
-                mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
-            except OSError:
-                continue
-            if mtime > cutoff:
-                return True
-    return False
+    states = _worker_protocol().iter_worker_states(Path(ws))
+    return any(s["status"] == "in-progress" and s["mtime"] > cutoff
+               for s in states)
 
 
 def drift_detected(ws) -> bool:

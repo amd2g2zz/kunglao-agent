@@ -7,7 +7,7 @@ This script reads claim-register.yaml and emits a compact, scannable
 progress report:
   - Total claims
   - Status breakdown (OPEN / IN_PROGRESS / STALE / terminal)
-  - Open workers (count of worker-status-*.md with in_progress)
+  - Open workers (in-progress count from the canonical liveness protocol)
   - Active blockers (after stale-blocker prune)
   - C0-C7 status (read from converge-checklist.md if exists)
   - Last activity timestamp
@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -27,6 +28,29 @@ from pathlib import Path
 import yaml
 
 from status_defs import TERMINAL as TERMINAL_STATUSES
+
+
+def _worker_protocol():
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
+    path under the unique name lib_kunglao_hooks (bare `import lib_kunglao`
+    is ambiguous under pytest — scripts/lib_kunglao.py shares the name).
+    Review F-1: this module previously counted active workers by SUBSTRING
+    presence ("in-progress" in text), which counts every normally-completed
+    worker (its append-only file keeps historical in-progress lines) as
+    active — the exact double representation #444 removes."""
+    name = "lib_kunglao_hooks"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        if not path.exists():
+            raise RuntimeError(
+                f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
+                "ship together; reinstall the kunglao-agent skill")
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
+    return lib
 
 
 def utc_now() -> datetime:
@@ -45,22 +69,16 @@ def report(workspace: Path) -> int:
         s = (c.get("status") or "UNKNOWN").upper()
         by_status[s] = by_status.get(s, 0) + 1
 
-    runs_dir = workspace / "runs"
-    active_workers = 0
-    stuck_workers = 0
-    if runs_dir.exists():
-        cutoff_age = timedelta(minutes=20)
-        now = utc_now()
-        for p in runs_dir.glob("worker-status-*.md"):
-            try:
-                text = p.read_text(encoding="utf-8", errors="replace")
-                if "in-progress" in text.lower():
-                    active_workers += 1
-                mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
-                if (now - mtime) > cutoff_age:
-                    stuck_workers += 1
-            except OSError:
-                continue
+    # Worker liveness from the canonical protocol (#444, review F-1): last
+    # `status:` token wins over both line shapes, main runs/ + .wt-*
+    # worktrees. `stuck` keeps its pre-F-1 advisory semantics: any status
+    # file older than 20 min is "potentially stuck" (label says potentially —
+    # mtime only, not the canonical active+stale rule).
+    states = _worker_protocol().iter_worker_states(Path(workspace))
+    active_workers = sum(1 for s in states if s["status"] == "in-progress")
+    cutoff_age = timedelta(minutes=20)
+    now = utc_now()
+    stuck_workers = sum(1 for s in states if (now - s["mtime"]) > cutoff_age)
 
     blockers_dir = workspace / "blockers"
     active_blockers = 0

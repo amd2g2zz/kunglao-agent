@@ -51,7 +51,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import time
 from collections import Counter
@@ -63,9 +62,23 @@ try:
 except (AttributeError, ValueError):
     pass
 
-STATUS_RE = re.compile(r"status:\s*(\S+)")
+def _worker_protocol():
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
+    path under the unique name lib_kunglao_hooks (bare `import lib_kunglao`
+    is ambiguous under pytest — scripts/lib_kunglao.py shares the name)."""
+    import importlib.util
+    name = "lib_kunglao_hooks"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
+    return lib
 
-# real worker heartbeat convention: convergence_check.STUCK_MINUTES = 20
+
+# real worker heartbeat convention: lib_kunglao.STUCK_MINUTES = 20 (#444)
 STUCK_SECONDS = 20 * 60
 
 # ---------------------------------------------------------------------------
@@ -208,29 +221,28 @@ def _worker_events(ws: Path) -> list[str]:
     """Classify worker status files by the REAL contract:
 
     - append-only log lines ("[HH:MM] step: ... | status: in-progress" or a
-      dedicated "status: done" line — both shapes per worker_pulse:67)
+      dedicated "status: done" line — both shapes are the protocol)
     - FIRST status line == in-progress -> worker_started (the worker contract's
       opening line is literally "step: started ...")
-    - LAST status line wins (lib_kunglao): in-progress -> step (fresh) or
-      stuck (heartbeat stale > STUCK_SECONDS); done -> completed;
-      blocked -> failed
+    - LAST status line wins (lib_kunglao protocol, #444): in-progress ->
+      step (fresh) or stuck (heartbeat stale > STUCK_SECONDS); done ->
+      completed; blocked -> failed
     """
     runs = ws / "runs"
     if not runs.is_dir():
         return []
     now = time.time()
     out: list[str] = []
+    parse_tokens = _worker_protocol().parse_worker_status_tokens
     for p in sorted(runs.glob("worker-status-*.md")):
         try:
-            text = p.read_text(encoding="utf-8", errors="replace")
+            tokens = parse_tokens(p.read_text(encoding="utf-8", errors="replace"))
             mtime = p.stat().st_mtime
         except OSError:
             continue
-        statuses = [m.group(1).strip().lower() for line in text.splitlines()
-                    if (m := STATUS_RE.search(line))]
-        if not statuses:
+        if not tokens:
             continue
-        first, last = statuses[0], statuses[-1]
+        first, last = tokens[0], tokens[-1]
         if first == "in-progress":
             out.append(WORKER_STARTED)
         if last == "in-progress":

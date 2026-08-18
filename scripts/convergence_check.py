@@ -41,7 +41,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -54,7 +54,6 @@ from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES
 from retract_claim import RETRACTED, TERMINAL_WITH_RETRACTED
 
 WORKER_CAP = 3
-STUCK_MINUTES = 20
 
 # Exit codes
 EXIT_CONVERGED = 0
@@ -80,55 +79,64 @@ def _resolve_ws(arg) -> Path:
     return sub if (sub / "claim-register.yaml").exists() else cwd
 
 
-def _scan_active_workers(workspace: Path):
-    """Count in-flight + stuck workers from runs/worker-status-*.md.
+def _load_worker_lib():
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444).
 
-    v1.9.13 (worktree isolation): worker state lives in EACH worker's git
-    worktree (.wt-*/ with .kunglao-worktree marker/), NOT the main workspace
-    (merged status files are removed from the main tree). Scan the main
-    workspace runs/ PLUS every .wt-*/ worktree runs/ dir.
+    Parsing of runs/worker-status-*.md (last ``status:`` token wins), the
+    .wt-* worktree scan targets, and the W-15 done-artifact check live only
+    there; this module is a consumer. By-path under the unique name
+    ``lib_kunglao_hooks`` (the external_kicker.should_kick /
+    state_anchor._load_drift_lib precedent): bare ``import lib_kunglao`` is
+    ambiguous under pytest (pythonpath = . hooks scripts — hooks first)
+    because scripts/lib_kunglao.py (drift lib) shares the name. All
+    scripts-side consumers use the SAME name, so one process shares one
+    module instance.
 
-    Status files are append-only logs ("[ts] step: ... | status: in-progress"
-    ... "| status: done") — a worker is ACTIVE only if its LAST status line
-    is in-progress. Files whose last status is done/blocked (or that contain
-    no status line) are NOT counted, even if earlier lines say in-progress
-    (worktree snapshots carry historical files from HEAD).
+    Load failure raises instead of falling back to a local copy — a silent
+    fallback would resurrect the exact double-representation this change
+    removes (#444 AC-1). hooks/ and scripts/ ship together in one skill
+    install; a missing file means a broken install, not a degraded mode.
     """
-    import re as _re
-    _status_line = _re.compile(r"status:\s*(\S+)")
-    dirs = [workspace / "runs"]
-    try:
-        for wt in workspace.parent.glob(".wt-*/.kunglao-worktree"):
-            runs_dir = wt.parent / "malware-analysis-workspace" / "runs"
-            if runs_dir.exists():
-                dirs.append(runs_dir)
-    except OSError:
-        pass
-    active = 0
-    stuck = []
-    cutoff = timedelta(minutes=STUCK_MINUTES)
-    now = utc_now()
-    for runs in dirs:
-        if not runs.exists():
-            continue
-        for p in runs.glob("worker-status-*.md"):
-            try:
-                text = p.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            # last status line decides activity
-            last_status = None
-            for line in text.splitlines():
-                m = _status_line.search(line)
-                if m:
-                    last_status = m.group(1).lower()
-            if last_status != "in-progress":
-                continue
-            active += 1
-            mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
-            if (now - mtime) > cutoff:
-                stuck.append({"worker": p.stem, "age_min": int((now - mtime).total_seconds() // 60)})
-    return active, stuck
+    import importlib.util
+    name = "lib_kunglao_hooks"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        if not path.exists():
+            raise RuntimeError(
+                f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
+                "ship together; reinstall the kunglao-agent skill")
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
+    return lib
+
+
+def _scan_workers(workspace: Path):
+    """(active, stuck, done_artifact_violations) via the canonical protocol.
+
+    One iter_worker_states pass feeds both aggregates (single read per status
+    file). Semantics unchanged from the pre-#444 inline scan: active = last
+    status token is in-progress; stuck = active + older than
+    lib.STUCK_MINUTES; v1.9.13 worktree isolation (.wt-*/ with
+    .kunglao-worktree marker) included. NEW: W-15 done-artifact violations
+    (design #444 D3 — diagnostic only, never a decision branch).
+    """
+    lib = _load_worker_lib()
+    states = lib.iter_worker_states(workspace)
+    active, stuck = lib.scan_active_workers(workspace, states)
+    return active, stuck, lib.scan_done_artifact_violations(workspace, states)
+
+
+def _scan_active_workers(workspace: Path):
+    """(active, stuck) — thin delegator to the protocol owner.
+
+    Kept as a named function because tests/test_worktree_marker.py imports it
+    directly. Pre-#444 this was the inline parse (representation A of the
+    #444 double-representation); now hooks/lib_kunglao.py owns the parse.
+    """
+    return _scan_workers(workspace)[:2]
 
 
 def _open_claims(reg: dict):
@@ -499,7 +507,7 @@ def decide(workspace: Path) -> dict:
 
     opens = _open_claims(reg)
     partials = _partial_facts(workspace)
-    active, stuck = _scan_active_workers(workspace)
+    active, stuck, done_violations = _scan_workers(workspace)
     free_slots = max(0, WORKER_CAP - active)
     blockers = _active_blockers(workspace)
     failure_blocked_ids = _failure_blocked(workspace)
@@ -623,6 +631,11 @@ def decide(workspace: Path) -> dict:
         "free_slots": free_slots,
         "worker_cap": WORKER_CAP,
         "stuck_workers": stuck,
+        # W-15 (#444): workers reporting done whose declared artifacts: files
+        # are missing / explicitly none. Diagnostic field — decision branches
+        # untouched (#443 owns decide() restructure). schema-safe:
+        # schemas/convergence-check-output.json additionalProperties: true.
+        "done_artifact_violations": done_violations,
         "active_blockers": blockers,
         # M2 completeness diagnostics
         "orphan_claims": orphans,
@@ -641,7 +654,11 @@ def _human(d: dict) -> str:
     lines.append(f"partial facts:  {d['partial_count']}")
     lines.append(f"workers:        {d['active_workers']}/{d['worker_cap']} active -> {d['free_slots']} free slot(s)")
     if d["stuck_workers"]:
-        lines.append(f"stuck (> {STUCK_MINUTES}m): {d['stuck_workers']}")
+        lines.append(f"stuck (> {_load_worker_lib().STUCK_MINUTES}m): {d['stuck_workers']}")
+    if d.get("done_artifact_violations"):
+        w15 = [f"{v['worker']} ({v['kind']}: {', '.join(v['missing']) or 'no files'})"
+               for v in d["done_artifact_violations"]]
+        lines.append(f"w15 (done without files): {'; '.join(w15)}")
     if d["active_blockers"]:
         lines.append(f"blockers:       {d['active_blockers']}")
     if d.get("failure_blocked"):

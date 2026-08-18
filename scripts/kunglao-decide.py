@@ -114,7 +114,8 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
          Schema: decision, exit_code, action, open_claims, open_count,
          unblocked_open_count, blocked_open_count, failure_blocked,
          partial_facts, partial_count, active_workers, free_slots,
-         worker_cap, stuck_workers, active_blockers, orphan_claims,
+         worker_cap, stuck_workers, done_artifact_violations (#444 W-15
+         diagnostic), active_blockers, orphan_claims,
          unverified_primary_qs, note_layer_gaps, pq_parse_error.
          Validated against convergence-check-output.json.
       2. kunglao-decide.decide() (this function) — composed M1 DecideOutput.

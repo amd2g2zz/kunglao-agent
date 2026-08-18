@@ -31,12 +31,29 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-STATUS_RE = re.compile(r"status:\s*(\S+)")
 CLAIM_RE = re.compile(r"claim\s*:?\s+([A-Za-z0-9][\w.-]*)")
 STEP_RE = re.compile(r"step\s*:?\s+(\S+)")
 LEDGER_NAME = ".convergence_ledger.jsonl"
 EVENT_LIMIT = 15
 TREND_LIMIT = 10
+
+
+def _worker_protocol():
+    """hooks/lib_kunglao.py — THE worker-status protocol owner (#444), by
+    path under the unique name lib_kunglao_hooks (bare `import lib_kunglao`
+    is ambiguous under pytest — scripts/lib_kunglao.py shares the name).
+    CLAIM_RE / STEP_RE below are display-only field extraction, not liveness
+    parsing, so they stay local."""
+    import importlib.util
+    name = "lib_kunglao_hooks"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
+    return lib
 
 
 def _bold(s: str, color: bool) -> str:
@@ -76,13 +93,16 @@ def _claims_board(ws: Path, color: bool) -> list[str]:
 def _worker_lines(ws: Path, color: bool) -> list[str]:
     """runs/worker-status-*.md → id / claim / step / status / heartbeat.
 
-    Reuses the lib_kunglao parsing contract: the LAST `status:` line decides
-    the worker's state; a missing status file is skipped, never fatal.
-    Heartbeat time = file mtime (the file is appended on every worker step).
+    Status comes from the canonical worker-liveness protocol
+    (hooks/lib_kunglao.parse_worker_status, #444): the LAST `status:` token
+    decides the worker's state; a missing status file is skipped, never
+    fatal. Heartbeat time = file mtime (the file is appended on every worker
+    step).
     """
     runs = ws / "runs"
     if not runs.is_dir():
         return ["  (no runs/)"]
+    parse_status = _worker_protocol().parse_worker_status
     out: list[str] = []
     for p in sorted(runs.glob("worker-status-*.md")):
         try:
@@ -91,11 +111,7 @@ def _worker_lines(ws: Path, color: bool) -> list[str]:
         except OSError:
             continue
         wid = p.stem.removeprefix("worker-status-")
-        status = None
-        for line in text.splitlines():
-            m = STATUS_RE.search(line)
-            if m:
-                status = m.group(1).lower()
+        status = parse_status(text)
         claim = CLAIM_RE.search(text)
         step = STEP_RE.search(text)
         row = (f"  {wid:<8} claim={claim.group(1) if claim else '-'}  "

@@ -120,7 +120,21 @@ wire_up_settings.derive_hook_subset(
     include=_KICKER_ENTRY_FILES, skip=_KICKER_SKIP_FILES,
     owner="external_kicker KUNGLAO_HOOK_ENTRIES")
 
-_STATUS_RE = re.compile(r"status:\s*(\S+)")
+def _worker_protocol():
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
+    path under the unique name lib_kunglao_hooks (same pattern as the
+    lib_kunglao_scripts loader in should_kick below: bare `import
+    lib_kunglao` is ambiguous under pytest)."""
+    import importlib.util
+    name = "lib_kunglao_hooks"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
+    return lib
 
 
 def utc_now() -> str:
@@ -280,25 +294,24 @@ def release_kick_lock(lock_path: Path) -> None:
 def has_fresh_workers(runs_dir: Path, fresh_minutes: int = FRESH_WORKER_MINUTES) -> bool:
     """D3: True when a worker status file is in-progress AND freshly written.
 
-    Mirrors lib_kunglao.scan_active_workers parsing (last `status:` line
-    decides; lowercased). Only files younger than `fresh_minutes` count — a
-    live session is mid-dispatch; a dead session's stale in-progress files
+    Parsing comes from the canonical worker-liveness protocol
+    (hooks/lib_kunglao.parse_worker_status, #444 — last `status:` token wins
+    over both line shapes). The single runs_dir scan target is this caller's
+    semantics (dead-session recovery inspects ONE session's runs dir, not the
+    .wt-* worktree fan-out). Only files younger than `fresh_minutes` count —
+    a live session is mid-dispatch; a dead session's stale in-progress files
     must NOT block recovery.
     """
     if not runs_dir.exists():
         return False
+    parse_status = _worker_protocol().parse_worker_status
     now = datetime.now(tz=timezone.utc)
     try:
         for p in runs_dir.glob("worker-status-*.md"):
             try:
-                text = p.read_text(encoding="utf-8", errors="replace")
+                last_status = parse_status(p.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
-            last_status = None
-            for line in text.splitlines():
-                m = _STATUS_RE.search(line)
-                if m:
-                    last_status = m.group(1).lower()
             if last_status != "in-progress":
                 continue
             mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
@@ -478,9 +491,9 @@ def _register_open_ids(ws: Path) -> list[str]:
 
 
 def _in_progress_workers(ws: Path) -> list[str]:
-    """Worker ids from runs/worker-status-*.md whose LAST status line is in-progress.
+    """Worker ids from runs/worker-status-*.md whose LAST status token is in-progress.
 
-    Same last-status rule as has_fresh_workers / _scan_active_workers; mtime
+    Same protocol parse as has_fresh_workers (hooks/lib_kunglao, #444); mtime
     is NOT a filter — the recovery prompt must surface the dead session's
     stale in-progress workers so the fresh session can reconcile them.
     """
@@ -491,17 +504,13 @@ def _in_progress_workers(ws: Path) -> list[str]:
         files = sorted(runs.glob("worker-status-*.md"))
     except OSError:
         return []
+    parse_status = _worker_protocol().parse_worker_status
     out = []
     for p in files:
         try:
-            text = p.read_text(encoding="utf-8", errors="replace")
+            last_status = parse_status(p.read_text(encoding="utf-8", errors="replace"))
         except OSError:
             continue
-        last_status = None
-        for line in text.splitlines():
-            m = _STATUS_RE.search(line)
-            if m:
-                last_status = m.group(1).lower()
         if last_status == "in-progress":
             out.append(p.stem.replace("worker-status-", ""))
     return out

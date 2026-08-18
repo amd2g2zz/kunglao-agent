@@ -92,57 +92,167 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
     return hook_name in hook_set or not hook_set
 
 
-# ---- active-worker scan (single source of truth, issue #37) ----
-# Byte-for-byte mirror of scripts/convergence_check.py:_scan_active_workers so the
-# worker_budget gate and the convergence decision share ONE count source. Do NOT
-# let these drift — a gate/decision count mismatch is the exact double-truth-source
-# bug issue #37 fixes (gate read the state cache while convergence read status files).
+# ---- worker-status protocol — THE single parse point (issue #37 → #444) ----
+# Wire format (agents/kunglao-worker.md rule #4; append-only log):
+#   "[ts] step: ... | status: in-progress"   (pipe-embedded)
+#   "status: done"                            (dedicated line)
+# Rule: the LAST `status:` token in the file wins. This module is the ONLY
+# place in the repo that implements this parse (#444 AC-1, enforced by
+# tests/test_worker_liveness_protocol.py). Every other module —
+# convergence_check, worker_pulse, scripts/lib_kunglao, external_kicker,
+# event_taxonomy, kunglao_status, reconcile_workers — is a CONSUMER via
+# parse_worker_status(_tokens) / scan_active_workers / iter_worker_states.
+# Pre-#444 these were byte-for-byte mirrors of
+# scripts/convergence_check.py:_scan_active_workers (the #37 approach); a
+# mirror is still two copies — #444 made this the one implementation and the
+# scripts side delegate (importlib by path, unique name lib_kunglao_hooks,
+# the external_kicker.should_kick precedent: bare `import lib_kunglao` is
+# ambiguous under pytest because scripts/lib_kunglao.py shares the name).
 
-STUCK_MINUTES = 20  # mirror scripts/convergence_check.py
+STUCK_MINUTES = 20
+
+WORKER_STATUS_RE = re.compile(r"status:\s*(\S+)")
+
+# W-15 artifact declarations (#444): workers list deliverable paths on
+# `artifacts:` lines (dedicated line OR pipe-embedded, both shapes legal —
+# same duality as the status token). `artifacts: none` is the explicit
+# zero-file declaration (a W-15 failure: files are the deliverable).
+ARTIFACTS_RE = re.compile(
+    r"(?:^|\|)\s*artifacts?\s*:\s*([^|\n]+)", re.IGNORECASE | re.MULTILINE)
+_NO_ARTIFACTS_MARKERS = frozenset({"none", "-", "(none)"})
 
 
-def scan_active_workers(workspace: Path) -> tuple[int, list]:
-    """Count active + stuck workers from runs/worker-status-*.md.
+def parse_worker_status_tokens(text: str) -> list[str]:
+    """All ``status:`` tokens in file order, lowercased.
 
-    Active = a worker whose LAST ``status:`` line is ``in-progress``. Scans the
-    workspace ``runs/`` dir plus every ``.wt-*/ with .kunglao-worktree marker``
-    worktree dir (v1.9.13 worktree isolation: worker state lives in each worker's
-    own worktree, not the main tree). Stuck = active files older than
-    STUCK_MINUTES. OSError on glob/read/stat skips that file.
-
-    Byte-for-byte mirror of scripts/convergence_check.py:_scan_active_workers.
+    Empty list = the file has no status line (not active, not delivered).
+    Consumers needing first-vs-last semantics (event_taxonomy worker_started)
+    read tokens[0]/tokens[-1]; liveness is always the LAST token.
     """
-    status_line = re.compile(r"status:\s*(\S+)")
-    dirs = [workspace / "runs"]
+    out = []
+    for line in text.splitlines():
+        m = WORKER_STATUS_RE.search(line)
+        if m:
+            out.append(m.group(1).lower())
+    return out
+
+
+def parse_worker_status(text: str) -> str | None:
+    """The liveness token: the LAST ``status:`` line wins (append-only log)."""
+    tokens = parse_worker_status_tokens(text)
+    return tokens[-1] if tokens else None
+
+
+def parse_declared_artifacts(text: str) -> list[str]:
+    """Declared deliverable paths from ``artifacts:`` lines
+    (comma/semicolon/whitespace separated, order preserved, deduped).
+    [] = legacy file without declarations (W-15-exempt, #444 migration compat).
+    """
+    out: list[str] = []
+    for m in ARTIFACTS_RE.finditer(text):
+        for tok in re.split(r"[,;\s]+", m.group(1).strip()):
+            if tok and tok not in out:
+                out.append(tok)
+    return out
+
+
+def iter_worker_states(workspace: Path) -> list[dict]:
+    """One row per worker-status file (single read each), across the canonical
+    scan targets: workspace ``runs/`` PLUS every ``.wt-*/`` (with
+    ``.kunglao-worktree`` marker) worktree ``runs/`` (v1.9.13 worktree
+    isolation: worker state lives in each worker's own worktree). OSError on
+    glob/read/stat skips that file. ``root`` is the workspace the file's
+    declared artifacts resolve against (main root, or that worktree's
+    malware-analysis-workspace root).
+    """
+    ws = Path(workspace)
+    roots = [ws]
     try:
-        for wt in workspace.parent.glob(".wt-*/.kunglao-worktree"):
-            runs_dir = wt.parent / "malware-analysis-workspace" / "runs"
-            if runs_dir.exists():
-                dirs.append(runs_dir)
+        for wt in ws.parent.glob(".wt-*/.kunglao-worktree"):
+            root = wt.parent / "malware-analysis-workspace"
+            if (root / "runs").exists():
+                roots.append(root)
     except OSError:
         pass
-    active = 0
-    stuck = []
-    cutoff = timedelta(minutes=STUCK_MINUTES)
-    now = datetime.now(timezone.utc)
-    for runs in dirs:
+    states = []
+    for root in roots:
+        runs = root / "runs"
         if not runs.exists():
             continue
         for p in runs.glob("worker-status-*.md"):
             try:
                 text = p.read_text(encoding="utf-8", errors="replace")
+                mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
             except OSError:
                 continue
-            # last status line decides activity
-            last_status = None
-            for line in text.splitlines():
-                m = status_line.search(line)
-                if m:
-                    last_status = m.group(1).lower()
-            if last_status != "in-progress":
-                continue
-            active += 1
-            mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
-            if (now - mtime) > cutoff:
-                stuck.append({"worker": p.stem, "age_min": int((now - mtime).total_seconds() // 60)})
+            tokens = parse_worker_status_tokens(text)
+            states.append({
+                "file": p,
+                "root": root,
+                "status": tokens[-1] if tokens else None,
+                "mtime": mtime,
+                "artifacts": parse_declared_artifacts(text),
+            })
+    return states
+
+
+def scan_active_workers(workspace: Path, states: list | None = None) -> tuple[int, list]:
+    """Count active + stuck workers from runs/worker-status-*.md.
+
+    Active = a worker whose LAST ``status:`` line is ``in-progress``. Stuck =
+    active files older than STUCK_MINUTES (mtime). ``states`` lets a caller
+    that already ran iter_worker_states reuse the single read.
+
+    Output shape is FROZEN (#37 consumers): ``(active, stuck)`` where each
+    stuck entry is ``{"worker": <file stem>, "age_min": int}`` —
+    worker_budget.check_workers_lt_3, worker_pulse flags and kunglao-decide's
+    ``stale`` derivation all read exactly this.
+    """
+    if states is None:
+        states = iter_worker_states(workspace)
+    active = 0
+    stuck = []
+    cutoff = timedelta(minutes=STUCK_MINUTES)
+    now = datetime.now(timezone.utc)
+    for s in states:
+        if s["status"] != "in-progress":
+            continue
+        active += 1
+        if (now - s["mtime"]) > cutoff:
+            stuck.append({"worker": s["file"].stem,
+                          "age_min": int((now - s["mtime"]).total_seconds() // 60)})
     return active, stuck
+
+
+def scan_done_artifact_violations(workspace: Path, states: list | None = None) -> list:
+    """W-15 (#444): a worker that reports ``done`` must have its declared files.
+
+    Opt-in: only files carrying ``artifacts:`` declarations are checked — a
+    legacy done file without declarations stays readable and exempt (migration
+    compat; liveness semantics unchanged for every file age). ``artifacts:
+    none`` = explicit zero-file completion = W-15 failure ("a worker that
+    reports 'done' without files has FAILED" — the W-15 lesson, machine path
+    instead of prose). Relative paths resolve against the file's owning
+    workspace root (main workspace, or the .wt-* worktree's own workspace);
+    absolute paths are checked as-is.
+    """
+    if states is None:
+        states = iter_worker_states(workspace)
+    violations = []
+    for s in states:
+        if s["status"] != "done":
+            continue
+        declared = s["artifacts"]
+        if not declared:
+            continue  # legacy format — no declarations, W-15-exempt
+        if all(t.lower() in _NO_ARTIFACTS_MARKERS for t in declared):
+            violations.append({"worker": s["file"].stem,
+                               "kind": "done-no-files", "missing": []})
+            continue
+        missing = [t for t in declared
+                   if t.lower() not in _NO_ARTIFACTS_MARKERS
+                   and not (Path(t) if Path(t).is_absolute() else s["root"] / t).exists()]
+        if missing:
+            violations.append({"worker": s["file"].stem,
+                               "kind": "declared-missing", "missing": missing})
+    return violations
