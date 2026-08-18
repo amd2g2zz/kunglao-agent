@@ -109,7 +109,7 @@ def process_event(payload: dict) -> int:
         # unresolved", but judge() PASSES an oracle with zero open_items — the
         # test fixture — so an explicit block is required to honor "second
         # stop only passes with sanction".)
-        reason = ("second stop without oracle sanction — task-oracle.yaml "
+        reason = ("second stop without oracle sanction - task-oracle.yaml "
                   "must record adjudication.stop_hook_active with "
                   "{second_stop: true, last_decision: PASS} to pass")
         print(json.dumps({"decision": "block", "reason": reason},
@@ -126,7 +126,7 @@ def process_event(payload: dict) -> int:
         # means the run was never anchored — refusing completion is the
         # fail-closed half of the no-oracle pass-through that replay #4
         # observed).
-        reason = ("no task-oracle.yaml in an activated workspace — the "
+        reason = ("no task-oracle.yaml in an activated workspace - the "
                   "orchestrator must register the oracle at Phase 0 before "
                   "completion can be judged")
         print(json.dumps({"decision": "block", "reason": reason},

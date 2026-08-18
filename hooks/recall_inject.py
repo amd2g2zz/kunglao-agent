@@ -165,7 +165,7 @@ def recall_files(query: str, cwd: Path | None = None,
 
 def _guidance(queries: list[str], files: list[str]) -> str:
     return (
-        f"recall_inject: claim dispatch knowledge recall (#268) — "
+        f"recall_inject: claim dispatch knowledge recall (#268) - "
         f"queries: {', '.join(queries)}\n"
         f"Before dispatching, read: {', '.join(files)}"
     )

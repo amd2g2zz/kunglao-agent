@@ -119,9 +119,9 @@ def check_convergence_health(paths):
     if r is None:
         return True, ''
     if r.returncode == 1:
-        return False, "convergence STALLED — diagnose before dispatching"
+        return False, "convergence STALLED - diagnose before dispatching"
     if r.returncode == 2:
-        return False, "convergence SPINNING — STOP dispatching"
+        return False, "convergence SPINNING - STOP dispatching"
     return True, ''
 
 
@@ -147,11 +147,11 @@ def check_backtrack_gate(paths):
     if r.returncode == 0:
         return True, ''
     if r.returncode == 1:
-        return False, ("stuck worker(s) without a valid `## backtrack` block — "
+        return False, ("stuck worker(s) without a valid `## backtrack` block - "
                        "force a backtrack decision before dispatching")
     if r.returncode == 2:
         return False, ("stuck worker(s) with stale backtrack (>30m un-actioned, "
-                       "decision != redispatch) — escalate or override to redispatch")
+                       "decision != redispatch) - escalate or override to redispatch")
     return True, ''  # unknown rc -> fail open
 
 
@@ -401,7 +401,7 @@ def compare_register_change(reg_path: Path, before: dict[str, str] | None,
         return False, (f'WORKER SELF-PROMOTION BLOCKED: {agent_name} flipped '
                        f'claim(s) to terminal status {promoted}. Only the '
                        f'orchestrator promotes after kunglao-redteam passes '
-                       f'(maker-checker §1b).')
+                       f'(maker-checker S1b).')
     return True, 'ok'
 
 
@@ -434,7 +434,7 @@ def compare_register_change_proven_gate(
         # fail closed: a promotion may have been written and cannot be
         # verified — block rather than permit an unverified PROVEN.
         return False, ('PROMOTION GATE: claim-register.yaml unreadable after '
-                       'write — cannot verify PROVEN gate (fail closed); '
+                       'write - cannot verify PROVEN gate (fail closed); '
                        'fix or restore the register and retry')
     # find claims that became PROVEN
     newly_proven = [cid for cid, st in after.items()
@@ -447,7 +447,7 @@ def compare_register_change_proven_gate(
         from blind_gate import check_proven_gate
     except Exception as exc:
         return False, (f'PROMOTION GATE: blind_gate unavailable (fail closed) '
-                       f'— {type(exc).__name__}: {exc}')
+                       f'- {type(exc).__name__}: {exc}')
     # contradiction gate (#47): PROVEN also requires no same-topic CONFLICT —
     # same-topic multi-PROVEN facts with differing conclusions need a
     # supersedes/superseded_by link, else the write is blocked.
@@ -455,7 +455,7 @@ def compare_register_change_proven_gate(
         from fact_contradiction_gate import check_proven_contradiction
     except Exception as exc:
         return False, (f'PROMOTION GATE: fact_contradiction_gate unavailable '
-                       f'(fail closed) — {type(exc).__name__}: {exc}')
+                       f'(fail closed) - {type(exc).__name__}: {exc}')
     # inference-scope gate (#48): inferential/routing claims need independent
     # static sign-off coverage — byte anchors / orchestrator-captured evidence
     # do not cover the inference (a2b5e25c problem 2, F040).
@@ -463,7 +463,7 @@ def compare_register_change_proven_gate(
         from blind_gate import check_inference_blind_scope
     except Exception as exc:
         return False, (f'PROMOTION GATE: blind_gate.check_inference_blind_scope '
-                       f'unavailable (fail closed) — {type(exc).__name__}: {exc}')
+                       f'unavailable (fail closed) - {type(exc).__name__}: {exc}')
     register_text = reg_path.read_text(encoding='utf-8', errors='replace')
     import re as _re
     violations = []
@@ -492,7 +492,7 @@ def compare_register_change_proven_gate(
         # Infrastructure failure (should not happen after import above, but
         # defensive) — fail closed: code must be complete.
         return False, (f'PROMOTION GATE: checker raised while verifying PROVEN '
-                       f'({type(exc).__name__}: {exc}) — fail closed')
+                       f'({type(exc).__name__}: {exc}) - fail closed')
     except Exception as exc:
         # #98 (D6/F15): runtime verifier error (timeout/resource limit) —
         # degrade to STAMP guidance instead of hard fail-closed block.
@@ -502,10 +502,10 @@ def compare_register_change_proven_gate(
         for cid in newly_proven:
             violations.append(
                 f'{cid}: VERIFIER RUNTIME ERROR '
-                f'({type(exc).__name__}: {exc}) — '
+                f'({type(exc).__name__}: {exc}) - '
                 f'degrade to STAMP (guardrails SS1b self_caveat allowed)')
     if violations:
-        return False, (f'PROMOTION GATE: PROVEN rejected — '
+        return False, (f'PROMOTION GATE: PROVEN rejected - '
                        f'{"; ".join(violations)}. Downgrade to STAMP or resolve the blockers.')
     return True, f'{len(newly_proven)} PROVEN promotion(s) with valid BLIND sign-off'
 
@@ -615,7 +615,7 @@ def check_host_forbidden_tools(tools: list[str]) -> tuple[bool, str]:
     bad = [t for t in tools if t in HOST_FORBIDDEN_TOOLS]
     if bad:
         return (False, (
-            f'host-channel dynamic tool(s) {bad!r} forbidden — '
+            f'host-channel dynamic tool(s) {bad!r} forbidden - '
             f'use mcp__x64dbg__connect_remote (VM path) / rev-frida via VM '
             f'frida-server. See kunglao-agent/references/dynamic-re-tool-priority.md'
         ))
@@ -794,7 +794,7 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
             if _plan_is_empty_shell(plan_text):
                 return (False, (
                     f'{plan_path.name} is an empty-shell template (goal/preflight/'
-                    f'steps/fallback all bare, no content) — fill in the plan '
+                    f'steps/fallback all bare, no content) - fill in the plan '
                     f'FIRST (kunglao-worker.md golden rule #3), then re-dispatch'
                 ))
             return (True, f'plan file exists: {plan_path.name}')
@@ -807,7 +807,7 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
         if m:
             return (True, f'plan path referenced in dispatch prompt: {m.group(0)}')
     return (False, (f'no runs/plan-{key}*.md for claim {cid} and the dispatch '
-                    f'prompt does not reference a plan path for it — write the '
+                    f'prompt does not reference a plan path for it - write the '
                     f'plan FIRST (kunglao-worker.md golden rule #3: PLAN FIRST, '
                     f'execute second)'))
 
@@ -927,10 +927,10 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
     if 'tool-catalog:' in text_lower:
         return (True, 'tool-catalog marker present')
     if _is_diagnostic_exempt(text):
-        return (True, 'one-off diagnostic — tool-first exempt')
+        return (True, 'one-off diagnostic - tool-first exempt')
     keywords = _load_tool_index_keywords(_SKILL_ROOT)
     if not keywords:
-        return (True, 'no tools/_INDEX.yaml keywords to match — tool-first skipped')
+        return (True, 'no tools/_INDEX.yaml keywords to match - tool-first skipped')
     for kw, tool_name in keywords.items():
         if kw in _TOOLFIRST_STOPWORDS:
             continue
@@ -1027,26 +1027,26 @@ def check_agent_type(paths: dict, desc: str, prompt: str,
     """
     _, _, cid = parse_dispatch(desc)
     if not cid or not agent_name:
-        return (True, 'no claim id or no agent name — agenttype skipped')
+        return (True, 'no claim id or no agent name - agenttype skipped')
     if not _AGENTTYPE_AVAILABLE:
-        return (True, 'route_capability unavailable — agenttype skipped')
+        return (True, 'route_capability unavailable - agenttype skipped')
     specialists = _load_specialist_table()
     if not specialists:
-        return (True, 'no specialist table — agenttype skipped')
+        return (True, 'no specialist table - agenttype skipped')
     specialist_names = {s['name'] for s in specialists}
     if agent_name not in specialist_names and agent_name != GENERIC_WORK_AGENT:
-        return (True, f'{agent_name} is a role agent — claim routing not applied')
+        return (True, f'{agent_name} is a role agent - claim routing not applied')
     register = paths.get('register')
     if not register:
-        return (True, 'no register path — agenttype skipped')
+        return (True, 'no register path - agenttype skipped')
     claim = read_claim(Path(register), cid)
     if not claim or not claim.get('statement'):
-        return (True, f'claim {cid} not in register — agenttype skipped')
+        return (True, f'claim {cid} not in register - agenttype skipped')
     features = _load_workspace_features(paths.get('workspace'))
     rec, _rationale = _recommend_agent_type(
         features, claim.get('statement', ''), specialists)
     if rec is None:
-        return (True, 'no specialist fits — kunglao-worker allowed')
+        return (True, 'no specialist fits - kunglao-worker allowed')
     if agent_name == rec:
         return (True, f'agent_type matches recommended specialist {rec}')
     if 'agent-reasoning:' in (prompt or '').lower():
@@ -1058,7 +1058,7 @@ def check_agent_type(paths: dict, desc: str, prompt: str,
         f'specialist-first violation (#310): route_capability recommends '
         f'{rec} for claim {cid} but the dispatch sends {agent_name}. Add '
         f'`agent-reasoning: <why {agent_name} instead of {rec}>` to the '
-        f'dispatch prompt, or dispatch {rec} — the deviation must be '
+        f'dispatch prompt, or dispatch {rec} - the deviation must be '
         f'recorded, not silently mixed.'
     ))
 
@@ -1077,7 +1077,7 @@ def check_agent_type(paths: dict, desc: str, prompt: str,
 REJECT_FIXES: dict[str, dict[str, str]] = {
     'workers': {
         'additionalContext': (
-            'active workers >= MAX_WORKERS (3) — slot-full, the loop has no '
+            'active workers >= MAX_WORKERS (3) - slot-full, the loop has no '
             'capacity for another worker. Fix: wait for an active worker to '
             'finish (runs/worker-status-*.md last status line = done), or '
             'TaskStop the stuck/retired worker to release a slot, then '
@@ -1087,17 +1087,17 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     'cap': {
         'additionalContext': (
             'per-claim cost cap reached: promotion_attempts >= 3. Fix: STOP '
-            're-dispatching this claim — re-dispatch keeps rejecting by design. '
+            're-dispatching this claim - re-dispatch keeps rejecting by design. '
             'Run uv run --project <skill> <skill>/scripts/failure_analysis_gate.py <ws> <claim> '
             '(answer the 3 questions), record the next method, then re-dispatch '
-            '— or mark the claim DEFERRED / supersede it.'
+            '- or mark the claim DEFERRED / supersede it.'
         ),
     },
     'tools': {
         'additionalContext': (
             'a dispatched tool requires a task_spec constraint that is '
             'forbidden. Fix: dispatch with tools whose constraints are allowed '
-            'only — vm_detonation=forbidden means static tools '
+            'only - vm_detonation=forbidden means static tools '
             '(grep / xxd / mcp__ghidra__*) and NO vmr-shell / rev-frida / '
             'mcp__x64dbg__*. To use VM tools, get user authorisation and set '
             'task_spec.constraints.vm_detonation: allowed first, then re-dispatch.'
@@ -1105,9 +1105,9 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     },
     'hostchan': {
         'additionalContext': (
-            'host-channel dynamic tool forbidden (SKILL.md §hard prohibitions '
-            '#5 — sample must never execute on the host). Fix: only '
-            'mcp__x64dbg__connect_remote(host=192.168.20.128) is allowed — launch the '
+            'host-channel dynamic tool forbidden (SKILL.md hard-prohibitions '
+            '#5 - sample must never execute on the host). Fix: only '
+            'mcp__x64dbg__connect_remote(host=192.168.20.128) is allowed - launch the '
             'VM-side x64dbg via vmr-shell first, then connect_remote; or '
             'rev-frida against the VM frida-server (192.168.20.128:1337). '
             'Never start_session / connect_to_session / connect_to_instance / '
@@ -1117,7 +1117,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     'deadline': {
         'additionalContext': (
             'time budget exhausted (now >= deadline_ts). Fix: the run is over '
-            'budget — either close the run out (write closeout, mark claims '
+            'budget - either close the run out (write closeout, mark claims '
             'accordingly), or get user approval to extend: write a new '
             'deadline_ts in analysis_state.txt (or raise '
             'task_spec.time_budget_minutes) and re-dispatch after the '
@@ -1128,7 +1128,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
         'additionalContext': (
             'tier gate: tier=N dispatch requires every open claim at '
             'evidence_tier_attempted >= N-1. Fix: complete the lower-tier '
-            'evidence first — raise the open claim\'s evidence_tier_attempted '
+            'evidence first - raise the open claim\'s evidence_tier_attempted '
             'in claim-register.yaml by doing that tier\'s work (static/CTI '
             'before VM), then re-dispatch the tier=N claim.'
         ),
@@ -1139,13 +1139,13 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'task_spec.time_budget_minutes=0/unset (contract: no budget until '
             'convergence). Fix: remove the cap wording from the dispatch '
             'description ("no self-cap" / "until closed"), or set '
-            'task_spec.time_budget_minutes > 0 to authorise a ceiling — '
+            'task_spec.time_budget_minutes > 0 to authorise a ceiling - '
             'then re-dispatch.'
         ),
     },
     'heartbeat': {
         'additionalContext': (
-            'heartbeat NOT registered / STALE — dispatching without monitoring '
+            'heartbeat NOT registered / STALE - dispatching without monitoring '
             'is the #1 recurring failure. Fix BEFORE dispatching: run '
             'uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on, '
             'then register the cron (CronCreate */5 * * * * with the heartbeat '
@@ -1159,7 +1159,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'uv run --project <skill> <skill>/scripts/plan_drift_detector.py <ws> --active-only '
             'to list the drifted items, then update global_plan.txt and/or '
             'runs/plan-C*.md to match what the run actually does (new claim, '
-            'dropped step, superseded plan) — record the deviation reasoning — '
+            'dropped step, superseded plan) - record the deviation reasoning - '
             'and re-check before re-dispatching.'
         ),
     },
@@ -1167,10 +1167,10 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
         'additionalContext': (
             'convergence loop unhealthy (STALLED / SPINNING). Fix: run '
             'uv run --project <skill> <skill>/scripts/convergence_health.py <ws> for the '
-            'diagnostic — STALLED: re-prime the loop (workers/heartbeat alive? '
+            'diagnostic - STALLED: re-prime the loop (workers/heartbeat alive? '
             'claim actually in progress?); SPINNING: STOP dispatching and '
             'reconcile what is being re-done (usually a missing '
-            'verify/promote step) — collapse the spin, then resume.'
+            'verify/promote step) - collapse the spin, then resume.'
         ),
     },
     'backtrack': {
@@ -1189,7 +1189,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'execute second). Fix: write runs/plan-C<NN>.md '
             '(goal / preflight / steps / fallback) for claim C-<NN> BEFORE '
             'dispatching, or reference the plan path in the dispatch prompt '
-            'when writing it in the same turn — then re-dispatch.'
+            'when writing it in the same turn - then re-dispatch.'
         ),
     },
     'toolfirst': {
@@ -1199,7 +1199,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'Fix: read <skill>/tools/_INDEX.md -> pick the matching '
             '_index-<category>.md entry -> add `tool-catalog: <tool-name>` to '
             'the dispatch prompt (or `tool-catalog: none (reasoning: <why '
-            'not>)` if the registered tool genuinely does not apply) — then '
+            'not>)` if the registered tool genuinely does not apply) - then '
             're-dispatch.'
         ),
     },
@@ -1214,17 +1214,17 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'recommended agent_type (ghidra-light / go-symbols / floss-filter '
             '/ pefile-signature / verdict-scorer), or add '
             '`agent-reasoning: <why this agent instead of the recommended '
-            'specialist>` to the dispatch prompt — the deviation must be '
-            'recorded, not silently mixed — then re-dispatch.'
+            'specialist>` to the dispatch prompt - the deviation must be '
+            'recorded, not silently mixed - then re-dispatch.'
         ),
     },
     'snapshot': {
         'additionalContext': (
-            'anti state-loss marker missing (§1c v1.9.24). Fix: count facts/ '
+            'anti state-loss marker missing (S1c v1.9.24). Fix: count facts/ '
             'first, then start the dispatch prompt with '
             '"facts-snapshot: N facts at <ts>" (e.g. '
-            '"facts-snapshot: 9 facts at 2026-08-13T00:00Z") — the marker '
-            'makes the pre-dispatch checkpoint verifiable — then re-dispatch.'
+            '"facts-snapshot: 9 facts at 2026-08-13T00:00Z") - the marker '
+            'makes the pre-dispatch checkpoint verifiable - then re-dispatch.'
         ),
     },
     'devreason': {
@@ -1232,7 +1232,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'priority deviation without justification (anti-spoof v1.9.24). '
             'Fix: add "reasoning: <why C-<NN> instead of the ranked #1 '
             'C-<MM>>" to the dispatch prompt, or dispatch the top-ranked claim '
-            'instead — the deviation must be recorded, not silently skipped.'
+            'instead - the deviation must be recorded, not silently skipped.'
         ),
     },
 }
@@ -1278,7 +1278,7 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
     """
     from datetime import datetime, timedelta, timezone
     if not state_path.exists():
-        return True, 'no kunglao-agent workspace — heartbeat gate skipped'
+        return True, 'no kunglao-agent workspace - heartbeat gate skipped'
     # the heartbeat belongs to skill-level monitoring, not the analysis workspace: check the cwd side first, then fall back to the skill install dir
     hb = state_path.parent / 'runs' / '.heartbeat.json'
     _skill = Path(__file__).resolve().parents[1]
@@ -1318,14 +1318,14 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
                 'heartbeat NOT registered. BEFORE dispatching, run:\n'
                 '  uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n'
                 '  CronCreate */5 * * * * <heartbeat_loop_prompt.py output>\n'
-                '§6.1b v1.9.28: dispatching a task != monitoring started.')
+                'S6.1b v1.9.28: dispatching a task != monitoring started.')
     age, last_str = _age(hb)
     if age is None:
         return (False,
-                'heartbeat file unreadable / no parseable timestamps — re-register with --heartbeat-on')
+                'heartbeat file unreadable / no parseable timestamps - re-register with --heartbeat-on')
     if age > timedelta(minutes=35):
         return (False,
-                f'heartbeat STALE ({int(age.total_seconds()//60)} min > 35) — cron not '
+                f'heartbeat STALE ({int(age.total_seconds()//60)} min > 35) - cron not '
                 f'ticking AND no recent tool activity. Re-register: --heartbeat-on + CronCreate /loop 5m.')
     return (True, f'heartbeat alive (last activity {last_str})')
 
@@ -1383,7 +1383,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     if 'facts-snapshot:' not in desc:
         return _reject('snapshot',
                        'dispatch prompt lacks `facts-snapshot:` marker '
-                       '(§1c v1.9.24 — checkpoint state before dispatch).', paths)
+                       '(S1c v1.9.24 - checkpoint state before dispatch).', paths)
     # best-first priority audit — v1.9.24: DEVIATION REASONING IS HARD-REQUIRED.
     # check_priority returns (ok, msg, deviated). If the dispatch deviates from
     # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —

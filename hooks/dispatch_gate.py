@@ -138,12 +138,12 @@ def main() -> int:
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "additionalContext": (
-                f"dispatch_gate: {claim_id} is failure-blocked — a prior attempt "
+                f"dispatch_gate: {claim_id} is failure-blocked - a prior attempt "
                 f"failed and no failure_analysis is recorded. Per SKILL.md "
                 f"'A failed attempt is not a negative result', run:\n"
                 f"  uv run --project {SKILL_DIR} {SKILL_DIR}/scripts/failure_analysis_gate.py {ws} {claim_id}\n"
                 f"answer the 3 questions (method_assumption / assumption_validity / "
-                f"next_method), then re-dispatch — or dispatch a different claim. "
+                f"next_method), then re-dispatch - or dispatch a different claim. "
                 f"A failed attempt is evidence the METHOD failed, not that the "
                 f"behavior is absent."
             ),

@@ -3,7 +3,7 @@
 
 state_anchor is a PostToolUse(Agent) hook that injects a compact mechanical-
 state signature (<=500 chars) into additionalContext on every worker
-completion, plus a `⚠ STATE FLAT` drift warning when drift_detected (#43).
+completion, plus a `WARNING: STATE FLAT` drift warning when drift_detected (#43).
 FAIL_OPEN: any exception -> empty string, never raises.
 
 All I/O is SYNTHETIC: pytest tmp_path workspaces only. The live workspace
@@ -149,7 +149,7 @@ def test_anchor_warns_on_drift_rotation_4_no_worker(ws):
                       for _ in range(4)])
     mod = _hook()
     anchor = mod.build_anchor(ws)
-    assert "⚠ STATE FLAT" in anchor
+    assert "WARNING: STATE FLAT" in anchor
     assert "STATE FLAT: 4 identical" in anchor    # rotation count N=4 in the warning
 
 

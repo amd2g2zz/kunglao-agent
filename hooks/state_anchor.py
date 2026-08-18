@@ -224,7 +224,7 @@ def _compose(drift_prefix: str, round_n: int, decision: str, open_count: int,
     budget = ANCHOR_CAP - len(drift_prefix) - len(header)
     # Fit as many ids as the budget allows; reserve room for a trailing ", …".
     shown, running, truncated = [], 0, False
-    ELLIPSIS = ", …"
+    ELLIPSIS = ", ..."
     for cid in open_ids:
         piece = (", " if shown else "") + str(cid)
         need = len(piece) + (len(ELLIPSIS) if shown else 0)
@@ -234,7 +234,7 @@ def _compose(drift_prefix: str, round_n: int, decision: str, open_count: int,
         shown.append(str(cid))
         running += len(piece)
     if not shown:
-        ids_text = "(none)" if not open_ids else "…"
+        ids_text = "(none)" if not open_ids else "..."
     else:
         ids_text = ", ".join(shown) + (ELLIPSIS if truncated else "")
     full = drift_prefix + header + ids_text
@@ -276,7 +276,7 @@ def build_anchor(ws) -> str:
             try:
                 if lib.drift_detected(ws):
                     n = int(lib.signature_rotation(ws))
-                    drift_prefix = (f"⚠ STATE FLAT: {n} identical turns, "
+                    drift_prefix = (f"WARNING: STATE FLAT: {n} identical turns, "
                                     f"re-read claim-register\n")
             except Exception:  # noqa: BLE001 — drift warning is best-effort
                 drift_prefix = ""

@@ -78,9 +78,11 @@ def test_wire_up_settings_exports_hook_deployment_targets() -> None:
         "each target must be a resolver callable (ws -> Path)"
 
     ws_level, parent_level = [fn(Path("ws")) for fn in targets]
-    assert str(ws_level).endswith("ws/.claude/settings.json"), \
+    # as_posix(): str(Path) yields native separators (backslashes on win32) —
+    # compare through the separator-stable lens, same exactness (#457 triage #7).
+    assert ws_level.as_posix().endswith("ws/.claude/settings.json"), \
         f"target[0] must resolve to the ws-level file: {ws_level}"
-    assert str(parent_level).endswith(".claude/settings.json"), \
+    assert parent_level.as_posix().endswith(".claude/settings.json"), \
         f"target[1] must resolve to a workspace-parent file: {parent_level}"
     assert parent_level.parent.parent == Path("ws").resolve().parent, \
         "target[1] must be the PARENT of the workspace: <ws-parent>/.claude/settings.json"

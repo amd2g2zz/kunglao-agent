@@ -528,7 +528,7 @@ def decide(workspace: Path) -> dict:
             orphan_ids = [o["id"] for o in orphans]
             decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
                 f"Cannot CONVERGE: {len(orphans)} orphan terminal claim(s) {orphan_ids} " \
-                f"have no answers_question — link them to a primary_question or reopen."
+                f"have no answers_question -> link them to a primary_question or reopen."
         elif unverified_pqs:
             uv_ids = [u["question"] for u in unverified_pqs]
             decision, exit_code, action = "SATURATED", EXIT_SATURATED, \
@@ -537,7 +537,7 @@ def decide(workspace: Path) -> dict:
                 f"Dispatch verifier or rework answering claims."
         elif pq_note_gaps:
             decision, exit_code, action = "DISPATCH_VERIFIER", EXIT_VERIFY, \
-                f"Note-layer (DESIGN §8 C0) not satisfied: primary_questions {pq_note_gaps} " \
+                f"Note-layer (DESIGN S8 C0) not satisfied: primary_questions {pq_note_gaps} " \
                 f"lack a note with verify_status=passes (link: note.claim_id -> claim.answers_question). " \
                 f"Run verify-note.py before delivery."
         else:
@@ -554,7 +554,7 @@ def decide(workspace: Path) -> dict:
                     names = ", ".join(d["trigger"] for d in discoveries)
                     discovery_reason = (
                         f"{len(discoveries)} unconsumed discovery(s) in {names} "
-                        f"— create child obligations or record materiality rejection")
+                        f"-> create child obligations or record materiality rejection")
             except Exception as exc:
                 discovery_reason = f"discovery scan unavailable ({type(exc).__name__})"
             if discovery_reason:
@@ -580,11 +580,11 @@ def decide(workspace: Path) -> dict:
                         contradiction_reason = f"contradiction scan unavailable ({type(exc).__name__})"
                 if contradiction_reason:
                     decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
-                        f"Cannot CONVERGE: {contradiction_reason} — resolve via " \
+                        f"Cannot CONVERGE: {contradiction_reason} -> resolve via " \
                         f"fact_contradiction_gate or supersedes links."
                 else:
                     decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
-                        "Claim loop done — all open claims closed, partials verified, primary_questions PROVEN " \
+                        "Claim loop done - all open claims closed, partials verified, primary_questions PROVEN " \
                         "with verify_status=passes notes, completion transaction clean (zero global " \
                         "contradictions, zero unconsumed discoveries, PROVEN provenance). STOP dispatch; deliver"
     elif unblocked_open and free_slots:
@@ -595,7 +595,7 @@ def decide(workspace: Path) -> dict:
             f"Dispatch a verifier for {len(partials)} partial fact(s). Do NOT declare PROVEN without sign-off."
     elif unblocked_open and not free_slots:
         decision, exit_code, action = "SATURATED", EXIT_SATURATED, \
-            f"All {WORKER_CAP} slots busy with {len(unblocked_open)} open claim(s) queued. Poll workers — do not wait idly."
+            f"All {WORKER_CAP} slots busy with {len(unblocked_open)} open claim(s) queued. Poll workers - do not wait idly."
     elif failure_blocked_open:
         decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
             f"{len(failure_blocked_open)} claim(s) have a failed attempt with no failure_analysis: {failure_blocked_ids}. " \
@@ -606,7 +606,7 @@ def decide(workspace: Path) -> dict:
     else:
         # Fallback (should not normally reach here)
         decision, exit_code, action = "SATURATED", EXIT_SATURATED, \
-            "Unexpected state — investigate manually."
+            "Unexpected state - investigate manually."
 
     return {
         "decision": decision,
@@ -639,7 +639,7 @@ def _human(d: dict) -> str:
     lines.append("")
     lines.append(f"open claims:    {d['open_count']} ({d['unblocked_open_count']} unblocked, {d['blocked_open_count']} blocked)")
     lines.append(f"partial facts:  {d['partial_count']}")
-    lines.append(f"workers:        {d['active_workers']}/{d['worker_cap']} active → {d['free_slots']} free slot(s)")
+    lines.append(f"workers:        {d['active_workers']}/{d['worker_cap']} active -> {d['free_slots']} free slot(s)")
     if d["stuck_workers"]:
         lines.append(f"stuck (> {STUCK_MINUTES}m): {d['stuck_workers']}")
     if d["active_blockers"]:
@@ -661,7 +661,7 @@ def _human(d: dict) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="kunglao-agent convergence check — should I dispatch?")
+    parser = argparse.ArgumentParser(description="kunglao-agent convergence check - should I dispatch?")
     parser.add_argument("workspace", nargs="?", default=None, help="workspace root")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     args = parser.parse_args()

@@ -615,7 +615,12 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
         "sample_sha256": sample_sha,
         "sample_type": "(detected at analysis time)",
         "sample_path": f"bins/{sample_name}",
-        "skill_dir": str(SKILL_DIR),
+        # as_posix(): the skill dir lands in CLAUDE.md BASH command lines
+        # (`python <skill>/scripts/convergence_check.py .`) where backslashes
+        # are shell escapes — str(Path) breaks every rendered command on
+        # win32 and drifts the portable golden contract (#457 triage #9-#11;
+        # same rule as the #367 hook stamping).
+        "skill_dir": SKILL_DIR.as_posix(),
         "venv_path": venv_path,
     }
     text = template_render.render_strict(
@@ -891,7 +896,7 @@ def initialize(ws: Path, hooks_json: Path | None,
         # (v1.9.7 default-inactive: no .hook_state.json -> hooks sleep). The
         # wired line must never read as armed: activation is orchestrator-
         # owned (Phase 0) and short-lived (TTL renewed by --renew).
-        print(f"kunglao-init: hooks wired but dormant — activation is "
+        print(f"kunglao-init: hooks wired but dormant - activation is "
               f"orchestrator-owned (Phase 0, hook_activation.py --tier/--set-active) "
               f"with a {HOOK_TTL_MINUTES}-min TTL renewed by --renew; "
               f"no .hook_state.json -> hooks sleep")

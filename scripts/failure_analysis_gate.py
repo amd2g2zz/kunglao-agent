@@ -335,7 +335,7 @@ def _write_lesson(lib: Path, signature: str, topic: str,
         "created_at": utc_now_iso(),
     }
     lines = ["---", yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).strip(), "---", ""]
-    lines.append(f"# Lesson — {topic}")
+    lines.append(f"# Lesson - {topic}")
     lines.append("")
     lines.append("## Failure signature")
     lines.append(f"- method_assumption: {fm['method_assumption']}")
@@ -543,12 +543,12 @@ def _print_blocked(d: dict) -> None:
         print(f"stale analysis (covers attempt {d['stale_analysis'].get('covers_attempt')}): update it")
     print()
     print("Before re-dispatching OR concluding NEGATIVE, answer three questions")
-    print("(reason from THIS specific failure — do not pick from a fixed menu):")
+    print("(reason from THIS specific failure - do not pick from a fixed menu):")
     print()
-    print("  1. method_assumption   — what did the failed method assume would happen?")
-    print("  2. assumption_validity — is that assumption justified given the evidence?")
+    print("  1. method_assumption   - what did the failed method assume would happen?")
+    print("  2. assumption_validity - is that assumption justified given the evidence?")
     print("                           if NOT justified -> the METHOD failed, not the behavior absent")
-    print("  3. next_method         — what DIFFERENT method tests a different assumption?")
+    print("  3. next_method         - what DIFFERENT method tests a different assumption?")
     print("                           (literal retry is forbidden; 'method was adequate' only if Q2=justified)")
     print()
     print("Record with:")
@@ -560,7 +560,7 @@ def _print_blocked(d: dict) -> None:
         print("Similar lessons from the failure-lessons library (keyword match, #41):")
         for s in sim:
             print(f"  - {s['file']} (score {s['score']}, outcome {s['outcome']}): "
-                  f"{s['claim_topic']} — next: {s['next_method']}")
+                  f"{s['claim_topic']} -> next: {s['next_method']}")
 
     fm = _failure_modes_recall()
     if fm:
@@ -569,7 +569,7 @@ def _print_blocked(d: dict) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="kunglao-agent failure-analysis gate — reason before re-dispatch or NEGATIVE")
+    parser = argparse.ArgumentParser(description="kunglao-agent failure-analysis gate - reason before re-dispatch or NEGATIVE")
     parser.add_argument("workspace", nargs="?", default=None, help="workspace root (omit: cwd or ./malware-analysis-workspace)")
     parser.add_argument("claim_id", nargs="?", default=None, help="claim to check (omit to scan all)")
     parser.add_argument("--record", action="store_true", help="record a failure analysis")
@@ -610,7 +610,7 @@ def main() -> int:
         elif hits:
             for h in hits:
                 print(f"{h['file']} (score {h['score']}, outcome {h['outcome']}): "
-                      f"{h['claim_topic']} — next: {h['next_method']}")
+                      f"{h['claim_topic']} -> next: {h['next_method']}")
         else:
             print("no matching lessons")
         return 0
@@ -645,11 +645,11 @@ def main() -> int:
             if r["state"] == "BLOCKED":
                 _print_blocked(r)
             elif r["state"] == "OK_COVERED":
-                print(f"OK: {args.claim_id} — analysis covers attempt {r.get('promotion_attempts')}")
+                print(f"OK: {args.claim_id} - analysis covers attempt {r.get('promotion_attempts')}")
             elif r["state"] == "TERMINAL":
-                print(f"OK: {args.claim_id} — terminal ({r.get('status')}), no analysis needed")
+                print(f"OK: {args.claim_id} - terminal ({r.get('status')}), no analysis needed")
             elif r["state"] == "OK_NO_PRIOR_FAILURE":
-                print(f"OK: {args.claim_id} — no prior failed attempt (attempts={r.get('promotion_attempts')})")
+                print(f"OK: {args.claim_id} - no prior failed attempt (attempts={r.get('promotion_attempts')})")
             else:
                 print(f"FAIL: claim {args.claim_id} not found")
         return 1 if r["state"] == "BLOCKED" else (2 if r["state"] == "NOT_FOUND" else 0)

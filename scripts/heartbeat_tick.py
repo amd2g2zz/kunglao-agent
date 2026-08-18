@@ -110,6 +110,15 @@ def main(argv: list[str] | None = None) -> int:
     """argv: explicit CLI args (defaults to sys.argv[1:]) — lets the kunglao.py
     router pass the caller's workspace instead of the router's own argv
     (issue #370: bare main() resolved the subcommand token "tick" as the ws)."""
+    # UTF-8 stdout unification (same pattern as scripts/mcp_probe.py) — scoped
+    # to CLI execution so importing this module never mutates the importer's
+    # stdout (kunglao.py router imports it). Without it the #365 warn line's
+    # em-dash prints as cp936 on a GBK console/pipe and the caller's UTF-8
+    # read sees mojibake (#457 triage #6).
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass  # captured stream without reconfigure (pytest capsys)
     args = sys.argv[1:] if argv is None else argv
     ws = _resolve_ws(args[0] if args else None)
     # action_taken (issue #237): the tick MUST produce a convergence action or a

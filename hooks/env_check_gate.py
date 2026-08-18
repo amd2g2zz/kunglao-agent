@@ -94,7 +94,7 @@ def _guidance(ws: Path, flag_val: str) -> str:
     the alternative (dispatch an independent worker), the fix (unset + restart).
     """
     return (
-        f"env_check_gate: {FLAG_NAME} is set (value={flag_val!r}) — this "
+        f"env_check_gate: {FLAG_NAME} is set (value={flag_val!r}) - this "
         f"Agent dispatch is REJECTED (hard block, kunglao #88/#233).\n"
         f"Problem: flag on -> subagents route through the teammate channel "
         f"(2026-08-12 incident: 400 [1210] everywhere, 19 facts self-stamped). "

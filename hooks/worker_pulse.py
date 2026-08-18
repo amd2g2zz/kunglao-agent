@@ -107,7 +107,7 @@ def _check_stale_workers(ws: Path) -> str:
         return ''
     return (f"[worker_pulse] {len(stale)} stale in-progress worker(s) "
             f"(> {STUCK_MIN}m no status-file update): " + ", ".join(stale) +
-            " — intervene or force a `## backtrack` block.")
+            " - intervene or force a `## backtrack` block.")
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
@@ -191,14 +191,14 @@ def _delivery_reminder(ws: Path) -> str:
         return ''
     if not delivered:
         return ''
-    return "TASKSTOP: " + ", ".join(delivered) + " delivered — TaskStop now"
+    return "TASKSTOP: " + ", ".join(delivered) + " delivered - TaskStop now"
 
 
 def _build_pulse(ws: Path) -> tuple[str, str | None]:
     """Compact convergence snapshot: decision + next-up claim + flags.
     Returns (pulse, decision) — decision is None when convergence_check
     output is unavailable."""
-    lines = ["[worker_pulse] worker completed — convergence pulse (auto):"]
+    lines = ["[worker_pulse] worker completed - convergence pulse (auto):"]
 
     cc = _run_py([str(SKILL_DIR / "scripts" / "convergence_check.py"), str(ws), "--json"], ws)
     d = None
@@ -208,7 +208,7 @@ def _build_pulse(ws: Path) -> tuple[str, str | None]:
         except json.JSONDecodeError:
             d = None
     if d:
-        lines.append(f"DECISION: {d['decision']} — {d['action']}")
+        lines.append(f"DECISION: {d['decision']} - {d['action']}")
         flags = []
         if d.get("stuck_workers"):
             flags.append(f"stuck={[w['worker'] for w in d['stuck_workers']]}")

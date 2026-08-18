@@ -303,7 +303,7 @@ def main() -> int:
         # armed. Wired hooks are DORMANT by design (v1.9.7 default-inactive:
         # no .hook_state.json -> hooks sleep); activation is orchestrator-
         # owned (Phase 0) and short-lived (TTL renewed by --renew).
-        print(f"NOTE: hooks wired but dormant — activation is orchestrator-"
+        print(f"NOTE: hooks wired but dormant - activation is orchestrator-"
               f"owned (Phase 0, --tier/--set-active) with a "
               f"{DEFAULT_TTL_MINUTES}-min TTL renewed by --renew; "
               f"no .hook_state.json -> hooks sleep")
