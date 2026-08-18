@@ -10,6 +10,10 @@ hook 激活语义说明 (wired ≠ active)").
 
 Boundary: #445 owns the post-registration self-CHECK; #454 owns ONLY the
 dormant-semantics copy at the two wiring surfaces.
+
+#455 target-alignment: init refuses to proceed without an explicit
+--type / --resolve (sniff is NOT a default by design) — the test passes
+--type windows for the canonical PE sample.
 """
 from __future__ import annotations
 
@@ -61,14 +65,16 @@ def test_wire_up_output_says_wired_but_dormant(tmp_path):
 
 def test_init_hooks_output_says_wired_but_dormant(tmp_path):
     """kunglao-init hooks-deployed output carries the same dormant semantics
-    (deploy_hooks path exercised via --hooks-json)."""
+    (deploy_hooks path exercised via --hooks-json). #455 target-alignment:
+    --type windows is required (sniff is never a default by design)."""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
     (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
     hooks_json = ws / "seeded-settings.json"
     hooks_json.write_text(json.dumps({"hooks": {}}), encoding="utf-8")
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws),
-            "--skip-toolchain", "--hooks-json", str(hooks_json),
+            "--skip-toolchain", "--type", "windows",
+            "--hooks-json", str(hooks_json),
             "--profile-root", str(ws.parent / "profile-root")]
     env = {k: v for k, v in os.environ.items() if k != FLAG_NAME}
     env["PYTHONIOENCODING"] = "utf-8"

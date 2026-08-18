@@ -49,6 +49,12 @@ def _run_init(ws: Path, extra: list[str] | None = None,
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     if "--skip-toolchain" not in argv:
         argv.append("--skip-toolchain")
+    # #455: without a type the run pends (exit 8, agent --resolve loop) — this
+    # file owns re-init/idempotency semantics, not type semantics, so the
+    # default run pins the PE fixture's type explicitly (type semantics live
+    # in test_init_typeaware.py / test_target_alignment.py).
+    if "--type" not in argv and "--resolve" not in argv:
+        argv += ["--type", "windows"]
     if profile_root is None:
         profile_root = ws.parent / "profile-root"
     argv += ["--profile-root", str(profile_root)]
@@ -275,7 +281,9 @@ def test_profile_inclusion_idempotent(init_ws: Path, tmp_path: Path) -> None:
     text = profile.read_text(encoding="utf-8")
     assert f'$env:{FLAG_NAME} = "0"' in text, f"profile not patched: {text}"
     assert "# my profile" in text, "unrelated profile content must survive"
-    assert "appended" in r1.stdout, f"init must record the profile action: {r1.stdout}"
+    # #455: human logs live on stderr (stdout is the machine channel)
+    assert "appended" in (r1.stdout + r1.stderr), \
+        f"init must record the profile action: {r1.stdout}{r1.stderr}"
 
     before = profile.read_bytes()
     r2 = _run_init(init_ws, profile_root=profile_root)
@@ -297,7 +305,9 @@ def test_profile_inclusion_rewrites_truthy(init_ws: Path, tmp_path: Path) -> Non
     text = profile.read_text(encoding="utf-8")
     assert f'$env:{FLAG_NAME} = "0"' in text
     assert f'$env:{FLAG_NAME} = "1"' not in text
-    assert "rewritten" in r.stdout, f"init must record the rewrite: {r.stdout}"
+    # #455: human logs live on stderr (stdout is the machine channel)
+    assert "rewritten" in (r.stdout + r.stderr), \
+        f"init must record the rewrite: {r.stdout}{r.stderr}"
 
 
 def test_claudemd_documents_env_and_script_discipline(init_ws: Path) -> None:

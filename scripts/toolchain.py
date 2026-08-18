@@ -786,6 +786,43 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
 # F6 (#304 review): read_project_type imported from init_state.py above —
 # single source of truth; no local duplicate.
 
+# #455: the type IS the environment-contract selector — each type selects
+# a completely different check set. Declared here (consumed by tests as the
+# contract surface; the checkers dict in check() is the execution source):
+#   * decompiler surfaces as one of decompiler | ghidra | ida (whichever
+#     probe hits first — #407 MCP-first);
+#   * aapt surfaces as aapt or aapt2 (aapt2 wins if found);
+#   * mcp:<name> items are dynamic (mcp_probe.MANIFEST per type).
+# ANDROID IS NOT A VM CHANNEL CONTRACT: the android set never contains
+# vm_reachable / remote_debugger — the VMware/VBox ports (9876 vmr-shell /
+# 1337 frida-to-VM) belong to the windows/linux VM contracts only. Android
+# dynamics go through ADB + device-side services (adb forward + the
+# frida/android_server device ports), which is a different contract by
+# design (issue #455 evidence 2; deep manifest is #450).
+CHECK_SETS: dict[str, frozenset[str]] = {
+    "windows": frozenset({
+        "pefile", "die", "floss", "decompiler", "ghidra", "ida",
+        "vm_reachable", "remote_debugger", "docker",
+    }),
+    "linux": frozenset({
+        "file", "readelf", "objdump", "decompiler", "ghidra", "ida",
+        "vm_reachable", "remote_debugger", "docker", "gdbserver",
+        "ebpf", "strace", "ltrace",
+    }),
+    "android": frozenset({
+        "aapt", "aapt2", "jadx", "apktool", "gitnexus",
+        "decompiler", "ghidra", "ida",
+        "adb", "device_root", "debug_flag", "frida_server",
+        "android_server", "ebpf_android", "unidbg",
+    }),
+}
+
+# The explicit negative declaration: items a type must NEVER produce.
+# Regression-pinned by tests/test_target_alignment.py (#455 checkbox 4).
+NEVER_CHECKS: dict[str, frozenset[str]] = {
+    "android": frozenset({"vm_reachable", "remote_debugger"}),
+}
+
 # ---------- report formatting ----------
 
 def format_human(report: ToolchainReport) -> str:

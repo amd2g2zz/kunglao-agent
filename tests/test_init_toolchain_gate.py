@@ -543,8 +543,12 @@ def test_run_ask_result_still_hard_refuses(tmp_path, monkeypatch):
 
 
 def test_init_decline_degrades_warn_and_proceeds(tmp_path, monkeypatch):
-    """Real ask_then_install through run(): missing die + interactive decline
-    -> die degraded WARN -> resolved report no longer FAIL -> init proceeds."""
+    """Real ask_then_install through run(): missing die + a FAILED install
+    attempt (--assume-yes, #455: consent channel is assume_yes only) -> die
+    degraded WARN -> resolved report no longer FAIL -> init proceeds.
+
+    (#455: the old stdin-decline branch is gone — without --assume-yes the
+    gate is the #304 headless refusal, exit 4.)"""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
     (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
@@ -559,11 +563,10 @@ def test_init_decline_degrades_warn_and_proceeds(tmp_path, monkeypatch):
         ])
 
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
-    monkeypatch.setattr(mod.sys, "stdin",
-                       type("SI", (), {"isatty": lambda self: True})())
-    monkeypatch.setattr(mod.toolchain_install.builtins, "input",
-                        lambda prompt="": "n")
-    rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root")
+    monkeypatch.setattr(mod.toolchain_install, "_run_install_plan",
+                        lambda name, plan, assume_yes, ws: (1, "", "no choco"))
+    rc = mod.run(ws, project_type="windows",
+                 profile_root=tmp_path / "profile-root", assume_yes=True)
     assert rc == 0, "declined static item (die) must degrade WARN and proceed"
     assert (ws / "claim-register.yaml").exists()
 

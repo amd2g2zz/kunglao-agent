@@ -2,7 +2,7 @@
 """Issue #414 (v0.1.1): exit-code semantics audit — RC matrix test.
 
 Every kunglao-init exit path must return the RC documented in the module
-docstring / RC_* constants (0/1/2/3/4/5). A caller that branches on the
+docstring / RC_* constants (0/1/2/3/4/5, +7 hook wiring #445 / +8 pending decisions #455). A caller that branches on the
 exit code (kunglao-init-worker, orchestrator harness) must never be able to
 read 0 as success from a refused init, and must never confuse two failure
 modes. The observed harness surface printed "exit=0" for the flag-reject
@@ -10,16 +10,20 @@ refusal (M4) — this matrix pins each failure mode to its documented RC.
 
 Documented codes:
   RC_OK = 0               success (fresh init / resume / upgrade)
-  RC_ERROR = 1            generic (argparse usage / template defect)
+  RC_ERROR = 1            generic (malformed flags / template defect / bad --resolve)
   RC_FATAL_VERIFY = 2     post-init idempotency verify failed
   RC_FLAG_REJECT = 3      Phase 0 agent-teams flag truthy
   RC_TOOLCHAIN_REFUSE = 4 toolchain HARD FAIL — human must install
   RC_NO_SAMPLE = 5        bins/ empty — friendly prompt
+  RC_PENDING_DECISIONS = 8 #455: undecided intake item — pending list on
+                          stdout, agent re-enters with --resolve
 
 Note on argparse: Python's argparse exits 2 on usage errors by default.
-kunglao-init documents RC_ERROR=1 as the generic code (argparse included),
-so a usage error must be normalized to 1 before sys.exit — otherwise a
-caller sees the fatal-verify code 2 for a trivial invocation mistake.
+kunglao-init documents RC_ERROR=1 as the generic code (malformed flags
+included), so a usage error must be normalized to 1 before sys.exit —
+otherwise a caller sees the fatal-verify code 2 for a trivial invocation
+mistake. A MISSING workspace is NOT a usage error anymore (#455): it is
+the defined zero-arg entry -> pending decision, exit 8.
 """
 from __future__ import annotations
 
@@ -44,10 +48,11 @@ RC_FATAL_VERIFY = 2
 RC_FLAG_REJECT = 3
 RC_TOOLCHAIN_REFUSE = 4
 RC_NO_SAMPLE = 5
+RC_PENDING_DECISIONS = 8  # #455: undecided intake item -> pending list + --resolve
 
 # Every documented RC must be asserted at least once in this file.
 DOCUMENTED_RCS = (RC_OK, RC_ERROR, RC_FATAL_VERIFY, RC_FLAG_REJECT,
-                  RC_TOOLCHAIN_REFUSE, RC_NO_SAMPLE)
+                  RC_TOOLCHAIN_REFUSE, RC_NO_SAMPLE, RC_PENDING_DECISIONS)
 
 
 def _load_init_module():
@@ -146,21 +151,45 @@ def test_rc_matrix_resume_0(tmp_path):
         f"resume must exit {RC_OK}, got {r2.returncode}: {r2.stdout}{r2.stderr}"
 
 
-def test_rc_matrix_argparse_usage_1(tmp_path):
-    """argparse usage error (no workspace) -> RC_ERROR=1, NOT 2 (fatal-verify).
-
-    Python's argparse exits 2 on usage errors by default; kunglao-init
-    documents RC_ERROR=1 as the generic code (argparse included). A caller
-    must not read a usage mistake as the post-init fatal-verify code 2.
-    """
-    argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"),
-            "--profile-root", str(tmp_path / "profile-root")]
+def _hermetic_env() -> dict:
+    """Env for raw argv runs: flag pinned off, VM/Ghidra probes disabled."""
     env = {k: v for k, v in os.environ.items()
            if k not in (FLAG_NAME, "GHIDRA_HOME", "KUNGLAO_VM_HOST")}
     env["PYTHONIOENCODING"] = "utf-8"
     env[FLAG_NAME] = "0"
+    return env
+
+
+def test_rc_matrix_zero_arg_pending_8(tmp_path):
+    """#455: zero-arg invocation is the defined intake entry, NOT an argparse
+    usage error — it exits RC_PENDING_DECISIONS=8 with a machine-parseable
+    pending list whose FIRST decision is the workspace path."""
+    import json
+    argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"),
+            "--profile-root", str(tmp_path / "profile-root")]
     r = subprocess.run(argv, capture_output=True, text=True, timeout=120,
-                       env=env, errors="replace")
+                       env=_hermetic_env(), errors="replace")
+    assert r.returncode == RC_PENDING_DECISIONS, \
+        f"zero-arg must exit {RC_PENDING_DECISIONS} (pending), got {r.returncode}: {r.stdout}{r.stderr}"
+    pending = json.loads(r.stdout)  # stdout is the machine channel
+    assert pending["decisions"], "pending list must carry at least one decision"
+    assert pending["decisions"][0]["decision_id"] == "workspace", \
+        f"interaction order: workspace is the first pending decision, got {pending['decisions'][0]}"
+
+
+def test_rc_matrix_argparse_usage_1(tmp_path):
+    """argparse usage error (unknown flag) -> RC_ERROR=1, NOT 2 (fatal-verify).
+
+    #455 note: a MISSING workspace is no longer a usage error (see
+    test_rc_matrix_zero_arg_pending_8); a genuinely malformed argv still hits
+    argparse's usage path, which kunglao-init normalizes 2 -> 1 so a caller
+    must not read an invocation mistake as the post-init fatal-verify code 2.
+    """
+    argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"),
+            "--definitely-not-a-flag",
+            "--profile-root", str(tmp_path / "profile-root")]
+    r = subprocess.run(argv, capture_output=True, text=True, timeout=120,
+                       env=_hermetic_env(), errors="replace")
     assert r.returncode == RC_ERROR, \
         f"argparse usage error must exit {RC_ERROR} (generic), got {r.returncode}: {r.stderr}"
 
@@ -224,11 +253,11 @@ def test_rc_matrix_template_defect_1(tmp_path, monkeypatch):
 
 
 def test_rc_matrix_module_constants_match_documented_contract():
-    """kunglao-init's RC_* constants are exactly the documented 0/1/2/3/4/5.
+    """kunglao-init's RC_* constants are exactly the documented 0/1/2/3/4/5/7.
 
     If a future edit adds a new documented code, this matrix must grow a
     per-mode assertion for it — the #414 acceptance is 'per-mode RC matrix
-    test green (0/1/2/3/4/5)'.
+    test green (0/1/2/3/4/5)', extended by #455 with the pending code 8.
     """
     mod = _load_init_module()
     observed = {
@@ -238,6 +267,7 @@ def test_rc_matrix_module_constants_match_documented_contract():
         mod.RC_FLAG_REJECT: "RC_FLAG_REJECT",
         mod.RC_TOOLCHAIN_REFUSE: "RC_TOOLCHAIN_REFUSE",
         mod.RC_NO_SAMPLE: "RC_NO_SAMPLE",
+        mod.RC_PENDING_DECISIONS: "RC_PENDING_DECISIONS",
     }
     assert set(observed) == set(DOCUMENTED_RCS), \
         f"RC constants drifted from documented contract: {observed}"

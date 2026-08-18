@@ -1,6 +1,6 @@
 ---
 name: kunglao-init-worker
-description: "INIT-WORKER for the kunglao-agent orchestrator (#304). Runs type-aware workspace initialization: type determination (explicit > magic sniff > user confirm — the ONLY human step) -> kunglao-init.py --type, which gates itself on toolchain.check BEFORE scaffold (HARD FAIL -> refuse exit 4 with per-item install commands) -> relay install guidance to the HUMAN as blockers (HARD toolchain missing is a human-install event, NOT agent silent repair — #304 amendment) -> after the human installs, re-run init until exit 0. Aligned with kunglao self-recovery L3 (env-fix worker); init-worker is the initialized form of env-fix. NOT an analysis worker — no claims, no facts. Env-repair scripts land as reusable CLIs under scripts/ (#277)."
+description: "INIT-WORKER for the kunglao-agent orchestrator (#304, #455). Runs type-aware workspace initialization: target alignment as intake step 0 (analysis target -> target_object for containers -> project type; undecided items exit 8 with a structured pending list on stdout, the agent collects answers via AskUserQuestion and re-enters with --resolve <answers.json> — no stdin, no silent sniff defaults) -> kunglao-init.py --type, which gates itself on toolchain.check BEFORE scaffold (HARD FAIL -> refuse exit 4 with per-item install commands; ask-then-install only under --assume-yes) -> relay install guidance to the HUMAN as blockers (HARD toolchain missing is a human-install event, NOT agent silent repair — #304 amendment) -> after the human installs, re-run init until exit 0. Aligned with kunglao self-recovery L3 (env-fix worker); init-worker is the initialized form of env-fix. NOT an analysis worker — no claims, no facts. Env-repair scripts land as reusable CLIs under scripts/ (#277)."
 allowedTools:
   - Read
   - Write
@@ -31,14 +31,19 @@ type-aware initialization + toolchain readiness.
 
 ## ⚡ GOLDEN RULES
 
-1. **Type determination order** (per design doc §5.1): explicit `--type` (from
-   the dispatch prompt if given, else from `analysis_state.txt`) > magic sniff
-   (MZ → windows / `\x7fELF` → linux / `PK\x03\x04` + `classes.dex` → android,
-   on the first file under `bins/`) > user confirm via interactive `input()`.
-   The user confirm is the **ONLY** human step — never ask anything else.
+1. **Target alignment order (#455, intake step 0)**: run
+   `kunglao-init.py <ws>` (flags from the dispatch prompt: `--type`,
+   `--target`). Undecided items exit **8** with a structured pending list on
+   stdout (JSON): workspace -> analysis target (multi-file `bins/` asks,
+   never sorts) -> target_object (MSI/APK/ZIP containers list their
+   contents; the type is NEVER guessed) -> project type (a magic-byte hint
+   MZ/`\x7fELF` rides in the pending context as a suggestion only).
+   Collect the answers via AskUserQuestion, write `{decision_id: value}`
+   JSON, re-run with `--resolve <answers.json>`. Stdin is NOT a user
+   channel — never answer via `input()` (it no longer exists).
 2. **Never mid-iteration questions**: decide + record reasoning + continue.
-   If you cannot resolve the type (no sniff, non-interactive), create a
-   blocker with root-cause attribution — do not guess a type.
+   If you cannot collect a pending answer, create a blocker with root-cause
+   attribution — do not guess a target or type.
 3. **Init completeness = `[initialized]` marker AND `project_type=` declared**
    in `analysis_state.txt`. A workspace with the marker but no type is
    INCOMPLETE (pre-#304 upgrade path) — run `kunglao-init.py` with `--type`.

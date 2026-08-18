@@ -3,14 +3,29 @@
 """kunglao-init — workspace initialization + re-init protection (phase 3.5, E-init.1-4).
 
 Standalone CLI (not a kunglao.py subcommand, module-design L448):
-    python kunglao-init.py <workspace> [--type windows|linux|android] [--force]
+    python kunglao-init.py [<workspace>] [--type windows|linux|android]
+        [--target <bins/ file>] [--resolve <answers.json>] [--force]
         [--hooks-json <path>] [--profile-root <path>]
 
+#455 target alignment (intake step 0): the analysis TARGET is an explicit
+    user-aligned input, never the first file in bins/ by sort order. Any
+    undecided intake item (workspace / target / target_object / type) makes
+    init print a structured pending-decision JSON to stdout and exit
+    RC_PENDING_DECISIONS=8 (fail-closed, zero scaffold) — the AGENT layer
+    collects answers via Claude Code's native question capability and
+    re-runs with --resolve <answers.json>. Scripts NEVER read stdin as a
+    user channel (stdin is not the user in Claude Code; isatty is
+    untrustworthy) — all input()/confirm sites are gone. Containers
+    (MSI/CFBF, APK/zip) are detected, their contents listed, and their
+    type is never guessed. The persisted type (explicit > --resolve answer
+    > analysis_state.txt) selects the toolchain contract; android never
+    touches the VMware/VBox channel (toolchain.CHECK_SETS).
+
 #304 type-aware extension:
-    --type explicit > magic sniff (MZ/ELF/PK+classes.dex on bins/ first file)
-    > interactive input() confirm with sniff default
-    The type is persisted to analysis_state.txt project_type=<type>; the
-    template is chosen by type.
+    --type explicit > --resolve answer > persisted project_type >
+    pending (sniff suggestion rides in pending context ONLY — never
+    adopted). The type is persisted to analysis_state.txt
+    project_type=<type>; the template is chosen by type.
     Init-completeness = [initialized] marker AND project_type declared
 
 #304 amendment (comment 304-5289955958): toolchain verification =
@@ -93,7 +108,9 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
+import zipfile
 from collections.abc import Collection
 from pathlib import Path
 
@@ -107,7 +124,12 @@ import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
 # #408: ask-then-install — interactive install prompts + MCP registration +
 # re-probe (graceful degrade on decline; --assume-yes for CI/headless).
+# #455: the interactive consent channel is gone (no stdin); ask_then_install
+# runs only under --assume-yes, decline semantics preserved.
 import toolchain_install  # noqa: E402
+# #455: shared pending-decision schema — the structured intake channel
+# (stdout JSON + --resolve re-entry) shared with #449/#451.
+import decision_pending  # noqa: E402
 # F6 (#304 review): init-completeness predicate = single source in init_state.py
 from init_state import VALID_TYPES, is_init_complete, read_project_type  # noqa: E402
 import mcp_probe  # noqa: E402  (#316: MCP supply manifest/scaffold single source of truth)
@@ -121,6 +143,7 @@ import template_render  # noqa: E402
 # canonical registration entry — init deploys a worker_budget subset but no
 # longer hand-rolls its own entry shape or skips verification.
 import hook_activation  # noqa: E402
+import yaml  # noqa: E402  # #455: task_spec.yaml -> CLAUDE.md constraint section
 
 MARKER = "[initialized]"
 SEED_MIN = 3
@@ -153,6 +176,18 @@ RC_TOOLCHAIN_REFUSE = 4  # toolchain HARD FAIL — human must install, no scaffo
 RC_NO_SAMPLE = 5     # bins/ empty — friendly prompt (place a sample into bins/)
 RC_PATH_SHAPE = 6    # #411: target is a sample dir / file, not a workspace root — refuse with guidance
 RC_HOOK_WIRING = 7   # #445: hook deployment self-check FAILED (written layer/coverage/shape mismatch) — init FAIL, never a WARN
+RC_PENDING_DECISIONS = 8  # #455: undecided intake item (workspace/target/
+                          # target_object/type) — pending list on stdout,
+                          # agent re-enters with --resolve; zero scaffold
+
+# #455: intake interaction order (zero-arg entry walks this sequence).
+INTAKE_GUIDANCE = (
+    "Intake order: workspace path -> analysis target (bins/ file) -> "
+    "project type -> task requirements (#449 needs-first intake). Collect "
+    "answers for each decision via the Claude Code native question "
+    "capability (never script stdin), write them to a JSON file as "
+    "{decision_id: value}, and re-run with --resolve <answers.json>."
+)
 
 SCAFFOLD_DIRS = ("facts", "blockers", "runs")
 SCAFFOLD_FILES = {
@@ -184,9 +219,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         prog="kunglao-init",
         description="workspace initialization + re-init protection (standalone CLI, not a kunglao.py subcommand)",
     )
-    parser.add_argument("workspace", help="target workspace path (holds bins/, claim-register.yaml, etc.)")
+    # #455: workspace is OPTIONAL — a zero-arg invocation emits a pending
+    # workspace decision (defined interaction order) instead of a bare
+    # argparse usage error; --resolve supplies it on re-entry.
+    parser.add_argument("workspace", nargs="?", default=None,
+                        help="target workspace path (holds bins/, claim-register.yaml, etc.); "
+                             "omitted -> pending decision (#455)")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
                         help="project type: windows|linux|android (#304)")
+    parser.add_argument("--target", metavar="NAME", default=None,
+                        help="#455: explicit analysis target — a file name under bins/ "
+                             "(containers get a target_object round)")
     parser.add_argument("--force", action="store_true",
                         help="rebuild: back up claim-register first, then re-initialize")
     parser.add_argument("--skip-toolchain", action="store_true",
@@ -206,6 +249,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--assume-yes", action="store_true",
                         help="#408: consent to every ask-then-install prompt "
                              "(CI/headless; non-interactive stdin declines by default)")
+    parser.add_argument("--resolve", metavar="PATH", default=None,
+                        help="#455: answers file ({decision_id: value} JSON) collected "
+                             "by the agent after a pending-decision exit 8")
     try:
         return parser.parse_args(argv)
     except SystemExit as exc:
@@ -440,84 +486,358 @@ def refuse_path_shape(ws: Path, shape: str) -> int:
     return RC_PATH_SHAPE
 
 
-def detect_sample(ws: Path) -> tuple[str, str]:
-    """First file under bins/ (sorted by name) as the sample: (filename, sha256). No sample → ("unknown", "")."""
-    bins = ws / "bins"
-    if not bins.is_dir():
+def detect_sample(ws: Path, target: str) -> tuple[str, str]:
+    """The ALIGNED analysis target under bins/ as the sample: (filename, sha256).
+
+    #455: the target is explicit (flag / --resolve / unique file) — never
+    the first file by sort order. Unknown target -> ("unknown", "")."""
+    p = ws / "bins" / target if target else None
+    if p is None or not p.is_file():
         return "unknown", ""
-    files = sorted(p for p in bins.iterdir() if p.is_file())
-    if not files:
-        return "unknown", ""
-    sample = files[0]
     try:
-        sha = hashlib.sha256(sample.read_bytes()).hexdigest()
+        sha = hashlib.sha256(p.read_bytes()).hexdigest()
     except OSError:
         sha = ""
-    return sample.name, sha
+    return p.name, sha
 
 
-def sniff_type(ws: Path) -> str | None:
-    """Magic sniff: read first bins/ file headers → windows|linux|android or None."""
+# ---------- #455: target alignment (intake step 0) ----------
+
+# CFBF composite-document signature (MSI / legacy OLE containers).
+MAGIC_CFBF = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
+CONTAINER_KINDS = ("msi", "zip", "apk")
+
+# Kind -> type suggestion for the pending context ONLY (never adopted —
+# the whole point of #455). Containers deliberately have NO hint.
+KIND_TYPE_HINT: dict[str, str] = {"pe": "windows", "elf": "linux"}
+
+# Container contents listing bound (options stay askable; the full list
+# rides in context.contents_full).
+CONTAINER_OPTIONS_MAX = 12
+
+
+def file_kind(path: Path) -> str:
+    """Magic-byte classification: pe | elf | apk | zip | msi | unknown."""
+    try:
+        head = path.read_bytes()[:512]
+    except OSError:
+        return "unknown"
+    if head[:8] == MAGIC_CFBF:
+        return "msi"
+    if head[:4] == b"PK\x03\x04":
+        return "apk" if b"classes.dex" in head else "zip"
+    if head[:4] == b"\x7fELF":
+        return "elf"
+    if head[:2] == b"MZ":
+        return "pe"
+    return "unknown"
+
+
+def is_container(kind: str) -> bool:
+    """MSI/APK/zip are containers — the analysis target is an embedded
+    object; the container's own type is never guessed."""
+    return kind in CONTAINER_KINDS
+
+
+def survey_bins(ws: Path) -> list[dict]:
+    """Every file under bins/ (name, size, kind), sorted for DISPLAY only —
+    no selection decision ever follows from the order (#455). Reads bins/
+    ONLY, never bin/ (#411 boundary)."""
     bins = ws / "bins"
     if not bins.is_dir():
-        return None
-    files = sorted(p for p in bins.iterdir() if p.is_file())
-    if not files:
-        return None
-    sample = files[0]
+        return []
+    out: list[dict] = []
+    for p in sorted(bins.iterdir()):
+        if not p.is_file():
+            continue
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = 0
+        out.append({"name": p.name, "size": size, "kind": file_kind(p)})
+    return out
+
+
+def zip_contents(path: Path) -> list[str]:
+    """zip/APK contents listing (entry names)."""
     try:
-        header = sample.read_bytes()[:512]
-    except OSError:
+        with zipfile.ZipFile(path) as zf:
+            return zf.namelist()
+    except (zipfile.BadZipFile, OSError):
+        return []
+
+
+def _cfb_sector_base(sector: int, sector_size: int) -> int:
+    """MS-CFB: sector N lives at (N+1)*sector_size — the 512-byte header
+    heads the file and for v4 (4096-byte sectors; every real-world MSI)
+    bytes [512, sector_size) are padding. A naive 512+N*sector_size only
+    coincides with the spec for 512-byte sectors and silently misaligns
+    every v4 inventory (review HIGH-1)."""
+    return (sector + 1) * sector_size
+
+
+def _cfb_fat_ids(data: bytes, sector_size: int) -> list[int] | None:
+    """FAT sector ids: header DIFAT[0..108] plus the extended DIFAT chain
+    (first at 0x44, count at 0x48) — required once a file has more than
+    109 FAT sectors (a 607MB MSI measured during the fix carries 145).
+    None on out-of-bounds structure."""
+    special = 0xFFFFFFFC  # FATSECT/DIFSECT/ENDOFCHAIN/FREESECT and above
+    ids: list[int] = []
+    for i in range(109):
+        s = struct.unpack_from("<I", data, 0x4C + 4 * i)[0]
+        if s < special:
+            ids.append(s)
+    per_sector = sector_size // 4
+    next_dif = struct.unpack_from("<I", data, 0x44)[0]
+    seen: set[int] = set()
+    while next_dif < special and next_dif not in seen:
+        seen.add(next_dif)
+        base = _cfb_sector_base(next_dif, sector_size)
+        if base + sector_size > len(data):
+            return None
+        for i in range(per_sector - 1):  # last slot = next DIFAT pointer
+            s = struct.unpack_from("<I", data, base + 4 * i)[0]
+            if s < special:
+                ids.append(s)
+        next_dif = struct.unpack_from(
+            "<I", data, base + 4 * (per_sector - 1))[0]
+    return ids
+
+
+def _cfb_fat(data: bytes, sector_size: int) -> dict[int, int] | None:
+    """FAT from the DIFAT (header + extended chain), spec sector offsets.
+    None when the structure is unparseable/out of bounds."""
+    fat_sector_ids = _cfb_fat_ids(data, sector_size)
+    if fat_sector_ids is None:
         return None
-    # PK zip (APK) + classes.dex marker
-    if header[:4] == b"PK\x03\x04" and b"classes.dex" in header:
-        return "android"
-    # ELF
-    if header[:4] == b"\x7fELF":
-        return "linux"
-    # PE (MZ)
-    if header[:2] == b"MZ":
-        return "windows"
-    return None
+    fat: dict[int, int] = {}
+    entries_per_sector = sector_size // 4
+    for fat_sector in fat_sector_ids:
+        base = _cfb_sector_base(fat_sector, sector_size)
+        if base + sector_size > len(data):
+            return None
+        for j in range(entries_per_sector):
+            fat[fat_sector * entries_per_sector + j] = \
+                struct.unpack_from("<I", data, base + 4 * j)[0]
+    return fat
 
 
-def prompt_type(default: str | None = None) -> str:
-    """Interactive type prompt (only human step in init-worker flow)."""
-    hint = f" [{default}]" if default else ""
-    while True:
+def cfb_stream_names(data: bytes) -> list[str]:
+    """Names-level CFBF (MSI) directory listing per MS-CFB: sector N at
+    (N+1)*sector_size, FAT via the DIFAT (header + extended chain),
+    directory sectors walked along the FAT chain. Only STREAM entries
+    (type 2) are listed — storages (1) and the root entry (5) are
+    container structure, not embedded objects (review HIGH-1/LOW-4).
+    Payloads/tables are NOT parsed — the #455 contract is an inventory.
+
+    Unparseable structure -> [] (the caller surfaces the failure as an
+    empty inventory in the pending context, never a crash)."""
+    if len(data) < 512 or data[:8] != MAGIC_CFBF:
+        return []
+    ssz = struct.unpack_from("<H", data, 0x1E)[0]
+    if not 6 <= ssz <= 20:
+        return []
+    sector_size = 1 << ssz
+    first_dir = struct.unpack_from("<I", data, 0x30)[0]
+    fat = _cfb_fat(data, sector_size)
+    if fat is None:
+        return []
+
+    names: list[str] = []
+    seen: set[int] = set()
+    sector = first_dir
+    while 0 <= sector < 0xFFFFFFFC and sector not in seen:
+        seen.add(sector)
+        base = _cfb_sector_base(sector, sector_size)
+        if base + sector_size > len(data):
+            break
+        for i in range(sector_size // 128):
+            entry = base + i * 128
+            if data[entry + 66] != 2:  # streams only, structure excluded
+                continue
+            name_len = struct.unpack_from("<H", data, entry + 64)[0]
+            raw = data[entry:entry + max(0, name_len - 2)]
+            try:
+                name = raw.decode("utf-16-le")
+            except UnicodeDecodeError:
+                continue
+            if name and name not in names:
+                names.append(name)
+        sector = fat.get(sector, 0xFFFFFFFE)
+    return names
+
+
+def container_contents(path: Path, kind: str) -> list[str]:
+    """Contents inventory for a container target (names level)."""
+    if kind in ("zip", "apk"):
+        return zip_contents(path)
+    if kind == "msi":
         try:
-            raw = input(f"Project type{hint} (windows|linux|android): ").strip().lower()
-        except EOFError:
-            if default:
-                return default
-            print("kunglao-init: ERROR cannot determine type (non-interactive, no --type, no sniff)",
-                  file=sys.stderr)
-            sys.exit(1)
-        if raw and raw in VALID_TYPES:
-            return raw
-        if not raw and default and default in VALID_TYPES:
-            return default
-        print(f"Invalid type: {raw!r}. Choose: windows, linux, android")
+            return cfb_stream_names(path.read_bytes())
+        except OSError:
+            return []
+    return []
 
 
-def resolve_type(ws: Path, explicit: str | None) -> str:
-    """Type resolution: explicit > sniff > interactive confirm.
-    Returns the resolved type string.
-    """
-    if explicit:
-        return explicit
-    sniffed = sniff_type(ws)
-    if sniffed:
-        # Sniff succeeded — confirm with user
-        try:
-            raw = input(f"Detected type: {sniffed}. Confirm? [Y/n]: ").strip().lower()
-            if raw in ("n", "no"):
-                return prompt_type(default=sniffed)
-        except EOFError:
-            pass  # Non-interactive: accept sniff
-        return sniffed
-    # No sniff result — interactive prompt
-    return prompt_type()
+def emit_pending(ws: Path | None,
+                 decisions: list["decision_pending.PendingDecision"],
+                 ) -> int:
+    """Print the pending-decision list (stdout = machine channel, stderr =
+    human guidance) and return RC_PENDING_DECISIONS. Zero scaffold is the
+    caller's invariant: this runs before any write."""
+    doc = decision_pending.PendingDecisionList(
+        flow="kunglao-init",
+        workspace=str(ws) if ws is not None else None,
+        guidance=INTAKE_GUIDANCE,
+        decisions=decisions,
+        resume={"argv": ["kunglao-init.py",
+                         str(ws) if ws is not None else "<workspace>",
+                         "--resolve", "<answers.json>"]},
+    )
+    print(doc.to_json())
+    print(
+        "kunglao-init: PENDING user decisions — collect via the agent's "
+        "native question channel (AskUserQuestion), then re-run with "
+        "--resolve <answers.json> (#455; zero scaffold written)",
+        file=sys.stderr,
+    )
+    return RC_PENDING_DECISIONS
+
+
+def _aligned_target(files: list[dict], explicit_target: str | None,
+                    answers: dict[str, str],
+                    ) -> tuple[str | None, str | None, int | None]:
+    """Target name decision: explicit --target > --resolve answer > unique
+    file in bins/. A multi-file bins/ returns (None, None, None) — the
+    caller pends; sort order is NEVER a tiebreaker (#455). Malformed
+    resolved target -> RC_ERROR."""
+    names = [f["name"] for f in files]
+    target = explicit_target or answers.get("target") or None
+    if target is not None:
+        if target not in names:
+            print(
+                f"kunglao-init: ERROR resolved target {target!r} is not a "
+                f"file under bins/ (available: {', '.join(names) or 'none'})",
+                file=sys.stderr)
+            return None, None, RC_ERROR
+        return target, next(f["kind"] for f in files if f["name"] == target), None
+    if len(files) == 1:
+        # Uniqueness is determinism, not sort-order arbitrariness.
+        return files[0]["name"], files[0]["kind"], None
+    return None, None, None
+
+
+def _container_object(ws: Path, target: str, kind: str,
+                      answers: dict[str, str],
+                      ) -> tuple[str | None,
+                                 "decision_pending.PendingDecision | None",
+                                 int | None]:
+    """target_object decision for a container target: a --resolve answer
+    (validated against the real contents inventory; `__container__` analyzes
+    the container itself) or a pending decision listing the contents."""
+    contents = container_contents(ws / "bins" / target, kind)
+    target_object = answers.get("target_object") or None
+    if target_object is not None:
+        if target_object not in contents and target_object != "__container__":
+            print(
+                f"kunglao-init: ERROR resolved target_object "
+                f"{target_object!r} is not in the {kind} inventory",
+                file=sys.stderr)
+            return None, None, RC_ERROR
+        return target_object, None, None
+    decision = decision_pending.PendingDecision(
+        decision_id="target_object",
+        question=f"The target {target!r} is a {kind} container — "
+                 "which embedded object is the analysis target?",
+        kind=decision_pending.KIND_CHOICE,
+        options=tuple(contents[:CONTAINER_OPTIONS_MAX] + ["__container__"]),
+        default=None,
+        context={"kind": kind, "contents_full": contents},
+    )
+    return None, decision, None
+
+
+def _aligned_type(ws: Path, kind: str | None, explicit_type: str | None,
+                  answers: dict[str, str],
+                  ) -> tuple[str | None,
+                             "decision_pending.PendingDecision | None",
+                             int | None]:
+    """Project-type decision: explicit --type > --resolve answer > persisted
+    state > pending. A sniff hint (KIND_TYPE_HINT) is pending CONTEXT only —
+    never adopted, never a default (#455). Malformed -> RC_ERROR."""
+    project_type = explicit_type or answers.get("type") or None
+    if project_type is not None and project_type not in VALID_TYPES:
+        print(f"kunglao-init: ERROR resolved type {project_type!r} is not "
+              f"one of {', '.join(VALID_TYPES)}", file=sys.stderr)
+        return None, None, RC_ERROR
+    if project_type is None:
+        project_type = read_project_type(ws)
+        if project_type not in VALID_TYPES:
+            project_type = None
+    if project_type is not None:
+        return project_type, None, None
+    suggested = KIND_TYPE_HINT.get(kind) if kind else None
+    decision = decision_pending.PendingDecision(
+        decision_id="type",
+        question="Project type (environment contract selector)?",
+        kind=decision_pending.KIND_CHOICE,
+        options=tuple(VALID_TYPES),
+        default=None,  # a sniff hint is never a default (#455)
+        context={"suggested_type": suggested},
+    )
+    return None, decision, None
+
+
+def align_target(ws: Path, files: list[dict],
+                 explicit_target: str | None, explicit_type: str | None,
+                 answers: dict[str, str] | None,
+                 ) -> tuple[str | None, str | None, str | None, int | None]:
+    """#455 intake step 0 decision matrix.
+
+    Returns (target_name, target_object, project_type, pending_exit) —
+    pending_exit is RC_PENDING_DECISIONS when a user decision is missing
+    (the three values are then None / partial), None when aligned. Raises
+    nothing; malformed resolved values are reported to stderr by the
+    caller via the returned exit (fail-closed RC_ERROR handled in run()).
+
+    Order: target (multi-file asks; unique file is deterministic) ->
+    target_object (containers list contents, type never guessed) -> type
+    (sniff hint is context only)."""
+    answers = answers or {}
+    target, kind, err = _aligned_target(files, explicit_target, answers)
+    if err is not None:
+        return None, None, None, err
+
+    pending: list[decision_pending.PendingDecision] = []
+    target_object: str | None = None
+    if target is not None and kind is not None and is_container(kind):
+        target_object, decision, err = _container_object(
+            ws, target, kind, answers)
+        if err is not None:
+            return None, None, None, err
+        if decision is not None:
+            pending.append(decision)
+    elif target is None:
+        pending.append(decision_pending.PendingDecision(
+            decision_id="target",
+            question="bins/ holds multiple files — which one is the "
+                     "analysis target?",
+            kind=decision_pending.KIND_CHOICE,
+            options=tuple(f["name"] for f in files),
+            default=None,  # sort order is NOT a suggestion
+            context={"bins": files},
+        ))
+
+    project_type, decision, err = _aligned_type(ws, kind, explicit_type,
+                                                answers)
+    if err is not None:
+        return None, None, None, err
+    if decision is not None:
+        pending.append(decision)
+
+    if pending:
+        return target, target_object, project_type, emit_pending(ws, pending)
+    return target, target_object, project_type, None
 
 
 def write_project_type(ws: Path, project_type: str) -> bool:
@@ -589,6 +909,67 @@ def os_section(project_type: str | None) -> str:
     return OS_SECTIONS.get(project_type or "", "")
 
 
+def write_state_line(ws: Path, key: str, value: str) -> bool:
+    """Write `key=value` to analysis_state.txt (upsert, like
+    write_project_type's append-or-replace). Returns True if written."""
+    p = ws / "analysis_state.txt"
+    text = p.read_text(encoding="utf-8") if p.exists() else ""
+    prefix = f"{key}="
+    if any(line.strip().startswith(prefix) for line in text.splitlines()):
+        new_lines = [f"{key}={value}" if line.strip().startswith(prefix)
+                     else line for line in text.splitlines()]
+        atomic_write(p, "\n".join(new_lines))
+        return True
+    if text and not text.endswith("\n"):
+        text += "\n"
+    atomic_write(p, text + f"{key}={value}\n")
+    return True
+
+
+def task_spec_section(ws: Path) -> str:
+    """#455: render the task_spec-driven constraint block for CLAUDE.md.
+
+    Absent task_spec.yaml -> "" (init legitimately precedes the needs-first
+    intake; #449 fills it later). Unparseable/non-mapping task_spec ->
+    TemplateRenderError -> the run() cleanup path (fail-closed: a corrupt
+    contract never renders a silently-partial CLAUDE.md)."""
+    p = ws / "task_spec.yaml"
+    if not p.exists():
+        return ""
+    try:
+        spec = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise template_render.TemplateRenderError(
+            f"task_spec.yaml unparseable: {exc}") from exc
+    if not isinstance(spec, dict):
+        raise template_render.TemplateRenderError(
+            "task_spec.yaml must be a YAML mapping")
+    constraints = spec.get("constraints") or {}
+    scope = spec.get("scope") or {}
+    if not isinstance(constraints, dict) or not isinstance(scope, dict):
+        raise template_render.TemplateRenderError(
+            "task_spec.yaml constraints/scope must be mappings")
+    lines: list[str] = ["## Task constraints (task_spec)", ""]
+    if "vm_detonation" in constraints:
+        lines.append(f"- vm_detonation: {constraints['vm_detonation']}")
+    if "dynamic_re" in constraints:
+        lines.append(f"- dynamic_re: {constraints['dynamic_re']}")
+    if "time_budget_minutes" in constraints:
+        lines.append(f"- time_budget_minutes: {constraints['time_budget_minutes']}")
+    out = scope.get("out") or []
+    if out:
+        lines.append("- scope excluded: " + ", ".join(str(o) for o in out))
+    if "depth" in spec:
+        lines.append(f"- depth: {spec['depth']}")
+    # The block carries its own trailing blank line: the template emits
+    # `{{task_spec_section}}## Success criteria` with NO separator newline,
+    # so an absent task_spec renders byte-identical to the pre-slot
+    # template (zero drift for workspaces without task_spec.yaml).
+    lines.append("")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
                   project_type: str | None = None) -> Path | None:
     """Write CLAUDE.md from template with project info filled in.
@@ -615,6 +996,7 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
 
     params = {
         "type_section": os_section(project_type),
+        "task_spec_section": task_spec_section(ws),  # #455: user contract
         "type": project_type or "windows",
         "sample_sha1": sample_name,
         "sample_sha256": sample_sha,
@@ -867,7 +1249,9 @@ def resume(ws: Path, text: str) -> int:
 
 def initialize(ws: Path, hooks_json: Path | None,
                 project_type: str | None = None, no_mcp: bool = False,
-                created: "Collection[Path] | None" = None) -> int:
+                created: "Collection[Path] | None" = None,
+                target: str | None = None,
+                target_object: str | None = None) -> int:
     """Phase 2 fresh initialization + Phase 3 idempotency verify.
 
     Returns the exit code (0 success / RC_FATAL_VERIFY verify-failure).
@@ -880,17 +1264,12 @@ def initialize(ws: Path, hooks_json: Path | None,
         created = scaffold(ws)
     if ensure_agent_teams_state(ws):
         print(f"kunglao-init: analysis_state {AGENT_TEAMS_STATE_LINE}")
-    sample, sample_sha = detect_sample(ws)
+    # #455: sample identity follows the ALIGNED target (never sorted-first)
+    sample, sample_sha = detect_sample(ws, target)
+    if target_object:
+        write_state_line(ws, "analysis_target_object", target_object)
 
-    # #304: Resolve and write project type
-    if project_type is None:
-        # Try to read existing type from analysis_state.txt
-        existing_type = read_project_type(ws)
-        if existing_type:
-            project_type = existing_type
-        else:
-            # No type yet — resolve
-            project_type = resolve_type(ws, None)
+    # #304: write the resolved project type
     write_project_type(ws, project_type)
     print(f"kunglao-init: project_type={project_type}")
 
@@ -941,23 +1320,27 @@ def initialize(ws: Path, hooks_json: Path | None,
     return RC_OK
 
 
-def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
+def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         profile_root: Path | None = None,
         project_type: str | None = None,
         skip_toolchain: bool = False, no_mcp: bool = False,
         install_git_hooks_flag: bool = False,
-        assume_yes: bool = False) -> int:
-    """State-machine entry (#304 amended flow, comment 304-5289955958):
+        assume_yes: bool = False,
+        target: str | None = None,
+        answers: dict[str, str] | None = None) -> int:
+    """State-machine entry (#304 amended flow, comment 304-5289955958;
+    #455 target alignment as intake step 0):
 
-    Phase 0 environment guard → re-init check (resume; if project_type is
-    missing, upgrade by writing it then exit 0, F1) → no-sample friendly
-    prompt → type determination (explicit > sniff > confirm) →
-    **toolchain.check preflight** (HARD FAIL → #408 ask-then-install: per-item
-    install prompts; consent installs + registers MCP + re-probes; decline
-    degrades WARN/HARD per item. Items still HARD after the ask → per-item
-    install guidance + refuse + cleanup of artifacts created by this run;
-    cleanup removes ONLY this run's scaffold entries — pre-existing content
-    is never in the created manifest and therefore never deleted, F2) →
+    Phase 0 environment guard → workspace resolution (missing → pending
+    `workspace` decision, exit 8 — the zero-arg interaction order is
+    defined, never a bare argparse error) → re-init check (resume; if
+    project_type is missing, upgrade by writing it then exit 0, F1) →
+    no-sample friendly prompt → **target alignment** (multi-file /
+    container / undecided type → structured pending list, exit 8, zero
+    scaffold; a sniff hint is context only, never adopted) →
+    **toolchain.check preflight** (HARD FAIL → #408 ask-then-install ONLY
+    under --assume-yes — stdin is not a user channel (#455); the headless
+    refusal with per-item install guidance + cleanup is the default) →
     only on PASS: scaffold + [initialized] marker + project_type.
 
     #362: template render defects (unfilled {{placeholder}}) surface as a
@@ -980,8 +1363,26 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
         for line in guard_log:  # HARD REJECT guidance goes to stderr
             print(line, file=sys.stderr)
         return guard_rc
+    # #455: stdout is the MACHINE channel (pending-decision JSON must be
+    # parseable alone) — informational guard lines go to stderr.
     for line in guard_log:
-        print(line)
+        print(line, file=sys.stderr)
+
+    # #455 intake step 0a — workspace resolution. A missing workspace is a
+    # PENDING DECISION (defined interaction order), not an argparse error;
+    # the --resolve answers may carry it on re-entry.
+    answers = answers or {}
+    if ws is None:
+        ws_answer = answers.get("workspace")
+        if not ws_answer:
+            return emit_pending(None, [decision_pending.PendingDecision(
+                decision_id="workspace",
+                question="Workspace path (the directory that holds or will "
+                         "hold bins/)?",
+                kind=decision_pending.KIND_VALUE,
+                options=(), default=None,
+            )])
+        ws = Path(ws_answer)
     ws = Path(ws).resolve()
 
     # #411: workspace-path shape gate — BEFORE any write (including hook
@@ -1014,14 +1415,19 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
             # F1 (#304 review): marker present but project_type missing
             # (pre-#304 workspace). resume() alone would exit 0 forever and
             # env_check_gate would keep rejecting — no mechanical repair path.
-            # Write the missing type (explicit > state > sniff > confirm)
-            # and exit 0; register/marker/seeds untouched.
+            # Write the missing type (explicit > --resolve > state >
+            # pending) and exit 0; register/marker/seeds untouched.
             if project_type is None:
-                existing = read_project_type(ws)
-                if existing and existing in VALID_TYPES:
-                    project_type = existing
-                else:
-                    project_type = resolve_type(ws, None)
+                project_type = answers.get("type") or read_project_type(ws)
+                if project_type not in VALID_TYPES:
+                    # #455: no sniff-and-accept — pending decision instead
+                    return emit_pending(ws, [decision_pending.PendingDecision(
+                        decision_id="type",
+                        question="Project type (environment contract selector)?",
+                        kind=decision_pending.KIND_CHOICE,
+                        options=tuple(VALID_TYPES), default=None,
+                        context={"suggested_type": None},
+                    )])
             write_project_type(ws, project_type)
             print(
                 f"kunglao-init: upgraded {ws} — wrote project_type={project_type} "
@@ -1033,8 +1439,8 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
         print(f"kunglao-init: --force backup -> {backup}")
 
     # #304: no-sample cold start -> friendly prompt, refuse (exit 5)
-    sample, sample_sha = detect_sample(ws)
-    if sample == "unknown" or not sample_sha:
+    files = survey_bins(ws)
+    if not files:
         print(
             "kunglao-init: no analysis target found — place a sample into bins/ "
             "or specify a path, then re-run "
@@ -1043,30 +1449,31 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
         )
         return RC_NO_SAMPLE
 
-    # Type resolution BEFORE any file is written (explicit > state > sniff > confirm)
-    if project_type is None:
-        existing = read_project_type(ws)
-        if existing and existing in VALID_TYPES:
-            project_type = existing
-        else:
-            project_type = resolve_type(ws, None)
+    # #455 intake step 0 — target alignment BEFORE any file is written:
+    # target (multi-file must ask; unique file is deterministic) ->
+    # target_object (containers list contents, type never guessed) ->
+    # type (sniff hint is context only). Any undecided item -> pending
+    # list (exit RC_PENDING_DECISIONS), zero scaffold.
+    target_name, target_object, project_type, pending_rc = align_target(
+        ws, files, target, project_type, answers)
+    if pending_rc is not None:
+        return pending_rc
+    assert target_name is not None and project_type is not None  # aligned
 
-    # #304: toolchain.check BEFORE scaffold — HARD FAIL => ask-then-install
-    # (#408), then refuse + cleanup only for items still HARD.
+    # #304: toolchain.check BEFORE scaffold — HARD FAIL => #408
+    # ask-then-install, then refuse + cleanup only for items still HARD.
     # Verify-first: a refused init leaves no half-initialized state behind.
+    # #455: stdin is NOT a user channel (isatty untrustworthy) — the
+    # interactive ask branch is gone. ask_then_install runs ONLY under
+    # --assume-yes; otherwise the #304 headless refusal (per-item install
+    # guidance, exit 4) is the single non-consent path. The consent MENU
+    # as an AskUserQuestion flow is #451's change.
     if not skip_toolchain:
         report = toolchain.check(ws, project_type)
         if report.overall_status == toolchain.Status.FAIL:
-            # #408: interactive ask per missing item — consent installs +
-            # registers MCP + re-probes; decline degrades (WARN static /
-            # HARD decompiler). --assume-yes consents headlessly.
-            # Non-interactive stdin WITHOUT --assume-yes keeps the #304
-            # refusal: no silent install and no silent degrade-and-proceed
-            # without explicit consent.
-            interactive = getattr(sys.stdin, "isatty", lambda: False)()
-            if assume_yes or interactive:
+            if assume_yes:
                 resolved = toolchain_install.ask_then_install(
-                    report, ws, report.project_type, assume_yes=assume_yes)
+                    report, ws, report.project_type, assume_yes=True)
                 if resolved.overall_status == toolchain.Status.FAIL:
                     return refuse_toolchain(ws, resolved)
             else:
@@ -1080,7 +1487,8 @@ def run(ws: Path, force: bool = False, hooks_json: Path | None = None,
     created = scaffold(ws)
     try:
         return initialize(ws, hooks_json, project_type=project_type,
-                          no_mcp=no_mcp, created=created)
+                          no_mcp=no_mcp, created=created,
+                          target=target_name, target_object=target_object)
     except template_render.TemplateRenderError as exc:
         removed, preserved = cleanup_scaffold(ws, created=created)
         print(f"kunglao-init: TEMPLATE DEFECT — {exc}", file=sys.stderr)
@@ -1171,11 +1579,23 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    return run(Path(args.workspace), force=args.force, hooks_json=args.hooks_json,
+    answers: dict[str, str] = {}
+    if args.resolve is not None:
+        # #455: fail-closed answers loading — a missing/corrupt answers
+        # file is RC_ERROR, never an empty-answers silent proceed.
+        try:
+            answers = decision_pending.load_answers(Path(args.resolve))
+        except ValueError as exc:
+            print(f"kunglao-init: ERROR --resolve {args.resolve}: {exc}",
+                  file=sys.stderr)
+            return RC_ERROR
+    return run(Path(args.workspace) if args.workspace else None,
+               force=args.force, hooks_json=args.hooks_json,
                profile_root=args.profile_root, project_type=args.type,
                skip_toolchain=args.skip_toolchain, no_mcp=args.no_mcp,
                install_git_hooks_flag=args.install_git_hooks,
-               assume_yes=args.assume_yes)
+               assume_yes=args.assume_yes,
+               target=args.target, answers=answers)
 
 
 if __name__ == "__main__":

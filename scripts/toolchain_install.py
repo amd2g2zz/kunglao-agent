@@ -20,7 +20,6 @@ explicit consent.
 """
 from __future__ import annotations
 
-import builtins
 import shutil
 import subprocess
 import sys
@@ -200,25 +199,24 @@ def register_ghidra_mcp() -> int:
 
 def register_ida_mcp_url(url: str) -> int:
     """Register an existing IDA MCP URL: `claude mcp add --transport http
-    ida-pro-vm <url>`. Never installs the IDA product (#408)."""
+    ida-pro-vm <url>`. Never installs the IDA product (#408).
+
+    #455: no longer called from ask_then_install (stdin URL collection
+    removed); kept as the registration primitive the #451 negotiation menu
+    (agent-collected URL -> this call) consumes."""
     return _run_claude_mcp(["mcp", "add", "--transport", "http", "ida-pro-vm", url])
 
 
 def prompt_yes_no(prompt: str, assume_yes: bool = False) -> bool:
-    """Interactive consent prompt (y/n). Safe default: decline.
+    """Consent gate (#408; #455 amendment: stdin is NOT a user channel).
 
-    Non-interactive stdin (CI/headless without --assume-yes) -> False so the
-    flow never hangs on a closed pipe. --assume-yes forces True.
+    --assume-yes forces True. Everything else declines — the script NEVER
+    reads stdin (no input(), no isatty branch): the interactive consent
+    flow is the agent layer's job (pending-decision list + --resolve, the
+    #451 negotiation menu); this module's default is the safe decline that
+    degrades the item per its plan.
     """
-    if assume_yes:
-        return True
-    if not getattr(sys.stdin, "isatty", lambda: False)():
-        return False
-    try:
-        raw = builtins.input(f"{prompt} [y/N] ").strip().lower()
-    except EOFError:
-        return False
-    return raw in ("y", "yes")
+    return bool(assume_yes)
 
 
 def degrade_report(report: "toolchain.ToolchainReport", name: str
@@ -310,41 +308,19 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
               f"({item.detail})")
 
         if plan.kind == "mcp_url":
-            # IDA: never auto-install. Ask for the existing MCP URL, register it.
-            if assume_yes:
-                print(
-                    "toolchain-install: IDA is not auto-installable (#408) — "
-                    "register your existing IDA MCP URL manually: "
-                    "`claude mcp add --transport http ida-pro-vm <ida-mcp-url>`, "
-                    "then re-run kunglao-init",
-                    file=sys.stderr,
-                )
-                result = degrade_report(result, item.name)
-                continue
-            if not getattr(sys.stdin, "isatty", lambda: False)():
-                result = degrade_report(result, item.name)
-                continue
-            try:
-                url = builtins.input(
-                    "  IDA is never auto-installed. Enter the existing IDA MCP "
-                    "URL to register (or blank to skip): "
-                ).strip()
-            except EOFError:
-                url = ""
-            if not url:
-                result = degrade_report(result, item.name)
-                continue
-            rc = register_ida_mcp_url(url)
-            if rc != 0:
-                print("toolchain-install: IDA MCP registration failed — "
-                      "see the guidance above; the decompiler remains required",
-                      file=sys.stderr)
-                result = degrade_report(result, item.name)
-                continue
-            fresh = toolchain.check(ws, project_type)
-            if fresh.overall_status == toolchain.Status.PASS:
-                return fresh
-            result = fresh
+            # IDA: never auto-install. #455 amendment: stdin is NOT a user
+            # channel — the URL cannot be collected here (no input(), no
+            # isatty branch). Print the manual registration guidance and
+            # degrade; the agent layer surfaces the exact command to the
+            # user (the interactive menu is #451's negotiation interface).
+            print(
+                "toolchain-install: IDA is not auto-installable (#408) — "
+                "register your existing IDA MCP URL manually: "
+                "`claude mcp add --transport http ida-pro-vm <ida-mcp-url>`, "
+                "then re-run kunglao-init",
+                file=sys.stderr,
+            )
+            result = degrade_report(result, item.name)
             continue
 
         consent = prompt_yes_no(f"  install {item.name}?", assume_yes=assume_yes)

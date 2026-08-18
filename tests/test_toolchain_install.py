@@ -13,7 +13,9 @@ Contract:
 4. register_ghidra_mcp() runs `claude mcp add ghidra -- <bridge>`;
    register_ida_mcp_url() runs the http-transport `claude mcp add` with the
    operator-supplied URL — IDA is NEVER auto-installed.
-5. prompt_yes_no() declines safely on non-interactive stdin.
+5. prompt_yes_no() NEVER reads stdin (#455): True only under assume_yes,
+   everything else is the safe decline. The interactive consent/URL flow is
+   the agent layer's job (pending-decision list + --resolve; #451 menu).
 6. degrade_report() maps a failed item to WARN (static-ok) or HARD
    (decompiler) by returning a NEW report with the item degraded.
 7. ask_then_install() re-probes via toolchain.check after a successful
@@ -152,33 +154,29 @@ def test_register_ida_mcp_url(monkeypatch):
     assert log[0][-1] == "http://localhost:13337", log[0]
 
 
-# ---------- consent prompt ----------
+# ---------- consent gate (#455: stdin is NOT a user channel) ----------
 
-def test_prompt_yes_no_yes(monkeypatch):
+def test_prompt_yes_no_never_reads_stdin(monkeypatch):
+    """#455: even a TTY-looking stdin that would answer 'y' is IGNORED —
+    input() must never be called; consent comes only from --assume-yes."""
+    import builtins
+
+    def _boom(*_args):
+        raise AssertionError("input() must never be called (#455)")
+
+    monkeypatch.setattr(builtins, "input", _boom)
     monkeypatch.setattr(ti.sys, "stdin",
                        type("SI", (), {"isatty": lambda self: True})())
-    monkeypatch.setattr(ti.builtins, "input", lambda prompt="": "y")
-    assert ti.prompt_yes_no("install pefile?") is True
-
-
-def test_prompt_yes_no_no(monkeypatch):
-    monkeypatch.setattr(ti.sys, "stdin",
-                       type("SI", (), {"isatty": lambda self: True})())
-    monkeypatch.setattr(ti.builtins, "input", lambda prompt="": "n")
     assert ti.prompt_yes_no("install pefile?") is False
 
 
-def test_prompt_yes_no_assume_yes(monkeypatch):
-    monkeypatch.setattr(ti.sys, "stdin",
-                       type("SI", (), {"isatty": lambda self: False})())
+def test_prompt_yes_no_decline_default():
+    """No consent channel -> safe decline (never hang a headless run)."""
+    assert ti.prompt_yes_no("install pefile?") is False
+
+
+def test_prompt_yes_no_assume_yes():
     assert ti.prompt_yes_no("install pefile?", assume_yes=True) is True
-
-
-def test_prompt_yes_no_non_tty_defaults_decline(monkeypatch):
-    """Non-interactive stdin -> safe decline (never hang a headless run)."""
-    monkeypatch.setattr(ti.sys, "stdin",
-                       type("SI", (), {"isatty": lambda self: False})())
-    assert ti.prompt_yes_no("install pefile?") is False
 
 
 # ---------- degrade ----------
@@ -218,12 +216,10 @@ def test_degrade_report_returns_new_object():
 # ---------- ask_then_install orchestration ----------
 
 def test_ask_then_install_consent_reprobes(monkeypatch):
-    """Consent -> install runs -> re-probe via toolchain.check returns the
-    fresh PASS report; the degraded input report is replaced."""
+    """Consent (--assume-yes, #455: no stdin) -> install runs -> re-probe via
+    toolchain.check returns the fresh PASS report; the degraded input report
+    is replaced."""
     calls: list[str] = []
-    monkeypatch.setattr(ti.sys, "stdin",
-                       type("SI", (), {"isatty": lambda self: True})())
-    monkeypatch.setattr(ti.builtins, "input", lambda prompt="": "y")
 
     def fake_install(name, plan, assume_yes, ws):
         calls.append(f"install:{name}")
@@ -240,17 +236,15 @@ def test_ask_then_install_consent_reprobes(monkeypatch):
     monkeypatch.setattr(ti.toolchain, "check", fake_reprobe)
 
     r = ti.ask_then_install(_report("pefile"), ws=Path("/tmp/ws"),
-                            project_type="windows", assume_yes=False)
+                            project_type="windows", assume_yes=True)
     assert calls == ["install:pefile", "reprobe:windows"], calls
     assert r.overall_status == tc.Status.PASS, r
 
 
 def test_ask_then_install_decline_degrades(monkeypatch):
-    """Decline -> no install, no re-probe; the item is degraded (WARN)."""
+    """Decline (default, no consent channel #455) -> no install, no re-probe;
+    the item is degraded (WARN)."""
     calls: list[str] = []
-    monkeypatch.setattr(ti.sys, "stdin",
-                       type("SI", (), {"isatty": lambda self: True})())
-    monkeypatch.setattr(ti.builtins, "input", lambda prompt="": "n")
 
     monkeypatch.setattr(ti, "_run_install_plan",
                         lambda name, plan, assume_yes, ws: calls.append(f"install:{name}") or (1, "", "declined"))
@@ -275,33 +269,32 @@ def test_ask_then_install_install_failure_degrades(monkeypatch):
     monkeypatch.setattr(ti, "_run_install_plan", fake_install)
     monkeypatch.setattr(ti.toolchain, "check",
                         lambda ws, project_type: calls.append("reprobe") or tc.ToolchainReport(project_type=project_type, items=[]))
-    monkeypatch.setattr(ti.sys, "stdin",
-                       type("SI", (), {"isatty": lambda self: True})())
-    monkeypatch.setattr(ti.builtins, "input", lambda prompt="": "y")
 
     r = ti.ask_then_install(_report("die"), ws=Path("/tmp/ws"),
-                            project_type="windows", assume_yes=False)
+                            project_type="windows", assume_yes=True)
     assert calls == ["install:die"], calls
     item = next(i for i in r.items if i.name == "die")
     assert item.status == tc.Status.WARN, item
 
 
-def test_ask_then_install_ida_registers_url_not_product(monkeypatch):
-    """IDA plan -> consent asks for an existing MCP URL and registers it
-    (never an install command); re-probe then runs."""
+def test_ask_then_install_ida_degrades_with_guidance(monkeypatch, capsys):
+    """#455: the IDA branch can no longer collect a URL via stdin — it prints
+    the manual `claude mcp add` guidance, degrades the item (WARN), and never
+    runs an install plan. register_ida_mcp_url stays the #451-menu primitive."""
     calls: list[str] = []
-    monkeypatch.setattr(ti.sys, "stdin",
-                       type("SI", (), {"isatty": lambda self: True})())
-    monkeypatch.setattr(ti.builtins, "input", lambda prompt="": "http://localhost:13337")
+    calls2: list[str] = []
     monkeypatch.setattr(ti, "_run_install_plan",
                         lambda name, plan, assume_yes, ws: calls.append(f"install:{name}") or (0, "", ""))
     monkeypatch.setattr(ti.toolchain, "check",
                         lambda ws, project_type: tc.ToolchainReport(project_type=project_type, items=[]))
-    calls2: list[str] = []
     monkeypatch.setattr(ti, "register_ida_mcp_url",
                         lambda url: calls2.append(url) or 0)
 
     r = ti.ask_then_install(_report("ida"), ws=Path("/tmp/ws"),
-                            project_type="windows", assume_yes=False)
+                            project_type="windows", assume_yes=True)
     assert calls == [], "IDA must never be auto-installed (no install plan runs)"
-    assert calls2 == ["http://localhost:13337"], calls2
+    assert calls2 == [], "no URL may be collected from stdin (#455)"
+    item = next(i for i in r.items if i.name == "ida")
+    assert item.status == tc.Status.WARN, item
+    err = capsys.readouterr().err
+    assert "claude mcp add" in err, "manual registration guidance must be printed"

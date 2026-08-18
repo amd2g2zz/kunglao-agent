@@ -130,6 +130,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
 | `toolchain.py` | type-aware toolchain probe matrix (#304) | lib(1), tests, docs |
 | `toolchain_install.py` | ask-then-install: per-item install commands by platform + MCP registration + re-probe (#408) | CLI, lib(1), tests |
+| `decision_pending.py` | pending-decision list schema + serialization (stdout JSON, exit 8, `--resolve` answers; shared intake channel #455/#449/#451) | lib(2), tests |
+| `log_setup.py` | shared stdlib-logging facade (FileHandler + stderr StreamHandler, idempotent; #454/#459) | lib, tests |
 | `platform_paths.py` | platform-correct analyzeHeadless + venv python resolution (#409) | lib(2), tests |
 | `chunker.py` | length-measured batch chunking (#309) | tests |
 | `cost_estimate.py` | pre-dispatch cost estimator (#309) | lib(1), tests |

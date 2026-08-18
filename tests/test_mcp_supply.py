@@ -77,6 +77,10 @@ def run_init(ws: Path, *extra: str) -> subprocess.CompletedProcess:
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *extra]
     if "--skip-toolchain" not in argv:
         argv.append("--skip-toolchain")
+    # target-alignment intake: pin the PE fixture's type explicitly — this
+    # file owns .mcp.json scaffold behavior, not type semantics.
+    if "--type" not in argv and "--resolve" not in argv:
+        argv += ["--type", "windows"]
     argv += ["--profile-root", str(ws.parent / "profile-root")]
     return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=env, encoding="utf-8", errors="replace")
