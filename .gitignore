@@ -70,3 +70,4 @@ analysis_space/
 
 # Deployment secrets/topology (per-machine; .env.example is the template)
 .env
+.review/
