@@ -31,6 +31,26 @@ release (see the mapping table at the end).
 ## [Unreleased]
 
 
+### Changed (probe capability tiers, #474)
+
+- toolchain probes now carry an explicit probe tier — `presence`
+  (file/registry), `liveness` (side-effect-free handshake: TCP, adb
+  forward + recv, raw JDWP), `capability` (real trial run) — exposed as a
+  per-item `probe` field in `--json` output (scripts/toolchain.py)
+- decompiler check is honestly three-state: a registered ghidra/ida-pro-vm
+  MCP name or a present CLI binary is now WARN "capability unverified"
+  (previously a fake PASS satisfying the HARD init gate on registry
+  evidence alone — a Python probe cannot reach into the MCP session);
+  PASS requires the analyzeHeadless import trial, available only under the
+  new `--capability` flag / `check(..., caps=True)` (minutes-long, init/
+  on-demand only; the default path runs presence+liveness only)
+- new android `jdwp_debug` HARD check: `adb jdwp` pid discovery +
+  `adb forward tcp:8700 jdwp:<pid>` + the raw 14-byte JDWP-Handshake echo
+  (never `jdb -attach` — attach holds/resumes the target); jdb enters the
+  android matrix docs (CLAUDE.md golden) as the interactive driver
+
+
+
 ### Fixed (platform de-hardcoding, #409)
 
 - analyzeHeadless path is now platform-correct in scripts/toolchain.py

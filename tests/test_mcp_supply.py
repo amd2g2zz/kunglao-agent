@@ -400,8 +400,10 @@ def test_toolchain_mcp_fix_guidance_in_human_output(fake_claude_json, ws):
 # ---------- #407: MCP-first decompiler check ----------
 
 def test_toolchain_decompiler_mcp_first_ida_pro_vm(fake_claude_json, ws):
-    """#407: ida-pro-vm registered (ghidra absent) -> decompiler PASS via MCP,
-    and the mcp:ghidra supply item is satisfied by the ida-pro-vm provider."""
+    """#407/#474: ida-pro-vm registered (ghidra absent) -> decompiler WARN
+    'capability unverified' via MCP (registered supply defuses the HARD FAIL;
+    a registry read is not capability), and the mcp:ghidra supply item is
+    satisfied by the ida-pro-vm provider."""
     write_claude_json(fake_claude_json, {
         "sequential-thinking": reg("st"),
         "ida-pro-vm": reg("ida"),
@@ -410,15 +412,17 @@ def test_toolchain_decompiler_mcp_first_ida_pro_vm(fake_claude_json, ws):
     assert r.returncode in (0, 1, 2), r.stdout + r.stderr
     out = json.loads(r.stdout)
     decomp = next(c for c in out["checks"] if c["name"] == "decompiler")
-    assert decomp["status"] == "PASS", decomp
+    assert decomp["status"] == "WARN", decomp
     assert "via MCP (ida-pro-vm)" in decomp["detail"], decomp
+    assert "capability unverified" in decomp["detail"], decomp
     mcp_ghidra = next(c for c in out["checks"] if c["name"] == "mcp:ghidra")
     assert mcp_ghidra["status"] == "PASS", \
         f"ghidra supply must be satisfied by the ida-pro-vm provider: {mcp_ghidra}"
 
 
 def test_toolchain_decompiler_mcp_first_ghidra(fake_claude_json, ws):
-    """#407: ghidra MCP registered -> decompiler PASS via MCP."""
+    """#407/#474: ghidra MCP registered -> decompiler WARN 'capability
+    unverified' via MCP (registry evidence is not capability)."""
     write_claude_json(fake_claude_json, {
         "ghidra": reg("ghidra"),
         "sequential-thinking": reg("st"),
@@ -427,14 +431,16 @@ def test_toolchain_decompiler_mcp_first_ghidra(fake_claude_json, ws):
     assert r.returncode in (0, 1, 2), r.stdout + r.stderr
     out = json.loads(r.stdout)
     decomp = next(c for c in out["checks"] if c["name"] == "decompiler")
-    assert decomp["status"] == "PASS", decomp
+    assert decomp["status"] == "WARN", decomp
     assert "via MCP (ghidra)" in decomp["detail"], decomp
+    assert "capability unverified" in decomp["detail"], decomp
 
 
 def test_toolchain_decompiler_mcp_beats_cli_fallback(fake_claude_json, ws,
                                                      monkeypatch):
-    """#407: MCP registration is the PRIMARY signal; CLI (GHIDRA_HOME) is
-    the fallback — an MCP registration wins even when GHIDRA_HOME is set."""
+    """#407/#474: MCP registration is the PRIMARY signal; CLI (GHIDRA_HOME) is
+    the fallback — an MCP registration wins even when GHIDRA_HOME is set
+    (the decompiler item surfaces as WARN via MCP, not the CLI ghidra item)."""
     write_claude_json(fake_claude_json, {
         "ghidra": reg("ghidra"),
         "sequential-thinking": reg("st"),
@@ -443,9 +449,10 @@ def test_toolchain_decompiler_mcp_beats_cli_fallback(fake_claude_json, ws,
     r = run_toolchain(ws, "--type", "windows", "--json")
     out = json.loads(r.stdout)
     decomp = next(c for c in out["checks"] if c["name"] == "decompiler")
-    assert decomp["status"] == "PASS", decomp
+    assert decomp["status"] == "WARN", decomp
     assert "via MCP" in decomp["detail"], \
         f"MCP must be the primary decompiler signal: {decomp}"
+    assert "capability unverified" in decomp["detail"], decomp
 
 
 def test_toolchain_decompiler_fail_with_install_guidance(fake_claude_json, ws):

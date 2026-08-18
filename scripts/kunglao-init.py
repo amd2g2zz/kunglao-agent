@@ -888,6 +888,7 @@ OS_SECTIONS: dict[str, str] = {
 - **frida-server (HARD, init-enforced; renamed + custom port)**: Device-side binary must NOT use the default name; custom port (default convention: 1337). kunglao-init verifies it via `adb forward tcp:<port>` + TCP connect; unreachable means init refuses with deployment guidance.
 - **GitNexus required**: `gitnexus --version` must succeed. Post-decompile graph building is a mandatory step in the Android flow.
 - **IDA android_server (HARD, init-enforced)**: Must be present on device for IDA remote debugging. kunglao-init verifies it via `adb forward tcp:23946` + TCP connect; unreachable means init refuses with deployment guidance.
+- **JDWP debugging (HARD, init-enforced; #474)**: A debuggable app process must be running (`adb jdwp` lists a pid). kunglao-init verifies the JDWP agent via the raw 14-byte `JDWP-Handshake` echo (`adb forward tcp:8700 jdwp:<pid>` then handshake — side-effect-free, never `jdb -attach`, which holds/resumes the target). jdb remains the interactive driver for the analyst (`jdb -connect com.sun.jdi.SocketAttach:...`); the probe is the mechanical gate.
 - **eBPF tracing (WARN)**: Requires Android SDK >= 31 (getprop ro.build.version.sdk). SDK < 31 means eBPF unavailable (not blocking).
 - **unidbg (WARN, fallback)**: Requires java + unidbg library. Only used when static+debug+frida all fail. AND-gated: frida data sufficient + decompilation done + still stuck.
 

@@ -128,7 +128,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
 | `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
-| `toolchain.py` | type-aware toolchain probe matrix (#304) | lib(1), tests, docs |
+| `toolchain.py` | type-aware toolchain probe matrix (#304) with probe tiers presence/liveness/capability + jdwp handshake (#474) | lib(1), tests, docs |
 | `toolchain_install.py` | ask-then-install: per-item install commands by platform + MCP registration + re-probe (#408) | CLI, lib(1), tests |
 | `decision_pending.py` | pending-decision list schema + serialization (stdout JSON, exit 8, `--resolve` answers; shared intake channel #455/#449/#451) | lib(2), tests |
 | `log_setup.py` | shared stdlib-logging facade (FileHandler + stderr StreamHandler, idempotent; #454/#459) | lib, tests |

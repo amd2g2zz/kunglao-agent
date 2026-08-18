@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""toolchain.py — type-aware toolchain probe matrix (#304).
+"""toolchain.py — type-aware toolchain probe matrix (#304, #474 probe tiers).
 
 Per-type manifests (windows/linux/android), tiers 0-3 (HARD/HARD/HARD/WARN).
 Real probes (subprocess with timeouts, fail-open on probe crash but honest
 reporting). Dependency-cascade error messages that name the ROOT CAUSE.
+#474: every check carries a probe tier — PRESENCE (exists), LIVENESS
+(side-effect-free handshake), CAPABILITY (trial run; opt-in only).
 
-CLI: toolchain.py <workspace> [--type t] [--json] [--reproduce]
+CLI: toolchain.py <workspace> [--type t] [--json] [--reproduce] [--capability]
 Exit codes: 0 = all PASS, 1 = any HARD FAIL, 2 = only WARN failures.
 """
 from __future__ import annotations
@@ -95,6 +97,10 @@ FIXES: dict[str, str] = {
                     "(default name/port 27042 is detected by samples)",
     "android_server": "fix the root cause first (ADB); then adb push android_server to the device and run it; "
                       f"verified at init via `adb forward tcp:{ANDROID_SERVER_PORT} tcp:{ANDROID_SERVER_PORT}` + TCP connect",
+    "jdwp_debug": "fix the root cause first (ADB + ro.debuggable=1); then start the target app "
+                  "(a debuggable process must be running — `adb jdwp` must list a pid); the probe "
+                  "forwards tcp:8700 -> jdwp:<pid> and exchanges the raw 14-byte JDWP-Handshake "
+                  "(jdb remains the interactive driver; never jdb -attach from a probe — side effects)",
 }
 
 # #316: registration guidance for MCP supply checks — fix text rendered by the
@@ -106,6 +112,17 @@ class Tier(Enum):
     """Check severity: HARD blocks analysis, WARN is informational."""
     HARD = "HARD"
     WARN = "WARN"
+
+
+# #474: probe capability tiers — HOW a check was verified, orthogonal to
+# severity. A presence probe says the tool exists; liveness says a
+# side-effect-free handshake succeeded; capability says a real trial run
+# succeeded. The further down this ladder, the stronger the claim.
+class ProbeTier(Enum):
+    """How a check was verified (presence -> liveness -> capability)."""
+    PRESENCE = "presence"      # file/registry lookup (~0ms)
+    LIVENESS = "liveness"      # side-effect-free network handshake (seconds)
+    CAPABILITY = "capability"  # real trial run of the tool (minutes)
 
 
 class Status(Enum):
@@ -123,6 +140,7 @@ class CheckResult:
     tier: Tier
     detail: str
     root_cause: str | None = None
+    probe: ProbeTier = ProbeTier.PRESENCE  # #474: how it was verified
 
 
 @dataclass
@@ -259,6 +277,77 @@ def _adb_forward_probe(adb: str, port: int, timeout: int = 2) -> tuple[bool, str
         return True, f"listening on device port {port} (via adb forward)"
 
 
+# ---------- #474: jdwp liveness handshake ----------
+
+# The JDWP protocol opens with a raw 14-byte ASCII handshake: client sends
+# "JDWP-Handshake", a live JDWP agent echoes the same 14 bytes back. This is
+# side-effect-free (unlike `jdb -attach`, which resumes/holds the target VM)
+# and proves a JDWP transport is actually answering — a bare TCP accept
+# proves nothing (adb's forwarder accepts even for a dead device service).
+JDWP_HANDSHAKE_BYTES = b"JDWP-Handshake"
+# adb reserves 8700 for jdwp forwards by convention; the local side only
+# needs to be a free port — 8700 keeps it recognizable in netstat output.
+JDWP_LOCAL_PORT = 8700
+
+
+def _jdwp_handshake(host: str, port: int, timeout: int = 2) -> tuple[bool, str]:
+    """Raw JDWP handshake probe (#474, liveness tier).
+
+    Send the 14-byte ASCII handshake, require the same 14 bytes echoed.
+    Returns (ok, detail). Fail-open on any socket error (honest detail,
+    never a crash) — same policy as _tcp_connect.
+    """
+    try:
+        with socket.create_connection((host, port), timeout=timeout) as s:
+            s.settimeout(timeout)
+            s.sendall(JDWP_HANDSHAKE_BYTES)
+            echo = b""
+            while len(echo) < len(JDWP_HANDSHAKE_BYTES):
+                chunk = s.recv(len(JDWP_HANDSHAKE_BYTES) - len(echo))
+                if not chunk:
+                    return False, f"{port}: closed during handshake (no JDWP agent)"
+                echo += chunk
+    except socket.timeout:
+        return False, f"{port}: handshake timed out — no JDWP agent answering"
+    except OSError as exc:
+        return False, f"{port}: {exc}"
+    if echo == JDWP_HANDSHAKE_BYTES:
+        return True, f"JDWP handshake echoed on {port}"
+    return False, f"{port}: handshake echo mismatch (got {echo!r})"
+
+
+def _adb_jdwp_probe(adb: str, timeout: int = 2) -> tuple[bool, str]:
+    """Device-side JDWP probe (#474, liveness tier).
+
+    `adb jdwp` lists debuggable pids; forward tcp:8700 -> jdwp:<first pid>
+    then run the raw 14-byte handshake (never `jdb -attach` — attach has
+    side effects on the target). Returns (ok, detail).
+    """
+    rc, out, err = _run_cmd([adb, "jdwp"], timeout=10)
+    if rc != 0:
+        return False, f"adb jdwp failed: {err or out[:80]}"
+    pid = next((l.strip() for l in out.splitlines() if l.strip()), "")
+    if not pid or not pid.isdigit():
+        return False, (
+            "no debuggable pid listed by `adb jdwp` — a debuggable app "
+            "process must be running (ro.debuggable=1 + the target app "
+            "started, or `am set-debug-app -w <pkg>`)"
+        )
+    rc, out, err = _run_cmd(
+        [adb, "forward", f"tcp:{JDWP_LOCAL_PORT}", f"jdwp:{pid}"], timeout=10)
+    if rc != 0:
+        return False, f"adb forward tcp:{JDWP_LOCAL_PORT} jdwp:{pid} failed: {err or out[:80]}"
+    # Real adb echoes "<serial> tcp:<port> ..."; a port-bearing reply pins
+    # the actual local listener (test stubs report their own port).
+    local_port = JDWP_LOCAL_PORT
+    m = re.search(r"(?:tcp:|:)(\d+)\s*$", out.strip())
+    if m:
+        local_port = int(m.group(1))
+    ok, detail = _jdwp_handshake("127.0.0.1", local_port, timeout=timeout)
+    return ok, (f"pid {pid}: {detail}" if not ok
+                else f"JDWP agent pid {pid} alive — handshake echoed")
+
+
 # ---------- MCP supply (#316) ----------
 
 def _check_mcp(report: ToolchainReport, ws: Path, project_type: str) -> None:
@@ -274,54 +363,111 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str) -> None:
                     "WARN": Status.WARN}[mc.status],
             tier=Tier.HARD if mc.tier == "HARD" else Tier.WARN,
             detail=mc.detail,
+            # #474: registry read is presence evidence (no handshake)
+            probe=ProbeTier.PRESENCE,
         ))
 
 
-# ---------- #407: MCP-first decompiler check (deduplicated, one helper) ----------
+# ---------- #407/#474: MCP-first decompiler check (deduplicated, one helper) ----------
 
 # Registry keys checked by mcp_probe.registered_names (user ~/.claude.json +
 # workspace .mcp.json). A registered MCP decompiler is the PRIMARY signal;
 # CLI (GHIDRA_HOME/analyzeHeadless, idat64 on PATH) is only a fallback.
 _DECOMPILER_MCP_NAMES = ("ghidra", "ida-pro-vm")
 
+# #474: a Python probe cannot reach into the MCP session (analysis tools
+# register only after connect_instance succeeds — agents/ghidra-light.md),
+# so the honest ceiling for registry + port evidence is WARN. Same for a
+# present-but-untrialled CLI binary. PASS requires a capability trial, and
+# trials run ONLY under the caps opt-in (init-only contract, minutes-long).
+_UNVERIFIED = "capability unverified"
+
+
+def _capability_probe_ghidra(ah: Path, timeout: int = 300) -> tuple[bool, str]:
+    """CAPABILITY trial: analyzeHeadless imports a minimal synthetic ELF.
+
+    Minutes-long (30s-2min real) — #474 contract: init-only / on-demand,
+    never on the periodic path. Runs in a throwaway temp project dir; the
+    synthetic payload is a 64-byte minimal ELF header (never a sample).
+    Fail-open on any crash with the honest error (never raises).
+    """
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="kgl-cap-") as tmp:
+        sample = Path(tmp) / "cap_probe.elf"
+        # minimal ELF64 header magic — analyzeHeadless accepts and analyzes it
+        sample.write_bytes(b"\x7fELF\x02\x01\x01\x00" + b"\x00" * 56)
+        rc, out, err = _run_cmd(
+            [str(ah), tmp, "cap_probe", "-import", str(sample),
+             "-deleteProject"],
+            timeout=timeout,
+        )
+    if rc == 0:
+        return True, "capability trial: analyzeHeadless imported a minimal ELF"
+    return False, f"capability trial failed: {(err or out)[:120]}"
+
 
 def _check_decompiler(report: ToolchainReport, ws: Path,
-                      has_native_so: bool | None = None) -> None:
-    """Append the decompiler availability check (#407).
+                      has_native_so: bool | None = None,
+                      caps: bool = False) -> None:
+    """Append the decompiler availability check (#407 MCP-first, #474 honest).
 
-    MCP-first: `ghidra` OR `ida-pro-vm` registered (probe ~/.claude.json +
-    workspace .mcp.json via mcp_probe.registered_names) -> PASS "via MCP (<name>)".
-    CLI fallback: GHIDRA_HOME/support/analyzeHeadless(.bat) or idat64 on PATH.
-    Neither -> decompiler FAIL with ask-to-install guidance referencing the
-    #408 installer.
+    Three states, strongest evidence wins:
+      - capability-PASS (caps=True only): analyzeHeadless trial import
+        succeeded (CAPABILITY tier) — the only honest PASS.
+      - liveness/presence-WARN: MCP registered (+ bridge port reachable) or
+        CLI binary present — status WARN "capability unverified" (a probe
+        cannot reach into the MCP session; presence is not capability).
+      - FAIL: nothing registered/present (android pure-DEX keeps WARN).
 
-    `has_native_so` encodes the android tier nuance: None (windows/linux) and
-    True (android with native .so) -> HARD FAIL; False (android pure-DEX)
-    -> WARN (HARD tier, non-blocking).
+    `has_native_so` encodes the android tier nuance: None (windows/linux)
+    and True (android with native .so) -> HARD tier; False (android
+    pure-DEX) -> the FAIL/WARN wording nuance stays as before.
     """
     registered = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
-    for name in _DECOMPILER_MCP_NAMES:
-        if name in registered:
-            report.items.append(CheckResult(
-                name="decompiler", status=Status.PASS, tier=Tier.HARD,
-                detail=f"via MCP ({name})",
-            ))
-            return
 
     ghidra_home = _env_get("GHIDRA_HOME")
     ah = (platform_paths.analyze_headless(ghidra_home)
           if ghidra_home else None)
     ida = _shutil_which("idat64")
+
+    # capability trial — only when explicitly requested and a CLI binary
+    # exists to trial (MCP capability is unprovable from a Python probe).
+    if caps and _file_exists(ah):
+        ok, detail = _capability_probe_ghidra(ah)
+        if ok:
+            report.items.append(CheckResult(
+                name="ghidra", status=Status.PASS, tier=Tier.HARD,
+                detail=f"analyzeHeadless at {ah} — {detail}",
+                probe=ProbeTier.CAPABILITY,
+            ))
+            return
+        # trial ran and failed: report the FAIL honestly, fall through to
+        # the WARN evidence lines below (presence still true, capability not).
+
+    for name in _DECOMPILER_MCP_NAMES:
+        if name in registered:
+            report.items.append(CheckResult(
+                name="decompiler", status=Status.WARN, tier=Tier.HARD,
+                detail=f"via MCP ({name}) — registered, {_UNVERIFIED} "
+                       f"(registry read only; a probe cannot reach the MCP "
+                       f"session — tools register after connect_instance)",
+                probe=ProbeTier.LIVENESS,
+            ))
+            return
+
     if _file_exists(ah):
         report.items.append(CheckResult(
-            name="ghidra", status=Status.PASS, tier=Tier.HARD,
-            detail=f"analyzeHeadless at {ah}",
+            name="ghidra", status=Status.WARN, tier=Tier.HARD,
+            detail=f"analyzeHeadless at {ah} — presence only, {_UNVERIFIED} "
+                   f"(run toolchain --capability for a trial import)",
+            probe=ProbeTier.PRESENCE,
         ))
         return
     if ida:
         report.items.append(CheckResult(
-            name="ida", status=Status.PASS, tier=Tier.HARD,
-            detail=f"idat64 at {ida}",
+            name="ida", status=Status.WARN, tier=Tier.HARD,
+            detail=f"idat64 at {ida} — presence only, {_UNVERIFIED}",
+            probe=ProbeTier.PRESENCE,
         ))
         return
 
@@ -331,6 +477,7 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
             detail="No decompiler found (need Ghidra, IDA, or a ghidra/ida-pro-vm "
                    "MCP registration) — WARN for pure-DEX samples; HARD if sample "
                    "has .so (see the #408 installer)",
+            probe=ProbeTier.PRESENCE,
         ))
     else:
         report.items.append(CheckResult(
@@ -341,12 +488,14 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
                          "ghidra/ida-pro-vm MCP registration — see the #408 "
                          "installer)"),
             root_cause="decompiler" if has_native_so else None,
+            probe=ProbeTier.PRESENCE,
         ))
 
 
 # ---------- Windows manifest ----------
 
-def _check_windows(report: ToolchainReport, ws: Path) -> None:
+def _check_windows(report: ToolchainReport, ws: Path,
+                   caps: bool = False) -> None:
     """Windows toolchain checks (PE32+ x86-64)."""
     # T0: venv + pefile / DIE / floss
     for tool in ("pefile", "die", "floss"):
@@ -356,28 +505,31 @@ def _check_windows(report: ToolchainReport, ws: Path) -> None:
             if r[0] == 0:
                 report.items.append(CheckResult(
                     name="pefile", status=Status.PASS, tier=Tier.HARD,
-                    detail="pefile importable"
+                    detail="pefile importable", probe=ProbeTier.CAPABILITY,
                 ))
             else:
                 report.items.append(CheckResult(
                     name="pefile", status=Status.FAIL, tier=Tier.HARD,
                     detail=f"pefile not importable: {r[2][:100]}",
+                    probe=ProbeTier.CAPABILITY,
                 ))
             continue
         path = _shutil_which(tool)
         if path:
             report.items.append(CheckResult(
                 name=tool, status=Status.PASS, tier=Tier.HARD,
-                detail=f"found at {path}",
+                detail=f"found at {path}", probe=ProbeTier.PRESENCE,
             ))
         else:
             report.items.append(CheckResult(
                 name=tool, status=Status.FAIL, tier=Tier.HARD,
                 detail=f"{tool} not found in PATH",
+                probe=ProbeTier.PRESENCE,
             ))
 
-    # T1: Ghidra or IDA (#407: MCP-first, CLI fallback — one shared helper)
-    _check_decompiler(report, ws)
+    # T1: Ghidra or IDA (#407: MCP-first, CLI fallback — one shared helper;
+    # #474: three-state honest, caps plumbs the capability trial)
+    _check_decompiler(report, ws, caps=caps)
 
     # T2: VM reachability (vmr-shell 9876 + frida custom port, default 1337)
     vm_host = _env_get("KUNGLAO_VM_HOST")
@@ -392,12 +544,13 @@ def _check_windows(report: ToolchainReport, ws: Path) -> None:
         report.items.append(CheckResult(
             name="vm_reachable", status=Status.PASS, tier=Tier.HARD,
             detail=f"VM {vm_host} reachable on {VM_SHELL_PORT}+{FRIDA_PORT}",
+            probe=ProbeTier.LIVENESS,
         ))
     else:
         report.items.append(CheckResult(
             name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
             detail=f"VM unreachable: {vm_err}",
-            root_cause="VM",
+            root_cause="VM", probe=ProbeTier.LIVENESS,
         ))
 
     # T2: Remote debugger (x64dbg/ida_server/frida-server) — cascade from VM
@@ -405,13 +558,14 @@ def _check_windows(report: ToolchainReport, ws: Path) -> None:
         report.items.append(CheckResult(
             name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
             detail="Remote debugger unreachable (VM not reachable)",
-            root_cause="VM",
+            root_cause="VM", probe=ProbeTier.LIVENESS,
         ))
     else:
         # Would need actual VM-side probing — mark as WARN if can't verify
         report.items.append(CheckResult(
             name="remote_debugger", status=Status.WARN, tier=Tier.HARD,
             detail="VM reachable; remote debugger presence not verified",
+            probe=ProbeTier.LIVENESS,
         ))
 
     # T2: Docker (WARN)
@@ -419,12 +573,12 @@ def _check_windows(report: ToolchainReport, ws: Path) -> None:
     if docker:
         report.items.append(CheckResult(
             name="docker", status=Status.PASS, tier=Tier.WARN,
-            detail=f"docker at {docker}",
+            detail=f"docker at {docker}", probe=ProbeTier.PRESENCE,
         ))
     else:
         report.items.append(CheckResult(
             name="docker", status=Status.WARN, tier=Tier.WARN,
-            detail="docker not found (optional)",
+            detail="docker not found (optional)", probe=ProbeTier.PRESENCE,
         ))
 
     # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
@@ -433,7 +587,8 @@ def _check_windows(report: ToolchainReport, ws: Path) -> None:
 
 # ---------- Linux manifest ----------
 
-def _check_linux(report: ToolchainReport, ws: Path) -> None:
+def _check_linux(report: ToolchainReport, ws: Path,
+                 caps: bool = False) -> None:
     """Linux toolchain checks (ELF)."""
     # T0: venv + binutils (file/readelf/objdump)
     for tool in ("file", "readelf", "objdump"):
@@ -441,16 +596,18 @@ def _check_linux(report: ToolchainReport, ws: Path) -> None:
         if path:
             report.items.append(CheckResult(
                 name=tool, status=Status.PASS, tier=Tier.HARD,
-                detail=f"found at {path}",
+                detail=f"found at {path}", probe=ProbeTier.PRESENCE,
             ))
         else:
             report.items.append(CheckResult(
                 name=tool, status=Status.FAIL, tier=Tier.HARD,
                 detail=f"{tool} not found in PATH",
+                probe=ProbeTier.PRESENCE,
             ))
 
-    # T1: Ghidra or IDA (#407: MCP-first, CLI fallback — one shared helper)
-    _check_decompiler(report, ws)
+    # T1: Ghidra or IDA (#407: MCP-first, CLI fallback — one shared helper;
+    # #474: three-state honest, caps plumbs the capability trial)
+    _check_decompiler(report, ws, caps=caps)
 
     # T2: VM reachability (vmr-shell 9876 + frida custom port, default 1337)
     vm_host = _env_get("KUNGLAO_VM_HOST")
@@ -465,12 +622,13 @@ def _check_linux(report: ToolchainReport, ws: Path) -> None:
         report.items.append(CheckResult(
             name="vm_reachable", status=Status.PASS, tier=Tier.HARD,
             detail=f"VM {vm_host} reachable on {VM_SHELL_PORT}+{FRIDA_PORT}",
+            probe=ProbeTier.LIVENESS,
         ))
     else:
         report.items.append(CheckResult(
             name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
             detail=f"VM unreachable: {vm_err}",
-            root_cause="VM",
+            root_cause="VM", probe=ProbeTier.LIVENESS,
         ))
 
     # T2: debugger (gdbserver/linux_server64/frida-server) — cascade from VM
@@ -478,12 +636,13 @@ def _check_linux(report: ToolchainReport, ws: Path) -> None:
         report.items.append(CheckResult(
             name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
             detail="Remote debugger unreachable (VM not reachable)",
-            root_cause="VM",
+            root_cause="VM", probe=ProbeTier.LIVENESS,
         ))
     else:
         report.items.append(CheckResult(
             name="remote_debugger", status=Status.WARN, tier=Tier.HARD,
             detail="VM reachable; remote debugger presence not verified",
+            probe=ProbeTier.LIVENESS,
         ))
 
     # T2: Docker (WARN)
@@ -491,12 +650,12 @@ def _check_linux(report: ToolchainReport, ws: Path) -> None:
     if docker:
         report.items.append(CheckResult(
             name="docker", status=Status.PASS, tier=Tier.WARN,
-            detail=f"docker at {docker}",
+            detail=f"docker at {docker}", probe=ProbeTier.PRESENCE,
         ))
     else:
         report.items.append(CheckResult(
             name="docker", status=Status.WARN, tier=Tier.WARN,
-            detail="docker not found (optional)",
+            detail="docker not found (optional)", probe=ProbeTier.PRESENCE,
         ))
 
     # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
@@ -509,11 +668,13 @@ def _check_linux(report: ToolchainReport, ws: Path) -> None:
         report.items.append(CheckResult(
             name="gdbserver", status=Status.PASS, tier=Tier.WARN,
             detail=f"gdbserver on host PATH at {gdbserver}",
+            probe=ProbeTier.PRESENCE,
         ))
     else:
         report.items.append(CheckResult(
             name="gdbserver", status=Status.WARN, tier=Tier.WARN,
             detail="gdbserver not on host PATH (VM-side binary verified via VM channel)",
+            probe=ProbeTier.PRESENCE,
         ))
 
     # T2: eBPF (WARN — kernel > 6). The gate is the TARGET (VM) kernel, not
@@ -523,6 +684,7 @@ def _check_linux(report: ToolchainReport, ws: Path) -> None:
             name="ebpf", status=Status.WARN, tier=Tier.WARN,
             detail="host is not Linux — target VM kernel not probeable from host "
                    "(eBPF unavailable is not blocking, WARN tier)",
+            probe=ProbeTier.PRESENCE,
         ))
     else:
         uname_r = _run_cmd(["uname", "-r"], timeout=5)
@@ -535,11 +697,13 @@ def _check_linux(report: ToolchainReport, ws: Path) -> None:
             report.items.append(CheckResult(
                 name="ebpf", status=Status.PASS, tier=Tier.WARN,
                 detail=f"kernel {kernel_ver} >= 6.0 — eBPF available",
+                probe=ProbeTier.CAPABILITY,
             ))
         else:
             report.items.append(CheckResult(
                 name="ebpf", status=Status.WARN, tier=Tier.WARN,
                 detail=f"kernel {kernel_ver or 'unknown'} < 6.0 — eBPF unavailable (not blocking)",
+                probe=ProbeTier.CAPABILITY,
             ))
 
     # T3: strace/ltrace (WARN)
@@ -549,12 +713,14 @@ def _check_linux(report: ToolchainReport, ws: Path) -> None:
             name=tool, status=Status.PASS if path else Status.WARN,
             tier=Tier.WARN,
             detail=f"found at {path}" if path else f"{tool} not found (optional)",
+            probe=ProbeTier.PRESENCE,
         ))
 
 
 # ---------- Android manifest ----------
 
-def _check_android(report: ToolchainReport, ws: Path) -> None:
+def _check_android(report: ToolchainReport, ws: Path,
+                   caps: bool = False) -> None:
     """Android toolchain checks (APK/DEX/SO)."""
     # T0: venv + aapt/aapt2 (or unzip substitute)
     aapt_found = None
@@ -564,7 +730,7 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
             aapt_found = tool
             report.items.append(CheckResult(
                 name=tool, status=Status.PASS, tier=Tier.HARD,
-                detail=f"found at {path}",
+                detail=f"found at {path}", probe=ProbeTier.PRESENCE,
             ))
             break
     if aapt_found is None:
@@ -573,11 +739,13 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
             report.items.append(CheckResult(
                 name="aapt", status=Status.WARN, tier=Tier.HARD,
                 detail=f"aapt/aapt2 not found — unzip at {unzip} may substitute for APK unpacking",
+                probe=ProbeTier.PRESENCE,
             ))
         else:
             report.items.append(CheckResult(
                 name="aapt", status=Status.FAIL, tier=Tier.HARD,
                 detail="aapt/aapt2 not found and no unzip substitute — APK unpacking unavailable",
+                probe=ProbeTier.PRESENCE,
             ))
 
     # T1: jadx + apktool
@@ -586,12 +754,13 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
         if path:
             report.items.append(CheckResult(
                 name=tool, status=Status.PASS, tier=Tier.HARD,
-                detail=f"found at {path}",
+                detail=f"found at {path}", probe=ProbeTier.PRESENCE,
             ))
         else:
             report.items.append(CheckResult(
                 name=tool, status=Status.FAIL, tier=Tier.HARD,
                 detail=f"{tool} not found in PATH",
+                probe=ProbeTier.PRESENCE,
             ))
 
     # T1: GitNexus (real probe: gitnexus --version)
@@ -602,27 +771,31 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
             report.items.append(CheckResult(
                 name="gitnexus", status=Status.PASS, tier=Tier.HARD,
                 detail=f"gitnexus --version OK: {out[:80]}",
+                probe=ProbeTier.CAPABILITY,
             ))
         else:
             report.items.append(CheckResult(
                 name="gitnexus", status=Status.FAIL, tier=Tier.HARD,
                 detail=f"gitnexus at {gn_path} but --version probe failed"
                        f" ({err or out[:60]}) — post-decompile graph building requires it",
+                probe=ProbeTier.CAPABILITY,
             ))
     else:
         report.items.append(CheckResult(
             name="gitnexus", status=Status.FAIL, tier=Tier.HARD,
             detail="gitnexus not found — post-decompile graph building requires it",
+            probe=ProbeTier.PRESENCE,
         ))
 
     # T1: Ghidra or IDA (native .so decompilation; #407 MCP-first helper)
-    _check_decompiler(report, ws, has_native_so=_probe_native_so(ws))
+    _check_decompiler(report, ws, has_native_so=_probe_native_so(ws),
+                      caps=caps)
 
     # T2: ADB (root dependency)
     adb = _shutil_which("adb")
     adb_ok = False
     if adb:
-        # Check adb devices
+        # Check adb devices (liveness: the daemon answers + a device shows)
         rc, out, err = _run_cmd([adb, "devices"], timeout=10)
         devices = [l.strip() for l in out.splitlines() if "\tdevice" in l]
         if devices:
@@ -630,18 +803,19 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
             report.items.append(CheckResult(
                 name="adb", status=Status.PASS, tier=Tier.HARD,
                 detail=f"adb found, devices: {', '.join(devices)}",
+                probe=ProbeTier.CAPABILITY,
             ))
         else:
             report.items.append(CheckResult(
                 name="adb", status=Status.FAIL, tier=Tier.HARD,
                 detail="adb found but no devices attached",
-                root_cause="ADB",
+                root_cause="ADB", probe=ProbeTier.CAPABILITY,
             ))
     else:
         report.items.append(CheckResult(
             name="adb", status=Status.FAIL, tier=Tier.HARD,
             detail="adb not found in PATH — Android device bridge unavailable",
-            root_cause="ADB",
+            root_cause="ADB", probe=ProbeTier.PRESENCE,
         ))
 
     # T2: device root (cascades from ADB)
@@ -658,13 +832,13 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
         if rc == 0 and "uid=0" in out:
             report.items.append(CheckResult(
                 name="device_root", status=Status.PASS, tier=Tier.HARD,
-                detail=f"device rooted: {out}",
+                detail=f"device rooted: {out}", probe=ProbeTier.CAPABILITY,
             ))
         else:
             report.items.append(CheckResult(
                 name="device_root", status=Status.FAIL, tier=Tier.HARD,
                 detail=f"Device not rooted or su unavailable: {err or out[:100]}",
-                root_cause="root",
+                root_cause="root", probe=ProbeTier.CAPABILITY,
             ))
 
     # T2: debug flag (HARD, enforced — #304 F3): verified by reading back
@@ -685,13 +859,14 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
             report.items.append(CheckResult(
                 name="debug_flag", status=Status.PASS, tier=Tier.HARD,
                 detail="ro.debuggable=1 — debug flag set (read back verified)",
+                probe=ProbeTier.CAPABILITY,
             ))
         else:
             report.items.append(CheckResult(
                 name="debug_flag", status=Status.FAIL, tier=Tier.HARD,
                 detail=f"debug flag not set (ro.debuggable={debuggable or 'unreadable'}; "
                        f"{err or out[:60]}) — required for Android dynamic analysis",
-                root_cause="debug_flag",
+                root_cause="debug_flag", probe=ProbeTier.CAPABILITY,
             ))
 
     # T2: frida-server (renamed + custom port, convention 1337) — HARD, enforced
@@ -711,6 +886,7 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
                 name="frida_server", status=Status.PASS, tier=Tier.HARD,
                 detail=f"frida-server reachable on custom port {FRIDA_PORT} "
                        f"(renamed binary verified by port)",
+                probe=ProbeTier.LIVENESS,
             ))
         else:
             report.items.append(CheckResult(
@@ -718,7 +894,7 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
                 detail=f"frida-server NOT verified on custom port {FRIDA_PORT}: {detail} — "
                        f"must run a RENAMED binary on the custom port "
                        f"(default name/port 27042 is detected by samples)",
-                root_cause="frida_server",
+                root_cause="frida_server", probe=ProbeTier.LIVENESS,
             ))
 
     # T2: android_server — HARD, enforced (#304 F3): real probe via adb forward
@@ -737,13 +913,44 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
                 name="android_server", status=Status.PASS, tier=Tier.HARD,
                 detail=f"android_server listening on device port {ANDROID_SERVER_PORT} "
                        f"(via adb forward)",
+                probe=ProbeTier.LIVENESS,
             ))
         else:
             report.items.append(CheckResult(
                 name="android_server", status=Status.FAIL, tier=Tier.HARD,
                 detail=f"android_server NOT verified on port {ANDROID_SERVER_PORT}: {detail} — "
                        f"adb push android_server to the device and run it",
-                root_cause="android_server",
+                root_cause="android_server", probe=ProbeTier.LIVENESS,
+            ))
+
+    # T2: jdwp_debug (#474) — JDWP raw-handshake liveness probe: the android
+    # dynamic-debugging core had NO probe (zero repo hits). Discover a
+    # debuggable pid via `adb jdwp`, forward to jdwp:<pid>, exchange the
+    # 14-byte handshake — side-effect-free, unlike `jdb -attach` (attach
+    # holds/resumes the target VM). jdb remains the interactive driver
+    # (matrix docs); this probe is the mechanical gate.
+    if not adb_ok:
+        report.items.append(CheckResult(
+            name="jdwp_debug", status=Status.FAIL, tier=Tier.HARD,
+            detail="Cannot verify JDWP — ADB unavailable",
+            root_cause="ADB", probe=ProbeTier.LIVENESS,
+        ))
+    else:
+        assert adb  # noqa: S101 — adb is set when adb_ok is True
+        ok, detail = _adb_jdwp_probe(adb)
+        if ok:
+            report.items.append(CheckResult(
+                name="jdwp_debug", status=Status.PASS, tier=Tier.HARD,
+                detail=detail, probe=ProbeTier.LIVENESS,
+            ))
+        else:
+            report.items.append(CheckResult(
+                name="jdwp_debug", status=Status.FAIL, tier=Tier.HARD,
+                detail=f"JDWP agent not verified: {detail} — jdb dynamic "
+                       f"debugging needs a debuggable process; the probe uses "
+                       f"the raw 14-byte handshake (never jdb -attach, which "
+                       f"has side effects)",
+                root_cause="jdwp_debug", probe=ProbeTier.LIVENESS,
             ))
 
     # T2: eBPF (SDK >= 31) — WARN gate
@@ -751,6 +958,7 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
         report.items.append(CheckResult(
             name="ebpf_android", status=Status.WARN, tier=Tier.WARN,
             detail="Cannot check Android SDK version — ADB unavailable",
+            probe=ProbeTier.CAPABILITY,
         ))
     else:
         rc, out, err = _run_cmd([adb, "shell", "getprop", "ro.build.version.sdk"],
@@ -763,12 +971,14 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
             report.items.append(CheckResult(
                 name="ebpf_android", status=Status.PASS, tier=Tier.WARN,
                 detail=f"Android SDK {sdk} >= 31 — eBPF available",
+                probe=ProbeTier.CAPABILITY,
             ))
         else:
             report.items.append(CheckResult(
                 name="ebpf_android", status=Status.WARN, tier=Tier.WARN,
                 detail=f"Android SDK {sdk if sdk else 'unknown (probe failed: ' + (err or out)[:60] + ')'} "
                        f"< 31 — eBPF unavailable (Android 12+ required; not blocking)",
+                probe=ProbeTier.CAPABILITY,
             ))
 
     # T3: unidbg (WARN)
@@ -776,6 +986,7 @@ def _check_android(report: ToolchainReport, ws: Path) -> None:
     report.items.append(CheckResult(
         name="unidbg", status=Status.WARN, tier=Tier.WARN,
         detail=f"java {'found' if java else 'not found'} — unidbg is optional fallback",
+        probe=ProbeTier.PRESENCE,
     ))
 
     # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
@@ -813,7 +1024,7 @@ CHECK_SETS: dict[str, frozenset[str]] = {
         "aapt", "aapt2", "jadx", "apktool", "gitnexus",
         "decompiler", "ghidra", "ida",
         "adb", "device_root", "debug_flag", "frida_server",
-        "android_server", "ebpf_android", "unidbg",
+        "android_server", "jdwp_debug", "ebpf_android", "unidbg",
     }),
 }
 
@@ -851,6 +1062,7 @@ def format_json(report: ToolchainReport) -> str:
                 "name": i.name,
                 "status": i.status.value,
                 "tier": i.tier.value,
+                "probe": i.probe.value,  # #474: presence|liveness|capability
                 "detail": i.detail,
                 "root_cause": i.root_cause,
                 "fix": FIXES.get(i.name) if i.status != Status.PASS else None,
@@ -871,8 +1083,14 @@ def format_reproduce(report: ToolchainReport) -> str:
 
 # ---------- main ----------
 
-def check(ws: Path, project_type: str | None = None) -> ToolchainReport:
-    """Run type-aware toolchain checks."""
+def check(ws: Path, project_type: str | None = None,
+          caps: bool = False) -> ToolchainReport:
+    """Run type-aware toolchain checks.
+
+    #474: caps=True opts into CAPABILITY-tier trial probes (decompiler
+    import trial, minutes-long). The default path runs presence+liveness
+    only — capability trials are init-only/on-demand by contract.
+    """
     if project_type is None:
         project_type = read_project_type(ws)
     if project_type not in VALID_TYPES:
@@ -887,7 +1105,7 @@ def check(ws: Path, project_type: str | None = None) -> ToolchainReport:
         "linux": _check_linux,
         "android": _check_android,
     }
-    checkers[project_type](report, ws)
+    checkers[project_type](report, ws, caps=caps)
     return report
 
 
@@ -903,11 +1121,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="output as JSON")
     parser.add_argument("--reproduce", action="store_true",
                         help="machine-parseable output for CI")
+    parser.add_argument("--capability", action="store_true",
+                        help="run CAPABILITY-tier trial probes (decompiler "
+                             "import trial; minutes-long — init/on-demand "
+                             "only, #474)")
     args = parser.parse_args(argv)
 
     ws = Path(args.workspace).resolve()
     try:
-        report = check(ws, args.type)
+        report = check(ws, args.type, caps=args.capability)
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
