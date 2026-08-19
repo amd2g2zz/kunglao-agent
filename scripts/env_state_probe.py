@@ -131,7 +131,7 @@ def _probe_mcp_bridge(ws: Path, ptype: str) -> dict:
         return _entry("skip", f"no MCP names registered for type {ptype}")
     failed = [c.name for c in checks if c.status != "PASS"]
     if failed:
-        return _entry("fail", f"MCP unreachable: {', '.join(failed)}")
+        return _entry("fail", f"MCP not registered: {', '.join(failed)} (registry read only; capability unverified per #474)")
     return _entry("pass", f"{len(checks)} MCP name(s) registered and reachable")
 
 

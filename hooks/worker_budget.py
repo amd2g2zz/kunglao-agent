@@ -1253,7 +1253,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
         'additionalContext': (
             'environment drift (v1.9.39, #475): a capability this dispatch '
             'needs is FAILED or STALE in runs/env-state.json (written by '
-            'heartbeat_tick step 8). Fix in order: (1) L1 deterministic '
+            'heartbeat_tick step 9). Fix in order: (1) L1 deterministic '
             'repair: uv run --project <skill> <skill>/scripts/env_repair_l1.py '
             '<ws> --all (idempotent; safe no-op without the device); (2) if '
             'STALE: run one heartbeat_tick to refresh the snapshot, then '
@@ -1397,7 +1397,7 @@ def check_env_fresh(paths: dict, tier: int = 0, tools: list[str] | None = None) 
     new; pre-existing workspaces must not start failing). Explicit FAIL on a
     capability this dispatch needs -> REJECT with L1 repair guidance. Any
     needed entry older than 2x TTL -> REJECT with the self-heal hint (run
-    one heartbeat_tick — step 8 refreshes the snapshot by construction).
+    one heartbeat_tick — step 9 refreshes the snapshot by construction).
     """
     ws = paths.get('workspace')
     if not ws:
@@ -1406,7 +1406,7 @@ def check_env_fresh(paths: dict, tier: int = 0, tools: list[str] | None = None) 
     p = Path(ws) / ENV_STATE_FILE
     if not p.exists():
         return True, ('no runs/env-state.json — env freshness unverified; '
-                      'one heartbeat_tick (step 8) writes it, or re-init')
+                      'one heartbeat_tick (step 9) writes it, or re-init')
     try:
         data = json.loads(p.read_text(encoding='utf-8'))
         # #475 review HIGH-1: valid JSON of the WRONG SHAPE (list top-level,

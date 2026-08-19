@@ -6,7 +6,7 @@
 
 `runs/env-state.json` SHALL be the single source of truth for environment
 capability freshness. It SHALL be written by `scripts/env_state_probe.py`
-(invoked as heartbeat_tick step 8) with schema
+(invoked as heartbeat_tick step 9) with schema
 `{per_capability: {status, last_probe_ts, detail}, written_by, ts}` where
 `written_by` names the writer module. Probes SHALL be limited to the
 presence/liveness subset of the #474 tier ladder (TCP connect, adb forward +
