@@ -62,7 +62,14 @@ remaining work back through Task dispatch.
 
 ## 7. Hard prohibitions
 
-1. **No asking the user mid-iteration** — decide yourself, record the reasoning, keep going.
+1. **No asking the user mid-iteration** — defer to the **3-state charter**
+   in `docs/agent_3state_charter.md` (single source of truth, #447).
+   Default = **allowed** (decide + record + continue); identity ambiguity /
+   authorization boundary / scope change = **must-ask**; irreversible action =
+   **must-stop**. The orchestrator MUST consult the charter before any
+   "should I" / "do you want" / 等用户决定 decision. Execution surfaces:
+   `scripts/ask_for_direction_gate.py` (Type A/B/D/S), `scripts/kunglao-init.py`
+   pending decisions, `hooks/dispatch_gate.py` must-stop hook (Phase 2).
 2. **No cascade abort** — a single claim failing affects only that claim (deferred), never the others.
 3. **user feedback dual-layer skepticism** — accept as hypothesis(source:user_feedback), the artifact judges truth, procedural, no queue-jumping.
 4. **re-plan only when** — a verified finding / refutation propagates / task_spec is updated externally; never re-plan off a single failure.

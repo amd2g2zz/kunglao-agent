@@ -204,3 +204,107 @@ class TestDispatchGateWarning:
 
 def test_protocol_version_is_one() -> None:
     assert DISPATCH_PROTOCOL_VERSION == 1
+
+
+# ----- #447 must-stop at dispatch time (Type S hook) ------------------
+
+class TestDispatchMustStop:
+    """#447: irreversible actions in the dispatch prompt MUST HARD_PAUSE
+    (rc=2 + stderr + hookSpecificOutput) BEFORE the worker runs."""
+
+    def _setup_ws(self, tmp_path: Path) -> Path:
+        ws = tmp_path / "malware-analysis-workspace"
+        ws.mkdir(parents=True)
+        (ws / "claim-register.yaml").write_text("", encoding="utf-8")
+        (ws / ".hook_state.json").write_text(json.dumps({
+            "active_hooks": ["dispatch_gate"],
+            "paused_hooks": [],
+            "expires_at": "2099-12-31T23:59:59Z",
+        }), encoding="utf-8")
+        return tmp_path
+
+    def _run_hook(self, tmp_path: Path, prompt: str):
+        import subprocess
+        script = REPO_ROOT / "hooks" / "dispatch_gate.py"
+        payload = json.dumps({
+            "cwd": str(tmp_path),
+            "tool_input": {"prompt": prompt},
+        })
+        return subprocess.run(
+            [sys.executable, str(script)],
+            input=payload, capture_output=True, text=True, timeout=30,
+            cwd=REPO_ROOT, errors="replace",
+        )
+
+    def test_must_stop_unit_match(self) -> None:
+        sys.path.insert(0, str(REPO_ROOT / "hooks"))
+        import importlib
+        import dispatch_gate as dg
+        importlib.reload(dg)
+        assert dg._must_stop_dispatch("vmrun delete VM-1") is not None
+        assert dg._must_stop_dispatch("git push --force origin") is not None
+        assert dg._must_stop_dispatch("publish to pypi") is not None
+        assert dg._must_stop_dispatch("normal analysis work") is None
+
+    def test_irreversible_dispatch_hard_pauses(self, tmp_path: Path) -> None:
+        """A dispatch prompt containing an irreversible action MUST exit 2
+        (hard pause) + emit stderr signal."""
+        self._setup_ws(tmp_path)
+        prompt = ('[T2 tools=vmrun] claim C-409 '
+                  'task: cleanup environment, vmrun delete VM-1')
+        r = self._run_hook(tmp_path, prompt)
+        assert r.returncode == 2, \
+            f"must-stop must HARD_PAUSE; got rc={r.returncode}, " \
+            f"stdout={r.stdout!r}, stderr={r.stderr!r}"
+        assert "HARD_PAUSE" in r.stderr
+        assert "must-stop" in r.stderr
+
+    def test_normal_dispatch_does_not_hard_pause(self, tmp_path: Path) -> None:
+        """A normal dispatch prompt (no irreversible action) exits 0 (silent),
+        not 2 — must-stop is narrow."""
+        self._setup_ws(tmp_path)
+        prompt = "[T1 tools=grep] claim C-401 static string extraction"
+        r = self._run_hook(tmp_path, prompt)
+        assert r.returncode == 0, \
+            f"normal dispatch must stay silent; stderr={r.stderr!r}"
+        assert "must-stop" not in r.stderr
+
+    def test_declared_irreversible_field_fires_must_stop(self, tmp_path: Path) -> None:
+        """#447 declaration-over-inference: a v1 dispatch declaring
+        `"reversible": false` MUST hard-pause — language-independent, no
+        prose inference involved. The dispatch text itself carries no
+        irreversible keyword in any language."""
+        self._setup_ws(tmp_path)
+        prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-77", '
+                  '"tier": 2, "tools": ["vmr-shell"], '
+                  '"reversible": false}}\n'
+                  'task text contains no dangerous keyword at all')
+        r = self._run_hook(tmp_path, prompt)
+        assert r.returncode == 2, \
+            f"declared irreversible must HARD_PAUSE; rc={r.returncode}, " \
+            f"stderr={r.stderr!r}"
+        assert "must-stop" in r.stderr
+
+    def test_declared_reversible_true_does_not_fire(self, tmp_path: Path) -> None:
+        """`"reversible": true` (or absent) = ordinary dispatch; the field
+        only fires on an explicit false declaration."""
+        self._setup_ws(tmp_path)
+        prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-78", '
+                  '"tier": 1, "tools": ["grep"], '
+                  '"reversible": true}}')
+        r = self._run_hook(tmp_path, prompt)
+        assert r.returncode == 0, \
+            f"reversible:true must stay silent; stderr={r.stderr!r}"
+
+    def test_chinese_prose_alone_is_not_irreversible(self, tmp_path: Path) -> None:
+        """Declaration-over-inference doctrine: Chinese prose (or any prose)
+        without a declared field or command-grammar hit must NOT hard-pause.
+        Prose sniffing is a tripwire in the TEXT gate, never load-bearing
+        here."""
+        self._setup_ws(tmp_path)
+        prompt = ('{"kunglao_dispatch": {"version": 1, "claim": "C-79", '
+                  '"tier": 1, "tools": ["strings"]}}\n'
+                  '描述文本: 删除虚拟机的可能性讨论, but no command executed')
+        r = self._run_hook(tmp_path, prompt)
+        assert r.returncode == 0, \
+            f"prose alone must not fire dispatch must-stop; stderr={r.stderr!r}"

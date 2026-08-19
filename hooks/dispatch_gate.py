@@ -149,6 +149,30 @@ def _parse_dispatch(text: str) -> tuple[str | None, str | None]:
     return (claim_id, "v0")
 
 
+def _declared_irreversible(text: str) -> bool:
+    """#447 declaration-over-inference: a v1 dispatch MAY declare
+    `"reversible": false` in its JSON payload. That is a STRUCTURAL,
+    language-independent must-stop signal — the agent states its intent
+    instead of the gate inferring it from prose (prose enumeration is
+    unfinishable in any language; command grammar below is enumerable).
+
+    Load-bearing enforcement order for must-stop:
+      1. declared field (this function) — v1 only
+      2. command grammar (_DISPATCH_MUST_STOP_PATTERNS) — vmrun delete /
+         git push --force are commands, a finite grammar, enumerable
+    Prose sniffing lives in scripts/ask_for_direction_gate.py as a
+    best-effort tripwire, never load-bearing."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "hooks"))
+        from lib_kunglao import parse_dispatch_json
+    except Exception:
+        return False
+    _, _, claim_id, meta = parse_dispatch_json(text)
+    if claim_id is None or not isinstance(meta, dict):
+        return False
+    return meta.get("reversible") is False
+
+
 def _warn_unparseable(claim_id: str | None, reason: str | None) -> None:
     """#452: when neither v0 nor v1 protocol matches, emit a visible signal.
 
@@ -175,6 +199,61 @@ def _warn_unparseable(claim_id: str | None, reason: str | None) -> None:
     }, ensure_ascii=False), flush=True)
 
 
+# #447 Type S — irreversible-action dispatcher. English-only on principle
+# (mixing languages in regex is brittle, user directive).
+_DISPATCH_MUST_STOP_PATTERNS = [
+    # VM / snapshot destruction
+    r"\b(?:rm|delete|remove|destroy)\s+(?:vm|VM|vmx|snapshot)\b",
+    r"\b(?:snapshot\s+delete|snapshot\s+revert|vmrun\s+delete)\b",
+    # destructive git
+    r"\bgit\s+push\s+--force\b",
+    r"\bgit\s+reset\s+--hard\b",
+    r"\bgit\s+clean\s+-fd\b",
+    # public publish
+    r"\b(?:public\s+publish|public\s+release|publish\s+to\s+pypi|publish\s+to\s+npm)\b",
+]
+
+
+def _must_stop_dispatch(prompt_text: str) -> str | None:
+    """Return the first matching irreversible-action pattern, or None."""
+    for pat in _DISPATCH_MUST_STOP_PATTERNS:
+        m = re.search(pat, prompt_text, re.IGNORECASE)
+        if m:
+            return m.group(0)
+    return None
+
+
+def _warn_must_stop(claim_id: str | None, prompt_text: str) -> int:
+    """#447 must-stop hook: emit stderr + hookSpecificOutput + HARD_PAUSE.
+
+    Unlike scripts/ask_for_direction_gate.py which sees the orchestrator's
+    PRINTED text, this hook sees the dispatch PROMPT itself — catching
+    irreversible actions BEFORE the worker runs. Per
+    docs/agent_3state_charter.md: must-stop events MUST HARD_PAUSE regardless
+    of any other state (precedence over Type C convergence)."""
+    excerpt = prompt_text[:300].replace("\n", " ")
+    cid = claim_id or "(no claim)"
+    print(
+        f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447) — irreversible "
+        f"action detected in dispatch for {cid}. Refusing to dispatch.",
+        file=sys.stderr,
+        flush=True,
+    )
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": (
+                f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447). "
+                f"Irreversible action detected in dispatch for {cid}. "
+                f"Per docs/agent_3state_charter.md, irreversible actions "
+                f"MUST be explicitly approved by the user. Refusing to "
+                f"dispatch this worker. Excerpt: {excerpt!r}"
+            ),
+        },
+    }, ensure_ascii=False), flush=True)
+    return 2
+
+
 def main() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -194,6 +273,17 @@ def main() -> int:
         # #452: visible signal — gate did not recognise the dispatch
         _warn_unparseable(None, proto)
         return 0
+
+    # #447 must-stop at dispatch time, language-independent first:
+    #   1. DECLARED — v1 payload `"reversible": false` (the agent states
+    #      its intent; no natural-language inference involved)
+    #   2. COMMAND GRAMMAR — vmrun delete / git push --force are commands
+    #      (finite grammar, enumerable), not prose
+    # Fires BEFORE the failure-blocked lookup — an irreversible action in
+    # a healthy claim's dispatch is just as irreversible. Single source:
+    # docs/agent_3state_charter.md.
+    if _declared_irreversible(prompt_text) or _must_stop_dispatch(prompt_text):
+        return _warn_must_stop(claim_id, prompt_text)
 
     blocked = _failure_blocked_ids(ws)
     if claim_id not in blocked:

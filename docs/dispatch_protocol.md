@@ -27,6 +27,15 @@ JSON 前缀嵌入 Agent tool prompt:
 - `tools`: 可选,字符串列表
 - `agent`: 可选,worker 名(如 `ghidra-light` / `floss-filter`)
 - `task`: 可选,自由文本任务描述
+- **`reversible`: 可选,布尔(#447 机械优先,LLM 兜漏召回)** — agent 显式
+  声明本次派发是否不可逆。`"reversible": false` 是**语言无关**的 must-stop
+  信号:`hooks/dispatch_gate.py` 按结构字段直接 HARD_PAUSE,不做任何自然
+  语言推断。缺省 = true(普通派发)。
+
+  谁来决定 reversible 的值:机械层先跑(命令文法命中 `vmrun delete` /
+  `git push --force` 即不可逆,无论声明);机械漏召回(措辞没对上任何
+  pattern)时,由 orchestrator 的语义判断兜底 — 识别到不可逆即声明
+  `reversible: false`,把语义判断落回结构字段。**判断用语义,执行用机械。**
 
 ## 协议 v0 (兼容)
 

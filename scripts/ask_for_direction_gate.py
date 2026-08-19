@@ -1,24 +1,36 @@
 # -*- coding: utf-8 -*-
-"""ask_for_direction_gate.py - block orchestrator self-avoidance / asking-for-direction output.
+"""ask_for_direction_gate.py — orchestrator self-avoidance + 3-state charter enforcement (#447).
 
-User pain point (verbatim, in Chinese): "kunglao-agent 遇到问题不自己解决而是停下来询问或者反问"
-("kunglao-agent, when hitting a problem, solves it itself instead of
-stopping to ask or ask back")
-- "刚才任务做完了，我要做下一个吗?" ("just finished the task — should I do
-the next one?") (ask-back, violates section 9 rule 5)
+User pain point (English summary): when hitting a problem, the orchestrator
+should solve it itself instead of stopping to ask the user. Examples:
 - "Should I dispatch W-8 or wait?" (ask-back, violates section 6d.1)
 
-This gate scans orchestrator output text for violation patterns:
+#447 Three-state charter — THIS gate is one of three execution surfaces
+(see docs/agent_3state_charter.md):
   - Type A (BAD ask-back/question): "should I", "do you want", "what should I",
     "can you confirm", "please confirm", "confirm continuation",
-    "let me know", "want me to", "等用户决定" ("wait for the user to decide")
+    "let me know", "want me to"
   - Type B (BAD boundary): "just finished X, should I move to Y?" —
     completion = dispatch-next per priority.py, never ask
   - Type C (OK convergence sign-off): "C0-C7 all pass, confirm convergence" —
     legitimate per section 8 (only allowed after explicit convergence check)
+  - Type D (must-ask, #447 NEW): identity ambiguity / authorization boundary /
+    scope change — MUST HARD_PAUSE for user confirmation
+  - Type S (must-stop, #447 NEW): irreversible action (delete VM / push --force
+    / public release) — MUST HARD_PAUSE + block
 
 Allowed only when kunglao-agent state indicates C0-C7 convergence reached.
 Otherwise: REJECT (rc=1) + log "B1k orchestrator-self-redirect", force rewrite.
+Type D / Type S → HARD_PAUSE (rc=2) regardless of state.
+
+Declaration over inference (#447 doctrine): prose patterns here are
+TRIPWIRES, never load-bearing. Natural-language enumeration is unfinishable
+in any language; the load-bearing must-stop enforcement is structural and
+language-free — the v1 dispatch protocol `"reversible": false` field (the
+agent declares it) and command grammar in hooks/dispatch_gate.py
+(vmrun delete / git push --force are commands, a finite grammar). Tripwire
+lists cover the languages sessions actually produce (zh + en here) and are
+explicitly non-exhaustive.
 
 Usage:
   python ask_for_direction_gate.py <workspace> "<orchestrator_output_text>"
@@ -26,7 +38,7 @@ Usage:
 Exit codes:
   0 = clean (no violation) OR Type C with convergence flag present
   1 = Type A/B violation detected (orchestrator must self-redirect)
-  2 = HARD_PAUSE: 3+ self-redirects in this session (orchestrator must ask user)
+  2 = HARD_PAUSE: Type D (must-ask) OR Type S (must-stop) OR 3+ self-redirects
 """
 from __future__ import annotations
 
@@ -39,8 +51,27 @@ from pathlib import Path
 
 SELF_REDIRECT_LOG = "self_redirects.jsonl"
 
-# Type A: blatant ask-back/question phrases that should NEVER appear
+# ---------------------------------------------------------------------------
+# #447 doctrine — declaration over inference.
+#
+# These prose pattern lists are TRIPWIRES, not enforcement. Natural-language
+# enumeration is unfinishable in ANY language (English no less than Chinese),
+# so nothing load-bearing may depend on these lists. The load-bearing
+# enforcement for must-ask / must-stop is structural and language-free:
+#   - v1 dispatch protocol field `"reversible": false` (agent DECLARES it)
+#   - command grammar (vmrun delete / git push --force — commands, not prose;
+#     a finite grammar IS enumerable) in hooks/dispatch_gate.py
+#   - structured state (claim-register / decision_pending / .hook_state.json)
+#
+# Because these are tripwires, they cover the languages sessions actually
+# produce — this project's sessions are Chinese + English mixed, so both are
+# listed. The lists are explicitly NON-EXHAUSTIVE; extending them is routine,
+# never a contract change.
+# ---------------------------------------------------------------------------
+
+# Type A: blatant ask-back/question phrases that should NEVER appear.
 TYPE_A_PATTERNS = [
+    # English
     r"\bshould I\b",
     r"\bdo you want\b",
     r"\bdo you want me\b",
@@ -52,18 +83,24 @@ TYPE_A_PATTERNS = [
     r"\bwant me to\b",
     r"\bplease advise\b",
     r"\bshall I\b",
-    r"\b等用户决定\b",
-    r"\b等待 direction\b",
+    # Chinese (tripwire; non-exhaustive). No \b anchors — CJK chars are all
+    # \w, so a boundary only exists at punctuation/edges and mid-sentence
+    # phrases would never match.
+    r"等用户决定",
+    r"等待 direction",
+    r"要我.{0,12}吗",
+    r"是否继续",
 ]
 
-# Type B: completion-then-ask pattern (also BAD)
+# Type B: completion-then-ask pattern (also BAD).
 TYPE_B_PATTERNS = [
+    # English
     r"\bjust finished\b.*\bshould I\b",
     r"\bcompleted\b.*\bshould I\b",
     r"\bdone\b.*\bshould I\b",
-    r"\b任务做完了\b.*\b要做下一个吗\b",
-    r"\b刚完成\b.*\b接下来\b",
-    r"任务做完了[\s\S]*?要做下一个吗",
+    # Chinese (tripwire; non-exhaustive; no \b anchors, see above)
+    r"任务做完了[\s\S]{0,20}要做下一个吗",
+    r"刚完成[\s\S]{0,20}接下来",
 ]
 
 # Type C: legitimate convergence sign-off request (only allowed near C0-C7)
@@ -71,6 +108,35 @@ TYPE_C_PATTERNS = [
     r"\bC0-C7\b.*\bconverge",
     r"\bconverge\b.*\bconfirm",
     r"\ball claims terminal\b.*\bconfirm",
+]
+
+# #447 Type D (must-ask): identity ambiguity / authorization boundary / scope
+# change. MUST trigger HARD_PAUSE (rc=2) — orchestrator cannot self-resolve.
+# Single source: docs/agent_3state_charter.md. Tripwire layer (non-exhaustive);
+# load-bearing equivalents are structural (see doctrine note above).
+TYPE_D_PATTERNS = [
+    # identity ambiguity
+    r"\bmultiple\s+(?:vm|VMs|vms|toolchain|toolchains)\s+(?:found|discovered|matched)\b",
+    r"\bidentity\s+ambigu(?:ity|ous)\b",
+    # authorization boundary
+    r"\b(?:out[-\s]?of[-\s]?scope|not\s+in\s+original\s+scope)\b",
+    r"\b(?:scope\s+change|scope\s+expansion|task\s+boundary\s+expansion)\b",
+    r"\b(?:new\s+hard\s+error|new\s+blocker|encountered\s+blocker)\b",
+    # scope change
+    r"\bnot\s+covered\s+by\s+the\s+task\b",
+]
+
+# #447 Type S (must-stop): irreversible action. MUST HARD_PAUSE + block.
+TYPE_S_PATTERNS = [
+    # VM / snapshot destruction
+    r"\b(?:rm|delete|remove|destroy)\s+(?:vm|VM|vmx|snapshot)\b",
+    r"\b(?:snapshot\s+delete|snapshot\s+revert|vmrun\s+delete)\b",
+    # destructive git
+    r"\bgit\s+push\s+--force\b",
+    r"\bgit\s+reset\s+--hard\b",
+    r"\bgit\s+clean\s+-fd\b",
+    # public publish
+    r"\b(?:public\s+publish|public\s+release|publish\s+to\s+pypi|publish\s+to\s+npm)\b",
 ]
 
 
@@ -98,6 +164,32 @@ def find_convergence_signal(text: str) -> bool:
         if re.search(pat, text, re.IGNORECASE):
             return True
     return False
+
+
+def find_must_ask_signals(text: str) -> list:
+    """#447 Type D: events that MUST trigger HARD_PAUSE (must-ask).
+
+    Per docs/agent_3state_charter.md: identity ambiguity / authorization
+    boundary / scope change. Returns list of (pattern, match) tuples."""
+    out = []
+    for pat in TYPE_D_PATTERNS:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            out.append((pat, m.group(0)))
+    return out
+
+
+def find_must_stop_signals(text: str) -> list:
+    """#447 Type S: events that MUST trigger HARD_PAUSE + block (must-stop).
+
+    Per docs/agent_3state_charter.md: irreversible action (VM destroy /
+    git --force / public publish / etc.). Returns list of (pattern, match)."""
+    out = []
+    for pat in TYPE_S_PATTERNS:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            out.append((pat, m.group(0)))
+    return out
 
 
 def append_redirect(workspace: Path, text_excerpt: str, violation: str) -> int:
@@ -129,6 +221,39 @@ def append_redirect(workspace: Path, text_excerpt: str, violation: str) -> int:
 
 
 def check(workspace: Path, text: str) -> int:
+    # #447 Type S (must-stop) takes precedence over everything — irreversible
+    # actions MUST HARD_PAUSE regardless of any other state.
+    must_stop = find_must_stop_signals(text)
+    if must_stop:
+        excerpt = text[:300].replace("\n", " ")
+        print(f"HARD_PAUSE Type S (must-stop, #447): {len(must_stop)} irreversible-action signal(s):")
+        for pat, match in must_stop[:5]:
+            print(f"  '{match}' (pattern: {pat})")
+        print()
+        print("Per docs/agent_3state_charter.md, irreversible actions MUST be")
+        print("explicitly approved by the user. The orchestrator MUST NOT proceed")
+        print("without confirmation. Refusing to continue.")
+        print()
+        print(f"Excerpt: {excerpt}")
+        append_redirect(workspace, excerpt, "must-stop:" + must_stop[0][1])
+        return 2
+
+    # #447 Type D (must-ask) also HARD_PAUSE — identity ambiguity / scope change.
+    must_ask = find_must_ask_signals(text)
+    if must_ask:
+        excerpt = text[:300].replace("\n", " ")
+        print(f"HARD_PAUSE Type D (must-ask, #447): {len(must_ask)} ambiguity / scope signal(s):")
+        for pat, match in must_ask[:5]:
+            print(f"  '{match}' (pattern: {pat})")
+        print()
+        print("Per docs/agent_3state_charter.md, these events MUST be confirmed")
+        print("by the user. The orchestrator MUST NOT self-resolve identity /")
+        print("scope / authorization questions.")
+        print()
+        print(f"Excerpt: {excerpt}")
+        append_redirect(workspace, excerpt, "must-ask:" + must_ask[0][1])
+        return 2
+
     violations = find_violations(text)
 
     if violations and find_convergence_signal(text):
