@@ -8,7 +8,7 @@ no need to open any .py source. Any doc that forces the agent to read source
 to use it is a defect — this test mechanically asserts that premise.
 
 Contract:
-1. Every registered tool in tools/_INDEX.yaml (28 total) has a contract entry
+1. Every registered tool in tools/_INDEX.yaml (29 total) has a contract entry
    (H3 `### <name>`) in its category index md
 2. An entry has 6 required segments: Purpose / Usage / Inputs / Outputs /
    exit code / when_not (REQUIRED_SEGMENTS) — the segment names are shared
@@ -94,9 +94,9 @@ def _all_tools_md() -> list[Path]:
 
 # ---------- 1. registered tool -> category-md contract entry ----------
 
-def test_yaml_registry_has_28_tools() -> None:
+def test_yaml_registry_has_29_tools() -> None:
     tools = _yaml_tools()
-    assert len(tools) == 28, f"expected 28 registered tools, got {len(tools)}"
+    assert len(tools) == 29, f"expected 29 registered tools, got {len(tools)}"
     names = [t["name"] for t in tools]
     assert len(names) == len(set(names)), "duplicate tool names in _INDEX.yaml"
 

@@ -92,6 +92,7 @@ assets:
     - tools/static/opaque_pred.py
     - tools/static/overlay_scan.py
     - tools/static/pe_analyze.py
+    - tools/static/rust-dep-strings.py
     - tools/static/shellcode_scan.py
     - tools/static/stack-strings.py
     - tools/static/strings-classify.py

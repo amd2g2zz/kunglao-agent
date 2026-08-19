@@ -161,6 +161,15 @@ tools:
     input_output: {input: sample bytes + --window/--zero-run, output: Go buildinfo blob listing (offset/go_version/path/mod_count/dep_count/size)}
     when_not: not for non-Go samples (confirm the language with die first)
 
+  - name: rust-dep-strings
+    category: static
+    capability: static:rust-dep-strings
+    description: Carve Rust crate dependency strings
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: sample bytes + --channels registry,crate, output: crate name+version listing with source channel (registry path id / standalone string) + registry ids + registry+ source URLs}
+    when_not: not for non-Rust samples (confirm the language with die first); the standalone-crate channel alone is weaker evidence than the registry channel
+
   - name: call-site-args
     category: static
     capability: static:callsite-args

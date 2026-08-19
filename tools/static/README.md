@@ -1,10 +1,10 @@
 # tools/static — static analysis tool home
 
-This directory is the `static` category's tool home: purely local static-analysis CLIs — PE parsing, string and entropy extraction, syscall/stack-string/overlay scanning, disassembly comparison and listing validation, and more. 16 tools are currently registered (see `tools/_INDEX.yaml`).
+This directory is the `static` category's tool home: purely local static-analysis CLIs — PE parsing, string and entropy extraction, syscall/stack-string/overlay scanning, disassembly comparison and listing validation, and more. 17 tools are currently registered (see `tools/_INDEX.yaml`).
 
 ## Relation to the index docs
 
-A worker reads `tools/_index-static.md` first (the 6-segment contract entries for the 16 tools: Purpose/Usage/Inputs/Outputs/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and absorption history. The machine contract is `tools/_INDEX.yaml`.
+A worker reads `tools/_index-static.md` first (the 6-segment contract entries for the 17 tools: Purpose/Usage/Inputs/Outputs/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and absorption history. The machine contract is `tools/_INDEX.yaml`.
 
 ## Absorbed tools (issue #278 PR-1b, 6 zero-dependency CLIs)
 
@@ -47,3 +47,9 @@ lzma-raw is no longer absorbed separately: the `lzma-raw` subcommand of `tools/c
 - All fully parameterized, read-only idempotent, three-state exit codes: 0 success / 1 negative finding (ran, no result) / 2 error (bad arguments/unreadable input, with guidance).
 - `--json` default output is a single JSON object + `--reproduce` field=value lines (kunglao L1 mechanical gate).
 - Per-tool usage/exit-code specifics defer to the contract entries in `tools/_index-static.md`.
+
+## Absorbed tools (issue #427)
+
+| Tool | Source script | One-line contract |
+|---|---|---|
+| `rust-dep-strings.py` | `ghidra_scripts/RustDependencyStrings.py` (author Matt Ehrnschwender; the cargo registry path regex is the absorbed asset, adapted to the marker + bounded-window + backtrack form) | Rust crate dependency-string carving (registry paths / standalone name-version, dual channel) |
