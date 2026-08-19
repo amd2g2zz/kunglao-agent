@@ -14,7 +14,7 @@ the situation it was built for.
 | `scripts/convergence_check.py` | **Every turn, before anything else** — answers "should I dispatch, or am I converged/saturated/blocked?" |
 | `scripts/convergence_health.py` | **Every 3rd turn / when "busy but stuck"** — reads the ledger and answers "is the loop actually converging, or spinning?" |
 | `scripts/failure_analysis_gate.py` | **When a worker reports failure, before re-dispatch or NEGATIVE** — forces 3-question method-failure reasoning. A failed attempt is not evidence the behavior is absent |
-| `scripts/priority.py` | "I have multiple open claims and need to pick the next one" — value/leverage/cheapness scoring |
+| `scripts/priority.py` | DEPRECATED (#499) — next-claim ranking moved to `scripts/priority_ratio.py` (VoI proxy); removal tracked by #446 |
 | `scripts/active_intervention.py` | "A worker has been silent for > 5 min and the status file shows it's stuck" — non-response is a signal |
 | `scripts/backtrack_gate.py` | "The same worker has been doing the same thing for > 20 min without progress" — backtrack decision required |
 | `scripts/kunglao-verify.py` | "I'm about to declare a claim PROVEN-FULL" — L1 mechanical reproduce + byte-exact compare; independent verifier sign-off is structural |

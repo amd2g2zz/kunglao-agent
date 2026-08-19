@@ -40,7 +40,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | --- | --- | --- |
 | `convergence_check.py` | convergence decision (DISPATCH/DISPATCH_VERIFIER/SATURATED/BLOCKED/CONVERGED) — the every-turn gate | hooks, CLI, lib(2), tests |
 | `convergence_health.py` | ledger-based HEALTHY/STALLED/SPINNING verdicts | hooks, CLI, lib(2), tests |
-| `priority.py` | legacy dispatch ranker (v1 direct-cap formula, kept for compatibility) | hooks, lib(1), tests |
+| `priority.py` | DEPRECATED weighted dispatch ranker (#499; authority `priority_ratio.py`, removal #446) | lib, tests |
 | `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4) | lib(3), tests |
 | `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |

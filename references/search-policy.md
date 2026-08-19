@@ -9,16 +9,16 @@ Three layers, each real and machine-checkable:
    dispatchable only when every claim it `depends_on` is terminal. Refutation
    propagates along the same edges (§9 rule 4b). This is the CORE.
 2. **Computed-priority greedy best-first** - among dispatchable open claims, the
-   orchestrator dispatches the highest-priority one first. Priority is a real
-   heuristic computed by `scripts/priority.py` (NOT LLM free judgment):
+   orchestrator dispatches the highest-priority one first. Priority is the VoI
+   proxy computed by `scripts/priority_ratio.py` (NOT LLM free judgment; #499):
 
-       Priority(C) = 0.4*value + 0.3*leverage + 0.2*cheapness + 0.1*novelty
-         value     : 1.0 PRIMARY (answers_question set); 0.6 competitor (competitor_group); 0.2 background
-         leverage  : min(1, open_dependents/3) - OPEN claims that depend on C
-         cheapness : next evidence-tier cost: T1=1.0  T2=0.5  T3=0.2  (cheaper first)
-         novelty   : 1/(1+promotion_attempts) - fresh claims before re-tries
+       score(C) = [0.45*L + 0.30*D + 0.25*N] / TIER_COST[tier]
+         L leverage      : downstream OPEN claims normalized; claim with a terminal fact -> 0
+         D discriminator : live competitor_group (>=2 OPEN) = 1.0 / answers_question = 0.5 / else 0.2
+         N novelty       : 1 - same-category terminal-facts saturation (facts/_INDEX driven)
+         TIER_COST       : {1: 1.0, 2: 3.0, 3: 10.0} (deeper tier -> smaller ratio)
 
-   Weights overridable via `task_spec.priority_weights` or env `PRIORITY_WEIGHTS=v,l,c,n`.
+   Weights are spec-frozen (specs/phase-4/contract.md §1) - no runtime override.
    A claim is DISPATCHABLE when: status non-terminal AND promotion_attempts<3 AND
    every depends_on[C] is terminal.
 3. **Iterative-deepening tier gate** (`worker_budget.check_tier_gate`) - tier N needs
@@ -35,7 +35,7 @@ Three layers, each real and machine-checkable:
 
 ## Per-round loop (the orchestrator runs this each iteration)
 
-1. `python scripts/priority.py` (or `--json`) -> ranked dispatchable-claim queue + per-claim `gate` status.
+1. `python scripts/priority_ratio.py` <ws> (or `--json`) -> ranked action queue (claim_id / action / score).
 2. Dispatch the top claim(s), respecting `<=3 workers` + tier gate. Deviate from rank #1 only with a recorded reason in `reasoning`.
 3. Workers gather evidence; verify (`verify-static-vs-dynamic`); update `claim-register.yaml` (status / `evidence_tier_attempted` / `promotion_attempts`).
 4. Re-plan only on: verified finding / refutation via `claim_deps` / task_spec external update (§9 rule 4). Back to step 1.

@@ -4,7 +4,7 @@
   2. Does this load the sample on the host? If yes -> BLOCK.
   3. Is the agent's verdict self-stamped (verifier_id == worker_id)? If yes -> BLOCK (F-8, see section 1b maker-checker).
   4. Did I re-issue the same dispatch without backtrack? If yes -> REDIRECT to backtrack_gate.py (F-11).
-  5. Am I waiting on user direction (fan-wen)? If yes -> DECIDE myself (see F-13 + section 9 rule 5 - just decide per priority.py / section 8 / section 9).
+  5. Am I waiting on user direction (fan-wen)? If yes -> DECIDE myself (see F-13 + section 9 rule 5 - just decide per priority_ratio.py / section 8 / section 9).
 # Orchestrator Guardrails (kunglao-agent §1-§6 reference)
 
 > The non-negotiable addendum to "You are the ORCHESTRATOR". These rules
@@ -432,7 +432,7 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   `runs/worker-status-*.md` in every worker worktree (`.wt-*/`), record last
   update time; (2) worker silent >5 min → run `scripts/active_intervention.py`,
   silent >20 min → `scripts/backtrack_gate.py`, dead → B1c blocker + redispatch;
-  (3) run `scripts/convergence_check.py` — DISPATCH → `priority.py` + dispatch
+  (3) run `scripts/convergence_check.py` — DISPATCH → `priority_ratio.py` + dispatch
   next; SATURATED → keep polling, no idle; CONVERGED → run the §6.3 closeout
   checklist FIRST — if any item is unmet, continue the session (dispatch
   verifier / write notes / re-score verdict / write report) instead of

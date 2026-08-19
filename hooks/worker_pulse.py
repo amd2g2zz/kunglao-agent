@@ -23,12 +23,12 @@ SMART = narrow + alive-only (same philosophy as dispatch_gate):
 Output shape (one compact block):
   [worker_pulse] W-<n> finished
   DECISION: <DISPATCH|SATURATED|BLOCKED|DISPATCH_VERIFIER|CONVERGED> — <action>
-  next up: <top dispatchable claim via priority.py>
+  next up: <top dispatchable claim via priority_ratio.py — the sanctioned scorer (#499)>
   flags: stuck=<...> failure-blocked=<...> partial=<...>
   TASKSTOP: W-<n> delivered — TaskStop now          # #88: on a final-state worker
 
-Pure read: reads claim-register.yaml + runs convergence_check/priority in
-subprocess. No state writes, no files touched (except the ledger side-effect
+Pure read: reads claim-register.yaml + runs convergence_check/priority_ratio
+in subprocess. No state writes, no files touched (except the ledger side-effect
 of convergence_check, which is by-design).
 
 TASKSTOP delivery reminder (#88, D1): when the just-completed dispatch's
@@ -240,18 +240,32 @@ def _build_pulse(ws: Path) -> tuple[str, str | None]:
         if flags:
             lines.append("flags: " + "; ".join(flags))
 
-    # next-up claim via priority.py
-    pr = _run_py([str(SKILL_DIR / "scripts" / "priority.py"), str(ws), "--json"], ws)
+    # next-up claim via priority_ratio.py — THE authoritative scorer (#499:
+    # specs/phase-4/contract.md §1 lands DECIDE action ranking on
+    # priority_ratio; the legacy weighted module is deprecated, #446 retires it).
+    pr = _run_py([str(SKILL_DIR / "scripts" / "priority_ratio.py"), str(ws), "--json"], ws)
     if pr and pr.returncode == 0:
         try:
-            pj = json.loads(pr.stdout)
+            actions = json.loads(pr.stdout)
         except json.JSONDecodeError:
-            pj = None
-        if pj and pj.get("dispatchable"):
-            top = pj["dispatchable"][0]
-            lines.append(f"next up: {top['id']} (score {top['score']}) {top.get('statement', '')[:80]}")
-        elif pj:
-            lines.append("next up: no dispatchable claims (check DECISION above)")
+            actions = None
+        if isinstance(actions, list):
+            # caller-side filtering is the caller's job (contract §1 — the pure
+            # function takes no ws): drop failure-blocked claims (cc flags them)
+            # and claims convergence_check no longer counts open (e.g. RETRACTED
+            # — ratio.is_open keys off status_defs.TERMINAL, cc off
+            # TERMINAL_WITH_RETRACTED; cc is the convergence truth face).
+            failure_blocked = set(d.get("failure_blocked") or []) if d else set()
+            cc_open = ({c.get("id") for c in d.get("open_claims", []) if c.get("id")}
+                       if d else None)
+            eligible = [a for a in actions
+                        if a.get("claim_id") not in failure_blocked
+                        and (cc_open is None or a.get("claim_id") in cc_open)]
+            if eligible:
+                top = eligible[0]
+                lines.append(f"next up: {top['claim_id']} (score {top['score']}) {top.get('action', '')}")
+            else:
+                lines.append("next up: no dispatchable claims (check DECISION above)")
 
     if len(lines) == 1:
         return "", (d or {}).get("decision")

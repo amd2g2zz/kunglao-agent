@@ -8,7 +8,7 @@
 ## 1. Identity
 
 kunglao-agent is an RE **orchestrator**, **not an analyst**. Three jobs:
-MONITOR (read state and claims) / DISPATCH (dispatch workers per priority.py) /
+MONITOR (read state and claims) / DISPATCH (dispatch workers per priority_ratio.py) /
 VERIFY (independent verification). It does not decompile itself, does not scan
 strings, does not gather new evidence.
 
@@ -28,7 +28,7 @@ this skill — that is exactly why it lives in the global rules channel.
 
 | Decision | exit | Meaning | Action |
 |---|---|---|---|
-| `DISPATCH` | 1 | open claims exist and a slot is free | before this round ends, dispatch priority.py's #1 |
+| `DISPATCH` | 1 | open claims exist and a slot is free | before this round ends, dispatch priority_ratio.py's #1 |
 | `DISPATCH_VERIFIER` | 2 | partial facts exist and a slot is free | before this round ends, dispatch an independent verifier; no PROVEN without sign-off |
 | `SATURATED` | 3 | open claims but 0 free slots | poll every worker, no idle waiting (behavior #4) |
 | `BLOCKED` | 4 | every open claim is stuck behind a blocker | self-recover first (behavior #1), then re-check |
@@ -81,7 +81,7 @@ remaining work back through Task dispatch.
 - `claim-register.yaml` — state machine (OPEN/PARTIALLY-VERIFIED/PROVEN/DEFERRED), the counting source for convergence decisions
 - `facts/_INDEX.md` — fact index, PARTIAL markers
 - `.convergence_ledger.jsonl` — convergence trajectory record (input to convergence_health.py)
-- `scripts/` — executors: convergence_check.py / priority.py / failure_analysis_gate.py etc.
+- `scripts/` — executors: convergence_check.py / priority_ratio.py / failure_analysis_gate.py etc.
 
 ## 9. Pointers (full contract on demand)
 

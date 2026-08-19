@@ -1,7 +1,7 @@
 {
   "decision": "DISPATCH",
   "exit_code": 1,
-  "action": "Run priority.py and dispatch the top claim. 1 unblocked open claim(s), 3 free slot(s).",
+  "action": "Run priority_ratio.py and dispatch the top claim. 1 unblocked open claim(s), 3 free slot(s).",
   "open_claims": [
     {
       "id": "C-1",

@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """convergence_check.py - the "should I dispatch right now?" decision (v1.9).
 
-Companion to priority.py:
-  priority.py        → "given I'm dispatching, WHICH claim is highest-value?"
+Companion to priority_ratio.py:
+  priority_ratio.py  → "given I'm dispatching, WHICH claim is highest-value?"
   convergence_check  → "SHOULD I be dispatching at all, or am I converged / saturated / blocked?"
 
 This exists because the #1 failure mode across 8 sessions / 6 workspaces was
@@ -14,7 +14,7 @@ executable form of that check, so the agent has a concrete tool rather than
 aspirational prose.
 
 Decision matrix:
-  open_claims>0 AND free_slots>0           → DISPATCH       (run priority.py, dispatch top)
+  open_claims>0 AND free_slots>0           → DISPATCH       (run priority_ratio.py, dispatch top)
   partial_facts>0 AND free_slots>0         → DISPATCH_VERIFIER
   open_claims>0 AND free_slots==0          → SATURATED      (poll workers, don't idle)
   open_claims==0 AND partial_facts==0      → CONVERGED      (loop done, write report)
@@ -597,7 +597,7 @@ def decide(workspace: Path) -> dict:
                         "contradictions, zero unconsumed discoveries, PROVEN provenance). STOP dispatch; deliver"
     elif unblocked_open and free_slots:
         decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
-            f"Run priority.py and dispatch the top claim. {len(unblocked_open)} unblocked open claim(s), {free_slots} free slot(s)."
+            f"Run priority_ratio.py and dispatch the top claim. {len(unblocked_open)} unblocked open claim(s), {free_slots} free slot(s)."
     elif partials and free_slots:
         decision, exit_code, action = "DISPATCH_VERIFIER", EXIT_VERIFY, \
             f"Dispatch a verifier for {len(partials)} partial fact(s). Do NOT declare PROVEN without sign-off."

@@ -52,14 +52,18 @@ HOST_FORBIDDEN_TOOLS = (
 )
 
 
-# ---------- best-first priority advisory (imports scripts/priority.py) ----------
+# ---------- best-first priority advisory (imports scripts/priority_ratio.py) ----------
+# #499: priority_ratio is THE sanctioned next-claim scorer (specs/phase-4/
+# contract.md §1 — the DECIDE ranker, issue #2 VoI proxy). The legacy
+# weighted ranker is deprecated (retirement: #446).
 _SKILL_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
 try:
-    from priority import rank_claims as _rank_claims, _weights as _priority_weights
+    from priority_ratio import priority_ratio as _ratio_rank, EvidenceView as _EvidenceView
+    from retract_claim import RETRACTED  # retracted = terminal (#331)
     from status_defs import TERMINAL  # single source of truth (#34, #95)
     _PRIORITY_AVAILABLE = True
-except Exception:  # pragma: no cover - hook stays usable if priority.py is moved
+except Exception:  # pragma: no cover - hook stays usable if the scorer moves
     _PRIORITY_AVAILABLE = False
 
 # ---------- issue #310: specialist trigger table (imports route_capability) ----------
@@ -187,33 +191,69 @@ def check_backtrack_gate(paths):
     return True, ''  # unknown rc -> fail open
 
 
-def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid):
-    """Best-first priority audit — v1.9.24 returns (ok, msg, deviated).
+def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None):
+    """Best-first priority audit — v1.9.24 returns (ok, msg, deviated). #499:
+    ranks by the authoritative VoI scorer (priority_ratio.py — specs/phase-4/
+    contract.md §1), NOT the deprecated weighted module.
 
     Silent for rank-#1 dispatches; ADVISORY when the dispatched claim is not
     the top-ranked dispatchable one. `deviated=True` means the dispatch
     departed from rank #1 and a `reasoning:` field is HARD-REQUIRED in the
     dispatch prompt (pre_check rejects without it — anti-spoof: prevents
     "pretend-priority" dispatches that skip the recorded-deviation discipline).
+
+    task_spec_path is kept for signature stability only — the VoI weights are
+    spec-frozen (0.45/0.30/0.25); the old priority_weights/PRIORITY_WEIGHTS
+    override does not apply to the authority scorer.
+
+    Caller-side filtering is the caller's job (contract §1 — the pure function
+    takes no ws): failure-blocked claims (failed attempt, no current
+    failure_analysis) are excluded so this audit never contradicts
+    convergence_check, and RETRACTED counts as terminal (#331), matching the
+    convergence truth face. The filter stays MINIMAL on purpose (injection
+    M4 guard): RETRACTED is the one status ratio.is_open misses
+    (status_defs.TERMINAL is frozen without it), so it is removed here;
+    DEFERRED/STALE/PROVEN/... terminal rows STAY in the list handed to
+    _ratio_rank — is_open already excludes them from candidacy, and their
+    rows feed the novelty derivation (_fact_count_by_category keys terminal
+    facts to claims by id); over-filtering silently drops their categories
+    from novelty counting.
     """
     if not _PRIORITY_AVAILABLE or not dispatched_cid:
         return (True, '', False)
     reg = _load_yaml(reg_path)
     deps = _load_yaml(deps_path)
-    rows = _rank_claims(reg, deps, _priority_weights(_load_yaml(task_spec_path)))
-    if not rows:
+    claims = [c for c in (reg.get('claims') or []) if c.get('id')]
+    evidence = _EvidenceView()
+    if ws:
+        ws_path = Path(ws)
+        try:
+            import failure_analysis_gate as fag
+            blocked_ids = {b['claim_id'] for b in fag.scan_workspace(ws_path)
+                           if b.get('state') == 'BLOCKED'}
+            claims = [c for c in claims if c.get('id') not in blocked_ids]
+        except Exception:  # pragma: no cover - the audit stays usable, fail-open
+            pass
+        evidence = _EvidenceView.from_workspace(ws_path)
+    # RETRACTED is terminal (#331) — ratio.is_open keys off status_defs.TERMINAL
+    # (frozen without RETRACTED), so THIS caller removes it. Every other
+    # terminal-status row is kept: is_open already excludes it from candidacy,
+    # and its row feeds the novelty fact counting (M4 guard).
+    claims = [c for c in claims if (c.get('status') or '').upper() != RETRACTED]
+    actions = _ratio_rank(claims, deps, evidence)
+    if not actions:
         return (True, '', False)
-    top = rows[0]
-    if top['id'] == dispatched_cid:
+    top = actions[0]
+    if top.claim_id == dispatched_cid:
         return (True, '', False)  # rank #1 - silent
-    rank = next((i + 1 for i, r in enumerate(rows) if r['id'] == dispatched_cid), None)
+    rank = next((i + 1 for i, a in enumerate(actions) if a.claim_id == dispatched_cid), None)
     if rank is None:
         return (True, f'ADVISORY: {dispatched_cid} not in dispatchable set '
-                      f'(rank #1 = {top["id"]} score {top["score"]}); '
+                      f'(rank #1 = {top.claim_id} score {top.score}); '
                       f'blocked by deps/promotion, or already terminal?', False)
     return (True, f'ADVISORY: dispatched {dispatched_cid} rank #{rank} '
-                  f'(score {rows[rank - 1]["score"]}); rank #1 is {top["id"]} '
-                  f'(score {top["score"]}) - record a reasoning for the deviation.', True)
+                  f'(score {actions[rank - 1].score}); rank #1 is {top.claim_id} '
+                  f'(score {top.score}) - record a reasoning for the deviation.', True)
 
 
 # ---------- parsing ----------
@@ -1555,7 +1595,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     # the ranked #1 claim, the prompt MUST carry an explicit `reasoning:` field —
     # otherwise the dispatch is REJECTED (prevents "pretend-priority" spoofing:
     # dispatching a different claim without recording why).
-    _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), paths.get('task_spec'), cid)
+    _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), paths.get('task_spec'), cid, paths.get('workspace'))
     if deviated:
         desc = payload.get('tool_input', {}).get('prompt', '')
         if 'reasoning:' not in desc:

@@ -24,7 +24,7 @@ Failure modes covering the orchestrator's core dispatch loop:
 | F1 | Idles with slots free, never dispatches next claim | are you idling with slots free? (slots<3 and open_claims>0 -> dispatch now) | B1a |
 | F2 | Never self-schedules /loop | did you schedule /loop? (>=1 worker in flight or >=1 OPEN claim -> heartbeat required) | B1a |
 | F3 | Only pings last-dispatched worker | did you check ALL registered workers, not just last-dispatched? (for worker in registry, no short-circuit) | B1d |
-| F4 | Doesn't re-plan based on subagent return | did you re-read worker output + re-run priority.py? (every worker return -> re-plan) | B1b |
+| F4 | Doesn't re-plan based on subagent return | did you re-read worker output + re-run priority_ratio.py? (every worker return -> re-plan) | B1b |
 | F5 | Dead-worker / zombie wait | did you cross-check worker_budget active_workers + TaskList? (dead worker = post_check missing + liveness gone) | B1c |
 | F6 | Discards stage-specific agents, uses general-purpose | is this really a general-purpose dispatch? (claim matches stage agent -> use stage-specific) | (self-violation) |
 

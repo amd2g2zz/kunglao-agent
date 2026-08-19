@@ -148,7 +148,7 @@ Act on the decision + exit code — it is a command, not a suggestion:
 
 | Decision | Exit | Meaning | Action |
 | --- | --- | --- | --- |
-| `DISPATCH` | 1 | open claims + free slots | Run `priority.py`; dispatch the top claim — this turn, no exceptions |
+| `DISPATCH` | 1 | open claims + free slots | Run `priority_ratio.py`; dispatch the top claim — this turn, no exceptions |
 | `DISPATCH_VERIFIER` | 2 | partial facts + free slots | Dispatch a verifier; do NOT declare PROVEN without sign-off |
 | `SATURATED` | 3 | open claims but 0 free slots | Poll stuck workers; do not idle |
 | `BLOCKED` | 4 | open claims all blocked | Resolve blockers (self-recovery), then re-check |
@@ -158,7 +158,7 @@ Manual fallback (script unavailable): scan `claim-register.yaml` for OPEN/PARTIA
 
 ## The dispatch contract
 
-The shape is fixed: `[T<N> tools=<comma-separated>] claim <C-NN> <task>`, parsed by `hooks/worker_budget.py` (enforces ≤3 workers, per-claim cap, constraints, time, tier gate). T1 = cheap (grep/strings/DIE/decompile), T2 = medium (emulation), T3 = expensive (VM/Frida). The worker fills `runs/worker-status-<id>.md` and, when done, `facts/F<NNN>.md`. After a worker returns: read both files, classify, update `claim-register.yaml`, re-run `priority.py`, dispatch the new top. Example: `[T1 tools=grep,xxd] claim C-007 grep chemistry strings in main.main`.
+The shape is fixed: `[T<N> tools=<comma-separated>] claim <C-NN> <task>`, parsed by `hooks/worker_budget.py` (enforces ≤3 workers, per-claim cap, constraints, time, tier gate). T1 = cheap (grep/strings/DIE/decompile), T2 = medium (emulation), T3 = expensive (VM/Frida). The worker fills `runs/worker-status-<id>.md` and, when done, `facts/F<NNN>.md`. After a worker returns: read both files, classify, update `claim-register.yaml`, re-run `priority_ratio.py`, dispatch the new top. Example: `[T1 tools=grep,xxd] claim C-007 grep chemistry strings in main.main`.
 
 **Plan-to-execute**: write `runs/plan-C<NN>.md` BEFORE dispatching claim C-NN — the worker_budget plan gate REJECTS any dispatch without a plan on disk (or with an empty-shell plan carrying no content) or a plan path in the dispatch prompt (the plan phase exposes inferences before execution). The plan declares `agent_type: <agent executing this plan>` (route_capability recommendation). The dispatch prompt must also carry `facts-snapshot:` (e.g. `facts-snapshot: 9 facts at <ts>`) or the dispatch is REJECTED; rank-#1 deviation requires `reasoning:` in the prompt (check_priority audit REJECTS without).
 
@@ -192,7 +192,7 @@ Run `python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd tur
 
 **Self-cap-safe dispatch**: `worker_budget.detect_self_cap()` rejects time-cap phrasing in dispatch descriptions ("30 min", "stop after 1 hour") unless a negation phrase is present ("no self-cap", "until done"). Never write time-cap phrasing; if unavoidable, append "(no self-cap)". Pattern table — see `references/_INDEX.md`.
 
-**Dispatch policy**: claim-driven — `claim_deps.yaml` is the core; claims are nodes, dispatch/verify/propagate all key off claims, refutation propagates along deps. Tier-gated — broad cheap evidence (T1) on all claims before expensive (T3) on one (`worker_budget.check_tier_gate()`, iterative deepening by evidence cost). Greedy best-first — `scripts/priority.py` (heuristic score value×leverage×cheapness×novelty, priority queue by rank). Pick the next open claim within the dep+tier constraints, ranked by that script. Search cadence (iteration 1 cheap → 5 medium → 8 cross-validate → 10+ stop) — see `references/_INDEX.md`. Tool inventory + CLI family — see `references/_INDEX.md`.
+**Dispatch policy**: claim-driven — `claim_deps.yaml` is the core; claims are nodes, dispatch/verify/propagate all key off claims, refutation propagates along deps. Tier-gated — broad cheap evidence (T1) on all claims before expensive (T3) on one (`worker_budget.check_tier_gate()`, iterative deepening by evidence cost). Greedy best-first — `scripts/priority_ratio.py` (VoI proxy [0.45·L+0.30·D+0.25·N]/cost, priority queue by rank). Pick the next open claim within the dep+tier constraints, ranked by that script. Search cadence (iteration 1 cheap → 5 medium → 8 cross-validate → 10+ stop) — see `references/_INDEX.md`. Tool inventory + CLI family — see `references/_INDEX.md`.
 
 **Drift reality check**: run `python <SKILL_DIR>/scripts/plan_drift_detector.py <WORKSPACE>` each round — verify the plan's claim IDs against `claim_deps.yaml` and the next-step claims; unverified plan items are hypotheses — never execute on a stale plan.
 
@@ -268,10 +268,10 @@ Read `references/failure-modes.md` (index) for all 18 F-rows and their enforceme
 
 | Symptom | Countermeasure | Enforcement |
 | --- | --- | --- |
-| Idles with slots free (F1) | Dispatch `priority.py` #1 now | convergence_check exit 1 |
+| Idles with slots free (F1) | Dispatch `priority_ratio.py` #1 now | convergence_check exit 1 |
 | Forgot heartbeat (F2) | Schedule `/loop 5m` or CronCreate before first dispatch | worker_budget `check_heartbeat_alive` |
 | Pings only the last-dispatched worker (F3) | Enumerate ALL registered workers each tick | heartbeat_tick.py |
-| Doesn't re-plan after worker return (F4) | Re-read worker output + re-run `priority.py` | priority audit |
+| Doesn't re-plan after worker return (F4) | Re-read worker output + re-run `priority_ratio.py` | priority audit |
 | Dead-worker / zombie wait (F5) | Cross-check active_workers + TaskList | `--reconcile` |
 | General-purpose instead of stage agent (F6) | Use the stage-specific agent for the claim | worker_budget agenttype gate |
 | Inference written as fact | Plan before dispatch | plan-to-execute gate |
@@ -283,7 +283,7 @@ Read `references/failure-modes.md` (index) for all 18 F-rows and their enforceme
 
 **The orchestrator is NOT an analyst**: never decompile, emulate, scan strings, or gather novel evidence — that is delegated to workers (maker-checker: worker = maker, you = checker, different agents). Never ask the user "should I do X?" — act per this contract; ask only when the next action is genuinely unrecoverable without user input (contradicting CTI, blocked on access, zero OPEN claims + empty fact base). Do not re-read what hasn't changed — mid-iteration re-read heuristic — see `references/_INDEX.md`. Do not query CTI/OSINT sources, extract IOCs, or attribute to a threat actor — the job ends at a byte-anchored, verified RE fact base.
 
-**Three jobs, nothing else**: MONITOR — read the cold-start files, track claims, spot cross-fact patterns (synthesis). DISPATCH — run `scripts/priority.py` to rank dispatchable open claims, dispatch the top within ≤3 workers + tier gate; deviate from rank #1 only with recorded `reasoning`; do NOT prescribe how a worker works. VERIFY — the verify chain above.
+**Three jobs, nothing else**: MONITOR — read the cold-start files, track claims, spot cross-fact patterns (synthesis). DISPATCH — run `scripts/priority_ratio.py` to rank dispatchable open claims, dispatch the top within ≤3 workers + tier gate; deviate from rank #1 only with recorded `reasoning`; do NOT prescribe how a worker works. VERIFY — the verify chain above.
 
 **Read/write boundary (F2)**: read state (`claim-register.yaml` / `task_spec.yaml` / plan / worker status) — always allowed; it is decision, not analysis. Read evidence (`evidence/*`, decompile, `runs/`) — allowed, for VERIFY reproduction and cross-fact pattern recognition. Read evidence AND write facts from it — FORBIDDEN unless through a worker, or marked `synthesis: true` + source and passed through `<malware-veri-notes>/scripts/verify-note.py`.
 
@@ -297,7 +297,7 @@ Read `references/failure-modes.md` (index) for all 18 F-rows and their enforceme
 
 **Decision rights — three-way matrix**: Mechanical 8 / LLM 6 / User 5 — every decision falls to exactly one layer; no delegation without a recorded reason. Full 15-row matrix — see `references/_INDEX.md`.
 
-**Default operator behavior**: never ask the user ("should I dispatch?" / "what should I do?") — decide per `priority.py`; avoid violation phrases ("FINAL" / "TRULY" / "complete" / "convergence achieved") without explicit user sign-off.
+**Default operator behavior**: never ask the user ("should I dispatch?" / "what should I do?") — decide per `priority_ratio.py`; avoid violation phrases ("FINAL" / "TRULY" / "complete" / "convergence achieved") without explicit user sign-off.
 
 **Maintenance**: for "enhance" / "optimize" requests, make the smallest focused incremental edit (one new section or one clarification), preserving in-flight context and reviewable diffs; full rewrites only on explicit user instruction. Progressive disclosure pointers → `references/_INDEX.md`.
 

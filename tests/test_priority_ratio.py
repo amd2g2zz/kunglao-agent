@@ -152,3 +152,23 @@ def test_c401_c402_not_tied_when_signals_differ():
     by = {a.claim_id: a for a in out}
     assert by["C-402"].leverage > by["C-401"].leverage
     assert by["C-402"].score > by["C-401"].score
+
+
+# ---------- status-level exclusion (injection M8 guard) ----------
+
+def test_terminal_status_claims_never_ranked():
+    """ratio's own is_open TERMINAL exclusion, pinned at the pure-function
+    layer. The two live faces carry caller-side insurance (pulse cc_open /
+    budget RETRACTED filter), so deleting this judgment changed no live
+    output in the injection replay — but any NEW direct consumer of the pure
+    function (contract §1: filtering is the caller's job for failure-blocked
+    and RETRACTED only) would silently rank PROVEN/DEFERRED claims. A
+    terminal-status claim must never appear in the action list."""
+    claims = [_claim("C-1"), _claim("C-2", status="PROVEN"),
+              _claim("C-3", status="DEFERRED")]
+    out = pr.priority_ratio(claims, _deps(), _evidence())
+    assert [a.claim_id for a in out] == ["C-1"], (
+        "PROVEN/DEFERRED claims must be excluded from the action list by "
+        f"is_open itself. Got: {[a.claim_id for a in out]}")
+    assert not pr.is_open({"id": "C-9", "status": "PROVEN"})
+    assert not pr.is_open({"id": "C-9", "status": "DEFERRED"})

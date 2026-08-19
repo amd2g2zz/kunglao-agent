@@ -19,7 +19,7 @@ The prompt's FIRST action is `hook_activation.py <ws> --heartbeat-on
 prompt body executing is the proof CronCreate accepted it, #461), then
 per-tick monitoring (reconcile / status poll / smart ping / convergence /
 renew). Since v1.9.29 (issue #237) the convergence decision is a COMMAND,
-not a suggestion: DISPATCH must dispatch priority.py #1, BLOCKED must
+not a suggestion: DISPATCH must dispatch priority_ratio.py #1, BLOCKED must
 self-recover/reactivate, DEFERRED must check reactivation — no action in
 a tick = idle fault. CONVERGED only after §6.3 checklist + handoff-check
 PASS, then `--heartbeat-off` stops the loop (guarded: unconverged teardown
@@ -60,7 +60,7 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
    (isolation boundary #88: no agent teams; the orchestrator→worker SendMessage ping is the sanctioned channel,
     workers never message each other)
 3. python {cc} {ws} decision → imperative execution (every decision MUST produce a convergence-advancing action; no action = idle fault):
-   DISPATCH   → MUST dispatch priority.py #1, no idling allowed
+   DISPATCH   → MUST dispatch priority_ratio.py #1, no idling allowed
    BLOCKED    → MUST self-recover (resolve / stale_blocker_prune) or reactivate the failed claim
    DEFERRED   → MUST check whether reactivation is possible (e.g. VM reachable again → restore the claim and dispatch)
    SATURATED  → MUST poll all active workers (no idle waiting)
