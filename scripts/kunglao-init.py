@@ -1188,7 +1188,6 @@ def _deploy_agents(ws: Path) -> list[dict]:
     component entries. Copy failures raise (OSError) — the caller maps to
     RC_ERROR (fail fast, never a half-deployed agents dir).
     """
-    import yaml as _yaml  # already module-level; local name for clarity
     comps: list[dict] = []
     dst_dir = ws / ".claude" / "agents"
     dst_dir.mkdir(parents=True, exist_ok=True)
@@ -1256,7 +1255,7 @@ def _record_mcp(ws: Path, project_type: str) -> list[dict]:
     the workspace-level .mcp.json lookup depend on process cwd (workspace
     registrations were missed whenever init ran from another directory).
     """
-    found = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+    mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)  # registry read warms the single-source probe
     comps: list[dict] = []
     for check in mcp_probe.check_mcp(ws, project_type):
         if check.status == "PASS":
@@ -1432,6 +1431,42 @@ def resume(ws: Path, text: str) -> int:
     return 0
 
 
+# #473: task-oracle skeleton — the completion-gate power line. Content is
+# deliberately structural (no analysis, no task invention): task_text carries
+# a backfill marker the orchestrator's Phase 1 replaces with the user's
+# verbatim task; open_items/deferrals start empty; registered_ts proves the
+# file is non-empty on disk.
+ORACLE_BACKFILL_MARKER = "pending-user-input-backfill"
+
+ORACLE_FILE = "task-oracle.yaml"
+
+
+def write_task_oracle_skeleton(ws: Path) -> bool:
+    """#473: write the workspace task-oracle.yaml skeleton. Returns True when
+    written; an existing non-empty oracle is never clobbered (Phase-0
+    backfill survives re-inits); empty/corrupt remnants are replaced."""
+    target = ws / ORACLE_FILE
+    if target.exists() and target.read_text(encoding="utf-8").strip():
+        return False
+    text = (
+        "# task-oracle.yaml — pre-registered completion anchor (#55, #473).\n"
+        "# Skeleton written by kunglao-init; the orchestrator backfills\n"
+        "# task_text with the user's verbatim task at Phase 1 (SKILL.md)\n"
+        "# before the first dispatch.\n"
+        f"task_text: {ORACLE_BACKFILL_MARKER}\n"
+        "open_items: []\n"
+        "deferrals: []\n"
+        "adjudication:\n"
+        "  stop_hook_active:\n"
+        "    second_stop: false\n"
+        "    last_decision: \"\"\n"
+        "    last_decision_at: \"\"\n"
+        f"registered_ts: {utc_now()}\n"
+    )
+    atomic_write(target, text)
+    return True
+
+
 def initialize(ws: Path, hooks_json: Path | None,
                 project_type: str | None = None, no_mcp: bool = False,
                 created: "Collection[Path] | None" = None,
@@ -1497,6 +1532,19 @@ def initialize(ws: Path, hooks_json: Path | None,
         print(f"kunglao-init: hooks selfcheck FAILED — "
               f"{hook_report.get('selfcheck', {}).get('mismatches')}", file=sys.stderr)
         return rc
+
+    # #473 gate power-on: register the task-oracle skeleton. The closing gate
+    # chain (completion_gate -> premature_termination_detect) is dead without
+    # a workspace oracle — nobody registered one. Init has no user task text,
+    # so this writes the STRUCTURE (pending-user-input marker + empty ledgers
+    # + registered_ts); the orchestrator backfills task_text at Phase 1
+    # (SKILL.md). Idempotent: a pre-existing oracle is never clobbered, and
+    # the file is deliberately OUTSIDE the state-hash inputs (it is a
+    # workspace artifact, not scaffold state).
+    oracle_written = write_task_oracle_skeleton(ws)
+    if oracle_written:
+        print("kunglao-init: task-oracle.yaml skeleton registered "
+              "(task_text pending Phase-0 backfill by the orchestrator)")
 
     # #412: the exit message lists what init did (scaffold + env + type) and
     # does NOT summarize sample content (no sample= in the output).

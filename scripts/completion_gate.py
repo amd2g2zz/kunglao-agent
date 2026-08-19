@@ -142,6 +142,14 @@ def judge(oracle, declaration_text=None) -> tuple[int, str]:
     if not task_text:
         return (3, "task_text missing/empty — refuse self-produced anchor "
                    "(the #54 F1 self-anchoring failure)")
+    # #473 review HIGH-1: the init skeleton marker is NOT a task text. A
+    # skeleton (task_text=pending-user-input-backfill + empty ledgers) must
+    # keep the exit-3 refuse path alive — otherwise init pre-writing the
+    # skeleton would silently turn the fail-closed gate into a fail-open
+    # one for every run whose Phase-0 backfill was skipped.
+    if task_text == "pending-user-input-backfill":
+        return (3, "task_text is the init skeleton marker — Phase-0 backfill "
+                   "pending, no user anchor to judge against (#473)")
 
     open_items = oracle.get("open_items") or []
     deferrals = oracle.get("deferrals") or []

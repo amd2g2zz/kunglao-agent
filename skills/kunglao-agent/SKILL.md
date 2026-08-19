@@ -130,6 +130,8 @@ python <SKILL_DIR>/scripts/heartbeat_loop_prompt.py <WORKSPACE>           # stdo
 
 MUSTs: `--wire-up` before the first dispatch (hooks silently drop from settings rewrites); `--reconcile` every tick (self-heals zombie `[active_workers]`); `--renew` every 30 min (activation expires); `--heartbeat-on` + `heartbeat_loop_prompt.py` before the first dispatch — the worker_budget gate `check_heartbeat_alive` REJECTS dispatches with missing/stale `.heartbeat.json`. Gate semantics — see `references/_INDEX.md`.
 
+**Oracle backfill (gate power-on)**: before the first dispatch, write the user's task VERBATIM into `<WORKSPACE>/task-oracle.yaml` `task_text:` (init registered the skeleton with a `pending-user-input-backfill` marker). Without the backfill the completion gate judges nothing — an unpowered gate chain is the documented closing-escape hole. The heartbeat tick reports `oracle_registered` each tick; a false value with the marker still in `task_text` means the backfill was skipped — do it now.
+
 **Tick binding**: run `python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — one-shot selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention required. Every convergence decision is a COMMAND with a required action (see the dispatch loop table); no action in a tick = idle fault. Stop the loop at closeout: after the §6.3 checklist + handoff-check PASS, run `python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
 
 ## Phase 2 Dispatch Loop

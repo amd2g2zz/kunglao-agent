@@ -41,8 +41,9 @@ def build_prompt(ws: str, interval: str = "5m") -> str:
 python {h} {ws} --heartbeat-on   # register the heartbeat (writes runs/.heartbeat.json) — monitoring is file state from here on
 
 [Per-tick monitoring (5-minute interval)]
-0. python {tk} {ws}              # v1.9.38 one-command tick: selfcheck + reconcile + renew + heartbeat-check
+0. python {tk} {ws}              # v1.9.38 one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check
                                  # (all mechanical steps folded into 1 command; manual handling only when exit=1)
+                                 # oracle_registered=false in the report → run the Phase 0 task-oracle.yaml backfill now
 1. Read the runs/.heartbeat-tick.json report: exit=0 → only cognitive steps remain (ping active workers / handle finished workers)
 2. Smart-ping every active worker (§6.1a): SendMessage "[ping HH:MM] step? stuck? eta?"
    → append structured replies to runs/.ping-log.jsonl

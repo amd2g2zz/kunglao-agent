@@ -1,5 +1,7 @@
-# task-oracle.yaml — pre-registered completion anchor (#55).
-# Registered at Phase 0 by the orchestrator; consumed by completion_gate.
+# task-oracle.yaml — pre-registered completion anchor (#55, #473).
+# Skeleton written by kunglao-init at workspace creation; the orchestrator
+# backfills task_text with the user's verbatim task at Phase 1 (SKILL.md)
+# before the first dispatch; consumed by completion_gate.
 task_text: ""          # user's original goal, verbatim — empty = refuse (D6)
 open_items: []         # - id: X, closed_by: ...
 deferrals: []          # - item: X, authorized_by: <user>, reason: ...

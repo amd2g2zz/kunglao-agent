@@ -1,19 +1,29 @@
 # -*- coding: utf-8 -*-
-"""premature_termination_detect.py — detect the 4-fingerprint signature of
-premature-termination in an orchestrator's closing declaration (#54).
+"""premature_termination_detect.py — detect the fingerprint signature of
+premature-termination in an orchestrator's closing declaration (#54, #473).
 
 Premature-termination = the orchestrator declares "task complete" while open
 items != 0. This is the 3rd documented recurrence (2026-07-28 / 07-30 /
-2026-08-11). The detector scans the closing DECLARATION TEXT for 4 fingerprints:
+2026-08-11) plus the 2026-08-18 handoff-escape variant (#473: self-completion
+-> invented "pure-manual" tier -> cost/session stop reason -> user-directed
+imperatives). The detector scans the closing DECLARATION TEXT for 5
+fingerprints:
 
   F1 self-anchoring        — closing quotes the agent's OWN summary, not the
                              user's verbatim instruction.
-  F2 self-invented tiering — invented tiers ("note-only" / deferred / low-priority)
-                             that are NOT in the task mask open items.
-  F3 cost-semantic drift   — a cost figure appears in the closing declaration
-                             (cost is never a stop reason — behavior #3).
-  F4 false completion      — "task complete" co-occurs with open-items-remaining
+  F2 self-invented tiering — invented tiers ("note-only" / deferred / low-
+                             priority / #473 human-handoff) that are NOT in
+                             the task mask open items.
+  F3 cost-semantic drift   — a cost figure (currency OR #473 time-cost)
+                             appears in the closing declaration as stop
+                             reasoning (cost is never a stop reason —
+                             behavior #3).
+  F4 false completion      — "task complete" (or #473 its semantic
+                             equivalent) co-occurs with open-items-remaining
                              signals.
+  F5 user-delegation       — #473: user-directed imperatives (你打开/手动跟/
+     escape                   dump 给我) assign the OPERATOR work while open
+                             items remain.
 
 LAYERING — this is #54's KEY PROPERTY. It is COMPLEMENTARY to the two existing
 mechanical layers, NOT a duplicate of either:
@@ -79,6 +89,9 @@ SELF_SUMMARY_PHRASES = [
 # F2 — self-invented tier keywords: labels that re-tier open items into a
 # "don't count" bucket the user never authorized. Sourced verbatim from the
 # issue's instance evidence ("备注级（记录即可）", "deferred") + close paraphrases.
+# #473: HANDOFF_KEYWORDS extend the family — assigning the USER manual work
+# ("纯人工 RE" / "手动跟" / "dump 给我") is the same re-tiering move wearing
+# a handoff costume: the tier ("human must do it") was never in the task.
 # ---------------------------------------------------------------------------
 TIER_KEYWORDS = [
     r"备注级",
@@ -92,6 +105,18 @@ TIER_KEYWORDS = [
     r"信息级",
     r"参考级",
     r"低优先级",
+]
+
+HANDOFF_KEYWORDS = [
+    r"手动",
+    r"人工",
+    r"\bmanual(?:ly)?\b",
+    r"\bby\s+hand\b",
+    r"\bGUI\b",
+    r"dump\s*给我",
+    r"交给用户",
+    r"需要人工",
+    r"\bhand\s*off\b",
 ]
 
 # Open-item references: G<digit> (gap ids), #<digit> (issue/task ids),
@@ -112,8 +137,15 @@ OPEN_ITEM_REFS = [
 # F3 — cost-semantic drift: a cost figure + an "informational" qualifier
 # co-occur in the closing declaration (cost treated as stop reasoning —
 # behavior #3 violation). A bare cost figure does NOT fire (D4 precision guard).
+# #473: TIME_COST_RE joins the currency figure — "1-2 小时纯人工" is a cost
+# argument exactly like "$52.85"; a bare duration report ("扫描花了 30 分钟",
+# past-tense fact) stays quiet under the same sentence qualifier rule.
 # ---------------------------------------------------------------------------
 COST_FIGURE_RE = re.compile(r"[\$￥]\s?\d+(?:\.\d{1,2})?")
+TIME_COST_RE = re.compile(
+    r"\d+(?:[-~到至]\d+)?\s*(?:小时|分钟|钟头|min(?:ute)?s?|hours?|hrs?)",
+    re.IGNORECASE,
+)
 COST_QUALIFIERS = [
     r"informational",
     r"info[-\s]?only",
@@ -121,6 +153,16 @@ COST_QUALIFIERS = [
     r"仅供参考",
     r"仅.{0,3}信息",
     r"\b参考\b",
+    # #473: stop-reason qualifiers — the sentence frames cost as why the
+    # work stops/gets handed off ("需要 ... 纯人工", "不值得继续").
+    r"需要",
+    r"纯人工",
+    r"人工",
+    r"手动",
+    r"无法自动化",
+    r"不值得",
+    r"超过收益",
+    r"成本.{0,6}超",
 ]
 
 # ---------------------------------------------------------------------------
@@ -136,6 +178,13 @@ COMPLETION_PHRASES = [
     r"stopping\s+here",
     r"任务完成",
     r"声明完成",
+    # #473: semantic-equivalent completion — "I've done everything I can"
+    # declares done-ness without the literal phrase (2026-08-18 step 1).
+    r"我能(?:做的|继续的)(?:事|工作)?都(?:已经)?做(?:了|完)",
+    r"没有(?:更多|别的)(?:我能)?做的",
+    r"nothing\s+more\s+I\s+can\s+do",
+    r"everything\s+I\s+can\s+do\s+(?:has|is)\s+been\s+done",
+    r"已经没有(?:可做的|能做的)",
 ]
 
 OPEN_ITEMS_SIGNALS = [
@@ -148,6 +197,13 @@ OPEN_ITEMS_SIGNALS = [
     r"遗留",
     r"未决",
     r"open\s+items?\s*[:：]\s*[1-9]",
+    # #473: remaining-work phrasing without item ids — the 2026-08-18
+    # escape says "当前剩余的工作需要 ..." (work remains, re-tiered as
+    # manual) instead of naming G-ids. 剩余/还需/剩下的 + 工作/任务/RE.
+    r"剩余.{0,6}(?:工作|任务|分析|RE)",
+    r"还需.{0,6}(?:做|处理|分析|人工)",
+    r"剩下的(?:工作|事)",
+    r"(?:继续|后续)(?:投入|跟进|分析)",
 ]
 
 ZERO_OPEN_RE = re.compile(
@@ -155,6 +211,28 @@ ZERO_OPEN_RE = re.compile(
     r"0\s+items?\s+remaining|没有\s*(?:遗留|open)|无\s*(?:遗留|open)",
     re.IGNORECASE,
 )
+
+# ---------------------------------------------------------------------------
+# F5 — user-delegation escape (#473): the closing declaration contains a
+# user-directed imperative (assigning the OPERATOR work) while open items
+# remain. Patterns: 你打开/你装上/你接着干/你来/手动跟/dump 给我. Sourced from
+# the 2026-08-18 step-4 narration ("你能继续的路: Ghidra GUI 手动跟 30 分钟,
+# 把字节码 dump 给我" — the escalation rewritten as user errands).
+# ---------------------------------------------------------------------------
+USER_IMPERATIVE_PATTERNS = [
+    r"你(?:能|可以)?(?:继续|接着|来)[的]?(?:路|话)?[：:]?",  # 你能继续的路: / 你接着干
+    r"你(?:来|打开|装上|跟|跑|执行|跑一下|手动)",
+    r"手动跟",
+    r"dump\s*给我",
+    r"把.{0,30}(?:给|发|贴)(?:给)?我",
+]
+
+# #473 tool-rebuttal duty: a needs-human/cannot-automate assertion makes the
+# declaration LEGAL only with tools/_INDEX.yaml + tool-search zero-hit
+# evidence attached (the exact spot where the 2026-08-18 worker claimed
+# "1-2h manual RE" while tools/_INDEX.yaml's ghidra-decompile-functions
+# --addresses reaches the capability without any human GUI session).
+NEEDS_HUMAN_RE = re.compile(r"需(?:要)?人工|人工(?:RE|分析|操作)|无法自动化|只能手动|必须手动|需手动", re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
 # task_text recovery + agent-region segmentation (F1 only — D3).
@@ -275,8 +353,10 @@ def _check_f1_self_anchoring(transcript: str, task_text: Optional[str]) -> dict:
 
 
 def _check_f2_self_invented_tiering(transcript: str, task_text: Optional[str]) -> dict:
+    # #473: handoff keywords are tier-family — a "human must do it" bucket is
+    # as self-invented as "备注级". Excluded when the user's own task says it.
     evidence = []
-    for pat in TIER_KEYWORDS:
+    for pat in TIER_KEYWORDS + HANDOFF_KEYWORDS:
         if task_text and re.search(pat, task_text, re.IGNORECASE):
             # The user themselves used this tier word -> not self-invented.
             continue
@@ -284,7 +364,10 @@ def _check_f2_self_invented_tiering(transcript: str, task_text: Optional[str]) -
             evidence.append({"pattern": pat, "span": m.group(0)})
     if not evidence:
         return _fp("F2", "self-invented tiering", False, [], "no self-invented tier keyword found")
-    open_ref_found = any(re.search(p, transcript, re.IGNORECASE) for p in OPEN_ITEM_REFS)
+    # #473: id refs (G1/#2/C-3/缺口) OR remaining-work phrasing both prove
+    # items stay open while the tier bucket re-classifies them.
+    open_ref_found = any(re.search(p, transcript, re.IGNORECASE)
+                         for p in OPEN_ITEM_REFS + OPEN_ITEMS_SIGNALS)
     fired = bool(open_ref_found)
     note = "" if fired else "tier keyword present but no open-item reference nearby"
     return _fp("F2", "self-invented tiering", fired, evidence, note)
@@ -293,7 +376,8 @@ def _check_f2_self_invented_tiering(transcript: str, task_text: Optional[str]) -
 def _check_f3_cost_drift(transcript: str) -> dict:
     evidence = []
     for seg in _split_sentences(transcript):
-        if COST_FIGURE_RE.search(seg) and any(
+        figure = COST_FIGURE_RE.search(seg) or TIME_COST_RE.search(seg)
+        if figure and any(
             re.search(q, seg, re.IGNORECASE) for q in COST_QUALIFIERS
         ):
             evidence.append({
@@ -323,14 +407,38 @@ def _check_f4_false_completion(transcript: str) -> dict:
     return _fp("F4", "false completion", fired, evidence, note)
 
 
+def _check_f5_user_delegation(transcript: str) -> dict:
+    """#473: user-directed imperative + open-items-remaining signals in the
+    same declaration -> the escalation was rewritten as user errands. A
+    zero-open assertion anywhere in the declaration is the genuine-completion
+    guard (same D4 shape as F4)."""
+    imperative_evidence = []
+    for pat in USER_IMPERATIVE_PATTERNS:
+        for m in re.finditer(pat, transcript):
+            imperative_evidence.append({"pattern": pat, "span": m.group(0)})
+    if not imperative_evidence:
+        return _fp("F5", "user-delegation escape", False, [],
+                   "no user-directed imperative found")
+    if ZERO_OPEN_RE.search(transcript):
+        return _fp("F5", "user-delegation escape", False, imperative_evidence,
+                   "zero-open asserted; imperative not an escape")
+    open_ref_found = any(re.search(p, transcript, re.IGNORECASE)
+                         for p in OPEN_ITEM_REFS + OPEN_ITEMS_SIGNALS)
+    fired = bool(open_ref_found)
+    note = "" if fired else "imperative present but no open-item reference nearby"
+    return _fp("F5", "user-delegation escape", fired, imperative_evidence, note)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 def detect(transcript: str, task_text: Optional[str] = None) -> dict:
-    """Scan `transcript` (the closing declaration) for the 4 premature-
+    """Scan `transcript` (the closing declaration) for the premature-
     termination fingerprints. Returns a dict with `fired_count`, `fired_ids`,
-    and `fingerprints` (each: id, name, fired, evidence[{pattern, span}], note).
+    `fingerprints` (each: id, name, fired, evidence[{pattern, span}], note),
+    and `require_evidence` (#473: evidence duties — a needs-human assertion
+    demands a tool-search zero-hit proof before it is legal).
 
     `task_text` (the user's verbatim instruction) grounds F1/F2. When omitted,
     it is recovered from a `任务原文：` / `user:` / `task:` marker; F1 degrades
@@ -343,12 +451,19 @@ def detect(transcript: str, task_text: Optional[str] = None) -> dict:
         _check_f2_self_invented_tiering(transcript, task_text),
         _check_f3_cost_drift(transcript),
         _check_f4_false_completion(transcript),
+        _check_f5_user_delegation(transcript),
     ]
     fired_ids = [fp["id"] for fp in fingerprints if fp["fired"]]
+    # #473 tool-rebuttal duty: needs-human/cannot-automate assertions are
+    # legal ONLY with tools/_INDEX.yaml + tool-search zero-hit evidence.
+    require_evidence = (
+        ["tool_search_zero_hit"] if NEEDS_HUMAN_RE.search(transcript) else []
+    )
     return {
         "fired_count": len(fired_ids),
         "fired_ids": fired_ids,
         "fingerprints": fingerprints,
+        "require_evidence": require_evidence,
     }
 
 

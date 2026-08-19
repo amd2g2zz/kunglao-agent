@@ -19,6 +19,9 @@ Steps executed (idempotent, all safe to re-run):
                         plan-redteam-*.md (verifier visibility, v1.9.37)
   6. renew            — refresh hooks TTL + heartbeat last_tick_ts
   7. heartbeat-check  — assert last_tick_ts < 35 min old
+  8. oracle-check     — task-oracle.yaml registered (#473 gate power-on;
+                        report field oracle_registered + actionable line
+                        when missing; report-only, never fails the tick)
 
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
 1 = heartbeat stale, project hooks missing, or selfcheck failed (LLM must act;
@@ -106,6 +109,32 @@ def _renew_margin_low(ws: Path) -> bool:
         return False
 
 
+def _oracle_registered(ws: Path) -> bool:
+    """#473 gate power-on: true iff the workspace carries a non-empty
+    task-oracle.yaml (the completion-gate anchor init registers + Phase 0
+    backfills). Fail-open on read errors -> False (reported, never crashes
+    the tick); does NOT change the tick exit code by itself (the
+    selfcheck/renew/heartbeat rc weights stay authoritative)."""
+    try:
+        p = ws / "task-oracle.yaml"
+        if not p.exists() or not p.read_text(encoding="utf-8").strip():
+            return False
+        # #473 review HIGH-1: the init skeleton marker is not a registered
+        # oracle — the Phase-0 backfill (user's verbatim task) is what
+        # powers the completion gate. Marker still present = still
+        # unregistered (the nag line below must fire).
+        return "pending-user-input-backfill" not in p.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+ORACLE_MISSING_LINE = (
+    "[gate] task-oracle.yaml not registered — the closing gate chain is "
+    "unpowered; run Phase 0 backfill (write the user's task verbatim into "
+    "task-oracle.yaml) before completion can be judged (#473)"
+)
+
+
 def main(argv: list[str] | None = None) -> int:
     """argv: explicit CLI args (defaults to sys.argv[1:]) — lets the kunglao.py
     router pass the caller's workspace instead of the router's own argv
@@ -137,6 +166,12 @@ def main(argv: list[str] | None = None) -> int:
         print(RENEW_MARGIN_LOW_LINE)
     report["renew"] = run("hook_activation.py", ws, "--renew")
     report["heartbeat"] = run("hook_activation.py", ws, "--heartbeat-check")
+    # #473: oracle registration check — one report field + one actionable
+    # stdout line when missing (mechanical催告; the LLM reading the tick
+    # acts). Report-only: rc weights unchanged.
+    report["oracle_registered"] = _oracle_registered(ws)
+    if not report["oracle_registered"]:
+        print(ORACLE_MISSING_LINE)
 
     out = ws / "runs" / ".heartbeat-tick.json"
     try:
