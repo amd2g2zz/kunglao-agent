@@ -213,8 +213,9 @@ def test_gate_blocked_from_real_failure_analysis(tmp_path):
 
 
 def test_gate_blocked_cleared_by_current_analysis(tmp_path):
-    """A current failure analysis (covers_attempt >= promotion_attempts)
-    clears the BLOCKED state — the gate is satisfied."""
+    """A current failure analysis (covers_attempt >= promotion_attempts AND
+    the #495 three artifacts present) clears the BLOCKED state — the gate is
+    satisfied."""
     ws = tmp_path
     (ws / "claim-register.yaml").write_text(
         "claims:\n"
@@ -224,7 +225,11 @@ def test_gate_blocked_cleared_by_current_analysis(tmp_path):
     adir.mkdir()
     (adir / "failure-C-G.yaml").write_text(
         "method_assumption: floss\nassumption_validity: not-justified\n"
-        "next_method: pefile\ncovers_attempt: 1\n", encoding="utf-8")
+        "next_method: pefile\ncovers_attempt: 1\n"
+        "validated_capability: floss ran to completion\n"
+        "identified_obstacle: binary is packed\n"
+        "next_method_source: lesson-hit\n",
+        encoding="utf-8")
     counts = et.classify_workspace(ws)
     assert counts["gate_blocked"] == 0
 

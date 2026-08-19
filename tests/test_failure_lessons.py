@@ -48,12 +48,21 @@ def _analysis_path(ws: Path, cid: str) -> Path:
 
 
 def _record(ws: Path, cid: str, **kwargs) -> dict:
-    """Function-level --record (same args as the CLI flags)."""
+    """Function-level --record (same args as the CLI flags).
+
+    #495 contract migration: every record now carries the three failure
+    artifacts + provenance. Defaults keep this file's original assertions
+    (outcome handling / aggregation / retrieval) testing what they always
+    tested, under the new unblock contract.
+    """
     return fag.record_analysis(
         ws, cid,
         kwargs.get("assumption", ""), kwargs.get("validity", ""),
         kwargs.get("next_method", ""), kwargs.get("outcome"),
-        kwargs.get("what_happened"))
+        kwargs.get("what_happened"),
+        validated_capability=kwargs.get("capability", "bridge works"),
+        identified_obstacle=kwargs.get("obstacle", "vm blocked it"),
+        source=kwargs.get("source", "lesson-hit"))
 
 
 def _write_ledger_redteam(ws: Path, cid: str, result: str = "CONFIRMED") -> None:
@@ -121,7 +130,9 @@ def test_record_outcome_validation(tmp_path):
 
 
 def test_record_legacy_fields_unchanged(tmp_path):
-    """Pre-#41 record (no outcome flags) produces exactly the legacy field set."""
+    """A record without outcome flags produces exactly the #495 field set:
+    the six legacy fields keep their names/positions, plus the transducer
+    fields (artifacts / provenance / ladder trace); outcome stays absent."""
     # Arrange
     ws = tmp_path / "ws"
     ws.mkdir()
@@ -131,8 +142,13 @@ def test_record_legacy_fields_unchanged(tmp_path):
     r = _record(ws, "C-1", assumption="a", validity="justified-adequate", next_method="adequate")
 
     # Assert
-    assert set(r["entry"].keys()) == {"claim", "covers_attempt", "method_assumption",
-                                      "assumption_validity", "next_method", "analyzed_at"}
+    assert set(r["entry"].keys()) == {
+        "claim", "covers_attempt", "method_assumption",
+        "assumption_validity", "next_method",
+        "next_method_source",               # #495 provenance
+        "validated_capability", "identified_obstacle",   # #495 artifacts
+        "method_ladder_query", "candidates",             # #495 ladder trace
+        "analyzed_at"}
     assert "outcome" not in r["entry"]
 
 

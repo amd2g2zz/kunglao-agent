@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""failure_analysis_gate.py - force method reasoning after a failed attempt (v1.9.3).
+"""failure_analysis_gate.py - force method reasoning after a failed attempt (v2.0.0).
 
 THE PROBLEM THIS SOLVES (user's exact words, in Chinese):
   "目前我们要分析 c2 的网络协议,但是目前失败了,你能说没有网络协议行为,
@@ -29,9 +29,32 @@ Only if the agent can argue assumption_validity = "justified, method was adequat
 may the claim be marked NEGATIVE — and even then it carries single-method
 confidence (a different method can overturn it later).
 
-Enforcement: a claim with a prior failed attempt (promotion_attempts > 0, status
-non-terminal) that has NO current failure_analysis → BLOCKED. The orchestrator
-cannot re-dispatch through the normal flow until the analysis is recorded.
+v2.0.0 (#495 failure→knowledge transducer): the three questions alone are
+prose that evaporates — v0.1.1 trajectory-1 had decomposition-level evidence
+(JNI bridge works, spawn timeout kills only the spawn path) that never
+reached the model because it lived in narrative. A record now must also
+carry the THREE FAILURE ARTIFACTS:
+
+  4. validated_capability — what this failure PROVED works (capability ✓)
+  5. identified_obstacle  — what specifically blocked you; auto-promoted
+                           to a NEW claim (depends_on the failed claim,
+                           inherits answers_question) — the DAG grows a node
+  6. next_method_source   — provenance of the next method: lesson-hit |
+                           reference-hit | web-hit | novel-hypothesis
+
+Recording a failure automatically runs the method-ladder rung the gate can
+run mechanically: the lessons library is searched with the obstacle +
+assumption error signature (same keyword interface as --search); hits land
+in the entry's `candidates`, the query in `method_ladder_query` (auditable).
+The search is FAIL-OPEN — a missing library or a crashed search never
+blocks the record. `novel-hypothesis` additionally requires non-empty
+candidates: at least the lessons rung must have a recorded hit before a
+novel experiment may be declared (it occupies budget).
+
+Enforcement: a claim with a prior failed attempt (promotion_attempts > 0,
+status non-terminal) that has NO current failure_analysis — or whose
+analysis is missing either artifact — is BLOCKED. The orchestrator cannot
+re-dispatch through the normal flow until the analysis is recorded.
 
 Each failed attempt needs its own analysis (covers_attempt versioning) — you can't
 coast on the reasoning from attempt 1 when attempt 3 also fails.
@@ -47,7 +70,10 @@ Usage:
   python scripts/failure_analysis_gate.py <workspace> <C-NN> --record \
       --assumption "what the failed method assumed" \
       --validity "not-justified | justified-adequate" \
-      --next-method "what different method to try (or 'method was adequate' for true negative)"
+      --next-method "what different method to try (or 'method was adequate' for true negative)" \
+      --validated-capability "what this failure PROVED works (#495)" \
+      --identified-obstacle "what specifically blocked you (#495, auto-promoted to a claim)" \
+      --source "lesson-hit | reference-hit | web-hit | novel-hypothesis (#495)"
 
   # fill the outcome at claim closure (adds --outcome/--what-happened to the
   # recorded analysis; prior assumption/validity/next_method are preserved)
@@ -91,6 +117,13 @@ LEDGER_NAME = ".convergence_ledger.jsonl"
 # Closed-loop outcomes eligible for the lessons library. Tuple constant on
 # purpose — no status-set literal here (test_status_defs grep guard).
 OUTCOME_VALUES = ("PROVEN", "VERIFIED", "REFUTED", "NEGATIVE")
+
+# #495: provenance of next_method. The method-ladder is lessons retrieval ->
+# re-library retrieval -> WebSearch error signature -> novel hypothesis; the
+# gate mechanically runs ONLY the lessons rung (record-time auto-search) —
+# rungs 2/3 are declared, the enum + novel precondition are enforced here.
+# Tuple constant on purpose (same grep-guard convention as OUTCOME_VALUES).
+SOURCE_VALUES = ("lesson-hit", "reference-hit", "web-hit", "novel-hypothesis")
 
 # #41: the lessons library is GLOBAL (cross-sample), never per-workspace —
 # default <skill>/references/lessons/ next to case-book.md. --library and
@@ -158,14 +191,33 @@ def _needs_analysis(claim: dict) -> bool:
     return int(claim.get("promotion_attempts") or 0) > 0
 
 
+def _artifact_gaps(analysis: dict) -> list[str]:
+    """#495: which of the three failure artifacts the analysis is missing.
+    An absent analysis is missing both (it never transduced anything)."""
+    if not analysis:
+        return ["validated_capability", "identified_obstacle"]
+    gaps = []
+    for field in ("validated_capability", "identified_obstacle"):
+        if not str(analysis.get(field) or "").strip():
+            gaps.append(field)
+    return gaps
+
+
 def _analysis_covers(analysis: dict, claim: dict) -> bool:
     """Does the recorded analysis cover the latest failed attempt?
-    covers_attempt must match (or exceed) the claim's current promotion_attempts."""
+    covers_attempt must match (or exceed) the claim's current promotion_attempts.
+    #495: the three failure artifacts must ALSO be present — an analysis that
+    answers the three questions in prose but records no validated_capability /
+    identified_obstacle is exactly the v0.1.1 trajectory-1 evidence evaporation
+    (decomposition-level knowledge lived in narrative and evaporated on pivot);
+    it does not unblock re-dispatch."""
     if not analysis:
         return False
     covers = int(analysis.get("covers_attempt") or 0)
     attempts = int(claim.get("promotion_attempts") or 0)
-    return covers >= attempts
+    if covers < attempts:
+        return False
+    return not _artifact_gaps(analysis)
 
 
 def check_claim(workspace: Path, claim_id: str, library: Path | None = None) -> dict:
@@ -197,6 +249,9 @@ def check_claim(workspace: Path, claim_id: str, library: Path | None = None) -> 
         "statement": (claim.get("statement") or "")[:200],
         "evidence": claim.get("evidence") or [],
         "stale_analysis": analysis,
+        # #495: which failure artifacts the (stale/partial) analysis lacks —
+        # the orchestrator's to-do list for unblocking.
+        "missing_artifacts": _artifact_gaps(analysis),
         # #41: guide the orchestrator with up to 3 similar lessons from the
         # global library (keyword overlap on statement + claim id).
         "similar_lessons": _score_lessons(
@@ -221,13 +276,23 @@ def scan_workspace(workspace: Path, library: Path | None = None) -> list:
 def record_analysis(workspace: Path, claim_id: str, assumption: str,
                     validity: str, next_method: str,
                     outcome: str | None = None,
-                    what_happened: str | None = None) -> dict:
-    claims, _ = _load_claims(workspace)
+                    what_happened: str | None = None,
+                    validated_capability: str | None = None,
+                    identified_obstacle: str | None = None,
+                    source: str | None = None,
+                    library: Path | None = None) -> dict:
+    claims, reg = _load_claims(workspace)
     claim = next((c for c in claims if c.get("id") == claim_id), None)
     if not claim:
         return {"recorded": False, "reason": f"claim {claim_id} not found"}
 
     validity = (validity or "").strip().lower()
+
+    # #495: is this a failure-time record (any of the three question fields
+    # explicitly supplied)? Closure-only calls (outcome backfill) must not
+    # re-run the ladder nor clobber the failure-time artifacts.
+    failure_time = bool((assumption or "").strip() or validity or
+                        (next_method or "").strip())
 
     # #41 claim-closure backfill: when the caller only supplies the outcome
     # (--outcome/--what-happened), preserve the failure-time analysis fields —
@@ -239,6 +304,11 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
         validity = (prior.get("assumption_validity") or "").strip().lower()
     if not (next_method or "").strip():
         next_method = prior.get("next_method", "")
+    # #495: the artifacts get the same preserve-from-prior rule.
+    if not (validated_capability or "").strip():
+        validated_capability = prior.get("validated_capability") or ""
+    if not (identified_obstacle or "").strip():
+        identified_obstacle = prior.get("identified_obstacle") or ""
 
     if validity not in ("not-justified", "justified-adequate"):
         return {"recorded": False,
@@ -253,6 +323,18 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
             return {"recorded": False,
                     "reason": "validity=not-justified requires a DIFFERENT method, not 'adequate' or bare 'retry'"}
 
+    # #495 provenance: source is mandatory, inherits from prior on closure.
+    source_norm = (source or "").strip().lower()
+    if not source_norm:
+        source_norm = str(prior.get("next_method_source") or "").strip().lower()
+    if not source_norm:
+        return {"recorded": False,
+                "reason": (f"--source is required (one of {', '.join(SOURCE_VALUES)}) — "
+                           "provenance of the next method (#495)")}
+    if source_norm not in SOURCE_VALUES:
+        return {"recorded": False,
+                "reason": f"--source must be one of {', '.join(SOURCE_VALUES)}"}
+
     # #41 outcome: optional; both-or-neither; one of OUTCOME_VALUES (normalized).
     outcome_norm = None
     if outcome or what_happened:
@@ -265,6 +347,21 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
                     "reason": f"--outcome must be one of {', '.join(OUTCOME_VALUES)}"}
         what_happened = what_happened.strip()
 
+    # #495 method-ladder rung 1 (lessons): auto-search at failure time with
+    # the obstacle + assumption error signature. FAIL-OPEN — a missing library
+    # or a crashed search never blocks the record.
+    if failure_time:
+        ladder_query = " ".join(x for x in (identified_obstacle, assumption) if x)
+        candidates = _ladder_candidates(ladder_query, library)
+    else:
+        ladder_query = prior.get("method_ladder_query", "")
+        candidates = prior.get("candidates") or []
+    if source_norm == "novel-hypothesis" and not candidates:
+        return {"recorded": False,
+                "reason": ("source=novel-hypothesis requires non-empty candidates — "
+                           "consult the method ladder (lessons/reference/web) first; a "
+                           "novel experiment occupies budget (#495)")}
+
     adir = workspace / ANALYSES_DIR
     adir.mkdir(parents=True, exist_ok=True)
     entry = {
@@ -273,8 +370,21 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
         "method_assumption": assumption,
         "assumption_validity": validity,
         "next_method": next_method,
+        "next_method_source": source_norm,
         "analyzed_at": prior.get("analyzed_at") or utc_now_iso(),
     }
+    # #495 artifacts: written only when non-empty (a closure backfill on a
+    # legacy analysis must not fabricate empty strings).
+    if (validated_capability or "").strip():
+        entry["validated_capability"] = validated_capability
+    if (identified_obstacle or "").strip():
+        entry["identified_obstacle"] = identified_obstacle
+    if failure_time:
+        entry["method_ladder_query"] = ladder_query
+        entry["candidates"] = candidates
+    elif prior.get("method_ladder_query") is not None:
+        entry["method_ladder_query"] = prior.get("method_ladder_query", "")
+        entry["candidates"] = candidates
     if outcome_norm:
         entry["outcome"] = outcome_norm
         entry["what_happened"] = what_happened
@@ -282,7 +392,107 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
         yaml.safe_dump(entry, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
-    return {"recorded": True, "entry": entry}
+    # #495: the obstacle is the third artifact — promote it to a claim so the
+    # DAG grows a node (idempotent on obstacle_for).
+    promotion = {"created": False, "id": None}
+    if (identified_obstacle or "").strip():
+        promotion = _promote_obstacle_claim(workspace, claim_id,
+                                            identified_obstacle, claim, claims, reg)
+    return {"recorded": True, "entry": entry, "obstacle_claim": promotion}
+
+
+# ===================== #495 failure→knowledge transducer =====================
+
+def _ladder_candidates(query: str, library: Path | None) -> list[dict]:
+    """Method-ladder rung 1 (lessons): keyword search over the global library
+    with the failure's error signature. Same scoring interface as --search
+    (#41). FAIL-OPEN by contract: any failure (missing dir, unreadable files,
+    crashed scan) yields [] — the ladder must never block a record."""
+    try:
+        return _score_lessons(query, Path(library) if library else LESSONS_DIR_DEFAULT)
+    except Exception:  # noqa: BLE001 — #495 hard constraint: fail-open
+        return []
+
+
+def _next_claim_id(claims: list) -> str:
+    """C-<max numeric suffix + 1>, following the register's id width
+    (C-001 style stays zero-padded; C-1 style stays bare)."""
+    mx, width = 0, 1
+    for c in claims:
+        m = re.search(r"(\d+)$", str(c.get("id") or ""))
+        if not m:
+            continue
+        n = int(m.group(1))
+        if n > mx:
+            mx = n
+            width = len(m.group(1))
+    return f"C-{mx + 1:0{max(width, 1)}d}"
+
+
+def _promote_obstacle_claim(workspace: Path, claim_id: str, obstacle: str,
+                            parent_claim: dict, claims: list, reg: dict) -> dict:
+    """identified_obstacle is the third failure artifact: promote it to a NEW
+    claim so the flat DAG grows a node (#495).
+
+    - idempotent: judged by the ownership marker (obstacle_for == failed
+      claim id), NOT by text — re-recording with reworded obstacle never
+      creates a second node;
+    - new claim: OPEN, depends_on the failed claim, answers_question context
+      inherited from it, origin=failure-obstacle;
+    - claim_deps.yaml gains the real edge (the authoritative dep store that
+      plan_drift_detector / refutation_propagate walk).
+    """
+    existing = next((c for c in claims
+                     if c.get("obstacle_for") == claim_id
+                     and c.get("origin") == "failure-obstacle"), None)
+    if existing:
+        return {"created": False, "id": existing.get("id")}
+
+    new_id = _next_claim_id(claims)
+    obstacle_text = " ".join((obstacle or "").split())
+    new_claim = {
+        "id": new_id,
+        "status": "OPEN",
+        "boundary_type": "obstacle",
+        "evidence_tier_attempted": 0,
+        "promotion_attempts": 0,
+        "depends_on": [claim_id],
+        "statement": f"Obstacle (from {claim_id}): {obstacle_text[:160]}",
+        "origin": "failure-obstacle",
+        "obstacle_for": claim_id,
+        "promoted_from": f"{ANALYSES_DIR}/failure-{claim_id}.yaml",
+    }
+    if (parent_claim or {}).get("answers_question"):
+        new_claim["answers_question"] = parent_claim["answers_question"]
+    claims.append(new_claim)
+    reg["claims"] = claims
+    (workspace / "claim-register.yaml").write_text(
+        yaml.safe_dump(reg, allow_unicode=True, sort_keys=False),
+        encoding="utf-8")
+
+    deps_path = workspace / "claim_deps.yaml"
+    deps: dict = {}
+    if deps_path.exists():
+        try:
+            loaded = yaml.safe_load(deps_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                deps = loaded
+        except Exception:
+            deps = {}  # unreadable deps file — rebuild from the edge below
+    edges = deps.get("depends_on")
+    if not isinstance(edges, dict):
+        edges = {}
+    parents = edges.get(new_id)
+    if not isinstance(parents, list):
+        parents = []
+    if claim_id not in parents:
+        parents.append(claim_id)
+    edges[new_id] = parents
+    deps["depends_on"] = edges
+    deps_path.write_text(
+        yaml.safe_dump(deps, allow_unicode=True, sort_keys=False),
+        encoding="utf-8")
+    return {"created": True, "id": new_id}
 
 
 # ===================== #41 failure-lessons library =====================
@@ -551,9 +761,24 @@ def _print_blocked(d: dict) -> None:
     print("  3. next_method         - what DIFFERENT method tests a different assumption?")
     print("                           (literal retry is forbidden; 'method was adequate' only if Q2=justified)")
     print()
+    print("And transduce the failure into typed artifacts (#495 - the analysis does")
+    print("not unblock without them):")
+    print()
+    print("  4. validated_capability - what this failure PROVED works (capability ok)")
+    print("  5. identified_obstacle  - what specifically blocked you (auto-promoted")
+    print("                           to a new claim depending on this one)")
+    print("  6. --source             - provenance: lesson-hit | reference-hit |")
+    print("                           web-hit | novel-hypothesis (novel requires the")
+    print("                           ladder to have recorded a hit first)")
+    if d.get("missing_artifacts"):
+        print()
+        print(f"  failure artifacts still missing: {', '.join(d['missing_artifacts'])}")
+    print()
     print("Record with:")
     print(f"  python scripts/failure_analysis_gate.py <ws> {cid} --record \\")
-    print(f"      --assumption \"...\" --validity not-justified|justified-adequate --next-method \"...\"")
+    print(f"      --assumption \"...\" --validity not-justified|justified-adequate --next-method \"...\" \\")
+    print(f"      --validated-capability \"...\" --identified-obstacle \"...\" \\")
+    print(f"      --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance, #495)")
     sim = d.get("similar_lessons") or []
     if sim:
         print()
@@ -580,6 +805,13 @@ def main() -> int:
                         help="claim-closure result (#41): PROVEN|VERIFIED|REFUTED|NEGATIVE")
     parser.add_argument("--what-happened", default=None,
                         help="free text: what actually happened (#41, required with --outcome)")
+    parser.add_argument("--validated-capability", default=None,
+                        help="what this failure PROVED works — capability ok (#495 artifact)")
+    parser.add_argument("--identified-obstacle", default=None,
+                        help="what specifically blocked you (#495 artifact; auto-promoted to a claim)")
+    parser.add_argument("--source", default=None,
+                        help="provenance of next_method (#495): "
+                             "lesson-hit | reference-hit | web-hit | novel-hypothesis")
     parser.add_argument("--lessons", action="store_true",
                         help="aggregate analyses into the global lessons library (#41)")
     parser.add_argument("--search", metavar="KEYWORDS", default=None,
@@ -621,13 +853,21 @@ def main() -> int:
             return 64
         r = record_analysis(workspace, args.claim_id, args.assumption or "",
                            args.validity or "", args.next_method or "",
-                           args.outcome, args.what_happened)
+                           args.outcome, args.what_happened,
+                           validated_capability=args.validated_capability,
+                           identified_obstacle=args.identified_obstacle,
+                           source=args.source,
+                           library=args.library)
         if args.json:
             print(json.dumps(r, indent=2, ensure_ascii=False))
         else:
             print("RECORDED" if r.get("recorded") else f"REJECTED: {r.get('reason')}")
             if r.get("entry"):
                 print(yaml.safe_dump(r["entry"], allow_unicode=True, sort_keys=False))
+            oc = r.get("obstacle_claim") or {}
+            if oc.get("id"):
+                verb = "promoted new" if oc.get("created") else "existing"
+                print(f"obstacle claim ({verb}): {oc['id']}")
         return 0 if r.get("recorded") else 1
 
     if args.claim_id:
