@@ -144,7 +144,7 @@ def test_requirements_conservative_family():
 def test_requirements_vm_detonation_alone_does_not_relax():
     """R1 pin: vm_detonation=forbidden alone (dynamic_re absent) does NOT
     relax the VM channel — frida-on-VM may still be the plan; per-port
-    contracts are #450 env-manifest scope."""
+    contracts are #450 env-facts scope."""
     import toolchain as tc
     reqs = tc.requirements_from_task_spec(
         {"constraints": {"vm_detonation": "forbidden"}})

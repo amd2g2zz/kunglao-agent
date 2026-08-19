@@ -77,8 +77,14 @@ def _resolve_ws(arg) -> Path:
     if arg:
         return Path(arg)
     cwd = Path(os.getcwd())
-    sub = cwd / "malware-analysis-workspace"
-    return sub if (sub / "claim-register.yaml").exists() else cwd
+    # #450: layout names from the env manifest (single source — the
+    # pre-#450 literal lived here). Absent manifest → DEFAULT_LAYOUT,
+    # behavior byte-identical to the hardcoded version.
+    import env_manifest  # (same scripts/ dir; function-level: keep the
+    # module import graph of the hot CLI path unchanged)
+    layout = env_manifest.layout_conventions(cwd)
+    sub = cwd / layout.workspace_dir
+    return sub if (sub / layout.claim_register).exists() else cwd
 
 
 def _load_worker_lib():

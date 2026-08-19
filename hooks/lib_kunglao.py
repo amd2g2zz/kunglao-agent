@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -237,27 +238,48 @@ def parse_declared_artifacts(text: str) -> list[str]:
     return out
 
 
+def _env_layout(ws: Path):
+    """#450: layout conventions from scripts/env_manifest.py (the layout
+    single source — the .wt-*/malware-analysis-workspace/runs literals
+    used to live inline here). Missing module = broken install, not a
+    degraded mode (#444 posture: hooks/ and scripts/ ship together)."""
+    scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        import env_manifest
+    except ImportError as exc:
+        raise RuntimeError(
+            f"env manifest module missing: {scripts_dir / 'env_manifest.py'} — "
+            "hooks/ and scripts/ ship together; reinstall the kunglao-agent "
+            "skill") from exc
+    return env_manifest.layout_conventions(ws)
+
+
 def iter_worker_states(workspace: Path) -> list[dict]:
     """One row per worker-status file (single read each), across the canonical
-    scan targets: workspace ``runs/`` PLUS every ``.wt-*/`` (with
-    ``.kunglao-worktree`` marker) worktree ``runs/`` (v1.9.13 worktree
-    isolation: worker state lives in each worker's own worktree). OSError on
-    glob/read/stat skips that file. ``root`` is the workspace the file's
-    declared artifacts resolve against (main root, or that worktree's
-    malware-analysis-workspace root).
-    """
+    scan targets: workspace ``runs/`` PLUS every worker-worktree ``runs/``
+    (v1.9.13 worktree isolation: worker state lives in each worker's own
+    worktree). OSError on glob/read/stat skips that file. ``root`` is the
+    workspace the file's declared artifacts resolve against (main root, or
+    that worktree's workspace root). #450: the names come from the env
+    manifest layout (absent manifest → the pre-#450 defaults, scan targets
+    unchanged)."""
     ws = Path(workspace)
+    layout = _env_layout(ws)
     roots = [ws]
     try:
-        for wt in ws.parent.glob(".wt-*/.kunglao-worktree"):
-            root = wt.parent / "malware-analysis-workspace"
-            if (root / "runs").exists():
+        pattern = (f"{layout.worker_worktree_glob}/"
+                   f"{layout.worker_worktree_marker}")
+        for wt in ws.parent.glob(pattern):
+            root = wt.parent / layout.workspace_dir
+            if (root / layout.runs_dir).exists():
                 roots.append(root)
     except OSError:
         pass
     states = []
     for root in roots:
-        runs = root / "runs"
+        runs = root / layout.runs_dir
         if not runs.exists():
             continue
         for p in runs.glob("worker-status-*.md"):

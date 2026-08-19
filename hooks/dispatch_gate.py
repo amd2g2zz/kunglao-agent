@@ -69,10 +69,29 @@ DISPATCH_RE = re.compile(
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
-    """Same resolution as worker_budget.py: cwd → malware-analysis-workspace."""
+    """cwd → <layout.workspace_dir> — the layout names come from the env
+    manifest (#450 single source; hooks/dispatch_gate.py +
+    scripts/convergence_check.py + hooks/lib_kunglao.py used to hardcode
+    them). Absent manifest → DEFAULT_LAYOUT = the pre-#450 literals,
+    discovery behavior byte-identical."""
     cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
-    for base in [cwd / "malware-analysis-workspace", cwd]:
-        if (base / "claim-register.yaml").exists():
+    try:
+        # membership check mirrors lib_kunglao._env_layout (F5): each
+        # hook run is a fresh process so this never leaks in practice,
+        # but _resolve_workspace can be called repeatedly in-process
+        # (tests, embedders) — no unbounded path growth.
+        scripts_dir = str(SKILL_DIR / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import env_manifest
+    except ImportError as exc:  # broken install, not a degraded mode (#444 posture)
+        raise RuntimeError(
+            f"env manifest module missing: {SKILL_DIR / 'scripts' / 'env_manifest.py'} — "
+            "hooks/ and scripts/ ship together; reinstall the kunglao-agent "
+            "skill") from exc
+    layout = env_manifest.layout_conventions(cwd)
+    for base in [cwd / layout.workspace_dir, cwd]:
+        if (base / layout.claim_register).exists():
             return base
     return None
 

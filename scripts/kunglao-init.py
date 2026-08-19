@@ -144,6 +144,11 @@ import template_render  # noqa: E402
 # longer hand-rolls its own entry shape or skips verification.
 import hook_activation  # noqa: E402
 import yaml  # noqa: E402  # #455: task_spec.yaml -> CLAUDE.md constraint section
+# #450: environment facts single source — the CLAUDE.md "VM required" line
+# is conditionalized per the resolved env manifest (manifest > task_spec
+# derivation > conservative default; #449's requirements are consumed
+# through env_manifest, never re-implemented here).
+import env_manifest  # noqa: E402
 
 MARKER = "[initialized]"
 SEED_MIN = 3
@@ -1011,12 +1016,23 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
         return None
     tmpl = tmpl_path.read_text(encoding="utf-8")
 
+    # #450: condition the template's unconditional "VM required" line on
+    # the resolved env manifest (env = f(task_spec) closed the #449
+    # leftover). No manifest + no task_spec -> vm_requirement_for returns
+    # None -> the line stays byte-identical (renderer golden anchor);
+    # garbage manifest -> conservative unconditional line + a warning.
+    type_section = os_section(project_type)
+    vm_req = env_manifest.vm_requirement_for(ws)
+    if vm_req is not None and not vm_req[0]:
+        type_section = env_manifest.conditionalize_vm_required(
+            type_section, vm_req[1])
+
     # Detect venv path
     venv_candidate = ws / ".venv"
     venv_path = str(venv_candidate) if venv_candidate.exists() else ".venv/"
 
     params = {
-        "type_section": os_section(project_type),
+        "type_section": type_section,
         "task_spec_section": task_spec_section(ws),  # #455: user contract
         "type": project_type or "windows",
         "sample_sha1": sample_name,

@@ -546,7 +546,7 @@ def requirements_from_task_spec(task_spec: dict | None) -> Requirements:
     when one lands (#450+), it extends HERE, never at the checkers.
     vm_detonation ALONE does not relax (openspec issue-449 design R1): it
     forbids vmr-shell detonation only — frida-on-VM may still be the plan;
-    the per-port contract is #450 env-manifest scope.
+    the per-port contract is #450 env-facts scope.
     """
     if not isinstance(task_spec, dict):
         return DEFAULT_REQUIREMENTS
