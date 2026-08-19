@@ -832,3 +832,102 @@ def test_claudemd_garbage_manifest_keeps_unconditional_line(tmp_path, capsys):
     (ws_holder / "env-facts.yaml").write_text("\t: [", encoding="utf-8")
     text = _render_claudemd(mod, tmp_path)
     assert "- **VM required**:" in text
+
+
+# ---------- #477 ④: installed ledger (record_installed) ----------
+
+def _load_env_manifest():
+    import env_manifest
+    return env_manifest
+
+
+def test_record_installed_creates_section(tmp_path):
+    mod = _load_env_manifest()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    ok = mod.record_installed(ws, "pefile", "pip", "PASS")
+    assert ok is True
+    data = yaml.safe_load((ws / "env-facts.yaml").read_text(encoding="utf-8"))
+    entry = data["installed"]["pefile"]
+    assert entry["manager"] == "pip"
+    assert entry["reprobe"] == "PASS"
+    assert entry["at"]  # timestamp present
+    assert data["version"] == mod.MANIFEST_VERSION
+
+
+def test_record_installed_merges_preserving_user_fields(tmp_path):
+    """User facts survive an install-ledger write (probe's never-clobber
+    rule); prior installs of OTHER tools survive too."""
+    mod = _load_env_manifest()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "env-facts.yaml").write_text(yaml.safe_dump({
+        "version": 1,
+        "needs_vm": False,
+        "vm": {"vmx_path": "D:/vms/analysis.vmx"},
+        "installed": {"floss": {"manager": "pip", "at": "2026-08-19T00:00:00",
+                                "reprobe": "PASS"}},
+    }, sort_keys=False), encoding="utf-8")
+    ok = mod.record_installed(ws, "pefile", "pip", "PASS")
+    assert ok is True
+    data = yaml.safe_load((ws / "env-facts.yaml").read_text(encoding="utf-8"))
+    assert data["needs_vm"] is False
+    assert data["vm"]["vmx_path"] == "D:/vms/analysis.vmx"
+    assert data["installed"]["floss"]["manager"] == "pip"
+    assert data["installed"]["pefile"]["manager"] == "pip"
+
+
+def test_record_installed_reinstall_updates_entry(tmp_path):
+    """Per-tool update-wins: re-installing a tool REPLACES its stale entry
+    (unlike the probe gap-filler merge — the ledger records the LATEST
+    state of each tool, e.g. after an upgrade)."""
+    mod = _load_env_manifest()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "env-facts.yaml").write_text(yaml.safe_dump({
+        "version": 1,
+        "installed": {"die": {"manager": "choco", "at": "2026-01-01T00:00:00",
+                              "reprobe": "PASS"}},
+    }, sort_keys=False), encoding="utf-8")
+    mod.record_installed(ws, "die", "winget", "PASS", at="2026-08-20T00:00:00")
+    data = yaml.safe_load((ws / "env-facts.yaml").read_text(encoding="utf-8"))
+    assert data["installed"]["die"] == {
+        "manager": "winget", "at": "2026-08-20T00:00:00", "reprobe": "PASS"}
+
+
+def test_record_installed_refuses_garbage_manifest(tmp_path, capsys):
+    """A defective facts file is never overwritten (mirror of --probe's
+    refuse-to-clobber); False + stderr guidance, no exception."""
+    mod = _load_env_manifest()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "env-facts.yaml").write_text("\t: [", encoding="utf-8")
+    ok = mod.record_installed(ws, "pefile", "pip", "PASS")
+    assert ok is False
+    assert "\t: [" in (ws / "env-facts.yaml").read_text(encoding="utf-8")
+    err = capsys.readouterr().err
+    assert "refusing" in err.lower() or "ERROR" in err, err
+
+
+def test_record_installed_non_string_fails_closed(tmp_path):
+    mod = _load_env_manifest()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    with pytest.raises(ValueError):
+        mod.record_installed(ws, 123, "pip", "PASS")
+    with pytest.raises(ValueError):
+        mod.record_installed(ws, "pefile", "pip", ["PASS"])
+
+
+def test_installed_section_never_breaks_resolve_or_ledger_detector(
+        tmp_path):
+    """installed is write-through ledger data: resolve() still works and
+    the #478 deploy-ledger shape detector cannot fire (version present)."""
+    mod = _load_env_manifest()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    mod.record_installed(ws, "pefile", "pip", "PASS")
+    m = mod.resolve(ws)  # must not raise
+    assert m is not None
+    raw = mod.load_manifest(ws)
+    assert raw is not None and raw["installed"]["pefile"]["manager"] == "pip"

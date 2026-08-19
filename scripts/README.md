@@ -5,9 +5,9 @@ Every `.py` in this directory is classified by role and by where it is
 referenced. The reference map below is the definitive answer to "who uses
 this script?" — used to keep documentation, hooks, CI, and tests in sync.
 
-- **Total scripts**: 92 (72 cataloged at #318 close; +15 by #236/#271/#287/
+- **Total scripts**: 94 (72 cataloged at #318 close; +15 by #236/#271/#287/
   #304/#309/#316; +4 by #310/#331/#336 merged after the #320 snapshot;
-  +1 by #409 — per-script provenance in the tables below).
+  +1 by #409; +2 by #477 — per-script provenance in the tables below).
 - **Orphans**: 0 — every script has at least one live reference
   (tests/ count as references; a script referenced only by tests is
   categorized `TEST`, not orphan).
@@ -134,7 +134,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
 | `toolchain.py` | type-aware toolchain probe matrix (#304) with probe tiers presence/liveness/capability + jdwp handshake (#474) | lib(1), tests, docs |
-| `toolchain_install.py` | ask-then-install: per-item install commands by platform + MCP registration + re-probe (#408) | CLI, lib(1), tests |
+| `toolchain_install.py` | ask-then-install: (manager, package) data x pkg_detect detection + MCP registration + re-probe + env-facts installed ledger (#408, #477) | CLI, lib(1), tests |
+| `pkg_detect.py` | package-manager detection (winget/choco/scoop/brew/apt/dnf/apk/pacman/pip/uv/npm; which-first + known-path, read-only) + unpacked-ghidra half-state (#477) | CLI, lib(1), tests |
+| `deploy_shim.py` | device-side idempotent deploy (frida-server rename+custom port / android-server, re-probe gated, installed ledger) + #462 one-off shim records under scripts/shims/ (#477) | CLI, tests |
 | `toolchain_negotiation.py` | init negotiation menu (issue #451): install/use-path/skip/degrade, apply_answers validate-then-act | CLI, lib(1), tests |
 | `decision_pending.py` | pending-decision list schema + serialization (stdout JSON, exit 8, `--resolve` answers; shared intake channel #455/#449/#451) | lib(2), tests |
 | `log_setup.py` | shared stdlib-logging facade (FileHandler + stderr StreamHandler, idempotent; #454/#459) | lib, tests |

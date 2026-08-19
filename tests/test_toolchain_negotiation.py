@@ -112,11 +112,18 @@ def _fake_check_factory(fails: list[str], calls: list | None = None):
 # ---------- module surface ----------
 
 def test_negotiable_set_derived_from_install_plans():
-    """NEGOTIABLE is DERIVED (kind=auto + degrade=WARN), not hand-listed:
-    today that is exactly {pefile, floss, die}; the decompiler (HARD
-    degrade) and ida (mcp_url kind) are excluded."""
+    """NEGOTIABLE is DERIVED (kind=auto + degrade=WARN), not hand-listed.
+    #477 expanded INSTALL_PLANS 5 -> 17, so the derived set is now every
+    auto+WARN item (the issue's '可自动装项全进' requirement); the
+    decompiler (HARD degrade) and ida (mcp_url kind) stay excluded."""
     import toolchain_negotiation as neg
-    assert neg.NEGOTIABLE == frozenset({"pefile", "floss", "die"})
+    expected = frozenset({
+        "pefile", "floss", "die",
+        "file", "readelf", "objdump", "docker",
+        "jadx", "apktool", "gitnexus", "adb", "aapt",
+        "gdbserver", "strace", "ltrace",
+    })
+    assert neg.NEGOTIABLE == expected
     assert "decompiler" not in neg.NEGOTIABLE
     assert "ida" not in neg.NEGOTIABLE
 

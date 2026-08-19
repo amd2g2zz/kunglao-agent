@@ -641,6 +641,57 @@ def _cmd_probe(ws: Path) -> int:
     return RC_OK
 
 
+# ---------- #477 ④: installed ledger (write-through bookkeeping) ----------
+
+def record_installed(ws: Path, name: str, manager: str, reprobe: str,
+                     at: str | None = None) -> bool:
+    """Merge ONE install-ledger entry into <ws>/env-facts.yaml (#477 ④).
+
+    installed.<name> = {manager, at, reprobe} — the write-through
+    bookkeeping face of the facts file: resolve() does not consume it
+    (it is orthogonal to the five fact families), and the #478
+    deploy-ledger shape detector can never fire on it (version is always
+    present). Per-tool UPDATE-WINS: re-installing a tool replaces its
+    stale entry (the ledger records the LATEST state — deliberately
+    unlike _merge's existing-wins gap-filling); every OTHER top-level
+    key survives untouched.
+
+    Returns False (stderr guidance, nothing written) when the existing
+    file is a defect — same refuse-to-clobber posture as --probe; the
+    caller's install loop treats the ledger as fail-open bookkeeping.
+    Non-string fields raise ValueError (fail-closed family — a list
+    reprobe value is a defect, never str()-coerced).
+    """
+    for label, value in (("name", name), ("manager", manager),
+                         ("reprobe", reprobe)):
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"installed-ledger {label} must be a "
+                             f"non-empty string, got {value!r}")
+    path = Path(ws) / MANIFEST_FILENAME
+    existing: dict | None = None
+    if path.exists():
+        try:
+            existing = _load_manifest_file(path)
+        except ValueError as exc:
+            print(f"ERROR: {exc} — installed ledger refusing to overwrite "
+                  f"(fix {path} by hand, #450/#477)", file=sys.stderr)
+            return False
+    from datetime import datetime, timezone
+    entry = {
+        "manager": manager,
+        "at": at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "reprobe": reprobe,
+    }
+    merged = dict(existing or {})
+    merged["version"] = MANIFEST_VERSION
+    installed = dict(merged.get("installed") or {})
+    installed[name] = entry           # per-tool update-wins (docstring)
+    merged["installed"] = installed
+    path.write_text(yaml.safe_dump(merged, sort_keys=False,
+                                   allow_unicode=True), encoding="utf-8")
+    return True
+
+
 # ---------- main ----------
 
 def main(argv: list[str] | None = None) -> int:

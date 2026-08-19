@@ -322,9 +322,13 @@ def test_library_refuse_returns_4_no_scaffold(tmp_path, monkeypatch):
     import toolchain as tc
 
     def fake_fail(ws_arg, project_type=None):
+        # #477: gitnexus became INSTALL_PLANS-covered (negotiable -> the
+        # exit-8 menu); this test pins the NON-negotiable exit-4 refusal,
+        # so the fixture uses the decompiler (HARD degrade, never in the
+        # menu — #451/#477 surface split).
         return tc.ToolchainReport(project_type=project_type or "windows", items=[
-            tc.CheckResult(name="gitnexus", status=tc.Status.FAIL, tier=tc.Tier.HARD,
-                           detail="gitnexus not found", root_cause=None),
+            tc.CheckResult(name="decompiler", status=tc.Status.FAIL, tier=tc.Tier.HARD,
+                           detail="no decompiler found", root_cause=None),
         ])
 
     monkeypatch.setattr(mod.toolchain, "check", fake_fail)

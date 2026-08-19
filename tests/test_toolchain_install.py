@@ -24,6 +24,7 @@ Contract:
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import subprocess
@@ -57,30 +58,103 @@ def test_plan_keys_and_kinds():
             f"{name} missing degrades WARN (static analysis proceeds degraded)"
 
 
-def test_install_commands_platform_matrix(monkeypatch):
-    """Platform-appropriate commands: pip/uv for pefile+floss,
-    brew/choco/apt for die+ghidra; IDA carries none."""
-    # Windows (choco)
-    monkeypatch.setattr(ti.sys, "platform", "win32")
+def test_install_commands_detection_matrix(monkeypatch):
+    """#477: commands are assembled from (manager, package) DATA x
+    DETECTED managers — the sys.platform hardcode is gone.
+
+    Issue acceptance 2: winget present + choco absent on win32 -> the
+    winget plan is selected (docker carries a winget spec); die carries
+    no winget package, so a winget-only Windows yields NO command (the
+    choco suggestion no longer dead-ends pretending choco exists)."""
+    def _hits(*names):
+        import pkg_detect
+        return [pkg_detect.ManagerHit(name=n, path=f"/fake/{n}",
+                                      source="PATH") for n in names]
+
+    # win32 + winget only -> winget-spec items resolve via winget
+    monkeypatch.setattr(ti, "_detect_managers", lambda platform=None: _hits("winget"))
+    cmds = ti.install_commands("docker")
+    assert cmds and cmds[:2] == ["winget", "install"], cmds
+    # die has no winget package: honest empty (manual guidance via
+    # resolve_install) instead of a fabricated choco command
+    assert ti.install_commands("die") == []
+    res = ti.resolve_install("die")
+    assert res.mode == "manual" and res.next_action is not None
+    assert res.next_action.action == "install"
+    assert "choco" in (res.next_action.command or ""), res.next_action
+
+    # choco present -> die resolves through choco
+    monkeypatch.setattr(ti, "_detect_managers", lambda platform=None: _hits("choco"))
     cmds = ti.install_commands("die")
     assert cmds and "choco install" in " ".join(cmds), cmds
-    # macOS (brew)
-    monkeypatch.setattr(ti.sys, "platform", "darwin")
+
+    # brew (darwin) -> die via brew
+    monkeypatch.setattr(ti, "_detect_managers", lambda platform=None: _hits("brew"))
     cmds = ti.install_commands("die")
     assert cmds and "brew install" in " ".join(cmds), cmds
-    # Linux (apt)
-    monkeypatch.setattr(ti.sys, "platform", "linux")
-    cmds = ti.install_commands("die")
-    assert cmds and "apt-get install" in " ".join(cmds), cmds
+
     # pefile via python package manager on any platform
+    monkeypatch.setattr(ti, "_detect_managers", lambda platform=None: _hits("pip"))
     cmds = ti.install_commands("pefile")
     assert cmds and ("pip install" in " ".join(cmds)
                      or "uv pip install" in " ".join(cmds)), cmds
+
     # IDA: never auto-install — no commands, and the plan is mcp_url
     assert ti.install_commands("ida") == [], \
         "IDA must never yield an install command"
     assert ti.INSTALL_PLANS["ida"].degrade == "WARN", \
         "IDA absence degrades WARN (the decompiler item carries the HARD tier)"
+
+
+def test_resolve_install_elevation_never_autosudoes(monkeypatch):
+    """#304 parity: a needs_sudo manager (apt/dnf/apk/pacman) resolves to
+    mode 'elevation' — the exact sudo-prefixed command is PRINTED for the
+    human, never auto-executed by _run_install_plan."""
+    import pkg_detect
+    monkeypatch.setattr(
+        ti, "_detect_managers",
+        lambda platform=None: [pkg_detect.ManagerHit(
+            name="apt", path="/usr/bin/apt-get", source="known-path")])
+    res = ti.resolve_install("docker")
+    assert res.mode == "elevation", res
+    assert res.manager == "apt"
+    assert res.argv and res.argv[0] == "apt-get", res.argv
+
+    ran: list[list[str]] = []
+    monkeypatch.setattr(ti, "_subprocess_run",
+                        lambda argv, **kw: ran.append(argv) or _cp(argv))
+    rc, out, err = ti._run_install_plan("docker", ti.INSTALL_PLANS["docker"],
+                                        True, Path("/tmp/ws"))
+    assert rc != 0 and "elevation" in err, (rc, err)
+    assert ran == [], "an elevation-required install must never auto-run"
+
+
+def test_resolve_install_setenv_for_unpacked_ghidra(tmp_path, monkeypatch):
+    """Issue acceptance 3: an unpacked ghidra directory already on disk ->
+    the recommendation is 'configure GHIDRA_HOME', not a reinstall."""
+    ghidra = tmp_path / "ghidra_11.3_PUBLIC"
+    (ghidra / "support").mkdir(parents=True)
+    ah_name = "analyzeHeadless.bat" if sys.platform == "win32" \
+        else "analyzeHeadless"
+    (ghidra / "support" / ah_name).write_text("@echo off\n", encoding="utf-8")
+    monkeypatch.delenv("GHIDRA_HOME", raising=False)
+    monkeypatch.setenv("KUNGLAO_TOOL_DIRS", str(tmp_path))
+    monkeypatch.setattr(ti, "_detect_managers", lambda platform=None: [])
+    res = ti.resolve_install("decompiler")
+    assert res.mode == "set-env", res
+    assert res.next_action is not None
+    assert res.next_action.action == "set-env"
+    assert str(ghidra) in (res.next_action.command or ""), res.next_action
+
+
+def test_resolve_install_mcp_url_is_none():
+    res = ti.resolve_install("ida")
+    assert res.mode == "none" and res.argv == [], res
+
+
+def test_resolve_install_unknown_item():
+    with pytest.raises(KeyError):
+        ti.resolve_install("not-a-tool")
 
 
 def test_install_commands_unknown_item():
@@ -374,3 +448,172 @@ def test_ask_then_install_ida_report_detail_not_declined(monkeypatch):
     assert item.status == tc.Status.WARN, item
     assert "declined" not in item.detail, item.detail
     assert "no consent channel" in item.detail, item.detail
+
+
+# ---------- #477 ②: coverage — closed declaration over the check surface ----------
+
+def test_coverage_closed_declaration_covers_check_sets():
+    """Every toolchain check item is classified: either it carries an
+    InstallPlan (auto-installable) or it is declared NOT_AUTO_INSTALLABLE
+    with a reason. 100% classified, no overlap, no invention (structural
+    declaration — the memory doctrine)."""
+    all_items: set[str] = set()
+    for type_items in tc.CHECK_SETS.values():
+        all_items |= set(type_items)
+    auto = set(ti.INSTALL_PLANS)
+    declared = set(ti.NOT_AUTO_INSTALLABLE)
+    assert auto >= {"pefile", "floss", "die", "decompiler", "ida"}
+    assert len(auto) >= 12, f"coverage expansion required (5 -> >=12): {len(auto)}"
+    missing = all_items - auto - declared
+    assert not missing, f"unclassified check items: {sorted(missing)}"
+    overlap = auto & declared
+    assert not overlap, f"items both auto and declared-not-auto: {overlap}"
+    for name, reason in ti.NOT_AUTO_INSTALLABLE.items():
+        assert isinstance(reason, str) and reason.strip(), (
+            f"NOT_AUTO_INSTALLABLE[{name!r}] must carry a reason")
+
+
+def test_coverage_every_auto_plan_has_package_data():
+    """kind='auto' without package data would resolve to manual forever —
+    a silent coverage hole (the issue's original 5/31 complaint)."""
+    for name, plan in ti.INSTALL_PLANS.items():
+        if plan.kind == "auto":
+            assert plan.packages, f"{name}: auto plan with no packages"
+
+
+def test_not_auto_family_membership_pinned():
+    """FAULT-INJECT M8 pin (survivor 8): every never-auto family item
+    (VM channel / device-side / host-property) is declared in
+    NOT_AUTO_INSTALLABLE with a reason AND carries NO InstallPlan.
+
+    Complements test_coverage_closed_declaration_covers_check_sets, which
+    only pins union-completeness + no-overlap + auto>=12 — all three are
+    INVARIANT under a side swap (moving vm_reachable into INSTALL_PLANS
+    kept that test green while resolve_install fabricated
+    `winget install VMware.WorkstationPro` for a VM-CHANNEL item). Only
+    a per-item attribution pin notices the swap."""
+    never_auto_family = {
+        "vm_reachable", "remote_debugger",   # VM channel (#408, #451 vm-*)
+        "device_root", "debug_flag",         # human/device property
+        "frida_server", "android_server",    # device-side deploy (#477 ③)
+        "jdwp_debug",                        # running-app capability
+        "ebpf", "ebpf_android",              # kernel/SDK properties
+        "unidbg",                            # Java library, not a CLI
+    }
+    for name in never_auto_family:
+        assert name in ti.NOT_AUTO_INSTALLABLE, (
+            f"{name} must stay declared NOT_AUTO_INSTALLABLE "
+            f"(family: never auto-installed)")
+        reason = ti.NOT_AUTO_INSTALLABLE[name]
+        assert isinstance(reason, str) and reason.strip(), (
+            f"NOT_AUTO_INSTALLABLE[{name!r}] must carry a reason")
+        assert name not in ti.INSTALL_PLANS, (
+            f"{name} must never carry an InstallPlan — a side swap broke "
+            f"the closed declaration (union test cannot see this)")
+    # Generic vm_* leak scan: the VM channel is a human event (#408) —
+    # no vm_* item may ever resolve to a package install.
+    vm_leaked = sorted(n for n in ti.INSTALL_PLANS if n.startswith("vm_"))
+    assert not vm_leaked, f"VM-channel items must not be installable: {vm_leaked}"
+
+
+# ---------- #477 ④: unified re-probe loop -> env-facts installed ledger ----------
+
+def test_ask_then_install_records_installed_ledger(monkeypatch, tmp_path):
+    """④: a consented successful install re-probes AND the outcome lands
+    in <ws>/env-facts.yaml installed.<name> = {manager, at, reprobe}."""
+    ws = tmp_path / "ws"
+    recorded: dict = {}
+
+    import env_manifest
+    monkeypatch.setattr(env_manifest, "record_installed",
+                        lambda ws_arg, name, manager, reprobe, at=None:
+                        recorded.update(name=name, manager=manager,
+                                        reprobe=reprobe) or True)
+
+    def fake_install(name, plan, assume_yes, ws_arg):
+        return (0, "ok", "")
+
+    def fake_reprobe(ws_arg, project_type, caps=False, task_spec=None):
+        return tc.ToolchainReport(project_type=project_type, items=[
+            tc.CheckResult(name="pefile", status=tc.Status.PASS,
+                           tier=tc.Tier.HARD, detail="now present"),
+        ])
+
+    monkeypatch.setattr(ti, "_run_install_plan", fake_install)
+    monkeypatch.setattr(ti.toolchain, "check", fake_reprobe)
+    import pkg_detect
+    monkeypatch.setattr(ti, "_detect_managers",
+                        lambda platform=None: [pkg_detect.ManagerHit(
+                            name="pip", path="/x/pip", source="PATH")])
+
+    r = ti.ask_then_install(_report("pefile"), ws=ws,
+                            project_type="windows", assume_yes=True)
+    assert r.overall_status == tc.Status.PASS
+    assert recorded["name"] == "pefile", recorded
+    assert recorded["manager"] == "pip", recorded
+    assert recorded["reprobe"] == "PASS", recorded
+
+
+def test_ask_then_install_failed_install_records_nothing(
+        monkeypatch, tmp_path):
+    """④: an install that FAILS takes the degrade+NextAction path — no
+    installed-ledger entry (the failure surface is the guidance, not the
+    ledger)."""
+    ws = tmp_path / "ws"
+    recorded: list[str] = []
+    import env_manifest
+    monkeypatch.setattr(env_manifest, "record_installed",
+                        lambda *a, **kw: recorded.append("x") or True)
+
+    monkeypatch.setattr(ti, "_run_install_plan",
+                        lambda name, plan, assume_yes, ws_arg:
+                        (1, "", "network down"))
+    monkeypatch.setattr(ti.toolchain, "check",
+                        lambda ws_arg, project_type, caps=False,
+                        task_spec=None: tc.ToolchainReport(
+                            project_type=project_type, items=[]))
+    r = ti.ask_then_install(_report("pefile"), ws=ws,
+                            project_type="windows", assume_yes=True)
+    item = next(i for i in r.items if i.name == "pefile")
+    assert item.status == tc.Status.WARN, item
+    assert recorded == []
+
+
+def test_cli_end_to_end_one_command(monkeypatch, tmp_path, capsys):
+    """④ 'one command testable end-to-end': the standalone CLI runs the
+    whole chain probe -> ask(--assume-yes) -> install -> re-probe ->
+    env-facts ledger against seams."""
+    ws = tmp_path / "ws"
+    (ws / "bins").mkdir(parents=True)
+
+    def fake_check(ws_arg, project_type=None, caps=False, task_spec=None):
+        calls.append("check")
+        return tc.ToolchainReport(project_type="windows", items=[
+            tc.CheckResult(name="pefile",
+                           status=tc.Status.FAIL if calls.count("check") == 1
+                           else tc.Status.PASS,
+                           tier=tc.Tier.HARD, detail="probe"),
+        ])
+
+    calls: list[str] = []
+    monkeypatch.setattr(tc, "load_task_spec", lambda ws_arg: None)
+    monkeypatch.setattr(ti.toolchain, "check", fake_check)
+    monkeypatch.setattr(ti, "_run_install_plan",
+                        lambda name, plan, assume_yes, ws_arg:
+                        calls.append(f"install:{name}") or (0, "ok", ""))
+    import pkg_detect
+    monkeypatch.setattr(ti, "_detect_managers",
+                        lambda platform=None: [pkg_detect.ManagerHit(
+                            name="pip", path="/x/pip", source="PATH")])
+    ledger: list[str] = []
+    import env_manifest
+    monkeypatch.setattr(env_manifest, "record_installed",
+                        lambda ws_arg, name, manager, reprobe, at=None:
+                        ledger.append(f"{name}:{manager}:{reprobe}") or True)
+
+    rc = ti.main([str(ws), "--type", "windows", "--assume-yes", "--json"])
+    assert rc == 0, rc
+    assert calls == ["check", "install:pefile", "check"], calls
+    assert ledger == ["pefile:pip:PASS"], ledger
+    out = capsys.readouterr().out
+    assert '"overall": "PASS"' in out, out
