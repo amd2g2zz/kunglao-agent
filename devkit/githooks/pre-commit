@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# devkit/githooks/pre-commit — Kunglao development 4-gate runner (#463)
+#
+# Runs the 4-gate quality framework on EVERY commit. Catches regressions
+# and broken imports BEFORE they reach the repo. NOT the product's review
+# gate (.claude/git-hooks/pre-commit — that one is for product review
+# evidence; this one is for developer-side quality enforcement).
+#
+# Gates run: 1 (Requirement) + 3 (Engineering) + 4 (mutmut availability).
+# Gate 2 (full pytest) is OPT-IN via $KUNGLAO_DEV_GATE2=1 (slow ~3min).
+#
+# The hook is installed by `devkit/install_git_hooks.py` which:
+#   1. reads the devkit_root path from $ARGV[0] (or auto-detect)
+#   2. writes this script to <repo>/.git/hooks/pre-commit (preserving the
+#      product's .claude/git-hooks/pre-commit template, which is unchanged)
+#   3. makes the deployed hook executable (0755)
+#
+#   Uninstall: devkit/install_git_hooks.py --uninstall
+#
+# Cross-platform: this hook is bash-only because git itself ships bash, and
+# git's hook runner invokes /bin/sh regardless of platform. The hook body
+# only calls `python` (not `.venv/...`) — the deployer MUST stamp the
+# absolute devkit path so `python devkit/quality_gates.py` works from the
+# cwd-agnostic hook context.
+
+# be defensive: any uninitialised var / pipefail failure = reject commit
+set -euo pipefail
+
+# __KUNGLAO_DEVKIT_ROOT__ is the install-time placeholder: the human-run
+# installer (devkit/install_git_hooks.py) stamps the deployed devkit's
+# absolute root path ONCE into the installed .git/hooks/pre-commit copy.
+# The commit-time env (USERPROFILE redirection, virtualenv, etc.) cannot
+# alter the literal — same anti-forgery pattern as #367.
+devkit_root="__KUNGLAO_DEVKIT_ROOT__"
+if [ "$devkit_root" = "__KUNGLAO_DEVKIT_ROOT__" ]; then
+  echo "devkit/pre-commit BLOCKED: hook not installed (placeholder unstamped)."
+  echo "  Install: uv run python <devkit>/install_git_hooks.py"
+  echo "  Uninstall: uv run python <devkit>/install_git_hooks.py --uninstall"
+  exit 1
+fi
+
+command -v python >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1 || {
+  echo "devkit/pre-commit BLOCKED: python not on PATH"
+  exit 1
+}
+PY="$(command -v python)"
+[ -x "$PY" ] || PY="$(command -v python3)"
+
+# Gate 1 + 3 + 4 — quick checks. Fast (<10s on a warm cache).
+"$PY" "$devkit_root/quality_gates.py" 1 3 4 --quiet || {
+  echo "devkit/pre-commit BLOCKED: Gate 1 / 3 / 4 failed."
+  echo "  Run: $PY $devkit_root/quality_gates.py  (full verbose)"
+  exit 1
+}
+
+# Gate 2 (full pytest) — opt-in only. ~3min on warm cache.
+if [ "${KUNGLAO_DEV_GATE2:-0}" = "1" ]; then
+  "$PY" -m pytest -q || {
+    echo "devkit/pre-commit BLOCKED: Gate 2 (pytest) failed."
+    exit 1
+  }
+fi
+
+exit 0

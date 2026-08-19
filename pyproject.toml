@@ -25,6 +25,11 @@ dev = [
     # tomllib is 3.11+ stdlib; tests run on the 3.10 floor so the tomli
     # backfill is a dev-only dependency (issue #352).
     "tomli>=2.0; python_version < '3.11'",
+    # #463 4-gate quality framework: coverage is OBSERVATION (no threshold
+    # gate — per docs/quality_gates.md, coverage/test-count are not KPIs).
+    "pytest-cov>=5.0",
+    # #463 Gate 4 (test effectiveness): mutation testing on changed code.
+    "mutmut>=2.4",
 ]
 
 # NOTE: pytest configuration lives in pytest.ini (single source of truth).
