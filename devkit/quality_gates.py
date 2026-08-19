@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""quality_gates.py — 4-gate quality framework runner (cross-platform, #463).
+"""quality_gates.py — multi-gate quality framework runner (cross-platform, #463).
 
-Runs the 4 quality gates (Requirement Correctness / Regression Safety /
-Engineering Quality / Test Effectiveness) against the current working
-tree. Exit 0 only if all gates pass. Fault-injection fixtures are Phase 2
-(documented, not yet automated here — see devkit/docs/quality_gates.md
-"故障注入").
+Runs the registered quality gates (Requirement Correctness / Regression
+Safety / Engineering Quality / Test Effectiveness / Subagent Review /
+Agents Contract) against the current working tree. The GATES registry
+below is the single source of truth for the gate count — docstrings and
+hook templates must not hardcode a number that can drift (G-class
+lesson, #498). Exit 0 only if all gates pass. Fault-injection fixtures
+are Phase 2 (documented, not yet automated here — see
+devkit/docs/quality_gates.md "故障注入").
 
 Cross-platform: pure Python stdlib + optional `mutmut` for Gate 4. No
 bash-only constructs so it runs identically on Windows / Linux / macOS.
 
 Usage:
-  uv run python devkit/quality_gates.py            # all 4 gates
+  uv run python devkit/quality_gates.py            # all registered gates
   uv run python devkit/quality_gates.py 1 2        # only gates 1 + 2
   uv run python devkit/quality_gates.py --quiet    # terse mode
 
@@ -32,6 +35,13 @@ Gate semantics:
   4. Test Effectiveness — `import mutmut` succeeds (mutation testing
      tool available locally). Phase 1 only verifies tool availability;
      Phase 2 will run mutmut on PR diff and enforce a threshold.
+  5. Subagent Review — execution-layer maker-checker evidence: commits
+     touching domain paths need a valid .subagent-review/*.json
+     (devkit/subagent_review.py, #462).
+  6. Agents Contract — definition-layer twin of Gate 5: agents/*.md
+     must declare the 3-element contract (plan-to-execute / status-sync
+     / tool-discovery) via structural markers (devkit/agents_lint.py,
+     #492).
 """
 from __future__ import annotations
 
@@ -150,6 +160,32 @@ def _gate5_subagent_review(verbose: bool = True) -> bool:
     return bool(rc == 0)
 
 
+def _gate6_agents_contract(verbose: bool = True) -> bool:
+    """Agents Contract — Gate 6 (issue #492, split from #462).
+
+    Definition-layer twin of Gate 5: where Gate 5 checks the EXECUTION
+    evidence (.subagent-review/*.json), Gate 6 statically lints the
+    agent DEFINITIONS (agents/*.md) for the 3-element contract via
+    structural markers — structured declaration over prose regex (user
+    doctrine: enumerating natural-language clauses is unfinishable in
+    any language). agents/*.md are standing assets, so this runs on
+    every invocation (cheap static read), not on domain-path triggers.
+
+    Fail-closed: agents/ missing / zero *.md / any agent missing a
+    marker or carrying a hollow marker → FAIL.
+    """
+    try:
+        sys.path.insert(0, str(REPO_ROOT / "devkit"))
+        from agents_lint import check as _agents_check
+    except Exception as exc:
+        print(f"  [fail] agents_lint import error: {exc!r}")
+        return False
+    rc = _agents_check()
+    # agents_lint.check() returns 0 (pass) or 1 (violations).
+    # bool(rc==0) — same truthiness trap guard as Gate 5.
+    return bool(rc == 0)
+
+
 def _observation_pass_rate(verbose: bool = True) -> None:
     """Print pass-rate metric from .pytest-result.xml if present.
 
@@ -185,6 +221,7 @@ GATES = {
     3: ("Engineering Quality",    _gate3_engineering_quality),
     4: ("Test Effectiveness",     _gate4_test_effectiveness),
     5: ("Subagent Review",        _gate5_subagent_review),
+    6: ("Agents Contract",        _gate6_agents_contract),
 }
 
 

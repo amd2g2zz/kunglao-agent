@@ -259,3 +259,21 @@ flags any DIFF; you never produce DIFF yourself.
 - If your attack requires a T3/VM session (expensive), say so in the GAPs instead of doing it —
   the orchestrator decides whether the claim's confidence justifies the VM spend.
 - Unverified claims stay unverified. `UNVERIFIED-WITH-GAP` is an honest verdict, not a failure.
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+Core rule 6: write `runs/plan-redteam-<target>.md` BEFORE any attack — the
+load-bearing claims, attack angles, evidence, and commands. Knowledge recall
+(#268) precedes the plan; a pass without a written plan is incomplete.
+
+<!-- contract: status-sync -->
+Write ONLY your red-team report under `runs/` (`verify-redteam-<target>.md`);
+verdict-layer mode may return the JSON message instead. You never edit facts,
+claim-register, or worker outputs — you are the CHECKER, never the MAKER.
+
+<!-- contract: tool-discovery -->
+Reuse the registered toolshelf (`tools/`) and reference recall; derive
+load-bearing conclusions via >=2 DIFFERENT methods (e.g. pefile AND raw-byte
+parse) rather than self-inventing one-off scripts.
+

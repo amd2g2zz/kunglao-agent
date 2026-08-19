@@ -85,6 +85,7 @@ correct way to express "can't" is:
 "I checked X/Y/Z, tried methods A/B, stuck at <specific point>, need
 <specific help>".
 
+<!-- contract: plan-to-execute -->
 ## Plan-to-Execute (v1.9.29)
 
 After receiving a task, do **NOT execute immediately**. Trial-and-error is
@@ -215,6 +216,7 @@ write "task complete" while open questions remain on your claim.
 - **frida NativeFunction** calls inside Go binaries can throw TypeError in
   async callbacks — do them in synchronous context.
 
+<!-- contract: status-sync -->
 ## State-write protocol (kunglao-agent §1c) — write files or you failed
 
 A worker that returns "done" without writing files has FAILED (the W-15
@@ -334,6 +336,7 @@ self_caveat: "unverified — needs independent verifier pass"
 
 lint check: `cd <workspace> && python <malware-veri-notes>/scripts/lint-notes.py` — your fact must produce 0 ERR lines.
 
+<!-- contract: tool-discovery -->
 ## Script reusability (added 2026-07-30 — user-flagged)
 
 Worker scripts in `scripts/` accumulate as one-shot, sample-specific hacks

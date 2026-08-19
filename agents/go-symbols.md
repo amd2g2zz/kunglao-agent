@@ -70,3 +70,22 @@ Recover Go symbols/types/itabs from pclntab via unstrip (no decompile) -> emit a
 
 ## Output
 4 files in `evidence_dir`. Return a one-line summary: function count, garble verdict, #annotations.
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+Pipeline step 1: sequentialthinking preamble BEFORE running unstrip — confirm
+Go, pick suspicious-name patterns, choose `--data-at` targets from prior evidence.
+Update the plan when the data argues otherwise, then continue.
+
+<!-- contract: status-sync -->
+WRITE the four evidence files yourself (`unstrip-info.json` /
+`unstrip-symbols.json` / `unstrip-ghidra-apply.py` / `unstrip-ghidra-hints.json`);
+return the one-line summary (function count, garble verdict, #annotations)
+only after the files exist — a run without files has FAILED.
+
+<!-- contract: tool-discovery -->
+Reuse `unstrip` (PATH or the `analysis_state.txt` toolchain path) — do not
+hand-roll pclntab parsing; garble assist names candidates, never fabricates
+semantic names.
+

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# devkit/githooks/pre-commit — Kunglao development 4-gate runner (#463)
+# devkit/githooks/pre-commit — Kunglao development quality-gate runner (#463)
 #
-# Runs the 4-gate quality framework on EVERY commit. Catches regressions
+# Runs the devkit quality gates on EVERY commit. Catches regressions
 # and broken imports BEFORE they reach the repo. NOT the product's review
 # gate (.claude/git-hooks/pre-commit — that one is for product review
 # evidence; this one is for developer-side quality enforcement).
 #
-# Gates run: 1 (Requirement) + 3 (Engineering) + 4 (mutmut availability).
+# Gates run: 1 (Requirement) + 3 (Engineering) + 4 (mutmut availability)
+# + 5 (Subagent Review, #462) + 6 (Agents Contract, #492).
 # Gate 2 (full pytest) is OPT-IN via $KUNGLAO_DEV_GATE2=1 (slow ~3min).
 #
 # The hook is installed by `devkit/install_git_hooks.py` which:
@@ -63,10 +64,10 @@ PY="$(command -v python)"
 # keeps the hook POSIX-portable.
 devkit_root="$(tail -n1 "$0" | sed 's/^# devkit-installed: //')"
 
-# Gate 1 + 3 + 4 + 5 — quick checks. Fast (<10s on a warm cache).
-"$PY" "$devkit_root/quality_gates.py" 1 3 4 5 --quiet || {
+# Gate 1 + 3 + 4 + 5 + 6 — quick checks. Fast (<10s on a warm cache).
+"$PY" "$devkit_root/quality_gates.py" 1 3 4 5 6 --quiet || {
   echo "devkit/pre-commit BLOCKED: quality gate(s) failed (see output above)."
-  echo "  Run: $PY $devkit_root/quality_gates.py 1 3 4 5  (full verbose)"
+  echo "  Run: $PY $devkit_root/quality_gates.py 1 3 4 5 6  (full verbose)"
   exit 1
 }
 

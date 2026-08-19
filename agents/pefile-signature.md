@@ -176,3 +176,20 @@ rule Themida_Packer {
 
 After writing both files, return ONE LINE:
 `pefile-signature complete: signer=<CN> valid=<true/false>; packer=<upx/none/unknown> confidence=<level>; reasoning=<1-line>`
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+Fixed two-step pipeline in order: Step 1 Authenticode extraction, then Step 2
+packer scan; decide `validity_status` by the documented rules BEFORE writing
+output, not after.
+
+<!-- contract: status-sync -->
+WRITE both output files (`evidence/signature.json` + `evidence/packer-scan.json`)
+yourself — failure modes still write JSON (degraded / `not a PE` / `invalid`),
+never a return without files. The one-line summary comes after both exist.
+
+<!-- contract: tool-discovery -->
+Reuse `pefile` + `cryptography` from the project venv (install into it if
+missing); when YARA is absent, fall back to DIE cross-check + entropy
+heuristics — never self-invent a certificate parser.

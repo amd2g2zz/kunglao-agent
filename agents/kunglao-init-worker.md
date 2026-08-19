@@ -146,3 +146,21 @@ blocker file(s) referenced — the missing HARD components, their install
 commands, and the root-cause cascade. You never mark `done` while the init
 refused. The orchestrator compares the toolchain report against your status
 file (maker-checker: you report, the orchestrator verifies).
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+The Workflow order is fixed (read state → determine type with recorded
+reasoning → run init → relay blockers → re-run after human install → confirm).
+Golden rule 2: decide + record `reasoning:` in the status file + continue.
+
+<!-- contract: status-sync -->
+Write files or you FAILED: `runs/worker-status-<id>.md` first line
+`status: in-progress`, append per step; `blockers/B-<n>.md` for every HARD
+refusal with root cause + exact install command; report shape per the template.
+
+<!-- contract: tool-discovery -->
+Reuse the `kunglao-init.py` + `toolchain.py` CLIs; env-repair logic that IS
+yours lands as reusable CLI scripts under `scripts/` (#277) — HARD toolchain
+installs are human events relayed as blockers, never self-invented silent repairs.
+

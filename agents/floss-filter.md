@@ -193,3 +193,20 @@ floss-filter complete: <top-3 categories with counts>; <family_keyword_hits coun
 ```
 
 For example: `floss-filter complete: stack_strings=8500, paths=230, other=180; family_hits=0; outliers=2 (base64 in paths class, raw URL in other); reasoning: Go binary, K=200 cap, no family matches in 20k lines — Kaspersky Gsb.are hint NOT corroborated by binary strings`.
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+Read the inputs first (Step 1), then apply the pipeline inline; thresholds
+are heuristics you set from the data and justify, not hardcoded defaults —
+every default override and K choice lands in `provenance.reasoning_notes`.
+
+<!-- contract: status-sync -->
+WRITE `evidence/floss-filtered.json` yourself (Layer A inventory + Layer B
+top-K); on failure write the error JSON to the same `output_path`, never
+return bare prose. The one-line return summary comes only after the file exists.
+
+<!-- contract: tool-discovery -->
+Apply the pipeline inline — do NOT write a Python script file, do NOT score
+with an LLM (the composite score is deterministic); inputs (`floss-raw.txt`,
+noise dict, family keywords) are read-only and never modified.

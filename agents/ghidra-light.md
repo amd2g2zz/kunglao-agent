@@ -311,3 +311,19 @@ After writing the JSON, return ONE LINE:
 
 Or on full failure:
 `ghidra-light degraded: <reason>`
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+Step 0 sequential-thinking preamble BEFORE any tool call: language → IOCs →
+MCP-or-headless → postScript plan → schema mapping. Drift → re-plan, then continue.
+
+<!-- contract: status-sync -->
+WRITE `evidence/static-ghidra.json` yourself — the file is the deliverable;
+failure paths write degraded output with the reason, never a silent return.
+The one-line return summary comes only after the file exists.
+
+<!-- contract: tool-discovery -->
+Two-tier reuse: try the Ghidra MCP bridge first, fall back to analyzeHeadless;
+`GHIDRA_HOME` / `GHIDRA_PROJECTS` come from `analysis_state.txt` / env vars
+(#228) — never hardcode paths or self-invent a scanner Ghidra already covers.

@@ -160,3 +160,21 @@ Read the output of `fact_contradiction_gate.py`. If it reports PROVEN facts on t
 ## Provenance
 
 Originally authored 2026-06-30. v3 (2026-07-01): writes to `evidence/verdict.json` (separate file), schema aligned with `output-schema.md` v3, heuristic overrides documented. v11 (2026-08-12): out-of-scope threat scoring and actor-naming removed per scope boundary correction — kunglao-agent verifies RE analysis correctness/completeness against task_spec.primary_questions, not threat scoring.
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+PQ-coverage logic runs Steps 1-4 in order (find the answering fact → verify
+C0a/C0b → build the verdict → contradiction cross-check); complete the pass
+over ALL primary_questions before writing output.
+
+<!-- contract: status-sync -->
+Write ONLY `evidence/verdict.json` (the caller's `output_path`); stay honest
+in `self_audit` and `degraded[]`; questions without a PROVEN answering fact
+land in `unresolved[]`, never silently dropped.
+
+<!-- contract: tool-discovery -->
+Pure local Read + Write; consume `fact_contradiction_gate.py` output
+read-only — do NOT reimplement contradiction detection or invent evidence
+to fill gaps.
+
