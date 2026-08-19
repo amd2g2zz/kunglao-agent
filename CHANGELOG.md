@@ -44,7 +44,7 @@ release (see the mapping table at the end).
   PASS requires the analyzeHeadless import trial, available only under the
   new `--capability` flag / `check(..., caps=True)` (minutes-long, init/
   on-demand only; the default path runs presence+liveness only)
-- new android `jdwp_debug` HARD check: `adb jdwp` pid discovery +
+- new android `jdwp_debug` WARN informational check (optional capability, 2026-08-19 user ruling): `adb jdwp` pid discovery +
   `adb forward tcp:8700 jdwp:<pid>` + the raw 14-byte JDWP-Handshake echo
   (never `jdb -attach` — attach holds/resumes the target); jdb enters the
   android matrix docs (CLAUDE.md golden) as the interactive driver

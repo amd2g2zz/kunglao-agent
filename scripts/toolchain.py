@@ -97,10 +97,10 @@ FIXES: dict[str, str] = {
                     "(default name/port 27042 is detected by samples)",
     "android_server": "fix the root cause first (ADB); then adb push android_server to the device and run it; "
                       f"verified at init via `adb forward tcp:{ANDROID_SERVER_PORT} tcp:{ANDROID_SERVER_PORT}` + TCP connect",
-    "jdwp_debug": "fix the root cause first (ADB + ro.debuggable=1); then start the target app "
-                  "(a debuggable process must be running — `adb jdwp` must list a pid); the probe "
-                  "forwards tcp:8700 -> jdwp:<pid> and exchanges the raw 14-byte JDWP-Handshake "
-                  "(jdb remains the interactive driver; never jdb -attach from a probe — side effects)",
+    "jdwp_debug": "optional capability (WARN): only needed when the task actually drives jdb. "
+                  "To enable: ADB ok + ro.debuggable=1 + the target app running (`adb jdwp` lists "
+                  "a pid); the probe forwards tcp:8700 -> jdwp:<pid> and exchanges the raw 14-byte "
+                  "JDWP-Handshake (jdb stays the interactive driver; never jdb -attach — side effects)",
 }
 
 # #316: registration guidance for MCP supply checks — fix text rendered by the
@@ -923,34 +923,41 @@ def _check_android(report: ToolchainReport, ws: Path,
                 root_cause="android_server", probe=ProbeTier.LIVENESS,
             ))
 
-    # T2: jdwp_debug (#474) — JDWP raw-handshake liveness probe: the android
-    # dynamic-debugging core had NO probe (zero repo hits). Discover a
-    # debuggable pid via `adb jdwp`, forward to jdwp:<pid>, exchange the
-    # 14-byte handshake — side-effect-free, unlike `jdb -attach` (attach
-    # holds/resumes the target VM). jdb remains the interactive driver
-    # (matrix docs); this probe is the mechanical gate.
+    # T2: jdwp_debug (#474, #474-followup 2026-08-19) — JDWP raw-handshake
+    # liveness probe: the android dynamic-debugging core previously had NO
+    # probe. Discover a debuggable pid via `adb jdwp`, forward to jdwp:<pid>,
+    # exchange the 14-byte handshake — side-effect-free, unlike `jdb
+    # -attach` (attach holds/resumes the target VM).
+    # TIER NOTE (user ruling 2026-08-19): JDWP is NOT a hard requirement —
+    # static-only and frida-driven flows never touch jdb. The probe is
+    # informational (WARN tier): a miss reports capability-absence to the
+    # ORCHESTRATOR (which decides whether dynamic debugging is needed for
+    # this task — ReAct/reflexion routing is orchestrator territory, not a
+    # scaffold gate). Only a jdwp-dependent task treats the miss as blocking
+    # (worker_budget check_env_fresh does that per-dispatch, not init).
     if not adb_ok:
         report.items.append(CheckResult(
-            name="jdwp_debug", status=Status.FAIL, tier=Tier.HARD,
-            detail="Cannot verify JDWP — ADB unavailable",
-            root_cause="ADB", probe=ProbeTier.LIVENESS,
+            name="jdwp_debug", status=Status.WARN, tier=Tier.WARN,
+            detail="JDWP unprobed — ADB unavailable (informational; only "
+                   "jdwp-dependent tasks need this capability)",
+            probe=ProbeTier.LIVENESS,
         ))
     else:
         assert adb  # noqa: S101 — adb is set when adb_ok is True
         ok, detail = _adb_jdwp_probe(adb)
         if ok:
             report.items.append(CheckResult(
-                name="jdwp_debug", status=Status.PASS, tier=Tier.HARD,
+                name="jdwp_debug", status=Status.PASS, tier=Tier.WARN,
                 detail=detail, probe=ProbeTier.LIVENESS,
             ))
         else:
             report.items.append(CheckResult(
-                name="jdwp_debug", status=Status.FAIL, tier=Tier.HARD,
-                detail=f"JDWP agent not verified: {detail} — jdb dynamic "
-                       f"debugging needs a debuggable process; the probe uses "
-                       f"the raw 14-byte handshake (never jdb -attach, which "
-                       f"has side effects)",
-                root_cause="jdwp_debug", probe=ProbeTier.LIVENESS,
+                name="jdwp_debug", status=Status.WARN, tier=Tier.WARN,
+                detail=f"JDWP agent not verified: {detail} — dynamic "
+                       f"debugging via jdb unavailable for this workspace; "
+                       f"static/frida flows are unaffected (the raw "
+                       f"handshake probe is used; never jdb -attach)",
+                probe=ProbeTier.LIVENESS,
             ))
 
     # T2: eBPF (SDK >= 31) — WARN gate

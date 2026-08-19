@@ -30,7 +30,7 @@ A registered `ghidra`/`ida-pro-vm` MCP name plus a reachable bridge port, or a p
 
 ### Requirement: the android manifest SHALL include a jdwp liveness handshake probe
 
-A `jdwp_debug` check SHALL exist in the android check set: discover debuggable pids via `adb jdwp`, `adb forward tcp:<local> jdwp:<pid>`, then perform the raw JDWP handshake — send the 14-byte ASCII `JDWP-Handshake` and require the same 14 bytes echoed within a short timeout. It SHALL NOT use `jdb -attach` (attach has side effects on the target). With ADB unavailable the check SHALL cascade-FAIL naming ADB as root cause; a handshake echo mismatch or timeout SHALL FAIL. The android matrix documentation SHALL mention jdb as the interactive driver (fallback), and the JDWP probe as the mechanical gate.
+A `jdwp_debug` check SHALL exist in the android check set: discover debuggable pids via `adb jdwp`, `adb forward tcp:<local> jdwp:<pid>`, then perform the raw JDWP handshake — send the 14-byte ASCII `JDWP-Handshake` and require the same 14 bytes echoed within a short timeout. It SHALL NOT use `jdb -attach` (attach has side effects on the target). With ADB unavailable, or on a handshake echo mismatch/timeout, the check SHALL report WARN (capability-absence, tier WARN — never blocking). *(Amended 2026-08-19 per user ruling: jdwp is NOT a hard requirement — static-only and frida-driven flows never touch jdb; the miss is surfaced to the orchestrator, which decides per-task whether to repair. Original SHALL text: cascade-FAIL/FAIL — superseded.)* The android matrix documentation SHALL mention jdb as the interactive driver (fallback), and the JDWP probe as the mechanical gate.
 
 #### Scenario: handshake echo PASSes
 

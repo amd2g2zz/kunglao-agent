@@ -205,8 +205,11 @@ def test_android_jdwp_check_pass_with_echo_server(kunglao_ws, tmp_path,
     assert "4242" in item.detail
 
 
-def test_android_jdwp_check_fail_wrong_echo(kunglao_ws, tmp_path, monkeypatch):
-    """`jdwp_debug` FAIL: server echoes wrong bytes (and carries guidance)."""
+def test_android_jdwp_check_miss_is_warn_not_fail(kunglao_ws, tmp_path,
+                                                  monkeypatch):
+    """#474 follow-up: server echoes wrong bytes -> WARN capability-absence
+    (jdwp is optional; the miss must NOT block init — orchestrator decides
+    per-task whether dynamic debugging is needed)."""
     import toolchain as tc
     fake_bin = _fake_bin_dir(tmp_path)
     with _FakeJdwpServer(b"WRONG-echo----") as srv:
@@ -214,12 +217,14 @@ def test_android_jdwp_check_fail_wrong_echo(kunglao_ws, tmp_path, monkeypatch):
         monkeypatch.setenv("PATH", str(fake_bin))
         report = tc.check(kunglao_ws, "android")
     item = next(i for i in report.items if i.name == "jdwp_debug")
-    assert item.status == tc.Status.FAIL, item
-    assert "jdwp_debug" in tc.FIXES, "FAIL must have install/deploy guidance"
+    assert item.status == tc.Status.WARN, item
+    assert item.tier == tc.Tier.WARN, "WARN tier — non-blocking, informational"
+    assert "jdwp_debug" in tc.FIXES, "the miss must still carry enable guidance"
 
 
-def test_android_jdwp_check_no_pids_fails(kunglao_ws, tmp_path, monkeypatch):
-    """`adb jdwp` returns no pid (no debuggable process) -> FAIL."""
+def test_android_jdwp_check_no_pids_is_warn(kunglao_ws, tmp_path, monkeypatch):
+    """`adb jdwp` returns no pid (no debuggable process) -> WARN
+    capability-absence (2026-08-19 user ruling: jdwp is optional)."""
     import toolchain as tc
     fake_bin = _fake_bin_dir(tmp_path)
     stub = fake_bin / "adb_stub.py"
@@ -252,20 +257,21 @@ def test_android_jdwp_check_no_pids_fails(kunglao_ws, tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(fake_bin))
     report = tc.check(kunglao_ws, "android")
     item = next(i for i in report.items if i.name == "jdwp_debug")
-    assert item.status == tc.Status.FAIL, item
+    assert item.status == tc.Status.WARN, item
 
 
-def test_android_jdwp_check_adb_missing_cascades(kunglao_ws, tmp_path,
-                                                 monkeypatch):
-    """ADB missing -> jdwp_debug cascade-FAIL naming ADB as root cause."""
+def test_android_jdwp_check_adb_missing_is_warn(kunglao_ws, tmp_path,
+                                                monkeypatch):
+    """#474 follow-up: ADB missing -> WARN unprobed (NOT a cascade-FAIL —
+    jdwp absence never blocks; adb itself has its own HARD check)."""
     import toolchain as tc
     empty = tmp_path / "empty-474"
     empty.mkdir()
     monkeypatch.setenv("PATH", str(empty))
     report = tc.check(kunglao_ws, "android")
     item = next(i for i in report.items if i.name == "jdwp_debug")
-    assert item.status == tc.Status.FAIL, item
-    assert item.root_cause == "ADB", item
+    assert item.status == tc.Status.WARN, item
+    assert item.tier == tc.Tier.WARN, item
 
 
 def test_android_checkset_declares_jdwp():
