@@ -121,10 +121,16 @@ def _install_one(src: Path, dst: Path, devkit_root: Path,
 
     if not dry_run:
         dst.parent.mkdir(parents=True, exist_ok=True)
-        dst.write_text(stamped, encoding="utf-8")
+        # newline="" preserves the source line endings (LF). Windows'
+        # default `write_text` translates \n to \r\n, which contaminates
+        # bash variable assignments with a trailing CR and breaks the
+        # downstream `if [ "$devkit_root" = ... ]` string comparison
+        # (the literal in the if line has no CR).
+        with dst.open("w", encoding="utf-8", newline="") as f:
+            f.write(stamped)
         mode = dst.stat().st_mode
         dst.chmod(mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-        with dst.open("a", encoding="utf-8") as f:
+        with dst.open("a", encoding="utf-8", newline="") as f:
             f.write(f"\n{DEVKIT_HOOK_MARKER} {devkit_root}\n")
 
     msg = f"  installed: {dst.name}"

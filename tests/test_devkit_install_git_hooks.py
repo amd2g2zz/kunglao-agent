@@ -152,7 +152,12 @@ def test_install_idempotent(tmp_path: Path) -> None:
     assert hook.exists()
     content = hook.read_text(encoding="utf-8")
     assert "__KUNGLAO_DEVKIT_ROOT__" not in content
-    assert content.count("# devkit-installed:") == 1
+    # The marker line is appended once at the END of the file by
+    # `install_git_hooks.py`. The hook template may mention the literal
+    # string `# devkit-installed:` in prose comments, so we count the
+    # line-anchored form (the actual marker is `# devkit-installed: <path>`).
+    assert sum(1 for line in content.splitlines()
+               if line.startswith("# devkit-installed: ")) == 1
 
 
 def test_install_creates_hooks_dir_if_missing(tmp_path: Path) -> None:
