@@ -19,7 +19,7 @@ files:
   references/cold-start-contract.md: f19b0ccd07fd1cd93f67ef0098e380d781c55927beac9e10cdbeb72d5a9b14b8
   references/convergence-loop.md: 6ef0a4f0c3b48fc632cd6cc8ebd3010ebc803863e782c416411149464cbbcb86
   references/decision-rights.md: 2332fb0c0ed0e95b2e97549f2c478b37656f7914f2d1d4212576448e6bdfcd75
-  references/dispatch-protocol.md: 12d119506f9a95eca45822f417a764530645e6bc0c487fa18c9afc9b47840dff
+  references/dispatch-protocol.md: 7168141f8fdd0eec0d957ea73e045605ff8f8d93c4aa6565afb0274d8ad79ec6
   references/downstream-contract.md: 4665e25d99dbac0a610e3b682a6b252fdb0e6df2749fe6269c3ef7141f4c91b0
   references/dynamic-re-tool-priority.md: 90437ec9ea4428f23ba1c8cc9e5a3d83aecd822e624ed95bded5bd3923038b4f
   references/error-response-taxonomy.md: 54d649097f66c339c21cf5c8968cfe2a7f5ba102af8241b51a296c2a492827b1

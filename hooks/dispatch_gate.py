@@ -16,6 +16,22 @@ SMART = narrow + alive-only:
   - it injects corrective guidance (hookSpecificOutput.additionalContext),
     not a hard abort — the orchestrator can record the analysis and proceed.
 
+#496 decision teeth (value selection gets enforcement on this face):
+  - top-1: dispatching a non-top-1 claim (rank >= 2 under
+    worker_budget.check_priority — the single ranking source, #499
+    authority = priority_ratio) without an `agent-reasoning:` prefix
+    REJECTs; with the reason it passes and leaves a
+    priority_deviation trace in the unified log (exact copy of the #310
+    agenttype-deviation structure).
+  - capability card: the target claim's (or its obstacle_for parent's)
+    #495 validated_capability mentions tool family F, the dispatch
+    declares a disjoint family, and the prompt shows no
+    `capability-disproof: <family>` -> REJECT (disprove the card first —
+    trajectory-1 replay: frida validated, switching to xposed needs the
+    frida failure shown). FAIL_OPEN when no card / no known families.
+  - strategy log: a passing dispatch carrying `[strategy <id>]` appends
+    the dispatch row consumed by priority_ratio's novelty (opt-in).
+
 #452 (派发协议结构化) — dispatch protocol:
   v1 (new, JSON):
     {"kunglao_dispatch": {"version": 1, "claim": "C-409", "tier": 1,
@@ -38,6 +54,8 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+import yaml
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 HOOK_STATE = Path(".hook_state.json")
@@ -254,6 +272,199 @@ def _warn_must_stop(claim_id: str | None, prompt_text: str) -> int:
     return 2
 
 
+# ===================== #496 decision teeth =====================
+
+# ③ strategy dispatch marker: `[strategy <id>]` anywhere in the prompt.
+STRATEGY_MARKER_RE = re.compile(r"\[strategy\s+([A-Za-z0-9._-]+)\]")
+STRATEGY_LOG = "runs/strategy-log.jsonl"
+# #496 review F4: the ledger used to append unbounded (every marked
+# dispatch +1 row, from_workspace re-reads the whole file). Cap: before
+# each dispatch row is written the file is re-read and truncated to the
+# most recent STRATEGY_LOG_MAX rows (read-truncate-write — idempotent, an
+# already-short file keeps its rows verbatim and in order).
+STRATEGY_LOG_MAX = 200
+
+
+def _reject_with_guidance(name: str, msg: str, fix: str) -> int:
+    """#496: REJECT with guidance — the exact structure worker_budget._reject
+    and _warn_must_stop already use: stderr `REJECT <name>` summary + stdout
+    hookSpecificOutput.additionalContext carrying a concrete fix path +
+    exit 2 (block the Agent call)."""
+    print(f"REJECT {name}: {msg}", file=sys.stderr, flush=True)
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": (
+                f"dispatch_gate: REJECT {name} (#496). {msg}\n\nHow to fix:\n{fix}"
+            ),
+        },
+    }, ensure_ascii=False), flush=True)
+    return 2
+
+
+def _emit_trace(ws: Path, action: str, claim_id: str, detail: str) -> None:
+    """Deviation/disproof trace into the unified event log (kunglao_log,
+    the #459 face #461 dispatch events already use — self_redirects.jsonl
+    is the #447 ask-back VIOLATION counter and must stay unpolluted).
+    Logging never breaks the gate: fail-open, stderr note only."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "scripts"))
+        from kunglao_log import emit
+        emit(ws, "hook:dispatch_gate", action, claim=claim_id, detail=detail)
+    except Exception as exc:  # noqa: BLE001 — a trace must never block dispatch
+        print(f"dispatch_gate: trace emit failed ({action}: {exc!r})",
+              file=sys.stderr, flush=True)
+
+
+def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
+    """① #496: top-1 enforcement — exact copy of the #310 agenttype-deviation
+    pattern with the ranking source swapped for worker_budget.check_priority
+    (which ranks by priority_ratio, the #499 authority — reusing it keeps
+    this hook and worker_budget's devreason audit on ONE ranking, never two).
+
+    deviated (rank >= 2) + no `agent-reasoning:` prefix -> REJECT (exit 2);
+    with the prefix -> pass + stderr `TOP1 (deviation recorded)` +
+    priority_deviation trace. rank-None / audit unavailable -> no REJECT
+    (FAIL_OPEN — a broken gate must not block dispatch; the failure-blocked
+    slice keeps its own #495 injection path)."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "hooks"))
+        from worker_budget import check_priority
+    except Exception:  # noqa: BLE001 — scorer wiring unavailable -> fail open
+        return None
+    try:
+        _ok, msg, deviated = check_priority(
+            ws / "claim-register.yaml", ws / "claim_deps.yaml",
+            ws / "task_spec.yaml", claim_id, ws)
+    except Exception:  # noqa: BLE001 — audit crash -> fail open
+        return None
+    if not deviated:
+        if msg:
+            print(f"PRIORITY: {msg}", file=sys.stderr, flush=True)
+        return None
+    if "agent-reasoning:" in (prompt_text or "").lower():
+        print(f"TOP1 (deviation recorded): {msg}", file=sys.stderr, flush=True)
+        _emit_trace(ws, "priority_deviation", claim_id, msg)
+        return None
+    return _reject_with_guidance(
+        "top1", msg,
+        "add `agent-reasoning: <why this claim instead of the ranked #1>` "
+        "to the dispatch prompt (the deviation must be recorded, not "
+        "silently skipped — same discipline as the #310 agenttype gate), "
+        "or dispatch the top-ranked claim.")
+
+
+def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
+    """②(a) #496: capability card — a validated capability in hand (the
+    #495 artifact, read via priority_ratio.EvidenceView) constrains tool
+    choice. Switching to a disjoint declared tool family REJECTs unless the
+    prompt shows the disproof (`capability-disproof: <family>`); an excused
+    switch passes and leaves a capability_switch trace. The card scope is
+    the target claim PLUS its obstacle_for parent — the trajectory-1 pivot
+    onto the promoted obstacle claim stays covered. FAIL_OPEN when the
+    scorer, the register or the card is unavailable."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "scripts"))
+        import priority_ratio as pr
+    except Exception:  # noqa: BLE001 — scorer unavailable -> fail open
+        return None
+    tools: list[str] = []
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "hooks"))
+        from lib_kunglao import parse_dispatch
+        tools = parse_dispatch(prompt_text or "")[1]
+    except Exception:  # noqa: BLE001 — unparseable tools -> no families -> open
+        tools = []
+    claim_ids = {claim_id}
+    try:
+        reg = yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+        target = next((c for c in (reg.get("claims") or [])
+                       if c.get("id") == claim_id), None)
+        parent = (target or {}).get("obstacle_for")
+        if parent:
+            claim_ids.add(str(parent))
+    except Exception:  # noqa: BLE001 — register unreadable -> card scope is the claim
+        pass
+    try:
+        evidence = pr.EvidenceView.from_workspace(ws)
+    except Exception:  # noqa: BLE001 — artifact scan failure -> fail open
+        return None
+    v = pr.capability_switch_violation(claim_ids, tools, prompt_text, evidence)
+    if v is None:
+        # trace the EXCUSED switch: a disproof marker naming a validated
+        # family the dispatch moved away from (cold path, recomputed here so
+        # the pure judgment stays single-purpose)
+        if "capability-disproof:" in (prompt_text or "").lower():
+            cap_fams: set[str] = set()
+            for cid, cap in evidence.validated_capabilities:
+                if cid in claim_ids:
+                    cap_fams |= pr.tool_families_from_text(cap)
+            disp_fams = pr.tool_families_from_tools(tools)
+            if cap_fams and disp_fams and not (cap_fams & disp_fams):
+                print(f"CAPABILITY (disproof recorded): {claim_id} switching "
+                      f"from validated {sorted(cap_fams)} to "
+                      f"{sorted(disp_fams)}", file=sys.stderr, flush=True)
+                _emit_trace(ws, "capability_switch", claim_id,
+                            f"disproof shown; validated={sorted(cap_fams)} "
+                            f"dispatch={sorted(disp_fams)}")
+        return None
+    return _reject_with_guidance(
+        "capability",
+        f"{claim_id} has a validated capability in hand "
+        f"({v['capability'][:120]}) but the dispatch declares a different "
+        f"tool family {v['dispatch_families']} (validated: "
+        f"{v['validated_families']})",
+        "show the disproof first — add `capability-disproof: <family> "
+        "(why the validated tool family failed)` to the dispatch prompt "
+        "(the #495 analysis already carries the obstacle evidence; the "
+        "marker is you SHOWING the card, trajectory-1: switching off "
+        "validated frida requires the frida failure) — or keep dispatching "
+        "the validated family.")
+
+
+def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
+    """③ #496: append the strategy dispatch row on the PASS path — the only
+    writer the strategy-novelty interface needs (opt-in: no
+    `[strategy <id>]` marker, no row). attempts_at_snapshot is the claim's
+    current promotion_attempts, so a later #495 analysis with a higher
+    covers_attempt counts as a same-strategy failure. Fail-open."""
+    m = STRATEGY_MARKER_RE.search(prompt_text or "")
+    if not m:
+        return
+    snapshot = 0
+    try:
+        reg = yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+        target = next((c for c in (reg.get("claims") or [])
+                       if c.get("id") == claim_id), None)
+        snapshot = int((target or {}).get("promotion_attempts") or 0)
+    except Exception:  # noqa: BLE001 — unreadable register: snapshot 0, row kept
+        snapshot = 0
+    row = {
+        "ts": datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+        "event": "dispatch",
+        "strategy": m.group(1),
+        "claim": claim_id,
+        "attempts_at_snapshot": snapshot,
+    }
+    try:
+        path = ws / STRATEGY_LOG
+        path.parent.mkdir(parents=True, exist_ok=True)
+        kept: list[str] = []
+        if path.exists():
+            kept = [ln for ln in
+                    path.read_text(encoding="utf-8", errors="replace").splitlines()
+                    if ln.strip()]
+        kept = kept[-STRATEGY_LOG_MAX:]
+        kept.append(json.dumps(row, ensure_ascii=False))
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"dispatch_gate: strategy-log write failed ({exc!r})",
+              file=sys.stderr, flush=True)
+
+
 def main() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -286,26 +497,38 @@ def main() -> int:
         return _warn_must_stop(claim_id, prompt_text)
 
     blocked = _failure_blocked_ids(ws)
-    if claim_id not in blocked:
-        return 0  # dispatching a healthy claim — silent
+    if claim_id in blocked:
+        # INJECT corrective guidance (not hard block — orchestrator can
+        # record the analysis and proceed this same turn). The #495 slice
+        # keeps its own response; the #496 teeth below never hijack it
+        # (a failure-blocked claim is rank-None under check_priority).
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": (
+                    f"dispatch_gate: {claim_id} is failure-blocked - a prior attempt "
+                    f"failed and no failure_analysis is recorded. Per SKILL.md "
+                    f"'A failed attempt is not a negative result', run:\n"
+                    f"  uv run --project {SKILL_DIR} {SKILL_DIR}/scripts/failure_analysis_gate.py {ws} {claim_id}\n"
+                    f"answer the 3 questions (method_assumption / assumption_validity / "
+                    f"next_method), then re-dispatch - or dispatch a different claim. "
+                    f"A failed attempt is evidence the METHOD failed, not that the "
+                    f"behavior is absent."
+                ),
+            }
+        }, ensure_ascii=False))
+        return 0
 
-    # INJECT corrective guidance (not hard block — orchestrator can record
-    # the analysis and proceed this same turn)
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "additionalContext": (
-                f"dispatch_gate: {claim_id} is failure-blocked - a prior attempt "
-                f"failed and no failure_analysis is recorded. Per SKILL.md "
-                f"'A failed attempt is not a negative result', run:\n"
-                f"  uv run --project {SKILL_DIR} {SKILL_DIR}/scripts/failure_analysis_gate.py {ws} {claim_id}\n"
-                f"answer the 3 questions (method_assumption / assumption_validity / "
-                f"next_method), then re-dispatch - or dispatch a different claim. "
-                f"A failed attempt is evidence the METHOD failed, not that the "
-                f"behavior is absent."
-            ),
-        }
-    }, ensure_ascii=False))
+    # #496 decision teeth, in order: top-1 first (the most fundamental
+    # deviation), then the capability card, then the strategy log on the
+    # pass path. Each REJECTs (exit 2) or returns None to fall through.
+    rc = _top1_enforcement(ws, claim_id, prompt_text)
+    if rc is not None:
+        return rc
+    rc = _capability_guard(ws, claim_id, prompt_text)
+    if rc is not None:
+        return rc
+    _log_strategy_dispatch(ws, claim_id, prompt_text)
     return 0
 
 

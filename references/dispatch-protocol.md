@@ -60,8 +60,29 @@ gate 解析失败时:
 - v1 prompt 优先
 - 老调用方不需要迁移;新调用方可以选 v1
 
+## 派发 prompt 标记(#496 决策上牙,声明式)
+
+三个 prompt 内标记由 `hooks/dispatch_gate.py` 消费,全部走"判断用语义、
+执行用机械"的声明通道(散文枚举不可穷尽,标记可枚举):
+
+- **`agent-reasoning: <理由>`** — 派发目标不是 priority_ratio(#499 唯一
+  权威 scorer,经 `worker_budget.check_priority`)的 top-1 时**必须**携带
+  (#310 agenttype 门同款纪律):无标记 → REJECT(exit 2);有标记 → 放行
+  并留痕(统一日志 `runs/logs/kunglao-*.jsonl`,action=`priority_deviation`)。
+- **`capability-disproof: <family> (为何失效)`** — 目标 claim(含其
+  `obstacle_for` 父链)的 #495 `validated_capability` 已验证某工具族
+  (frida/ghidra/x64dbg/...)而本次派发声明了**不相交**的工具族时**必须**
+  携带并命名被证伪的族:轨迹1 例 — frida✓ 在手换 xposed,需出示 frida✗。
+  无标记 → REJECT;有标记 → 放行并留痕(action=`capability_switch`)。
+- **`[strategy <id>]`** — 可选(机制留接口,不强制):携带时派发放行路径
+  追加 `runs/strategy-log.jsonl` 一行;同 strategy 的历史失败(经 #495
+  `covers_attempt` 推导,无新增写者)降低该 claim 在 ratio novelty 中的
+  得分 — 同一打法反复失败,排名靠后。
+
 ## 见
 
 - `hooks/dispatch_gate.py` — 实现
 - `hooks/lib_kunglao.py` — `parse_dispatch(text)` 共享解析
+- `scripts/priority_ratio.py` — 能力卡纯判据 + strategy novelty 消费(#496)
 - `openspec/changes/issue-452-dispatch-protocol/` — 完整 spec/design
+- `openspec/changes/issue-496-decision-teeth/` — 决策上牙 spec/design
