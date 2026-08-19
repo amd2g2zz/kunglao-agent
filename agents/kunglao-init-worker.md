@@ -154,13 +154,54 @@ The Workflow order is fixed (read state → determine type with recorded
 reasoning → run init → relay blockers → re-run after human install → confirm).
 Golden rule 2: decide + record `reasoning:` in the status file + continue.
 
+**#494 expansion — plan FIRST, in writing**: your first action is to create
+`runs/worker-status-kunglao-init-worker-<id>.md` and write its plan
+section BEFORE any state read. The plan section states, in this domain's
+language: (a) what you will do — the intake order (needs-first
+`task_spec.yaml` → target alignment → type determination with the
+reasoning you will record → `kunglao-init.py` run), and the toolchain
+gate outcome you expect (PASS / WARN-only items / HARD FAIL candidates);
+(b) expected artifacts — `analysis_state.txt` (`project_type=` +
+`[initialized]` marker), `task_spec.yaml`, `blockers/B-<n>.md` for every
+HARD refusal; (c) the done criterion — init exit 0 + marker verified, or
+`status: blocked` with the blocker file carrying the install commands.
+Exit-code drift (exit 4 refuse) → update the plan, then take the
+relay-to-human branch.
+
 <!-- contract: status-sync -->
 Write files or you FAILED: `runs/worker-status-<id>.md` first line
 `status: in-progress`, append per step; `blockers/B-<n>.md` for every HARD
 refusal with root cause + exact install command; report shape per the template.
 
+**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: the
+status file is `runs/worker-status-kunglao-init-worker-<id>.md`, an
+append-only log parsed by the single canonical parse point
+(`hooks/lib_kunglao.py` — LAST `status:` token wins). Canonical
+vocabulary ONLY — `status: in-progress` / `status: done` /
+`status: blocked`. W-15: the `status: done` line MUST carry
+`| artifacts: analysis_state.txt, task_spec.yaml` (paths the init
+actually produced/verified — `lib_kunglao.scan_done_artifact_violations`
+re-verifies they exist); while blocked, reference the blocker files by
+name in the appended lines. Heartbeat: reply to the orchestrator's ping
+in the same file — waiting on a human install is `blocked`, not silence
+(time-based stall watchdog: `STUCK_MINUTES=20` — 20 min without a status-file update).
+
 <!-- contract: tool-discovery -->
 Reuse the `kunglao-init.py` + `toolchain.py` CLIs; env-repair logic that IS
 yours lands as reusable CLI scripts under `scripts/` (#277) — HARD toolchain
 installs are human events relayed as blockers, never self-invented silent repairs.
+
+**#494 expansion — discovery before ANY new env-repair code (#277)**. Before
+writing any repair script, run the three-point check: (1) `ls scripts/re` —
+the workspace RE tools (know what the analysis side already deployed);
+(2) read `tools/_INDEX.yaml` — the registered toolshelf (env repair is NOT
+its category; that absence is itself the answer — do not force an
+analysis tool into an env role); (3) the `references/` docs for your
+domain (`tool-inventory.md` for the mechanism list,
+`cli-script-checklist.md` before writing any CLI).
+Registered domain tools (verify each exists before calling): `kunglao-init.py`, `toolchain.py`, `env_manifest.py`, `env_repair_l1.py`, `env_state_probe.py`.
+Self-invention is forbidden: a missing env capability = file an issue to
+upstream it into `scripts/` as a reusable CLI (#277 checklist); a one-off
+shim must be labeled disposable and dropped after the run; HARD
+toolchain installs are human events, never agent repairs.
 
