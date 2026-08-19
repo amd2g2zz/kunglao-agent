@@ -42,6 +42,9 @@ Gate semantics:
      must declare the 3-element contract (plan-to-execute / status-sync
      / tool-discovery) via structural markers (devkit/agents_lint.py,
      #492).
+  7. Doc Sync — writing-layer drift guard: numeric gate-count claims on
+     the devkit/workflows face, un-re-pinned references/ edits, and
+     unregistered new scripts (devkit/doc_sync.py, #446).
 """
 from __future__ import annotations
 
@@ -186,6 +189,35 @@ def _gate6_agents_contract(verbose: bool = True) -> bool:
     return bool(rc == 0)
 
 
+def _gate7_doc_sync(verbose: bool = True) -> bool:
+    """Doc Sync — Gate 7 (issue #446, G-class writing-layer drift).
+
+    Three sub-checks (devkit/doc_sync.py):
+      (a) numeric gate-count claims on devkit/** + .github/workflows/**
+          are violations — the GATES registry is the count's only source
+          (number-free wording required; even a correct number is a
+          drift seed for the next registered gate);
+      (b) staged references/*.md without a staged, pin-accurate
+          references/_INDEX.yaml → HARD_PAUSE (re_pin_references.py
+          joins the pre-commit chain — the 7th live drift, 2026-08-19);
+      (c) staged NEW scripts/*.py unmentioned in references/_INDEX.md →
+          WARN (three-piece mechanism registration ledger).
+
+    N/A when nothing is staged (manual runs): the references check
+    passes trivially; the face scan is cheap and always runs.
+    """
+    try:
+        sys.path.insert(0, str(REPO_ROOT / "devkit"))
+        from doc_sync import check as _doc_sync_check
+    except Exception as exc:
+        print(f"  [fail] doc_sync import error: {exc!r}")
+        return False
+    rc = _doc_sync_check()
+    # doc_sync.check() returns 0 (pass), 1 (violations), 2 (HARD_PAUSE).
+    # bool(rc==0) — same truthiness trap guard as Gates 5 and 6.
+    return bool(rc == 0)
+
+
 def _observation_pass_rate(verbose: bool = True) -> None:
     """Print pass-rate metric from .pytest-result.xml if present.
 
@@ -222,6 +254,7 @@ GATES = {
     4: ("Test Effectiveness",     _gate4_test_effectiveness),
     5: ("Subagent Review",        _gate5_subagent_review),
     6: ("Agents Contract",        _gate6_agents_contract),
+    7: ("Doc Sync",               _gate7_doc_sync),
 }
 
 

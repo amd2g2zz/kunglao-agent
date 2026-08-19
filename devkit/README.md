@@ -8,14 +8,14 @@
 ```
 devkit/
 ├── README.md                 ← 你在这里
-├── quality_gates.py          ← 4-gate 质量门 runner
+├── quality_gates.py          ← 质量门 runner(门数 = GATES 注册表,勿在文档复制计数)
 ├── pass_rate_metric.py       ← CI metric 提取
 ├── install_git_hooks.py      ← 把 githooks/ 部署到 .git/hooks/
 ├── githooks/                 ← hook 模板(原样,带 __KUNGLAO_DEVKIT_ROOT__ 占位符)
 │   └── pre-commit
 ├── docs/                     ← devkit 自己的文档
 │   ├── README.md
-│   ├── quality_gates.md      ← 4-gate 框架
+│   ├── quality_gates.md      ← 质量门框架(#463 初版图示 + 后续门追加说明)
 │   ├── quality_roadmap.md    ← KPI 跟踪
 │   ├── defect_escape_rate.md
 │   └── unit_test_spec.md     ← 单元测试编写规范
@@ -42,14 +42,18 @@ devkit/
 - **Git hook 与产品隔离**:产品 `.claude/git-hooks/pre-commit`(review gate)
   和 devkit `githooks/pre-commit`(quality gate)是不同概念,各自独立。
 
-## 与 4-Gate 框架的关系
+## 与质量门框架的关系
 
 ```python
-# devkit/quality_gates.py 是 4-Gate 的 runner
+# devkit/quality_gates.py 是质量门的 runner;门清单的唯一来源是其
+# GATES 注册表(本文不复制计数 — 派生不复制,#446 G 类):
 Gate 1 (Requirement Correctness) — 验 scripts/ 里的契约模块能 import
 Gate 2 (Regression Safety)       — 调 pytest(在 tests/ 跑)
 Gate 3 (Engineering Quality)     — pytest --collect-only
 Gate 4 (Test Effectiveness)      — mutmut 可用性
+Gate 5 (Subagent Review)         — .subagent-review 执行层证据(#462)
+Gate 6 (Agents Contract)         — agents/*.md 三要素声明 lint(#492)
+Gate 7 (Doc Sync)                — 写作层漂移门(#446)
 ```
 
 devkit/ 只关心**怎么跑 gates**;**每个 gate 该验什么**写在 `devkit/docs/`。
@@ -67,7 +71,8 @@ uv run python devkit/install_git_hooks.py --dry-run
 uv run python devkit/install_git_hooks.py --uninstall
 ```
 
-安装后,每次 commit 自动跑 Gate 1/3/4(<10s)。
+安装后,每次 commit 自动跑 hook 模板声明的快速门集(GATES 注册表减去
+opt-in 的 Gate 2,<10s)。
 
 跑 Gate 2 (full pytest, ~3min) 需要 opt-in:
 ```bash
@@ -110,7 +115,7 @@ uv run python -m pytest tests/test_devkit_*.py
 
 ## 见
 
-- `devkit/docs/quality_gates.md` — 4-gate 框架定义
+- `devkit/docs/quality_gates.md` — 质量门框架定义
 - `devkit/docs/quality_roadmap.md` — KPI 跟踪
 - `devkit/docs/unit_test_spec.md` — 单元测试编写规范
 - `openspec/changes/issue-463-coverage-gate/` — 完整 spec

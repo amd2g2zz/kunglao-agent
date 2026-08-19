@@ -49,6 +49,7 @@ issue #447 证据 1 显示**三份文本对"什么时候该问用户"答案互�
 | 文本 | 角色 |
 |---|---|
 | `scripts/ask_for_direction_gate.py` | Type A/B/C 检测 (RC=1 reject)+ Type D/S 触发时 HARD_PAUSE (rc=2) — 看到 orchestrator **打印后** 的文本。v2 (#497): Type D blocker tripwire 无梯耗尽标记时降 rc=1 走梯指引; 新增 Type E 判死门 + plan-stall 搁浅门(均为陈述句门, rc=1) |
+| `scripts/error_response.py` `_CHARTER_STATE` 表 | 错误分类 → 三态的**派生列**:值域 = 本表三态 (allowed / must-ask / must-stop),符号锚 `CHARTER_SOURCE`/`CHARTER_STATES` 声明在模块内;互指存在由 `tests/test_decision_surface_anchor.py` 锁步断言 (#446 F 类) |
 | `hooks/dispatch_gate.py` | Type S 在 **dispatch prompt 本身** 上拦截 (rc=2 hard pause,worker 运行**前**) — 不可逆动作的承载执行器 |
 | `scripts/kunglao-init.py` 协商接口 | init 阶段 Type D 触发 — pending decisions + RC_PENDING_DECISIONS=8 |
 | 全局 `kunglao-convergence-loop.md` 硬禁止 #1 | **重写为对这张表的引用**,不直接措辞 |

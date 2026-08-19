@@ -1,11 +1,16 @@
-# Quality Gates — 4-gate framework (issue #463, v0.1.2)
+# Quality Gates — 质量门框架 (issue #463, v0.1.2;门清单见 devkit/quality_gates.py GATES 注册表)
 
 > **核心原则**:质量门验证**交付结果**,不验证 Agent 做了多少工作。
 > 禁止通过无限增加测试证明测试质量。Unit Test 是手段,不是指标。
 > 覆盖率与测试数只能作为观测,不得作为优化目标。
 > 最终以 First-Pass Acceptance / Defect Escape / Regression / Rework 衡量交付质量。
 
-## The 4 Gates
+## The Gates
+
+> 本页图示为 #463 初版门集(初版门数见 git 史)。后续门按注册表追加:Gate 5
+> Subagent Review(#462)、Gate 6 Agents Contract(#492)、Gate 7 Doc Sync
+> (#446)。**门清单的唯一来源是 `devkit/quality_gates.py` 的 GATES
+> 注册表** — 本文不复制计数(派生不复制,#446 G 类)。
 
 ```
 Agent 代码变更
@@ -72,10 +77,10 @@ Agent 代码变更
 
 **这些 KPI 优先级高于** Coverage / Test Case Count / Test LOC / Unit Test 数量。
 
-## 故障注入 — 横切 4-Gate 的验证技术
+## 故障注入 — 横跨质量门的验证技术
 
-故障注入验证"系统在故障下是否仍满足需求"。它不是第 5 个 Gate,而是**验证
-4 个 Gate 的手段**:Gate 1 用它验证容错需求,Gate 2 用它复现历史故障,
+故障注入验证"系统在故障下是否仍满足需求"。它不是新增的 Gate,而是**验证
+既有 Gate 的手段**:Gate 1 用它验证容错需求,Gate 2 用它复现历史故障,
 Gate 4 用它暴露测试盲区。
 
 ### 故障类型与注入方式
@@ -128,7 +133,7 @@ Regression 没有下降或 Rework 增加 — 当前测试策略正在产生**低
 
 每次 Agent 代码变更必须按以下顺序输出:
 
-1. **是否通过 4 个 Quality Gates**(Pass/Fail + 证据)
+1. **是否通过全部 Quality Gates(GATES 注册表,Pass/Fail + 证据)**
 2. **发现的真实风险**(具体 + 可量化)
 3. **是否存在测试膨胀**(对照"测试数量 vs KPI"曲线)
 4. **是否需要返工**(明确范围)

@@ -11,8 +11,8 @@ files:
   references/_index-platforms.md: eb4224a8cde683873a422a5a21ca62067b46efe09a46a7ff2c0f981ce57b6c7b
   references/_index-resources.md: d58750800fcd490ed014fbef7ee6dae2228180c44996d937a1130cc1c0f50196
   references/_index-tools.md: e28287ddfbb4006a0965a0f3dfb0206d6a54f711d6d7f9195c1d3d65f7f2a382
-  references/_INDEX.md: 602675f69cfce1bda364142b24f852a829de7ac7f542fdcce22e106748c8c561
-  references/agent-three-state-charter.md: de3021c7450c345021dc79434701d6873deb98abbfca979cb102532dec663d52
+  references/_INDEX.md: 1beffcb10396c2e284fa76b98bcd2865723f4afc436f89e7d33224f9040ae716
+  references/agent-three-state-charter.md: eef047d075d57382b6c6736400f9f744e47d5dde916cafb9f249c2c47365d43e
   references/archive/long-horizon-architecture-2026-07.md: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
   references/case-book.md: 148c5dc4a7546d39e64f8e734882e770b65b9f398fb9abcc10db508d0fa633e0
   references/cli-script-checklist.md: 2ae29be865f82c17f357666da831993796b0bbccae28c81d8b7a58f6af768228
@@ -29,6 +29,7 @@ files:
   references/failure-modes-state.md: ac17dabfd4abc717e77c67406ecbf24415a49a7e75beeb6127c2efbe27f2057e
   references/failure-modes.md: 72487c1c1e48a6e376ba347968319c0b54143f639fc00b3c1ff161345f75acec
   references/guardrails.md: f90273f020b71cbeeece16bb6716b58aa1cd8abc36fe1c6ec082a787444d322f
+  references/lessons/README.md: 2d7dd200a129cca4ad73435c9e381bf090bcb7aaaffc53c5f35708c5efcc8ace
   references/machine-check-contract.md: ad25084781c581d23108b260214a7d04c4b9000993019394a76d685d4c862a75
   references/malware-phase-routing.md: 00e6484afaa85da42ed5cdc2c919b3d9b22ca173da37ac4c6da0d691b0ced7f2
   references/method-constraints.md: efcd26339f3a31a3133a83c59ad556331e33365edf02af1b9f1600c7f1a644f7

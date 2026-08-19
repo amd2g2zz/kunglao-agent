@@ -7,7 +7,7 @@
 
 | ✅ 在 devkit/docs/ | ❌ 不在 devkit/docs/ |
 |---|---|
-| 4-Gate 质量门框架 (`quality_gates.md`) | README / 用户面向教程 |
+| 质量门框架 (`quality_gates.md`,门清单见 GATES 注册表) | README / 用户面向教程 |
 | KPI 跟踪 (`quality_roadmap.md`) | CHANGELOG(发布给用户) |
 | Defect Escape 跟踪 (`defect_escape_rate.md`) | API reference |
 | 单元测试编写规范 (`unit_test_spec.md`) | |
@@ -50,4 +50,4 @@ devkit/docs/ 是 devkit/ 的内嵌子目录,**不是** 顶层目录 —
 
 - `devkit/README.md` — devkit 总目录约定
 - `docs/`(如有)— 产品文档
-- `openspec/changes/issue-463-coverage-gate/` — 4-gate 框架来源
+- `openspec/changes/issue-463-coverage-gate/` — 质量门框架来源

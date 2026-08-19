@@ -218,4 +218,4 @@ def test_decide_invariant_total_count():
 
 - `devkit/docs/quality_gates.md` — Gate 4(测试有效性)
 - `devkit/docs/quality_roadmap.md` — KPI 跟踪
-- `openspec/changes/issue-463-coverage-gate/` — 4-gate 来源
+- `openspec/changes/issue-463-coverage-gate/` — 质量门来源

@@ -7,7 +7,11 @@
 # evidence; this one is for developer-side quality enforcement).
 #
 # Gates run: 1 (Requirement) + 3 (Engineering) + 4 (mutmut availability)
-# + 5 (Subagent Review, #462) + 6 (Agents Contract, #492).
+# + 5 (Subagent Review, #462) + 6 (Agents Contract, #492)
+# + 7 (Doc Sync, #446 — gate-count wording / references re-pin /
+# new-script registration). The quick-set below must equal the GATES
+# registry minus opt-in Gate 2 (test_doc_sync derives it — do not
+# hardcode counts here or anywhere).
 # Gate 2 (full pytest) is OPT-IN via $KUNGLAO_DEV_GATE2=1 (slow ~3min).
 #
 # The hook is installed by `devkit/install_git_hooks.py` which:
@@ -64,10 +68,10 @@ PY="$(command -v python)"
 # keeps the hook POSIX-portable.
 devkit_root="$(tail -n1 "$0" | sed 's/^# devkit-installed: //')"
 
-# Gate 1 + 3 + 4 + 5 + 6 — quick checks. Fast (<10s on a warm cache).
-"$PY" "$devkit_root/quality_gates.py" 1 3 4 5 6 --quiet || {
+# Quick set (registry minus Gate 2). Fast (<10s on a warm cache).
+"$PY" "$devkit_root/quality_gates.py" 1 3 4 5 6 7 --quiet || {
   echo "devkit/pre-commit BLOCKED: quality gate(s) failed (see output above)."
-  echo "  Run: $PY $devkit_root/quality_gates.py 1 3 4 5 6  (full verbose)"
+  echo "  Verbose re-run: $PY $devkit_root/quality_gates.py <same gates as above, without --quiet>"
   exit 1
 }
 

@@ -184,7 +184,7 @@ The shape is fixed: `[T<N> tools=<comma-separated>] claim <C-NN> <task>`, parsed
 
 Run `python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd turn — HEALTHY/STALLED/SPINNING from `.convergence_ledger.jsonl`. `worker_budget.py` REJECTS any dispatch while STALLED (exit 1) or SPINNING (exit 2); the 3rd-turn cadence is the self-audit, the gate itself is mechanical. Verdict table — see `references/_INDEX.md`.
 
-**A failed attempt is not a negative result**: when a worker reports failure, run `python <SKILL_DIR>/scripts/failure_analysis_gate.py <WORKSPACE> <C-NN>` before re-dispatch or NEGATIVE — it forces three reasoning questions. Protocol + examples — see `references/_INDEX.md`.
+**A failed attempt is not a negative result**: when a worker reports failure, run `python <SKILL_DIR>/scripts/failure_analysis_gate.py <WORKSPACE> <C-NN>` before re-dispatch or NEGATIVE — it forces three reasoning questions. Protocol + examples — see `references/_INDEX.md`. Failure-lessons library (issue 41, global + cross-sample): `--lessons` aggregates closed-loop analyses into `references/lessons/`, and keyword retrieval (`similar_lessons`) runs automatically inside the gate at failure time — see `references/_INDEX.md` "lessons/" row.
 
 **Worker monitoring**: enumerate ALL workers each tick, ping silent ones (smart ping, §6.1a), TaskStop at 3 strikes, dispatch a verifier on done/blocked. Tick mechanics — see `references/_INDEX.md`.
 

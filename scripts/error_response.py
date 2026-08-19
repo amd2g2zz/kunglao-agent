@@ -147,6 +147,14 @@ class Classification:
 
 
 # Pure tables (single source — any change goes through #448 openspec):
+#
+# F-class decision-surface anchor (#446): the three-state vocabulary below
+# is DERIVED from the charter, never invented here. Mutual lockstep is
+# asserted mechanically by tests/test_decision_surface_anchor.py
+# (charter executor table names this module back; symbolic anchors, no
+# line numbers — #446 acceptance requires symbol references).
+CHARTER_SOURCE = "references/agent-three-state-charter.md"
+CHARTER_STATES = ("allowed", "must-ask", "must-stop")
 _RESPONSE_MAP: dict[ErrorClass, Response] = {
     ErrorClass.HUMAN_EVENT_REFUSE: Response.STOP,
     ErrorClass.CONFIG_CHANGE_REQUIRED: Response.ASK,

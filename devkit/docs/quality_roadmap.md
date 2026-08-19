@@ -2,7 +2,7 @@
 
 > **核心原则**:覆盖率 / 测试数 / Unit Test 数量是**观测**,不是目标。
 > 真实 KPI:First-Pass Acceptance / Defect Escape / Regression / Rework。
-> 故障注入是 4-gate 的关键技术,不是独立 KPI。
+> 故障注入是质量门框架的关键技术,不是独立 KPI。
 
 ## KPI 跟踪
 
@@ -14,7 +14,7 @@
 
 详见 `docs/defect_escape_rate.md` 季度更新。
 
-## 4 Gates + 故障注入 横切
+## 质量门 + 故障注入 横切
 
 ```
                 Gate 1 (需求)  Gate 2 (回归)  Gate 3 (工程)  Gate 4 (测试)
@@ -31,7 +31,7 @@
                   • MCP/工具失败 (subprocess / bridge drop)
 ```
 
-### 故障注入与 4 Gate 的映射
+### 故障注入与质量门的映射
 
 | 故障类型 | Gate 1 (需求) | Gate 2 (回归) | Gate 4 (测试) |
 |---|---|---|---|
@@ -110,6 +110,6 @@ Pass Rate 是 Gate 2 指标。**不**作为主优化目标。
 
 ## 见
 
-- `devkit/docs/quality_gates.md` — 4-gate 框架 + 故障注入(必读)
+- `devkit/docs/quality_gates.md` — 质量门框架 + 故障注入(必读)
 - `devkit/docs/defect_escape_rate.md` — Defect Escape 跟踪
 - `openspec/changes/issue-463-coverage-gate/` — 完整 spec/design/tasks

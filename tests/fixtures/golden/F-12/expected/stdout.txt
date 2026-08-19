@@ -30,5 +30,5 @@ Record with:
       --validated-capability "..." --identified-obstacle "..." \
       --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance, #495)
 
-See failure-modes reference (recall #268): failure-modes.md, failure-modes-lifecycle.md, failure-modes-monitoring.md, failure-modes-state.md, case-book.md, convergence-loop.md
+See failure-modes reference (recall #268): failure-modes.md, failure-modes-lifecycle.md, failure-modes-monitoring.md, failure-modes-state.md, case-book.md, lessons/README.md, convergence-loop.md
 
