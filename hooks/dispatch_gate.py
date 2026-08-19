@@ -321,15 +321,19 @@ def _reject_with_guidance(name: str, msg: str, fix: str) -> int:
     return 2
 
 
-def _emit_trace(ws: Path, action: str, claim_id: str, detail: str) -> None:
-    """Deviation/disproof trace into the unified event log (kunglao_log,
+def _emit_trace(ws: Path, action: str, claim_id: str, detail: str,
+                exit_code: int | None = None) -> None:
+    """Deviation/disproof/REJECT trace into the unified event log (kunglao_log,
     the #459 face #461 dispatch events already use — self_redirects.jsonl
     is the #447 ask-back VIOLATION counter and must stay unpolluted).
-    Logging never breaks the gate: fail-open, stderr note only."""
+    Action words are registered in event_taxonomy.EMIT_ACTIONS; exit_code
+    carries the gate's rc on REJECT faces (#459). Logging never breaks the
+    gate: fail-open, stderr note only."""
     try:
         sys.path.insert(0, str(SKILL_DIR / "scripts"))
         from kunglao_log import emit
-        emit(ws, "hook:dispatch_gate", action, claim=claim_id, detail=detail)
+        emit(ws, "hook:dispatch_gate", action, claim=claim_id, detail=detail,
+             exit=exit_code)
     except Exception as exc:  # noqa: BLE001 — a trace must never block dispatch
         print(f"dispatch_gate: trace emit failed ({action}: {exc!r})",
               file=sys.stderr, flush=True)
@@ -365,6 +369,9 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
         print(f"TOP1 (deviation recorded): {msg}", file=sys.stderr, flush=True)
         _emit_trace(ws, "priority_deviation", claim_id, msg)
         return None
+    # #459: the REJECT face reaches the unified log too (the excused side
+    # already traces; a blocked deviation is the event the post-mortem needs)
+    _emit_trace(ws, "top1_reject", claim_id, msg, exit_code=2)
     return _reject_with_guidance(
         "top1", msg,
         "add `agent-reasoning: <why this claim instead of the ranked #1>` "
@@ -428,6 +435,11 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
                             f"disproof shown; validated={sorted(cap_fams)} "
                             f"dispatch={sorted(disp_fams)}")
         return None
+    # #459: the capability REJECT face reaches the unified log (trajectory-1
+    # pivots must be visible in the event stream, not stderr-only)
+    _emit_trace(ws, "capability_reject", claim_id,
+                f"validated={v['validated_families']} "
+                f"dispatch={v['dispatch_families']}", exit_code=2)
     return _reject_with_guidance(
         "capability",
         f"{claim_id} has a validated capability in hand "

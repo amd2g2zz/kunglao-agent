@@ -120,6 +120,54 @@ ALL_EVENT_TYPES = [
     BLOCKER_OPENED, BLOCKER_RESOLVED, GATE_BLOCKED, REDTEAM_VERDICT,
 ]
 
+# ---------------------------------------------------------------------------
+# #459 controlled emit-action vocabulary (the WRITE side word table)
+# ---------------------------------------------------------------------------
+# ALL_EVENT_TYPES above classifies workspace STATE (25 classes, pinned by
+# test_catalog_has_exactly_25_types — do not extend casually). EMIT_ACTIONS
+# is the sibling contract for the write side: every kunglao_log.emit(...,
+# action=...) call site must draw its word from this list. Anchored by
+# tests/test_event_stream_adoption.py — a literal outside the list turns the
+# suite red (issue #459 acceptance: "action 字段 100% 来自受控词表").
+#
+# Registration discipline mirrors the 25-class table: one word per EMIT FACE
+# (not per module), lowercase snake_case; detail carries the free text, the
+# exit field carries the rc. Words already emitted by real producers were
+# incorporated verbatim (grep 2026-08-20):
+#   claim_migrate  kunglao_record.py        register migration mirror
+#   verify         kunglao_verify.py        verification verdict mirror
+#   converge       convergence_check.py     per-round DECISION
+#   failure_blocked failure_analysis_gate  BLOCKED, stale-coverage flavor
+#   dispatch       worker_budget.py         #461 dispatch linkage event
+#   priority_deviation dispatch_gate.py    #496 top-1 deviation, excused
+#   capability_switch   dispatch_gate.py    #496 card switch, disproof shown
+# #459 adopted faces:
+#   ask_back / must_stop / must_ask / ladder_required /
+#   death_verdict_rejected / plan_stall    ask_for_direction_gate TYPE A-E
+#   top1_reject / capability_reject        dispatch_gate #496 REJECT faces
+#   stale_plan_on_new_evidence             plan_drift_detector class-7 WARN
+#   analysis_recorded / analysis_blocked    failure_analysis_gate #495 face
+EMIT_ACTIONS = [
+    "analysis_blocked",
+    "analysis_recorded",
+    "ask_back",
+    "capability_reject",
+    "capability_switch",
+    "claim_migrate",
+    "converge",
+    "death_verdict_rejected",
+    "dispatch",
+    "failure_blocked",
+    "ladder_required",
+    "must_ask",
+    "must_stop",
+    "plan_stall",
+    "priority_deviation",
+    "stale_plan_on_new_evidence",
+    "top1_reject",
+    "verify",
+]
+
 LEDGER_EVENT_MAP = {
     "fact_written": FACT_WRITTEN,
     "fact_verified": FACT_VERIFIED,

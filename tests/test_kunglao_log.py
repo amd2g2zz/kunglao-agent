@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from kunglao_log import emit, log_path  # noqa: E402
 
@@ -95,3 +97,85 @@ def test_emit_deterministic_for_same_inputs(tmp: Path):
     body2 = {k: v for k, v in rows[1].items() if k != "ts"}
     assert body == body2
     assert rows[0] == rows[1]  # same inputs + same second = byte-identical lines
+
+
+# ---------- #459: --tail read-only diagnostic CLI -------------------------
+
+class TestTailCli:
+    """kunglao_log --tail <ws> [N] — the minimal answer to issue #459's
+    "诊断不可解释" (post-mortems rebuilt from worker-status tails + mtimes
+    + vmware.log). One command, the most recent N events, JSON lines."""
+
+    def _emit_n(self, ws: Path, n: int, tag: str) -> None:
+        for i in range(n):
+            emit(ws, actor="worker", action="tool_call", tool=tag,
+                 detail=f"i={i}")
+
+    def _tail(self, ws: Path, *extra: str) -> subprocess.CompletedProcess:
+        script = REPO_ROOT / "scripts" / "kunglao_log.py"
+        return subprocess.run(
+            [sys.executable, str(script), "--tail", str(ws), *extra],
+            capture_output=True, text=True, timeout=60, cwd=str(REPO_ROOT),
+            errors="replace")
+
+    def test_tail_default_20_and_explicit_n(self, tmp: Path):
+        self._emit_n(tmp, 25, "t1")
+        r = self._tail(tmp)
+        assert r.returncode == 0, f"stderr={r.stderr!r}"
+        lines = [ln for ln in r.stdout.splitlines() if ln.strip()]
+        assert len(lines) == 20, f"default N must be 20; got {len(lines)}"
+        rows = [json.loads(ln) for ln in lines]
+        assert rows[-1]["detail"] == "i=24", (
+            f"tail must return the MOST RECENT events; last={rows[-1]}")
+
+        r5 = self._tail(tmp, "5")
+        assert r5.returncode == 0
+        rows5 = [json.loads(ln) for ln in r5.stdout.splitlines() if ln.strip()]
+        assert len(rows5) == 5 and rows5[-1]["detail"] == "i=24"
+        assert rows5[0]["detail"] == "i=20"
+
+    def test_tail_is_read_only(self, tmp: Path):
+        self._emit_n(tmp, 3, "t2")
+        logs = tmp / "runs" / "logs"
+        before = {p.name: p.read_bytes() for p in logs.glob("*.jsonl")}
+        stat_before = {p.name: p.stat().st_mtime_ns
+                       for p in logs.glob("*.jsonl")}
+        r = self._tail(tmp, "10")
+        assert r.returncode == 0
+        after = {p.name: p.read_bytes() for p in logs.glob("*.jsonl")}
+        stat_after = {p.name: p.stat().st_mtime_ns
+                      for p in logs.glob("*.jsonl")}
+        assert before == after and stat_before == stat_after, (
+            "--tail must not create/modify/truncate anything")
+
+    def test_tail_merges_day_files_chronologically(self, tmp: Path):
+        logs = tmp / "runs" / "logs"
+        logs.mkdir(parents=True)
+        (logs / "kunglao-2020-01-01.jsonl").write_text(
+            json.dumps({"ts": "2020-01-01T00:00:00Z", "actor": "w",
+                        "action": "dispatch", "claim": None, "tool": None,
+                        "artifact": None, "duration_ms": None, "exit": None,
+                        "detail": "old"}, sort_keys=True) + "\n",
+            encoding="utf-8")
+        self._emit_n(tmp, 2, "t3")
+        r = self._tail(tmp, "2")
+        rows = [json.loads(ln) for ln in r.stdout.splitlines() if ln.strip()]
+        assert len(rows) == 2
+        assert rows[0]["detail"] == "i=0" and rows[1]["detail"] == "i=1", (
+            f"most recent across ALL day files, file order; got {rows}")
+
+    def test_tail_empty_workspace_rc0_silent(self, tmp: Path):
+        ws = tmp / "nothing"
+        ws.mkdir()
+        r = self._tail(ws)
+        assert r.returncode == 0, (
+            f"no events is not an error; stderr={r.stderr!r}")
+        assert not r.stdout.strip()
+
+    def test_tail_missing_workspace_and_bad_n_fail_fast(self, tmp: Path):
+        r = self._tail(tmp / "nope")
+        assert r.returncode == 64, (
+            f"missing workspace must fail fast; rc={r.returncode}")
+        self._emit_n(tmp, 2, "t4")
+        r0 = self._tail(tmp, "0")
+        assert r0.returncode == 64, f"N<1 must fail fast; rc={r0.returncode}"

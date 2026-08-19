@@ -246,6 +246,21 @@ def _print_stale_plan_warns(warns: list) -> None:
         print(f"    ... and {len(warns) - 5} more")
 
 
+def _emit_stale_plan_warns(workspace: Path, warns: list) -> None:
+    """#459 observability: class-7 WARN face -> unified event log, one event
+    per item (claim carries the warn's claim_id so a tail can filter). The
+    warn is observe-only on stdout and never changes the exit code — neither
+    may the emit (fail-open, kunglao_record posture)."""
+    for w in warns:
+        try:
+            from kunglao_log import emit
+            emit(workspace, actor="orchestrator",
+                 action="stale_plan_on_new_evidence",
+                 claim=w.get("claim_id"), detail=w.get("fix"))
+        except Exception:
+            pass
+
+
 @_gt.telemetry('plan_drift_detector')
 def check(workspace: Path, active_only: bool = False) -> int:
     reg = _load_yaml(workspace / "claim-register.yaml")
@@ -371,6 +386,9 @@ def check(workspace: Path, active_only: bool = False) -> int:
     # #497: stale-plan-on-new-evidence — WARN-level by design (observe-first):
     # collected here, printed below, NEVER counted toward the exit codes.
     stale_plan_warns = find_stale_plan_on_new_evidence(workspace, plan_path, claims)
+    # #459: the class-7 WARN also reaches the unified event log (the Orient
+    # layer should not have to re-derive mtimes to see the drift).
+    _emit_stale_plan_warns(workspace, stale_plan_warns)
 
     if not drifts:
         print("OK: no plan drift detected")

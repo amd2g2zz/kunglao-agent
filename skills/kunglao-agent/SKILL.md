@@ -260,7 +260,7 @@ Isolation-first: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never enabled — no 
 Monitor a running session from disk — no live server, no new state source:
 
 - **Status panel**: `python <SKILL_DIR>/scripts/kunglao-status.py <WORKSPACE>` renders the claims board (counts by status), active workers (id / claim / step / status / heartbeat time), convergence progress (open-count trend), and the recent event stream. ANSI colors auto-degrade off a TTY; `--no-color` forces plain text.
-- **Event log**: every worker / orchestrator / hook action appends one JSON line to `<WORKSPACE>/runs/logs/kunglao-<date>.jsonl` with ts / actor / action / claim / tool / artifact / duration_ms / exit / detail — tail it for the raw timeline behind the panel.
+- **Event log**: every worker / orchestrator / hook action appends one JSON line to `<WORKSPACE>/runs/logs/kunglao-<date>.jsonl` with ts / actor / action / claim / tool / artifact / duration_ms / exit / detail — tail it for the raw timeline behind the panel. Read side: `python <SKILL_DIR>/scripts/kunglao_log.py --tail <WORKSPACE> [N]` prints the most recent N events (default 20, merged across day files, JSON lines, read-only) — the one-command diagnostic when a session looks stuck; action words come from the controlled vocabulary `event_taxonomy.EMIT_ACTIONS`, so filter/aggregate on them reliably.
 
 ## Failure Routing
 

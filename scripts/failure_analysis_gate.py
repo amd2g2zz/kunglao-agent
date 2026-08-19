@@ -138,16 +138,44 @@ def utc_now_iso() -> str:
 
 
 def _emit_failure_blocked(workspace: Path, d: dict) -> None:
-    """#287 observability: log the gate trigger to the structured event log.
+    """#287/#459 observability: log the gate trigger to the structured event
+    log. #495 split (#459): a BLOCKED whose analysis is missing the three
+    failure artifacts emits analysis_blocked with the missing list (the
+    Orient layer's direct to-do); a pure stale-coverage BLOCKED
+    (covers_attempt lags, artifacts all present) keeps failure_blocked —
+    one event per BLOCKED, the word carries the reason.
 
     Guarded — logging must never break the gate (a failed analysis run keeps
     its exit code and BLOCKED output even if the log write fails).
     """
     try:
         from kunglao_log import emit
-        emit(workspace, actor="orchestrator", action="failure_blocked",
-             claim=d.get("claim_id"),
-             detail=f"status={d.get('status')} attempts={d.get('promotion_attempts')}")
+        missing = d.get("missing_artifacts") or []
+        if missing:
+            emit(workspace, actor="orchestrator", action="analysis_blocked",
+                 claim=d.get("claim_id"),
+                 detail=f"missing_artifacts={','.join(missing)} "
+                        f"attempts={d.get('promotion_attempts')}")
+        else:
+            emit(workspace, actor="orchestrator", action="failure_blocked",
+                 claim=d.get("claim_id"),
+                 detail=f"status={d.get('status')} "
+                        f"attempts={d.get('promotion_attempts')}")
+    except Exception:
+        pass
+
+
+def _emit_analysis_recorded(workspace: Path, claim_id: str, entry: dict) -> None:
+    """#459: the three-artifact LANDING event — what #495 put on disk,
+    what the Orient layer (#498) consumes. detail carries the next-method
+    provenance and the method-ladder candidate count. Fail-open by contract
+    (a record is never undone by a log failure)."""
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="orchestrator", action="analysis_recorded",
+             claim=claim_id,
+             detail=f"source={entry.get('next_method_source')} "
+                    f"candidates={len(entry.get('candidates') or [])}")
     except Exception:
         pass
 
@@ -398,6 +426,9 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
     if (identified_obstacle or "").strip():
         promotion = _promote_obstacle_claim(workspace, claim_id,
                                             identified_obstacle, claim, claims, reg)
+    # #459: the landing event fires after the entry + promotion are on disk
+    # (a tail reader never sees a recorded event for a half-written state).
+    _emit_analysis_recorded(workspace, claim_id, entry)
     return {"recorded": True, "entry": entry, "obstacle_claim": promotion}
 
 
@@ -793,7 +824,7 @@ def _print_blocked(d: dict) -> None:
         print("See failure-modes reference (recall #268): " + ", ".join(fm))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="kunglao-agent failure-analysis gate - reason before re-dispatch or NEGATIVE")
     parser.add_argument("workspace", nargs="?", default=None, help="workspace root (omit: cwd or ./malware-analysis-workspace)")
     parser.add_argument("claim_id", nargs="?", default=None, help="claim to check (omit to scan all)")
@@ -821,7 +852,7 @@ def main() -> int:
     parser.add_argument("--reflect-queue", default=None,
                         help="/reflect human queue file (default: ~/.claude/learnings-queue.json)")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     workspace = _resolve_ws(args.workspace)
 

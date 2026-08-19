@@ -1013,11 +1013,11 @@ def _human(d: dict) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="kunglao-agent convergence check - should I dispatch?")
     parser.add_argument("workspace", nargs="?", default=None, help="workspace root")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     workspace = _resolve_ws(args.workspace)
     if not (workspace / "claim-register.yaml").exists():
@@ -1027,11 +1027,16 @@ def main() -> int:
     d = decide(workspace)
     _append_ledger(workspace, d)  # silent side channel for convergence_health.py
     # #287 observability: mirror the convergence decision to the structured
-    # event log. Guarded — logging must never block the decision.
+    # event log. #459: detail now carries the decision plus the counts a
+    # `kunglao_log --tail` diagnosis needs (no second read of the register).
+    # Guarded — logging must never block the decision.
     try:
         from kunglao_log import emit
         emit(workspace, actor="orchestrator", action="converge",
-             detail=d["decision"], exit=d["exit_code"])
+             detail=(f"{d['decision']} open={d['open_count']} "
+                     f"partial={d['partial_count']} slots={d['free_slots']} "
+                     f"workers={d['active_workers']}"),
+             exit=d["exit_code"])
     except Exception:
         pass
     if args.json:

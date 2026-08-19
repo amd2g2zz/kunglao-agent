@@ -44,6 +44,12 @@ Allowed only when kunglao-agent state indicates C0-C7 convergence reached.
 Otherwise: REJECT (rc=1) + log "B1k orchestrator-self-redirect", force rewrite.
 Type D / Type S → HARD_PAUSE (rc=2) regardless of state.
 
+#459 observability: every INTERCEPTION (rc 1/2) mirrors one event to the
+unified log (kunglao_log.emit; action words ask_back / must_stop / must_ask /
+ladder_required / death_verdict_rejected / plan_stall — all registered in
+event_taxonomy.EMIT_ACTIONS; exit carries the rc). Fail-open: a log write
+failure never changes the verdict. Clean passes emit nothing (zero noise).
+
 Declaration over inference (#447 doctrine): prose patterns here are
 TRIPWIRES, never load-bearing. Natural-language enumeration is unfinishable
 in any language; the load-bearing must-stop enforcement is structural and
@@ -238,6 +244,19 @@ TYPE_S_PATTERNS = [
 
 def utc_now() -> str:
     return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _emit_interception(workspace: Path, action: str, detail: str, rc: int) -> None:
+    """#459 observability: mirror an interception to the structured event
+    log (action words from event_taxonomy.EMIT_ACTIONS; exit carries the rc
+    so a tail can reconstruct the verdict timeline). Guarded — logging must
+    never change the gate's verdict (fail-open, kunglao_record posture)."""
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="orchestrator", action=action,
+             detail=detail, exit=rc)
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -514,6 +533,8 @@ def check(workspace: Path, text: str) -> int:
         print()
         print(f"Excerpt: {excerpt}")
         append_redirect(workspace, excerpt, "must-stop:" + must_stop[0][1])
+        _emit_interception(workspace, "must_stop",
+                           f"type=S match={must_stop[0][1]!r}", 2)
         return 2
 
     # #447 Type D (must-ask) also HARD_PAUSE — identity ambiguity / scope change.
@@ -530,6 +551,8 @@ def check(workspace: Path, text: str) -> int:
         print()
         print(f"Excerpt: {excerpt}")
         append_redirect(workspace, excerpt, "must-ask:" + must_ask[0][1])
+        _emit_interception(workspace, "must_ask",
+                           f"type=D match={must_ask[0][1]!r}", 2)
         return 2
 
     # #497 charter v2 — Type D blocker family: an in-authorization-boundary
@@ -552,6 +575,10 @@ def check(workspace: Path, text: str) -> int:
             print()
             print(f"Excerpt: {excerpt}")
             append_redirect(workspace, excerpt, "must-ask:" + blockers[0][1])
+            _emit_interception(
+                workspace, "must_ask",
+                f"type=D ladder-exhausted on {', '.join(exhausted[:3])} "
+                f"match={blockers[0][1]!r}", 2)
             return 2
         print(f"REJECT Type D-blocker (charter v2, #497): '{blockers[0][1]}' is an")
         print("in-authorization-boundary hard error -> allowed + FORCED LADDER,")
@@ -567,6 +594,8 @@ def check(workspace: Path, text: str) -> int:
         print()
         print(f"Excerpt: {excerpt}")
         append_redirect(workspace, excerpt, "ladder-required:" + blockers[0][1])
+        _emit_interception(workspace, "ladder_required",
+                           f"type=D-blocker match={blockers[0][1]!r}", 1)
         return 1
 
     # #497 Type E (death declaration, declarative gate): a death verdict
@@ -594,6 +623,8 @@ def check(workspace: Path, text: str) -> int:
             print()
             print(f"Excerpt: {excerpt}")
             append_redirect(workspace, excerpt, "death-declaration:" + death[0][1])
+            _emit_interception(workspace, "death_verdict_rejected",
+                               f"type=E match={death[0][1]!r}", 1)
             return 1
         print(f"OK: death declaration backed by evidence "
               f"({'; '.join(evidence[:3])}) — legal terminal (#497)")
@@ -623,6 +654,8 @@ def check(workspace: Path, text: str) -> int:
             print()
             print(f"Excerpt: {excerpt}")
             append_redirect(workspace, excerpt, "plan-stall:" + decl.group(0))
+            _emit_interception(workspace, "plan_stall",
+                               f"declaration={decl.group(0)!r}", 1)
             return 1
         _append_event(workspace, excerpt, "plan-stall-decl:")
         # action happened since the last declaration -> preceded by
@@ -654,6 +687,10 @@ def check(workspace: Path, text: str) -> int:
     print()
     print(f"Excerpt: {excerpt}")
     n_redirects = append_redirect(workspace, excerpt, violations[0][1])
+    rc = 2 if n_redirects >= 3 else 1
+    _emit_interception(
+        workspace, "ask_back",
+        f"types={[v[0] for v in violations[:5]]} redirects={n_redirects}", rc)
     if n_redirects >= 3:
         print()
         print(f"HARD_PAUSE: {n_redirects} self-redirects in last hour.")
