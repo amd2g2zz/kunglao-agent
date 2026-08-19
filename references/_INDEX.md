@@ -70,6 +70,7 @@
 | `optimization-2026-08.md` | optimization | Background compendium: smart-ping, closeout checklist, worktree caveats. | When needing the full expanded text of a compact SKILL.md reference. |
 | `schema.md` | schema | All data schemas: boundary_type, fact.status, claim-register, etc. | When reading/writing structured state files. |
 | `state-mapping.md` | schema | Two-layer state mapping: claim-register workflow states ↔ fact status + verify_status; ICD-203 nine-rule landing fields (#336). | When writing/migrating facts, linting, or reconciling register vs frontmatter statuses. |
+| `subagent-review.md` (in `devkit/docs/`) | gates | Gate 5 (Subagent Review / Maker-Checker) contract — 3 required fields per specialist subagent dispatch (plan / status_sync / tools_used) + verified_by anti self-stamp. | Before any specialist subagent dispatch, or when pre-commit Gate 5 HARD_PAUSE fires. |
 | `search-policy.md` | dispatch | Three-layer search strategy: claim-DAG, priority greedy, tier gate. | Before each dispatch round for priority.py and tier gates. |
 | `tool-inventory.md` | tools | Full tool inventory table and kunglao CLI family. | When needing the complete list of available tools. |
 | `verify-static-vs-dynamic.md` | verification | Static vs dynamic verification strategies. | When verifying a worker's evidence to pick the correct verification method. |
