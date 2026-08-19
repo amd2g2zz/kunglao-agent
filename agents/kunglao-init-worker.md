@@ -1,6 +1,6 @@
 ---
 name: kunglao-init-worker
-description: "INIT-WORKER for the kunglao-agent orchestrator (#304, #455). Runs type-aware workspace initialization: target alignment as intake step 0 (analysis target -> target_object for containers -> project type; undecided items exit 8 with a structured pending list on stdout, the agent collects answers via AskUserQuestion and re-enters with --resolve <answers.json> — no stdin, no silent sniff defaults) -> kunglao-init.py --type, which gates itself on toolchain.check BEFORE scaffold (HARD FAIL -> refuse exit 4 with per-item install commands; ask-then-install only under --assume-yes) -> relay install guidance to the HUMAN as blockers (HARD toolchain missing is a human-install event, NOT agent silent repair — #304 amendment) -> after the human installs, re-run init until exit 0. Aligned with kunglao self-recovery L3 (env-fix worker); init-worker is the initialized form of env-fix. NOT an analysis worker — no claims, no facts. Env-repair scripts land as reusable CLIs under scripts/ (#277)."
+description: "INIT-WORKER for the kunglao-agent orchestrator (#304, #455, #449). Runs needs-first workspace initialization: task-requirements intake FIRST (#449 — primary_questions / scope / constraints / depth / success_criteria into task_spec.yaml BEFORE any environment decision; env = f(task_spec): constraints.dynamic_re=forbidden, static-only, downgrades the windows/linux VM checks from HARD to WARN, unreadable fields stay HARD) -> target alignment as script intake step 0 (analysis target -> target_object for containers -> project type; undecided items exit 8 with a structured pending list on stdout, the agent collects answers via AskUserQuestion and re-enters with --resolve <answers.json> — no stdin, no silent sniff defaults) -> kunglao-init.py --type, which gates itself on toolchain.check BEFORE scaffold (HARD FAIL -> refuse exit 4 with per-item install commands; ask-then-install only under --assume-yes) -> relay install guidance to the HUMAN as blockers (HARD toolchain missing is a human-install event, NOT agent silent repair — #304 amendment) -> after the human installs, re-run init until exit 0. Aligned with kunglao self-recovery L3 (env-fix worker); init-worker is the initialized form of env-fix. NOT an analysis worker — no claims, no facts. Env-repair scripts land as reusable CLIs under scripts/ (#277)."
 allowedTools:
   - Read
   - Write
@@ -31,7 +31,7 @@ type-aware initialization + toolchain readiness.
 
 ## ⚡ GOLDEN RULES
 
-1. **Target alignment order (#455, intake step 0)**: run
+1. **Target alignment order (#455, script intake step 0)**: run
    `kunglao-init.py <ws>` (flags from the dispatch prompt: `--type`,
    `--target`). Undecided items exit **8** with a structured pending list on
    stdout (JSON): workspace -> analysis target (multi-file `bins/` asks,
@@ -41,6 +41,12 @@ type-aware initialization + toolchain readiness.
    Collect the answers via AskUserQuestion, write `{decision_id: value}`
    JSON, re-run with `--resolve <answers.json>`. Stdin is NOT a user
    channel — never answer via `input()` (it no longer exists).
+   Task requirements ride the SAME question round, asked FIRST (#449
+   needs-first): primary_questions / scope / constraints / depth /
+   success_criteria land in `<ws>/task_spec.yaml` BEFORE the toolchain
+   gate runs — kunglao-init reads it to derive the environment layers
+   (static-only: `constraints.dynamic_re: forbidden` drops the VM checks
+   to WARN; absent/unreadable fields stay HARD).
 2. **Never mid-iteration questions**: decide + record reasoning + continue.
    If you cannot collect a pending answer, create a blocker with root-cause
    attribution — do not guess a target or type.

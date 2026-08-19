@@ -287,10 +287,17 @@ def _run_install_plan(name: str, plan: "InstallPlan", assume_yes: bool,
 
 def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
                      project_type: str, assume_yes: bool = False,
+                     task_spec: dict | None = None,
                      ) -> "toolchain.ToolchainReport":
     """#408 orchestrator: for each HARD-FAIL item with an install plan, ask
     for consent; on consent install + register MCP + re-probe via
     toolchain.check; on decline/install-failure degrade the item.
+
+    #449 needs-first (review M1): task_spec is the SAME parsed mapping the
+    calling gate derived its layers from — the post-install re-probe must
+    re-derive identically (a static-only spec under --assume-yes must not
+    have vm_reachable re-hardened by a spec-blind re-probe). None keeps
+    the 2-arg check() call shape (stable for test fakes / direct callers).
 
     Returns the report to continue with:
       - install succeeded AND re-probe PASS -> the fresh re-probe report
@@ -341,7 +348,10 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
 
         print(f"toolchain-install: {item.name} installed ({out or 'ok'}) — "
               f"re-probing toolchain")
-        fresh = toolchain.check(ws, project_type)
+        if task_spec is None:
+            fresh = toolchain.check(ws, project_type)
+        else:
+            fresh = toolchain.check(ws, project_type, task_spec=task_spec)
         if fresh.overall_status == toolchain.Status.PASS:
             return fresh
         # Re-probe still failing on the same or another item: continue the
@@ -372,8 +382,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     ws = Path(args.workspace).resolve()
+    # #449 needs-first (review M1): the standalone CLI consumes
+    # <ws>/task_spec.yaml with the SAME single loading point and the SAME
+    # conservative WARNING fallback as toolchain.py main, so the initial
+    # probe and the ask-then-install re-probe derive layers identically.
     try:
-        report = toolchain.check(ws, args.type)
+        task_spec = toolchain.load_task_spec(ws)
+    except ValueError as exc:
+        print(f"WARNING: {exc} — toolchain layers stay conservative HARD "
+              f"(#449; fix task_spec.yaml at needs-first intake)",
+              file=sys.stderr)
+        task_spec = None
+    try:
+        if task_spec is None:
+            report = toolchain.check(ws, args.type)
+        else:
+            report = toolchain.check(ws, args.type, task_spec=task_spec)
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
@@ -386,7 +410,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     resolved = ask_then_install(report, ws, report.project_type,
-                                assume_yes=args.assume_yes)
+                                assume_yes=args.assume_yes,
+                                task_spec=task_spec)
     if args.json:
         print(json.dumps({
             "overall": resolved.overall_status.value,

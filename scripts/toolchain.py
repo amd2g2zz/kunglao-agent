@@ -7,8 +7,14 @@ Real probes (subprocess with timeouts, fail-open on probe crash but honest
 reporting). Dependency-cascade error messages that name the ROOT CAUSE.
 #474: every check carries a probe tier — PRESENCE (exists), LIVENESS
 (side-effect-free handshake), CAPABILITY (trial run; opt-in only).
+#449 needs-first: env = f(task_spec) — requirements_from_task_spec derives
+the VM-channel requirement from a parsed task_spec (static-only:
+constraints.dynamic_re=forbidden downgrades vm_reachable/remote_debugger
+to WARN); absent/unreadable task_spec = conservative HARD, byte-identical
+to the pre-#449 gate.
 
 CLI: toolchain.py <workspace> [--type t] [--json] [--reproduce] [--capability]
+     (consumes <workspace>/task_spec.yaml when present, #449)
 Exit codes: 0 = all PASS, 1 = any HARD FAIL, 2 = only WARN failures.
 """
 from __future__ import annotations
@@ -45,6 +51,10 @@ import platform_paths  # noqa: E402  (same dir, sys.path injected above)
 # Single manifest source: scripts/mcp_probe.py MANIFEST — shared with the
 # kunglao-init .mcp.json scaffold and the CLAUDE.md/README doc tables.
 import mcp_probe  # noqa: E402  (same dir, sys.path injected above)
+
+# #449 needs-first: task_spec loading for env = f(task_spec) — same YAML
+# dependency kunglao-init already uses for the CLAUDE.md constraint block.
+import yaml  # noqa: E402
 
 VALID_TYPES = ("windows", "linux", "android")
 
@@ -492,10 +502,175 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
         ))
 
 
+# ---------- #449: env = f(task_spec) — needs-first requirements ----------
+
+# The environment contract derives from the TASK, not the type template: a
+# static-only task_spec must not HARD-require the VM channel (#449 evidence
+# 2: 2026-08-17 transcript — task_spec unanswered while the full VM chain
+# was already brought up). Conservative rule: every field the task_spec does
+# not explicitly answer keeps its current HARD tier — an absent/unreadable
+# task_spec is byte-identical to the pre-#449 gate.
+TASK_SPEC_FILENAME = "task_spec.yaml"
+
+
+@dataclass(frozen=True)
+class Requirements:
+    """Which environment capabilities the TASK needs (env = f(task_spec)).
+
+    needs_vm: the windows/linux VM channel (vmr-shell + frida-to-VM) is
+        required. True is the conservative default — the pre-#449 status
+        quo — whenever task_spec does not explicitly say otherwise.
+    basis: why (task_spec field citation, or the conservative default) —
+        rides into the downgraded check details so a WARN is never mystery
+        noise.
+    """
+
+    needs_vm: bool = True
+    basis: str = "task_spec absent/unreadable — conservative default (VM HARD)"
+
+
+DEFAULT_REQUIREMENTS = Requirements()
+
+
+def requirements_from_task_spec(task_spec: dict | None) -> Requirements:
+    """Derive the environment requirement set from a parsed task_spec.
+
+    Reads ONLY explicit task_spec fields: constraints.dynamic_re ("allowed"
+    | "forbidden" — templates/state/task_spec.yaml, the master switch for
+    emulation/Frida). "forbidden" = static-only → the VM channel is not
+    needed. Anything else (absent, empty, non-mapping, garbage, "allowed")
+    stays conservative: needs_vm=True, pre-#449 behavior.
+
+    primary_questions carry no env-relevant explicit field today (their
+    `need:` enum says how to answer, not which environment to bring up);
+    when one lands (#450+), it extends HERE, never at the checkers.
+    vm_detonation ALONE does not relax (openspec issue-449 design R1): it
+    forbids vmr-shell detonation only — frida-on-VM may still be the plan;
+    the per-port contract is #450 env-manifest scope.
+    """
+    if not isinstance(task_spec, dict):
+        return DEFAULT_REQUIREMENTS
+    constraints = task_spec.get("constraints")
+    if not isinstance(constraints, dict):
+        return DEFAULT_REQUIREMENTS
+    dynamic_re = str(constraints.get("dynamic_re", "")).strip().lower()
+    if dynamic_re == "forbidden":
+        return Requirements(
+            needs_vm=False,
+            basis="task_spec constraints.dynamic_re=forbidden (static-only)",
+        )
+    return DEFAULT_REQUIREMENTS
+
+
+def load_task_spec(ws: Path) -> dict | None:
+    """Load <ws>/task_spec.yaml → parsed mapping; None when absent/empty.
+
+    Single loading point (kunglao-init's gate + this CLI). Fail-closed
+    ValueError on an unparseable, non-mapping, or UNREADABLE file (Windows
+    share lock / permission — review M2): callers must NOT relax anything
+    there — the unreadable-field rule is conservative HARD (kunglao-init's
+    CLAUDE.md render fails closed on the same defect).
+    """
+    path = ws / TASK_SPEC_FILENAME
+    if not path.exists():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"task_spec.yaml unparseable: {exc}") from exc
+    except OSError as exc:
+        # PermissionError/locked-file path shares the unparseable route:
+        # every caller's `except ValueError` already warns + stays
+        # conservative HARD — no bare traceback crash out of the gate.
+        raise ValueError(f"task_spec.yaml unreadable: {exc}") from exc
+    if data is None:
+        return None
+    if not isinstance(data, dict):
+        raise ValueError(
+            "task_spec.yaml must be a YAML mapping "
+            "(primary_questions/scope/constraints/...)")
+    return data
+
+
+def _check_vm_channel(report: ToolchainReport,
+                      reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """VM reachability + remote-debugger cascade (windows/linux manifests).
+
+    #449 env = f(task_spec): a static-only task (constraints.dynamic_re=
+    forbidden) downgrades both items to WARN with the task_spec basis in
+    the detail — capability absence is REPORTED to the orchestrator, never
+    silently skipped, it just stops blocking init (same informational
+    posture as jdwp_debug). Any absent/unreadable task_spec keeps the HARD
+    status quo byte-identical (regression-pinned by tests). The two copies
+    this helper replaces (windows/linux) were byte-identical; #407's
+    _check_decompiler is the dedup pattern.
+
+    Android has NO VM channel by design (#455: dynamics go through ADB +
+    device services; NEVER_CHECKS pins it) — windows/linux only.
+    """
+    # T2: VM reachability (vmr-shell 9876 + frida custom port, default 1337)
+    vm_host = _env_get("KUNGLAO_VM_HOST")
+    if not vm_host:
+        vm_ok, vm_err = False, "KUNGLAO_VM_HOST unset"
+    else:
+        vm_ok_9876, err_9876 = _tcp_connect(vm_host, VM_SHELL_PORT)
+        vm_ok_frida, err_frida = _tcp_connect(vm_host, FRIDA_PORT)
+        vm_ok = vm_ok_9876 and vm_ok_frida
+        vm_err = "; ".join(e for e in (err_9876, err_frida) if e)
+    if vm_ok:
+        detail = f"VM {vm_host} reachable on {VM_SHELL_PORT}+{FRIDA_PORT}"
+        if not reqs.needs_vm:
+            detail += f" — not required by task_spec ({reqs.basis})"
+        report.items.append(CheckResult(
+            name="vm_reachable", status=Status.PASS,
+            tier=Tier.HARD if reqs.needs_vm else Tier.WARN,
+            detail=detail, probe=ProbeTier.LIVENESS,
+        ))
+    elif reqs.needs_vm:
+        report.items.append(CheckResult(
+            name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
+            detail=f"VM unreachable: {vm_err}",
+            root_cause="VM", probe=ProbeTier.LIVENESS,
+        ))
+    else:
+        report.items.append(CheckResult(
+            name="vm_reachable", status=Status.WARN, tier=Tier.WARN,
+            detail=f"VM unreachable: {vm_err} — not required by task_spec "
+                   f"({reqs.basis})",
+            probe=ProbeTier.LIVENESS,
+        ))
+
+    # T2: remote debugger (x64dbg/ida_server/frida-server | gdbserver/
+    # linux_server64/frida-server) — cascade from VM
+    if reqs.needs_vm:
+        if not vm_ok:
+            report.items.append(CheckResult(
+                name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
+                detail="Remote debugger unreachable (VM not reachable)",
+                root_cause="VM", probe=ProbeTier.LIVENESS,
+            ))
+        else:
+            # Would need actual VM-side probing — mark as WARN if can't verify
+            report.items.append(CheckResult(
+                name="remote_debugger", status=Status.WARN, tier=Tier.HARD,
+                detail="VM reachable; remote debugger presence not verified",
+                probe=ProbeTier.LIVENESS,
+            ))
+    else:
+        state = ("VM unreachable — remote debugger unprobed" if not vm_ok
+                 else "VM reachable")
+        report.items.append(CheckResult(
+            name="remote_debugger", status=Status.WARN, tier=Tier.WARN,
+            detail=f"{state}; not required by task_spec ({reqs.basis})",
+            probe=ProbeTier.LIVENESS,
+        ))
+
+
 # ---------- Windows manifest ----------
 
 def _check_windows(report: ToolchainReport, ws: Path,
-                   caps: bool = False) -> None:
+                   caps: bool = False,
+                   reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
     """Windows toolchain checks (PE32+ x86-64)."""
     # T0: venv + pefile / DIE / floss
     for tool in ("pefile", "die", "floss"):
@@ -531,42 +706,10 @@ def _check_windows(report: ToolchainReport, ws: Path,
     # #474: three-state honest, caps plumbs the capability trial)
     _check_decompiler(report, ws, caps=caps)
 
-    # T2: VM reachability (vmr-shell 9876 + frida custom port, default 1337)
-    vm_host = _env_get("KUNGLAO_VM_HOST")
-    if not vm_host:
-        vm_ok, vm_err = False, "KUNGLAO_VM_HOST unset"
-    else:
-        vm_ok_9876, err_9876 = _tcp_connect(vm_host, VM_SHELL_PORT)
-        vm_ok_frida, err_frida = _tcp_connect(vm_host, FRIDA_PORT)
-        vm_ok = vm_ok_9876 and vm_ok_frida
-        vm_err = "; ".join(e for e in (err_9876, err_frida) if e)
-    if vm_ok:
-        report.items.append(CheckResult(
-            name="vm_reachable", status=Status.PASS, tier=Tier.HARD,
-            detail=f"VM {vm_host} reachable on {VM_SHELL_PORT}+{FRIDA_PORT}",
-            probe=ProbeTier.LIVENESS,
-        ))
-    else:
-        report.items.append(CheckResult(
-            name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
-            detail=f"VM unreachable: {vm_err}",
-            root_cause="VM", probe=ProbeTier.LIVENESS,
-        ))
-
-    # T2: Remote debugger (x64dbg/ida_server/frida-server) — cascade from VM
-    if not vm_ok:
-        report.items.append(CheckResult(
-            name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
-            detail="Remote debugger unreachable (VM not reachable)",
-            root_cause="VM", probe=ProbeTier.LIVENESS,
-        ))
-    else:
-        # Would need actual VM-side probing — mark as WARN if can't verify
-        report.items.append(CheckResult(
-            name="remote_debugger", status=Status.WARN, tier=Tier.HARD,
-            detail="VM reachable; remote debugger presence not verified",
-            probe=ProbeTier.LIVENESS,
-        ))
+    # T2: VM channel (vmr-shell 9876 + frida 1337 + remote-debugger
+    # cascade) — shared helper; #449 env = f(task_spec): static-only
+    # task_spec downgrades the pair to WARN (basis in the detail).
+    _check_vm_channel(report, reqs)
 
     # T2: Docker (WARN)
     docker = _shutil_which("docker")
@@ -588,7 +731,8 @@ def _check_windows(report: ToolchainReport, ws: Path,
 # ---------- Linux manifest ----------
 
 def _check_linux(report: ToolchainReport, ws: Path,
-                 caps: bool = False) -> None:
+                 caps: bool = False,
+                 reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
     """Linux toolchain checks (ELF)."""
     # T0: venv + binutils (file/readelf/objdump)
     for tool in ("file", "readelf", "objdump"):
@@ -609,41 +753,10 @@ def _check_linux(report: ToolchainReport, ws: Path,
     # #474: three-state honest, caps plumbs the capability trial)
     _check_decompiler(report, ws, caps=caps)
 
-    # T2: VM reachability (vmr-shell 9876 + frida custom port, default 1337)
-    vm_host = _env_get("KUNGLAO_VM_HOST")
-    if not vm_host:
-        vm_ok, vm_err = False, "KUNGLAO_VM_HOST unset"
-    else:
-        vm_ok_9876, err_9876 = _tcp_connect(vm_host, VM_SHELL_PORT)
-        vm_ok_frida, err_frida = _tcp_connect(vm_host, FRIDA_PORT)
-        vm_ok = vm_ok_9876 and vm_ok_frida
-        vm_err = "; ".join(e for e in (err_9876, err_frida) if e)
-    if vm_ok:
-        report.items.append(CheckResult(
-            name="vm_reachable", status=Status.PASS, tier=Tier.HARD,
-            detail=f"VM {vm_host} reachable on {VM_SHELL_PORT}+{FRIDA_PORT}",
-            probe=ProbeTier.LIVENESS,
-        ))
-    else:
-        report.items.append(CheckResult(
-            name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
-            detail=f"VM unreachable: {vm_err}",
-            root_cause="VM", probe=ProbeTier.LIVENESS,
-        ))
-
-    # T2: debugger (gdbserver/linux_server64/frida-server) — cascade from VM
-    if not vm_ok:
-        report.items.append(CheckResult(
-            name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
-            detail="Remote debugger unreachable (VM not reachable)",
-            root_cause="VM", probe=ProbeTier.LIVENESS,
-        ))
-    else:
-        report.items.append(CheckResult(
-            name="remote_debugger", status=Status.WARN, tier=Tier.HARD,
-            detail="VM reachable; remote debugger presence not verified",
-            probe=ProbeTier.LIVENESS,
-        ))
+    # T2: VM channel (vmr-shell 9876 + frida 1337 + remote-debugger
+    # cascade) — shared helper; #449 env = f(task_spec): static-only
+    # task_spec downgrades the pair to WARN (basis in the detail).
+    _check_vm_channel(report, reqs)
 
     # T2: Docker (WARN)
     docker = _shutil_which("docker")
@@ -720,8 +833,15 @@ def _check_linux(report: ToolchainReport, ws: Path,
 # ---------- Android manifest ----------
 
 def _check_android(report: ToolchainReport, ws: Path,
-                   caps: bool = False) -> None:
-    """Android toolchain checks (APK/DEX/SO)."""
+                   caps: bool = False,
+                   reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """Android toolchain checks (APK/DEX/SO).
+
+    #449: `reqs` is accepted for checker-signature uniformity but does not
+    relax anything — android's dynamic contract is the ADB channel
+    (device-side services), not the VMware/VBox VM channel (#455;
+    NEVER_CHECKS). Needs-first android relaxation is follow-up scope, not
+    #449 evidence."""
     # T0: venv + aapt/aapt2 (or unzip substitute)
     aapt_found = None
     for tool in ("aapt", "aapt2"):
@@ -1091,12 +1211,19 @@ def format_reproduce(report: ToolchainReport) -> str:
 # ---------- main ----------
 
 def check(ws: Path, project_type: str | None = None,
-          caps: bool = False) -> ToolchainReport:
+          caps: bool = False,
+          task_spec: dict | None = None) -> ToolchainReport:
     """Run type-aware toolchain checks.
 
     #474: caps=True opts into CAPABILITY-tier trial probes (decompiler
     import trial, minutes-long). The default path runs presence+liveness
     only — capability trials are init-only/on-demand by contract.
+    #449 needs-first: task_spec (a PARSED mapping — load_task_spec is the
+    single loading point at the callers) derives the environment
+    requirements via requirements_from_task_spec; None = conservative
+    defaults, every unreadable field keeps its pre-#449 HARD tier. The
+    type stays the manifest selector (template default); the task_spec
+    only tightens/relaxes requirement tiers on top of it.
     """
     if project_type is None:
         project_type = read_project_type(ws)
@@ -1107,12 +1234,13 @@ def check(ws: Path, project_type: str | None = None,
             f"Set --type or add project_type=<type> to analysis_state.txt."
         )
     report = ToolchainReport(project_type=project_type)
+    reqs = requirements_from_task_spec(task_spec)
     checkers = {
         "windows": _check_windows,
         "linux": _check_linux,
         "android": _check_android,
     }
-    checkers[project_type](report, ws, caps=caps)
+    checkers[project_type](report, ws, caps=caps, reqs=reqs)
     return report
 
 
@@ -1135,8 +1263,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     ws = Path(args.workspace).resolve()
+    # #449 needs-first: consume <ws>/task_spec.yaml when present; garbage
+    # never relaxes anything — warn + conservative HARD (pre-#449 tiers).
     try:
-        report = check(ws, args.type, caps=args.capability)
+        task_spec = load_task_spec(ws)
+    except ValueError as exc:
+        print(f"WARNING: {exc} — toolchain layers stay conservative HARD "
+              f"(#449; fix task_spec.yaml at needs-first intake)",
+              file=sys.stderr)
+        task_spec = None
+    try:
+        report = check(ws, args.type, caps=args.capability,
+                       task_spec=task_spec)
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

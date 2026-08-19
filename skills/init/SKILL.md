@@ -1,10 +1,11 @@
 ---
 name: kunglao-agent:init
 description: >-
-  Initialize a kunglao-agent analysis workspace. Scaffolds the directory
-  skeleton, writes the workspace CLAUDE.md, mounts the sample, intakes
-  task_spec.yaml, probes the toolchain, and activates hooks. One fresh
-  workspace per sample engagement.
+  Initialize a kunglao-agent analysis workspace. Intakes task_spec.yaml
+  FIRST (needs-first: the environment derives from the task), aligns the
+  analysis target and project type, scaffolds the directory skeleton,
+  writes the workspace CLAUDE.md, mounts the sample, probes the toolchain,
+  and deploys hooks. One fresh workspace per sample engagement.
 arguments: [workspace]
 argument-hint: <workspace> [--type windows|linux|android] — no args → guided setup
 ---
@@ -16,7 +17,20 @@ analysis; a workspace that is not initialized is refused work.
 
 ## Flow
 
-1. **Target alignment (intake step 0)** — run
+0. **Task-spec intake (needs-first, #449)** — confirm the primary
+   questions / scope / constraints / depth / success_criteria BEFORE any
+   environment or scaffold decision: the environment is a function of the
+   task (env = f(task_spec)), never of the project-type template alone.
+   Ask the user HERE (before iteration 1), never later — the same
+   native-question round may also carry the workspace/target/type
+   answers. The answers land in `<workspace>/task_spec.yaml` (from
+   `templates/state/`) ahead of the step-5 toolchain probe, which derives
+   its requirement tiers from it: `constraints.dynamic_re: forbidden`
+   (static-only) downgrades the windows/linux VM checks from HARD to
+   WARN; every field the task_spec does not answer stays HARD
+   (conservative default — an absent task_spec is byte-identical to a
+   VM-required workspace).
+1. **Target alignment (#455)** — run
    `python <SKILL_DIR>/scripts/kunglao-init.py <workspace>` FIRST; undecided
    intake items (workspace path -> analysis target -> project type) exit 8
    with a structured pending list on stdout (JSON). Collect the answers via
@@ -27,23 +41,22 @@ analysis; a workspace that is not initialized is refused work.
    (a magic-byte hint rides in the pending context only).
 2. **Scaffold** — create the workspace directory skeleton and state files:
    `runs/`, `facts/_INDEX.md`, `claim-register.yaml`, `analysis_state.txt`,
-   `task_spec.yaml` (from `templates/state/`).
+   `task_spec.yaml` (from `templates/state/`; already filled by step 0 —
+   scaffold never clobbers it).
 3. **Write CLAUDE.md** — render the type-appropriate workspace contract from
    `templates/CLAUDE.md.base.tmpl`; the task_spec constraints (vm_detonation,
    scope exclusions, depth) are rendered INTO the contract.
 4. **Mount the sample** — place the binary at `bins/<sha256>` and verify the
    hash matches `task_spec.yaml` / report.
-5. **Task-spec intake** — confirm the primary questions / scope / constraints
-   / depth / success_criteria. Ask the user HERE (before iteration 1), never
-   later (the needs-first intake consumes the same pending/--resolve
-   channel).
-6. **Toolchain probe** — run per-project-type probes (Windows: Ghidra-or-IDA
+5. **Toolchain probe** — run per-project-type probes (Windows: Ghidra-or-IDA
    + VM; Linux: Ghidra-or-IDA + remote debugger; Android: ADB + rooted
    device + frida-server — Android NEVER probes VMware/VBox or the 9876/1337
-   VM channel). Hard failures report root-cause guidance; the
+   VM channel). The probe consumes `task_spec.yaml` when present (#449:
+   static-only → the VM checks are WARN, not HARD); missing/unreadable
+   fields stay HARD. Hard failures report root-cause guidance; the
    ask-then-install flow runs only under `--assume-yes` (stdin is not a user
    channel).
-7. **Deploy the engineering environment** (#478) — init itself deploys
+6. **Deploy the engineering environment** (#478) — init itself deploys
    hooks (creates `<ws>/.claude/settings.json` when absent, then registers
    + self-checks; `--no-hooks` is the only skip), copies the core 3
    subagents to `<ws>/.claude/agents/`, records the MCP supply state in

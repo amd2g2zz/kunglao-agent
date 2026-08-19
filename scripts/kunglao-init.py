@@ -1797,11 +1797,45 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     # (post-init dispatch / mid-analysis), the executors are
     # scripts/ask_for_direction_gate.py + hooks/dispatch_gate.py.
     if not skip_toolchain:
-        report = toolchain.check(ws, project_type)
+        # #449 needs-first (env = f(task_spec)): the gate derives its layers
+        # from task_spec.yaml when the needs-first intake (SKILL.md Flow
+        # step 0) has filled it. Absent → conservative defaults (every
+        # unreadable field stays HARD, byte-identical to the pre-#449 gate)
+        # + one guidance line; unparseable → WARNING + conservative HARD
+        # (the CLAUDE.md render fails closed on the same defect later).
+        # The 2-arg check() call is preserved on the no-spec path — stable
+        # call shape for test fakes and direct consumers.
+        try:
+            task_spec = toolchain.load_task_spec(ws)
+        except ValueError as exc:
+            print(f"kunglao-init: WARNING {exc} — toolchain layers stay "
+                  "conservative HARD; fix task_spec.yaml at needs-first "
+                  "intake (Flow step 0, #449)", file=sys.stderr)
+            task_spec = None
+        else:
+            if task_spec is None:
+                print("kunglao-init: task_spec.yaml absent — toolchain "
+                      "layers default to HARD; fill it at needs-first intake "
+                      "(Flow step 0, #449) so env derives from the task",
+                      file=sys.stderr)
+        if task_spec is None:
+            report = toolchain.check(ws, project_type)
+        else:
+            report = toolchain.check(ws, project_type, task_spec=task_spec)
         if report.overall_status == toolchain.Status.FAIL:
             if assume_yes:
-                resolved = toolchain_install.ask_then_install(
-                    report, ws, report.project_type, assume_yes=True)
+                # #449 review M1: the re-probe inside ask_then_install must
+                # derive from the SAME task_spec as the gate above — a
+                # static-only spec must not have vm_reachable re-hardened
+                # after an installable item (die/pefile) is installed. Same
+                # no-spec call-shape rule as check() above (test fakes).
+                if task_spec is None:
+                    resolved = toolchain_install.ask_then_install(
+                        report, ws, report.project_type, assume_yes=True)
+                else:
+                    resolved = toolchain_install.ask_then_install(
+                        report, ws, report.project_type, assume_yes=True,
+                        task_spec=task_spec)
                 if resolved.overall_status == toolchain.Status.FAIL:
                     return refuse_toolchain(ws, resolved)
             else:
