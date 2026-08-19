@@ -46,6 +46,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |
 | `hook_activation.py` | THE canonical hook registration entry (#445): register_hooks/--wire-up + post-write self-check + tier activation | hooks, CLI, lib(6), tests |
 | `env_check.py` | environment readiness gate (venv/toolchain/VM channel) | hooks, CLI, tests |
+| `env_manifest.py` | env-facts.yaml single source (issue #450): five fact families + LayoutConventions, priority chain yaml > task-spec > defaults; --render/--probe | CLI, lib(3), tests |
 | `env_state_probe.py` | env-state liveness snapshot writer → runs/env-state.json (tick step 9; #475) | lib(2), tests |
 | `env_repair_l1.py` | L1 deterministic env repair (adb-reconnect/vm-rediscover/mcp-rehandshake; idempotent, safe no-op; #475) | CLI, tests |
 | `heartbeat.py` | convergence-gated heartbeat bookkeeping (lib for hook_activation) | lib(1), tests |
@@ -133,6 +134,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
 | `toolchain.py` | type-aware toolchain probe matrix (#304) with probe tiers presence/liveness/capability + jdwp handshake (#474) | lib(1), tests, docs |
 | `toolchain_install.py` | ask-then-install: per-item install commands by platform + MCP registration + re-probe (#408) | CLI, lib(1), tests |
+| `toolchain_negotiation.py` | init negotiation menu (issue #451): install/use-path/skip/degrade, apply_answers validate-then-act | CLI, lib(1), tests |
 | `decision_pending.py` | pending-decision list schema + serialization (stdout JSON, exit 8, `--resolve` answers; shared intake channel #455/#449/#451) | lib(2), tests |
 | `log_setup.py` | shared stdlib-logging facade (FileHandler + stderr StreamHandler, idempotent; #454/#459) | lib, tests |
 | `platform_paths.py` | platform-correct analyzeHeadless + venv python resolution (#409) | lib(2), tests |

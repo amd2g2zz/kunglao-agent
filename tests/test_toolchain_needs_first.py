@@ -56,9 +56,16 @@ def _write_task_spec(ws: Path, spec: dict) -> Path:
 def _hermetic_env(monkeypatch, fake_bin: Path | None = None,
                   claude_json: Path | None = None) -> None:
     """Hostile toolchain env: no VM host, no GHIDRA_HOME, isolated MCP
-    registry; PATH may point at a stub dir (die/floss presence)."""
+    registry; PATH may point at a stub dir (die/floss presence).
+    #451: VM discovery seams OFF (deterministic inventory — no vmrun /
+    VBoxManage probing from module-level tests)."""
+    import toolchain as tc
     monkeypatch.delenv("KUNGLAO_VM_HOST", raising=False)
     monkeypatch.delenv("GHIDRA_HOME", raising=False)
+    if hasattr(tc, "_vmrun_exe"):
+        monkeypatch.setattr(tc, "_vmrun_exe", lambda: None)
+    if hasattr(tc, "_vbox_exe"):
+        monkeypatch.setattr(tc, "_vbox_exe", lambda: None)
     if fake_bin is not None:
         monkeypatch.setenv("PATH", str(fake_bin))  # replace, not prepend
     if claude_json is not None:
@@ -296,17 +303,20 @@ def test_check_dynamic_re_allowed_keeps_vm_hard(tmp_path, monkeypatch):
 
 
 def test_check_no_task_spec_vm_hard_byte_identical(tmp_path, monkeypatch):
-    """Backward compatibility: with NO task_spec input the VM items are
-    byte-identical to the pre-#449 gate (status/tier/detail/root_cause
-    pinned to the literal strings), and an explicit task_spec=None is
-    indistinguishable from omitting the parameter."""
+    """Backward compatibility: with NO task_spec input the VM items stay
+    byte-identical between the default call and task_spec=None (status/
+    tier/root_cause/probe pinned to the #449-era literals; #451 extends
+    the FAIL detail with the deterministic discovery footer — seams off in
+    _hermetic_env, so the block reads "(none)")."""
     import toolchain as tc
     ws = _ws_with_sample(tmp_path)
     _hermetic_env(monkeypatch, claude_json=_fake_registry(tmp_path, []))
     r_default = tc.check(ws, "windows")
     vm = _vm_items(r_default)["vm_reachable"]
     assert vm.status == tc.Status.FAIL and vm.tier == tc.Tier.HARD, vm
-    assert vm.detail == "VM unreachable: KUNGLAO_VM_HOST unset", vm
+    assert vm.detail == ("VM unreachable: KUNGLAO_VM_HOST unset\n"
+                         "discovered VMs (vmrun=False, vbox=False):\n"
+                         "  (none)"), vm
     assert vm.root_cause == "VM", vm
     assert vm.probe == tc.ProbeTier.LIVENESS, vm
     rd = _vm_items(r_default)["remote_debugger"]

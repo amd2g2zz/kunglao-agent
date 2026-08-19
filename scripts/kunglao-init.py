@@ -28,6 +28,17 @@ Standalone CLI (not a kunglao.py subcommand, module-design L448):
     project_type=<type>; the template is chosen by type.
     Init-completeness = [initialized] marker AND project_type declared
 
+#451 init negotiation interface: the toolchain gate's FAIL surface is
+    split per the #448 taxonomy — WARN-degradable tool misses
+    (pefile/floss/die) become an enumerated menu (disk candidates from
+    KUNGLAO_TOOL_DIRS first, then install / use-path:<candidate> / skip /
+    degrade) pended through the #455 channel (exit 8 + --resolve
+    answers, decision ids `install:<item>`); any non-negotiable HARD
+    miss keeps the #304 human-event refusal exit 4 for that round. Every
+    FAIL prints a machine-parseable next-action (action:/command:/
+    option N: lines) and the refusal flushes stdout before its stderr
+    block; stderr is utf-8 on every path.
+
 #304 amendment (comment 304-5289955958): toolchain verification =
     verify-first + notify the human + refuse + cleanup.
     Flow: Phase 0 flag guard → resume check → no-sample friendly prompt
@@ -130,6 +141,10 @@ import toolchain_install  # noqa: E402
 # #455: shared pending-decision schema — the structured intake channel
 # (stdout JSON + --resolve re-entry) shared with #449/#451.
 import decision_pending  # noqa: E402
+# #451: init negotiation interface — the install/use-path/skip/degrade
+# menu for WARN-degradable tool misses (enumerate -> choose via the #455
+# pending channel) + the exit-4 human-event lane split (#448 taxonomy).
+import toolchain_negotiation  # noqa: E402
 # F6 (#304 review): init-completeness predicate = single source in init_state.py
 from init_state import VALID_TYPES, is_init_complete, read_project_type  # noqa: E402
 import mcp_probe  # noqa: E402  (#316: MCP supply manifest/scaffold single source of truth)
@@ -222,6 +237,23 @@ SCAFFOLD_FILES = {
 def utc_now() -> str:
     """UTC ISO-8601 seconds precision, Z suffix (same shape as hooks_selfcheck)."""
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _ensure_utf8_stderr(stream=None) -> bool:
+    """#451 乱码 fix: stderr unified to utf-8/replace (stdout already is).
+
+    A GBK-default stderr next to a utf-8 stdout garbles the mixed terminal
+    stream (`REFUSE —` -> `REFUSE ??`, 2026-08-17 transcript). Fail-open on
+    streams without reconfigure (returns False, never raises)."""
+    target = sys.stderr if stream is None else stream
+    reconfigure = getattr(target, "reconfigure", None)
+    if reconfigure is None:
+        return False
+    try:
+        reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        return False
+    return True
 
 
 def atomic_write(path: Path, text: str) -> None:
@@ -1855,7 +1887,27 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 if resolved.overall_status == toolchain.Status.FAIL:
                     return refuse_toolchain(ws, resolved)
             else:
-                return refuse_toolchain(ws, report)
+                # #451 negotiation (#448 taxonomy split): WARN-degradable
+                # misses become an enumerated menu (disk candidates first)
+                # pended via the #455 channel (exit 8 + --resolve re-entry)
+                # — but ONLY when the menu is the sole blocker. Any
+                # non-negotiable HARD miss keeps the #304 human-event
+                # refusal exit 4 for this round (the menu defers to the
+                # round after the human acts). Malformed answers fail
+                # closed (RC_ERROR), never a silent default.
+                try:
+                    resolved, menu = toolchain_negotiation.negotiate(
+                        report, ws, report.project_type, answers,
+                        task_spec=task_spec)
+                except ValueError as exc:
+                    print(f"kunglao-init: ERROR --resolve {exc}",
+                          file=sys.stderr)
+                    return RC_ERROR
+                if menu and not toolchain_negotiation.has_non_negotiable_hard_fail(
+                        report):
+                    return emit_pending(ws, menu)
+                if resolved.overall_status == toolchain.Status.FAIL:
+                    return refuse_toolchain(ws, resolved)
 
     # #362: template defect (unfilled {{placeholder}}) → hard error, not a
     # silent partial CLAUDE.md. Clean up THIS RUN's scaffold entries (the
@@ -1927,6 +1979,10 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
 
     - exit RC_TOOLCHAIN_REFUSE(4), no [initialized] marker written
     - print [FAIL] name + detail + fix (install command) per item
+    - #451: the item-level dynamic fix wins over the FIXES static text,
+      every FAIL carries machine-parseable `action:`/`command:`/`option N:`
+      lines (the negotiation-consumable channel), and stdout is flushed
+      first so buffered prompts never splice into the stderr block (交错)
     - clean up scaffold artifacts created by this run (if any); cleanup
       removes ONLY this run's artifacts — pre-existing content is never
       deleted and is reported as preserved (F2)
@@ -1936,6 +1992,7 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
         if i.status == toolchain.Status.FAIL and i.tier == toolchain.Tier.HARD
     ]
     removed, preserved = cleanup_scaffold(ws)
+    sys.stdout.flush()  # #451 交错: stderr block never overtakes stdout prompts
     print(
         f"kunglao-init: REFUSE — toolchain HARD check failed "
         f"(type={report.project_type}); install the missing tools, then re-run "
@@ -1944,9 +2001,16 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
     )
     for item in hard_fails:
         print(f"  [FAIL] {item.name}: {item.detail}", file=sys.stderr)
-        fix = toolchain.FIXES.get(item.name)
+        fix = item.fix or toolchain.FIXES.get(item.name)
         if fix:
             print(f"      fix: {fix}", file=sys.stderr)
+        na = toolchain.next_action_for(item)
+        if na is not None:
+            print(f"      action: {na.action}", file=sys.stderr)
+            if na.command:
+                print(f"      command: {na.command}", file=sys.stderr)
+            for i, opt in enumerate(na.options, 1):
+                print(f"      option {i}: {opt}", file=sys.stderr)
     if removed:
         print(f"kunglao-init: removed artifacts created by this run: {', '.join(removed)}",
               file=sys.stderr)
@@ -1958,6 +2022,10 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # #451 乱码 fix: stderr utf-8 alignment (stdout is reconfigured in
+    # toolchain.py) — mixed GBK/utf-8 byte streams garble each other in one
+    # terminal (2026-08-18 transcript: `REFUSE —` -> `REFUSE ??`).
+    _ensure_utf8_stderr(sys.stderr)
     args = parse_args(argv)
     answers: dict[str, str] = {}
     if args.resolve is not None:

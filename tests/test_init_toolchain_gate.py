@@ -487,9 +487,18 @@ def test_platform_headless_isolated_from_user_global_ghidra_registration(
     test_init_gate_resolves_platform_headless(hostile_root, monkeypatch)
 
 
-def test_run_hard_fail_non_tty_without_assume_yes_refuses(tmp_path, monkeypatch):
-    """HARD FAIL + non-interactive stdin + no --assume-yes -> refuse exit 4
-    (keeps the #304 human-install event; no silent install, no hang)."""
+def test_run_hard_fail_non_tty_without_assume_yes_pends_menu(tmp_path, monkeypatch,
+                                                             capsys):
+    """HARD FAIL + non-interactive stdin + no --assume-yes -> #451 contract:
+    when the missing item is WARN-degradable (die), init pends the
+    install/use-path/skip/degrade menu (exit RC_PENDING_DECISIONS=8, the
+    #455 --resolve channel) instead of the headless exit-4 refusal — a
+    structured pending list, never an auto-decline. ask_then_install is
+    still never entered without --assume-yes (no silent install, no hang).
+
+    (#451 supersedes the #455-era pin that die-only non-interactive =
+    exit 4: the refusal stays reserved for non-negotiable HARD human
+    events — see test_run_hard_fail_non_tty_mixed_still_refuses.)"""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
     (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
@@ -515,8 +524,41 @@ def test_run_hard_fail_non_tty_without_assume_yes_refuses(tmp_path, monkeypatch)
     monkeypatch.setattr(mod.sys, "stdin",
                        type("SI", (), {"isatty": lambda self: False})())
     rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root")
-    assert rc == RC_TOOLCHAIN_REFUSE
+    out = capsys.readouterr().out
+    assert rc == 8, \
+        f"die-only miss must pend the #451 menu (exit 8), got {rc}: {out}"
     assert "ask" not in calls, "non-interactive without --assume-yes must not ask"
+    assert '"install:die"' in out, f"menu decision missing from pending doc: {out}"
+    assert not (ws / "claim-register.yaml").exists()
+
+
+def test_run_hard_fail_non_tty_mixed_still_refuses(tmp_path, monkeypatch):
+    """④ anchor: a negotiable miss PLUS a non-negotiable HARD miss
+    (vm_reachable) under non-interactive stdin keeps the #304 human-event
+    refusal exit 4 (the menu defers to the round after the human acts)."""
+    ws = tmp_path / "ws"
+    (ws / "bins").mkdir(parents=True)
+    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    monkeypatch.setenv(FLAG_NAME, "0")
+    mod = _load_init_module()
+    import toolchain as tc
+
+    monkeypatch.setattr(mod.toolchain, "check",
+                        lambda ws_arg, project_type=None: tc.ToolchainReport(
+                            project_type="windows", items=[
+                                tc.CheckResult(name="die", status=tc.Status.FAIL,
+                                               tier=tc.Tier.HARD,
+                                               detail="die not found"),
+                                tc.CheckResult(name="vm_reachable",
+                                               status=tc.Status.FAIL,
+                                               tier=tc.Tier.HARD,
+                                               detail="VM unreachable"),
+                            ]))
+    monkeypatch.setattr(mod.sys, "stdin",
+                       type("SI", (), {"isatty": lambda self: False})())
+    rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root")
+    assert rc == RC_TOOLCHAIN_REFUSE
+    assert not (ws / "claim-register.yaml").exists()
 
 
 def test_run_ask_result_still_hard_refuses(tmp_path, monkeypatch):

@@ -34,6 +34,26 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 import toolchain  # noqa: E402  (#304 toolchain probes — re-probe after install)
 
+
+def _ensure_utf8_stderr(stream=None) -> bool:
+    """#451 乱码 fix: stderr unified to utf-8/replace (stdout already is).
+
+    A GBK-default stderr next to a utf-8 stdout garbles the mixed terminal
+    stream (2026-08-17 transcript). Fail-open on streams without
+    reconfigure (returns False, never raises)."""
+    target = sys.stderr if stream is None else stream
+    reconfigure = getattr(target, "reconfigure", None)
+    if reconfigure is None:
+        return False
+    try:
+        reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        return False
+    return True
+
+
+_ensure_utf8_stderr(sys.stderr)
+
 # Seam for tests: subprocess.run is accessed via this private name so tests
 # can assert the exact argv without executing real installs.
 _subprocess_run = subprocess.run
@@ -219,14 +239,39 @@ def prompt_yes_no(prompt: str, assume_yes: bool = False) -> bool:
     return bool(assume_yes)
 
 
-def degrade_report(report: "toolchain.ToolchainReport", name: str
+# Why an item degraded — selects the degrade_report detail wording (#451
+# review M-1): "declined" is reserved for a REAL user choice, and this
+# module no longer has a channel for one (#455). The negotiation surface
+# (toolchain_negotiation --resolve) owns that wording in its own note.
+DEGRADE_NO_CONSENT = "no-consent"          # headless decline / IDA mcp_url
+DEGRADE_INSTALL_FAILED = "install-failed"  # a consented install ran + failed
+
+_DEGRADE_CAUSES: dict[str, str] = {
+    DEGRADE_NO_CONSENT: " — no consent channel (non-interactive, #455); ",
+    DEGRADE_INSTALL_FAILED: " — install failed; ",
+}
+
+
+def degrade_report(report: "toolchain.ToolchainReport", name: str,
+                   reason: str = DEGRADE_NO_CONSENT,
                    ) -> "toolchain.ToolchainReport":
     """Return a NEW report with `name` degraded per its plan:
     WARN for static-ok items; the decompiler stays FAIL (HARD).
 
     Immutable: the input report is never mutated (coding-style rule).
+
+    reason selects the detail suffix: DEGRADE_NO_CONSENT (default — the
+    headless decline and the IDA mcp_url degrade, both WITHOUT any user
+    choice) or DEGRADE_INSTALL_FAILED (a --assume-yes install that ran and
+    failed). "declined" never appears here — it is reserved for the
+    negotiation surface's real --resolve choice.
     """
+    if reason not in _DEGRADE_CAUSES:
+        raise ValueError(
+            f"unknown degrade reason {reason!r} "
+            f"(expected one of {sorted(_DEGRADE_CAUSES)})")
     plan = INSTALL_PLANS[name]
+    cause = _DEGRADE_CAUSES[reason]
     new_items = []
     for item in report.items:
         if item.name == name:
@@ -234,16 +279,16 @@ def degrade_report(report: "toolchain.ToolchainReport", name: str
                 new_items.append(toolchain.CheckResult(
                     name=item.name, status=toolchain.Status.FAIL,
                     tier=toolchain.Tier.HARD,
-                    detail=item.detail + " — install declined/failed; "
-                            "this item is REQUIRED and stays HARD (#408)",
+                    detail=item.detail + cause
+                            + "this item is REQUIRED and stays HARD (#408)",
                     root_cause=item.root_cause,
                 ))
             else:
                 new_items.append(toolchain.CheckResult(
                     name=item.name, status=toolchain.Status.WARN,
                     tier=toolchain.Tier.HARD,
-                    detail=item.detail + " — install declined/failed; "
-                            "static analysis proceeds degraded (WARN, #408)",
+                    detail=item.detail + cause
+                            + "static analysis proceeds degraded (WARN, #408)",
                     root_cause=item.root_cause,
                 ))
         else:
@@ -312,7 +357,7 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
             continue
         plan = INSTALL_PLANS[item.name]
         print(f"toolchain-install: {item.name} is missing "
-              f"({item.detail})")
+              f"({item.detail})", flush=True)
 
         if plan.kind == "mcp_url":
             # IDA: never auto-install. #455 amendment: stdin is NOT a user
@@ -332,8 +377,15 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
 
         consent = prompt_yes_no(f"  install {item.name}?", assume_yes=assume_yes)
         if not consent:
-            print(f"  declined — {item.name} will be degraded "
-                  f"({plan.degrade})")
+            # #451 伪装 fix: a headless no-channel degrade is NOT a user
+            # refusal — "declined" is reserved for a real choice (a
+            # --resolve answer in the negotiation menu). The prompt line is
+            # flushed closed so the next stderr block cannot splice into it.
+            print(f"  no consent channel (non-interactive, #455) — "
+                  f"{item.name} degrades automatically ({plan.degrade}); "
+                  f"decide via kunglao-init's negotiation menu "
+                  f"(--resolve, #451) or re-run with --assume-yes",
+                  flush=True)
             result = degrade_report(result, item.name)
             continue
 
@@ -343,7 +395,8 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
                   f"({err or out or 'unknown error'})", file=sys.stderr)
             print(f"toolchain-install: official guidance — "
                   f"{_official_guidance(item.name)}", file=sys.stderr)
-            result = degrade_report(result, item.name)
+            result = degrade_report(result, item.name,
+                                    reason=DEGRADE_INSTALL_FAILED)
             continue
 
         print(f"toolchain-install: {item.name} installed ({out or 'ok'}) — "

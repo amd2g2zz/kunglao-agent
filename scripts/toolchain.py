@@ -12,6 +12,12 @@ the VM-channel requirement from a parsed task_spec (static-only:
 constraints.dynamic_re=forbidden downgrades vm_reachable/remote_debugger
 to WARN); absent/unreadable task_spec = conservative HARD, byte-identical
 to the pre-#449 gate.
+#451: every FAIL carries a machine-parseable next_action (NextAction:
+closed verb set + exact command + enumerated options) — human output
+appends `action:`/`command:`/`option N:` key-value lines after the fix
+line, --json adds a next_action object; vm_reachable FAIL embeds a
+read-only discovered-VM inventory (vmrun + VBoxManage + snapshots) and
+the fix names the exact next step (the OPERATOR picks, never init).
 
 CLI: toolchain.py <workspace> [--type t] [--json] [--reproduce] [--capability]
      (consumes <workspace>/task_spec.yaml when present, #449)
@@ -36,6 +42,26 @@ try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):
     pass
+
+
+def _ensure_utf8_stderr(stream=None) -> bool:
+    """#451 乱码 fix: stderr unified to utf-8/replace (stdout already is).
+
+    A GBK-default stderr next to a utf-8 stdout garbles the mixed terminal
+    stream (`REFUSE —` -> `REFUSE ??`, 2026-08-17 transcript). Fail-open on
+    streams without reconfigure (returns False, never raises)."""
+    target = sys.stderr if stream is None else stream
+    reconfigure = getattr(target, "reconfigure", None)
+    if reconfigure is None:
+        return False
+    try:
+        reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        return False
+    return True
+
+
+_ensure_utf8_stderr(sys.stderr)
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
@@ -118,6 +144,112 @@ FIXES: dict[str, str] = {
 FIXES.update({f"mcp:{i.name}": i.register for i in mcp_probe.MANIFEST})
 
 
+# ---------- #451: machine-parseable next-action on every FAIL ----------
+# Issue #451 evidence 1/4: a prose fix pushes discovery work back onto the
+# human and cannot be consumed mechanically. Every FAIL therefore carries a
+# structured next-action: a closed verb vocabulary + the exact command +
+# enumerated options, rendered as key-value lines in the human output
+# (`action:` / `command:` / `option N:`) and as a `next_action` object in
+# --json. Downstream consumers (the #451 negotiation menu, the #478
+# init-worker's AskUserQuestion relay) parse THIS, never the prose.
+
+NEXT_ACTION_VERBS = frozenset({
+    "install",          # an exact install command exists (pip/npm/pkg mgr)
+    "set-env",          # set an environment variable (GHIDRA_HOME)
+    "register-mcp",     # register via `claude mcp add`
+    "vm-enumerate",     # multiple/no candidates: enumerate (vmrun list / VBoxManage)
+    "vm-start",         # single off candidate: boot it (vmrun -T ws start)
+    "vm-reip",          # running/lease-drifted: re-resolve the live IP
+    "human-configure",  # device-side human decision (root / debug flag)
+    "human-deploy",     # device-side human deployment (frida/android_server)
+})
+
+
+@dataclass(frozen=True)
+class NextAction:
+    """One mechanically consumable remediation step (#451).
+
+    action:  verb from the closed NEXT_ACTION_VERBS vocabulary
+    command: the exact command the human/agent runs (None when the action
+             is a human decision with no single command)
+    options: enumerated candidates (VM names); menu choices are built by
+             the negotiation layer, not here
+    """
+
+    action: str
+    command: str | None = None
+    options: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """#451 review L-1: the verb vocabulary is CLOSED — fail-closed at
+        construction. A verb outside NEXT_ACTION_VERBS raises instead of
+        silently rendering an unparseable `action:` line downstream."""
+        if self.action not in NEXT_ACTION_VERBS:
+            raise ValueError(
+                f"NextAction.action {self.action!r} is not in the closed "
+                f"NEXT_ACTION_VERBS vocabulary "
+                f"{sorted(NEXT_ACTION_VERBS)}")
+
+
+# Static per-item next actions (mirrors the FIXES name surface; vm_reachable
+# and remote_debugger are DYNAMIC — derived from the live VM inventory in
+# _vm_fail_fixes — and mcp:<name> is derived from the manifest register text).
+_STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
+    "pefile": NextAction("install", "pip install pefile"),
+    "die": NextAction("install"),  # platform matrix: FIXES text / #408 installer
+    "floss": NextAction("install", "pip install flare-floss"),
+    "file": NextAction("install"),
+    "readelf": NextAction("install"),
+    "objdump": NextAction("install"),
+    "decompiler": NextAction(
+        "install",
+        "choco install ghidra -y (win32) | brew install --cask ghidra (darwin) "
+        "| apt-get install -y ghidra (linux)"),
+    "ghidra": NextAction("set-env",
+                         "set GHIDRA_HOME=<Ghidra install root>"),
+    "ida": NextAction("register-mcp",
+                      "claude mcp add --transport http ida-pro-vm <ida-mcp-url>"),
+    "aapt": NextAction("install",
+                       "install Android SDK build-tools (aapt/aapt2)"),
+    "jadx": NextAction("install"),
+    "apktool": NextAction("install"),
+    "gitnexus": NextAction("install", "npm i -g gitnexus"),
+    "adb": NextAction("install",
+                      "install Android SDK platform-tools and add adb to PATH"),
+    "device_root": NextAction(
+        "human-configure", "adb shell su -c id (rooting is a human decision)"),
+    "debug_flag": NextAction(
+        "human-configure",
+        "adb shell setprop ro.debuggable 1 (or am set-debug-app -w <pkg>)"),
+    "frida_server": NextAction(
+        "human-deploy",
+        "adb push a RENAMED frida-server to the device and run it on the "
+        "custom port"),
+    "android_server": NextAction(
+        "human-deploy", "adb push android_server to the device and run it"),
+    "jdwp_debug": NextAction("human-configure"),
+}
+
+
+def next_action_for(item: "CheckResult") -> NextAction | None:
+    """Derive the machine-parseable next action for a report item (#451).
+
+    Priority: item-level dynamic (the VM inventory path) > static table >
+    mcp:<name> derived from the manifest register command > root-cause-VM
+    fallback (fix the VM channel first) > None."""
+    if item.next_action is not None:
+        return item.next_action
+    if item.name.startswith("mcp:"):
+        register = FIXES.get(item.name)
+        return NextAction("register-mcp", register) if register else None
+    static = _STATIC_NEXT_ACTIONS.get(item.name)
+    if static is not None:
+        return static
+    if item.root_cause == "VM":
+        return NextAction("vm-enumerate", "vmrun list")
+    return None
+
+
 class Tier(Enum):
     """Check severity: HARD blocks analysis, WARN is informational."""
     HARD = "HARD"
@@ -151,6 +283,8 @@ class CheckResult:
     detail: str
     root_cause: str | None = None
     probe: ProbeTier = ProbeTier.PRESENCE  # #474: how it was verified
+    fix: str | None = None  # #451: item-level dynamic fix; overrides FIXES static text
+    next_action: NextAction | None = None  # #451: machine-parseable remediation
 
 
 @dataclass
@@ -224,6 +358,200 @@ def _env_get(name: str) -> str | None:
 
 def _file_exists(path: Path | None) -> bool:
     return path is not None and path.exists()
+
+
+# ---------- #451: VM inventory (read-only discovery) ----------
+# Issue #451 evidence 1 (toolchain.py:84 pre-patch): a bare "set
+# KUNGLAO_VM_HOST" fix pushes the discovery work back onto the human. The
+# check itself enumerates what exists (vmrun + VirtualBox, snapshots, power
+# state, read-only + fail-open) and the fix names the exact next step.
+# Inventory evidence is presence-tier (#474) — it never changes the
+# vm_reachable LIVENESS claim, it enriches the FAILURE surface only.
+
+_VMRUN_STOCK_PATHS = (
+    r"C:\Program Files (x86)\VMware\VMware Workstation\vmrun.exe",
+    r"C:\Program Files\VMware\VMware Workstation\vmrun.exe",
+)
+
+
+def _vmrun_exe() -> str | None:
+    """Locate vmrun: KUNGLAO_VMRUN_PATH override > PATH > stock Workstation
+    install paths. Tests close this seam (monkeypatch -> None)."""
+    override = _env_get("KUNGLAO_VMRUN_PATH")
+    if override:
+        return override if os.path.isfile(override) else None
+    found = _shutil_which("vmrun")
+    if found:
+        return found
+    for p in _VMRUN_STOCK_PATHS:
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def _vbox_exe() -> str | None:
+    """Locate VBoxManage: KUNGLAO_VBOXMANAGE_PATH override > PATH."""
+    override = _env_get("KUNGLAO_VBOXMANAGE_PATH")
+    if override:
+        return override if os.path.isfile(override) else None
+    return _shutil_which("VBoxManage")
+
+
+@dataclass(frozen=True)
+class VMInventoryEntry:
+    """One discovered VM (name, config path, power state, snapshots)."""
+
+    name: str
+    vmx: str
+    running: bool
+    snapshots: tuple[str, ...] = ()
+
+
+def _vmrun_inventory(vmrun: str) -> list[VMInventoryEntry]:
+    """Registered (inventory.vmls) + running (vmrun list) VMware VMs with
+    snapshot names. Read-only; any probe failure degrades to fewer entries."""
+    rc, out, _err = _run_cmd([vmrun, "-T", "ws", "list"], timeout=15)
+    running: set[str] = set()
+    if rc == 0:
+        for line in out.splitlines()[1:]:  # skip "Total running VMs: N"
+            vmx = line.strip()
+            if vmx.lower().endswith(".vmx"):
+                running.add(vmx)
+    entries: dict[str, VMInventoryEntry] = {}
+    for vmx in running:
+        entries[vmx] = VMInventoryEntry(name=Path(vmx).stem, vmx=vmx,
+                                        running=True)
+    inv = Path(os.environ.get("APPDATA", "")) / "VMware" / "inventory.vmls"
+    if inv.is_file():
+        try:
+            text = inv.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        cur_cfg: str | None = None
+        for m in re.finditer(
+                r'config\s*=\s*"([^"]+\.vmx)"|DisplayName\s*=\s*"([^"]*)"',
+                text):
+            cfg, disp = m.group(1), m.group(2)
+            if cfg:
+                cur_cfg = cfg
+            elif cur_cfg:
+                name = disp or Path(cur_cfg).stem
+                old = entries.get(cur_cfg)
+                entries[cur_cfg] = VMInventoryEntry(
+                    name=name, vmx=cur_cfg, running=bool(old and old.running))
+                cur_cfg = None
+    for vmx, entry in list(entries.items()):
+        rc, out, _err = _run_cmd(
+            [vmrun, "-T", "ws", "listSnapshots", vmx], timeout=10)
+        if rc == 0:
+            snaps = tuple(l.strip() for l in out.splitlines()[1:] if l.strip())
+            entries[vmx] = VMInventoryEntry(name=entry.name, vmx=vmx,
+                                            running=entry.running,
+                                            snapshots=snaps)
+    return list(entries.values())
+
+
+def _vbox_inventory(vbox: str) -> list[VMInventoryEntry]:
+    """VirtualBox VMs (read-only; probe failure -> [])."""
+    rc_r, out_r, _ = _run_cmd([vbox, "list", "runningvms"], timeout=15)
+    run_names = {l.split('"')[1] for l in (out_r or "").splitlines()
+                 if l.startswith('"')} if rc_r == 0 else set()
+    rc_a, out_a, _ = _run_cmd([vbox, "list", "vms"], timeout=15)
+    result: list[VMInventoryEntry] = []
+    if rc_a == 0:
+        for line in out_a.splitlines():
+            if line.startswith('"'):
+                name = line.split('"')[1]
+                result.append(VMInventoryEntry(name=name, vmx=line,
+                                               running=name in run_names))
+    return result
+
+
+def _vm_inventory() -> tuple[list[VMInventoryEntry], bool, bool]:
+    """(entries, has_vmrun, has_vbox) — the single seam tests replace."""
+    entries: list[VMInventoryEntry] = []
+    vmrun = _vmrun_exe()
+    if vmrun:
+        entries.extend(_vmrun_inventory(vmrun))
+    vbox = _vbox_exe()
+    if vbox:
+        entries.extend(_vbox_inventory(vbox))
+    return entries, vmrun is not None, vbox is not None
+
+
+def _vm_inventory_detail(entries: list[VMInventoryEntry]) -> str:
+    """Numbered candidate list (the issue's real-output format)."""
+    if not entries:
+        return "  (none)"
+    lines: list[str] = []
+    for i, e in enumerate(entries, 1):
+        state = "RUNNING" if e.running else "off"
+        snap = f"snapshots: {len(e.snapshots)}"
+        if e.snapshots:
+            snap += f" (latest: {e.snapshots[-1]})"
+        lines.append(f"  {i}. {e.name} [{state}] {snap}")
+        lines.append(f"     {e.vmx}")
+    return "\n".join(lines)
+
+
+def _vm_fail_fixes(vm_host: str | None,
+                   vm_err: str) -> tuple[str, str, NextAction]:
+    """(detail, fix, next_action) for a FAILED VM check, derived from the
+    live read-only inventory (#451 evidence 1: the check enumerates, the
+    OPERATOR decides — init never auto-selects among candidates)."""
+    entries, has_vmrun, has_vbox = _vm_inventory()
+    detail = (f"VM unreachable: {vm_err}\n"
+              f"discovered VMs (vmrun={has_vmrun}, vbox={has_vbox}):\n"
+              + _vm_inventory_detail(entries))
+    ports = f"vmr_server {VM_SHELL_PORT} + frida-server {FRIDA_PORT}"
+    names = tuple(e.name for e in entries)
+    if vm_host:
+        running = [e for e in entries if e.running]
+        detail += ("\nnote: KUNGLAO_VM_HOST is set but ports closed; if the "
+                   "VM just rebooted its DHCP lease changed - re-resolve the "
+                   "IP, never reuse a cached one")
+        if running:
+            fix = (f"running VM(s): {', '.join(e.name for e in running)}. "
+                   f"Re-resolve the live IP (vmrun getGuestIPAddress "
+                   f'"{running[0].vmx}"), set KUNGLAO_VM_HOST=<ip>, and '
+                   f"ensure {ports} are listening inside the guest")
+            na = NextAction("vm-reip",
+                            f'vmrun getGuestIPAddress "{running[0].vmx}"',
+                            tuple(e.name for e in running))
+        else:
+            fix = (f"no running VM discovered - start the analysis VM "
+                   f"(candidates above), resolve its IP, set "
+                   f"KUNGLAO_VM_HOST=<ip>, ensure {ports} in-guest")
+            na = NextAction("vm-start", 'vmrun -T ws start "<vmx>" nogui',
+                            names)
+        return detail, fix, na
+    if len(entries) == 1:
+        e = entries[0]
+        if e.running:
+            fix = (f"single candidate {e.name} is RUNNING - resolve its IP "
+                   f'(vmrun getGuestIPAddress "{e.vmx}"), set '
+                   f"KUNGLAO_VM_HOST=<ip>, ensure {ports} in-guest")
+            na = NextAction("vm-reip",
+                            f'vmrun getGuestIPAddress "{e.vmx}"', (e.name,))
+        else:
+            fix = (f'single candidate - start it: vmrun -T ws start "{e.vmx}" '
+                   f'nogui; resolve: vmrun getGuestIPAddress "{e.vmx}"; set '
+                   f"KUNGLAO_VM_HOST=<ip>; ensure {ports} in-guest")
+            na = NextAction("vm-start",
+                            f'vmrun -T ws start "{e.vmx}" nogui', (e.name,))
+        return detail, fix, na
+    if len(entries) > 1:
+        return detail, (
+            "multiple VM candidates listed above - the OPERATOR picks the "
+            "analysis VM (init never auto-selects among candidates); start "
+            f"it, resolve its IP, set KUNGLAO_VM_HOST=<ip>, ensure {ports} "
+            f"in-guest"), NextAction("vm-enumerate", "vmrun list", names)
+    command = ("vmrun list" if has_vmrun
+               else "VBoxManage list vms" if has_vbox else None)
+    return detail, (
+        "no VM discovered (vmrun inventory + VirtualBox) - register or boot "
+        f"the analysis VM, then set KUNGLAO_VM_HOST=<ip> ({ports} reachable)"
+    ), NextAction("vm-enumerate", command)
 
 
 def _probe_native_so(ws: Path) -> bool:
@@ -609,6 +937,10 @@ def _check_vm_channel(report: ToolchainReport,
     device services; NEVER_CHECKS pins it) — windows/linux only.
     """
     # T2: VM reachability (vmr-shell 9876 + frida custom port, default 1337)
+    # #451: the HARD FAIL surface embeds the read-only discovered-VM
+    # inventory + a dynamic fix/next_action derived from the candidate
+    # count (enumerate/start/reip) — the OPERATOR picks, never init.
+    vm_next: NextAction | None = None
     vm_host = _env_get("KUNGLAO_VM_HOST")
     if not vm_host:
         vm_ok, vm_err = False, "KUNGLAO_VM_HOST unset"
@@ -627,10 +959,12 @@ def _check_vm_channel(report: ToolchainReport,
             detail=detail, probe=ProbeTier.LIVENESS,
         ))
     elif reqs.needs_vm:
+        detail, fix, vm_next = _vm_fail_fixes(vm_host, vm_err)
         report.items.append(CheckResult(
             name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
-            detail=f"VM unreachable: {vm_err}",
+            detail=detail,
             root_cause="VM", probe=ProbeTier.LIVENESS,
+            fix=fix, next_action=vm_next,
         ))
     else:
         report.items.append(CheckResult(
@@ -648,6 +982,9 @@ def _check_vm_channel(report: ToolchainReport,
                 name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
                 detail="Remote debugger unreachable (VM not reachable)",
                 root_cause="VM", probe=ProbeTier.LIVENESS,
+                # #451: the cascade shares the VM's next_action — its root
+                # cause is the VM channel (fix the root cause first)
+                next_action=vm_next,
             ))
         else:
             # Would need actual VM-side probing — mark as WARN if can't verify
@@ -1163,6 +1500,17 @@ NEVER_CHECKS: dict[str, frozenset[str]] = {
 
 # ---------- report formatting ----------
 
+def _next_action_json(item: CheckResult) -> dict | None:
+    """--json rendering of a FAIL item's next_action (None otherwise)."""
+    if item.status != Status.FAIL:
+        return None
+    na = next_action_for(item)
+    if na is None:
+        return None
+    return {"action": na.action, "command": na.command,
+            "options": list(na.options)}
+
+
 def format_human(report: ToolchainReport) -> str:
     """Format report as human-readable text."""
     lines = [f"toolchain check: type={report.project_type}"]
@@ -1173,8 +1521,18 @@ def format_human(report: ToolchainReport) -> str:
         if item.root_cause:
             line += f" (root cause: {item.root_cause})"
         lines.append(line)
-        if item.status != Status.PASS and item.name in FIXES:
-            lines.append(f"      fix: {FIXES[item.name]}")
+        if item.status != Status.PASS and (item.fix or item.name in FIXES):
+            lines.append(f"      fix: {item.fix or FIXES[item.name]}")
+        # #451: machine-parseable key-value lines — anchored prefixes the
+        # negotiation consumers grep for (never part of detail/fix prose).
+        if item.status == Status.FAIL:
+            na = next_action_for(item)
+            if na is not None:
+                lines.append(f"      action: {na.action}")
+                if na.command:
+                    lines.append(f"      command: {na.command}")
+                for i, opt in enumerate(na.options, 1):
+                    lines.append(f"      option {i}: {opt}")
     lines.append(f"OVERALL: {report.overall_status.value}")
     return "\n".join(lines)
 
@@ -1192,7 +1550,9 @@ def format_json(report: ToolchainReport) -> str:
                 "probe": i.probe.value,  # #474: presence|liveness|capability
                 "detail": i.detail,
                 "root_cause": i.root_cause,
-                "fix": FIXES.get(i.name) if i.status != Status.PASS else None,
+                "fix": (i.fix or FIXES.get(i.name))
+                       if i.status != Status.PASS else None,
+                "next_action": _next_action_json(i),  # #451
             }
             for i in report.items
         ],

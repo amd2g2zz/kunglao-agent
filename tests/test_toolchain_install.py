@@ -213,6 +213,47 @@ def test_degrade_report_returns_new_object():
     assert next(i for i in orig.items if i.name == "pefile").status == tc.Status.FAIL
 
 
+# ---------- degrade detail wording (#451 review M-1) ----------
+# "declined" is reserved for a REAL user choice (--resolve on the
+# negotiation surface); this module has no user channel left (#455), so
+# its degrade details must say why WITHOUT that word.
+
+def test_degrade_report_default_reason_is_no_consent_not_declined():
+    """Default reason (the standalone CLI headless decline): the REPORT
+    detail says 'no consent channel (non-interactive)' — never 'declined'."""
+    r = ti.degrade_report(_report("pefile"), "pefile")
+    item = next(i for i in r.items if i.name == "pefile")
+    assert "declined" not in item.detail, item.detail
+    assert "no consent channel (non-interactive, #455)" in item.detail
+    assert "static analysis proceeds degraded (WARN, #408)" in item.detail
+
+
+def test_degrade_report_hard_item_detail_no_consent_not_declined():
+    """Same pin on the decompiler (HARD) branch of the no-choice path."""
+    r = ti.degrade_report(_report("decompiler"), "decompiler")
+    item = next(i for i in r.items if i.name == "decompiler")
+    assert "declined" not in item.detail, item.detail
+    assert "no consent channel (non-interactive, #455)" in item.detail
+    assert "this item is REQUIRED and stays HARD (#408)" in item.detail
+
+
+def test_degrade_report_install_failed_reason_wording():
+    """reason=DEGRADE_INSTALL_FAILED (a consented install that ran and
+    failed): 'install failed' wording, still never 'declined'; the CLI
+    --json 'degraded' key still rides on the WARN branch text."""
+    r = ti.degrade_report(_report("pefile"), "pefile",
+                          reason=ti.DEGRADE_INSTALL_FAILED)
+    item = next(i for i in r.items if i.name == "pefile")
+    assert "declined" not in item.detail, item.detail
+    assert (" — install failed; "
+            "static analysis proceeds degraded (WARN, #408)") in item.detail
+
+
+def test_degrade_report_unknown_reason_fails_closed():
+    with pytest.raises(ValueError):
+        ti.degrade_report(_report("pefile"), "pefile", reason="declined")
+
+
 # ---------- ask_then_install orchestration ----------
 
 def test_ask_then_install_consent_reprobes(monkeypatch):
@@ -258,6 +299,25 @@ def test_ask_then_install_decline_degrades(monkeypatch):
     assert item.status == tc.Status.WARN, item
 
 
+def test_ask_then_install_decline_report_detail_not_declined(monkeypatch):
+    """M-1 end-to-end (REPORT surface, not the print stream): a headless
+    decline's resolved report — what format_human / --json consume —
+    carries the no-consent wording and never 'declined'."""
+    monkeypatch.setattr(ti, "_run_install_plan",
+                        lambda name, plan, assume_yes, ws: (1, "", "unreached"))
+    monkeypatch.setattr(ti.toolchain, "check",
+                        lambda ws, project_type: tc.ToolchainReport(
+                            project_type=project_type, items=[]))
+
+    r = ti.ask_then_install(_report("pefile"), ws=Path("/tmp/ws"),
+                            project_type="windows", assume_yes=False)
+    item = next(i for i in r.items if i.name == "pefile")
+    assert item.status == tc.Status.WARN, item
+    assert "declined" not in item.detail, item.detail
+    assert "no consent channel" in item.detail, item.detail
+    assert "declined" not in tc.format_human(r)
+
+
 def test_ask_then_install_install_failure_degrades(monkeypatch):
     """Install command fails -> official guidance path; item degraded, no re-probe."""
     calls: list[str] = []
@@ -298,3 +358,19 @@ def test_ask_then_install_ida_degrades_with_guidance(monkeypatch, capsys):
     assert item.status == tc.Status.WARN, item
     err = capsys.readouterr().err
     assert "claude mcp add" in err, "manual registration guidance must be printed"
+
+
+def test_ask_then_install_ida_report_detail_not_declined(monkeypatch):
+    """M-1: the IDA mcp_url degrade is a no-user-choice path too — its
+    REPORT detail (what format_human / --json consume), not just the
+    stderr guidance, must not claim 'declined'."""
+    monkeypatch.setattr(ti.toolchain, "check",
+                        lambda ws, project_type: tc.ToolchainReport(
+                            project_type=project_type, items=[]))
+
+    r = ti.ask_then_install(_report("ida"), ws=Path("/tmp/ws"),
+                            project_type="windows", assume_yes=True)
+    item = next(i for i in r.items if i.name == "ida")
+    assert item.status == tc.Status.WARN, item
+    assert "declined" not in item.detail, item.detail
+    assert "no consent channel" in item.detail, item.detail
