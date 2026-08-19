@@ -1431,6 +1431,57 @@ def resume(ws: Path, text: str) -> int:
     return 0
 
 
+# #461: heartbeat bootstrap — the init success path arms the observer spine
+# itself (--wire-up + --heartbeat-on), so "init 后自活" is file state rather
+# than the SKILL.md Phase-1 manual 6-step chain the orchestrator forgets
+# (2026-08-18 field report: worker dispatched, monitoring/heartbeat/events
+# all absent). Idempotent: register_hooks merges by command basename
+# (replace, never stack); heartbeat_register rewrites fresh timestamps while
+# preserving a proven loop_registered marker.
+def bootstrap_observability(ws: Path, hooks_json: Path | None = None,
+                            no_hooks: bool = False,
+                            plugin_mode: bool = False) -> int:
+    """#461: LAST step of every init exit-0 path (fresh initialize / resume
+    / legacy type-upgrade). Wire the full hook registry through THE #445
+    canonical registration entry and register the heartbeat.
+
+    Skip semantics:
+      - no_hooks / plugin_mode: the engineering layer is explicitly opted
+        out — skip both (#478 pin: --no-hooks must not even create
+        .claude/settings.json);
+      - hooks_json given: the operator owns the hook target file — skip the
+        wire-up (never write a file the operator did not name), still
+        register the heartbeat (workspace monitoring state, not a hook
+        entry).
+
+    Wiring failures surface through the #445 channel (RC_HOOK_WIRING —
+    init FAIL, never a WARN). The heartbeat registers with
+    loop_registered=false: init alone never fakes cron registration;
+    heartbeat_loop_prompt.py --verify is the HARD acceptance check.
+    """
+    if no_hooks or plugin_mode:
+        print("kunglao-init: heartbeat bootstrap skipped — engineering layer "
+              "opted out (--no-hooks / plugin seam)")
+        return RC_OK
+    if hooks_json is None:
+        try:
+            n = hook_activation.register_hooks(workspace=ws)
+        except hook_activation.HookWiringSelfcheckError as exc:
+            print(f"kunglao-init: hooks selfcheck FAILED — {exc}", file=sys.stderr)
+            return RC_HOOK_WIRING
+        print(f"kunglao-init: hooks wired ({n} entries, canonical "
+              f"registration + selfcheck PASS, #461 bootstrap)")
+    else:
+        print("kunglao-init: full wire-up skipped — operator owns the hook "
+              "target (--hooks-json)")
+    from heartbeat import heartbeat_register
+    heartbeat_register(ws)
+    print("kunglao-init: heartbeat registered (runs/.heartbeat.json, #461) — "
+          "loop registration is still pending: create the /loop cron and "
+          "accept it with heartbeat_loop_prompt.py --verify")
+    return RC_OK
+
+
 # #473: task-oracle skeleton — the completion-gate power line. Content is
 # deliberately structural (no analysis, no task invention): task_text carries
 # a backfill marker the orchestrator's Phase 1 replaces with the user's
@@ -1562,6 +1613,15 @@ def initialize(ws: Path, hooks_json: Path | None,
               f"no .hook_state.json -> hooks sleep")
     else:
         print(f"kunglao-init: hooks skipped — {hook_report['reason']}")  # reachable ONLY via --no-hooks / plugin seam (#478)
+
+    # #461: heartbeat bootstrap — LAST step of the init success path: the
+    # observer spine must be armed by init itself (exit 0 only with the
+    # heartbeat file on disk and the full registry wired), never left to
+    # the SKILL.md Phase-1 manual chain.
+    rc = bootstrap_observability(ws, hooks_json=hooks_json, no_hooks=no_hooks,
+                                 plugin_mode=plugin_mode)
+    if rc != RC_OK:
+        return rc
     return RC_OK
 
 
@@ -1659,6 +1719,13 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         text = reg.read_text(encoding="utf-8")
         if MARKER in text:
             if is_init_complete(ws):
+                # #461: resume is also an exit-0 path — re-arm the observer
+                # spine (idempotent bootstrap) before reporting resume.
+                rc = bootstrap_observability(ws, hooks_json=hooks_json,
+                                             no_hooks=no_hooks,
+                                             plugin_mode=plugin_mode)
+                if rc != RC_OK:
+                    return rc
                 return resume(ws, text)
             # F1 (#304 review): marker present but project_type missing
             # (pre-#304 workspace). resume() alone would exit 0 forever and
@@ -1681,6 +1748,13 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 f"kunglao-init: upgraded {ws} — wrote project_type={project_type} "
                 f"(pre-#304 workspace: [initialized] without project_type)"
             )
+            # #461: legacy type-upgrade is an exit-0 path too — bootstrap
+            # the observer spine so the upgraded workspace is self-armed.
+            rc = bootstrap_observability(ws, hooks_json=hooks_json,
+                                         no_hooks=no_hooks,
+                                         plugin_mode=plugin_mode)
+            if rc != RC_OK:
+                return rc
             return 0
     if force and reg.exists():
         backup = backup_register(reg)

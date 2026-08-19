@@ -88,6 +88,24 @@ except Exception:  # pragma: no cover — hook stays usable if the policy moves
 
 TOOL_ERRORS_FILE = 'runs/tool-errors.json'
 
+# ---------- #461: dispatch linkage (hook_activation renewal entry reuse) ----------
+# The four lifecycle effects a PASSING dispatch must have (issue #461 core
+# claim: spawn IS a lifecycle event). Reuses hook_activation's existing
+# primitives (dispatch_linkage = update_state/write_state/renew) and the
+# existing unified event log (kunglao_log.emit -> runs/logs/kunglao-*.jsonl,
+# the #459 target) — no new activation mechanism, no fourth liveness
+# representation (#446 F-class red line). Import-guarded fail-open: a hook
+# must stay usable even if the scripts/ modules move.
+sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
+try:
+    import hook_activation as _ha_link
+except Exception:  # pragma: no cover - hook stays usable if the module moves
+    _ha_link = None
+try:
+    import kunglao_log as _klog
+except Exception:  # pragma: no cover - logging must never break the hook
+    _klog = None
+
 
 def _load_yaml(path):
     if not path or not Path(path).exists():
@@ -1443,6 +1461,36 @@ def check_env_fresh(paths: dict, tier: int = 0, tools: list[str] | None = None) 
     return True, ''
 
 
+def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
+                        cid: str | None, agent_name: str) -> None:
+    """#461: apply the dispatch linkage at the approval point — renew the
+    activation TTL (auto --renew), complete the active set, flip phase to
+    DISPATCH (via hook_activation.dispatch_linkage), and append the
+    dispatch event to the unified log (kunglao_log.emit, #459 target).
+
+    Fail-open with a stderr WARN: linkage is liveness/observability and
+    must not block an already-approved dispatch. The fail-CLOSED side is
+    the TTL itself — if the linkage stops working, the activation expires
+    within 30 min and the sleeping hooks reject further dispatches.
+    """
+    ws = paths.get('workspace')
+    if not ws:
+        return
+    ws_path = Path(ws)
+    try:
+        if _ha_link is not None:
+            _ha_link.dispatch_linkage(ws_path)
+        if _klog is not None:
+            _klog.emit(
+                ws_path, 'hook:worker_budget', 'dispatch', claim=cid,
+                detail=f'tier={tier} tools={",".join(tools)} '
+                       f'agent={agent_name or "?"} (#461 linkage: renew + '
+                       f'arm + phase=DISPATCH)')
+    except Exception as exc:  # noqa: BLE001 - linkage never blocks dispatch
+        print(f'[kunglao-agent] dispatch linkage WARN (fail-open, #461): '
+              f'{type(exc).__name__}: {exc}', file=sys.stderr)
+
+
 def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
     prompt = payload.get('tool_input', {}).get('prompt', '')
@@ -1519,6 +1567,10 @@ def pre_check(payload: dict, paths: dict) -> int:
     elif pmsg:
         print(f'PRIORITY: {pmsg}', file=sys.stderr)
     worker_id = agent_name or f'w{int(time.time())}'
+    # #461: a PASSING dispatch is a lifecycle event — renew TTL / complete
+    # the activation set / flip phase to DISPATCH / log the dispatch event
+    # (fail-open inside; rejected dispatches above never reach this line).
+    _dispatch_lifecycle(paths, tier, tools, cid, agent_name)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',

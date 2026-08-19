@@ -255,6 +255,62 @@ def renew(workspace: Path, ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
 
 
 # ===========================================================================
+# #461: dispatch linkage — the dispatch event as a LIFECYCLE event
+# ===========================================================================
+# The enforcement pair a dispatch path depends on: the gate that observes
+# the dispatch itself (dispatch_gate) and the one that observes the worker
+# completing it (worker_pulse). A passing dispatch must leave both armed.
+DISPATCH_HOOKS = ("dispatch_gate", "worker_pulse")
+
+
+def dispatch_linkage(workspace: Path,
+                     ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
+    """#461: one call, four lifecycle effects — invoked by
+    hooks/worker_budget.pre_check AFTER every gate passes (the PreToolUse
+    approval point). Reuses the existing primitives only (update_state /
+    write_state / renew) — no new activation mechanism, no fourth liveness
+    representation (#446 F-class red line):
+
+      1. renew        — refresh expires_at (the auto `--renew`: the 30-min
+                        TTL no longer depends on the orchestrator
+                        remembering; issue: "30min 过期的 --renew 由派发
+                        事件自动触发")
+      2. complete     — dispatch_gate + worker_pulse enter active_hooks and
+                        leave paused_hooks; user_override "off" still wins
+                        (an explicit operator opt-out is never force-armed)
+      3. flip phase   — phase=DISPATCH, the state machine's vocabulary for
+                        the issue's "IDLE→RUNNING" (workers in flight while
+                        the state said IDLE was the 2026-08-18 field report)
+      4. heartbeat    — renew()'s existing side effect: last_tick_ts refresh
+                        (a dispatching orchestrator IS alive)
+
+    Cold state (no .hook_state.json — the 2026-08-18 field state, 2/10
+    hooks): update_state bootstraps the full tier-"none" set first.
+    Returns the renewed state dict.
+    """
+    state = read_state(workspace)
+    if not state:
+        state = update_state(workspace, "none", "IDLE",
+                             ttl_minutes=ttl_minutes)
+    overrides = state.get("user_override", {})
+    active = list(state.get("active_hooks", []))
+    for hook in DISPATCH_HOOKS:
+        if overrides.get(hook) == "off":
+            continue  # explicit user off — never force-activate
+        if hook not in active:
+            active.append(hook)
+    linked = dict(state)
+    linked["active_hooks"] = active
+    linked["paused_hooks"] = [h for h in state.get("paused_hooks", [])
+                              if h not in DISPATCH_HOOKS
+                              or overrides.get(h) == "off"]
+    linked["phase"] = "DISPATCH"
+    write_state(workspace, linked)
+    # renew re-reads from disk: stamps the fresh TTL + heartbeat tick
+    return renew(workspace, ttl_minutes=ttl_minutes)
+
+
+# ===========================================================================
 # #445: THE canonical hook registration entry
 # ===========================================================================
 # Machine-readable declarations — pinned by tests/test_hook_registration_entry.py.
@@ -606,6 +662,16 @@ def main() -> int:
                              "<ws>/runs/.heartbeat.json {started_ts, interval_min, cron_id} so "
                              "'monitoring is running' is a checked file state, not a self-claim. "
                              "Call at Phase 0 right after the /loop cron is created.")
+    parser.add_argument("--loop-registered", action="store_true",
+                        help="#461: mark the cron loop registration "
+                             "(loop_registered=true in <ws>/runs/.heartbeat.json). "
+                             "Passed by the heartbeat loop prompt's FIRST action — "
+                             "the prompt body executing is the proof CronCreate "
+                             "accepted it. Combine with --heartbeat-on (register + "
+                             "mark in one call); alone it marks an existing file. "
+                             "heartbeat_loop_prompt.py --verify HARD-fails while the "
+                             "marker is false (silent cron-registration failure is "
+                             "forbidden).")
     parser.add_argument("--heartbeat-check", action="store_true",
                         help="VERIFY the heartbeat is actually registered — exit 0 if "
                              "<ws>/runs/.heartbeat.json exists and is < 35 min old (cron tick should "
@@ -650,8 +716,16 @@ def main() -> int:
         return 0
 
     if args.heartbeat_on:
-        from heartbeat import heartbeat_register
-        return heartbeat_register(workspace)
+        from heartbeat import heartbeat_register, mark_loop_registered
+        rc = heartbeat_register(workspace,
+                                loop_registered=args.loop_registered)
+        if rc == 0 and args.loop_registered:
+            rc = mark_loop_registered(workspace)
+        return rc
+
+    if args.loop_registered:
+        from heartbeat import mark_loop_registered
+        return mark_loop_registered(workspace)
 
     if args.heartbeat_check:
         from heartbeat import heartbeat_check
