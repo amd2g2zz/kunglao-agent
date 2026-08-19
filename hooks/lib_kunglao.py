@@ -20,13 +20,94 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ---- dispatch prefix regex (single source) ----
+# v0 protocol (legacy, still supported): "[T<N> tools=a,b] claim C-NN ..."
 DISPATCH_RE = re.compile(
     r"\[T(\d)\s+tools=([^\]]+)\]\s+claim\s+(C-\d+)"
 )
+# v1 protocol marker — find the JSON object containing the
+# "kunglao_dispatch" key. We grab the surrounding braces by scanning
+# forward for balanced `{`/`}` rather than relying on a non-greedy
+# capture (which fails on nested dicts/lists in v1 payloads).
+DISPATCH_JSON_START_RE = re.compile(
+    r"\{\s*\"kunglao_dispatch\"\s*:",
+)
+
+DISPATCH_PROTOCOL_VERSION = 1
+
+
+def _balanced_json_at(text: str, start: int) -> int:
+    """Return the index just past the balanced JSON object that starts at
+    `start` (must point at '{'). Tracks strings + escaped chars so braces
+    inside strings don't fool the counter."""
+    depth = 0
+    in_str = False
+    escape = False
+    i = start
+    while i < len(text):
+        ch = text[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+        else:
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return i + 1
+        i += 1
+    return -1  # unbalanced
+
+
+def parse_dispatch_json(text: str) -> tuple[int, list[str], str | None, dict | None]:
+    """Parse v1 protocol JSON prefix.
+
+    Returns (tier, tools, claim_id, raw_metadata). (0, [], None, None) on
+    failure — caller falls back to v0 regex.
+    """
+    m = DISPATCH_JSON_START_RE.search(text)
+    if not m:
+        return (0, [], None, None)
+    end = _balanced_json_at(text, m.start())
+    if end < 0:
+        return (0, [], None, None)
+    try:
+        payload_obj = json.loads(text[m.start():end])
+    except (json.JSONDecodeError, ValueError):
+        return (0, [], None, None)
+    payload = payload_obj.get("kunglao_dispatch")
+    if not isinstance(payload, dict):
+        return (0, [], None, None)
+    if int(payload.get("version", 0)) != DISPATCH_PROTOCOL_VERSION:
+        return (0, [], None, None)
+    claim_id = payload.get("claim")
+    tier = int(payload.get("tier", 0))
+    if not isinstance(claim_id, str) or not re.fullmatch(r"C-\d+", claim_id):
+        return (0, [], None, None)
+    if tier not in (1, 2, 3):
+        return (0, [], None, None)
+    raw_tools = payload.get("tools") or []
+    if not isinstance(raw_tools, list):
+        raw_tools = []
+    tools = [str(t).strip() for t in raw_tools if str(t).strip()]
+    meta = {k: v for k, v in payload.items()
+            if k not in ("version", "claim", "tier", "tools")}
+    return (tier, tools, claim_id, meta)
 
 
 def parse_dispatch(text: str) -> tuple[int, list[str], str | None]:
-    """Parse '[T<N> tools=a,b] claim C-NN' -> (tier, tools, claim_id). (0, [], None) if absent."""
+    """Parse '[T<N> tools=a,b] claim C-NN' -> (tier, tools, claim_id).
+
+    (0, [], None) if absent. v1 (JSON) takes precedence over v0 (regex)."""
+    v1 = parse_dispatch_json(text)
+    if v1[2] is not None:
+        return (v1[0], v1[1], v1[2])
     m = DISPATCH_RE.search(text)
     if not m:
         return (0, [], None)

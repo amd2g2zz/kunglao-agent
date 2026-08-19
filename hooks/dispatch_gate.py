@@ -16,10 +16,15 @@ SMART = narrow + alive-only:
   - it injects corrective guidance (hookSpecificOutput.additionalContext),
     not a hard abort — the orchestrator can record the analysis and proceed.
 
-Design: PreToolUse hook on Agent. Reads the dispatch prompt from the tool
-input. If it matches `[T<N> tools=...] claim <C-NN>` and C-NN is in
-failure_analysis_gate's BLOCKED set → inject guidance. Otherwise → exit 0
-(silent). No state writes, no files touched.
+#452 (派发协议结构化) — dispatch protocol:
+  v1 (new, JSON):
+    {"kunglao_dispatch": {"version": 1, "claim": "C-409", "tier": 1,
+      "tools": [...], "agent": "ghidra-light", ...}}
+  v0 (legacy, regex): [T<N> tools=a,b] claim C-NN ...
+  v1 takes precedence; v0 still supported. Parsing lives in
+  hooks/lib_kunglao.py:parse_dispatch (single source). On parse failure,
+  this hook emits a stderr warning + hookSpecificOutput warning so a broken
+  prompt is NOT silent (the pre-#452 silent-return-0 hid protocol drift).
 
 Wiring (in .claude/settings.json PreToolUse, Agent matcher — kunglao-agent
 dispatches via the Agent tool):
@@ -36,6 +41,9 @@ from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 HOOK_STATE = Path(".hook_state.json")
+# Backward-compat re-export: imports of `DISPATCH_RE` from this module keep
+# working. The real parser is hooks/lib_kunglao.py:parse_dispatch which
+# handles v0 (regex) + v1 (JSON).
 DISPATCH_RE = re.compile(
     r"\[T\s*([123])\s+tools\s*=\s*([^\]]*)\]\s*claim\s+([A-Z]+-\d+)",
     re.IGNORECASE,
@@ -93,6 +101,80 @@ def _failure_blocked_ids(ws: Path) -> set:
         return set()
 
 
+def _extract_prompt_text(payload: dict) -> str:
+    """Build the prompt blob from the tool_input payload shape.
+
+    v1.9.8: handle all payload shapes (prompt / description / task / input as
+    string or dict) so the gate survives whichever field carries the dispatch
+    prompt."""
+    tool_input = payload.get("tool_input") or {}
+    prompt_parts: list[str] = []
+    if isinstance(tool_input, dict):
+        for k in ("prompt", "description", "task", "input"):
+            v = tool_input.get(k)
+            if v:
+                prompt_parts.append(str(v))
+        if not prompt_parts:
+            prompt_parts = [str(v) for v in tool_input.values() if str(v)]
+    else:
+        prompt_parts = [str(tool_input)]
+    return " ".join(prompt_parts)
+
+
+def _parse_dispatch(text: str) -> tuple[str | None, str | None]:
+    """Parse dispatch protocol (v0 regex OR v1 JSON).
+
+    Returns (claim_id, protocol_version) or (None, reason). The shared
+    parser lives in hooks/lib_kunglao.py; this thin wrapper exists so the
+    gate doesn't have to know about import order / sys.path tricks."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "hooks"))
+        from lib_kunglao import parse_dispatch as _shared_parse
+    except Exception as exc:  # pragma: no cover — defensive
+        # Fallback to local regex if lib_kunglao is somehow unimportable
+        m = DISPATCH_RE.search(text)
+        if not m:
+            return (None, f"lib_kunglao import failed ({exc!r})")
+        return (m.group(3), "v0-local-fallback")
+    tier, tools, claim_id = _shared_parse(text)
+    if claim_id is None:
+        return (None, "v0/v1 both unmatched")
+    # Re-detect which protocol matched by re-running the v1 path inline
+    try:
+        from lib_kunglao import parse_dispatch_json
+        if parse_dispatch_json(text)[2] is not None:
+            return (claim_id, "v1")
+    except Exception:
+        pass
+    return (claim_id, "v0")
+
+
+def _warn_unparseable(claim_id: str | None, reason: str | None) -> None:
+    """#452: when neither v0 nor v1 protocol matches, emit a visible signal.
+
+    Pre-#452 the hook was silent-return-0; that hid protocol drift. Now we
+    log to stderr AND inject an additionalContext warning so the orchestrator
+    (and CI / logs) can see the gate did NOT recognise the dispatch."""
+    print(
+        "dispatch_gate: unrecognized dispatch protocol "
+        f"(v0/v1 both failed: {reason})",
+        file=sys.stderr,
+        flush=True,
+    )
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": (
+                "dispatch_gate: WARN — unrecognized dispatch protocol "
+                "(v0/v1 both unmatched). Gate is INACTIVE for this dispatch. "
+                "See docs/dispatch_protocol.md. Add a JSON "
+                '{"kunglao_dispatch":{"version":1,"claim":"C-NN","tier":N,...}} '
+                "prefix to the Agent prompt."
+            ),
+        },
+    }, ensure_ascii=False), flush=True)
+
+
 def main() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -106,28 +188,13 @@ def main() -> int:
     if not _kunglao_active(ws):
         return 0  # kunglao-agent not activated or expired — hooks sleep
 
-    # Extract the dispatch description. kunglao-agent dispatches workers via the
-    # Agent tool (worker_budget is wired on the Agent matcher); the description
-    # lives in the prompt field. v1.9.8: handle all payload shapes (prompt /
-    # description / task / input as string or dict) so the gate survives
-    # whichever field carries the dispatch prompt.
-    tool_input = payload.get("tool_input") or {}
-    prompt_parts = []
-    if isinstance(tool_input, dict):
-        for k in ("prompt", "description", "task", "input"):
-            v = tool_input.get(k)
-            if v:
-                prompt_parts.append(str(v))
-        if not prompt_parts:
-            prompt_parts = [str(v) for v in tool_input.values() if str(v)]
-    else:
-        prompt_parts = [str(tool_input)]
-    prompt_text = " ".join(prompt_parts)
-    m = DISPATCH_RE.search(prompt_text)
-    if not m:
-        return 0  # not a claim dispatch — silent
+    prompt_text = _extract_prompt_text(payload)
+    claim_id, proto = _parse_dispatch(prompt_text)
+    if claim_id is None:
+        # #452: visible signal — gate did not recognise the dispatch
+        _warn_unparseable(None, proto)
+        return 0
 
-    claim_id = m.group(3)
     blocked = _failure_blocked_ids(ws)
     if claim_id not in blocked:
         return 0  # dispatching a healthy claim — silent
