@@ -43,8 +43,9 @@ Gate semantics:
      / tool-discovery) via structural markers (devkit/agents_lint.py,
      #492).
   7. Doc Sync — writing-layer drift guard: numeric gate-count claims on
-     the devkit/workflows face, un-re-pinned references/ edits, and
-     unregistered new scripts (devkit/doc_sync.py, #446).
+     the devkit/workflows face, un-re-pinned references/ edits,
+     unregistered new scripts, and ext-index inconsistency (devkit/
+     doc_sync.py, #446 + #476).
 """
 from __future__ import annotations
 

@@ -441,6 +441,57 @@ class TestResolvabilityUnit:
 
 # ---------- ④ SUFFICIENT negative: scenario independence ----------------
 
+class TestExtNameResolution:
+    """#476 compatibility face: the ext catalog (tools/_INDEX.ext.yaml,
+    describe-only) contributes logical names to the bare-name resolution
+    set — a review citing an ext name cites a REAL repo capability, not a
+    self-invention. Broken ext file drops only ext names (fail-closed
+    toward strict, internal names unaffected — design D9)."""
+
+    def _with_ext(self, tmp_path: Path) -> Path:
+        root = self._shelf(tmp_path)
+        (root / "tools" / "_INDEX.ext.yaml").write_text(
+            "ext:\n"
+            "  - name: convergence_check\n"
+            "    capability: converge:check\n"
+            "    source: scripts/convergence_check.py\n"
+            "    usage: python scripts/convergence_check.py\n"
+            "    description: fixture\n",
+            encoding="utf-8")
+        return root
+
+    def _shelf(self, tmp_path: Path) -> Path:
+        (tmp_path / "tools").mkdir(parents=True)
+        (tmp_path / "tools" / "_INDEX.yaml").write_text(
+            _MINIMAL_INDEX, encoding="utf-8")
+        return tmp_path
+
+    def test_ext_bare_name_resolves(self, tmp_path: Path) -> None:
+        assert sr._tool_resolves("convergence_check", self._with_ext(tmp_path))
+
+    def test_ext_names_do_not_shadow_internal(self, tmp_path: Path) -> None:
+        root = self._with_ext(tmp_path)
+        names = sr._index_tool_names(root)
+        assert names == {"ghidra-recon", "ghidra-decompile-functions",
+                         "convergence_check"}, names
+
+    def test_broken_ext_yaml_keeps_internal_names(self, tmp_path: Path) -> None:
+        root = self._with_ext(tmp_path)
+        (root / "tools" / "_INDEX.ext.yaml").write_text(
+            "ext: [ :{broken", encoding="utf-8")
+        assert sr._index_tool_names(root) == \
+            {"ghidra-recon", "ghidra-decompile-functions"}
+
+    def test_real_repo_ext_citations_resolve(self) -> None:
+        ext = REPO_ROOT / "tools" / "_INDEX.ext.yaml"
+        assert ext.is_file(), "ext index missing (#476)"
+        data = yaml.safe_load(ext.read_text(encoding="utf-8"))
+        names = [e["name"] for e in data.get("ext", [])]
+        assert names, "ext index is empty"
+        bad = [n for n in names if not sr._tool_resolves(n, REPO_ROOT)]
+        assert not bad, f"ext names failing resolution: {bad[:5]}"
+
+
 class TestScenarioIndependence:
     def test_valid_sibling_does_not_mask_unresolvable(self, tmp_path: Path) -> None:
         """A valid review file next to a bad one cannot mask it — the

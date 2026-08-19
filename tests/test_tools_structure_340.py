@@ -46,7 +46,7 @@ TOOLS = ROOT / "tools"
 
 # ---- target layout constants (single source for this contract) ----
 
-META_TOOLS = {"tool-search.py", "validate_index.py"}
+META_TOOLS = {"tool-search.py", "validate_index.py", "ext-scan.py"}
 
 MOVED_TOOLS = {
     "tools/auxiliary/audit_legacy_proven.py": "tools/audit_legacy_proven.py",
@@ -95,8 +95,9 @@ def _yaml_data() -> dict:
 # ---------- R1: root-level placement ----------
 
 def test_tools_root_holds_only_index_docs_and_meta_tools() -> None:
-    """The tools/ root .py set == {tool-search.py, validate_index.py} (meta-tool
-    exception), every other .py belongs in a category directory or _lib/."""
+    """The tools/ root .py set == {tool-search.py, validate_index.py,
+    ext-scan.py} (meta-tool exception, #476 added the ext-catalog
+    generator), every other .py belongs in a category directory or _lib/."""
     root_py = {p.name for p in TOOLS.glob("*.py")}
     assert root_py == META_TOOLS, (
         f"tools/ root .py must be exactly the meta-tools {sorted(META_TOOLS)}, "

@@ -79,24 +79,39 @@ RESOLVABLE_ROOTS = ("scripts/", "tools/", "references/")
 INDEX_CITATION_BASE = "tools/_INDEX.yaml"
 
 
-def _index_tool_names(repo_root: Path) -> set[str]:
-    """Registered logical tool names from tools/_INDEX.yaml. A missing or
-    broken index fails CLOSED toward strict: the empty set makes every
-    bare name unresolvable — the gate gets stricter, never looser."""
-    index = repo_root / "tools" / "_INDEX.yaml"
-    if not index.is_file():
-        return set()
+def _yaml_key_names(path: Path, key: str) -> set[str] | None:
+    """Names under `<key>:` of a yaml index file; None = missing or
+    unreadable (caller decides the fail-closed direction)."""
+    if not path.is_file():
+        return None
     try:
         import yaml
-        data = yaml.safe_load(index.read_text(encoding="utf-8")) or {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception:  # noqa: BLE001 — unreadable index = no names
-        return set()
-    tools = data.get("tools") if isinstance(data, dict) else None
+        return None
+    items = data.get(key) if isinstance(data, dict) else None
     names: set[str] = set()
-    for entry in tools or []:
+    for entry in items or []:
         if isinstance(entry, dict) and entry.get("name"):
             names.add(str(entry["name"]))
     return names
+
+
+def _index_tool_names(repo_root: Path) -> set[str]:
+    """Registered logical tool names from tools/_INDEX.yaml, plus the
+    ext catalog names from tools/_INDEX.ext.yaml (#476 — a review may
+    cite an ext capability by its logical name). A missing or broken
+    INTERNAL index fails CLOSED toward strict: the empty set makes every
+    bare name unresolvable — the gate gets stricter, never looser. A
+    broken/absent EXT file drops only the ext names: internal entries
+    remain verifiable, so strictness never depends on the ext catalog
+    (ambiguity between the two sets is prevented at generation time by
+    tools/ext-scan.py's collision guard and re-checked by Gate 7)."""
+    internal = _yaml_key_names(repo_root / "tools" / "_INDEX.yaml", "tools")
+    if internal is None:
+        return set()
+    ext = _yaml_key_names(repo_root / "tools" / "_INDEX.ext.yaml", "ext")
+    return internal | (ext or set())
 
 
 def _tool_resolves(entry: object, repo_root: Path) -> bool:
@@ -201,7 +216,9 @@ def _validate_one(path: Path) -> tuple[bool, str]:
         return False, (
             f"  {path.name}: tools_used cites unresolvable tool(s): {bad}\n"
             "    Resolvable = scripts/re/** (workspace RE namespace), a name\n"
-            "    registered in tools/_INDEX.yaml, or a real file under\n"
+            "    registered in tools/_INDEX.yaml or the\n"
+            "    tools/_INDEX.ext.yaml describe-only catalog (#476), or a\n"
+            "    real file under\n"
             "    scripts/ tools/ references/ (#anchor allowed; a\n"
             "    tools/_INDEX.yaml#<name> anchor must NAME a registered\n"
             "    tool).\n"

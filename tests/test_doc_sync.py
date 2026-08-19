@@ -13,6 +13,10 @@ Covers the three sub-checks of devkit/doc_sync.py:
   (c) new-script registration — staged NEW scripts/*.py whose stem is not
       mentioned in references/_INDEX.md → WARN (non-blocking; the
       mechanisms.md ledger hard-gate is #498 closeout territory)
+  (d) ext index consistency (#476) — tools/_INDEX.ext.yaml entries with a
+      dangling source path / missing fields / a name colliding with the
+      internal registry → FAIL; entry-point scripts/hooks absent from the
+      catalog → WARN (fix: regenerate via tools/ext-scan.py)
 
 Plus Gate 7 registration lockstep (GATES[7], docstring name, pre-commit
 template gate list derived from the registry — never hardcoded here).
@@ -272,6 +276,131 @@ class TestNewScriptRegistration:
         rc, out = r.run_captured(capsys)
         assert rc == 0
         assert "WARN" not in out
+
+
+# ---- (d) ext index consistency (#476) ----------------------------------
+
+EXT_INDEX_REL = "tools/_INDEX.ext.yaml"
+
+
+def _ext_yaml(entries: list[dict]) -> str:
+    lines = ["schema: tools-ext-index/1", "ext:"]
+    for e in entries:
+        lines.append(f"  - name: {e.get('name', '')}")
+        lines.append(f"    capability: {e.get('capability', '')}")
+        lines.append(f"    source: {e.get('source', '')}")
+        lines.append(f"    usage: {e.get('usage', 'usage')}")
+        lines.append(f"    description: {e.get('description', 'fixture')}")
+    return "\n".join(lines) + "\n"
+
+
+ENTRYPOINT_SCRIPT = (
+    '"""fixture tool — has an entry point."""\n'
+    'if __name__ == "__main__":\n'
+    "    raise SystemExit(0)\n"
+)
+
+
+class TestExtIndexConsistency:
+    """Sub-check (d), issue #476: the ext catalog (describe-only index of
+    repo capabilities outside tools/_INDEX.yaml) must stay consistent —
+    entries pointing at nothing FAIL, entry-point scripts/hooks missing
+    from the catalog WARN (fix = regenerate via tools/ext-scan.py)."""
+
+    def test_entry_pointing_at_missing_file_fails(self, tmp_path: Path,
+                                                  capsys) -> None:
+        r = _Repo(tmp_path)
+        r.write(EXT_INDEX_REL, _ext_yaml([{
+            "name": "ghost-tool", "capability": "test:ghost",
+            "source": "scripts/no_such_file.py"}]))
+        r.stage(EXT_INDEX_REL)
+        rc, out = r.run_captured(capsys)
+        assert rc == 1, "dangling source path must FAIL (broken catalog)"
+        assert "no_such_file.py" in out
+
+    def test_malformed_entry_fails(self, tmp_path: Path, capsys) -> None:
+        r = _Repo(tmp_path)
+        r.write(EXT_INDEX_REL, _ext_yaml([{"name": "no-source",
+                                           "capability": "test:x",
+                                           "source": ""}]))
+        r.stage(EXT_INDEX_REL)
+        rc, out = r.run_captured(capsys)
+        assert rc == 1, "entry without source must FAIL"
+        assert "no-source" in out
+
+    def test_duplicate_of_internal_registered_name_fails(self, tmp_path: Path,
+                                                         capsys) -> None:
+        r = _Repo(tmp_path)
+        r.write("tools/_INDEX.yaml",
+                "tools:\n  - name: crypto-tool\n    category: crypto\n")
+        r.write(EXT_INDEX_REL, _ext_yaml([{
+            "name": "crypto-tool", "capability": "test:dup",
+            "source": "scripts/anything.py"}]))
+        r.write("scripts/anything.py", ENTRYPOINT_SCRIPT)
+        r.stage("tools/_INDEX.yaml", EXT_INDEX_REL)
+        rc, out = r.run_captured(capsys)
+        assert rc == 1, (
+            "ext name colliding with an internal registered name makes "
+            "bare-name resolution ambiguous — FAIL")
+        assert "crypto-tool" in out
+
+    def test_unindexed_entrypoint_script_warns_but_passes(self, tmp_path: Path,
+                                                          capsys) -> None:
+        r = _Repo(tmp_path)
+        r.write("scripts/indexed_thing.py", ENTRYPOINT_SCRIPT)
+        r.write("scripts/orphan_tool.py", ENTRYPOINT_SCRIPT)
+        # satisfy sub-check (c) so the ONLY warning can come from (d)
+        r.write("references/_INDEX.md",
+                "# index\n mentions orphan_tool and indexed_thing rows\n")
+        r.write(EXT_INDEX_REL, _ext_yaml([{
+            "name": "indexed_thing", "capability": "test:x",
+            "source": "scripts/indexed_thing.py"}]))
+        r.stage("scripts/orphan_tool.py")
+        rc, out = r.run_captured(capsys)
+        assert rc == 0, "WARN is non-blocking (#446 sub-check style)"
+        assert "WARN" in out
+        assert "orphan_tool" in out
+        assert "ext-scan" in out, "the warning must name the regeneration fix"
+
+    def test_fully_indexed_tree_no_warn(self, tmp_path: Path, capsys) -> None:
+        r = _Repo(tmp_path)
+        r.write("scripts/indexed_thing.py", ENTRYPOINT_SCRIPT)
+        r.write("references/_INDEX.md",
+                "# index\n mentions indexed_thing row\n")
+        r.write(EXT_INDEX_REL, _ext_yaml([{
+            "name": "indexed_thing", "capability": "test:x",
+            "source": "scripts/indexed_thing.py"}]))
+        r.stage("scripts/indexed_thing.py")
+        rc, out = r.run_captured(capsys)
+        assert rc == 0
+        assert "WARN" not in out
+
+    def test_library_module_does_not_require_indexing(self, tmp_path: Path,
+                                                     capsys) -> None:
+        """Structural whitelist (design D3): a no-entry-point module is a
+        library, not a callable tool — absence from the catalog is fine."""
+        r = _Repo(tmp_path)
+        r.write("scripts/pure_lib.py",
+                '"""library fixture."""\n\ndef helper():\n    return 1\n')
+        r.write("references/_INDEX.md",
+                "# index\n mentions pure_lib row\n")
+        r.stage("scripts/pure_lib.py")
+        rc, out = r.run_captured(capsys)
+        assert rc == 0
+        assert "WARN" not in out
+
+    def test_missing_ext_index_is_na(self, tmp_path: Path, capsys) -> None:
+        r = _Repo(tmp_path)
+        r.write("scripts/some_tool.py", ENTRYPOINT_SCRIPT)
+        r.stage("scripts/some_tool.py")
+        rc, out = r.run_captured(capsys)
+        assert rc == 0, "absent ext index = sub-check N/A (existence pinned by tests)"
+
+    def test_real_repo_ext_index_consistent(self, tmp_path: Path,
+                                            monkeypatch, capsys) -> None:
+        monkeypatch.setattr(ds, "_staged_files", lambda *a, **k: [])
+        assert ds.check() == 0, (
+            "the shipped ext index must pass its own consistency gate")
 
 
 # ---- Gate 7 registration lockstep (registry-derived, never hardcoded) --
