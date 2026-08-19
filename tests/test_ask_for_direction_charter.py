@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """tests/test_ask_for_direction_charter.py — 3-state charter (#447).
 
-Covers the five types in docs/agent_3state_charter.md:
+Covers the five types in references/agent-three-state-charter.md:
   - Type A (BAD ask-back) — REJECT (rc=1)
   - Type B (BAD completion-then-ask) — REJECT (rc=1)
   - Type C (OK convergence sign-off) — ALLOWED (rc=0)

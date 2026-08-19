@@ -59,7 +59,7 @@ issue #447 证据 1 显示**三份文本对"什么时候该问用户"答案互�
 
 ```
 第1优先 机械层(便宜、确定、可审计 — 先跑,覆盖内零漏报)
-├── 声明字段:派发协议 "reversible": false → HARD_PAUSE(docs/dispatch_protocol.md)
+├── 声明字段:派发协议 "reversible": false → HARD_PAUSE(references/dispatch-protocol.md)
 ├── 命令文法:vmrun delete / git push --force(文法有限,可枚举)→ HARD_PAUSE
 ├── 结构化状态:claim-register / decision_pending / .hook_state.json
 └── regex 绊线:prose pattern(zh+en,非穷尽)

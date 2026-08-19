@@ -31,6 +31,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch | CLI, tests |
 | `kunglao-digest.py` | digest mechanical generation (thin wrapper → `digest_build.py`) | CLI, tests |
 | `kunglao-eval.py` | eval harness CLI (thin wrapper → `kunglao_eval.py`) | CLI, CI, tests |
+| `error_response.py` | action-error classifier (issue #448): vmrun / init-exit / tool-install signatures → STOP/ASK/RETRY-ONCE/ESCALATE (UNCLASSIFIED = ASK, rc=2) | lib(2), CLI, tests |
 | `mcp_probe.py` | MCP supply probe (#316): per-type manifest + ~/.claude.json + .mcp.json probe | CLI, lib(2), tests |
 
 ## Core executors (loop machinery — invoked by hooks / CLI / other scripts)

@@ -287,7 +287,7 @@ Read `references/failure-modes.md` (index) for all 18 F-rows and their enforceme
 
 ## Hard prohibitions
 
-1. **No mid-iteration questioning** — defer to the **3-state charter** (`docs/agent_3state_charter.md`, single source): default = allowed (decide, record the assumption in `reasoning`, continue); identity ambiguity / authorization boundary / scope change = must-ask (HARD_PAUSE); irreversible action = must-stop (HARD_PAUSE). Executors: `scripts/ask_for_direction_gate.py` (Type A/B/D/S) + `hooks/dispatch_gate.py` (must-stop at dispatch time) + init pending decisions.
+1. **No mid-iteration questioning** — defer to the **3-state charter** (`references/agent-three-state-charter.md`, single source): default = allowed (decide, record the assumption in `reasoning`, continue); identity ambiguity / authorization boundary / scope change = must-ask (HARD_PAUSE); irreversible action = must-stop (HARD_PAUSE). Executors: `scripts/ask_for_direction_gate.py` (Type A/B/D/S) + `hooks/dispatch_gate.py` (must-stop at dispatch time) + init pending decisions.
 2. **No cascade abort** — failure on claim C → C becomes a deferred fact; other claims unaffected; never generalize from a single failure.
 3. **User feedback = dual-layer skepticism** — accept user feedback as a `source: user_feedback` claim (hypothesis); epistemically the artifact judges truth; procedurally YOU decide priority/timing; user source does not jump the queue.
 4. **Re-plan only on**: (a) verified finding, (b) refutation propagating via `claim_deps.yaml`, (c) task_spec external update. Never on mere failure.

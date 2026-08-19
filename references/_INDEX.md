@@ -14,6 +14,7 @@
 | methodology | field-notes, malware-analysis, malware-analysis-workflow, malware-analysis-quickstart, malware-triage, malware-dynamic-analysis, detection-engineer, malware-report-writer, phishing-case-study | Analysis methods and malware application domain (primary use case) |
 | osint | multi-search-engine, multi-search-engine-refs | Multi-engine OSINT search |
 | resources | awesome-re-resources | External RE resource collection |
+| contracts | agent-three-state-charter, error-response-taxonomy, dispatch-protocol | Behavior contracts the orchestrator loads on scenario (ask/stop charter, error response taxonomy, dispatch protocol) |
 
 | Scenario | Domain |
 |---|---|
@@ -26,6 +27,8 @@
 | Platform-specific | platforms |
 | Detection rules / reports | methodology (detection-engineer, malware-report-writer) |
 | Intelligence / search | osint |
+| Action error / tool-VM-install failure response | contracts (error-response-taxonomy) |
+| Ask-the-user / irreversible-action decision | contracts (agent-three-state-charter) |
 
 ## Per-domain index files
 
@@ -49,6 +52,9 @@
 | `cold-start-contract.md` | contracts | 8-file read sequence for round 0, incremental-change detection, Phase 0 mandates. | At session start for cold-start vs incremental-read decision, or Phase 0 hook config. |
 | `convergence-loop.md` | contracts | 5 convergence-driven behaviors with case evidence, spin-detection, failure-analysis gate. | When diagnosing a spinning/stalled loop or deciding on failed-attempt handling. |
 | `decision-rights.md` | governance | Decision rights matrix — 15-row three-way table (mechanical / LLM / user). | When resolving who decides a particular decision. |
+| `agent-three-state-charter.md` | contracts | 3-state ask/stop charter (allowed / must-ask / must-stop; mechanical-first, LLM backstops miss-recall). | Before any "should I ask the user" decision, an identity/scope/authorization ambiguity, or an irreversible action. |
+| `error-response-taxonomy.md` | contracts | Action-error classes → forced responses (STOP / ASK / RETRY-ONCE / ESCALATE); human-event gate > default-allowed priority. | Immediately after any tool/VM/install/action error, before choosing a response. |
+| `dispatch-protocol.md` | contracts | Dispatch prompt protocol v1 (JSON) + v0 (regex); `reversible: false` declaration field. | When writing a worker dispatch prompt or adding fields to the dispatch JSON. |
 | `downstream-contract.md` | governance | Downstream contract for skill maintainers — full contract table and rules. | When maintaining or extending the skill. |
 | `dynamic-re-tool-priority.md` | dynamic-analysis | Tool-priority order for dynamic RE dispatch, VM-channel-only mandate. | Before dispatching a worker for call-site stepping or dynamic RE. |
 | `excerpt-lint.md` | gates | Three mechanical lint rules for condensed decompile excerpts. | When authoring or reviewing a condensed decompile excerpt fixture. |

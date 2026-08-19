@@ -6,7 +6,7 @@ should solve it itself instead of stopping to ask the user. Examples:
 - "Should I dispatch W-8 or wait?" (ask-back, violates section 6d.1)
 
 #447 Three-state charter — THIS gate is one of three execution surfaces
-(see docs/agent_3state_charter.md):
+(see references/agent-three-state-charter.md):
   - Type A (BAD ask-back/question): "should I", "do you want", "what should I",
     "can you confirm", "please confirm", "confirm continuation",
     "let me know", "want me to"
@@ -112,7 +112,7 @@ TYPE_C_PATTERNS = [
 
 # #447 Type D (must-ask): identity ambiguity / authorization boundary / scope
 # change. MUST trigger HARD_PAUSE (rc=2) — orchestrator cannot self-resolve.
-# Single source: docs/agent_3state_charter.md. Tripwire layer (non-exhaustive);
+# Single source: references/agent-three-state-charter.md. Tripwire layer (non-exhaustive);
 # load-bearing equivalents are structural (see doctrine note above).
 TYPE_D_PATTERNS = [
     # identity ambiguity
@@ -169,7 +169,7 @@ def find_convergence_signal(text: str) -> bool:
 def find_must_ask_signals(text: str) -> list:
     """#447 Type D: events that MUST trigger HARD_PAUSE (must-ask).
 
-    Per docs/agent_3state_charter.md: identity ambiguity / authorization
+    Per references/agent-three-state-charter.md: identity ambiguity / authorization
     boundary / scope change. Returns list of (pattern, match) tuples."""
     out = []
     for pat in TYPE_D_PATTERNS:
@@ -182,7 +182,7 @@ def find_must_ask_signals(text: str) -> list:
 def find_must_stop_signals(text: str) -> list:
     """#447 Type S: events that MUST trigger HARD_PAUSE + block (must-stop).
 
-    Per docs/agent_3state_charter.md: irreversible action (VM destroy /
+    Per references/agent-three-state-charter.md: irreversible action (VM destroy /
     git --force / public publish / etc.). Returns list of (pattern, match)."""
     out = []
     for pat in TYPE_S_PATTERNS:
@@ -230,7 +230,7 @@ def check(workspace: Path, text: str) -> int:
         for pat, match in must_stop[:5]:
             print(f"  '{match}' (pattern: {pat})")
         print()
-        print("Per docs/agent_3state_charter.md, irreversible actions MUST be")
+        print("Per references/agent-three-state-charter.md, irreversible actions MUST be")
         print("explicitly approved by the user. The orchestrator MUST NOT proceed")
         print("without confirmation. Refusing to continue.")
         print()
@@ -246,7 +246,7 @@ def check(workspace: Path, text: str) -> int:
         for pat, match in must_ask[:5]:
             print(f"  '{match}' (pattern: {pat})")
         print()
-        print("Per docs/agent_3state_charter.md, these events MUST be confirmed")
+        print("Per references/agent-three-state-charter.md, these events MUST be confirmed")
         print("by the user. The orchestrator MUST NOT self-resolve identity /")
         print("scope / authorization questions.")
         print()

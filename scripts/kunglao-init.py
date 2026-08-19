@@ -1719,7 +1719,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     # #447 three-state charter: init's behaviour here corresponds to the
     # "must-ask" lane (Type D) — pending decisions + RC_PENDING_DECISIONS=8
     # are the MUST-ASK enforcement surface at intake. See
-    # docs/agent_3state_charter.md (single source). For runtime events
+    # references/agent-three-state-charter.md (single source). For runtime events
     # (post-init dispatch / mid-analysis), the executors are
     # scripts/ask_for_direction_gate.py + hooks/dispatch_gate.py.
     if not skip_toolchain:

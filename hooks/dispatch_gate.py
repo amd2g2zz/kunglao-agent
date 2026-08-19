@@ -191,7 +191,7 @@ def _warn_unparseable(claim_id: str | None, reason: str | None) -> None:
             "additionalContext": (
                 "dispatch_gate: WARN — unrecognized dispatch protocol "
                 "(v0/v1 both unmatched). Gate is INACTIVE for this dispatch. "
-                "See docs/dispatch_protocol.md. Add a JSON "
+                "See references/dispatch-protocol.md. Add a JSON "
                 '{"kunglao_dispatch":{"version":1,"claim":"C-NN","tier":N,...}} '
                 "prefix to the Agent prompt."
             ),
@@ -229,7 +229,7 @@ def _warn_must_stop(claim_id: str | None, prompt_text: str) -> int:
     Unlike scripts/ask_for_direction_gate.py which sees the orchestrator's
     PRINTED text, this hook sees the dispatch PROMPT itself — catching
     irreversible actions BEFORE the worker runs. Per
-    docs/agent_3state_charter.md: must-stop events MUST HARD_PAUSE regardless
+    references/agent-three-state-charter.md: must-stop events MUST HARD_PAUSE regardless
     of any other state (precedence over Type C convergence)."""
     excerpt = prompt_text[:300].replace("\n", " ")
     cid = claim_id or "(no claim)"
@@ -245,7 +245,7 @@ def _warn_must_stop(claim_id: str | None, prompt_text: str) -> int:
             "additionalContext": (
                 f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447). "
                 f"Irreversible action detected in dispatch for {cid}. "
-                f"Per docs/agent_3state_charter.md, irreversible actions "
+                f"Per references/agent-three-state-charter.md, irreversible actions "
                 f"MUST be explicitly approved by the user. Refusing to "
                 f"dispatch this worker. Excerpt: {excerpt!r}"
             ),
@@ -281,7 +281,7 @@ def main() -> int:
     #      (finite grammar, enumerable), not prose
     # Fires BEFORE the failure-blocked lookup — an irreversible action in
     # a healthy claim's dispatch is just as irreversible. Single source:
-    # docs/agent_3state_charter.md.
+    # references/agent-three-state-charter.md.
     if _declared_irreversible(prompt_text) or _must_stop_dispatch(prompt_text):
         return _warn_must_stop(claim_id, prompt_text)
 
