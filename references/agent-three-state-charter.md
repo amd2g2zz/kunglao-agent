@@ -1,4 +1,4 @@
-# Agent 行为三态宪法 — issue #447
+# Agent 行为三态宪法 — issue #447(v2 校准: issue #497)
 
 > 单一引用源: agent 在 4 类典型事件中的三态选择 (allowed / must-ask / must-stop)。
 > 全局硬禁止 #1、ask_for_direction_gate、init 协商 — 全部声明为这张表的执行器。
@@ -23,9 +23,11 @@ issue #447 证据 1 显示**三份文本对"什么时候该问用户"答案互�
 | **普通推进** | 收敛签到 (C0-C7 all pass) | **allowed** | convergence check per section 8 |
 | **身份歧义** | 多 VM / 多 toolchain / 多样本歧义 | **must-ask** | emit Type D 信号 + HARD_PAUSE (rc=2) |
 | **身份歧义** | 任务目标歧义 (workflow ≠ evidence) | **must-ask** | emit Type D 信号 + HARD_PAUSE |
-| **授权边界** | 有界授权内新硬错误 (#451 风格) | **must-ask** | emit Type D 信号 + HARD_PAUSE |
-| **授权边界** | 工具/资源耗尽 (#474 #475 风格) | **must-ask** | emit Type D 信号 |
+| **授权边界** | 有界授权内新硬错误 (#451 风格; v2 #497 校准) | **allowed** | **强制走梯**: 先走 method-ladder (`failure_analysis_gate --record`, #495 三产物) / env-ladder (自恢复 L1→L2→L3), **走梯后复评**; gate 的 TYPE_D blocker tripwire 无梯耗尽标记时降 rc=1 指引 |
+| **授权边界** | 工具/资源耗尽 — 梯爬完 (梯耗尽标记 = failure_analysis 记录无 `candidates` 且 claim `promotion_attempts >= 3`, #495 字段) | **must-ask** | emit Type D 信号 |
 | **范围变更** | 任务边界扩张(原计划外) | **must-ask** | emit Type D 信号 |
+| **判死宣告** | "这条路走不通/无法继续/dead end" 类陈述句 (v2 #497) | **有证据: allowed / 无证据: NEGATIVE (reject)** | 有障碍 REFUTED(#495 升格 obstacle claim 状态)或能力证伪(failure_analysis `outcome: REFUTED`)证据 → 合法终局; 无证据 → emit Type E + rc=1 强制走梯复评, **不得作为终局** |
+| **计划搁浅** | "下一步:"/"next step:" 声明后无工具动作 (v2 #497) | **NEGATIVE** (reject) | Type B 等价: rc=1, 执行该下一步或声明阻塞原因 (事件流轮次窗口判滞) |
 | **不可逆动作** | 删除 VM / 改 vmx / git push --force | **must-stop** | 阻止 + emit Type S + HARD_PAUSE |
 | **不可逆动作** | 公开 release / publish | **must-stop** | 阻止 + emit Type S |
 | **废话反问** | "should I" / "do you want" / 等用户决定 | **NEGATIVE** (reject) | Type A/B violation (ask_for_direction_gate) |
@@ -38,13 +40,15 @@ issue #447 证据 1 显示**三份文本对"什么时候该问用户"答案互�
 | Type B | 完成-问下一步 | REJECT (rc=1) |
 | Type C | 收敛签到 | ALLOWED |
 | **Type D** | must-ask 触发信号(身份歧义 / 授权边界 / 范围变更) | HARD_PAUSE (rc=2) |
+| **Type E** | 判死宣告(死亡宣告陈述句, v2 #497) | 无证据: REJECT (rc=1) 强制走梯复评; 有障碍 REFUTED / 能力证伪证据: 合法终局 |
+| plan-stall | 计划搁浅("下一步:" 后无动作, v2 #497) | REJECT (rc=1), Type B 等价 |
 | **Type S** | must-stop 触发信号(不可逆动作) | HARD_PAUSE (rc=2) |
 
 ## 执行器 (谁是这张表的执行者)
 
 | 文本 | 角色 |
 |---|---|
-| `scripts/ask_for_direction_gate.py` | Type A/B/C 检测 (RC=1 reject)+ Type D/S 触发时 HARD_PAUSE (rc=2) — 看到 orchestrator **打印后** 的文本 |
+| `scripts/ask_for_direction_gate.py` | Type A/B/C 检测 (RC=1 reject)+ Type D/S 触发时 HARD_PAUSE (rc=2) — 看到 orchestrator **打印后** 的文本。v2 (#497): Type D blocker tripwire 无梯耗尽标记时降 rc=1 走梯指引; 新增 Type E 判死门 + plan-stall 搁浅门(均为陈述句门, rc=1) |
 | `hooks/dispatch_gate.py` | Type S 在 **dispatch prompt 本身** 上拦截 (rc=2 hard pause,worker 运行**前**) — 不可逆动作的承载执行器 |
 | `scripts/kunglao-init.py` 协商接口 | init 阶段 Type D 触发 — pending decisions + RC_PENDING_DECISIONS=8 |
 | 全局 `kunglao-convergence-loop.md` 硬禁止 #1 | **重写为对这张表的引用**,不直接措辞 |
@@ -83,13 +87,31 @@ issue #447 证据 1 显示**三份文本对"什么时候该问用户"答案互�
 - **must-stop** → 不能绕过(用户必须显式 unlock)
 - **NEGATIVE** (Type A/B) → 不能借"Type C 收敛"绕过(除非 C0-C7 all pass 真实存在)
 
+v2 (#497) 注:授权边界行的 must-ask → allowed 校准是**表级变更**(经
+openspec 流程,见变更记录),不是运行时降级;blocker 家族保留的 must-ask
+升级条件是**结构性标记**(梯耗尽,#495 字段),不是运行时随意升级。判死
+宣告的"有证据 → 合法终局"同样由结构化证据(obstacle claim 状态 /
+failure_analysis outcome)决定,不由 orchestrator 自行声明。
+
 ## 不变性
 
 - 本表是**唯一**的"何时问用户"权威源
 - 任何代码/规则不得**直接**说"问用户" / "不问用户" — 必须引用本表
 - 表格变更须经 openspec 流程(版本 + 变更记录)
 
+## 变更记录
+
+- **v2 (#497, openspec/changes/issue-497-decision-grammar-v2/)**:授权边界
+  "有界授权内新硬错误" must-ask → **allowed + 强制走梯**(仅"工具/资源
+  耗尽 — 梯爬完"保留 must-ask,梯耗尽标记 = failure_analysis 无
+  candidates 且 attempts>=3);新增**判死宣告**(Type E)与**计划搁浅**
+  (plan-stall, Type B 等价)两行 — v0.1.1 双轨迹的复发行为是陈述句,
+  问句层执法看不见;执行器 `ask_for_direction_gate.py` 同步。
+- **v1 (#447, openspec/changes/issue-447-three-state-charter/)**:初版
+  三态表 + 类型字母表 + 检测教义。
+
 ## 见
 
-- `scripts/ask_for_direction_gate.py` — Type A/B/D 检测
+- `scripts/ask_for_direction_gate.py` — Type A/B/D/E 检测 + plan-stall
 - `openspec/changes/issue-447-three-state-charter/` — 完整 spec
+- `openspec/changes/issue-497-decision-grammar-v2/` — v2 校准 spec

@@ -63,16 +63,21 @@ remaining work back through Task dispatch.
 ## 7. Hard prohibitions
 
 1. **No asking the user mid-iteration** — defer to the **3-state charter**
-   in `references/agent-three-state-charter.md` (single source of truth, #447).
+   in `references/agent-three-state-charter.md` (single source of truth, #447; v2 #497).
    Default = **allowed** (decide + record + continue); identity ambiguity /
-   authorization boundary / scope change = **must-ask**; irreversible action =
-   **must-stop**. The orchestrator MUST consult the charter before any
-   "should I" / "do you want" / 等用户决定 decision. Execution surfaces:
-   `scripts/ask_for_direction_gate.py` (Type A/B/D/S), `scripts/kunglao-init.py`
-   pending decisions, `hooks/dispatch_gate.py` must-stop hook (Phase 2).
+   scope change / tools-and-resources exhausted (ladder climbed) = **must-ask**;
+   an in-boundary new hard error = **allowed + forced ladder** (method-ladder /
+   env-ladder, then re-evaluate — #497 v2); irreversible action =
+   **must-stop**. Declarative gates: an unevidenced death verdict (Type E)
+   or a stalled "next step:" declaration = reject (rc=1). The orchestrator
+   MUST consult the charter before any "should I" / "do you want" /
+   等用户决定 decision. Execution surfaces:
+   `scripts/ask_for_direction_gate.py` (Type A/B/D/E/S + plan-stall),
+   `scripts/kunglao-init.py` pending decisions, `hooks/dispatch_gate.py`
+   must-stop hook (Phase 2).
 2. **No cascade abort** — a single claim failing affects only that claim (deferred), never the others.
 3. **user feedback dual-layer skepticism** — accept as hypothesis(source:user_feedback), the artifact judges truth, procedural, no queue-jumping.
-4. **re-plan only when** — a verified finding / refutation propagates / task_spec is updated externally; never re-plan off a a single failure.
+4. **re-plan only when** — a verified finding / refutation propagates / task_spec is updated externally / **new capability or obstacle fact lands (#495 failure artifacts: validated_capability, identified_obstacle→promoted claim)**. Never re-plan off an information-free pivot (a narrative turn with no new evidence); a single failure WITH its transduced artifacts IS new information. Whitelist inverted per #497/#498: deviating from the plan after the model changed is the norm (re-derivation); the model changing while the plan stays put is the drift (STALE_PLAN_ON_NEW_EVIDENCE, WARN-level in plan_drift_detector).
 5. **VM-ONLY dynamic tools (non-negotiable)** — HOST_FORBIDDEN_TOOLS bans the host channel: mcp__x64dbg__start_session/connect_to_session/terminate_session/connect_to_instance, mcp__frida__spawn/attach; samples execute in the VM only.
 6. **No declare done on OPEN claim** — handoff-check PASS decides; the open-claim count is the truth, not self-perception.
 
