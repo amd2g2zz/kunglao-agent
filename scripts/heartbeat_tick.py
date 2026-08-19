@@ -22,6 +22,10 @@ Steps executed (idempotent, all safe to re-run):
   8. oracle-check     — task-oracle.yaml registered (#473 gate power-on;
                         report field oracle_registered + actionable line
                         when missing; report-only, never fails the tick)
+  9. env-probe        — liveness-subset env snapshot → runs/env-state.json
+                        (#475: env freshness bound to the tick by
+                        construction — the only mechanically-enforced
+                        periodic; probe failure never fails the tick)
 
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
 1 = heartbeat stale, project hooks missing, or selfcheck failed (LLM must act;
@@ -166,12 +170,19 @@ def main(argv: list[str] | None = None) -> int:
         print(RENEW_MARGIN_LOW_LINE)
     report["renew"] = run("hook_activation.py", ws, "--renew")
     report["heartbeat"] = run("hook_activation.py", ws, "--heartbeat-check")
-    # #473: oracle registration check — one report field + one actionable
-    # stdout line when missing (mechanical催告; the LLM reading the tick
-    # acts). Report-only: rc weights unchanged.
+    # step 8 (#473): oracle registration check — one report field + one
+    # actionable stdout line when missing (mechanical催告; the LLM reading
+    # the tick acts). Report-only: rc weights unchanged.
     report["oracle_registered"] = _oracle_registered(ws)
     if not report["oracle_registered"]:
         print(ORACLE_MISSING_LINE)
+    # step 9 — env-probe (#475): liveness-subset snapshot into
+    # runs/env-state.json (check_env_fresh / env_drift_watch consume it).
+    # The subprocess rc is advisory-only: env drift is surfaced by the
+    # monitor + the fresh gate, and a probe crash must never fail the tick
+    # (env_state_probe itself exits 0 on probe failure; rc!=0 here means
+    # the script itself crashed — recorded, not fatal).
+    report["env_state"] = run("env_state_probe.py", ws)
 
     out = ws / "runs" / ".heartbeat-tick.json"
     try:

@@ -74,6 +74,20 @@ except Exception:  # pragma: no cover - hook stays usable if the router is moved
 
 GENERIC_WORK_AGENT = 'kunglao-worker'
 
+# ---------- #475: tool_error_policy wiring (the missing consumer, #309 debt) ----------
+# tool_error_policy.py (WARN=3 / DISABLE=5 hysteresis) had zero consumers —
+# this import + post_check application is the mechanical wiring; the policy
+# module stays the single sanctioned source (thresholds are never copied).
+sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
+try:
+    import tool_error_policy as _tep
+    TOOL_ERROR_POLICY_LOADED = True
+except Exception:  # pragma: no cover — hook stays usable if the policy moves
+    _tep = None
+    TOOL_ERROR_POLICY_LOADED = False
+
+TOOL_ERRORS_FILE = 'runs/tool-errors.json'
+
 
 def _load_yaml(path):
     if not path or not Path(path).exists():
@@ -1235,6 +1249,18 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'instead - the deviation must be recorded, not silently skipped.'
         ),
     },
+    'envfresh': {
+        'additionalContext': (
+            'environment drift (v1.9.39, #475): a capability this dispatch '
+            'needs is FAILED or STALE in runs/env-state.json (written by '
+            'heartbeat_tick step 8). Fix in order: (1) L1 deterministic '
+            'repair: uv run --project <skill> <skill>/scripts/env_repair_l1.py '
+            '<ws> --all (idempotent; safe no-op without the device); (2) if '
+            'STALE: run one heartbeat_tick to refresh the snapshot, then '
+            're-dispatch; (3) if L1 cannot repair (VM lease gone), fix the '
+            'root cause (re-lease the VM / re-attach the device) and re-init.'
+        ),
+    },
 }
 
 
@@ -1330,6 +1356,93 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
     return (True, f'heartbeat alive (last activity {last_str})')
 
 
+# v1.9.39 (#475): env-state freshness gate constants. TTL aligns with the
+# tick cadence family (5-min cron / 35-min heartbeat ceiling): 30 min = one
+# heartbeat TTL window of drift tolerance; 2x = the hard self-heal line.
+ENV_STATE_TTL_MINUTES = 30
+ENV_STATE_FILE = 'runs/env-state.json'
+# module-level timedelta for the gate (datetime itself stays local-import,
+# same convention as check_heartbeat_alive)
+from datetime import timedelta as _env_timedelta  # noqa: E402
+
+# which env capabilities a dispatch actually needs: VM-channel tools and any
+# tier>=2 dynamic work (T2/T3 run in the VM / on-device per the tier ladder).
+_ENV_CAP_FOR_TOOL_PREFIX = (
+    'mcp__ghidra__',      # decompiler MCP — bridge liveness
+    'mcp__x64dbg__',      # remote debugger — VM channel
+)
+
+
+def _env_caps_needed(tier: int, tools: list[str]) -> set[str]:
+    """Env capabilities this dispatch depends on (vm_reachable for VM-channel
+    tools / tier>=2; mcp_bridge for MCP decompiler tools)."""
+    caps: set[str] = set()
+    if tier >= 2:
+        caps.add('vm_reachable')
+    for t in tools:
+        if t in VM_TOOLS or t.startswith('mcp__x64dbg'):
+            caps.add('vm_reachable')
+        if t.startswith(_ENV_CAP_FOR_TOOL_PREFIX[0]) or t.startswith('mcp__ida'):
+            caps.add('mcp_bridge')
+        # #474 follow-up: jdb/jdwp-driving tools gate on the jdwp capability
+        if 'jdwp' in t or 'jdb' in t:
+            caps.add('jdwp_debug')
+    return caps
+
+
+def check_env_fresh(paths: dict, tier: int = 0, tools: list[str] | None = None) -> tuple[bool, str]:
+    """#475: three-state env-state freshness gate — PURE FILE READ (<5ms).
+
+    Missing/corrupt env-state.json -> FAIL_OPEN + hint (env freshness is
+    new; pre-existing workspaces must not start failing). Explicit FAIL on a
+    capability this dispatch needs -> REJECT with L1 repair guidance. Any
+    needed entry older than 2x TTL -> REJECT with the self-heal hint (run
+    one heartbeat_tick — step 8 refreshes the snapshot by construction).
+    """
+    ws = paths.get('workspace')
+    if not ws:
+        return True, ''
+    from datetime import datetime, timezone
+    p = Path(ws) / ENV_STATE_FILE
+    if not p.exists():
+        return True, ('no runs/env-state.json — env freshness unverified; '
+                      'one heartbeat_tick (step 8) writes it, or re-init')
+    try:
+        data = json.loads(p.read_text(encoding='utf-8'))
+        # #475 review HIGH-1: valid JSON of the WRONG SHAPE (list top-level,
+        # string entries) parses fine then crashes on .get — guard both.
+        if not isinstance(data, dict):
+            raise ValueError('env-state.json top level is not an object')
+        per = data.get('per_capability') or {}
+        if not isinstance(per, dict):
+            raise ValueError('per_capability is not an object')
+    except (OSError, ValueError, json.JSONDecodeError):
+        return True, 'env-state.json unreadable/malformed — fail open (run a heartbeat_tick to rewrite)'
+    needed = _env_caps_needed(tier, tools or [])
+    if not needed:
+        return True, ''
+    now = datetime.now(timezone.utc)
+    stale_line = _env_timedelta(minutes=ENV_STATE_TTL_MINUTES * 2)
+    for cap in sorted(needed):
+        entry = per.get(cap)
+        if not entry or not isinstance(entry, dict):
+            continue  # unprobed or wrong-shape — not evidence, fail open
+        if entry.get('status') == 'fail':
+            return (False,
+                    f'env drift: {cap} FAIL ({(entry.get("detail") or "")[:120]}) - '
+                    f'run L1 repair: uv run --project <skill> <skill>/scripts/env_repair_l1.py <ws> --all')
+        ts = entry.get('last_probe_ts', '')
+        try:
+            age = now - datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
+        except ValueError:
+            continue  # unparseable ts — not evidence of drift; fail open
+        if age > stale_line:
+            return (False,
+                    f'env-state STALE: {cap} last probe {int(age.total_seconds()//60)} min ago '
+                    f'(> {ENV_STATE_TTL_MINUTES * 2}) - run one heartbeat_tick to refresh, then re-dispatch')
+    return True, ''
+
+
 def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
     prompt = payload.get('tool_input', {}).get('prompt', '')
@@ -1350,6 +1463,11 @@ def pre_check(payload: dict, paths: dict) -> int:
         # gates (historical research-tree r3, R1/R3). FAIL_OPEN inside the checks.
         ('drift', check_plan_drift(paths)),
         ('health', check_convergence_health(paths)),
+        # v1.9.39 (#475): env-state freshness gate — a dispatch whose tier/
+        # tools need a drifted environment capability is REJECTED; missing/
+        # stale-beyond-2xTTL state follows the FAIL_OPEN/self-heal split
+        # (see check_env_fresh). Pure file read (<5ms), no subprocess.
+        ('envfresh', check_env_fresh(paths, tier, tools)),
         # v1.9.29 (#38): stuck-worker backtrack gate — closes the
         # built-but-not-wired gap (backtrack_gate.py existed but was never
         # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
@@ -1411,12 +1529,105 @@ def pre_check(payload: dict, paths: dict) -> int:
     return 0
 
 
+def _apply_tool_error_policy(paths: dict, tool_result: str) -> None:
+    """#475: count per-tool consecutive failures in the worker transcript
+    result and apply the hysteresis policy (single source: tool_error_policy).
+
+    Detection: an `mcp__<name>__<op> ...: Error: ...` line = one failing
+    invocation of that tool; a line naming the tool without an Error marker =
+    success (streak reset). State persists in runs/tool-errors.json. WARN →
+    stderr advisory; disable_escalate → stderr escalation + the env-state
+    entry for the tool's capability is marked failed (repair-ladder input).
+    All IO failures fail open (policy must not break post_check).
+    """
+    if _tep is None:
+        return
+    ws = paths.get('workspace')
+    if not ws:
+        return
+    runs = Path(ws) / 'runs'
+    state_path = runs / 'tool-errors.json'
+    try:
+        state = json.loads(state_path.read_text(encoding='utf-8')) \
+            if state_path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        state = {}
+    events = []
+    for line in tool_result.splitlines():
+        low = line.strip()
+        m = re.match(r'((?:mcp__)?[a-z0-9_\-]+)', low)
+        if not m:
+            continue
+        tool = m.group(1)
+        # only actual tool invocations count — an mcp__ name or a KNOWN_TOOLS
+        # entry; a generic word starting an error line must not build a
+        # phantom streak ("attempt 3: Error: ..." ≠ tool 'attempt').
+        if not (tool.startswith('mcp__') or tool in KNOWN_TOOLS):
+            continue
+        events.append((tool, 'error' in low.lower() and ':' in low))
+    for tool, failed in events:
+        rec = state.get(tool) or {'consecutive_failures': 0}
+        rec['consecutive_failures'] = 0 if not failed else rec['consecutive_failures'] + 1
+        state[tool] = rec
+        if not failed:
+            continue
+        r = _tep.evaluate_streak(rec['consecutive_failures'], tool=tool)
+        if r['action'] == 'warn':
+            print(f'[kunglao-agent] tool-error WARN: {r["message"]} — switch '
+                  f'approach or repair the environment', file=sys.stderr)
+        elif r['action'] == 'disable_escalate':
+            print(f'[kunglao-agent] tool-error DISABLE: {r["message"]} '
+                  f'({r.get("blocker_note", "")})', file=sys.stderr)
+            _mark_env_capability_failed(runs, tool)
+    try:
+        runs.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(state, indent=2), encoding='utf-8')
+    except OSError:
+        pass  # persistence failure: this tick's advisory already went to stderr
+
+
+def _mark_env_capability_failed(runs: Path, tool: str) -> None:
+    """disable_escalate side effect: flip the env-state entry for the tool's
+    capability to fail, so check_env_fresh + env_drift_watch + env_repair_l1
+    all see the drift through the single env-state source."""
+    env_path = runs / 'env-state.json'
+    # tool name → env capability (same vocabulary as check_env_fresh /
+    # env_state_probe): decompiler MCPs hit mcp_bridge, VM-channel tools hit
+    # vm_reachable, anything else records under the tool itself so the
+    # disable is at least visible in env-state.
+    if tool.startswith(('mcp__ghidra', 'mcp__ida')):
+        cap = 'mcp_bridge'
+    elif tool in VM_TOOLS or tool.startswith('mcp__x64dbg'):
+        cap = 'vm_reachable'
+    else:
+        cap = f'tool:{tool}'
+    try:
+        data = json.loads(env_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return  # no env-state: the tick will write one; nothing to flip
+    import datetime as _dt
+    entry = data.setdefault('per_capability', {}).setdefault(cap, {})
+    entry.update({
+        'status': 'fail',
+        'last_probe_ts': _dt.datetime.now(_dt.timezone.utc).isoformat(
+            timespec='seconds').replace('+00:00', 'Z'),
+        'detail': f'tool {tool} disabled after consecutive errors (hysteresis)',
+    })
+    try:
+        env_path.write_text(json.dumps(data, indent=2), encoding='utf-8')
+    except OSError:
+        pass
+
+
 def post_check(payload: dict, paths: dict) -> int:
     worker_id = payload.get('tool_input', {}).get('name') or ''
     if worker_id:
         remove_worker(paths['state'], worker_id)
     tool_result = str(payload.get('tool_result', ''))
     scan_actual_tools(tool_result)  # post-hoc audit (informational)
+    # #475: same-tool consecutive-error hysteresis — the #309 policy's first
+    # mechanical consumer (warn at 3, disable+escalate at 5, success resets).
+    _apply_tool_error_policy(paths, tool_result)
     # ---- v1.9.29 claim-status guard: block worker self-promotion ----
     # A worker must NOT flip a claim to terminal status (PROVEN / NEGATIVE /
     # REFUTED / DEFERRED) — only the orchestrator promotes after the

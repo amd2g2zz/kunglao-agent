@@ -681,7 +681,7 @@ def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
 REJECT_NAMES = [
     'workers', 'cap', 'tools', 'hostchan', 'deadline', 'tier',
     'selfcap', 'heartbeat', 'drift', 'health', 'backtrack', 'plan',
-    'toolfirst', 'agenttype', 'snapshot', 'devreason',
+    'toolfirst', 'agenttype', 'snapshot', 'devreason', 'envfresh',
 ]
 
 # per-REJECT keyword that proves the guidance is concrete (names the mechanism),
@@ -703,6 +703,7 @@ REJECT_FIX_KEYWORDS = {
     'agenttype': 'agent-reasoning',
     'snapshot': 'facts-snapshot',
     'devreason': 'reasoning',
+    'envfresh': 'env_repair_l1',   # #475: L1 repair script must be named
 }
 
 

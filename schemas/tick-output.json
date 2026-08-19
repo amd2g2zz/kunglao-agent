@@ -14,6 +14,16 @@
     "help_requests": { "type": "array", "items": { "type": "string" } },
     "stuck": { "type": "array", "items": { "type": "string" } },
     "health": { "enum": ["HEALTHY", "STALLED", "SPINNING"] },
-    "next": { "type": "string" }
+    "next": { "type": "string" },
+    "env_drift": {
+      "description": "#475 advisory-only env drift decision (never gates a tick, #88 contract); optional for backward compatibility",
+      "type": "object",
+      "required": ["status", "drifted"],
+      "properties": {
+        "status": { "enum": ["OK", "DRIFT", "NO_DATA"] },
+        "drifted": { "type": "array", "items": { "type": "string" } },
+        "detail": { "type": "string" }
+      }
+    }
   }
 }

@@ -45,6 +45,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |
 | `hook_activation.py` | THE canonical hook registration entry (#445): register_hooks/--wire-up + post-write self-check + tier activation | hooks, CLI, lib(6), tests |
 | `env_check.py` | environment readiness gate (venv/toolchain/VM channel) | hooks, CLI, tests |
+| `env_state_probe.py` | env-state liveness snapshot writer → runs/env-state.json (tick step 9; #475) | lib(2), tests |
+| `env_repair_l1.py` | L1 deterministic env repair (adb-reconnect/vm-rediscover/mcp-rehandshake; idempotent, safe no-op; #475) | CLI, tests |
 | `heartbeat.py` | convergence-gated heartbeat bookkeeping (lib for hook_activation) | lib(1), tests |
 | `heartbeat_tick.py` | heartbeat tick runner (hook-invoked + kunglao.py) | hooks, lib(1), tests |
 | `heartbeat_loop_prompt.py` | loop-prompt generator for the tick loop | hooks, tests |

@@ -30,6 +30,33 @@ release (see the mapping table at the end).
 
 ## [Unreleased]
 
+### Added (environment drift detection + bounded repair L1, #475)
+
+- env-state single source of truth: `runs/env-state.json`
+  (`per_capability: {status, last_probe_ts, detail}, written_by, ts`),
+  written by `scripts/env_state_probe.py` — liveness-subset probes only
+  (TCP/adb-forward/port reachability; capability trials never run on the
+  periodic path, #474 contract)
+- heartbeat_tick step 8: the env probe is bound to the tick — the only
+  mechanically-enforced periodic (#475 design argument) — so env freshness
+  is guaranteed by construction, not by a new timer; probe failure never
+  fails the tick
+- worker_budget `check_env_fresh` dispatch gate (pure file read, <5ms):
+  missing env-state FAIL_OPEN + hint; explicit FAIL ∩ the dispatch's
+  tier/tools REJECT with L1 repair guidance; entries older than 2×TTL
+  (60 min) REJECT with the self-heal hint "run one heartbeat_tick"
+- kunglao-monitor `env_drift` advisory field (OK/DRIFT/NO_DATA + drifted
+  capability list) — #88 contract preserved: advisory only, never gates a
+  tick; tick-output.json gains the optional `env_drift` property (required
+  set unchanged)
+- `scripts/env_repair_l1.py`: bounded deterministic L1 repair
+  (adb-reconnect / vm-rediscover / mcp-rehandshake) — idempotent, safe
+  no-op without substrate, rewrites env-state on success; L2/L3 out of scope
+- tool_error_policy wiring (#309 debt paid): worker_budget post_check now
+  counts per-tool consecutive failures (runs/tool-errors.json) and applies
+  the WARN=3/DISABLE=5 hysteresis — warn → stderr advisory,
+  disable_escalate → escalation + env-state capability marked failed;
+  consumer count 0 → 1 (mechanical)
 
 ### Changed (probe capability tiers, #474)
 

@@ -35,6 +35,9 @@ HEARTBEAT_FILE = "runs/.heartbeat.json"
 HEARTBEAT_MAX_MIN = 35          # same threshold as worker_budget.check_heartbeat_alive
 STUCK_MIN = 20                  # same as backtrack_gate --stuck-min default
 VALID_BACKTRACK_DECISIONS = ("continue", "retry_different", "escalate", "redispatch")
+# #475: env-state drift threshold — mirrors hooks/worker_budget
+# ENV_STATE_TTL_MINUTES (advisory threshold here, reject line there is 2x).
+ENV_STATE_TTL_MINUTES = 30
 
 
 def utc_now() -> str:
@@ -171,6 +174,49 @@ def decide_next(hb: str, health: dict, help_reqs: list[str], stuck: list[str],
     return "poll active workers (SATURATED — no free slot)"
 
 
+def env_drift_watch(ws: Path) -> dict:
+    """#475: read runs/env-state.json → advisory drift decision.
+
+    ADVISORY ONLY (#88 contract): the returned field rides the tick output;
+    it never gates a tick action. Missing file → NO_DATA; any FAIL entry or
+    entry older than ENV_STATE_TTL_MINUTES (mirrors worker_budget) → DRIFT
+    with the capability list + ages; else OK. Corrupt JSON → NO_DATA.
+    """
+    p = ws / "runs" / "env-state.json"
+    if not p.exists():
+        return {"status": "NO_DATA", "drifted": [], "detail": "no runs/env-state.json"}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        # #475 review HIGH-1: wrong-shape JSON (list top-level / string
+        # entries) parses fine then crashes .get — guard both, NO_DATA path.
+        if not isinstance(data, dict):
+            raise ValueError("top level is not an object")
+        per = data.get("per_capability") or {}
+        if not isinstance(per, dict):
+            raise ValueError("per_capability is not an object")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return {"status": "NO_DATA", "drifted": [], "detail": f"env-state unreadable ({exc})"}
+    now = _utc_now_dt()
+    drifted: list[str] = []
+    for name, entry in per.items():
+        if not isinstance(entry, dict):
+            continue  # wrong-shape entry — not evidence
+        if entry.get("status") == "fail":
+            drifted.append(name)
+            continue
+        try:
+            ts = datetime.datetime.fromisoformat(
+                str(entry.get("last_probe_ts", "")).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if now - ts > datetime.timedelta(minutes=ENV_STATE_TTL_MINUTES):
+            drifted.append(name)
+    if drifted:
+        return {"status": "DRIFT", "drifted": sorted(drifted),
+                "detail": "env drifted: " + ", ".join(sorted(drifted))}
+    return {"status": "OK", "drifted": [], "detail": "env fresh and passing"}
+
+
 def tick(ws: Path) -> dict:
     """M5.4 L410-420: heartbeat → loop_reconcile → help/stuck/health → next → TickOutput."""
     hb, hb_detail = heartbeat_check(ws)
@@ -193,6 +239,8 @@ def tick(ws: Path) -> dict:
         "next": decide_next(hb, health, help_reqs, stuck, gone, active_workers),
         "heartbeat_detail": hb_detail,
         "health_detail": health["detail"],
+        # #475: env drift — ADVISORY (never gates a tick, #88 contract)
+        "env_drift": env_drift_watch(ws),
     }
 
 
