@@ -5,7 +5,7 @@
   "tools_used": [
     "scripts/check_global_rule_subset.py",
     "scripts/references_recall.py",
-    "tools/_INDEX.yaml#subagent-review"
+    "tools/_INDEX.md"
   ],
   "verified_by": "verifier-subagent-2026-08-19-gate5"
 }

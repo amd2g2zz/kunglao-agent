@@ -1,0 +1,10 @@
+{
+  "agent": "fixer-subagent (issue #493 R2 LOW patch)",
+  "plan": "#493 LOW patch from FAULT-INJECT bypass bonus: tools/_INDEX.yaml#<name> anchor must NAME a registered index tool in _tool_resolves (fail-closed: missing/empty index -> anchor unresolvable; anchors on other bases keep strip semantics); remediate the three unregistered-anchor citations caught by the tightened rule (doc example #ghidra-decompile, two tracked review JSONs #subagent-review); unit + end-to-end pins (fake anchor rejected, registered anchor accepted, index-less/empty-index fail-closed).",
+  "status_sync": "tests/test_subagent_injection.py + tests/test_subagent_review.py quick gate; devkit/quality_gates.py 1 3 4 5 6 7",
+  "tools_used": [
+    "tools/_INDEX.yaml#ghidra-decompile-functions",
+    "scripts/priority_ratio.py"
+  ],
+  "verified_by": "reviewer-493-r2-anchor"
+}

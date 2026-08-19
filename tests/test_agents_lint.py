@@ -392,17 +392,32 @@ class TestGateWiring:
                 f"G-class drift: quality_gates.py still says {stale!r}"
             )
 
+    @staticmethod
+    def _quick_gate_list() -> str:
+        # Derived from the GATES registry (never hardcoded here — the #446
+        # drift this suite exists to catch was exactly a stale count).
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "quality_gates", DEVKIT_DIR / "quality_gates.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return " ".join(str(g) for g in sorted(mod.GATES) if g != 2)
+
     def test_pre_commit_template_lists_gate6(self) -> None:
         src = (DEVKIT_DIR / "githooks" / "pre-commit").read_text(encoding="utf-8")
-        assert "1 3 4 5 6" in src, "pre-commit template must run gate 6"
+        assert self._quick_gate_list() in src, (
+            "pre-commit template must run the registry quick set")
         assert "4-gate" not in src, "G-class drift in pre-commit template header"
         assert "Agents Contract" in src or "agents" in src.lower()
 
     def test_pre_commit_template_gate_list_matches_registry(self) -> None:
         # The header enumerates gates for humans; the command is mechanical.
-        # Both must at least agree on gate 5 + 6 presence (drift tripwire).
+        # The quiet-run command must list the registry quick set exactly;
+        # the verbose rerun hint is number-free by #446 doctrine, so only the
+        # quiet run is count-checked (count == 1, not the legacy 2).
         src = (DEVKIT_DIR / "githooks" / "pre-commit").read_text(encoding="utf-8")
-        assert src.count("1 3 4 5 6") == 2, (
-            "pre-commit template should list gates 1 3 4 5 6 in BOTH the "
-            "quiet run and the verbose rerun hint"
+        expected = self._quick_gate_list()
+        assert src.count(expected) == 1, (
+            f"pre-commit template should list gates {expected} in the "
+            "quiet run (verbose hint is number-free per doc-sync doctrine)"
         )

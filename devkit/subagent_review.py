@@ -16,6 +16,10 @@ Local-pre-commit mechanical enforcement:
   - the JSON's required fields must all be present
   - the `verified_by` field must NOT be the orchestrator's own
     handle — that's the maker-checker anti-self-stamp rule
+  - each `tools_used` citation must RESOLVE (#493): a citation that
+    resolves nowhere is a self-invention signal — the field-incident
+    replay showed a 5-field-complete review could still cite the
+    hand-written scripts/decompile_funcs_headless.py driver and pass
 
 When the staged change does NOT touch domain paths (e.g. pure
 pyproject / openspec / devkit scaffolding), Gate 5 is N/A — passes
@@ -60,6 +64,87 @@ SELF_VERIFIERS = (
     "anthropic",
     "claude",
 )
+
+# #493 — tools_used resolvability. Legal resolution classes:
+#   (a) scripts/re/** — the workspace RE-tool namespace deployed per
+#       engagement (three-point check #1 in agents/*.md); never present
+#       in the skill repo itself, so trusted by prefix;
+#   (b) a bare logical name registered in tools/_INDEX.yaml;
+#   (c) a real file under scripts/ / tools/ / references/ (registered
+#       toolshelf + skill CLIs + reference docs), `#anchor` suffix
+#       allowed — EXCEPT on the index itself: tools/_INDEX.yaml#<name>
+#       resolves only when <name> is a REGISTERED tool (#493 LOW patch).
+WORKSPACE_TOOL_NAMESPACE = "scripts/re/"
+RESOLVABLE_ROOTS = ("scripts/", "tools/", "references/")
+INDEX_CITATION_BASE = "tools/_INDEX.yaml"
+
+
+def _index_tool_names(repo_root: Path) -> set[str]:
+    """Registered logical tool names from tools/_INDEX.yaml. A missing or
+    broken index fails CLOSED toward strict: the empty set makes every
+    bare name unresolvable — the gate gets stricter, never looser."""
+    index = repo_root / "tools" / "_INDEX.yaml"
+    if not index.is_file():
+        return set()
+    try:
+        import yaml
+        data = yaml.safe_load(index.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — unreadable index = no names
+        return set()
+    tools = data.get("tools") if isinstance(data, dict) else None
+    names: set[str] = set()
+    for entry in tools or []:
+        if isinstance(entry, dict) and entry.get("name"):
+            names.add(str(entry["name"]))
+    return names
+
+
+def _tool_resolves(entry: object, repo_root: Path) -> bool:
+    """True iff a tools_used citation resolves to a real tool (see
+    WORKSPACE_TOOL_NAMESPACE / RESOLVABLE_ROOTS above). Mechanical
+    judgment only — no name sniffing, no natural-language inference.
+    Rejection precedes namespace trust (#493 F1/F2): traversal and
+    empty segments never resolve, even when the raw string carries
+    the trusted scripts/re/ prefix; a bare prefix cites nothing.
+    Anchored index citations (#493 LOW): tools/_INDEX.yaml#<name>
+    resolves only when <name> is registered; anchors elsewhere are
+    stripped and ignored (historic semantics)."""
+    text = str(entry).strip()
+    if not text:
+        return False
+    base, _, anchor = text.partition("#")
+    path = base.strip().replace("\\", "/")
+    if not path:
+        return False  # anchor-only citation names nothing
+    if path.startswith("./"):
+        path = path[2:]
+    segments = path.split("/")
+    if any(not s for s in segments):
+        return False  # empty segment: leading/trailing/double slash
+    if ".." in segments:
+        # Traversal is not resolution — and this check runs BEFORE the
+        # namespace prefix trust below: scripts/re/../../etc/passwd
+        # carries the trusted prefix yet never resolves (#493 F1).
+        return False
+    if path == INDEX_CITATION_BASE and anchor.strip():
+        # #493 LOW patch (FAULT-INJECT bypass bonus): an anchored index
+        # citation must NAME a registered tool — the anchor is not
+        # decoration riding a real whitelisted file. A missing/broken
+        # index yields the empty name set, so this fails CLOSED toward
+        # strict (same direction as bare names below). Anchors on any
+        # other base keep the strip-and-ignore semantics.
+        return anchor.strip() in _index_tool_names(repo_root)
+    if text.startswith(WORKSPACE_TOOL_NAMESPACE):
+        # Trusted by prefix (deployed per engagement; not enumerable
+        # here). The rejections above already ran, so reaching this
+        # branch guarantees a non-empty, traversal-free remainder under
+        # the prefix — bare "scripts/re/" cites nothing (#493 F2).
+        return True
+    if len(segments) == 1:
+        return path in _index_tool_names(repo_root)
+    if not path.startswith(RESOLVABLE_ROOTS):
+        return False  # outside the whitelist domains
+    return (repo_root / path).exists()
 
 
 def _staged_files() -> list[str]:
@@ -106,6 +191,21 @@ def _validate_one(path: Path) -> tuple[bool, str]:
         # tools_used is required; #462 evidence 3 — self-invention is the
         # biggest regression vector. Empty list is a soft fail.
         return False, f"  {path.name}: tools_used is empty (no reuse record)"
+    tools = data.get("tools_used")
+    if not isinstance(tools, (list, tuple)):
+        # schema says array; a bare string/scalar is not a citation carrier
+        return False, (
+            f"  {path.name}: tools_used must be an array of tool citations")
+    bad = [t for t in tools if not _tool_resolves(t, REPO_ROOT)]
+    if bad:
+        return False, (
+            f"  {path.name}: tools_used cites unresolvable tool(s): {bad}\n"
+            "    Resolvable = scripts/re/** (workspace RE namespace), a name\n"
+            "    registered in tools/_INDEX.yaml, or a real file under\n"
+            "    scripts/ tools/ references/ (#anchor allowed; a\n"
+            "    tools/_INDEX.yaml#<name> anchor must NAME a registered\n"
+            "    tool).\n"
+            "    An unresolvable citation is a self-invention signal (#493).")
     return True, ""
 
 
