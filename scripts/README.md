@@ -114,6 +114,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao-status.py` | status panel CLI — renders claims board + active workers + convergence trend (SKILL.md §Status panel; ANSI auto-degrade) | docs, tests |
 | `kunglao_status.py` | disk-rendered TUI status panel implementation | lib(1), tests |
 | `kunglao_log.py` | structured JSONL event log | lib(4), tests |
+| `kunglao_resume.py` | /kunglao-agent:resume — crash-recovery brief (read-only: health/12-source summary/table-lookup next-step; issue #466) | CLI, tests |
 
 ## Support libraries & utilities
 
