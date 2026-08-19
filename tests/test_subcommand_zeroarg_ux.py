@@ -32,6 +32,7 @@ REGISTRY_FILE = SKILLS / "subcommands.yaml"
 MAIN = SKILLS / "kunglao-agent" / "SKILL.md"
 INIT = SKILLS / "init" / "SKILL.md"
 ANALYSIS = SKILLS / "analysis" / "SKILL.md"
+RESUME = SKILLS / "resume" / "SKILL.md"
 HELP = SKILLS / "help" / "SKILL.md"
 ROOT_SKILL = ROOT / "SKILL.md"
 README = ROOT / "README.md"
@@ -92,7 +93,8 @@ def test_registry_exists_and_covers_all_subcommands() -> None:
     """THE single source exists, parses, and covers init / analysis / help
     with every D4 field."""
     reg = _registry()
-    assert set(reg) == {"init", "analysis", "help"}, (
+    # #466: resume joined the surface — the four-command set
+    assert set(reg) == {"init", "analysis", "help", "resume"}, (
         f"registry must cover exactly the skills/ subcommands: {sorted(reg)}")
     for name, rec in reg.items():
         assert isinstance(rec, dict), f"registry[{name}] must be a mapping"
@@ -103,10 +105,12 @@ def test_registry_exists_and_covers_all_subcommands() -> None:
 
 
 def test_registry_zero_args_actions_are_guided() -> None:
-    """Zero-args actions in the registry are guided prompts (init/analysis)
-    or the usage list (help) — never a bare error, never a silent guess."""
+    """Zero-args actions in the registry are guided prompts
+    (init/analysis/resume — review F5: resume pinned like its siblings, the
+    resume SKILL.md section test alone covered it only indirectly) or the
+    usage list (help) — never a bare error, never a silent guess."""
     reg = _registry()
-    for name in ("init", "analysis"):
+    for name in ("init", "analysis", "resume"):
         assert "guided" in str(reg[name]["zero-args"]).lower(), (
             f"registry[{name}][zero-args] must be a guided prompt")
     assert "usage list" in str(reg["help"]["zero-args"]).lower()
@@ -149,7 +153,7 @@ def test_subcommand_hints_equal_registry_hints() -> None:
     registry hint EXACTLY (a mirror is what drifted in #413 — init had a
     hint, analysis did not)."""
     reg = _registry()
-    for name in ("init", "analysis", "help"):
+    for name in ("init", "analysis", "help", "resume"):
         hint = _frontmatter(SKILLS / name / "SKILL.md").get("argument-hint")
         assert hint == reg[name]["argument-hint"], (
             f"skills/{name}/SKILL.md argument-hint drifts from subcommands.yaml: "
@@ -206,7 +210,7 @@ def test_help_no_args_section_is_defined() -> None:
 def test_subcommands_carry_never_guess_guards() -> None:
     """The #413 'menu, WAIT, never guess' guard extended below the router:
     every argument-taking subcommand states it in its body."""
-    for path in (INIT, ANALYSIS):
+    for path in (INIT, ANALYSIS, RESUME):
         assert "never guess" in _body(path).lower(), (
             f"{path.relative_to(ROOT)} missing the never-guess guard")
 

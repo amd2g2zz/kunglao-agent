@@ -56,6 +56,12 @@ kunglao-agent subcommands:
                            workspace
                            example: /kunglao-agent:analysis ~/cases/synth-dropper
 
+  /kunglao-agent:resume   <workspace>
+                           crash/reboot recovery: read-only breakpoint brief
+                           (health + state + timeline + next step); advises
+                           the #461 re-arm chain when the heartbeat is dead
+                           example: /kunglao-agent:resume ~/cases/synth-dropper
+
   /kunglao-agent:help      [no args]
                            print this usage list
                            example: /kunglao-agent:help
@@ -63,6 +69,7 @@ kunglao-agent subcommands:
 Next steps:
   uninitialized workspace → /kunglao-agent:init
   initialized workspace   → /kunglao-agent:analysis
+  crashed / rebooted ws   → /kunglao-agent:resume
   unsure which command    → /kunglao-agent:help
   partial arguments       → the subcommand prints its own guided prompt
                            (see its SKILL.md "No arguments" section)
@@ -79,6 +86,8 @@ Next steps:
 - `init <workspace> [--type ...]` → read and follow `skills/init/SKILL.md`.
 - `analysis <workspace>` (alias `analyze`) → read and follow
   `skills/analysis/SKILL.md`; the convergence loop is the destination.
+- `resume <workspace>` → read and follow `skills/resume/SKILL.md`
+  (read-only crash/reboot recovery brief, #466).
 - `help` → read and follow `skills/help/SKILL.md` (usage list).
 - Natural-language RE request (e.g. "what does this binary do") → map to
   `analysis`: read `skills/analysis/SKILL.md` then
@@ -97,5 +106,6 @@ not `skills/kunglao-agent/`.
 - `/kunglao-agent` — print the subcommand menu, wait for a choice.
 - `/kunglao-agent init ~/cases/synth-dropper --type windows`
 - `/kunglao-agent analysis ~/cases/synth-dropper`
+- `/kunglao-agent resume ~/cases/synth-dropper`
 - `/kunglao-agent help`
 (feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table)

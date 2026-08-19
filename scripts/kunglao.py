@@ -16,6 +16,7 @@ Subcommands (Phase 3, first wave):
   verify    <- kunglao_verify.main (M3)
   record    <- kunglao_record.main (M4)
   health    <- convergence_health (M5)
+  resume    <- kunglao_resume.main (#466 crash/reboot brief, read-only)
 
 Usage:
     python kunglao.py decide <workspace> --json
@@ -105,6 +106,16 @@ def cmd_health(args) -> int:
     return r["exit_code"]
 
 
+def cmd_resume(args) -> int:
+    """#466: crash/reboot recovery brief — pure delegation to
+    kunglao_resume.main (READ-ONLY: decide() direct, never cc.main())."""
+    import kunglao_resume as kresume
+    argv = [str(args.workspace)]
+    if args.json:
+        argv.append("--json")
+    return kresume.main(argv)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(prog="kunglao.py", description="kunglao-agent unified entry")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -140,6 +151,12 @@ def main() -> int:
     p_health = sub.add_parser("health", help="convergence health (M5)")
     p_health.add_argument("workspace", nargs="?", default=".")
     p_health.set_defaults(func=cmd_health)
+
+    p_resume = sub.add_parser("resume",
+                              help="crash/reboot recovery brief (#466, read-only)")
+    p_resume.add_argument("workspace", nargs="?", default=".")
+    p_resume.add_argument("--json", action="store_true")
+    p_resume.set_defaults(func=cmd_resume)
 
     args = ap.parse_args()
     return args.func(args)

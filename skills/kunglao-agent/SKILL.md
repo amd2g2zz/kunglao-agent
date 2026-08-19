@@ -38,7 +38,7 @@ triggers:
   - claim-driven RE
   - byte-anchored fact base
 arguments: [request]
-argument-hint: init <workspace> | analysis <workspace> | help
+argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | help
 ---
 
 # kunglao-agent — RE orchestrator looper (contract)
@@ -79,7 +79,7 @@ Run the steps in order; any FAIL blocks the next step.
 
 ## Arguments
 
-Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand (`init` / `analysis` / `help` / legacy passthrough) or a natural-language need. The workspace is an explicit positional argument; when absent the subcommand runs its guided no-args prompt (never a silent default, never a guess).
+Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand (`init` / `analysis` / `resume` / `help` / legacy passthrough) or a natural-language need. The workspace is an explicit positional argument; when absent the subcommand runs its guided no-args prompt (never a silent default, never a guess).
 
 **No arguments → menu, WAIT.** An empty `$ARGUMENTS` prints the subcommand menu below and STOPS — never silently run the loop. Operators must pick a subcommand. (`help` also prints the menu.)
 
@@ -90,7 +90,7 @@ Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand 
    | `analysis <workspace>` | enter the convergence loop (dispatch/verify/update) — full flow in `skills/analysis/SKILL.md` |
    | `help` | print the subcommand usage list |
    | `verify [fact_id]` | run only the M3 verify chain (L1 mechanical + L2 redteam) |
-   | `resume` (alias `continue`) | continue an existing workspace idempotently (no re-scaffold) |
+   | `resume <workspace>` | crash/reboot recovery: read-only breakpoint brief (health, state summary, timeline, next step) + re-arm advice — full flow in `skills/resume/SKILL.md` |
    | `decide` `tick` `verify` `record` `health` | mechanical CLI passthrough — `scripts/kunglao.py` subcommands |
    | `monitor` `digest` `eval` | mechanical CLI passthrough — standalone CLIs (`scripts/kunglao-monitor.py` / `kunglao-digest.py` / `kunglao-eval.py`), not kunglao.py subcommands |
 
@@ -308,4 +308,4 @@ Read `references/failure-modes.md` (index) for all 18 F-rows and their enforceme
 - `/kunglao-agent analysis ~/cases/synth-dropper` — enter the convergence loop on an existing workspace.
 - `/kunglao-agent help` — print the subcommand usage list.
 - `/kunglao-agent what does this binary do` — natural-language request mapped to `analysis`.
-- `/kunglao-agent resume` — continue an existing workspace idempotently.
+- `/kunglao-agent resume ~/cases/synth-dropper` — crash/reboot recovery: print the read-only breakpoint brief of where the analysis stood (never writes; re-arm is advised, not performed).
