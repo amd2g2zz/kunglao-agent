@@ -63,10 +63,10 @@ PY="$(command -v python)"
 # keeps the hook POSIX-portable.
 devkit_root="$(tail -n1 "$0" | sed 's/^# devkit-installed: //')"
 
-# Gate 1 + 3 + 4 — quick checks. Fast (<10s on a warm cache).
-"$PY" "$devkit_root/quality_gates.py" 1 3 4 --quiet || {
-  echo "devkit/pre-commit BLOCKED: Gate 1 / 3 / 4 failed."
-  echo "  Run: $PY $devkit_root/quality_gates.py  (full verbose)"
+# Gate 1 + 3 + 4 + 5 — quick checks. Fast (<10s on a warm cache).
+"$PY" "$devkit_root/quality_gates.py" 1 3 4 5 --quiet || {
+  echo "devkit/pre-commit BLOCKED: quality gate(s) failed (see output above)."
+  echo "  Run: $PY $devkit_root/quality_gates.py 1 3 4 5  (full verbose)"
   exit 1
 }
 

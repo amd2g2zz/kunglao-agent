@@ -123,6 +123,33 @@ def _gate4_test_effectiveness(verbose: bool = True) -> bool:
     return True
 
 
+def _gate5_subagent_review(verbose: bool = True) -> bool:
+    """Subagent Review (Maker-Checker) — Gate 5 (issue #462).
+
+    Specialist agents (ghidra-light / floss-filter / pefile-signature /
+    go-symbols / verdict-scorer) currently lack the 3-element subagent
+    contract (plan-to-execute / state-sync / tool-discovery + no-self-
+    invention) that kunglao-worker has. Gate 5 enforces it mechanically
+    for any commit touching domain paths: a .subagent-review/*.json
+    file with all required fields must exist, and verified_by must
+    not be the orchestrator's own handle (anti-self-stamp).
+
+    N/A when staged changes don't touch domain paths (e.g. openspec
+    scaffolding or pyproject bumps). Trivially passes.
+    """
+    try:
+        sys.path.insert(0, str(REPO_ROOT / "devkit"))
+        from subagent_review import check as _subagent_check
+    except Exception as exc:
+        print(f"  [fail] subagent_review import error: {exc!r}")
+        return False
+    rc = _subagent_check()
+    # subagent_review.check() returns 0 (pass) or 2 (HARD_PAUSE).
+    # The runner treats any truthy ok as PASS — bool(rc==0) is required
+    # so rc=2 doesn't accidentally register as PASS.
+    return bool(rc == 0)
+
+
 def _observation_pass_rate(verbose: bool = True) -> None:
     """Print pass-rate metric from .pytest-result.xml if present.
 
@@ -157,6 +184,7 @@ GATES = {
     2: ("Regression Safety",      _gate2_regression_safety),
     3: ("Engineering Quality",    _gate3_engineering_quality),
     4: ("Test Effectiveness",     _gate4_test_effectiveness),
+    5: ("Subagent Review",        _gate5_subagent_review),
 }
 
 

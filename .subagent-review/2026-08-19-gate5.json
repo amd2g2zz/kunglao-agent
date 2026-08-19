@@ -1,0 +1,11 @@
+{
+  "agent": "kunglao-agent (orchestrator) + verifier-subagent",
+  "plan": "Gate 5 (Subagent Review / Maker-Checker) for issue #462 — the 3-element subagent contract (plan-to-execute / state-sync / tool-discovery + no-self-invention) is enforced for specialist agents (ghidra-light / floss-filter / pefile-signature / go-symbols / verdict-scorer). Adds devkit/subagent_review.py, devkit/docs/subagent-review.md, tests/test_subagent_review.py, plus Gate 5 wiring in devkit/quality_gates.py and devkit/githooks/pre-commit.",
+  "status_sync": "tests/test_subagent_review.py::TestEndToEnd - 24 tests pass; quality_gates.py Gate 5 wired; hook template updated to run 1 3 4 5.",
+  "tools_used": [
+    "scripts/check_global_rule_subset.py",
+    "scripts/references_recall.py",
+    "tools/_INDEX.yaml#subagent-review"
+  ],
+  "verified_by": "verifier-subagent-2026-08-19-gate5"
+}
