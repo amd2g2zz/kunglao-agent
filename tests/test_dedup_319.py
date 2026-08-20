@@ -128,7 +128,12 @@ def test_docs_single_design_tree():
 
 def test_docs_readme_layout_matches_actual_dirs():
     readme = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
-    actual = {p.name for p in (ROOT / "docs").iterdir() if p.is_dir()}
+    # superpowers/ holds agent-planning workspaces (dev-only, gitignored);
+    # present only on dev machines, invisible to CI — excluded from the table.
+    actual = {
+        p.name for p in (ROOT / "docs").iterdir()
+        if p.is_dir() and p.name != "superpowers"
+    }
     listed = set(re.findall(r"\| `([\w-]+)/` \|", readme))
     assert listed == actual, (
         f"docs/README.md layout table drift: listed={sorted(listed)} "

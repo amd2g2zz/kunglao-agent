@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Anchors #537 contract-text fixes so they cannot regress: F-C3 (the
 SKILL.md hook wire-up row), F-C4 (the bundled-rules channel + its
 byte-identity with the repo-top source), and the completion_gate.py
@@ -37,8 +38,9 @@ def test_skill_md_112_row_is_affirmative_auto_install():
     assert "not auto-installed" not in row_112.lower(), (
         f"F-C3 regression: the Hook wire-up row still says NOT auto-installed. Got: {row_112!r}"
     )
-    assert "#461" in row_112, (
-        f"F-C3: the Hook wire-up row must credit #461 for self-install. Got: {row_112!r}"
+    assert "auto-installed" in row_112.lower() and "repair" in row_112.lower(), (
+        f"F-C3: the Hook wire-up row must state auto-install and repair-only manual chain. "
+        f"Got: {row_112!r}"
     )
 
 

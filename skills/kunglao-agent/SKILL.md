@@ -109,7 +109,7 @@ Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand 
 | Pre-installed agents | kunglao-worker, ghidra-light, go-symbols, pefile-signature, floss-filter, verdict-scorer (in `<AGENTS_DIR>`) |
 | Default CLAUDE.md | `<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/CLAUDE.md` |
 | Memory dir | `<MEMORY_DIR>` |
-| Hook wire-up | Auto-installed by `#461` init (HARD acceptance); manual `hook_activation.py --wire-up` only for repair |
+| Hook wire-up | Auto-installed by init (HARD acceptance, self-check enforced); manual `hook_activation.py --wire-up` only for repair |
 | Smoke test | `PYTHONPATH="scripts;hooks;." python tests/test_v1_8_enforcement_gates.py` (28/28 must pass) |
 | Run-all-gates | see `references/_INDEX.md` "failure-modes" domain |
 | Hard prohibition #5 | x64dbg / Frida host-channel FORBIDDEN |
