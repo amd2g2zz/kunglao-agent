@@ -144,7 +144,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `chunker.py` | length-measured batch chunking (#309) | tests |
 | `cost_estimate.py` | pre-dispatch cost estimator (#309) | lib(1), tests |
 | `event_taxonomy.py` | 25-class event taxonomy (#309) | tests |
-| `function_kg.py` | minimal function-level knowledge graph (#309) | tests |
 | `recov_metrics.py` | symbol/type recovery quality metrics (#309) | lib(1), tests |
 | `tool_error_policy.py` | same-tool consecutive-error hysteresis (#309) | tests |
 

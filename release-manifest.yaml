@@ -40,7 +40,6 @@ assets:
     - templates/state/blocker.md
     - templates/state/claim_deps.yaml
     - templates/state/claim-register.yaml
-    - templates/state/failure-registry.yaml
     - templates/state/task-oracle.yaml
     - templates/state/task_spec.yaml
     # #356 W2: single-source workspace CLAUDE.md template (OS delta injected

@@ -206,7 +206,7 @@ Run `python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd tur
 
 **Fallback (no formal workflow)**: if `worker_budget.py` / `claim_deps.yaml` are absent, the contract reduces to the 3 jobs + hard prohibitions + §1a-§1d. With no `task_spec.yaml`, ask the user ONCE for primary questions and record them — do not invent. Dispatch `kunglao-worker` (not `general-purpose`); verify via the independent verifier subagent before PROVEN.
 
-**External memory**: `task_spec.yaml` · `claim-register.yaml` · `claim_deps.yaml` · `analysis_state.txt` · `global_plan.txt` (+vN snapshots) · `progress.txt` (append-only) · `facts/_INDEX.md` · `blockers/`. Every round is a cold start from these files; no reliance on prior-round context.
+**External memory**: `task_spec.yaml` · `claim-register.yaml` · `claim_deps.yaml` · `analysis_state.txt` · `global_plan.txt` (+vN snapshots) · `progress.txt` (append-only human log — narrative only, NOT machine-ingested as state; facts go to `facts/`) · `facts/_INDEX.md` · `blockers/`. Every round is a cold start from these files; no reliance on prior-round context.
 
 ## Phase 3 Verify
 

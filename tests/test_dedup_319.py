@@ -34,7 +34,8 @@ STATE_TEMPLATE_NAMES = (
     "blocker.md",
     "claim-register.yaml",
     "claim_deps.yaml",
-    "failure-registry.yaml",
+    # failure-registry.yaml retired in #530: template shipped with zero
+    # writers (design-spec §3.6 sec_e never implemented; init never seeded it).
     "task-oracle.yaml",
     "task_spec.yaml",
 )

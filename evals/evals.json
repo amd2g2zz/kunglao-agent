@@ -28,15 +28,16 @@
     },
     {
       "id": 3,
-      "prompt": "Given a converged workspace where all claims are PROVEN, run the verdict scorer with a task_spec that specifies pq_coverage=true, maliciousness=true, and attribution=false. The B4-2 contract requires maliciousness and attribution to be decoupled: maliciousness produces a 6-dimension score leading to a classification (clean/benign/suspicious/malicious), and attribution uses Admiralty+ACH+Diamond methodology. Since attribution is disabled in the task_spec, the verdict must contain maliciousness scoring and PQ-coverage summary but must NOT contain an attribution section.",
-      "expected_output": "The verdict-scorer produces a verdict.json containing a 'maliciousness' object with 6-dimension scores and a classification field, plus a 'pq_coverage' summary. The verdict must NOT contain an 'attribution' section because the task_spec explicitly disabled it. All evidence files consumed are listed in the evidence_manifest.",
+      "prompt": "Given a converged workspace where all claims are PROVEN, run the verdict-scorer agent with a task_spec whose primary_questions are all answered by PROVEN facts. The verdict v11 contract (analysis_verdict schema, schema_version 2026-08-12-v11) scores PQ-coverage and fact-citation validity ONLY: every primary_question gets an answered/cited_fact/confidence_band/gap entry, contradictions come from the fact_contradiction_gate output, and degraded[] records self-honest evidence gaps. Out-of-scope capabilities (maliciousness scoring, attribution, threat-actor classification) are banned from the verdict by contract and must not appear.",
+      "expected_output": "The verdict-scorer writes evidence/verdict.json with the analysis_verdict v11 schema: schema_version \"2026-08-12-v11\", sample_sha256, analysis_verdict{complete, correct, primary_questions[], unresolved, contradictions, degraded}, and self_audit{evidence_strength, ignored_evidence, open_questions}. Every primary_question is answered with a cited PROVEN fact and a confidence_band; complete=true only when all questions meet C0a/C0b. The verdict does NOT contain an out-of-scope capability section (no maliciousness object, no attribution section) because those are banned by the v11 contract.",
       "files": [],
       "expectations": [
-        "The verdict output contains a 'maliciousness' object with per-dimension scores",
-        "The verdict output contains a 'pq_coverage' summary section",
-        "The verdict output does NOT contain an 'attribution' section (disabled by task_spec)",
-        "The classification field in maliciousness is one of: clean, benign, suspicious, malicious",
-        "The verdict's evidence_manifest lists all evidence files used as input"
+        "The verdict output contains an analysis_verdict object with schema_version 2026-08-12-v11",
+        "PQ-coverage is scored per primary_question: answered / cited_fact / confidence_band / gap; gap is null when answered",
+        "contradictions[] is populated only from fact_contradiction_gate output, never re-derived ad hoc",
+        "self_audit.evidence_strength is one of: strong, mixed, weak; degraded[] records honest evidence gaps",
+        "The verdict does NOT contain a 'maliciousness' or 'attribution' section (out-of-scope capabilities banned by v11)",
+        "complete=true only when every primary_question has an answering fact meeting C0a/C0b requirements"
       ]
     }
   ]

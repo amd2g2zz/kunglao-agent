@@ -19,7 +19,7 @@
 1. **`claim-register.yaml`** — all claims (C-NN + boundary_type + source + promotion_attempts + evidence_tier_attempted + status + competitor_group)
 2. **`analysis_state.txt`** — structured segments: current_task / VERIFIED-FACTS LEDGER / IOC REGISTER / GATE STATUS / active_workers / in_flight intents / deadline_ts
 3. **`global_plan.txt`** + **`claim_deps.yaml`** — current plan DAG + dependency/competitor graph
-4. **`progress.txt`** — structured sections: VERIFIED-FACTS LEDGER / decision rationale (append-only)
+4. **`progress.txt`** — human log (append-only): narrative timeline / decision rationale for the human reader; the VERIFIED-FACTS LEDGER lives in `analysis_state.txt`, facts in `facts/` — machines never ingest `progress.txt` as state
 5. **`<malware-veri-notes>/scripts/lint-notes.py`** output — error check (C5). Status counts come from _INDEX.md, NOT lint.
 6. **`blockers/`** — if non-empty, read each blocker-*.md
 7. **`facts/_INDEX.md`** — status count source. Format: `F<id> | <status> | <claim_id> | <conclusion>`. O(1) all-passes check via `scripts/update_index.py count_by_status`.
