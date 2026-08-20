@@ -54,6 +54,24 @@ from pathlib import Path
 
 # fact statuses counting as "stamped" (terminal subset of references/schema.md fact.status)
 FACT_VERIFIED_STATUSES = ("PROVEN", "VERIFIED")
+# W-2 (#532): a fact does not escape the R1 verification requirement by
+# inventing a status word. The 2026-08-20 external dump used
+# VERIFIED-BY-EXTRACTION — a non-standard status carrying verified/proven
+# SEMANTICS — and the FACT_VERIFIED_STATUSES membership test let it through
+# untouched. Any status CLAIMING verification (standard word or invented
+# one) is adjudicated as a STAMP.
+_VERIFIED_SEMANTIC_RE = re.compile(r"(?:PROVEN|VERIFIED|CONFIRMED)", re.IGNORECASE)
+
+
+def is_verified_semantics(status: str) -> bool:
+    """True when `status` CLAIMS verification — standard word or invented one.
+
+    W-2 (#532): the membership test on FACT_VERIFIED_STATUSES is necessary
+    but not sufficient; an invented status word carrying the semantics of a
+    stamp must be held to the same R1 requirement."""
+    return bool(_VERIFIED_SEMANTIC_RE.search(str(status or "")))
+
+
 # fields carrying a "produced anchor" (R2 applicability condition)
 EXPECTED_FIELDS = ("expected", "expected_sha256", "output", "output_sha256")
 # positive-verdict tokens in verification records (content-aware — "F-1: FAILED" is not independent verification)
@@ -279,11 +297,23 @@ def _check_note(ws: Path, p: Path) -> list[dict]:
 
 
 def _check_fact(ws: Path, p: Path) -> list[dict]:
-    """A fact with status ∈ {PROVEN, VERIFIED} must carry independent-verifier evidence (R1+R2)."""
+    """A fact with verification-claiming status must carry independent-verifier evidence (R1+R2).
+
+    W-2 (#532): a NON-STANDARD status carrying verified/proven semantics
+    (VERIFIED-BY-EXTRACTION, proven-by-hand, ...) is adjudicated as a STAMP
+    too — fail-closed, same R1 requirement as PROVEN/VERIFIED."""
     text = p.read_text(encoding="utf-8", errors="replace")
     fm = _parse_frontmatter(text)
-    status = str(fm.get("status", "")).strip().upper()
-    if status not in FACT_VERIFIED_STATUSES:
+    status = str(fm.get("status", "")).strip()
+    standard = status.upper() in FACT_VERIFIED_STATUSES
+    semantic = is_verified_semantics(status)
+    if not standard and semantic:
+        return [{"rule": "W2", "file": f"facts/{p.name}", "detail": (
+            f"non-standard status {status!r} carries verified/proven semantics "
+            f"— treated as a STAMP and held to the same R1 requirement; use a "
+            f"status from {list(FACT_VERIFIED_STATUSES)} or downgrade to "
+            f"STAMP (state that belongs in claim-register, not frontmatter)")}]
+    if not semantic:
         return []
     fid = str(fm.get("id", "")).strip() or p.stem
     claim_id = str(fm.get("claim_id", "")).strip()

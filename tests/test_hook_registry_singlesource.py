@@ -45,11 +45,12 @@ def test_registry_exists_in_wire_up_settings() -> None:
     """The writer exports WIRE_UP_HOOK_FILES — the single source."""
     files = wire_up_settings.WIRE_UP_HOOK_FILES
     assert isinstance(files, frozenset), "registry must be a frozenset (immutable)"
-    # the 8 distinct files the registrations write today (issue #372)
+    # the 9 distinct files the registrations write today (#372 baseline 8
+    # + #532 write_guard on the Edit|Write|MultiEdit matcher)
     assert files == frozenset({
         "env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
         "recall_inject.py", "heartbeat_touch.py", "worker_pulse.py",
-        "state_anchor.py", "completion_gate.py",
+        "state_anchor.py", "completion_gate.py", "write_guard.py",
     }), f"registry drifted from the actual registrations: {sorted(files)}"
 
 
@@ -157,7 +158,7 @@ def test_check_hooks_scans_stop_section(tmp_path: Path) -> None:
 KONG_CHAIN = ["heartbeat_touch.py", "worker_budget.py",
               "dispatch_gate.py", "worker_pulse.py"]
 KONG_SKIP = {"env_check_gate.py", "recall_inject.py",
-             "state_anchor.py", "completion_gate.py"}
+             "state_anchor.py", "completion_gate.py", "write_guard.py"}
 KICKER_FILES = {"worker_budget.py", "dispatch_gate.py",
                 "heartbeat_touch.py", "worker_pulse.py"}
 

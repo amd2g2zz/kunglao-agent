@@ -36,6 +36,7 @@ assets:
     - hooks/state_anchor.py
     - hooks/worker_budget.py
     - hooks/worker_pulse.py
+    - hooks/write_guard.py     # #532 four-carrier Write/Edit PreToolUse gate
   templates:
     - templates/state/blocker.md
     - templates/state/claim_deps.yaml

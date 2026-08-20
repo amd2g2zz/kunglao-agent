@@ -51,6 +51,7 @@ WIRE_UP_HOOK_FILES = frozenset({
     "worker_pulse.py",         # PostToolUse/Agent — completion pulse
     "state_anchor.py",         # PostToolUse/Agent — per-turn state re-anchor (#44)
     "completion_gate.py",      # Stop — code-owned completion gate (#55)
+    "write_guard.py",          # PreToolUse/Edit|Write — contract-carrier write gate (#532)
 })
 
 

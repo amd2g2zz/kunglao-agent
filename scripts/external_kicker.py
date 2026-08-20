@@ -115,6 +115,7 @@ _KICKER_SKIP_FILES = frozenset({
     "recall_inject.py",     # recall injector — full --wire-up restores it
     "state_anchor.py",      # state re-anchor — full --wire-up restores it
     "completion_gate.py",   # Stop completion gate — full --wire-up restores it
+    "write_guard.py",       # carrier write gate (#532) — full --wire-up restores it
 })
 _KICKER_ENTRY_FILES = frozenset(f for _, _, f in KUNGLAO_HOOK_ENTRIES)
 

@@ -581,6 +581,12 @@ def register_hooks(workspace: Path | None = None,
     # last_tick_ts, decoupling heartbeat liveness from orchestrator cognition.
     pre, added = _ensure(pre, "Bash", "heartbeat_touch.py")
     count += added
+    # write_guard (#532): the four-carrier write gate on the Edit/Write face.
+    # NOT activation-gated by design (its docstring records why: the failure
+    # mode it exists to stop is "nobody dispatched, so nothing was armed") —
+    # arming is target-based (path is a contract carrier), not TTL-based.
+    pre, added = _ensure(pre, "Edit|Write|MultiEdit", "write_guard.py")
+    count += added
     post, added = _ensure(post, "Agent", "worker_budget.py")
     count += added
     post, added = _ensure(post, "Agent", "worker_pulse.py")

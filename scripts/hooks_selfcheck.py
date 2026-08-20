@@ -51,6 +51,7 @@ _KONG_SKIP_FILES = frozenset({
     "recall_inject.py",     # recall injector — env_check scans it
     "state_anchor.py",      # state re-anchor — env_check scans it
     "completion_gate.py",   # Stop completion gate — env_check scans it
+    "write_guard.py",       # carrier write gate — env_check scans it (#532)
 })
 
 # #381: validate the subset tables against the registry (raises on drift) —

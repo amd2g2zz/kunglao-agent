@@ -147,6 +147,7 @@ ALL_EVENT_TYPES = [
 #   top1_reject / capability_reject        dispatch_gate #496 REJECT faces
 #   stale_plan_on_new_evidence             plan_drift_detector class-7 WARN
 #   analysis_recorded / analysis_blocked    failure_analysis_gate #495 face
+#   write_blocked        write_guard.py / worker_budget  #532 carrier write refusal
 EMIT_ACTIONS = [
     "analysis_blocked",
     "analysis_recorded",
@@ -166,6 +167,7 @@ EMIT_ACTIONS = [
     "stale_plan_on_new_evidence",
     "top1_reject",
     "verify",
+    "write_blocked",
 ]
 
 LEDGER_EVENT_MAP = {

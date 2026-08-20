@@ -57,8 +57,10 @@ def _write_settings(target_root: Path) -> Path:
     deployment target); target_root=isolated_home -> user-global (used by the
     negative regression test); target_root=parent (ws.parent) -> the
     workspace-parent target the external_kicker reads/writes (#410). #372:
-    derives from the registry (all 8 files, recall_inject under Pre/Agent,
-    completion_gate under Stop)."""
+    derives from the registry (all files, recall_inject under Pre/Agent,
+    completion_gate under Stop). #532: write_guard rides the
+    Edit|Write|MultiEdit matcher — a Pre/Agent-only fixture can never satisfy
+    the full-registry scan."""
     settings = target_root / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True)
     pre_agent = ["worker_budget.py", "dispatch_gate.py", "env_check_gate.py",
@@ -71,6 +73,8 @@ def _write_settings(target_root: Path) -> Path:
         for h in ("worker_budget.py", "worker_pulse.py", "state_anchor.py")]
     pre.append({"matcher": "Bash", "hooks": [
         {"type": "command", "command": "python C:/skills/hooks/heartbeat_touch.py"}]})
+    pre.append({"matcher": "Edit|Write|MultiEdit", "hooks": [
+        {"type": "command", "command": "python C:/skills/hooks/write_guard.py"}]})
     stop = [{"hooks": [
         {"type": "command", "command": "python C:/skills/hooks/completion_gate.py"}]}]
     settings.write_text(json.dumps({"hooks": {"PreToolUse": pre,

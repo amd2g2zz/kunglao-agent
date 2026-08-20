@@ -1734,7 +1734,65 @@ def post_check(payload: dict, paths: dict) -> int:
             # Log only — the write already happened; the orchestrator's
             # convergence loop treats terminal-without-redteam as STAMP.
             print(f'[kunglao-agent] {reason}', file=sys.stderr)
+        # F-B3 (#532): the PROVEN backstop stops being dead code. Unlike
+        # check_claim_status_change (log-only, orchestrator-exempt), this
+        # gate applies to ALL actors: a newly-PROVEN claim needs BLIND
+        # sign-off, period. It is the LAST line of defense behind
+        # write_guard — an agent that edits claim-register.yaml through a
+        # path the PreToolUse matcher never saw still lands here on the
+        # PostToolUse face. The before-snapshot comes from the payload's
+        # register_before (populated by the write-guard shadow pipeline /
+        # the orchestrator's own pre-dispatch record) or, absent that, the
+        # LAST recorded statuses — before=None is the gate's no-op branch,
+        # not its happy path, so a real before is always preferred.
+        before = payload.get('register_before')
+        if before is None:
+            before = _register_before_from_state(paths)
+        facts_dir = Path(paths.get('workspace') or reg.parent) / 'facts'
+        proven_ok, proven_reason = compare_register_change_proven_gate(
+            reg, before, agent_name, facts_dir)
+        if not proven_ok:
+            print(proven_reason, file=sys.stderr)
+            _emit_gate_event(paths, 'write_blocked',
+                             detail=proven_reason, exit=2)
+            return 2
     return 0
+
+
+def _register_before_from_state(paths: dict) -> dict[str, str] | None:
+    """F-B3 (#532) before-snapshot fallback: the LAST record of each claim's
+    status that is not the register's CURRENT content — i.e. what a prior
+    pre_check/post_check snapshot stashed in runs/.register-snapshot.json.
+
+    Returns None when no prior snapshot exists (the gate's no-before branch:
+    the promotion comparison cannot run without a baseline; write_guard's
+    shadow pipeline supplies the real one on the write face)."""
+    ws = paths.get('workspace')
+    if not ws:
+        return None
+    snap = Path(ws) / 'runs' / '.register-snapshot.json'
+    if not snap.exists():
+        return None
+    try:
+        return json.loads(snap.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _emit_gate_event(paths: dict, action: str, *, detail: str, exit: int) -> None:
+    """#532 item 5: gate refusals in this hook are observable too.
+
+    Never raises — logging must never break enforcement (kunglao_log.emit
+    itself degrades to a stderr warning on write failure)."""
+    ws = paths.get('workspace')
+    if not ws:
+        return
+    try:
+        import kunglao_log
+        kunglao_log.emit(Path(ws), actor='hook', action=action,
+                         exit=exit, detail=str(detail)[:2000])
+    except Exception:  # noqa: BLE001 - logging never breaks enforcement
+        pass
 
 
 def _resolve_paths(payload: dict) -> dict:

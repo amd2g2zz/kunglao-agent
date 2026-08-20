@@ -609,3 +609,8 @@ ext:
     source: "scripts/write_gate.py"
     usage: "python scripts/write_gate.py"
     description: "write_gate — write-side gate auditor (issue #236)."
+  - name: "write_guard"
+    capability: "unknown"
+    source: "hooks/write_guard.py"
+    usage: "hook hooks/write_guard.py (settings.json wiring; JSON on stdin; exit code = verdict)"
+    description: "write_guard.py — PreToolUse Edit/Write gate on the four contract carriers (#532)."
