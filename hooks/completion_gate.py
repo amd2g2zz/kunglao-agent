@@ -5,22 +5,29 @@
 Thin wrapper around scripts/completion_gate.py::judge. Reads the Claude Code
 Stop payload, resolves the workspace, strict-activates (mirrors
 hooks/state_anchor.py #44), finds task-oracle.yaml, calls judge, and emits a
-Stop-hook `{"decision": "block", "reason": "..."}` when judge returns non-zero.
+Stop-hook {"decision": "block", "reason": "..."} when judge returns non-zero.
 
-Activation gating + FAIL_OPEN (design.md D8/D9):
-  - not activated (no .hook_state.json / completion_gate not active / expired)
-    → pass-through (exit 0, empty stdout)
-  - activated + no task-oracle.yaml in the workspace
-    → pass-through (D9: the gate is opt-in via oracle presence; the orchestrator
-      registers the oracle at Phase 0 for any non-trivial task)
-  - activated + oracle present + empty task_text → block with exit 3 (D6:
-      malformed oracle is the genuine self-anchor fingerprint)
-  - activated + oracle present + unsatisfied → block with exit 1/2
-  - stop_hook_active=true in the payload → pass-through (anti-loop: after one
-      block the agent gets a second stop attempt to fix the items / register a
-      proper oracle; blocking forever would deadlock the session)
+Activation gating: current fail-open / fail-closed boundaries (post
+#147/#199/#200):
+  - no workspace markers (neither claim-register.yaml nor .hook_state.json
+    under cwd or cwd/malware-analysis-workspace) → pass-through (D9:
+    nothing kunglao-related is running)
+  - workspace resolved but NOT activated (no .hook_state.json, gate not
+    strict-active, or expired) → pass-through (the gate is opt-in via
+    activation)
+  - activated + NO task-oracle.yaml → BLOCK, exit 3 (#200: an activated
+    workspace must be oracle-anchored at Phase 0 — a missing oracle means
+    the run was never anchored, and refusing completion is fail-closed,
+    NOT the pre-#200 oracle-presence pass-through)
+  - activated + oracle present + empty task_text → block, exit 3 (D6:
+    malformed oracle is the genuine self-anchor fingerprint)
+  - activated + oracle present + unsatisfied → block, exit 1/2
+  - stop_hook_active=true (second stop) → BLOCK unless task-oracle.yaml
+    records adjudication.stop_hook_active = {second_stop: true,
+    last_decision: PASS} (#147/#199: an unsanctioned second stop must not
+    silently pass; only that sanctioned-PASS record passes)
   - any exception → pass-through (FAIL_OPEN: a completion-gate failure must
-      never deadlock the session)
+    never deadlock the session — unreadable oracle / judge errors fail open)
 
 Emits Claude Code Stop-hook JSON to block; empty stdout + exit 0 to pass. The
 pure judge() function does NOT fail open (it returns exit 3 on bad input) —

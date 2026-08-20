@@ -112,6 +112,9 @@ assets:
     # revision. The main skill (skills/kunglao-agent/SKILL.md) + the per-command
     # skills + references/ digests land in the receipt.
     - skills/kunglao-agent/SKILL.md
+    # #537 F-C4: global-rule distillation bundled with the skill package
+    # (external installs read this copy; repo-top rules/ is the source).
+    - skills/kunglao-agent/rules/kunglao-convergence-loop.md
     - skills/init/SKILL.md
     - skills/analysis/SKILL.md
     - skills/help/SKILL.md

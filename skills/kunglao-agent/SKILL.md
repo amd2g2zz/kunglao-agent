@@ -49,7 +49,7 @@ argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | he
 
 **Reference library** — progressive disclosure: read `references/_INDEX.md` (domain index + scenario-to-domain map), then per-domain `_index-<domain>.md`; load by scenario on demand, never wholesale. This file is the operative contract — read it, then act. Programmatic recall: `python <SKILL_DIR>/scripts/references_recall.py <scenario|category|filename>` returns matching rows (path + purpose + when-to-read), never file contents.
 
-**Global rules this skill implements (auto-loaded every session):** `maker-checker.md` (maker/checker separation — workers make, the orchestrator checks, no self-stamping) and `numeric-fidelity.md` (counting-basis fidelity — C-020: 811 slots vs 774 records, 69+1 helper/kfunc), both in `~/.claude/rules/common/`; they apply even when this skill is not loaded. This skill owns the orchestrator mechanics (worker/verifier dispatch, gates).
+**Rules bundled with skill:** `<SKILL_DIR>/rules/kunglao-convergence-loop.md` (distilled always-on convergence rules, incl. maker-checker §5) ships WITH the skill — external installs read the bundled copy. Repo-top `rules/` is the source; its deployment into `~/.claude/rules/common/` (together with `maker-checker.md`, `numeric-fidelity.md`) is a dev-machine-internal setup convenience, NOT a runtime dependency of this skill — where that global-rules channel is deployed it still applies in sessions that never load this skill.
 
 ## Goal
 
@@ -109,7 +109,7 @@ Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand 
 | Pre-installed agents | kunglao-worker, ghidra-light, go-symbols, pefile-signature, floss-filter, verdict-scorer (in `<AGENTS_DIR>`) |
 | Default CLAUDE.md | `<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/CLAUDE.md` |
 | Memory dir | `<MEMORY_DIR>` |
-| Hook wire-up | NOT auto-installed — wire up manually only if the user requests |
+| Hook wire-up | Auto-installed by `#461` init (HARD acceptance); manual `hook_activation.py --wire-up` only for repair |
 | Smoke test | `PYTHONPATH="scripts;hooks;." python tests/test_v1_8_enforcement_gates.py` (28/28 must pass) |
 | Run-all-gates | see `references/_INDEX.md` "failure-modes" domain |
 | Hard prohibition #5 | x64dbg / Frida host-channel FORBIDDEN |
