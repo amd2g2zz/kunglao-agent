@@ -78,6 +78,10 @@ assets:
     - tools/ghidra/GhidraScanPointer.java
     - tools/ghidra/run_ghidra_postscript.py
     - tools/_lib/lib_disasm.py
+    # #538: shared facts/_INDEX schema+parser (update_index + digest_build)
+    - tools/_lib/index_schema.py
+    # #538: workspace carrier manifest writer (resume #466 diff source)
+    - tools/_lib/workspace_manifest.py
     - tools/auxiliary/measure_blind_coverage.py
     - tools/auxiliary/measure_cold_start.py
     - tools/static/binary-sweep.py

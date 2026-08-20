@@ -180,12 +180,18 @@ def _partial_facts(workspace: Path):
 
 
 def _active_blockers(workspace: Path):
-    """Return active blocker ids from blockers/*.md (excluding INVALIDATED)."""
+    """Return active blocker ids from blockers/*.md (excluding INVALIDATED).
+
+    README.md is the #538 carrier stub, never a blocker record — skip it
+    explicitly (the old code only skipped it by accident: the stub text
+    happens to contain the word "INVALIDATED")."""
     bdir = workspace / "blockers"
     if not bdir.exists():
         return []
     out = []
     for p in bdir.glob("*.md"):
+        if p.name == "README.md":
+            continue
         try:
             text = p.read_text(encoding="utf-8", errors="replace")
         except OSError:

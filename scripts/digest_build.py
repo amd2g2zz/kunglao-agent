@@ -22,6 +22,19 @@ from pathlib import Path
 
 import yaml
 
+# #538 W-5: the _INDEX row schema and its parser live in THE single module
+# (tools/_lib/index_schema.py) shared with scripts/update_index.py — the old
+# inline 5-column split here was the second, divergent contract (and parsed
+# free text as status in live workspaces).
+_LIB_DIR = Path(__file__).resolve().parent.parent / "tools" / "_lib"
+if str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))
+from index_schema import (  # noqa: E402
+    IndexSchemaError,
+    parse_index_text,
+)
+import index_schema as _INDEX_SCHEMA  # noqa: E402  (identity anchor for tests)
+
 SCHEMA_VERSION = "digest-v1"
 DIGEST_PATH = Path("runs") / "digest.md"
 
@@ -40,21 +53,29 @@ def _read_text(path: Path) -> str:
 
 
 def _facts_index(ws: Path) -> list[dict]:
-    """Parse facts/_INDEX.md 'F-NN | status | claim | conclusion | unit'. Fixture fallback <ws>/_INDEX.md."""
+    """Parse facts/_INDEX.md via the shared single-schema parser (#538 W-5).
+
+    Row: F<id> | <status> | <claim_id> | <one-line conclusion>[ | unit=...].
+    The optional 5th `unit=` field is digest-specific display metadata; it is
+    derived here (split off the conclusion), NOT part of the shared schema.
+    A malformed status raises IndexSchemaError — never silently re-typed.
+    Fixture fallback <ws>/_INDEX.md kept (pre-contract workspaces)."""
     index = ws / "facts" / "_INDEX.md"
     if not index.exists():
         index = ws / "_INDEX.md"
     if not index.exists():
         return []
     out = []
-    for line in _read_text(index).splitlines():
-        parts = [p.strip() for p in line.split("|")]
-        if len(parts) < 4:
-            continue
-        fid = parts[0]
-        unit = parts[4] if len(parts) > 4 else "n/a"
-        out.append({"id": fid, "status": parts[1], "claim": parts[2],
-                    "conclusion": parts[3], "unit": unit})
+    for row in parse_index_text(_read_text(index)):
+        conclusion = row["conclusion"]
+        unit = "n/a"
+        # unit= rides as a 5th pipe column in legacy rows; recover it from
+        # the conclusion tail without re-splitting the shared row.
+        if " | unit=" in conclusion:
+            conclusion, _, unit = conclusion.partition(" | unit=")
+        out.append({"id": row["fact_id"], "status": row["status"],
+                    "claim": row["claim_id"], "conclusion": conclusion,
+                    "unit": unit})
     return out
 
 

@@ -165,6 +165,21 @@ import yaml  # noqa: E402  # #455: task_spec.yaml -> CLAUDE.md constraint sectio
 # through env_manifest, never re-implemented here).
 import env_manifest  # noqa: E402
 
+# #538 item 2: workspace carrier manifest — the disk-side snapshot resume
+# (#466) diffs against. tools/_lib is a pythonpath root under pytest but
+# NOT for standalone `python kunglao-init.py`, so load by file location
+# (same pattern the tools/* CLIs use for lib_disasm).
+_LIB_DIR = _SCRIPT_DIR.parent / "tools" / "_lib"
+if str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))
+import workspace_manifest  # noqa: E402
+
+
+def write_workspace_manifest(ws: Path) -> Path:
+    """#538: snapshot the carrier set (thin seam over tools/_lib)."""
+    return workspace_manifest.write_manifest(ws)
+
+
 MARKER = "[initialized]"
 SEED_MIN = 3
 HOOK_FILES = ("worker_budget.py",)  # DESIGN §7 0.3: PreToolUse + PostToolUse → worker_budget
@@ -221,7 +236,64 @@ INTAKE_GUIDANCE = (
     "{decision_id: value}, and re-run with --resolve <answers.json>."
 )
 
-SCAFFOLD_DIRS = ("facts", "blockers", "runs")
+# #538 eager scaffold: every docs/workspace-manifest.md directory row is
+# materialized at init (no lazy ambiguity — "absent" must never mean "not
+# yet decided"). runs/logs/ included per C-3 (the event dir was lazy).
+# hypotheses/ ships as a stub dir today; #528 owns the real writer.
+SCAFFOLD_DIRS = (
+    "facts",
+    "notes",
+    "analyses",
+    "evidence",
+    "blockers",
+    "runs",
+    "runs/logs",
+    "hypotheses",
+    "scratch",
+)
+# #538 item 1: self-describing stubs for the agent-facing carriers ("本文件由
+# init 创建; X 落于此当…"). Workers landing cold read these to know what each
+# dir is for. Non-empty files are never clobbered (scaffold idempotency).
+CARRIER_READMES = {
+    "notes": (
+        "# notes/ — 结果层 (results layer)\n\n"
+        "本文件由 kunglao-init 创建。notes/ 落分析结果层 note 文件\n"
+        "(frontmatter: id / claim_id / verify_status — convergence note 层读它)。\n"
+        "可改正:先判 A 后改 B → 修 notes 并保留 supersedes: <prior-id> 链 (#528)。\n"
+        "假设记录(claim 动机/竞态猜想)不落这里 — 那是 hypotheses/ 层 (#528)。\n"
+    ),
+    "analyses": (
+        "# analyses/ — longer-form analysis\n\n"
+        "本文件由 kunglao-init 创建。analyses/ 落长形态分析:\n"
+        "failure-*.yaml 失败记录 (#496)、跨 fact 的综合分析。\n"
+    ),
+    "evidence": (
+        "# evidence/ — raw evidence\n\n"
+        "本文件由 kunglao-init 创建。evidence/ 落原始证据工件\n"
+        "(pcap、capture、静态 dump、现场脚本)。索引由\n"
+        "tools/pipelines/build_evidence_index.py 生成 (eids 按 path 顺序)。\n"
+    ),
+    "blockers": (
+        "# blockers/ — active blockers\n\n"
+        "本文件由 kunglao-init 创建。blocker-<id>.md 由 convergence/agent 写入;\n"
+        "resume 简报与 kunglao-status 读它。README.md 是载体 stub,\n"
+        "不计入 active blockers;INVALIDATED 标记解除阻塞。\n"
+    ),
+    "hypotheses": (
+        "# hypotheses/ — hypothesis layer (#528, stub)\n\n"
+        "本文件由 kunglao-init 创建。hypotheses/ 由 #528 实装\n"
+        "(claim 动机 / competitor_group 猜想 / 被推翻猜想的持久层)。\n"
+        "目前仅 stub:目录已建,写入器随 #528 落地。\n"
+    ),
+    "scratch": (
+        "# scratch/ — free-zone (非契约工件)\n\n"
+        "本文件由 kunglao-init 创建。scratch/ 是 free-zone:\n"
+        "- 任何非契约工件(探索脚本、FINDINGS.md 草稿)可无仪式写入;\n"
+        "- init 不 diff、不清理本目录;导出工具按独立 zone 分流;\n"
+        "- 本目录内容不得成为 gate/convergence 的承重件 ——\n"
+        "  承重的脚本必须升格到 analyses/ 或 evidence/。\n"
+    ),
+}
 SCAFFOLD_FILES = {
     "analysis_state.txt": (
         "# analysis_state — kunglao-init scaffold (empty-structure stubs, DESIGN §7 0.4)\n"
@@ -229,7 +301,10 @@ SCAFFOLD_FILES = {
     ),
     "global_plan.txt": "# global_plan — kunglao-init v1 stub\n",
     "claim_deps.yaml": "depends_on: {}\n",
-    "task_spec_snapshot.yaml": "{}\n",
+    # #538 C-4: task_spec_snapshot.yaml stub DELETED — the forever-3B "{}\n"
+    # was same-name-different-meaning vs task_spec.yaml and misled handoff.
+    # intake writes the real snapshot or the file does not exist; resume
+    # (#466) handles both cases.
     "facts/_INDEX.md": "# _INDEX\n",
 }
 
@@ -1095,13 +1170,24 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
 
 
 def scaffold(ws: Path) -> list[Path]:
-    """Idempotent scaffold (DESIGN §7 0.4): mkdir dirs; skip existing non-empty files (no clobber)."""
+    """Idempotent scaffold (DESIGN §7 0.4): mkdir dirs; skip existing non-empty files (no clobber).
+
+    #538: mkdir covers EVERY contract dir (eager, not lazy); each agent-facing
+    carrier ships a self-describing README stub; the workspace manifest
+    (.workspace-manifest.json) is snapshotted last for kunglao-resume (#466)."""
     created: list[Path] = []
     for name in SCAFFOLD_DIRS:
         d = ws / name
         if not d.is_dir():
             d.mkdir(parents=True)
             created.append(d)
+    for carrier, text in CARRIER_READMES.items():
+        p = ws / carrier / "README.md"
+        if p.exists() and p.read_text(encoding="utf-8").strip():
+            continue  # user/agent-owned stub or rewrite — never clobber
+        p.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(p, text)
+        created.append(p)
     for name, stub in SCAFFOLD_FILES.items():
         p = ws / name
         if p.exists() and p.read_text(encoding="utf-8").strip():
@@ -1109,6 +1195,7 @@ def scaffold(ws: Path) -> list[Path]:
         p.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(p, stub)
         created.append(p)
+    write_workspace_manifest(ws)  # #538 item 2: resume diff source
     return created
 
 
