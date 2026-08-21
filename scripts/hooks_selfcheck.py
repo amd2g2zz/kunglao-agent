@@ -32,6 +32,10 @@ from pathlib import Path
 
 import wire_up_settings
 
+# #536: template version stamp verify (init writes, selfcheck verifies —
+# same shape as the state_hash contract).
+import template_version  # noqa: E402
+
 # #381: KONG_HOOK_FILES is a DELIBERATE narrow subset of the hook registry
 # (wire_up_settings.WIRE_UP_HOOK_FILES) — the mechanical liveness chain this
 # self-repair verifies (the 4 hooks from the v1.9.37 'heartbeat lost'
@@ -126,6 +130,21 @@ def rebuild_project_level(workspace: Path) -> dict:
         return {"rebuilt": False, "error": str(exc)}
 
 
+def check_stamp_version(ws: Path) -> dict:
+    """#536: three-carrier template version stamp consistency.
+
+    Faults are reported (report row + status line) but do NOT move the
+    exit code here — hooks_selfcheck owns hook liveness; the stamp HARD
+    gate is env_check's `template_version` row. A stamp fault printed
+    every tick makes the drift visible in the operator stream without
+    downing heartbeat repair for a cosmetic-to-hooks defect."""
+    try:
+        faults = template_version.verify_stamps(ws)
+    except RuntimeError as exc:  # unreadable skill version — surface, don't crash
+        return {"faults": {}, "error": str(exc)}
+    return {"faults": faults}
+
+
 def main() -> int:
     ws = _resolve_ws(sys.argv[1] if len(sys.argv) > 1 else None)
     proj_settings = ws / ".claude" / "settings.json"
@@ -159,6 +178,8 @@ def main() -> int:
         "user_level": user_check,
         "user_migration_warning": migration_warning,
         "project_rebuild": rebuilt,
+        # #536: stamp faults = per-carrier missing/mismatch map
+        "template_version_stamps": check_stamp_version(ws),
     }
     out = ws / "runs" / ".hooks-selfcheck.json"
     try:
@@ -171,6 +192,12 @@ def main() -> int:
     status = f"project={'OK' if proj_ok else 'MISSING ' + str(proj_check.get('missing'))}"
     if migration_warning:
         status += " (global has leftover kunglao hooks — migrate)"
+    # #536: stamp faults ride the status line (non-fatal here — see
+    # check_stamp_version docstring).
+    stamp_faults = report["template_version_stamps"].get("faults") or {}
+    if stamp_faults:
+        status += (f" (template_version stamp faults: "
+                   f"{', '.join(f'{k}={v}' for k, v in sorted(stamp_faults.items()))})")
     print(f"hooks_selfcheck: {status}")
     return 0 if proj_ok else 1
 

@@ -40,10 +40,17 @@ from env_check import (  # pytest.ini pythonpath = . hooks scripts tools
 def _kunglao_ws(tmp_path: Path) -> Path:
     """Minimal workspace: runs/ + FULLY initialized state (#304: [initialized]
     marker in claim-register.yaml + project_type in analysis_state.txt) so the
-    snapshot write succeeds and init_complete passes."""
+    snapshot write succeeds and init_complete passes. #536: carries the
+    template version stamp (a fully-initialized workspace has one)."""
+    import template_version
+    stamp = template_version.stamp_line(template_version.read_skill_version())
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
+    (ws / "facts").mkdir()
+    (ws / "facts" / "_INDEX.md").write_text(stamp + "\n# _INDEX\n", encoding="utf-8")
+    (ws / "CLAUDE.md").write_text(stamp + "\n# workspace\n", encoding="utf-8")
     (ws / "claim-register.yaml").write_text(
+        stamp + "\n"
         "# [initialized] state_hash=abc seeds=3\n"
         "claims:\n- id: C-001\n  status: OPEN\n", encoding="utf-8")
     (ws / "analysis_state.txt").write_text(

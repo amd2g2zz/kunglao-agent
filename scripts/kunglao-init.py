@@ -164,6 +164,9 @@ import yaml  # noqa: E402  # #455: task_spec.yaml -> CLAUDE.md constraint sectio
 # derivation > conservative default; #449's requirements are consumed
 # through env_manifest, never re-implemented here).
 import env_manifest  # noqa: E402
+# #536: template version stamp — single source pyproject.toml, written on
+# the three text carriers at init, verified by hooks_selfcheck/env_check.
+import template_version  # noqa: E402
 
 # #538 item 2: workspace carrier manifest — the disk-side snapshot resume
 # (#466) diffs against. tools/_lib is a pythonpath root under pytest but
@@ -305,7 +308,11 @@ SCAFFOLD_FILES = {
     # was same-name-different-meaning vs task_spec.yaml and misled handoff.
     # intake writes the real snapshot or the file does not exist; resume
     # (#466) handles both cases.
-    "facts/_INDEX.md": "# _INDEX\n",
+    "facts/_INDEX.md": (
+        # #536: template version stamp rides the stub header — comment form
+        # survives update_index row rewrites (comment preservation).
+        template_version.stamp_line(template_version.read_skill_version()) + "\n# _INDEX\n"
+    ),
 }
 
 
@@ -523,6 +530,10 @@ def claim_register_text(sample: str, sample_sha: str, state_hash: str,
     lines = [
         f"# [initialized] kunglao-init state_hash={state_hash} seeds={len(claims)} sample={sample}",
         f"# sha256={sample_sha} ts={utc_now()}",
+        # #536: template version stamp — init writes, hooks_selfcheck/
+        # env_check verify (same shape as state_hash). Comment form keeps
+        # the register YAML-parseable.
+        template_version.stamp_line(template_version.read_skill_version()),
         "# kunglao-init structural seed claims — scaffold facts only "
         "(artifact identity / project type / sample hash; #412: no analysis conclusions)",
         "claims:",
@@ -1684,6 +1695,13 @@ def initialize(ws: Path, hooks_json: Path | None,
 
     # Write CLAUDE.md from type-specific template (idempotent: skip if exists)
     write_claudemd(ws, sample, sample_sha, project_type=project_type)
+    # #536: stamp CLAUDE.md with the template version (post-render so the
+    # golden render contract stays byte-identical; idempotent refresh also
+    # upgrades a behind workspace on --force re-init). The register and
+    # facts/_INDEX.md carry the stamp from their creation text above.
+    stamped = template_version.stamp_workspace(ws)
+    if stamped:
+        print(f"kunglao-init: template_version stamped {stamped}")
     # #316: workspace .mcp.json MCP supply scaffold (idempotent; --no-mcp skips)
     if no_mcp:
         print("kunglao-init: .mcp.json skipped (--no-mcp)")

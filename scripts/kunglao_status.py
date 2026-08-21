@@ -197,6 +197,20 @@ def _event_line(ev: dict, color: bool) -> str:
     return " ".join(parts)
 
 
+def _upgrade_line(ws: Path, color: bool) -> str | None:
+    """#536: one-line warning when the workspace stamp is older than the
+    active skill version (workspace template behind skill). None = aligned
+    (or unstamped legacy — no false alarm for pre-#536 workspaces)."""
+    try:
+        import template_version  # scripts/ (same dir, plain import)
+    except ImportError:
+        return None
+    try:
+        return template_version.upgrade_warning(ws)
+    except RuntimeError:
+        return None
+
+
 def render_status(ws: Path, *, color: bool) -> str:
     """Render the full panel from disk state. Pure: no writes, no clock reads
     beyond file mtimes, byte-identical modulo ANSI between color modes."""
@@ -214,6 +228,10 @@ def render_status(ws: Path, *, color: bool) -> str:
         parts.extend(_event_line(ev, color) for ev in events)
     else:
         parts.append("  (no kunglao-*.jsonl events yet)")
+    # #536: upgrade warning — appended last so it reads as the closing line
+    warn = _upgrade_line(ws, color)
+    if warn:
+        parts.append(_bold(warn, color))
     return "\n".join(parts)
 
 

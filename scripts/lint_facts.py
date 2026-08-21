@@ -41,6 +41,14 @@ except ImportError:  # pragma: no cover
 
 # ---------- schema constants (mirror frontmatter-schema.md) ----------
 
+# #536: fact schema pin — the revision of templates/fact-frontmatter.md that
+# facts are written against. Emitted in every lint output mode (text +
+# --json `active_schema_rev`) so consumers can detect version skew against
+# the schema authority in the live skill dir. Bump ONLY on a
+# backward-incompatible frontmatter schema change (a new optional field is
+# not a revision bump).
+ACTIVE_SCHEMA_REV = 1
+
 VALID_STATUS = {"PROVEN", "INFERRED", "NEGATIVE", "REFUTED", "OPEN", "DEFERRED", "VERIFIED"}
 VALID_SOURCE = {
     "static-decompile", "dynamic-trace", "frida-capture", "qiling-emu",
@@ -797,13 +805,18 @@ def main(argv=None):
     args = ap.parse_args(argv)
     errors, warnings = lint_workspace(args.ws)
     if args.json:
-        print(json.dumps({"errors": errors, "warnings": warnings}, ensure_ascii=False, indent=2))
+        # #536: active_schema_rev rides the machine output for drift detection
+        print(json.dumps({"active_schema_rev": ACTIVE_SCHEMA_REV,
+                          "errors": errors, "warnings": warnings},
+                         ensure_ascii=False, indent=2))
     else:
         for sev, code, msg in errors:
             print(f"  ERR   [{code}]  {msg}")
         for sev, code, msg in warnings:
             print(f"  warn  [{code}]  {msg}")
         print()
+        # #536: schema pin line — human output carries it too
+        print(f"active_schema_rev: {ACTIVE_SCHEMA_REV}")
         print(f"Summary: {len(errors)} errors, {len(warnings)} warnings")
     return 1 if errors else 0
 

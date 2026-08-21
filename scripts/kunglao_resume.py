@@ -52,6 +52,8 @@ import digest_build
 import external_kicker as kicker
 import hook_activation
 import kunglao_log
+# #536: workspace template version cross-check (status + resume both print it)
+import template_version
 from status_defs import ACTIVE_STATUSES, PARTIAL_STATUSES
 
 RC_RESUMABLE = 0
@@ -446,6 +448,14 @@ def build_brief(ws) -> dict:
             f"global_plan variants coexist ({plan['variants']}) — D1-family "
             "single-source violation; the active-pointer fix is #446's "
             "mechanism governance")
+    # #536: workspace template behind skill → one-line upgrade advice
+    # (read-only surface: advice never moves rc; env_check is the hard gate)
+    try:
+        upgrade = template_version.upgrade_warning(ws)
+    except RuntimeError:
+        upgrade = None
+    if upgrade:
+        advice.append(upgrade)
 
     d = decision or {}
     summary = {

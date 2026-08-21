@@ -106,6 +106,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `retract_claim.py` | RETRACTED terminal state + dependency blast-radius reopening (#331) | CLI, tests |
 | `progress_report.py` | one-block progress report | tests |
 | `init_state.py` | init-completeness single source of truth (#304) | hooks, lib(3), tests |
+| `template_version.py` | workspace template version stamp — write/verify/upgrade-warning (#536) | kunglao-init, hooks_selfcheck, env_check, kunglao-status, kunglao-resume, tests |
 
 ## Observability sidecar (issue #287)
 
