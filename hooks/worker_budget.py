@@ -1388,29 +1388,22 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
     hb_skill = _skill / 'runs' / '.heartbeat.json'
 
     def _age(hb_path: Path):
-        # F1 (#14): liveness = max(last_tick_ts, activity_ts) — tool activity
-        # (activity_ts) counts as alive even when the cron does not tick
-        # (last_tick_ts stale). Fixes the v1.9.36 semantic split (the hook
-        # bumped activity_ts but the gate only read last_tick_ts → the fix
-        # never reached the gate).
+        # #533 F-H2: liveness = last_tick_ts ONLY — tick_fresh is the proof
+        # that the loop (cron+LLM) is running. activity_ts is kicker's signal
+        # (external_kicker.session_is_dead checks BOTH), not dispatch gate's.
         try:
             data = json.loads(hb_path.read_text(encoding='utf-8'))
-            parsed = []
-            for k in ('last_tick_ts', 'activity_ts'):
-                v = data.get(k, '')
-                if v:
-                    try:
-                        parsed.append((datetime.fromisoformat(v.replace('Z', '+00:00')), v))
-                    except ValueError:
-                        pass
-            if not parsed:
-                return None, ''
-            dt, s = max(parsed, key=lambda x: x[0])  # most recent = best liveness
-            return (datetime.now(timezone.utc) - dt), s
+            v = data.get('last_tick_ts', '')
+            if v:
+                try:
+                    dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
+                    return (datetime.now(timezone.utc) - dt), v
+                except ValueError:
+                    pass
+            return None, ''
         except Exception:
             return None, ''
 
-    # workspace heartbeat missing or expired → use the fresh heartbeat from the skill dir (unified skill-monitoring registration point)
     ws_age, ws_last = _age(hb) if hb.exists() else (None, '')
     if ws_age is None or ws_age > timedelta(minutes=35):
         sk_age, sk_last = _age(hb_skill) if hb_skill.exists() else (None, '')
@@ -1434,10 +1427,10 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
 
 
 # v1.9.39 (#475): env-state freshness gate constants. TTL aligns with the
-# tick cadence family (5-min cron / 35-min heartbeat ceiling): 30 min = one
-# heartbeat TTL window of drift tolerance; 2x = the hard self-heal line.
-ENV_STATE_TTL_MINUTES = 30
-ENV_STATE_FILE = 'runs/env-state.json'
+    # #533 F-H3: removed skill-level fallback — cross-workspace masking bug.
+    # Each workspace has its own heartbeat; session must have its own.
+    ws_age, ws_last = _age(hb) if hb.exists() else (None, '')
+
 # module-level timedelta for the gate (datetime itself stays local-import,
 # same convention as check_heartbeat_alive)
 from datetime import timedelta as _env_timedelta  # noqa: E402

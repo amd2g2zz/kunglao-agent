@@ -103,6 +103,11 @@ def heartbeat_check(workspace: Path) -> int:
     except Exception as exc:
         print(f"HEARTBEAT DOWN: .heartbeat.json unreadable ({exc})", file=sys.stderr)
         return 1
+    # #533 F-H1: check loop_registered marker
+    if not state.get(LOOP_MARKER_KEY, False):
+        print(f"HEARTBEAT LOOP NOT REGISTERED: {LOOP_MARKER_KEY}=false — cron registration not confirmed, run --loop-registered", file=sys.stderr)
+        return 1
+
     age = datetime.now(timezone.utc) - last
     if age > timedelta(minutes=STALE_MINUTES):
         print(f"HEARTBEAT STALE: last tick {state.get('last_tick_ts')} ({int(age.total_seconds()//60)} min ago > {STALE_MINUTES})", file=sys.stderr)

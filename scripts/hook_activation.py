@@ -310,6 +310,40 @@ def dispatch_linkage(workspace: Path,
     return renew(workspace, ttl_minutes=ttl_minutes)
 
 
+
+# The Stop gate (completion_gate) must be ALWAYS armed — it fires on EVERY
+# session termination, not just on a dispatch event. Unlike DISPATCH_HOOKS which
+# are activated on each dispatch and decay, completion_gate is a permanent
+# sentinel: it checks convergence_state on Stop regardless of whether any
+# dispatch occurred. F-S1/#533: "init 即武装 completion_gate".
+ALWAYS_ARMED_HOOKS = ("completion_gate",)
+
+
+def always_arm(workspace: Path,
+               ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
+    """#533 F-S1: ensure ALWAYS_ARMED_HOOKS are in active_hooks.
+    Unlike dispatch_linkage (which also flips phase=DISPATCH), this function
+    only ensures the Stop gate is permanently armed. Call from init Phase 0.
+    Repeated calls are idempotent."""
+    state = read_state(workspace)
+    if not state:
+        state = update_state(workspace, "none", "IDLE", ttl_minutes=ttl_minutes)
+    overrides = state.get("user_override", {})
+    active = list(state.get("active_hooks", []))
+    for hook in ALWAYS_ARMED_HOOKS:
+        if overrides.get(hook) == "off":
+            continue  # explicit user off — respect it
+        if hook not in active:
+            active.append(hook)
+    linked = dict(state)
+    linked["active_hooks"] = active
+    # completion_gate is NOT paused when DISPATCH_HOOKS are unpaused
+    linked["paused_hooks"] = [h for h in state.get("paused_hooks", [])
+                               if h not in ALWAYS_ARMED_HOOKS
+                               or overrides.get(h) == "off"]
+    write_state(workspace, linked)
+    return renew(workspace, ttl_minutes=ttl_minutes)
+
 # ===========================================================================
 # #445: THE canonical hook registration entry
 # ===========================================================================

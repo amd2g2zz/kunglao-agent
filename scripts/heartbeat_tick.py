@@ -13,7 +13,11 @@ fires it, reads the JSON report, and does only what needs cognition (ping stuck
 workers, dispatch). Fewer steps = fewer failure modes.
 
 Steps executed (idempotent, all safe to re-run):
-  0. hooks_selfcheck  — project+user settings.json kunglao hooks present; user-level
+  0. hooks_selfcheck  — (a) import-time verifies all 9 WIRE_UP_HOOK_FILES via
+                        derive_hook_subset (loud fail on registry drift); (b) run-time
+                        checks 4 liveness-chain hooks (heartbeat_touch/worker_budget/
+                        dispatch_gate/worker_pulse) in project settings.json; auto-rebuilds
+                        via --wire-up if missing; warns on global leftover hooks (#258)
                         auto-rebuilt via --wire-up if dropped (v1.9.37)
   1. reconcile        — rebuild [active_workers] from worker-status-*.md +
                         plan-redteam-*.md (verifier visibility, v1.9.37)

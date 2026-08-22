@@ -12,7 +12,8 @@ mutation by Claude Code UI / plugin toggle / enabledPlugins change can silently 
 the hooks key, and nothing restores it.
 
 This script is the mechanical cure. Run every heartbeat tick (step 0 of the tick,
-before reconcile/dispatch): it verifies the 4 kunglao hooks are present in the
+it (a) import-time verifies all 9 WIRE_UP_HOOK_FILES registry entries via
+derive_hook_subset and (b) run-time checks the 4 liveness-chain hooks
 PROJECT-level <workspace>/.claude/settings.json — the wire-up deployment target since
 issue #258 (2026-08-12; pre-#258 wrote the user-global file and bound hooks to a
 worktree path that died with the worktree). If project-level is missing any hook, it
