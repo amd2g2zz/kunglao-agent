@@ -403,3 +403,142 @@ class TestIndexToolNamesExt:
         assert "crypto-tool" in names
         assert names == {"crypto-tool"}, (
             f"broken ext yaml must not leak names: {names}")
+
+
+# ---------------------------------------------------------------------------
+# #515: environment-side wiring — ext-scan --with-mcp <probe-json>
+# ---------------------------------------------------------------------------
+
+PROBE_JSON: dict = {
+    "schema": "mcp-inventory/1",
+    "claude_json": "C:/somewhere/.claude.json",
+    "server_count": 3,
+    "servers": [
+        {"name": "camoufox", "prefix": "mcp__camoufox__*",
+         "sources": ["user-global"], "in_manifest": False,
+         "manifest_tier": None, "required_for_types": []},
+        {"name": "gitnexus", "prefix": "mcp__gitnexus__*",
+         "sources": ["user-project:D:/lab/proj"], "in_manifest": True,
+         "manifest_tier": "HARD", "required_for_types": ["android"]},
+        {"name": "playwright", "prefix": "mcp__playwright__*",
+         "sources": ["workspace"], "in_manifest": False,
+         "manifest_tier": None, "required_for_types": []},
+    ],
+}
+
+
+def _probe_file(tmp_path: Path, probe: dict | None = None) -> Path:
+    p = tmp_path / "probe.json"
+    p.write_text(json.dumps(probe if probe is not None else PROBE_JSON),
+                 encoding="utf-8")
+    return p
+
+
+class TestMcpWiring:
+    """① ext-scan --with-mcp merges mcp_probe inventory entries into the
+    ext catalog (kind-inferable by the mcp__ name prefix, source =
+    claude-json provenance label, describe-only); ② generator-level
+    inconsistency exits 1; ③ the COMMITTED repo index stays
+    environment-free (regeneration discipline)."""
+
+    def test_with_mcp_merges_entries(self, tmp_path: Path) -> None:
+        root = _sandbox_root(tmp_path)
+        r = run_py(EXT_SCAN, "--root", str(root), "--with-mcp",
+                   str(_probe_file(tmp_path)), "--stdout")
+        assert r.returncode == 0, r.stderr
+        entries = {e["name"]: e for e in yaml.safe_load(r.stdout)["ext"]}
+        for name in ("mcp__camoufox", "mcp__gitnexus", "mcp__playwright"):
+            assert name in entries, f"{name} missing from merged index"
+        e = entries["mcp__camoufox"]
+        assert e["source"] == "claude-json", (
+            "mcp entries carry a provenance label, not a repo path (#515 D2)")
+        assert e["capability"] == "mcp:camoufox"
+        assert "--mcp-inventory" in e["usage"], (
+            "usage must name the probe regeneration command")
+        assert "describe-only" in e["description"]
+        # repo entries survive the merge untouched
+        assert "alpha_tool" in entries
+
+    def test_with_mcp_manifest_annotation_in_description(self,
+                                                         tmp_path: Path) -> None:
+        root = _sandbox_root(tmp_path)
+        r = run_py(EXT_SCAN, "--root", str(root), "--with-mcp",
+                   str(_probe_file(tmp_path)), "--stdout")
+        entries = {e["name"]: e for e in yaml.safe_load(r.stdout)["ext"]}
+        assert "user-global" in entries["mcp__camoufox"]["description"]
+        assert "environment-extra" in entries["mcp__camoufox"]["description"]
+        assert "HARD" in entries["mcp__gitnexus"]["description"]
+        assert "android" in entries["mcp__gitnexus"]["description"]
+        # project path detail is sanitized to the surface kind
+        assert "D:/lab/proj" not in entries["mcp__gitnexus"]["description"]
+
+    def test_with_mcp_capability_map_override(self, tmp_path: Path) -> None:
+        root = _sandbox_root(tmp_path)
+        (root / "tools" / "_INDEX.ext.map.yaml").write_text(
+            "map:\n  mcp__camoufox: web:stealth-browse\n", encoding="utf-8")
+        r = run_py(EXT_SCAN, "--root", str(root), "--with-mcp",
+                   str(_probe_file(tmp_path)), "--stdout")
+        entries = {e["name"]: e for e in yaml.safe_load(r.stdout)["ext"]}
+        assert entries["mcp__camoufox"]["capability"] == "web:stealth-browse"
+        assert entries["mcp__gitnexus"]["capability"] == "mcp:gitnexus"
+
+    def test_with_mcp_deterministic(self, tmp_path: Path) -> None:
+        root = _sandbox_root(tmp_path)
+        probe = _probe_file(tmp_path)
+        r1 = run_py(EXT_SCAN, "--root", str(root), "--with-mcp",
+                    str(probe), "--stdout")
+        r2 = run_py(EXT_SCAN, "--root", str(root), "--with-mcp",
+                    str(probe), "--stdout")
+        assert r1.returncode == r2.returncode == 0
+        assert r1.stdout == r2.stdout
+
+    def test_with_mcp_rejects_duplicate_server(self, tmp_path: Path) -> None:
+        probe = json.loads(json.dumps(PROBE_JSON))
+        probe["servers"].append(dict(probe["servers"][0]))
+        root = _sandbox_root(tmp_path)
+        r = run_py(EXT_SCAN, "--root", str(root), "--with-mcp",
+                   str(_probe_file(tmp_path, probe)), "--stdout")
+        assert r.returncode == 1, "duplicate server = generator inconsistency"
+        assert "duplicate" in r.stderr
+
+    def test_with_mcp_rejects_non_probe_document(self, tmp_path: Path) -> None:
+        root = _sandbox_root(tmp_path)
+        r = run_py(EXT_SCAN, "--root", str(root), "--with-mcp",
+                   str(_probe_file(tmp_path, {"nope": 1})), "--stdout")
+        assert r.returncode == 1
+        assert "mcp-inventory" in r.stderr or "servers" in r.stderr
+
+    def test_with_mcp_unreadable_file_is_usage_error(self,
+                                                     tmp_path: Path) -> None:
+        root = _sandbox_root(tmp_path)
+        r = run_py(EXT_SCAN, "--root", str(root), "--with-mcp",
+                   str(tmp_path / "missing-probe.json"), "--stdout")
+        assert r.returncode == 2
+
+    def test_with_mcp_name_collision_with_repo_stem(self,
+                                                    tmp_path: Path) -> None:
+        """A probe server whose mcp__<name> collides with a repo entry-point
+        stem must refuse generation (bare-name resolution stays unambiguous)."""
+        root = _sandbox_root(tmp_path)
+        (root / "scripts" / "mcp__evil.py").write_text(CLI_FIXTURE,
+                                                       encoding="utf-8")
+        probe = {"servers": [{"name": "evil", "prefix": "mcp__evil__*",
+                              "sources": ["user-global"],
+                              "manifest_tier": None,
+                              "required_for_types": []}]}
+        r = run_py(EXT_SCAN, "--root", str(root), "--with-mcp",
+                   str(_probe_file(tmp_path, probe)), "--stdout")
+        assert r.returncode == 1, "mcp/repo stem collision must refuse"
+        assert "ambiguous" in r.stderr
+
+    def test_committed_repo_index_stays_environment_free(self) -> None:
+        """The shipped tools/_INDEX.ext.yaml is regenerated WITHOUT
+        --with-mcp (committed artifact = repo face only; the environment
+        face is per-machine, #515 D2)."""
+        names = [e["name"] for e in load_ext()]
+        mcp = [n for n in names if n.startswith("mcp__")]
+        assert mcp == [], (
+            f"committed ext index carries environment entries: {mcp} — "
+            "regenerate with plain `python tools/ext-scan.py`")
+        r = run_py(EXT_SCAN, "--check")
+        assert r.returncode == 0, r.stderr

@@ -9,6 +9,13 @@ tools/_INDEX.yaml execution registry (three sources, design D2):
   3. references/re-library/*.md — capability-declaration domain docs
      (the #494 three-point check's third point).
 
+Optionally merges the ENVIRONMENT-side face (#515 acceptance 1):
+`--with-mcp <probe.json>` consumes a `scripts/mcp_probe.py
+--mcp-inventory` document and derives describe-only entries
+(name=mcp__<server>, source="claude-json" provenance label — NOT a repo
+path). The COMMITTED index stays environment-free: repo regeneration and
+--check run without --with-mcp; the environment face is per-machine.
+
 Emits tools/_INDEX.ext.yaml — a DESCRIBE-ONLY catalog (zero new trust
 mechanism, design D6): nothing consumes this index to EXECUTE anything.
 Consumption is read/print (tools/tool-search.py --find) and citation
@@ -17,6 +24,8 @@ resolution (devkit/subagent_review._index_tool_names, #493 surface).
 Capability tags come from the OPTIONAL tools/_INDEX.ext.map.yaml
 (name -> "<domain>:<operation>"); unmapped entries surface as
 capability: unknown — discovery never depends on map maintenance.
+mcp entries default to capability "mcp:<server>" (overridable by the
+same map, by full mcp__<server> name).
 
 stdlib-only (ast/pathlib) — no yaml dependency, output is hand-serialized
 for byte determinism; zero-LLM, zero-network.
@@ -26,10 +35,14 @@ Usage:
   python tools/ext-scan.py --check         # exit 0 fresh / 1 stale or missing
   python tools/ext-scan.py --stdout        # print, never write
   python tools/ext-scan.py --root <dir>    # operate on another tree
+  python tools/ext-scan.py --with-mcp <probe.json> [--root <dir>] ...
+                                          # merge a mcp_probe inventory
+                                          # (environment face, #515)
 
 Exit codes: 0 ok (written/checked/printed); 1 stale (--check) or
 generator-level inconsistency (duplicate names, collision with an
-internal registered name); 2 usage error.
+internal registered name, malformed probe document); 2 usage error
+(including an unreadable/non-JSON --with-mcp file).
 
 The generator itself is NOT registered in any index (the querier does
 not enter the queried registry — same discipline as tool-search.py).
@@ -70,6 +83,15 @@ SOURCE_DIRS = (
 
 UNKNOWN_CAPABILITY = "unknown"
 
+# #515: environment-side entries. source is a PROVENANCE LABEL, not a repo
+# path — the generating machine's claude-json is neither portable nor
+# verifiable from the repo (doc_sync Gate 7 checks the label, not the path).
+MCP_PROVENANCE = "claude-json"
+MCP_NAME_RE = re.compile(r"^mcp__[a-z0-9][a-z0-9_-]*$")
+MCP_USAGE_TEMPLATE = (
+    "describe-only mcp server; live tools are mcp__{server}__* "
+    "(probe: python scripts/mcp_probe.py <workspace> --mcp-inventory)")
+
 HOOK_USAGE_TEMPLATE = ("hook {source} (settings.json wiring; "
                        "JSON on stdin; exit code = verdict)")
 REF_USAGE_TEMPLATE = "read {source} (capability reference)"
@@ -78,7 +100,11 @@ INDEX_HEADER = """schema: tools-ext-index/1
 purpose: >-
   Descriptive catalog of callable repo capabilities OUTSIDE the internal
   tools/_INDEX.yaml execution registry: entry-point scripts/ CLIs,
-  hooks/ gates, references/re-library/ capability docs (issue #476).
+  hooks/ gates, references/re-library/ capability docs (issue #476);
+  optionally environment-side mcp server entries merged at generation
+  time via --with-mcp (issue #515 — committed regenerations run WITHOUT
+  the flag, the environment face is per-machine; mcp entries carry the
+  claude-json provenance label, never a repo path).
   DESCRIBE-ONLY, zero new trust mechanism — no code path executes an
   entry from this index. Consumption: tools/tool-search.py --find
   (read/print) and Gate 5 tools_used citation resolution (#493).
@@ -257,9 +283,70 @@ def internal_registered_names(root: Path) -> set[str]:
     return names
 
 
+# ---- environment-side entries (#515) ---------------------------------------
+
+def _surface_kinds(sources: list[str]) -> list[str]:
+    """Registration-surface KINDS from probe source labels —
+    'user-project:D:/lab/x' collapses to 'user-project' (the raw path is
+    machine-local; the catalog must stay pasteable)."""
+    kinds = sorted({s.split(":", 1)[0].strip() for s in sources if s.strip()})
+    return kinds or ["unknown"]
+
+
+def mcp_entries_from_probe(probe: object) -> list[dict]:
+    """Validate a mcp_probe --mcp-inventory document and derive ext
+    catalog entries (name=mcp__<server>, source=claude-json).
+
+    Raises ValueError on shape violations (generator-level inconsistency,
+    exit 1): missing/ill-typed servers list, duplicate server, server name
+    that yields an invalid mcp__ tool name. Config VALUES never enter the
+    entries — only names/surfaces/tiers (secret hygiene, probe contract).
+    """
+    if (not isinstance(probe, dict)
+            or not isinstance(probe.get("servers"), list)):
+        raise ValueError(
+            "--with-mcp input is not a mcp-inventory document "
+            "(expected a dict with a 'servers' list — generate one via "
+            "`python scripts/mcp_probe.py <ws> --mcp-inventory`)")
+    entries: list[dict] = []
+    seen: set[str] = set()
+    for i, s in enumerate(probe["servers"]):
+        if not isinstance(s, dict):
+            raise ValueError(f"--with-mcp servers[{i}] is not an object")
+        name = str(s.get("name", "")).strip().lower()
+        if not name:
+            raise ValueError(f"--with-mcp servers[{i}]: missing 'name'")
+        if name in seen:
+            raise ValueError(f"--with-mcp duplicate server name {name!r}")
+        seen.add(name)
+        entry_name = f"mcp__{name}"
+        if not MCP_NAME_RE.match(entry_name):
+            raise ValueError(
+                f"--with-mcp server name {name!r} yields invalid catalog "
+                f"name {entry_name!r} (expected ^mcp__[a-z0-9][a-z0-9_-]*$)")
+        sources = [str(x) for x in (s.get("sources") or [])]
+        surfaces = _surface_kinds(sources)
+        tier = s.get("manifest_tier")
+        req_types = [str(t) for t in (s.get("required_for_types") or [])]
+        if tier:
+            supply = f"{tier} for {', '.join(req_types) or 'n/a'}"
+        else:
+            supply = "environment-extra (not in supply manifest)"
+        entries.append({
+            "name": entry_name,
+            "kind": "mcp",
+            "source": MCP_PROVENANCE,
+            "usage": MCP_USAGE_TEMPLATE.format(server=name),
+            "description": (
+                f"MCP server '{name}' registered on: {', '.join(surfaces)}; "
+                f"supply: {supply}; describe-only, never executed"),
+        })
+    return entries
+
+
 # ---- collection + rendering ----------------------------------------------
 
-def collect_entries(root: Path) -> list[dict]:
+def collect_entries(root: Path, mcp_probe: object = None) -> list[dict]:
     """All ext entries, capability-tagged and name-sorted (deterministic).
 
     Name identity rule (#318 dead-name safety): an entry's name is its
@@ -275,7 +362,13 @@ def collect_entries(root: Path) -> list[dict]:
     hooks/completion_gate.py -> completion_gate-script +
     completion_gate-hook (symmetric, no source-dir priority).
     A collision with an INTERNAL registered name raises ValueError: the
-    generator refuses to emit an ambiguous bare-name set."""
+    generator refuses to emit an ambiguous bare-name set.
+
+    #515: mcp_probe (a parsed --with-mcp inventory document, or None)
+    merges environment-side entries (name=mcp__<server>) under the SAME
+    collision discipline — mcp names collide with repo stems or internal
+    names at generation refusal, never silently.
+    """
     cap_map = load_capability_map(root)
     internal = internal_registered_names(root)
     sourced = [(source, kind, derive_entry(source, kind, root))
@@ -298,6 +391,19 @@ def collect_entries(root: Path) -> list[dict]:
         entry["name"] = name
         entry["capability"] = cap_map.get(name, UNKNOWN_CAPABILITY)
         by_name[name] = entry
+    if mcp_probe is not None:
+        for entry in mcp_entries_from_probe(mcp_probe):
+            name = entry["name"]
+            if name in by_name or name in internal:
+                other = by_name.get(name, {}).get(
+                    "source", "the internal registry")
+                raise ValueError(
+                    f"ext name {name!r} (mcp server {name[5:]!r}) is "
+                    f"ambiguous against {other} — bare-name resolution "
+                    f"must stay unambiguous")
+            entry["capability"] = cap_map.get(
+                name, f"mcp:{name[len('mcp__'):]}")
+            by_name[name] = entry
     return [by_name[n] for n in sorted(by_name)]
 
 
@@ -330,11 +436,27 @@ def main(argv: list[str] | None = None) -> int:
                     help="print the generated index instead of writing")
     ap.add_argument("--root", default=None,
                     help="operate on another tree (default: this repo)")
+    ap.add_argument("--with-mcp", metavar="PROBE_JSON", default=None,
+                    help="merge a mcp_probe --mcp-inventory document "
+                         "(environment-side face, #515): entries named "
+                         "mcp__<server> with the claude-json provenance "
+                         "label. The committed index is regenerated "
+                         "WITHOUT this flag")
     args = ap.parse_args(argv)
+
+    mcp_probe_doc: object = None
+    if args.with_mcp:
+        try:
+            mcp_probe_doc = json.loads(
+                Path(args.with_mcp).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"error: cannot read --with-mcp file {args.with_mcp!r}: "
+                  f"{exc}", file=sys.stderr)
+            return 2
 
     root = Path(args.root).resolve() if args.root else REPO_ROOT
     try:
-        text = render(collect_entries(root))
+        text = render(collect_entries(root, mcp_probe=mcp_probe_doc))
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

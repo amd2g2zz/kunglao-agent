@@ -248,6 +248,16 @@ def _registry_note() -> str:
 EXT_INDEX_REL = "tools/_INDEX.ext.yaml"
 INTERNAL_INDEX_REL = "tools/_INDEX.yaml"
 
+# #515: environment-side entries (name mcp__<server>, merged via
+# `tools/ext-scan.py --with-mcp`) describe a machine-local MCP
+# registration, not a repo file — their existence semantics degrades to
+# SANCTIONED-PROVENANCE checking: source must be one of these labels and
+# the name must match the canonical mcp server shape. The generating
+# machine's claude-json path is neither portable nor verifiable from the
+# repo, so a raw path in that slot is a FAIL, not a pass.
+ENV_PROVENANCE_SOURCES = ("claude-json",)
+MCP_NAME_RE_STR = r"^mcp__[a-z0-9][a-z0-9_-]*$"
+
 _EXT_SCAN_CACHE: dict[str, object] = {}
 
 
@@ -353,7 +363,22 @@ def _check_ext_index() -> tuple[list[str], list[str]]:
             if not str(e.get(field, "")).strip():
                 fails.append(f"{loc} ({name}): missing/empty '{field}'")
         source = str(e.get("source", "")).strip()
-        if source and not (REPO_ROOT / source).exists():
+        if name.startswith("mcp__"):
+            # #515 environment entry: provenance semantics, not repo-path
+            # existence (the check must be name-shape-first so a malformed
+            # server name can never ride a sanctioned label through).
+            if not re.match(MCP_NAME_RE_STR, name):
+                fails.append(
+                    f"{loc} ({name}): environment entry name must match "
+                    f"{MCP_NAME_RE_STR} (canonical lowercase mcp server)")
+            elif source not in ENV_PROVENANCE_SOURCES:
+                fails.append(
+                    f"{loc} ({name}): environment entry source {source!r} "
+                    f"is not a sanctioned provenance label "
+                    f"{list(ENV_PROVENANCE_SOURCES)} — regenerate via "
+                    f"`uv run python tools/ext-scan.py --with-mcp "
+                    f"<probe.json>` (#515)")
+        elif source and not (REPO_ROOT / source).exists():
             fails.append(
                 f"{loc} ({name}): source '{source}' does not exist — "
                 "regenerate via `uv run python tools/ext-scan.py` "

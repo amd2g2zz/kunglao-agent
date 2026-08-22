@@ -82,4 +82,3 @@ analysis_space/
 # Dev worktrees (parallel branch isolation; #472-class hygiene: never tracked)
 .worktrees/
 docs/superpowers/
-/coverage.json

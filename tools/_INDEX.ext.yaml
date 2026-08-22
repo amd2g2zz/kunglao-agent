@@ -2,7 +2,11 @@ schema: tools-ext-index/1
 purpose: >-
   Descriptive catalog of callable repo capabilities OUTSIDE the internal
   tools/_INDEX.yaml execution registry: entry-point scripts/ CLIs,
-  hooks/ gates, references/re-library/ capability docs (issue #476).
+  hooks/ gates, references/re-library/ capability docs (issue #476);
+  optionally environment-side mcp server entries merged at generation
+  time via --with-mcp (issue #515 — committed regenerations run WITHOUT
+  the flag, the environment face is per-machine; mcp entries carry the
+  claude-json provenance label, never a repo path).
   DESCRIBE-ONLY, zero new trust mechanism — no code path executes an
   entry from this index. Consumption: tools/tool-search.py --find
   (read/print) and Gate 5 tools_used citation resolution (#493).

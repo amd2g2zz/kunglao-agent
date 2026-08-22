@@ -110,6 +110,16 @@ filename lists) into `_INDEX.ext.yaml`; each entry carries
   malformed entries / collisions with internal registered names, and warns
   when an entry-point file is missing from the catalog. Fix for both:
   `uv run python tools/ext-scan.py` (never hand-edit the generated file).
+- **Environment-side mcp entries (#515)**: `ext-scan.py --with-mcp
+  <probe.json>` merges a `scripts/mcp_probe.py --mcp-inventory` document
+  (registered MCP servers — the camoufox/gitnexus/playwright class) as
+  entries named `mcp__<server>` carrying the `claude-json` **provenance
+  label** (not a repo path; Gate 7 checks the label against
+  `ENV_PROVENANCE_SOURCES` plus the `mcp__<server>` name shape instead of
+  file existence). Still describe-only — mcp-ness is the structural
+  `mcp__` name prefix, `--find` projects `kind: mcp`, `tools_used` may
+  cite `mcp__<server>`. The **committed** index is regenerated WITHOUT
+  the flag (environment face is per-machine; never commit it).
 
 ### Vacuum-shell disposition record (#339)
 

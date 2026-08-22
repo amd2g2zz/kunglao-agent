@@ -683,8 +683,27 @@ def check_host_forbidden_tools(tools: list[str]) -> tuple[bool, str]:
     `task_spec.constraints.vm_detonation` because they would execute the
     sample on the host, bypassing the workspace `block_malware_exec` PreToolUse
     hook (which matches Bash only, not MCP).
+
+    #515 (c) wildcard coverage: intended_tools may carry explicit wildcard
+    forms (`mcp__<server>__*`). A wildcard that COVERS a host-forbidden name
+    is rejected with the same semantics — the worker could then legally pick
+    the covered name (e.g. `mcp__frida__*` covers spawn/attach,
+    `mcp__x64dbg__*` covers all four x64dbg host channels). Exact-name
+    membership is unchanged (zero loosening); only explicit wildcard forms
+    are additionally evaluated for coverage. Benign wildcards
+    (`mcp__camoufox__*`) and concrete VM-channel names pass.
     """
-    bad = [t for t in tools if t in HOST_FORBIDDEN_TOOLS]
+    bad = []
+    for t in tools:
+        if t in HOST_FORBIDDEN_TOOLS:
+            bad.append(t)
+            continue
+        if t.endswith('*'):
+            prefix = t[:-1]
+            covered = sorted(f for f in HOST_FORBIDDEN_TOOLS
+                             if f.startswith(prefix))
+            if covered:
+                bad.append(f"{t} (covers {', '.join(covered)})")
     if bad:
         return (False, (
             f'host-channel dynamic tool(s) {bad!r} forbidden - '

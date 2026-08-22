@@ -135,7 +135,7 @@ def _repo_python_files():
         rel = p.relative_to(ROOT).as_posix()
         if rel.startswith("tests/"):        # fixtures may rebuild shapes freely
             continue
-        if rel.startswith((".git", ".review", "openspec/")):
+        if rel.startswith((".git", ".review", "openspec/", ".worktrees")):
             continue
         if rel == CANONICAL_REL.as_posix():
             continue

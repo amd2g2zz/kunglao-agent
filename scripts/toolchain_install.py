@@ -134,6 +134,10 @@ INSTALL_PLANS: dict[str, InstallPlan] = {
         packages=(
             PkgSpec("choco", ("choco", "install", "die", "-y")),
             PkgSpec("brew", ("brew", "install", "die")),
+            PkgSpec("apt", ("apt-get", "install", "-y", "die")),
+            PkgSpec("dnf", ("dnf", "install", "-y", "die")),
+            PkgSpec("apk", ("apk", "add", "die")),
+            PkgSpec("pacman", ("pacman", "-S", "--noconfirm", "die")),
         ),
     ),
     "decompiler": InstallPlan(

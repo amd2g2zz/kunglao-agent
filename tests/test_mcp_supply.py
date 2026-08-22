@@ -530,3 +530,109 @@ def test_readme_mentions_probe_and_scaffold():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "mcp_probe.py" in text
     assert "--no-mcp" in text
+
+
+# ---------- #515 acceptance 1: environment-side inventory (--mcp-inventory) ----------
+
+class TestMcpInventory:
+    """--mcp-inventory: enumerate REGISTERED servers across the three
+    registration surfaces with the mcp__<server>__* tool prefix and the
+    per-type required/optional annotation. Read-only / zero-network /
+    zero-spawn; secret hygiene (no command/args/env values)."""
+
+    def test_enumerates_all_three_registration_surfaces(
+            self, tmp_path, fake_claude_json, ws):
+        write_claude_json(
+            fake_claude_json,
+            servers={"Camoufox": {"type": "stdio", "command": "uvx",
+                                  "args": ["camoufox-mcp"],
+                                  "env": {"CAMOUFOX_API_KEY": "sk-leak-me"}},
+                     "gitnexus": reg("gitnexus")},
+            project_servers={"playwright": reg("npx")})
+        (ws / ".mcp.json").write_text(
+            json.dumps({"mcpServers": {"volatility": reg("vol")}}),
+            encoding="utf-8")
+        r = run_mcp_probe(ws, "--mcp-inventory",
+                          "--claude-json", str(fake_claude_json))
+        assert r.returncode == 0, r.stderr
+        inv = json.loads(r.stdout)
+        servers = {s["name"]: s for s in inv["servers"]}
+        assert set(servers) == {"camoufox", "gitnexus", "playwright",
+                                "volatility"}, (
+            "inventory must enumerate global + project-scoped + workspace "
+            "surfaces, canonical lowercase")
+        assert servers["camoufox"]["prefix"] == "mcp__camoufox__*"
+        assert servers["camoufox"]["sources"] == ["user-global"]
+        assert servers["playwright"]["sources"] == ["user-project:D:/some/ws"]
+        assert servers["volatility"]["sources"] == ["workspace"]
+
+    def test_manifest_annotation_tier_and_types(self, tmp_path, fake_claude_json,
+                                                ws):
+        write_claude_json(fake_claude_json,
+                          servers={"gitnexus": reg("gitnexus"),
+                                   "camoufox": reg("camoufox")})
+        r = run_mcp_probe(ws, "--mcp-inventory",
+                          "--claude-json", str(fake_claude_json))
+        assert r.returncode == 0, r.stderr
+        servers = {s["name"]: s for s in json.loads(r.stdout)["servers"]}
+        # manifest member: tier + types from the #316 supply manifest
+        assert servers["gitnexus"]["in_manifest"] is True
+        assert servers["gitnexus"]["manifest_tier"] == "HARD"
+        assert servers["gitnexus"]["required_for_types"] == ["android"]
+        # environment-extra: not in the manifest
+        assert servers["camoufox"]["in_manifest"] is False
+        assert servers["camoufox"]["manifest_tier"] is None
+        assert servers["camoufox"]["required_for_types"] == []
+
+    def test_secret_hygiene_never_emits_config_values(
+            self, tmp_path, fake_claude_json, ws):
+        """MCP configs may carry API keys in `env` — the inventory must be
+        pasteable: names/sources/tiers only, never command/args/env values."""
+        write_claude_json(fake_claude_json, servers={
+            "camoufox": {"type": "stdio", "command": "uvx",
+                         "args": ["--secret-arg"],
+                         "env": {"CAMOUFOX_API_KEY": "sk-do-not-leak"}}})
+        r = run_mcp_probe(ws, "--mcp-inventory",
+                          "--claude-json", str(fake_claude_json))
+        assert r.returncode == 0, r.stderr
+        for secret in ("sk-do-not-leak", "--secret-arg", "uvx"):
+            assert secret not in r.stdout, (
+                f"inventory leaked config value {secret!r}")
+
+    def test_inventory_is_type_agnostic_and_exits_zero(
+            self, tmp_path, fake_claude_json, ws):
+        """Enumeration face: no --type / analysis_state.txt needed (check
+        mode would exit 1 on a missing type — inventory must not)."""
+        write_claude_json(fake_claude_json, servers={"camoufox": reg("x")})
+        r = run_mcp_probe(ws, "--mcp-inventory",
+                          "--claude-json", str(fake_claude_json))
+        assert r.returncode == 0, r.stderr
+        assert json.loads(r.stdout)["server_count"] == 1
+
+    def test_inventory_missing_config_is_empty_not_error(
+            self, tmp_path, ws):
+        """Fail-open JSON read (same policy as check face): unreadable
+        config -> empty inventory, exit 0."""
+        r = run_mcp_probe(ws, "--mcp-inventory",
+                          "--claude-json", str(tmp_path / "nope.json"))
+        assert r.returncode == 0, r.stderr
+        inv = json.loads(r.stdout)
+        assert inv["server_count"] == 0 and inv["servers"] == []
+
+    def test_inventory_mutually_exclusive_with_check_modes(
+            self, tmp_path, fake_claude_json, ws):
+        write_claude_json(fake_claude_json, servers={"camoufox": reg("x")})
+        for flag in ("--json", "--reproduce"):
+            r = run_mcp_probe(ws, "--mcp-inventory", flag,
+                              "--claude-json", str(fake_claude_json))
+            assert r.returncode == 2, (
+                f"--mcp-inventory + {flag} is a usage error (distinct faces)")
+
+    def test_inventory_deterministic(self, tmp_path, fake_claude_json, ws):
+        write_claude_json(fake_claude_json,
+                          servers={"camoufox": reg("x"), "gitnexus": reg("y")})
+        argv = [sys.executable, str(SCRIPTS / "mcp_probe.py"), str(ws),
+                "--mcp-inventory", "--claude-json", str(fake_claude_json)]
+        outs = [subprocess.run(argv, capture_output=True, text=True,
+                               timeout=120).stdout for _ in range(2)]
+        assert outs[0] == outs[1]

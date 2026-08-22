@@ -30,6 +30,8 @@ from worker_budget import (  # noqa: E402
     check_workers_lt_3,
     check_promotion_attempts,
     check_tools_allowed,
+    check_host_forbidden_tools,
+    HOST_FORBIDDEN_TOOLS,
     check_deadline,
     check_tier_gate,
     scan_actual_tools,
@@ -967,6 +969,127 @@ def test_scan_actual_tools_extracts_names():
 
 def test_scan_actual_tools_empty():
     assert scan_actual_tools('no tools here') == []
+
+
+# ---------- #515 acceptance 2: mcp__* dispatch validation ----------
+
+def test_mcp_vm_channel_names_pass_when_vm_allowed(tmp_path):
+    """(a) VM-channel x64dbg names (connect_remote et al.) pass the
+    intended_tools subset check when task_spec allows vm_detonation."""
+    ts = tmp_path / 'task_spec.yaml'
+    _write_task_spec(ts, {'vm_detonation': 'allowed'})
+    ok, msg = check_tools_allowed(
+        ['mcp__x64dbg__connect_remote', 'mcp__x64dbg__set_breakpoint',
+         'mcp__x64dbg__read_memory'], ts)
+    assert ok, msg
+
+
+def test_mcp_vm_channel_names_reject_when_vm_forbidden(tmp_path):
+    ts = tmp_path / 'task_spec.yaml'
+    _write_task_spec(ts, {'vm_detonation': 'forbidden'})
+    ok, msg = check_tools_allowed(['mcp__x64dbg__connect_remote'], ts)
+    assert not ok and 'vm' in msg.lower()
+
+
+def test_mcp_non_vm_family_passes_even_under_strictest_spec(tmp_path):
+    """(c) pass path: non-VM mcp families (camoufox/gitnexus/...) map to
+    no constraint — they pass regardless of vm_detonation."""
+    ts = tmp_path / 'task_spec.yaml'
+    _write_task_spec(ts, {'vm_detonation': 'forbidden'})
+    ok, msg = check_tools_allowed(
+        ['mcp__camoufox__*', 'mcp__gitnexus__build_graph', 'grep'], ts)
+    assert ok, msg
+
+
+def test_mcp_x64dbg_wildcard_maps_to_vm_constraint(tmp_path):
+    """(c) prefix semantics: the wildcard form mcp__x64dbg__* still maps
+    to vm_detonation (tool_to_constraint startswith) — forbidden spec
+    rejects it, allowed spec passes it."""
+    ts_forbidden = tmp_path / 'ts_forbidden.yaml'
+    _write_task_spec(ts_forbidden, {'vm_detonation': 'forbidden'})
+    ok, _ = check_tools_allowed(['mcp__x64dbg__*'], ts_forbidden)
+    assert not ok
+    ts_allowed = tmp_path / 'ts_allowed.yaml'
+    _write_task_spec(ts_allowed, {'vm_detonation': 'allowed'})
+    ok, msg = check_tools_allowed(['mcp__x64dbg__*'], ts_allowed)
+    assert ok, msg
+
+
+def test_host_forbidden_tuple_is_exactly_the_six_vm_only_names():
+    """VM-ONLY contract zero-regression pin: the 6 host-channel names are
+    unchanged (#515 hard constraint — names and REJECT semantics frozen)."""
+    assert HOST_FORBIDDEN_TOOLS == (
+        'mcp__x64dbg__start_session',
+        'mcp__x64dbg__connect_to_session',
+        'mcp__x64dbg__terminate_session',
+        'mcp__x64dbg__connect_to_instance',
+        'mcp__frida__spawn',
+        'mcp__frida__attach',
+    )
+
+
+def test_host_forbidden_each_of_the_six_names_rejects():
+    """(b) every HOST_FORBIDDEN_TOOLS entry REJECTs with the VM-path fix
+    (connect_remote) in the message."""
+    for bad in HOST_FORBIDDEN_TOOLS:
+        ok, msg = check_host_forbidden_tools([bad])
+        assert not ok, f'{bad} must be rejected'
+        assert 'connect_remote' in msg
+
+
+def test_host_forbidden_wildcard_covering_forbidden_rejects():
+    """(c) wildcard/prefix form: an intended wildcard that COVERS a
+    host-forbidden name (worker could legally pick it) rejects with the
+    same semantics — mcp__frida__* covers spawn/attach, mcp__x64dbg__*
+    covers all four x64dbg host channels."""
+    for wildcard in ('mcp__frida__*', 'mcp__x64dbg__*'):
+        ok, msg = check_host_forbidden_tools([wildcard])
+        assert not ok, f'{wildcard} covers a host-forbidden name — must reject'
+        assert 'connect_remote' in msg
+        assert wildcard in msg
+
+
+def test_host_forbidden_benign_wildcards_and_concrete_names_pass():
+    """(c) negative: wildcards/families covering NO forbidden name pass —
+    the coverage check must not become a blanket mcp ban."""
+    ok, msg = check_host_forbidden_tools(
+        ['mcp__camoufox__*', 'mcp__ghidra__*', 'mcp__x64dbg__connect_remote',
+         'grep'])
+    assert ok, msg
+
+
+def test_host_forbidden_mixed_list_reports_every_offender():
+    ok, msg = check_host_forbidden_tools(
+        ['mcp__camoufox__*', 'mcp__frida__spawn', 'mcp__frida__attach'])
+    assert not ok
+    assert 'mcp__frida__spawn' in msg and 'mcp__frida__attach' in msg
+
+
+def test_pre_check_mcp_vm_channel_dispatch_passes(tmp_path, capsys):
+    """(a) at the hook level: a concrete VM-channel T3 dispatch passes
+    every pre_check gate on a healthy workspace (tier-3 needs every open
+    claim at evidence_tier_attempted >= 2)."""
+    ws = _healthy_ws(tmp_path)
+    _write_register(ws / 'claim-register.yaml', [
+        {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 2},
+    ])
+    payload = _budget_payload(
+        desc='[T3 tools=mcp__x64dbg__connect_remote,mcp__x64dbg__read_memory] '
+             'claim C-001 strings')
+    rc = pre_check(payload, _paths_for(ws))
+    assert rc == 0, capsys.readouterr().err
+
+
+def test_pre_check_mcp_wildcard_covering_host_channels_rejects(tmp_path, capsys):
+    """(c) at the hook level: the wildcard form mcp__frida__* is rejected
+    by the hostchan gate (covers spawn/attach)."""
+    ws = _healthy_ws(tmp_path)
+    payload = _budget_payload(
+        desc='[T3 tools=mcp__frida__*] claim C-001 strings')
+    rc = pre_check(payload, _paths_for(ws))
+    assert rc == 2
+    assert 'REJECT hostchan' in capsys.readouterr().err
 
 
 # ---------- runner ----------

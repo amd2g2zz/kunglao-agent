@@ -19,10 +19,23 @@ map is empty (a scaffold must never shadow a working user-level registration
 with a broken command) and whose `mcp_manifest` carries the per-type list
 with purpose/source/register-command-template per item.
 
+Environment-side inventory (#515 acceptance 1): `--mcp-inventory` is a
+distinct ENUMERATION face (vs the check faces below) — it lists every
+REGISTERED server across the three registration surfaces with the harness
+tool prefix `mcp__<server>__*` and the per-type required/optional status
+annotated from MANIFEST (tier null = environment-extra). Read-only: reads
+the JSON config files only, never connects, never spawns, zero network.
+Secret hygiene: emits names/surfaces/tiers only — never command/args/env
+values (an MCP config may carry API keys in `env`; the inventory must be
+pasteable/committable). Consumed by `tools/ext-scan.py --with-mcp` to
+derive describe-only ext catalog entries.
+
 CLI: mcp_probe.py <workspace> [--type windows|linux|android] [--json]
                      [--reproduce] [--claude-json PATH]
+                     [--mcp-inventory]
 Exit codes (same contract as toolchain.py #304): 0 = all present,
-1 = any HARD missing, 2 = only WARN missing.
+1 = any HARD missing, 2 = only WARN missing. Inventory mode: 0 (it is a
+listing, not a verdict) and is mutually exclusive with --json/--reproduce.
 """
 from __future__ import annotations
 
@@ -234,6 +247,46 @@ def check_mcp(ws: Path, project_type: str,
     return checks
 
 
+# ---------- environment-side inventory (#515) ----------
+
+INVENTORY_SCHEMA = "mcp-inventory/1"
+
+
+def mcp_inventory(ws: Path, claude_json: Path | None = None) -> dict:
+    """Enumerate REGISTERED servers across all three registration surfaces.
+
+    Distinct from check_mcp (the supply CHECK face): this lists what the
+    environment actually HAS — every mcpServers key, manifest members and
+    environment-extra alike — annotated with the harness tool prefix
+    (`mcp__<server>__*`) and the per-type required/optional status from
+    MANIFEST. Names are canonical lowercase (same case-insensitive
+    matching semantic as registered_names).
+
+    Secret hygiene: only names/surfaces/tiers are emitted — never the
+    command/args/env/url VALUES from the config (they may carry API keys).
+    """
+    if claude_json is None:
+        claude_json = claude_json_path()
+    found = registered_names(claude_json, ws)
+    servers = []
+    for canonical in sorted(found):
+        item = _BY_NAME.get(canonical)
+        servers.append({
+            "name": canonical,
+            "prefix": f"mcp__{canonical}__*",
+            "sources": list(found[canonical]),
+            "in_manifest": item is not None,
+            "manifest_tier": item.tier if item is not None else None,
+            "required_for_types": list(item.types) if item is not None else [],
+        })
+    return {
+        "schema": INVENTORY_SCHEMA,
+        "claude_json": str(claude_json),
+        "server_count": len(servers),
+        "servers": servers,
+    }
+
+
 # ---------- scaffold (kunglao-init task 2) ----------
 
 def build_scaffold_json() -> dict:
@@ -340,9 +393,28 @@ def main(argv: list[str] | None = None) -> int:
                         help="machine-parseable output for CI")
     parser.add_argument("--claude-json", metavar="PATH", default=None,
                         help="user-level claude.json path (default: ~/.claude.json)")
+    parser.add_argument(
+        "--mcp-inventory", action="store_true",
+        help="enumeration face (#515): list every registered MCP server "
+             "(name, mcp__<server>__* prefix, surfaces, manifest tier) as "
+             "JSON; always exits 0; mutually exclusive with --json/--reproduce")
     args = parser.parse_args(argv)
 
+    if args.mcp_inventory and (args.json or args.reproduce):
+        parser.error("--mcp-inventory is the enumeration face — it cannot "
+                     "combine with the check faces (--json/--reproduce)")
+
     ws = Path(args.workspace).resolve()
+
+    if args.mcp_inventory:
+        # Type-agnostic enumeration: no project_type needed (and no
+        # check_mcp ValueError path) — the inventory lists the environment,
+        # it does not gate on it.
+        inv = mcp_inventory(
+            ws, claude_json=Path(args.claude_json) if args.claude_json else None)
+        print(json.dumps(inv, indent=2, ensure_ascii=False))
+        return 0
+
     project_type = args.type or read_project_type(ws)
     try:
         checks = check_mcp(ws, project_type, claude_json=Path(args.claude_json)

@@ -186,9 +186,13 @@ def _find_projection_internal(entry: dict) -> dict:
 
 
 def _find_projection_ext(entry: dict) -> dict:
+    # #515: environment-side entries (name mcp__<server>, merged via
+    # ext-scan --with-mcp) project kind=mcp — the structural mcp__
+    # prefix is the single naming rule (no on-disk kind field).
+    kind = "mcp" if str(entry.get("name", "")).startswith("mcp__") else "ext"
     return {
         "name": entry.get("name"),
-        "kind": "ext",
+        "kind": kind,
         "capability": entry.get("capability"),
         "source": entry.get("source"),
         "usage": entry.get("usage"),

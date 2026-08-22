@@ -46,12 +46,6 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
     # 2026-08-19-gate5.json is additionally pinned by
     # tests/test_subagent_injection.py::test_tracked_gate5_review_citations_resolve
     # -> allowlisted, NOT git rm --cached (local-green / fresh-CI-red landmine).
-    ".subagent-review/2026-08-19-gate5.json":
-        "Gate 5 execution-evidence receipt; citations pinned by test_subagent_injection",
-    ".subagent-review/2026-08-20-493.json":
-        "#493 review receipt (execution evidence; rule intent = ignore new artifacts)",
-    ".subagent-review/2026-08-20-493-anchor.json":
-        "#493 anchor review receipt (execution evidence)",
 }
 
 

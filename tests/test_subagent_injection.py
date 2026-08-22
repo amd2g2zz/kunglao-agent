@@ -29,13 +29,12 @@ Companion: tests/test_subagent_review.py pins the schema boundary
 real injection scenarios from the field report.
 """
 from __future__ import annotations
-
+import pytest
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -562,9 +561,11 @@ class TestRealShelfResolvability:
         assert not sr._tool_resolves(citation, REPO_ROOT), citation
 
     def test_tracked_gate5_review_citations_resolve(self) -> None:
-        """The committed .subagent-review/2026-08-19-gate5.json must stay
-        valid under the tightened rule (its three citations are real)."""
+        """#549: .subagent-review/2026-08-19-gate5.json removed from tracked
+        tree (was a review-process artifact). Skip if absent."""
         p = REPO_ROOT / ".subagent-review" / "2026-08-19-gate5.json"
+        if not p.exists():
+            pytest.skip(".subagent-review/2026-08-19-gate5.json no longer tracked (#549)")
         data = json.loads(p.read_text(encoding="utf-8"))
         bad = [t for t in data["tools_used"]
                if not sr._tool_resolves(t, REPO_ROOT)]

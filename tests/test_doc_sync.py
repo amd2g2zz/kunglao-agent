@@ -475,3 +475,81 @@ class TestOutputSafety:
         monkeypatch.setattr(ds, "_out_encoding", lambda: "gbk")
         s = ds._safe("质量门框架 ⚠ drift: 4-gate wording")
         assert isinstance(s, str)  # no UnicodeEncodeError
+
+
+# ---- #515: environment entries (mcp__*) provenance semantics -----------
+
+class TestExtIndexMcpProvenance:
+    """#515 design D4: an ext entry named mcp__<server> describes an
+    ENVIRONMENT registration, not a repo file — its existence semantics
+    degrades to sanctioned-provenance checking (source must be a
+    recognized label, name must match the mcp server shape). Anything
+    else FAILs like a dangling repo path."""
+
+    def _mcp_entry(self, name: str = "mcp__camoufox",
+                   source: str = "claude-json") -> dict:
+        return {
+            "name": name, "capability": "mcp:camoufox",
+            "source": source,
+            "usage": "describe-only; probe via scripts/mcp_probe.py "
+                     "--mcp-inventory",
+            "description": "MCP server 'camoufox' (user-global)",
+        }
+
+    def test_mcp_entry_with_claude_json_label_passes(self, tmp_path: Path,
+                                                     capsys) -> None:
+        r = _Repo(tmp_path)
+        r.write(EXT_INDEX_REL, _ext_yaml([self._mcp_entry()]))
+        r.stage(EXT_INDEX_REL)
+        rc, out = r.run_captured(capsys)
+        assert rc == 0, (
+            "claude-json provenance label is the sanctioned existence "
+            "semantics for environment entries (#515 D4)")
+
+    def test_mcp_entry_with_bogus_source_fails(self, tmp_path: Path,
+                                               capsys) -> None:
+        r = _Repo(tmp_path)
+        r.write(EXT_INDEX_REL,
+                _ext_yaml([self._mcp_entry(
+                    source="<HOME>/.claude.json")]))
+        r.stage(EXT_INDEX_REL)
+        rc, out = r.run_captured(capsys)
+        assert rc == 1, "a raw machine path is not a sanctioned provenance"
+        assert "provenance" in out
+
+    def test_mcp_entry_with_repo_path_source_fails(self, tmp_path: Path,
+                                                   capsys) -> None:
+        """Even an EXISTING repo file is not a valid provenance label for
+        an mcp entry — env face and repo face must not blur."""
+        r = _Repo(tmp_path)
+        r.write("scripts/anything.py", ENTRYPOINT_SCRIPT)
+        r.write(EXT_INDEX_REL,
+                _ext_yaml([self._mcp_entry(source="scripts/anything.py")]))
+        r.stage(EXT_INDEX_REL)
+        rc, out = r.run_captured(capsys)
+        assert rc == 1
+        assert "provenance" in out
+
+    def test_mcp_entry_malformed_name_fails(self, tmp_path: Path,
+                                            capsys) -> None:
+        for i, bad in enumerate(("mcp__", "mcp__Bad_Server", "mcp___x")):
+            case_dir = tmp_path / f"case{i}"
+            case_dir.mkdir()
+            r = _Repo(case_dir)
+            r.write(EXT_INDEX_REL, _ext_yaml([self._mcp_entry(name=bad)]))
+            r.stage(EXT_INDEX_REL)
+            rc, out = r.run_captured(capsys)
+            assert rc == 1, f"{bad!r} is not a canonical mcp server name"
+            assert bad in out
+
+    def test_repo_entry_dangling_source_still_fails(self, tmp_path: Path,
+                                                    capsys) -> None:
+        """Regression pin: the repo-face existence check is unchanged —
+        only mcp__-prefixed entries take the provenance branch."""
+        r = _Repo(tmp_path)
+        r.write(EXT_INDEX_REL, _ext_yaml([{
+            "name": "ghost-tool", "capability": "test:ghost",
+            "source": "scripts/no_such_file.py"}]))
+        r.stage(EXT_INDEX_REL)
+        rc, out = r.run_captured(capsys)
+        assert rc == 1 and "no_such_file.py" in out
