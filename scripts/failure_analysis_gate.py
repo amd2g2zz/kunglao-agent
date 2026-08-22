@@ -308,7 +308,8 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
                     validated_capability: str | None = None,
                     identified_obstacle: str | None = None,
                     source: str | None = None,
-                    library: Path | None = None) -> dict:
+                    library: Path | None = None,
+                    trigger_precision: dict | None = None) -> dict:
     claims, reg = _load_claims(workspace)
     claim = next((c for c in claims if c.get("id") == claim_id), None)
     if not claim:
@@ -416,6 +417,14 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
     if outcome_norm:
         entry["outcome"] = outcome_norm
         entry["what_happened"] = what_happened
+    # #525: trigger_precision is optional at record time (legacy analyses
+    # predate the contract); aggregate_lessons gates on it at WRITE time,
+    # not here. Preserve from prior on closure backfill so the field
+    # survives a re-record.
+    if trigger_precision is not None:
+        entry["trigger_precision"] = dict(trigger_precision)
+    elif prior.get("trigger_precision"):
+        entry["trigger_precision"] = prior["trigger_precision"]
     _analysis_path(workspace, claim_id).write_text(
         yaml.safe_dump(entry, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
@@ -563,8 +572,19 @@ def _lesson_filename(signature: str) -> str:
 def _write_lesson(lib: Path, signature: str, topic: str,
                   entries: list[tuple[str, dict]]) -> Path:
     """One lesson file per signature group, listing every source claim."""
+    # #525: every lesson starts at stage=draft (nursery, capa analogy). The
+    # trigger_precision block is mandatory per #525 — without it, the
+    # aggregation layer rejects the entry (gates below in this fn).
+    tp_keys = ("tool", "error_signature", "family", "unit")
+    tp = entries[0][1].get("trigger_precision") or {}
+    missing_tp = [k for k in tp_keys if not (tp.get(k) or "").strip()]
+    if missing_tp:
+        raise ValueError(
+            f"trigger_precision missing fields {missing_tp} on signature {signature}"
+        )
     fm = {
         "type": "lesson",
+        "stage": "draft",
         "signature": signature,
         "slug": _lesson_slug(signature),
         "method_assumption": entries[0][1].get("method_assumption", ""),
@@ -573,6 +593,7 @@ def _write_lesson(lib: Path, signature: str, topic: str,
         "claim_topic": topic,
         "outcome": ", ".join(sorted({e.get("outcome", "") for _, e in entries})),
         "sources": sorted(cid for cid, _ in entries),
+        "trigger_precision": dict(tp),
         "created_at": utc_now_iso(),
     }
     lines = ["---", yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).strip(), "---", ""]
@@ -602,6 +623,72 @@ def _reflect_reason(outcome: str | None, redteam_ok: bool) -> str:
     if outcome == "NEGATIVE" and not redteam_ok:
         return "negative-unverified"
     return ""
+
+
+def _read_lesson_frontmatter(path: Path) -> tuple[str, str, dict]:
+    """Return (raw_text, fm_yaml, parsed_dict). Tolerant to malformed."""
+    text = path.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return text, "", {}
+    try:
+        fm = yaml.safe_load(parts[1]) or {}
+        if not isinstance(fm, dict):
+            fm = {}
+    except Exception:
+        fm = {}
+    return text, parts[1], fm
+
+
+def promote_lesson(lesson_path: Path, workspace: Path | None = None,
+                   promoted_by: str = "kunglao-verify",
+                   evidence: str = "",
+                   demote_to: str | None = None) -> dict:
+    """#525: flip a lesson's frontmatter stage draft → active, stamp
+    promoted_at / promoted_by / promoted_evidence, and emit a
+    lesson_stage_transition row to the kunglao_log. Idempotent on
+    already-active (no rewrite, no audit row). Demotion is forbidden —
+    lessons only retire (separate signal); attempts raise ValueError."""
+    if demote_to is not None:
+        raise ValueError(
+            f"demotion to {demote_to!r} is not supported by promote_lesson; "
+            "retire the lesson instead (separate signal, #525).")
+    lesson_path = Path(lesson_path)
+    text, fm_yaml, fm = _read_lesson_frontmatter(lesson_path)
+    current = str(fm.get("stage", "draft")).strip().lower() or "draft"
+    if current == "active":
+        return {"promoted": False, "already_active": True,
+                "lesson": str(lesson_path)}
+    fm["stage"] = "active"
+    fm["promoted_at"] = utc_now_iso()
+    fm["promoted_by"] = promoted_by
+    if evidence:
+        fm["promoted_evidence"] = evidence
+    new_yaml = yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).strip()
+    new_text = text.replace(fm_yaml, new_yaml, 1)
+    if new_text == text:
+        # frontmatter never matched — defensive rewrite
+        new_text = "---\n" + new_yaml + "\n---\n" + text.split("---", 2)[-1]
+    lesson_path.write_text(new_text, encoding="utf-8")
+
+    # Audit row: lesson_stage_transition, actor=nursery, claim=<first source>.
+    sources = fm.get("sources") or []
+    claim_id = str(sources[0]) if sources else ""
+    detail = (f"draft→active promoted_by={promoted_by}")
+    if evidence:
+        detail += f" evidence={evidence}"
+    try:
+        if workspace is not None:
+            from kunglao_log import emit
+            emit(Path(workspace), actor="nursery",
+                 action="lesson_stage_transition", claim=claim_id,
+                 detail=detail)
+    except Exception:
+        pass  # logging never blocks promotion
+    return {"promoted": True, "already_active": False,
+            "lesson": str(lesson_path),
+            "promoted_at": fm["promoted_at"],
+            "promoted_by": promoted_by}
 
 
 def _append_reflect_queue(queue_path: Path, entries: list[dict]) -> int:
@@ -679,6 +766,28 @@ def aggregate_lessons(workspace: Path, library: Path | None = None,
             outcome = entry.get("outcome")
             if outcome in ("PROVEN", "VERIFIED") or (
                     outcome == "NEGATIVE" and cid in redteam_ok):
+                # #525: nursery gate — every library lesson MUST carry a
+                # complete trigger_precision block. Missing or incomplete
+                # entries route to /reflect (reason=missing-precision)
+                # instead of the library, so the gate is observable AND
+                # doesn't block the rest of aggregation.
+                tp = entry.get("trigger_precision") or {}
+                tp_keys = ("tool", "error_signature", "family", "unit")
+                missing_tp = [k for k in tp_keys if not (tp.get(k) or "").strip()]
+                if missing_tp:
+                    queued.append({
+                        "claim_id": cid,
+                        "reason": "missing-precision",
+                        "outcome": outcome,
+                        "next_method": entry.get("next_method", ""),
+                        "method_assumption": entry.get("method_assumption", ""),
+                        "message": (
+                            f"closed-loop analysis for {cid} lacks "
+                            f"trigger_precision fields {missing_tp}; "
+                            f"backfill the frontmatter (tool/error_signature/"
+                            "family/unit) before re-aggregation (#525)."),
+                    })
+                    continue
                 topic = _claim_topic(claim, cid)
                 sig = _signature(entry.get("method_assumption", ""),
                                  entry.get("next_method", ""), topic)
@@ -733,6 +842,7 @@ def _lesson_meta(path: Path) -> dict:
         except Exception:
             meta = {}
     return {"path": path, "text": text,
+            "stage": str(meta.get("stage", "")),
             "outcome": str(meta.get("outcome", "")),
             "next_method": str(meta.get("next_method", "")),
             "claim_topic": str(meta.get("claim_topic", ""))}
@@ -749,6 +859,7 @@ def _score_lessons(query: str, library: Path, limit: int = 3) -> list[dict]:
         score = len(q & _tokens(meta["text"]))
         if score:
             scored.append({"file": p.name, "score": score,
+                           "stage": meta.get("stage", ""),
                            "outcome": meta["outcome"],
                            "next_method": meta["next_method"],
                            "claim_topic": meta["claim_topic"]})
@@ -822,6 +933,74 @@ def _print_blocked(d: dict) -> None:
     if fm:
         print()
         print("See failure-modes reference (recall #268): " + ", ".join(fm))
+
+
+def promote_lesson(lesson_path: Path, workspace: Path,
+                  promoted_by: str, evidence: str,
+                  demote_to: str | None = None) -> dict:
+    """Flip a lesson's stage (issue #525 nursery two-stage lifecycle).
+
+    draft → active is the only forward transition: lessons that have been
+    mechanically verified (kunglao-verify L1 reproduce, or red-team pass)
+    are trusted enough to drop the [unverified] injection tag. The
+    transition is audited via kunglao_log.emit(action=lesson_stage_transition).
+
+    Re-promoting an active lesson is an idempotent no-op (already_active).
+    Demotion (active → draft) is rejected with ValueError — lessons do not
+    regress; retirement is a separate signal.
+    """
+    if demote_to is not None:
+        raise ValueError(
+            f"promote_lesson does not support demotion (got demote_to={demote_to!r}); "
+            "lessons retire via a separate signal."
+        )
+    p = Path(lesson_path)
+    if not p.exists():
+        return {"promoted": False, "reason": f"lesson not found: {p}"}
+    text = p.read_text(encoding="utf-8")
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {"promoted": False, "reason": f"lesson lacks frontmatter: {p}"}
+    try:
+        fm = yaml.safe_load(parts[1]) or {}
+        if not isinstance(fm, dict):
+            return {"promoted": False, "reason": "lesson frontmatter is not a mapping"}
+    except yaml.YAMLError as exc:
+        return {"promoted": False, "reason": f"frontmatter parse error: {exc}"}
+
+    sources = fm.get("sources") or []
+    current = (fm.get("stage") or "draft").lower()
+    if current == "active":
+        return {"promoted": False, "already_active": True,
+                "promoted_at": fm.get("promoted_at", "")}
+
+    now = utc_now_iso()
+    fm["stage"] = "active"
+    fm["promoted_at"] = now
+    fm["promoted_by"] = promoted_by
+    fm["promoted_evidence"] = evidence
+    body = parts[2] if len(parts) >= 3 else ""
+    new_text = ("---\n" +
+                yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).rstrip() +
+                "\n---" + body)
+    p.write_text(new_text, encoding="utf-8")
+
+    # Audit log (#525 — fail-open by contract; never break the promotion).
+    try:
+        from kunglao_log import emit
+        # sources is a list of claim ids; first is the canonical owner
+        claim_id = sources[0] if isinstance(sources, list) and sources else None
+        emit(workspace, actor="nursery", action="lesson_stage_transition",
+             claim=str(claim_id) if claim_id else None,
+             tool="failure_analysis_gate",
+             artifact=p.name,
+             detail=(f"draft→active promoted_by={promoted_by} "
+                     f"evidence={evidence}"))
+    except Exception:
+        pass
+
+    return {"promoted": True, "from_stage": "draft", "to_stage": "active",
+            "promoted_at": now}
 
 
 def main(argv: list[str] | None = None) -> int:
