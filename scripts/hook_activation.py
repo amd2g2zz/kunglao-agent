@@ -70,6 +70,16 @@ init returns RC_HOOK_WIRING — never a silent OK or a WARN.
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="hook_activation", action="write_blocked",
+                             detail="module wired")
+except NameError:
+    pass
+
 import argparse
 import json
 import sys

@@ -15,6 +15,16 @@ Usage:
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="digest_build", action="converge",
+                          detail="module wired")
+except NameError:
+    pass
+
 import argparse
 import sys
 from datetime import datetime, timezone

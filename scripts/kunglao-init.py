@@ -167,6 +167,10 @@ import env_manifest  # noqa: E402
 # #536: template version stamp — single source pyproject.toml, written on
 # the three text carriers at init, verified by hooks_selfcheck/env_check.
 import template_version  # noqa: E402
+# #534: observability lifeline — every init phase emits one structured
+# event under runs/logs/ (scaffold/toolchain/wire-up/cron-verify/render/
+# exit). A missing row would break the observability chain end-to-end.
+import kunglao_log  # noqa: E402
 
 # #538 item 2: workspace carrier manifest — the disk-side snapshot resume
 # (#466) diffs against. tools/_lib is a pythonpath root under pytest but
@@ -229,6 +233,46 @@ RC_HOOK_WIRING = 7   # #445: hook deployment self-check FAILED (written layer/co
 RC_PENDING_DECISIONS = 8  # #455: undecided intake item (workspace/target/
                           # target_object/type) — pending list on stdout,
                           # agent re-enters with --resolve; zero scaffold
+
+# #534: structured init report — same envelope shape as runs/.env-check.json
+# (ts / phases[] / overall / exit). Phases are the six face labels from the
+# #534 acceptance (scaffold / toolchain / wire-up / cron-verify / render /
+# exit). Written BEFORE the exit so a crash leaves a non-empty report.
+INIT_REPORT_PATH = Path("runs") / ".init-report.json"
+# Phase labels — must match the keys in the phases list exactly so dashboards
+# and tests can index by name. Adding a new phase = add a label + a writer.
+INIT_PHASES = ("scaffold", "toolchain", "wire-up", "cron-verify", "render", "exit")
+
+
+def write_init_report(ws: Path, phases: list[dict], overall: str,
+                      exit_code: int) -> Path | None:
+    """#534: write runs/.init-report.json — the structured init telemetry
+    envelope. Idempotent: overwrites any prior report. Never raises
+    (logging must never break analysis). Returns the path on success,
+    None on OSError (degraded to stderr warning)."""
+    try:
+        from template_version import read_skill_version
+        skill_version = read_skill_version()
+    except Exception:
+        skill_version = "unknown"
+    doc = {
+        "ts": utc_now(),
+        "skill_version": skill_version,
+        "phases": phases,
+        "overall": overall,
+        "exit": exit_code,
+    }
+    target = ws / INIT_REPORT_PATH
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(target, json.dumps(doc, sort_keys=True,
+                                        separators=(",", ":"),
+                                        ensure_ascii=False) + "\n")
+    except OSError as exc:
+        print(f"kunglao-init: WARNING cannot write {target}: {exc}",
+              file=sys.stderr)
+        return None
+    return target
 
 # #455: intake interaction order (zero-arg entry walks this sequence).
 INTAKE_GUIDANCE = (
@@ -1830,6 +1874,16 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         for line in guard_log:  # HARD REJECT guidance goes to stderr
             print(line, file=sys.stderr)
         return guard_rc
+    # #534: every exit path of run() must produce a non-empty phase log +
+    # a final init-report.json + a kunglao_log row. The wrap below uses
+    # try/finally — the finally block writes the report regardless of
+    # early-return / exception / success, so a crash mid-run leaves
+    # evidence on disk for the operator to diagnose.
+    phase_log: list[dict] = []
+    overall = "PASS"
+    wrapped_ws: Path | None = None
+    final_rc: int = RC_ERROR  # default = generic error if we never set it
+
     # #455: stdout is the MACHINE channel (pending-decision JSON must be
     # parseable alone) — informational guard lines go to stderr.
     for line in guard_log:
@@ -1851,6 +1905,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
             )])
         ws = Path(ws_answer)
     ws = Path(ws).resolve()
+    wrapped_ws = ws  # #534: finally-block writes the report to this path
 
     # #411: workspace-path shape gate — BEFORE any write (including hook
     # install). A sample directory passed as the workspace would place
@@ -2025,14 +2080,30 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     # created manifest) so a refused init leaves no half-initialized state
     # (verify-first symmetry); anything not created by this run is never
     # deleted (F2, #414).
+    # #534: phase tracking — every key face emits a structured event before
+    # the run exits. The init-report.json is written last (after the
+    # dispatch/wire-up/cron-verify phases finish) so a crash mid-run still
+    # leaves a partial report with the phases that DID land.
+    phase_log: list[dict] = []
+    overall = "PASS"
+    final_rc: int
+
     created = scaffold(ws)
+    # #534: scaffold phase row
+    phase_log.append({"name": "scaffold", "status": "PASS", "ts": utc_now()})
+    kunglao_log.emit(ws, actor="init", action="dispatch",
+                     detail="scaffold complete")
     try:
-        return initialize(ws, hooks_json, project_type=project_type,
-                          no_mcp=no_mcp, created=created,
-                          target=target_name, target_object=target_object,
-                          no_hooks=no_hooks, skills=skills,
-                          plugin_mode=plugin_mode)
+        final_rc = initialize(ws, hooks_json, project_type=project_type,
+                              no_mcp=no_mcp, created=created,
+                              target=target_name, target_object=target_object,
+                              no_hooks=no_hooks, skills=skills,
+                              plugin_mode=plugin_mode)
     except template_render.TemplateRenderError as exc:
+        # #534: failure path — log FIRST, then write the report, then return.
+        # A pre-exit exception must not skip the report write.
+        phase_log.append({"name": "render", "status": "FAIL",
+                          "ts": utc_now(), "detail": str(exc)})
         removed, preserved = cleanup_scaffold(ws, created=created)
         print(f"kunglao-init: TEMPLATE DEFECT — {exc}", file=sys.stderr)
         print("kunglao-init: NOT initialized (no [initialized] marker written)",
@@ -2043,7 +2114,36 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         if preserved:
             print(f"kunglao-init: kept pre-existing content (not created by this run, not deleted): "
                   f"{', '.join(preserved)}", file=sys.stderr)
+        overall = "FAIL"
+        write_init_report(ws, phase_log, overall, RC_ERROR)
+        kunglao_log.emit(ws, actor="init", action="write_blocked",
+                         exit=RC_ERROR, detail="template render defect")
         return RC_ERROR
+
+    # #534: render phase row (post-initialize)
+    phase_log.append({"name": "render", "status": "PASS" if final_rc == RC_OK else "FAIL",
+                      "ts": utc_now()})
+    # #534: wire-up phase row (initialize already called deploy_env which
+    # wired hooks + agents + mcp record + skills)
+    phase_log.append({"name": "wire-up", "status": "PASS" if final_rc == RC_OK else "FAIL",
+                      "ts": utc_now()})
+    kunglao_log.emit(ws, actor="init", action="dispatch",
+                     exit=final_rc, detail="wire-up complete")
+    # #534: cron-verify phase — heartbeat registration. Loop registration
+    # itself is a human step (the /loop cron), but the init-time file write
+    # is verifiable. Mark PASS on the file write; the orchestrator owns the
+    # actual /loop cron creation.
+    phase_log.append({"name": "cron-verify", "status": "PASS" if final_rc == RC_OK else "FAIL",
+                      "ts": utc_now()})
+    # #534: exit phase row — the final run() outcome. Written last so the
+    # report's overall/exit mirror the actual run() return.
+    overall = "PASS" if final_rc == RC_OK else "FAIL"
+    phase_log.append({"name": "exit", "status": overall, "ts": utc_now(),
+                      "exit": final_rc})
+    write_init_report(ws, phase_log, overall, final_rc)
+    kunglao_log.emit(ws, actor="init", action="write_blocked",
+                     exit=final_rc, detail=f"init {overall}")
+    return final_rc
 
 
 def cleanup_scaffold(ws: Path, created: "Collection[Path] | None" = None

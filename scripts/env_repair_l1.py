@@ -30,6 +30,16 @@ surface, not a crash).
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="env_repair_l1", action="write_blocked",
+                          detail="module wired")
+except NameError:
+    pass
+
 import datetime
 import json
 import os

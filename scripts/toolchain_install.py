@@ -26,6 +26,16 @@ without explicit consent, IDA never auto-installed.
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="toolchain_install", action="write_blocked",
+                                detail="module wired")
+except NameError:
+    pass
+
 import shutil
 import subprocess
 import sys

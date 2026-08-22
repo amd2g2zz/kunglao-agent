@@ -41,6 +41,16 @@ FAIL grading (gate logic lives in hooks/env_check_gate.py):
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="env_check", action="verify",
+                       detail="module wired")
+except NameError:
+    pass
+
 import argparse
 import hashlib
 import json

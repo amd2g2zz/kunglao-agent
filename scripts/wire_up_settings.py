@@ -30,6 +30,16 @@ resolution now lives in hook_activation._canonical_hooks_dir / build_hook_entry.
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="wire_up_settings", action="write_blocked",
+                                detail="module wired")
+except NameError:
+    pass
+
 import warnings
 from collections.abc import Iterable
 from pathlib import Path

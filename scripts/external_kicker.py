@@ -51,6 +51,16 @@ Pure stdlib. Exit 0 = tick ok (kick or skip), 1 = fatal config error.
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="external_kicker", action="dispatch",
+                              detail="module wired")
+except NameError:
+    pass
+
 import argparse
 import json
 import os

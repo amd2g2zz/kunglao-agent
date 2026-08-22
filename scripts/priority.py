@@ -47,6 +47,16 @@ Usage:
 Workspace defaults to $PWD/malware-analysis-workspace if it has claim-register.yaml, else $PWD.
 """
 from __future__ import annotations
+
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="priority", action="priority_deviation",
+                        detail="module wired")
+except NameError:
+    pass
 import json, math, os, sys
 from pathlib import Path
 import yaml

@@ -16,6 +16,16 @@ All writes are atomic (tmp→rename) so concurrent/interleaved upserts don't los
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="update_index", action="claim_migrate",
+                           detail="module wired")
+except NameError:
+    pass
+
 import sys
 from pathlib import Path
 

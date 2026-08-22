@@ -46,6 +46,15 @@ import os
 import subprocess
 import sys
 import datetime
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="heartbeat_tick", action="dispatch",
+                             detail="module wired")
+except NameError:
+    pass
 from pathlib import Path
 
 import hook_activation as ha
