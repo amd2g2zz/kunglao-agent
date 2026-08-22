@@ -3,14 +3,16 @@
 """scripts/kunglao_export.py — workspace export tool (#540, D5)
 
 Zones:
-- contract_carriers: 契约载体 (全部 dotfiles)
-- evidence: evidence/, pcap+frida scripts (reproduce 锚)
+- contract_carriers: 契约载体 (全部 dotfiles + named contract files)
+- evidence: evidence/, runs/, pcap+frida scripts (reproduce 锚)
 - scratch: free-zone (excluded by default, --include-scratch)
 
 Manifest:
-- version stamp (#536)
-- per-file sha256
-- allows roundtrip integrity check
+- workspace template version stamp (#536 — pairs with template_version.py)
+- per-file sha256 (round-trip integrity)
+- empty dirs preserved via .gitkeep fallback
+
+verify subcommand: re-hash every archived file, report mismatches.
 """
 from __future__ import annotations
 
@@ -22,7 +24,7 @@ import tarfile
 import time
 from pathlib import Path
 
-# Manifest version — pairs with #536
+# Manifest format version (orthogonal to #536 skill version)
 MANIFEST_VERSION = "1.0"
 
 # Contract carrier patterns (#538 + dotfiles)
@@ -72,27 +74,68 @@ def classify(path: Path) -> str:
 
 def build_manifest(ws: Path, include_scratch: bool) -> dict:
     """Build export manifest with sha256 for each file."""
+    # Workspace template version stamp (#536). Imported lazily so the
+    # script stays a standalone CLI even when template_version is moved.
+    try:
+        import template_version  # noqa: PLC0415 — stdlib path bootstrap
+        skill_version = template_version.read_skill_version()
+        ws_version = template_version.read_workspace_version(ws)
+        stamp_faults = template_version.verify_stamps(ws)
+    except (ImportError, RuntimeError):
+        skill_version = ws_version = None
+        stamp_faults = {}
+
     manifest = {
         "version": MANIFEST_VERSION,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "workspace": str(ws.name),
+        "skill_version": skill_version,
+        "workspace_version": ws_version,
+        "stamp_faults": stamp_faults,
         "zones": {"carrier": [], "evidence": [], "scratch": [], "other": []},
+        "empty_dirs": [],
     }
     for p in sorted(ws.rglob("*")):
+        if ".git" in p.parts:
+            continue
+        rel = str(p.relative_to(ws)) if p != ws else "."
+        if p.is_dir():
+            # Empty-dir fidelity: a directory with no children tracked. We
+            # only record dirs we are about to archive (i.e. inside the
+            # zone rules below). The export loop plants a .gitkeep so the
+            # archive round-trips faithfully.
+            continue
         if not p.is_file():
             continue
-        # Skip .git
-        if ".git" in p.parts:
+        if p.name == ".gitkeep":
+            # Empty-dir markers — represented in `empty_dirs` instead,
+            # never in zone file lists (avoids manifest/archive drift).
             continue
         zone = classify(p)
         if zone == "scratch" and not include_scratch:
             continue
-        rel = str(p.relative_to(ws))
         manifest["zones"][zone].append({
             "path": rel,
             "sha256": sha256_file(p),
             "size": p.stat().st_size,
         })
+
+    # Empty-dir pass: a dir with a .gitkeep marker AND no other tracked
+    # children is part of the contract surface and must round-trip. We
+    # enumerate every dir under ws so a deeply nested empty contract
+    # dir is captured (rglob gives the parents even when they are empty).
+    for d in sorted(ws.rglob("*")):
+        if ".git" in d.parts:
+            continue
+        if not d.is_dir():
+            continue
+        marker = d / ".gitkeep"
+        if not marker.exists():
+            continue
+        non_marker_children = [c for c in d.iterdir() if c.name != ".gitkeep"]
+        if non_marker_children:
+            continue
+        manifest["empty_dirs"].append(str(d.relative_to(ws)))
     return manifest
 
 
@@ -123,6 +166,12 @@ def export_workspace(ws: Path, archive: Path, include_scratch: bool = False) -> 
                 src = ws / entry["path"]
                 if src.exists():
                     tar.add(src, arcname=f"export/{entry['path']}")
+        # Empty-dir fidelity: write a synthetic .gitkeep per recorded dir
+        for d in manifest.get("empty_dirs", []):
+            ti = tarfile.TarInfo(f"export/{d}/.gitkeep")
+            content = b"# kunglao export: empty-dir fidelity marker\n"
+            ti.size = len(content)
+            tar.addfile(ti, __import__("io").BytesIO(content))
     print(f"archive: {archive}")
     return 0
 

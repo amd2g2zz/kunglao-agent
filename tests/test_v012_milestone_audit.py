@@ -41,7 +41,7 @@ def test_changelog_has_unreleased_section():
 
 
 def test_no_legacy_precommit_reference():
-    """#445: 单一 hook 注册路径,无 .RETIRED-PRECOMMIT-PATH 残留引用。"""
+    """#445: 单一 hook 注册路径,无 .claude/hooks/pre-commit 残留引用。"""
     offenders = []
     for p in ROOT.rglob("*"):
         if not p.is_file() or ".git" in p.parts or ".review" in p.parts:
@@ -54,7 +54,7 @@ def test_no_legacy_precommit_reference():
             text = p.read_text(encoding="utf-8", errors="replace")
         except (UnicodeDecodeError, OSError):
             continue
-        if "RETIRED_PRECOMMIT_PATH" in text:
+        if ".claude/hooks/pre-commit" in text:
             # Allow self-reference
             if p.name in ("test_dedup_319.py", "test_v012_milestone_audit.py"):
                 continue
