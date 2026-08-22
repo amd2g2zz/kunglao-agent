@@ -107,6 +107,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `progress_report.py` | one-block progress report | tests |
 | `init_state.py` | init-completeness single source of truth (#304) | hooks, lib(3), tests |
 | `template_version.py` | workspace template version stamp — write/verify/upgrade-warning (#536) | kunglao-init, hooks_selfcheck, env_check, kunglao-status, kunglao-resume, tests |
+| `hypothesis_store.py` | hypothesis layer carrier (#528) — H-*.md parse + open→refuted/superseded state machine over `hypotheses/` | digest_build (sec_g), hooks/state_anchor, kunglao-init stub, tests |
+| `notes_writer.py` | notes/ result-layer writer (#528) — supersedes-chain enforcement + verify_status reset on corrections | tests; write-path contract behind hooks/write_guard (#532) |
 
 ## Observability sidecar (issue #287)
 
@@ -115,7 +117,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao-status.py` | status panel CLI — renders claims board + active workers + convergence trend (SKILL.md §Status panel; ANSI auto-degrade) | docs, tests |
 | `kunglao_status.py` | disk-rendered TUI status panel implementation | lib(1), tests |
 | `kunglao_log.py` | structured JSONL event log | lib(4), tests |
-| `kunglao_resume.py` | /kunglao-agent:resume — crash-recovery brief (read-only: health/12-source summary/table-lookup next-step; issue #466) | CLI, tests |
+| `kunglao_resume.py` | /kunglao-agent:resume — crash-recovery brief (read-only: health/13-source summary/open-hypothesis pointers/table-lookup next-step; issue #466, #528) | CLI, tests |
 
 ## Support libraries & utilities
 

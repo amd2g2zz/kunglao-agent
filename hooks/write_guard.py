@@ -204,6 +204,9 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
     Leg 2 (write_gate R1/R2): stamp re-verification — scoped to THE FILE
     BEING WRITTEN, so one dirty legacy fact cannot deadlock every future
     write (the whole-workspace audit stays on the write_gate.py CLI face).
+    Leg 3 (notes_writer #528): supersedes-chain adjudication of the note
+    post-image — a correction without `supersedes:`, a pointer at a
+    nonexistent note, or an inherited verify_status stamp is blocked.
     """
     violations: list[str] = []
     from lint_facts import lint_index, lint_workspace
@@ -226,6 +229,18 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
             if Path(str(v.get("file", ""))).name == target_name:
                 violations.append(
                     f"write_gate[{v.get('rule')}] {v.get('detail')}")
+    if carrier == CARRIER_NOTE:
+        try:
+            from notes_writer import check_write
+            pending_text = (shadow / rel).read_text(
+                encoding="utf-8", errors="replace")
+            violations += [f"supersedes[{i}] {msg}" for i, msg in enumerate(
+                check_write(shadow / "notes", pending_text, rel.name),
+                start=1)]
+        except Exception as exc:  # noqa: BLE001 — checker crash = fail closed
+            violations.append(
+                f"supersedes[?] adjudication crashed "
+                f"({type(exc).__name__}: {exc}); fail-closed.")
     return violations
 
 

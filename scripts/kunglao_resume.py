@@ -288,6 +288,23 @@ def _last_structured_event(ws: Path) -> dict | None:
     return None
 
 
+def _open_hypotheses(ws: Path) -> dict:
+    """#528: OPEN hypothesis pointers (what re-hydrates at restart) via the
+    single hypothesis-layer parser. Reads hypotheses/ ONLY — never notes/
+    (the result layer). FAIL_OPEN: no dir / broken layer -> empty."""
+    hyp_dir = ws / "hypotheses"
+    if not hyp_dir.is_dir():
+        return {"open_count": 0, "pointers": []}
+    try:
+        from hypothesis_store import HypothesisStore
+        hyps = HypothesisStore(hyp_dir).list_open()
+        return {"open_count": len(hyps),
+                "pointers": [{"claim_id": h.claim_id, "hyp_id": h.id}
+                             for h in hyps]}
+    except Exception:  # noqa: BLE001 — degrade, never block the brief
+        return {"open_count": 0, "pointers": []}
+
+
 def _data_age_rows(ws: Path, now: datetime) -> list[dict]:
     """The design D3 matrix as data: one row per declared source with its
     missing/stale verdict. CRITICAL rows are the only rc-moving ones."""
@@ -345,6 +362,11 @@ def _data_age_rows(ws: Path, now: datetime) -> list[dict]:
         row("runs/logs/kunglao-*.jsonl", "eventlog", ev is not None,
             _age_minutes(_parse_ts((ev or {}).get("ts")), now),
             "ok" if ev else "missing"),
+        # #528: the cold-start 9th file — a missing digest means the
+        # restart re-hydrates 8 files (degraded, flagged, never fatal).
+        row("runs/digest.md", "digest", (ws / "runs" / "digest.md").exists(),
+            _age_minutes(_mtime(ws / "runs" / "digest.md"), now),
+            "ok" if (ws / "runs" / "digest.md").exists() else "missing"),
     ]
 
 
@@ -495,6 +517,7 @@ def build_brief(ws) -> dict:
         "stale_workers": _stale_workers(ws, now),
         "plan": plan,
         "timeline": _timeline(ws, now),
+        "hypotheses": _open_hypotheses(ws),
         "next_step": next_step,
         "advice": advice,
         "sources": _sources_flags(data_age),
@@ -565,6 +588,15 @@ def render_text(brief: dict) -> str:
     L.append("## breakpoint timeline (oldest -> newest)")
     for e in b["timeline"]:
         L.append(f"{e['ts']}  {e['source']}: {e['note']}")
+
+    # #528: what re-hydrates — OPEN hypothesis pointers (ids only).
+    hyps = b.get("hypotheses") or {}
+    if hyps.get("open_count"):
+        ptrs = ", ".join(f"{p['hyp_id']}({p['claim_id']})"
+                         for p in hyps["pointers"])
+        L.append("")
+        L.append("## open hypotheses (re-hydrate at cold start)")
+        L.append(f"open_count: {hyps['open_count']} | {ptrs}")
 
     L.append("")
     L.append("## next step")

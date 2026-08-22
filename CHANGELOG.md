@@ -30,6 +30,44 @@ release (see the mapping table at the end).
 
 ## [Unreleased]
 
+### Added (hypothesis persistence + restart re-hydration, #528)
+
+- `scripts/hypothesis_store.py` — the hypothesis layer carrier over
+  `hypotheses/` (`H-*.md`: id / claim_id / competitor_group / candidates /
+  status): parse + strict state machine open -> refuted (requires
+  `refuting_fact_id`) | superseded (requires `superseded_by`), terminal
+  states never reopen, `open -> open` idempotent for cold-start rehydrate;
+  unparseable files are skipped so a corrupt hypothesis never blocks a
+  reader
+- digest `## sec_g — open hypotheses` (scripts/digest_build.py): the
+  cold-start digest lists OPEN hypothesis pointers only (never the
+  motivation body, capped rows, never reads notes/); absent when there
+  are none — pre-#528 workspaces keep the exact six-section digest; the
+  section build is fail-open (a hypotheses-layer crash degrades the
+  digest to six sections, it never blocks cold start)
+- cold start is now the 9-file read: `runs/digest.md` joins
+  references/cold-start-contract.md as file 9, read via the
+  kunglao-resume read-only face
+- state_anchor `hyps=` segment (hooks/state_anchor.py): structured
+  open-hypothesis pointers inside the existing 500-char anti-narrative
+  anchor; `build_anchor_payload()` exposes them as
+  `[{"claim_id", "hyp_id"}]` dicts
+- resume brief (#466 face) surfaces `runs/digest.md` data-age row + a
+  `hypotheses` block (open_count + pointers) — read-only, fail-open
+- `scripts/notes_writer.py` — notes/ result-layer writer with the
+  supersedes-chain contract: a same-claim correction MUST declare
+  `supersedes: <prior-id>`, the prior note is never modified, a
+  correction is always written `verify_status: pending` (never inherits
+  the old stamp), and a pointer at a nonexistent note is rejected
+- write_guard (#532 note leg) gains Leg 3: the note post-image is
+  adjudicated against the chain contract on every Write/Edit — a
+  chainless same-claim correction (the AES->ChaCha20 silent-overwrite
+  shape), a fake chain pointer, or an inherited stamp is BLOCKED
+- hypotheses/ README stub (kunglao-init CARRIER_READMES) updated from
+  "#528 owns the real writer" to the landed writer + state machine;
+  docs/workspace-manifest.md hypotheses/ row now names
+  hypothesis_store.py, digest sec_g, and the state_anchor segment
+
 ### Added (environment drift detection + bounded repair L1, #475)
 
 - env-state single source of truth: `runs/env-state.json`

@@ -23,7 +23,7 @@ Test anchor: `tests/test_workspace_carriers_538.py`.
 | `blockers/` | contract | `convergence_check.py`, init | resume brief, `kunglao-status` | blocker-*.md files |
 | `runs/` | contract | init, every command | `kunglao-resume.py`, `kunglao-status.py` | worker status, plans, digests |
 | `runs/logs/` | contract | init, `kunglao_log.py` | `kunglao_log.tail`, `event_taxonomy.py` | daily `kunglao-<date>.jsonl` event stream (#538 C-3: no longer lazy) |
-| `hypotheses/` | contract | init (stub only); writer lands with #528 | #528 digest open-hypothesis section | stub today: dir + README; #528 owns the real writer. Remove the stub note when #528 lands |
+| `hypotheses/` | contract | init, `hypothesis_store.py` (#528) | `digest_build.py` sec_g (cold-start digest), `state_anchor.py` hyps segment | hypothesis layer `H-*.md`: open → refuted/superseded state machine (refuted needs `refuting_fact_id`, superseded needs `superseded_by`); writer landed with #528 |
 | `claim-register.yaml` | contract | init, `kunglao-record.py` | `worker_budget.py`, `digest_build.py`, gates | register of record |
 | `facts/_INDEX.md` | contract | init (empty header), `update_index.py` | shared parser (`tools/_lib/index_schema.py`) | single 4-column schema (W-5) |
 | `scratch/` | free-zone | agent prompt | agent prompt, export tool (zones it separately) | non-contract artifacts (12-field scripts, FINDINGS.md) — init does not diff it |
@@ -47,8 +47,8 @@ knows what the directory is for ("本文件由 init 创建; X 落于此当…"):
 - `analyses/README.md` — longer-form analysis; failure records for #496.
 - `evidence/README.md` — raw evidence only; indexed by
   `build_evidence_index.py` (eids assigned in path order).
-- `hypotheses/README.md` — hypothesis layer introduced by #528; stub only
-  until then.
+- `hypotheses/README.md` — hypothesis layer (#528): `H-*.md` with the
+  open → refuted/superseded state machine; writer `hypothesis_store.py`.
 - `scratch/README.md` — the free-zone declaration (below).
 - `facts/_INDEX.md` — header-only empty index (single schema, W-5).
 

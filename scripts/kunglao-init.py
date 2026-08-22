@@ -242,7 +242,7 @@ INTAKE_GUIDANCE = (
 # #538 eager scaffold: every docs/workspace-manifest.md directory row is
 # materialized at init (no lazy ambiguity — "absent" must never mean "not
 # yet decided"). runs/logs/ included per C-3 (the event dir was lazy).
-# hypotheses/ ships as a stub dir today; #528 owns the real writer.
+# hypotheses/ landed its real writer with #528 (scripts/hypothesis_store.py).
 SCAFFOLD_DIRS = (
     "facts",
     "notes",
@@ -283,10 +283,16 @@ CARRIER_READMES = {
         "不计入 active blockers;INVALIDATED 标记解除阻塞。\n"
     ),
     "hypotheses": (
-        "# hypotheses/ — hypothesis layer (#528, stub)\n\n"
-        "本文件由 kunglao-init 创建。hypotheses/ 由 #528 实装\n"
-        "(claim 动机 / competitor_group 猜想 / 被推翻猜想的持久层)。\n"
-        "目前仅 stub:目录已建,写入器随 #528 落地。\n"
+        "# hypotheses/ — hypothesis layer (#528)\n\n"
+        "本文件由 kunglao-init 创建。hypotheses/ 落假设层 H-*.md 文件\n"
+        "(frontmatter: id / claim_id / competitor_group / candidates /\n"
+        "status — claim 动机与竞态猜想,判官未裁决前的持久层)。\n"
+        "写入器: scripts/hypothesis_store.py (状态机 open → refuted |\n"
+        "superseded;refuted 必须带 refuting_fact_id,superseded 必须带\n"
+        "superseded_by;终态不可重开)。\n"
+        "读取器: digest_build sec_g(冷启动第 9 文 runs/digest.md 只列\n"
+        "open 假设)+ state_anchor hyps 段。\n"
+        "结果不落这里 — 那是 notes/ 结果层(修正走 supersedes 链)。\n"
     ),
     "scratch": (
         "# scratch/ — free-zone (非契约工件)\n\n"

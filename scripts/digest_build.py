@@ -38,6 +38,11 @@ import index_schema as _INDEX_SCHEMA  # noqa: E402  (identity anchor for tests)
 SCHEMA_VERSION = "digest-v1"
 DIGEST_PATH = Path("runs") / "digest.md"
 
+# #528 sec_g: the open-hypotheses section is pointer-sized and BOUNDED —
+# a pathological hypotheses/ dir must not blow the 4096-byte cold-start
+# cap (same bounding posture as every other digest section).
+MAX_SEC_G_HYPS = 12
+
 
 def _load_yaml(path: Path) -> dict:
     if not path.exists():
@@ -87,6 +92,45 @@ def _claims(ws: Path) -> list[dict]:
 def _failure_rules(ws: Path) -> list[dict]:
     fr = _load_yaml(ws / "failure-registry.yaml")
     return fr.get("rules") or []
+
+
+def build_sec_g(ws: Path) -> str:
+    """Digest sec_g: OPEN hypotheses, pointers only (#528).
+
+    Reads ONLY from <ws>/hypotheses/ (hypothesis_store, the single
+    parser). NEVER from notes/ — notes is the result layer (user
+    correction 2026-08-20: first judge, then revise notes), and
+    re-importing a 'hypothesis' from notes is the exact path that
+    produced the AES->ChaCha20 silent-overwrite anti-pattern.
+
+    Refuted/superseded hypotheses are deliberately absent: only UNRESOLVED
+    questions re-hydrate at restart; decided ones live in the notes/
+    facts/ trail, not duplicated here.
+
+    Returns "" when there is nothing to show (no dir, no open hypotheses)
+    so build_digest emits no section at all — pre-#528 workspaces keep
+    their exact six-section digest.
+    """
+    hyp_dir = Path(ws) / "hypotheses"
+    if not hyp_dir.is_dir():
+        return ""
+    # Imported lazily: digest_build must stay importable even if the
+    # hypothesis layer module moves (the build path wraps this in
+    # try/except anyway, but the import failure should not fire at module
+    # import time for unrelated callers).
+    from hypothesis_store import HypothesisStore
+    open_hyps = HypothesisStore(hyp_dir).list_open()[:MAX_SEC_G_HYPS]
+    if not open_hyps:
+        return ""
+    lines = ["## sec_g — open hypotheses (#528, pointers only)", "",
+             "| hyp_id | claim_id | competitor_group | candidates |",
+             "|---|---|---|---|"]
+    for h in open_hyps:
+        cands = ", ".join(h.candidates) if h.candidates else "-"
+        lines.append(f"| {h.id} | {h.claim_id} | "
+                     f"{h.competitor_group or '-'} | {cands} |")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def build_digest(ws: Path) -> str:
@@ -179,6 +223,18 @@ def build_digest(ws: Path) -> str:
         tail = progress.strip().splitlines()[-3:]
         for ln in tail:
             L.append(f"  {ln}")
+
+    # ---- sec_g: open hypotheses (#528) — FAIL-OPEN ----
+    # A hypotheses-layer failure must never block cold start: the digest
+    # degrades to the pre-#528 six-section shape instead of raising
+    # (issue #528 work item: digest build failure must not block restart).
+    try:
+        sec_g = build_sec_g(ws)
+    except Exception:  # noqa: BLE001 — degrade, never block cold start
+        sec_g = ""
+    if sec_g:
+        L.append("")
+        L.extend(sec_g.splitlines())
 
     return "\n".join(L) + "\n"
 

@@ -59,17 +59,23 @@ import sys
 from pathlib import Path
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
+SCRIPTS_DIR = SKILL_DIR / "scripts"
 ANCHOR_CAP = 500  # issue requirement: <=500 chars
 
 # Import status_defs constants from scripts/ (single source of truth, #34, #95).
 # sys.path must include scripts/ before the import; same pattern as other hooks
 # (dispatch_gate, worker_budget, worker_pulse).
-sys.path.insert(0, str(SKILL_DIR / "scripts"))
+sys.path.insert(0, str(SCRIPTS_DIR))
 from status_defs import PARTIAL_STATUSES  # noqa: E402
 
 _LEDGER_FILE = ".convergence_ledger.jsonl"
 _CLAIM_ID_RE = re.compile(r"^-\s+id:\s*(\S+)")
 _CLAIM_STATUS_RE = re.compile(r"^\s+status:\s*(\S+)")
+
+# #528: open hypotheses ride the anchor as a STRUCTURED id list (never
+# narrative — the anti-narrative contract at test_anchor_excludes_
+# progress_narrative). Bounded like every other anchor segment.
+HYP_SEGMENT_CAP = 10
 
 
 # ---------- drift lib: single-source load of scripts/lib_kunglao.py ----------
@@ -211,18 +217,47 @@ def _count_facts(ws: Path) -> int:
         return 0
 
 
+def _open_hypothesis_pointers(ws: Path) -> list[dict[str, str]]:
+    """Structured open-hypothesis pointers [{"claim_id", "hyp_id"}] from
+    <ws>/hypotheses/ (#528). Reads ONLY the hypothesis layer — never
+    notes/ (the result layer). FAIL_OPEN: any failure -> [] (a broken
+    hypotheses layer must never break the anchor)."""
+    hyp_dir = ws / "hypotheses"
+    if not hyp_dir.is_dir():
+        return []
+    try:
+        from hypothesis_store import HypothesisStore
+        return [{"claim_id": h.claim_id, "hyp_id": h.id}
+                for h in HypothesisStore(hyp_dir).list_open()]
+    except Exception:  # noqa: BLE001 — FAIL_OPEN: pointers are optional
+        return []
+
+
 # ---------- anchor composition (<= ANCHOR_CAP chars; truncate from tail) ----------
 
 def _compose(drift_prefix: str, round_n: int, decision: str, open_count: int,
              partial_count, active_workers, blockers, facts_total,
-             open_ids: list) -> str:
+             open_ids: list, hyp_pointers: list[dict[str, str]] | None = None
+             ) -> str:
     """Assemble the anchor text, truncating the open_ids list from the tail
-    until the whole (drift_prefix + summary) fits ANCHOR_CAP chars."""
+    until the whole (drift_prefix + summary) fits ANCHOR_CAP chars.
+
+    #528: open hypotheses ride as a STRUCTURED id segment
+    (`| hyps=N: H-1(C-1) …`) — ids only, never narrative — inside the
+    SAME 500-char budget. The hypothesis segment never displaces the
+    claim-id list: it is appended after it and drops first when tight."""
     header = (f"[state_anchor] round={round_n} decision={decision} "
               f"open_count={open_count} partial={partial_count} "
               f"workers={active_workers} blk={len(blockers or [])} "
               f"facts={facts_total} | open_ids: ")
-    budget = ANCHOR_CAP - len(drift_prefix) - len(header)
+    hyp_seg = ""
+    hyps = hyp_pointers or []
+    if hyps:
+        shown = hyps[:HYP_SEGMENT_CAP]
+        pairs = ", ".join(f"{p['hyp_id']}({p['claim_id']})" for p in shown)
+        more = len(hyps) - len(shown)
+        hyp_seg = f" | hyps={len(hyps)}: {pairs}" + (f", +{more}" if more > 0 else "")
+    budget = ANCHOR_CAP - len(drift_prefix) - len(header) - len(hyp_seg)
     # Fit as many ids as the budget allows; reserve room for a trailing ", …".
     shown, running, truncated = [], 0, False
     ELLIPSIS = ", ..."
@@ -238,7 +273,7 @@ def _compose(drift_prefix: str, round_n: int, decision: str, open_count: int,
         ids_text = "(none)" if not open_ids else "..."
     else:
         ids_text = ", ".join(shown) + (ELLIPSIS if truncated else "")
-    full = drift_prefix + header + ids_text
+    full = drift_prefix + header + ids_text + hyp_seg
     if len(full) > ANCHOR_CAP:
         full = full[:ANCHOR_CAP]
     return full
@@ -247,9 +282,11 @@ def _compose(drift_prefix: str, round_n: int, decision: str, open_count: int,
 def build_anchor(ws) -> str:
     """Compact mechanical-state signature (<= ANCHOR_CAP chars). Reads ONLY
     fired-predicate state (ledger last snapshot + claim register + facts count
-    + the snapshot's active_workers). Prepends a `⚠ STATE FLAT` drift warning
-    when drift_detected (#43). NEVER reads progress.txt / analysis_state.txt
-    (LLM narrative). FAIL_OPEN: any exception -> ""."""
+    + the snapshot's active_workers) plus, since #528, OPEN hypothesis
+    pointers from hypotheses/ (ids only, never narrative). Prepends a
+    `⚠ STATE FLAT` drift warning when drift_detected (#43). NEVER reads
+    progress.txt / analysis_state.txt (LLM narrative). FAIL_OPEN: any
+    exception -> ""."""
     try:
         ws = Path(ws)
         snap_row, round_n = _last_snapshot(ws)
@@ -284,9 +321,26 @@ def build_anchor(ws) -> str:
 
         return _compose(drift_prefix, round_n, decision, open_count,
                         partial_count, active_workers, blockers, facts_total,
-                        open_ids)
+                        open_ids, _open_hypothesis_pointers(ws))
     except Exception:  # noqa: BLE001 — FAIL_OPEN: never raise into the harness
         return ""
+
+
+def build_anchor_payload(ws) -> dict:
+    """Machine-readable form of the anchor's structured segments (#528).
+
+    Consumers that want dicts instead of the capped anchor STRING (tests,
+    introspection tooling) read this. It exposes exactly what the string
+    form's structured segments carry — hypothesis pointers as
+    [{"claim_id", "hyp_id"}] — and nothing narrative."""
+    ws = Path(ws)
+    snap_row, round_n = _last_snapshot(ws)
+    return {
+        "round": round_n,
+        "decision": (snap_row or {}).get("decision"),
+        "open_ids": _open_ids(ws, snap_row) if snap_row else [],
+        "hypothesis_pointers": _open_hypothesis_pointers(ws),
+    }
 
 
 # ---------- emission + entry points ----------
