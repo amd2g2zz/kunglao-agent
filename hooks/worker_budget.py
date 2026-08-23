@@ -27,6 +27,11 @@ import yaml
 MAX_WORKERS = 3
 MAX_PROMOTION_ATTEMPTS = 3
 
+# v1.9.39 (#475): env-state freshness gate constants. TTL aligns with the
+# scripts/kunglao-monitor.py advisory (drift detection uses the same value).
+ENV_STATE_FILE = 'runs/env-state.json'
+ENV_STATE_TTL_MINUTES = 30
+
 PREFIX_RE = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\]')
 CLAIM_RE = re.compile(r'\bclaim\s+(C-\d+)')
 
