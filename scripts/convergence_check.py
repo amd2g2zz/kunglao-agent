@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """convergence_check.py - the "should I dispatch right now?" decision (v1.9).
 
-Companion to priority.py:
-  priority.py        → "given I'm dispatching, WHICH claim is highest-value?"
+Companion to priority_ratio.py:
+  priority_ratio.py  → "given I'm dispatching, WHICH claim is highest-value?"
   convergence_check  → "SHOULD I be dispatching at all, or am I converged / saturated / blocked?"
 
 This exists because the #1 failure mode across 8 sessions / 6 workspaces was
@@ -14,7 +14,7 @@ executable form of that check, so the agent has a concrete tool rather than
 aspirational prose.
 
 Decision matrix:
-  open_claims>0 AND free_slots>0           → DISPATCH       (run priority.py, dispatch top)
+  open_claims>0 AND free_slots>0           → DISPATCH       (run priority_ratio.py, dispatch top)
   partial_facts>0 AND free_slots>0         → DISPATCH_VERIFIER
   open_claims>0 AND free_slots==0          → SATURATED      (poll workers, don't idle)
   open_claims==0 AND partial_facts==0      → CONVERGED      (loop done, write report)
@@ -41,7 +41,9 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 
 import yaml
@@ -54,7 +56,6 @@ from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES
 from retract_claim import RETRACTED, TERMINAL_WITH_RETRACTED
 
 WORKER_CAP = 3
-STUCK_MINUTES = 20
 
 # Exit codes
 EXIT_CONVERGED = 0
@@ -76,59 +77,74 @@ def _resolve_ws(arg) -> Path:
     if arg:
         return Path(arg)
     cwd = Path(os.getcwd())
-    sub = cwd / "malware-analysis-workspace"
-    return sub if (sub / "claim-register.yaml").exists() else cwd
+    # #450: layout names from the env manifest (single source — the
+    # pre-#450 literal lived here). Absent manifest → DEFAULT_LAYOUT,
+    # behavior byte-identical to the hardcoded version.
+    import env_manifest  # (same scripts/ dir; function-level: keep the
+    # module import graph of the hot CLI path unchanged)
+    layout = env_manifest.layout_conventions(cwd)
+    sub = cwd / layout.workspace_dir
+    return sub if (sub / layout.claim_register).exists() else cwd
+
+
+def _load_worker_lib():
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444).
+
+    Parsing of runs/worker-status-*.md (last ``status:`` token wins), the
+    .wt-* worktree scan targets, and the W-15 done-artifact check live only
+    there; this module is a consumer. By-path under the unique name
+    ``lib_kunglao_hooks`` (the external_kicker.should_kick /
+    state_anchor._load_drift_lib precedent): bare ``import lib_kunglao`` is
+    ambiguous under pytest (pythonpath = . hooks scripts — hooks first)
+    because scripts/lib_kunglao.py (drift lib) shares the name. All
+    scripts-side consumers use the SAME name, so one process shares one
+    module instance.
+
+    Load failure raises instead of falling back to a local copy — a silent
+    fallback would resurrect the exact double-representation this change
+    removes (#444 AC-1). hooks/ and scripts/ ship together in one skill
+    install; a missing file means a broken install, not a degraded mode.
+    """
+    import importlib.util
+    name = "lib_kunglao_hooks"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        if not path.exists():
+            raise RuntimeError(
+                f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
+                "ship together; reinstall the kunglao-agent skill")
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
+    return lib
+
+
+def _scan_workers(workspace: Path):
+    """(active, stuck, done_artifact_violations) via the canonical protocol.
+
+    One iter_worker_states pass feeds both aggregates (single read per status
+    file). Semantics unchanged from the pre-#444 inline scan: active = last
+    status token is in-progress; stuck = active + older than
+    lib.STUCK_MINUTES; v1.9.13 worktree isolation (.wt-*/ with
+    .kunglao-worktree marker) included. NEW: W-15 done-artifact violations
+    (design #444 D3 — diagnostic only, never a decision branch).
+    """
+    lib = _load_worker_lib()
+    states = lib.iter_worker_states(workspace)
+    active, stuck = lib.scan_active_workers(workspace, states)
+    return active, stuck, lib.scan_done_artifact_violations(workspace, states)
 
 
 def _scan_active_workers(workspace: Path):
-    """Count in-flight + stuck workers from runs/worker-status-*.md.
+    """(active, stuck) — thin delegator to the protocol owner.
 
-    v1.9.13 (worktree isolation): worker state lives in EACH worker's git
-    worktree (.wt-*/ with .kunglao-worktree marker/), NOT the main workspace
-    (merged status files are removed from the main tree). Scan the main
-    workspace runs/ PLUS every .wt-*/ worktree runs/ dir.
-
-    Status files are append-only logs ("[ts] step: ... | status: in-progress"
-    ... "| status: done") — a worker is ACTIVE only if its LAST status line
-    is in-progress. Files whose last status is done/blocked (or that contain
-    no status line) are NOT counted, even if earlier lines say in-progress
-    (worktree snapshots carry historical files from HEAD).
+    Kept as a named function because tests/test_worktree_marker.py imports it
+    directly. Pre-#444 this was the inline parse (representation A of the
+    #444 double-representation); now hooks/lib_kunglao.py owns the parse.
     """
-    import re as _re
-    _status_line = _re.compile(r"status:\s*(\S+)")
-    dirs = [workspace / "runs"]
-    try:
-        for wt in workspace.parent.glob(".wt-*/.kunglao-worktree"):
-            runs_dir = wt.parent / "malware-analysis-workspace" / "runs"
-            if runs_dir.exists():
-                dirs.append(runs_dir)
-    except OSError:
-        pass
-    active = 0
-    stuck = []
-    cutoff = timedelta(minutes=STUCK_MINUTES)
-    now = utc_now()
-    for runs in dirs:
-        if not runs.exists():
-            continue
-        for p in runs.glob("worker-status-*.md"):
-            try:
-                text = p.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-            # last status line decides activity
-            last_status = None
-            for line in text.splitlines():
-                m = _status_line.search(line)
-                if m:
-                    last_status = m.group(1).lower()
-            if last_status != "in-progress":
-                continue
-            active += 1
-            mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
-            if (now - mtime) > cutoff:
-                stuck.append({"worker": p.stem, "age_min": int((now - mtime).total_seconds() // 60)})
-    return active, stuck
+    return _scan_workers(workspace)[:2]
 
 
 def _open_claims(reg: dict):
@@ -164,12 +180,18 @@ def _partial_facts(workspace: Path):
 
 
 def _active_blockers(workspace: Path):
-    """Return active blocker ids from blockers/*.md (excluding INVALIDATED)."""
+    """Return active blocker ids from blockers/*.md (excluding INVALIDATED).
+
+    README.md is the #538 carrier stub, never a blocker record — skip it
+    explicitly (the old code only skipped it by accident: the stub text
+    happens to contain the word "INVALIDATED")."""
     bdir = workspace / "blockers"
     if not bdir.exists():
         return []
     out = []
     for p in bdir.glob("*.md"):
+        if p.name == "README.md":
+            continue
         try:
             text = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -491,7 +513,176 @@ def _failure_blocked(workspace: Path) -> list:
         return []
 
 
-def decide(workspace: Path) -> dict:
+# ===================== #443: decide() explicit state machine =====================
+# The pre-#443 decide() was a 13-branch elif pile: order was the semantics,
+# comments were the spec, and every incident's cheapest fix was "insert one
+# more elif" (D1 mechanism proliferation, issue #443 evidence 1/2). The
+# decision is now an explicit (State, Event) machine:
+#   - priority / mutual exclusion live in STAGE_PROBES (ordered event lists)
+#   - outcomes live in TRANSITIONS ((State, Event) -> (State, action builder))
+#   - a new gate is a table row, never a new elif rung
+# Gate SEMANTICS and every action string are byte-identical to the
+# pre-refactor chain — proven per-case against the c5cb1ae baseline by
+# tests/test_decide_regression_anchor.py (frozen snapshot + live baseline).
+
+
+class State(str, Enum):
+    """Machine states: 3 evaluation stages + 6 terminal verdicts.
+
+    SCHEMA  — task_spec schema check (fail-closed first: a malformed
+              primary_questions means the convergence target is undefined)
+    DRAIN   — opens==0 and partials==0: is the loop REALLY done?
+              (#17/M2 completeness + #147 completion transaction)
+    SCHEDULE — open/partial work exists: can we dispatch right now?
+    Terminal states carry the verdict via VERDICTS."""
+
+    SCHEMA = "SCHEMA"
+    DRAIN = "DRAIN"
+    SCHEDULE = "SCHEDULE"
+    INVALID = "INVALID"
+    CONVERGED = "CONVERGED"
+    DISPATCH = "DISPATCH"
+    DISPATCH_VERIFIER = "DISPATCH_VERIFIER"
+    SATURATED = "SATURATED"
+    BLOCKED = "BLOCKED"
+
+
+class Event(str, Enum):
+    """Gate events, named with LANDED vocabulary only (#446 F-lesson: no
+    second taxonomy). Sources: #77 schema, #17/M2 completeness, DESIGN S8
+    C0 note layer, #147 discovery/contradiction, #495 failure three-artifact
+    protocol, #497 ladder flavors."""
+
+    # SCHEMA stage
+    SCHEMA_INVALID = "SCHEMA_INVALID"            # #77 malformed primary_questions
+    WORK_PENDING = "WORK_PENDING"                # opens or partials non-empty
+    DRAINED = "DRAINED"                          # complementary to WORK_PENDING
+    # DRAIN stage (probe order = the historical incident order)
+    ORPHAN_TERMINAL_CLAIM = "ORPHAN_TERMINAL_CLAIM"    # M2 completeness gate
+    PRIMARY_Q_UNVERIFIED = "PRIMARY_Q_UNVERIFIED"      # M2: BLIND-verified PROVEN, not STAMP
+    NOTE_LAYER_GAP = "NOTE_LAYER_GAP"                  # DESIGN §8 C0
+    DISCOVERY_UNCONSUMED = "DISCOVERY_UNCONSUMED"     # #147 discovery consumption
+    GLOBAL_CONTRADICTION = "GLOBAL_CONTRADICTION"     # #147 completion transaction
+    DRAIN_CLEAN = "DRAIN_CLEAN"                        # DRAIN catch-all
+    # SCHEDULE stage
+    WORK_AND_FREE_SLOT = "WORK_AND_FREE_SLOT"
+    PARTIALS_AND_FREE_SLOT = "PARTIALS_AND_FREE_SLOT"
+    WORK_NO_FREE_SLOT = "WORK_NO_FREE_SLOT"
+    FAILURE_ARTIFACTS_DUE = "FAILURE_ARTIFACTS_DUE"    # #495: analysis lacks
+    #      validated_capability / identified_obstacle (or is absent/stale)
+    LADDER_REQUIRED_BLOCKER = "LADDER_REQUIRED_BLOCKER"    # #497 climb flavor
+    LADDER_EXHAUSTED_BLOCKER = "LADDER_EXHAUSTED_BLOCKER"  # #497 exhaustion marker
+    UNEXPECTED_STATE = "UNEXPECTED_STATE"                  # SCHEDULE catch-all
+
+
+# Terminal state -> (decision, exit_code). Single binding point: a new
+# verdict can no longer drift from its exit code.
+VERDICTS = {
+    State.INVALID: ("INVALID", EXIT_BLOCKED),
+    State.CONVERGED: ("CONVERGED", EXIT_CONVERGED),
+    State.DISPATCH: ("DISPATCH", EXIT_DISPATCH),
+    State.DISPATCH_VERIFIER: ("DISPATCH_VERIFIER", EXIT_VERIFY),
+    State.SATURATED: ("SATURATED", EXIT_SATURATED),
+    State.BLOCKED: ("BLOCKED", EXIT_BLOCKED),
+}
+
+
+@dataclass
+class _DecideInputs:
+    """Explicit state object for one decide() call (#443 design §4).
+
+    Everything the old chain kept in scattered locals; the machine's
+    predicates and action builders read only this. Lazy scans
+    (discovery/contradiction/ladder marker) keep the old cost profile:
+    computed only when the machine actually reaches the stage that asks.
+    """
+    workspace: Path
+    opens: list
+    partials: list
+    active: int
+    stuck: list
+    done_violations: list
+    free_slots: int
+    blockers: list
+    failure_blocked_ids: list
+    orphans: list
+    unverified_pqs: list
+    pq_note_gaps: list
+    pq_error: str | None
+    blocked_claims: list
+    unblocked_open: list
+    failure_blocked_open: list
+    _discovery_reason: str | None = field(default=None, repr=False)
+    _contradiction_reason: str | None = field(default=None, repr=False)
+    _ladder_ids: list | None = field(default=None, repr=False)
+
+    def discovery_reason(self) -> str:
+        """#147 discovery scan, cached. Computed only when DRAIN asks for it."""
+        if self._discovery_reason is None:
+            # replay #1: fact body said 'discovered shellcode, downstream
+            # payload not analyzed' and the run converged without the
+            # obligation — disclosed payloads must be obligations before
+            # CONVERGED is possible.
+            reason = ""
+            try:
+                import obligation_discovery as od
+                discoveries = od.scan_discoveries(self.workspace / "facts",
+                                                  self.workspace / "claim-register.yaml")
+                if discoveries:
+                    names = ", ".join(d["trigger"] for d in discoveries)
+                    reason = (
+                        f"{len(discoveries)} unconsumed discovery(s) in {names} "
+                        f"-> create child obligations or record materiality rejection")
+            except Exception as exc:
+                reason = f"discovery scan unavailable ({type(exc).__name__})"
+            self._discovery_reason = reason
+        return self._discovery_reason
+
+    def contradiction_reason(self) -> str:
+        """#147 completion transaction, cached: CONVERGED is not trusted on
+        the register's word — recompute global contradictions from facts/.
+        A workspace without a facts index has zero facts and cannot hold a
+        contradiction."""
+        if self._contradiction_reason is None:
+            reason = ""
+            if (self.workspace / "facts" / "_INDEX.md").exists():
+                try:
+                    import fact_contradiction_gate as fcg
+                    conflicts = fcg.scan_conflicts(self.workspace / "facts" / "_INDEX.md",
+                                                   self.workspace / "facts")
+                    if conflicts:
+                        pairs = "; ".join(
+                            f"{c['fact_a']} <-> {c['fact_b']}" for c in conflicts)
+                        reason = f"GLOBAL CONTRADICTION: {pairs}"
+                except Exception as exc:  # fail-closed: cannot verify → cannot converge
+                    reason = f"contradiction scan unavailable ({type(exc).__name__})"
+            self._contradiction_reason = reason
+        return self._contradiction_reason
+
+    def ladder_exhausted_ids(self) -> list:
+        """#497 ladder-exhaustion marker (ask_for_direction_gate.
+        find_ladder_exhaustion): promotion_attempts >= 3 with an empty
+        method-ladder candidates list — the only blocker flavor that stays
+        must-ask. Consumed ONLY to flavor the all-open-blocked event: both
+        ladder flavors share one verdict+action today (decide() does not own
+        the must-ask/climb split, #497's ask gate does), so an import
+        failure degrades the event label, never the decision (fail-open)."""
+        if self._ladder_ids is None:
+            try:
+                import ask_for_direction_gate as afdg
+                ids = list(afdg.find_ladder_exhaustion(self.workspace))
+            except Exception:
+                ids = []
+            open_ids = {c["id"] for c in self.opens}
+            self._ladder_ids = [i for i in ids if i in open_ids]
+        return self._ladder_ids
+
+
+def _decide_inputs(workspace: Path) -> _DecideInputs:
+    """Snapshot one workspace into the explicit state object (#443 design §4).
+
+    Pure reads, same computation order as the pre-refactor decide() prelude;
+    no gate logic lives here."""
     reg = _load_yaml(workspace / "claim-register.yaml")
     task_spec = _load_task_spec(workspace)
     pq_questions, pq_error = _parse_primary_questions(task_spec)
@@ -499,15 +690,14 @@ def decide(workspace: Path) -> dict:
 
     opens = _open_claims(reg)
     partials = _partial_facts(workspace)
-    active, stuck = _scan_active_workers(workspace)
+    active, stuck, done_violations = _scan_workers(workspace)
     free_slots = max(0, WORKER_CAP - active)
     blockers = _active_blockers(workspace)
     failure_blocked_ids = _failure_blocked(workspace)
 
-    # M2 completeness gate: check before declaring CONVERGED
+    # M2 completeness gates + note layer (diagnostics regardless of verdict)
     orphans = _orphan_terminal_claims(reg, pq_ids)
     unverified_pqs = _unverified_primary_questions(reg, task_spec)
-    # DESIGN §8 C0 note-layer gate: every pq needs a verify_status=passes note
     pq_note_gaps = _note_layer_gaps(workspace, pq_ids, reg)
 
     blocked_claims = [c for c in opens if c["blocked"]]
@@ -515,120 +705,285 @@ def decide(workspace: Path) -> dict:
     unblocked_open = [c for c in opens if not c["blocked"] and c["id"] not in failure_blocked_ids]
     failure_blocked_open = [c for c in opens if c["id"] in failure_blocked_ids]
 
-    # Decision matrix (order matters). INVALID schema first (fail-closed):
-    # a non-empty malformed primary_questions means the run's convergence
-    # target is undefined — escalate, never dispatch against it (issue #77).
-    if pq_error:
-        decision, exit_code, action = "INVALID", EXIT_BLOCKED, \
-            f"INVALID task_spec primary_questions: {pq_error}"
-    elif not opens and not partials:
-        # M2 completeness gate: CONVERGED requires primary_questions all PROVEN
-        # AND zero orphan terminal claims. Otherwise downgrade.
-        if orphans:
-            orphan_ids = [o["id"] for o in orphans]
-            decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
-                f"Cannot CONVERGE: {len(orphans)} orphan terminal claim(s) {orphan_ids} " \
-                f"have no answers_question — link them to a primary_question or reopen."
-        elif unverified_pqs:
-            uv_ids = [u["question"] for u in unverified_pqs]
-            decision, exit_code, action = "SATURATED", EXIT_SATURATED, \
-                f"Cannot CONVERGE: primary_questions {uv_ids} lack PROVEN answering claims " \
-                f"(need BLIND-verified PROVEN, not STAMP/unverified). " \
-                f"Dispatch verifier or rework answering claims."
-        elif pq_note_gaps:
-            decision, exit_code, action = "DISPATCH_VERIFIER", EXIT_VERIFY, \
-                f"Note-layer (DESIGN §8 C0) not satisfied: primary_questions {pq_note_gaps} " \
-                f"lack a note with verify_status=passes (link: note.claim_id -> claim.answers_question). " \
-                f"Run verify-note.py before delivery."
-        else:
-            # #147: discovery consumption — disclosed payloads must be
-            # obligations before CONVERGED is possible (replay #1: fact body
-            # said 'discovered shellcode, downstream payload not analyzed'
-            # and the run converged without the obligation).
-            discovery_reason = ""
-            try:
-                import obligation_discovery as od
-                discoveries = od.scan_discoveries(workspace / "facts",
-                                                  workspace / "claim-register.yaml")
-                if discoveries:
-                    names = ", ".join(d["trigger"] for d in discoveries)
-                    discovery_reason = (
-                        f"{len(discoveries)} unconsumed discovery(s) in {names} "
-                        f"— create child obligations or record materiality rejection")
-            except Exception as exc:
-                discovery_reason = f"discovery scan unavailable ({type(exc).__name__})"
-            if discovery_reason:
-                decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
-                    f"Cannot CONVERGE: {discovery_reason}"
-            else:
-                # #147: completion transaction — CONVERGED is not trusted on the
-                # register's word. Recompute global contradictions from facts/.
-                # Any contradiction downgrades the decision (replay #2). A
-                # workspace without a facts index has zero facts and cannot hold
-                # a contradiction.
-                contradiction_reason = ""
-                if (workspace / "facts" / "_INDEX.md").exists():
-                    try:
-                        import fact_contradiction_gate as fcg
-                        conflicts = fcg.scan_conflicts(workspace / "facts" / "_INDEX.md",
-                                                       workspace / "facts")
-                        if conflicts:
-                            pairs = "; ".join(
-                                f"{c['fact_a']} <-> {c['fact_b']}" for c in conflicts)
-                            contradiction_reason = f"GLOBAL CONTRADICTION: {pairs}"
-                    except Exception as exc:  # fail-closed: cannot verify → cannot converge
-                        contradiction_reason = f"contradiction scan unavailable ({type(exc).__name__})"
-                if contradiction_reason:
-                    decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
-                        f"Cannot CONVERGE: {contradiction_reason} — resolve via " \
-                        f"fact_contradiction_gate or supersedes links."
-                else:
-                    decision, exit_code, action = "CONVERGED", EXIT_CONVERGED, \
-                        "Claim loop done — all open claims closed, partials verified, primary_questions PROVEN " \
-                        "with verify_status=passes notes, completion transaction clean (zero global " \
-                        "contradictions, zero unconsumed discoveries, PROVEN provenance). STOP dispatch; deliver"
-    elif unblocked_open and free_slots:
-        decision, exit_code, action = "DISPATCH", EXIT_DISPATCH, \
-            f"Run priority.py and dispatch the top claim. {len(unblocked_open)} unblocked open claim(s), {free_slots} free slot(s)."
-    elif partials and free_slots:
-        decision, exit_code, action = "DISPATCH_VERIFIER", EXIT_VERIFY, \
-            f"Dispatch a verifier for {len(partials)} partial fact(s). Do NOT declare PROVEN without sign-off."
-    elif unblocked_open and not free_slots:
-        decision, exit_code, action = "SATURATED", EXIT_SATURATED, \
-            f"All {WORKER_CAP} slots busy with {len(unblocked_open)} open claim(s) queued. Poll workers — do not wait idly."
-    elif failure_blocked_open:
-        decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
-            f"{len(failure_blocked_open)} claim(s) have a failed attempt with no failure_analysis: {failure_blocked_ids}. " \
-            f"Run failure_analysis_gate.py <ws> to reason about WHY the method failed before re-dispatch or NEGATIVE."
-    elif opens and not unblocked_open:
-        decision, exit_code, action = "BLOCKED", EXIT_BLOCKED, \
-            f"All {len(opens)} open claim(s) are blocked. Resolve blockers: {blockers or 'none on disk'}."
-    else:
-        # Fallback (should not normally reach here)
-        decision, exit_code, action = "SATURATED", EXIT_SATURATED, \
-            "Unexpected state — investigate manually."
+    return _DecideInputs(
+        workspace=workspace, opens=opens, partials=partials, active=active,
+        stuck=stuck, done_violations=done_violations, free_slots=free_slots,
+        blockers=blockers, failure_blocked_ids=failure_blocked_ids,
+        orphans=orphans, unverified_pqs=unverified_pqs, pq_note_gaps=pq_note_gaps,
+        pq_error=pq_error, blocked_claims=blocked_claims,
+        unblocked_open=unblocked_open, failure_blocked_open=failure_blocked_open)
 
+
+# ---- event predicates (each is ONE gate; composition lives in data) ----
+
+def _pq_schema_invalid(s: _DecideInputs) -> bool:
+    # #77: a non-empty malformed primary_questions means the run's
+    # convergence target is undefined — escalate, never dispatch against it.
+    return bool(s.pq_error)
+
+
+def _work_pending(s: _DecideInputs) -> bool:
+    return bool(s.opens or s.partials)
+
+
+def _drained(s: _DecideInputs) -> bool:
+    return not _work_pending(s)
+
+
+def _orphan_terminal(s: _DecideInputs) -> bool:
+    # M2 completeness gate: CONVERGED requires zero orphan terminal claims.
+    return bool(s.orphans)
+
+
+def _pq_unverified(s: _DecideInputs) -> bool:
+    # M2: every primary_question needs a BLIND-verified PROVEN answering claim.
+    return bool(s.unverified_pqs)
+
+
+def _note_layer_gap(s: _DecideInputs) -> bool:
+    # DESIGN §8 C0: every pq needs a verify_status=passes note.
+    return bool(s.pq_note_gaps)
+
+
+def _discovery_unconsumed(s: _DecideInputs) -> bool:
+    # #147: disclosed payloads must be obligations before CONVERGED.
+    return bool(s.discovery_reason())
+
+
+def _global_contradiction(s: _DecideInputs) -> bool:
+    # #147: any global contradiction downgrades the completion.
+    return bool(s.contradiction_reason())
+
+
+def _drain_clean(s: _DecideInputs) -> bool:
+    return True  # DRAIN catch-all (tail invariant, see tests)
+
+
+def _work_and_free_slot(s: _DecideInputs) -> bool:
+    return bool(s.unblocked_open) and s.free_slots > 0
+
+
+def _partials_and_free_slot(s: _DecideInputs) -> bool:
+    return bool(s.partials) and s.free_slots > 0
+
+
+def _work_no_free_slot(s: _DecideInputs) -> bool:
+    return bool(s.unblocked_open) and s.free_slots == 0
+
+
+def _failure_artifacts_due(s: _DecideInputs) -> bool:
+    # #495: claims with a failed attempt whose analysis is absent/stale or
+    # lacks validated_capability / identified_obstacle cannot be re-dispatched
+    # or marked NEGATIVE until reasoned about.
+    return bool(s.failure_blocked_open)
+
+
+def _all_open_blocked(s: _DecideInputs) -> bool:
+    return bool(s.opens) and not s.unblocked_open
+
+
+def _ladder_exhausted_blocker(s: _DecideInputs) -> bool:
+    # #497 marker flavor: blocked-open work where the ladder was climbed.
+    return _all_open_blocked(s) and bool(s.ladder_exhausted_ids())
+
+
+def _ladder_required_blocker(s: _DecideInputs) -> bool:
+    # #497 climb flavor: blocked-open work, ladder not (yet) exhausted.
+    return _all_open_blocked(s) and not s.ladder_exhausted_ids()
+
+
+def _unexpected_state(s: _DecideInputs) -> bool:
+    return True  # SCHEDULE catch-all (tail invariant, see tests)
+
+
+_EVENT_PREDICATES = {
+    Event.SCHEMA_INVALID: _pq_schema_invalid,
+    Event.WORK_PENDING: _work_pending,
+    Event.DRAINED: _drained,
+    Event.ORPHAN_TERMINAL_CLAIM: _orphan_terminal,
+    Event.PRIMARY_Q_UNVERIFIED: _pq_unverified,
+    Event.NOTE_LAYER_GAP: _note_layer_gap,
+    Event.DISCOVERY_UNCONSUMED: _discovery_unconsumed,
+    Event.GLOBAL_CONTRADICTION: _global_contradiction,
+    Event.DRAIN_CLEAN: _drain_clean,
+    Event.WORK_AND_FREE_SLOT: _work_and_free_slot,
+    Event.PARTIALS_AND_FREE_SLOT: _partials_and_free_slot,
+    Event.WORK_NO_FREE_SLOT: _work_no_free_slot,
+    Event.FAILURE_ARTIFACTS_DUE: _failure_artifacts_due,
+    Event.LADDER_REQUIRED_BLOCKER: _ladder_required_blocker,
+    Event.LADDER_EXHAUSTED_BLOCKER: _ladder_exhausted_blocker,
+    Event.UNEXPECTED_STATE: _unexpected_state,
+}
+
+
+# ---- action builders (strings byte-identical to the pre-#443 chain) ----
+
+def _act_invalid(s: _DecideInputs) -> str:
+    return f"INVALID task_spec primary_questions: {s.pq_error}"
+
+
+def _act_orphans(s: _DecideInputs) -> str:
+    orphan_ids = [o["id"] for o in s.orphans]
+    return (f"Cannot CONVERGE: {len(s.orphans)} orphan terminal claim(s) {orphan_ids} "
+            f"have no answers_question -> link them to a primary_question or reopen.")
+
+
+def _act_pq_unverified(s: _DecideInputs) -> str:
+    uv_ids = [u["question"] for u in s.unverified_pqs]
+    return (f"Cannot CONVERGE: primary_questions {uv_ids} lack PROVEN answering claims "
+            f"(need BLIND-verified PROVEN, not STAMP/unverified). "
+            f"Dispatch verifier or rework answering claims.")
+
+
+def _act_note_gap(s: _DecideInputs) -> str:
+    return (f"Note-layer (DESIGN S8 C0) not satisfied: primary_questions {s.pq_note_gaps} "
+            f"lack a note with verify_status=passes (link: note.claim_id -> claim.answers_question). "
+            f"Run verify-note.py before delivery.")
+
+
+def _act_discovery(s: _DecideInputs) -> str:
+    return f"Cannot CONVERGE: {s.discovery_reason()}"
+
+
+def _act_contradiction(s: _DecideInputs) -> str:
+    return (f"Cannot CONVERGE: {s.contradiction_reason()} -> resolve via "
+            f"fact_contradiction_gate or supersedes links.")
+
+
+def _act_converged(s: _DecideInputs) -> str:
+    return ("Claim loop done - all open claims closed, partials verified, primary_questions PROVEN "
+            "with verify_status=passes notes, completion transaction clean (zero global "
+            "contradictions, zero unconsumed discoveries, PROVEN provenance). STOP dispatch; deliver")
+
+
+def _act_dispatch_top(s: _DecideInputs) -> str:
+    return (f"Run priority_ratio.py and dispatch the top claim. "
+            f"{len(s.unblocked_open)} unblocked open claim(s), {s.free_slots} free slot(s).")
+
+
+def _act_verify_partials(s: _DecideInputs) -> str:
+    return (f"Dispatch a verifier for {len(s.partials)} partial fact(s). "
+            f"Do NOT declare PROVEN without sign-off.")
+
+
+def _act_saturated_queue(s: _DecideInputs) -> str:
+    return (f"All {WORKER_CAP} slots busy with {len(s.unblocked_open)} open claim(s) queued. "
+            f"Poll workers - do not wait idly.")
+
+
+def _act_failure_analysis(s: _DecideInputs) -> str:
+    return (f"{len(s.failure_blocked_open)} claim(s) have a failed attempt with no "
+            f"failure_analysis: {s.failure_blocked_ids}. "
+            f"Run failure_analysis_gate.py <ws> to reason about WHY the method failed before "
+            f"re-dispatch or NEGATIVE.")
+
+
+def _act_all_blocked(s: _DecideInputs) -> str:
+    # Shared by both #497 ladder flavors (same verdict today; the flavor
+    # split point for a future must-ask/climb fork is one table row).
+    return (f"All {len(s.opens)} open claim(s) are blocked. "
+            f"Resolve blockers: {s.blockers or 'none on disk'}.")
+
+
+def _act_unexpected(s: _DecideInputs) -> str:
+    return "Unexpected state - investigate manually."
+
+
+# ---- the declared composition: probe order + transitions (all data) ----
+
+STAGE_PROBES = {
+    # SCHEMA: fail-closed schema check FIRST (a malformed convergence target
+    # must never reach dispatch), then the work/drain fork.
+    State.SCHEMA: [Event.SCHEMA_INVALID, Event.WORK_PENDING, Event.DRAINED],
+    # DRAIN: the pre-#443 completion-transaction order, frozen by the
+    # regression anchor (orphan > unverified > note-gap > discovery >
+    # contradiction > clean).
+    State.DRAIN: [Event.ORPHAN_TERMINAL_CLAIM, Event.PRIMARY_Q_UNVERIFIED,
+                  Event.NOTE_LAYER_GAP, Event.DISCOVERY_UNCONSUMED,
+                  Event.GLOBAL_CONTRADICTION, Event.DRAIN_CLEAN],
+    # SCHEDULE: dispatchable work first, then saturation, then WHY nothing
+    # is dispatchable (#495 failure artifacts, #497 ladder flavors), then
+    # the catch-all (reachable: opens==0 + partials>0 + slots==0).
+    State.SCHEDULE: [Event.WORK_AND_FREE_SLOT, Event.PARTIALS_AND_FREE_SLOT,
+                     Event.WORK_NO_FREE_SLOT, Event.FAILURE_ARTIFACTS_DUE,
+                     Event.LADDER_EXHAUSTED_BLOCKER, Event.LADDER_REQUIRED_BLOCKER,
+                     Event.UNEXPECTED_STATE],
+}
+
+TRANSITIONS = {
+    (State.SCHEMA, Event.SCHEMA_INVALID): (State.INVALID, _act_invalid),
+    (State.SCHEMA, Event.WORK_PENDING): (State.SCHEDULE, None),
+    (State.SCHEMA, Event.DRAINED): (State.DRAIN, None),
+    (State.DRAIN, Event.ORPHAN_TERMINAL_CLAIM): (State.BLOCKED, _act_orphans),
+    (State.DRAIN, Event.PRIMARY_Q_UNVERIFIED): (State.SATURATED, _act_pq_unverified),
+    (State.DRAIN, Event.NOTE_LAYER_GAP): (State.DISPATCH_VERIFIER, _act_note_gap),
+    (State.DRAIN, Event.DISCOVERY_UNCONSUMED): (State.DISPATCH, _act_discovery),
+    (State.DRAIN, Event.GLOBAL_CONTRADICTION): (State.BLOCKED, _act_contradiction),
+    (State.DRAIN, Event.DRAIN_CLEAN): (State.CONVERGED, _act_converged),
+    (State.SCHEDULE, Event.WORK_AND_FREE_SLOT): (State.DISPATCH, _act_dispatch_top),
+    (State.SCHEDULE, Event.PARTIALS_AND_FREE_SLOT): (State.DISPATCH_VERIFIER, _act_verify_partials),
+    (State.SCHEDULE, Event.WORK_NO_FREE_SLOT): (State.SATURATED, _act_saturated_queue),
+    (State.SCHEDULE, Event.FAILURE_ARTIFACTS_DUE): (State.BLOCKED, _act_failure_analysis),
+    (State.SCHEDULE, Event.LADDER_REQUIRED_BLOCKER): (State.BLOCKED, _act_all_blocked),
+    (State.SCHEDULE, Event.LADDER_EXHAUSTED_BLOCKER): (State.BLOCKED, _act_all_blocked),
+    (State.SCHEDULE, Event.UNEXPECTED_STATE): (State.SATURATED, _act_unexpected),
+}
+
+# SCHEMA -> one stage -> verdict; the bound is a cycle guard, not a semantic.
+_MACHINE_MAX_STEPS = 4
+
+
+def _run_machine(snap: _DecideInputs):
+    """Drive the declared machine over one snapshot: probe the stage's
+    events in STAGE_PROBES order, take the first fire, follow TRANSITIONS,
+    stop at a verdict state. Fail-closed on table gaps → the pre-#443
+    'Unexpected state' fallback (never silently report progress)."""
+    state = State.SCHEMA
+    for _ in range(_MACHINE_MAX_STEPS):
+        event = None
+        for candidate in STAGE_PROBES[state]:
+            if _EVENT_PREDICATES[candidate](snap):
+                event = candidate
+                break
+        transition = TRANSITIONS.get((state, event)) if event is not None else None
+        if transition is None:
+            break  # undeclared (state, event): conservative fallback below
+        state, build_action = transition
+        if state in VERDICTS:
+            return state, build_action(snap)
+    return State.SATURATED, _act_unexpected(snap)
+
+
+def decide(workspace: Path) -> dict:
+    snap = _decide_inputs(workspace)
+    state, action = _run_machine(snap)
+    decision, exit_code = VERDICTS[state]
     return {
         "decision": decision,
         "exit_code": exit_code,
         "action": action,
-        "open_claims": opens,
-        "open_count": len(opens),
-        "unblocked_open_count": len(unblocked_open),
-        "blocked_open_count": len(blocked_claims),
-        "failure_blocked": failure_blocked_ids,
-        "partial_facts": partials,
-        "partial_count": len(partials),
-        "active_workers": active,
-        "free_slots": free_slots,
+        "open_claims": snap.opens,
+        "open_count": len(snap.opens),
+        "unblocked_open_count": len(snap.unblocked_open),
+        "blocked_open_count": len(snap.blocked_claims),
+        "failure_blocked": snap.failure_blocked_ids,
+        "partial_facts": snap.partials,
+        "partial_count": len(snap.partials),
+        "active_workers": snap.active,
+        "free_slots": snap.free_slots,
         "worker_cap": WORKER_CAP,
-        "stuck_workers": stuck,
-        "active_blockers": blockers,
+        "stuck_workers": snap.stuck,
+        # W-15 (#444): workers reporting done whose declared artifacts: files
+        # are missing / explicitly none. Diagnostic field — decision branches
+        # untouched. schema-safe:
+        # schemas/convergence-check-output.json additionalProperties: true.
+        "done_artifact_violations": snap.done_violations,
+        "active_blockers": snap.blockers,
         # M2 completeness diagnostics
-        "orphan_claims": orphans,
-        "unverified_primary_qs": unverified_pqs,
-        "note_layer_gaps": pq_note_gaps,
-        "pq_parse_error": pq_error,
+        "orphan_claims": snap.orphans,
+        "unverified_primary_qs": snap.unverified_pqs,
+        "note_layer_gaps": snap.pq_note_gaps,
+        "pq_parse_error": snap.pq_error,
     }
 
 
@@ -639,9 +994,13 @@ def _human(d: dict) -> str:
     lines.append("")
     lines.append(f"open claims:    {d['open_count']} ({d['unblocked_open_count']} unblocked, {d['blocked_open_count']} blocked)")
     lines.append(f"partial facts:  {d['partial_count']}")
-    lines.append(f"workers:        {d['active_workers']}/{d['worker_cap']} active → {d['free_slots']} free slot(s)")
+    lines.append(f"workers:        {d['active_workers']}/{d['worker_cap']} active -> {d['free_slots']} free slot(s)")
     if d["stuck_workers"]:
-        lines.append(f"stuck (> {STUCK_MINUTES}m): {d['stuck_workers']}")
+        lines.append(f"stuck (> {_load_worker_lib().STUCK_MINUTES}m): {d['stuck_workers']}")
+    if d.get("done_artifact_violations"):
+        w15 = [f"{v['worker']} ({v['kind']}: {', '.join(v['missing']) or 'no files'})"
+               for v in d["done_artifact_violations"]]
+        lines.append(f"w15 (done without files): {'; '.join(w15)}")
     if d["active_blockers"]:
         lines.append(f"blockers:       {d['active_blockers']}")
     if d.get("failure_blocked"):
@@ -660,11 +1019,11 @@ def _human(d: dict) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="kunglao-agent convergence check — should I dispatch?")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="kunglao-agent convergence check - should I dispatch?")
     parser.add_argument("workspace", nargs="?", default=None, help="workspace root")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     workspace = _resolve_ws(args.workspace)
     if not (workspace / "claim-register.yaml").exists():
@@ -674,11 +1033,16 @@ def main() -> int:
     d = decide(workspace)
     _append_ledger(workspace, d)  # silent side channel for convergence_health.py
     # #287 observability: mirror the convergence decision to the structured
-    # event log. Guarded — logging must never block the decision.
+    # event log. #459: detail now carries the decision plus the counts a
+    # `kunglao_log --tail` diagnosis needs (no second read of the register).
+    # Guarded — logging must never block the decision.
     try:
         from kunglao_log import emit
         emit(workspace, actor="orchestrator", action="converge",
-             detail=d["decision"], exit=d["exit_code"])
+             detail=(f"{d['decision']} open={d['open_count']} "
+                     f"partial={d['partial_count']} slots={d['free_slots']} "
+                     f"workers={d['active_workers']}"),
+             exit=d["exit_code"])
     except Exception:
         pass
     if args.json:

@@ -3,36 +3,44 @@
 
 _INDEX.md is the orchestrator's O(1) status-count source for cold-restart.
 Format: one row per fact:
-  F<hash> | <status> | <claim_id> | <one-line conclusion>
+  F<id> | <status> | <claim_id> | <one-line conclusion>
+
+#538 W-5: the row schema and its parser live in THE single module
+(tools/_lib/index_schema.py) shared with digest_build.py — this file is a
+write-side consumer: it validates through the shared validator before any
+disk write, so a malformed row (e.g. free text in the status column) is
+refused, never persisted (畸形行拒写).
 
 Lines starting with '#' are comments (preserved across upserts).
 All writes are atomic (tmp→rename) so concurrent/interleaved upserts don't lose rows.
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="update_index", action="claim_migrate",
+                           detail="module wired")
+except NameError:
+    pass
+
 import sys
 from pathlib import Path
 
+_LIB_DIR = Path(__file__).resolve().parent.parent / "tools" / "_lib"
+if str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))
+from index_schema import (  # noqa: E402
+    IndexSchemaError,
+    format_row,
+    parse_index_text,
+    read_index,
+    validate_row,
+)
+
 SEP = ' | '
-
-
-def read_index(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    rows = []
-    for line in path.read_text(encoding='utf-8').splitlines():
-        s = line.strip()
-        if not s or s.startswith('#'):
-            continue
-        parts = [p.strip() for p in line.split(SEP)]
-        if len(parts) >= 4:
-            rows.append({
-                'fact_id': parts[0],
-                'status': parts[1],
-                'claim_id': parts[2],
-                'conclusion': SEP.join(parts[3:]),
-            })
-    return rows
 
 
 def count_by_status(path: Path) -> dict[str, int]:
@@ -43,7 +51,11 @@ def count_by_status(path: Path) -> dict[str, int]:
 
 
 def upsert(path: Path, fact_id: str, status: str, claim_id: str, conclusion: str) -> None:
-    """Insert or update the row for fact_id. Atomic write."""
+    """Insert or update the row for fact_id. Atomic write.
+
+    Raises IndexSchemaError BEFORE touching disk when the row violates the
+    single schema (#538: malformed status/ids never land on disk)."""
+    validate_row(fact_id, status, claim_id, conclusion)
     rows = read_index(path)
     found = False
     for r in rows:
@@ -69,7 +81,7 @@ def _write(path: Path, rows: list[dict]) -> None:
     if comments and rows:
         out.append('')
     for r in rows:
-        out.append(f"{r['fact_id']}{SEP}{r['status']}{SEP}{r['claim_id']}{SEP}{r['conclusion']}")
+        out.append(format_row(r))
     _atomic_write(path, '\n'.join(out) + '\n')
 
 

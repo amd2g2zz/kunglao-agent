@@ -176,3 +176,57 @@ rule Themida_Packer {
 
 After writing both files, return ONE LINE:
 `pefile-signature complete: signer=<CN> valid=<true/false>; packer=<upx/none/unknown> confidence=<level>; reasoning=<1-line>`
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+Fixed two-step pipeline in order: Step 1 Authenticode extraction, then Step 2
+packer scan; decide `validity_status` by the documented rules BEFORE writing
+output, not after.
+
+**#494 expansion — plan FIRST, in writing**: your first action is to create
+`runs/worker-status-pefile-signature-<id>.md` and write its plan section
+BEFORE touching the sample. The plan section states, in this domain's
+language: (a) what you will do — Step 1 Authenticode extraction then Step
+2 packer scan, with the `validity_status` decision tree
+(valid/expired/invalid/unknown) pre-decided from the documented rules; (b)
+expected artifacts — `evidence/signature.json` (`signers[]`
+subject/issuer/serial/validity fields) and `evidence/packer-scan.json`
+(`detected_packer` candidates pre-listed from `die.json` + section
+entropy); (c) the done criterion — both files written, failure paths
+included (`not a PE` / degraded JSON with reason). Missing pefile or
+cryptography in the venv → update the plan, install into the venv, then
+continue.
+
+<!-- contract: status-sync -->
+WRITE both output files (`evidence/signature.json` + `evidence/packer-scan.json`)
+yourself — failure modes still write JSON (degraded / `not a PE` / `invalid`),
+never a return without files. The one-line summary comes after both exist.
+
+**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+`runs/worker-status-pefile-signature-<id>.md` as an append-only log parsed
+by the single canonical parse point (`hooks/lib_kunglao.py` — LAST
+`status:` token wins). Canonical vocabulary ONLY — `status: in-progress` /
+`status: done` / `status: blocked`. W-15: the `status: done` line MUST
+carry `| artifacts: evidence/signature.json, evidence/packer-scan.json` —
+`lib_kunglao.scan_done_artifact_violations` re-verifies both paths exist.
+Heartbeat: reply to the orchestrator's ping in the same file — never let
+a long cert-chain parse be mistaken for "stuck" (time-based stall watchdog: `STUCK_MINUTES=20` — 20 min without a status-file update).
+
+<!-- contract: tool-discovery -->
+Reuse `pefile` + `cryptography` from the project venv (install into it if
+missing); when YARA is absent, fall back to DIE cross-check + entropy
+heuristics — never self-invent a certificate parser.
+
+**#494 expansion — discovery before ANY new code**. Before writing any
+parsing snippet, run the three-point check: (1) `ls scripts/re` — the
+workspace RE tools; (2) grep `tools/_INDEX.yaml` by capability —
+`pe-analyze` already has a `signature` subcommand (PE Authenticode table)
+and `yara-scan` already runs rule files; (3) the matching
+`references/re-library/` file (`languages-compiled.md` for PE/packer
+idioms).
+Registered domain tools (verify in the index first): `pe-analyze`, `yara-scan`, `die-probe`, `overlay-scan`.
+Self-invention is forbidden: a missing capability = file an issue to
+upstream it into `tools/` (a hand-rolled certificate parser is the #462
+failure mode verbatim); a one-off shim must be labeled disposable and
+dropped after the run.

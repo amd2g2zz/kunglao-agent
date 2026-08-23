@@ -14,6 +14,7 @@
 | methodology | field-notes, malware-analysis, malware-analysis-workflow, malware-analysis-quickstart, malware-triage, malware-dynamic-analysis, detection-engineer, malware-report-writer, phishing-case-study | Analysis methods and malware application domain (primary use case) |
 | osint | multi-search-engine, multi-search-engine-refs | Multi-engine OSINT search |
 | resources | awesome-re-resources | External RE resource collection |
+| contracts | agent-three-state-charter, error-response-taxonomy, dispatch-protocol | Behavior contracts the orchestrator loads on scenario (ask/stop charter, error response taxonomy, dispatch protocol) |
 
 | Scenario | Domain |
 |---|---|
@@ -26,6 +27,8 @@
 | Platform-specific | platforms |
 | Detection rules / reports | methodology (detection-engineer, malware-report-writer) |
 | Intelligence / search | osint |
+| Action error / tool-VM-install failure response | contracts (error-response-taxonomy) |
+| Ask-the-user / irreversible-action decision | contracts (agent-three-state-charter) |
 
 ## Per-domain index files
 
@@ -49,6 +52,9 @@
 | `cold-start-contract.md` | contracts | 8-file read sequence for round 0, incremental-change detection, Phase 0 mandates. | At session start for cold-start vs incremental-read decision, or Phase 0 hook config. |
 | `convergence-loop.md` | contracts | 5 convergence-driven behaviors with case evidence, spin-detection, failure-analysis gate. | When diagnosing a spinning/stalled loop or deciding on failed-attempt handling. |
 | `decision-rights.md` | governance | Decision rights matrix — 15-row three-way table (mechanical / LLM / user). | When resolving who decides a particular decision. |
+| `agent-three-state-charter.md` | contracts | 3-state ask/stop charter (allowed / must-ask / must-stop; mechanical-first, LLM backstops miss-recall). | Before any "should I ask the user" decision, an identity/scope/authorization ambiguity, or an irreversible action. |
+| `error-response-taxonomy.md` | contracts | Action-error classes → forced responses (STOP / ASK / RETRY-ONCE / ESCALATE); human-event gate > default-allowed priority. | Immediately after any tool/VM/install/action error, before choosing a response. |
+| `dispatch-protocol.md` | contracts | Dispatch prompt protocol v1 (JSON) + v0 (regex); `reversible: false` declaration field. | When writing a worker dispatch prompt or adding fields to the dispatch JSON. |
 | `downstream-contract.md` | governance | Downstream contract for skill maintainers — full contract table and rules. | When maintaining or extending the skill. |
 | `dynamic-re-tool-priority.md` | dynamic-analysis | Tool-priority order for dynamic RE dispatch, VM-channel-only mandate. | Before dispatching a worker for call-site stepping or dynamic RE. |
 | `excerpt-lint.md` | gates | Three mechanical lint rules for condensed decompile excerpts. | When authoring or reviewing a condensed decompile excerpt fixture. |
@@ -57,6 +63,7 @@
 | `failure-modes-state.md` | failure-modes | F14-F18: plan-state consistency (stale blockers, claims, drift, progress). | When reporting plan/status/progress issues. |
 | `failure-modes.md` | failure-modes | Index routing the 18 failure modes across three domain files. | When a failure-mode occurred but unsure which domain file to load. |
 | `guardrails.md` | governance | Full backing reference for orchestrator guardrails. | When the SKILL.md inline summary is insufficient. |
+| `lessons/README.md` | failure-lessons | Global failure-lessons library (issue 41, cross-sample, never per-workspace): `scripts/failure_analysis_gate.py --lessons` aggregates closed-loop analyses at closeout into runtime lesson files; keyword retrieval (`similar_lessons`) runs automatically inside the gate at failure time. The README is the indexable face; runtime lesson files exist only in deployed copies. | After a closeout (`--lessons` aggregation), when choosing a method-ladder rung and past failures of the same shape matter, or when adding to / searching the library. |
 | `machine-check-contract.md` | contracts | Executable-oracle contract (#332): verification records must carry machine_check {command, expected, actual, passed}; exception path and mapping-table mirror of references/machine_check_map.yaml. | When validating a red-team verification record, writing one, or promoting a claim. |
 | `malware-phase-routing.md` | routing | Maps file types to analysis phases, VM isolation boundary. | At the start of a new malware engagement for phase decision. |
 | `method-constraints.md` | dispatch | Constraint table for known-incompatible scenarios. | Before dispatching a worker to include correct method constraints. |
@@ -64,7 +71,8 @@
 | `optimization-2026-08.md` | optimization | Background compendium: smart-ping, closeout checklist, worktree caveats. | When needing the full expanded text of a compact SKILL.md reference. |
 | `schema.md` | schema | All data schemas: boundary_type, fact.status, claim-register, etc. | When reading/writing structured state files. |
 | `state-mapping.md` | schema | Two-layer state mapping: claim-register workflow states ↔ fact status + verify_status; ICD-203 nine-rule landing fields (#336). | When writing/migrating facts, linting, or reconciling register vs frontmatter statuses. |
-| `search-policy.md` | dispatch | Three-layer search strategy: claim-DAG, priority greedy, tier gate. | Before each dispatch round for priority.py and tier gates. |
+| `subagent-review.md` (in `devkit/docs/`) | gates | Gate 5 (Subagent Review / Maker-Checker) contract — 3 required fields per specialist subagent dispatch (plan / status_sync / tools_used) + verified_by anti self-stamp. | Before any specialist subagent dispatch, or when pre-commit Gate 5 HARD_PAUSE fires. |
+| `search-policy.md` | dispatch | Three-layer search strategy: claim-DAG, priority greedy, tier gate. | Before each dispatch round for priority_ratio.py and tier gates. |
 | `tool-inventory.md` | tools | Full tool inventory table and kunglao CLI family. | When needing the complete list of available tools. |
 | `verify-static-vs-dynamic.md` | verification | Static vs dynamic verification strategies. | When verifying a worker's evidence to pick the correct verification method. |
 | `wal-protocol.md` | contracts | Write-ahead log for atomic multi-writer state updates. | When writing facts and updating claim-register concurrently. |

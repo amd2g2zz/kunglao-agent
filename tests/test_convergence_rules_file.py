@@ -32,6 +32,7 @@ ALLOWED_VOCABULARY = [
     "convergence_health.py",
     "failure_analysis_gate.py",
     "priority.py",
+    "priority_ratio.py",
     "claim-register.yaml",
     "facts/_INDEX.md",
     ".convergence_ledger.jsonl",

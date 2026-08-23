@@ -1,0 +1,862 @@
+{
+  "drain_blocked_contradiction": {
+    "action": "Cannot CONVERGE: GLOBAL CONTRADICTION: F001 <-> F002 -> resolve via fact_contradiction_gate or supersedes links.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "BLOCKED",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "drain_blocked_orphans": {
+    "action": "Cannot CONVERGE: 1 orphan terminal claim(s) ['C-2'] have no answers_question -> link them to a primary_question or reopen.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "BLOCKED",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [
+      {
+        "id": "C-2",
+        "status": "PROVEN"
+      }
+    ],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "drain_converged_full": {
+    "action": "Claim loop done - all open claims closed, partials verified, primary_questions PROVEN with verify_status=passes notes, completion transaction clean (zero global contradictions, zero unconsumed discoveries, PROVEN provenance). STOP dispatch; deliver",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "CONVERGED",
+    "done_artifact_violations": [],
+    "exit_code": 0,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "drain_converged_minimal": {
+    "action": "Claim loop done - all open claims closed, partials verified, primary_questions PROVEN with verify_status=passes notes, completion transaction clean (zero global contradictions, zero unconsumed discoveries, PROVEN provenance). STOP dispatch; deliver",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "CONVERGED",
+    "done_artifact_violations": [],
+    "exit_code": 0,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "drain_converged_yesno_negative": {
+    "action": "Claim loop done - all open claims closed, partials verified, primary_questions PROVEN with verify_status=passes notes, completion transaction clean (zero global contradictions, zero unconsumed discoveries, PROVEN provenance). STOP dispatch; deliver",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "CONVERGED",
+    "done_artifact_violations": [],
+    "exit_code": 0,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "drain_dispatch_discovery": {
+    "action": "Cannot CONVERGE: 2 unconsumed discovery(s) in F001.md, F001.md -> create child obligations or record materiality rejection",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "DISPATCH",
+    "done_artifact_violations": [],
+    "exit_code": 1,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "drain_saturated_unverified": {
+    "action": "Cannot CONVERGE: primary_questions ['q1'] lack PROVEN answering claims (need BLIND-verified PROVEN, not STAMP/unverified). Dispatch verifier or rework answering claims.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "SATURATED",
+    "done_artifact_violations": [],
+    "exit_code": 3,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [
+      {
+        "answering_claims": [],
+        "question": "q1"
+      }
+    ],
+    "worker_cap": 3
+  },
+  "drain_verify_note_gaps": {
+    "action": "Note-layer (DESIGN S8 C0) not satisfied: primary_questions ['q1'] lack a note with verify_status=passes (link: note.claim_id -> claim.answers_question). Run verify-note.py before delivery.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "DISPATCH_VERIFIER",
+    "done_artifact_violations": [],
+    "exit_code": 2,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [
+      "q1"
+    ],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "mixed_blocked_and_unblocked_dispatch": {
+    "action": "Run priority_ratio.py and dispatch the top claim. 1 unblocked open claim(s), 3 free slot(s).",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 1,
+    "decision": "DISPATCH",
+    "done_artifact_violations": [],
+    "exit_code": 1,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": true,
+        "id": "C-1",
+        "status": "OPEN"
+      },
+      {
+        "blocked": false,
+        "id": "C-2",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 2,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "order_discovery_beats_contradiction": {
+    "action": "Cannot CONVERGE: 1 unconsumed discovery(s) in F001.md -> create child obligations or record materiality rejection",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "DISPATCH",
+    "done_artifact_violations": [],
+    "exit_code": 1,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "order_failure_beats_all_infra": {
+    "action": "1 claim(s) have a failed attempt with no failure_analysis: ['C-1']. Run failure_analysis_gate.py <ws> to reason about WHY the method failed before re-dispatch or NEGATIVE.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 1,
+    "decision": "BLOCKED",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [
+      "C-1"
+    ],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      },
+      {
+        "blocked": true,
+        "id": "C-2",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 2,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "order_note_gap_beats_discovery": {
+    "action": "Note-layer (DESIGN S8 C0) not satisfied: primary_questions ['q1'] lack a note with verify_status=passes (link: note.claim_id -> claim.answers_question). Run verify-note.py before delivery.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "DISPATCH_VERIFIER",
+    "done_artifact_violations": [],
+    "exit_code": 2,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [
+      "q1"
+    ],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "order_opens_beat_partials": {
+    "action": "Run priority_ratio.py and dispatch the top claim. 1 unblocked open claim(s), 3 free slot(s).",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "DISPATCH",
+    "done_artifact_violations": [],
+    "exit_code": 1,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 1,
+    "partial_facts": [
+      {
+        "fact": "F001",
+        "status": "PARTIAL"
+      }
+    ],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "order_orphans_beats_unverified": {
+    "action": "Cannot CONVERGE: 1 orphan terminal claim(s) ['C-2'] have no answers_question -> link them to a primary_question or reopen.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "BLOCKED",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [
+      {
+        "id": "C-2",
+        "status": "PROVEN"
+      }
+    ],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [
+      {
+        "answering_claims": [],
+        "question": "q1"
+      }
+    ],
+    "worker_cap": 3
+  },
+  "order_queue_beats_failure": {
+    "action": "All 3 slots busy with 1 open claim(s) queued. Poll workers - do not wait idly.",
+    "active_blockers": [],
+    "active_workers": 3,
+    "blocked_open_count": 0,
+    "decision": "SATURATED",
+    "done_artifact_violations": [],
+    "exit_code": 3,
+    "failure_blocked": [
+      "C-2"
+    ],
+    "free_slots": 0,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      },
+      {
+        "blocked": false,
+        "id": "C-2",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 2,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "order_unverified_beats_note_gap": {
+    "action": "Cannot CONVERGE: primary_questions ['q1'] lack PROVEN answering claims (need BLIND-verified PROVEN, not STAMP/unverified). Dispatch verifier or rework answering claims.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "SATURATED",
+    "done_artifact_violations": [],
+    "exit_code": 3,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [
+      "q1"
+    ],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [
+      {
+        "answering_claims": [],
+        "question": "q1"
+      }
+    ],
+    "worker_cap": 3
+  },
+  "sched_blocked_all_infra": {
+    "action": "All 2 open claim(s) are blocked. Resolve blockers: none on disk.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 2,
+    "decision": "BLOCKED",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": true,
+        "id": "C-1",
+        "status": "OPEN"
+      },
+      {
+        "blocked": true,
+        "id": "C-2",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 2,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_blocked_all_infra_files": {
+    "action": "All 1 open claim(s) are blocked. Resolve blockers: ['B-1'].",
+    "active_blockers": [
+      "B-1"
+    ],
+    "active_workers": 0,
+    "blocked_open_count": 1,
+    "decision": "BLOCKED",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": true,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_blocked_failure_due": {
+    "action": "1 claim(s) have a failed attempt with no failure_analysis: ['C-1']. Run failure_analysis_gate.py <ws> to reason about WHY the method failed before re-dispatch or NEGATIVE.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "BLOCKED",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [
+      "C-1"
+    ],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_dispatch_open_free": {
+    "action": "Run priority_ratio.py and dispatch the top claim. 1 unblocked open claim(s), 3 free slot(s).",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "DISPATCH",
+    "done_artifact_violations": [],
+    "exit_code": 1,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_dispatch_two_active": {
+    "action": "Run priority_ratio.py and dispatch the top claim. 1 unblocked open claim(s), 1 free slot(s).",
+    "active_blockers": [],
+    "active_workers": 2,
+    "blocked_open_count": 0,
+    "decision": "DISPATCH",
+    "done_artifact_violations": [],
+    "exit_code": 1,
+    "failure_blocked": [],
+    "free_slots": 1,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_failure_full_analysis_dispatch": {
+    "action": "Run priority_ratio.py and dispatch the top claim. 1 unblocked open claim(s), 3 free slot(s).",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "DISPATCH",
+    "done_artifact_violations": [],
+    "exit_code": 1,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_failure_partial_artifacts": {
+    "action": "1 claim(s) have a failed attempt with no failure_analysis: ['C-1']. Run failure_analysis_gate.py <ws> to reason about WHY the method failed before re-dispatch or NEGATIVE.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "BLOCKED",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [
+      "C-1"
+    ],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_ladder_exhausted_infra": {
+    "action": "All 1 open claim(s) are blocked. Resolve blockers: none on disk.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 1,
+    "decision": "BLOCKED",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": true,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_ladder_exhausted_unblocked": {
+    "action": "Run priority_ratio.py and dispatch the top claim. 1 unblocked open claim(s), 3 free slot(s).",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "DISPATCH",
+    "done_artifact_violations": [],
+    "exit_code": 1,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_saturated_no_slots": {
+    "action": "All 3 slots busy with 1 open claim(s) queued. Poll workers - do not wait idly.",
+    "active_blockers": [],
+    "active_workers": 3,
+    "blocked_open_count": 0,
+    "decision": "SATURATED",
+    "done_artifact_violations": [],
+    "exit_code": 3,
+    "failure_blocked": [],
+    "free_slots": 0,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_unexpected_partials_no_slots": {
+    "action": "Unexpected state - investigate manually.",
+    "active_blockers": [],
+    "active_workers": 3,
+    "blocked_open_count": 0,
+    "decision": "SATURATED",
+    "done_artifact_violations": [],
+    "exit_code": 3,
+    "failure_blocked": [],
+    "free_slots": 0,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 1,
+    "partial_facts": [
+      {
+        "fact": "F001",
+        "status": "PARTIAL"
+      }
+    ],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "sched_verify_partials_free": {
+    "action": "Dispatch a verifier for 1 partial fact(s). Do NOT declare PROVEN without sign-off.",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "DISPATCH_VERIFIER",
+    "done_artifact_violations": [],
+    "exit_code": 2,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [],
+    "open_count": 0,
+    "orphan_claims": [],
+    "partial_count": 1,
+    "partial_facts": [
+      {
+        "fact": "F001",
+        "status": "PARTIAL"
+      }
+    ],
+    "pq_parse_error": null,
+    "stuck_workers": [],
+    "unblocked_open_count": 0,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "schema_invalid_beats_dispatch": {
+    "action": "INVALID task_spec primary_questions: item 0 is list ([1, 2]); expected a string or mapping",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "INVALID",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": "item 0 is list ([1, 2]); expected a string or mapping",
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "schema_invalid_duplicate_qid": {
+    "action": "INVALID task_spec primary_questions: duplicate question id 'q1' (item 1)",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "INVALID",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": "duplicate question id 'q1' (item 1)",
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  },
+  "schema_invalid_int_item": {
+    "action": "INVALID task_spec primary_questions: item 0 is int (5); expected a string or mapping",
+    "active_blockers": [],
+    "active_workers": 0,
+    "blocked_open_count": 0,
+    "decision": "INVALID",
+    "done_artifact_violations": [],
+    "exit_code": 4,
+    "failure_blocked": [],
+    "free_slots": 3,
+    "note_layer_gaps": [],
+    "open_claims": [
+      {
+        "blocked": false,
+        "id": "C-1",
+        "status": "OPEN"
+      }
+    ],
+    "open_count": 1,
+    "orphan_claims": [],
+    "partial_count": 0,
+    "partial_facts": [],
+    "pq_parse_error": "item 0 is int (5); expected a string or mapping",
+    "stuck_workers": [],
+    "unblocked_open_count": 1,
+    "unverified_primary_qs": [],
+    "worker_cap": 3
+  }
+}

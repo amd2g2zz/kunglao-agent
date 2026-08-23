@@ -4,17 +4,31 @@
 claim: 
 
 Before re-dispatching OR concluding NEGATIVE, answer three questions
-(reason from THIS specific failure — do not pick from a fixed menu):
+(reason from THIS specific failure - do not pick from a fixed menu):
 
-  1. method_assumption   — what did the failed method assume would happen?
-  2. assumption_validity — is that assumption justified given the evidence?
+  1. method_assumption   - what did the failed method assume would happen?
+  2. assumption_validity - is that assumption justified given the evidence?
                            if NOT justified -> the METHOD failed, not the behavior absent
-  3. next_method         — what DIFFERENT method tests a different assumption?
+  3. next_method         - what DIFFERENT method tests a different assumption?
                            (literal retry is forbidden; 'method was adequate' only if Q2=justified)
+
+And transduce the failure into typed artifacts (#495 - the analysis does
+not unblock without them):
+
+  4. validated_capability - what this failure PROVED works (capability ok)
+  5. identified_obstacle  - what specifically blocked you (auto-promoted
+                           to a new claim depending on this one)
+  6. --source             - provenance: lesson-hit | reference-hit |
+                           web-hit | novel-hypothesis (novel requires the
+                           ladder to have recorded a hit first)
+
+  failure artifacts still missing: validated_capability, identified_obstacle
 
 Record with:
   python scripts/failure_analysis_gate.py <ws> C-1 --record \
-      --assumption "..." --validity not-justified|justified-adequate --next-method "..."
+      --assumption "..." --validity not-justified|justified-adequate --next-method "..." \
+      --validated-capability "..." --identified-obstacle "..." \
+      --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance, #495)
 
-See failure-modes reference (recall #268): failure-modes.md, failure-modes-lifecycle.md, failure-modes-monitoring.md, failure-modes-state.md, case-book.md, convergence-loop.md
+See failure-modes reference (recall #268): failure-modes.md, failure-modes-lifecycle.md, failure-modes-monitoring.md, failure-modes-state.md, case-book.md, lessons/README.md, convergence-loop.md
 

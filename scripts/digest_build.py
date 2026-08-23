@@ -15,6 +15,16 @@ Usage:
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="digest_build", action="converge",
+                          detail="module wired")
+except NameError:
+    pass
+
 import argparse
 import sys
 from datetime import datetime, timezone
@@ -22,8 +32,26 @@ from pathlib import Path
 
 import yaml
 
+# #538 W-5: the _INDEX row schema and its parser live in THE single module
+# (tools/_lib/index_schema.py) shared with scripts/update_index.py — the old
+# inline 5-column split here was the second, divergent contract (and parsed
+# free text as status in live workspaces).
+_LIB_DIR = Path(__file__).resolve().parent.parent / "tools" / "_lib"
+if str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))
+from index_schema import (  # noqa: E402
+    IndexSchemaError,
+    parse_index_text,
+)
+import index_schema as _INDEX_SCHEMA  # noqa: E402  (identity anchor for tests)
+
 SCHEMA_VERSION = "digest-v1"
 DIGEST_PATH = Path("runs") / "digest.md"
+
+# #528 sec_g: the open-hypotheses section is pointer-sized and BOUNDED —
+# a pathological hypotheses/ dir must not blow the 4096-byte cold-start
+# cap (same bounding posture as every other digest section).
+MAX_SEC_G_HYPS = 12
 
 
 def _load_yaml(path: Path) -> dict:
@@ -40,21 +68,29 @@ def _read_text(path: Path) -> str:
 
 
 def _facts_index(ws: Path) -> list[dict]:
-    """Parse facts/_INDEX.md 'F-NN | status | claim | conclusion | unit'. Fixture fallback <ws>/_INDEX.md."""
+    """Parse facts/_INDEX.md via the shared single-schema parser (#538 W-5).
+
+    Row: F<id> | <status> | <claim_id> | <one-line conclusion>[ | unit=...].
+    The optional 5th `unit=` field is digest-specific display metadata; it is
+    derived here (split off the conclusion), NOT part of the shared schema.
+    A malformed status raises IndexSchemaError — never silently re-typed.
+    Fixture fallback <ws>/_INDEX.md kept (pre-contract workspaces)."""
     index = ws / "facts" / "_INDEX.md"
     if not index.exists():
         index = ws / "_INDEX.md"
     if not index.exists():
         return []
     out = []
-    for line in _read_text(index).splitlines():
-        parts = [p.strip() for p in line.split("|")]
-        if len(parts) < 4:
-            continue
-        fid = parts[0]
-        unit = parts[4] if len(parts) > 4 else "n/a"
-        out.append({"id": fid, "status": parts[1], "claim": parts[2],
-                    "conclusion": parts[3], "unit": unit})
+    for row in parse_index_text(_read_text(index)):
+        conclusion = row["conclusion"]
+        unit = "n/a"
+        # unit= rides as a 5th pipe column in legacy rows; recover it from
+        # the conclusion tail without re-splitting the shared row.
+        if " | unit=" in conclusion:
+            conclusion, _, unit = conclusion.partition(" | unit=")
+        out.append({"id": row["fact_id"], "status": row["status"],
+                    "claim": row["claim_id"], "conclusion": conclusion,
+                    "unit": unit})
     return out
 
 
@@ -66,6 +102,45 @@ def _claims(ws: Path) -> list[dict]:
 def _failure_rules(ws: Path) -> list[dict]:
     fr = _load_yaml(ws / "failure-registry.yaml")
     return fr.get("rules") or []
+
+
+def build_sec_g(ws: Path) -> str:
+    """Digest sec_g: OPEN hypotheses, pointers only (#528).
+
+    Reads ONLY from <ws>/hypotheses/ (hypothesis_store, the single
+    parser). NEVER from notes/ — notes is the result layer (user
+    correction 2026-08-20: first judge, then revise notes), and
+    re-importing a 'hypothesis' from notes is the exact path that
+    produced the AES->ChaCha20 silent-overwrite anti-pattern.
+
+    Refuted/superseded hypotheses are deliberately absent: only UNRESOLVED
+    questions re-hydrate at restart; decided ones live in the notes/
+    facts/ trail, not duplicated here.
+
+    Returns "" when there is nothing to show (no dir, no open hypotheses)
+    so build_digest emits no section at all — pre-#528 workspaces keep
+    their exact six-section digest.
+    """
+    hyp_dir = Path(ws) / "hypotheses"
+    if not hyp_dir.is_dir():
+        return ""
+    # Imported lazily: digest_build must stay importable even if the
+    # hypothesis layer module moves (the build path wraps this in
+    # try/except anyway, but the import failure should not fire at module
+    # import time for unrelated callers).
+    from hypothesis_store import HypothesisStore
+    open_hyps = HypothesisStore(hyp_dir).list_open()[:MAX_SEC_G_HYPS]
+    if not open_hyps:
+        return ""
+    lines = ["## sec_g — open hypotheses (#528, pointers only)", "",
+             "| hyp_id | claim_id | competitor_group | candidates |",
+             "|---|---|---|---|"]
+    for h in open_hyps:
+        cands = ", ".join(h.candidates) if h.candidates else "-"
+        lines.append(f"| {h.id} | {h.claim_id} | "
+                     f"{h.competitor_group or '-'} | {cands} |")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def build_digest(ws: Path) -> str:
@@ -158,6 +233,18 @@ def build_digest(ws: Path) -> str:
         tail = progress.strip().splitlines()[-3:]
         for ln in tail:
             L.append(f"  {ln}")
+
+    # ---- sec_g: open hypotheses (#528) — FAIL-OPEN ----
+    # A hypotheses-layer failure must never block cold start: the digest
+    # degrades to the pre-#528 six-section shape instead of raising
+    # (issue #528 work item: digest build failure must not block restart).
+    try:
+        sec_g = build_sec_g(ws)
+    except Exception:  # noqa: BLE001 — degrade, never block cold start
+        sec_g = ""
+    if sec_g:
+        L.append("")
+        L.extend(sec_g.splitlines())
 
     return "\n".join(L) + "\n"
 

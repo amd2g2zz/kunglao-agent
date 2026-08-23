@@ -23,12 +23,12 @@ SMART = narrow + alive-only (same philosophy as dispatch_gate):
 Output shape (one compact block):
   [worker_pulse] W-<n> finished
   DECISION: <DISPATCH|SATURATED|BLOCKED|DISPATCH_VERIFIER|CONVERGED> — <action>
-  next up: <top dispatchable claim via priority.py>
+  next up: <top dispatchable claim via priority_ratio.py — the sanctioned scorer (#499)>
   flags: stuck=<...> failure-blocked=<...> partial=<...>
   TASKSTOP: W-<n> delivered — TaskStop now          # #88: on a final-state worker
 
-Pure read: reads claim-register.yaml + runs convergence_check/priority in
-subprocess. No state writes, no files touched (except the ledger side-effect
+Pure read: reads claim-register.yaml + runs convergence_check/priority_ratio
+in subprocess. No state writes, no files touched (except the ledger side-effect
 of convergence_check, which is by-design).
 
 TASKSTOP delivery reminder (#88, D1): when the just-completed dispatch's
@@ -59,15 +59,18 @@ DISPATCH_RE = re.compile(
 )
 
 # v1.9.29 (#38): soft stale-worker detection for the non-dispatch PostToolUse
-# path. A worker is in-progress iff the LAST `status:` line (most-recent-state
-# wins, same convention as lib_kunglao.scan_active_workers and
-# backtrack_gate.parse_status) lowercased + dash->underscore == "in_progress".
-STATUS_RE = re.compile(r"^\s*status\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
-# #88 (D1): unanchored `status:` search for the delivery-moment check — matches
-# BOTH the real status-line shape ("[12:00] step: ... | status: done") and the
-# dedicated-line shape ("status: done"); last match wins (lib_kunglao convention).
-FINAL_STATUS_RE = re.compile(r"status:\s*(\S+)", re.IGNORECASE)
+# path. Worker-status parsing lives in lib_kunglao (THE single parse point,
+# #444): parse_worker_status(_tokens) returns the LAST `status:` token wins
+# result over both line shapes. Import is lazy (worker_budget precedent) and
+# fail-open ('' on any error — the hard REJECT is worker_budget's job).
 STUCK_MIN = 20  # minutes — mirrors backtrack_gate default --stuck-min 20
+
+
+def _worker_lib():
+    """hooks/lib_kunglao — the worker-status protocol single parse point (#444)."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import lib_kunglao
+    return lib_kunglao
 
 
 def _check_stale_workers(ws: Path) -> str:
@@ -77,22 +80,25 @@ def _check_stale_workers(ws: Path) -> str:
     exceeds STUCK_MIN. Returns a human-readable message naming each stale
     worker + age, or '' if none. NEVER aborts — the hard REJECT is
     worker_budget's job (check_backtrack_gate). Any OSError / missing runs/
-    dir -> '' (no crash, no false alarm)."""
+    dir / protocol import error -> '' (no crash, no false alarm)."""
     runs = ws / "runs"
     if not runs.is_dir():
+        return ''
+    try:
+        parse_tokens = _worker_lib().parse_worker_status_tokens
+    except Exception:
         return ''
     now = time.time()
     stale = []
     try:
         for p in runs.glob("worker-status-*.md"):
             try:
-                text = p.read_text(encoding="utf-8", errors="replace")
+                tokens = parse_tokens(p.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
-            matches = STATUS_RE.findall(text)
-            if not matches:
+            if not tokens:
                 continue
-            last = matches[-1].lower().replace("-", "_")
+            last = tokens[-1].replace("-", "_")
             if last != "in_progress":
                 continue
             try:
@@ -107,7 +113,7 @@ def _check_stale_workers(ws: Path) -> str:
         return ''
     return (f"[worker_pulse] {len(stale)} stale in-progress worker(s) "
             f"(> {STUCK_MIN}m no status-file update): " + ", ".join(stale) +
-            " — intervene or force a `## backtrack` block.")
+            " - intervene or force a `## backtrack` block.")
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
@@ -166,39 +172,38 @@ def _delivery_reminder(ws: Path) -> str:
     """TASKSTOP delivery-moment reminder (#88 D1).
 
     When the just-completed dispatch's worker status file shows a FINAL state
-    (`done` / `blocked` — LAST `status:` line wins, lib_kunglao convention),
+    (`done` / `blocked` — LAST `status:` token wins, lib_kunglao protocol),
     remind the orchestrator to TaskStop the delivered worker: a
     delivered-but-unstopped background worker holds a slot forever. Returns
     '' when no delivered worker is found (in-progress or missing = silent)."""
     runs = ws / "runs"
     if not runs.is_dir():
         return ''
+    try:
+        parse_status = _worker_lib().parse_worker_status
+    except Exception:
+        return ''
     delivered = []
     try:
         for p in runs.glob("worker-status-*.md"):
             try:
-                text = p.read_text(encoding="utf-8", errors="replace")
+                last = parse_status(p.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
-            last = None
-            for line in text.splitlines():
-                m = FINAL_STATUS_RE.search(line)
-                if m:
-                    last = m.group(1).lower().replace("-", "_")
-            if last in ("done", "blocked"):
+            if last is not None and last.replace("-", "_") in ("done", "blocked"):
                 delivered.append(p.name.removeprefix("worker-status-").removesuffix(".md"))
     except OSError:
         return ''
     if not delivered:
         return ''
-    return "TASKSTOP: " + ", ".join(delivered) + " delivered — TaskStop now"
+    return "TASKSTOP: " + ", ".join(delivered) + " delivered - TaskStop now"
 
 
 def _build_pulse(ws: Path) -> tuple[str, str | None]:
     """Compact convergence snapshot: decision + next-up claim + flags.
     Returns (pulse, decision) — decision is None when convergence_check
     output is unavailable."""
-    lines = ["[worker_pulse] worker completed — convergence pulse (auto):"]
+    lines = ["[worker_pulse] worker completed - convergence pulse (auto):"]
 
     cc = _run_py([str(SKILL_DIR / "scripts" / "convergence_check.py"), str(ws), "--json"], ws)
     d = None
@@ -208,7 +213,7 @@ def _build_pulse(ws: Path) -> tuple[str, str | None]:
         except json.JSONDecodeError:
             d = None
     if d:
-        lines.append(f"DECISION: {d['decision']} — {d['action']}")
+        lines.append(f"DECISION: {d['decision']} - {d['action']}")
         flags = []
         if d.get("stuck_workers"):
             flags.append(f"stuck={[w['worker'] for w in d['stuck_workers']]}")
@@ -218,6 +223,10 @@ def _build_pulse(ws: Path) -> tuple[str, str | None]:
             flags.append(f"partial={d['partial_count']}")
         if d.get("active_blockers"):
             flags.append(f"blockers={d['active_blockers']}")
+        # W-15 (#444): done-without-files at the exact delivery-review moment —
+        # the pulse is where "report done" gets double-checked (design D3).
+        if d.get("done_artifact_violations"):
+            flags.append(f"w15={[w['worker'] for w in d['done_artifact_violations']]}")
         # DLQ (#36): surface quarantined (DEAD) claim count. Fail-open — a
         # missing module or register must never break the convergence pulse.
         try:
@@ -231,18 +240,32 @@ def _build_pulse(ws: Path) -> tuple[str, str | None]:
         if flags:
             lines.append("flags: " + "; ".join(flags))
 
-    # next-up claim via priority.py
-    pr = _run_py([str(SKILL_DIR / "scripts" / "priority.py"), str(ws), "--json"], ws)
+    # next-up claim via priority_ratio.py — THE authoritative scorer (#499:
+    # specs/phase-4/contract.md §1 lands DECIDE action ranking on
+    # priority_ratio; the legacy weighted module is deprecated, #446 retires it).
+    pr = _run_py([str(SKILL_DIR / "scripts" / "priority_ratio.py"), str(ws), "--json"], ws)
     if pr and pr.returncode == 0:
         try:
-            pj = json.loads(pr.stdout)
+            actions = json.loads(pr.stdout)
         except json.JSONDecodeError:
-            pj = None
-        if pj and pj.get("dispatchable"):
-            top = pj["dispatchable"][0]
-            lines.append(f"next up: {top['id']} (score {top['score']}) {top.get('statement', '')[:80]}")
-        elif pj:
-            lines.append("next up: no dispatchable claims (check DECISION above)")
+            actions = None
+        if isinstance(actions, list):
+            # caller-side filtering is the caller's job (contract §1 — the pure
+            # function takes no ws): drop failure-blocked claims (cc flags them)
+            # and claims convergence_check no longer counts open (e.g. RETRACTED
+            # — ratio.is_open keys off status_defs.TERMINAL, cc off
+            # TERMINAL_WITH_RETRACTED; cc is the convergence truth face).
+            failure_blocked = set(d.get("failure_blocked") or []) if d else set()
+            cc_open = ({c.get("id") for c in d.get("open_claims", []) if c.get("id")}
+                       if d else None)
+            eligible = [a for a in actions
+                        if a.get("claim_id") not in failure_blocked
+                        and (cc_open is None or a.get("claim_id") in cc_open)]
+            if eligible:
+                top = eligible[0]
+                lines.append(f"next up: {top['claim_id']} (score {top['score']}) {top.get('action', '')}")
+            else:
+                lines.append("next up: no dispatchable claims (check DECISION above)")
 
     if len(lines) == 1:
         return "", (d or {}).get("decision")

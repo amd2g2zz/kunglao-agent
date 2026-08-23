@@ -24,11 +24,17 @@ progressed while the files never caught up")
      tier — the first 5 classes are all "file A vs file B" consistency;
      this one asks whether the STATE FILE itself is wrong (files agree
      but reality was never verified)
+  7. STALE_PLAN_ON_NEW_EVIDENCE (#497, WARN-only): new evidence (a
+     #495 failure_analysis record, a promoted obstacle claim) landed
+     AFTER the last plan update while the plan was never re-derived —
+     the whitelist-inverted drift (the plan is a derived view of the
+     model per #498: model changed + plan unchanged = drift). Printed
+     as WARN (observe-first), NEVER counted toward the exit codes.
 
 Usage:
   python plan_drift_detector.py <workspace> [--apply]
 Exit codes:
-  0 = no drift
+  0 = no drift (WARN-only output still exits 0 — observation, not a gate)
   1 = drift detected (B1o blocker)
   2 = HARD_PAUSE: 3+ drift warnings in same session
 """
@@ -171,6 +177,90 @@ def extract_low_confidence_claim_ids(facts_dir: Path) -> set:
     return out
 
 
+def find_stale_plan_on_new_evidence(workspace: Path, plan_path, claims: list) -> list:
+    """#497: stale-plan-on-new-evidence — the whitelist-inverted drift.
+
+    The first 6 classes ask whether the plan files AGREE; none asks whether
+    the plan was RE-DERIVED after the world model changed (#498: the plan is
+    a derived view — model changed + plan unchanged is the real drift, while
+    deviating from a stale plan after new evidence is the NORM). Mechanical
+    proxy, mtime-anchored and namespace-independent:
+      - any analyses/failure-*.yaml (#495 failure_analysis) newer than the
+        plan -> new failure knowledge the plan never saw;
+      - claim-register.yaml carrying a promoted obstacle claim
+        (origin: failure-obstacle) and newer than the plan -> a new DAG
+        node the plan never absorbed.
+    Deliberately WARN-level (observe-first per issue #497 What 4): callers
+    print these but NEVER count them toward the drift exit codes. Strictly
+    greater-than comparison — equal mtimes mean the plan already saw the
+    evidence (fail-open to no warning)."""
+    warns = []
+    if not plan_path or not plan_path.exists():
+        return warns
+    try:
+        plan_mtime = plan_path.stat().st_mtime
+    except OSError:
+        return warns
+    adir = workspace / "analyses"
+    if adir.exists():
+        for p in sorted(adir.glob("failure-*.yaml")):
+            try:
+                if p.stat().st_mtime > plan_mtime:
+                    warns.append({
+                        "type": "STALE_PLAN_ON_NEW_EVIDENCE",
+                        "claim_id": p.stem.removeprefix("failure-"),
+                        "fix": (f"analyses/{p.name} landed after the last plan "
+                                f"update — re-derive {plan_path.name} on the new "
+                                f"evidence (#497)"),
+                    })
+            except OSError:
+                continue
+    reg_path = workspace / "claim-register.yaml"
+    has_obstacle = any(c.get("origin") == "failure-obstacle" for c in claims)
+    if has_obstacle and reg_path.exists():
+        try:
+            if reg_path.stat().st_mtime > plan_mtime:
+                warns.append({
+                    "type": "STALE_PLAN_ON_NEW_EVIDENCE",
+                    "claim_id": "claim-register",
+                    "fix": ("obstacle claim promoted (#495) after the last plan "
+                            f"update — re-derive {plan_path.name} on the new "
+                            "evidence (#497)"),
+                })
+        except OSError:
+            pass
+    return warns
+
+
+def _print_stale_plan_warns(warns: list) -> None:
+    """WARN block for stale-plan-on-new-evidence (observation, not a gate)."""
+    if not warns:
+        return
+    print(f"WARN (observe-only, #497): {len(warns)} STALE_PLAN_ON_NEW_EVIDENCE item(s) —")
+    print("  new evidence landed after the last plan update; the plan is a derived")
+    print("  view (#498) and should be re-derived (model changed -> re-plan is the")
+    print("  norm; only an information-free pivot is not):")
+    for w in warns[:5]:
+        print(f"    - {w['claim_id']}: {w['fix']}")
+    if len(warns) > 5:
+        print(f"    ... and {len(warns) - 5} more")
+
+
+def _emit_stale_plan_warns(workspace: Path, warns: list) -> None:
+    """#459 observability: class-7 WARN face -> unified event log, one event
+    per item (claim carries the warn's claim_id so a tail can filter). The
+    warn is observe-only on stdout and never changes the exit code — neither
+    may the emit (fail-open, kunglao_record posture)."""
+    for w in warns:
+        try:
+            from kunglao_log import emit
+            emit(workspace, actor="orchestrator",
+                 action="stale_plan_on_new_evidence",
+                 claim=w.get("claim_id"), detail=w.get("fix"))
+        except Exception:
+            pass
+
+
 @_gt.telemetry('plan_drift_detector')
 def check(workspace: Path, active_only: bool = False) -> int:
     reg = _load_yaml(workspace / "claim-register.yaml")
@@ -293,8 +383,16 @@ def check(workspace: Path, active_only: bool = False) -> int:
                 "fix": f"claim {cid} is PROVEN but a supporting fact carries low confidence",
             })
 
+    # #497: stale-plan-on-new-evidence — WARN-level by design (observe-first):
+    # collected here, printed below, NEVER counted toward the exit codes.
+    stale_plan_warns = find_stale_plan_on_new_evidence(workspace, plan_path, claims)
+    # #459: the class-7 WARN also reaches the unified event log (the Orient
+    # layer should not have to re-derive mtimes to see the drift).
+    _emit_stale_plan_warns(workspace, stale_plan_warns)
+
     if not drifts:
         print("OK: no plan drift detected")
+        _print_stale_plan_warns(stale_plan_warns)
         return 0
 
     by_type = {}
@@ -308,8 +406,11 @@ def check(workspace: Path, active_only: bool = False) -> int:
             print(f"    - {d['claim_id']}: {d['fix']}")
         if len(items) > 5:
             print(f"    ... and {len(items) - 5} more")
+    _print_stale_plan_warns(stale_plan_warns)
     # v1.9.29: 3+ drift warnings in the same run = HARD_PAUSE (exit 2),
     # per the docstring contract that the implementation previously lacked.
+    # (#497: STALE_PLAN_ON_NEW_EVIDENCE warns are NOT drift warnings for
+    # this threshold — they never enter `drifts`.)
     return 2 if len(drifts) >= 3 else 1
 
 

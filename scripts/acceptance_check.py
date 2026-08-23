@@ -100,7 +100,9 @@ def _test_suite_timeout_s(loadavg: float | None = None, cpu_count: int | None = 
             pass  # garbage override: fall through to load scaling
     try:
         load = loadavg if loadavg is not None else os.getloadavg()[0]
-    except OSError:  # pragma: no cover - platforms without getloadavg
+    except (AttributeError, OSError):  # pragma: no cover - platforms without
+        # getloadavg: win32 lacks the attribute entirely (AttributeError),
+        # POSIX raises OSError when unreadable — fail open to the floor (#457)
         load = 0.0
     cpus = cpu_count if cpu_count is not None else (os.cpu_count() or 1)
     factor = max(1.0, load / cpus)

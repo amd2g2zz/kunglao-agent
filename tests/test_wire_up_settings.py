@@ -21,15 +21,15 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SKILL_HOOKS = ROOT / "hooks"
 
-# The full entry set wire_up_settings registers: 9 entries / 8 distinct hook
+# The full entry set wire_up_settings registers: 10 entries / 9 distinct hook
 # files (worker_budget registered under BOTH PreToolUse(Agent) and
-# PostToolUse(Agent)).
-WIRE_UP_ENTRIES = 9
+# PostToolUse(Agent); #532 adds write_guard on Edit|Write|MultiEdit).
+WIRE_UP_ENTRIES = 10
 WIRE_UP_HOOK_FILES = {
     "env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
     "recall_inject.py",
     "heartbeat_touch.py", "worker_pulse.py", "state_anchor.py",
-    "completion_gate.py",
+    "completion_gate.py", "write_guard.py",
 }
 
 

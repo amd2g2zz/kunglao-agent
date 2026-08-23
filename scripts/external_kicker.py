@@ -24,7 +24,8 @@ Design (see openspec/archive/external-kicker/design.md D1-D6):
      no session alive. Tick interval default 15 < 30-min TTL → kick always
      lands before the TTL expires → no silent gate window.
   D2 project-level hooks re-registration: `ensure_project_hooks` — pure dict
-     transform (5 kunglao entries, wire_up_settings._ensure shape), every
+     transform (5 kunglao entries, hook_activation.build_hook_entry shape
+     — #445 single construction source), every
      other key preserved (env secrets, mcpServers, permissions, other
      matchers' entries). Written atomically ONLY when changed. Never touches
      user-level settings.
@@ -50,6 +51,16 @@ Pure stdlib. Exit 0 = tick ok (kick or skip), 1 = fatal config error.
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="external_kicker", action="dispatch",
+                              detail="module wired")
+except NameError:
+    pass
+
 import argparse
 import json
 import os
@@ -61,6 +72,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import wire_up_settings
+# #445: THE canonical registration entry — this module is a DECLARED
+# SUBORDINATE of it (see REGISTRATION_RELATION below), not a peer entry.
+# Safe at module scope: hook_activation imports no sibling modules at
+# import time (lazy imports only), so no cycle exists in either direction.
+import hook_activation
 
 # D6: activation TTL from hook_activation.py DEFAULT_TTL_MINUTES — the tick
 # interval MUST stay below it or the TTL-expiry→next-tick gap silently closes
@@ -109,8 +125,30 @@ _KICKER_SKIP_FILES = frozenset({
     "recall_inject.py",     # recall injector — full --wire-up restores it
     "state_anchor.py",      # state re-anchor — full --wire-up restores it
     "completion_gate.py",   # Stop completion gate — full --wire-up restores it
+    "write_guard.py",       # carrier write gate (#532) — full --wire-up restores it
 })
 _KICKER_ENTRY_FILES = frozenset(f for _, _, f in KUNGLAO_HOOK_ENTRIES)
+
+# #445: relationship of this module's writer to THE canonical registration
+# entry — declared, machine-readable, and pinned by
+# tests/test_hook_registration_entry.py. The kicker is NOT merged into the
+# canonical writer: it must write the WORKSPACE-PARENT target with a
+# deliberately narrow bootstrap subset while a session is dead. What IS
+# unified is the entry CONSTRUCTION (hook_activation.build_hook_entry) and
+# the registry pinning (derive_hook_subset above) — the two paths cannot
+# drift apart in command shape or file set.
+REGISTRATION_RELATION = {
+    "canonical_entry": hook_activation.CANONICAL_REGISTRATION_ENTRY,
+    "role": ("declared subordinate: dead-session bootstrap writer — "
+             "re-registers the minimal liveness chain while no session "
+             "lives; the full registry is restored by the canonical entry "
+             "once the kicked session starts"),
+    "target": ("workspace-parent .claude/settings.json "
+               "(wire_up_settings.hook_deployment_targets[1], #410)"),
+    "subset": ("KUNGLAO_HOOK_ENTRIES (5 entries), pinned to the registry "
+               "via wire_up_settings.derive_hook_subset (#381)"),
+    "construction": "hook_activation.build_hook_entry (single source, #445)",
+}
 
 # #381 module-load contract check: the entry file set must exactly account
 # for the registry — drift raises HERE, on every import (tests and
@@ -120,7 +158,21 @@ wire_up_settings.derive_hook_subset(
     include=_KICKER_ENTRY_FILES, skip=_KICKER_SKIP_FILES,
     owner="external_kicker KUNGLAO_HOOK_ENTRIES")
 
-_STATUS_RE = re.compile(r"status:\s*(\S+)")
+def _worker_protocol():
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
+    path under the unique name lib_kunglao_hooks (same pattern as the
+    lib_kunglao_scripts loader in should_kick below: bare `import
+    lib_kunglao` is ambiguous under pytest)."""
+    import importlib.util
+    name = "lib_kunglao_hooks"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
+    return lib
 
 
 def utc_now() -> str:
@@ -188,14 +240,10 @@ def ensure_project_hooks(settings: dict, hook_dir: str) -> tuple[dict, int]:
     the wire_up_settings.py:20 mis-wiring bug lives there.
     """
     def _canonical(matcher: str, hook_file: str) -> dict:
-        p = (Path(hook_dir) / hook_file).as_posix()  # POSIX: hooks run via sh -c
-        # #389: hooks run via `uv run --project <skill_root>` — bare python
-        # can resolve to 2.x (this machine: /usr/local/bin/python -> 2.7.17)
-        # and kill every re-registered hook; uv uses the skill's project venv.
-        skill_root = Path(hook_dir).parent.as_posix()
-        return {"matcher": matcher,
-                "hooks": [{"type": "command",
-                           "command": f"uv run --project {skill_root} {p}"}]}
+        # #445: construction delegated to THE canonical builder — no third
+        # hand-rolled entry shape (byte-identical output, test-pinned).
+        return hook_activation.build_hook_entry(Path(hook_dir), hook_file,
+                                                matcher)
 
     hooks = dict(settings.get("hooks") or {})
     appended = 0
@@ -280,25 +328,24 @@ def release_kick_lock(lock_path: Path) -> None:
 def has_fresh_workers(runs_dir: Path, fresh_minutes: int = FRESH_WORKER_MINUTES) -> bool:
     """D3: True when a worker status file is in-progress AND freshly written.
 
-    Mirrors lib_kunglao.scan_active_workers parsing (last `status:` line
-    decides; lowercased). Only files younger than `fresh_minutes` count — a
-    live session is mid-dispatch; a dead session's stale in-progress files
+    Parsing comes from the canonical worker-liveness protocol
+    (hooks/lib_kunglao.parse_worker_status, #444 — last `status:` token wins
+    over both line shapes). The single runs_dir scan target is this caller's
+    semantics (dead-session recovery inspects ONE session's runs dir, not the
+    .wt-* worktree fan-out). Only files younger than `fresh_minutes` count —
+    a live session is mid-dispatch; a dead session's stale in-progress files
     must NOT block recovery.
     """
     if not runs_dir.exists():
         return False
+    parse_status = _worker_protocol().parse_worker_status
     now = datetime.now(tz=timezone.utc)
     try:
         for p in runs_dir.glob("worker-status-*.md"):
             try:
-                text = p.read_text(encoding="utf-8", errors="replace")
+                last_status = parse_status(p.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
-            last_status = None
-            for line in text.splitlines():
-                m = _STATUS_RE.search(line)
-                if m:
-                    last_status = m.group(1).lower()
             if last_status != "in-progress":
                 continue
             mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
@@ -478,9 +525,9 @@ def _register_open_ids(ws: Path) -> list[str]:
 
 
 def _in_progress_workers(ws: Path) -> list[str]:
-    """Worker ids from runs/worker-status-*.md whose LAST status line is in-progress.
+    """Worker ids from runs/worker-status-*.md whose LAST status token is in-progress.
 
-    Same last-status rule as has_fresh_workers / _scan_active_workers; mtime
+    Same protocol parse as has_fresh_workers (hooks/lib_kunglao, #444); mtime
     is NOT a filter — the recovery prompt must surface the dead session's
     stale in-progress workers so the fresh session can reconcile them.
     """
@@ -491,17 +538,13 @@ def _in_progress_workers(ws: Path) -> list[str]:
         files = sorted(runs.glob("worker-status-*.md"))
     except OSError:
         return []
+    parse_status = _worker_protocol().parse_worker_status
     out = []
     for p in files:
         try:
-            text = p.read_text(encoding="utf-8", errors="replace")
+            last_status = parse_status(p.read_text(encoding="utf-8", errors="replace"))
         except OSError:
             continue
-        last_status = None
-        for line in text.splitlines():
-            m = _STATUS_RE.search(line)
-            if m:
-                last_status = m.group(1).lower()
         if last_status == "in-progress":
             out.append(p.stem.replace("worker-status-", ""))
     return out

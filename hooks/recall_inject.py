@@ -31,7 +31,8 @@ Design (mirrors dispatch_gate / env_check_gate, inject-only):
     or not the enforcement hooks are activated.
 
 Wiring (in .claude/settings.json PreToolUse, Agent matcher — registered
-idempotently by scripts/wire_up_settings.py alongside dispatch_gate):
+idempotently by scripts/hook_activation.py --wire-up (the canonical
+registration entry, #445) alongside dispatch_gate):
   {"matcher": "Agent", "hooks": [{"type": "command",
     "command": "uv run --project <skill_root> <skill_root>/hooks/recall_inject.py"}]}
 """
@@ -165,7 +166,7 @@ def recall_files(query: str, cwd: Path | None = None,
 
 def _guidance(queries: list[str], files: list[str]) -> str:
     return (
-        f"recall_inject: claim dispatch knowledge recall (#268) — "
+        f"recall_inject: claim dispatch knowledge recall (#268) - "
         f"queries: {', '.join(queries)}\n"
         f"Before dispatching, read: {', '.join(files)}"
     )

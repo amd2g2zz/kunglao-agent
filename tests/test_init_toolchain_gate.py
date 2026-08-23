@@ -322,9 +322,13 @@ def test_library_refuse_returns_4_no_scaffold(tmp_path, monkeypatch):
     import toolchain as tc
 
     def fake_fail(ws_arg, project_type=None):
+        # #477: gitnexus became INSTALL_PLANS-covered (negotiable -> the
+        # exit-8 menu); this test pins the NON-negotiable exit-4 refusal,
+        # so the fixture uses the decompiler (HARD degrade, never in the
+        # menu — #451/#477 surface split).
         return tc.ToolchainReport(project_type=project_type or "windows", items=[
-            tc.CheckResult(name="gitnexus", status=tc.Status.FAIL, tier=tc.Tier.HARD,
-                           detail="gitnexus not found", root_cause=None),
+            tc.CheckResult(name="decompiler", status=tc.Status.FAIL, tier=tc.Tier.HARD,
+                           detail="no decompiler found", root_cause=None),
         ])
 
     monkeypatch.setattr(mod.toolchain, "check", fake_fail)
@@ -432,6 +436,16 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     monkeypatch.setenv("GHIDRA_HOME", str(ghidra_home))
     monkeypatch.delenv("KUNGLAO_VM_HOST", raising=False)
 
+    # #454: isolate the MCP registry — _check_decompiler is MCP-first and a
+    # machine with a user-global mcp:ghidra registration would short-circuit
+    # to `decompiler via MCP (ghidra)`, hiding the independent ghidra CLI
+    # item this test pins. Inject an EMPTY user registry (KUNGLAO_CLAUDE_JSON
+    # is mcp_probe.claude_json_path's documented test override); the
+    # workspace surface is already isolated (fresh tmp ws, no .mcp.json).
+    isolated_registry = tmp_path / "isolated-claude.json"
+    isolated_registry.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(isolated_registry))
+
     # PATH with the host tools so binutils/pefile-style probes are satisfiable
     empty = tmp_path / "empty-bin"
     empty.mkdir()
@@ -441,14 +455,54 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     report = tc.check(ws, "linux")
     ghidra = next((i for i in report.items if i.name == "ghidra"), None)
     assert ghidra is not None, f"ghidra check missing from report: {report.items}"
-    assert ghidra.status == tc.Status.PASS, \
-        f"platform-correct analyzeHeadless must PASS the ghidra check on this host: {ghidra}"
+    # #474: presence-only CLI supply is WARN "capability unverified" (PASS
+    # needs the --capability trial); what this test pins is the platform-
+    # correct PATH resolution — the resolver must find the binary and say so.
+    assert ghidra.status == tc.Status.WARN, \
+        f"platform-correct analyzeHeadless must supply the ghidra item (WARN, capability unverified): {ghidra}"
     assert platform_paths.analyze_headless_name() in ghidra.detail
+    assert "capability unverified" in ghidra.detail
 
 
-def test_run_hard_fail_non_tty_without_assume_yes_refuses(tmp_path, monkeypatch):
-    """HARD FAIL + non-interactive stdin + no --assume-yes -> refuse exit 4
-    (keeps the #304 human-install event; no silent install, no hang)."""
+# ---------- #454: test isolation from the REAL user MCP registry ----------
+
+def test_platform_headless_isolated_from_user_global_ghidra_registration(
+        tmp_path, monkeypatch):
+    """#454 regression: on a machine whose user-level registry carries a
+    GLOBAL mcp:ghidra registration, the platform-headless test must still
+    walk its expected path (independent `ghidra` CLI item PASSes) — the test
+    must be isolated from the real user registry instead of assuming one.
+
+    Simulates the hostile machine deterministically (KUNGLAO_CLAUDE_JSON ->
+    fake registry with mcpServers.ghidra) and calls the target test as a
+    function: without in-test isolation, _check_decompiler is MCP-first, the
+    fake global registration short-circuits to `decompiler via MCP (ghidra)`
+    and the target test's "ghidra check missing" assertion raises."""
+    import json
+    hostile_root = tmp_path / "hostile-home"
+    hostile_root.mkdir()
+    fake_registry = hostile_root / ".claude.json"
+    fake_registry.write_text(json.dumps(
+        {"mcpServers": {"ghidra": {"type": "stdio", "command": "bridge.exe"}}}),
+        encoding="utf-8")
+    monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(fake_registry))
+    # Inner isolation (inside the target test) must override this outer
+    # hostile registry — same MonkeyPatch instance, LIFO undo at teardown.
+    test_init_gate_resolves_platform_headless(hostile_root, monkeypatch)
+
+
+def test_run_hard_fail_non_tty_without_assume_yes_pends_menu(tmp_path, monkeypatch,
+                                                             capsys):
+    """HARD FAIL + non-interactive stdin + no --assume-yes -> #451 contract:
+    when the missing item is WARN-degradable (die), init pends the
+    install/use-path/skip/degrade menu (exit RC_PENDING_DECISIONS=8, the
+    #455 --resolve channel) instead of the headless exit-4 refusal — a
+    structured pending list, never an auto-decline. ask_then_install is
+    still never entered without --assume-yes (no silent install, no hang).
+
+    (#451 supersedes the #455-era pin that die-only non-interactive =
+    exit 4: the refusal stays reserved for non-negotiable HARD human
+    events — see test_run_hard_fail_non_tty_mixed_still_refuses.)"""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
     (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
@@ -474,8 +528,41 @@ def test_run_hard_fail_non_tty_without_assume_yes_refuses(tmp_path, monkeypatch)
     monkeypatch.setattr(mod.sys, "stdin",
                        type("SI", (), {"isatty": lambda self: False})())
     rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root")
-    assert rc == RC_TOOLCHAIN_REFUSE
+    out = capsys.readouterr().out
+    assert rc == 8, \
+        f"die-only miss must pend the #451 menu (exit 8), got {rc}: {out}"
     assert "ask" not in calls, "non-interactive without --assume-yes must not ask"
+    assert '"install:die"' in out, f"menu decision missing from pending doc: {out}"
+    assert not (ws / "claim-register.yaml").exists()
+
+
+def test_run_hard_fail_non_tty_mixed_still_refuses(tmp_path, monkeypatch):
+    """④ anchor: a negotiable miss PLUS a non-negotiable HARD miss
+    (vm_reachable) under non-interactive stdin keeps the #304 human-event
+    refusal exit 4 (the menu defers to the round after the human acts)."""
+    ws = tmp_path / "ws"
+    (ws / "bins").mkdir(parents=True)
+    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    monkeypatch.setenv(FLAG_NAME, "0")
+    mod = _load_init_module()
+    import toolchain as tc
+
+    monkeypatch.setattr(mod.toolchain, "check",
+                        lambda ws_arg, project_type=None: tc.ToolchainReport(
+                            project_type="windows", items=[
+                                tc.CheckResult(name="die", status=tc.Status.FAIL,
+                                               tier=tc.Tier.HARD,
+                                               detail="die not found"),
+                                tc.CheckResult(name="vm_reachable",
+                                               status=tc.Status.FAIL,
+                                               tier=tc.Tier.HARD,
+                                               detail="VM unreachable"),
+                            ]))
+    monkeypatch.setattr(mod.sys, "stdin",
+                       type("SI", (), {"isatty": lambda self: False})())
+    rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root")
+    assert rc == RC_TOOLCHAIN_REFUSE
+    assert not (ws / "claim-register.yaml").exists()
 
 
 def test_run_ask_result_still_hard_refuses(tmp_path, monkeypatch):
@@ -506,8 +593,12 @@ def test_run_ask_result_still_hard_refuses(tmp_path, monkeypatch):
 
 
 def test_init_decline_degrades_warn_and_proceeds(tmp_path, monkeypatch):
-    """Real ask_then_install through run(): missing die + interactive decline
-    -> die degraded WARN -> resolved report no longer FAIL -> init proceeds."""
+    """Real ask_then_install through run(): missing die + a FAILED install
+    attempt (--assume-yes, #455: consent channel is assume_yes only) -> die
+    degraded WARN -> resolved report no longer FAIL -> init proceeds.
+
+    (#455: the old stdin-decline branch is gone — without --assume-yes the
+    gate is the #304 headless refusal, exit 4.)"""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
     (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
@@ -522,11 +613,10 @@ def test_init_decline_degrades_warn_and_proceeds(tmp_path, monkeypatch):
         ])
 
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
-    monkeypatch.setattr(mod.sys, "stdin",
-                       type("SI", (), {"isatty": lambda self: True})())
-    monkeypatch.setattr(mod.toolchain_install.builtins, "input",
-                        lambda prompt="": "n")
-    rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root")
+    monkeypatch.setattr(mod.toolchain_install, "_run_install_plan",
+                        lambda name, plan, assume_yes, ws: (1, "", "no choco"))
+    rc = mod.run(ws, project_type="windows",
+                 profile_root=tmp_path / "profile-root", assume_yes=True)
     assert rc == 0, "declined static item (die) must degrade WARN and proceed"
     assert (ws / "claim-register.yaml").exists()
 

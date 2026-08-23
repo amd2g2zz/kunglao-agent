@@ -130,7 +130,7 @@ def test_prompt_is_imperative(tmp_path):
     bind a convergence-advancing action; no action = idle fault."""
     from scripts.heartbeat_loop_prompt import build_prompt
     p = build_prompt(str(tmp_path / "ws"))
-    assert "MUST dispatch priority.py #1" in p, "DISPATCH must dispatch"
+    assert "MUST dispatch priority_ratio.py #1" in p, "DISPATCH must dispatch"
     assert "idle fault" in p, "no action = idle fault"
     assert "self-recover" in p, "BLOCKED must self-recover"
     assert "reactivat" in p, "DEFERRED must check reactivation"

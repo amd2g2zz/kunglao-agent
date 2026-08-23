@@ -49,15 +49,33 @@ kunglao-agent subcommands:
   /kunglao-agent:init      <workspace> [--type windows|linux|android]
                            initialize a workspace (scaffold + CLAUDE.md +
                            sample mount + task_spec intake + hooks)
+                           example: /kunglao-agent:init ~/cases/synth-dropper --type windows
 
-  /kunglao-agent:analysis  <workspace>
+  /kunglao-agent:analysis  <workspace>   (alias: analyze)
                            enter the convergence loop on an initialized
                            workspace
+                           example: /kunglao-agent:analysis ~/cases/synth-dropper
 
+  /kunglao-agent:resume   <workspace>
+                           crash/reboot recovery: read-only breakpoint brief
+                           (health + state + timeline + next step); advises
+                           the #461 re-arm chain when the heartbeat is dead
+                           example: /kunglao-agent:resume ~/cases/synth-dropper
 
   /kunglao-agent:help      [no args]
                            print this usage list
-(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table)
+                           example: /kunglao-agent:help
+
+Next steps:
+  uninitialized workspace → /kunglao-agent:init
+  initialized workspace   → /kunglao-agent:analysis
+  crashed / rebooted ws   → /kunglao-agent:resume
+  unsure which command    → /kunglao-agent:help
+  partial arguments       → the subcommand prints its own guided prompt
+                           (see its SKILL.md "No arguments" section)
+(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table;
+ #456: zero-args guard below the router, per-command examples + next steps —
+ menu/hints render skills/subcommands.yaml, the single source)
 ```
 
 
@@ -68,6 +86,8 @@ kunglao-agent subcommands:
 - `init <workspace> [--type ...]` → read and follow `skills/init/SKILL.md`.
 - `analysis <workspace>` (alias `analyze`) → read and follow
   `skills/analysis/SKILL.md`; the convergence loop is the destination.
+- `resume <workspace>` → read and follow `skills/resume/SKILL.md`
+  (read-only crash/reboot recovery brief, #466).
 - `help` → read and follow `skills/help/SKILL.md` (usage list).
 - Natural-language RE request (e.g. "what does this binary do") → map to
   `analysis`: read `skills/analysis/SKILL.md` then
@@ -75,14 +95,17 @@ kunglao-agent subcommands:
 - Unknown subcommand (not in the table, not natural language) → print the menu
   AND `unknown: <x>` — never guess, never silently run.
 
-The workspace is never a parameter: workspace detection runs in Phase 0 of the
-main contract. `<SKILL_DIR>` is the repo root (this file's parent), not
-`skills/kunglao-agent/`.
+The workspace is an explicit positional argument. When it is absent the
+subcommand runs its guided no-args prompt (see the "No arguments" section of
+`skills/init/SKILL.md` and `skills/analysis/SKILL.md`) — never a silent
+default, never a guess. `<SKILL_DIR>` is the repo root (this file's parent),
+not `skills/kunglao-agent/`.
 
 ## Examples
 
 - `/kunglao-agent` — print the subcommand menu, wait for a choice.
 - `/kunglao-agent init ~/cases/synth-dropper --type windows`
 - `/kunglao-agent analysis ~/cases/synth-dropper`
+- `/kunglao-agent resume ~/cases/synth-dropper`
 - `/kunglao-agent help`
 (feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table)

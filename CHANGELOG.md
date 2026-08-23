@@ -28,7 +28,142 @@ release (see the mapping table at the end).
 - Exit-code semantics audit (#414): RC matrix pinned by test; argparse usage errors normalized 2→1; cleanup removes only this-run artifacts.
 - Test-suite validity audit (#394): redundant/meaningless tests removed/merged (before/after counts in the PR).
 
-## [Unreleased]
+## [0.1.2] - 2026-08-23
+
+### Added
+- workspace CLAUDE.md template — progressive disclosure (37-line core + 9 pointers) + 6 carrier memory contract + loop mandatory block (#535)
+- Version stamp system — kunglao_template_version three-carrier stamp + fact schema_rev + upgrade detection (#536)
+- Workspace carrier contracts — eager scaffold 9 carriers + .workspace-manifest.json + _INDEX unified schema + scratch/ free-zone (#538)
+- Skill package contract text fix — SKILL.md:112 contradiction rewrite + global rules channel dispatch (#537)
+- Enforcement persistence — SessionStart re-arming + always_arm() + liveness predicate split + Stop gate always armed + MCP matcher (#533)
+- Observability lifeline — init full-path log + .init-report.json + 19 silent modules wired (#534)
+- Rollup write-loop automation — claim terminal state triggers lessons/outcome writes (#524)
+- Lessons nursery two-stage lifecycle — draft → active + trigger_precision gate (#525)
+- Lessons utility telemetry + deprecate governance — CBM quartet + tombstone (#526)
+- Dispatch context block mechanization — worker channel injection + verifier BLIND hard exclusion (#527)
+- Hypothesis persistence + restart rehydration — hypotheses/ + digest sec_g + state_anchor structured pointer (#528)
+- Strategy convergence four metrics — regret / cost-to-slope / P(faster|hit) / competence (#529)
+- Workspace export tool — zone-based routing (contract carriers / evidence / scratch) + manifest + verify (#540)
+- v0.1.2 milestone audit four-piece set — white-box + black-box + log + regression (#539)
+
+### Changed
+- Tool-search three sources — mcp_probe enumeration + dispatch acceptance + artifact→evidence e2e (#515)
+- Mechanism registry + retirement precedent (#446)
+- Quick fixes baseline test failures (#457)
+
+### Fixed
+- Init deployment: .claude/settings.json deadlock (hooks always skip), agents zero-deployment, .mcp.json empty scaffold (#478)
+- Deployment coverage: pkg_detect + INSTALL_PLANS 5→17 full coverage (#477)
+- Environment drift detection + bounded repair ladder (#475)
+- Toolchain probe upgrade to capability (#474)
+- Hook chain final gates: task-oracle registration + fingerprint table (#473)
+
+### Changed (coverage policy alignment, #564)
+
+- **Policy decision**: coverage stays as **OBSERVATION**, not a
+  release gate — `#463` 4-gate quality framework is reaffirmed and
+  `pytest.ini`, `pyproject.toml`, and `.github/workflows/release-check.yml`
+  are explicitly aligned on that stance. The buffered floor asserted
+  inside `tests/test_coverage_floor_520.py` (FLOOR=60, target 75)
+  remains as a normal pytest assertion, **not** via `--cov-fail-under`,
+  so the `#463` config comment stays literally true while `#520` ships
+  its ratchet.
+- `tests/test_coverage_policy_564.py` — drift guard: enforces
+  (a) no `--cov-fail-under` anywhere in `pytest.ini`,
+      `release-check.yml`, `pyproject.toml`, or `ci.yml`;
+  (b) every policy truth source (pytest.ini / release-check.yml /
+      pyproject.toml / test_coverage_floor_520.py) carries an
+      `OBSERVATION` marker, so a future edit that flips only one file
+      fails the integration test. Without this guard the four
+      sources could drift silently; with it the choice is conscious
+      or loud.
+- `pyproject.toml` dev-deps comment `#463` block updated to spell
+  "observation" so the three truth sources share one word.
+
+### Added (hypothesis persistence + restart re-hydration, #528)
+
+- `scripts/hypothesis_store.py` — the hypothesis layer carrier over
+  `hypotheses/` (`H-*.md`: id / claim_id / competitor_group / candidates /
+  status): parse + strict state machine open -> refuted (requires
+  `refuting_fact_id`) | superseded (requires `superseded_by`), terminal
+  states never reopen, `open -> open` idempotent for cold-start rehydrate;
+  unparseable files are skipped so a corrupt hypothesis never blocks a
+  reader
+- digest `## sec_g — open hypotheses` (scripts/digest_build.py): the
+  cold-start digest lists OPEN hypothesis pointers only (never the
+  motivation body, capped rows, never reads notes/); absent when there
+  are none — pre-#528 workspaces keep the exact six-section digest; the
+  section build is fail-open (a hypotheses-layer crash degrades the
+  digest to six sections, it never blocks cold start)
+- cold start is now the 9-file read: `runs/digest.md` joins
+  references/cold-start-contract.md as file 9, read via the
+  kunglao-resume read-only face
+- state_anchor `hyps=` segment (hooks/state_anchor.py): structured
+  open-hypothesis pointers inside the existing 500-char anti-narrative
+  anchor; `build_anchor_payload()` exposes them as
+  `[{"claim_id", "hyp_id"}]` dicts
+- resume brief (#466 face) surfaces `runs/digest.md` data-age row + a
+  `hypotheses` block (open_count + pointers) — read-only, fail-open
+- `scripts/notes_writer.py` — notes/ result-layer writer with the
+  supersedes-chain contract: a same-claim correction MUST declare
+  `supersedes: <prior-id>`, the prior note is never modified, a
+  correction is always written `verify_status: pending` (never inherits
+  the old stamp), and a pointer at a nonexistent note is rejected
+- write_guard (#532 note leg) gains Leg 3: the note post-image is
+  adjudicated against the chain contract on every Write/Edit — a
+  chainless same-claim correction (the AES->ChaCha20 silent-overwrite
+  shape), a fake chain pointer, or an inherited stamp is BLOCKED
+- hypotheses/ README stub (kunglao-init CARRIER_READMES) updated from
+  "#528 owns the real writer" to the landed writer + state machine;
+  docs/workspace-manifest.md hypotheses/ row now names
+  hypothesis_store.py, digest sec_g, and the state_anchor segment
+
+### Added (environment drift detection + bounded repair L1, #475)
+
+- env-state single source of truth: `runs/env-state.json`
+  (`per_capability: {status, last_probe_ts, detail}, written_by, ts`),
+  written by `scripts/env_state_probe.py` — liveness-subset probes only
+  (TCP/adb-forward/port reachability; capability trials never run on the
+  periodic path, #474 contract)
+- heartbeat_tick step 8: the env probe is bound to the tick — the only
+  mechanically-enforced periodic (#475 design argument) — so env freshness
+  is guaranteed by construction, not by a new timer; probe failure never
+  fails the tick
+- worker_budget `check_env_fresh` dispatch gate (pure file read, <5ms):
+  missing env-state FAIL_OPEN + hint; explicit FAIL ∩ the dispatch's
+  tier/tools REJECT with L1 repair guidance; entries older than 2×TTL
+  (60 min) REJECT with the self-heal hint "run one heartbeat_tick"
+- kunglao-monitor `env_drift` advisory field (OK/DRIFT/NO_DATA + drifted
+  capability list) — #88 contract preserved: advisory only, never gates a
+  tick; tick-output.json gains the optional `env_drift` property (required
+  set unchanged)
+- `scripts/env_repair_l1.py`: bounded deterministic L1 repair
+  (adb-reconnect / vm-rediscover / mcp-rehandshake) — idempotent, safe
+  no-op without substrate, rewrites env-state on success; L2/L3 out of scope
+- tool_error_policy wiring (#309 debt paid): worker_budget post_check now
+  counts per-tool consecutive failures (runs/tool-errors.json) and applies
+  the WARN=3/DISABLE=5 hysteresis — warn → stderr advisory,
+  disable_escalate → escalation + env-state capability marked failed;
+  consumer count 0 → 1 (mechanical)
+
+### Changed (probe capability tiers, #474)
+
+- toolchain probes now carry an explicit probe tier — `presence`
+  (file/registry), `liveness` (side-effect-free handshake: TCP, adb
+  forward + recv, raw JDWP), `capability` (real trial run) — exposed as a
+  per-item `probe` field in `--json` output (scripts/toolchain.py)
+- decompiler check is honestly three-state: a registered ghidra/ida-pro-vm
+  MCP name or a present CLI binary is now WARN "capability unverified"
+  (previously a fake PASS satisfying the HARD init gate on registry
+  evidence alone — a Python probe cannot reach into the MCP session);
+  PASS requires the analyzeHeadless import trial, available only under the
+  new `--capability` flag / `check(..., caps=True)` (minutes-long, init/
+  on-demand only; the default path runs presence+liveness only)
+- new android `jdwp_debug` WARN informational check (optional capability, 2026-08-19 user ruling): `adb jdwp` pid discovery +
+  `adb forward tcp:8700 jdwp:<pid>` + the raw 14-byte JDWP-Handshake echo
+  (never `jdb -attach` — attach holds/resumes the target); jdb enters the
+  android matrix docs (CLAUDE.md golden) as the interactive driver
+
 
 
 ### Fixed (platform de-hardcoding, #409)

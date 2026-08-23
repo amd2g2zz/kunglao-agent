@@ -25,12 +25,19 @@ This README is the **toolshelf guide** (for registrants/maintainers); it does no
 2. **Tool scripts always live in their category directory**: every registered tool's .py lives in `tools/<category>/`.
    The tools/ root layer allows only index/doc files (`_INDEX.md`/`_INDEX.yaml`/
    `_index-<category>.md`/`README.md`) plus the meta-tool exception below.
-3. **Root-layer meta-tool exception (documented)**: `tool-search.py` and `validate_index.py`
+3. **Root-layer meta-tool exception (documented)**: `tool-search.py`,
+   `validate_index.py`, and `ext-scan.py`
    stay at the tools/ root — they are the toolshelf's meta-tools, operating on
-   `tools/_INDEX.yaml` itself (query/validation) rather than on samples, so they belong to no analysis category;
-   both resolve their default index path as `Path(__file__).parent / "_INDEX.yaml"`,
-   and being on the same level as `_INDEX.yaml` is part of that contract. `tool-search.py` is deliberately not registered in the
-   index (the querier does not enter the queried registry).
+   the index files themselves (`tools/_INDEX.yaml` query/validation;
+   `tools/_INDEX.ext.yaml` generation) rather than on samples, so they belong to no analysis category;
+   `tool-search.py` and `validate_index.py` resolve their default index path as
+   `Path(__file__).parent / "_INDEX.yaml"`,
+   and being on the same level as `_INDEX.yaml` is part of that contract. `tool-search.py` and `ext-scan.py`
+   are deliberately not registered in any
+   index (the querier/generator does not enter the queried registry).
+   The root layer also carries the ext-catalog data files
+   (`_INDEX.ext.yaml` — generated, describe-only; `_INDEX.ext.map.yaml` —
+   optional capability map; see "Ext catalog" below).
 4. **Single shared-library point `tools/_lib/`**: pure library modules shared across categories (no CLI entry,
    not registered in the index) belong in `tools/_lib/` (currently: `lib_disasm.py`, the PE/capstone
    VA→offset core). Consumers add `tools/_lib` to `sys.path` themselves.
@@ -50,11 +57,14 @@ Mechanical assertions for the structure contract are in `tests/test_tools_struct
 ```text
 tools/
 ├── _INDEX.yaml            # machine contract: tool registry (schema tools-index/1)
+├── _INDEX.ext.yaml        # GENERATED describe-only catalog: repo capabilities outside the registry (#476)
+├── _INDEX.ext.map.yaml    # optional name→capability map for the ext catalog (unmapped → unknown)
 ├── _INDEX.md              # top-level 6-category domain index (progressive-disclosure entry, styled after references/_INDEX.md)
 ├── _index-<category>.md   # per-category contract entries (per-tool H3 entry, 6 required segments); filename == category id
 ├── README.md              # this document: structure rules + directory layout + contract fields + MD format rules + registration flow
-├── tool-search.py         # meta-tool (root-layer exception): deterministic query over _INDEX.yaml, not registered in the index
+├── tool-search.py         # meta-tool (root-layer exception): deterministic query over _INDEX.yaml (+ --find over the ext catalog), not registered in the index
 ├── validate_index.py      # meta-tool (root-layer exception): machine-contract validator for _INDEX.yaml
+├── ext-scan.py            # meta-tool (root-layer exception): ext-catalog generator (--check detects drift)
 ├── _lib/                  # cross-category shared-library single point: lib_disasm.py (PE/capstone VA→offset)
 ├── crypto/                # crypto category: crypto-tool.py + algorithms.py (shared module)
 ├── static/                # static category: static CLIs + shared common.py (#340 dual-module merge) + yara-rules/
@@ -79,6 +89,37 @@ tools/
 - **Frida dynamic instrumentation**: MCP `mcp__frida__*` + VM channel `192.168.20.128:1337`; hook templates in `templates/frida/`.
 - **x64dbg remote debugging**: MCP `mcp__x64dbg__*` (`connect_remote` only; all other calls forbidden on the host).
 - **T2 emulation/simulated execution** (Qiling/unicorn): external skill `/malware-framework`.
+
+### Ext catalog (`_INDEX.ext.yaml`, describe-only — issue #476)
+
+Capabilities that live OUTSIDE this toolshelf registry but are callable repo
+surface: entry-point `scripts/` CLIs, `hooks/` gates, and
+`references/re-library/` capability-declaration docs. Enumerated
+mechanically by `ext-scan.py` (AST `__main__` entry-point detection — no
+filename lists) into `_INDEX.ext.yaml`; each entry carries
+`name / capability / source / usage / description`.
+
+- **Zero new trust mechanism**: entries are DESCRIBED, never executed from
+  the index. Consumption is read/print (`tool-search.py --find <keyword>`,
+  the mechanical query face of the #494 "search before you build" contract)
+  and citation resolution (Gate 5 `tools_used` may cite an ext logical name).
+- **Capability map is optional**: `_INDEX.ext.map.yaml` tags well-known
+  names; unmapped entries surface as `capability: unknown` and stay
+  discoverable by keyword (name/description/usage/source matching).
+- **Consistency**: Gate 7 sub-check (d) fails on dangling source paths /
+  malformed entries / collisions with internal registered names, and warns
+  when an entry-point file is missing from the catalog. Fix for both:
+  `uv run python tools/ext-scan.py` (never hand-edit the generated file).
+- **Environment-side mcp entries (#515)**: `ext-scan.py --with-mcp
+  <probe.json>` merges a `scripts/mcp_probe.py --mcp-inventory` document
+  (registered MCP servers — the camoufox/gitnexus/playwright class) as
+  entries named `mcp__<server>` carrying the `claude-json` **provenance
+  label** (not a repo path; Gate 7 checks the label against
+  `ENV_PROVENANCE_SOURCES` plus the `mcp__<server>` name shape instead of
+  file existence). Still describe-only — mcp-ness is the structural
+  `mcp__` name prefix, `--find` projects `kind: mcp`, `tools_used` may
+  cite `mcp__<server>`. The **committed** index is regenerated WITHOUT
+  the flag (environment face is per-machine; never commit it).
 
 ### Vacuum-shell disposition record (#339)
 

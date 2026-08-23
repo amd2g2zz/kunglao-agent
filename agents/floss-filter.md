@@ -193,3 +193,61 @@ floss-filter complete: <top-3 categories with counts>; <family_keyword_hits coun
 ```
 
 For example: `floss-filter complete: stack_strings=8500, paths=230, other=180; family_hits=0; outliers=2 (base64 in paths class, raw URL in other); reasoning: Go binary, K=200 cap, no family matches in 20k lines — Kaspersky Gsb.are hint NOT corroborated by binary strings`.
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+Read the inputs first (Step 1), then apply the pipeline inline; thresholds
+are heuristics you set from the data and justify, not hardcoded defaults —
+every default override and K choice lands in `provenance.reasoning_notes`.
+
+**#494 expansion — plan FIRST, in writing**: your first action is to create
+`runs/worker-status-floss-filter-<id>.md` and write its plan section
+BEFORE reading the inputs. The plan section states, in this domain's
+language: (a) what you will do — the thresholds you will set FROM the data
+(length floor, entropy floor, per-category K) with the justification you
+will record in `provenance.reasoning_notes`; (b) expected artifacts —
+Layer A `string_inventory` statistics shape + Layer B per-category top-K
+entries shape (family_keyword_hits and stack_strings uncapped); (c) the
+done criterion — `evidence/floss-filtered.json` parses, every default
+override documented, or the `input_too_small` error JSON on the failure
+path. Drift (a bimodal entropy distribution argues a different floor) →
+update the plan, then continue.
+
+<!-- contract: status-sync -->
+WRITE `evidence/floss-filtered.json` yourself (Layer A inventory + Layer B
+top-K); on failure write the error JSON to the same `output_path`, never
+return bare prose. The one-line return summary comes only after the file exists.
+
+**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+`runs/worker-status-floss-filter-<id>.md` as an append-only log parsed by
+the single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
+token wins). Canonical vocabulary ONLY — `status: in-progress` /
+`status: done` / `status: blocked`. W-15: the `status: done` line MUST
+carry `| artifacts: evidence/floss-filtered.json` —
+`lib_kunglao.scan_done_artifact_violations` re-verifies the path exists;
+the error-JSON failure path is still a done with that file as the
+artifact, never a bare return. Heartbeat: reply to the orchestrator's
+ping in the same file — a 100k-line filter pass is long but alive; never
+let it be mistaken for "stuck" (time-based stall watchdog: `STUCK_MINUTES=20` — 20 min without a status-file update).
+
+<!-- contract: tool-discovery -->
+Apply the pipeline inline — do NOT write a Python script file, do NOT score
+with an LLM (the composite score is deterministic); inputs (`floss-raw.txt`,
+noise dict, family keywords) are read-only and never modified.
+
+**#494 expansion — discovery before ANY new code**. The inline-pipeline rule
+above (no script file) is about THIS stage's scoring; it is not a license
+to hand-roll a neighbor capability either. Before extending the pipeline,
+run the three-point check: (1) `ls scripts/re` — the workspace RE tools;
+(2) grep `tools/_INDEX.yaml` by capability — entropy triage, byte-pattern
+sweep and stack-string rebuild are already registered; (3) the matching
+`references/re-library/` file (`languages-go.md` for Go runtime-symbol
+semantics).
+Registered domain tools (verify in the index first): `strings-classify`, `binary-sweep`, `stack-strings`, `go-buildinfo-carve`.
+You write NO new tools at all: when the data needs a transformation the
+shelf already covers, name the registered tool in
+`provenance.reasoning_notes` so the stage owner routes to it; a missing
+capability = file an issue to upstream it into `tools/`; a one-off shim
+has no place here (inline means disposable by construction — never
+promote inline logic into a permanent script).

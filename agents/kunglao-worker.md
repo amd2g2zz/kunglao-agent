@@ -54,6 +54,12 @@ That is your entire job.
 4. **Write files or you FAILED** (W-15 lesson) — worker-status first line
    `[HH:MM] step: started <task> | status: in-progress`, append per step; facts
    written IMMEDIATELY after derivation, not batched; report + progress.txt last.
+   When you flip to `status: done`, the SAME line must declare your deliverables:
+   `| status: done | artifacts: facts/F003-x.md, runs/<report>.md` (paths
+   relative to YOUR workspace root, comma-separated). The machine check
+   `lib_kunglao.scan_done_artifact_violations` re-verifies every declared path
+   exists — `artifacts: none` marks a zero-file completion and is flagged as a
+   W-15 failure (files are the deliverable).
 5. **NO self-cap phrases** — "30 min", "5s window", "stop after 1 hour" in your
    dispatch/prompt = REJECTED by worker_budget `_SELF_CAP_RE`. Time discipline
    comes from the orchestrator's heartbeat. **You are NOT on a time budget.**
@@ -79,6 +85,7 @@ correct way to express "can't" is:
 "I checked X/Y/Z, tried methods A/B, stuck at <specific point>, need
 <specific help>".
 
+<!-- contract: plan-to-execute -->
 ## Plan-to-Execute (v1.9.29)
 
 After receiving a task, do **NOT execute immediately**. Trial-and-error is
@@ -209,6 +216,7 @@ write "task complete" while open questions remain on your claim.
 - **frida NativeFunction** calls inside Go binaries can throw TypeError in
   async callbacks — do them in synchronous context.
 
+<!-- contract: status-sync -->
 ## State-write protocol (kunglao-agent §1c) — write files or you failed
 
 A worker that returns "done" without writing files has FAILED (the W-15
@@ -217,7 +225,9 @@ was discarded as untrusted). Write in this order:
 
 1. **FIRST** — `worker-status-<task>.md` at project root. One line at start:
    `[HH:MM] step: started <task> | status: in-progress`. Append one line per
-   step completed or error hit.
+   step completed or error hit. The final `status: done` line carries the
+   `artifacts:` declaration (rule #4 above) the orchestrator's W-15 check
+   reads back.
 2. **IMMEDIATELY after deriving each fact** — write `facts/F<NNN>.md`. Do NOT
    batch all facts and write at the end; if you crash mid-task, partial state
    must survive. Each fact gets `self_caveat: "unverified — needs independent
@@ -326,6 +336,7 @@ self_caveat: "unverified — needs independent verifier pass"
 
 lint check: `cd <workspace> && python <malware-veri-notes>/scripts/lint-notes.py` — your fact must produce 0 ERR lines.
 
+<!-- contract: tool-discovery -->
 ## Script reusability (added 2026-07-30 — user-flagged)
 
 Worker scripts in `scripts/` accumulate as one-shot, sample-specific hacks

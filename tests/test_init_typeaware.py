@@ -4,6 +4,10 @@
 TDD RED phase: tests for type determination, magic sniffing, interactive confirm,
 type written to analysis_state.txt, template selection by type, init-completeness
 (marker + project_type), resume behavior.
+
+#455 amendment: the interactive confirm channel is GONE — a sniffed type is
+a pending-decision suggestion only; these tests drive types via --resolve
+answers files (structured pending list + re-entry, see test_target_alignment.py).
 """
 from __future__ import annotations
 
@@ -32,11 +36,13 @@ def init_ws(tmp_path: Path) -> Path:
 
 def _run_init(ws: Path, extra: list[str] | None = None,
               profile_root: Path | None = None,
-              flag: str | None = "0",
-              stdin_data: str | None = None) -> subprocess.CompletedProcess:
+              flag: str | None = "0") -> subprocess.CompletedProcess:
     """Run kunglao-init hermetically. --skip-toolchain by default (#304 fix:
     the toolchain gate runs before the scaffold, covered separately by test_init_toolchain_gate.py —
-    this file's tests focus on type detection/template selection/completeness)."""
+    this file's tests focus on type detection/template selection/completeness).
+
+    #455: no stdin channel — interactive confirm is gone; tests drive the
+    type via --resolve answers files."""
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     if "--skip-toolchain" not in argv:
         argv.append("--skip-toolchain")
@@ -49,8 +55,16 @@ def _run_init(ws: Path, extra: list[str] | None = None,
         env[FLAG_NAME] = flag
     return subprocess.run(
         argv, capture_output=True, text=True, timeout=120, env=env,
-        input=stdin_data, errors="replace",
+        errors="replace",
     )
+
+
+def _write_answers(init_ws: Path, payload: dict) -> str:
+    """Answers file for --resolve (lives beside the workspace's tmp root)."""
+    f = init_ws.parent / "answers.json"
+    import json as _json
+    f.write_text(_json.dumps(payload), encoding="utf-8")
+    return str(f)
 
 
 # ---------- fixture builders for binary types ----------
@@ -70,10 +84,16 @@ def _make_elf(ws: Path, name: str = "sample.elf") -> Path:
 
 
 def _make_apk(ws: Path, name: str = "sample.apk") -> Path:
-    """Create a minimal APK (PK zip + classes.dex marker)."""
+    """Create a minimal REAL zip APK (classes.dex first).
+
+    #455: an APK is a container — the contents inventory comes from a real
+    zip central directory (a bare 'PK + zeros' blob is unparseable and
+    yields an empty inventory)."""
+    import zipfile
     p = ws / "bins" / name
-    # PK zip header
-    p.write_bytes(b"PK\x03\x04" + b"\x00" * 128 + b"classes.dex")
+    with zipfile.ZipFile(p, "w") as zf:
+        zf.writestr("classes.dex", b"dex\n035\x00" + b"\x00" * 32)
+        zf.writestr("AndroidManifest.xml", b"<manifest/>")
     return p
 
 
@@ -98,47 +118,66 @@ def test_type_linux_explicit(init_ws: Path):
 
 
 def test_type_android_explicit(init_ws: Path):
-    """--type android writes project_type=android to analysis_state.txt."""
+    """--type android writes project_type=android to analysis_state.txt.
+
+    #455: the APK is a CONTAINER — the embedded analysis object is its own
+    pending decision even when the type is explicit (type is not guessed
+    here, but the target object still is)."""
     _make_apk(init_ws)
     r = _run_init(init_ws, ["--type", "android"])
-    assert r.returncode == 0, f"init failed: {r.stderr}"
+    assert r.returncode == 8, \
+        f"container target_object must pend even with explicit type: {r.stdout}{r.stderr}"
+    r2 = _run_init(init_ws, ["--type", "android",
+                             "--resolve", _write_answers(init_ws, {"target_object": "classes.dex"})])
+    assert r2.returncode == 0, f"init failed: {r2.stderr}"
     state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
     assert "project_type=android" in state
 
 
-# ---------- magic sniff ----------
+# ---------- magic sniff suggestion (#455: pending context only, never adopted) ----------
 
-def test_sniff_pe_detects_windows(init_ws: Path):
-    """PE (MZ) in bins/ -> sniff detects 'windows' when --type not given."""
+def test_sniff_pe_suggestion_needs_resolve(init_ws: Path):
+    """PE (MZ) in bins/, no --type: the sniff suggestion ('windows') is NOT
+    adopted — a pending list exits 8; a --resolve type answer completes."""
     _make_pe(init_ws)
-    r = _run_init(init_ws, stdin_data="y\n")
-    assert r.returncode == 0, f"init failed: {r.stderr}"
+    r = _run_init(init_ws)
+    assert r.returncode == 8, f"sniff must not be silently adopted (#455): {r.stdout}{r.stderr}"
+    import json as _json
+    pending = _json.loads(r.stdout)
+    type_dec = next(d for d in pending["decisions"] if d["decision_id"] == "type")
+    assert type_dec["context"]["suggested_type"] == "windows"
+    r2 = _run_init(init_ws, ["--resolve", _write_answers(init_ws, {"type": "windows"})])
+    assert r2.returncode == 0, f"init failed: {r2.stderr}"
     state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
     assert "project_type=windows" in state, f"PE not sniffed as windows: {state}"
 
 
-def test_sniff_elf_detects_linux(init_ws: Path):
-    """ELF in bins/ -> sniff detects 'linux'."""
+def test_sniff_elf_resolves_linux(init_ws: Path):
+    """ELF in bins/ -> --resolve linux completes."""
     _make_elf(init_ws)
-    r = _run_init(init_ws, stdin_data="y\n")
+    r = _run_init(init_ws, ["--resolve", _write_answers(init_ws, {"type": "linux"})])
     assert r.returncode == 0, f"init failed: {r.stderr}"
     state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
     assert "project_type=linux" in state
 
 
-def test_sniff_apk_detects_android(init_ws: Path):
-    """APK (PK + classes.dex) in bins/ -> sniff detects 'android'."""
+def test_sniff_apk_resolves_android(init_ws: Path):
+    """APK (PK + classes.dex) in bins/: the APK is a CONTAINER (#455) — the
+    type is never guessed; --resolve supplies target_object + type."""
     _make_apk(init_ws)
-    r = _run_init(init_ws, stdin_data="y\n")
-    assert r.returncode == 0, f"init failed: {r.stderr}"
+    r = _run_init(init_ws)
+    assert r.returncode == 8, f"container type must pend: {r.stdout}{r.stderr}"
+    r2 = _run_init(init_ws, ["--resolve", _write_answers(
+        init_ws, {"target_object": "classes.dex", "type": "android"})])
+    assert r2.returncode == 0, f"init failed: {r2.stderr}"
     state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
     assert "project_type=android" in state
 
 
-def test_sniff_unknown_prompts(init_ws: Path):
-    """Unknown binary type -> interactive prompt with default."""
+def test_sniff_unknown_resolves_by_answer(init_ws: Path):
+    """Unknown binary type -> the type comes from the --resolve answer."""
     (init_ws / "bins" / "unknown.bin").write_bytes(b"RANDOM" + b"\x00" * 128)
-    r = _run_init(init_ws, stdin_data="linux\n")
+    r = _run_init(init_ws, ["--resolve", _write_answers(init_ws, {"type": "linux"})])
     assert r.returncode == 0, f"init failed: {r.stderr}"
     state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
     assert "project_type=linux" in state
@@ -179,7 +218,8 @@ def test_linux_template_selected(init_ws: Path):
 def test_android_template_selected(init_ws: Path):
     """--type android -> CLAUDE.md uses android template."""
     _make_apk(init_ws)
-    r = _run_init(init_ws, ["--type", "android"])
+    r = _run_init(init_ws, ["--type", "android",
+                            "--resolve", _write_answers(init_ws, {"target_object": "classes.dex"})])
     assert r.returncode == 0, f"init failed: {r.stderr}"
     claude = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
     assert "adb" in claude.lower() or "android" in claude.lower()
@@ -254,8 +294,9 @@ def test_marker_without_type_upgrade_restores_gate_pass(init_ws: Path):
     assert mod.is_init_complete(init_ws), "gate must pass after the upgrade run"
 
 
-def test_marker_without_type_upgrade_via_sniff(init_ws: Path):
-    """F1: upgrade without --type resolves the type via magic sniff (PE)."""
+def test_marker_without_type_upgrade_via_resolve(init_ws: Path):
+    """F1 (#455): upgrade without --type resolves the type via the
+    --resolve answer (the old stdin-confirm path is gone)."""
     _make_pe(init_ws)
     (init_ws / "claim-register.yaml").write_text(
         "# [initialized] state_hash=abc seeds=3\n"
@@ -265,8 +306,8 @@ def test_marker_without_type_upgrade_via_sniff(init_ws: Path):
     (init_ws / "analysis_state.txt").write_text(
         "agent_teams_flag=0\n", encoding="utf-8",
     )
-    r = _run_init(init_ws, stdin_data="y\n")
-    assert r.returncode == 0, f"upgrade via sniff failed: {r.stdout}{r.stderr}"
+    r = _run_init(init_ws, ["--resolve", _write_answers(init_ws, {"type": "windows"})])
+    assert r.returncode == 0, f"upgrade via resolve failed: {r.stdout}{r.stderr}"
     state = (init_ws / "analysis_state.txt").read_text(encoding="utf-8")
     assert "project_type=windows" in state
 

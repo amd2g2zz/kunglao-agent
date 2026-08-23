@@ -139,15 +139,23 @@ def _run_toolchain(ws: Path, extra: list[str] | None = None,
 
 
 def _rewrite_adb_stub(fake_bin: Path, *, uid: str = "0", debuggable: str = "1",
-                      sdk: str = "31", handle_forward: bool = True) -> Path:
+                      sdk: str = "31", handle_forward: bool = True,
+                      jdwp_port: int = 0) -> Path:
     """Rewrite fake_bin/adb_stub.py with custom device responses
-    (uid / ro.debuggable / sdk / forward). Returns the stub path."""
+    (uid / ro.debuggable / sdk / forward / jdwp). Returns the stub path.
+
+    jdwp_port != 0: the jdwp forward handler reports that port (a test-
+    provided echo listener); 0 = no jdwp handler override (forward is
+    plain success and the handshake hits nothing)."""
     lines = [
         "import sys",
         "args = sys.argv[1:]",
         "if 'devices' in args:",
         "    print('List of devices attached')",
         "    print('emulator-5554\\tdevice')",
+        "    sys.exit(0)",
+        "if 'jdwp' in args:",
+        "    print('4242')",
         "    sys.exit(0)",
         "if 'shell' in args and 'su' in args and 'id' in args:",
         f"    print('uid={uid}(root) gid={uid}(root)')",
@@ -160,6 +168,13 @@ def _rewrite_adb_stub(fake_bin: Path, *, uid: str = "0", debuggable: str = "1",
         "    sys.exit(0)",
     ]
     if handle_forward:
+        # jdwp forwards report the port of the (test-provided) echo listener
+        # so the 14-byte handshake lands on it; other forwards just succeed.
+        lines.append(
+            "if 'forward' in args and any(a.startswith('jdwp:') for a in args):"
+        )
+        lines.append(f"    print('127.0.0.1:{jdwp_port}')")
+        lines.append("    sys.exit(0)")
         lines.append("if 'forward' in args:")
         lines.append("    sys.exit(0)")
     lines.append("sys.exit(0)")
@@ -419,7 +434,28 @@ def test_exit_2_warn_only(fake_bin, kunglao_ws, monkeypatch):
             f"#!/bin/sh\nexec \"{sys.executable}\" \"{gn_stub}\" \"$@\"\n",
             encoding="utf-8")
         gn.chmod(0o755)
-    _rewrite_adb_stub(fake_bin)
+    # jdwp echo listener (14-byte handshake) + the fake adb wiring (#474):
+    # the warn-only run must have NO FAIL, including jdwp_debug.
+    jdwp_echo = socket_mod.create_server(("127.0.0.1", 0))
+    jdwp_port = jdwp_echo.getsockname()[1]
+
+    def _jdwp_serve():
+        import threading
+        def _echo():
+            while True:
+                try:
+                    conn, _ = jdwp_echo.accept()
+                except OSError:
+                    return
+                with conn:
+                    try:
+                        if conn.recv(64):
+                            conn.sendall(b"JDWP-Handshake")
+                    except OSError:
+                        pass
+        threading.Thread(target=_echo, daemon=True).start()
+    _jdwp_serve()
+    _rewrite_adb_stub(fake_bin, jdwp_port=jdwp_port)
     # decompiler: GHIDRA_HOME + analyzeHeadless (platform-correct name, #409)
     _write_fake_headless(fake_bin)
     monkeypatch.setenv("GHIDRA_HOME", str(fake_bin))
@@ -442,6 +478,7 @@ def test_exit_2_warn_only(fake_bin, kunglao_ws, monkeypatch):
     finally:
         frida_sock.close()
         as_sock.close()
+        jdwp_echo.close()
 
 
 def test_exit_1_hard_fail(kunglao_ws, monkeypatch):
@@ -753,8 +790,10 @@ def test_decompiler_check_single_helper():
 
 
 def test_decompiler_cli_ghidra_fallback(fake_bin, kunglao_ws, monkeypatch):
-    """#407: CLI (GHIDRA_HOME + analyzeHeadless, platform-correct name #409)
-    remains a working fallback when no decompiler MCP is registered."""
+    """#407/#474: CLI (GHIDRA_HOME + analyzeHeadless, platform-correct name
+    #409) remains a working fallback SUPPLY signal when no decompiler MCP is
+    registered — now as WARN 'capability unverified' (#474: presence is not
+    capability; PASS needs the --capability trial)."""
     _only_st_claude_json(kunglao_ws)
     (fake_bin / "support").mkdir(exist_ok=True)
     headless = fake_bin / "support" / platform_paths.analyze_headless_name()
@@ -764,12 +803,14 @@ def test_decompiler_cli_ghidra_fallback(fake_bin, kunglao_ws, monkeypatch):
                        env={"GHIDRA_HOME": str(fake_bin)})
     data = json.loads(r.stdout)
     ghidra = next(c for c in data["checks"] if c["name"] == "ghidra")
-    assert ghidra["status"] == "PASS", ghidra
+    assert ghidra["status"] == "WARN", ghidra
     assert "analyzeHeadless" in ghidra["detail"], ghidra
+    assert "capability unverified" in ghidra["detail"], ghidra
 
 
 def test_decompiler_cli_ida_fallback(fake_bin, kunglao_ws, monkeypatch):
-    """#407: CLI idat64 on PATH remains a fallback decompiler signal."""
+    """#407/#474: CLI idat64 on PATH remains a fallback SUPPLY signal —
+    WARN 'capability unverified' under the honest three-state (#474)."""
     _only_st_claude_json(kunglao_ws)
     if os.name == "nt":
         (fake_bin / "idat64.exe").write_text("", encoding="utf-8")
@@ -780,14 +821,17 @@ def test_decompiler_cli_ida_fallback(fake_bin, kunglao_ws, monkeypatch):
     r = _run_toolchain(kunglao_ws, ["--type", "windows", "--json"])
     data = json.loads(r.stdout)
     ida = next(c for c in data["checks"] if c["name"] == "ida")
-    assert ida["status"] == "PASS", ida
+    assert ida["status"] == "WARN", ida
     assert "idat64" in ida["detail"], ida
+    assert "capability unverified" in ida["detail"], ida
 
 
 def test_android_native_so_decompiler_passes_via_mcp(fake_bin, kunglao_ws,
                                                      monkeypatch):
-    """#407: sample with native .so + ida-pro-vm MCP registered -> decompiler
-    PASS (via MCP), not the native-so HARD FAIL."""
+    """#407/#474: sample with native .so + ida-pro-vm MCP registered -> the
+    decompiler item is WARN 'capability unverified' (registered supply
+    defuses the native-so HARD FAIL; honest capability verdict is #474's
+    --capability business, not the registry read)."""
     _only_st_claude_json(kunglao_ws)
     (kunglao_ws.parent / "fake-claude.json").write_text(json.dumps({
         "mcpServers": {
@@ -802,5 +846,6 @@ def test_android_native_so_decompiler_passes_via_mcp(fake_bin, kunglao_ws,
     r = _run_toolchain(kunglao_ws, ["--type", "android", "--json"])
     data = json.loads(r.stdout)
     decomp = next(c for c in data["checks"] if c["name"] == "decompiler")
-    assert decomp["status"] == "PASS", decomp
+    assert decomp["status"] == "WARN", decomp
     assert "via MCP (ida-pro-vm)" in decomp["detail"], decomp
+    assert "capability unverified" in decomp["detail"], decomp

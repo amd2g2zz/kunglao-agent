@@ -1,6 +1,6 @@
 [project]
 name = "kunglao-agent"
-version = "0.1.1"
+version = "0.1.2"
 description = "Convergence-driven reverse-engineering orchestrator — Claude Code skill (issue #80 release contract)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,7 +25,26 @@ dev = [
     # tomllib is 3.11+ stdlib; tests run on the 3.10 floor so the tomli
     # backfill is a dev-only dependency (issue #352).
     "tomli>=2.0; python_version < '3.11'",
+    # #564 coverage policy alignment: coverage is OBSERVATION (#463),
+    # pytest-cov is wired only so the report lands in CI artifacts;
+    # the primary quality metric is Gate 4 (mutmut availability),
+    # not a coverage line %. tests/test_coverage_policy_564.py is the
+    # drift guard for this declaration.
+    "pytest-cov>=5.0",
+    # #463 Gate 4 (test effectiveness): mutation testing on changed code.
+    "mutmut>=2.4",
+    "ruff>=0.6",
 ]
 
 # NOTE: pytest configuration lives in pytest.ini (single source of truth).
 # Do not add [tool.pytest.ini_options] here — two configs would split authority.
+
+# Static-analysis gate (v0.1.2 plan R2 Task 0.3): blunder-level ruleset,
+# zero-noise by design — style rules deliberately NOT enabled (existing
+# codebase is not style-clean; enabling them would force a 99-script churn).
+# Per-PR new code must be ruff-clean; tightening happens per-issue, not here.
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]

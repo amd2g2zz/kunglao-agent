@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: b216386f9dccacec68893d5d440060277440ef236076169180db01b9fb670524
+  references/_INDEX.md: 1beffcb10396c2e284fa76b98bcd2865723f4afc436f89e7d33224f9040ae716
   references/_index-anti-analysis.md: 77ae0fe0834dde577e39d1124d4941962b1e4d7af1012434cac89c7d3f381431
   references/_index-languages.md: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
   references/_index-methodology.md: 4183b6f86c4ccd299452d41d2532fde6487301175804cb84729d41d3b4cf08aa
@@ -12,20 +12,24 @@ files:
   references/_index-platforms.md: eb4224a8cde683873a422a5a21ca62067b46efe09a46a7ff2c0f981ce57b6c7b
   references/_index-resources.md: d58750800fcd490ed014fbef7ee6dae2228180c44996d937a1130cc1c0f50196
   references/_index-tools.md: e28287ddfbb4006a0965a0f3dfb0206d6a54f711d6d7f9195c1d3d65f7f2a382
+  references/agent-three-state-charter.md: eef047d075d57382b6c6736400f9f744e47d5dde916cafb9f249c2c47365d43e
   references/archive/long-horizon-architecture-2026-07.md: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
   references/case-book.md: 148c5dc4a7546d39e64f8e734882e770b65b9f398fb9abcc10db508d0fa633e0
   references/cli-script-checklist.md: 2ae29be865f82c17f357666da831993796b0bbccae28c81d8b7a58f6af768228
-  references/cold-start-contract.md: 844bdb8a8c35884160c02b9adc0c8765b8b0933af060048ce98821f314de6f6e
+  references/cold-start-contract.md: 808a31d11be26fd9d8030c49694b788814f4edb148b018cc21044ba5d24b3d01
   references/convergence-loop.md: 6ef0a4f0c3b48fc632cd6cc8ebd3010ebc803863e782c416411149464cbbcb86
-  references/decision-rights.md: e8f4c039dcbe98849be7d8a43dcc979611a158e7fcae9d193e6fd4ba9b8da71f
+  references/decision-rights.md: 2332fb0c0ed0e95b2e97549f2c478b37656f7914f2d1d4212576448e6bdfcd75
+  references/dispatch-protocol.md: 7168141f8fdd0eec0d957ea73e045605ff8f8d93c4aa6565afb0274d8ad79ec6
   references/downstream-contract.md: 4665e25d99dbac0a610e3b682a6b252fdb0e6df2749fe6269c3ef7141f4c91b0
   references/dynamic-re-tool-priority.md: 90437ec9ea4428f23ba1c8cc9e5a3d83aecd822e624ed95bded5bd3923038b4f
+  references/error-response-taxonomy.md: 54d649097f66c339c21cf5c8968cfe2a7f5ba102af8241b51a296c2a492827b1
   references/excerpt-lint.md: ae0c1ea36b2087099044095e2f400c9154eb053f1d2b1a170da81477988ddbb0
-  references/failure-modes-lifecycle.md: 80a6db6ce47e83e9ec47a19c24144a131d9da96feb4d4cf5429ff528cc25857b
+  references/failure-modes-lifecycle.md: 1915f1be7f461d50144bb07c96e9570e8678647ebee678e4c4de470f2208536f
   references/failure-modes-monitoring.md: 1ed6ef1adaa7b4d13f3ac47e96fe0f003ebe34e803bbcb13f0197a2e901e5bad
   references/failure-modes-state.md: ac17dabfd4abc717e77c67406ecbf24415a49a7e75beeb6127c2efbe27f2057e
-  references/failure-modes.md: a7cc2a6a610ccc7d25951622c0186c1b27ce2c11e85cf0f973cdd30b9a831e8d
-  references/guardrails.md: ce663c953079a7399cbcc318e670df447b62beae2145e84c7afcefb7ab492c24
+  references/failure-modes.md: 72487c1c1e48a6e376ba347968319c0b54143f639fc00b3c1ff161345f75acec
+  references/guardrails.md: f90273f020b71cbeeece16bb6716b58aa1cd8abc36fe1c6ec082a787444d322f
+  references/lessons/README.md: 2d7dd200a129cca4ad73435c9e381bf090bcb7aaaffc53c5f35708c5efcc8ace
   references/machine-check-contract.md: ad25084781c581d23108b260214a7d04c4b9000993019394a76d685d4c862a75
   references/malware-phase-routing.md: 00e6484afaa85da42ed5cdc2c919b3d9b22ca173da37ac4c6da0d691b0ced7f2
   references/method-constraints.md: efcd26339f3a31a3133a83c59ad556331e33365edf02af1b9f1600c7f1a644f7
@@ -35,7 +39,7 @@ files:
   references/re-library/awesome-re-resources.md: 8252476aa2b40d76b01572e7df910fc9c6a83337fc2e48385dd15885a1ab96f0
   references/re-library/detection-engineer.md: fc06be71641d31a6e8da60f3b2084197da9bc1b2bffc7ecf3d07b076b0aa9072
   references/re-library/field-notes.md: 8afaff77a88e61173f7981aa421e775c7ca6447825fcdb41bebb722ef2a18436
-  references/re-library/languages-compiled.md: ce03d6da37cac4cdf8619bad2f30a9d4e1e9fc918634a7521cae7e2ffc9ca09d
+  references/re-library/languages-compiled.md: 2b995c280ea34211a326545828b4bda2639a2a39e53539667ed395ea0ee55780
   references/re-library/languages-go.md: 75b7d09b4d57bd8655c5d26ea4209548916bca06b74b43aa269238ea9282a8c2
   references/re-library/languages-platforms.md: a3b26cd35817f51394685b49b4e79f187547f7b5bcc8601de93c246ab514440a
   references/re-library/languages.md: 230012d76b1e22baa71fb49494b748f7081fb837fbfbc977e1acd03586b1a49c
@@ -61,9 +65,9 @@ files:
   references/re-library/tools-dynamic.md: af6d0539a253366cf76b3266922bc4551478ebe32576fc216b68d91d0ea5f7de
   references/re-library/tools.md: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
   references/schema.md: 7e7e97005892d24fec5800cad12f1bb6aee8e554478fe82cbd65a407c0f4d112
-  references/search-policy.md: 5a4a88cdfab1e8493a23cd531fddd3078ef9ad261a3d627f0f5a8871848e66c4
+  references/search-policy.md: 73f5cd3b71c83e06edbddc400aa8f44cd91fbd6c449f6e6d350fe3113b072180
   references/state-mapping.md: 906f7d9874fa0e1a2c69f90b02fe5945a9848b2f560ba0de4bb3813702a28fe2
-  references/tool-inventory.md: fb6153d11576962a647edede955ad48736577a1c47d0b2e57d243861dd9bc108
+  references/tool-inventory.md: 0690b8e98bc1f14df1bae66c202f6596ed05e5ad8041726742f8698c0ab3b438
   references/verify-static-vs-dynamic.md: 51dc34d5602e07edc27044b743acb932a6158f9eaaf2a84b169ef3d9e8b7d811
   references/wal-protocol.md: 0dcc8fefaa011184063d335d33dd591b3cf54e4d1ec1f1e1a60ee6ff47c9c4e8
 symptom_map:

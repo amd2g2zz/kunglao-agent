@@ -55,7 +55,7 @@ hash) — no analysis conclusions.
 - fresh init: `kunglao-init: initialized <ws> (scaffold=3 structural seeds project_type=<type>)` + `kunglao-init: state_hash=<hex>` + hooks line (below) — the exit line lists what init did (scaffold/env/type), never a sample-content summary (#412)
 - resume mode: `kunglao-init: resume — <ws> already initialized` (exit 0)
 - --force: `kunglao-init: --force backup -> <backup-path>`
-- hooks: deployed → `kunglao-init: hooks -> <target> (<n> entries, idempotent)`; skipped → `kunglao-init: hooks skipped — <reason>`
+- hooks: deployed → `kunglao-init: hooks -> <target> (<n> entries, idempotent)`; skipped → `kunglao-init: hooks skipped — <reason>` (#478: the skip line is reachable ONLY via `--no-hooks` — the default path creates `<ws>/.claude/settings.json` when absent and deploys; the pre-#478 silent skip on a missing file is gone)
 
 **stderr**: drift → `kunglao-init: WARNING state drift detected (recorded
 <old>, computed <new>) — external edits present` (contains "drift"/"warn",

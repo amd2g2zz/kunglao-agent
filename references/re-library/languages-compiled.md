@@ -319,6 +319,10 @@ strings binary | grep "called .unwrap().. on"
 cargo install cargo-bloat
 cargo bloat --release -n 50
 
+# kunglao toolshelf: carve crate dependency strings from the binary
+# (registry paths + standalone name-version strings, dual channel)
+python tools/static/rust-dep-strings.py --in <sample> --json
+
 # Ghidra Rust helper scripts
 # https://github.com/AmateursCTF/ghidra-rust (community scripts for Rust RE)
 ```

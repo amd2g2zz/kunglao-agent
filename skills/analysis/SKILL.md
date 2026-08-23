@@ -6,7 +6,7 @@ description: >-
   fact base to PROVEN convergence. The workspace must already be initialized
   (see /kunglao-agent:init).
 arguments: [workspace]
-argument-hint: <workspace>
+argument-hint: <workspace> (alias analyze) — no args → guided workspace prompt
 ---
 
 # kunglao-agent:analysis — convergence loop
@@ -20,6 +20,21 @@ evidence-indexed.
 
 The workspace must already exist and be initialized (see
 `/kunglao-agent:init`); a workspace that is not initialized is refused work.
+
+## No arguments
+
+An empty `$ARGUMENTS` never enters the loop and never guesses the cwd:
+print the guided workspace prompt and WAIT — one question, enumerated
+candidates, never guess, no bare argparse-style error dump.
+
+- Ask for the workspace path (one question; enumerate known candidates if
+  any are visible).
+- If the cwd already looks initialized (`claim-register.yaml` present),
+  propose exactly the cwd as the candidate and CONFIRM it — never silently
+  run on it.
+
+A missing workspace is the zero-args case: `analysis` takes exactly one
+positional argument, so there is no separate partial-argument flow.
 
 ## Flow
 

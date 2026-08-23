@@ -34,7 +34,8 @@ STATE_TEMPLATE_NAMES = (
     "blocker.md",
     "claim-register.yaml",
     "claim_deps.yaml",
-    "failure-registry.yaml",
+    # failure-registry.yaml retired in #530: template shipped with zero
+    # writers (design-spec §3.6 sec_e never implemented; init never seeded it).
     "task-oracle.yaml",
     "task_spec.yaml",
 )
@@ -95,7 +96,7 @@ def test_no_reference_to_legacy_precommit_path():
     for p in ROOT.rglob("*"):
         if not p.is_file() or ".git" in p.parts or ".review-gate" in p.parts:
             continue  # runtime dirs (.git, review-gate evidence) are not repo content
-        if ".devfleet-worktrees" in p.parts:
+        if ".devfleet-worktrees" in p.parts or ".worktrees" in p.parts:
             continue  # git-worktree scratch dir (gitignored, not repo content)
         if p.resolve() == self_file:
             continue  # this test states the prohibition itself
@@ -127,7 +128,12 @@ def test_docs_single_design_tree():
 
 def test_docs_readme_layout_matches_actual_dirs():
     readme = (ROOT / "docs" / "README.md").read_text(encoding="utf-8")
-    actual = {p.name for p in (ROOT / "docs").iterdir() if p.is_dir()}
+    # superpowers/ holds agent-planning workspaces (dev-only, gitignored);
+    # present only on dev machines, invisible to CI — excluded from the table.
+    actual = {
+        p.name for p in (ROOT / "docs").iterdir()
+        if p.is_dir() and p.name != "superpowers"
+    }
     listed = set(re.findall(r"\| `([\w-]+)/` \|", readme))
     assert listed == actual, (
         f"docs/README.md layout table drift: listed={sorted(listed)} "

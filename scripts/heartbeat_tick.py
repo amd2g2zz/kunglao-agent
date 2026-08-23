@@ -13,12 +13,23 @@ fires it, reads the JSON report, and does only what needs cognition (ping stuck
 workers, dispatch). Fewer steps = fewer failure modes.
 
 Steps executed (idempotent, all safe to re-run):
-  0. hooks_selfcheck  — project+user settings.json kunglao hooks present; user-level
+  0. hooks_selfcheck  — (a) import-time verifies all 9 WIRE_UP_HOOK_FILES via
+                        derive_hook_subset (loud fail on registry drift); (b) run-time
+                        checks 4 liveness-chain hooks (heartbeat_touch/worker_budget/
+                        dispatch_gate/worker_pulse) in project settings.json; auto-rebuilds
+                        via --wire-up if missing; warns on global leftover hooks (#258)
                         auto-rebuilt via --wire-up if dropped (v1.9.37)
   1. reconcile        — rebuild [active_workers] from worker-status-*.md +
                         plan-redteam-*.md (verifier visibility, v1.9.37)
   6. renew            — refresh hooks TTL + heartbeat last_tick_ts
   7. heartbeat-check  — assert last_tick_ts < 35 min old
+  8. oracle-check     — task-oracle.yaml registered (#473 gate power-on;
+                        report field oracle_registered + actionable line
+                        when missing; report-only, never fails the tick)
+  9. env-probe        — liveness-subset env snapshot → runs/env-state.json
+                        (#475: env freshness bound to the tick by
+                        construction — the only mechanically-enforced
+                        periodic; probe failure never fails the tick)
 
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
 1 = heartbeat stale, project hooks missing, or selfcheck failed (LLM must act;
@@ -35,6 +46,15 @@ import os
 import subprocess
 import sys
 import datetime
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="heartbeat_tick", action="dispatch",
+                             detail="module wired")
+except NameError:
+    pass
 from pathlib import Path
 
 import hook_activation as ha
@@ -106,10 +126,45 @@ def _renew_margin_low(ws: Path) -> bool:
         return False
 
 
+def _oracle_registered(ws: Path) -> bool:
+    """#473 gate power-on: true iff the workspace carries a non-empty
+    task-oracle.yaml (the completion-gate anchor init registers + Phase 0
+    backfills). Fail-open on read errors -> False (reported, never crashes
+    the tick); does NOT change the tick exit code by itself (the
+    selfcheck/renew/heartbeat rc weights stay authoritative)."""
+    try:
+        p = ws / "task-oracle.yaml"
+        if not p.exists() or not p.read_text(encoding="utf-8").strip():
+            return False
+        # #473 review HIGH-1: the init skeleton marker is not a registered
+        # oracle — the Phase-0 backfill (user's verbatim task) is what
+        # powers the completion gate. Marker still present = still
+        # unregistered (the nag line below must fire).
+        return "pending-user-input-backfill" not in p.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+ORACLE_MISSING_LINE = (
+    "[gate] task-oracle.yaml not registered — the closing gate chain is "
+    "unpowered; run Phase 0 backfill (write the user's task verbatim into "
+    "task-oracle.yaml) before completion can be judged (#473)"
+)
+
+
 def main(argv: list[str] | None = None) -> int:
     """argv: explicit CLI args (defaults to sys.argv[1:]) — lets the kunglao.py
     router pass the caller's workspace instead of the router's own argv
     (issue #370: bare main() resolved the subcommand token "tick" as the ws)."""
+    # UTF-8 stdout unification (same pattern as scripts/mcp_probe.py) — scoped
+    # to CLI execution so importing this module never mutates the importer's
+    # stdout (kunglao.py router imports it). Without it the #365 warn line's
+    # em-dash prints as cp936 on a GBK console/pipe and the caller's UTF-8
+    # read sees mojibake (#457 triage #6).
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass  # captured stream without reconfigure (pytest capsys)
     args = sys.argv[1:] if argv is None else argv
     ws = _resolve_ws(args[0] if args else None)
     # action_taken (issue #237): the tick MUST produce a convergence action or a
@@ -128,6 +183,19 @@ def main(argv: list[str] | None = None) -> int:
         print(RENEW_MARGIN_LOW_LINE)
     report["renew"] = run("hook_activation.py", ws, "--renew")
     report["heartbeat"] = run("hook_activation.py", ws, "--heartbeat-check")
+    # step 8 (#473): oracle registration check — one report field + one
+    # actionable stdout line when missing (mechanical催告; the LLM reading
+    # the tick acts). Report-only: rc weights unchanged.
+    report["oracle_registered"] = _oracle_registered(ws)
+    if not report["oracle_registered"]:
+        print(ORACLE_MISSING_LINE)
+    # step 9 — env-probe (#475): liveness-subset snapshot into
+    # runs/env-state.json (check_env_fresh / env_drift_watch consume it).
+    # The subprocess rc is advisory-only: env drift is surfaced by the
+    # monitor + the fresh gate, and a probe crash must never fail the tick
+    # (env_state_probe itself exits 0 on probe failure; rc!=0 here means
+    # the script itself crashed — recorded, not fatal).
+    report["env_state"] = run("env_state_probe.py", ws)
 
     out = ws / "runs" / ".heartbeat-tick.json"
     try:

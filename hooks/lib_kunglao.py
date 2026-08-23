@@ -16,17 +16,134 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ---- dispatch prefix regex (single source) ----
+# v0 protocol (legacy, still supported): "[T<N> tools=a,b] claim C-NN ..."
 DISPATCH_RE = re.compile(
     r"\[T(\d)\s+tools=([^\]]+)\]\s+claim\s+(C-\d+)"
 )
+# v1 protocol marker — find the JSON object containing the
+# "kunglao_dispatch" key. We grab the surrounding braces by scanning
+# forward for balanced `{`/`}` rather than relying on a non-greedy
+# capture (which fails on nested dicts/lists in v1 payloads).
+DISPATCH_JSON_START_RE = re.compile(
+    r"\{\s*\"kunglao_dispatch\"\s*:",
+)
+
+DISPATCH_PROTOCOL_VERSION = 1
+
+
+# ---- #567 SECURITY: MCP tool prefix enforcement (single source) ----
+# Only mcp__kunglao__* is sanctioned in this workspace. Any other MCP
+# namespace (mcp__unknown__, mcp__external__) is rejected at the dispatch
+# gate with rc=2 — the same posture as HOST_FORBIDDEN_TOOLS in
+# hooks/worker_budget.py (exact-name deny-list); the MCP gate extends that
+# posture to prefix-based matching. Adding a new namespace requires
+# deleting this entry, never bypassing the check.
+MCP_FORBIDDEN_PREFIXES: tuple[str, ...] = (
+    "mcp__unknown__",
+    "mcp__external__",
+)
+
+
+def check_mcp_prefix(tool_name: str) -> tuple[bool, str | None]:
+    """Return (allowed, reason) for a tool name under the MCP prefix gate.
+
+    - mcp__kunglao__*       -> (True, None)
+    - mcp__unknown__*       -> (False, reason naming the offender)
+    - mcp__external__*      -> (False, reason naming the offender)
+    - empty / non-MCP name  -> (True, None) (the helper only governs MCP)
+    - substring trap        -> NOT triggered: match is startswith on the
+      literal prefix tuple, so `mcp__kunglao_unknown__foo` passes.
+    """
+    if not tool_name:
+        return True, None
+    for prefix in MCP_FORBIDDEN_PREFIXES:
+        if tool_name.startswith(prefix):
+            return False, (
+                f"MCP prefix {prefix!r} is forbidden by issue #567 — only "
+                f"mcp__kunglao__* is sanctioned in this workspace; "
+                f"got {tool_name!r}"
+            )
+    return True, None
+
+
+def _balanced_json_at(text: str, start: int) -> int:
+    """Return the index just past the balanced JSON object that starts at
+    `start` (must point at '{'). Tracks strings + escaped chars so braces
+    inside strings don't fool the counter."""
+    depth = 0
+    in_str = False
+    escape = False
+    i = start
+    while i < len(text):
+        ch = text[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+        else:
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return i + 1
+        i += 1
+    return -1  # unbalanced
+
+
+def parse_dispatch_json(text: str) -> tuple[int, list[str], str | None, dict | None]:
+    """Parse v1 protocol JSON prefix.
+
+    Returns (tier, tools, claim_id, raw_metadata). (0, [], None, None) on
+    failure — caller falls back to v0 regex.
+    """
+    m = DISPATCH_JSON_START_RE.search(text)
+    if not m:
+        return (0, [], None, None)
+    end = _balanced_json_at(text, m.start())
+    if end < 0:
+        return (0, [], None, None)
+    try:
+        payload_obj = json.loads(text[m.start():end])
+    except (json.JSONDecodeError, ValueError):
+        return (0, [], None, None)
+    payload = payload_obj.get("kunglao_dispatch")
+    if not isinstance(payload, dict):
+        return (0, [], None, None)
+    if int(payload.get("version", 0)) != DISPATCH_PROTOCOL_VERSION:
+        return (0, [], None, None)
+    claim_id = payload.get("claim")
+    tier = int(payload.get("tier", 0))
+    if not isinstance(claim_id, str) or not re.fullmatch(r"C-\d+", claim_id):
+        return (0, [], None, None)
+    if tier not in (1, 2, 3):
+        return (0, [], None, None)
+    raw_tools = payload.get("tools") or []
+    if not isinstance(raw_tools, list):
+        raw_tools = []
+    tools = [str(t).strip() for t in raw_tools if str(t).strip()]
+    meta = {k: v for k, v in payload.items()
+            if k not in ("version", "claim", "tier", "tools")}
+    return (tier, tools, claim_id, meta)
 
 
 def parse_dispatch(text: str) -> tuple[int, list[str], str | None]:
-    """Parse '[T<N> tools=a,b] claim C-NN' -> (tier, tools, claim_id). (0, [], None) if absent."""
+    """Parse '[T<N> tools=a,b] claim C-NN' -> (tier, tools, claim_id).
+
+    (0, [], None) if absent. v1 (JSON) takes precedence over v0 (regex)."""
+    v1 = parse_dispatch_json(text)
+    if v1[2] is not None:
+        return (v1[0], v1[1], v1[2])
     m = DISPATCH_RE.search(text)
     if not m:
         return (0, [], None)
@@ -92,57 +209,188 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
     return hook_name in hook_set or not hook_set
 
 
-# ---- active-worker scan (single source of truth, issue #37) ----
-# Byte-for-byte mirror of scripts/convergence_check.py:_scan_active_workers so the
-# worker_budget gate and the convergence decision share ONE count source. Do NOT
-# let these drift — a gate/decision count mismatch is the exact double-truth-source
-# bug issue #37 fixes (gate read the state cache while convergence read status files).
+# ---- worker-status protocol — THE single parse point (issue #37 → #444) ----
+# Wire format (agents/kunglao-worker.md rule #4; append-only log):
+#   "[ts] step: ... | status: in-progress"   (pipe-embedded)
+#   "status: done"                            (dedicated line)
+# Rule: the LAST `status:` token in the file wins. This module is the ONLY
+# place in the repo that implements this parse (#444 AC-1, enforced by
+# tests/test_worker_liveness_protocol.py). Every other module —
+# convergence_check, worker_pulse, scripts/lib_kunglao, external_kicker,
+# event_taxonomy, kunglao_status, reconcile_workers — is a CONSUMER via
+# parse_worker_status(_tokens) / scan_active_workers / iter_worker_states.
+# Pre-#444 these were byte-for-byte mirrors of
+# scripts/convergence_check.py:_scan_active_workers (the #37 approach); a
+# mirror is still two copies — #444 made this the one implementation and the
+# scripts side delegate (importlib by path, unique name lib_kunglao_hooks,
+# the external_kicker.should_kick precedent: bare `import lib_kunglao` is
+# ambiguous under pytest because scripts/lib_kunglao.py shares the name).
 
-STUCK_MINUTES = 20  # mirror scripts/convergence_check.py
+STUCK_MINUTES = 20
+
+WORKER_STATUS_RE = re.compile(r"status:\s*(\S+)")
+
+# W-15 artifact declarations (#444): workers list deliverable paths on
+# `artifacts:` lines (dedicated line OR pipe-embedded, both shapes legal —
+# same duality as the status token). `artifacts: none` is the explicit
+# zero-file declaration (a W-15 failure: files are the deliverable).
+ARTIFACTS_RE = re.compile(
+    r"(?:^|\|)\s*artifacts?\s*:\s*([^|\n]+)", re.IGNORECASE | re.MULTILINE)
+_NO_ARTIFACTS_MARKERS = frozenset({"none", "-", "(none)"})
 
 
-def scan_active_workers(workspace: Path) -> tuple[int, list]:
-    """Count active + stuck workers from runs/worker-status-*.md.
+def parse_worker_status_tokens(text: str) -> list[str]:
+    """All ``status:`` tokens in file order, lowercased.
 
-    Active = a worker whose LAST ``status:`` line is ``in-progress``. Scans the
-    workspace ``runs/`` dir plus every ``.wt-*/ with .kunglao-worktree marker``
-    worktree dir (v1.9.13 worktree isolation: worker state lives in each worker's
-    own worktree, not the main tree). Stuck = active files older than
-    STUCK_MINUTES. OSError on glob/read/stat skips that file.
-
-    Byte-for-byte mirror of scripts/convergence_check.py:_scan_active_workers.
+    Empty list = the file has no status line (not active, not delivered).
+    Consumers needing first-vs-last semantics (event_taxonomy worker_started)
+    read tokens[0]/tokens[-1]; liveness is always the LAST token.
     """
-    status_line = re.compile(r"status:\s*(\S+)")
-    dirs = [workspace / "runs"]
+    out = []
+    for line in text.splitlines():
+        m = WORKER_STATUS_RE.search(line)
+        if m:
+            out.append(m.group(1).lower())
+    return out
+
+
+def parse_worker_status(text: str) -> str | None:
+    """The liveness token: the LAST ``status:`` line wins (append-only log)."""
+    tokens = parse_worker_status_tokens(text)
+    return tokens[-1] if tokens else None
+
+
+def parse_declared_artifacts(text: str) -> list[str]:
+    """Declared deliverable paths from ``artifacts:`` lines
+    (comma/semicolon/whitespace separated, order preserved, deduped).
+    [] = legacy file without declarations (W-15-exempt, #444 migration compat).
+    """
+    out: list[str] = []
+    for m in ARTIFACTS_RE.finditer(text):
+        for tok in re.split(r"[,;\s]+", m.group(1).strip()):
+            if tok and tok not in out:
+                out.append(tok)
+    return out
+
+
+def _env_layout(ws: Path):
+    """#450: layout conventions from scripts/env_manifest.py (the layout
+    single source — the .wt-*/malware-analysis-workspace/runs literals
+    used to live inline here). Missing module = broken install, not a
+    degraded mode (#444 posture: hooks/ and scripts/ ship together)."""
+    scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
     try:
-        for wt in workspace.parent.glob(".wt-*/.kunglao-worktree"):
-            runs_dir = wt.parent / "malware-analysis-workspace" / "runs"
-            if runs_dir.exists():
-                dirs.append(runs_dir)
+        import env_manifest
+    except ImportError as exc:
+        raise RuntimeError(
+            f"env manifest module missing: {scripts_dir / 'env_manifest.py'} — "
+            "hooks/ and scripts/ ship together; reinstall the kunglao-agent "
+            "skill") from exc
+    return env_manifest.layout_conventions(ws)
+
+
+def iter_worker_states(workspace: Path) -> list[dict]:
+    """One row per worker-status file (single read each), across the canonical
+    scan targets: workspace ``runs/`` PLUS every worker-worktree ``runs/``
+    (v1.9.13 worktree isolation: worker state lives in each worker's own
+    worktree). OSError on glob/read/stat skips that file. ``root`` is the
+    workspace the file's declared artifacts resolve against (main root, or
+    that worktree's workspace root). #450: the names come from the env
+    manifest layout (absent manifest → the pre-#450 defaults, scan targets
+    unchanged)."""
+    ws = Path(workspace)
+    layout = _env_layout(ws)
+    roots = [ws]
+    try:
+        pattern = (f"{layout.worker_worktree_glob}/"
+                   f"{layout.worker_worktree_marker}")
+        for wt in ws.parent.glob(pattern):
+            root = wt.parent / layout.workspace_dir
+            if (root / layout.runs_dir).exists():
+                roots.append(root)
     except OSError:
         pass
-    active = 0
-    stuck = []
-    cutoff = timedelta(minutes=STUCK_MINUTES)
-    now = datetime.now(timezone.utc)
-    for runs in dirs:
+    states = []
+    for root in roots:
+        runs = root / layout.runs_dir
         if not runs.exists():
             continue
         for p in runs.glob("worker-status-*.md"):
             try:
                 text = p.read_text(encoding="utf-8", errors="replace")
+                mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
             except OSError:
                 continue
-            # last status line decides activity
-            last_status = None
-            for line in text.splitlines():
-                m = status_line.search(line)
-                if m:
-                    last_status = m.group(1).lower()
-            if last_status != "in-progress":
-                continue
-            active += 1
-            mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)
-            if (now - mtime) > cutoff:
-                stuck.append({"worker": p.stem, "age_min": int((now - mtime).total_seconds() // 60)})
+            tokens = parse_worker_status_tokens(text)
+            states.append({
+                "file": p,
+                "root": root,
+                "status": tokens[-1] if tokens else None,
+                "mtime": mtime,
+                "artifacts": parse_declared_artifacts(text),
+            })
+    return states
+
+
+def scan_active_workers(workspace: Path, states: list | None = None) -> tuple[int, list]:
+    """Count active + stuck workers from runs/worker-status-*.md.
+
+    Active = a worker whose LAST ``status:`` line is ``in-progress``. Stuck =
+    active files older than STUCK_MINUTES (mtime). ``states`` lets a caller
+    that already ran iter_worker_states reuse the single read.
+
+    Output shape is FROZEN (#37 consumers): ``(active, stuck)`` where each
+    stuck entry is ``{"worker": <file stem>, "age_min": int}`` —
+    worker_budget.check_workers_lt_3, worker_pulse flags and kunglao-decide's
+    ``stale`` derivation all read exactly this.
+    """
+    if states is None:
+        states = iter_worker_states(workspace)
+    active = 0
+    stuck = []
+    cutoff = timedelta(minutes=STUCK_MINUTES)
+    now = datetime.now(timezone.utc)
+    for s in states:
+        if s["status"] != "in-progress":
+            continue
+        active += 1
+        if (now - s["mtime"]) > cutoff:
+            stuck.append({"worker": s["file"].stem,
+                          "age_min": int((now - s["mtime"]).total_seconds() // 60)})
     return active, stuck
+
+
+def scan_done_artifact_violations(workspace: Path, states: list | None = None) -> list:
+    """W-15 (#444): a worker that reports ``done`` must have its declared files.
+
+    Opt-in: only files carrying ``artifacts:`` declarations are checked — a
+    legacy done file without declarations stays readable and exempt (migration
+    compat; liveness semantics unchanged for every file age). ``artifacts:
+    none`` = explicit zero-file completion = W-15 failure ("a worker that
+    reports 'done' without files has FAILED" — the W-15 lesson, machine path
+    instead of prose). Relative paths resolve against the file's owning
+    workspace root (main workspace, or the .wt-* worktree's own workspace);
+    absolute paths are checked as-is.
+    """
+    if states is None:
+        states = iter_worker_states(workspace)
+    violations = []
+    for s in states:
+        if s["status"] != "done":
+            continue
+        declared = s["artifacts"]
+        if not declared:
+            continue  # legacy format — no declarations, W-15-exempt
+        if all(t.lower() in _NO_ARTIFACTS_MARKERS for t in declared):
+            violations.append({"worker": s["file"].stem,
+                               "kind": "done-no-files", "missing": []})
+            continue
+        missing = [t for t in declared
+                   if t.lower() not in _NO_ARTIFACTS_MARKERS
+                   and not (Path(t) if Path(t).is_absolute() else s["root"] / t).exists()]
+        if missing:
+            violations.append({"worker": s["file"].stem,
+                               "kind": "declared-missing", "missing": missing})
+    return violations

@@ -16,23 +16,74 @@ from pathlib import Path
 # stale (5-min interval + jitter margin) means monitoring is NOT running.
 STALE_MINUTES = 35
 
+# #461: the cron-registration marker. --heartbeat-on alone proves only that
+# the FILE was written (init / manual chain both can do that); the marker
+# flips to true only when the /loop prompt body itself executes (its first
+# action runs `--heartbeat-on --loop-registered`) — the prompt body running
+# is the one mechanical event that proves CronCreate accepted the
+# registration. heartbeat_loop_prompt.py --verify HARD-fails while it is
+# not true: a silently-failed cron registration was the 2026-08-19 v0.1.1
+# field report ("monitoring never started", zero error surfaced).
+LOOP_MARKER_KEY = "loop_registered"
+
 
 def utc_now() -> str:
     return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def heartbeat_register(workspace: Path) -> int:
+def heartbeat_register(workspace: Path, loop_registered: bool = False) -> int:
     """Register the heartbeat as verifiable state (<ws>/runs/.heartbeat.json).
 
     Turns 'monitoring is running' from a self-claim into a checked file state.
     Every heartbeat tick refreshes `last_tick_ts`; heartbeat_check exits 1
     when the file is missing or stale.
+
+    #461: a re-register must NOT silently erase a proven cron registration —
+    an existing loop_registered=true survives (only --heartbeat-off deletes
+    the file, and a fresh loop must re-prove itself). loop_registered=True
+    is set by the /loop prompt's first action (--loop-registered), never by
+    a bare --heartbeat-on: file existence is not registration.
     """
-    state = {"started_ts": utc_now(), "interval_min": 5, "last_tick_ts": utc_now()}
     path = workspace / "runs" / ".heartbeat.json"
+    was_registered = False
+    if path.exists():
+        try:
+            was_registered = bool(
+                json.loads(path.read_text(encoding="utf-8")).get(LOOP_MARKER_KEY))
+        except (json.JSONDecodeError, OSError):
+            was_registered = False
+    now = utc_now()
+    state = {"started_ts": now, "interval_min": 5, "last_tick_ts": now,
+             LOOP_MARKER_KEY: bool(loop_registered or was_registered)}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
     print(f"OK: heartbeat registered at {path} (interval 5m)")
+    return 0
+
+
+def mark_loop_registered(workspace: Path) -> int:
+    """#461: mark the cron loop registration (loop_registered=true).
+
+    Called with `hook_activation.py <ws> --loop-registered` by the /loop
+    prompt's first action — the prompt body executing IS the proof that
+    CronCreate accepted it. Requires an existing heartbeat file (register
+    first with --heartbeat-on); never fabricates one.
+    """
+    path = workspace / "runs" / ".heartbeat.json"
+    if not path.exists():
+        print(f"FAIL: no {path} — register the heartbeat first "
+              f"(--heartbeat-on), then mark the loop (#461)", file=sys.stderr)
+        return 1
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"FAIL: {path} unreadable ({exc}) — re-register with "
+              f"--heartbeat-on (#461)", file=sys.stderr)
+        return 1
+    state[LOOP_MARKER_KEY] = True
+    path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    print(f"OK: cron loop registration marked at {path} "
+          f"({LOOP_MARKER_KEY}=true)")
     return 0
 
 
@@ -52,6 +103,11 @@ def heartbeat_check(workspace: Path) -> int:
     except Exception as exc:
         print(f"HEARTBEAT DOWN: .heartbeat.json unreadable ({exc})", file=sys.stderr)
         return 1
+    # #533 F-H1: check loop_registered marker
+    if not state.get(LOOP_MARKER_KEY, False):
+        print(f"HEARTBEAT LOOP NOT REGISTERED: {LOOP_MARKER_KEY}=false — cron registration not confirmed, run --loop-registered", file=sys.stderr)
+        return 1
+
     age = datetime.now(timezone.utc) - last
     if age > timedelta(minutes=STALE_MINUTES):
         print(f"HEARTBEAT STALE: last tick {state.get('last_tick_ts')} ({int(age.total_seconds()//60)} min ago > {STALE_MINUTES})", file=sys.stderr)

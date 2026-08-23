@@ -24,6 +24,13 @@ fails lint is unqualified and must not enter the fact base.
 | 11 | `promotion_gate` | The promotion CONDITION, not a verification command. Empty exactly for `confirmed`/`pure_negative`/`contradiction`/`coordinate` |
 | 12 | `provenance` | ≥1 entry, each with `role` + `path`/`url`/`bytes` + `content_sha256` + `credibility` |
 
+Plus the schema pin (#536): every fact carries `schema_rev: 1` in its
+frontmatter — the revision of THIS template it was written against. The
+schema authority lives in the live skill dir
+(`malware-veri-notes/references/frontmatter-schema.md`); the pin makes
+silent semantic drift mechanically detectable (`lint_facts` reports
+`active_schema_rev: 1` so consumers can compare).
+
 ## source enum (8 values)
 
 `static-decompile` · `dynamic-trace` · `frida-capture` · `qiling-emu` ·
@@ -84,6 +91,7 @@ Plus the verifier gate: `verify_status` ∈ `pending`/`partial`/`passes`/`fails`
 ---
 id: F999-example-c2-endpoint
 type: fact
+schema_rev: 1
 title: "C2 endpoint extraction from XOR-encoded config"
 status: PROVEN
 verify_status: passes

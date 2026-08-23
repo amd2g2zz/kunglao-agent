@@ -5,9 +5,9 @@ Every `.py` in this directory is classified by role and by where it is
 referenced. The reference map below is the definitive answer to "who uses
 this script?" — used to keep documentation, hooks, CI, and tests in sync.
 
-- **Total scripts**: 92 (72 cataloged at #318 close; +15 by #236/#271/#287/
+- **Total scripts**: 94 (72 cataloged at #318 close; +15 by #236/#271/#287/
   #304/#309/#316; +4 by #310/#331/#336 merged after the #320 snapshot;
-  +1 by #409 — per-script provenance in the tables below).
+  +1 by #409; +2 by #477 — per-script provenance in the tables below).
 - **Orphans**: 0 — every script has at least one live reference
   (tests/ count as references; a script referenced only by tests is
   categorized `TEST`, not orphan).
@@ -24,14 +24,15 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | Script | Role | Referenced from |
 | --- | --- | --- |
 | `kunglao.py` | unified entry point — subcommands compose script functions (JSON + exit codes frozen) | CLI, tests, release_receipt |
-| `kunglao-init.py` | workspace init + re-init guard | CLI, tests |
+| `kunglao-init.py` | workspace init + re-init guard + deploy_env (#478: hooks/agents/mcp-record/skills + env-manifest ledger) | CLI, tests |
 | `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + explore_gate + priority_ratio | CLI, tests |
 | `kunglao-verify.py` | M3 VERIFY entry (thin wrapper → `kunglao_verify.py`) | CLI, tests |
 | `kunglao-record.py` | M4 RECORD entry (thin wrapper → `kunglao_record.py`) | CLI, tests |
 | `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch | CLI, tests |
 | `kunglao-digest.py` | digest mechanical generation (thin wrapper → `digest_build.py`) | CLI, tests |
 | `kunglao-eval.py` | eval harness CLI (thin wrapper → `kunglao_eval.py`) | CLI, CI, tests |
-| `mcp_probe.py` | MCP supply probe (#316): per-type manifest + ~/.claude.json + .mcp.json probe | CLI, lib(2), tests |
+| `error_response.py` | action-error classifier (issue #448): vmrun / init-exit / tool-install signatures → STOP/ASK/RETRY-ONCE/ESCALATE (UNCLASSIFIED = ASK, rc=2) | lib(2), CLI, tests |
+| `mcp_probe.py` | MCP supply probe (#316): per-type manifest + ~/.claude.json + .mcp.json probe; `--mcp-inventory` enumeration face (#515): registered servers → `mcp__<server>__*` prefixes + manifest tier (read-only, secret-safe; consumed by `tools/ext-scan.py --with-mcp`) | CLI, lib(2), tests |
 
 ## Core executors (loop machinery — invoked by hooks / CLI / other scripts)
 
@@ -39,12 +40,15 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | --- | --- | --- |
 | `convergence_check.py` | convergence decision (DISPATCH/DISPATCH_VERIFIER/SATURATED/BLOCKED/CONVERGED) — the every-turn gate | hooks, CLI, lib(2), tests |
 | `convergence_health.py` | ledger-based HEALTHY/STALLED/SPINNING verdicts | hooks, CLI, lib(2), tests |
-| `priority.py` | legacy dispatch ranker (v1 direct-cap formula, kept for compatibility) | hooks, lib(1), tests |
+| `priority.py` | DEPRECATED weighted dispatch ranker (#499; authority `priority_ratio.py`, removal #446) | lib, tests |
 | `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4) | lib(3), tests |
 | `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |
-| `hook_activation.py` | hook wire-up + tier activation (--wire-up/--renew/--heartbeat-*) | hooks, CLI, lib(6), tests |
+| `hook_activation.py` | THE canonical hook registration entry (#445): register_hooks/--wire-up + post-write self-check + tier activation | hooks, CLI, lib(6), tests |
 | `env_check.py` | environment readiness gate (venv/toolchain/VM channel) | hooks, CLI, tests |
+| `env_manifest.py` | env-facts.yaml single source (issue #450): five fact families + LayoutConventions, priority chain yaml > task-spec > defaults; --render/--probe | CLI, lib(3), tests |
+| `env_state_probe.py` | env-state liveness snapshot writer → runs/env-state.json (tick step 9; #475) | lib(2), tests |
+| `env_repair_l1.py` | L1 deterministic env repair (adb-reconnect/vm-rediscover/mcp-rehandshake; idempotent, safe no-op; #475) | CLI, tests |
 | `heartbeat.py` | convergence-gated heartbeat bookkeeping (lib for hook_activation) | lib(1), tests |
 | `heartbeat_tick.py` | heartbeat tick runner (hook-invoked + kunglao.py) | hooks, lib(1), tests |
 | `heartbeat_loop_prompt.py` | loop-prompt generator for the tick loop | hooks, tests |
@@ -102,6 +106,10 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `retract_claim.py` | RETRACTED terminal state + dependency blast-radius reopening (#331) | CLI, tests |
 | `progress_report.py` | one-block progress report | tests |
 | `init_state.py` | init-completeness single source of truth (#304) | hooks, lib(3), tests |
+| `template_version.py` | workspace template version stamp — write/verify/upgrade-warning (#536) | kunglao-init, hooks_selfcheck, env_check, kunglao-status, kunglao-resume, tests |
+| `rollup.py` | terminal-transition write loop — claim→outcome_capture+lessons+narrative+checkpoint (#524) | tests |
+| `hypothesis_store.py` | hypothesis layer carrier (#528) — H-*.md parse + open→refuted/superseded state machine over `hypotheses/` | digest_build (sec_g), hooks/state_anchor, kunglao-init stub, tests |
+| `notes_writer.py` | notes/ result-layer writer (#528) — supersedes-chain enforcement + verify_status reset on corrections | tests; write-path contract behind hooks/write_guard (#532) |
 
 ## Observability sidecar (issue #287)
 
@@ -110,6 +118,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao-status.py` | status panel CLI — renders claims board + active workers + convergence trend (SKILL.md §Status panel; ANSI auto-degrade) | docs, tests |
 | `kunglao_status.py` | disk-rendered TUI status panel implementation | lib(1), tests |
 | `kunglao_log.py` | structured JSONL event log | lib(4), tests |
+| `kunglao_resume.py` | /kunglao-agent:resume — crash-recovery brief (read-only: health/13-source summary/open-hypothesis pointers/table-lookup next-step; issue #466, #528) | CLI, tests |
+| `heartbeat_touch.py` | lightweight heartbeat timestamp refresh — companion to heartbeat_tick.py (one-shot, no side effects; #534) | hooks, tests |
+| `strategy_metrics.py` | strategy convergence four metrics — regret / cost-to-slope / P(faster|hit) / competence (#529) | lib(1), tests |
 
 ## Support libraries & utilities
 
@@ -121,20 +132,26 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `normalize_trace.py` | dynamic trace normalization | tools, tests |
 | `fixture_excerpt_lint.py` | fixture excerpt lint (standalone CLI) | tests, docs |
 | `references_recall.py` | references scored-recall CLI over the layered index — scenario → primary/supplementary; keyword → top-K ranked rows with score (no file dumps); `--list-categories` / `--scene-map` | tests, docs |
-| `wire_up_settings.py` | hook settings registration (lib for hook_activation) | hooks, lib(1), tests |
+| `wire_up_settings.py` | hook REGISTRY + deprecated alias -> hook_activation.register_hooks (#445; retirement #446) | hooks, lib(1), tests |
 | `shell_defaults.py` | reusable CLI: idempotent shell env-default line management (check/apply/remove, powershell+bash; #276) | lib(1), tests |
 | `template_gen.py` | deterministic script-template generator CLI (templates/scripts/*.tmpl; exit 2/3/4/5, #278) | templates, tests, docs |
 | `template_render.py` | shared {{param}} render + leftover-detection engine (single source for template_gen + kunglao-init, #362) | lib(2), tests |
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
+| `dispatch_context.py` | structured dispatch context block (fact snapshot + priority state + validated capability + plan + siblings; #527) | lib(3), tests |
+| `lessons_telemetry.py` | per-lesson CBM quartet + utility score + tombstone (#526) | tests |
 | `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
-| `toolchain.py` | type-aware toolchain probe matrix (#304) | lib(1), tests, docs |
-| `toolchain_install.py` | ask-then-install: per-item install commands by platform + MCP registration + re-probe (#408) | CLI, lib(1), tests |
+| `toolchain.py` | type-aware toolchain probe matrix (#304) with probe tiers presence/liveness/capability + jdwp handshake (#474) | lib(1), tests, docs |
+| `toolchain_install.py` | ask-then-install: (manager, package) data x pkg_detect detection + MCP registration + re-probe + env-facts installed ledger (#408, #477) | CLI, lib(1), tests |
+| `pkg_detect.py` | package-manager detection (winget/choco/scoop/brew/apt/dnf/apk/pacman/pip/uv/npm; which-first + known-path, read-only) + unpacked-ghidra half-state (#477) | CLI, lib(1), tests |
+| `deploy_shim.py` | device-side idempotent deploy (frida-server rename+custom port / android-server, re-probe gated, installed ledger) + #462 one-off shim records under scripts/shims/ (#477) | CLI, tests |
+| `toolchain_negotiation.py` | init negotiation menu (issue #451): install/use-path/skip/degrade, apply_answers validate-then-act | CLI, lib(1), tests |
+| `decision_pending.py` | pending-decision list schema + serialization (stdout JSON, exit 8, `--resolve` answers; shared intake channel #455/#449/#451) | lib(2), tests |
+| `log_setup.py` | shared stdlib-logging facade (FileHandler + stderr StreamHandler, idempotent; #454/#459) | lib, tests |
 | `platform_paths.py` | platform-correct analyzeHeadless + venv python resolution (#409) | lib(2), tests |
 | `chunker.py` | length-measured batch chunking (#309) | tests |
 | `cost_estimate.py` | pre-dispatch cost estimator (#309) | lib(1), tests |
 | `event_taxonomy.py` | 25-class event taxonomy (#309) | tests |
-| `function_kg.py` | minimal function-level knowledge graph (#309) | tests |
 | `recov_metrics.py` | symbol/type recovery quality metrics (#309) | lib(1), tests |
 | `tool_error_policy.py` | same-tool consecutive-error hysteresis (#309) | tests |
 
@@ -145,5 +162,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `release_receipt.py` | release receipt generation + CLI probe | CI, tests |
 | `release_check_selfcheck.py` | release-check self-verification | CI |
 | `check_global_rule_subset.py` | global-rule subset compliance check | CI, tests |
+| `kunglao_export.py` | workspace export by zone (contract_carriers/evidence/scratch) + manifest (#540, D5) | tests |
 | `structural_check.py` | repo structure + broken-link + index drift check | CI, tests |
 | `re_pin_references.py` | references/_INDEX.yaml pin regeneration — re-run after ANY references/ edit (drift fails test_replay_gate) | docs, tests |

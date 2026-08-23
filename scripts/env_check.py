@@ -41,6 +41,16 @@ FAIL grading (gate logic lives in hooks/env_check_gate.py):
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="env_check", action="verify",
+                       detail="module wired")
+except NameError:
+    pass
+
 import argparse
 import hashlib
 import json
@@ -53,6 +63,9 @@ from pathlib import Path
 
 import init_state  # noqa: E402  # F6 (#304 review): shared init-completeness predicate
 import wire_up_settings  # noqa: E402  # #372: hook registry single source
+# #536: template version stamp verify (init writes, env_check verifies —
+# same shape as state_hash; hard row in the checklist below).
+import template_version  # noqa: E402
 # #409: platform-correct analyzeHeadless name + venv python location.
 import platform_paths  # noqa: E402
 
@@ -333,6 +346,36 @@ def read_sample_sha256(ws: Path) -> str | None:
     return None
 
 
+def check_template_version(ws: Path) -> tuple[str, str]:
+    """#536: three-carrier template version stamp, TRI-STATE.
+
+    PASS  — every present carrier carries the active skill version.
+    WARN  — one or more carriers lack the stamp line entirely (a pre-#536
+            legacy workspace; init never stamped it). Not a hard failure:
+            the workspace predates the stamp, not diverged from it. The
+            fix is one re-init away.
+    FAIL  — a carrier carries a DIFFERENT version (true drift: stamped at
+            0.1.x, running skill 0.2.y — semantics may have changed).
+    """
+    try:
+        faults = template_version.verify_stamps(ws)
+    except RuntimeError as exc:  # no skill version anywhere — release defect
+        return "FAIL", f"skill version unreadable: {exc}"
+    missing = sorted(k for k, v in faults.items() if v == "missing")
+    mismatched = sorted(k for k, v in faults.items()
+                        if v.startswith("mismatch:"))
+    if mismatched:
+        return "FAIL", (f"stamp mismatch on {', '.join(mismatched)} "
+                        f"({faults[mismatched[0]]} vs expected "
+                        f"{template_version.read_skill_version()}) — re-run "
+                        f"kunglao-init to align the workspace template")
+    if missing:
+        return "WARN", (f"stamp missing on {', '.join(missing)} — "
+                        "workspace predates the template version stamp "
+                        "(re-run kunglao-init to add it)")
+    return "PASS", f"stamped {template_version.read_skill_version()} on all carriers"
+
+
 # ---------- main ----------
 
 def _norm(ok: bool, msg: str) -> tuple[str, str]:
@@ -361,6 +404,9 @@ def run(ws: Path) -> tuple[int, dict]:
         "ghidra": _norm(*check_ghidra()),
         "hooks_deployed": check_hooks(ws),  # TRI-STATE: PASS|WARN|FAIL (#410)
         "venv_sample": _norm(*check_venv_sample(ws, read_sample_sha256(ws))),
+        # #536: TRI-STATE like hooks — WARN on stamp-less legacy workspace,
+        # FAIL on genuine version drift (see check_template_version).
+        "template_version": check_template_version(ws),
     }
     report = {
         "ts": utc_now(),

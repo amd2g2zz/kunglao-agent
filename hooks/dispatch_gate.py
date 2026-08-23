@@ -16,10 +16,31 @@ SMART = narrow + alive-only:
   - it injects corrective guidance (hookSpecificOutput.additionalContext),
     not a hard abort — the orchestrator can record the analysis and proceed.
 
-Design: PreToolUse hook on Agent. Reads the dispatch prompt from the tool
-input. If it matches `[T<N> tools=...] claim <C-NN>` and C-NN is in
-failure_analysis_gate's BLOCKED set → inject guidance. Otherwise → exit 0
-(silent). No state writes, no files touched.
+#496 decision teeth (value selection gets enforcement on this face):
+  - top-1: dispatching a non-top-1 claim (rank >= 2 under
+    worker_budget.check_priority — the single ranking source, #499
+    authority = priority_ratio) without an `agent-reasoning:` prefix
+    REJECTs; with the reason it passes and leaves a
+    priority_deviation trace in the unified log (exact copy of the #310
+    agenttype-deviation structure).
+  - capability card: the target claim's (or its obstacle_for parent's)
+    #495 validated_capability mentions tool family F, the dispatch
+    declares a disjoint family, and the prompt shows no
+    `capability-disproof: <family>` -> REJECT (disprove the card first —
+    trajectory-1 replay: frida validated, switching to xposed needs the
+    frida failure shown). FAIL_OPEN when no card / no known families.
+  - strategy log: a passing dispatch carrying `[strategy <id>]` appends
+    the dispatch row consumed by priority_ratio's novelty (opt-in).
+
+#452 (派发协议结构化) — dispatch protocol:
+  v1 (new, JSON):
+    {"kunglao_dispatch": {"version": 1, "claim": "C-409", "tier": 1,
+      "tools": [...], "agent": "ghidra-light", ...}}
+  v0 (legacy, regex): [T<N> tools=a,b] claim C-NN ...
+  v1 takes precedence; v0 still supported. Parsing lives in
+  hooks/lib_kunglao.py:parse_dispatch (single source). On parse failure,
+  this hook emits a stderr warning + hookSpecificOutput warning so a broken
+  prompt is NOT silent (the pre-#452 silent-return-0 hid protocol drift).
 
 Wiring (in .claude/settings.json PreToolUse, Agent matcher — kunglao-agent
 dispatches via the Agent tool):
@@ -34,8 +55,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import yaml
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 HOOK_STATE = Path(".hook_state.json")
+# Backward-compat re-export: imports of `DISPATCH_RE` from this module keep
+# working. The real parser is hooks/lib_kunglao.py:parse_dispatch which
+# handles v0 (regex) + v1 (JSON).
 DISPATCH_RE = re.compile(
     r"\[T\s*([123])\s+tools\s*=\s*([^\]]*)\]\s*claim\s+([A-Z]+-\d+)",
     re.IGNORECASE,
@@ -43,10 +69,29 @@ DISPATCH_RE = re.compile(
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
-    """Same resolution as worker_budget.py: cwd → malware-analysis-workspace."""
+    """cwd → <layout.workspace_dir> — the layout names come from the env
+    manifest (#450 single source; hooks/dispatch_gate.py +
+    scripts/convergence_check.py + hooks/lib_kunglao.py used to hardcode
+    them). Absent manifest → DEFAULT_LAYOUT = the pre-#450 literals,
+    discovery behavior byte-identical."""
     cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
-    for base in [cwd / "malware-analysis-workspace", cwd]:
-        if (base / "claim-register.yaml").exists():
+    try:
+        # membership check mirrors lib_kunglao._env_layout (F5): each
+        # hook run is a fresh process so this never leaks in practice,
+        # but _resolve_workspace can be called repeatedly in-process
+        # (tests, embedders) — no unbounded path growth.
+        scripts_dir = str(SKILL_DIR / "scripts")
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import env_manifest
+    except ImportError as exc:  # broken install, not a degraded mode (#444 posture)
+        raise RuntimeError(
+            f"env manifest module missing: {SKILL_DIR / 'scripts' / 'env_manifest.py'} — "
+            "hooks/ and scripts/ ship together; reinstall the kunglao-agent "
+            "skill") from exc
+    layout = env_manifest.layout_conventions(cwd)
+    for base in [cwd / layout.workspace_dir, cwd]:
+        if (base / layout.claim_register).exists():
             return base
     return None
 
@@ -93,26 +138,14 @@ def _failure_blocked_ids(ws: Path) -> set:
         return set()
 
 
-def main() -> int:
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return 0
+def _extract_prompt_text(payload: dict) -> str:
+    """Build the prompt blob from the tool_input payload shape.
 
-    ws = _resolve_workspace(payload)
-    if ws is None:
-        return 0  # not a kunglao-agent workspace — silent
-
-    if not _kunglao_active(ws):
-        return 0  # kunglao-agent not activated or expired — hooks sleep
-
-    # Extract the dispatch description. kunglao-agent dispatches workers via the
-    # Agent tool (worker_budget is wired on the Agent matcher); the description
-    # lives in the prompt field. v1.9.8: handle all payload shapes (prompt /
-    # description / task / input as string or dict) so the gate survives
-    # whichever field carries the dispatch prompt.
+    v1.9.8: handle all payload shapes (prompt / description / task / input as
+    string or dict) so the gate survives whichever field carries the dispatch
+    prompt."""
     tool_input = payload.get("tool_input") or {}
-    prompt_parts = []
+    prompt_parts: list[str] = []
     if isinstance(tool_input, dict):
         for k in ("prompt", "description", "task", "input"):
             v = tool_input.get(k)
@@ -122,33 +155,477 @@ def main() -> int:
             prompt_parts = [str(v) for v in tool_input.values() if str(v)]
     else:
         prompt_parts = [str(tool_input)]
-    prompt_text = " ".join(prompt_parts)
-    m = DISPATCH_RE.search(prompt_text)
-    if not m:
-        return 0  # not a claim dispatch — silent
+    return " ".join(prompt_parts)
 
-    claim_id = m.group(3)
-    blocked = _failure_blocked_ids(ws)
-    if claim_id not in blocked:
-        return 0  # dispatching a healthy claim — silent
 
-    # INJECT corrective guidance (not hard block — orchestrator can record
-    # the analysis and proceed this same turn)
+def _parse_dispatch(text: str) -> tuple[str | None, str | None]:
+    """Parse dispatch protocol (v0 regex OR v1 JSON).
+
+    Returns (claim_id, protocol_version) or (None, reason). The shared
+    parser lives in hooks/lib_kunglao.py; this thin wrapper exists so the
+    gate doesn't have to know about import order / sys.path tricks."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "hooks"))
+        from lib_kunglao import parse_dispatch as _shared_parse
+    except Exception as exc:  # pragma: no cover — defensive
+        # Fallback to local regex if lib_kunglao is somehow unimportable
+        m = DISPATCH_RE.search(text)
+        if not m:
+            return (None, f"lib_kunglao import failed ({exc!r})")
+        return (m.group(3), "v0-local-fallback")
+    tier, tools, claim_id = _shared_parse(text)
+    if claim_id is None:
+        return (None, "v0/v1 both unmatched")
+    # Re-detect which protocol matched by re-running the v1 path inline
+    try:
+        from lib_kunglao import parse_dispatch_json
+        if parse_dispatch_json(text)[2] is not None:
+            return (claim_id, "v1")
+    except Exception:
+        pass
+    return (claim_id, "v0")
+
+
+def _declared_irreversible(text: str) -> bool:
+    """#447 declaration-over-inference: a v1 dispatch MAY declare
+    `"reversible": false` in its JSON payload. That is a STRUCTURAL,
+    language-independent must-stop signal — the agent states its intent
+    instead of the gate inferring it from prose (prose enumeration is
+    unfinishable in any language; command grammar below is enumerable).
+
+    Load-bearing enforcement order for must-stop:
+      1. declared field (this function) — v1 only
+      2. command grammar (_DISPATCH_MUST_STOP_PATTERNS) — vmrun delete /
+         git push --force are commands, a finite grammar, enumerable
+    Prose sniffing lives in scripts/ask_for_direction_gate.py as a
+    best-effort tripwire, never load-bearing."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "hooks"))
+        from lib_kunglao import parse_dispatch_json
+    except Exception:
+        return False
+    _, _, claim_id, meta = parse_dispatch_json(text)
+    if claim_id is None or not isinstance(meta, dict):
+        return False
+    return meta.get("reversible") is False
+
+
+def _warn_unparseable(claim_id: str | None, reason: str | None) -> None:
+    """#452: when neither v0 nor v1 protocol matches, emit a visible signal.
+
+    Pre-#452 the hook was silent-return-0; that hid protocol drift. Now we
+    log to stderr AND inject an additionalContext warning so the orchestrator
+    (and CI / logs) can see the gate did NOT recognise the dispatch."""
+    print(
+        "dispatch_gate: unrecognized dispatch protocol "
+        f"(v0/v1 both failed: {reason})",
+        file=sys.stderr,
+        flush=True,
+    )
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "additionalContext": (
-                f"dispatch_gate: {claim_id} is failure-blocked — a prior attempt "
-                f"failed and no failure_analysis is recorded. Per SKILL.md "
-                f"'A failed attempt is not a negative result', run:\n"
-                f"  uv run --project {SKILL_DIR} {SKILL_DIR}/scripts/failure_analysis_gate.py {ws} {claim_id}\n"
-                f"answer the 3 questions (method_assumption / assumption_validity / "
-                f"next_method), then re-dispatch — or dispatch a different claim. "
-                f"A failed attempt is evidence the METHOD failed, not that the "
-                f"behavior is absent."
+                "dispatch_gate: WARN — unrecognized dispatch protocol "
+                "(v0/v1 both unmatched). Gate is INACTIVE for this dispatch. "
+                "See references/dispatch-protocol.md. Add a JSON "
+                '{"kunglao_dispatch":{"version":1,"claim":"C-NN","tier":N,...}} '
+                "prefix to the Agent prompt."
             ),
-        }
-    }, ensure_ascii=False))
+        },
+    }, ensure_ascii=False), flush=True)
+
+
+# #447 Type S — irreversible-action dispatcher. English-only on principle
+# (mixing languages in regex is brittle, user directive).
+_DISPATCH_MUST_STOP_PATTERNS = [
+    # VM / snapshot destruction
+    r"\b(?:rm|delete|remove|destroy)\s+(?:vm|VM|vmx|snapshot)\b",
+    r"\b(?:snapshot\s+delete|snapshot\s+revert|vmrun\s+delete)\b",
+    # destructive git
+    r"\bgit\s+push\s+--force\b",
+    r"\bgit\s+reset\s+--hard\b",
+    r"\bgit\s+clean\s+-fd\b",
+    # public publish
+    r"\b(?:public\s+publish|public\s+release|publish\s+to\s+pypi|publish\s+to\s+npm)\b",
+]
+
+
+def _must_stop_dispatch(prompt_text: str) -> str | None:
+    """Return the first matching irreversible-action pattern, or None."""
+    for pat in _DISPATCH_MUST_STOP_PATTERNS:
+        m = re.search(pat, prompt_text, re.IGNORECASE)
+        if m:
+            return m.group(0)
+    return None
+
+
+def _warn_must_stop(claim_id: str | None, prompt_text: str) -> int:
+    """#447 must-stop hook: emit stderr + hookSpecificOutput + HARD_PAUSE.
+
+    Unlike scripts/ask_for_direction_gate.py which sees the orchestrator's
+    PRINTED text, this hook sees the dispatch PROMPT itself — catching
+    irreversible actions BEFORE the worker runs. Per
+    references/agent-three-state-charter.md: must-stop events MUST HARD_PAUSE regardless
+    of any other state (precedence over Type C convergence)."""
+    excerpt = prompt_text[:300].replace("\n", " ")
+    cid = claim_id or "(no claim)"
+    print(
+        f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447) — irreversible "
+        f"action detected in dispatch for {cid}. Refusing to dispatch.",
+        file=sys.stderr,
+        flush=True,
+    )
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": (
+                f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447). "
+                f"Irreversible action detected in dispatch for {cid}. "
+                f"Per references/agent-three-state-charter.md, irreversible actions "
+                f"MUST be explicitly approved by the user. Refusing to "
+                f"dispatch this worker. Excerpt: {excerpt!r}"
+            ),
+        },
+    }, ensure_ascii=False), flush=True)
+    return 2
+
+
+# ===================== #496 decision teeth =====================
+
+# ③ strategy dispatch marker: `[strategy <id>]` anywhere in the prompt.
+STRATEGY_MARKER_RE = re.compile(r"\[strategy\s+([A-Za-z0-9._-]+)\]")
+STRATEGY_LOG = "runs/strategy-log.jsonl"
+# #496 review F4: the ledger used to append unbounded (every marked
+# dispatch +1 row, from_workspace re-reads the whole file). Cap: before
+# each dispatch row is written the file is re-read and truncated to the
+# most recent STRATEGY_LOG_MAX rows (read-truncate-write — idempotent, an
+# already-short file keeps its rows verbatim and in order).
+STRATEGY_LOG_MAX = 200
+
+
+def _reject_with_guidance(name: str, msg: str, fix: str) -> int:
+    """#496: REJECT with guidance — the exact structure worker_budget._reject
+    and _warn_must_stop already use: stderr `REJECT <name>` summary + stdout
+    hookSpecificOutput.additionalContext carrying a concrete fix path +
+    exit 2 (block the Agent call)."""
+    print(f"REJECT {name}: {msg}", file=sys.stderr, flush=True)
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": (
+                f"dispatch_gate: REJECT {name} (#496). {msg}\n\nHow to fix:\n{fix}"
+            ),
+        },
+    }, ensure_ascii=False), flush=True)
+    return 2
+
+
+def _emit_trace(ws: Path, action: str, claim_id: str, detail: str,
+                exit_code: int | None = None) -> None:
+    """Deviation/disproof/REJECT trace into the unified event log (kunglao_log,
+    the #459 face #461 dispatch events already use — self_redirects.jsonl
+    is the #447 ask-back VIOLATION counter and must stay unpolluted).
+    Action words are registered in event_taxonomy.EMIT_ACTIONS; exit_code
+    carries the gate's rc on REJECT faces (#459). Logging never breaks the
+    gate: fail-open, stderr note only."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "scripts"))
+        from kunglao_log import emit
+        emit(ws, "hook:dispatch_gate", action, claim=claim_id, detail=detail,
+             exit=exit_code)
+    except Exception as exc:  # noqa: BLE001 — a trace must never block dispatch
+        print(f"dispatch_gate: trace emit failed ({action}: {exc!r})",
+              file=sys.stderr, flush=True)
+
+
+def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
+    """① #496: top-1 enforcement — exact copy of the #310 agenttype-deviation
+    pattern with the ranking source swapped for worker_budget.check_priority
+    (which ranks by priority_ratio, the #499 authority — reusing it keeps
+    this hook and worker_budget's devreason audit on ONE ranking, never two).
+
+    deviated (rank >= 2) + no `agent-reasoning:` prefix -> REJECT (exit 2);
+    with the prefix -> pass + stderr `TOP1 (deviation recorded)` +
+    priority_deviation trace. rank-None / audit unavailable -> no REJECT
+    (FAIL_OPEN — a broken gate must not block dispatch; the failure-blocked
+    slice keeps its own #495 injection path)."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "hooks"))
+        from worker_budget import check_priority
+    except Exception as exc:  # noqa: BLE001 — scorer wiring unavailable -> fail open
+        # #569 AUDIT: the gate is being bypassed silently — leave a trace so
+        # post-mortem can see the FAIL_OPEN path was taken. detail carries
+        # the exception class so the post-mortem can distinguish scorer
+        # unavailable from audit crash without re-reading the source.
+        _emit_trace(ws, "top1_fail_open", claim_id,
+                    f"reason=scorer_unavailable; exc={type(exc).__name__}")
+        return None
+    try:
+        _ok, msg, deviated = check_priority(
+            ws / "claim-register.yaml", ws / "claim_deps.yaml",
+            ws / "task_spec.yaml", claim_id, ws)
+    except Exception as exc:  # noqa: BLE001 — audit crash -> fail open
+        # #569 AUDIT: same as above — the audit itself crashed, the gate
+        # fails open, but the audit log must record the bypass.
+        _emit_trace(ws, "top1_fail_open", claim_id,
+                    f"reason=audit_crash; exc={type(exc).__name__}: {exc}")
+        return None
+    if not deviated:
+        if msg:
+            print(f"PRIORITY: {msg}", file=sys.stderr, flush=True)
+        return None
+    if "agent-reasoning:" in (prompt_text or "").lower():
+        print(f"TOP1 (deviation recorded): {msg}", file=sys.stderr, flush=True)
+        _emit_trace(ws, "priority_deviation", claim_id, msg)
+        return None
+    # #459: the REJECT face reaches the unified log too (the excused side
+    # already traces; a blocked deviation is the event the post-mortem needs)
+    _emit_trace(ws, "top1_reject", claim_id, msg, exit_code=2)
+    return _reject_with_guidance(
+        "top1", msg,
+        "add `agent-reasoning: <why this claim instead of the ranked #1>` "
+        "to the dispatch prompt (the deviation must be recorded, not "
+        "silently skipped — same discipline as the #310 agenttype gate), "
+        "or dispatch the top-ranked claim.")
+
+
+def _mcp_prefix_gate(prompt_text: str) -> int | None:
+    """#567 SECURITY: MCP tool prefix enforcement.
+
+    Rejects dispatch payloads declaring any tool whose name carries a
+    forbidden MCP prefix (mcp__unknown__*, mcp__external__*). The helper
+    is the single source in hooks/lib_kunglao.py:check_mcp_prefix —
+    mirrors the HOST_FORBIDDEN_TOOLS posture in worker_budget.py. None
+    (pass-through) when the dispatch declares no tools or only sanctioned
+    ones. Returns rc=2 with REJECT guidance on the first offender."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "hooks"))
+        from lib_kunglao import check_mcp_prefix, parse_dispatch as _shared_parse
+    except Exception:  # noqa: BLE001 — helper unavailable -> fail open
+        return None
+    try:
+        tier, tools, _claim_id = _shared_parse(prompt_text or "")
+    except Exception:  # noqa: BLE001 — unparseable tools -> open
+        return None
+    if not tools:
+        return None
+    for tool in tools:
+        allowed, reason = check_mcp_prefix(tool)
+        if not allowed:
+            return _reject_with_guidance(
+                "mcp_prefix", reason,
+                "use only mcp__kunglao__* MCP tools in this workspace — "
+                "add new MCP namespaces to lib_kunglao.MCP_FORBIDDEN_PREFIXES "
+                "intentionally, never bypass via unknown prefixes.")
+    return None
+
+
+def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
+    """②(a) #496: capability card — a validated capability in hand (the
+    #495 artifact, read via priority_ratio.EvidenceView) constrains tool
+    choice. Switching to a disjoint declared tool family REJECTs unless the
+    prompt shows the disproof (`capability-disproof: <family>`); an excused
+    switch passes and leaves a capability_switch trace. The card scope is
+    the target claim PLUS its obstacle_for parent — the trajectory-1 pivot
+    onto the promoted obstacle claim stays covered. FAIL_OPEN when the
+    scorer, the register or the card is unavailable."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "scripts"))
+        import priority_ratio as pr
+    except Exception:  # noqa: BLE001 — scorer unavailable -> fail open
+        return None
+    tools: list[str] = []
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "hooks"))
+        from lib_kunglao import parse_dispatch
+        tools = parse_dispatch(prompt_text or "")[1]
+    except Exception:  # noqa: BLE001 — unparseable tools -> no families -> open
+        tools = []
+    claim_ids = {claim_id}
+    try:
+        reg = yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+        target = next((c for c in (reg.get("claims") or [])
+                       if c.get("id") == claim_id), None)
+        parent = (target or {}).get("obstacle_for")
+        if parent:
+            claim_ids.add(str(parent))
+    except Exception:  # noqa: BLE001 — register unreadable -> card scope is the claim
+        pass
+    try:
+        evidence = pr.EvidenceView.from_workspace(ws)
+    except Exception:  # noqa: BLE001 — artifact scan failure -> fail open
+        return None
+    v = pr.capability_switch_violation(claim_ids, tools, prompt_text, evidence)
+    if v is None:
+        # trace the EXCUSED switch: a disproof marker naming a validated
+        # family the dispatch moved away from (cold path, recomputed here so
+        # the pure judgment stays single-purpose)
+        if "capability-disproof:" in (prompt_text or "").lower():
+            cap_fams: set[str] = set()
+            for cid, cap in evidence.validated_capabilities:
+                if cid in claim_ids:
+                    cap_fams |= pr.tool_families_from_text(cap)
+            disp_fams = pr.tool_families_from_tools(tools)
+            if cap_fams and disp_fams and not (cap_fams & disp_fams):
+                print(f"CAPABILITY (disproof recorded): {claim_id} switching "
+                      f"from validated {sorted(cap_fams)} to "
+                      f"{sorted(disp_fams)}", file=sys.stderr, flush=True)
+                _emit_trace(ws, "capability_switch", claim_id,
+                            f"disproof shown; validated={sorted(cap_fams)} "
+                            f"dispatch={sorted(disp_fams)}")
+        return None
+    # #459: the capability REJECT face reaches the unified log (trajectory-1
+    # pivots must be visible in the event stream, not stderr-only)
+    _emit_trace(ws, "capability_reject", claim_id,
+                f"validated={v['validated_families']} "
+                f"dispatch={v['dispatch_families']}", exit_code=2)
+    return _reject_with_guidance(
+        "capability",
+        f"{claim_id} has a validated capability in hand "
+        f"({v['capability'][:120]}) but the dispatch declares a different "
+        f"tool family {v['dispatch_families']} (validated: "
+        f"{v['validated_families']})",
+        "show the disproof first — add `capability-disproof: <family> "
+        "(why the validated tool family failed)` to the dispatch prompt "
+        "(the #495 analysis already carries the obstacle evidence; the "
+        "marker is you SHOWING the card, trajectory-1: switching off "
+        "validated frida requires the frida failure) — or keep dispatching "
+        "the validated family.")
+
+
+def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
+    """③ #496: append the strategy dispatch row on the PASS path — the only
+    writer the strategy-novelty interface needs (opt-in: no
+    `[strategy <id>]` marker, no row). attempts_at_snapshot is the claim's
+    current promotion_attempts, so a later #495 analysis with a higher
+    covers_attempt counts as a same-strategy failure. Fail-open."""
+    m = STRATEGY_MARKER_RE.search(prompt_text or "")
+    if not m:
+        return
+    snapshot = 0
+    try:
+        reg = yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+        target = next((c for c in (reg.get("claims") or [])
+                       if c.get("id") == claim_id), None)
+        snapshot = int((target or {}).get("promotion_attempts") or 0)
+    except Exception:  # noqa: BLE001 — unreadable register: snapshot 0, row kept
+        snapshot = 0
+    row = {
+        "ts": datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+                .replace("+00:00", "Z"),
+        "event": "dispatch",
+        "strategy": m.group(1),
+        "claim": claim_id,
+        "attempts_at_snapshot": snapshot,
+    }
+    try:
+        path = ws / STRATEGY_LOG
+        path.parent.mkdir(parents=True, exist_ok=True)
+        kept: list[str] = []
+        if path.exists():
+            kept = [ln for ln in
+                    path.read_text(encoding="utf-8", errors="replace").splitlines()
+                    if ln.strip()]
+        kept = kept[-STRATEGY_LOG_MAX:]
+        kept.append(json.dumps(row, ensure_ascii=False))
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"dispatch_gate: strategy-log write failed ({exc!r})",
+              file=sys.stderr, flush=True)
+
+
+def main() -> int:
+    try:
+        payload = json.loads(sys.stdin.read() or "{}")
+    except json.JSONDecodeError:
+        return 0
+
+    ws = _resolve_workspace(payload)
+    if ws is None:
+        # Even with no workspace resolution, MCP prefix gate must still
+        # REJECT forbidden namespaces — the prefix is a structural policy,
+        # not a workspace-bound concern. Issue #567.
+        try:
+            prompt_text = _extract_prompt_text(payload)
+        except Exception:  # noqa: BLE001 — malformed payload -> no-op
+            return 0
+        claim_id, _proto = _parse_dispatch(prompt_text)
+        if claim_id is None:
+            return 0
+        rc = _mcp_prefix_gate(prompt_text)
+        return rc if rc is not None else 0
+
+    # #567 SECURITY: MCP prefix gate runs BEFORE activation check — a
+    # forbidden MCP namespace is a structural policy violation, NOT a
+    # session-level concern. The gate sleeps for nothing else; it must
+    # not sleep for `mcp__unknown__*` / `mcp__external__*`. Hooks may not
+    # be activated and the prefix must still REJECT.
+    prompt_text = _extract_prompt_text(payload)
+    claim_id, proto = _parse_dispatch(prompt_text)
+    if claim_id is not None:
+        rc = _mcp_prefix_gate(prompt_text)
+        if rc is not None:
+            return rc
+
+    if not _kunglao_active(ws):
+        return 0  # kunglao-agent not activated or expired — hooks sleep
+
+    if claim_id is None:
+        # #452: visible signal — gate did not recognise the dispatch
+        _warn_unparseable(None, proto)
+        return 0
+
+    # #447 must-stop at dispatch time, language-independent first:
+    #   1. DECLARED — v1 payload `"reversible": false` (the agent states
+    #      its intent; no natural-language inference involved)
+    #   2. COMMAND GRAMMAR — vmrun delete / git push --force are commands
+    #      (finite grammar, enumerable), not prose
+    # Fires BEFORE the failure-blocked lookup — an irreversible action in
+    # a healthy claim's dispatch is just as irreversible. Single source:
+    # references/agent-three-state-charter.md.
+    if _declared_irreversible(prompt_text) or _must_stop_dispatch(prompt_text):
+        return _warn_must_stop(claim_id, prompt_text)
+
+    blocked = _failure_blocked_ids(ws)
+    if claim_id in blocked:
+        # INJECT corrective guidance (not hard block — orchestrator can
+        # record the analysis and proceed this same turn). The #495 slice
+        # keeps its own response; the #496 teeth below never hijack it
+        # (a failure-blocked claim is rank-None under check_priority).
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": (
+                    f"dispatch_gate: {claim_id} is failure-blocked - a prior attempt "
+                    f"failed and no failure_analysis is recorded. Per SKILL.md "
+                    f"'A failed attempt is not a negative result', run:\n"
+                    f"  uv run --project {SKILL_DIR} {SKILL_DIR}/scripts/failure_analysis_gate.py {ws} {claim_id}\n"
+                    f"answer the 3 questions (method_assumption / assumption_validity / "
+                    f"next_method), then re-dispatch - or dispatch a different claim. "
+                    f"A failed attempt is evidence the METHOD failed, not that the "
+                    f"behavior is absent."
+                ),
+            }
+        }, ensure_ascii=False))
+        return 0
+
+    # #496 decision teeth, in order: top-1 first (the most fundamental
+    # deviation), then the capability card, then the strategy log on the
+    # pass path. Each REJECTs (exit 2) or returns None to fall through.
+    rc = _top1_enforcement(ws, claim_id, prompt_text)
+    if rc is not None:
+        return rc
+    rc = _capability_guard(ws, claim_id, prompt_text)
+    if rc is not None:
+        return rc
+    # #567 SECURITY: MCP prefix gate runs BEFORE this point (see main()
+    # ordering) — a forbidden MCP namespace is a structural violation,
+    # not a session-level concern, so it cannot be deferred to the
+    # activated path.
+    _log_strategy_dispatch(ws, claim_id, prompt_text)
     return 0
 
 

@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# devkit/githooks/pre-commit — Kunglao development quality-gate runner (#463)
+#
+# Runs the devkit quality gates on EVERY commit. Catches regressions
+# and broken imports BEFORE they reach the repo. NOT the product's review
+# gate (.claude/git-hooks/pre-commit — that one is for product review
+# evidence; this one is for developer-side quality enforcement).
+#
+# Gates run: 1 (Requirement) + 3 (Engineering) + 4 (mutmut availability)
+# + 5 (Subagent Review, #462) + 6 (Agents Contract, #492)
+# + 7 (Doc Sync, #446 — gate-count wording / references re-pin /
+# new-script registration). The quick-set below must equal the GATES
+# registry minus opt-in Gate 2 (test_doc_sync derives it — do not
+# hardcode counts here or anywhere).
+# Gate 2 (full pytest) is OPT-IN via $KUNGLAO_DEV_GATE2=1 (slow ~3min).
+#
+# The hook is installed by `devkit/install_git_hooks.py` which:
+#   1. reads the devkit_root path from $ARGV[0] (or auto-detect)
+#   2. writes this script to <repo>/.git/hooks/pre-commit (preserving the
+#      product's .claude/git-hooks/pre-commit template, which is unchanged)
+#   3. makes the deployed hook executable (0755)
+#
+#   Uninstall: devkit/install_git_hooks.py --uninstall
+#
+# Cross-platform: this hook is bash-only because git itself ships bash, and
+# git's hook runner invokes /bin/sh regardless of platform. The hook body
+# only calls `python` (not `.venv/...`) — the deployer MUST stamp the
+# absolute devkit path so `python devkit/quality_gates.py` works from the
+# cwd-agnostic hook context.
+
+# be defensive: any uninitialised var / pipefail failure = reject commit
+set -euo pipefail
+
+# Anti-forgery: the installer (devkit/install_git_hooks.py) appends a
+# `# devkit-installed: <path>` marker line at the end of this file. We
+# verify presence via grep on $0 (self-reference) instead of comparing
+# $devkit_root to a literal — the previous string-comparison form was
+# fragile: `_stamp_hook` does a `replace(PLACEHOLDER, path)` on the
+# whole template, which collapses the assignment and the if-literal to
+# the SAME string, making the comparison trivially TRUE and the
+# placeholder check meaningless. Marker-based check is robust against
+# CR/LF drift and replacement strategy. Removing the marker requires
+# write access to .git/hooks/, which already requires the same trust
+# as committing code. Same anti-forgery spirit as #367.
+if ! grep -qF "# devkit-installed:" "$0" 2>/dev/null; then
+  echo "devkit/pre-commit BLOCKED: hook not installed (marker missing)."
+  echo "  Install: uv run python <devkit>/install_git_hooks.py"
+  echo "  Uninstall: uv run python <devkit>/install_git_hooks.py --uninstall"
+  exit 1
+fi
+
+command -v python >/dev/null 2>&1 || command -v python3 >/dev/null 2>&1 || {
+  echo "devkit/pre-commit BLOCKED: python not on PATH"
+  exit 1
+}
+PY="$(command -v python)"
+[ -x "$PY" ] || PY="$(command -v python3)"
+
+# Extract the devkit root from the marker line appended by the installer.
+# The marker is `# devkit-installed: <path>` — appended at the END of
+# the file by `install_git_hooks.py`. Read just the last line (the
+# comment block above also contains the literal string in prose, so
+# full-file grep -F would spuriously match a comment). Strip the
+# `# devkit-installed: ` prefix.
+#
+# A regex anchor (`^# devkit-installed: `) would also work but
+# requires `grep -E` (no -F); tail -n1 + prefix-strip is simpler and
+# keeps the hook POSIX-portable.
+devkit_root="$(tail -n1 "$0" | sed 's/^# devkit-installed: //')"
+
+# Quick set (registry minus Gate 2). Fast (<10s on a warm cache).
+"$PY" "$devkit_root/quality_gates.py" 1 3 4 5 6 7 --quiet || {
+  echo "devkit/pre-commit BLOCKED: quality gate(s) failed (see output above)."
+  echo "  Verbose re-run: $PY $devkit_root/quality_gates.py <same gates as above, without --quiet>"
+  exit 1
+}
+
+# Gate 2 (full pytest) — opt-in only. ~3min on warm cache.
+if [ "${KUNGLAO_DEV_GATE2:-0}" = "1" ]; then
+  "$PY" -m pytest -q || {
+    echo "devkit/pre-commit BLOCKED: Gate 2 (pytest) failed."
+    exit 1
+  }
+fi
+
+exit 0

@@ -19,7 +19,7 @@ on:
 
 jobs:
   release-check:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       fail-fast: false
       matrix:
@@ -51,7 +51,20 @@ jobs:
       run: uv run python scripts/check_global_rule_subset.py
 
     - name: Run standard test command
-      run: uv run python -m pytest -q --junitxml=.pytest-result.xml
+      # #463 quality-gate framework: coverage is OBSERVATION only.
+      # pytest.ini MUST NOT carry --cov-fail-under; we pass --cov here just
+      # so the report lands in CI artifacts. Coverage % is NOT a gate.
+      # The quality gates (names/registry: devkit/quality_gates.py GATES)
+      # are documented in devkit/docs/quality_gates.md and run via
+      # `uv run python devkit/quality_gates.py` (Gate 2 IS pytest green,
+      # but Coverage / Test-Count are observation not KPI).
+      run: uv run python -m pytest -q --junitxml=.pytest-result.xml --cov=scripts --cov=hooks --cov-report=xml --cov-report=term
+
+    - name: Run quality-gate framework (Gate 1 / 3 / 4)
+      # Gate 2 = pytest green (previous step). The other three gates:
+      # Gate 1 = contract modules importable; Gate 3 = collect-only clean;
+      # Gate 4 = mutmut available. Cross-platform Python, NOT bash.
+      run: uv run python devkit/quality_gates.py 1 3 4
 
     - name: Oracle self-check (issue #121)
       run: uv run python scripts/kunglao_eval.py --oracle-selfcheck
@@ -65,6 +78,13 @@ jobs:
         name: release-receipt-${{ matrix.python-version }}-${{ github.sha }}
         path: release-receipt.json
         if-no-files-found: error
+
+    - name: Upload coverage report (observation only, #463)
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-${{ matrix.python-version }}-${{ github.sha }}
+        path: coverage.xml
+        if-no-files-found: warn
 
     - name: Structural integrity check (issue #141)
       run: uv run python scripts/structural_check.py .

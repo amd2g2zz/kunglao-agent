@@ -146,7 +146,9 @@ def build_index(ws: Path, rel_map: dict | None = None) -> dict:
                 continue
             if _is_derivation(p):
                 continue
-            if p.name in ("_INDEX.md", "_index.json"):
+            # README.md is the #538 carrier stub, not raw evidence — skip
+            # it or every scaffolded workspace indexes a fake entry.
+            if p.name in ("_INDEX.md", "_index.json", "README.md"):
                 continue
             rel = p.relative_to(ws).as_posix()
             entries.append({

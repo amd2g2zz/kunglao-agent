@@ -70,3 +70,61 @@ Recover Go symbols/types/itabs from pclntab via unstrip (no decompile) -> emit a
 
 ## Output
 4 files in `evidence_dir`. Return a one-line summary: function count, garble verdict, #annotations.
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+Pipeline step 1: sequentialthinking preamble BEFORE running unstrip — confirm
+Go, pick suspicious-name patterns, choose `--data-at` targets from prior evidence.
+Update the plan when the data argues otherwise, then continue.
+
+**#494 expansion — plan FIRST, in writing**: your first action is to create
+`runs/worker-status-go-symbols-<id>.md` and write its plan section BEFORE
+running `unstrip` (the sequentialthinking preamble lands THERE, in
+writing). The plan section states, in this domain's language: (a) what you
+will do — the unstrip subcommand sequence (`--info` → default → `--format
+ghidra` → `--xref` / `--data-at`) and the name patterns you will classify
+into decrypt / c2 / loader / persistence / exfil / recon; (b) expected
+artifacts — per file: `unstrip-info.json` (go_version / pclntab addr+size /
+function_count / garble verdict), `unstrip-symbols.json` (Layer A counts +
+Layer B `suspicious_functions[]`), `unstrip-ghidra-apply.py` (VERBATIM
+export), `unstrip-ghidra-hints.json` (`prioritized_targets[]` +
+`annotations[]` plan); (c) the done criterion — all four files exist and
+the one-line summary matches them. Non-Go `die.json` → update the plan,
+then stop degraded (`status: blocked`, not a silent skip).
+
+<!-- contract: status-sync -->
+WRITE the four evidence files yourself (`unstrip-info.json` /
+`unstrip-symbols.json` / `unstrip-ghidra-apply.py` / `unstrip-ghidra-hints.json`);
+return the one-line summary (function count, garble verdict, #annotations)
+only after the files exist — a run without files has FAILED.
+
+**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+`runs/worker-status-go-symbols-<id>.md` as an append-only log parsed by the
+single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
+token wins). Canonical vocabulary ONLY — `status: in-progress` /
+`status: done` / `status: blocked`. W-15: the `status: done` line MUST
+declare the four deliverables — `| status: done | artifacts: <the four
+evidence/unstrip-*.json / .py paths, comma-separated>` —
+`lib_kunglao.scan_done_artifact_violations` re-verifies each declared path
+exists; `artifacts: none` is a W-15 failure. Heartbeat: reply to the
+orchestrator's ping in the same file with your current state — never let
+a long unstrip parse be mistaken for "stuck" (time-based stall watchdog: `STUCK_MINUTES=20` — 20 min without a status-file update).
+
+<!-- contract: tool-discovery -->
+Reuse `unstrip` (PATH or the `analysis_state.txt` toolchain path) — do not
+hand-roll pclntab parsing; garble assist names candidates, never fabricates
+semantic names.
+
+**#494 expansion — discovery before ANY new code**. Before writing any
+parser or wrapper, run the three-point check: (1) `ls scripts/re` — the
+workspace RE tools deployed for this engagement; (2) grep
+`tools/_INDEX.yaml` by category/capability (`static:*`, `ghidra:*`); (3)
+the matching `references/re-library/` file (`languages-go.md` for pclntab
+/ garble / itab specifics).
+Registered domain tools (verify in the index first): `go-buildinfo-carve`, `binary-sweep`, `stack-strings`, `disasm-dump`, `ghidra-evidence-annotations`.
+Self-invention is forbidden: `unstrip` itself IS the pclntab tool — never
+hand-roll symbol recovery; a missing capability = file an issue to
+upstream it into `tools/`; a one-off shim must be labeled disposable and
+dropped after the run.
+

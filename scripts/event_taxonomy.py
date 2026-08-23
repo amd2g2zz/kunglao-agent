@@ -51,7 +51,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import time
 from collections import Counter
@@ -63,9 +62,23 @@ try:
 except (AttributeError, ValueError):
     pass
 
-STATUS_RE = re.compile(r"status:\s*(\S+)")
+def _worker_protocol():
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
+    path under the unique name lib_kunglao_hooks (bare `import lib_kunglao`
+    is ambiguous under pytest — scripts/lib_kunglao.py shares the name)."""
+    import importlib.util
+    name = "lib_kunglao_hooks"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
+    return lib
 
-# real worker heartbeat convention: convergence_check.STUCK_MINUTES = 20
+
+# real worker heartbeat convention: lib_kunglao.STUCK_MINUTES = 20 (#444)
 STUCK_SECONDS = 20 * 60
 
 # ---------------------------------------------------------------------------
@@ -105,6 +118,66 @@ ALL_EVENT_TYPES = [
     WORKER_STARTED, WORKER_STEP, WORKER_COMPLETED, WORKER_FAILED, WORKER_STUCK,
     CLAIM_PARTIAL, CLAIM_DEFERRED, CLAIM_SUPERSEDED, CLAIM_DEAD,
     BLOCKER_OPENED, BLOCKER_RESOLVED, GATE_BLOCKED, REDTEAM_VERDICT,
+]
+
+# ---------------------------------------------------------------------------
+# #459 controlled emit-action vocabulary (the WRITE side word table)
+# ---------------------------------------------------------------------------
+# ALL_EVENT_TYPES above classifies workspace STATE (25 classes, pinned by
+# test_catalog_has_exactly_25_types — do not extend casually). EMIT_ACTIONS
+# is the sibling contract for the write side: every kunglao_log.emit(...,
+# action=...) call site must draw its word from this list. Anchored by
+# tests/test_event_stream_adoption.py — a literal outside the list turns the
+# suite red (issue #459 acceptance: "action 字段 100% 来自受控词表").
+#
+# Registration discipline mirrors the 25-class table: one word per EMIT FACE
+# (not per module), lowercase snake_case; detail carries the free text, the
+# exit field carries the rc. Words already emitted by real producers were
+# incorporated verbatim (grep 2026-08-20):
+#   claim_migrate  kunglao_record.py        register migration mirror
+#   verify         kunglao_verify.py        verification verdict mirror
+#   converge       convergence_check.py     per-round DECISION
+#   failure_blocked failure_analysis_gate  BLOCKED, stale-coverage flavor
+#   dispatch       worker_budget.py         #461 dispatch linkage event
+#   priority_deviation dispatch_gate.py    #496 top-1 deviation, excused
+#   capability_switch   dispatch_gate.py    #496 card switch, disproof shown
+# #459 adopted faces:
+#   ask_back / must_stop / must_ask / ladder_required /
+#   death_verdict_rejected / plan_stall    ask_for_direction_gate TYPE A-E
+#   top1_reject / capability_reject        dispatch_gate #496 REJECT faces
+#   stale_plan_on_new_evidence             plan_drift_detector class-7 WARN
+#   analysis_recorded / analysis_blocked    failure_analysis_gate #495 face
+#   write_blocked        write_guard.py / worker_budget  #532 carrier write refusal
+#   lesson_citation / lesson_burn / lesson_match / lesson_deprecated
+#                                 lessons_telemetry #526 CBM + tombstone face
+#   lesson_stage_transition failure_analysis_gate nursery draft→active (#525)
+EMIT_ACTIONS = [
+    "analysis_blocked",
+    "analysis_recorded",
+    "ask_back",
+    "capability_reject",
+    "capability_switch",
+    "claim_migrate",
+    "converge",
+    "death_verdict_rejected",
+    "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face
+    "dispatch",
+    "failure_blocked",
+    "ladder_required",
+    "lesson_burn",
+    "lesson_citation",
+    "lesson_deprecated",
+    "lesson_match",
+    "lesson_stage_transition",  # #525 lessons nursery draft → active
+    "must_ask",
+    "must_stop",
+    "plan_stall",
+    "priority_deviation",
+    "stale_plan_on_new_evidence",
+    "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
+    "top1_reject",
+    "verify",
+    "write_blocked",
 ]
 
 LEDGER_EVENT_MAP = {
@@ -208,29 +281,28 @@ def _worker_events(ws: Path) -> list[str]:
     """Classify worker status files by the REAL contract:
 
     - append-only log lines ("[HH:MM] step: ... | status: in-progress" or a
-      dedicated "status: done" line — both shapes per worker_pulse:67)
+      dedicated "status: done" line — both shapes are the protocol)
     - FIRST status line == in-progress -> worker_started (the worker contract's
       opening line is literally "step: started ...")
-    - LAST status line wins (lib_kunglao): in-progress -> step (fresh) or
-      stuck (heartbeat stale > STUCK_SECONDS); done -> completed;
-      blocked -> failed
+    - LAST status line wins (lib_kunglao protocol, #444): in-progress ->
+      step (fresh) or stuck (heartbeat stale > STUCK_SECONDS); done ->
+      completed; blocked -> failed
     """
     runs = ws / "runs"
     if not runs.is_dir():
         return []
     now = time.time()
     out: list[str] = []
+    parse_tokens = _worker_protocol().parse_worker_status_tokens
     for p in sorted(runs.glob("worker-status-*.md")):
         try:
-            text = p.read_text(encoding="utf-8", errors="replace")
+            tokens = parse_tokens(p.read_text(encoding="utf-8", errors="replace"))
             mtime = p.stat().st_mtime
         except OSError:
             continue
-        statuses = [m.group(1).strip().lower() for line in text.splitlines()
-                    if (m := STATUS_RE.search(line))]
-        if not statuses:
+        if not tokens:
             continue
-        first, last = statuses[0], statuses[-1]
+        first, last = tokens[0], tokens[-1]
         if first == "in-progress":
             out.append(WORKER_STARTED)
         if last == "in-progress":

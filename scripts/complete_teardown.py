@@ -37,6 +37,16 @@ Exit codes:
 """
 from __future__ import annotations
 
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="complete_teardown", action="write_blocked",
+                                detail="module wired")
+except NameError:
+    pass
+
 import argparse
 import hashlib
 import json

@@ -165,7 +165,7 @@ def check(workspace: Path, max_age_min: int = 5) -> int:
     print()
     print("ORCHESTRATOR MUST respond within 5 min by one of:")
     print("  (a) SendMessage with workaround + log ## orchestrator_response in heartbeat_actions.md")
-    print("  (b) redispatch the claim with a different agent (per priority.py)")
+    print("  (b) redispatch the claim with a different agent (per priority_ratio.py)")
     print("  (c) explicit B1d log + mark claim as blocked with reason")
     print()
     print("Ignoring help requests for > 5 min wastes worker time and cascades")

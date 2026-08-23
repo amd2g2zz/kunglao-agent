@@ -55,12 +55,36 @@ workspace-parent <workspace-parent>/.claude/settings.json (the external_kicker
 D2 dead-session-recovery read/write target). env_check accepts both; the
 target set derives from wire_up_settings.hook_deployment_targets (single
 source). --wire-up still writes the workspace-level file (#258).
+
+Issue #445 (2026-08-18): this module is THE canonical hook REGISTRATION
+entry (register_hooks / --wire-up). The pre-#445 layout had three
+independent writers (wire_up_settings.wire_up_settings, external_kicker.
+ensure_project_hooks, kunglao-init deploy_hooks), each hand-rolling entry
+construction and none self-checking — a write landing on a layer that does
+not fire failed silently (the T1 zombie class). Now: wire_up_settings's
+writer lives HERE (its name is a deprecated alias), external_kicker and
+kunglao-init construct entries via build_hook_entry below, and every
+registration runs selfcheck_registration (written location vs declared
+fire layer + coverage + command shape). Mismatch FAILs: --wire-up exits 1,
+init returns RC_HOOK_WIRING — never a silent OK or a WARN.
 """
 from __future__ import annotations
+
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="hook_activation", action="write_blocked",
+                             detail="module wired")
+except NameError:
+    pass
 
 import argparse
 import json
 import sys
+import warnings
+from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -240,6 +264,420 @@ def renew(workspace: Path, ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
     return state
 
 
+# ===========================================================================
+# #461: dispatch linkage — the dispatch event as a LIFECYCLE event
+# ===========================================================================
+# The enforcement pair a dispatch path depends on: the gate that observes
+# the dispatch itself (dispatch_gate) and the one that observes the worker
+# completing it (worker_pulse). A passing dispatch must leave both armed.
+DISPATCH_HOOKS = ("dispatch_gate", "worker_pulse")
+
+
+def dispatch_linkage(workspace: Path,
+                     ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
+    """#461: one call, four lifecycle effects — invoked by
+    hooks/worker_budget.pre_check AFTER every gate passes (the PreToolUse
+    approval point). Reuses the existing primitives only (update_state /
+    write_state / renew) — no new activation mechanism, no fourth liveness
+    representation (#446 F-class red line):
+
+      1. renew        — refresh expires_at (the auto `--renew`: the 30-min
+                        TTL no longer depends on the orchestrator
+                        remembering; issue: "30min 过期的 --renew 由派发
+                        事件自动触发")
+      2. complete     — dispatch_gate + worker_pulse enter active_hooks and
+                        leave paused_hooks; user_override "off" still wins
+                        (an explicit operator opt-out is never force-armed)
+      3. flip phase   — phase=DISPATCH, the state machine's vocabulary for
+                        the issue's "IDLE→RUNNING" (workers in flight while
+                        the state said IDLE was the 2026-08-18 field report)
+      4. heartbeat    — renew()'s existing side effect: last_tick_ts refresh
+                        (a dispatching orchestrator IS alive)
+
+    Cold state (no .hook_state.json — the 2026-08-18 field state, 2/10
+    hooks): update_state bootstraps the full tier-"none" set first.
+    Returns the renewed state dict.
+    """
+    state = read_state(workspace)
+    if not state:
+        state = update_state(workspace, "none", "IDLE",
+                             ttl_minutes=ttl_minutes)
+    overrides = state.get("user_override", {})
+    active = list(state.get("active_hooks", []))
+    for hook in DISPATCH_HOOKS:
+        if overrides.get(hook) == "off":
+            continue  # explicit user off — never force-activate
+        if hook not in active:
+            active.append(hook)
+    linked = dict(state)
+    linked["active_hooks"] = active
+    linked["paused_hooks"] = [h for h in state.get("paused_hooks", [])
+                              if h not in DISPATCH_HOOKS
+                              or overrides.get(h) == "off"]
+    linked["phase"] = "DISPATCH"
+    write_state(workspace, linked)
+    # renew re-reads from disk: stamps the fresh TTL + heartbeat tick
+    return renew(workspace, ttl_minutes=ttl_minutes)
+
+
+
+# The Stop gate (completion_gate) must be ALWAYS armed — it fires on EVERY
+# session termination, not just on a dispatch event. Unlike DISPATCH_HOOKS which
+# are activated on each dispatch and decay, completion_gate is a permanent
+# sentinel: it checks convergence_state on Stop regardless of whether any
+# dispatch occurred. F-S1/#533: "init 即武装 completion_gate".
+ALWAYS_ARMED_HOOKS = ("completion_gate",)
+
+
+def always_arm(workspace: Path,
+               ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
+    """#533 F-S1: ensure ALWAYS_ARMED_HOOKS are in active_hooks.
+    Unlike dispatch_linkage (which also flips phase=DISPATCH), this function
+    only ensures the Stop gate is permanently armed. Call from init Phase 0.
+    Repeated calls are idempotent."""
+    state = read_state(workspace)
+    if not state:
+        state = update_state(workspace, "none", "IDLE", ttl_minutes=ttl_minutes)
+    overrides = state.get("user_override", {})
+    active = list(state.get("active_hooks", []))
+    for hook in ALWAYS_ARMED_HOOKS:
+        if overrides.get(hook) == "off":
+            continue  # explicit user off — respect it
+        if hook not in active:
+            active.append(hook)
+    linked = dict(state)
+    linked["active_hooks"] = active
+    # completion_gate is NOT paused when DISPATCH_HOOKS are unpaused
+    linked["paused_hooks"] = [h for h in state.get("paused_hooks", [])
+                               if h not in ALWAYS_ARMED_HOOKS
+                               or overrides.get(h) == "off"]
+    write_state(workspace, linked)
+    return renew(workspace, ttl_minutes=ttl_minutes)
+
+# ===========================================================================
+# #445: THE canonical hook registration entry
+# ===========================================================================
+# Machine-readable declarations — pinned by tests/test_hook_registration_entry.py.
+# Exactly one registration entry exists; legacy names survive as declared
+# aliases (deprecated, #446 retires them) and the kicker's bootstrap writer
+# as a declared subordinate. Anything else writing hook entries is an
+# unregistered fourth path and fails the single-entry scan.
+CANONICAL_REGISTRATION_ENTRY = "hook_activation.register_hooks"
+DEPRECATED_ALIASES = (
+    "wire_up_settings.wire_up_settings",  # pre-#445 full-registry writer
+)
+DECLARED_SUBORDINATE_WRITERS = (
+    # dead-session bootstrap subset, workspace-parent target — see
+    # external_kicker.REGISTRATION_RELATION for the full contract.
+    "external_kicker.ensure_project_hooks",
+)
+
+
+class HookWiringSelfcheckError(RuntimeError):
+    """#445: post-registration self-check failed — the hooks were NOT
+    verifiably registered on a layer that fires. Raised by register_hooks
+    (fail-closed); the CLI maps it to exit 1, init to RC_HOOK_WIRING."""
+
+
+def build_hook_entry(hook_dir: Path, hook_file: str,
+                     matcher: str | None) -> dict:
+    """THE hook-entry construction source (#445) — every writer derives its
+    entries from this one function (pre-#445: three hand-rolled copies).
+    matcher=None -> a Stop-style entry (no matcher key: Stop hooks fire on
+    every termination, not on a tool matcher).
+
+    POSIX path (forward slashes): hooks run via `sh -c` — Windows backslash
+    paths get their backslashes eaten as escape chars (C:\\Users\\... ->
+    C:Users...). #389: hooks run via `uv run --project <skill_root>` — bare
+    python can resolve to 2.x and kill every registered hook; uv uses the
+    skill's own project venv (python 3.11+).
+    """
+    skill_root = Path(hook_dir).parent
+    p = (Path(hook_dir) / hook_file).as_posix()
+    hooks = [{"type": "command",
+              "command": f"uv run --project {skill_root.as_posix()} {p}"}]
+    if matcher is None:
+        return {"hooks": hooks}
+    return {"matcher": matcher, "hooks": hooks}
+
+
+def _canonical_hooks_dir() -> Path:
+    """Canonical deployed skill hooks dir — where hook COMMAND paths must point.
+
+    Issue #269: hook commands are absolute paths into the CANONICAL skill
+    install (~/.claude/skills/kunglao-agent/hooks), never this module's own
+    location. This script may be run from a dev worktree (<HOME>/.claude/
+    .wt-*/); a worktree-bound command dies with the worktree — the #228
+    incident: 8 hooks went silent at once when the referenced path was
+    deleted. When this module IS deployed at the canonical location (the
+    normal production case), the two coincide and `here` wins.
+    """
+    here = Path(__file__).resolve().parent.parent / "hooks"
+    canonical = Path.home() / ".claude" / "skills" / "kunglao-agent" / "hooks"
+    return here if here == canonical else canonical
+
+
+def _resolve_registration_target(workspace: Path | None,
+                                 global_opt_in: bool = False) -> Path:
+    """Resolve the settings.json this registration writes (#445 seam —
+    tests inject the historical mis-wiring here to prove FAIL semantics).
+
+      - global_opt_in=True -> Path.home()/.claude/settings.json — EXPLICIT
+        opt-in only (the pre-#258 default wrote the user-global settings and
+        bound hooks to paths that died with the worktree);
+      - workspace given    -> <workspace>/.claude/settings.json (#258);
+      - workspace None     -> <cwd>/.claude/settings.json (cwd probe).
+    """
+    if global_opt_in:
+        return Path.home() / ".claude" / "settings.json"
+    if workspace is not None:
+        return Path(workspace).resolve() / ".claude" / "settings.json"
+    return Path.cwd().resolve() / ".claude" / "settings.json"
+
+
+_SELFCHECK_LAYERS = ("project", "user-opt-in", "operator-declared")
+
+
+def selfcheck_registration(target: Path, *, expected_files: Collection[str],
+                           hook_dir: Path | None = None,
+                           workspace: Path | None = None,
+                           layer: str = "project") -> dict:
+    """#445 post-registration self-check — the written-location vs
+    actual-fire-layer assertion, run AFTER every registration write.
+
+    Re-reads the WRITTEN FILE from disk (maker-checker: never trust the
+    in-memory dict the writer just assembled) and asserts three legs:
+
+      layer    — `layer="project"`: the resolved target must be a member of
+                 wire_up_settings.hook_deployment_targets(workspace) AND not
+                 the user-global ~/.claude/settings.json (a write outside the
+                 declared fire layers is the historical "repaired the wrong
+                 file" bug). `layer="user-opt-in"`: must BE the user-global
+                 file. `layer="operator-declared"`: an explicitly named
+                 operator target (--hooks-json) — legs below still apply.
+      coverage — every expected hook file appears as a command basename in
+                 the re-read file (Pre/Post/Stop all scanned) — the v1.9.37
+                 "settings rewrite dropped the hooks segment" class.
+      shape    — every expected command is uv-form pointing into the
+                 declared hook_dir (default: the canonical deployed skill
+                 dir) — the #269 worktree-bound-command silent-death class.
+                 Path existence is deliberately NOT asserted (a canonical
+                 install under a test HOME is a legitimate shape).
+
+    Pure checker: returns {"ok", "layer", "target", "mismatches",
+    "present", "missing"} and never raises — the CALLER decides the failure
+    mode (register_hooks raises HookWiringSelfcheckError; init maps to
+    RC_HOOK_WIRING; the CLI prints FAIL and exits 1).
+    """
+    if layer not in _SELFCHECK_LAYERS:
+        raise ValueError(f"unknown self-check layer {layer!r}; "
+                         f"valid: {_SELFCHECK_LAYERS}")
+    import wire_up_settings  # lazy: registry single source (#372/#410)
+
+    def _bad(reason: str) -> dict:
+        return {"ok": False, "layer": layer, "target": str(target),
+                "mismatches": [reason], "present": [],
+                "missing": sorted(expected_files)}
+
+    if not Path(target).exists():
+        return _bad(f"written file absent: {target}")
+    try:
+        settings = json.loads(Path(target).read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        return _bad(f"written file unparseable: {exc}")
+
+    cmds = [str(h.get("command", ""))
+            for entries in (settings.get("hooks") or {}).values()
+            for e in entries
+            for h in e.get("hooks", [])]
+    bases = {c.replace("\\", "/").rsplit("/", 1)[-1] for c in cmds}
+    expected = set(expected_files)
+    missing = sorted(expected - bases)
+    present = sorted(expected & bases)
+    mismatches: list[str] = []
+    if missing:
+        mismatches.append(
+            f"coverage: hook entries missing from written file: {missing}")
+
+    t = Path(target).resolve()
+    user_global = (Path.home() / ".claude" / "settings.json").resolve()
+    if layer == "user-opt-in":
+        if t != user_global:
+            mismatches.append(
+                f"layer: user-opt-in registration must write the user-global "
+                f"file, wrote {t}")
+    elif layer == "project":
+        fire = {p.resolve() for p in
+                wire_up_settings.hook_deployment_targets(
+                    workspace if workspace is not None else Path.cwd())}
+        if t not in fire:
+            mismatches.append(
+                f"layer: written file {t} is not a declared hook fire layer "
+                f"for this workspace (fire layers: {sorted(map(str, fire))})")
+        elif t == user_global:
+            mismatches.append(
+                "layer: user-global settings is not a project fire layer "
+                "(#258/#445 mis-wiring class)")
+
+    d = Path(hook_dir) if hook_dir is not None else _canonical_hooks_dir()
+    prefix = f"uv run --project {d.parent.as_posix()} "
+    for c in cmds:
+        base = c.replace("\\", "/").rsplit("/", 1)[-1]
+        if base not in expected:
+            continue  # unrelated entries are not this registration's claim
+        if not (c.startswith(prefix)
+                and c[len(prefix):].startswith(d.as_posix() + "/")):
+            mismatches.append(
+                f"shape: command for {base} is not canonical (must be "
+                f"uv-form into the declared hooks dir {d}): {c}")
+
+    return {"ok": not mismatches, "layer": layer, "target": str(target),
+            "mismatches": mismatches, "present": present, "missing": missing}
+
+
+def register_hooks(workspace: Path | None = None,
+                   global_opt_in: bool = False) -> int:
+    """THE registration writer (#445) — register kunglao-agent hooks in the
+    PROJECT-level settings.json. Moved verbatim from wire_up_settings
+    (pre-#445 name: wire_up_settings.wire_up_settings).
+
+    Deployment target (#258): <workspace>/.claude/settings.json (cwd probe
+    when workspace is None); global_opt_in=True is the EXPLICIT user-global
+    escape hatch. Idempotent merge: reads current settings, appends our hook
+    entries (PreToolUse/Agent + PostToolUse/Agent + heartbeat_touch on Bash
+    + completion_gate on Stop), skips entries that already exist (same
+    basename), preserves every other key. Writes back with 2-space indent.
+
+    #445: after writing, runs selfcheck_registration and RAISES
+    HookWiringSelfcheckError on any mismatch (wrong layer / dropped
+    entries / non-canonical commands) — fail-closed, never a silent OK.
+    Returns the number of hook entries registered.
+    """
+    settings_path = _resolve_registration_target(workspace, global_opt_in)
+    if global_opt_in:
+        print(f"WARNING: wiring kunglao-agent hooks into the USER-GLOBAL "
+              f"{settings_path} — hooks must live in the project-level "
+              f".claude/settings.json (issue #258); global deployment is "
+              f"explicit opt-in ONLY.", file=sys.stderr)
+
+    existing = {}
+    if settings_path.exists():
+        try:
+            existing = json.loads(settings_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+
+    hooks = existing.get("hooks") or {}
+    pre = hooks.get("PreToolUse") or []
+    post = hooks.get("PostToolUse") or []
+
+    # hook_dir: the CANONICAL deployed skill hooks dir — NOT this module's
+    # own location (#269; running from a worktree must not bind hook commands
+    # to the worktree path, which dies with it — #228).
+    hook_dir = _canonical_hooks_dir()
+
+    def _ensure(entries: list, matcher: str, hook_file: str) -> tuple[list, bool]:
+        new = [e for e in entries if e.get("matcher") == matcher]
+        other = [e for e in entries if e.get("matcher") != matcher]
+        # remove legacy entries with the same basename (backslash paths from
+        # pre-posix wire-up) so re-wiring replaces them, not stacks.
+        new = [
+            e for e in new
+            if not any((h.get("command", "").replace("\\", "/").rsplit("/", 1)[-1] == hook_file) for h in e.get("hooks", []))
+        ]
+        new.append(build_hook_entry(hook_dir, hook_file, matcher))
+        return other + new, True
+
+    def _ensure_stop(entries: list, hook_file: str) -> tuple[list, bool]:
+        """Stop hooks carry no matcher (they fire on every Stop event). Dedupe
+        by command basename across all Stop entries so re-wiring replaces, not
+        stacks. Appends one entry with the single hook."""
+        kept = []
+        for e in entries:
+            hs = e.get("hooks", [])
+            filtered = []
+            for h in hs:
+                cmd = str(h.get("command", "")).replace("\\", "/")
+                if cmd.rsplit("/", 1)[-1] == hook_file:
+                    continue  # drop existing — re-added fresh below
+                filtered.append(h)
+            if filtered:
+                kept.append({"hooks": filtered})
+        kept.append(build_hook_entry(hook_dir, hook_file, None))
+        return kept, True
+
+    count = 0
+    # env_check_gate FIRST: the environment hard-gate (#233) must reject a
+    # teammate-polluted dispatch before any budget/state logic runs.
+    pre, added = _ensure(pre, "Agent", "env_check_gate.py")
+    count += added
+    pre, added = _ensure(pre, "Agent", "worker_budget.py")
+    count += added
+    pre, added = _ensure(pre, "Agent", "dispatch_gate.py")
+    count += added
+    # recall_inject (#268): runtime knowledge recall injected into every claim
+    # dispatch. Inject-only (always exits 0 — recall must never block dispatch)
+    # and deliberately NOT activation-gated: knowledge helps whether or not the
+    # enforcement hooks are activated. Grouped with the dispatch injectors.
+    pre, added = _ensure(pre, "Agent", "recall_inject.py")
+    count += added
+    # heartbeat_touch on matcher=Bash — ANY tool activity refreshes
+    # last_tick_ts, decoupling heartbeat liveness from orchestrator cognition.
+    pre, added = _ensure(pre, "Bash", "heartbeat_touch.py")
+    count += added
+    # write_guard (#532): the four-carrier write gate on the Edit/Write face.
+    # NOT activation-gated by design (its docstring records why: the failure
+    # mode it exists to stop is "nobody dispatched, so nothing was armed") —
+    # arming is target-based (path is a contract carrier), not TTL-based.
+    pre, added = _ensure(pre, "Edit|Write|MultiEdit", "write_guard.py")
+    count += added
+    post, added = _ensure(post, "Agent", "worker_budget.py")
+    count += added
+    post, added = _ensure(post, "Agent", "worker_pulse.py")
+    count += added
+    # state_anchor (#44): per-turn mechanical state re-anchor on every worker
+    # completion — the L1 PREVENT layer (F5 forget/refresh).
+    post, added = _ensure(post, "Agent", "state_anchor.py")
+    count += added
+
+    # completion_gate (#55): the code-owned completion gate. Stop hook — fires
+    # at session termination, blocks when task-oracle.yaml is unsatisfied.
+    # No matcher (Stop is not a tool-use event); dedupe by command basename.
+    stop = hooks.get("Stop") or []
+    stop, added = _ensure_stop(stop, "completion_gate.py")
+    count += added
+
+    hooks["PreToolUse"] = pre
+    hooks["PostToolUse"] = post
+    hooks["Stop"] = stop
+    existing["hooks"] = hooks
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    settings_path.write_text(
+        json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
+    # #445: written ≠ fired until verified — self-check re-reads the file.
+    check = selfcheck_registration(
+        settings_path,
+        expected_files=_wire_up_hook_files(),
+        hook_dir=hook_dir,
+        workspace=workspace,
+        layer="user-opt-in" if global_opt_in else "project")
+    if not check["ok"]:
+        raise HookWiringSelfcheckError(
+            f"{settings_path} failed the post-registration self-check "
+            f"({', '.join(check['mismatches'])}) — the hooks are NOT "
+            f"verifiably registered on a layer that fires (#445)")
+    return count
+
+
+def _wire_up_hook_files() -> frozenset[str]:
+    """Registry accessor (lazy import — the registry's home is
+    wire_up_settings, unchanged by #445)."""
+    import wire_up_settings
+    return wire_up_settings.WIRE_UP_HOOK_FILES
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Selective hook activation for kunglao-agent")
     parser.add_argument("workspace", help="workspace root")
@@ -274,6 +712,16 @@ def main() -> int:
                              "<ws>/runs/.heartbeat.json {started_ts, interval_min, cron_id} so "
                              "'monitoring is running' is a checked file state, not a self-claim. "
                              "Call at Phase 0 right after the /loop cron is created.")
+    parser.add_argument("--loop-registered", action="store_true",
+                        help="#461: mark the cron loop registration "
+                             "(loop_registered=true in <ws>/runs/.heartbeat.json). "
+                             "Passed by the heartbeat loop prompt's FIRST action — "
+                             "the prompt body executing is the proof CronCreate "
+                             "accepted it. Combine with --heartbeat-on (register + "
+                             "mark in one call); alone it marks an existing file. "
+                             "heartbeat_loop_prompt.py --verify HARD-fails while the "
+                             "marker is false (silent cron-registration failure is "
+                             "forbidden).")
     parser.add_argument("--heartbeat-check", action="store_true",
                         help="VERIFY the heartbeat is actually registered — exit 0 if "
                              "<ws>/runs/.heartbeat.json exists and is < 35 min old (cron tick should "
@@ -295,15 +743,39 @@ def main() -> int:
 
     # T-2 split: delegated jobs live in focused modules
     if args.wire_up:
-        from wire_up_settings import wire_up_settings
-        n = wire_up_settings(workspace=workspace)
-        target = workspace / ".claude" / "settings.json"
-        print(f"OK: kunglao-agent hooks wired into {target} ({n} entries)")
+        # #445: THE canonical registration entry. Post-write self-check is
+        # part of the registration itself — a wiring that lands on a layer
+        # that does not fire FAILS here (exit 1), so init (skills/init runs
+        # exactly this command) fails loudly instead of reporting OK.
+        target = _resolve_registration_target(workspace, global_opt_in=False)
+        try:
+            n = register_hooks(workspace=workspace)
+        except HookWiringSelfcheckError as exc:
+            print(f"FAIL: hook wiring selfcheck — {exc}", file=sys.stderr)
+            return 1
+        print(f"OK: kunglao-agent hooks wired into {target} ({n} entries) "
+              f"+ selfcheck PASS (layer=project)")
+        # #454: wiring != activation — the wired line must never read as
+        # armed. Wired hooks are DORMANT by design (v1.9.7 default-inactive:
+        # no .hook_state.json -> hooks sleep); activation is orchestrator-
+        # owned (Phase 0) and short-lived (TTL renewed by --renew).
+        print(f"NOTE: hooks wired but dormant - activation is orchestrator-"
+              f"owned (Phase 0, --tier/--set-active) with a "
+              f"{DEFAULT_TTL_MINUTES}-min TTL renewed by --renew; "
+              f"no .hook_state.json -> hooks sleep")
         return 0
 
     if args.heartbeat_on:
-        from heartbeat import heartbeat_register
-        return heartbeat_register(workspace)
+        from heartbeat import heartbeat_register, mark_loop_registered
+        rc = heartbeat_register(workspace,
+                                loop_registered=args.loop_registered)
+        if rc == 0 and args.loop_registered:
+            rc = mark_loop_registered(workspace)
+        return rc
+
+    if args.loop_registered:
+        from heartbeat import mark_loop_registered
+        return mark_loop_registered(workspace)
 
     if args.heartbeat_check:
         from heartbeat import heartbeat_check

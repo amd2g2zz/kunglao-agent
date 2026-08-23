@@ -311,3 +311,61 @@ After writing the JSON, return ONE LINE:
 
 Or on full failure:
 `ghidra-light degraded: <reason>`
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+Step 0 sequential-thinking preamble BEFORE any tool call: language → IOCs →
+MCP-or-headless → postScript plan → schema mapping. Drift → re-plan, then continue.
+
+**#494 expansion — plan FIRST, in writing**: your first action is to create
+`runs/worker-status-ghidra-light-<id>.md` and write its plan section BEFORE
+any analysis tool call (Step 0's sequential-thinking preamble lands THERE,
+in writing — not only in your head). The plan section states, in this
+domain's language: (a) what you will do — the decompile/disasm target
+functions chosen from prior evidence (`evidence/floss-filtered.json`,
+`evidence/cti-correlated.json`, `evidence/unstrip-ghidra-hints.json`) and
+the MCP-vs-headless tier you expect to take; (b) expected artifacts — the
+`evidence/static-ghidra.json` fields each step will populate, plus the
+expected pseudo-C shape per decompile target (e.g. "wininet call sequence
++ config string refs"); (c) the done criterion — `_meta.path_used` set +
+`suspicious_functions` populated, or `degraded: true` with a reason. On
+drift (MCP offline → headless fallback) update the plan, then continue;
+close with `plan_vs_actual: <difference>`.
+
+<!-- contract: status-sync -->
+WRITE `evidence/static-ghidra.json` yourself — the file is the deliverable;
+failure paths write degraded output with the reason, never a silent return.
+The one-line return summary comes only after the file exists.
+
+**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+`runs/worker-status-ghidra-light-<id>.md` as an append-only log parsed by
+the single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
+token wins). Use the canonical vocabulary ONLY — `status: in-progress` /
+`status: done` / `status: blocked` — one appended line per tier step (MCP
+attempt, headless run, parse, xref pass) and on every state change. W-15:
+the `status: done` line MUST carry the artifacts declaration —
+`| status: done | artifacts: evidence/static-ghidra.json` — a done without
+a real file list is a zero-deliverable completion and is machine-flagged
+(`lib_kunglao.scan_done_artifact_violations` re-verifies every declared
+path exists). Heartbeat: on the orchestrator's ping, reply with your
+current state in the same file immediately — never let a long headless
+analysis be mistaken for "stuck" (time-based stall watchdog: `STUCK_MINUTES=20` — 20 min without a status-file update).
+
+<!-- contract: tool-discovery -->
+Two-tier reuse: try the Ghidra MCP bridge first, fall back to analyzeHeadless;
+`GHIDRA_HOME` / `GHIDRA_PROJECTS` come from `analysis_state.txt` / env vars
+(#228) — never hardcode paths or self-invent a scanner Ghidra already covers.
+
+**#494 expansion — discovery before ANY new code** (#462 incident: a
+ghidra-light worker hand-wrote `DecompileFuncs.java` + a 201-line headless
+driver while the shelf already covered it). Before writing any postScript
+or driver, run the three-point check: (1) `ls scripts/re` — the workspace
+RE tools deployed for this engagement; (2) grep `tools/_INDEX.yaml` by
+category/capability (`ghidra:*`, `static:*`) — the registered toolshelf;
+(3) the matching `references/re-library/` file (`languages-compiled.md`
+for compiler idioms, `anti-analysis.md` before fighting obfuscation).
+Registered domain tools (verify in the index first): `ghidra-recon`, `ghidra-decompile-functions`, `ghidra-scan-pointer`, `ghidra-evidence-annotations`, `c-normalize`.
+Self-invention is forbidden: a missing capability = file an issue to
+upstream it into `tools/` (never a silent workspace script); a one-off
+shim must be labeled disposable and dropped after the run.

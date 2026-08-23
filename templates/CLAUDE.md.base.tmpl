@@ -6,34 +6,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Kunglao-agent malware RE workspace — not a software project. The "code" is state files, facts, and worker runs analyzing a malware sample.
 
-## Sample under analysis
+## Workspace at a glance
 
-| Field | Value |
-|-------|-------|
-| SHA1 (filename) | `{{sample_sha1}}` |
-| SHA256 | `{{sample_sha256}}` |
-| Type | `{{sample_type}}` |
-| Path | `{{sample_path}}` |
+| What | Where |
+|------|-------|
+| Sample + toolchain snapshot | `analysis_state.txt` |
+| High-level plan | `global_plan.txt` |
+| Analysis contract (needs-first intake) | `task_spec.yaml` |
+| Active claims + status | `claim-register.yaml` |
+| Claim dependency graph | `claim_deps.yaml` |
+| Fact index | `facts/_INDEX.md` |
+| Active blockers | `blockers/` |
+| Worker status + heartbeats | `runs/` |
+| Environment readiness snapshot | `runs/.env-check.json` (written by `env_check.py`) |
+
+The workspace is the source of truth; this file is the index. Drill into a pointer before acting on memory.
+
+## Loop enforcement (persistent channel)
+
+The convergence loop runs every round and is the only rule set that survives context compact. Each round:
+
+- Run `python {{skill_dir}}/scripts/convergence_check.py .` and surface the verdict before claiming progress; its decision-table action is mandatory.
+- Heartbeat TTL: if `runs/.heartbeat.json` is stale (older than 35 minutes), re-anchor from disk before deciding — never reason over a stale heartbeat.
+- Oracle verdict: `task-oracle.yaml` is the authoritative completion anchor; a FAILED verdict is terminal until a blocker is filed.
+- Post-compact re-entry: re-read `analysis_state.txt`, `claim-register.yaml`, and `global_plan.txt` before the first tool call — disk is truth, memory is not.
 
 ## Skill & orchestrator
 
-Analysis is driven by `/kunglao-agent` (skill at `{{skill_dir}}`).
-
-**Key scripts** (invoke from workspace root with `.venv` activated):
-```bash
-source .venv/Scripts/activate
-python {{skill_dir}}/scripts/convergence_check.py .
-python {{skill_dir}}/scripts/priority.py .
-python {{skill_dir}}/scripts/convergence_health.py .
-python {{skill_dir}}/scripts/failure_analysis_gate.py . <C-NN>
-```
-
-**Hook activation** (30-min TTL, renew via `/loop`):
-```bash
-python {{skill_dir}}/scripts/hook_activation.py . --renew
-```
-
-**Environment readiness**: `python {{skill_dir}}/scripts/env_check.py .` (PASS/FAIL per check; exit 0 = all pass).
+Analysis is driven by `/kunglao-agent` (skill at `{{skill_dir}}`). Key scripts under `{{skill_dir}}/scripts/`, run from the workspace root with `.venv` activated: `convergence_check.py`, `priority_ratio.py`, `convergence_health.py`, `failure_analysis_gate.py`, `env_check.py` (writes `runs/.env-check.json`), `hook_activation.py --renew` (30-min hook TTL).
 
 ## State files (read every turn, disk is truth)
 
@@ -44,11 +44,49 @@ python {{skill_dir}}/scripts/hook_activation.py . --renew
 | `task_spec.yaml` | Analysis contract (depth, scope, constraints, success criteria) |
 | `analysis_state.txt` | Cognition baseline (venv, sample hash, toolchain, worker list) |
 | `global_plan.txt` | High-level analysis plan |
+| `task-oracle.yaml` | Completion anchor (verbatim task, open items, deferrals) |
 | `facts/_INDEX.md` | Fact index with PARTIAL/PROVEN markers |
 | `blockers/` | Active blocker files |
 | `runs/` | Worker status files + `.heartbeat.json` |
 
 **Facts** go in `facts/F<NNN>.md` with byte-anchored, reproducible evidence.
+
+## Sample under analysis
+
+| Field | Value |
+|-------|-------|
+| SHA1 (filename) | `{{sample_sha1}}` |
+| SHA256 | `{{sample_sha256}}` |
+| Type | `{{sample_type}}` |
+| Path | `{{sample_path}}` |
+
+## Memory carriers (write/recall contract)
+
+Notes travel in six carriers; each row is the contract for what lands there, who writes it, when it is recalled, and how corrections work. Blanket note-write directives do not exist — the per-carrier rule below is the authority. Recall is gated by `convergence_check.py` every round (see Loop enforcement): disk is truth.
+
+| Carrier | Write what | Who writes, when | When to recall | Correction semantics |
+|---------|------------|------------------|----------------|----------------------|
+| `claim-register.yaml` | New OPEN claims or status transitions | Worker, when evidence emerges | Every round, before `convergence_check.py` | Status moves forward only with verifier sign-off; history is never edited |
+| `facts/_INDEX.md` + `facts/F<NNN>.md` | Byte-anchored reproducible facts | Worker, on first observation | Every round, on claim cite | A superseding fact lands as a new `F<NNN>` entry; the prior row stays |
+| `blockers/` | Blocker files for unresolvable environment/tooling gaps | Worker, after the self-repair ladder fails | Every round, before dispatch | A blocker closes only when its root cause is resolved and recorded |
+| `global_plan.txt` | High-level strategy shifts only | Orchestrator, on milestone change | Every round, after the convergence verdict | Amendments append; the prior plan text is preserved under `runs/` |
+| `analysis_state.txt` | Venv path, sample hash, toolchain, worker roster | Init and env repair | Every cold start and post-compact re-entry | The file is authoritative; in-memory guesses are discarded |
+| `task-oracle.yaml` | Verbatim task text, open items, deferrals, verdicts | Orchestrator (init writes the skeleton) | Every round, after `convergence_check.py` | Oracle verdicts are terminal until a blocker is filed |
+
+**Write criteria** — write to a carrier only when ALL five hold:
+
+1. The information is new: a re-read of the existing carrier cannot reconstruct it.
+2. It has exactly one owning carrier — no two carriers may both claim it.
+3. Its recall trigger is reachable from `convergence_check.py` (per-round and mechanical, never user-prompted).
+4. Replacement test (HARD default): a freshly spawned worker with zero conversation history, given workspace read access alone, can locate this information through the recall trigger.
+5. It outlives the current round — per-round scratch belongs in `runs/` or the `scratch/` free-zone, never in a carrier.
+
+**When to skip a write** (specific cases, not a general write ban):
+
+- The information already lives in the pointed-to source file; carriers are the source, not a cache.
+- It is per-turn scratch state — use `runs/` or `scratch/`.
+- Two carriers both want it: pick the canonical one and cross-reference; duplicate nothing.
+- It cannot survive a `convergence_check.py` review — transient by definition.
 
 ## Five-layer analysis principle
 
@@ -63,11 +101,12 @@ python {{skill_dir}}/scripts/hook_activation.py . --renew
 - **Dynamic tools VM-only**: x64dbg, Frida, sample execution must run on VM. Never launch/debug/inject on host.
 - **Orchestrator does not analyze**: the orchestrator monitors/dispatches/verifies only. Decompile, strings, grep, emulation, debugging go to workers.
 - **Maker-checker**: worker=maker, orchestrator=checker. Facts must be independently verified before promotion to PROVEN.
+- **BLIND verifier contract**: verifier agents receive only the raw evidence path and the questions — never producer context or the producer's reasoning.
 - **No stopping for self-answerable questions**: within the analysis loop, do not halt for questions you can answer yourself — attempt self-repair for environment failures and record the decision for decidable items. Schema ambiguity and directional choices (which change what the user asked for) must still be surfaced to the user.
 
 {{type_section}}
 
-## Success criteria
+{{task_spec_section}}## Success criteria
 
 Key behaviors are verifiable, not aspirational. Each check names where the proof lives:
 
@@ -77,7 +116,7 @@ Key behaviors are verifiable, not aspirational. Each check names where the proof
 - Environment failures are self-repaired before analysis dispatch — provable via `runs/.env-check.json` showing overall PASS (or a blocker file explaining why not).
 - Tool selection goes through `tools/_INDEX.yaml` (capability + description) before writing a new script — provable by the `tool-catalog:` marker in worker dispatch records.
 
-## MCP servers (supply manifest — #316)
+## MCP servers (supply manifest)
 
 Analysis correctness depends on registered MCP servers — a fresh machine deployed per kunglao docs must register these (user-level `claude mcp add ...`, or fill real entries in the workspace `.mcp.json` scaffold). Mechanical check: `python {{skill_dir}}/scripts/mcp_probe.py . --type {{type}}` (exit 1 = HARD missing).
 

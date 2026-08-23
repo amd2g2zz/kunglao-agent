@@ -259,3 +259,63 @@ flags any DIFF; you never produce DIFF yourself.
 - If your attack requires a T3/VM session (expensive), say so in the GAPs instead of doing it —
   the orchestrator decides whether the claim's confidence justifies the VM spend.
 - Unverified claims stay unverified. `UNVERIFIED-WITH-GAP` is an honest verdict, not a failure.
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+Core rule 6: write `runs/plan-redteam-<target>.md` BEFORE any attack — the
+load-bearing claims, attack angles, evidence, and commands. Knowledge recall
+(#268) precedes the plan; a pass without a written plan is incomplete.
+
+**#494 expansion — plan FIRST, visible to the liveness scan**: your first
+action is to create `runs/worker-status-kunglao-redteam-<id>.md` and
+write its plan section BEFORE any attack tool call (core rule 6's
+`runs/plan-redteam-<target>.md` stays the attack plan proper; the
+worker-status plan section is its liveness-visible head). The plan
+section states, in this domain's language: (a) what you will do — the
+target's load-bearing numbers/claims, your attack angles (method blind
+spot / alternative explanation / extrapolation / self-consistency /
+negative-result overreach), the ≥2 independent derivation paths, and the
+machine checks you will run; (b) expected artifacts — the expected
+RED-TEAM VERDICT shape per claim (CONFIRMED / REFUTED /
+UNVERIFIED-WITH-GAP + GAPs + machine_check entries); (c) the done
+criterion — `runs/verify-redteam-<target>.md` written with the
+MACHINE-CHECK block (or `machine_check: none` + reason for pure-CTI).
+BLIND-scope inputs missing → update the plan, then `status: blocked`.
+
+<!-- contract: status-sync -->
+Write ONLY your red-team report under `runs/` (`verify-redteam-<target>.md`);
+verdict-layer mode may return the JSON message instead. You never edit facts,
+claim-register, or worker outputs — you are the CHECKER, never the MAKER.
+
+**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+`runs/worker-status-kunglao-redteam-<id>.md` as an append-only log parsed
+by the single canonical parse point (`hooks/lib_kunglao.py` — LAST
+`status:` token wins). Canonical vocabulary ONLY — `status: in-progress` /
+`status: done` / `status: blocked`. W-15: the `status: done` line MUST
+carry `| artifacts: runs/verify-redteam-<target>.md` (verdict-layer JSON
+return: declare the status/plan files you DID write) —
+`lib_kunglao.scan_done_artifact_violations` re-verifies the declared
+paths. Heartbeat: reply to the orchestrator's ping in the same file — a
+long dual-path derivation is alive work, never let it be mistaken for
+"stuck" (time-based stall watchdog: `STUCK_MINUTES=20` — 20 min without a status-file update).
+
+<!-- contract: tool-discovery -->
+Reuse the registered toolshelf (`tools/`) and reference recall; derive
+load-bearing conclusions via >=2 DIFFERENT methods (e.g. pefile AND raw-byte
+parse) rather than self-inventing one-off scripts.
+
+**#494 expansion — discovery before ANY new derivation code**. The toolshelf
+under `tools/` is BLIND-safe for you (tools, not conclusions — core rule
+1). Before writing any check snippet, run the three-point check: (1) `ls
+scripts/re` — the workspace RE tools; (2) grep `tools/_INDEX.yaml` by
+capability — the machine-check oracle for static constants is already
+registered; (3) the matching domain reference (`references/verify-static-vs-dynamic.md`
+at the root, plus the `references/re-library/` file for the claim's
+language/layer).
+Registered domain tools (verify in the index first): `disasm-constant-check`, `pe-analyze`, `disasm-dump`, `binary-sweep`, `ghidra-recon`.
+Self-invention is forbidden: a missing capability = file an issue to
+upstream it into `tools/`; a one-off shim must be labeled disposable and
+dropped after the run — an unverifiable hand-rolled check is exactly the
+shared-blind-spot the machine-check contract (#332) exists to kill.
+

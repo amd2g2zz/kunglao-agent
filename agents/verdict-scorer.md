@@ -160,3 +160,65 @@ Read the output of `fact_contradiction_gate.py`. If it reports PROVEN facts on t
 ## Provenance
 
 Originally authored 2026-06-30. v3 (2026-07-01): writes to `evidence/verdict.json` (separate file), schema aligned with `output-schema.md` v3, heuristic overrides documented. v11 (2026-08-12): out-of-scope threat scoring and actor-naming removed per scope boundary correction — kunglao-agent verifies RE analysis correctness/completeness against task_spec.primary_questions, not threat scoring.
+
+## Subagent contract (#492 — structural declaration)
+
+<!-- contract: plan-to-execute -->
+PQ-coverage logic runs Steps 1-4 in order (find the answering fact → verify
+C0a/C0b → build the verdict → contradiction cross-check); complete the pass
+over ALL primary_questions before writing output.
+
+**#494 expansion — plan FIRST, in writing**: your first action is to create
+`runs/worker-status-verdict-scorer-<id>.md` and write its plan section
+BEFORE reading any input. The plan section states, in this domain's
+language: (a) what you will do — the PQ checklist: enumerate
+`task_spec.yaml` `primary_questions[]` and, for each, the expected
+answering fact per C0a (`status: PROVEN` + `confidence_band: PROVEN-FULL`)
+or C0b (`need: model_selection`: one terminal PROVEN, remaining
+candidates REFUTED/DEFERRED); (b) expected artifacts — the expected
+verdict structure (complete/correct, per-PQ entries with `cited_fact` +
+`gap`, `unresolved[]`, `contradictions[]` from the gate output,
+`degraded[]`, `self_audit`); (c) the done criterion —
+`evidence/verdict.json` written with one entry per primary_question,
+unanswered PQs in `unresolved[]`, never silently dropped. Missing inputs
+(no claim-register / no task_spec) → update the plan, then
+`status: blocked`.
+
+<!-- contract: status-sync -->
+Write ONLY `evidence/verdict.json` (the caller's `output_path`); stay honest
+in `self_audit` and `degraded[]`; questions without a PROVEN answering fact
+land in `unresolved[]`, never silently dropped.
+
+**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+`runs/worker-status-verdict-scorer-<id>.md` as an append-only log parsed by
+the single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
+token wins). Canonical vocabulary ONLY — `status: in-progress` /
+`status: done` / `status: blocked`. W-15: the `status: done` line MUST
+carry `| artifacts: evidence/verdict.json` —
+`lib_kunglao.scan_done_artifact_violations` re-verifies the path exists.
+The status file is the ONE addition #494 makes to your writable set;
+`evidence/verdict.json` remains your only analysis output. Heartbeat:
+reply to the orchestrator's ping in the same file — never let a long
+fact-base pass be mistaken for "stuck" (time-based stall watchdog: `STUCK_MINUTES=20` — 20 min without a status-file update).
+
+<!-- contract: tool-discovery -->
+Pure local Read + Write; consume `fact_contradiction_gate.py` output
+read-only — do NOT reimplement contradiction detection or invent evidence
+to fill gaps.
+
+**#494 expansion — discovery before consuming ANY output as an input**. You
+have no Bash: discovery is Read/Grep-shaped. (1) Grep `scripts/re` — the
+workspace RE tools (know what exists before declaring something missing);
+(2) read `tools/_INDEX.yaml` — the registered toolshelf; (3) the
+`references/` docs for your domain (`tool-inventory.md` for the mechanism
+list, `machine-check-contract.md` for what a checkable claim looks like).
+Registered domain tools (verify each exists before citing): `audit-legacy-proven`, `measure-blind-coverage`, `build-evidence-index`, `fact_contradiction_gate.py`, `convergence_check.py`.
+The two scripts are orchestrator-run CLIs whose outputs you consume
+read-only (gate output) or whose semantics you mirror (convergence C0a/C0b
+— verdict is never more lenient than convergence); never reimplement
+them, never invent evidence to fill a gap. A missing capability = note it
+in `degraded[]` / `self_audit.open_questions` and file an issue to
+upstream it into `tools/`. You write no shims at all (no Bash, no script
+surface): a one-off shim is structurally impossible for you — keep it
+that way.
+

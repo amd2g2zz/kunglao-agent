@@ -1,28 +1,29 @@
 
-**Heuristic**: are you cold-starting a fresh iteration? If yes, read 8 files in order. If not (mid-iteration), skip this file.
+**Heuristic**: are you cold-starting a fresh iteration? If yes, read 9 files in order. If not (mid-iteration), skip this file.
 # Cold-Start Contract (DESIGN §13)
 
 ## Cold start vs mid-iteration
 
-**Cold start (round 0 only)**: read 8 files in full, in order. Build full mental model.
+**Cold start (round 0 only)**: read 9 files in full, in order. Build full mental model.
 
-**Mid-iteration (round 1+)**: do NOT re-read the full 8 files. Instead:
+**Mid-iteration (round 1+)**: do NOT re-read the full 9 files. Instead:
 1. Check `<workspace>/claim-register.yaml` `last_read_at` — the freshness signal (a `scripts/update_state_freshness.py` design never shipped; `last_read_at` + `.convergence_ledger.jsonl` timestamps carry this role): which files have changed since the last read?
-2. Re-read ONLY the changed files. If none changed, skip all 8 files.
+2. Re-read ONLY the changed files. If none changed, skip all 9 files.
 3. Verify `claim-register.yaml` `last_read_at` is current (orchestrator must track its own read time; if older than 5 min, re-read).
 
 **Heuristic: don't re-read what hasn't changed.** Re-reading task_spec.yaml every round wastes ~30K tokens of context.
 
-## The 8-file read (cold start only)
+## The 9-file read (cold start only)
 
 0. **`task_spec.yaml`** — value function (primary_questions, scope, constraints, depth, success_criteria)
 1. **`claim-register.yaml`** — all claims (C-NN + boundary_type + source + promotion_attempts + evidence_tier_attempted + status + competitor_group)
 2. **`analysis_state.txt`** — structured segments: current_task / VERIFIED-FACTS LEDGER / IOC REGISTER / GATE STATUS / active_workers / in_flight intents / deadline_ts
 3. **`global_plan.txt`** + **`claim_deps.yaml`** — current plan DAG + dependency/competitor graph
-4. **`progress.txt`** — structured sections: VERIFIED-FACTS LEDGER / decision rationale (append-only)
+4. **`progress.txt`** — human log (append-only): narrative timeline / decision rationale for the human reader; the VERIFIED-FACTS LEDGER lives in `analysis_state.txt`, facts in `facts/` — machines never ingest `progress.txt` as state
 5. **`<malware-veri-notes>/scripts/lint-notes.py`** output — error check (C5). Status counts come from _INDEX.md, NOT lint.
 6. **`blockers/`** — if non-empty, read each blocker-*.md
 7. **`facts/_INDEX.md`** — status count source. Format: `F<id> | <status> | <claim_id> | <conclusion>`. O(1) all-passes check via `scripts/update_index.py count_by_status`.
+8. **`runs/digest.md`** — mechanical digest (#528, the 9th file): `## sec_g` lists the OPEN hypotheses (hyp_id / claim_id / competitor_group / candidates) so a fresh session re-hydrates the same undecided claim motivations and competitor groups it had before the restart. Read via the `kunglao-resume` read-only face — the cold-start session READS the digest, it never writes it. Only `open` hypotheses appear: decided ones (refuted/superseded) stay in the notes/facts trail and are never duplicated. If the digest build failed, cold start degrades to the 8 files above — a broken hypotheses layer never blocks a restart.
 
 ## Why fixed
 
@@ -60,7 +61,8 @@ Compare `task_spec.yaml` to `task_spec_snapshot.yaml` (written after each re-pla
      fix) EVERY Agent dispatch while the flag is set in a kunglao workspace.
   A dispatch that did fire means both layers were missing or bypassed —
   treat it as the #88 violation: stop, unset the flag, restart the session.
-  Registered first in the PreToolUse Agent list by `wire_up_settings.py`.
+  Registered first in the PreToolUse Agent list by `hook_activation.py
+--wire-up` (THE canonical registration entry, #445).
 - **Settings rewrites can flip the flag back (#317, #314 A5 — operator note,
   not a code defect)**: editors / toolchain rewrites of settings.json have
   repeatedly reset the `env` block to
@@ -74,7 +76,9 @@ Compare `task_spec.yaml` to `task_spec_snapshot.yaml` (written after each re-pla
   in multiple sessions — settings rewrites drop the hooks section; PostToolUse
   `remove_worker` never fires → zombie `[active_workers]` → false `3>=3` dispatch
   rejection + dead worker_pulse). `--wire-up` is idempotent and preserves other
-  settings keys. Verify: re-run prints `(0 entries)`.
+  settings keys, then self-checks the wiring (#445). Verify: re-run prints
+  `+ selfcheck PASS (layer=project)`; a `FAIL:` line means the write landed
+  on a layer that does not fire — fix before dispatching.
 - **Every heartbeat tick MUST run `--reconcile`** — ground-truth rebuild of
   `[active_workers]` from `.wt-*/` worker-status files (last status line ==
   in-progress). Self-heals accounting even when hooks are unwired. This is the

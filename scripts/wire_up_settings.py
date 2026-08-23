@@ -1,7 +1,18 @@
 # -*- coding: utf-8 -*-
-"""wire_up_settings.py - register kunglao-agent hooks in the PROJECT settings.json.
+"""wire_up_settings.py - THE hook registry + a deprecated registration alias.
 
-Extracted from hook_activation.py (T-2 split) — the --wire-up job.
+Issue #445 (2026-08-18): the WRITER that used to live here moved to
+hook_activation.register_hooks (THE canonical registration entry, with the
+post-write layer self-check). This module keeps two things:
+
+  1. the REGISTRY (WIRE_UP_HOOK_FILES, HOOK_DEPLOYMENT_TARGETS,
+     hook_deployment_targets, derive_hook_subset) — the data source every
+     checker/writer derives from (#372/#381/#410 contracts). It is not a
+     registration entry; moving it would churn four importers for zero
+     convergence.
+  2. wire_up_settings() — a DEPRECATED thin alias delegating to
+     hook_activation.register_hooks (kept for the conservative #445
+     migration; retirement is #446's job).
 
 Issue #258 (2026-08-12): hook deployment is PROJECT-scoped. The pre-#258
 hardcoded `Path.home()/.claude/settings.json` wrote hooks globally; in a
@@ -12,16 +23,24 @@ hooks live and die WITH the workspace: no global pollution, no stale
 worktree-bound commands.
 
 Issue #269 (2026-08-13): hook COMMAND paths are absolute and point at the
-CANONICAL deployed skill install (~/.claude/skills/kunglao-agent/hooks) — the
-generation used `Path(__file__)` (the script's own location), so a --wire-up
-run from a dev worktree bound the commands to the worktree path, which dies
-with the worktree (#228 lesson). _canonical_hooks_dir() decouples the
-registered path from wherever this module happens to run.
+CANONICAL deployed skill install (~/.claude/skills/kunglao-agent/hooks) — a
+--wire-up run from a dev worktree must not bind the commands to the
+worktree path, which dies with the worktree (#228 lesson). The canonical
+resolution now lives in hook_activation._canonical_hooks_dir / build_hook_entry.
 """
 from __future__ import annotations
 
-import json
-import sys
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="wire_up_settings", action="write_blocked",
+                                detail="module wired")
+except NameError:
+    pass
+
+import warnings
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -42,6 +61,7 @@ WIRE_UP_HOOK_FILES = frozenset({
     "worker_pulse.py",         # PostToolUse/Agent — completion pulse
     "state_anchor.py",         # PostToolUse/Agent — per-turn state re-anchor (#44)
     "completion_gate.py",      # Stop — code-owned completion gate (#55)
+    "write_guard.py",          # PreToolUse/Edit|Write — contract-carrier write gate (#532)
 })
 
 
@@ -119,170 +139,26 @@ def derive_hook_subset(registry: Iterable[str], include: Iterable[str],
     return include
 
 
-def _settings_target(workspace: Path | None) -> Path:
-    """Project-level settings.json target (never the user-global, #258).
 
-    - workspace given -> <workspace>/.claude/settings.json
-    - workspace None  -> <cwd>/.claude/settings.json (cwd probe: an existing
-      .claude/settings.json or a claim-register.yaml workspace root in cwd;
-      else the file is created at <cwd>/.claude/settings.json)
 
-    This is the #410 ws-level target — the first entry of the deployment
-    registry (HOOK_DEPLOYMENT_TARGETS / hook_deployment_targets); the
-    workspace-parent target lives with the external_kicker (D2).
+def wire_up_settings(workspace: Path | None = None,
+                     global_opt_in: bool = False) -> int:
+    """#445 DEPRECATED thin alias — hook_activation.register_hooks is THE
+    canonical hook registration entry.
+
+    Signature preserved for the conservative #445 migration (callers:
+    tests + any external integrations); every call now warns and delegates.
+    Retirement (deleting the alias) is issue #446 — NOT this change.
+
+    See hook_activation.register_hooks for the actual behavior (the #258
+    project-level target, the #269 canonical command paths, and the #445
+    post-write self-check that FAILs a write landing on a layer that does
+    not fire).
     """
-    if workspace is not None:
-        return Path(workspace).resolve() / ".claude" / "settings.json"
-    cwd = Path.cwd().resolve()
-    return cwd / ".claude" / "settings.json"
-
-
-def _canonical_hooks_dir() -> Path:
-    """Canonical deployed skill hooks dir — where hook COMMAND paths must point.
-
-    Issue #269: hook commands are absolute paths into the CANONICAL skill
-    install (~/.claude/skills/kunglao-agent/hooks), never this module's own
-    location. This script may be run from a dev worktree
-    (<HOME>/.claude/wt-*/); a worktree-bound command dies with the
-    worktree — the #228 incident: 8 hooks went silent at once when the
-    referenced path was deleted. When this module IS deployed at the canonical
-    location (the normal production case), the two coincide and `here` wins.
-    """
-    here = Path(__file__).resolve().parent.parent / "hooks"
-    canonical = Path.home() / ".claude" / "skills" / "kunglao-agent" / "hooks"
-    return here if here == canonical else canonical
-
-
-def wire_up_settings(workspace: Path | None = None, global_opt_in: bool = False) -> int:
-    """Register kunglao-agent hooks in the PROJECT-level settings.json.
-
-    Deployment target (issue #258):
-      - workspace given  -> <workspace>/.claude/settings.json
-      - workspace None   -> <cwd>/.claude/settings.json (probe; created if absent)
-      - global_opt_in=True -> Path.home()/.claude/settings.json — EXPLICIT
-        opt-in only; the old default wrote the user-global settings, and in a
-        worktree that bound hooks to a worktree path that later died (the
-        #258 incident: 8 hooks silently dead, session tool calls blocked).
-
-    Idempotent merge: reads current settings, appends our hook entries under
-    PreToolUse/PostToolUse with matcher "Agent" (heartbeat_touch on matcher
-    "Bash"), and under Stop (no matcher — Stop fires on every termination)
-    registers hooks/completion_gate.py (#55). Skips entries that already exist
-    (same command path / basename), preserves every other key. Writes back with
-    4-space indent. Returns the number of hook entries registered.
-    """
-    if global_opt_in:
-        settings_path = Path.home() / ".claude" / "settings.json"
-        print(f"WARNING: wiring kunglao-agent hooks into the USER-GLOBAL "
-              f"{settings_path} — hooks must live in the project-level "
-              f".claude/settings.json (issue #258); global deployment is "
-              f"explicit opt-in ONLY.", file=sys.stderr)
-    else:
-        settings_path = _settings_target(workspace)
-
-    existing = {}
-    if settings_path.exists():
-        try:
-            existing = json.loads(settings_path.read_text(encoding="utf-8"))
-        except Exception:
-            existing = {}
-
-    hooks = existing.get("hooks") or {}
-    pre = hooks.get("PreToolUse") or []
-    post = hooks.get("PostToolUse") or []
-
-    # hook_dir: the CANONICAL deployed skill hooks dir — NOT this module's
-    # own location (#269; running from a worktree must not bind hook commands
-    # to the worktree path, which dies with it — #228).
-    hook_dir = _canonical_hooks_dir()
-
-    def _entry(hook_file: str) -> dict:
-        # POSIX path (forward slashes): hooks run via `sh -c` — Windows
-        # backslash paths get their backslashes eaten as escape chars
-        # (C:\Users\... -> C:Users...). #389: hooks run via
-        # `uv run --project <skill_root>` — bare python can resolve to 2.x
-        # (this machine: /usr/local/bin/python -> 2.7.17) and kill every
-        # registered hook; uv uses the skill's own project venv (python 3.11+).
-        # skill_root is the CANONICAL skill install root (#269), never this
-        # module's location.
-        skill_root = hook_dir.parent
-        p = (hook_dir / hook_file).as_posix()
-        return {"type": "command",
-                "command": f"uv run --project {skill_root.as_posix()} {p}"}
-
-    def _ensure(entries: list, matcher: str, hook_file: str) -> tuple[list, bool]:
-        new = [e for e in entries if e.get("matcher") == matcher]
-        other = [e for e in entries if e.get("matcher") != matcher]
-        # remove legacy entries with the same basename (backslash paths from
-        # pre-posix wire-up) so re-wiring replaces them, not stacks.
-        new = [
-            e for e in new
-            if not any((h.get("command", "").replace("\\", "/").rsplit("/", 1)[-1] == hook_file) for h in e.get("hooks", []))
-        ]
-        new.append({"matcher": matcher, "hooks": [_entry(hook_file)]})
-        return other + new, True
-
-    def _ensure_stop(entries: list, hook_file: str) -> tuple[list, bool]:
-        """Stop hooks carry no matcher (they fire on every Stop event). Dedupe
-        by command basename across all Stop entries so re-wiring replaces, not
-        stacks. Appends one entry with the single hook."""
-        kept, found = [], False
-        for e in entries:
-            hs = e.get("hooks", [])
-            filtered = []
-            for h in hs:
-                cmd = str(h.get("command", "")).replace("\\", "/")
-                if cmd.rsplit("/", 1)[-1] == hook_file:
-                    found = True  # drop existing — re-added fresh below
-                else:
-                    filtered.append(h)
-            if filtered:
-                kept.append({"hooks": filtered})
-        kept.append({"hooks": [_entry(hook_file)]})
-        return kept, True
-
-    count = 0
-    # env_check_gate FIRST: the environment hard-gate (#233) must reject a
-    # teammate-polluted dispatch before any budget/state logic runs.
-    pre, added = _ensure(pre, "Agent", "env_check_gate.py")
-    count += added
-    pre, added = _ensure(pre, "Agent", "worker_budget.py")
-    count += added
-    pre, added = _ensure(pre, "Agent", "dispatch_gate.py")
-    count += added
-    # recall_inject (#268): runtime knowledge recall injected into every claim
-    # dispatch. Inject-only (always exits 0 — recall must never block dispatch)
-    # and deliberately NOT activation-gated: knowledge helps whether or not the
-    # enforcement hooks are activated. Grouped with the dispatch injectors.
-    pre, added = _ensure(pre, "Agent", "recall_inject.py")
-    count += added
-    # heartbeat_touch on matcher=Bash — ANY tool activity refreshes
-    # last_tick_ts, decoupling heartbeat liveness from orchestrator cognition.
-    pre, added = _ensure(pre, "Bash", "heartbeat_touch.py")
-    count += added
-    post, added = _ensure(post, "Agent", "worker_budget.py")
-    count += added
-    post, added = _ensure(post, "Agent", "worker_pulse.py")
-    count += added
-    # state_anchor (#44): per-turn mechanical state re-anchor on every worker
-    # completion — the L1 PREVENT layer (F5 forget/refresh). Same matcher /
-    # _entry shape as worker_pulse; idempotent via _ensure's basename dedupe.
-    post, added = _ensure(post, "Agent", "state_anchor.py")
-    count += added
-
-    # completion_gate (#55): the code-owned completion gate. Stop hook — fires
-    # at session termination, blocks when task-oracle.yaml is unsatisfied.
-    # No matcher (Stop is not a tool-use event); dedupe by command basename.
-    stop = hooks.get("Stop") or []
-    stop, added = _ensure_stop(stop, "completion_gate.py")
-    count += added
-
-    hooks["PreToolUse"] = pre
-    hooks["PostToolUse"] = post
-    hooks["Stop"] = stop
-    existing["hooks"] = hooks
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    settings_path.write_text(
-        json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
-    return count
+    warnings.warn(
+        "wire_up_settings.wire_up_settings is deprecated (#445): the hook "
+        "registration entry is hook_activation.register_hooks (CLI: "
+        "hook_activation.py <workspace> --wire-up). Retirement: #446.",
+        DeprecationWarning, stacklevel=2)
+    from hook_activation import register_hooks
+    return register_hooks(workspace=workspace, global_opt_in=global_opt_in)

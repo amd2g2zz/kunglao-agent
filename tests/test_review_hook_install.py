@@ -95,10 +95,14 @@ def test_installed_hook_with_placeholder_residue_fails_closed(tmp_path: Path) ->
                     "--allow-empty", "-m", "bootstrap"],
                    check=True, timeout=60)
     # template is executable and runs `sh`-portable; invoke via sh with the
-    # scratch repo as cwd (the hook resolves the repo from git rev-parse)
+    # scratch repo as cwd (the hook resolves the repo from git rev-parse).
+    # Decode UTF-8: the template's guidance prints an em-dash; a locale/GBK
+    # decode crashes the capture reader thread and leaves stdout=None
+    # (#457 triage #12). Mirrors _tick in tests/test_heartbeat_tick.py.
     r = subprocess.run(
         ["sh", str(TEMPLATE)],
         cwd=repo, capture_output=True, text=True, timeout=60,
+        encoding="utf-8", errors="replace",
     )
     assert r.returncode == 1, (
         f"unstamped template must fail closed (rc={r.returncode}): "
@@ -122,6 +126,10 @@ def _run_init_flag(ws: Path, home: Path, extra: list[str]) -> subprocess.Complet
     env["USERPROFILE"] = str(home)
     env["PYTHONIOENCODING"] = "utf-8"
     argv = [sys.executable, str(INIT), str(ws), *extra]
+    # target-alignment intake: pin the PE fixture's type explicitly — this
+    # file owns hook installation behavior, not type semantics.
+    if "--type" not in argv and "--resolve" not in argv:
+        argv += ["--type", "windows"]
     return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=env, errors="replace")
 
@@ -140,23 +148,28 @@ def _git_repo(ws: Path) -> None:
                    check=True, timeout=60)
 
 
-def test_install_git_hooks_stamps_real_key_path(tmp_path: Path) -> None:
-    """Happy path: key present at $HOME/.claude/kunglao-review.key ->
-    installer writes .git/hooks/pre-commit with the REAL absolute path
-    substituted for the placeholder, executable, placeholder gone."""
+def _install_hook(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """Shared installer happy-path setup: ws (git repo + bins/) + a home
+    carrying the review key; runs kunglao-init --install-git-hooks and
+    returns (ws, home, hook) for per-aspect assertions."""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
     (ws / "bins" / "s.exe").write_bytes(b"MZ" + b"\x00" * 64)
     _git_repo(ws)
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)
-    key = home / ".claude" / "kunglao-review.key"
-    key.write_text("a" * 64, encoding="utf-8")
-
+    (home / ".claude" / "kunglao-review.key").write_text("a" * 64, encoding="utf-8")
     r = _run_init_flag(ws, home, ["--install-git-hooks", "--skip-toolchain"])
     assert r.returncode == 0, f"init failed: {r.stdout}{r.stderr}"
+    return ws, home, ws / ".git" / "hooks" / "pre-commit"
 
-    hook = ws / ".git" / "hooks" / "pre-commit"
+
+def test_install_git_hooks_stamps_real_key_path(tmp_path: Path) -> None:
+    """Happy path: key present at $HOME/.claude/kunglao-review.key ->
+    installer writes .git/hooks/pre-commit with the REAL absolute path
+    substituted for the placeholder, placeholder gone."""
+    ws, home, hook = _install_hook(tmp_path)
+
     assert hook.exists(), "installer must write .git/hooks/pre-commit"
     text = hook.read_text(encoding="utf-8")
     # placeholder must be gone from the key ASSIGNMENT; it legitimately
@@ -182,6 +195,17 @@ def test_install_git_hooks_stamps_real_key_path(tmp_path: Path) -> None:
         f"installed hook must embed the real skill root {ROOT.as_posix()}: {text}")
     assert 'uv run --project "$skill_root" "$skill_root/scripts/review_gate.py" check' in text, (
         f"installed hook must invoke the gate via uv (#389): {text}")
+
+
+@pytest.mark.skipif(
+    os.name != "posix",
+    reason="POSIX exec bit only: os.chmod on win32 can only toggle the "
+           "read-only flag (the installed hook lands mode 0666), so the "
+           "S_IXUSR assertion is meaningless there — stamping coverage stays "
+           "in test_install_git_hooks_stamps_real_key_path, unskipped (#457)")
+def test_install_git_hooks_sets_exec_bit(tmp_path: Path) -> None:
+    """The installer chmod +x's the deployed hook — POSIX-only semantics."""
+    _, _, hook = _install_hook(tmp_path)
     mode = stat.S_IMODE(hook.stat().st_mode)
     assert mode & stat.S_IXUSR, f"installed hook must be executable (mode {mode:o})"
 

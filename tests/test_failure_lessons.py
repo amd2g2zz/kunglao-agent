@@ -48,12 +48,28 @@ def _analysis_path(ws: Path, cid: str) -> Path:
 
 
 def _record(ws: Path, cid: str, **kwargs) -> dict:
-    """Function-level --record (same args as the CLI flags)."""
+    """Function-level --record (same args as the CLI flags).
+
+    #495 contract migration: every record now carries the three failure
+    artifacts + provenance. #525 contract migration: trigger_precision is
+    required to enter the library, but the field set tested here predates
+    the nursery gate — the default below makes existing assertions still
+    exercise the legacy paths (no-precision + missing-precision queue
+    coverage lives in test_lessons_nursery / test_lessons_trigger_precision).
+    """
+    tp = kwargs.get("trigger_precision") or {
+        "tool": "test.tool", "error_signature": "TEST-ERR",
+        "family": "test.family", "unit": "attempt",
+    }
     return fag.record_analysis(
         ws, cid,
         kwargs.get("assumption", ""), kwargs.get("validity", ""),
         kwargs.get("next_method", ""), kwargs.get("outcome"),
-        kwargs.get("what_happened"))
+        kwargs.get("what_happened"),
+        validated_capability=kwargs.get("capability", "bridge works"),
+        identified_obstacle=kwargs.get("obstacle", "vm blocked it"),
+        source=kwargs.get("source", "lesson-hit"),
+        trigger_precision=tp)
 
 
 def _write_ledger_redteam(ws: Path, cid: str, result: str = "CONFIRMED") -> None:
@@ -121,18 +137,33 @@ def test_record_outcome_validation(tmp_path):
 
 
 def test_record_legacy_fields_unchanged(tmp_path):
-    """Pre-#41 record (no outcome flags) produces exactly the legacy field set."""
+    """A record without outcome flags produces exactly the #495 field set:
+    the six legacy fields keep their names/positions, plus the transducer
+    fields (artifacts / provenance / ladder trace); outcome stays absent.
+    #525: trigger_precision is the only new field; without it, the entry
+    mirrors the pre-#525 set verbatim (the gate is at aggregate_lessons
+    write time, not at record time)."""
     # Arrange
     ws = tmp_path / "ws"
     ws.mkdir()
     _write_register(ws, [_claim("C-1")])
 
-    # Act
-    r = _record(ws, "C-1", assumption="a", validity="justified-adequate", next_method="adequate")
+    # Act — no trigger_precision (legacy contract test)
+    r = fag.record_analysis(
+        ws, "C-1",
+        assumption="a", validity="justified-adequate", next_method="adequate",
+        validated_capability="bridge works",
+        identified_obstacle="vm blocked it",
+        source="lesson-hit")
 
     # Assert
-    assert set(r["entry"].keys()) == {"claim", "covers_attempt", "method_assumption",
-                                      "assumption_validity", "next_method", "analyzed_at"}
+    assert set(r["entry"].keys()) == {
+        "claim", "covers_attempt", "method_assumption",
+        "assumption_validity", "next_method",
+        "next_method_source",               # #495 provenance
+        "validated_capability", "identified_obstacle",   # #495 artifacts
+        "method_ladder_query", "candidates",             # #495 ladder trace
+        "analyzed_at"}
     assert "outcome" not in r["entry"]
 
 

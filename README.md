@@ -50,8 +50,14 @@ or, manually (the clone carries its pinned environment; first use in Claude Code
 
 ```bash
 git clone https://github.com/amd2g2zz/kunglao-agent.git ~/.claude/skills/kunglao-agent
-cp agents/kunglao-worker.md agents/kunglao-redteam.md ~/.claude/agents/
 ```
+
+`kunglao-init` deploys the workspace-level engineering environment itself
+(#478): hooks (`<ws>/.claude/settings.json`, created when absent — the old
+deadlock where a missing file silently skipped deployment is gone), the core
+subagents (`<ws>/.claude/agents/`: kunglao-worker / kunglao-redteam /
+kunglao-init-worker), and an `env-manifest.yaml` deployment ledger. The
+legacy manual `cp agents/*.md ~/.claude/agents/` step is no longer needed.
 
 ### 2. Initialize a workspace
 
@@ -88,13 +94,21 @@ Every `/kunglao-agent` command, its arguments, and an example:
 
 | Command | Arguments | Purpose | Example |
 |---|---|---|---|
-| `/kunglao-agent` | `init <ws>` / `analysis <ws>` / `help` | command menu — with no args prints the menu and waits; unknown subcommands print the menu + `unknown: <x>` | `/kunglao-agent` |
+| `/kunglao-agent` | `init <ws>` / `analysis <ws>` / `resume <ws>` / `help` | command menu — with no args prints the menu and waits; unknown subcommands print the menu + `unknown: <x>` | `/kunglao-agent` |
 | `/kunglao-agent:init` | `<workspace> [--type windows\|linux\|android]` | initialize a workspace (scaffold + CLAUDE.md + sample mount + task_spec intake + hooks) | `/kunglao-agent:init ~/cases/synth-dropper --type windows` |
 | `/kunglao-agent:analysis` | `<workspace>` | enter the convergence loop on an initialized workspace | `/kunglao-agent:analysis ~/cases/synth-dropper` |
+| `/kunglao-agent:resume` | `<workspace>` | crash/reboot recovery: read-only breakpoint brief (health, state summary, timeline, next step) + re-arm advice | `/kunglao-agent:resume ~/cases/synth-dropper` |
 | `/kunglao-agent:help` | none | print the subcommand usage list | `/kunglao-agent:help` |
 
 The namespaced form (`/kunglao-agent:init`) is the plugin-manager surface;
 the main skill also accepts the subcommand form (`/kunglao-agent init <ws>`).
+
+Called with no arguments, `init`, `analysis` and `resume` print a guided prompt —
+never guess, never a bare argparse-style error (see each skill's "No
+arguments" section); the menu's next-steps block maps operator state to a
+command (uninitialized → init, initialized → analysis, crashed/rebooted → resume,
+unsure → help). The
+menu and hints render `skills/subcommands.yaml`, the single source. (#456)
 
 ## A worked analysis case
 

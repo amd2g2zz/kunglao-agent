@@ -8,6 +8,8 @@ under the workspace. Worker, orchestrator, and hook events share ONE schema:
   ts          ISO8601 UTC timestamp (auto, Z suffix)
   actor       who did it (worker / orchestrator / hook / ...)
   action      what happened (dispatch / tool_call / artifact_written / verify / ...)
+              — #459: emit-side words come from the controlled vocabulary
+              event_taxonomy.EMIT_ACTIONS (CI-anchored, unregistered = red)
   claim       claim id the event concerns (or null)
   tool        tool name for tool events (or null)
   artifact    artifact id / path written or read (or null)
@@ -20,14 +22,22 @@ Design contract:
   - deterministic output: sort_keys + compact separators + ensure_ascii=False.
   - NEVER raises on write failure — emit degrades to a stderr warning and
     returns; logging must never break analysis.
+
+#459 read side: `kunglao_log.py --tail <ws> [N]` prints the most recent N
+events (default 20, merged across all day files, JSON lines) — the minimal
+answer to "诊断不可解释": one command reconstructs what just happened.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+RC_USAGE = 64  # bad invocation (missing workspace / N < 1) — fail fast
+DEFAULT_TAIL = 20
 
 
 def log_path(ws: Path) -> Path:
@@ -70,3 +80,67 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
             os.close(fd)
     except OSError as exc:
         print(f"[kunglao_log] warning: cannot write {p}: {exc}", file=sys.stderr)
+
+
+def tail(ws, n: int = DEFAULT_TAIL) -> list[dict]:
+    """The most recent n events across ALL day files, chronological order.
+
+    Read-only: creates/modifies nothing. Day files sort by name (= date), so
+    file order is stream order; within a file, append order is stream order.
+    Unparseable lines are skipped (same tolerance event_taxonomy applies).
+    n <= 0 returns [] (the CLI rejects it earlier; the function degrades)."""
+    logs = Path(ws) / "runs" / "logs"
+    rows: list[dict] = []
+    if not logs.is_dir():
+        return rows
+    for p in sorted(logs.glob("kunglao-*.jsonl")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return rows[-n:] if n > 0 else []
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Read-only diagnostic CLI. `--tail <ws> [N]` → JSON lines on stdout."""
+    ap = argparse.ArgumentParser(
+        prog="kunglao_log.py",
+        description="unified event log (#287 sink, #459 read side)")
+    ap.add_argument("--tail", metavar="WORKSPACE", default=None,
+                    help="print the most recent N events of this workspace "
+                         f"(default {DEFAULT_TAIL}), JSON lines, read-only")
+    ap.add_argument("n", nargs="?", type=int, default=DEFAULT_TAIL,
+                    help=f"how many events (default {DEFAULT_TAIL})")
+    args = ap.parse_args(argv)
+    if args.tail is None:
+        ap.print_help(sys.stderr)
+        return RC_USAGE
+    ws = Path(args.tail)
+    if not ws.is_dir():
+        print(f"FAIL: workspace not found: {ws}", file=sys.stderr)
+        return RC_USAGE
+    if args.n < 1:
+        print(f"FAIL: N must be >= 1 (got {args.n})", file=sys.stderr)
+        return RC_USAGE
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+    for row in tail(ws, args.n):
+        # canonical form = the emit serialization (sort_keys, compact,
+        # ensure_ascii=False) so tail output round-trips with the file bytes
+        print(json.dumps(row, sort_keys=True, separators=(",", ":"),
+                         ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

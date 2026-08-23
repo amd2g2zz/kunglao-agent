@@ -35,14 +35,10 @@ TOOLS = ROOT / "tools"
 
 # Exemptions with a reason each — remove the exemption once the reason lapses:
 EXEMPT_CLIS: dict[str, str] = {
-    # tool-search.py prints _INDEX.yaml fields (Chinese input_output) with
-    # json.dumps(ensure_ascii=False). Its contract tests
-    # (tests/test_tool_search.py — issue #316 domain, edits reserved there)
-    # capture with text=True + locale decode; a UTF-8 writer would crash that
-    # helper on GBK machines. Guard this file together with the helper fix
-    # (encoding="utf-8", errors="replace") in that test — #317 follow-up.
-    "tool-search.py": "test helper (tests/test_tool_search.py, #316 domain) "
-                      "decodes with the locale; guard only with that fix",
+    # tool-search.py's former exemption (test helper decoded with the
+    # locale) lapsed in #476: the helper now decodes UTF-8 and the CLI
+    # carries the canonical guard. Kept here as the pattern for future
+    # exemptions: name the file, name the coupled fix, remove when done.
 }
 
 

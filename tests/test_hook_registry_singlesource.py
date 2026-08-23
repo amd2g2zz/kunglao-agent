@@ -45,11 +45,12 @@ def test_registry_exists_in_wire_up_settings() -> None:
     """The writer exports WIRE_UP_HOOK_FILES — the single source."""
     files = wire_up_settings.WIRE_UP_HOOK_FILES
     assert isinstance(files, frozenset), "registry must be a frozenset (immutable)"
-    # the 8 distinct files the registrations write today (issue #372)
+    # the 9 distinct files the registrations write today (#372 baseline 8
+    # + #532 write_guard on the Edit|Write|MultiEdit matcher)
     assert files == frozenset({
         "env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
         "recall_inject.py", "heartbeat_touch.py", "worker_pulse.py",
-        "state_anchor.py", "completion_gate.py",
+        "state_anchor.py", "completion_gate.py", "write_guard.py",
     }), f"registry drifted from the actual registrations: {sorted(files)}"
 
 
@@ -78,9 +79,11 @@ def test_wire_up_settings_exports_hook_deployment_targets() -> None:
         "each target must be a resolver callable (ws -> Path)"
 
     ws_level, parent_level = [fn(Path("ws")) for fn in targets]
-    assert str(ws_level).endswith("ws/.claude/settings.json"), \
+    # as_posix(): str(Path) yields native separators (backslashes on win32) —
+    # compare through the separator-stable lens, same exactness (#457 triage #7).
+    assert ws_level.as_posix().endswith("ws/.claude/settings.json"), \
         f"target[0] must resolve to the ws-level file: {ws_level}"
-    assert str(parent_level).endswith(".claude/settings.json"), \
+    assert parent_level.as_posix().endswith(".claude/settings.json"), \
         f"target[1] must resolve to a workspace-parent file: {parent_level}"
     assert parent_level.parent.parent == Path("ws").resolve().parent, \
         "target[1] must be the PARENT of the workspace: <ws-parent>/.claude/settings.json"
@@ -155,7 +158,7 @@ def test_check_hooks_scans_stop_section(tmp_path: Path) -> None:
 KONG_CHAIN = ["heartbeat_touch.py", "worker_budget.py",
               "dispatch_gate.py", "worker_pulse.py"]
 KONG_SKIP = {"env_check_gate.py", "recall_inject.py",
-             "state_anchor.py", "completion_gate.py"}
+             "state_anchor.py", "completion_gate.py", "write_guard.py"}
 KICKER_FILES = {"worker_budget.py", "dispatch_gate.py",
                 "heartbeat_touch.py", "worker_pulse.py"}
 

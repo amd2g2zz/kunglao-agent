@@ -41,9 +41,14 @@ L1_LINE_RE = re.compile(r"^([A-Za-z_][\w.]*)\s*[:=]\s*(.+)$")
 def run_cli(*args, env=None, timeout=60):
     e = dict(os.environ) if env is None else env
     e.pop("GHIDRA_HOME", None)
+    # Decode UTF-8 explicitly: ghidra_job.py emits UTF-8 (#317 stdout guard at
+    # module level); a locale/GBK decode crashes the capture reader thread on
+    # the argparse help's em-dash and leaves stdout=None (#457 triage #2-#5).
+    # Mirrors _tick in tests/test_heartbeat_tick.py.
     return subprocess.run(
         [sys.executable, str(CLI), *args],
         capture_output=True, text=True, timeout=timeout, env=e,
+        encoding="utf-8", errors="replace",
     )
 
 

@@ -312,12 +312,14 @@ def test_ask_for_direction_type_a_rejected():
 
 
 def test_ask_for_direction_type_b_rejected():
-    text = "刚才任务做完了，我要做下一个吗？"
+    # English-only pattern policy (mixed-language regex is brittle): the
+    # pre-#447 Chinese fixture depended on deleted Chinese patterns.
+    text = "Just finished the task - should I do the next one?"
     with tempfile.TemporaryDirectory() as tmp:
         ws = Path(tmp)
         rc = adg.check(ws, text)
         assert rc == 1, f"expected REJECT, got rc={rc}"
-    print("  [OK ] ask_for_direction rejects Type B (Chinese 'just finished...should I')")
+    print("  [OK ] ask_for_direction rejects Type B ('just finished...should I')")
 
 
 def test_ask_for_direction_type_c_allowed():

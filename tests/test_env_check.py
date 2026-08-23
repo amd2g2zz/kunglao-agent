@@ -40,10 +40,17 @@ from env_check import (  # pytest.ini pythonpath = . hooks scripts tools
 def _kunglao_ws(tmp_path: Path) -> Path:
     """Minimal workspace: runs/ + FULLY initialized state (#304: [initialized]
     marker in claim-register.yaml + project_type in analysis_state.txt) so the
-    snapshot write succeeds and init_complete passes."""
+    snapshot write succeeds and init_complete passes. #536: carries the
+    template version stamp (a fully-initialized workspace has one)."""
+    import template_version
+    stamp = template_version.stamp_line(template_version.read_skill_version())
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
+    (ws / "facts").mkdir()
+    (ws / "facts" / "_INDEX.md").write_text(stamp + "\n# _INDEX\n", encoding="utf-8")
+    (ws / "CLAUDE.md").write_text(stamp + "\n# workspace\n", encoding="utf-8")
     (ws / "claim-register.yaml").write_text(
+        stamp + "\n"
         "# [initialized] state_hash=abc seeds=3\n"
         "claims:\n- id: C-001\n  status: OPEN\n", encoding="utf-8")
     (ws / "analysis_state.txt").write_text(
@@ -57,8 +64,10 @@ def _write_settings(target_root: Path) -> Path:
     deployment target); target_root=isolated_home -> user-global (used by the
     negative regression test); target_root=parent (ws.parent) -> the
     workspace-parent target the external_kicker reads/writes (#410). #372:
-    derives from the registry (all 8 files, recall_inject under Pre/Agent,
-    completion_gate under Stop)."""
+    derives from the registry (all files, recall_inject under Pre/Agent,
+    completion_gate under Stop). #532: write_guard rides the
+    Edit|Write|MultiEdit matcher — a Pre/Agent-only fixture can never satisfy
+    the full-registry scan."""
     settings = target_root / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True)
     pre_agent = ["worker_budget.py", "dispatch_gate.py", "env_check_gate.py",
@@ -71,6 +80,8 @@ def _write_settings(target_root: Path) -> Path:
         for h in ("worker_budget.py", "worker_pulse.py", "state_anchor.py")]
     pre.append({"matcher": "Bash", "hooks": [
         {"type": "command", "command": "python C:/skills/hooks/heartbeat_touch.py"}]})
+    pre.append({"matcher": "Edit|Write|MultiEdit", "hooks": [
+        {"type": "command", "command": "python C:/skills/hooks/write_guard.py"}]})
     stop = [{"hooks": [
         {"type": "command", "command": "python C:/skills/hooks/completion_gate.py"}]}]
     settings.write_text(json.dumps({"hooks": {"PreToolUse": pre,

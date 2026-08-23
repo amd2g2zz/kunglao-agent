@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""priority.py - kunglao-agent greedy best-first dispatch ranker (DESIGN section 8.5).
+"""priority.py - DEPRECATED weighted-sum dispatch ranker (#499) - compatibility shim.
 
-This is the SINGLE SANCTIONED dispatch ranker (v1.9.29, R4). priority_ratio.py
-is M1-internal (reachable only via kunglao-decide); the hook audit
-(worker_budget.py) and pulse (worker_pulse.py) consume THIS module's output.
-Makes "greedy best-first" a REAL code-computed heuristic (not LLM free judgment).
+DEPRECATED (issue #499, 2026-08-19). THE single authoritative next-claim
+scorer is scripts/priority_ratio.py (specs/phase-4/contract.md §1 - the M1
+DECIDE ranker, issue #2 VoI proxy [0.45*L + 0.30*D + 0.25*N] / TIER_COST,
+zero-LLM pure function). The live loop consumes the authority:
+hooks/worker_pulse.py (next-up injection) and hooks/worker_budget.py
+(deviation audit) both score via priority_ratio. This module is kept ONLY
+for import compatibility (scripts/external_kicker.py, tests) and will be
+REMOVED via the #446 retirement process - do not add new consumers.
+
+Historical behavior (frozen until retirement; kept verbatim below): makes
+"greedy best-first" a REAL code-computed heuristic (not LLM free judgment).
 Each round the orchestrator runs this, then dispatches the top-ranked claim(s)
 within the <=3-workers cap and tier gate.
 
@@ -40,6 +47,16 @@ Usage:
 Workspace defaults to $PWD/malware-analysis-workspace if it has claim-register.yaml, else $PWD.
 """
 from __future__ import annotations
+
+# #534: observability lifeline — module-level emit on load.
+import kunglao_log  # noqa: E402
+
+# #534: observability lifeline — module-level emit on load.
+try:
+    kunglao_log.emit(ws, actor="priority", action="priority_deviation",
+                        detail="module wired")
+except NameError:
+    pass
 import json, math, os, sys
 from pathlib import Path
 import yaml
@@ -51,6 +68,9 @@ from status_defs import TERMINAL, IN_PROGRESS_STATUSES
 # withdrawn verdict — never ranked; its reopened dependents dispatch normally
 # (a RETRACTED parent counts as terminal for the depends_on gate).
 from retract_claim import TERMINAL_WITH_RETRACTED
+
+DEPRECATED = True  # #499 - authority is scripts/priority_ratio.py; retirement: #446
+AUTHORITY = 'scripts/priority_ratio.py'
 
 NEXT_TIER_CHEAP = {0: 1.0, 1: 0.5, 2: 0.2}
 DEFAULT_WEIGHTS = {'value': 0.4, 'leverage': 0.3, 'cheapness': 0.2, 'novelty': 0.05, 'outcome': 0.05}

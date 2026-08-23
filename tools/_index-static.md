@@ -17,6 +17,7 @@
 | `binary-sweep` | Byte-level URL/IP/domain/custom-regex scanning | Read for direct byte-pattern scanning; for section-aware extraction use the die/floss flow |
 | `strings-classify` | String entropy/printability/decodability classification + inventory | Read when classifying string entropy and base64/hex decodability; for plain string enumeration use floss |
 | `go-buildinfo-carve` | Go buildinfo blob location and parsing | Read when extracting Go build info; not for non-Go samples (confirm language with die first) |
+| `rust-dep-strings` | Rust crate dependency-string carving (registry paths / standalone name-version) | Read when extracting Rust crate deps; not for non-Rust samples (confirm language with die first) |
 | `call-site-args` | Call-site argument extraction from disassembly text (x64/x86) | Read when extracting call-site arguments from disassembly text; for precise dataflow use ghidra-recon/emulated execution |
 | `c-normalize` | Decompiled-C normalization (modulo idioms/dead stores) | Read to normalize before a worker reads Ghidra decompiled C; for semantic deobfuscation use opaque-pred |
 | `opaque-pred` | Opaque predicate/MBA equivalence decision (z3) | Read when statically resolving opaque predicates/proving MBA equivalences; not when z3 is absent or the task is not expression-level |
@@ -156,6 +157,18 @@
 - **Outputs**: Go buildinfo blob listing (offset/go_version/path/mod_count/dep_count/size).
 - **exit code**: 0 success / 1 negative finding (no blob found) / 2 error.
 - **when_not**: Not for non-Go samples (confirm the language with die first).
+
+### rust-dep-strings
+
+- **Purpose**: Rust crate dependency-string carving (dual channel: cargo registry paths with 16-hex registry ids + standalone crate-name-version strings).
+- **Usage**:
+  ```bash
+  python tools/static/rust-dep-strings.py --in <sample> --channels registry,crate
+  ```
+- **Inputs**: Sample bytes (`--in`) + `--channels` (comma-separated subset of `registry,crate`; default both).
+- **Outputs**: Crate name+version listing with source channel per hit, plus registry ids and `registry+` source URLs (`--json` object / `--reproduce` field=value).
+- **exit code**: 0 success / 1 negative finding (no crate, registry id, or source found) / 2 error.
+- **when_not**: Not for non-Rust samples (confirm the language with die first); the standalone-crate channel alone is weaker evidence than the registry channel.
 
 ### call-site-args
 

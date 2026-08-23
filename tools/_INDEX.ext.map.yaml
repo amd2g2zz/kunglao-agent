@@ -1,0 +1,57 @@
+# tools/_INDEX.ext.map.yaml — optional name -> capability map (#476).
+#
+# OPTIONAL by design: unmapped ext entries surface as capability:
+# unknown and remain discoverable via tool-search --find (keyword match
+# over name/description/usage/source). This map only improves
+# retrievability for well-known entries; it is NOT a completeness
+# obligation. Tags follow the "<domain>:<operation>" grammar.
+#
+# Keys are the FINAL generated names = RAW FILE STEMS (identity rule:
+# no kebab transform — a transformed name could collide with a dead
+# name or a sibling file it does not mean; cross-kind collisions carry
+# a -script/-hook suffix, see tools/ext-scan.py).
+#
+# Line-level consumed by tools/ext-scan.py (stdlib-only).
+
+schema: tools-ext-capability-map/1
+
+map:
+  # -- unified CLI + loop machinery --
+  kunglao: cli:unified
+  kunglao-init: workspace:init
+  kunglao-decide: decide:convergence
+  kunglao-verify: verify:mechanical
+  kunglao-record: record:handoff
+  kunglao-monitor: monitor:health
+  kunglao-digest: digest:build
+  kunglao_resume: resume:recovery
+  kunglao-status: status:query
+  kunglao_log: log:event-stream
+  convergence_check: converge:check
+  convergence_health: converge:health
+  priority: dispatch:priority
+  priority_ratio: dispatch:priority-ratio
+  worker_budget: dispatch:budget
+  dispatch_gate: dispatch:gate
+  heartbeat_tick: heartbeat:tick
+  # -- env / toolchain --
+  env_check: env:check
+  env_manifest: env:manifest
+  env_repair_l1: env:repair
+  env_state_probe: env:state-probe
+  toolchain: env:toolchain
+  toolchain_install: env:toolchain-install
+  mcp_probe: env:mcp-probe
+  # -- gates / verification --
+  review_gate: review:gate
+  write_gate: write:gate
+  failure_analysis_gate: failure:analysis
+  fact_contradiction_gate: facts:contradiction
+  provenance_gate: facts:provenance
+  lint_facts: facts:lint
+  # -- references (capability docs) --
+  malware-triage: re:triage
+  patterns-decode: re:decode-patterns
+  anti-analysis: re:anti-analysis
+  languages-go: re:go
+  tools: re:tools-reference

@@ -7,7 +7,7 @@
 | # | Decision | Mechanical (script/hook) | LLM (orchestrator) | User |
 | --- | --- | --- | --- | --- |
 | 1 | Should I dispatch now? (convergence 5-branch) | ✅ `convergence_check.py` | — | — |
-| 2 | WHICH claim next? (action ranking) | ✅ `priority_ratio.py` / `priority.py` | — | — |
+| 2 | WHICH claim next? (action ranking) | ✅ `priority_ratio.py` | — | — |
 | 3 | Is the heartbeat alive? (dispatch gate) | ✅ `worker_budget.py` | — | — |
 | 4 | May this worker be spawned? (≤3 / cap / tools / tier) | ✅ `worker_budget.py` | — | — |
 | 5 | Is this fact byte-verified? (L1 mechanical) | ✅ `kunglao-verify` L1 | — | — |
