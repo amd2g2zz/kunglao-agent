@@ -1,5 +1,6 @@
 ---
 name: kunglao-agent
+version: 0.1.2
 description: >-
   Use when the user runs, starts, dispatches, or continues kunglao-agent (/kunglao-agent),
   or when a malware / RE sample needs deep analysis with unresolved claims. Also
@@ -12,6 +13,23 @@ description: >-
   report writing, single quick questions, re-running CTI that already produced
   artifacts. Convergence loop, failure gate, and reference protocols are loaded on
   demand from references/.
+
+v0.1.2 additions (this version):
+- SessionStart enforcement persistence (#533) — always_arm() + renew() on session start
+- Observability lifeline (#534) — init full-path log + 19 silent modules wired
+- Rollup write-loop automation (#524) — claim terminal state triggers lessons/outcome
+- Lessons nursery two-stage lifecycle (#525) — draft → active + trigger_precision gate
+- Lessons utility telemetry + deprecate (#526) — CBM quartet + tombstone
+- Dispatch context block mechanization (#527) — worker channel + verifier BLIND
+- Hypothesis persistence + restart rehydration (#528)
+- Strategy convergence four metrics (#529) — regret / cost-to-slope / P(faster|hit) / competence
+- Workspace export tool (#540) — zone-based routing (carrier/evidence/scratch)
+- v0.1.2 milestone audit (#539) — 4-piece set: white-box + black-box + log + regression
+- MCP prefix enforcement (security, #567) — rejects mcp__unknown__/mcp__external__
+- Worker budget refactor (#568) — split into core/gates/sinks modules
+- Coverage OBSERVATION-only policy (#564) — drift guard tests
+- E2E DoD 9 regression (#565) — init exit-4 → no subsequent repair
+
 triggers:
   - run kunglao-agent
   - continue kunglao-agent
@@ -37,6 +55,17 @@ triggers:
   - malware sample triage
   - claim-driven RE
   - byte-anchored fact base
+  - claim terminal triggers rollup
+  - lessons nursery stage transition
+  - lessons tombstone deprecate
+  - hypothesis persistence restart
+  - dispatch context block inject
+  - MCP prefix enforcement
+  - worker budget refactor
+  - session start arm hooks
+  - observability log scan
+  - strategy metric compute
+  - workspace export import
 arguments: [request]
 argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | help
 ---
