@@ -22,9 +22,6 @@ from pathlib import Path
 
 # ---- dispatch prefix regex (single source) ----
 # v0 protocol (legacy, still supported): "[T<N> tools=a,b] claim C-NN ..."
-# RETIRED per references/mechanisms.md (issue #566 / #446 AC #3, 2026-08-23).
-# The regex stays defined for back-compat — any straggler call site keeps
-# parsing. New dispatchers MUST emit v1 (DISPATCH_JSON_START_RE below).
 DISPATCH_RE = re.compile(
     r"\[T(\d)\s+tools=([^\]]+)\]\s+claim\s+(C-\d+)"
 )
@@ -39,25 +36,39 @@ DISPATCH_JSON_START_RE = re.compile(
 DISPATCH_PROTOCOL_VERSION = 1
 
 
-# ---- mechanism ledger mirror (issue #566 / #446 AC #3) ----
-# Mirrors references/mechanisms.md so future lint probes can read this
-# from Python without parsing markdown. The single source remains the
-# markdown ledger; this dict is the runtime-typed projection.
-MECHANISMS: dict[str, dict[str, str]] = {
-    "DISPATCH_RE_v0": {
-        "name": "v0 dispatch protocol regex",
-        "lifecycle": "RETIRED",
-        "owner": "hooks/lib_kunglao.py",
-        "introduced": "2026-Q2 (pre-#452)",
-        "deprecated": "2026-08-19",
-        "retired": "2026-08-23",
-        "replacement": "parse_dispatch_json v1 (kunglao_dispatch JSON envelope, DISPATCH_PROTOCOL_VERSION = 1)",
-        "audit": (
-            "v1 first caller: worker_budget:1297-1298; zero production v0 "
-            "callers remaining post-#452; regex retained for back-compat only."
-        ),
-    },
-}
+# ---- #567 SECURITY: MCP tool prefix enforcement (single source) ----
+# Only mcp__kunglao__* is sanctioned in this workspace. Any other MCP
+# namespace (mcp__unknown__, mcp__external__) is rejected at the dispatch
+# gate with rc=2 — the same posture as HOST_FORBIDDEN_TOOLS in
+# hooks/worker_budget.py (exact-name deny-list); the MCP gate extends that
+# posture to prefix-based matching. Adding a new namespace requires
+# deleting this entry, never bypassing the check.
+MCP_FORBIDDEN_PREFIXES: tuple[str, ...] = (
+    "mcp__unknown__",
+    "mcp__external__",
+)
+
+
+def check_mcp_prefix(tool_name: str) -> tuple[bool, str | None]:
+    """Return (allowed, reason) for a tool name under the MCP prefix gate.
+
+    - mcp__kunglao__*       -> (True, None)
+    - mcp__unknown__*       -> (False, reason naming the offender)
+    - mcp__external__*      -> (False, reason naming the offender)
+    - empty / non-MCP name  -> (True, None) (the helper only governs MCP)
+    - substring trap        -> NOT triggered: match is startswith on the
+      literal prefix tuple, so `mcp__kunglao_unknown__foo` passes.
+    """
+    if not tool_name:
+        return True, None
+    for prefix in MCP_FORBIDDEN_PREFIXES:
+        if tool_name.startswith(prefix):
+            return False, (
+                f"MCP prefix {prefix!r} is forbidden by issue #567 — only "
+                f"mcp__kunglao__* is sanctioned in this workspace; "
+                f"got {tool_name!r}"
+            )
+    return True, None
 
 
 def _balanced_json_at(text: str, start: int) -> int:

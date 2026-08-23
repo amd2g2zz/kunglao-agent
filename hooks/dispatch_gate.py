@@ -380,6 +380,37 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
         "or dispatch the top-ranked claim.")
 
 
+def _mcp_prefix_gate(prompt_text: str) -> int | None:
+    """#567 SECURITY: MCP tool prefix enforcement.
+
+    Rejects dispatch payloads declaring any tool whose name carries a
+    forbidden MCP prefix (mcp__unknown__*, mcp__external__*). The helper
+    is the single source in hooks/lib_kunglao.py:check_mcp_prefix —
+    mirrors the HOST_FORBIDDEN_TOOLS posture in worker_budget.py. None
+    (pass-through) when the dispatch declares no tools or only sanctioned
+    ones. Returns rc=2 with REJECT guidance on the first offender."""
+    try:
+        sys.path.insert(0, str(SKILL_DIR / "hooks"))
+        from lib_kunglao import check_mcp_prefix, parse_dispatch as _shared_parse
+    except Exception:  # noqa: BLE001 — helper unavailable -> fail open
+        return None
+    try:
+        tier, tools, _claim_id = _shared_parse(prompt_text or "")
+    except Exception:  # noqa: BLE001 — unparseable tools -> open
+        return None
+    if not tools:
+        return None
+    for tool in tools:
+        allowed, reason = check_mcp_prefix(tool)
+        if not allowed:
+            return _reject_with_guidance(
+                "mcp_prefix", reason,
+                "use only mcp__kunglao__* MCP tools in this workspace — "
+                "add new MCP namespaces to lib_kunglao.MCP_FORBIDDEN_PREFIXES "
+                "intentionally, never bypass via unknown prefixes.")
+    return None
+
+
 def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
     """②(a) #496: capability card — a validated capability in hand (the
     #495 artifact, read via priority_ratio.EvidenceView) constrains tool
@@ -504,13 +535,34 @@ def main() -> int:
 
     ws = _resolve_workspace(payload)
     if ws is None:
-        return 0  # not a kunglao-agent workspace — silent
+        # Even with no workspace resolution, MCP prefix gate must still
+        # REJECT forbidden namespaces — the prefix is a structural policy,
+        # not a workspace-bound concern. Issue #567.
+        try:
+            prompt_text = _extract_prompt_text(payload)
+        except Exception:  # noqa: BLE001 — malformed payload -> no-op
+            return 0
+        claim_id, _proto = _parse_dispatch(prompt_text)
+        if claim_id is None:
+            return 0
+        rc = _mcp_prefix_gate(prompt_text)
+        return rc if rc is not None else 0
+
+    # #567 SECURITY: MCP prefix gate runs BEFORE activation check — a
+    # forbidden MCP namespace is a structural policy violation, NOT a
+    # session-level concern. The gate sleeps for nothing else; it must
+    # not sleep for `mcp__unknown__*` / `mcp__external__*`. Hooks may not
+    # be activated and the prefix must still REJECT.
+    prompt_text = _extract_prompt_text(payload)
+    claim_id, proto = _parse_dispatch(prompt_text)
+    if claim_id is not None:
+        rc = _mcp_prefix_gate(prompt_text)
+        if rc is not None:
+            return rc
 
     if not _kunglao_active(ws):
         return 0  # kunglao-agent not activated or expired — hooks sleep
 
-    prompt_text = _extract_prompt_text(payload)
-    claim_id, proto = _parse_dispatch(prompt_text)
     if claim_id is None:
         # #452: visible signal — gate did not recognise the dispatch
         _warn_unparseable(None, proto)
@@ -559,6 +611,10 @@ def main() -> int:
     rc = _capability_guard(ws, claim_id, prompt_text)
     if rc is not None:
         return rc
+    # #567 SECURITY: MCP prefix gate runs BEFORE this point (see main()
+    # ordering) — a forbidden MCP namespace is a structural violation,
+    # not a session-level concern, so it cannot be deferred to the
+    # activated path.
     _log_strategy_dispatch(ws, claim_id, prompt_text)
     return 0
 
