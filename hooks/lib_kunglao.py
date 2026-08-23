@@ -22,6 +22,9 @@ from pathlib import Path
 
 # ---- dispatch prefix regex (single source) ----
 # v0 protocol (legacy, still supported): "[T<N> tools=a,b] claim C-NN ..."
+# RETIRED per references/mechanisms.md (issue #566 / #446 AC #3, 2026-08-23).
+# The regex stays defined for back-compat — any straggler call site keeps
+# parsing. New dispatchers MUST emit v1 (DISPATCH_JSON_START_RE below).
 DISPATCH_RE = re.compile(
     r"\[T(\d)\s+tools=([^\]]+)\]\s+claim\s+(C-\d+)"
 )
@@ -34,6 +37,27 @@ DISPATCH_JSON_START_RE = re.compile(
 )
 
 DISPATCH_PROTOCOL_VERSION = 1
+
+
+# ---- mechanism ledger mirror (issue #566 / #446 AC #3) ----
+# Mirrors references/mechanisms.md so future lint probes can read this
+# from Python without parsing markdown. The single source remains the
+# markdown ledger; this dict is the runtime-typed projection.
+MECHANISMS: dict[str, dict[str, str]] = {
+    "DISPATCH_RE_v0": {
+        "name": "v0 dispatch protocol regex",
+        "lifecycle": "RETIRED",
+        "owner": "hooks/lib_kunglao.py",
+        "introduced": "2026-Q2 (pre-#452)",
+        "deprecated": "2026-08-19",
+        "retired": "2026-08-23",
+        "replacement": "parse_dispatch_json v1 (kunglao_dispatch JSON envelope, DISPATCH_PROTOCOL_VERSION = 1)",
+        "audit": (
+            "v1 first caller: worker_budget:1297-1298; zero production v0 "
+            "callers remaining post-#452; regex retained for back-compat only."
+        ),
+    },
+}
 
 
 def _balanced_json_at(text: str, start: int) -> int:

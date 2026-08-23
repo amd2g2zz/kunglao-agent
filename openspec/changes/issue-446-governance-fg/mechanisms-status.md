@@ -68,10 +68,10 @@
 | references 编辑必须同 commit 重钉 | implemented(本件) | doc_sync 子检查;RED/GREEN 见 tasks.md §3-4 |
 | 新机制三件套登记 | partial(本件:WARN 前哨) | doc_sync 子检查 WARN;**硬门 + mechanisms.md 总账 = pending**,挂 #498 收尾(issue #446 验收第一条) |
 | 行号引用清零(验收第二条) | pending | 本件零新增(锚全符号化);存量清零未做(grep `\.py:[0-9]+` 于注释/docstring 仍有命中,如 recall_inject.py 头注)— 另立 PR |
-| 合并/退役样板 PR(验收第三条) | pending | 未见退役 PR;活性单源台账已建(design.md §D7),合并 PR 排 #498 后 |
+| 合并/退役样板 PR(验收第三条) | **DONE(#566)** | `references/mechanisms.md` 已建 + v0 dispatch(`DISPATCH_RE`)走完 DEPRECATED→RETIRED lifecycle;`tests/test_mechanisms_retirement.py` 锁 8 条契约;样本(其余机制实际退役)排 #498 后单独 PR |
 
 ## 汇总(由上表逐行机械派生 — 改表后必须重算;两处数字不相等即缺陷)
 
-- implemented:30 项;partial:2 项(static-gap marker、三件套 WARN 前哨 — 其硬门与 mechanisms.md 总账挂 #498,见该行佐证列);pending:5 项(resume #466、§6.3 机械 checklist、handoff-check executor、行号引用存量清零、退役样板 PR 合并)。
-  复算:`grep -n "^|" mechanisms-status.md` 按状态列计数 = 30 implemented / 2 partial / 5 pending(2026-08-20 F2 修正:原汇总 24/3/5 手写失同步,所列 partial 第三项 smart-ping 无对应表格行 — smart-ping 协议归 Phase 1 心跳链行(implemented),不再单列)。
+- implemented:30 项;partial:2 项(static-gap marker、三件套 WARN 前哨 — 其硬门与 mechanisms.md 总账挂 #498,见该行佐证列);pending:4 项(resume #466、§6.3 机械 checklist、handoff-check executor、行号引用存量清零;退役样板 PR = done,#566 关闭)。
+  复算:`grep -n "^|" mechanisms-status.md` 按状态列计数 = 30 implemented / 2 partial / 4 pending / 1 done(#566 关闭退役样板 PR 行)(2026-08-20 F2 修正:原汇总 24/3/5 手写失同步,所列 partial 第三项 smart-ping 无对应表格行 — smart-ping 协议归 Phase 1 心跳链行(implemented),不再单列;2026-08-23 F3 修正:退役样板 PR 从 pending 改 done,pending 5 → 4)。
 - **给 #442 的三个硬缺口**:handoff-check(声明不存在的门)> resume(#466 在途)> §6.3 checklist(prose-only)。
