@@ -58,6 +58,28 @@ release (see the mapping table at the end).
 - Toolchain probe upgrade to capability (#474)
 - Hook chain final gates: task-oracle registration + fingerprint table (#473)
 
+### Changed (coverage policy alignment, #564)
+
+- **Policy decision**: coverage stays as **OBSERVATION**, not a
+  release gate — `#463` 4-gate quality framework is reaffirmed and
+  `pytest.ini`, `pyproject.toml`, and `.github/workflows/release-check.yml`
+  are explicitly aligned on that stance. The buffered floor asserted
+  inside `tests/test_coverage_floor_520.py` (FLOOR=60, target 75)
+  remains as a normal pytest assertion, **not** via `--cov-fail-under`,
+  so the `#463` config comment stays literally true while `#520` ships
+  its ratchet.
+- `tests/test_coverage_policy_564.py` — drift guard: enforces
+  (a) no `--cov-fail-under` anywhere in `pytest.ini`,
+      `release-check.yml`, `pyproject.toml`, or `ci.yml`;
+  (b) every policy truth source (pytest.ini / release-check.yml /
+      pyproject.toml / test_coverage_floor_520.py) carries an
+      `OBSERVATION` marker, so a future edit that flips only one file
+      fails the integration test. Without this guard the four
+      sources could drift silently; with it the choice is conscious
+      or loud.
+- `pyproject.toml` dev-deps comment `#463` block updated to spell
+  "observation" so the three truth sources share one word.
+
 ### Added (hypothesis persistence + restart re-hydration, #528)
 
 - `scripts/hypothesis_store.py` — the hypothesis layer carrier over
