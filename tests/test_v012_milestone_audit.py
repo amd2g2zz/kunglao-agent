@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """tests/test_v012_milestone_audit.py — #539 v0.1.2 里程碑四件套审计测试
 
 #539 split E: 里程碑审计本体 (white-box + black-box + replay + log + regression)

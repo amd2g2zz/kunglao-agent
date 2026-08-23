@@ -33,6 +33,7 @@ assets:
     - hooks/heartbeat_touch.py
     - hooks/lib_kunglao.py
     - hooks/recall_inject.py   # #268 wired by wire_up_settings.py:152
+    - hooks/session_start.py   # #533 SessionStart lifecycle (always_arm)
     - hooks/state_anchor.py
     - hooks/worker_budget.py
     - hooks/worker_pulse.py

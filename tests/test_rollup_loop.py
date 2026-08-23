@@ -54,7 +54,19 @@ def _write_register(ws: Path, claims: list[dict]) -> None:
 
 def _write_analysis(ws: Path, cid: str, **fields) -> None:
     base = {"claim": cid, "method_assumption": "m", "assumption_validity": "not-justified",
-            "next_method": "n", "analyzed_at": "2026-08-22T00:00:00Z"}
+            "next_method": "n", "analyzed_at": "2026-08-22T00:00:00Z",
+            # #525 nursery gate: aggregate_lessons routes entries missing a
+            # complete trigger_precision block to the /reflect queue (reason=
+            # missing-precision) instead of the lessons library — the rollup
+            # integration tests want a CLOSED-LOOP lesson write, so the helper
+            # seeds the required 4-key block by default (tests that need the
+            # missing-precision path can override).
+            "trigger_precision": {
+                "tool": "test-tool",
+                "error_signature": "test-sig",
+                "family": "test-family",
+                "unit": "test-unit",
+            }}
     base.update(fields)
     adir = ws / "analyses"
     adir.mkdir(exist_ok=True)

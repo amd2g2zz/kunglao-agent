@@ -150,6 +150,7 @@ ALL_EVENT_TYPES = [
 #   write_blocked        write_guard.py / worker_budget  #532 carrier write refusal
 #   lesson_citation / lesson_burn / lesson_match / lesson_deprecated
 #                                 lessons_telemetry #526 CBM + tombstone face
+#   lesson_stage_transition failure_analysis_gate nursery draft→active (#525)
 EMIT_ACTIONS = [
     "analysis_blocked",
     "analysis_recorded",
@@ -167,6 +168,7 @@ EMIT_ACTIONS = [
     "lesson_citation",
     "lesson_deprecated",
     "lesson_match",
+    "lesson_stage_transition",  # #525 lessons nursery draft → active
     "must_ask",
     "must_stop",
     "plan_stall",
