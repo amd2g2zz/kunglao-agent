@@ -28,7 +28,35 @@ release (see the mapping table at the end).
 - Exit-code semantics audit (#414): RC matrix pinned by test; argparse usage errors normalized 2→1; cleanup removes only this-run artifacts.
 - Test-suite validity audit (#394): redundant/meaningless tests removed/merged (before/after counts in the PR).
 
-## [Unreleased]
+## [0.1.2] - 2026-08-23
+
+### Added
+- workspace CLAUDE.md template — progressive disclosure (37-line core + 9 pointers) + 6 carrier memory contract + loop mandatory block (#535)
+- Version stamp system — kunglao_template_version three-carrier stamp + fact schema_rev + upgrade detection (#536)
+- Workspace carrier contracts — eager scaffold 9 carriers + .workspace-manifest.json + _INDEX unified schema + scratch/ free-zone (#538)
+- Skill package contract text fix — SKILL.md:112 contradiction rewrite + global rules channel dispatch (#537)
+- Enforcement persistence — SessionStart re-arming + always_arm() + liveness predicate split + Stop gate always armed + MCP matcher (#533)
+- Observability lifeline — init full-path log + .init-report.json + 19 silent modules wired (#534)
+- Rollup write-loop automation — claim terminal state triggers lessons/outcome writes (#524)
+- Lessons nursery two-stage lifecycle — draft → active + trigger_precision gate (#525)
+- Lessons utility telemetry + deprecate governance — CBM quartet + tombstone (#526)
+- Dispatch context block mechanization — worker channel injection + verifier BLIND hard exclusion (#527)
+- Hypothesis persistence + restart rehydration — hypotheses/ + digest sec_g + state_anchor structured pointer (#528)
+- Strategy convergence four metrics — regret / cost-to-slope / P(faster|hit) / competence (#529)
+- Workspace export tool — zone-based routing (contract carriers / evidence / scratch) + manifest + verify (#540)
+- v0.1.2 milestone audit four-piece set — white-box + black-box + log + regression (#539)
+
+### Changed
+- Tool-search three sources — mcp_probe enumeration + dispatch acceptance + artifact→evidence e2e (#515)
+- Mechanism registry + retirement precedent (#446)
+- Quick fixes baseline test failures (#457)
+
+### Fixed
+- Init deployment: .claude/settings.json deadlock (hooks always skip), agents zero-deployment, .mcp.json empty scaffold (#478)
+- Deployment coverage: pkg_detect + INSTALL_PLANS 5→17 full coverage (#477)
+- Environment drift detection + bounded repair ladder (#475)
+- Toolchain probe upgrade to capability (#474)
+- Hook chain final gates: task-oracle registration + fingerprint table (#473)
 
 ### Added (hypothesis persistence + restart re-hydration, #528)
 
