@@ -353,13 +353,23 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
     try:
         sys.path.insert(0, str(SKILL_DIR / "hooks"))
         from worker_budget import check_priority
-    except Exception:  # noqa: BLE001 — scorer wiring unavailable -> fail open
+    except Exception as exc:  # noqa: BLE001 — scorer wiring unavailable -> fail open
+        # #569 AUDIT: the gate is being bypassed silently — leave a trace so
+        # post-mortem can see the FAIL_OPEN path was taken. detail carries
+        # the exception class so the post-mortem can distinguish scorer
+        # unavailable from audit crash without re-reading the source.
+        _emit_trace(ws, "top1_fail_open", claim_id,
+                    f"reason=scorer_unavailable; exc={type(exc).__name__}")
         return None
     try:
         _ok, msg, deviated = check_priority(
             ws / "claim-register.yaml", ws / "claim_deps.yaml",
             ws / "task_spec.yaml", claim_id, ws)
-    except Exception:  # noqa: BLE001 — audit crash -> fail open
+    except Exception as exc:  # noqa: BLE001 — audit crash -> fail open
+        # #569 AUDIT: same as above — the audit itself crashed, the gate
+        # fails open, but the audit log must record the bypass.
+        _emit_trace(ws, "top1_fail_open", claim_id,
+                    f"reason=audit_crash; exc={type(exc).__name__}: {exc}")
         return None
     if not deviated:
         if msg:

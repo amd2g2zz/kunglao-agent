@@ -135,6 +135,8 @@ class TestEmitActionVocabulary:
             "top1_reject", "capability_reject",
             "stale_plan_on_new_evidence",
             "analysis_recorded", "analysis_blocked",
+            # #569 FAIL_OPEN audit faces
+            "top1_fail_open", "decide_fail_open",
         }
         missing = expected - set(et.EMIT_ACTIONS)
         assert not missing, f"EMIT_ACTIONS missing words: {sorted(missing)}"

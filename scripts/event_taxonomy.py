@@ -159,6 +159,7 @@ EMIT_ACTIONS = [
     "claim_migrate",
     "converge",
     "death_verdict_rejected",
+    "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face
     "dispatch",
     "failure_blocked",
     "ladder_required",
@@ -171,6 +172,7 @@ EMIT_ACTIONS = [
     "plan_stall",
     "priority_deviation",
     "stale_plan_on_new_evidence",
+    "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
     "verify",
     "write_blocked",

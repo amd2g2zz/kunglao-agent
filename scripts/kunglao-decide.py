@@ -93,7 +93,20 @@ def _conservative_blocked(ws: Path, exc: Exception) -> dict:
     sentinel values (e.g. -1) would poison the trajectory that convergence_health.py
     consumes.  The missing ledger entry is harmless — health assessment treats
     gaps as "no data for that turn" rather than an error.
+
+    #569 AUDIT: leaves a decide_fail_open trace in the unified event log so the
+    audit can see when the script took the exception path. The BLOCKED shape
+    is identical to a healthy BLOCKED, so without this trace the FAIL_OPEN
+    would be invisible to post-mortem. Logging is fail-open (stderr note
+    only on write failure) — the BLOCKED contract must survive any emit crash.
     """
+    try:
+        import kunglao_log
+        kunglao_log.emit(ws, actor="kunglao-decide", action="decide_fail_open",
+                         detail=f"{type(exc).__name__}: {exc}")
+    except Exception as emit_exc:  # noqa: BLE001 — emit must not block BLOCKED
+        print(f"kunglao-decide: trace emit failed ({emit_exc!r})",
+              file=sys.stderr, flush=True)
     return {
         "decision": "BLOCKED", "exit_code": cc.EXIT_BLOCKED,
         "top_actions": [], "blocked": [], "failure_blocked": [], "stale": [],
