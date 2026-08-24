@@ -198,19 +198,30 @@ def main(argv: list[str] | None = None) -> int:
     # the script itself crashed — recorded, not fatal).
     report["env_state"] = run("env_state_probe.py", ws)
 
+    sc = report["selfcheck"].get("stdout", "")[:80]
+    hb = report["heartbeat"].get("stdout", "")[:120]
+    rc_sc = report["selfcheck"].get("rc", -1)
+    rc_renew = report["renew"].get("rc", -1)
+    rc_hb = report["heartbeat"].get("rc", -1)
+    # #617: the decisive rc reaches the summary; failures carry a loud banner
+    # and a truncation-immune alert field in the persisted report.
+    first_failure = None
+    for name, rc in (("selfcheck", rc_sc), ("renew", rc_renew), ("heartbeat", rc_hb)):
+        if rc != 0 and first_failure is None:
+            first_failure = {"step": report[name].get("script", name), "rc": rc}
+    report["alert"] = first_failure is not None
+    report["first_failure"] = first_failure
+
     out = ws / "runs" / ".heartbeat-tick.json"
     try:
         out.write_text(json.dumps(report, indent=2), encoding="utf-8")
     except Exception:
         pass
 
-    sc = report["selfcheck"].get("stdout", "")[:80]
-    hb = report["heartbeat"].get("stdout", "")[:120]
-    rc_sc = report["selfcheck"].get("rc", -1)
-    rc_renew = report["renew"].get("rc", -1)
-    rc_hb = report["heartbeat"].get("rc", -1)
     action = report["action_taken"] or "(EMPTY — must be filled: what was dispatched/verified/resolved/reactivated)"
-    print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | {hb}")
+    print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | heartbeat_rc={rc_hb} | {hb}")
+    if first_failure is not None:
+        print(f"*** HEARTBEAT ALERT: step {first_failure['step']} failed (rc={first_failure['rc']}) — re-arm before next dispatch ***")
     print(f"action_taken: {action}")
     print(f"report: {out}")
     # #381: selfcheck rc weighs in — a crashed selfcheck (registry drift at
