@@ -279,3 +279,16 @@ The release contract is revision-owned: `pyproject.toml` + `uv.lock` (pinned dep
 ## License
 
 MIT
+
+## Internals: Two settings levels
+
+kunglao hooks live at TWO levels (registry: `scripts/wire_up_settings.py`
+`HOOK_DEPLOYMENT_TARGETS` — derive, don't copy):
+
+| Level | File | Written by | Carries |
+|---|---|---|---|
+| workspace | `<ws>/.claude/settings.json` | `--wire-up` (#258) | the kunglao hook registrations |
+| workspace-parent | `<ws>/../.claude/settings.json` | external_kicker (D2 recovery) | env secrets + mcpServers + block_malware_exec |
+
+The user HOME (`~/.claude/settings.json`) is deliberately NEVER written
+(kunglao-init.py:106-111) — production settings are untouchable.

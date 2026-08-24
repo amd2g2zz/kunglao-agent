@@ -259,16 +259,25 @@ GATES = {
 }
 
 
+# #563: named selector for the CI quick path — positional ids renumber on
+# registry growth; --quick is stable.
+QUICK_GATES = [1, 3, 4]
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     p.add_argument("gates", nargs="*", type=int, choices=sorted(GATES),
                    help="which gates to run (default: all)")
+    p.add_argument("--quick", action="store_true",
+                   help=f"run the CI quick set {QUICK_GATES} (stable name)")
     p.add_argument("--quiet", action="store_true",
                    help="suppress per-gate verbose output")
     args = p.parse_args(argv)
 
     verbose = not args.quiet
-    selected = args.gates or sorted(GATES)
+    if getattr(args, "quick", False) and args.gates:
+        p.error("--quick and positional gates are mutually exclusive")
+    selected = QUICK_GATES if getattr(args, "quick", False) else (args.gates or sorted(GATES))
     print(f"quality_gates: repo={REPO_ROOT} gates={selected}")
 
     failed: list[int] = []
