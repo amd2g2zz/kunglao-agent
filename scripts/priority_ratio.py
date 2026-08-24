@@ -519,10 +519,11 @@ def main(argv: list[str] | None = None) -> int:
     evidence = EvidenceView.from_workspace(ws)
     claims = reg.get("claims") or []
     actions = priority_ratio(claims, deps, evidence)
+    # #610: plain-text reads the typed actions; out stays the --json payload only
     out = [a.to_dict() for a in actions]
     print(json.dumps(out, ensure_ascii=False, indent=2) if args.json else "\n".join(
         f"{a.claim_id:<6} {a.action:<22} score={a.score:<7} L={a.leverage} D={a.discriminator} N={a.novelty} cost={a.cost}"
-        for a in out) or "(no dispatchable claims)")
+        for a in actions) or "(no dispatchable claims)")
     return 0
 
 
