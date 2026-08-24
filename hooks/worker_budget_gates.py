@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from worker_budget_core import (
-    MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, ENV_STATE_FILE, ENV_STATE_TTL_MINUTES,
+    MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, MAX_RETRIES, RETRY_COUNTER_FILE,
+    ENV_STATE_FILE, ENV_STATE_TTL_MINUTES,
     PREFIX_RE, CLAIM_RE, VM_TOOLS, KNOWN_TOOLS, HOST_FORBIDDEN_TOOLS,
     TOOL_ERRORS_FILE, GENERIC_WORK_AGENT, _SKILL_ROOT,
     _ratio_rank, _EvidenceView, _PRIORITY_AVAILABLE,
@@ -236,6 +237,163 @@ def check_promotion_attempts(reg_path: Path, claim_id: str | None) -> tuple[bool
     if pa >= MAX_PROMOTION_ATTEMPTS:
         return (False, f'claim {claim_id} promotion_attempts={pa} >= {MAX_PROMOTION_ATTEMPTS}')
     return (True, f'promotion_attempts={pa}')
+
+
+# ---------- #604: MAX_RETRIES circuit breaker for silent worker failures ----------
+# Distinct from MAX_PROMOTION_ATTEMPTS (#520): #520 only counts PROVEN
+# promotion attempts on a claim. #604 counts WORKER-level silent-failure
+# re-dispatches on the same (worker_id, claim_id). When a worker silently
+# dies / hangs and the orchestrator re-dispatches it 3 times on the same
+# claim, this gate escalates to BLOCKED and requires a failure-analysis
+# artifact before any further re-dispatch.
+#
+# The counter lives in <workspace>/runs/.retry-counter.yaml with shape:
+#   counters:
+#     "<worker_id>:<claim_id>": <int>
+# `record_retry` is called by the orchestrator after detecting a silent
+# failure (worker hung / no progress / heartbeat STALE on a dispatched
+# worker). `reset_retry_counter` is called ONLY on PROVEN completion
+# (claim finishes successfully — partial completion does NOT reset).
+# The counter file is fail-open (unreadable / missing → allow).
+
+def _retry_key(worker_id: str, claim_id: str) -> str:
+    return f'{worker_id}:{claim_id}'
+
+
+def read_retry_counter(workspace: str | Path) -> dict[str, int]:
+    """Read the {key: count} map from runs/.retry-counter.yaml.
+
+    Returns {} when the file is absent, unreadable, or malformed. Missing
+    `runs/` directory also returns {} (the counter file is created lazily
+    by `record_retry`).
+    """
+    if not workspace:
+        return {}
+    p = Path(workspace) / 'runs' / '.retry-counter.yaml'
+    if not p.exists():
+        return {}
+    try:
+        import yaml as _y
+        data = _y.safe_load(p.read_text(encoding='utf-8')) or {}
+    except Exception:
+        return {}
+    raw = data.get('counters') or {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, int] = {}
+    for k, v in raw.items():
+        try:
+            out[str(k)] = int(v)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _write_retry_counter(workspace: Path, counters: dict[str, int]) -> None:
+    """Atomically write the counter file. Creates runs/ if missing.
+
+    The atomic-write primitive is borrowed from worker_budget_core
+    (_atomic_write via tempfile + replace) so a crash mid-write cannot leave
+    a half-written YAML that the gate would then mis-read.
+    """
+    import yaml as _y
+    runs = workspace / 'runs'
+    runs.mkdir(parents=True, exist_ok=True)
+    p = runs / '.retry-counter.yaml'
+    text = _y.safe_dump({'counters': counters}, allow_unicode=True, sort_keys=True)
+    tmp = p.with_suffix(p.suffix + '.tmp')
+    tmp.write_text(text, encoding='utf-8')
+    tmp.replace(p)
+
+
+def record_retry(workspace: str | Path, worker_id: str, claim_id: str) -> int:
+    """Increment the silent-failure retry counter for (worker_id, claim_id).
+
+    Returns the new count. Creates the counter file if absent. NOOP on a
+    missing workspace (fail-open — a broken orchestrator path must not be
+    able to corrupt the gate's counter; if we cannot write, the counter
+    stays at the previous value, and the next check_max_retries call will
+    pass since no counter file means count=0).
+
+    The increment is intentionally atomic (read-modify-write under
+    _atomic_write): two concurrent silent-failure detections on the same
+    worker must each count (the worst case is one lost increment on a
+    race, which is acceptable — the gate fires at threshold, not exact).
+    """
+    if not workspace or not worker_id or not claim_id:
+        return 0
+    counters = read_retry_counter(workspace)
+    key = _retry_key(worker_id, claim_id)
+    counters[key] = int(counters.get(key, 0)) + 1
+    try:
+        _write_retry_counter(Path(workspace), counters)
+    except Exception:
+        # Fail-open: do not propagate — the gate will still pass since
+        # the on-disk counter is the source of truth (just possibly stale).
+        pass
+    return counters[key]
+
+
+def reset_retry_counter(workspace: str | Path, worker_id: str, claim_id: str) -> bool:
+    """Clear the retry counter for (worker_id, claim_id).
+
+    Intended for PROVEN-completion callers ONLY (claim finishes
+    successfully — the worker did its job, future dispatches are fresh).
+    Partial completion (status: in_progress / done-only-output) MUST NOT
+    call this — partial success does not prove the worker's failure mode
+    is resolved; the next dispatch on the same worker_id could hit the
+    same silent failure again.
+
+    Returns True if a counter was removed, False otherwise.
+    """
+    if not workspace or not worker_id or not claim_id:
+        return False
+    counters = read_retry_counter(workspace)
+    key = _retry_key(worker_id, claim_id)
+    if key not in counters:
+        return False
+    del counters[key]
+    try:
+        _write_retry_counter(Path(workspace), counters)
+    except Exception:
+        return False
+    return True
+
+
+def check_max_retries(workspace: str | Path, worker_id: str,
+                      claim_id: str) -> tuple[bool, str]:
+    """Issue #604: cap silent-failure retry loops at MAX_RETRIES.
+
+    When the same worker_id has been silently-failed and re-dispatched
+    MAX_RETRIES (3) times on the same claim_id, REJECT the dispatch and
+    escalate to BLOCKED. The REJECT message requests a failure-analysis
+    artifact — the orchestrator must record WHY the worker keeps silently
+    failing (env broken? wrong tool? capability gap?) before another
+    re-dispatch is allowed.
+
+    FAIL_OPEN semantics: a missing counter file, an unreadable workspace,
+    or a missing worker_id/claim_id lets the gate pass (returns True).
+    This matches the gate's FAIL_OPEN stance on scan failures — a broken
+    gate must not block dispatch, that would deadlock the loop.
+
+    Returns (ok, reason). ok=False means REJECT the dispatch.
+    """
+    if not workspace or not worker_id or not claim_id:
+        return (True, 'no workspace/worker_id/claim_id - max-retries skipped')
+    counters = read_retry_counter(workspace)
+    key = _retry_key(worker_id, claim_id)
+    count = int(counters.get(key, 0))
+    if count >= MAX_RETRIES:
+        return (False, (
+            f'BLOCKED: worker {worker_id} retry_count={count} >= {MAX_RETRIES} '
+            f'on claim {claim_id} (silent-failure circuit breaker, #604). '
+            f'A failure-analysis artifact (runs/failure-analysis-{claim_id}.md) '
+            f'is REQUIRED before further re-dispatch — record WHY the worker '
+            f'keeps silently failing (env / tool / capability gap) and reset '
+            f'the counter via reset_retry_counter(worker_id, claim_id) once the '
+            f'root cause is addressed or claim is PROVEN.'
+        ))
+    return (True, f'retry={count}')
 
 
 def check_tools_allowed(tools: list[str], task_spec_path: Path) -> tuple[bool, str]:

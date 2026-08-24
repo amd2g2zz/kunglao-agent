@@ -20,6 +20,17 @@ import yaml
 MAX_WORKERS = 3
 MAX_PROMOTION_ATTEMPTS = 3
 
+# v0.1.3 (#604): worker-level silent-failure retry counter. Distinct from
+# MAX_PROMOTION_ATTEMPTS (#520) which tracks claim-level PROVEN attempts.
+# MAX_RETRIES tracks WORKER-level silent-failure retries on the same
+# (worker_id, claim_id): when a worker silently dies/hangs and gets
+# re-dispatched 3 times on the same claim, the gate escalates to BLOCKED +
+# failure-analysis artifact. The two counters are independent — a claim can
+# have promotion_attempts=2 while a worker simultaneously has retries=2 on it.
+MAX_RETRIES = 3
+
+RETRY_COUNTER_FILE = 'runs/.retry-counter.yaml'
+
 # v1.9.39 (#475): env-state freshness gate constants. TTL aligns with the
 # scripts/kunglao-monitor.py advisory (drift detection uses the same value).
 ENV_STATE_FILE = 'runs/env-state.json'
