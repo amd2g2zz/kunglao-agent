@@ -41,6 +41,62 @@ VALID_BACKTRACK_DECISIONS = ("continue", "retry_different", "escalate", "redispa
 # liveness-minutes source; rationale + the 2x-reject relationship live there).
 from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402
 
+DRIFT_LEDGER = "runs/.drift-events.jsonl"  # #612: append-only advisory record
+
+
+def detect_drift(ws: Path) -> list[dict]:
+    """#612: the drift countermeasure that production lacked (3 incidents, ~4h,
+    0% mechanical detection — every catch was a manual smart-ping).
+
+    Flavor A (#607 made them visible) and Flavor B alike reduce to: a worker
+    file aged past STUCK_MIN (terminal statuses excluded) whose claim has NO
+    evidence on disk (no facts/F*.md, no evidence/ artifacts). Each such
+    worker appends one advisory event to runs/.drift-events.jsonl (#88:
+    advisory-only — never blocks, never changes a verdict). Fail-open on any
+    IO error (returns what was gathered)."""
+    events: list[dict] = []
+    try:
+        import backtrack_gate as bg
+    except Exception:
+        return events
+    runs = ws / "runs"
+    if not runs.exists():
+        return events
+    now = _utc_now_dt()
+    facts = ws / "facts"
+    evidence = ws / "evidence"
+    for p in sorted(runs.glob("worker-status-*.md")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        token = bg.parse_status(text)
+        if token in ("done", "failed", "blocked", "error", None):
+            continue
+        age = now - datetime.datetime.fromtimestamp(p.stat().st_mtime,
+                                                    tz=datetime.timezone.utc)
+        if age < datetime.timedelta(minutes=STUCK_MIN):
+            continue
+        has_evidence = False
+        if facts.exists() and any(facts.glob("F*.md")):
+            has_evidence = True  # conservative: any fact = evidence flowing
+        elif evidence.exists() and any(evidence.iterdir()):
+            has_evidence = True
+        if has_evidence:
+            continue
+        ev = {"ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "worker": p.name,
+              "flavor": "stuck-no-evidence",
+              "age_min": int(age.total_seconds() // 60)}
+        events.append(ev)
+        try:
+            ledger = runs / ".drift-events.jsonl"
+            with ledger.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(ev, ensure_ascii=False) + "\n")
+        except OSError:
+            pass  # advisory: ledger failure never blocks the signal list
+    return events
+
 
 def utc_now() -> str:
     """UTC ISO-8601, second precision, Z suffix (schema ts pattern)."""
