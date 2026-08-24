@@ -94,6 +94,34 @@ _TIER_RE = re.compile(
 
 
 # ---------------------------------------------------------------------------
+# #628: durable-note obligation (pending-queue face)
+# ---------------------------------------------------------------------------
+
+def notes_due(workspace: Path) -> list[str]:
+    """#628: claim ids whose durable result note is still owed.
+
+    Reads runs/notes-due.yaml (written by rollup Step 2.5) and drops entries
+    whose notes/<id>.md now exists. Fail-open: absent/corrupt queue → [] (a
+    legacy workspace must never be blocked). judge() stays workspace-pure —
+    the Stop-face shim (hooks/completion_gate.py::process_event) consumes
+    this, refusing closure while obligations remain (judge-then-revise
+    doctrine: nothing auto-writes the note)."""
+    due_path = Path(workspace) / "runs" / "notes-due.yaml"
+    if not due_path.exists():
+        return []
+    try:
+        data = yaml.safe_load(due_path.read_text(encoding="utf-8")) or {}
+    except (yaml.YAMLError, OSError):
+        return []
+    owed = []
+    for e in data.get("due") or []:
+        cid = e.get("claim_id")
+        if cid and not (Path(workspace) / "notes" / f"{cid}.md").exists():
+            owed.append(cid)
+    return owed
+
+
+# ---------------------------------------------------------------------------
 # User-vs-agent discrimination (D3)
 # ---------------------------------------------------------------------------
 

@@ -96,6 +96,33 @@ def _rolled_up(workspace: Path, claim_id: str, terminal_status: str) -> bool:
     return False
 
 
+NOTES_DUE_FILE = "runs/notes-due.yaml"
+
+
+def _queue_notes_due(workspace: Path, claim_id: str, terminal_status: str) -> bool:
+    """#628: append the durable-note obligation to runs/notes-due.yaml when
+    the terminal claim has no notes/<id>.md. Idempotent (no duplicate entry
+    per claim). Returns True when queued. The note itself is NEVER written
+    here — judge-then-revise first, the queue is only the reminder."""
+    notes_dir = workspace / "notes"
+    if (notes_dir / f"{claim_id}.md").exists():
+        return False
+    due_path = workspace / NOTES_DUE_FILE
+    try:
+        data = yaml.safe_load(due_path.read_text(encoding="utf-8")) if due_path.exists() else None
+        entries = (data or {}).get("due") or []
+        if any(e.get("claim_id") == claim_id for e in entries):
+            return False
+        entries.append({"claim_id": claim_id, "terminal": terminal_status,
+                        "queued_ts": utc_now_iso()})
+        due_path.parent.mkdir(parents=True, exist_ok=True)
+        due_path.write_text(yaml.safe_dump({"due": entries}, allow_unicode=True),
+                            encoding="utf-8")
+        return True
+    except OSError:
+        return False  # fail-open: the rollup's other steps must not block
+
+
 def _checkpoint_commit(workspace: Path, claim_id: str, terminal_status: str) -> str:
     """Shared #534 workspace-git checkpoint hook.
 
@@ -152,6 +179,13 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         library=lessons_library,
         reflect_queue=reflect_queue,
     )
+
+    # Step 2.5 (#628): queue the durable-note obligation — terminal claim
+    # without a notes/<id>.md entry goes to runs/notes-due.yaml. Nothing
+    # auto-WRITES the note (judge-then-revise doctrine, 2026-08-20 ruling):
+    # the queue only makes the obligation impossible to forget; the Stop-face
+    # completion gate refuses closure while entries remain.
+    notes_queued = _queue_notes_due(workspace, claim_id, status_upper)
 
     # Step 3: workspace git checkpoint commit (shared mount with #534).
     ck = _checkpoint_commit(workspace, claim_id, status_upper)

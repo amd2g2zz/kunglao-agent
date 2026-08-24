@@ -203,6 +203,11 @@ def main(argv: list[str] | None = None) -> int:
     # monitor must never fail the tick; its findings surface via the report).
     report["monitor"] = run("kunglao-monitor.py", ws, "--json")
 
+    # #629: feedback.check_stale gets its mechanical caller (was standalone
+    # since #237 planned it). Same advisory posture as the monitor: recorded,
+    # never weighed into rc/alert.
+    report["feedback"] = run("feedback.py", ws, "--check-stale")
+
     sc = report["selfcheck"].get("stdout", "")[:80]
     hb = report["heartbeat"].get("stdout", "")[:120]
     rc_sc = report["selfcheck"].get("rc", -1)
