@@ -198,6 +198,11 @@ def main(argv: list[str] | None = None) -> int:
     # the script itself crashed — recorded, not fatal).
     report["env_state"] = run("env_state_probe.py", ws)
 
+    # #620 Gap C: the monitor finally has a runtime consumer. #88 freeze:
+    # BACKGROUND advisory — recorded, never weighed into rc/alert (a crashed
+    # monitor must never fail the tick; its findings surface via the report).
+    report["monitor"] = run("kunglao-monitor.py", ws, "--json")
+
     sc = report["selfcheck"].get("stdout", "")[:80]
     hb = report["heartbeat"].get("stdout", "")[:120]
     rc_sc = report["selfcheck"].get("rc", -1)
