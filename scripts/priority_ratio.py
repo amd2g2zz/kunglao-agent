@@ -112,6 +112,19 @@ class EvidenceView:
                     terminal_claims.add(claim_id)
                 if "PROVEN" in status or "VERIFIED" in status:
                     verified += 1
+        # #594: a fresh workspace's _INDEX.md carries only the version stamp —
+        # zero terminal rows emptying the dispatchability gate. Fall back to
+        # the register's PROVEN claims (index rows still win when present).
+        if not terminal_claims:
+            reg = ws / "claim-register.yaml"
+            if reg.exists():
+                try:
+                    for c in (yaml.safe_load(reg.read_text(encoding="utf-8"))
+                              or {}).get("claims") or []:
+                        if str(c.get("status", "")).upper() in TERMINAL:
+                            terminal_claims.add(c.get("id"))
+                except (yaml.YAMLError, OSError):
+                    pass  # fail-open: broken register must not break ranking
         caps, obstacles, covers = _scan_failure_artifacts(ws)
         claim_strategy, strategy_failures = _load_strategy_view(ws, covers)
         return cls(frozenset(terminal_claims), verified, {}, lines,
@@ -442,7 +455,15 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
           evidence (EvidenceView, with terminal_fact_claims)
     Output: the sorted Action list (score descending, ties broken by lower cost, then by claim_id)
     """
+    # #594/#596: claim_deps.yaml is the authoritative graph, but a fresh
+    # workspace ships it empty ("depends_on: {}") — fall back to the
+    # operator-natural per-claim depends_on field so the ranking has input
+    # (and the per-claim field stops being cosmetic) until claim_deps is
+    # hand-populated.
     depends_on = (deps or {}).get("depends_on", {}) or {}
+    if not depends_on:
+        depends_on = {c["id"]: list(c.get("depends_on") or [])
+                      for c in claims if c.get("id") and c.get("depends_on")}
     competitor_groups = (deps or {}).get("competitor_groups", {}) or {}
     rev_deps = _reverse_deps(depends_on)
     open_ids = {c.get("id") for c in claims if c.get("id") and is_open(c)}
