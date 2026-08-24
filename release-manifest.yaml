@@ -36,6 +36,9 @@ assets:
     - hooks/session_start.py   # #533 SessionStart lifecycle (always_arm)
     - hooks/state_anchor.py
     - hooks/worker_budget.py
+    - hooks/worker_budget_core.py   # #568 split: budget core
+    - hooks/worker_budget_gates.py  # #568 split: gates consumer
+    - hooks/worker_budget_sinks.py  # #568 split: sinks persistence
     - hooks/worker_pulse.py
     - hooks/write_guard.py     # #532 four-carrier Write/Edit PreToolUse gate
   templates:
