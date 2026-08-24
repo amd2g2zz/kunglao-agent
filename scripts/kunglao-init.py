@@ -878,7 +878,7 @@ def emit_pending(ws: Path | None,
     """Print the pending-decision list (stdout = machine channel, stderr =
     human guidance) and return RC_PENDING_DECISIONS. Zero scaffold is the
     caller's invariant: this runs before any write."""
-    doc = decision_pending.PendingDecisionList(
+    doc = decision_pending.build_pending_doc(
         flow="kunglao-init",
         workspace=str(ws) if ws is not None else None,
         guidance=INTAKE_GUIDANCE,
@@ -887,7 +887,7 @@ def emit_pending(ws: Path | None,
                          str(ws) if ws is not None else "<workspace>",
                          "--resolve", "<answers.json>"]},
     )
-    print(doc.to_json())
+    print(decision_pending.pending_doc_json(doc))
     print(
         "kunglao-init: PENDING user decisions — collect via the agent's "
         "native question channel (AskUserQuestion), then re-run with "
