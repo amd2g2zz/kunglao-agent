@@ -318,5 +318,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+from _entry import run
+
 if __name__ == "__main__":
-    sys.exit(main())
+    run(globals())

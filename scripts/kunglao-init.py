@@ -2294,5 +2294,7 @@ def main(argv: list[str] | None = None) -> int:
                no_hooks=args.no_hooks, skills=skills)
 
 
+from _entry import run
+
 if __name__ == "__main__":
-    sys.exit(main())
+    run(globals())
