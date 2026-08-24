@@ -69,10 +69,25 @@ def _load_register(workspace: Path) -> tuple[list, dict, Path]:
 
 
 def _append_ledger(workspace: Path, entry: dict) -> None:
+    """#584: stdlib WatchedFileHandler (rotation-safe reopen — external
+    rotation of the ledger no longer kills the writer). Line format is a
+    CONTRACT (external_kicker._ledger_last_snapshot reads it): json.dumps
+    ensure_ascii=False + newline, byte-identical to the hand-rolled writer."""
+    import logging
+    from logging.handlers import WatchedFileHandler
     p = workspace / LEDGER_NAME
     p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    handler = WatchedFileHandler(p, mode="a", encoding="utf-8", delay=True)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger = logging.getLogger(f"kunglao.ledger.{workspace.name}")
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    try:
+        logger.info(json.dumps(entry, ensure_ascii=False))
+    finally:
+        logger.removeHandler(handler)
+        handler.close()
 
 
 def _rolled_up(workspace: Path, claim_id: str, terminal_status: str) -> bool:
