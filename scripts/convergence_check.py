@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -915,7 +916,61 @@ def _act_stuck_workers(s: _DecideInputs) -> str:
     except OSError:
         # Non-fatal: the verdict and summary still surface to the caller.
         pass
+    # #607 闭环: a stuck worker must FREE its claim — claim_expiry covers
+    # IN_PROGRESS but has zero mechanical callers, so the loop had NO machine
+    # path out of IN_PROGRESS. Reopen stuck workers' IN_PROGRESS claims →
+    # OPEN with an audit comment. Fail-open: register IO must not block the
+    # verdict. Never touches PROVEN/terminal claims.
+    try:
+        reopened = _reopen_stuck_claims(s)
+        if reopened:
+            summary += (f" Reopened {len(reopened)} stuck IN_PROGRESS claim(s) "
+                        f"→ OPEN for re-dispatch: {', '.join(reopened)}.")
+    except OSError:
+        pass
     return summary
+
+
+def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
+    """#607: map stuck worker stems → claim ids → flip IN_PROGRESS → OPEN.
+
+    Worker stem convention is ``worker-status-<claim-ish>-<suffix>``; match by
+    prefix (``worker-status-C-400*`` → claim ``C-400``). Returns the reopened
+    claim ids; OSError family propagates to the caller's fail-open."""
+    import yaml as _yaml
+    reg = s.workspace / "claim-register.yaml"
+    if not reg.exists():
+        return []
+    data = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+    claims = data.get("claims") or []
+    prefixes = []
+    for w in s.stuck:
+        stem = w["worker"].removeprefix("worker-status-")
+        # strip ONE trailing retry/version token (C-400v2 → C-400, C400v2 →
+        # C400) but never the id's own digits (C-400 stays C-400: only a
+        # trailing [vV]<digits> suffix or a separate hyphenated numeric tail
+        # is removed).
+        m = re.search(r"^(.*?)[vV]\d+$", stem) or re.search(r"^(.*)-\d+$", stem)
+        prefixes.append(m.group(1) if m and m.group(1) else stem)
+    reopened: list[str] = []
+    now = utc_now()
+    norm = lambda x: x.replace("-", "").replace("_", "").lower()
+    for c in claims:
+        cid = c.get("id")
+        if not cid or c.get("status") != "IN_PROGRESS":
+            continue
+        # shape-insensitive compare: C400 ≡ C-400 (worker stems drop the id's hyphen)
+        if any(norm(cid) == norm(p) or norm(cid).startswith(norm(p))
+               or norm(p).startswith(norm(cid)) for pfx in prefixes for p in [pfx]):
+            c["status"] = "OPEN"
+            hist = c.setdefault("history", [])
+            hist.append(f"#607 reopened from IN_PROGRESS (worker stuck) {now}")
+            reopened.append(cid)
+    if reopened:
+        data["_audit"] = (data.get("_audit") or []) + [
+            f"#607 stuck-worker reopen: {', '.join(reopened)} @ {now}"]
+        reg.write_text(_yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    return reopened
 
 
 def _act_failure_analysis(s: _DecideInputs) -> str:

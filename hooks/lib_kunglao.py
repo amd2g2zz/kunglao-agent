@@ -236,6 +236,11 @@ if str(_scripts_dir) not in sys.path:
     sys.path.insert(0, str(_scripts_dir))
 from liveness_policy import STUCK_MINUTES  # noqa: E402
 
+# #607: statuses that END a worker's liveness. Anything else — including
+# unknown tokens (planning/preflight) and None — counts as active: an
+# invisible worker is worse than an extra slot (claim black-hole, #607).
+TERMINAL_WORKER_STATUSES = frozenset({"done", "failed", "blocked", "error"})
+
 WORKER_STATUS_RE = re.compile(r"status:\s*(\S+)")
 
 # W-15 artifact declarations (#444): workers list deliverable paths on
@@ -361,7 +366,10 @@ def scan_active_workers(workspace: Path, states: list | None = None) -> tuple[in
     cutoff = timedelta(minutes=STUCK_MINUTES)
     now = datetime.now(timezone.utc)
     for s in states:
-        if s["status"] != "in-progress":
+        # #607: only TERMINAL statuses end liveness — unknown statuses
+        # (planning/preflight/None) count active so aged ones reach the
+        # stuck list (#595 event) instead of vanishing with their claim.
+        if s["status"] in TERMINAL_WORKER_STATUSES:
             continue
         active += 1
         if (now - s["mtime"]) > cutoff:
