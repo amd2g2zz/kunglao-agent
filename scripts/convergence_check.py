@@ -567,6 +567,7 @@ class Event(str, Enum):
     # SCHEDULE stage
     WORK_AND_FREE_SLOT = "WORK_AND_FREE_SLOT"
     PARTIALS_AND_FREE_SLOT = "PARTIALS_AND_FREE_SLOT"
+    STUCK_WORKERS_PRESENT = "STUCK_WORKERS_PRESENT"   # #595: silent-detect consumes stuck_workers
     WORK_NO_FREE_SLOT = "WORK_NO_FREE_SLOT"
     FAILURE_ARTIFACTS_DUE = "FAILURE_ARTIFACTS_DUE"    # #495: analysis lacks
     #      validated_capability / identified_obstacle (or is absent/stale)
@@ -767,6 +768,13 @@ def _partials_and_free_slot(s: _DecideInputs) -> bool:
     return bool(s.partials) and s.free_slots > 0
 
 
+def _stuck_workers_present(s: _DecideInputs) -> bool:
+    # #595: silent-detect — collected stuck_workers were never consumed by the
+    # machine. Firing here escalates to BLOCKED so orchestrator intervention
+    # can resolve instead of looping against a frozen worker.
+    return bool(s.stuck)
+
+
 def _work_no_free_slot(s: _DecideInputs) -> bool:
     return bool(s.unblocked_open) and s.free_slots == 0
 
@@ -808,6 +816,7 @@ _EVENT_PREDICATES = {
     Event.DRAIN_CLEAN: _drain_clean,
     Event.WORK_AND_FREE_SLOT: _work_and_free_slot,
     Event.PARTIALS_AND_FREE_SLOT: _partials_and_free_slot,
+    Event.STUCK_WORKERS_PRESENT: _stuck_workers_present,
     Event.WORK_NO_FREE_SLOT: _work_no_free_slot,
     Event.FAILURE_ARTIFACTS_DUE: _failure_artifacts_due,
     Event.LADDER_REQUIRED_BLOCKER: _ladder_required_blocker,
@@ -871,6 +880,44 @@ def _act_saturated_queue(s: _DecideInputs) -> str:
             f"Poll workers - do not wait idly.")
 
 
+def _act_stuck_workers(s: _DecideInputs) -> str:
+    """#595: a worker older than STUCK_MINUTES is the loud signal we were
+    silently collecting. Escalate to BLOCKED + drop a per-workspace
+    ``runs/.stuck-report.md`` so the orchestrator can see WHICH worker is
+    stuck and for HOW LONG. Report write is non-fatal (try/except) — the
+    state machine must still return a verdict even on a read-only filesystem
+    or a permission error. Order probe (SCHEDULE index 2) gates this: it
+    fires BEFORE WORK_NO_FREE_SLOT/FAILURE/LADDER/UNEXPECTED, so a stuck
+    worker always wins over those flavors."""
+    stems = ", ".join(f"{w['worker']} ({w['age_min']}m)" for w in s.stuck)
+    summary = (f"Stuck worker(s) detected: {stems}. "
+               f"Older than {_load_worker_lib().STUCK_MINUTES}m with status "
+               f"in-progress. Orchestrator intervention required before any "
+               f"further dispatch.")
+    try:
+        report = s.workspace / "runs" / ".stuck-report.md"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        lines = [f"# Stuck Workers Report (#595)", ""]
+        lines.append(f"Workspace: {s.workspace}")
+        lines.append(f"Detected: {len(s.stuck)} worker(s) older than "
+                     f"{_load_worker_lib().STUCK_MINUTES}m still in-progress.")
+        lines.append("")
+        lines.append("## Workers")
+        for w in s.stuck:
+            lines.append(f"- **{w['worker']}** — age {w['age_min']} min")
+        lines.append("")
+        lines.append("## Action")
+        lines.append("Investigate each worker above. Either: (a) restart the "
+                     "worker if it is genuinely hung, or (b) close the worker "
+                     "if the claim should be re-dispatched. Do NOT dispatch "
+                     "more work while stuck workers remain.")
+        report.write_text("\n".join(lines), encoding="utf-8")
+    except OSError:
+        # Non-fatal: the verdict and summary still surface to the caller.
+        pass
+    return summary
+
+
 def _act_failure_analysis(s: _DecideInputs) -> str:
     return (f"{len(s.failure_blocked_open)} claim(s) have a failed attempt with no "
             f"failure_analysis: {s.failure_blocked_ids}. "
@@ -904,8 +951,12 @@ STAGE_PROBES = {
     # SCHEDULE: dispatchable work first, then saturation, then WHY nothing
     # is dispatchable (#495 failure artifacts, #497 ladder flavors), then
     # the catch-all (reachable: opens==0 + partials>0 + slots==0).
+    # #595: STUCK_WORKERS_PRESENT at index 2 — silent-detect fires BEFORE
+    # the saturation/failure/ladder tail so a stuck worker can never be
+    # masked by an unblocked-open claim whose dispatch would collide.
     State.SCHEDULE: [Event.WORK_AND_FREE_SLOT, Event.PARTIALS_AND_FREE_SLOT,
-                     Event.WORK_NO_FREE_SLOT, Event.FAILURE_ARTIFACTS_DUE,
+                     Event.STUCK_WORKERS_PRESENT, Event.WORK_NO_FREE_SLOT,
+                     Event.FAILURE_ARTIFACTS_DUE,
                      Event.LADDER_EXHAUSTED_BLOCKER, Event.LADDER_REQUIRED_BLOCKER,
                      Event.UNEXPECTED_STATE],
 }
@@ -922,6 +973,7 @@ TRANSITIONS = {
     (State.DRAIN, Event.DRAIN_CLEAN): (State.CONVERGED, _act_converged),
     (State.SCHEDULE, Event.WORK_AND_FREE_SLOT): (State.DISPATCH, _act_dispatch_top),
     (State.SCHEDULE, Event.PARTIALS_AND_FREE_SLOT): (State.DISPATCH_VERIFIER, _act_verify_partials),
+    (State.SCHEDULE, Event.STUCK_WORKERS_PRESENT): (State.BLOCKED, _act_stuck_workers),
     (State.SCHEDULE, Event.WORK_NO_FREE_SLOT): (State.SATURATED, _act_saturated_queue),
     (State.SCHEDULE, Event.FAILURE_ARTIFACTS_DUE): (State.BLOCKED, _act_failure_analysis),
     (State.SCHEDULE, Event.LADDER_REQUIRED_BLOCKER): (State.BLOCKED, _act_all_blocked),
