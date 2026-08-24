@@ -59,6 +59,14 @@ import yaml
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 HOOK_STATE = Path(".hook_state.json")
+# #603: append-only top-1 REJECT ledger — one JSON row per REJECT, the
+# durable face of `_top1_enforcement`'s rc=2 path (pre-#603 the REJECT was
+# trace-only; an orchestrator looping on the same deviation accumulated
+# rejections with nothing on disk to count). Consumed by
+# scripts/kunglao_resume.py; NEVER wired into the #604 retry counter
+# (v0.1.3 adjudication — REJECT is pre-dispatch, worker attribution is
+# structurally unreliable).
+GATE_REJECTIONS_LOG = Path("runs/gate-rejections.jsonl")
 # Backward-compat re-export: imports of `DISPATCH_RE` from this module keep
 # working. The real parser is hooks/lib_kunglao.py:parse_dispatch which
 # handles v0 (regex) + v1 (JSON).
@@ -382,6 +390,37 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
     # #459: the REJECT face reaches the unified log too (the excused side
     # already traces; a blocked deviation is the event the post-mortem needs)
     _emit_trace(ws, "top1_reject", claim_id, msg, exit_code=2)
+    # #603: a REJECT must be DURABLE, not trace-only. Pre-#603 this face
+    # emitted a stderr/stdout trace and nothing else — an orchestrator
+    # looping on the same deviation accumulated rejections silently. One
+    # side effect, fail-open (bookkeeping must never turn a REJECT into a
+    # silent pass; a broken append degrades to a stderr note only):
+    #   one row appended to runs/gate-rejections.jsonl — the durable
+    #   rejection ledger (append-only JSONL, same shape discipline as
+    #   scripts/gate_telemetry.py), consumed by scripts/kunglao_resume.py.
+    # ADJUDICATION (v0.1.3): this is the ONLY side effect. REJECT is a
+    # PRE-DISPATCH event — worker attribution here is structurally
+    # unreliable (the time-fallback key never accumulates; agent-name
+    # attribution would trip the #604 MAX_RETRIES breaker on the worker's
+    # next COMPLIANT dispatch). runs/.retry-counter.yaml belongs to the
+    # orchestrator's silent-failure counting (#604) and must NOT be wired
+    # into the REJECT path — semantic contamination.
+    try:
+        row = {
+            "ts": datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+                    .replace("+00:00", "Z"),
+            "gate": "top1",
+            "claim": claim_id,
+            "msg": msg,
+            "exit_code": 2,
+        }
+        ledger = ws / GATE_REJECTIONS_LOG
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        with open(ledger, "a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        print(f"dispatch_gate: gate-rejections append failed ({exc!r})",
+              file=sys.stderr, flush=True)
     return _reject_with_guidance(
         "top1", msg,
         "add `agent-reasoning: <why this claim instead of the ranked #1>` "
