@@ -1651,3 +1651,54 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# ---------- #588/#590: Phase "-1" quick presence + preconditions group ----------
+
+# PRESENCE-tier binaries only (shutil.which, ~0ms each — no subprocess, no
+# network): the banner answers "is this host even shaped like an RE host?"
+# seconds into init, BEFORE the step-0 intake conversation (#588's O(hours)
+# → O(seconds) fix). It NEVER adopts values or downgrades anything — #449
+# needs-first precedence is untouched; step-5's full-tier check stands.
+_PRESENCE_PROBES = ("uv", "python3", "git", "ghidra", "jadx", "adb", "frida")
+
+
+def quick_presence(ws: Path) -> str:
+    """#588: O(seconds) host-health banner for the pre-intake phase.
+
+    Pure PRESENCE tier: which() lookups only. Never raises — a broken host
+    gets an honest all-missing banner, not a crash."""
+    import shutil
+    try:
+        found, missing = [], []
+        for binname in _PRESENCE_PROBES:
+            (found if shutil.which(binname) else missing).append(binname)
+        parts = [f"host presence: {len(found)}/{len(_PRESENCE_PROBES)}"]
+        if found:
+            parts.append("found: " + ", ".join(found))
+        if missing:
+            parts.append("MISSING: " + ", ".join(missing))
+        return " | ".join(parts) + "  (PRESENCE only — full tiers run at step 5)"
+    except Exception:
+        return "host presence: probe unavailable (PRESENCE only — step 5 decides)"
+
+
+def preconditions_questions(ws: Path | None = None) -> list[dict]:
+    """#590: the hidden-assumption question group, riding the SAME native
+    decision round as workspace/type (#455 shape). Probe findings attach as
+    decision CONTEXT only — `pending` is the floor; the probe never
+    auto-fills an answer (precedence: explicit > resolve > persisted >
+    pending, decision_pending.py contract)."""
+    context: dict = {"note": "probe findings are CONTEXT, not answers"}
+    if ws is not None:
+        try:
+            context["presence_banner"] = quick_presence(ws)
+        except Exception:
+            context["presence_banner"] = None
+    return [{
+        "id": "preconditions",
+        "question": ("Host/device preconditions: analysis device availability, "
+                     "VM host (KUNGLAO_VM_HOST), GHIDRA_HOME, VM guest OS "
+                     "matching the sample's project type, MCP supply state"),
+        "context": context,
+    }]
