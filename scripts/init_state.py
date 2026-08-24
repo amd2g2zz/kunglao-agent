@@ -12,10 +12,50 @@ this module.
 """
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 VALID_TYPES = ("windows", "linux", "android")
 MARKER = "[initialized]"
+# #625: the dedicated state file is the PRIMARY init-completeness truth —
+# a text-editor rewrite of the YAML comment can no longer silently drop it.
+# The YAML marker stays as a legacy fallback for pre-#625 workspaces.
+STATE_FILE = ".kunglao-init.json"
+
+
+def _utc_now() -> str:
+    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def write_init_marker(ws: Path, *, state_hash: str, project_type: str,
+                      seed_count: int) -> dict:
+    """#625: persist init-completeness into a dedicated JSON state file.
+
+    Fields: state_hash / project_type / seed_count / ts (ISO8601 Z). Fail-loud
+    on invalid type so init never writes a marker the predicate will reject."""
+    if project_type not in VALID_TYPES:
+        raise ValueError(f"project_type {project_type!r} not in {VALID_TYPES}")
+    record = {
+        "state_hash": state_hash,
+        "project_type": project_type,
+        "seed_count": seed_count,
+        "ts": _utc_now(),
+    }
+    (Path(ws) / STATE_FILE).write_text(
+        json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
+    return record
+
+
+def _read_init_marker(ws: Path) -> dict | None:
+    path = Path(ws) / STATE_FILE
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (json.JSONDecodeError, OSError):
+        return None
 
 
 def read_project_type(ws: Path) -> str | None:
@@ -31,11 +71,22 @@ def read_project_type(ws: Path) -> str | None:
 
 
 def init_complete(ws: Path) -> tuple[bool, str]:
-    """#304 predicate: [initialized] marker AND valid project_type declared.
+    """#304 predicate: initialized (marker) AND valid project_type declared.
 
+    #625: PRIMARY truth is .kunglao-init.json (survives YAML rewrites); the
+    YAML `[initialized]` comment is the legacy fallback (one version window).
     Returns (complete, detail). When incomplete, detail names the missing
     piece and the fix (run kunglao-init.py <ws> --type <type>).
     """
+    marker = _read_init_marker(ws)
+    if marker is not None:
+        ptype = marker.get("project_type")
+        if ptype not in VALID_TYPES:
+            return False, (
+                f"invalid project_type={ptype!r} — "
+                "run kunglao-init.py <ws> --type <windows|linux|android>"
+            )
+        return True, f"init complete: project_type={ptype} (state file)"
     reg = ws / "claim-register.yaml"
     if not reg.exists():
         return False, (

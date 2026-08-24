@@ -146,7 +146,7 @@ import decision_pending  # noqa: E402
 # pending channel) + the exit-4 human-event lane split (#448 taxonomy).
 import toolchain_negotiation  # noqa: E402
 # F6 (#304 review): init-completeness predicate = single source in init_state.py
-from init_state import VALID_TYPES, is_init_complete, read_project_type  # noqa: E402
+from init_state import VALID_TYPES, is_init_complete, read_project_type, write_init_marker  # noqa: E402
 import mcp_probe  # noqa: E402  (#316: MCP supply manifest/scaffold single source of truth)
 # #454: wiring≠activation — the hooks-deployed output names the activation
 # TTL window from the single source (never a second hardcoded 30).
@@ -1765,6 +1765,10 @@ def initialize(ws: Path, hooks_json: Path | None,
     digest = compute_state_hash(ws, register_text=draft)
     reg = ws / "claim-register.yaml"
     atomic_write(reg, claim_register_text(sample, sample_sha, state_hash=digest, project_type=project_type))
+    # #625: dedicated state file is the PRIMARY completeness truth (YAML
+    # comment stays as legacy fallback) — a YAML rewrite can no longer drop it.
+    write_init_marker(ws, state_hash=digest, project_type=project_type,
+                      seed_count=reg.read_text(encoding="utf-8").count("id: C-"))
 
     written = reg.read_text(encoding="utf-8")
     seed_count = written.count("id: C-")
