@@ -73,10 +73,12 @@ RC_ERROR = 1
 # definition). The issue comment's "2x heartbeat period" (10 min) is kept
 # as data-age DISPLAY only: a 10-min rc line would false-STALE every
 # legitimate quick restart (design D3).
-HEARTBEAT_STALE_MINUTES = 35
+# legitimate quick restart (design D3). #597: minutes constants
+# single-sourced in liveness_policy (values unchanged).
+from liveness_policy import HEARTBEAT_STALE_MINUTES  # noqa: E402
 # Worker-status freshness: kicker D3 constant — an in-progress file older
 # than this is a dead session's stale worker, surfaced for reconcile.
-WORKER_FRESH_MINUTES = kicker.FRESH_WORKER_MINUTES
+from liveness_policy import FRESH_WORKER_MINUTES as WORKER_FRESH_MINUTES  # noqa: E402,F401
 # Claim-class staleness: claim_expiry's own line (24 h without activity).
 CLAIM_STALE_HOURS = 24
 # Plan freshness: issue #466 comment — a plan mtime ≥ 2 days old is drift

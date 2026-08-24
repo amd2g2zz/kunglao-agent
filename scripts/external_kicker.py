@@ -80,16 +80,14 @@ import hook_activation
 
 # D6: activation TTL from hook_activation.py DEFAULT_TTL_MINUTES — the tick
 # interval MUST stay below it or the TTL-expiry→next-tick gap silently closes
-# the gates (issue requirement).
-ACTIVATION_TTL_MINUTES = 30
+# the gates (issue requirement). #597: the three minutes constants below are
+# single-sourced in liveness_policy (values unchanged; rationale there).
+from liveness_policy import (  # noqa: E402
+    ACTIVATION_TTL_MINUTES,
+    DEFAULT_STALE_MINUTES,
+    FRESH_WORKER_MINUTES,
+)
 DEFAULT_TICK_INTERVAL_MIN = 15
-# D1: both heartbeat signals stale beyond this → dead. 15+10 = worst-case
-# detection ≤ 25 min < 30-min TTL → the kick always lands before the old
-# activation expires (no silent window, with margin).
-DEFAULT_STALE_MINUTES = 10
-# D3: worker status files fresher than this block the kick (session mid-dispatch).
-# Mirrors lib_kunglao STUCK_MINUTES (20).
-FRESH_WORKER_MINUTES = 20
 # #45: fired-predicate resume prompt bounds — the open-claims list is truncated
 # by priority (priority.rank_claims order) when over either bound.
 DEFAULT_MAX_PROMPT_CHARS = 4000

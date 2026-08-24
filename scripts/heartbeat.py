@@ -14,7 +14,8 @@ from pathlib import Path
 
 # A 5-min cron tick should refresh .heartbeat.json continuously; >35 min
 # stale (5-min interval + jitter margin) means monitoring is NOT running.
-STALE_MINUTES = 35
+# #597: value single-sourced in liveness_policy (THE liveness-minutes source).
+from liveness_policy import STALE_MINUTES  # noqa: E402
 
 # #461: the cron-registration marker. --heartbeat-on alone proves only that
 # the FILE was written (init / manual chain both can do that); the marker

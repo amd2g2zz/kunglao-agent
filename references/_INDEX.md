@@ -67,7 +67,7 @@
 | `machine-check-contract.md` | contracts | Executable-oracle contract (#332): verification records must carry machine_check {command, expected, actual, passed}; exception path and mapping-table mirror of references/machine_check_map.yaml. | When validating a red-team verification record, writing one, or promoting a claim. |
 | `malware-phase-routing.md` | routing | Maps file types to analysis phases, VM isolation boundary. | At the start of a new malware engagement for phase decision. |
 | `method-constraints.md` | dispatch | Constraint table for known-incompatible scenarios. | Before dispatching a worker to include correct method constraints. |
-| `operational-mechanics.md` | mechanics | HOW behind heartbeat tick, worker ping, self-cap-safe dispatch, VM launch. | When implementing/debugging heartbeat, writing dispatch prose, or VM x64dbg launch. |
+| `operational-mechanics.md` | mechanics | HOW behind heartbeat tick, worker ping, self-cap-safe dispatch, VM launch; liveness_policy.py threshold single source (#597). | When implementing/debugging heartbeat, writing dispatch prose, VM x64dbg launch, or tuning a liveness/staleness threshold. |
 | `optimization-2026-08.md` | optimization | Background compendium: smart-ping, closeout checklist, worktree caveats. | When needing the full expanded text of a compact SKILL.md reference. |
 | `schema.md` | schema | All data schemas: boundary_type, fact.status, claim-register, etc. | When reading/writing structured state files. |
 | `state-mapping.md` | schema | Two-layer state mapping: claim-register workflow states ↔ fact status + verify_status; ICD-203 nine-rule landing fields (#336). | When writing/migrating facts, linting, or reconciling register vs frontmatter statuses. |

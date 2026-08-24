@@ -37,7 +37,9 @@ STUCK_MIN = 20                  # same as backtrack_gate --stuck-min default
 VALID_BACKTRACK_DECISIONS = ("continue", "retry_different", "escalate", "redispatch")
 # #475: env-state drift threshold — mirrors hooks/worker_budget
 # ENV_STATE_TTL_MINUTES (advisory threshold here, reject line there is 2x).
-ENV_STATE_TTL_MINUTES = 30
+# #597: the TTL value is single-sourced in liveness_policy (THE
+# liveness-minutes source; rationale + the 2x-reject relationship live there).
+from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402
 
 
 def utc_now() -> str:

@@ -98,6 +98,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `refutation_propagate.py` | refutation propagation across facts | tests |
 | `stale_blocker_prune.py` | stale blocker pruning | lib(1), tests |
 | `status_defs.py` | claim status constants — single source of truth | hooks, lib(13), tests |
+| `liveness_policy.py` | liveness/staleness minutes constants — single source (#597: stuck 20 / heartbeat 35 / activation+env 30 / kicker+margins 10, values adjudicated) | hooks, lib(9), tests |
 | `tier_rules.py` | claim tier rules | tests |
 | `loop_state.py` | loop state persistence | lib(1), tests |
 | `update_index.py` | facts/_INDEX.md maintenance | tools, tests |

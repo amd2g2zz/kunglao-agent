@@ -226,7 +226,15 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
 # the external_kicker.should_kick precedent: bare `import lib_kunglao` is
 # ambiguous under pytest because scripts/lib_kunglao.py shares the name).
 
-STUCK_MINUTES = 20
+# #597: the stuck threshold comes from scripts/liveness_policy.py (THE
+# single source for liveness minutes). hooks/ runs with its own dir at
+# sys.path[0], so the scripts dir goes on the path first (the _env_layout /
+# worker_budget_core precedent; missing module = broken install, not a
+# degraded mode — hooks/ and scripts/ ship together, #444 posture).
+_scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+if str(_scripts_dir) not in sys.path:
+    sys.path.insert(0, str(_scripts_dir))
+from liveness_policy import STUCK_MINUTES  # noqa: E402
 
 WORKER_STATUS_RE = re.compile(r"status:\s*(\S+)")
 

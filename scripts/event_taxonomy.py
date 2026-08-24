@@ -39,7 +39,7 @@ Taxonomy (25 classes):
                          (last line in-progress, fresh), worker_completed
                          (last done), worker_failed (last blocked),
                          worker_stuck (last in-progress, heartbeat stale
-                         > 20 min — convergence_check.STUCK_MINUTES)
+                         > STUCK_MINUTES — liveness_policy, #597)
     claim states       : claim_partial, claim_deferred, claim_superseded,
                          claim_dead
     blockers/gates     : blocker_opened (active blocker file),
@@ -78,8 +78,11 @@ def _worker_protocol():
     return lib
 
 
-# real worker heartbeat convention: lib_kunglao.STUCK_MINUTES = 20 (#444)
-STUCK_SECONDS = 20 * 60
+# real worker heartbeat convention: the stuck threshold is owned by
+# scripts/liveness_policy.py (#597 — THE liveness-minutes single source;
+# restating a hard number here would rot silently when the value changes).
+from liveness_policy import STUCK_MINUTES  # noqa: E402
+STUCK_SECONDS = STUCK_MINUTES * 60
 
 # ---------------------------------------------------------------------------
 # taxonomy (25 classes)

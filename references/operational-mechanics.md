@@ -112,6 +112,16 @@ tick proceeds on file state (`worker-status-*.md` freshness,
 gate. Do not design the tick loop around monitor results, and never block a
 scheduled action waiting for the monitor process to produce output.
 
+## Liveness thresholds single source (#597, 2026-08-24)
+
+Every liveness/staleness minutes constant (worker stuck 20, heartbeat stale
+35, activation/env-state TTL 30, kicker dead-session + renewal margin 10)
+lives in ONE module — `scripts/liveness_policy.py` — with the per-value
+rationale attached to each number. Consumers import; they never restate a
+number. When debugging "why did X fire at N minutes", read the rationale
+comment next to the constant there — not this file, and not the consumer's
+local history (pre-#597 copies were the drift source).
+
 ## Subagent-model switch caveat (A4, #317)
 
 **Operator note, not a code defect**: after switching `SUBAGENT_MODEL` (the

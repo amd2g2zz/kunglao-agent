@@ -33,8 +33,13 @@ RETRY_COUNTER_FILE = 'runs/.retry-counter.yaml'
 
 # v1.9.39 (#475): env-state freshness gate constants. TTL aligns with the
 # scripts/kunglao-monitor.py advisory (drift detection uses the same value).
+# #597: the TTL VALUE is single-sourced in scripts/liveness_policy.py (THE
+# liveness-minutes source; hooks/ and scripts/ ship together, #444 posture).
 ENV_STATE_FILE = 'runs/env-state.json'
-ENV_STATE_TTL_MINUTES = 30
+_scripts_dir = str(Path(__file__).resolve().parent.parent / 'scripts')
+if _scripts_dir not in sys.path:
+    sys.path.insert(0, _scripts_dir)
+from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402
 
 PREFIX_RE = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\]')
 CLAIM_RE = re.compile(r'\bclaim\s+(C-\d+)')

@@ -89,7 +89,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 HOOK_STATE_FILE = ".hook_state.json"
-DEFAULT_TTL_MINUTES = 30
+# #597: TTL value single-sourced in liveness_policy (rationale there).
+from liveness_policy import DEFAULT_TTL_MINUTES  # noqa: E402
 # Activation is short-lived BY DESIGN: the orchestrator must renew every
 # 30 min or the hooks sleep. This makes activation a real liveness signal —
 # a stale activation from a dead/abandoned session cannot keep firing hooks.

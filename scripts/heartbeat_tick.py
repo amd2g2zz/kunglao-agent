@@ -66,7 +66,8 @@ SCRIPTS = SKILL_DIR / "scripts"
 # cadence-mismatched with the 30-min TTL renews just before expiry — the one
 # silent-gate case no other anomaly surfaces. 10 min = a third of the TTL:
 # enough lead time to act before the NEXT tick misses the renewal entirely.
-RENEW_MARGIN_LOW_MINUTES = 10
+# #597: the 10-min value is single-sourced in liveness_policy (rationale there).
+from liveness_policy import RENEW_MARGIN_LOW_MINUTES  # noqa: E402
 RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
 
 
