@@ -126,6 +126,7 @@ def evaluate(payload: dict, environ: dict | None = None) -> tuple[int, str, str 
     # Check 1: agent-teams flag (existing check, unchanged)
     flag_val = environ.get(FLAG_NAME)
     if _is_truthy(flag_val):
+        _emit_reject(ws, f"env_check_gate: {FLAG_NAME} set ({flag_val}) — teammate-polluted session")
         return (
             2,
             f"REJECT env_check_gate: {FLAG_NAME} set ({flag_val}) -- teammate-polluted "
@@ -136,6 +137,7 @@ def evaluate(payload: dict, environ: dict | None = None) -> tuple[int, str, str 
     # Check 2: #304 init completeness (marker + project_type)
     init_ok, init_guidance = _check_init_complete(ws)
     if not init_ok:
+        _emit_reject(ws, f"env_check_gate: workspace not fully initialized. {init_guidance}")
         return (
             2,
             f"REJECT env_check_gate: workspace not fully initialized. {init_guidance}",
@@ -143,6 +145,18 @@ def evaluate(payload: dict, environ: dict | None = None) -> tuple[int, str, str 
         )
 
     return 0, "", None
+
+
+def _emit_reject(ws: Path, detail: str) -> None:
+    """#624: REJECTs leave a persistent trail in the kunglao_log event stream
+    (dispatch_gate/_emit_trace precedent). Fail-open: observability never
+    changes the hook verdict."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        import kunglao_log  # noqa: E402
+        kunglao_log.emit(ws, "env_check_gate", "reject", exit=2, detail=detail)
+    except Exception:
+        pass
 
 
 def main() -> int:
