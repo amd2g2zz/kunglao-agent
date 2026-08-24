@@ -184,7 +184,11 @@ def is_active_strict(workspace: Path, hook_name: str) -> bool:
     non-kunglao-agent session must get zero noise from these hooks.
 
     Strict = explicit activation required AND not expired AND not paused.
-    is_active() keeps its legacy behavior for the old gate family."""
+    is_active() keeps its legacy behavior for the old gate family.
+
+    #613: expiry is no longer silent — the first refusal per expired window
+    writes a one-shot runs/.hook-slept.json + one stderr WARNING (fail-open;
+    verdict unchanged; no auto-renew)."""
     state = read_state(workspace)
     if not state:
         return False  # default-inactive: no activation, no firing
@@ -193,6 +197,7 @@ def is_active_strict(workspace: Path, hook_name: str) -> bool:
         try:
             exp = datetime.fromisoformat(expires.replace("Z", "+00:00"))
             if datetime.now(tz=timezone.utc) > exp:
+                _emit_hook_slept_once(workspace, state, exp)
                 return False
         except (ValueError, TypeError):
             return False  # unparseable expiry → treat as stale, don't fire
@@ -206,6 +211,36 @@ def is_active_strict(workspace: Path, hook_name: str) -> bool:
     if hook_name in paused:
         return False
     return hook_name in active
+
+
+def _emit_hook_slept_once(workspace: Path, state: dict, exp: datetime) -> None:
+    """#613: one-shot observable expiry. Writes runs/.hook-slept.json once per
+    expired window (same expires_at → no rewrite) and prints one stderr
+    WARNING. Fail-open: any write/parse error leaves the verdict untouched."""
+    try:
+        runs = workspace / "runs"
+        marker = runs / ".hook-slept.json"
+        if marker.exists():
+            prior = json.loads(marker.read_text(encoding="utf-8"))
+            if prior.get("expired_at") == state.get("expires_at"):
+                return  # same window already reported
+        now = datetime.now(tz=timezone.utc)
+        gap_seconds = int((now - exp).total_seconds())
+        record = {
+            "ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "expired_at": state.get("expires_at"),
+            "gap_seconds": gap_seconds,
+            "hooks_affected": list(state.get("active_hooks", [])),
+        }
+        runs.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(
+            f"WARNING: activation expired {gap_seconds // 60} min ago — hooks asleep "
+            f"({len(record['hooks_affected'])} hook(s)). Re-arm: hook_activation.py {workspace} --renew",
+            file=sys.stderr,
+        )
+    except (OSError, ValueError, TypeError):
+        pass  # fail-open: observability must never change the gate verdict
 
 
 def update_state(workspace: Path, tier: str, phase: str,
