@@ -280,13 +280,14 @@ def test_w15_done_all_declared_present_clean(tmp_path):
     assert lib.scan_done_artifact_violations(ws) == []
 
 
-def test_w15_legacy_done_without_declaration_exempt(tmp_path):
-    """Migration compat: an old-format done file (no artifacts: line) stays
-    readable and is NOT flagged by the W-15 check."""
+def test_w15_legacy_done_without_declaration_flagged(tmp_path):
+    """#550 (user ruling 2026-08-25, no legacy-compat): a bare done file with
+    no artifacts: declaration IS flagged — done must declare deliverables."""
     lib = load_protocol()
     ws = _make_ws(tmp_path)
     _write_status(ws, "w1", "[12:00] step: finished | status: done\n")
-    assert lib.scan_done_artifact_violations(ws) == []
+    v = lib.scan_done_artifact_violations(ws)
+    assert any(x["kind"] == "done-undeclared" for x in v)
     active, stuck = lib.scan_active_workers(ws)
     assert (active, stuck) == (0, [])
 

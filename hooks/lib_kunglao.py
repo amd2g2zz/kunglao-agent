@@ -398,7 +398,13 @@ def scan_done_artifact_violations(workspace: Path, states: list | None = None) -
             continue
         declared = s["artifacts"]
         if not declared:
-            continue  # legacy format — no declarations, W-15-exempt
+            # #550: bare done is a violation, full stop (user ruling 2026-08-25:
+            # no legacy-compat path). The production hole (C-400: done trusted,
+            # no facts file) lived exactly here — a done worker must declare
+            # what it delivered.
+            violations.append({"worker": s["file"].stem,
+                               "kind": "done-undeclared", "missing": []})
+            continue
         if all(t.lower() in _NO_ARTIFACTS_MARKERS for t in declared):
             violations.append({"worker": s["file"].stem,
                                "kind": "done-no-files", "missing": []})
