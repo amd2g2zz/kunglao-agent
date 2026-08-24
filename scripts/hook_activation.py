@@ -284,6 +284,27 @@ def renew(workspace: Path, ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
     if not state:
         # no prior activation — activate the default set
         return update_state(workspace, "none", "IDLE", ttl_minutes=ttl_minutes)
+    # #619: audit the transition BEFORE overwriting — who renewed, whether the
+    # prior state had expired, and how long the gap was (postmortem fuel).
+    # Emits into the kunglao_log event stream; .hook_state.json stays minimal.
+    was_expired = False
+    gap_s = 0
+    prior_exp = state.get("expires_at")
+    if prior_exp:
+        try:
+            prior_dt = datetime.fromisoformat(str(prior_exp).replace("Z", "+00:00"))
+            delta = datetime.now(tz=timezone.utc) - prior_dt
+            gap_s = int(delta.total_seconds())
+            was_expired = delta.total_seconds() > 0
+        except (ValueError, TypeError):
+            was_expired = False
+    try:
+        import kunglao_log  # noqa: E402 (scripts/ dir on path)
+        kunglao_log.emit(workspace, "orchestrator", "renew",
+                         detail=f"was_expired={str(was_expired).lower()};"
+                                f"expiry_gap_s={gap_s};ttl_min={ttl_minutes}")
+    except Exception:
+        pass  # audit is observability — never fails the renew
     state["ts"] = utc_now()
     state["expires_at"] = (datetime.now(tz=timezone.utc) + timedelta(minutes=ttl_minutes)).isoformat(timespec="seconds").replace("+00:00", "Z")
     write_state(workspace, state)
