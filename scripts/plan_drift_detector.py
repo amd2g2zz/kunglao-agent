@@ -33,10 +33,22 @@ progressed while the files never caught up")
 
 Usage:
   python plan_drift_detector.py <workspace> [--apply]
+  python plan_drift_detector.py <workspace> [--auto]
 Exit codes:
   0 = no drift (WARN-only output still exits 0 — observation, not a gate)
   1 = drift detected (B1o blocker)
   2 = HARD_PAUSE: 3+ drift warnings in same session
+Auto-integration mode (issue #602, --auto flag):
+  Used by hooks/dispatch_gate.py L621 as a PreToolUse wire-up. Maps drift
+  severity to a gate exit code so the dispatch path can BLOCK / SATURATE
+  on plan-evidence disagreement WITHOUT changing the operator-facing CLI
+  semantics (--auto is purely an integration face, NOT a new behavior
+  layer; operator --apply / no-flag still returns 1 / 2 for the script's
+  exit-table consumers).
+  --auto exit codes:
+    0  = no drift                                  -> dispatch proceeds
+    3  = WARN-only (STALE_PLAN_ON_NEW_EVIDENCE, observe-first) -> SATURATED
+    2  = 1+ non-WARN drift                         -> BLOCKED (hard REJECT)
 """
 from __future__ import annotations
 import gate_telemetry as _gt
@@ -414,12 +426,85 @@ def check(workspace: Path, active_only: bool = False) -> int:
     return 2 if len(drifts) >= 3 else 1
 
 
+def check_auto(workspace: Path, active_only: bool = False) -> int:
+    """#602: integration face for hooks/dispatch_gate.py L621 wire-up.
+
+    Re-runs check() and remaps its exit code to the dispatch-gate contract:
+      - no drift                          -> 0 (proceed, no BLOCKED/SATURATED)
+      - WARN-only (STALE_PLAN_ON_NEW_EVIDENCE observe-first) -> 3 (SATURATED)
+      - 1+ non-WARN drift (ORPHAN_CLAIM / STALE_PLAN_ENTRY / MISSING_DEP_LINK /
+        UNANSWERED_QUESTION / STALE_NEXT_STEP / UNVERIFIED_EVIDENCE) -> 2 (BLOCKED)
+
+    The remapping is informational ONLY — it does not change what `check()`
+    reports (the drift types and counts) and does not change the
+    operator-facing CLI exit codes (those stay 0/1/2). Auto mode is the
+    integration face for the dispatch gate; the operator-facing contract
+    stays byte-identical.
+
+    Output ordering with the underlying check():
+      - The underlying check() prints its full report (REJECT/WARN/OK).
+      - check_auto() prints ONE summary line classifying the severity
+        ("DRIFT_AUTO: ok / warn-only / blocked") so the operator tail
+        can grep for it; it does NOT suppress the underlying report.
+    """
+    drifts_rc = check(workspace, active_only=active_only)
+    # check() prints to stdout; we add one classification line below.
+    if drifts_rc == 0:
+        # no drift at all — distinguish "no drift at all" from "WARN-only
+        # exit 0". check() collapses both to rc=0; the STALE_PLAN_ON_NEW_
+        # EVIDENCE warns are surfaced only as WARN lines in stdout.
+        # If we already saw WARN output above we are in the WARN-only path.
+        # Cheap heuristic: a WARN-only run prints "WARN" to stdout.
+        import io as _io
+        # check() already consumed stdout; we cannot read what it wrote.
+        # Instead, peek at the workspace ourselves for evidence-newer-than-plan
+        # signals and surface the WARN-only classification here. This is the
+        # SAME mtime comparison check() runs — duplicated here only to
+        # decide the auto exit code, not to print anything new.
+        try:
+            warns = find_stale_plan_on_new_evidence(
+                workspace,
+                _first_existing_plan(workspace),
+                _load_yaml(workspace / "claim-register.yaml").get("claims", []) or [],
+            )
+        except Exception:
+            warns = []
+        if warns:
+            print("DRIFT_AUTO: warn-only (STALE_PLAN_ON_NEW_EVIDENCE) -> SATURATED")
+            return 3
+        print("DRIFT_AUTO: ok -> proceed")
+        return 0
+    # 1 or 2 from underlying check() — both mean "non-WARN drift detected"
+    # (1 = drift detected, 2 = HARD_PAUSE / 3+ warnings which IS a non-WARN
+    # drift event from the gate's perspective).
+    print(f"DRIFT_AUTO: drift-severe (check rc={drifts_rc}) -> BLOCKED")
+    return 2
+
+
+def _first_existing_plan(workspace: Path):
+    """Return the first existing plan-path candidate, or None. Mirrors
+    check()'s plan-path resolution so check_auto() can ask the same
+    question when classifying WARN-only output. Internal helper, not
+    part of the public surface."""
+    for name in ("global_plan.txt", "global_plan.yaml", "plan.md"):
+        p = workspace / name
+        if p.exists():
+            return p
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Detect plan files drifting behind reality")
     parser.add_argument("workspace", help="workspace root")
     parser.add_argument("--active-only", action="store_true",
                         help="check only the current plan file (global_plan.txt), not all candidates")
+    parser.add_argument("--auto", action="store_true",
+                        help="integration face: remap exit codes to "
+                             "0=no-drift / 3=WARN-only(SATURATED) / 2=blocked "
+                             "for hooks/dispatch_gate.py L621 wire-up (#602)")
     args = parser.parse_args()
+    if args.auto:
+        return check_auto(Path(args.workspace), active_only=args.active_only)
     return check(Path(args.workspace), active_only=args.active_only)
 
 

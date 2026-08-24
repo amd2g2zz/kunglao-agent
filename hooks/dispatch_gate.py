@@ -495,6 +495,61 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
         "the validated family.")
 
 
+def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str) -> int | None:
+    """#602: plan-drift auto-integration wire-up for L621 dispatch path entry.
+
+    Shells out to scripts/plan_drift_detector.py --auto and translates its
+    exit code into a dispatch-gate response:
+      - exit 2 (drift-severe, 1+ non-WARN drift)     -> return 2 (BLOCKED)
+      - exit 3 (WARN-only, STALE_PLAN_ON_NEW_EVIDENCE) -> return 3 (SATURATED)
+      - exit 0 (no drift)                            -> return None (fall through)
+      - any other / missing / unparseable workspace  -> return None (fail-open)
+
+    NON-FATAL by design: a false-positive is acceptable — the operator
+    can re-dispatch. This is a PreToolUse safety net, NOT a hard gate;
+    the BLOCKED escalation only fires on REAL drift-severe events
+    (non-WARN classes: ORPHAN_CLAIM / STALE_PLAN_ENTRY / MISSING_DEP_LINK /
+    UNANSWERED_QUESTION / STALE_NEXT_STEP / UNVERIFIED_EVIDENCE).
+
+    The 5-second timeout mirrors the dispatch-gate hook posture (a hung
+    child process must NOT stall the orchestrator); on timeout we fail-open
+    (None) so an environment where plan_drift_detector is slow doesn't
+    break dispatch.
+    """
+    import subprocess as _sp
+    script = SKILL_DIR / "scripts" / "plan_drift_detector.py"
+    if not script.exists():
+        return None
+    try:
+        proc = _sp.run(
+            [sys.executable, str(script), str(ws), "--auto"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (_sp.TimeoutExpired, FileNotFoundError, OSError):
+        # NON-FATAL: timeout / spawn failure / missing interpreter -> open
+        return None
+    except Exception:  # noqa: BLE001 — last-resort fail-open
+        return None
+    rc = proc.returncode
+    if rc == 2:
+        # drift-severe -> BLOCKED. Print so the operator tail can see it.
+        try:
+            tail = (proc.stdout or "").strip().splitlines()[-1] if proc.stdout else ""
+        except Exception:
+            tail = ""
+        print(f"dispatch_gate: plan-drift auto BLOCKED ({claim_id}): {tail}",
+              file=sys.stderr, flush=True)
+        return 2
+    if rc == 3:
+        # drift-warning -> SATURATED. Visible but not REJECT.
+        print(f"dispatch_gate: plan-drift auto SATURATED ({claim_id}): "
+              "WARN-only, observe-first",
+              file=sys.stderr, flush=True)
+        return 3
+    # rc 0 (no drift) or any unexpected -> fall through
+    return None
+
+
 def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
     """③ #496: append the strategy dispatch row on the PASS path — the only
     writer the strategy-novelty interface needs (opt-in: no
@@ -611,6 +666,14 @@ def main() -> int:
             }
         }, ensure_ascii=False))
         return 0
+
+    # #602: plan-drift auto-integration — runs BEFORE the existing dispatch
+    # block. Drift-severe -> BLOCKED (rc=2); drift-warning -> SATURATED
+    # (rc=3); no drift -> None (fall through). NON-FATAL: false-positive is
+    # acceptable (operator can re-dispatch).
+    rc = _plan_drift_auto(ws, claim_id, prompt_text)
+    if rc is not None:
+        return rc
 
     # #496 decision teeth, in order: top-1 first (the most fundamental
     # deviation), then the capability card, then the strategy log on the
