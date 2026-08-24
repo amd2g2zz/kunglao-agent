@@ -1672,6 +1672,36 @@ def bootstrap_observability(ws: Path, hooks_json: Path | None = None,
               "target (--hooks-json)")
     from heartbeat import heartbeat_register
     heartbeat_register(ws)
+    emit_activation_handoff(ws)
+    return RC_OK
+
+
+def emit_activation_handoff(ws) -> int:
+    """#593+#598 机械交接 (adjudication (b) — both red lines PRESERVED):
+    init never fakes loop registration (loop_registered stays false until the
+    /loop prompt's first real tick) and never self-activates hooks (dormant
+    until orchestrator Phase 0). What it DOES do: emit the exact artifacts the
+    operator/orchestrator needs next — the real /loop prompt body (via the
+    emitter, never an embedded copy) and the exact verify/activate commands.
+    Prose-only dead ends are the defect this closes."""
+    try:
+        from heartbeat_loop_prompt import build_prompt
+        prompt = build_prompt(str(ws))
+        print("kunglao-init: /loop heartbeat prompt — pass to CronCreate "
+              "(*/5 * * * *) or /loop 5m, then accept with --verify:")
+        print("---- /loop prompt body ----")
+        print(prompt)
+        print("---- end prompt body ----")
+    except Exception as exc:  # emitter failure must not fail init
+        print(f"kunglao-init: /loop prompt emitter unavailable ({exc}) — "
+              "run heartbeat_loop_prompt.py manually", file=sys.stderr)
+    ha = Path(__file__).resolve().with_name("hook_activation.py")
+    print("kunglao-init: next steps (mechanical, copy-paste):")
+    print(f"  1. verify loop : python {ha} {ws} --heartbeat-on && "
+          "python heartbeat_loop_prompt.py --verify")
+    print(f"  2. arm hooks   : python {ha} {ws} --tier advisory "
+          "(or --set-active dispatch_gate,worker_pulse) — hooks stay "
+          "dormant until this Phase-0 arm (v1.9.7 default-inactive)")
     print("kunglao-init: heartbeat registered (runs/.heartbeat.json, #461) — "
           "loop registration is still pending: create the /loop cron and "
           "accept it with heartbeat_loop_prompt.py --verify")
