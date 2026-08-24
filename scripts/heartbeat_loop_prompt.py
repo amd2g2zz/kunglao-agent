@@ -59,7 +59,7 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
    → append structured replies to runs/.ping-log.jsonl
    (isolation boundary #88: no agent teams; the orchestrator→worker SendMessage ping is the sanctioned channel,
     workers never message each other)
-3. python {cc} {ws} decision → imperative execution (every decision MUST produce a convergence-advancing action; no action = idle fault):
+3. python {cc} {ws} --json → read the decision field, imperative execution (every decision MUST produce a convergence-advancing action; no action = idle fault):
    DISPATCH   → MUST dispatch priority_ratio.py #1, no idling allowed
    BLOCKED    → MUST self-recover (resolve / stale_blocker_prune) or reactivate the failed claim
    DEFERRED   → MUST check whether reactivation is possible (e.g. VM reachable again → restore the claim and dispatch)
