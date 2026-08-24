@@ -108,6 +108,29 @@ def verify_loop(ws: str) -> int:
             "means the CronCreate itself failed — re-create the cron.",
             file=sys.stderr)
         return 1
+    # #609: the marker is a self-written claim — cross-check liveness. A cron
+    # deleted after one successful fire must not keep verify vouching OK.
+    # Corrupt/absent last_tick_ts counts as not ticking (fail-closed).
+    last = data.get("last_tick_ts")
+    age_ok = False
+    if isinstance(last, str):
+        try:
+            from datetime import datetime, timedelta, timezone
+            from liveness_policy import STALE_MINUTES  # noqa: E402
+            last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+            age_ok = datetime.now(tz=timezone.utc) - last_dt <= timedelta(minutes=STALE_MINUTES)
+        except (ValueError, TypeError):
+            age_ok = False
+    if not age_ok:
+        detail = f"last tick {last}" if last else "last_tick_ts absent"
+        print(
+            f"LOOP NOT TICKING (HARD, #609): loop_registered=true but {detail} — "
+            "the cron is registered yet not firing (deleted after first fire, "
+            "session ended, or never created). The marker is history, not "
+            "liveness. Fix: re-register the /loop cron "
+            "(heartbeat_loop_prompt.py <ws> → CronCreate), then re-verify.",
+            file=sys.stderr)
+        return 1
     print(f"OK: cron loop registered (loop_registered=true, started "
           f"{data.get('started_ts')})")
     return 0
