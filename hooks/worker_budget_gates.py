@@ -750,7 +750,32 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
     text = f'{desc}\n{prompt}'
     text_lower = text.lower()
     if 'tool-catalog:' in text_lower:
-        return (True, 'tool-catalog marker present')
+        # #630: the marker must be HONEST — `none (reasoning: ...)` is the
+        # explicit opt-out; otherwise the named tool must be one the keyword
+        # scan would actually match (a bare marker or an unrelated name is
+        # self-attestation, which was the hole).
+        import re as _re630
+        m = _re630.search(r'tool-catalog:\s*(.+)', text_lower)
+        cited = (m.group(1).strip() if m else '')
+        if cited.startswith('none'):
+            return (True, 'tool-catalog: none (explicit opt-out)')
+        keywords = _load_tool_index_keywords(_SKILL_ROOT)
+        if not keywords:
+            return (True, 'no tools/_INDEX.yaml keywords to match - tool-first skipped')
+        matched_tools = set()
+        for kw, tool_name in keywords.items():
+            if kw in _TOOLFIRST_STOPWORDS:
+                continue
+            if _re630.search(_ASCII_BOUNDARY.format(kw=_re630.escape(kw)), text_lower):
+                matched_tools.add(tool_name)
+        for tool in matched_tools:
+            if tool and tool.lower() in cited:
+                return (True, f'tool-catalog: {tool} (matched)')
+        return (False, (
+            "`tool-catalog:` marker names a tool the dispatch text does not "
+            "actually match (self-attestation, #630). Cite the tool your text "
+            "references, or `tool-catalog: none (reasoning: <why not>)`."
+        ))
     if _is_diagnostic_exempt(text):
         return (True, 'one-off diagnostic - tool-first exempt')
     keywords = _load_tool_index_keywords(_SKILL_ROOT)
@@ -768,6 +793,41 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
                 f"does not apply, then re-dispatch."
             ))
     return (True, 'no tool-catalog keyword match')
+
+
+def verify_tool_catalog(ws) -> list:
+    """#630 post-side companion: a done worker's cited tool must EXIST.
+
+    A PreToolUse gate structurally cannot observe execution — the proof tier
+    here is #474's LIVENESS proxy: every `tool-catalog: <name>` cited in a
+    done worker's status file must resolve to a name the tools/_INDEX.yaml
+    keyword table knows. Fail-open when the index is absent (fixture/legacy
+    workspaces). Returns a list of {worker, cited} violations."""
+    import re as _re
+    from pathlib import Path as _P
+    ws = _P(ws)
+    runs = ws / "runs"
+    if not runs.is_dir():
+        return []
+    keywords = _load_tool_index_keywords(_SKILL_ROOT)
+    if not keywords:
+        return []  # no index → nothing to resolve against (fail-open)
+    known = {t.lower() for t in keywords.values()}
+    violations = []
+    for p in sorted(runs.glob("worker-status-*.md")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if "status: done" not in text:
+            continue
+        for m in _re.finditer(r"tool-catalog:\s*([^\n]+)", text, _re.IGNORECASE):
+            cited = m.group(1).strip()
+            if not cited or cited.lower().startswith("none"):
+                continue
+            if not any(k in cited.lower() for k in known):
+                violations.append({"worker": p.stem, "cited": cited})
+    return violations
 
 
 # ---------- issue #310: agenttype gate (specialist-first as a MECHANICAL check) ----------
