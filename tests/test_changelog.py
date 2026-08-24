@@ -62,7 +62,7 @@ def test_manifest_and_pyproject_are_0_1():
     m = re.search(r'^version\s*=\s*"([^"]+)"', pyproject, re.MULTILINE)
     assert m, "pyproject.toml missing [project].version"
     expected = m.group(1)  # single source of truth: pyproject version
-    assert expected == "0.1.1", f"pyproject version is {expected}, expected 0.1.1"
+    assert expected == "0.1.3", f"pyproject version is {expected}, expected 0.1.3"
 
     manifest = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     assert manifest["version"] == expected, \

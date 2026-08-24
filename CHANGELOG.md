@@ -28,6 +28,88 @@ release (see the mapping table at the end).
 - Exit-code semantics audit (#414): RC matrix pinned by test; argparse usage errors normalized 2→1; cleanup removes only this-run artifacts.
 - Test-suite validity audit (#394): redundant/meaningless tests removed/merged (before/after counts in the PR).
 
+## [0.1.3] - 2026-08-25
+
+### Round 1 — Unattended Runtime & Long-Horizon Defects (priority per user)
+
+**Added**
+- worker status contract (#607): unknown statuses (planning/preflight) count
+  ACTIVE — invisible workers reach the stuck list and the #595 event; stuck
+  workers' IN_PROGRESS claims reopen → OPEN (the loop's first machine path
+  out of IN_PROGRESS); backtrack_gate delegates to the canonical parser.
+- drift detection (#612): detect_drift() — stuck + empty evidence → advisory
+  events (runs/.drift-events.jsonl); production had 3 incidents with 0%
+  mechanical detection.
+- monitor wiring (#620 Gap C): heartbeat_tick runs the orphan monitor every
+  tick (#88 advisory frozen — rc never weighs).
+- top-1 REJECT ledger (#603): runs/gate-rejections.jsonl + kunglao_resume
+  consumer; retry-counter firewall pinned (REJECT never trips the #604 breaker).
+- init marker robustness (#625): .kunglao-init.json is the PRIMARY
+  completeness truth (survives YAML rewrites); YAML comment = legacy fallback.
+- orchestrator Bash guard (#608): PreToolUse/Bash WARN on analysis binaries
+  outside .wt-* worktrees (maker-checker, target-based #532-style) + durable
+  event; registered in all four hook tables.
+
+**Fixed**
+- liveness single-source (#597): liveness_policy.py — 10+ _MINUTES constants
+  unified (values unchanged); drift-guard test blocks bare assignments.
+- TTL expiry observability (#613): one-shot .hook-slept.json + stderr WARN.
+- tick rc surfacing (#617): heartbeat_rc reaches the summary line; ALERT
+  banner; alert/first_failure persisted (truncation-immune).
+- verify truthfulness (#609): --verify fails when registered-but-not-ticking
+  (last_tick_ts staleness, fail-closed).
+- prompt command ref (#611): /loop step-3 references the real --json
+  invocation.
+- plain-text crash (#610): priority_ratio default output iterates typed
+  actions (was AttributeError on every non---json run).
+
+### Round 2 — Init Handoff, Contracts & Intake
+
+**Added**
+- init mechanical handoff (#593 #598): init emits the REAL /loop prompt body
+  (via the build_prompt emitter) + exact --verify/--tier commands — both
+  by-design red lines PRESERVED (loop_registered never faked by init; hooks
+  stay dormant until Phase-0 arm).
+- intake preflight (#588 #590): quick_presence() PRESENCE-tier banner in
+  O(seconds) before step-0; preconditions decision group (context-only).
+- notes-due queue + completion reader (#628): rollup Step 2.5 queues terminal
+  claims lacking a durable note; nothing auto-writes (judge-then-revise).
+- closure wiring (#629): feedback.check_stale runs every tick (#88 advisory).
+- renew audit (#619): action=renew event (was_expired/expiry_gap_s) into
+  kunglao_log.
+- REJECT observability (#624): env_check_gate REJECTs leave a persistent
+  trail (both paths).
+
+**Fixed**
+- priority inputs (#594 #596): per-claim depends_on feeds the graph when
+  claim_deps is empty; register PROVEN claims form the terminal set when
+  _INDEX has no rows — fresh workspaces regain ranking gradient.
+- done-requires-artifacts (#550): bare done is a violation, full stop (user
+  ruling 2026-08-25: no legacy path) — the C-400 hole closed at W-15.
+- tool-first honesty (#630): marker must name the MATCHED tool (or
+  none+reasoning); post-side verify_tool_catalog resolves cited names.
+- gate numbering (#563): QUICK_GATES + --quick stable selector;
+  release_check_selfcheck fails loudly on stale workflow gate ids.
+- two-settings-levels doc (#589): README Internals section derived from
+  HOOK_DEPLOYMENT_TARGETS (registry named; HOME exclusion stated).
+
+### Hygiene (ponytail, adjudicated)
+
+- PendingDecisionList → function pair (#582); Classification → NamedTuple
+  view (#581); ledger writer → stdlib WatchedFileHandler, format
+  byte-identical (#584); the 8 kunglao-* entries share _entry.run (#585,
+  limited wave — the 89-file sweep defers to v0.2).
+- Closed as refuted by code facts: #578 #579 #583 (dead-code claims whose
+  cited targets have live callers / don't exist); #620 Gap B wontfix (hash
+  measures change; drift measures stagnation).
+- #580 (StrEnum) deferred to v0.2: blocked on the Python 3.10 floor.
+
+### Policy Decisions
+
+- #550: no legacy-compat for bare done (user ruling 2026-08-25).
+- #593/#598: init NEVER self-activates (both by-design red lines preserved;
+  mechanical handoff instead — adjudication (b)).
+
 ## [0.1.2] - 2026-08-23
 
 ### Added
