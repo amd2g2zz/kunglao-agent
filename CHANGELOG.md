@@ -110,6 +110,30 @@ release (see the mapping table at the end).
 - #593/#598: init NEVER self-activates (both by-design red lines preserved;
   mechanical handoff instead — adjudication (b)).
 
+### Round 3 — Post-Release Follow-ups (v0.1.3 milestone review)
+
+**Added**
+- anomaly detection layer (#663): `scripts/anomaly_detector.py` —
+  BaselineCorpus dataclass, score_fact (lexical-only when no claim
+  context), scan_anomalies (full 3-dim max per design.md D1), check_fact_anomaly
+  single-fact consumer, _load_baseline (RE-library refs + 2 future
+  sources, fail-open per design.md D5), CLI. `scripts/convergence_check.py`
+  gains `ANOMALY_DETECTED` DRAIN event between GLOBAL_CONTRADICTION and
+  DRAIN_CLEAN (per design.md D4) — anomalies surface as `BLOCKED` with
+  fact_id + score + top_dimension. `scripts/lint_facts.py` schema bump:
+  `VALID_BOUNDARY_TYPE` + `EMPTY_GATE_TYPES` add `'anomaly'`; `ACTIVE_SCHEMA_REV`
+  1 → 2 (additive per design.md D3); template + drift test bumped in lockstep.
+- references/anomaly-baseline.md: baseline corpus sourcing (RE-library refs +
+  prior samples + operator `baseline_corpus:` config), fail-open semantics
+  per design.md D5, operator tuning knobs (`anomaly_threshold` in
+  `analysis_state.txt`), maker-checker boundary (design.md D8 — anomaly is
+  observation, not verdict demotion; co-resident note via
+  `_write_anomaly_note` for analyst review).
+- tests/test_anomaly_detector.py: 9 RED → GREEN cases (RED1-RED6 unit,
+  RED7 convergence_check integration, RED8 claim_migrator invariant,
+  RED9 schema bump). Schema bump consistency for
+  tests/test_fact_schema_rev_536.py and templates/fact-frontmatter.md.
+
 ## [0.1.2] - 2026-08-23
 
 ### Added

@@ -564,6 +564,7 @@ class Event(str, Enum):
     NOTE_LAYER_GAP = "NOTE_LAYER_GAP"                  # DESIGN §8 C0
     DISCOVERY_UNCONSUMED = "DISCOVERY_UNCONSUMED"     # #147 discovery consumption
     GLOBAL_CONTRADICTION = "GLOBAL_CONTRADICTION"     # #147 completion transaction
+    ANOMALY_DETECTED = "ANOMALY_DETECTED"           # #663 anomaly observation gate
     DRAIN_CLEAN = "DRAIN_CLEAN"                        # DRAIN catch-all
     # SCHEDULE stage
     WORK_AND_FREE_SLOT = "WORK_AND_FREE_SLOT"
@@ -617,6 +618,29 @@ class _DecideInputs:
     _discovery_reason: str | None = field(default=None, repr=False)
     _contradiction_reason: str | None = field(default=None, repr=False)
     _ladder_ids: list | None = field(default=None, repr=False)
+    _anomalies: list | None = field(default=None, repr=False)
+
+    def anomaly_reason(self) -> list:
+        """#663 anomaly observation gate (fail-open per design.md D5).
+
+        Lazy + cached. Returns the anomaly list from scripts/anomaly_detector.
+        Fail-open: any import / scan error returns [] (the anomaly detector
+        is an informational observation, not a correctness gate — a broken
+        anomaly detector MUST NOT block convergence, only the contradiction
+        gate may block).
+        """
+        if self._anomalies is None:
+            anomalies: list = []
+            try:
+                import anomaly_detector as ad  # local import; never block
+                anomalies = ad.scan_anomalies(
+                    self.workspace / "facts" / "_INDEX.md",
+                    self.workspace / "facts",
+                )
+            except Exception:
+                anomalies = []  # fail-open per design.md D5
+            self._anomalies = anomalies
+        return self._anomalies
 
     def discovery_reason(self) -> str:
         """#147 discovery scan, cached. Computed only when DRAIN asks for it."""
@@ -757,6 +781,14 @@ def _global_contradiction(s: _DecideInputs) -> bool:
     return bool(s.contradiction_reason())
 
 
+def _anomaly_detected(s: _DecideInputs) -> bool:
+    # #663: anomaly facts observed — informational observation that blocks
+    # convergence pending analyst review (co-resident note + verify/refute).
+    # Per design.md D5 the gate fires only when anomalies exist; empty
+    # baseline (cold-start) returns [] and never blocks.
+    return bool(s.anomaly_reason())
+
+
 def _drain_clean(s: _DecideInputs) -> bool:
     return True  # DRAIN catch-all (tail invariant, see tests)
 
@@ -814,6 +846,7 @@ _EVENT_PREDICATES = {
     Event.NOTE_LAYER_GAP: _note_layer_gap,
     Event.DISCOVERY_UNCONSUMED: _discovery_unconsumed,
     Event.GLOBAL_CONTRADICTION: _global_contradiction,
+    Event.ANOMALY_DETECTED: _anomaly_detected,
     Event.DRAIN_CLEAN: _drain_clean,
     Event.WORK_AND_FREE_SLOT: _work_and_free_slot,
     Event.PARTIALS_AND_FREE_SLOT: _partials_and_free_slot,
@@ -858,6 +891,16 @@ def _act_discovery(s: _DecideInputs) -> str:
 def _act_contradiction(s: _DecideInputs) -> str:
     return (f"Cannot CONVERGE: {s.contradiction_reason()} -> resolve via "
             f"fact_contradiction_gate or supersedes links.")
+
+
+def _act_anomaly(s: _DecideInputs) -> str:
+    anomalies = s.anomaly_reason()
+    items = "; ".join(
+        f"{a['fact_id']} score={a['score']:.3f} ({a['top_dimension']})"
+        for a in anomalies
+    )
+    return (f"Cannot CONVERGE: {len(anomalies)} anomaly fact(s) above threshold "
+            f"(review or refute; co-resident notes in notes/<fact_id>.md): {items}")
 
 
 def _act_converged(s: _DecideInputs) -> str:
@@ -1002,7 +1045,8 @@ STAGE_PROBES = {
     # contradiction > clean).
     State.DRAIN: [Event.ORPHAN_TERMINAL_CLAIM, Event.PRIMARY_Q_UNVERIFIED,
                   Event.NOTE_LAYER_GAP, Event.DISCOVERY_UNCONSUMED,
-                  Event.GLOBAL_CONTRADICTION, Event.DRAIN_CLEAN],
+                  Event.GLOBAL_CONTRADICTION, Event.ANOMALY_DETECTED,
+                  Event.DRAIN_CLEAN],
     # SCHEDULE: dispatchable work first, then saturation, then WHY nothing
     # is dispatchable (#495 failure artifacts, #497 ladder flavors), then
     # the catch-all (reachable: opens==0 + partials>0 + slots==0).
@@ -1025,6 +1069,7 @@ TRANSITIONS = {
     (State.DRAIN, Event.NOTE_LAYER_GAP): (State.DISPATCH_VERIFIER, _act_note_gap),
     (State.DRAIN, Event.DISCOVERY_UNCONSUMED): (State.DISPATCH, _act_discovery),
     (State.DRAIN, Event.GLOBAL_CONTRADICTION): (State.BLOCKED, _act_contradiction),
+    (State.DRAIN, Event.ANOMALY_DETECTED): (State.BLOCKED, _act_anomaly),
     (State.DRAIN, Event.DRAIN_CLEAN): (State.CONVERGED, _act_converged),
     (State.SCHEDULE, Event.WORK_AND_FREE_SLOT): (State.DISPATCH, _act_dispatch_top),
     (State.SCHEDULE, Event.PARTIALS_AND_FREE_SLOT): (State.DISPATCH_VERIFIER, _act_verify_partials),
@@ -1076,6 +1121,8 @@ def decide(workspace: Path) -> dict:
         "failure_blocked": snap.failure_blocked_ids,
         "partial_facts": snap.partials,
         "partial_count": len(snap.partials),
+        "anomalies": snap.anomaly_reason(),
+        "anomaly_count": len(snap.anomaly_reason()),
         "active_workers": snap.active,
         "free_slots": snap.free_slots,
         "worker_cap": WORKER_CAP,
