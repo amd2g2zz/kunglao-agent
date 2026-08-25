@@ -562,6 +562,7 @@ class Event(str, Enum):
     ORPHAN_TERMINAL_CLAIM = "ORPHAN_TERMINAL_CLAIM"    # M2 completeness gate
     PRIMARY_Q_UNVERIFIED = "PRIMARY_Q_UNVERIFIED"      # M2: BLIND-verified PROVEN, not STAMP
     NOTE_LAYER_GAP = "NOTE_LAYER_GAP"                  # DESIGN §8 C0
+    OPEN_HYPOTHESIS_AT_CLOSE = "OPEN_HYPOTHESIS_AT_CLOSE"  # #662 unadjudicated hypothesis gate
     DISCOVERY_UNCONSUMED = "DISCOVERY_UNCONSUMED"     # #147 discovery consumption
     GLOBAL_CONTRADICTION = "GLOBAL_CONTRADICTION"     # #147 completion transaction
     ANOMALY_DETECTED = "ANOMALY_DETECTED"           # #663 anomaly observation gate
@@ -619,6 +620,25 @@ class _DecideInputs:
     _contradiction_reason: str | None = field(default=None, repr=False)
     _ladder_ids: list | None = field(default=None, repr=False)
     _anomalies: list | None = field(default=None, repr=False)
+    _open_hyps: list | None = field(default=None, repr=False)
+
+    def open_hypotheses(self) -> list:
+        """#662 unadjudicated-hypothesis gate input (lazy + cached).
+
+        Reads hypothesis_store.HypothesisStore.list_open(). Fail-open on
+        LAYER ERRORS ONLY (unreadable dir / parse explosion -> [] -> gate
+        silent); genuinely-open hypotheses BLOCK at DRAIN — that is the
+        feature (design D5/D7), not a failure mode.
+        """
+        if self._open_hyps is None:
+            hyps: list = []
+            try:
+                from hypothesis_store import HypothesisStore
+                hyps = HypothesisStore(self.workspace / "hypotheses").list_open()
+            except Exception:
+                hyps = []  # layer error — fail-open per design D7
+            self._open_hyps = hyps
+        return self._open_hyps
 
     def anomaly_reason(self) -> list:
         """#663 anomaly observation gate (fail-open per design.md D5).
@@ -771,6 +791,13 @@ def _note_layer_gap(s: _DecideInputs) -> bool:
     return bool(s.pq_note_gaps)
 
 
+def _open_hypothesis_at_close(s: _DecideInputs) -> bool:
+    # #662: unadjudicated competing explanations at delivery — the exact
+    # "contradictory self-report" defect class. Layer errors fail-open
+    # (empty list); genuinely-open hypotheses fire (design D5).
+    return bool(s.open_hypotheses())
+
+
 def _discovery_unconsumed(s: _DecideInputs) -> bool:
     # #147: disclosed payloads must be obligations before CONVERGED.
     return bool(s.discovery_reason())
@@ -844,6 +871,7 @@ _EVENT_PREDICATES = {
     Event.ORPHAN_TERMINAL_CLAIM: _orphan_terminal,
     Event.PRIMARY_Q_UNVERIFIED: _pq_unverified,
     Event.NOTE_LAYER_GAP: _note_layer_gap,
+    Event.OPEN_HYPOTHESIS_AT_CLOSE: _open_hypothesis_at_close,
     Event.DISCOVERY_UNCONSUMED: _discovery_unconsumed,
     Event.GLOBAL_CONTRADICTION: _global_contradiction,
     Event.ANOMALY_DETECTED: _anomaly_detected,
@@ -882,6 +910,15 @@ def _act_note_gap(s: _DecideInputs) -> str:
     return (f"Note-layer (DESIGN S8 C0) not satisfied: primary_questions {s.pq_note_gaps} "
             f"lack a note with verify_status=passes (link: note.claim_id -> claim.answers_question). "
             f"Run verify-note.py before delivery.")
+
+
+def _act_open_hypothesis(s: _DecideInputs) -> str:
+    hyps = s.open_hypotheses()
+    ids = ", ".join(h.id for h in hyps)
+    return (f"Cannot CONVERGE: {len(hyps)} open hypothesis(ies) {ids} — "
+            f"adjudicate before delivery (refute via refuting_fact_id / "
+            f"supersede via superseded_by, per #528 state machine). Scaffold "
+            f"candidates=[] must be filled or refuted.")
 
 
 def _act_discovery(s: _DecideInputs) -> str:
@@ -1044,7 +1081,8 @@ STAGE_PROBES = {
     # regression anchor (orphan > unverified > note-gap > discovery >
     # contradiction > clean).
     State.DRAIN: [Event.ORPHAN_TERMINAL_CLAIM, Event.PRIMARY_Q_UNVERIFIED,
-                  Event.NOTE_LAYER_GAP, Event.DISCOVERY_UNCONSUMED,
+                  Event.NOTE_LAYER_GAP, Event.OPEN_HYPOTHESIS_AT_CLOSE,
+                  Event.DISCOVERY_UNCONSUMED,
                   Event.GLOBAL_CONTRADICTION, Event.ANOMALY_DETECTED,
                   Event.DRAIN_CLEAN],
     # SCHEDULE: dispatchable work first, then saturation, then WHY nothing
@@ -1067,6 +1105,7 @@ TRANSITIONS = {
     (State.DRAIN, Event.ORPHAN_TERMINAL_CLAIM): (State.BLOCKED, _act_orphans),
     (State.DRAIN, Event.PRIMARY_Q_UNVERIFIED): (State.SATURATED, _act_pq_unverified),
     (State.DRAIN, Event.NOTE_LAYER_GAP): (State.DISPATCH_VERIFIER, _act_note_gap),
+    (State.DRAIN, Event.OPEN_HYPOTHESIS_AT_CLOSE): (State.BLOCKED, _act_open_hypothesis),
     (State.DRAIN, Event.DISCOVERY_UNCONSUMED): (State.DISPATCH, _act_discovery),
     (State.DRAIN, Event.GLOBAL_CONTRADICTION): (State.BLOCKED, _act_contradiction),
     (State.DRAIN, Event.ANOMALY_DETECTED): (State.BLOCKED, _act_anomaly),
@@ -1123,6 +1162,10 @@ def decide(workspace: Path) -> dict:
         "partial_count": len(snap.partials),
         "anomalies": snap.anomaly_reason(),
         "anomaly_count": len(snap.anomaly_reason()),
+        "open_hypotheses": [{"id": h.id, "claim_id": h.claim_id,
+                             "competitor_group": h.competitor_group}
+                            for h in snap.open_hypotheses()],
+        "open_hypothesis_count": len(snap.open_hypotheses()),
         "active_workers": snap.active,
         "free_slots": snap.free_slots,
         "worker_cap": WORKER_CAP,

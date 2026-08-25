@@ -234,6 +234,16 @@ def build_digest(ws: Path) -> str:
         for ln in tail:
             L.append(f"  {ln}")
 
+    # ---- sec_g: seed-then-list (#662 -> #528) — FAIL-OPEN ----
+    # Seed PQ scaffolds BEFORE listing: the cold-start digest is the
+    # mechanical enforcement point for ">=1 H-NN per primary_question before
+    # any C-NN dispatch" (#662 design D4). A seeding failure must never
+    # block cold start — degrade to listing whatever exists.
+    try:
+        from hypothesis_seeder import seed_from_task_spec
+        seed_from_task_spec(ws)
+    except Exception:  # noqa: BLE001 — seeding failure never blocks cold start
+        pass
     # ---- sec_g: open hypotheses (#528) — FAIL-OPEN ----
     # A hypotheses-layer failure must never block cold start: the digest
     # degrades to the pre-#528 six-section shape instead of raising

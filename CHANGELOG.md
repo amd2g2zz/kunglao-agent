@@ -133,6 +133,23 @@ release (see the mapping table at the end).
   RED7 convergence_check integration, RED8 claim_migrator invariant,
   RED9 schema bump). Schema bump consistency for
   tests/test_fact_schema_rev_536.py and templates/fact-frontmatter.md.
+- hypothesis seed layer (#662): `scripts/hypothesis_seeder.py` — mechanical
+  idempotent PQ scaffold seeder (every task_spec primary_question gets an
+  open `H-NNN` with `pq:<qid>` body marker, `candidates: []`,
+  `claim_id: C-PENDING`; marker lives in the body because HypothesisStore
+  rewrites drop unknown frontmatter keys — design D2). Wired into
+  `digest_build.build_digest` before sec_g (fail-open): seeding is
+  mechanically enforced at EVERY cold start, closing the "LLM must
+  remember to seed" gap. `scripts/convergence_check.py` DRAIN gains
+  `OPEN_HYPOTHESIS_AT_CLOSE` between NOTE_LAYER_GAP and
+  DISCOVERY_UNCONSUMED (#443 additive) — unadjudicated competing
+  explanations at delivery BLOCK convergence pending refute/supersede
+  (#528 terminal paths); decide() output gains open_hypotheses +
+  open_hypothesis_count (dict shape, mirrors anomalies).
+- tests/test_hypothesis_seeder.py: 8 RED → GREEN cases (RED1-RED4 seeder
+  unit, RED5 digest seed-then-list integration, RED6/RED7 convergence DRAIN
+  gate, RED8 scaffold shape). Fold-in cleanup: openspec change
+  issue-663-anomaly-detection archived post-#666-merge.
 
 ## [0.1.2] - 2026-08-23
 
