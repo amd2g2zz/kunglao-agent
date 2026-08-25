@@ -38,11 +38,21 @@ SENTINELS = ("/dev/null", "/dev/stdin", "/dev/stdout", "/dev/stderr")
 HISTORICAL = "HISTORICAL-PATH-EXAMPLE"
 
 
+EXEMPT_DIRS = ("v013_acceptance",)  # private acceptance harness (untracked; auditor's verification env)
+
+
 def scan(root: Path) -> list[str]:
-    """Return '<relpath>:<line>' violations for drive-letter literals."""
+    """Return '<relpath>:<line>' violations for drive-letter literals.
+
+    Skips dirs in EXEMPT_DIRS — v013_acceptance/ is the auditor's private
+    acceptance verification harness (untracked gitignored); the user policy
+    #690 targets tracked test code, not this auditor-private dir.
+    """
     out: list[str] = []
     for py in sorted(root.rglob("*.py")):
         rel = py.relative_to(root).as_posix()
+        if rel.split("/", 1)[0] in EXEMPT_DIRS:
+            continue
         for i, line in enumerate(
             py.read_text(encoding="utf-8", errors="replace").splitlines(), 1
         ):
