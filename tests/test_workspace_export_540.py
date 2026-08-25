@@ -171,17 +171,34 @@ def test_manifest_excludes_scratch_unless_requested(tmp_path):
     assert any(e["path"] == "scratch/f.txt" for e in m_full["zones"]["scratch"])
 
 
-def test_manifest_sha256_is_actual(tmp_path):
+# #687 ruling: the fixture must pin exact on-disk bytes via write_bytes.
+# write_text(newline=None) translates \n to os.linesep, so on Windows the
+# disk bytes were b'{"x": 1}\r\n' while the old expectation hardcoded the
+# LF digest — a platform-brittle expectation, not a production defect
+# (sha256_file reads "rb"; roundtrip/tamper tests prove end-to-end
+# consistency over actual bytes).
+_SHA_FIXTURE_CASES = (
+    b'{"x": 1}\n',       # LF — historical fixture content
+    b'{"x": 1}\r\n',     # CRLF — actual Windows write_text bytes; locks
+                         # "hash actual bytes, never normalized text"
+)
+
+
+@pytest.mark.parametrize("on_disk_bytes", _SHA_FIXTURE_CASES,
+                         ids=["lf", "crlf"])
+def test_manifest_sha256_is_actual(tmp_path, on_disk_bytes):
     mod = _load()
     ws = tmp_path / "ws"
     ws.mkdir()
-    (ws / ".mcp.json").write_text('{"x": 1}\n', encoding="utf-8")
+    (ws / ".mcp.json").write_bytes(on_disk_bytes)
     m = mod.build_manifest(ws, include_scratch=False)
     entries = m["zones"]["carrier"]
     assert entries, "carrier zone empty"
-    # sha256 of {"x": 1}\n
+    # expectation derived from the input bytes (numeric-fidelity: the
+    # digest is computed from the same literal that wrote the file —
+    # no second hardcoded hash)
     import hashlib
-    expected = hashlib.sha256(b'{"x": 1}\n').hexdigest()
+    expected = hashlib.sha256(on_disk_bytes).hexdigest()
     assert entries[0]["sha256"] == expected
 
 
