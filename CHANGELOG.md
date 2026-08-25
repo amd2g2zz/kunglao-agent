@@ -150,6 +150,28 @@ release (see the mapping table at the end).
   unit, RED5 digest seed-then-list integration, RED6/RED7 convergence DRAIN
   gate, RED8 scaffold shape). Fold-in cleanup: openspec change
   issue-663-anomaly-detection archived post-#666-merge.
+- intent-aware strategic stopping (#664): `scripts/completion_gate.py`
+  gains exit code 4 (`INTENT_UNMATCHED`) — at the would-be-PASS point
+  (items closed, defers signed), the gate re-extracts content anchors
+  from `task_text` via #54 F1's `_extract_anchors` and verifies each
+  appears in some `task_spec.yaml` primary_question id or question text.
+  ≥1 unmatched anchor → exit 4 with the unmatched anchors named in the
+  reason. Precedence 3 > 2 > 1 > 4 > 0 (intent check fires only at the
+  would-be-PASS point — item-level defects and unsigned defers strictly
+  outrank it; design.md D1). All paths fail-open (D4): no `workspace_path`,
+  no `task_spec.yaml`, malformed YAML, empty PQs, zero anchors, anchor-
+  module import failure → check skipped, oracle verdict unchanged. CLI
+  verdict map gains `4: "INTENT_UNMATCHED"`; `hooks/completion_gate.py`
+  docstring exit-code table gains the 4 row (D5 — shim logic already
+  blocks on every non-zero exit, so no propagation change). Two new
+  helpers: `_pq_coverage_text(task_spec)` schema-tolerant corpus builder
+  (handles canonical `{id, q}`, legacy one-key `{Q1: text}`, plain-string
+  items, top-level mapping) and `_intent_unmatched(oracle, task_text)`.
+- tests/test_intent_aware_completion.py: 8 RED → GREEN cases (RED1
+  unmatched-anchor returns 4 + names anchors, RED2 covered anchors →
+  PASS unchanged, RED3 no workspace_path → skip, RED4 no/malformed/
+  empty-PQ task_spec → skip + no crash, RED5 unresolved items outrank
+  intent, RED6 CLI JSON verdict label).
 
 ## [0.1.2] - 2026-08-23
 

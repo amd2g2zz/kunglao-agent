@@ -22,6 +22,11 @@ Activation gating: current fail-open / fail-closed boundaries (post
   - activated + oracle present + empty task_text → block, exit 3 (D6:
     malformed oracle is the genuine self-anchor fingerprint)
   - activated + oracle present + unsatisfied → block, exit 1/2
+  - activated + oracle would PASS items but task_text anchors are absent
+    from task_spec.yaml primary_questions → block, exit 4 (#664
+    INTENT_UNMATCHED — the gate refuses PASS until every user concern is
+    owned by a PQ; precedence 3>2>1>4>0 means this fires only at the
+    would-be-PASS point)
   - stop_hook_active=true (second stop) → BLOCK unless task-oracle.yaml
     records adjudication.stop_hook_active = {second_stop: true,
     last_decision: PASS} (#147/#199: an unsanctioned second stop must not
