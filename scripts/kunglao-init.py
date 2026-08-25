@@ -2246,9 +2246,13 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
     )
     for item in hard_fails:
         print(f"  [FAIL] {item.name}: {item.detail}", file=sys.stderr)
-        fix = item.fix or toolchain.FIXES.get(item.name)
+        fix = item.fix or toolchain.fix_text(item.name)
         if fix:
             print(f"      fix: {fix}", file=sys.stderr)
+        # #680: the upstream URL on its own line (unknown -> line omitted)
+        meta = toolchain.FIXES.get(item.name)
+        if meta is not None and meta.url:
+            print(f"      url: {meta.url}", file=sys.stderr)
         na = toolchain.next_action_for(item)
         if na is not None:
             print(f"      action: {na.action}", file=sys.stderr)

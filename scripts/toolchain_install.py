@@ -559,8 +559,24 @@ def degrade_report(report: "toolchain.ToolchainReport", name: str,
 
 
 def _official_guidance(name: str) -> str:
-    """Official install guidance (the toolchain.FIXES text) for a failed item."""
-    return toolchain.FIXES.get(name, "see the toolchain check detail above")
+    """Official install guidance (the toolchain.FIXES fix text) for a failed item."""
+    return toolchain.fix_text(name) or "see the toolchain check detail above"
+
+
+def _meta_guidance_lines(name: str) -> list[str]:
+    """#680: structured ToolMeta lines that supplement the guidance text —
+    the upstream url on its own line plus the post-install verify command.
+    Install plans read the structured fields here (issue acceptance);
+    empty for unknown names or entries without the fields (fallback)."""
+    meta = toolchain.FIXES.get(name)
+    if meta is None:
+        return []
+    lines = []
+    if meta.url:
+        lines.append(f"toolchain-install:   url: {meta.url}")
+    if meta.verify_cmd:
+        lines.append(f"toolchain-install:   verify: {meta.verify_cmd}")
+    return lines
 
 
 def _run_install_plan(name: str, plan: "InstallPlan", assume_yes: bool,
@@ -609,6 +625,11 @@ def _run_install_plan(name: str, plan: "InstallPlan", assume_yes: bool,
     rc, out, err = run_install(res.argv)
     if rc != 0:
         return rc, out, err
+    # #680: the verify command from the structured ToolMeta lets the
+    # operator confirm the install beyond the re-probe that follows.
+    meta = toolchain.FIXES.get(name)
+    if meta is not None and meta.verify_cmd:
+        print(f"toolchain-install:   verify: {meta.verify_cmd}", file=sys.stderr)
     if plan.mcp_register == "ghidra":
         rc = register_ghidra_mcp()
         if rc != 0:
@@ -703,6 +724,9 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
                   f"({err or out or 'unknown error'})", file=sys.stderr)
             print(f"toolchain-install: official guidance — "
                   f"{_official_guidance(item.name)}", file=sys.stderr)
+            # #680: structured guidance — url + verify lines from ToolMeta
+            for line in _meta_guidance_lines(item.name):
+                print(line, file=sys.stderr)
             result = degrade_report(result, item.name,
                                     reason=DEGRADE_INSTALL_FAILED)
             continue

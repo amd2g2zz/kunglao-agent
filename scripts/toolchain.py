@@ -109,41 +109,181 @@ ANDROID_SERVER_PORT = 23946  # IDA android_server default listener port
 # #304 amendment (comment 304-5289955958): per-item friendly install commands.
 # kunglao-init prints these on HARD refusal so the HUMAN knows exactly what to
 # install — init does NOT silently repair. Keyed by check item name.
-FIXES: dict[str, str] = {
-    "pefile": "pip install pefile",
-    "die": "install DIE (Detect It Easy) and add it to PATH",
-    "floss": "pip install flare-floss (or add floss to PATH)",
-    "file": "install binutils (file) and add to PATH",
-    "readelf": "install binutils (readelf) and add to PATH",
-    "objdump": "install binutils (objdump) and add to PATH",
-    "decompiler": "install a decompiler — follow the #408 installer (set GHIDRA_HOME=<Ghidra install root> with support/analyzeHeadless(.bat), or install IDA with idat64 on PATH, or register the ghidra/ida-pro-vm MCP via `claude mcp add`)",
-    "ghidra": "set GHIDRA_HOME=<Ghidra install root> (support/analyzeHeadless must exist, platform-correct name #409)",
-    "ida": "install IDA and add idat64 to PATH",
-    "vm_reachable": "set KUNGLAO_VM_HOST=<live VM lease IP> (vmr-shell discovery) and ensure ports are open",
-    "remote_debugger": "fix the root cause first: make the VM reachable (set KUNGLAO_VM_HOST), then deploy the remote debugger on the VM",
-    "aapt": "install Android SDK build-tools (aapt/aapt2) and add to PATH (or install unzip as a substitute)",
-    "jadx": "install jadx and add it to PATH",
-    "apktool": "install apktool and add it to PATH",
-    "gitnexus": "npm i -g gitnexus (or install per GitNexus docs); verify `gitnexus --version`",
-    "apkid": "install apkid: `pip install apkid` (https://github.com/rednaga/APKiD); verify `apkid --version` returns 2.x",
-    "baksmali": "install baksmali (https://github.com/baksmali/smali/releases - download jar or `apt install baksmali`); verify `baksmali --version` returns 2.x",
-    "adb": "install Android SDK platform-tools and add adb to PATH; attach a device (`adb devices` must be non-empty)",
-    "device_root": "root the device: `adb root` (emulator) or su via Magisk; verify `adb shell su -c id` returns uid=0",
-    "debug_flag": "set the debug flag: `adb shell am set-debug-app -w <pkg>` or `adb shell setprop ro.debuggable 1`; verified at init via `adb shell getprop ro.debuggable` (must read back 1)",
-    "frida_server": "fix the root cause first (ADB); then deploy a RENAMED frida-server binary on custom port "
-                    f"{FRIDA_PORT} and verify at init via `adb forward tcp:{FRIDA_PORT} tcp:{FRIDA_PORT}` + TCP connect "
-                    "(default name/port 27042 is detected by samples)",
-    "android_server": "fix the root cause first (ADB); then adb push android_server to the device and run it; "
-                      f"verified at init via `adb forward tcp:{ANDROID_SERVER_PORT} tcp:{ANDROID_SERVER_PORT}` + TCP connect",
-    "jdwp_debug": "optional capability (WARN): only needed when the task actually drives jdb. "
-                  "To enable: ADB ok + ro.debuggable=1 + the target app running (`adb jdwp` lists "
-                  "a pid); the probe forwards tcp:8700 -> jdwp:<pid> and exchanges the raw 14-byte "
-                  "JDWP-Handshake (jdb stays the interactive driver; never jdb -attach — side effects)",
+#
+# #680: FIXES values are structured ToolMeta, not bare strings. The legacy
+# guidance text survives verbatim as ToolMeta.fix (still what init prints);
+# the new fields end the "agent hunts for the install page / picks the wrong
+# package" waste — url/description always, repo/package/verify_cmd where
+# applicable. Old string callers keep a working string face: ToolMeta.__str__
+# renders the fix text, and fix_text(name) is the typed accessor.
+@dataclass(frozen=True)
+class ToolMeta:
+    """#680: metadata for one FIXES entry.
+
+    fix:         remediation guidance (the legacy FIXES string, verbatim)
+    description: one-line purpose (what the tool is FOR)
+    url:         official homepage / docs (None = unknown -> rendering omits
+                 the line; never fabricated)
+    repo:        source repository (None when none applies separately from url)
+    package:     PyPI / npm / apt package name (None when not a package)
+    verify_cmd:  post-install verification command (e.g. `jadx --version`)
+    """
+
+    fix: str
+    description: str
+    url: str | None
+    repo: str | None = None
+    package: str | None = None
+    verify_cmd: str | None = None
+
+    def __str__(self) -> str:
+        """Backward compat (#680 test 5): a FIXES value interpolated into a
+        string renders the legacy guidance text, never a dataclass repr."""
+        return self.fix
+
+
+FIXES: dict[str, ToolMeta] = {
+    "pefile": ToolMeta(
+        fix="pip install pefile",
+        description="PE/COFF parsing and Authenticode signature extraction",
+        url="https://github.com/erocarrera/pefile",
+        package="pefile", verify_cmd="pip show pefile"),
+    "die": ToolMeta(
+        fix="install DIE (Detect It Easy) and add it to PATH",
+        description="packer/compiler detector for PE/ELF/Mach-O",
+        url="https://github.com/horsicq/Detect-It-Easy",
+        package="die", verify_cmd="diec --version"),
+    "floss": ToolMeta(
+        fix="pip install flare-floss (or add floss to PATH)",
+        description="FLARE string deobfuscation (stack/tight strings)",
+        url="https://github.com/mandiant/flare-floss",
+        package="flare-floss", verify_cmd="floss --version"),
+    "file": ToolMeta(
+        fix="install binutils (file) and add to PATH",
+        description="file-type identification",
+        url="https://www.darwinsys.com/file/",
+        repo="https://github.com/file/file",
+        package="file", verify_cmd="file --version"),
+    "readelf": ToolMeta(
+        fix="install binutils (readelf) and add to PATH",
+        description="ELF header/section/segment inspection",
+        url="https://www.gnu.org/software/binutils/",
+        repo="https://sourceware.org/git/binutils-gdb.git",
+        package="binutils", verify_cmd="readelf --version"),
+    "objdump": ToolMeta(
+        fix="install binutils (objdump) and add to PATH",
+        description="disassembly and object-file inspection",
+        url="https://www.gnu.org/software/binutils/",
+        repo="https://sourceware.org/git/binutils-gdb.git",
+        package="binutils", verify_cmd="objdump --version"),
+    "decompiler": ToolMeta(
+        fix="install a decompiler — follow the #408 installer (set GHIDRA_HOME=<Ghidra install root> with support/analyzeHeadless(.bat), or install IDA with idat64 on PATH, or register the ghidra/ida-pro-vm MCP via `claude mcp add`)",
+        description="headless decompiler supply (Ghidra or IDA)",
+        url="https://ghidra-sre.org/",
+        repo="https://github.com/NationalSecurityAgency/ghidra",
+        package="ghidra", verify_cmd="analyzeHeadless"),
+    "ghidra": ToolMeta(
+        fix="set GHIDRA_HOME=<Ghidra install root> (support/analyzeHeadless must exist, platform-correct name #409)",
+        description="Ghidra reverse-engineering suite (headless analyzeHeadless)",
+        url="https://ghidra-sre.org/",
+        repo="https://github.com/NationalSecurityAgency/ghidra",
+        verify_cmd="analyzeHeadless"),
+    "ida": ToolMeta(
+        fix="install IDA and add idat64 to PATH",
+        description="IDA Pro disassembler (commercial)",
+        url="https://hex-rays.com/ida-pro/"),
+    "vm_reachable": ToolMeta(
+        fix="set KUNGLAO_VM_HOST=<live VM lease IP> (vmr-shell discovery) and ensure ports are open",
+        description="analysis VM channel liveness (vmrun/VBoxManage lease IP + open ports)",
+        url="https://github.com/amd2g2zz/kunglao-agent"),
+    "remote_debugger": ToolMeta(
+        fix="fix the root cause first: make the VM reachable (set KUNGLAO_VM_HOST), then deploy the remote debugger on the VM",
+        description="remote debugger deployed on the analysis VM",
+        url="https://github.com/amd2g2zz/kunglao-agent"),
+    "aapt": ToolMeta(
+        fix="install Android SDK build-tools (aapt/aapt2) and add to PATH (or install unzip as a substitute)",
+        description="Android asset packaging tool (APK manifest inspection)",
+        url="https://developer.android.com/tools/aapt",
+        package="aapt", verify_cmd="aapt version"),
+    "jadx": ToolMeta(
+        fix="install jadx and add it to PATH",
+        description="DEX-to-Java decompiler",
+        url="https://github.com/skylot/jadx",
+        package="jadx", verify_cmd="jadx --version"),
+    "apktool": ToolMeta(
+        fix="install apktool and add it to PATH",
+        description="APK resource decoding and rebuilding",
+        url="https://github.com/iBotPeaches/Apktool",
+        package="apktool", verify_cmd="apktool --version"),
+    "gitnexus": ToolMeta(
+        fix="npm i -g gitnexus (or install per GitNexus docs); verify `gitnexus --version`",
+        description="post-decompile code graph builder (npm)",
+        url="https://www.npmjs.com/package/gitnexus",
+        package="gitnexus", verify_cmd="gitnexus --version"),
+    "apkid": ToolMeta(
+        fix="install apkid: `pip install apkid` (https://github.com/rednaga/APKiD); verify `apkid --version` returns 2.x",
+        description="APK packer/compiler/obfuscator fingerprinting (YARA)",
+        url="https://github.com/rednaga/APKiD",
+        package="apkid", verify_cmd="apkid --version"),
+    "baksmali": ToolMeta(
+        fix="install baksmali (https://github.com/baksmali/smali/releases - download jar or `apt install baksmali`); verify `baksmali --version` returns 2.x",
+        description="DEX disassembler to smali",
+        url="https://github.com/baksmali/smali/releases",
+        repo="https://github.com/baksmali/smali",
+        package="baksmali", verify_cmd="baksmali --version"),
+    "adb": ToolMeta(
+        fix="install Android SDK platform-tools and add adb to PATH; attach a device (`adb devices` must be non-empty)",
+        description="Android Debug Bridge host client",
+        url="https://developer.android.com/tools/adb",
+        package="adb", verify_cmd="adb --version"),
+    "device_root": ToolMeta(
+        fix="root the device: `adb root` (emulator) or su via Magisk; verify `adb shell su -c id` returns uid=0",
+        description="rooted device (su/Magisk) for dynamic instrumentation",
+        url="https://github.com/topjohnwu/Magisk"),
+    "debug_flag": ToolMeta(
+        fix="set the debug flag: `adb shell am set-debug-app -w <pkg>` or `adb shell setprop ro.debuggable 1`; verified at init via `adb shell getprop ro.debuggable` (must read back 1)",
+        description="device ro.debuggable / debug-app state for JDWP",
+        url="https://developer.android.com/tools/adb"),
+    "frida_server": ToolMeta(
+        fix="fix the root cause first (ADB); then deploy a RENAMED frida-server binary on custom port "
+            f"{FRIDA_PORT} and verify at init via `adb forward tcp:{FRIDA_PORT} tcp:{FRIDA_PORT}` + TCP connect "
+            "(default name/port 27042 is detected by samples)",
+        description="renamed frida-server on a custom port (anti-detection)",
+        url="https://frida.re/",
+        repo="https://github.com/frida/frida"),
+    "android_server": ToolMeta(
+        fix="fix the root cause first (ADB); then adb push android_server to the device and run it; "
+            f"verified at init via `adb forward tcp:{ANDROID_SERVER_PORT} tcp:{ANDROID_SERVER_PORT}` + TCP connect",
+        description="IDA remote debug server pushed to the device",
+        url="https://hex-rays.com/ida-pro/"),
+    "jdwp_debug": ToolMeta(
+        fix="optional capability (WARN): only needed when the task actually drives jdb. "
+            "To enable: ADB ok + ro.debuggable=1 + the target app running (`adb jdwp` lists "
+            "a pid); the probe forwards tcp:8700 -> jdwp:<pid> and exchanges the raw 14-byte "
+            "JDWP-Handshake (jdb stays the interactive driver; never jdb -attach — side effects)",
+        description="JDWP capability probe (jdb handoff, WARN tier)",
+        url="https://docs.oracle.com/javase/8/docs/technotes/guides/jpda/jdwp-spec.html"),
 }
 
 # #316: registration guidance for MCP supply checks — fix text rendered by the
 # formatters like every other FIXES entry (keyed by report item name mcp:<name>).
-FIXES.update({f"mcp:{i.name}": i.register for i in mcp_probe.MANIFEST})
+# #680: MCP server metadata is OUT OF SCOPE (separate manifest, mcp_probe.py)
+# — the derived entries carry the register command as fix + the manifest
+# purpose as description, url=None (the fallback rendering path).
+FIXES.update({
+    f"mcp:{i.name}": ToolMeta(fix=i.register, description=i.purpose, url=None)
+    for i in mcp_probe.MANIFEST
+})
+
+
+def fix_text(name: str) -> str | None:
+    """#680: typed string face of FIXES — the remediation guidance text for
+    `name`, None when unknown. The canonical accessor for string callers
+    (kunglao-init / negotiation / deploy_shim / toolchain_install);
+    `fix_text(name) or default` preserves the old `.get(name, default)`
+    semantics. Unknown names MUST return None (never raise, never invent)."""
+    meta = FIXES.get(name)
+    return None if meta is None else meta.fix
 
 
 # ---------- #451: machine-parseable next-action on every FAIL ----------
@@ -245,8 +385,9 @@ def next_action_for(item: "CheckResult") -> NextAction | None:
     if item.next_action is not None:
         return item.next_action
     if item.name.startswith("mcp:"):
-        register = FIXES.get(item.name)
-        return NextAction("register-mcp", register) if register else None
+        meta = FIXES.get(item.name)  # ToolMeta (#680); command = the fix face
+        return (NextAction("register-mcp", meta.fix)
+                if meta is not None and meta.fix else None)
     static = _STATIC_NEXT_ACTIONS.get(item.name)
     if static is not None:
         return static
@@ -1528,6 +1669,15 @@ def format_human(report: ToolchainReport) -> str:
         lines.append(line)
         if item.status != Status.PASS and (item.fix or item.name in FIXES):
             lines.append(f"      fix: {item.fix or FIXES[item.name]}")
+            # #680: structured metadata supplements the fix prose — the
+            # upstream URL on its OWN line (never inline, never fabricated:
+            # url=None -> line omitted) + the verify command when present.
+            meta = FIXES.get(item.name)
+            if meta is not None:
+                if meta.url:
+                    lines.append(f"      url: {meta.url}")
+                if meta.verify_cmd:
+                    lines.append(f"      verify: {meta.verify_cmd}")
         # #451: machine-parseable key-value lines — anchored prefixes the
         # negotiation consumers grep for (never part of detail/fix prose).
         if item.status == Status.FAIL:
@@ -1555,8 +1705,13 @@ def format_json(report: ToolchainReport) -> str:
                 "probe": i.probe.value,  # #474: presence|liveness|capability
                 "detail": i.detail,
                 "root_cause": i.root_cause,
-                "fix": (i.fix or FIXES.get(i.name))
+                "fix": (i.fix or fix_text(i.name))
                        if i.status != Status.PASS else None,
+                # #680: fix stays the TEXT (schema stability); fix_url is
+                # additive — null when unknown (mcp:*, PASS items).
+                "fix_url": (FIXES[i.name].url
+                            if i.status != Status.PASS and i.name in FIXES
+                            else None),
                 "next_action": _next_action_json(i),  # #451
             }
             for i in report.items

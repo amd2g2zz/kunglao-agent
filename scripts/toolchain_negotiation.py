@@ -144,7 +144,7 @@ def _install_command(name: str) -> str:
     try:
         return " ".join(toolchain_install.install_commands(name))
     except KeyError:
-        return toolchain.FIXES.get(name, "")
+        return toolchain.fix_text(name) or ""
 
 
 def negotiation_decisions(
@@ -268,7 +268,7 @@ def apply_answers(report: "toolchain.ToolchainReport", ws: Path,
                   f"({err or out or 'unknown error'}) — degrading",
                   file=sys.stderr)
             print(f"kunglao-negotiation: official guidance — "
-                  f"{toolchain.FIXES.get(name, '')}", file=sys.stderr)
+                  f"{toolchain.fix_text(name) or ''}", file=sys.stderr)
 
     # 3. base report: a fresh re-probe when an install succeeded (same
     # task_spec as the gate — #449 review M1), the original otherwise.

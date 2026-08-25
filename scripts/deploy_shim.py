@@ -154,7 +154,7 @@ def deploy(tool: str, local: Path, port: int | None = None,
     adb = adb or _shutil_which("adb")
     if not adb:
         print(f"deploy-shim: adb not found in PATH — fix first: "
-              f"{toolchain.FIXES.get('adb', 'install platform-tools')}",
+              f"{toolchain.fix_text('adb') or 'install platform-tools'}",
               file=sys.stderr)
         return RC_DEPLOY_FAILED
 
@@ -194,7 +194,7 @@ def deploy(tool: str, local: Path, port: int | None = None,
     if not ok:
         print(f"deploy-shim: {tool} deployed but port {use_port} NOT "
               f"verified ({detail}) — fix: "
-              f"{toolchain.FIXES.get(item, '')}", file=sys.stderr)
+              f"{toolchain.fix_text(item) or ''}", file=sys.stderr)
         return RC_DEPLOY_FAILED
     print(f"deploy-shim: {tool} deployed and verified on port {use_port}")
     _record(ws, item, "PASS")
