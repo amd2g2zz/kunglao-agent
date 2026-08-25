@@ -125,6 +125,7 @@ FIXES: dict[str, str] = {
     "jadx": "install jadx and add it to PATH",
     "apktool": "install apktool and add it to PATH",
     "gitnexus": "npm i -g gitnexus (or install per GitNexus docs); verify `gitnexus --version`",
+    "apkid": "install apkid: `pip install apkid` (https://github.com/rednaga/APKiD); verify `apkid --version` returns 2.x",
     "adb": "install Android SDK platform-tools and add adb to PATH; attach a device (`adb devices` must be non-empty)",
     "device_root": "root the device: `adb root` (emulator) or su via Magisk; verify `adb shell su -c id` returns uid=0",
     "debug_flag": "set the debug flag: `adb shell am set-debug-app -w <pkg>` or `adb shell setprop ro.debuggable 1`; verified at init via `adb shell getprop ro.debuggable` (must read back 1)",
@@ -214,6 +215,7 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "jadx": NextAction("install"),
     "apktool": NextAction("install"),
     "gitnexus": NextAction("install", "npm i -g gitnexus"),
+    "apkid": NextAction("install", "pip install apkid"),
     "adb": NextAction("install",
                       "install Android SDK platform-tools and add adb to PATH"),
     "device_root": NextAction(

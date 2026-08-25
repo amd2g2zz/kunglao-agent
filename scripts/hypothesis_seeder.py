@@ -124,6 +124,121 @@ def _emit(ws: Path, hyp_id: str, qid: str) -> None:
         pass
 
 
+# ---------------------------------------------------------------------------
+# #669 — apkid evidence feeds the pq-family competitor_groups
+# ---------------------------------------------------------------------------
+# Tokens that mark a PQ as apkid-relevant. A PQ id/question containing any
+# of these tokens is a candidate to receive `apkid:<category>:<rule>`
+# candidates from evidence/apkid.json. Kept short and conservative — over-
+# matching is recovered downstream by the #528 adjudicator.
+_APKID_PQ_TOKENS = ("packer", "compiler", "obfuscator", "anti-debug", "anti-vm", "anti_debug", "anti_vm")
+# Category -> summary key in evidence/apkid.json
+_CATEGORY_TO_SUMMARY_KEY = {
+    "packer": "packer",
+    "compiler": "compiler",
+    "obfuscator": "obfuscator",
+    "anti_vm": "anti_vm",
+    "anti_debug": "anti_debug",
+}
+
+
+def _apkid_relevant_qids(task_spec: dict) -> dict[str, set[str]]:
+    """Map qid -> set of apkid categories relevant to that qid.
+
+    A category is relevant when ANY token in _APKID_PQ_TOKENS appears in the
+    qid OR the question text (case-insensitive substring). Returns
+    {qid: {category, ...}}."""
+    questions, _err = _parse_primary_questions(task_spec)
+    out: dict[str, set[str]] = {}
+    for qid, _need in questions:
+        # The qid itself + the question text (need may be free text)
+        # Question text lives in raw primary_questions entries; recover here.
+        raw = task_spec.get("primary_questions") or []
+        text = ""
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, dict) and item.get("id") == qid:
+                    # canonical {id, q/need/...} or legacy one-key
+                    for k, v in item.items():
+                        if isinstance(v, str):
+                            text += " " + v
+                    break
+        haystack = (qid + " " + text).lower()
+        cats: set[str] = set()
+        for token in _APKID_PQ_TOKENS:
+            if token.lower() in haystack:
+                # map token back to category
+                if token.lower() in ("anti-debug", "anti_debug"):
+                    cats.add("anti_debug")
+                elif token.lower() in ("anti-vm", "anti_vm"):
+                    cats.add("anti_vm")
+                else:
+                    cats.add(token.lower())
+        if cats:
+            out[qid] = cats
+    return out
+
+
+def seed_apkid_candidates(ws: Path) -> int:
+    """Append apkid-derived candidates to existing pq-family scaffolds.
+
+    Reads <ws>/evidence/apkid.json when present (status == ok). For each PQ
+    whose id/question matches a category-relevant token, appends candidate
+    strings of the form `apkid:<category>:<rule>` to the matching hypothesis's
+    `candidates` list. Idempotent: a candidate already present is skipped.
+
+    Returns the count of NEW candidates appended. Fail-open: missing
+    evidence, bad JSON, or no task_spec -> 0 (never raises).
+    """
+    ws = Path(ws)
+    evidence_path = ws / "evidence" / "apkid.json"
+    if not evidence_path.exists():
+        return 0
+    try:
+        data = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return 0
+    if not isinstance(data, dict) or data.get("status") != "ok":
+        return 0
+    summary = data.get("summary") or {}
+
+    task_spec = _load_task_spec(ws)
+    qid_to_cats = _apkid_relevant_qids(task_spec)
+    if not qid_to_cats:
+        return 0
+
+    store = HypothesisStore(ws / "hypotheses")
+    if not store.root.is_dir():
+        return 0
+
+    appended = 0
+    for qid, cats in qid_to_cats.items():
+        target_group = f"pq-{qid}"
+        matching = [h for h in store.list_all() if h.competitor_group == target_group]
+        if not matching:
+            continue
+        for hyp in matching:
+            existing = set(hyp.candidates)
+            new_candidates: list[str] = []
+            for cat in sorted(cats):
+                rules = summary.get(_CATEGORY_TO_SUMMARY_KEY.get(cat, cat)) or []
+                for rule in rules:
+                    cand = f"apkid:{cat}:{rule}"
+                    if cand not in existing and cand not in new_candidates:
+                        new_candidates.append(cand)
+            if new_candidates:
+                hyp.candidates = list(hyp.candidates) + new_candidates
+                store._write(hyp)
+                appended += len(new_candidates)
+                try:
+                    from kunglao_log import emit
+                    emit(ws, actor="hypothesis_seeder", action="apkid_candidates",
+                         detail=f"{hyp.id} +{len(new_candidates)}")
+                except Exception:  # noqa: BLE001
+                    pass
+    return appended
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="hypothesis_seeder — seed PQ scaffolds into hypotheses/")

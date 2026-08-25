@@ -167,11 +167,35 @@ release (see the mapping table at the end).
   helpers: `_pq_coverage_text(task_spec)` schema-tolerant corpus builder
   (handles canonical `{id, q}`, legacy one-key `{Q1: text}`, plain-string
   items, top-level mapping) and `_intent_unmatched(oracle, task_text)`.
-- tests/test_intent_aware_completion.py: 8 RED → GREEN cases (RED1
-  unmatched-anchor returns 4 + names anchors, RED2 covered anchors →
-  PASS unchanged, RED3 no workspace_path → skip, RED4 no/malformed/
-  empty-PQ task_spec → skip + no crash, RED5 unresolved items outrank
+- tests/test_intent_aware_completion.py: 8 RED -> GREEN cases (RED1
+  unmatched-anchor returns 4 + names anchors, RED2 covered anchors ->
+  PASS unchanged, RED3 no workspace_path -> skip, RED4 no/malformed/
+  empty-PQ task_spec -> skip + no crash, RED5 unresolved items outrank
   intent, RED6 CLI JSON verdict label).
+- apkid pre-scan at android intake (#669): `scripts/apkid_scanner.py`
+  (NEW) - T1-second YARA-based fingerprint scan before jadx dispatch.
+  Wraps `apkid scan --json <apk>`, writes `evidence/apkid.json` with the
+  schema `{tool, version, target, scanned_at, findings,
+  summary{packer,compiler,obfuscator,anti_vm,anti_debug,total},
+  status, reason}`. Fail-open on every layer: missing binary ->
+  `status:unavailable`, non-APK input -> `status:error` (no crash).
+  `scripts/toolchain.py` FIXES + `_STATIC_NEXT_ACTIONS` gain `apkid`
+  (FIXES line is the FIRST tool entry to embed its upstream URL inline
+  - `https://github.com/rednaga/APKiD` - addressing the user's "agents
+  have to search for tool addresses" feedback). `scripts/hypothesis_seeder.py`
+  gains `seed_apkid_candidates(ws)`: the "system optimum" wire per
+  the user's directive - apkid output feeds the EXISTING hypothesis
+  pipeline (pq-family competitor_groups get `apkid:<category>:<rule>`
+  candidates appended when their PQ id/question matches packer /
+  compiler / obfuscator / anti-debug / anti-vm tokens), not a parallel
+  pipe. Idempotent, fail-open. `scripts/kunglao_init.py` android flow
+  Phase 0 invokes the scanner after target alignment, before #670's
+  apk_mem_gate.
+- tests/test_apkid_scanner.py: 7 RED -> GREEN cases (RED1 happy-path
+  parse + summary rollup, RED2 missing-binary -> unavailable, RED3
+  non-APK -> error, RED4 schema shape always populated, RED5 toolchain
+  registers apkid, RED6 hypothesis_seeder appends candidates,
+  RED6b no apkid file -> noop).
 
 ## [0.1.2] - 2026-08-23
 
