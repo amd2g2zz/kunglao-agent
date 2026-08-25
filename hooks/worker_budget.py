@@ -11,11 +11,18 @@ import json
 import sys
 from pathlib import Path as _P
 _HERE = str(_P(__file__).resolve().parent)
-if _HERE not in sys.path:
-    sys.path.insert(0, _HERE)
+# Order-robust bootstrap (#568 CI regression): MOVE our dir to the FRONT
+# (a bare conditional insert leaves an earlier scripts/ insert winning, so
+# `from lib_kunglao import ...` resolves to scripts/lib_kunglao.py — which
+# lacks scan_active_workers — and standalone collection dies).
+if _HERE in sys.path:
+    sys.path.remove(_HERE)
+sys.path.insert(0, _HERE)
 
 from lib_kunglao import scan_active_workers  # noqa: E402,F401  # AC-3 wiring (#444)
+from status_defs import TERMINAL  # noqa: E402,F401  # #34 pin: the shim re-affirms the single status source (core already puts scripts/ on sys.path)
 from worker_budget_core import *  # noqa: E402,F401,F403
+from worker_budget_core import _claim_statuses  # noqa: E402,F401  # underscore names skip star-import; re-export for the #532 backstop tests
 from worker_budget_gates import *  # noqa: E402,F401,F403
 from worker_budget_sinks import *  # noqa: E402,F401,F403
 from worker_budget_sinks import _resolve_paths, _run_py  # noqa: E402,F401  # underscore-prefixed names need explicit re-export (monkeypatch.setattr on wb._run_py)

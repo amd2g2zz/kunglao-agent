@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 """worker_budget_core — constants, IO, parsing, claim-register primitives.
 

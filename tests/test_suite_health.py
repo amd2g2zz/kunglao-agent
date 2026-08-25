@@ -128,6 +128,14 @@ def test_golden_replay(case: dict) -> None:
             shutil.copytree(case_dir / "ws", tmp_ws)
         else:
             tmp_ws.mkdir()
+        # Determinism (#595 stuck-scan is mtime-based): copytree preserves
+        # source mtimes, so a fixture checked out >20m ago would flip the
+        # F-03 SATURATED golden into BLOCKED (stuck workers). The anchor
+        # suite's doctrine ("worker-status files freshly written →
+        # stuck_workers always []") applies here too: refresh mtimes,
+        # content bytes untouched (tree digest unaffected).
+        for st in (tmp_ws / "runs").glob("worker-status-*.md"):
+            st.touch()
         # point every fixture ws argument at the temp copy (keep any file
         # tail: F-13 passes ws/claim.txt etc.)
         argv = []

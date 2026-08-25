@@ -77,14 +77,18 @@ def test_event_enum_declared_with_landed_vocabulary() -> None:
         "ORPHAN_TERMINAL_CLAIM",     # M2 completeness
         "PRIMARY_Q_UNVERIFIED",      # M2 BLIND-verified PROVEN
         "NOTE_LAYER_GAP",            # DESIGN S8 C0
+        "OPEN_HYPOTHESIS_AT_CLOSE",  # #662 unadjudicated hypothesis gate
         "DISCOVERY_UNCONSUMED",      # #147 discovery consumption
         "GLOBAL_CONTRADICTION",      # #147 completion transaction
+        "ANOMALY_DETECTED",          # #663 anomaly observation gate
         "DRAIN_CLEAN",
         "WORK_AND_FREE_SLOT", "PARTIALS_AND_FREE_SLOT", "WORK_NO_FREE_SLOT",
+        "STUCK_WORKERS_PRESENT",     # #595 silent-detect consumes stuck_workers
         "FAILURE_ARTIFACTS_DUE",     # #495 validated_capability/identified_obstacle
         "LADDER_REQUIRED_BLOCKER",   # #497 climb-the-ladder flavor
         "LADDER_EXHAUSTED_BLOCKER",  # #497 ladder-exhaustion marker
         "UNEXPECTED_STATE",
+        "JADX_INFEASIBLE",           # #670 intake-level (NOT in DRAIN)
     }
     assert expected == set(Event.__members__), \
         f"Event vocabulary drift: missing={expected - set(Event.__members__)} " \

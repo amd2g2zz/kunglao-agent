@@ -31,6 +31,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch | CLI, tests |
 | `kunglao-digest.py` | digest mechanical generation (thin wrapper → `digest_build.py`) | CLI, tests |
 | `kunglao-eval.py` | eval harness CLI (thin wrapper → `kunglao_eval.py`) | CLI, CI, tests |
+| `_entry.py` | the shared `__main__` dispatcher for the kunglao-* entries (#585/#660): `run(globals())` resolves + calls main(); entry modules keep module-level main(argv) (#370) | lib(8 entries) |
 | `error_response.py` | action-error classifier (issue #448): vmrun / init-exit / tool-install signatures → STOP/ASK/RETRY-ONCE/ESCALATE (UNCLASSIFIED = ASK, rc=2) | lib(2), CLI, tests |
 | `mcp_probe.py` | MCP supply probe (#316): per-type manifest + ~/.claude.json + .mcp.json probe; `--mcp-inventory` enumeration face (#515): registered servers → `mcp__<server>__*` prefixes + manifest tier (read-only, secret-safe; consumed by `tools/ext-scan.py --with-mcp`) | CLI, lib(2), tests |
 
@@ -40,6 +41,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | --- | --- | --- |
 | `convergence_check.py` | convergence decision (DISPATCH/DISPATCH_VERIFIER/SATURATED/BLOCKED/CONVERGED) — the every-turn gate | hooks, CLI, lib(2), tests |
 | `convergence_health.py` | ledger-based HEALTHY/STALLED/SPINNING verdicts | hooks, CLI, lib(2), tests |
+| `anomaly_detector.py` | anomaly observation layer (#663): score_fact 3-dim + scan_anomalies + baseline corpus load (fail-open); feeds convergence ANOMALY_DETECTED | lib(1: convergence_check), CLI, tests |
+| `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669): seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` candidates | lib(1: digest_build), CLI, tests |
+| `apkid_scanner.py` | T1 apkid pre-scan wrapper (#669): fingerprints packer/compiler/obfuscator/anti-* into evidence/apkid.json (fail-open) | CLI, tests |
 | `priority.py` | DEPRECATED weighted dispatch ranker (#499; authority `priority_ratio.py`, removal #446) | lib, tests |
 | `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4) | lib(3), tests |
 | `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |

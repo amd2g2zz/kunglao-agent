@@ -79,7 +79,8 @@ def _write_settings(target_root: Path) -> Path:
         {"type": "command", "command": f"python C:/skills/hooks/{h}"}]}
         for h in ("worker_budget.py", "worker_pulse.py", "state_anchor.py")]
     pre.append({"matcher": "Bash", "hooks": [
-        {"type": "command", "command": "python C:/skills/hooks/heartbeat_touch.py"}]})
+        {"type": "command", "command": "python C:/skills/hooks/heartbeat_touch.py"},
+        {"type": "command", "command": "python C:/skills/hooks/orchestrator_tool_guard.py"}]})
     pre.append({"matcher": "Edit|Write|MultiEdit", "hooks": [
         {"type": "command", "command": "python C:/skills/hooks/write_guard.py"}]})
     stop = [{"hooks": [

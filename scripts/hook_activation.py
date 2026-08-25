@@ -682,6 +682,14 @@ def register_hooks(workspace: Path | None = None,
     # last_tick_ts, decoupling heartbeat liveness from orchestrator cognition.
     pre, added = _ensure(pre, "Bash", "heartbeat_touch.py")
     count += added
+    # orchestrator_tool_guard (#608): PreToolUse/Bash WARN on analysis
+    # binaries outside .wt-* worktrees (maker-checker, target-based
+    # #532-style). The #608 landing added the hook file + the registry
+    # entry + the self-check expectation but missed THIS writer call —
+    # the self-check then failed every wire-up with "missing
+    # ['orchestrator_tool_guard.py']" (the CI regression fixed here).
+    pre, added = _ensure(pre, "Bash", "orchestrator_tool_guard.py")
+    count += added
     # write_guard (#532): the four-carrier write gate on the Edit/Write face.
     # NOT activation-gated by design (its docstring records why: the failure
     # mode it exists to stop is "nobody dispatched, so nothing was armed") —

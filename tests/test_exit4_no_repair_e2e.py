@@ -47,7 +47,7 @@ from error_response import (  # noqa: E402
 import env_repair_l1  # noqa: E402
 
 
-PY311 = "/usr/local/bin/python3.11"
+PY311 = sys.executable  # venv python (>= floor); #457 hard pin broke the 3.10 job
 
 
 # ---------- #565 DoD 9: contract (library-level, deterministic) ----------

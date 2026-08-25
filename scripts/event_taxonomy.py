@@ -157,6 +157,7 @@ ALL_EVENT_TYPES = [
 EMIT_ACTIONS = [
     "analysis_blocked",
     "analysis_recorded",
+    "apkid_candidates",   # #669 hypothesis_seeder apkid→competitor_group extension
     "ask_back",
     "capability_reject",
     "capability_switch",
@@ -166,6 +167,7 @@ EMIT_ACTIONS = [
     "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face
     "dispatch",
     "failure_blocked",
+    "hypothesis_seed",    # #662 PQ scaffold seeding
     "ladder_required",
     "lesson_burn",
     "lesson_citation",
@@ -176,6 +178,8 @@ EMIT_ACTIONS = [
     "must_stop",
     "plan_stall",
     "priority_deviation",
+    "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
+    "renew",              # #619 hook_activation TTL renewal face
     "stale_plan_on_new_evidence",
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",

@@ -118,17 +118,18 @@ def test_execution_receipt_present():
 
 
 def _run_cli(args: list[str], cwd: Path, *, env: dict | None = None) -> subprocess.CompletedProcess:
-    """Run a kunglao CLI script as subprocess under a 3.11+ interpreter.
+    """Run a kunglao CLI script as subprocess under the venv interpreter.
 
-    We pin to /usr/local/bin/python3.11 because v0.1.2 scripts use PEP 604
-    union syntax (`Path | None`) that 3.10 chokes on (real external rollout
-    bug discovered in #457).
+    sys.executable is the uv-managed venv python (>= the project floor on
+    every CI matrix job), which supports the PEP 604 union syntax the
+    scripts use. The old hard pin /usr/local/bin/python3.11 (#457) broke
+    the 3.10 CI job with PermissionError, so we resolve dynamically.
     """
     full_env = dict(os.environ)
     if env:
         full_env.update(env)
     return subprocess.run(
-        ["/usr/local/bin/python3.11", *args],
+        [sys.executable, *args],
         cwd=str(cwd),
         env=full_env,
         capture_output=True,

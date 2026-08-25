@@ -42,8 +42,16 @@ if str(SCRIPTS) not in sys.path:
 
 import convergence_check  # module under test (== baseline before #443 GREEN)
 
-BASELINE_COMMIT = "c5cb1ae"  # origin/dev at v012/issue-443-decide-state-machine branch point
-ANCHOR_FILE = Path(__file__).parent / "decide_anchor_c5cb1ae.json"
+# 2026-08-25 re-pin: the anchor was re-frozen at 619ebd3 after the
+# INTENTIONAL decide() semantics additions of #662 (hypothesis seed:
+# open_hypotheses field + OPEN_HYPOTHESIS_AT_CLOSE event) and #663 (anomaly
+# detection: anomalies field + ANOMALY_DETECTED event), plus #670's
+# Event.JADX_INFEASIBLE. Those merges shipped without re-pinning the anchor,
+# so 31 frozen cases failed from that point on. The c5cb1ae anchor remains
+# recoverable from git history (and documents the original #443
+# zero-semantics-change proof). Machine-generated via .tmp/regen_anchor.py.
+BASELINE_COMMIT = "619ebd3"  # dev HEAD at the 2026-08-25 anchor re-pin
+ANCHOR_FILE = Path(__file__).parent / "decide_anchor_619ebd3.json"
 
 _CLEAN_INDEX = "# facts\n"
 _CONTRA_INDEX = (

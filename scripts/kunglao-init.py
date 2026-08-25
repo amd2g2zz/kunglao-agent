@@ -2294,7 +2294,11 @@ def main(argv: list[str] | None = None) -> int:
                no_hooks=args.no_hooks, skills=skills)
 
 
-from _entry import run
+# #660 dispatcher import — ALIASED: a bare `from _entry import run` would
+# shadow this module's business `run(ws, force=...)` (line ~1865), so
+# main()'s `return run(..., force=args.force, ...)` would resolve to the
+# dispatcher and raise TypeError (the CI regression fixed here).
+from _entry import run as _entry_run
 
 if __name__ == "__main__":
-    run(globals())
+    _entry_run(globals())

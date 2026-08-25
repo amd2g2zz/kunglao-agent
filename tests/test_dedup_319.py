@@ -107,6 +107,10 @@ def test_no_reference_to_legacy_precommit_path():
         except UnicodeDecodeError:
             continue
         if ".claude/hooks/pre-commit" in text:
+            # Allow self-reference + the v012 audit scanner (it states the
+            # same prohibition to enforce it — mirrors its own allow-list)
+            if p.name in ("test_dedup_319.py", "test_v012_milestone_audit.py"):
+                continue
             offenders.append(str(p.relative_to(ROOT)))
     assert not offenders, (
         "no file may reference the retired .claude/hooks/pre-commit path:\n"

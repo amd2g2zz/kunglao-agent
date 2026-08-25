@@ -25,6 +25,18 @@ from pathlib import Path
 DISPATCH_RE = re.compile(
     r"\[T(\d)\s+tools=([^\]]+)\]\s+claim\s+(C-\d+)"
 )
+
+# #446 governance metadata — the lifecycle ledger for retired/superseded
+# mechanisms living in this module. Consumed by test_mechanisms_retirement
+# (audit-trail completeness: every retired mechanism names its replacement).
+MECHANISMS = {
+    "v0_dispatch_RE": {
+        "lifecycle": "RETIRED",
+        "replacement": "v1 dispatch protocol — DISPATCH_JSON_START_RE + #452 JSON envelope",
+        "retired_note": "v0 regex prefix stays importable for replaying legacy "
+                        "transcripts; new dispatches MUST use the v1 envelope",
+    },
+}
 # v1 protocol marker — find the JSON object containing the
 # "kunglao_dispatch" key. We grab the surrounding braces by scanning
 # forward for balanced `{`/`}` rather than relying on a non-greedy

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """RED tests for #595 — STUCK_WORKERS_PRESENT event consumed by the gate.
 
 MDP (from .claude/PRPs/plans/v013-milestone.plan.md Round-1 / #595):

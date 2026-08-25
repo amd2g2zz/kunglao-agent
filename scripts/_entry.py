@@ -1,7 +1,8 @@
+# -*- coding: utf-8 -*-
 """_entry.py — the shared __main__ dispatcher for kunglao-* entry scripts
 (#585, limited first wave: the 8 entry scripts).
 
-The dispatcher replaces ONLY the `if __name__ == "__main__": sys.exit(main())`
+The dispatcher replaces ONLY the module-execution tail (main guard + sys.exit(main()))
 boilerplate. The #370 router contract is untouched: entry modules keep their
 module-level main(argv) (or their sibling-module import) — run() calls it.
 
@@ -21,7 +22,7 @@ def run(module_globals: dict, main=None) -> None:
     """Execute main(argv=None) and sys.exit its return code.
 
     Never called at import time — entry scripts invoke it inside their
-    `if __name__ == "__main__":` guard, keeping `python -c 'import mod'`
+    main guard, so importing the module stays
     side-effect free (the reason main(argv) exists, #370)."""
     fn = main or module_globals.get("main")
     if fn is None:

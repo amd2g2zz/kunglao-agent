@@ -235,6 +235,44 @@ release (see the mapping table at the end).
 - tests/test_baksmali_index.py: 4 RED -> GREEN cases (RED1 baksmali
   missing -> noop + warning, RED2 schema shape, RED3 gitnexus-shape
   compat, RED4 per-class xref fail-open).
+- CI release-check restoration (dev branch red since #661; 10 root-cause
+  classes fixed in one pass):
+  1. kunglao-init.py `from _entry import run` shadowed the module's own
+     business run(ws, force=...) -> alias _entry_run (#660 dispatcher
+     regression; ~180 cascade failures across init/toolchain/target tests).
+  2. hook_activation.register_hooks missed the orchestrator_tool_guard.py
+     writer call while the registry + self-check expected it (#608 landing
+     gap) -> PreToolUse/Bash entry now written.
+  3. decide() frozen anchor re-pinned at 619ebd3 after the intentional
+     #662/#663/#670 semantics additions (31 cases;
+     tests/decide_anchor_619ebd3.json machine-generated; c5cb1ae anchor
+     recoverable from history).
+  4. Event vocabulary pin gains STUCK_WORKERS_PRESENT (#595),
+     OPEN_HYPOTHESIS_AT_CLOSE (#662), ANOMALY_DETECTED (#663),
+     JADX_INFEASIBLE (#670).
+  5. release-manifest.yaml declares the #670 tools (apk_mem_gate.py,
+     baksmali_index.py) + both gain the #317 UTF-8 stdout guard.
+  6. EMIT_ACTIONS gains apkid_candidates/hypothesis_seed (#662/#669),
+     reject (#233 env gate face), renew (#619 TTL face).
+  7. scripts/README.md catalogs _entry/anomaly_detector/apkid_scanner/
+     hypothesis_seeder; references/_INDEX.md + _INDEX.yaml gain
+     anomaly-baseline.md + mechanisms.md; ext index regenerated.
+  8. Stale test pins brought to current contracts: wire-up entries 10->11
+     + registry set + env_check fixture + heartbeat REGISTRY tuple +
+     worker_budget status_defs import + hooks/lib_kunglao MECHANISMS
+     metadata (#446) + _entry.py docstring discipline + dedup_319
+     scanner exemption + digest_sec_g premise (no-PQ workspace) +
+     proven_backstop module-family scan + suite_health golden mtime
+     refresh (#595 stuck-scan determinism doctrine).
+  9. v012/exit4 replays use sys.executable (the #457 hard pin
+     /usr/local/bin/python3.11 broke the 3.10 job with PermissionError).
+  10. worker_budget.py shim: order-robust path bootstrap (moves hooks/
+     dir to sys.path FRONT — the conditional insert left scripts/
+     winning and lib_kunglao.scan_active_workers unresolvable
+     standalone) + explicit _claim_statuses re-export (underscore names
+     skip star-import) + scripts/kunglao_export.classify platform-stable
+     (as_posix + absolute paths skip the scratch-zone check — the CI
+     /tmp misclassification).
 
 ## [0.1.2] - 2026-08-23
 
