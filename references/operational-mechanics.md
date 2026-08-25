@@ -6,7 +6,12 @@ the principles; this file carries the mechanics.
 
 ## Active workers heartbeat (the tick loop)
 
-The orchestrator is a daemon (convergence-loop behavior #4). Each tick,
+The orchestrator is a daemon (convergence-loop behavior #4). **Workers are
+launched in the BACKGROUND and never awaited inline (#704)** — a foreground
+Task call that blocks until the worker finishes kills this whole loop
+(parallelism → 1, pings never fire, stuck workers invisible). Dispatch and
+keep moving; completion is discovered by the tick below, not by waiting.
+Each tick,
 enumerate ALL workers (not just the last-dispatched) and act per row:
 
 | Worker | age_min | status | ping_sent | pings | action |
