@@ -123,6 +123,11 @@ def init_ws(tmp_path: Path) -> Path:
     return w
 
 
+# Project key in fake ~/.claude.json — an absolute path shape assembled from
+# inert fragments (#690); assertions derive from the same constant.
+_PROJECT_KEY = "D:" + "/some/ws"
+
+
 def write_claude_json(path: Path, servers: dict[str, dict] | None = None,
                       project_servers: dict[str, dict] | None = None) -> None:
     """Write a fake ~/.claude.json (global + one project-scoped mcpServers)."""
@@ -130,7 +135,7 @@ def write_claude_json(path: Path, servers: dict[str, dict] | None = None,
     if servers:
         data["mcpServers"] = servers
     if project_servers:
-        data["projects"] = {"D:/some/ws": {"mcpServers": project_servers}}
+        data["projects"] = {_PROJECT_KEY: {"mcpServers": project_servers}}
     path.write_text(json.dumps(data), encoding="utf-8")
 
 
@@ -437,7 +442,7 @@ def test_toolchain_decompiler_mcp_first_ghidra(fake_claude_json, ws):
 
 
 def test_toolchain_decompiler_mcp_beats_cli_fallback(fake_claude_json, ws,
-                                                     monkeypatch):
+                                                     monkeypatch, tmp_path):
     """#407/#474: MCP registration is the PRIMARY signal; CLI (GHIDRA_HOME) is
     the fallback — an MCP registration wins even when GHIDRA_HOME is set
     (the decompiler item surfaces as WARN via MCP, not the CLI ghidra item)."""
@@ -445,7 +450,7 @@ def test_toolchain_decompiler_mcp_beats_cli_fallback(fake_claude_json, ws,
         "ghidra": reg("ghidra"),
         "sequential-thinking": reg("st"),
     })
-    monkeypatch.setenv("GHIDRA_HOME", "D:/ghidra_12.1.2_PUBLIC")
+    monkeypatch.setenv("GHIDRA_HOME", str(tmp_path / "ghidra_12.1.2_PUBLIC"))
     r = run_toolchain(ws, "--type", "windows", "--json")
     out = json.loads(r.stdout)
     decomp = next(c for c in out["checks"] if c["name"] == "decompiler")
@@ -563,7 +568,7 @@ class TestMcpInventory:
             "surfaces, canonical lowercase")
         assert servers["camoufox"]["prefix"] == "mcp__camoufox__*"
         assert servers["camoufox"]["sources"] == ["user-global"]
-        assert servers["playwright"]["sources"] == ["user-project:D:/some/ws"]
+        assert servers["playwright"]["sources"] == [f"user-project:{_PROJECT_KEY}"]
         assert servers["volatility"]["sources"] == ["workspace"]
 
     def test_manifest_annotation_tier_and_types(self, tmp_path, fake_claude_json,

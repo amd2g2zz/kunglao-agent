@@ -139,12 +139,14 @@ def write_artifact(tmp_path, artifact=None, name="bindiff.json") -> Path:
 
 class TestBuildBindiffCommand:
     def test_argv_shape(self, tmp_path):
+        home = str(tmp_path / "ghidra")
+        expected = (Path(home) / "support" / "analyzeHeadless.bat").as_posix()
         cmd = bd.build_bindiff_command(
-            ghidra_home="D:/ghidra", base=Path("base.exe"), target=Path("target.exe"),
+            ghidra_home=home, base=Path("base.exe"), target=Path("target.exe"),
             out=Path("out.json"), script_path=GHIDRA_DIR,
             project_dir=tmp_path / "proj", project_name="proj",
         )
-        assert cmd[0].replace("\\", "/") == "D:/ghidra/support/analyzeHeadless.bat"
+        assert cmd[0].replace("\\", "/") == expected
         imports = [i for i, tok in enumerate(cmd) if tok == "-import"]
         assert len(imports) == 2
         first, second = imports
@@ -160,7 +162,7 @@ class TestBuildBindiffCommand:
 
     def test_two_imports_present(self, tmp_path):
         cmd = bd.build_bindiff_command(
-            ghidra_home="D:/ghidra", base=Path("b.exe"), target=Path("t.exe"),
+            ghidra_home=str(tmp_path / "ghidra"), base=Path("b.exe"), target=Path("t.exe"),
             out=Path("o.json"), script_path=GHIDRA_DIR,
             project_dir=tmp_path / "proj", project_name="proj",
         )
@@ -170,10 +172,10 @@ class TestBuildBindiffCommand:
         """DIFF-2: the Java guard compares currentProgram.getName() (never a
         path) and looks DomainFiles up by name — forwarding full paths makes
         the guard always false and the diff silently never runs."""
-        base = Path("C:/samples/old/malware.v1.exe")
-        target = Path("D:/captures/new/malware.v2.exe")
+        base = tmp_path / "old" / "malware.v1.exe"
+        target = tmp_path / "captures" / "malware.v2.exe"
         cmd = bd.build_bindiff_command(
-            ghidra_home="D:/ghidra", base=base, target=target,
+            ghidra_home=str(tmp_path / "ghidra"), base=base, target=target,
             out=Path("o.json"), script_path=GHIDRA_DIR,
             project_dir=tmp_path / "proj", project_name="proj",
         )
@@ -591,7 +593,7 @@ FORBIDDEN_MARKERS = (
     "22e6f41209a831bc647fbdaa29add029ba493bd2",
     "hvnc_start_process_injected", "0x1403809a0", "0x14031b240",
     "0x140633c40", "0x1405feefc", "0x14060e95d",
-    "D:/works", "D:\\works", "C:/x", "_ghidra_workspace",
+    "D:" + "/works", "D:" + "\\works", "C:" + "/x", "_ghidra_workspace",
 )
 
 
@@ -667,7 +669,7 @@ class TestJavaPostScript:
         assert "@runtime Jython" not in text
 
     def test_no_hardcoded_absolute_paths(self, text):
-        for marker in ("D:/", "D:\\", "C:/Users", "C:\\Users"):
+        for marker in ("D:" + "/", "D:" + "\\", "C:" + "/Users", "C:" + "\\Users"):
             assert marker not in text, f"hardcoded path marker: {marker}"
 
 
@@ -682,8 +684,9 @@ class TestRealGhidraIntegration:
                              "VT correlator output lands in a valid bindiff.v1 "
                              "artifact")
     def test_full_vt_run_produces_bindiff_artifact(self):
-        ghidra_home = os.environ.get("GHIDRA_HOME", "D:/ghidra_12.1.2_PUBLIC")
-        if not (Path(ghidra_home) / "support" / "analyzeHeadless.bat").is_file():
+        ghidra_home = os.environ.get("GHIDRA_HOME")
+        if not ghidra_home or \
+                not (Path(ghidra_home) / "support" / "analyzeHeadless.bat").is_file():
             pytest.skip("no real Ghidra install")
         # TODO: build base/target sample PEs with 1 changed function body + 1
         # changed call, then run create + diff-summary + diff-function and

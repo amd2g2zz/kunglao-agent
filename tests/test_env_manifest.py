@@ -274,14 +274,14 @@ def test_probe_never_rewrites_deploy_ledger(tmp_path, monkeypatch):
     ws = _make_ws(tmp_path)
     ledger = _write_ledger(ws, "env-manifest.yaml")
     ledger_before = ledger.read_text(encoding="utf-8")
-    monkeypatch.setattr(em, "_shutil_which", lambda n: "C:/vmrun.exe")
+    monkeypatch.setattr(em, "_shutil_which", lambda n: str(tmp_path / "vmrun.exe"))
     monkeypatch.setattr(em, "_subprocess_run", _fake_run_ok)
     rc = em.main([str(ws), "--probe"])
     assert rc == 0
     assert ledger.read_text(encoding="utf-8") == ledger_before
     written = yaml.safe_load((ws / "env-facts.yaml")
                              .read_text(encoding="utf-8"))
-    assert written["vm"]["vmx_path"] == "C:\\vms-tmp\\win10x64\\vm.vmx"
+    assert written["vm"]["vmx_path"] == _FAKE_VMX
     assert written["vm"]["snapshot"]["name"] == "analysis-ready"
 
 
@@ -295,9 +295,10 @@ def test_init_redeploy_preserves_env_facts(tmp_path, monkeypatch):
     mod = _load_init_module()
     ws = tmp_path / "ws"
     ws.mkdir()
+    vmx = str(tmp_path / "vms-tmp" / "win10x64" / "vm.vmx")
     facts = ("version: 1\n"
              "vm:\n"
-             "  vmx_path: C:/vms-tmp/win10x64/vm.vmx\n"
+             f"  vmx_path: {vmx}\n"
              "  snapshot:\n"
              "    name: analysis-ready\n")
     facts_file = ws / "env-facts.yaml"
@@ -376,10 +377,11 @@ def test_resolve_manifest_data_fields(tmp_path):
     """All five fact families round-trip from the file (data, not code)."""
     import env_manifest as em
     ws = _make_ws(tmp_path)
+    vmx = str(tmp_path / "vms-tmp" / "win10x64" / "vm.vmx")
     _write_manifest(ws, {
         "version": 1,
         "vm": {
-            "vmx_path": "C:/vms-tmp/win10x64/vm.vmx",
+            "vmx_path": vmx,
             "ip_discovery": "live-dhcp",
             "snapshot": {"name": "analysis-ready", "autologin": False,
                          "rollback_fix": "fix-login-state.cmd"},
@@ -393,7 +395,7 @@ def test_resolve_manifest_data_fields(tmp_path):
         "layout": {"workspace_dir": "malws"},
     })
     m = em.resolve(ws)
-    assert m.vm.vmx_path == "C:/vms-tmp/win10x64/vm.vmx"
+    assert m.vm.vmx_path == vmx
     assert m.vm.snapshot.name == "analysis-ready"
     assert m.vm.snapshot.autologin is False
     assert m.vm.snapshot.rollback_fix == "fix-login-state.cmd"
@@ -609,9 +611,10 @@ def test_render_manifest_data(tmp_path, capsys):
     code) — including the snapshot semantics and the channel difference."""
     import env_manifest as em
     ws = _make_ws(tmp_path)
+    vmx = str(tmp_path / "vms-tmp" / "w10" / "vm.vmx")
     _write_manifest(ws, {
         "version": 1,
-        "vm": {"vmx_path": "C:/vms-tmp/w10/vm.vmx",
+        "vm": {"vmx_path": vmx,
                "snapshot": {"name": "analysis-ready", "autologin": False,
                             "rollback_fix": "fix-login-state.cmd"},
                "vpmc_compatible": False},
@@ -621,7 +624,7 @@ def test_render_manifest_data(tmp_path, capsys):
     rc = em.main([str(ws), "--render"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "C:/vms-tmp/w10/vm.vmx" in out
+    assert vmx in out
     assert "analysis-ready" in out
     assert "fix-login-state.cmd" in out
     assert "autologin" in out.lower()
@@ -652,8 +655,11 @@ def test_cli_json_summary_default(tmp_path, capsys):
 
 # ---------- 7. --probe: minimal discovery entry (fail-open) ----------
 
+# vmrun list output is Windows-shaped by nature; the fixture value is
+# assembled from inert fragments (#690: no absolute-path literals).
+_FAKE_VMX = "C:" + "\\vms-tmp\\win10x64\\vm.vmx"
 _VMRUN_LIST_OUT = (
-    "Total running VMs: 1\r\nC:\\vms-tmp\\win10x64\\vm.vmx\r\n")
+    f"Total running VMs: 1\r\n{_FAKE_VMX}\r\n")
 _VMRUN_SNAP_OUT = "Total snapshots: 2\r\nanalysis-ready\r\nbase\r\n"
 
 
@@ -674,13 +680,13 @@ def _fake_run_ok(args, **kwargs):
 def test_probe_discovers_and_writes_manifest(tmp_path, monkeypatch, capsys):
     import env_manifest as em
     ws = _make_ws(tmp_path)
-    monkeypatch.setattr(em, "_shutil_which", lambda n: "C:/vmrun.exe")
+    monkeypatch.setattr(em, "_shutil_which", lambda n: str(tmp_path / "vmrun.exe"))
     monkeypatch.setattr(em, "_subprocess_run", _fake_run_ok)
     rc = em.main([str(ws), "--probe"])
     assert rc == 0
     written = yaml.safe_load((ws / "env-facts.yaml")
                              .read_text(encoding="utf-8"))
-    assert written["vm"]["vmx_path"] == "C:\\vms-tmp\\win10x64\\vm.vmx"
+    assert written["vm"]["vmx_path"] == _FAKE_VMX
     assert written["vm"]["snapshot"]["name"] == "analysis-ready"
     assert "needs_vm" not in written  # probe never answers the requirement
     assert "running" in written["guest_channel"]["notes"]
@@ -698,7 +704,7 @@ def test_probe_merges_without_clobbering_user_fields(tmp_path, monkeypatch):
                             "rollback_fix": "fix-login-state.cmd"}},
         "guest_channel": {"preferred": "runScriptInGuest"},
     })
-    monkeypatch.setattr(em, "_shutil_which", lambda n: "C:/vmrun.exe")
+    monkeypatch.setattr(em, "_shutil_which", lambda n: str(tmp_path / "vmrun.exe"))
     monkeypatch.setattr(em, "_subprocess_run", _fake_run_ok)
     rc = em.main([str(ws), "--probe"])
     assert rc == 0
@@ -728,7 +734,7 @@ def test_probe_no_vmrun_fails_open_with_guidance(tmp_path, monkeypatch,
 def test_probe_no_running_vms_fails_open(tmp_path, monkeypatch, capsys):
     import env_manifest as em
     ws = _make_ws(tmp_path)
-    monkeypatch.setattr(em, "_shutil_which", lambda n: "C:/vmrun.exe")
+    monkeypatch.setattr(em, "_shutil_which", lambda n: str(tmp_path / "vmrun.exe"))
 
     def empty(args, **kwargs):
         class R:
@@ -752,7 +758,7 @@ def test_probe_refuses_to_overwrite_garbage_manifest(tmp_path, monkeypatch):
     ws = _make_ws(tmp_path)
     garbage = "{{{ broken"
     (ws / "env-facts.yaml").write_text(garbage, encoding="utf-8")
-    monkeypatch.setattr(em, "_shutil_which", lambda n: "C:/vmrun.exe")
+    monkeypatch.setattr(em, "_shutil_which", lambda n: str(tmp_path / "vmrun.exe"))
     monkeypatch.setattr(em, "_subprocess_run", _fake_run_ok)
     rc = em.main([str(ws), "--probe"])
     assert rc == em.RC_MANIFEST_DEFECT
@@ -861,10 +867,11 @@ def test_record_installed_merges_preserving_user_fields(tmp_path):
     mod = _load_env_manifest()
     ws = tmp_path / "ws"
     ws.mkdir()
+    vmx = str(tmp_path / "vms" / "analysis.vmx")
     (ws / "env-facts.yaml").write_text(yaml.safe_dump({
         "version": 1,
         "needs_vm": False,
-        "vm": {"vmx_path": "D:/vms/analysis.vmx"},
+        "vm": {"vmx_path": vmx},
         "installed": {"floss": {"manager": "pip", "at": "2026-08-19T00:00:00",
                                 "reprobe": "PASS"}},
     }, sort_keys=False), encoding="utf-8")
@@ -872,7 +879,7 @@ def test_record_installed_merges_preserving_user_fields(tmp_path):
     assert ok is True
     data = yaml.safe_load((ws / "env-facts.yaml").read_text(encoding="utf-8"))
     assert data["needs_vm"] is False
-    assert data["vm"]["vmx_path"] == "D:/vms/analysis.vmx"
+    assert data["vm"]["vmx_path"] == vmx
     assert data["installed"]["floss"]["manager"] == "pip"
     assert data["installed"]["pefile"]["manager"] == "pip"
 

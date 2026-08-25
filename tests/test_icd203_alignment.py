@@ -156,7 +156,7 @@ def build_workspace(tmp_path: Path, *, f022: bool = False) -> Path:
     _write(ws / "notes" / "01-sample-identity.md",
            "---\nid: 01-sample-identity\ntype: note\nstatus: PROVEN\nsource: static-decompile\n"
            "confidence: high\ncreated: 2026-08-13\nlast_reviewed: 2026-08-13\n"
-           "iocs:\n  - {type: file_path, value: \"E:\\old\\path\\x.pdb\"}\n"  # invalid YAML escape → forces parser fallback
+           "iocs:\n  - {type: file_path, value: \"old\\path\\x.pdb\"}\n"  # invalid YAML escape → forces parser fallback
            "facts_used:\n  - F001\n  - F017\ndepends_on: []\n"
            "hypothesis: \"x\"\n---\n\n# t\n\n**F001** establishes identity.\n")
     return ws

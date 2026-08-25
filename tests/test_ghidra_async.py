@@ -296,20 +296,23 @@ class TestCommandBuilders:
     def test_build_tool_command_unknown_tool_raises(self, tmp_path):
         with pytest.raises(ValueError):
             gj.build_tool_command(
-                ghidra_home="D:/ghidra", tool="bogus", binary=Path("s.exe"),
+                ghidra_home=str(tmp_path / "ghidra"), tool="bogus", binary=Path("s.exe"),
                 post_args=[], out=Path("o.json"), script_path=GHIDRA_DIR,
                 job_dir=tmp_path / "job-x",
             )
 
-    def test_wrap_batch_argv_windows(self):
-        argv = ["C:/ghidra/support/analyzeHeadless.bat", "--out=C:/x/out.json",
-                "-import", "C:/s/s.exe"]
+    def test_wrap_batch_argv_windows(self, tmp_path):
+        bat = str(tmp_path / "ghidra" / "support" / "analyzeHeadless.bat")
+        out = str(tmp_path / "x" / "out.json")
+        imp = str(tmp_path / "s" / "s.exe")
+        argv = [bat, f"--out={out}",
+                "-import", imp]
         # cmd splits --key=value at '='; the batch gets --key + value as two
         # args — GhidraJsonScript.getArg accepts both forms (its 3rd branch)
         assert gj.wrap_batch_argv(argv, is_windows=True) == ["cmd", "/c", *argv]
 
-    def test_wrap_batch_argv_ignores_exe(self):
-        argv = ["C:/ghidra/support/analyzeHeadless", "-x"]
+    def test_wrap_batch_argv_ignores_exe(self, tmp_path):
+        argv = [str(tmp_path / "ghidra" / "support" / "analyzeHeadless"), "-x"]
         assert gj.wrap_batch_argv(argv, is_windows=True) == argv
         assert gj.wrap_batch_argv(["x.bat"], is_windows=False) == ["x.bat"]
 

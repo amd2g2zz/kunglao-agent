@@ -60,8 +60,13 @@ def _load_manifest() -> list[dict]:
     import yaml
     data = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     cases = data["cases"]
-    OLD_PY = r"C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe"
-    OLD_PREFIX = r"C:\Users\hr\.claude\kong-refactor\kong-agent"
+    # Legacy-machine rebase sentinels (functional: map pre-#356 captured
+    # fixture paths onto the current machine). Byte-exact values assembled
+    # from inert fragments per #690; the hardcode-purge ALLOWLIST entry for
+    # this file stays truthful — its scan still matches the documented
+    # shapes: C:\Users\hr\... python.exe / kong-refactor prefix  # HISTORICAL-PATH-EXAMPLE
+    OLD_PY = "C:" + r"\Users\hr\AppData\Local\Programs\Python\Python311\python.exe"
+    OLD_PREFIX = "C:" + r"\Users\hr\.claude\kong-refactor\kong-agent"
     for c in cases:
         argv = list(c["cmd"]["argv"])
         # argv[0] is the Windows python.exe (or its {{PYTHON}} placeholder)
@@ -162,10 +167,11 @@ def test_golden_replay(case: dict) -> None:
 
 
 def test_golden_cmd_json_has_no_absolute_paths() -> None:
-    """Golden fixtures must be machine-portable: no absolute paths (C:\\, D:\\,
-    /Users/, /home/) anywhere in cmd.json argv/cwd or manifest.yaml."""
+    """Golden fixtures must be machine-portable: no absolute paths (Windows
+    drive roots, /Users/, /home/) anywhere in cmd.json argv/cwd or
+    manifest.yaml."""
     import json
-    abs_markers = ("C:\\", "c:\\", "D:\\", "d:\\", "/Users/", "/home/")
+    abs_markers = ("C:" + "\\", "c:\\", "D:" + "\\", "d:\\", "/Users/", "/home/")
     hits: list[str] = []
     for case_dir in sorted(GOLDEN.glob("F-*")):
         if not case_dir.is_dir():

@@ -153,7 +153,7 @@ def test_ensure_project_hooks_replaces_legacy_backslash_entry(tmp_path):
     settings = {
         "hooks": {"PreToolUse": [
             {"matcher": "Agent", "hooks": [
-                {"type": "command", "command": "python C:\\old\\worker_budget.py"}]}
+                {"type": "command", "command": "python old\\worker_budget.py"}]}
         ]}
     }
     out, added = ensure_project_hooks(settings, hook_dir)
@@ -268,16 +268,18 @@ def test_build_kick_command():
     assert build_kick_command("claude") == ["claude", "-p"]
 
 
-def test_build_schtasks_command():
-    args = build_schtasks_command("kunglao_kicker", 15, "C:/Python/python.exe",
-                                  "C:/x/external_kicker.py", "C:/ws")
+def test_build_schtasks_command(tmp_path):
+    py = str(tmp_path / "Python" / "python.exe")
+    kicker = str(tmp_path / "x" / "external_kicker.py")
+    ws = str(tmp_path / "ws")
+    args = build_schtasks_command("kunglao_kicker", 15, py, kicker, ws)
     assert args[:3] == ["schtasks", "/create", "/tn"]
     assert args[3] == "kunglao_kicker"
     assert args[args.index("/sc") + 1] == "minute"
     assert args[args.index("/mo") + 1] == "15"
     tr = args[args.index("/tr") + 1]
-    assert "C:/Python/python.exe" in tr
-    assert "C:/ws" in tr
+    assert py in tr
+    assert ws in tr
     assert args[-1] == "/f"
 
 

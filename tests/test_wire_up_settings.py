@@ -178,7 +178,7 @@ def test_wire_up_preserves_existing_keys(tmp_path, fake_home):
         "statusLine": {"type": "command", "command": "echo hi"},
         "hooks": {
             "PreToolUse": [{"matcher": "Bash",
-                            "hooks": [{"type": "command", "command": "python C:/other/hook.py"}]}],
+                            "hooks": [{"type": "command", "command": "python other/hook.py"}]}],
         },
     }), encoding="utf-8")
     sys.path.insert(0, str(SCRIPTS))
