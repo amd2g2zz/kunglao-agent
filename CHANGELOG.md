@@ -280,6 +280,40 @@ release (see the mapping table at the end).
      (as_posix + absolute paths skip the scratch-zone check — the CI
      /tmp misclassification).
 
+### Round 4 — Android capability-provider registry (#692, batch card 8)
+
+**Added**
+- tools/_INDEX.yaml capability-provider annotations (#692 WP1): opt-in
+  `produces/requires/cost_hint/quality/provider` block structurally linted
+  by tools/validate_index.py (closed requires vocabulary; per-capability
+  quality map); new provider entries jadx-decompile, baksmali-xref,
+  apkid-prescan, gitnexus-query register the D0 capability x provider
+  matrix; tool_search count pins updated deliberately (33 entries).
+- tools/static/dexdc_scanner.py (#692 WP2): dex-decompiler provider wrapper
+  (PyO3 wheel `import dex_decompiler` first, `dex-decompile` CLI fallback)
+  emitting evidence/dexdc_index.json (gitnexus-shape #670 wire) +
+  evidence/dexdc_taint.json (IssueReport face); toolchain FIXES["dexdc"]
+  ToolMeta + NextAction (#680 pattern); release-manifest declared.
+- scripts/route_capability.py provider selection (#692 WP3):
+  select_providers ranks providers quality->cost from workspace state
+  (mem-gate verdict demoted to a jadx provider precondition);
+  scripts/provider_health.py fail-open runtime failure memory flips
+  preference next round; --capability direct-query CLI.
+- dispatch context providers block (#692 WP4): build_dispatch_context
+  carries the ranked provider list + constraints (optional key, #527
+  backward compat) — the worker holds in-flight degradation authority.
+- taint seeds + wiring (#692 WP5):
+  references/re-library/android-fingerprint-seeds.yaml (extensible
+  fingerprint-API seed table, yara-rules lifecycle);
+  hypothesis_seeder.seed_taint_candidates + anomaly_detector.observe_taint;
+  EMIT_ACTIONS "taint_candidates".
+- deobf composition prior (#692 WP6): apkid obfuscator tag raises the
+  string-decrypt/dex-rewrite prior via route capability_suggestions — no
+  fixed deobf stage sequence exists.
+- gitnexus semantic_query (#692 WP7): android:semantic-query declared with
+  the lazy-index precondition (marker evidence/gitnexus_index.json; the
+  selection pass never builds the index).
+
 ## [0.1.2] - 2026-08-23
 
 ### Added

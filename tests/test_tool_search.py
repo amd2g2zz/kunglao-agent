@@ -11,10 +11,11 @@ Exit codes: 0 = ok (matches, or valid query with no match), 2 = usage error,
 3 = index missing/unreadable.
 
 Expectations below are PINNED to the real tools/_INDEX.yaml content
-(29 entries total: 3 deep / 21 cheap / 5 probe, all tier T1; growth from
+(34 entries total: 7 deep / 22 cheap / 5 probe, all tier T1; growth from
 fix/278-static-1c, PR-1c static CLIs, #315 yara pair, #322 sanitize-text,
-#306 c-normalize + opaque-pred, #427 rust-dep-strings). If the index grows, update these pins
-deliberately.
+#306 c-normalize + opaque-pred, #427 rust-dep-strings, #692 android
+providers jadx/baksmali-xref/apkid-prescan/gitnexus-query/dexdc-decompile). If the index
+grows, update these pins deliberately.
 """
 from __future__ import annotations
 
@@ -79,7 +80,7 @@ def test_tier_t1_returns_all_entries():
     r = run_cli("--tier", "T1", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 29
+    assert out["count"] == 34
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +91,7 @@ def test_cost_max_cheap_excludes_deep():
     r = run_cli("--cost-max", "cheap", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 26
+    assert out["count"] == 27
     assert all(t["cost_tier"] in ("probe", "cheap") for t in out["tools"])
     names = {t["name"] for t in out["tools"]}
     assert not (names & DEEP_TOOLS)

@@ -239,6 +239,245 @@ def resolve_capability(query: str, tools: list[dict]) -> list[str]:
     return names or [query]
 
 
+# ---------- issue #692 WP3: provider selection (design D3/D4) ----------
+
+QUALITY_ORDER = {"high": 0, "mid": 1, "floor": 2}
+MEM_GATE_JADX_OK = ("jadx-ok", "targeted-jadx")   # #670 verdicts that satisfy jadx
+DEX_EXTS = (".apk", ".dex")
+
+
+def _provider_health_mod():
+    """Sibling import (tests load this module by file path)."""
+    try:
+        import provider_health  # noqa: PLC0415
+    except ImportError:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import provider_health  # noqa: PLC0415
+    return provider_health
+
+
+def _has_java_tree(ev: Path) -> bool:
+    """Bounded walk (<=60 dirs, depth 3): any *.java under evidence/."""
+    if not ev.is_dir():
+        return False
+    scanned = 0
+    stack = [(ev, 0)]
+    while stack and scanned < 60:
+        d, depth = stack.pop()
+        scanned += 1
+        try:
+            entries = list(d.iterdir())
+        except OSError:
+            continue
+        if any(f.suffix == ".java" for f in entries if f.is_file()):
+            return True
+        if depth < 3:
+            stack.extend((f, depth + 1) for f in entries if f.is_dir())
+    return False
+
+
+def _valid_gitnexus_marker(path: Path) -> bool:
+    """#692 WP7: the lazy-index marker is SCHEMA-VALIDATED, not
+    existence-checked - {source_root, indexed_at, tools} all present.
+    A garbage or key-less file must not fake an index (stale markers
+    stay blocked)."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    return all(k in data for k in ("source_root", "indexed_at", "tools"))
+
+
+def load_workspace_state(ws) -> dict:
+    """Files-only workspace state for provider selection (design D2).
+
+    NEVER runs environment probes (import/which) - a token without a
+    workspace-state answer stays `unverified` downstream, never blocked.
+    """
+    ev = Path(ws) / "evidence"
+    state: dict = {
+        "mem_gate_verdict": None,
+        "tool_probes": {},
+        "source_tree": False,
+        "gitnexus_index": False,
+        "target_ext": None,
+    }
+    try:
+        mg = json.loads((ev / "apk_mem_gate.json").read_text(
+            encoding="utf-8"))
+        state["mem_gate_verdict"] = (mg.get("verdict")
+                                     if isinstance(mg, dict) else None)
+    except (OSError, ValueError):
+        pass
+    try:
+        probes = json.loads((ev / "tool-probes.json").read_text(
+            encoding="utf-8"))
+        if isinstance(probes, dict):
+            state["tool_probes"] = probes
+    except (OSError, ValueError):
+        pass
+    state["gitnexus_index"] = _valid_gitnexus_marker(
+        ev / "gitnexus_index.json")
+    # #692 WP6: apkid obfuscator rules (the deobf COMPOSITION prior)
+    try:
+        apkid = json.loads((ev / "apkid.json").read_text(encoding="utf-8"))
+        summary = apkid.get("summary") if isinstance(apkid, dict) else None
+        rules = (summary or {}).get("obfuscator") if isinstance(
+            summary, dict) else None
+        state["apkid_obfuscators"] = [str(r) for r in (rules or [])]
+    except (OSError, ValueError):
+        state["apkid_obfuscators"] = []
+    state["source_tree"] = (state["gitnexus_index"]
+                            or _has_java_tree(ev))
+    try:
+        state["provider_failures"] = _provider_health_mod() \
+            .recent_failures(Path(ws))
+    except Exception:  # noqa: BLE001 - fail-open: no memory, no crash
+        state["provider_failures"] = {}
+    return state
+
+
+def _eval_token(token: str, state: dict) -> tuple[str, str | None]:
+    """("ok", None) | ("blocked", reason) | ("unverified", reason).
+
+    The evaluator is TOLERANT (any registry data must resolve); the closed
+    vocabulary is enforced at LINT time by tools/validate_index.py.
+    """
+    if token == "dex":
+        ext = state.get("target_ext")
+        if ext is None:
+            return "ok", None  # target shape unknown: do not block
+        if str(ext).lower() in DEX_EXTS:
+            return "ok", None
+        return "blocked", "target %s is not dex" % ext
+    if token == "mem_budget_ok":
+        verdict = state.get("mem_gate_verdict")
+        if verdict is None:
+            return ("unverified",
+                    "mem_budget_ok: no apk_mem_gate verdict yet")
+        if verdict in MEM_GATE_JADX_OK:
+            return "ok", None
+        return ("blocked",
+                "mem budget verdict %s (#670 - jadx provider precondition, "
+                "not a pipeline stage)" % verdict)
+    if token in ("jadx_bin", "dexdc_wheel", "smali_toolchain"):
+        probes = state.get("tool_probes") or {}
+        if token not in probes:
+            return ("unverified",
+                    "%s: no tool-probes evidence" % token)
+        if probes[token]:
+            return "ok", None
+        return "blocked", "%s: probe failed" % token
+    if token == "source_tree":
+        if state.get("source_tree"):
+            return "ok", None
+        return ("blocked",
+                "no decompiled source tree under evidence/")
+    if token == "gitnexus_index":
+        if state.get("gitnexus_index"):
+            return "ok", None
+        return ("blocked",
+                "needs lazy index build (marker "
+                "evidence/gitnexus_index.json absent)")
+    return "unverified", "%s: unknown token (tolerant evaluator)" % token
+
+
+def select_providers(capability: str, tools: list[dict],
+                     state: dict) -> dict:
+    """Rank providers for one capability from workspace state (D3).
+
+    quality desc -> cost_hint.mem_gb asc -> registry order; a recent
+    provider-health failure (24h window) demotes below non-failed.
+    Statuses: available | blocked(reason) | unverified(reason).
+    Recommendation: first available, else first unverified, else None.
+    """
+    rows: list[tuple[dict, int]] = []
+    for pos, t in enumerate(tools):
+        if not t.get("provider") or capability not in (t.get("produces")
+                                                       or []):
+            continue
+        quality = (t.get("quality") or {}).get(capability)
+        entry = {
+            "name": t.get("name"),
+            "provider": t.get("provider"),
+            "quality": quality,
+            "cost": (t.get("cost_hint") or {}).get("mem_gb"),
+            "status": "available",
+            "recent_failure": False,
+        }
+        blocked = []
+        unverified = []
+        for token in t.get("requires") or []:
+            verdict, reason = _eval_token(token, state)
+            if verdict == "blocked":
+                blocked.append("%s: %s" % (token, reason))
+            elif verdict == "unverified":
+                unverified.append("%s: %s" % (token, reason))
+        blocked = "; ".join(blocked) or None
+        unverified = "; ".join(unverified) or None
+        if blocked is not None:
+            entry["status"] = "blocked"
+            entry["blocked_reason"] = blocked
+        elif unverified is not None:
+            entry["status"] = "unverified"
+            entry["unverified_reason"] = unverified
+        failure = (state.get("provider_failures") or {}).get(
+            t.get("provider"))
+        if failure:
+            entry["recent_failure"] = True
+            entry["failure_reason"] = failure.get("reason", "")
+        rows.append((entry, pos))
+
+    def _sort_key(item):
+        e, pos = item
+        mem = e["cost"] if isinstance(e["cost"], (int, float)) else 0.0
+        return (1 if e["recent_failure"] else 0,
+                QUALITY_ORDER.get(e["quality"], 9), mem, pos)
+
+    rows.sort(key=_sort_key)
+    ordered = [e for e, _ in rows]
+    recommendation = next(
+        (e["name"] for e in ordered if e["status"] == "available"), None)
+    if recommendation is None:
+        recommendation = next(
+            (e["name"] for e in ordered if e["status"] == "unverified"),
+            None)
+
+    rationale = ["ranked %d provider(s) for %s: quality desc, cost asc, "
+                 "registry order; recent failures demoted (24h window)"
+                 % (len(ordered), capability)]
+    for e in ordered:
+        if e["status"] == "blocked":
+            rationale.append("%s: blocked (%s)"
+                             % (e["name"], e["blocked_reason"]))
+        elif e["recent_failure"]:
+            rationale.append("%s: recent failure demoted (%s)"
+                             % (e["name"], e.get("failure_reason", "")))
+        elif e["status"] == "unverified":
+            rationale.append("%s: unverified (%s)"
+                             % (e["name"], e["unverified_reason"]))
+    return {"capability": capability, "providers": ordered,
+            "recommendation": recommendation, "rationale": rationale}
+
+
+def format_providers_text(result: dict) -> str:
+    lines = ["capability: %s" % result["capability"],
+             "recommendation: %s" % result["recommendation"]]
+    for e in result["providers"]:
+        mark = {"available": "OK", "blocked": "BLK",
+                "unverified": "UNV"}[e["status"]]
+        note = e.get("blocked_reason") or e.get("unverified_reason") or (
+            "recent failure: %s" % e.get("failure_reason", "")
+            if e["recent_failure"] else "")
+        lines.append("  [%s] %s (quality=%s, cost=%sgb) %s"
+                     % (mark, e["name"], e["quality"], e["cost"], note))
+    lines.append("rationale:")
+    lines.extend("  - %s" % r for r in result["rationale"])
+    return "\n".join(lines)
+
+
 def _dedupe(hits: list[tuple[str, float, str]]) -> list[tuple[str, float, str]]:
     """One entry per capability: max strength, first rule's reason."""
     best: dict[str, list] = {}
@@ -332,10 +571,37 @@ def _fallback() -> dict:
                                 "kunglao-worker allowed"]}
 
 
+def _deobf_prior(state: dict) -> list[dict]:
+    """#692 WP6 (design D8): apkid's obfuscator tag raises the PRIOR that
+    the deobf capabilities will be wanted — a prior ONLY: no chain
+    reordering, no stage sequence. The agent COMPOSES string_decrypt
+    (emulator) + dex_rewrite (dexlib2 rename) + re-decompile + re-index per
+    claim in whatever order the claim needs."""
+    rules = state.get("apkid_obfuscators") or []
+    if not rules:
+        return []
+    named = ", ".join(rules[:3])
+    return [
+        {"capability": "android:string-decrypt",
+         "rationale": "apkid obfuscator rules [%s] raise the "
+                      "string-decrypt prior (#692 WP6 - compose dexdc "
+                      "emulator per claim, no fixed stage order)" % named},
+        {"capability": "android:dex-rewrite",
+         "rationale": "apkid obfuscator rules [%s] raise the dex-rewrite "
+                      "prior (#692 WP6 - dexlib2 rename is the only "
+                      "persistent form; compose per claim)" % named},
+    ]
+
+
 def route(features: dict, claim_text: str, index_path: Path,
-          agents_dir: Path | None = None) -> dict:
+          agents_dir: Path | None = None,
+          ws: Path | None = None) -> dict:
     """Deterministic routing: feature rules + claim overlay → recommendation,
-    plus the specialist agent_type recommendation (#310)."""
+    plus the specialist agent_type recommendation (#310).
+
+    #692 WP6: `ws` (optional — all pre-#692 callers omit it) adds the
+    deobf composition prior (capability_suggestions) from apkid evidence.
+    A prior only: chain/confidence are never altered by suggestions."""
     tools = load_index(index_path)
     fhits = feature_hits(features or {})
     chits = claim_hits(claim_text)
@@ -346,6 +612,10 @@ def route(features: dict, claim_text: str, index_path: Path,
         result = _fallback()
         result["agent_type"] = agent_type
         result["agent_rationale"] = agent_rationale
+        if ws is not None:
+            suggestions = _deobf_prior(load_workspace_state(ws))
+            if suggestions:
+                result["capability_suggestions"] = suggestions
         return result
 
     corroborations = len({c for c, _, _ in fhits} & {c for c, _, _ in chits})
@@ -373,11 +643,16 @@ def route(features: dict, claim_text: str, index_path: Path,
         rationale.append(f"claim-intent corroborates feature rules "
                          f"x{corroborations} "
                          f"(+{CORROBORATION_BONUS * corroborations:.2f})")
-    return {"recommendation": {"chain": chain, "confidence": confidence,
-                               "alternatives": alternatives},
-            "rationale": rationale,
-            "agent_type": agent_type,
-            "agent_rationale": agent_rationale}
+    result = {"recommendation": {"chain": chain, "confidence": confidence,
+                                 "alternatives": alternatives},
+              "rationale": rationale,
+              "agent_type": agent_type,
+              "agent_rationale": agent_rationale}
+    if ws is not None:
+        suggestions = _deobf_prior(load_workspace_state(ws))
+        if suggestions:
+            result["capability_suggestions"] = suggestions
+    return result
 
 
 def format_text(result: dict) -> str:
@@ -479,9 +754,29 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--agents-dir", default=None,
                     help="agents dir with specialist trigger frontmatter "
                          "(default: agents/)")
+    ap.add_argument("--capability", default=None,
+                    help="#692 direct provider-selection query: rank "
+                         "providers for this capability tag from "
+                         "--workspace state")
     ap.add_argument("--json", action="store_true",
                     help="emit JSON instead of text lines")
     args = ap.parse_args(argv)
+
+    if args.capability:
+        index_path = Path(args.index) if args.index else DEFAULT_INDEX
+        if not index_path.is_file():
+            print("error: index file not found: %s" % index_path,
+                  file=sys.stderr)
+            return 3
+        tools = load_index(index_path)
+        state = load_workspace_state(_resolve_ws(args.workspace))
+        result = select_providers(args.capability, tools, state)
+        if args.json:
+            print(json.dumps({"providers": result}, ensure_ascii=False,
+                             indent=2))
+        else:
+            print(format_providers_text(result))
+        return 0
 
     if not args.features_file and not args.features:
         print("error: --features-file or --features required", file=sys.stderr)

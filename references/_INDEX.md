@@ -7,6 +7,7 @@
 | Domain | Files (re-library/) | Purpose |
 |---|---|---|
 | tools | tools, tools-dynamic, tools-advanced, tools-crypto | Static/dynamic/advanced/crypto tooling quick-reference |
+| android-fingerprint | android-fingerprint-apis | Device/sensor fingerprint API taint seeds (dexdc --seeds; #692 WP5) |
 | anti-analysis | anti-analysis | Anti-debug/anti-VM/anti-DBI detection and bypass |
 | patterns | patterns, patterns-simulation, patterns-decode, patterns-debugging | General RE techniques: patterns/simulation/decode/dynamic debugging |
 | languages | languages, languages-compiled, languages-go, languages-platforms | Language-specific RE (scripting/compiled/Go/platform stacks) |
@@ -83,6 +84,7 @@
 
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
+| `re-library/android-fingerprint-apis.md` | android-fingerprint | Device/sensor fingerprint API taint seed table - the capability doc driving dexdc `--taint-api` seeds; hypotheses (risk-control vs tracking) and anomaly concentration. | When a claim asks whether the sample collects fingerprint identifiers and where they flow (#692). |
 | `re-library/anti-analysis.md` | anti-analysis | Anti-debugging, anti-VM, anti-DBI, code-integrity bypass. | When encountering binaries detecting debuggers/VMs/instrumentation. |
 | `re-library/awesome-re-resources.md` | resources | Curated RE resource repos, tools, tutorials. | When seeking external learning materials or specialized utilities. |
 | `re-library/detection-engineer.md` | malware | Transforming analysis findings into detection content. | When writing detection signatures or hunting queries. |

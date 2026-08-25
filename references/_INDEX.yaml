@@ -11,7 +11,7 @@ files:
   references/_index-platforms.md: eb4224a8cde683873a422a5a21ca62067b46efe09a46a7ff2c0f981ce57b6c7b
   references/_index-resources.md: d58750800fcd490ed014fbef7ee6dae2228180c44996d937a1130cc1c0f50196
   references/_index-tools.md: e28287ddfbb4006a0965a0f3dfb0206d6a54f711d6d7f9195c1d3d65f7f2a382
-  references/_INDEX.md: 301942367f53160fc641df24c785e64ad0a394aa34f6d7896a8e5c87171ef253
+  references/_INDEX.md: d6fac381cd21985f16a0a5501245eb0b8b15f12a3f0fad58910ebba806e1976e
   references/agent-three-state-charter.md: eef047d075d57382b6c6736400f9f744e47d5dde916cafb9f249c2c47365d43e
   references/anomaly-baseline.md: 0ea89669d45fd8ae5ebe9855b591451c8ea6bf239adfc60f81552f356749ae8b
   references/archive/long-horizon-architecture-2026-07.md: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
@@ -37,6 +37,7 @@ files:
   references/method-constraints.md: efcd26339f3a31a3133a83c59ad556331e33365edf02af1b9f1600c7f1a644f7
   references/operational-mechanics.md: cca0ffd1673f7b603528412d7e0d54ee87155eff892c2501f81c332a535870bb
   references/optimization-2026-08.md: aa58f4fb6554779f856b74d60fe0afdc9a1943606cbf90ec65785e95ba084fc1
+  references/re-library/android-fingerprint-apis.md: 04b0abd2d9e29fe01e3d850658bc63ac6b08be57e2b6185d794d46e5c5fba2c8
   references/re-library/anti-analysis.md: 8534cc1640ba2707a9621d05521d317717b61778a3585e6b8c806de2897cf524
   references/re-library/awesome-re-resources.md: 8252476aa2b40d76b01572e7df910fc9c6a83337fc2e48385dd15885a1ab96f0
   references/re-library/detection-engineer.md: fc06be71641d31a6e8da60f3b2084197da9bc1b2bffc7ecf3d07b076b0aa9072

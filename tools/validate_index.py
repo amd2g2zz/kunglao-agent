@@ -15,6 +15,19 @@ Validates the machine-readable tool index against the contract:
                 (what it does + when to choose it) — issue #356 W1
   when_not:     optional — when NOT to use the tool (non-empty if present)
 
+#692 WP1 capability-provider annotation block (design D1/D2; OPT-IN — an
+# entry without `provider` never raises annotation errors):
+  provider:    unique provider identity (matches a toolchain FIXES key or
+               an mcp_probe.MANIFEST name); one entry per provider
+  produces:    non-empty list of "<domain>:<operation>" tags; MUST include
+               the entry's primary `capability`
+  requires:    list of precondition tokens from the closed vocabulary
+               PROVIDER_TOKENS (design D2); may be empty
+  cost_hint:   {mem_gb: number >= 0, time: probe|cheap|deep}
+  quality:     non-empty map {capability-tag: high|mid|floor} whose keys are
+               exactly the `produces` set (per-capability quality: baksmali
+               is floor for java-source but high for bytecode-truth)
+
 CLI contract (gate-callable):
   python validate_index.py [path_to_index.yaml]
   exit 0 = pass, exit 1 = fail with an error list printed to stderr.
@@ -44,6 +57,10 @@ except (AttributeError, ValueError):
 CATEGORIES = ("crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines")
 TIERS = ("T1", "T2", "T3")
 COST_TIERS = ("probe", "cheap", "deep")
+# #692 WP1: closed precondition vocabulary (design D2) + quality tiers.
+PROVIDER_TOKENS = ("dex", "mem_budget_ok", "dexdc_wheel", "jadx_bin",
+                   "smali_toolchain", "source_tree", "gitnexus_index")
+QUALITY_TIERS = ("high", "mid", "floor")
 REQUIRED_FIELDS = ("name", "category", "capability", "tier", "cost_tier",
                    "input_output", "description")
 
@@ -69,6 +86,84 @@ def _is_nonempty_io(value) -> bool:
     return False
 
 
+def _check_provider_annotations(entry: dict, loc: str, i: int,
+                                seen_providers: dict[str, int],
+                                errors: list[str]) -> None:
+    """#692 WP1: the opt-in capability-provider annotation block (D1).
+
+    Only runs when `provider` is present — legacy entries are untouched.
+    """
+    provider = entry.get("provider")
+    if not _is_nonempty_str(provider):
+        errors.append(f"{loc}: 'provider' must be a non-empty string")
+        provider = None
+    elif provider in seen_providers:
+        errors.append(f"{loc}: duplicate 'provider' '{provider}' "
+                      f"(first at tools[{seen_providers[provider]}])")
+    else:
+        seen_providers[provider] = i
+
+    produces = entry.get("produces")
+    produced: set[str] = set()
+    if not isinstance(produces, list) or not produces:
+        errors.append(f"{loc}: 'produces' must be a non-empty list of "
+                      "'<domain>:<operation>' tags")
+    else:
+        for tag in produces:
+            if not _is_domain_operation(tag):
+                errors.append(f"{loc}: 'produces' tag {tag!r} must be "
+                              "'<domain>:<operation>'")
+            else:
+                produced.add(tag)
+        if not produced:
+            errors.append(f"{loc}: 'produces' holds no valid tags")
+
+    requires = entry.get("requires")
+    if not isinstance(requires, list):
+        errors.append(f"{loc}: 'requires' must be a list of precondition "
+                      "tokens (may be empty)")
+    else:
+        for token in requires:
+            if token not in PROVIDER_TOKENS:
+                errors.append(f"{loc}: 'requires' token {token!r} outside "
+                              f"the closed vocabulary {PROVIDER_TOKENS}")
+
+    cost_hint = entry.get("cost_hint")
+    if not isinstance(cost_hint, dict):
+        errors.append(f"{loc}: 'cost_hint' must be a mapping "
+                      "{{mem_gb, time}}")
+    else:
+        mem = cost_hint.get("mem_gb")
+        if not isinstance(mem, (int, float)) or isinstance(mem, bool)                 or mem < 0:
+            errors.append(f"{loc}: 'cost_hint.mem_gb' must be a number >= 0, "
+                          f"got {mem!r}")
+        if cost_hint.get("time") not in COST_TIERS:
+            errors.append(f"{loc}: 'cost_hint.time' must be one of "
+                          f"{COST_TIERS}, got {cost_hint.get('time')!r}")
+
+    quality = entry.get("quality")
+    if not isinstance(quality, dict) or not quality:
+        errors.append(f"{loc}: 'quality' must be a non-empty map "
+                      "{capability-tag: high|mid|floor}")
+    else:
+        for tag, tier in quality.items():
+            if tag not in produced:
+                errors.append(f"{loc}: 'quality' key {tag!r} is not in "
+                              "'produces' (every produced capability needs "
+                              "a quality tier)")
+            if tier not in QUALITY_TIERS:
+                errors.append(f"{loc}: 'quality[{tag!r}]' must be one of "
+                              f"{QUALITY_TIERS}, got {tier!r}")
+        missing_q = produced - set(quality)
+        if missing_q:
+            errors.append(f"{loc}: 'quality' missing tiers for produced "
+                          f"capabilities {sorted(missing_q)}")
+
+    if produced and entry.get("capability") not in produced:
+        errors.append(f"{loc}: 'capability' {entry.get('capability')!r} must "
+                      "be a member of 'produces'")
+
+
 def validate_index(data) -> list[str]:
     """Validate a parsed _INDEX.yaml payload. Returns a list of error strings.
 
@@ -86,6 +181,7 @@ def validate_index(data) -> list[str]:
         return ["'tools' must be a list"]
 
     seen_names: dict[str, int] = {}
+    seen_providers: dict[str, int] = {}
     for i, entry in enumerate(tools):
         loc = f"tools[{i}]"
         if not isinstance(entry, dict):
@@ -130,6 +226,10 @@ def validate_index(data) -> list[str]:
         when_not = entry.get("when_not")
         if when_not is not None and not _is_nonempty_str(when_not):
             errors.append(f"{loc}: optional 'when_not' must be a non-empty string")
+
+        # #692 WP1: opt-in annotation block (skipped for legacy entries)
+        if "provider" in entry:
+            _check_provider_annotations(entry, loc, i, seen_providers, errors)
 
     return errors
 

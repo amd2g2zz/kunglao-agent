@@ -216,6 +216,31 @@ def _sibling_claims(ws: Path, claim_id: str) -> list[dict]:
 
 # ---------- public API ----------
 
+def _providers_block(ws: Path, capability: str | None) -> dict | None:
+    """#692 WP4 (design D5): the ranked provider block for one capability.
+
+    Fail-open: any failure (missing index, unparseable state, selection
+    error) omits the block — the context build never raises. Returns the
+    select_providers result {capability, providers, recommendation,
+    rationale} or None when there is no capability / no provider rows.
+    """
+    if not capability:
+        return None
+    try:
+        import route_capability as rc  # sibling (scripts/ on sys.path)
+
+        tools = rc.load_index(rc.DEFAULT_INDEX)
+        if not tools:
+            return None
+        state = rc.load_workspace_state(ws)
+        result = rc.select_providers(capability, tools, state)
+        if not result.get("providers"):
+            return None
+        return result
+    except Exception:  # noqa: BLE001 — fail-open, never block dispatch
+        return None
+
+
 def build_dispatch_context(
     *,
     ws: Path,
@@ -223,6 +248,7 @@ def build_dispatch_context(
     tier: int,
     tools: list[str],
     agent_name: str,
+    capability: str | None = None,
 ) -> dict:
     """Build the FULL dispatch context block (orchestrator-side view).
 
@@ -232,7 +258,19 @@ def build_dispatch_context(
 
     Returns a plain dict (caller decides serialization / injection)."""
     ws = Path(ws)
-    return {
+    # #692 WP4: providers ride the context (fail-open, optional key) so the
+    # worker holds in-flight degradation authority; explicit capability
+    # wins, else the claim's validated capability. NOT in
+    # VERIFIER_SAFE_KEYS — the verifier stays BLIND to the dispatch
+    # contract (same class as tier/tools).
+    try:
+        providers = _providers_block(
+            ws,
+            capability or _validated_capability(
+                ws, claim_id).get("capability"))
+    except Exception:  # noqa: BLE001 — context build never raises
+        providers = None
+    ctx = {
         "version": CONTEXT_BLOCK_VERSION,
         "claim_id": claim_id,
         "tier": tier,
@@ -246,6 +284,9 @@ def build_dispatch_context(
         "plan_ref": _plan_ref(ws, claim_id),
         "sibling_claims": _sibling_claims(ws, claim_id),
     }
+    if providers is not None:
+        ctx["providers"] = providers
+    return ctx
 
 
 def validate_context_shape(ctx: dict) -> None:
@@ -288,6 +329,16 @@ def validate_context_shape(ctx: dict) -> None:
     if not str(ctx["dispatch_ts"]).endswith("Z"):
         raise ValueError(
             f"context dispatch_ts {ctx['dispatch_ts']!r} is not UTC Z-form")
+    # #692 WP4: providers is OPTIONAL (#527 backward compat); when present
+    # it must be the select_providers face: {capability, providers, ...}.
+    if "providers" in ctx:
+        prov = ctx["providers"]
+        if not isinstance(prov, dict) or "capability" not in prov \
+                or "providers" not in prov:
+            raise ValueError(
+                "context 'providers' must be a dict carrying "
+                "'capability' and 'providers' keys (the #692 "
+                "select_providers face)")
 
 
 def apply_dispatch_context(ws: Path, ctx: dict) -> Path:

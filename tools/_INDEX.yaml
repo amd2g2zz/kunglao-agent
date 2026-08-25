@@ -301,3 +301,78 @@ tools:
     cost_tier: probe
     input_output: {input: sample-derived text (--in/stdin) + --mode zero-width|homoglyph|markers|full + --report-only, output: sanitized text or JSON (zwx_count/homoglyph_count/marker_count/suspicious/sha256) + --reproduce field=value}
     when_not: not needed when the text is not consumed by an LLM worker
+
+
+  # -- android capability providers (#692 WP1; annotation block design D1) --
+  # The registry IS the capability-provider matrix (design D0): multi-provider
+  # = multiple entries sharing capability tags. Entries without `provider`
+  # are legacy and carry no annotation block (opt-in, no behavior change).
+  - name: jadx-decompile
+    category: static
+    capability: android:java-source
+    description: DEX-to-Java decompiler (jadx)
+    tier: T1
+    cost_tier: deep
+    input_output: {input: "APK/JAR via worker-dispatched external jadx CLI (mem-gated by tools/static/apk_mem_gate.py, verdict in evidence/apk_mem_gate.json)", output: "decompiled Java source tree under evidence/"}
+    when_not: "not when the apk_mem_gate verdict is smali-only/refuse (blocked - mem budget; the #670 gate is this provider's precondition, not a pipeline stage); not for 1:1 bytecode truth (baksmali-xref)"
+    provider: jadx
+    produces: [android:java-source]
+    requires: [dex, mem_budget_ok, jadx_bin]
+    cost_hint: {mem_gb: 4.0, time: deep}
+    quality: {android:java-source: high}
+
+  - name: baksmali-xref
+    category: static
+    capability: android:bytecode-truth
+    description: DEX 1:1 smali + xref index
+    tier: T1
+    cost_tier: deep
+    input_output: {input: "APK/DEX (wrapped by tools/static/baksmali_index.py)", output: "evidence/smali_index.json - gitnexus-shape classes/methods/xrefs (#670 wire); the smali text is the 1:1 bytecode truth for fact anchors"}
+    when_not: "not for java-like source (jadx-decompile / dexdc-decompile); not for graph RAG queries over source (gitnexus-query)"
+    provider: baksmali
+    produces: [android:bytecode-truth, android:java-source, android:call-graph, android:dex-rewrite]
+    requires: [dex, smali_toolchain]
+    cost_hint: {mem_gb: 1.0, time: deep}
+    quality: {android:bytecode-truth: high, android:java-source: floor, android:call-graph: floor, android:dex-rewrite: mid}
+
+  - name: apkid-prescan
+    category: static
+    capability: android:packer-fingerprint
+    description: APK packer/compiler fingerprint
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: "APK (wrapped by scripts/apkid_scanner.py)", output: "evidence/apkid.json - packer/compiler/obfuscator/anti-* summary; the obfuscator tag feeds the WP6 deobf prior"}
+    when_not: "not on non-Android targets; not a provider for the D0 matrix capabilities - its tags raise priors only"
+    provider: apkid
+    produces: [android:packer-fingerprint]
+    requires: [dex]
+    cost_hint: {mem_gb: 0.5, time: cheap}
+    quality: {android:packer-fingerprint: high}
+
+  - name: gitnexus-query
+    category: static
+    capability: android:semantic-query
+    description: Source-tree graph RAG queries
+    tier: T1
+    cost_tier: deep
+    input_output: {input: "indexed decompiled source tree (16 MCP tools via the gitnexus server; index built lazily on claim demand, marker evidence/gitnexus_index.json)", output: "dependency/call-chain/execution-flow graph answers via Graph RAG"}
+    when_not: "not a decompiler; not without an indexed source tree (lazy build - never pre-run); not for DEX without source (dexdc CFG / baksmali xref instead)"
+    provider: gitnexus
+    produces: [android:semantic-query, android:call-graph]
+    requires: [source_tree, gitnexus_index]
+    cost_hint: {mem_gb: 1.0, time: deep}
+    quality: {android:semantic-query: high, android:call-graph: high}
+
+  - name: dexdc-decompile
+    category: static
+    capability: android:java-source
+    description: Rust DEX decompiler + taint
+    tier: T1
+    cost_tier: deep
+    input_output: {input: "APK/DEX via tools/static/dexdc_scanner.py (PyO3 wheel dex_decompiler, CLI dex-decompile fallback; no JVM)", output: "evidence/dexdc_index.json (gitnexus-shape classes/methods/xrefs + per-method cfg) + evidence/dexdc_taint.json (IssueReport issues source->sink with traces)"}
+    when_not: "not the highest-fidelity java source when jadx runs within budget (jadx stays high); its value is data-flow/string-decrypt/algorithm-verify which jadx lacks; not for dex rewrite (baksmali/dexlib2)"
+    provider: dexdc
+    produces: [android:java-source, android:call-graph, android:data-flow, android:string-decrypt, android:algorithm-verify]
+    requires: [dex, dexdc_wheel]
+    cost_hint: {mem_gb: 1.0, time: deep}
+    quality: {android:java-source: mid, android:call-graph: mid, android:data-flow: high, android:string-decrypt: high, android:algorithm-verify: high}

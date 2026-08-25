@@ -93,6 +93,7 @@ assets:
     # #670: memory-gated jadx dispatch estimator (APK/JAR) + DEX xref
     - tools/static/apk_mem_gate.py
     - tools/static/baksmali_index.py
+    - tools/static/dexdc_scanner.py   # #692 WP2 dexdc provider
     - tools/static/binary-sweep.py
     - tools/static/c_normalize.py
     - tools/static/call-site-args.py

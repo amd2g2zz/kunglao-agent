@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timezone
 import re
 import sys
 from dataclasses import dataclass, field
@@ -406,6 +407,106 @@ def _extract_sample_refs(fact_text: str) -> List[str]:
 # CLI (design D6)
 # ---------------------------------------------------------------------------
 
+# ---------- #692 WP5: taint findings as observations ----------
+
+TAINT_SEEDS_FILE = (Path(__file__).resolve().parent.parent / "references" /
+                    "re-library" / "android-fingerprint-seeds.yaml")
+DEFAULT_TAINT_THRESHOLD = 2   # distinct high-risk categories
+
+
+def _taint_seed_map() -> dict:
+    """api -> (category, risk) from the fingerprint seed table (fail-open)."""
+    try:
+        import yaml
+        data = yaml.safe_load(TAINT_SEEDS_FILE.read_text(encoding="utf-8"))
+        entries = data.get("seeds") if isinstance(data, dict) else None
+        return {str(e["api"]): (str(e.get("category", "uncategorized")),
+                                str(e.get("risk", "mid")))
+                for e in (entries or [])
+                if isinstance(e, dict) and e.get("api")}
+    except Exception:  # noqa: BLE001 - fail-open, no table = no scoring
+        return {}
+
+
+def observe_taint(ws, threshold=None) -> List[dict]:
+    """#692 WP5: taint findings as anomaly OBSERVATIONS.
+
+    #663 D8 posture: an OBSERVATION, never a verdict demotion - no fact
+    status changes. Reads evidence/dexdc_taint.json (status ok); scores
+    the DISTINCT high-risk seed-category concentration; >= threshold
+    (default 2) distinct high-risk categories -> write
+    notes/taint-observation.md (co-resident observation note, the same
+    face as _write_anomaly_note). Fail-open: missing/bad evidence or an
+    unreadable table -> [] (never raises). Returns [observation] or [].
+    """
+    ws = Path(ws)
+    if threshold is None:
+        threshold = DEFAULT_TAINT_THRESHOLD
+    try:
+        data = json.loads((ws / "evidence" / "dexdc_taint.json")
+                          .read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    if not isinstance(data, dict) or data.get("status") != "ok":
+        return []
+    issues = data.get("issues") or []
+    if not issues:
+        return []
+
+    seed_map = _taint_seed_map()
+    high_cats: dict = {}
+    for issue in issues:
+        source = str((issue or {}).get("source") or "").strip()
+        if not source:
+            continue
+        category, risk = seed_map.get(source, ("uncategorized", "mid"))
+        if risk == "high":
+            high_cats.setdefault(category, set()).add(source)
+
+    if len(high_cats) < threshold:
+        return []
+
+    notes_dir = ws / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    note_path = notes_dir / "taint-observation.md"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    cats_md = "\n".join(
+        "- **%s**: %s" % (c, ", ".join(sorted(apis)))
+        for c, apis in sorted(high_cats.items()))
+    body = (
+        "---\n"
+        "id: taint-observation\n"
+        "type: observation\n"
+        "boundary_type: anomaly\n"
+        "score: %.3f\n" % (len(high_cats) / max(threshold, 1)) +
+        "top_dimension: taint_concentration\n"
+        "anomaly_threshold: %d\n" % threshold +
+        "verify_status: pending\n"
+        "claim_id: C-NNN\n"
+        "created: %s\n" % today +
+        "last_reviewed: %s\n" % today +
+        "---\n\n"
+        "# Taint observation (dexdc)\n\n"
+        "%d distinct high-risk fingerprint families flow to sinks in "
+        "evidence/dexdc_taint.json (%d issue(s)):\n\n%s\n\n"
+        "Per #663 D8: this is a co-resident OBSERVATION, not a verdict "
+        "demotion. Per #692/#662: the dual competing explanations are "
+        "risk-control collection vs malicious tracking - adjudicate on "
+        "the pq-family hypothesis (taint:<category>:<api> candidates).\n"
+        % (len(high_cats), len(issues), cats_md) +
+        "\n## Analyst action\n\n"
+        "- [ ] Review sinks (exfil vs local log) before labeling\n"
+        "- [ ] Confirm or refute the observation note\n"
+    )
+    note_path.write_text(body, encoding="utf-8")
+    return [{
+        "categories": sorted(high_cats),
+        "apis": sorted(a for v in high_cats.values() for a in v),
+        "issue_count": len(issues),
+        "note": "notes/taint-observation.md",
+    }]
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="anomaly_detector — scan workspace for anomalous facts"
@@ -414,7 +515,23 @@ def main(argv=None) -> int:
     parser.add_argument("--json", action="store_true", help="JSON output")
     parser.add_argument("--threshold", type=float, default=None,
                         help=f"anomaly threshold (default {DEFAULT_THRESHOLD})")
+    parser.add_argument("--taint", action="store_true",
+                        help="#692 WP5: taint-findings observation mode "
+                             "(distinct high-risk family concentration -> "
+                             "notes/taint-observation.md)")
     args = parser.parse_args(argv)
+
+    if args.taint:
+        observations = observe_taint(args.workspace)
+        if args.json:
+            print(json.dumps({"taint_observations": observations,
+                              "count": len(observations)},
+                             ensure_ascii=False, indent=2))
+        else:
+            for o in observations:
+                print("TAINT-OBSERVATION: %s (%s)"
+                      % (",".join(o["categories"]), o["note"]))
+        return 0
 
     facts_dir = args.workspace / "facts"
     index_path = facts_dir / "_INDEX.md"

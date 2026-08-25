@@ -220,6 +220,12 @@ FIXES: dict[str, ToolMeta] = {
         description="post-decompile code graph builder (npm)",
         url="https://www.npmjs.com/package/gitnexus",
         package="gitnexus", verify_cmd="gitnexus --version"),
+    "dexdc": ToolMeta(
+        fix="install dex-decompiler: build the PyO3 wheel (cd dex-decompiler-py && maturin build --release && pip install target/wheels/dex_decompiler-*.whl) or cargo build --release; verify `pip show dex_decompiler`",
+        description="Rust DEX decompiler + per-method CFG + value-flow taint + offline emulator (no JVM)",
+        url="https://github.com/androguard/dex-decompiler",
+        repo="https://github.com/androguard/dex-decompiler",
+        verify_cmd="pip show dex_decompiler"),
     "apkid": ToolMeta(
         fix="install apkid: `pip install apkid` (https://github.com/rednaga/APKiD); verify `apkid --version` returns 2.x",
         description="APK packer/compiler/obfuscator fingerprinting (YARA)",
@@ -356,6 +362,8 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "jadx": NextAction("install"),
     "apktool": NextAction("install"),
     "gitnexus": NextAction("install", "npm i -g gitnexus"),
+    "dexdc": NextAction("install",
+                        "cd dex-decompiler-py && maturin build --release && pip install target/wheels/dex_decompiler-*.whl"),
     "apkid": NextAction("install", "pip install apkid"),
     "baksmali": NextAction("install",
                            "download from https://github.com/baksmali/smali/releases (or apt install baksmali)"),

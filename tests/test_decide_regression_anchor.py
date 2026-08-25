@@ -50,8 +50,8 @@ import convergence_check  # module under test (== baseline before #443 GREEN)
 # so 31 frozen cases failed from that point on. The c5cb1ae anchor remains
 # recoverable from git history (and documents the original #443
 # zero-semantics-change proof). Machine-generated via .tmp/regen_anchor.py.
-BASELINE_COMMIT = "619ebd3"  # dev HEAD at the 2026-08-25 anchor re-pin
-ANCHOR_FILE = Path(__file__).parent / "decide_anchor_619ebd3.json"
+BASELINE_COMMIT = "8804dcd"  # dev HEAD at the 2026-08-26 re-pin (#707 contradiction annotation is an intentional decide() semantics change)
+ANCHOR_FILE = Path(__file__).parent / "decide_anchor_8804dcd.json"
 
 _CLEAN_INDEX = "# facts\n"
 _CONTRA_INDEX = (
@@ -463,7 +463,22 @@ def build_case(name: str, base: Path | None = None) -> Path:
 # ------------------------------------------------------------- baseline IO
 
 def _canonical(d: dict) -> str:
-    return json.dumps(d, sort_keys=True, ensure_ascii=False, default=str)
+    """Canonical JSON for anchor equality — floats rounded to 12 decimals.
+
+    Rationale (#692 CI, 2026-08-26): anomaly scores are mean-of-ratios whose
+    last significant digit is a 1-ULP platform artifact (Windows CPython vs
+    Linux CPython libm differ at the 16th sig fig: 0.9058402860548272 vs
+    0.905840286054827). Rounding lives in the COMPARISON layer only — fact
+    values keep full precision; semantic drift beyond 1e-12 still fails."""
+    def _round(obj):
+        if isinstance(obj, float):
+            return round(obj, 12)
+        if isinstance(obj, dict):
+            return {k: _round(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_round(v) for v in obj]
+        return obj
+    return json.dumps(_round(d), sort_keys=True, ensure_ascii=False, default=str)
 
 
 class BaselineUnavailable(RuntimeError):

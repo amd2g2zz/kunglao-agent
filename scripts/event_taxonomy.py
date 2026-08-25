@@ -181,6 +181,7 @@ EMIT_ACTIONS = [
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face
     "stale_plan_on_new_evidence",
+    "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
     "verify",

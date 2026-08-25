@@ -239,6 +239,114 @@ def seed_apkid_candidates(ws: Path) -> int:
     return appended
 
 
+# ---------- #692 WP5: dexdc taint findings -> competitor candidates ------
+
+_TAINT_PQ_TOKENS = ("collect", "fingerprint", "device", "track", "privacy",
+                    "exfil", "sdk", "risk", "\u91c7\u96c6", "\u9690\u79c1",
+                    "\u98ce\u63a7", "\u8ffd\u8e2a")
+
+_TAINT_SEEDS_FILE = (Path(__file__).resolve().parent.parent /
+                     "references" / "re-library" /
+                     "android-fingerprint-seeds.yaml")
+
+
+def _taint_api_categories() -> dict:
+    """api -> category from the fingerprint seed table (fail-open {})."""
+    try:
+        data = yaml.safe_load(
+            _TAINT_SEEDS_FILE.read_text(encoding="utf-8"))
+        entries = data.get("seeds") if isinstance(data, dict) else None
+        return {str(e.get("api")): str(e.get("category"))
+                for e in (entries or [])
+                if isinstance(e, dict) and e.get("api")}
+    except (OSError, ValueError, yaml.YAMLError):
+        return {}
+
+
+def _taint_relevant_qids(task_spec: dict) -> list:
+    """PQ ids whose id/question text matches a taint relevance token."""
+    questions, _err = _parse_primary_questions(task_spec)
+    raw = task_spec.get("primary_questions") or []
+    out: list = []
+    for qid, _need in questions:
+        text = str(qid).lower()
+        if isinstance(raw, list):
+            for item in raw:
+                if isinstance(item, dict) and item.get("id") == qid:
+                    for v in item.values():
+                        if isinstance(v, str):
+                            text += " " + v
+                    break
+        if any(t.lower() in text for t in _TAINT_PQ_TOKENS):
+            out.append(qid)
+    return out
+
+
+def seed_taint_candidates(ws: Path) -> int:
+    """Append dexdc-taint-derived candidates to pq-family scaffolds
+    (#692 WP5 - the exact mirror of seed_apkid_candidates #669).
+
+    Reads <ws>/evidence/dexdc_taint.json when present (status == ok). For
+    each issue, candidate = ``taint:<category>:<source>`` (category from
+    the fingerprint seed table; ``uncategorized`` when not in it). Appends
+    to hypotheses whose competitor_group == pq-<qid> for PQs whose
+    id/question matches a taint relevance token. Idempotent + fail-open
+    (missing evidence / bad JSON / no task_spec -> 0, never raises).
+    Returns the count of NEW candidates appended.
+    """
+    ws = Path(ws)
+    evidence_path = ws / "evidence" / "dexdc_taint.json"
+    if not evidence_path.exists():
+        return 0
+    try:
+        data = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return 0
+    if not isinstance(data, dict) or data.get("status") != "ok":
+        return 0
+    issues = data.get("issues") or []
+    if not issues:
+        return 0
+
+    qids = _taint_relevant_qids(_load_task_spec(ws))
+    if not qids:
+        return 0
+
+    api_cats = _taint_api_categories()
+    store = HypothesisStore(ws / "hypotheses")
+    if not store.root.is_dir():
+        return 0
+
+    appended = 0
+    for qid in qids:
+        target_group = "pq-%s" % qid
+        matching = [h for h in store.list_all()
+                    if h.competitor_group == target_group]
+        for hyp in matching:
+            existing = set(hyp.candidates)
+            new_candidates: list = []
+            for issue in issues:
+                source = str((issue or {}).get("source") or "").strip()
+                if not source:
+                    continue
+                category = api_cats.get(source, "uncategorized")
+                cand = "taint:%s:%s" % (category, source)
+                if cand not in existing and cand not in new_candidates:
+                    new_candidates.append(cand)
+            if new_candidates:
+                hyp.candidates = list(hyp.candidates) + new_candidates
+                store._write(hyp)
+                appended += len(new_candidates)
+                try:
+                    from kunglao_log import emit
+                    emit(ws, actor="hypothesis_seeder",
+                         action="taint_candidates",
+                         detail="%s +%d" % (hyp.id, len(new_candidates)))
+                except Exception:  # noqa: BLE001 - logging never breaks seeding
+                    pass
+    return appended
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="hypothesis_seeder — seed PQ scaffolds into hypotheses/")
