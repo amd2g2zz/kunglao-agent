@@ -196,6 +196,45 @@ release (see the mapping table at the end).
   non-APK -> error, RED4 schema shape always populated, RED5 toolchain
   registers apkid, RED6 hypothesis_seeder appends candidates,
   RED6b no apkid file -> noop).
+- memory-gated jadx dispatch (#670): `tools/static/apk_mem_gate.py` (NEW)
+  - T1 memory-aware estimator. Calibrated against a single data point
+  (395MB APK / 12GB heap / ~10h GC-thrashed completion): `est =
+  max(4GB, 50 * dex_bytes_total)`, `budget = 0.65 * avail_gb`. Verdict
+  selects dispatch path: `jadx-ok` (budget >= 1.5*est), `targeted-jadx`
+  (est <= budget < 1.5*est -> baksmali xref + per-class jadx), `smali-only`
+  (budget < est -> baksmali + smali semantic), `refuse` (JAR target -
+  pure Java has no smali fallback; analysis cannot proceed). Writes
+  `evidence/apk_mem_gate.json` ALWAYS (fail-open, operator audit). Stdlib
+  memory detection: ctypes GlobalMemoryStatusEx (Windows) / sysconf
+  (POSIX) with 4GB fallback on failure. Operator escape hatch via
+  `analysis_state.txt` (`apk_mem_override=jadx|baksmali|refuse`).
+  Calibration basis string travels in JSON per #54 numeric-fidelity.
+- `tools/static/baksmali_index.py` (NEW) - replaces gitnexus's role for
+  DEX (gitnexus is Java-only). Calls `baksmali list --format json` for
+  class enumeration + per-class `baksmali xref` for call graphs.
+  Emits `evidence/smali_index.json` in gitnexus-shape compat
+  (`{tool, version, target, classes:[{name, methods:[{name, signature,
+  xrefs:{calls, called_by}}]}], scanned_at}`) so downstream consumers
+  (#663 anomaly, #662 hypothesis) don't branch on tool identity. The
+  "system optimum" wire per user's "思考当前体系怎么最优的发挥作用"
+  directive.
+- `scripts/toolchain.py`: FIXES + `_STATIC_NEXT_ACTIONS` gain `baksmali`
+  (URL `https://github.com/baksmali/smali/releases` embedded inline -
+  second tool entry after #669 apkid to carry upstream URL; addresses
+  user's "agents have to search for tool addresses" feedback).
+- `scripts/convergence_check.py`: `Event` enum gains `JADX_INFEASIBLE`
+  (intake-level, NOT in DRAIN - the REFUSE verdict aborts intake BEFORE
+  convergence starts; name exists for observability consistency).
+- tests/test_apk_mem_gate.py: 9 RED -> GREEN cases (RED1 small APK +
+  9.5GB avail -> jadx-ok, RED2 large APK + 1GB avail -> smali-only,
+  RED3 90MB APK + 7.5GB avail -> targeted-jadx, RED4 JAR -> refuse
+  regardless of budget, RED5 dex_bytes_total = sum of dex sizes not zip
+  overhead, RED6 avail_gb fallback on detection failure, RED7
+  calibration_basis always populated, RED8 evidence JSON written even
+  on REFUSE, RED8b operator override apk_mem_override=jadx).
+- tests/test_baksmali_index.py: 4 RED -> GREEN cases (RED1 baksmali
+  missing -> noop + warning, RED2 schema shape, RED3 gitnexus-shape
+  compat, RED4 per-class xref fail-open).
 
 ## [0.1.2] - 2026-08-23
 

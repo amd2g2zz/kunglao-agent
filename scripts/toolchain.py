@@ -126,6 +126,7 @@ FIXES: dict[str, str] = {
     "apktool": "install apktool and add it to PATH",
     "gitnexus": "npm i -g gitnexus (or install per GitNexus docs); verify `gitnexus --version`",
     "apkid": "install apkid: `pip install apkid` (https://github.com/rednaga/APKiD); verify `apkid --version` returns 2.x",
+    "baksmali": "install baksmali (https://github.com/baksmali/smali/releases - download jar or `apt install baksmali`); verify `baksmali --version` returns 2.x",
     "adb": "install Android SDK platform-tools and add adb to PATH; attach a device (`adb devices` must be non-empty)",
     "device_root": "root the device: `adb root` (emulator) or su via Magisk; verify `adb shell su -c id` returns uid=0",
     "debug_flag": "set the debug flag: `adb shell am set-debug-app -w <pkg>` or `adb shell setprop ro.debuggable 1`; verified at init via `adb shell getprop ro.debuggable` (must read back 1)",
@@ -216,6 +217,8 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "apktool": NextAction("install"),
     "gitnexus": NextAction("install", "npm i -g gitnexus"),
     "apkid": NextAction("install", "pip install apkid"),
+    "baksmali": NextAction("install",
+                           "download from https://github.com/baksmali/smali/releases (or apt install baksmali)"),
     "adb": NextAction("install",
                       "install Android SDK platform-tools and add adb to PATH"),
     "device_root": NextAction(

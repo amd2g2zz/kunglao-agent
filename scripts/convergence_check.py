@@ -577,6 +577,9 @@ class Event(str, Enum):
     LADDER_REQUIRED_BLOCKER = "LADDER_REQUIRED_BLOCKER"    # #497 climb flavor
     LADDER_EXHAUSTED_BLOCKER = "LADDER_EXHAUSTED_BLOCKER"  # #497 exhaustion marker
     UNEXPECTED_STATE = "UNEXPECTED_STATE"                  # SCHEDULE catch-all
+    # #670 intake-level (NOT in DRAIN) - the REFUSE verdict aborts intake
+    # BEFORE convergence_check starts; the name exists for observability.
+    JADX_INFEASIBLE = "JADX_INFEASIBLE"
 
 
 # Terminal state -> (decision, exit_code). Single binding point: a new
