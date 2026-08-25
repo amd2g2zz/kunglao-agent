@@ -1,0 +1,82 @@
+# acceptance_smoke.txt — pinned smoke subset for acceptance_check.py (#689)
+#
+# One pytest nodeid per line ("#" comments and blank lines ignored).
+# Purpose: test_suite_green asserts the core machinery is ALIVE — it is NOT
+# regression enforcement. Full-suite green is Gate 2 (devkit/quality_gates.py
+# Regression Safety); pytest must not nest full pytest (O(n^2), #689).
+#
+# Curation rules (design.md D2):
+#   - core-mechanism coverage: priority / digest / convergence / 3 CLIs /
+#     event-concurrency / evals schema
+#   - green on dev (never in the 102-failure baseline ledger)
+#   - zero overlap with in-flight PR #681-#684 file sets
+#   - a renamed/deleted test makes pytest exit nonzero ("no tests ran") —
+#     the manifest cannot silently shrink; fix the pin deliberately
+tests/test_priority_ratio.py::test_voi_formula_not_additive_not_old
+tests/test_priority_ratio.py::test_leverage_terminal_claim_is_zero
+tests/test_priority_ratio.py::test_leverage_higher_with_more_open_downstream
+tests/test_priority_ratio.py::test_discriminator_active_competitor_group_top
+tests/test_priority_ratio.py::test_discriminator_answers_question_middle
+tests/test_priority_ratio.py::test_discriminator_else_floor
+tests/test_priority_ratio.py::test_novelty_drops_with_prior_facts_in_category
+tests/test_priority_ratio.py::test_cost_tier_penalty
+tests/test_priority_ratio.py::test_scoring_is_deterministic_pure
+tests/test_priority_ratio.py::test_c401_c402_not_tied_when_signals_differ
+tests/test_priority_ratio.py::test_terminal_status_claims_never_ranked
+tests/test_digest.py::test_digest_has_six_sections
+tests/test_digest.py::test_digest_size_upper_bound
+tests/test_digest.py::test_digest_writes_to_runs
+tests/test_digest.py::test_numeric_fidelity_unit_carried
+tests/test_digest.py::test_completeness_new_verified_fact_in_digest
+tests/test_digest.py::test_digest_no_llm_pure_mechanical
+tests/test_digest.py::test_failure_registry_structured
+tests/test_digest.py::test_digest_handles_empty_workspace
+tests/test_convergence_rules_file.py::test_rules_file_exists
+tests/test_convergence_rules_file.py::test_rules_file_lte_150_lines
+tests/test_convergence_rules_file.py::test_outline_markers_present
+tests/test_convergence_rules_file.py::test_no_long_verbatim_blocks_from_reference
+tests/test_convergence_completeness.py::test_orphan_terminal_blocks_converged
+tests/test_convergence_completeness.py::test_orphan_terminal_with_blocked_converged_downgrade
+tests/test_convergence_completeness.py::test_stamp_answering_claim_blocks_converged
+tests/test_convergence_completeness.py::test_unverified_answering_claim_blocks_converged
+tests/test_convergence_completeness.py::test_spinning_flatline_not_hidden_by_dedup
+tests/test_convergence_completeness.py::test_spinning_flatline_30s_apart
+tests/test_convergence_completeness.py::test_same_turn_rapid_calls_still_dedup
+tests/test_convergence_completeness.py::test_all_proven_zero_orphan_converged
+tests/test_convergence_completeness.py::test_converged_includes_completeness_fields
+tests/test_convergence_completeness.py::test_no_primary_questions_still_converged
+tests/test_convergence_completeness.py::test_parse_primary_questions_accepts_each_form
+tests/test_convergence_completeness.py::test_parse_primary_questions_rejects_malformed
+tests/test_convergence_completeness.py::test_legacy_one_key_mapping_feeds_all_gates
+tests/test_convergence_completeness.py::test_malformed_mapping_returns_invalid
+tests/test_convergence_completeness.py::test_mixed_list_with_malformed_item_invalid
+tests/test_convergence_completeness.py::test_invalid_schema_blocks_dispatch_too
+tests/test_convergence_completeness.py::test_duplicate_question_ids_invalid
+tests/test_convergence_completeness.py::test_mixed_accepted_forms_normalize_and_converge
+tests/test_convergence_completeness.py::test_top_level_mapping_form_preserved
+tests/test_convergence_completeness.py::test_explicit_empty_list_feature_unused
+tests/test_verify_record_monitor.py::test_known_fact_pass_fake_fact_fail
+tests/test_verify_record_monitor.py::test_anchor_check_blocks_no_anchor
+tests/test_verify_record_monitor.py::test_ledger_idempotent_same_event_once
+tests/test_verify_record_monitor.py::test_monitor_tick_output_schema
+tests/test_verify_record_monitor.py::test_claim_migrator_blocks_worker_terminal
+tests/test_record_event_concurrent.py::test_concurrent_record_events_no_loss
+tests/test_record_event_concurrent.py::test_concurrent_many_events_no_loss
+tests/test_record_event_concurrent.py::test_idempotency_preserved_under_append_mode
+tests/test_record_event_concurrent.py::test_seq_increments_monotonically
+tests/test_record_event_concurrent.py::test_read_events_still_works
+tests/test_evals_schema.py::TestEvalsJsonExists::test_file_exists
+tests/test_evals_schema.py::TestEvalsJsonExists::test_valid_json
+tests/test_evals_schema.py::TestEvalsJsonStructure::test_skill_name
+tests/test_evals_schema.py::TestEvalsJsonStructure::test_evals_is_array
+tests/test_evals_schema.py::TestEvalsJsonStructure::test_minimum_three_evals
+tests/test_evals_schema.py::TestEvalsJsonFields::test_required_keys_present
+tests/test_evals_schema.py::TestEvalsJsonFields::test_id_is_positive_int
+tests/test_evals_schema.py::TestEvalsJsonFields::test_prompt_is_string
+tests/test_evals_schema.py::TestEvalsJsonFields::test_expected_output_is_string
+tests/test_evals_schema.py::TestEvalsJsonFields::test_expectations_is_nonempty_list
+tests/test_evals_schema.py::TestEvalsJsonFields::test_files_optional_but_list
+tests/test_evals_schema.py::TestEvalsJsonFields::test_unique_ids
+tests/test_evals_schema.py::TestEvalsCoverageScenarios::test_eval1_convergence_dispatch
+tests/test_evals_schema.py::TestEvalsCoverageScenarios::test_eval2_maker_checker
+tests/test_evals_schema.py::TestEvalsCoverageScenarios::test_eval3_verdict_decoupled

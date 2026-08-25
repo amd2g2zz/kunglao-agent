@@ -21,17 +21,11 @@ def test_acceptance_has_five_checks():
     assert must <= names, f"missing acceptance item(s): {must - names}"
 
 
-def test_test_suite_green_timeout_fits_full_suite():
-    """#351: _check_test_suite embeds the full suite as a subprocess; the timeout must accommodate the suite's real duration
-    (CI measured ~2.5 min). 60s constantly times out → acceptance always red."""
-    assert ac.TEST_SUITE_TIMEOUT >= 300, (
-        f"TEST_SUITE_TIMEOUT={ac.TEST_SUITE_TIMEOUT} — full suite CI actually runs ~150s, "
-        "an overly short timeout makes test_suite_green always fail on timeout")
-
-
 def test_test_suite_green_keeps_quiet_no_cache_pytest_flags():
-    """#351: the embedded pytest invocation keeps -q --tb=no -p no:cacheprovider and
-    excludes itself (otherwise recursive embedding)."""
+    """#351/#689: the embedded pytest invocation keeps -q --tb=no -p no:cacheprovider and
+    excludes itself (a pinned acceptance nodeid would otherwise recurse; the
+    default path is the pinned smoke subset per #689 — full-suite enforcement
+    lives in devkit/quality_gates.py Gate 2)."""
     src = inspect.getsource(ac._check_test_suite)
     assert "-q" in src and "--tb=no" in src and "no:cacheprovider" in src
     assert "--ignore=tests/test_acceptance.py" in src

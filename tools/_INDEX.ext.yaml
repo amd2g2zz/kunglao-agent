@@ -17,7 +17,7 @@ ext:
     capability: "unknown"
     source: "scripts/acceptance_check.py"
     usage: "python scripts/acceptance_check.py"
-    description: "acceptance_check.py — end-to-end acceptance (issue #6, plan §2.3/§9)."
+    description: "acceptance_check.py — end-to-end acceptance (issue #6, plan §2.3/§9; #689)."
   - name: "active_intervention"
     capability: "unknown"
     source: "scripts/active_intervention.py"
