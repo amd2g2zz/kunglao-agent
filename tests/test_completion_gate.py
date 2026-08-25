@@ -249,6 +249,7 @@ def test_cli_all_closed_exits_0(tmp_path):
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "completion_gate.py"), str(p)],
         capture_output=True, text=True,
+        encoding="utf-8", errors="replace",  # #672/#317: GBK default breaks on em-dash in reason strings
     )
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
@@ -260,6 +261,7 @@ def test_cli_regression_exits_1(tmp_path):
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "completion_gate.py"), str(p)],
         capture_output=True, text=True,
+        encoding="utf-8", errors="replace",  # #672/#317: GBK default breaks on em-dash in reason strings
     )
     assert r.returncode == 1, r.stderr
     out = json.loads(r.stdout)
@@ -273,6 +275,7 @@ def test_cli_missing_file_exits_3(tmp_path):
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "completion_gate.py"), str(missing)],
         capture_output=True, text=True,
+        encoding="utf-8", errors="replace",  # #672/#317: GBK default breaks on em-dash in reason strings
     )
     assert r.returncode == 3, r.stderr
     # missing oracle → exit 3 (refuse self-anchor); clear message on stderr or stdout

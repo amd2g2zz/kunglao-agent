@@ -235,6 +235,12 @@ release (see the mapping table at the end).
 - tests/test_baksmali_index.py: 4 RED -> GREEN cases (RED1 baksmali
   missing -> noop + warning, RED2 schema shape, RED3 gitnexus-shape
   compat, RED4 per-class xref fail-open).
+- Windows GBK subprocess fix (#672, redo of PR #683 on the post-#685
+  base): tests/test_completion_gate.py's three CLI-spawning subprocess
+  calls gain `encoding="utf-8", errors="replace"` — the GBK default
+  codec on Windows crashed `capture_output=True, text=True` on the
+  em-dash in completion-gate reason strings (the #317 canonical
+  safe-default, already the pattern in test_env_check.py:108).
 - CI release-check restoration (dev branch red since #661; 10 root-cause
   classes fixed in one pass):
   1. kunglao-init.py `from _entry import run` shadowed the module's own
