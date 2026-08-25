@@ -915,13 +915,89 @@ def _act_note_gap(s: _DecideInputs) -> str:
             f"Run verify-note.py before delivery.")
 
 
+def _scan_proven_facts(workspace: Path) -> dict[str, str]:
+    """Lightweight _INDEX scan for PROVEN fact id->conclusion map (fail-open).
+
+    Same pattern as _partial_facts (line 164). No schema validation, no YAML
+    parsing, no exceptions on malformed rows."""
+    idx = workspace / "facts" / "_INDEX.md"
+    if not idx.exists():
+        return {}
+    proven: dict[str, str] = {}
+    try:
+        text = idx.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return {}
+    for line in text.splitlines():
+        if "|" not in line:
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) < 4:
+            continue
+        if parts[1].upper() == "PROVEN":
+            proven[parts[0]] = parts[3]
+    return proven
+
+
+# Negation keywords for Path B (candidate heuristic). Lowercase; matched
+# after lowercasing the conclusion text.
+_NEGATION_KEYWORDS = ("not ", "never ", "rather than ", "instead of ", "is not ", "are not ")
+
+
+def _detect_contradiction(hyp_body: str, candidates: list[str],
+                          proven: dict[str, str]) -> str | None:
+    """Return an annotation snippet if hyp_body / candidates are contradicted
+    by a PROVEN fact, else None.
+
+    Path A — explicit PROVEN fact reference in hypothesis body:
+      scans hyp_body for F<digits> patterns, verifies each is in `proven`.
+    Path B — candidate negation heuristic:
+      for each PROVEN fact conclusion containing a negation keyword,
+      checks whether a candidate appears after the negation keyword.
+    Both paths are fail-open: any exception produces None."""
+    try:
+        # Path A: explicit fact ID in body
+        for m in re.finditer(r"F[-\s]?(\d+)", hyp_body):
+            fid = f"F{m.group(1)}"
+            if fid in proven:
+                snippet = proven[fid][:80]
+                return f"Contradicted: {fid} (conclusion: {snippet})"
+        # Path B: candidate negation
+        for fid, conclusion in proven.items():
+            lc = conclusion.lower()
+            for kw in _NEGATION_KEYWORDS:
+                idx2 = lc.find(kw)
+                if idx2 >= 0:
+                    after = lc[idx2 + len(kw):].rstrip(".,;")
+                    for cand in candidates:
+                        if cand.lower() == after:
+                            snippet = conclusion[:80]
+                            return f"Contradicted: {fid} ({kw.rstrip()} {cand}, conclusion: {snippet})"
+    except Exception:
+        pass
+    return None
+
+
 def _act_open_hypothesis(s: _DecideInputs) -> str:
     hyps = s.open_hypotheses()
     ids = ", ".join(h.id for h in hyps)
-    return (f"Cannot CONVERGE: {len(hyps)} open hypothesis(ies) {ids} — "
+    base = (f"Cannot CONVERGE: {len(hyps)} open hypothesis(ies) {ids} — "
             f"adjudicate before delivery (refute via refuting_fact_id / "
             f"supersede via superseded_by, per #528 state machine). Scaffold "
             f"candidates=[] must be filled or refuted.")
+    # Scan PROVEN facts for contradiction annotations
+    try:
+        proven = _scan_proven_facts(s.workspace)
+    except Exception:
+        proven = {}
+    annotations: list[str] = []
+    for h in hyps:
+        ann = _detect_contradiction(h.body, h.candidates, proven)
+        if ann:
+            annotations.append(f"  {h.id}: {ann}")
+    if annotations:
+        return base + "\n" + "\n".join(annotations)
+    return base
 
 
 def _act_discovery(s: _DecideInputs) -> str:
