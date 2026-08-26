@@ -58,6 +58,7 @@ _KONG_SKIP_FILES = frozenset({
     "completion_gate.py",   # Stop completion gate — env_check scans it
     "write_guard.py",       # carrier write gate — env_check scans it (#532)
     "orchestrator_tool_guard.py",  # Bash maker-checker WARN — env_check scans it (#608)
+    "violation_capture.py", # Bash violation recorder — env_check scans it (#718)
 })
 
 # #381: validate the subset tables against the registry (raises on drift) —

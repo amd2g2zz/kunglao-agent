@@ -63,6 +63,7 @@ WIRE_UP_HOOK_FILES = frozenset({
     "completion_gate.py",      # Stop — code-owned completion gate (#55)
     "write_guard.py",          # PreToolUse/Edit|Write — contract-carrier write gate (#532)
     "orchestrator_tool_guard.py",  # PreToolUse/Bash — maker-checker WARN (#608, target-based #532-style)
+    "violation_capture.py",    # PostToolUse/Bash — mechanical violation recorder (#718)
 })
 
 

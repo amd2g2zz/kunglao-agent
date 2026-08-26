@@ -208,6 +208,12 @@ def main(argv: list[str] | None = None) -> int:
     # never weighed into rc/alert.
     report["feedback"] = run("feedback.py", ws, "--check-stale")
 
+    # #718 P3: verify-stamp disk-vs-stream reconciliation. Advisory like
+    # the monitor — an UNWITNESSED transition lands in the report + the
+    # event stream (verify_status_change), never in rc/alert (a watch
+    # finding must not fail the tick).
+    report["verify_watch"] = run("verify_status_watch.py", ws, "--json")
+
     sc = report["selfcheck"].get("stdout", "")[:80]
     hb = report["heartbeat"].get("stdout", "")[:120]
     rc_sc = report["selfcheck"].get("rc", -1)

@@ -58,6 +58,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `heartbeat_tick.py` | heartbeat tick runner (hook-invoked + kunglao.py) | hooks, lib(1), tests |
 | `heartbeat_loop_prompt.py` | loop-prompt generator for the tick loop | hooks, tests |
 | `hooks_selfcheck.py` | hook registration self-check (runs hook_activation) | lib(1), tests |
+| `verify_status_watch.py` | verify-stamp disk-vs-stream reconciliation — the anti-sed tamper watch (#718) | heartbeat_tick, tests |
 | `external_kicker.py` | external scheduler kicker (schtasks/crontab-friendly) | tests |
 | `kunglao_record.py` | RECORD implementation module (ledger writes) | lib(2), tests |
 | `kunglao_verify.py` | L1 mechanical verify implementation (reproduce + byte-exact) | lib(3), tests |

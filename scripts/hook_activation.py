@@ -717,6 +717,13 @@ def register_hooks(workspace: Path | None = None,
     # completion — the L1 PREVENT layer (F5 forget/refresh).
     post, added = _ensure(post, "Agent", "state_anchor.py")
     count += added
+    # violation_capture (#718): PostToolUse/Bash mechanical recorder —
+    # out-of-band sed rewrites of contract-carrier fields (the write_guard
+    # bypass) + python tracebacks in tool output. RECORDER, never blocks:
+    # exit 0 forever, events only. Posture mirrors heartbeat_touch (Bash
+    # matcher, fail-open) with the WARN-record semantics of #608.
+    post, added = _ensure(post, "Bash", "violation_capture.py")
+    count += added
 
     # completion_gate (#55): the code-owned completion gate. Stop hook — fires
     # at session termination, blocks when task-oracle.yaml is unsatisfied.

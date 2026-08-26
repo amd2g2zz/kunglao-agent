@@ -49,6 +49,7 @@ REGISTRY_HOOK_FILES = (
     "recall_inject.py", "heartbeat_touch.py", "worker_pulse.py",
     "state_anchor.py", "completion_gate.py", "write_guard.py",  # #532
     "orchestrator_tool_guard.py",  # #608
+    "violation_capture.py",  # #718
 )
 
 

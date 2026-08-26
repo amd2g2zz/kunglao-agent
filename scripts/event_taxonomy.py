@@ -166,6 +166,7 @@ EMIT_ACTIONS = [
     "death_verdict_rejected",
     "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face
     "dispatch",
+    "env_incident",       # #718 violation_capture traceback/env-crash face
     "failure_blocked",
     "hypothesis_seed",    # #662 PQ scaffold seeding
     "ladder_required",
@@ -185,6 +186,8 @@ EMIT_ACTIONS = [
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
     "verify",
+    "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
+    "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
     "write_blocked",
 ]
 

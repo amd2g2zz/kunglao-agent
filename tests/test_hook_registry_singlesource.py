@@ -52,6 +52,7 @@ def test_registry_exists_in_wire_up_settings() -> None:
         "recall_inject.py", "heartbeat_touch.py", "worker_pulse.py",
         "state_anchor.py", "completion_gate.py", "write_guard.py",
         "orchestrator_tool_guard.py",  # #608 Bash maker-checker WARN
+        "violation_capture.py",        # #718 Bash violation recorder
     }), f"registry drifted from the actual registrations: {sorted(files)}"
 
 
@@ -160,7 +161,8 @@ KONG_CHAIN = ["heartbeat_touch.py", "worker_budget.py",
               "dispatch_gate.py", "worker_pulse.py"]
 KONG_SKIP = {"env_check_gate.py", "recall_inject.py",
              "state_anchor.py", "completion_gate.py", "write_guard.py",
-             "orchestrator_tool_guard.py"}  # #608
+             "orchestrator_tool_guard.py",
+             "violation_capture.py"}  # #608
 KICKER_FILES = {"worker_budget.py", "dispatch_gate.py",
                 "heartbeat_touch.py", "worker_pulse.py"}
 
