@@ -91,6 +91,9 @@ _CAPABILITY_TAGS = frozenset({
     "android:packer-fingerprint",
     "android:semantic-query",
     "android:string-decrypt",
+    # aux: — seeded from the #340 category contract test (auxiliary must be
+    # a legal category with at least one routable capability tag)
+    "aux:sanitize",
     # web: — coordinate with #728 merge (js_unbundle / js_deobfuscate)
     # "js:unbundle",
     # "js:deobfuscate",
