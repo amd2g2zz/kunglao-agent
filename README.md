@@ -64,7 +64,7 @@ legacy manual `cp agents/*.md ~/.claude/agents/` step is no longer needed.
 One fresh workspace per sample engagement — in Claude Code:
 
 ```
-/kunglao-agent:init <workspace> --type windows     # or linux | android | web
+/kunglao-agent:init <workspace> --type windows     # or linux | android
 ```
 
 Options: `--skip-toolchain` (skip the toolchain preflight — test/ops escape hatch), `--no-mcp` (skip the workspace `.mcp.json` scaffold), `--install-git-hooks` (install the review-gate pre-commit hook), `--force` (re-init after backing up the claim register).
@@ -95,7 +95,7 @@ Every `/kunglao-agent` command, its arguments, and an example:
 | Command | Arguments | Purpose | Example |
 |---|---|---|---|
 | `/kunglao-agent` | `init <ws>` / `analysis <ws>` / `resume <ws>` / `help` | command menu — with no args prints the menu and waits; unknown subcommands print the menu + `unknown: <x>` | `/kunglao-agent` |
-| `/kunglao-agent:init` | `<workspace> [--type windows\|linux\|android\|web]` | initialize a workspace (scaffold + CLAUDE.md + sample mount + task_spec intake + hooks) | `/kunglao-agent:init ~/cases/synth-dropper --type windows` |
+| `/kunglao-agent:init` | `<workspace> [--type windows\|linux\|android]` | initialize a workspace (scaffold + CLAUDE.md + sample mount + task_spec intake + hooks) | `/kunglao-agent:init ~/cases/synth-dropper --type windows` |
 | `/kunglao-agent:analysis` | `<workspace>` | enter the convergence loop on an initialized workspace | `/kunglao-agent:analysis ~/cases/synth-dropper` |
 | `/kunglao-agent:resume` | `<workspace>` | crash/reboot recovery: read-only breakpoint brief (health, state summary, timeline, next step) + re-arm advice | `/kunglao-agent:resume ~/cases/synth-dropper` |
 | `/kunglao-agent:help` | none | print the subcommand usage list | `/kunglao-agent:help` |

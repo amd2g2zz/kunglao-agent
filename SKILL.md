@@ -46,14 +46,10 @@ silently run the loop. The operator must pick a subcommand.
 ```
 kunglao-agent subcommands:
 
-  /kunglao-agent:init      <workspace> [--type windows|linux|android|web]
+  /kunglao-agent:init      <workspace> [--type windows|linux|android]
                            initialize a workspace (scaffold + CLAUDE.md +
                            sample mount + task_spec intake + hooks)
                            example: /kunglao-agent:init ~/cases/synth-dropper --type windows
-
-  Web environments (`--type web`): labs positioning, docker-default channel,
-  camoufox-reverse MCP for browser JS reverse engineering. Quick reference:
-  references/re-library/web-re-quickref.md.
 
   /kunglao-agent:analysis  <workspace>   (alias: analyze)
                            enter the convergence loop on an initialized

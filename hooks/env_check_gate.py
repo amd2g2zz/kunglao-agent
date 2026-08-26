@@ -77,7 +77,7 @@ def _check_init_complete(ws: Path) -> tuple[bool, str]:
         return True, ""
     return False, (
         f"{detail}. Run: uv run --project {SKILL_DIR} {SKILL_DIR}/scripts/kunglao-init.py {ws} "
-        f"--type <windows|linux|android|web>"
+        f"--type <windows|linux|android>"
     )
 
 

@@ -11,8 +11,7 @@ files:
   references/_index-platforms.md: eb4224a8cde683873a422a5a21ca62067b46efe09a46a7ff2c0f981ce57b6c7b
   references/_index-resources.md: d58750800fcd490ed014fbef7ee6dae2228180c44996d937a1130cc1c0f50196
   references/_index-tools.md: e28287ddfbb4006a0965a0f3dfb0206d6a54f711d6d7f9195c1d3d65f7f2a382
-  references/_index-web-labs.md: 12a33e5641f3f39738f46cd7bbe38c2d5d8b1d4c06fc89b4ec44a203669faf95
-  references/_INDEX.md: ed62b574e3454cef39c91eee418cb9556ac3a48e12b4ed26efc3fe9bc579575c
+  references/_INDEX.md: d6fac381cd21985f16a0a5501245eb0b8b15f12a3f0fad58910ebba806e1976e
   references/agent-three-state-charter.md: eef047d075d57382b6c6736400f9f744e47d5dde916cafb9f249c2c47365d43e
   references/anomaly-baseline.md: 0ea89669d45fd8ae5ebe9855b591451c8ea6bf239adfc60f81552f356749ae8b
   references/archive/long-horizon-architecture-2026-07.md: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
@@ -68,7 +67,6 @@ files:
   references/re-library/tools-crypto.md: 4c49547085ef4a173591eae2533e5845f998ef07a0ed534958b62d320e2bdfa5
   references/re-library/tools-dynamic.md: af6d0539a253366cf76b3266922bc4551478ebe32576fc216b68d91d0ea5f7de
   references/re-library/tools.md: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
-  references/re-library/web-re-quickref.md: 95c73daa64e53d7d5141f5f7c70a42d487f73baf3c70a9fb7e714fa353ed237d
   references/schema.md: 7e7e97005892d24fec5800cad12f1bb6aee8e554478fe82cbd65a407c0f4d112
   references/search-policy.md: 73f5cd3b71c83e06edbddc400aa8f44cd91fbd6c449f6e6d350fe3113b072180
   references/state-mapping.md: 906f7d9874fa0e1a2c69f90b02fe5945a9848b2f560ba0de4bb3813702a28fe2
