@@ -21,6 +21,31 @@ evidence-indexed.
 The workspace must already exist and be initialized (see
 `/kunglao-agent:init`); a workspace that is not initialized is refused work.
 
+## Stale-workspace gate (#748, machine-checkable)
+
+Before entering the loop, run:
+
+```
+kunglao check-stale <workspace>
+```
+
+This emits a JSON envelope `{status, rc, workspace_stamp, skill_version, advice}`.
+Three terminal outcomes:
+
+- `status="current"` + `rc=0` → proceed with the loop.
+- `status="stale"` + `rc=5` → **refuse**. Workspace template stamp is older than
+  the active skill version, so the gates added in v0.1.2 / v0.1.3
+  (`completion_gate`, `violation_capture`, `_path_hygiene`,
+  `orchestrator_tool_guard`) would silently not register, producing the
+  #717 三层闸门 escape pattern. **Direct the operator to**
+  `/kunglao-agent:upgrade <workspace>` and **stop**. The user must
+  explicitly run upgrade; do not auto-fix.
+- `status="no-stamp"` + `rc=5` → refuse and direct to
+  `/kunglao-agent:init <workspace>` first.
+
+The gate runs in <50ms and produces a parseable contract — agents should
+call it once at entry rather than reasoning about stamps themselves.
+
 ## No arguments
 
 An empty `$ARGUMENTS` never enters the loop and never guesses the cwd:

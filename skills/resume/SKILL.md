@@ -13,6 +13,22 @@ argument-hint: <workspace> — no args → guided workspace prompt
 
 # kunglao-agent:resume — crash/reboot breakpoint recovery (issue #466)
 
+## Stale-workspace gate (#748, machine-checkable)
+
+Before producing the brief, the CLI runs the stale-workspace gate
+automatically (it is part of `scripts/kunglao.py resume`, not a separate
+call). If the gate refuses:
+
+- `status="stale"` + `rc=5` → workspace template stamp trails the active
+  skill version. **Direct the operator to**
+  `/kunglao-agent:upgrade <workspace>` and stop. The user must explicitly
+  act — there is no auto-fix per #748 user ruling.
+- `status="no-stamp"` + `rc=5` → workspace has no version stamp at all;
+  direct to `/kunglao-agent:init <workspace>` first.
+
+Only when the gate passes does the resume brief render. The gate is
+machine-checkable and cannot be skipped by the slash command.
+
 Run after a crash, reboot, or dead session to rebuild the breakpoint from
 mechanical state — never from the dying session's narrative. The brief is
 produced by `scripts/kunglao_resume.py` (also `python scripts/kunglao.py

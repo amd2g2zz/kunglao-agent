@@ -73,6 +73,13 @@ def _armed_ws(tmp_path: Path, *, name: str = "ws",
         (ws / "task_spec.yaml").write_text(
             "primary_questions:\n  - q1: sample family\n", encoding="utf-8")
 
+    # #748: stamp the workspace template version so the stale-workspace
+    # gate (RC=5) passes — these tests are about resume's delegation
+    # behavior, not about the gate itself.
+    ws_version = "0.1.3"
+    (ws / "CLAUDE.md").write_text(
+        f"# kunglao_template_version: {ws_version}\n", encoding="utf-8")
+
     facts = ws / "facts"
     facts.mkdir(exist_ok=True)
     (facts / "_INDEX.md").write_text("# _INDEX\n", encoding="utf-8")

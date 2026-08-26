@@ -36,6 +36,15 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import convergence_check as cc
 import heartbeat_tick as hbt
+import template_version
+
+
+# Exit codes used by the stale-workspace gate (#748).
+#   5 = workspace template stamp is older than the active skill version, or
+#       the stamp is missing entirely — refuse with an explicit "run
+#       /kunglao-agent:upgrade <ws> first" rather than silently letting the
+#       loop run against a stale workspace (the #717 三层闸门 escape pattern).
+RC_STALE_WORKSPACE = 5
 
 
 def cmd_decide(args) -> int:
@@ -106,14 +115,124 @@ def cmd_health(args) -> int:
     return r["exit_code"]
 
 
+def cmd_check_stale(args) -> int:
+    """#748: stale-workspace gate — emit a JSON envelope and exit 5 when the
+    workspace stamp is older than the active skill version (or missing
+    entirely). Used by `/kunglao-agent:analysis` and `/kunglao-agent:resume`
+    SKILL.md bodies as the first step of entry.
+
+    JSON envelope:
+
+        {
+          "status":     "stale" | "current" | "no-stamp",
+          "rc":         0 | 5,
+          "workspace_stamp": "0.1.0" | null,
+          "skill_version":   "0.1.3",
+          "advice":     "run /kunglao-agent:upgrade <workspace> first" | null
+        }
+    """
+    ws = Path(args.workspace).resolve()
+    skill_v = template_version.read_skill_version()
+    ws_v = template_version.read_workspace_version(ws)
+    if ws_v is None:
+        envelope = {
+            "status": "no-stamp",
+            "rc": RC_STALE_WORKSPACE,
+            "workspace_stamp": None,
+            "skill_version": skill_v,
+            "advice": f"run /kunglao-agent:init {ws} first",
+        }
+        print(json.dumps(envelope, ensure_ascii=False))
+        return RC_STALE_WORKSPACE
+    try:
+        ws_key = template_version._semver_tuple(ws_v)
+        skill_key = template_version._semver_tuple(skill_v)
+    except Exception:
+        envelope = {
+            "status": "stale",
+            "rc": RC_STALE_WORKSPACE,
+            "workspace_stamp": ws_v,
+            "skill_version": skill_v,
+            "advice": f"workspace stamp {ws_v!r} not parseable — "
+                      f"run /kunglao-agent:init {ws} first",
+        }
+        print(json.dumps(envelope, ensure_ascii=False))
+        return RC_STALE_WORKSPACE
+    if ws_key < skill_key:
+        envelope = {
+            "status": "stale",
+            "rc": RC_STALE_WORKSPACE,
+            "workspace_stamp": ws_v,
+            "skill_version": skill_v,
+            "advice": f"run /kunglao-agent:upgrade {ws} first "
+                      f"(stamp {ws_v} < skill {skill_v})",
+        }
+        print(json.dumps(envelope, ensure_ascii=False))
+        return RC_STALE_WORKSPACE
+    envelope = {
+        "status": "current",
+        "rc": 0,
+        "workspace_stamp": ws_v,
+        "skill_version": skill_v,
+        "advice": None,
+    }
+    print(json.dumps(envelope, ensure_ascii=False))
+    return 0
+
+
 def cmd_resume(args) -> int:
     """#466: crash/reboot recovery brief — pure delegation to
-    kunglao_resume.main (READ-ONLY: decide() direct, never cc.main())."""
+    kunglao_resume.main (READ-ONLY: decide() direct, never cc.main()).
+
+    #748: stale-workspace gate runs first; if the workspace template stamp
+    trails the skill version, refuse with RC=5 and direct the operator to
+    `/kunglao-agent:upgrade <workspace>` (user must explicitly act —
+    no auto-fix per #748 user ruling 2026-08-26).
+    """
+    ws = Path(args.workspace).resolve()
+    rc = _gate_stale_workspace(ws)
+    if rc != 0:
+        return rc
     import kunglao_resume as kresume
-    argv = [str(args.workspace)]
+    argv = [str(ws)]
     if args.json:
         argv.append("--json")
     return kresume.main(argv)
+
+
+def _gate_stale_workspace(ws: Path) -> int:
+    """Shared #748 gate — emits the check-stale envelope to stderr and
+    returns RC_STALE_WORKSPACE on a stale workspace, 0 otherwise. Used by
+    cmd_resume; cmd_check_stale emits its own envelope and does not call
+    this (it is the canonical consumer)."""
+    import sys
+    skill_v = template_version.read_skill_version()
+    ws_v = template_version.read_workspace_version(ws)
+    if ws_v is None:
+        print(
+            f"kunglao: workspace {ws} has no version stamp — "
+            f"run /kunglao-agent:init {ws} first.",
+            file=sys.stderr,
+        )
+        return RC_STALE_WORKSPACE
+    try:
+        ws_key = template_version._semver_tuple(ws_v)
+        skill_key = template_version._semver_tuple(skill_v)
+    except Exception:
+        print(
+            f"kunglao: workspace stamp {ws_v!r} is not parseable — "
+            f"run /kunglao-agent:init {ws} first.",
+            file=sys.stderr,
+        )
+        return RC_STALE_WORKSPACE
+    if ws_key < skill_key:
+        print(
+            f"kunglao: workspace stamp {ws_v} trails skill version {skill_v} — "
+            f"run /kunglao-agent:upgrade {ws} first.",
+            file=sys.stderr,
+        )
+        return RC_STALE_WORKSPACE
+    return 0
 
 
 def cmd_upgrade(args) -> int:
@@ -173,6 +292,15 @@ def main() -> int:
     p_resume.add_argument("workspace", nargs="?", default=".")
     p_resume.add_argument("--json", action="store_true")
     p_resume.set_defaults(func=cmd_resume)
+
+    p_check_stale = sub.add_parser(
+        "check-stale",
+        help="stale-workspace gate (#748): JSON envelope + rc 0/5 "
+             "(status=current|stale|no-stamp); use this before "
+             "/kunglao-agent:analysis or /kunglao-agent:resume on a "
+             "workspace whose template stamp may trail the skill")
+    p_check_stale.add_argument("workspace", nargs="?", default=".")
+    p_check_stale.set_defaults(func=cmd_check_stale)
 
     p_up = sub.add_parser("upgrade",
                           help="workspace framework-scaffold migration (#726)")
