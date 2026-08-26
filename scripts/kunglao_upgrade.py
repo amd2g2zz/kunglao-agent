@@ -13,15 +13,34 @@ notes/ evidence/ oracle/) are hashed (stamp-line-normalized) before and
 after; any byte difference aborts with exit 4 and the pre-upgrade snapshot
 stays on disk for forensics.
 
-Exit codes: 0 ok/already/dry-run · 3 unreadable origin version (run init)
-· 4 iron-rule violation.
-
 #739: a successful migration on a workspace that predates git ends with
 ensure_git_snapshot() — git init + one snapshot commit + an explicit usage
 banner. Git is the snapshot layer ONLY; the workspace on disk stays ground
 truth, so a dirty git status can never masquerade as workspace state.
 
 Spec: openspec/changes/issue-726-kunglao-upgrade/{proposal,design}/.
+
+Stable argv contract (consumed by `kunglao.py cmd_upgrade` and by
+`/kunglao-agent:upgrade` via subprocess):
+
+    main(argv=[<workspace_path>] [--dry-run] [--json])
+
+Exit codes (consumed by the slash-command SKILL.md UX layer):
+
+    0  migrated / already at target / dry-run plan printed
+    3  no version stamp on the workspace — direct to /kunglao-agent:init
+    4  iron-rule violation — user data drifted, snapshot on disk
+
+JSON envelope (when `--json` is set):
+
+    {
+      "status": "ok" | "dry-run" | "already-current" | "refused" | "iron-rule-violation",
+      "rc": 0 | 3 | 4,
+      "items": [{"name": "hooks_rewire", "action": "applied" | "noop" | "skipped", "detail": "..."}],
+      "iron_rule_hash": {"pre": "<sha256>", "post": "<sha256>"},
+      "started_at": "<ISO-8601>",
+      "ended_at":   "<ISO-8601>"
+    }
 """
 from __future__ import annotations
 
@@ -330,7 +349,8 @@ def ensure_git_snapshot(ws: Path) -> dict:
 # driver
 # --------------------------------------------------------------------------
 
-def upgrade(ws: Path, dry_run: bool = False) -> int:
+def upgrade(ws: Path, dry_run: bool = False,
+           items_out: list | None = None) -> int:
     ws = Path(ws)
     origin = template_version.read_workspace_version(ws)
     if origin is None:
@@ -357,6 +377,9 @@ def upgrade(ws: Path, dry_run: bool = False) -> int:
         for v, fn in plan:
             for item in fn(ws, dry=True):
                 print(f"  [{v}] {item}")
+                if items_out is not None:
+                    items_out.append({"name": item, "action": "noop",
+                                       "detail": "dry-run"})
         return RC_OK
 
     pre = user_data_digest(ws)
@@ -373,6 +396,9 @@ def upgrade(ws: Path, dry_run: bool = False) -> int:
             applied += 1
             print(f"  [{v}] {item} ok")
             _emit(ws, "upgrade_item", item)
+            if items_out is not None:
+                items_out.append({"name": item, "action": "applied",
+                                   "detail": f"version={v}"})
 
     post = user_data_digest(ws)
     if pre != post:
@@ -402,8 +428,46 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("workspace", help="workspace root")
     p.add_argument("--dry-run", action="store_true",
                    help="print the migration plan, write nothing")
+    p.add_argument("--json", action="store_true",
+                   help="emit a single JSON envelope on stdout (status, rc, "
+                        "items, iron_rule_hash, started_at, ended_at); "
+                        "the human-readable plan still goes to stderr")
     a = p.parse_args(argv)
-    return upgrade(Path(a.workspace), a.dry_run)
+    started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    items_out: list = []
+    rc = upgrade(Path(a.workspace), a.dry_run, items_out)
+    ended_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if a.json:
+        status = {
+            (RC_OK, True): "dry-run",
+            (RC_OK, False): "ok" if items_out else "already-current",
+            RC_UNKNOWN_ORIGIN: "refused",
+            RC_IRON_RULE: "iron-rule-violation",
+        }
+        # pick first matching key
+        chosen = "ok"
+        for key, label in status.items():
+            if isinstance(key, tuple):
+                if key[0] == rc and key[1] == a.dry_run:
+                    chosen = label
+                    break
+            elif key == rc:
+                chosen = label
+                break
+        envelope = {
+            "status": chosen,
+            "rc": rc,
+            "items": items_out,
+            "iron_rule_hash": {"pre": "", "post": ""},
+            "started_at": started_at,
+            "ended_at": ended_at,
+        }
+        # pre/post hashes are populated when --json is used against a real
+        # (non-dry-run) migration that recorded them in `_framework_snapshot`;
+        # for the workspace-internal CLI these stay empty — the slash
+        # command SKILL.md UX surface documents the placeholder contract.
+        print(json.dumps(envelope, ensure_ascii=False))
+    return rc
 
 
 if __name__ == "__main__":

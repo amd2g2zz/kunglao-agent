@@ -8,8 +8,8 @@ description: >-
   "失败归因", "实际进度和计划不匹配", "kunglao-agent stuck / not moving", "plan doesn't
   match reality", "worker reports problem / 卡住", "VM 网络不通", "should just ping".
   Command router: prints the subcommand menu on no args and routes to the
-  per-command skills under skills/ (init / analysis / help). The full
-  convergence contract lives in skills/kunglao-agent/SKILL.md.
+  per-command skills under skills/ (init / analysis / resume / upgrade / help).
+  The full convergence contract lives in skills/kunglao-agent/SKILL.md.
 triggers:
   - run kunglao-agent
   - continue kunglao-agent
@@ -28,7 +28,7 @@ triggers:
   - RE orchestrator
   - run the RE loop
 arguments: [request]
-argument-hint: init <workspace> | analysis <workspace> | help
+argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | upgrade <workspace> | help
 ---
 
 # kunglao-agent — command router
@@ -66,6 +66,14 @@ kunglao-agent subcommands:
                            the #461 re-arm chain when the heartbeat is dead
                            example: /kunglao-agent:resume ~/cases/synth-dropper
 
+  /kunglao-agent:upgrade  <workspace> [--dry-run]
+                           migrate a legacy workspace's framework scaffold
+                           forward to the current skill package (hooks,
+                           templates, ALWAYS_ARMED hook state, event vocab,
+                           #720 .agent/ metadata). User data is never
+                           touched (iron rule; RC=4 on byte drift).
+                           example: /kunglao-agent:upgrade ~/cases/synth-dropper
+
   /kunglao-agent:help      [no args]
                            print this usage list
                            example: /kunglao-agent:help
@@ -74,6 +82,7 @@ Next steps:
   uninitialized workspace → /kunglao-agent:init
   initialized workspace   → /kunglao-agent:analysis
   crashed / rebooted ws   → /kunglao-agent:resume
+  legacy / behind ws      → /kunglao-agent:upgrade
   unsure which command    → /kunglao-agent:help
   partial arguments       → the subcommand prints its own guided prompt
                            (see its SKILL.md "No arguments" section)
@@ -92,6 +101,9 @@ Next steps:
   `skills/analysis/SKILL.md`; the convergence loop is the destination.
 - `resume <workspace>` → read and follow `skills/resume/SKILL.md`
   (read-only crash/reboot recovery brief, #466).
+- `upgrade <workspace>` → read and follow `skills/upgrade/SKILL.md`
+  (forward-only workspace framework-scaffold migration, #726; user data
+  read-only per iron rule; pairs with #739 git snapshot).
 - `help` → read and follow `skills/help/SKILL.md` (usage list).
 - Natural-language RE request (e.g. "what does this binary do") → map to
   `analysis`: read `skills/analysis/SKILL.md` then
@@ -111,5 +123,6 @@ not `skills/kunglao-agent/`.
 - `/kunglao-agent init ~/cases/synth-dropper --type windows`
 - `/kunglao-agent analysis ~/cases/synth-dropper`
 - `/kunglao-agent resume ~/cases/synth-dropper`
+- `/kunglao-agent upgrade ~/cases/synth-dropper`
 - `/kunglao-agent help`
 (feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table)

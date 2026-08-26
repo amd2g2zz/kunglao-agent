@@ -516,8 +516,12 @@ def _registry() -> dict:
 
 def test_registry_covers_four_commands() -> None:
     reg = _registry()
-    assert set(reg) == {"init", "analysis", "help", "resume"}, (
-        f"#466 acceptance: registry must be the four-command set, got {sorted(reg)}")
+    # #466 acceptance: registry must be the four-command set; #746 added
+    # upgrade to the user-facing slash-command UX surface (the CLI was
+    # workspace-internal via #726, now promoted per user 2026-08-26).
+    assert set(reg) == {"init", "analysis", "help", "resume", "upgrade"}, (
+        f"#466 acceptance: registry must be the four-command set (now five "
+        f"after #746): got {sorted(reg)}")
 
 
 def test_registry_resume_record_complete() -> None:

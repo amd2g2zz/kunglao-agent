@@ -93,8 +93,10 @@ def test_registry_exists_and_covers_all_subcommands() -> None:
     """THE single source exists, parses, and covers init / analysis / help
     with every D4 field."""
     reg = _registry()
-    # #466: resume joined the surface — the four-command set
-    assert set(reg) == {"init", "analysis", "help", "resume"}, (
+    # #466: resume joined the surface — the four-command set; #746 added
+    # upgrade to the user-facing slash-command UX surface (the CLI was
+    # workspace-internal via #726, now promoted per user 2026-08-26).
+    assert set(reg) == {"init", "analysis", "help", "resume", "upgrade"}, (
         f"registry must cover exactly the skills/ subcommands: {sorted(reg)}")
     for name, rec in reg.items():
         assert isinstance(rec, dict), f"registry[{name}] must be a mapping"
@@ -153,7 +155,7 @@ def test_subcommand_hints_equal_registry_hints() -> None:
     registry hint EXACTLY (a mirror is what drifted in #413 — init had a
     hint, analysis did not)."""
     reg = _registry()
-    for name in ("init", "analysis", "help", "resume"):
+    for name in ("init", "analysis", "help", "resume", "upgrade"):
         hint = _frontmatter(SKILLS / name / "SKILL.md").get("argument-hint")
         assert hint == reg[name]["argument-hint"], (
             f"skills/{name}/SKILL.md argument-hint drifts from subcommands.yaml: "

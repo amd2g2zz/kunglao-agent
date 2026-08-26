@@ -94,16 +94,17 @@ Every `/kunglao-agent` command, its arguments, and an example:
 
 | Command | Arguments | Purpose | Example |
 |---|---|---|---|
-| `/kunglao-agent` | `init <ws>` / `analysis <ws>` / `resume <ws>` / `help` | command menu — with no args prints the menu and waits; unknown subcommands print the menu + `unknown: <x>` | `/kunglao-agent` |
+| `/kunglao-agent` | `init <ws>` / `analysis <ws>` / `resume <ws>` / `upgrade <ws>` / `help` | command menu — with no args prints the menu and waits; unknown subcommands print the menu + `unknown: <x>` | `/kunglao-agent` |
 | `/kunglao-agent:init` | `<workspace> [--type windows\|linux\|android\|web]` | initialize a workspace (scaffold + CLAUDE.md + sample mount + task_spec intake + hooks) | `/kunglao-agent:init ~/cases/synth-dropper --type windows` |
 | `/kunglao-agent:analysis` | `<workspace>` | enter the convergence loop on an initialized workspace | `/kunglao-agent:analysis ~/cases/synth-dropper` |
 | `/kunglao-agent:resume` | `<workspace>` | crash/reboot recovery: read-only breakpoint brief (health, state summary, timeline, next step) + re-arm advice | `/kunglao-agent:resume ~/cases/synth-dropper` |
+| `/kunglao-agent:upgrade` | `<workspace> [--dry-run]` | forward-only workspace framework-scaffold migration (hooks rewire, template refresh, ALWAYS_ARMED hook state, event vocab, #720 .agent/ metadata). User data is read-only (iron rule; RC=4 on byte drift). | `/kunglao-agent:upgrade ~/cases/synth-dropper` |
 | `/kunglao-agent:help` | none | print the subcommand usage list | `/kunglao-agent:help` |
 
 The namespaced form (`/kunglao-agent:init`) is the plugin-manager surface;
 the main skill also accepts the subcommand form (`/kunglao-agent init <ws>`).
 
-Called with no arguments, `init`, `analysis` and `resume` print a guided prompt —
+Called with no arguments, `init`, `analysis`, `resume` and `upgrade` print a guided prompt —
 never guess, never a bare argparse-style error (see each skill's "No
 arguments" section); the menu's next-steps block maps operator state to a
 command (uninitialized → init, initialized → analysis, crashed/rebooted → resume,

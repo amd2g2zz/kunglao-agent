@@ -34,3 +34,10 @@ subcommands:
     missing-args: "takes no arguments — nothing can be missing"
     example: "/kunglao-agent:help"
     next-step: "unsure which command → /kunglao-agent:help"
+  upgrade:
+    invocation: "/kunglao-agent:upgrade <workspace>"
+    argument-hint: "<workspace> [--dry-run] — no args → guided workspace prompt"
+    zero-args: "guided workspace prompt — cwd candidate only with explicit confirm, never guess"
+    missing-args: "single positional — a missing workspace is the zero-args case"
+    example: "/kunglao-agent:upgrade ~/cases/synth-dropper"
+    next-step: "legacy workspace behind the skill package → /kunglao-agent:upgrade"
