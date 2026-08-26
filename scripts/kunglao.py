@@ -116,6 +116,22 @@ def cmd_resume(args) -> int:
     return kresume.main(argv)
 
 
+def cmd_upgrade(args) -> int:
+    """#726: workspace framework-scaffold migration — pure delegation to
+    kunglao_upgrade.main. Hyphenated filename blocks a plain import; the
+    module is loaded via importlib (same pattern the test suite uses for
+    kunglao-init)."""
+    import importlib.util
+    mod_path = Path(__file__).resolve().parent / "kunglao_upgrade.py"
+    spec = importlib.util.spec_from_file_location("kunglao_upgrade", mod_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    argv = [str(args.workspace)]
+    if args.dry_run:
+        argv.append("--dry-run")
+    return mod.main(argv)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(prog="kunglao.py", description="kunglao-agent unified entry")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -157,6 +173,13 @@ def main() -> int:
     p_resume.add_argument("workspace", nargs="?", default=".")
     p_resume.add_argument("--json", action="store_true")
     p_resume.set_defaults(func=cmd_resume)
+
+    p_up = sub.add_parser("upgrade",
+                          help="workspace framework-scaffold migration (#726)")
+    p_up.add_argument("workspace", nargs="?", default=".")
+    p_up.add_argument("--dry-run", action="store_true",
+                      help="print the migration plan, write nothing")
+    p_up.set_defaults(func=cmd_upgrade)
 
     args = ap.parse_args()
     return args.func(args)
