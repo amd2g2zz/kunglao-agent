@@ -709,6 +709,9 @@ def register_hooks(workspace: Path | None = None,
     # arming is target-based (path is a contract carrier), not TTL-based.
     pre, added = _ensure(pre, "Edit|Write|MultiEdit", "write_guard.py")
     count += added
+    # #675: this double registration (worker_budget Pre+Post) is pinned by
+    # wire_up_settings.DOUBLE_REGISTERED_HOOKS — test count anchors derive
+    # from it; changing the double-registration structure updates BOTH.
     post, added = _ensure(post, "Agent", "worker_budget.py")
     count += added
     post, added = _ensure(post, "Agent", "worker_pulse.py")

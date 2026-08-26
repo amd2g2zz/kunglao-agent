@@ -25,6 +25,7 @@ from external_kicker import (  # noqa: E402
     FRESH_WORKER_MINUTES,
     KICKER_LAST_FILE,
     KICKER_PROMPT_FILE,
+    KUNGLAO_HOOK_ENTRIES,
     acquire_kick_lock,
     build_crontab_line,
     build_kick_command,
@@ -38,6 +39,12 @@ from external_kicker import (  # noqa: E402
     validate_interval,
     write_settings_atomic,
 )
+
+# #675: per-event entry counts DERIVED from the kicker table (not
+# hand-pinned 3/2/5 integers — the #608 anchor-drift class).
+KICKER_TOTAL = len(KUNGLAO_HOOK_ENTRIES)
+KICKER_PRE_COUNT = sum(1 for e, _, _ in KUNGLAO_HOOK_ENTRIES if e == "PreToolUse")
+KICKER_POST_COUNT = sum(1 for e, _, _ in KUNGLAO_HOOK_ENTRIES if e == "PostToolUse")
 
 
 def ts(minutes_ago: int) -> str:
@@ -113,9 +120,9 @@ def test_ensure_project_hooks_preserves_env_and_other_keys(tmp_path):
     assert out["env"] == {"VMR_API_KEY": "SECRET_FAKE"}
     assert out["mcpServers"] == {"x": {"url": "y"}}
     assert out["permissions"] == ["Bash(*)"]
-    assert added == 5
-    assert len(out["hooks"]["PreToolUse"]) == 3
-    assert len(out["hooks"]["PostToolUse"]) == 2
+    assert added == KICKER_TOTAL
+    assert len(out["hooks"]["PreToolUse"]) == KICKER_PRE_COUNT
+    assert len(out["hooks"]["PostToolUse"]) == KICKER_POST_COUNT
 
 
 def test_ensure_project_hooks_exact_commands(tmp_path):
@@ -161,7 +168,7 @@ def test_ensure_project_hooks_replaces_legacy_backslash_entry(tmp_path):
     wb = [e for e in agent if any("worker_budget.py" in h.get("command", "") for h in e["hooks"])]
     assert len(wb) == 1                      # replaced, not stacked
     assert "\\" not in wb[0]["hooks"][0]["command"]
-    assert added == 4                        # legacy entry replaced in place, not appended
+    assert added == KICKER_TOTAL - 1       # legacy entry replaced in place, not appended
 
 
 def test_ensure_project_hooks_preserves_other_matchers(tmp_path):
@@ -340,8 +347,8 @@ def test_tick_kill_session_then_kick(tmp_path):
     assert rec["kick_ts"] and rec["pid"] == 0 and rec["prompt_file"]
     s = json.loads(settings_path.read_text(encoding="utf-8"))
     assert s["env"]["VMR_API_KEY"] == "SECRET_FAKE"                # env secret preserved
-    assert len(s["hooks"]["PreToolUse"]) == 3
-    assert len(s["hooks"]["PostToolUse"]) == 2
+    assert len(s["hooks"]["PreToolUse"]) == KICKER_PRE_COUNT
+    assert len(s["hooks"]["PostToolUse"]) == KICKER_POST_COUNT
     assert not (runs / ".kicker.lock").exists()                    # lock released
     assert not list(tmp_path.glob("*.tmp"))                        # atomic write, no leftovers
 

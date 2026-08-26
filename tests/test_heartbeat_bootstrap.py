@@ -35,22 +35,18 @@ from pathlib import Path
 
 import pytest
 
+import wire_up_settings  # pytest.ini pythonpath = . hooks scripts tools
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 HOOKS = ROOT / "hooks"
 
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
-# The #445 registry file set (wire_up_settings.WIRE_UP_HOOK_FILES) — the
-# full wire-up must land every one of these; worker_budget additionally
-# rides PostToolUse, so its command count is 2 (Pre + Post).
-REGISTRY_HOOK_FILES = (
-    "env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
-    "recall_inject.py", "heartbeat_touch.py", "worker_pulse.py",
-    "state_anchor.py", "completion_gate.py", "write_guard.py",  # #532
-    "orchestrator_tool_guard.py",  # #608
-    "violation_capture.py",  # #718
-)
+# #675: the registry file set IMPORTED from its single source (not a
+# hand-mirrored tuple — the #608 anchor-drift class). sorted() keeps
+# failure messages deterministic.
+REGISTRY_HOOK_FILES = tuple(sorted(wire_up_settings.WIRE_UP_HOOK_FILES))
 
 
 # ---------- shared helpers ----------
@@ -255,7 +251,10 @@ def test_init_bootstrap_idempotent_no_hook_stacking(tmp_path):
     assert r2.returncode == 0, f"second init failed: {r2.stderr}"
     counts = _command_counts(settings)
     expected = dict.fromkeys(REGISTRY_HOOK_FILES, 1)
-    expected["worker_budget.py"] = 2  # Pre + Post on Agent
+    # #675: double-registered files command-count 2 (one per event slot) —
+    # derived, not hand-named.
+    for f in wire_up_settings.DOUBLE_REGISTERED_HOOKS & set(REGISTRY_HOOK_FILES):
+        expected[f] = 2
     assert counts == expected, (
         f"bootstrap not idempotent (stacked/dropped entries): {counts}")
     assert (ws / "runs" / ".heartbeat.json").exists()

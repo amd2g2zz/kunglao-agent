@@ -66,6 +66,17 @@ WIRE_UP_HOOK_FILES = frozenset({
     "violation_capture.py",    # PostToolUse/Bash — mechanical violation recorder (#718)
 })
 
+# #675: hooks registered on MORE THAN ONE event slot by
+# hook_activation.register_hooks (worker_budget rides both
+# PreToolUse/Agent and PostToolUse/Agent). A fresh full wire-up writes
+# exactly len(WIRE_UP_HOOK_FILES) + len(DOUBLE_REGISTERED_HOOKS &
+# WIRE_UP_HOOK_FILES) command entries — tests derive their count anchors
+# from this pair instead of hand-pinned integers (the #608 anchor-drift
+# class: one registry addition broke three test files at once). The
+# scripts-side subset consumers already loud-fail via derive_hook_subset
+# (#381); this export gives the tests-side the same single source.
+DOUBLE_REGISTERED_HOOKS = frozenset({"worker_budget.py"})
+
 
 # #410: THE deployment-target registry — where kunglao hooks are written and
 # read. --wire-up writes the WORKSPACE-level file (the #258 PROJECT-scoped

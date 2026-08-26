@@ -56,6 +56,20 @@ def test_registry_exists_in_wire_up_settings() -> None:
     }), f"registry drifted from the actual registrations: {sorted(files)}"
 
 
+def test_double_registered_hooks_sentinel() -> None:
+    """#675: the double-registration set is pinned HERE (the sentinel
+    file — deriving it from the registry would be tautological). Every
+    tests/-side count anchor derives its extra registration from this
+    export, so membership drift must be loud and deliberate."""
+    doubled = wire_up_settings.DOUBLE_REGISTERED_HOOKS
+    assert isinstance(doubled, frozenset), (
+        "DOUBLE_REGISTERED_HOOKS must be a frozenset (immutable)")
+    assert doubled == frozenset({"worker_budget.py"}), (
+        f"DOUBLE_REGISTERED_HOOKS drifted: {sorted(doubled)} — a membership "
+        "change means register_hooks double-registers differently; update "
+        "this sentinel deliberately and verify the count anchors follow")
+
+
 def test_env_check_hook_files_is_the_registry() -> None:
     """env_check must derive its list FROM the registry — same object, not a
     hand-copied mirror (a copy is exactly what drifted in #372)."""

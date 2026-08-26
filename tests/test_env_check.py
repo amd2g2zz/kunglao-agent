@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 import platform_paths  # pytest.ini pythonpath = . hooks scripts tools
+import wire_up_settings  # pytest.ini pythonpath = . hooks scripts tools
 
 from env_check import (  # pytest.ini pythonpath = . hooks scripts tools
     FLAG_NAME,
@@ -91,6 +92,23 @@ def _write_settings(target_root: Path) -> Path:
                                               "PostToolUse": post,
                                               "Stop": stop}}),
                         encoding="utf-8")
+    # #675: the per-matcher grouping above mirrors register_hooks — the
+    # grouping lives only in its imperative _ensure sequence, so this
+    # guard (not derivation) is the loud-fail: registry growth without a
+    # fixture update fails HERE at construction with the symmetric
+    # difference, never as a downstream env-check mystery (#608 class).
+    covered = {
+        h["command"][len("python hooks/"):]
+        for group in (pre, post, stop)
+        for entry in group
+        for h in entry["hooks"]
+    }
+    registry = set(wire_up_settings.WIRE_UP_HOOK_FILES)
+    if covered != registry:
+        raise AssertionError(
+            "_write_settings drifted from wire_up_settings.WIRE_UP_HOOK_FILES"
+            f" (symmetric difference: {sorted(covered ^ registry)}) —"
+            " update the per-matcher groups to cover the registry (#675)")
     return settings
 
 
