@@ -42,11 +42,15 @@ def _kunglao_ws(tmp_path: Path) -> Path:
     """Minimal workspace: runs/ + FULLY initialized state (#304: [initialized]
     marker in claim-register.yaml + project_type in analysis_state.txt) so the
     snapshot write succeeds and init_complete passes. #536: carries the
-    template version stamp (a fully-initialized workspace has one)."""
+    template version stamp (a fully-initialized workspace has one).
+    #757: pins a vmr channel record so checklist shaping never hits the
+    runtime derivation probe path (tests control sockets explicitly)."""
     import template_version
     stamp = template_version.stamp_line(template_version.read_skill_version())
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
+    (ws / "runs" / ".init-report.json").write_text(
+        json.dumps({"channel": {"selected": "vmr"}}), encoding="utf-8")
     (ws / "facts").mkdir()
     (ws / "facts" / "_INDEX.md").write_text(stamp + "\n# _INDEX\n", encoding="utf-8")
     (ws / "CLAUDE.md").write_text(stamp + "\n# workspace\n", encoding="utf-8")
@@ -147,6 +151,18 @@ def _stub_non_hook_checks(monkeypatch):
     return env_check
 
 
+@pytest.fixture(autouse=True)
+def _isolated_claude_json(tmp_path, monkeypatch):
+    """#757: env_check now reads MCP registration surfaces — point the user
+    ~/.claude.json at an isolated file carrying a ghidra registration so the
+    desktop mcp_registered row lands on its deterministic WARN-unverified
+    branch and real-machine configs can never leak into these verdicts."""
+    p = tmp_path / ".claude.json"
+    p.write_text(json.dumps({"mcpServers": {"ghidra": {"command": "b"}}}),
+                 encoding="utf-8")
+    monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(p))
+
+
 def test_flag_set_fails_exit_1(monkeypatch, tmp_path):
     """Scenario 1: the 2026-08-12 polluted-session shape — flag set -> FAIL + exit 1."""
     ws = _kunglao_ws(tmp_path)
@@ -213,7 +229,11 @@ def test_all_pass_exit_0(monkeypatch, tmp_path):
     assert rc == 0
     snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
     assert snap["overall"] == "PASS"
-    assert all(c["status"] == "PASS" for c in snap["checks"].values())
+    # #757: the mcp_registered row is intentionally WARN-unverified here
+    # (fixture registers ghidra; a registry read can never claim capability).
+    assert snap["checks"]["mcp_registered"]["status"] == "WARN"
+    others = {k: v for k, v in snap["checks"].items() if k != "mcp_registered"}
+    assert all(c["status"] == "PASS" for c in others.values())
 
 
 def test_snapshot_written_on_fail(monkeypatch, tmp_path):

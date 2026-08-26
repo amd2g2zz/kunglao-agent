@@ -25,6 +25,12 @@ import kunglao_log
 
 REMOTE_CHANNELS = ("vmr", "ssh", "docker", "adb")
 LOCAL = "local"
+# #757: `mcp` is a first-class channel value (web normal-state — the dynamic
+# face is MCP/browser reachability, not a command control plane). It is NOT
+# in _PROBE_ORDER: at resolve time there is no executable MCP liveness probe
+# (that surface belongs to mcp_probe / env_check's mcp_registered row).
+MCP = "mcp"
+ALL_CHANNELS = (*REMOTE_CHANNELS, LOCAL, MCP)
 _PROBE_ORDER = ("vmr", "ssh", "docker", "adb")  # vmr first: current default
 
 WARN_TEXT_DEFAULT = ("dynamic channel unavailable — defaulted to local "
@@ -174,6 +180,11 @@ def resolve_init_channel(ws: Path) -> ChannelDecision:  # noqa: ARG001 — ws fo
         if explicit == LOCAL:
             # local is a first-class explicit choice — no probe, no warn
             return ChannelDecision(selected=LOCAL, defaulted_to_local=False,
+                                   probes={}, warn_reason="")
+        if explicit == MCP:
+            # #757: mcp is a first-class explicit choice (web normal state) —
+            # accepted verbatim; liveness is not provable here (no probe face)
+            return ChannelDecision(selected=MCP, defaulted_to_local=False,
                                    probes={}, warn_reason="")
         ok, reason = _probe_dispatch(explicit, probes)
         if ok:

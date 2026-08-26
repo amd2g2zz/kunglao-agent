@@ -63,7 +63,7 @@ positional argument, so there is no separate partial-argument flow.
 
 ## Flow
 
-1. **Phase 0 environment probe** — run `python <SKILL_DIR>/scripts/env_check.py <workspace>`; enter the loop only with `OVERALL=PASS`.
+1. **Phase 0 environment probe** — run `python <SKILL_DIR>/scripts/env_check.py <workspace>`; enter with OVERALL=PASS; degraded rows (marked `T3-restricted:` in the output and listed under `degraded` in `runs/.env-check.json`) enter the loop FLAGGED — they restrict T3 dynamic work, they do not block entry. Re-run Phase 0 after fixing any blocking row.
 2. **Read the operative contract** — load the full orchestration contract
    from `skills/kunglao-agent/SKILL.md` (Phases 1-5: activate → dispatch →
    verify → completion transaction → delivery) and follow it exactly.

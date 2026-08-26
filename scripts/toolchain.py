@@ -1128,13 +1128,15 @@ def _channel_backend() -> tuple[str, str | None]:
     """(#698) Parse KUNGLAO_CHANNEL -> (backend, warn_note).
 
     unset/"vmr" -> vmr (default; pre-#698 behavior byte-identical). Known
-    backends: ssh | docker | adb | local. Unknown value -> vmr fallback
+    backends: ssh | docker | adb | local | mcp (#757: mcp = web normal-state
+    channel — dynamic face is MCP/browser, no command control plane).
+    Unknown value -> vmr fallback
     with a note naming the offending value (never crash on config noise).
     """
     raw = (_env_get("KUNGLAO_CHANNEL") or "").strip().lower()
     if raw in ("", "vmr"):
         return "vmr", None
-    if raw in ("ssh", "docker", "adb", "local"):
+    if raw in ("ssh", "docker", "adb", "local", "mcp"):
         return raw, None
     return "vmr", f"(unknown KUNGLAO_CHANNEL={raw!r} - falling back to vmr backend)"
 
@@ -1300,6 +1302,26 @@ def _check_dynamic_channel(report: ToolchainReport,
     """
     backend, chan_warn = _channel_backend()
     vm_host = _env_get("KUNGLAO_VM_HOST")
+
+    # ---- mcp (#757): browser/MCP dynamic face, no command control plane
+    # Desktop dynamic RE cannot execute through an MCP channel yet (#698 D5
+    # execution layer is declarative); zero probes, fail-closed (D9).
+    # Static-only tasks fall through to the generic zero-probe WARN row.
+    if backend == "mcp" and reqs.needs_vm:
+        _mcp_detail = ("mcp channel provides no command control plane for "
+                       "desktop dynamic analysis — switch KUNGLAO_CHANNEL "
+                       "to vmr/ssh/docker/adb")
+        report.items.append(CheckResult(
+            name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
+            detail=_mcp_detail,
+            root_cause="VM", probe=ProbeTier.PRESENCE,
+        ))
+        report.items.append(CheckResult(
+            name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
+            detail=_mcp_detail,
+            root_cause="VM", probe=ProbeTier.PRESENCE,
+        ))
+        return
 
     # ---- local: policy channel, never probes -------------------------
     if backend == "local":

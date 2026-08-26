@@ -45,6 +45,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from _path_hygiene import ensure_scripts_path, scripts_on_path  # #671 authority
@@ -57,6 +58,9 @@ ensure_scripts_path()
 import init_state  # noqa: E402
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: only truthy rejects; 0/false/empty pass
+# #757: freshness window for the .env-check.json third check (must mirror the
+# producer, scripts/env_check.py GATE_REPORT_TTL_SECONDS).
+ENV_CHECK_TTL_SECONDS = 600
 
 
 def _is_truthy(value: str | None) -> bool:
@@ -110,6 +114,39 @@ def _guidance(ws: Path, flag_val: str) -> str:
     )
 
 
+def _fresh_blocking_fails(ws: Path) -> list[str]:
+    """#757: names of BLOCKING checks that FAILed in a FRESH env-check report.
+
+    reads <ws>/runs/.env-check.json and returns [] on every fail-open path —
+    the gate must never become the new dispatch deadlock source:
+      - file absent / corrupt / unparsable          -> []
+      - ts missing / unparseable / stale (> TTL s)  -> []
+      - legacy (pre-#757) rows without `blocking`   -> ignored (a VM-unreachable
+        legacy report must not resurrect as a hard gate)
+    Only rows with status FAIL AND blocking is True count.
+    """
+    path = ws / "runs" / ".env-check.json"
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return []
+        dt = datetime.fromisoformat(
+            str(data.get("ts", "")).replace("Z", "+00:00"))
+        age = (datetime.now(timezone.utc) - dt).total_seconds()
+    except Exception:  # noqa: BLE001 — every read failure fails open
+        return []
+    if age < 0 or age > ENV_CHECK_TTL_SECONDS:
+        return []
+    failing: list[str] = []
+    for name, row in (data.get("checks") or {}).items():
+        if (isinstance(row, dict) and row.get("status") == "FAIL"
+                and row.get("blocking") is True):
+            failing.append(str(name))
+    return sorted(failing)
+
+
 def evaluate(payload: dict, environ: dict | None = None) -> tuple[int, str, str | None]:
     """Hook decision for a PreToolUse(Agent) payload.
 
@@ -144,6 +181,29 @@ def evaluate(payload: dict, environ: dict | None = None) -> tuple[int, str, str 
             2,
             f"REJECT env_check_gate: workspace not fully initialized. {init_guidance}",
             f"env_check_gate: {init_guidance}",
+        )
+
+    # Check 3 (#757): fresh .env-check.json with a BLOCKING FAIL -> REJECT.
+    # Degraded (T3-restricted) FAILs and stale/absent/corrupt/legacy reports
+    # all pass through — fail-open; Phase 0 rerun is the remedy path.
+    blocking_fails = _fresh_blocking_fails(ws)
+    if blocking_fails:
+        names = ", ".join(blocking_fails)
+        rerun = (f"uv run --project {SKILL_DIR} {SKILL_DIR}/scripts/env_check.py "
+                 f"{ws}")
+        guidance = (
+            f"env_check_gate: the workspace's FRESH env-check report "
+            f"({names}) carries a BLOCKING FAIL — dispatch rejected.\n"
+            f"Fix: re-run `{rerun}`, clear the failing row(s), then dispatch. "
+            f"A report older than 10 minutes, an absent/corrupt one, or rows "
+            f"marked 'T3-restricted' do NOT block — enter flagged instead."
+        )
+        _emit_reject(ws, f"env_check_gate: fresh env-check blocking FAIL ({names})")
+        return (
+            2,
+            f"REJECT env_check_gate: fresh env-check blocking FAIL ({names}). "
+            f"Fix: re-run scripts/env_check.py and clear it.",
+            guidance,
         )
 
     return 0, "", None
