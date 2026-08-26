@@ -93,6 +93,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 
 | Script | Role | Referenced from |
 | --- | --- | --- |
+| `kunglao_upgrade.py` | workspace upgrade via declarative convergence (#726): 5 idempotent migrations + version wall + user-data sha256 iron rule + dry-run/snapshot; dispatched from `kunglao upgrade` subcommand | kunglao, tests |
 | `claim_expiry.py` | STALE demotion after inactivity | lib(1), tests |
 | `complete_teardown.py` | full teardown helper | tests |
 | `dead_letter.py` | DEAD status + dead-letter quarantine | hooks, lib(1), tests |
