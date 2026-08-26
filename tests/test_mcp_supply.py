@@ -42,6 +42,8 @@ ALL_MCP_NAMES = {
     "ghidra", "sequential-thinking", "x64dbg", "volatility",
     "ida-pro-vm", "gitnexus", "virustotal",
     "ssh-mcp",  # #698 ssh-channel execution control plane (static decl)
+    # #728 web (labs): browser JS RE supply — WARN, web-only
+    "camoufox-reverse",
 }
 
 

@@ -87,6 +87,14 @@ _ARGPARSE_ACTIONS = {
     "extend", "raise",  # argparse ext vocabulary members
 }
 
+# MCP tool kwargs quoted in DOCUMENTATION text — same keyword, different
+# contract again (#728 web labs): scripts/kunglao-init.py's web CLAUDE.md
+# template documents `camoufox.network_capture(action="start")` (the browser
+# network-capture toggle of the camoufox-reverse MCP, copy-pasteable doc for
+# the agent); it is not an event-stream emit action and must not enter
+# EMIT_ACTIONS.
+_MCP_DOC_KWARG_ACTIONS = {"start"}
+
 
 def _unregistered_action_literals(root: Path) -> dict[str, set[str]]:
     """Scan <root>/{scripts,hooks}/*.py for emit action literals outside
@@ -104,7 +112,7 @@ def _unregistered_action_literals(root: Path) -> dict[str, set[str]]:
             found: set[str] = set()
             for pat in _LITERAL_PATTERNS:
                 found |= set(pat.findall(text))
-            bad = found - known - _ARGPARSE_ACTIONS
+            bad = found - known - _ARGPARSE_ACTIONS - _MCP_DOC_KWARG_ACTIONS
             if bad:
                 violations[f"{sub}/{p.name}"] = bad
     return violations

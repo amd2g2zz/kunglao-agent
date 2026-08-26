@@ -96,7 +96,7 @@ def _all_tools_md() -> list[Path]:
 
 def test_yaml_registry_has_29_tools() -> None:
     tools = _yaml_tools()
-    assert len(tools) == 34, f"expected 34 registered tools, got {len(tools)}"  # 34 since #692 (5 android provider entries)
+    assert len(tools) == 36, f"expected 36 registered tools, got {len(tools)}"  # 36 since #728 (wakaru-unbundle / webcrack-deobfuscate; 34 since #692)
     names = [t["name"] for t in tools]
     assert len(names) == len(set(names)), "duplicate tool names in _INDEX.yaml"
 

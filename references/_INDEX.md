@@ -15,6 +15,7 @@
 | methodology | field-notes, malware-analysis, malware-analysis-workflow, malware-analysis-quickstart, malware-triage, malware-dynamic-analysis, detection-engineer, malware-report-writer, phishing-case-study | Analysis methods and malware application domain (primary use case) |
 | osint | multi-search-engine, multi-search-engine-refs | Multi-engine OSINT search |
 | resources | awesome-re-resources | External RE resource collection |
+| web-labs | web-re-quickref | Browser JS reverse engineering quick-reference (web workspaces, camoufox MCP supply, layered peeling workflow, crypto signatures, anti-patterns) |
 | contracts | agent-three-state-charter, error-response-taxonomy, dispatch-protocol | Behavior contracts the orchestrator loads on scenario (ask/stop charter, error response taxonomy, dispatch protocol) |
 
 | Scenario | Domain |
@@ -28,6 +29,7 @@
 | Platform-specific | platforms |
 | Detection rules / reports | methodology (detection-engineer, malware-report-writer) |
 | Intelligence / search | osint |
+| Browser JS target (`--type web`) | web-labs |
 | Action error / tool-VM-install failure response | contracts (error-response-taxonomy) |
 | Ask-the-user / irreversible-action decision | contracts (agent-three-state-charter) |
 
@@ -36,6 +38,7 @@
 | File | Domain | Purpose | When to read |
 |------|--------|---------|-------------|
 | `_index-tools.md` | tools | File-level index for the tools domain. | When a worker is dispatched to tooling / static-analysis work. |
+| `_index-web-labs.md` | web-labs | File-level index for the web-labs domain (quick-reference, camoufox MCP, peeling workflow). | When dispatched to a browser JS reverse engineering task (`--type web`). |
 | `_index-anti-analysis.md` | anti-analysis | File-level index for the anti-analysis domain. | When a worker faces anti-debug / anti-VM / anti-DBI samples. |
 | `_index-patterns.md` | patterns | File-level index for the patterns domain (general RE techniques). | When a worker needs pattern-recognition references. |
 | `_index-languages.md` | languages | File-level index for the languages domain. | When a worker has identified the sample's language. |
@@ -114,3 +117,4 @@
 | `re-library/tools-crypto.md` | tools | Encryption/encoding/hashing tool quick-reference. | When needing to identify/decode/crack encrypted data. |
 | `re-library/tools-dynamic.md` | tools | Dynamic analysis tooling (Frida, angr, lldb, x64dbg, Qiling). | When performing runtime/dynamic analysis or function hooking. |
 | `re-library/tools.md` | tools | Core static RE tools (GDB, Radare2, Ghidra, Unicorn). | When setting up a reversing workspace. |
+| `re-library/web-re-quickref.md` | web-labs | Browser JS reverse engineering quick-reference: hook/boundary quick reference, signed-parameter workflow, layered peeling (unbundle → deobfuscate → VM boundary), crypto signatures, anti-patterns. | Before opening the browser on a web target (`--type web`); injected into web workspace CLAUDE.md at init. |
