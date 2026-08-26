@@ -34,6 +34,7 @@ import socket
 import shutil
 import subprocess
 import sys
+import zipfile
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -200,7 +201,7 @@ FIXES: dict[str, ToolMeta] = {
         repo="https://sourceware.org/git/binutils-gdb.git",
         package="binutils", verify_cmd="objdump --version"),
     "decompiler": ToolMeta(
-        fix="install a decompiler — follow the #408 installer (set GHIDRA_HOME=<Ghidra install root> with support/analyzeHeadless(.bat), or install IDA with idat64 on PATH, or register the ghidra/ida-pro-vm MCP via `claude mcp add`)",
+        fix="install Ghidra OR IDA — either satisfies this check (#408 installer: set GHIDRA_HOME=<Ghidra install root> with support/analyzeHeadless(.bat), OR put idat64 on PATH); or register the ghidra/ida-pro-vm MCP via `claude mcp add`)",
         description="headless decompiler supply (Ghidra or IDA)",
         url="https://ghidra-sre.org/",
         repo="https://github.com/NationalSecurityAgency/ghidra",
@@ -736,8 +737,16 @@ def _vm_fail_fixes(vm_host: str | None,
 
 
 def _probe_native_so(ws: Path) -> bool:
-    """True if the sample under bins/ contains native .so code:
-    a .so file, or a zip (APK) whose first 4KB references lib/ (native dir)."""
+    """True if the sample under bins/ contains native .so code: a .so file,
+    or a zip (APK/JAR) whose central directory lists lib/*.so entries.
+
+    #756: an APK's central directory sits at the TAIL of the file while its
+    lib/ local file headers sit at arbitrary offsets — the previous head-4KB
+    byte scan missed real samples (live-run: 206 lib/**/*.so entries, zero
+    head-4KB hits -> has_native_so=False degraded the HARD decompiler gate).
+    namelist() reads only central-directory metadata, so it stays cheap even
+    on multi-hundred-MB APKs. Non-zip files keep the .so suffix rule; a
+    corrupt zip fails OPEN to the legacy head-4KB scan (never raises)."""
     bins = ws / "bins"
     if not bins.is_dir():
         return False
@@ -746,6 +755,18 @@ def _probe_native_so(ws: Path) -> bool:
             continue
         if p.name.endswith(".so"):
             return True
+        # #756: read the central directory once instead of guessing from the
+        # head bytes — entry layout is unbounded, the directory is not.
+        try:
+            with zipfile.ZipFile(p) as zf:
+                names = zf.namelist()
+        except (zipfile.BadZipFile, OSError):
+            names = None  # fail open: fall through to the legacy head scan
+        if names is not None:
+            if any(n.startswith("lib/") and n.endswith(".so")
+                   for n in names):
+                return True
+            continue
         try:
             head = p.read_bytes()[:4096]
         except OSError:
@@ -1001,11 +1022,13 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
     else:
         report.items.append(CheckResult(
             name="decompiler", status=Status.FAIL, tier=Tier.HARD,
-            detail=("Sample has native .so — decompiler REQUIRED for native code"
+            detail=("Sample has native .so — decompiler REQUIRED for native "
+                    "code (install Ghidra OR IDA — either satisfies this "
+                    "check)"
                     if has_native_so
-                    else "No decompiler found (need Ghidra, IDA, or a "
-                         "ghidra/ida-pro-vm MCP registration — see the #408 "
-                         "installer)"),
+                    else "No decompiler found (install Ghidra OR IDA — either "
+                         "satisfies this check; or register a "
+                         "ghidra/ida-pro-vm MCP — see the #408 installer)"),
             root_cause="decompiler" if has_native_so else None,
             probe=ProbeTier.PRESENCE,
         ))

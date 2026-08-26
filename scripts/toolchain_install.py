@@ -118,8 +118,9 @@ class InstallPlan:
 #   Python items     -> pip / uv
 #   RE system tools  -> winget / choco / brew
 #   Linux families   -> apt / dnf / apk / pacman (needs_sudo — #304)
-#   decompiler       -> the Ghidra path (auto) — pkg installs + MCP
-#                       bridge registration; IDA is the mcp_url path
+#   decompiler       -> either supply satisfies it (#756: Ghidra is the
+#                       AUTO path — pkg installs + MCP bridge registration;
+#                       an existing IDA covers it via the mcp_url path)
 #   ida              -> NEVER auto-installed; operator supplies the
 #                       existing MCP URL (claude mcp add --transport http)
 INSTALL_PLANS: dict[str, InstallPlan] = {

@@ -303,6 +303,7 @@ def _observation_artifact_budget(verbose: bool = True,
     budgets = {"max_new_spec": 1, "max_new_test": 5, "max_new_files": 20}
     if cfg_path.is_file():
         try:
+            import yaml  # local import: repo-wide use-site convention
             loaded = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
             budgets.update((loaded or {}).get("budget", {}))
         except Exception:  # noqa: BLE001 — observation must never raise
