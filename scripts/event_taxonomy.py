@@ -154,6 +154,8 @@ ALL_EVENT_TYPES = [
 #   lesson_citation / lesson_burn / lesson_match / lesson_deprecated
 #                                 lessons_telemetry #526 CBM + tombstone face
 #   lesson_stage_transition failure_analysis_gate nursery draft→active (#525)
+#   install_attempt / install_declined / install_failed
+#                                toolchain_install #700 per-item install events
 EMIT_ACTIONS = [
     "analysis_blocked",
     "analysis_recorded",
@@ -169,6 +171,9 @@ EMIT_ACTIONS = [
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "failure_blocked",
     "hypothesis_seed",    # #662 PQ scaffold seeding
+    "install_attempt",    # #700 toolchain_install per-item install events
+    "install_declined",   # #700 toolchain_install per-item install events
+    "install_failed",     # #700 toolchain_install per-item install events
     "ladder_required",
     "lesson_burn",
     "lesson_citation",

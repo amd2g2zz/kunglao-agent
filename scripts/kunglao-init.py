@@ -244,12 +244,82 @@ INIT_REPORT_PATH = Path("runs") / ".init-report.json"
 INIT_PHASES = ("scaffold", "toolchain", "wire-up", "cron-verify", "render", "exit")
 
 
+def _parse_init_report_keep() -> int:
+    """#700 D2: KUNGLAO_INIT_REPORT_KEEP int ≥ 1, default 5. Parse
+    failures, zero, negative → default — a mistyped env var must not
+    break init (fail-open class)."""
+    raw = os.environ.get("KUNGLAO_INIT_REPORT_KEEP")
+    if not raw:
+        return 5
+    try:
+        n = int(raw)
+    except ValueError:
+        return 5
+    if n < 1:
+        return 5
+    return n
+
+
+_INIT_ARCHIVE_RE = re.compile(r"\.init-report\.(\d+)\.json$")
+
+
+def archive_previous_init_report(target: Path) -> Path | None:
+    """#700 D1: rotate the existing report at `target` to a fresh numbered
+    sibling (n = max+1) and prune the archive set to KUNGLAO_INIT_REPORT_KEEP.
+    Never raises — history rotation must not break init (spec: rotation
+    never breaks init). Returns the archive path, or None when nothing was
+    rotated. Non-numeric siblings (e.g. user-created `.init-report.abc.json`)
+    are ignored at scan, count, and prune."""
+    if not target.exists():
+        return None
+    parent = target.parent
+    max_n = 0
+    try:
+        for p in parent.iterdir():
+            m = _INIT_ARCHIVE_RE.fullmatch(p.name)
+            if m:
+                n = int(m.group(1))
+                if n > max_n:
+                    max_n = n
+    except OSError:
+        return None
+    archive = parent / f".init-report.{max_n + 1}.json"
+    try:
+        target.replace(archive)
+    except OSError:
+        return None
+    try:
+        print(f"kunglao-init: archived previous init report -> {archive}",
+              file=sys.stderr)
+    except Exception:
+        pass
+    keep = _parse_init_report_keep()
+    try:
+        archives: list[tuple[int, Path]] = []
+        for p in parent.iterdir():
+            m = _INIT_ARCHIVE_RE.fullmatch(p.name)
+            if m:
+                archives.append((int(m.group(1)), p))
+        archives.sort()  # oldest first
+        for _, p in archives[:-keep] if len(archives) > keep else []:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return archive
+
+
 def write_init_report(ws: Path, phases: list[dict], overall: str,
                       exit_code: int) -> Path | None:
-    """#534: write runs/.init-report.json — the structured init telemetry
-    envelope. Idempotent: overwrites any prior report. Never raises
-    (logging must never break analysis). Returns the path on success,
-    None on OSError (degraded to stderr warning)."""
+    """#534 + #700: write runs/.init-report.json — the structured init
+    telemetry envelope. Rotates any prior report to runs/.init-report.{n}.json
+    (n = max+1, pruned to KUNGLAO_INIT_REPORT_KEEP, default 5) so a failed
+    cycle preserves the previous cycle's telemetry for resume (#466).
+    Idempotent modulo the archive. Never raises — logging must never break
+    analysis. Returns the path on success, None on OSError (degraded to
+    stderr warning)."""
     try:
         from template_version import read_skill_version
         skill_version = read_skill_version()
@@ -265,6 +335,20 @@ def write_init_report(ws: Path, phases: list[dict], overall: str,
     target = ws / INIT_REPORT_PATH
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"kunglao-init: WARNING cannot mkdir {target.parent}: {exc}",
+              file=sys.stderr)
+        return None
+    # #700: rotate the prior report — fail-open at the call site too. The
+    # helper itself is fail-open (D1) and returns None on any I/O fluke,
+    # but a pathological archive (monkeypatched helper in tests, future
+    # bug, or a Windows rename race) must NOT abort the fresh write —
+    # the spec scenario pins this: "rotation never breaks init".
+    try:
+        archive_previous_init_report(target)
+    except Exception:
+        pass
+    try:
         atomic_write(target, json.dumps(doc, sort_keys=True,
                                         separators=(",", ":"),
                                         ensure_ascii=False) + "\n")
