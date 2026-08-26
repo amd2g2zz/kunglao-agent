@@ -6,6 +6,7 @@ Extracted from hook_activation.py (T-2 split) — the --heartbeat-on /
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -143,6 +144,48 @@ def heartbeat_off(workspace: Path, force: bool = False) -> int:
                   "gate credential; deleting it breaks analysis (dispatch would be "
                   "rejected by check_heartbeat_alive). Dispatch/reactivate to "
                   "CONVERGED (confirmed by convergence_check.py) first, or pass "
+                  "explicit --force.",
+                  file=sys.stderr)
+            return 1
+        # #717 criterion 2: the completion oracle must ALSO be closed. The
+        # sample-incident-01 0.1.2 incident tore the heartbeat down on convergence
+        # alone while the Stop gate slept — five OC items + a bad-YAML
+        # oracle sailed through because convergence_check never reads
+        # task-oracle.yaml. Both judges must agree: convergence (claims
+        # resolved) AND judge() exit 0 (user's pre-registered items closed).
+        oracle_path = workspace / "task-oracle.yaml"
+        if not oracle_path.exists():
+            print("Oracle missing — teardown forbidden: an oracle-anchored "
+                  "workspace cannot stop monitoring without task-oracle.yaml "
+                  "(unanchored run? --force is the operator override).",
+                  file=sys.stderr)
+            return 1
+        try:
+            import yaml  # noqa: PLC0415 — optional dependency, gate-local use
+            oracle = yaml.safe_load(
+                oracle_path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001 — unreadable = refuse
+            print(f"Oracle unreadable ({type(exc).__name__}) — teardown "
+                  "forbidden: a corrupted oracle cannot be judged; repair "
+                  "task-oracle.yaml or pass explicit --force.",
+                  file=sys.stderr)
+            return 1
+        try:
+            spec = importlib.util.spec_from_file_location(
+                "_cg_heartbeat", Path(__file__).resolve().parent / "completion_gate.py")
+            cg = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(cg)
+            oracle_code, oracle_reason = cg.judge(oracle)
+        except Exception as exc:  # noqa: BLE001 — judge failure = refuse
+            print(f"Completion gate judge failed ({type(exc).__name__}) — "
+                  "teardown forbidden; pass explicit --force to override.",
+                  file=sys.stderr)
+            return 1
+        if oracle_code != 0:
+            print(f"Oracle not closed (exit {oracle_code}: {oracle_reason}) — "
+                  "teardown forbidden: convergence_check resolves CLAIMS, but "
+                  "the user's pre-registered open_items/deferrals are judged "
+                  "by the completion gate; close or user-defer them, or pass "
                   "explicit --force.",
                   file=sys.stderr)
             return 1

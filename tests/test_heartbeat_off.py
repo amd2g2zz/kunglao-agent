@@ -48,6 +48,19 @@ def _make_ws(ws: Path, claims: list[dict] | None = None, heartbeat: bool = True)
     return ws
 
 
+def _closed_oracle(ws: Path) -> Path:
+    """#717 dual-criterion fixture: a CLOSED task-oracle.yaml (the teardown
+    guard requires convergence AND a judge-clean oracle)."""
+    (ws / "task-oracle.yaml").write_text(
+        'task_text: "synthetic task"\n'
+        "open_items:\n"
+        "  - id: OC-1\n"
+        "    closed_by: F-001\n",
+        encoding="utf-8",
+    )
+    return ws
+
+
 def _run_off(ws: Path, *extra: str) -> subprocess.CompletedProcess:
     env = {"PYTHONIOENCODING": "utf-8", **os.environ}
     return subprocess.run(
@@ -73,8 +86,9 @@ def test_unconverged_rejects_with_guidance(tmp_path):
 
 
 def test_converged_deletes_heartbeat(tmp_path):
-    """Empty claims (all converged) → heartbeat deletion allowed + shutdown line printed."""
-    ws = _make_ws(tmp_path / "ws", claims=[])
+    """Empty claims (all converged) + closed oracle (#717 criterion 2) →
+    heartbeat deletion allowed + shutdown line printed."""
+    ws = _closed_oracle(_make_ws(tmp_path / "ws", claims=[]))
     r = _run_off(ws)
     assert r.returncode == 0, f"CONVERGED should allow off: stdout={r.stdout!r} stderr={r.stderr!r}"
     assert not (ws / "runs" / ".heartbeat.json").exists(), "heartbeat should be deleted"
@@ -90,8 +104,9 @@ def test_force_overrides_unconverged(tmp_path):
 
 
 def test_off_without_registered_heartbeat_is_noop(tmp_path):
-    """off without a registered heartbeat is an idempotent no-op (no error)."""
-    ws = _make_ws(tmp_path / "ws", claims=[], heartbeat=False)
+    """off without a registered heartbeat is an idempotent no-op (no error).
+    #717: teardown still needs a closed oracle even with no heartbeat file."""
+    ws = _closed_oracle(_make_ws(tmp_path / "ws", claims=[], heartbeat=False))
     r = _run_off(ws)
     assert r.returncode == 0, f"no heartbeat should no-op: stderr={r.stderr!r}"
 

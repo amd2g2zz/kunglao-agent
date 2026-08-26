@@ -210,7 +210,20 @@ def is_active_strict(workspace: Path, hook_name: str) -> bool:
     paused = state.get("paused_hooks", [])
     if hook_name in paused:
         return False
-    return hook_name in active
+    if hook_name in active:
+        return True
+    # #717: ALWAYS_ARMED hooks (completion_gate) fire on membership alone.
+    # is_active_strict used to fall through to `return False` here, so a
+    # state file written by any partial writer (update_state, an external
+    # editor, an activation that pre-dates init's always_arm) that omitted
+    # the gate from active_hooks silently slept the Stop gate — the
+    # sample-incident-01 0.1.2 incident: active_hooks=["active_intervention"] and
+    # the completion gate never fired once in a 4-hour run. Membership in
+    # ALWAYS_ARMED_HOOKS is itself the activation record (init's always_arm
+    # guarantees the entry; expiry/pause/override above still bind).
+    if hook_name in ALWAYS_ARMED_HOOKS:
+        return True
+    return False
 
 
 def _emit_hook_slept_once(workspace: Path, state: dict, exp: datetime) -> None:

@@ -287,6 +287,12 @@ def judge(oracle, declaration_text=None) -> tuple[int, str]:
     unsigned_defers: list[dict] = []
     for defer in deferrals:
         if not isinstance(defer, dict):
+            # #717: a bare string defer carries NO authorized_by — silently
+            # skipping it (pre-#717 `continue`) let sample-incident-01 defer five
+            # dynamic-leg items as plain strings and still PASS. A defer
+            # without a signature is by definition an unsigned defer.
+            unsigned_defers.append(
+                {"item": str(defer), "authorized_by": "", "reason": str(defer)})
             continue
         item_id = str(defer.get("item", "") or "").strip()
         if not is_user_authorized(defer):
@@ -318,6 +324,13 @@ def judge(oracle, declaration_text=None) -> tuple[int, str]:
     unresolved: list[dict] = []
     for item in open_items:
         if not isinstance(item, dict):
+            # #717: a bare string item has no id/closed_by — pre-#717
+            # `continue` made it INVISIBLE to the ledger, so sample-incident-01
+            # listed five open OC items as plain strings and the gate
+            # counted zero unresolved. An item that cannot be inspected
+            # cannot be resolved: it stays open, blocking exit 0.
+            unresolved.append(
+                {"id": str(item)[:60], "closed_by": "", "detail": str(item)})
             continue
         item_id = str(item.get("id", "") or "").strip()
         closed_by = str(item.get("closed_by", "") or "").strip()

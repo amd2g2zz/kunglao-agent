@@ -147,8 +147,24 @@ def process_event(payload: dict) -> int:
     try:
         import yaml
         oracle = yaml.safe_load((ws / ORACLE_FILE).read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001 — FAIL_OPEN on oracle read
-        return 0
+    except yaml.YAMLError as exc:
+        # #717: an UNREADABLE oracle in an activated workspace BLOCKS (exit 3),
+        # it does not pass through. The pre-#717 FAIL_OPEN here swallowed the
+        # sample-incident-01 L7 failure (a bare scalar with an inner colon —
+        # ScannerError "mapping values are not allowed here"), so the session
+        # ended cleanly with items open. A corrupted oracle is a
+        # fail-closed event in the D6 family, same as a missing one — the
+        # operator must repair task-oracle.yaml before completion can be
+        # judged. (OSError on read stays FAIL_OPEN per the module docstring:
+        # a transient IO error must not deadlock the session.)
+        reason = (f"task-oracle.yaml is unparseable YAML ({type(exc).__name__}: "
+                  f"{str(exc).splitlines()[0] if str(exc) else exc}) — repair "
+                  f"the oracle before completion can be judged (#717)")
+        print(json.dumps({"decision": "block", "reason": reason},
+                         ensure_ascii=False))
+        return 3
+    except OSError:
+        return 0  # transient IO failure — FAIL_OPEN (never deadlock)
     try:
         cg = _load_judge()
         code, reason = cg.judge(oracle)
