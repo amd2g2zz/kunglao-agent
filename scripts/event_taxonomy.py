@@ -170,6 +170,7 @@ EMIT_ACTIONS = [
     "dispatch",
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "failure_blocked",
+    "git_snapshot_skipped",  # #739 kunglao_upgrade WARN face — snapshot untakeable (git missing / git failed)
     "hypothesis_seed",    # #662 PQ scaffold seeding
     "install_attempt",    # #700 toolchain_install per-item install events
     "install_declined",   # #700 toolchain_install per-item install events

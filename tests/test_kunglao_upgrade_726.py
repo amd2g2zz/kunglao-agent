@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -99,6 +100,7 @@ def up():
 def test_vocab_has_upgrade_actions():
     assert "upgrade" in EMIT_ACTIONS
     assert "upgrade_item" in EMIT_ACTIONS
+    assert "git_snapshot_skipped" in EMIT_ACTIONS  # #739 WARN face
 
 
 def test_old_workspace_is_repaired(up, tmp_path):
@@ -211,3 +213,78 @@ def test_iron_rule_guard_selftest(up, tmp_path, capsys):
     assert rc == 4, "user-data mutation under upgrade must exit 4"
     assert list((ws / "runs").glob("upgrade-snapshot.*.json")), \
         "snapshot must survive an iron-rule failure"
+
+
+# ------------------------------------------------------------- #739 git snapshot
+
+def _git(ws: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(ws), *args],
+                          capture_output=True, text=True)
+
+
+def test_no_git_workspace_gets_git_snapshot(up, tmp_path, capsys):
+    """#739 — a legacy no-git workspace leaves the upgrade with a .git dir,
+    exactly one snapshot commit, a hygiene .gitignore, and the usage
+    banner (log / revert / checkout -b exp)."""
+    ws = synth_v012_ws(tmp_path)
+    assert not (ws / ".git").exists()
+    assert up.main([str(ws)]) == 0
+    assert (ws / ".git").is_dir()
+    subjects = _git(ws, "log", "--format=%s").stdout.splitlines()
+    assert len(subjects) == 1
+    assert "post-upgrade git snapshot" in subjects[0]
+    gi = (ws / ".gitignore").read_text(encoding="utf-8")
+    for pat in ("bins/", "__pycache__/", "*.pyc", "*.log", "runs/"):
+        assert pat in gi, pat
+    out = capsys.readouterr().out
+    assert "git -C" in out
+    assert "log --oneline" in out
+    assert "revert --no-edit" in out
+    assert "checkout -b exp" in out
+    assert "ground truth" in out, "banner must mark git as snapshot-only"
+
+
+def test_existing_git_repo_is_left_alone(up, tmp_path):
+    """#739 — an existing repo is never re-initialized: no snapshot commit
+    is layered on top, no .gitignore is written into it."""
+    ws = synth_v012_ws(tmp_path)
+    for args in (("init",), ("add", "-A"),
+                 ("-c", "user.name=t", "-c", "user.email=t@localhost",
+                  "commit", "--no-gpg-sign", "-m", "pre-existing")):
+        _git(ws, *args)
+    assert up.main([str(ws)]) == 0
+    assert _git(ws, "log", "--format=%s").stdout.splitlines() == \
+        ["pre-existing"]
+    assert up.ensure_git_snapshot(ws) == {"status": "existing"}
+    assert not (ws / ".gitignore").exists()
+
+
+def test_git_missing_warns_but_upgrade_succeeds(
+        up, tmp_path, capsys, monkeypatch):
+    """#739 — git binary missing: one-line WARN to stderr +
+    git_snapshot_skipped event, no .git — and the upgrade rc stays 0."""
+    ws = synth_v012_ws(tmp_path)
+
+    def no_git(*_a, **_k):
+        raise FileNotFoundError("git binary not found")
+
+    monkeypatch.setattr(up, "_run_git", no_git)
+    assert up.main([str(ws)]) == 0
+    assert not (ws / ".git").exists()
+    captured = capsys.readouterr()
+    assert "WARN" in captured.err
+    assert "git" in captured.err
+    actions = [json.loads(line).get("action")
+               for log in (ws / "runs" / "logs").glob("kunglao-*.jsonl")
+               for line in log.read_text(encoding="utf-8").splitlines()
+               if line.strip()]
+    assert "git_snapshot_skipped" in actions
+
+
+def test_dry_run_leaves_no_git(up, tmp_path):
+    """#739 — dry-run produces no write side effects: neither .git nor
+    .gitignore may appear."""
+    ws = synth_v012_ws(tmp_path)
+    assert up.main([str(ws), "--dry-run"]) == 0
+    assert not (ws / ".git").exists()
+    assert not (ws / ".gitignore").exists()

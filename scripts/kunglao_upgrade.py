@@ -16,6 +16,11 @@ stays on disk for forensics.
 Exit codes: 0 ok/already/dry-run · 3 unreadable origin version (run init)
 · 4 iron-rule violation.
 
+#739: a successful migration on a workspace that predates git ends with
+ensure_git_snapshot() — git init + one snapshot commit + an explicit usage
+banner. Git is the snapshot layer ONLY; the workspace on disk stays ground
+truth, so a dirty git status can never masquerade as workspace state.
+
 Spec: openspec/changes/issue-726-kunglao-upgrade/{proposal,design}/.
 """
 from __future__ import annotations
@@ -24,6 +29,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -232,6 +238,95 @@ def _emit(ws: Path, action: str, detail: str) -> None:
 
 
 # --------------------------------------------------------------------------
+# git snapshot layer (#739)
+# --------------------------------------------------------------------------
+
+_SNAPSHOT_COMMIT_MSG = ("kunglao-upgrade: post-upgrade git snapshot "
+                        "(legacy workspace had no git)")
+
+# bins/ = immutable sample input; the rest = runtime noise. Kept out of the
+# snapshot commit so a dirty status never masquerades as workspace truth.
+_GITIGNORE_BODY = (
+    "# kunglao-upgrade snapshot hygiene (#739)\n"
+    "# bins/            : immutable sample input, never snapshot-tracked\n"
+    "# runs/ *.log      : runtime noise\n"
+    "# __pycache__/ *.pyc : toolchain caches\n"
+    "bins/\n"
+    "__pycache__/\n"
+    "*.pyc\n"
+    "*.log\n"
+    "runs/\n"
+)
+
+
+def _run_git(ws: Path, *args: str) -> subprocess.CompletedProcess:
+    """One git invocation against ws (git -C form). FileNotFoundError
+    (git binary missing) propagates — the caller maps it to a WARN."""
+    return subprocess.run(
+        ["git", "-C", str(ws), *args],
+        capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+
+def _print_git_banner(ws: Path) -> None:
+    w = ws.as_posix()
+    print("kunglao-upgrade: this workspace had no git — a snapshot repo is "
+          "now initialized and the post-upgrade state committed.")
+    print("  Git here is a SNAPSHOT layer only: the workspace on disk is "
+          "ground truth — never read git status as current state.")
+    print(f"  history    : git -C {w} log --oneline")
+    print(f"  revert     : git -C {w} revert --no-edit HEAD")
+    print(f"  experiment : git -C {w} checkout -b exp")
+
+
+def ensure_git_snapshot(ws: Path) -> dict:
+    """#739 — legacy workspaces may predate git. After a successful upgrade,
+    give them a snapshot repo (init + one commit) so every later change has
+    a revert point. WARN-only by design: a snapshot we cannot take must
+    never fail an otherwise-successful upgrade. Idempotent — an existing
+    .git (dir OR worktree pointer file) is left untouched."""
+    ws = Path(ws)
+    if (ws / ".git").exists():
+        return {"status": "existing"}
+    try:
+        # .gitignore BEFORE the first add -A so the snapshot stays clean
+        (ws / ".gitignore").write_text(_GITIGNORE_BODY, encoding="utf-8")
+        # explicit identity + --no-gpg-sign: a snapshot commit must not
+        # depend on host git config (bare CI runners carry none). NB the
+        # -c config overrides go BEFORE the subcommand — after `commit`
+        # they mean "reuse that commit's message".
+        for label, args in (
+            ("init", ("init",)),
+            ("add", ("add", "-A")),
+            ("commit", ("-c", "user.name=kunglao-upgrade",
+                        "-c", "user.email=kunglao-upgrade@localhost",
+                        "commit", "--no-gpg-sign", "-m", _SNAPSHOT_COMMIT_MSG)),
+        ):
+            proc = _run_git(ws, *args)
+            if proc.returncode != 0:
+                tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+                why = tail[-1] if tail else f"exit {proc.returncode}"
+                print(f"kunglao-upgrade: WARN — git snapshot skipped at "
+                      f"`git {label}`: {why}", file=sys.stderr)
+                _emit(ws, "git_snapshot_skipped", f"git {label}: {why}")
+                return {"status": "skipped", "reason": f"git {label}"}
+    except FileNotFoundError:
+        print("kunglao-upgrade: WARN — git snapshot skipped (git binary "
+              "not found); the upgrade itself is unaffected.",
+              file=sys.stderr)
+        _emit(ws, "git_snapshot_skipped", "git binary not found")
+        return {"status": "skipped", "reason": "git-missing"}
+    except OSError as exc:
+        print(f"kunglao-upgrade: WARN — git snapshot skipped: {exc}",
+              file=sys.stderr)
+        _emit(ws, "git_snapshot_skipped", str(exc))
+        return {"status": "skipped", "reason": "io-error"}
+    rev = _run_git(ws, "rev-parse", "--short", "HEAD")
+    sha = rev.stdout.strip() if rev.returncode == 0 else None
+    _print_git_banner(ws)
+    return {"status": "created", "commit": sha}
+
+
+# --------------------------------------------------------------------------
 # driver
 # --------------------------------------------------------------------------
 
@@ -294,6 +389,9 @@ def upgrade(ws: Path, dry_run: bool = False) -> int:
     _emit(ws, "upgrade", f"{origin}->{target} items={applied}")
     print(f"kunglao-upgrade: {origin} -> {target} "
           f"({applied} item(s), snapshot {snap_path.name})")
+    # #739 — snapshot layer for workspaces that predate git; WARN-only,
+    # never changes the exit code
+    ensure_git_snapshot(ws)
     return RC_OK
 
 
