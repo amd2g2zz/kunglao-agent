@@ -116,11 +116,16 @@ def test_old_workspace_is_repaired(up, tmp_path):
     # ALWAYS_ARMED repaired
     state = json.loads((ws / ".hook_state.json").read_text(encoding="utf-8"))
     assert "completion_gate" in state.get("active_hooks", [])
-    # all three stamp carriers refreshed to the current skill version
+    # #758 G4 — the synthesized body ("# old workspace", hand-written) is
+    # NOT the template frame; refreshing its stamp would be the lying class
+    # (#758 root cause 2: fresh stamp over stale body amplified #717). All
+    # three carriers keep their honest v0.1.2 stamp until Wave-2 G3's
+    # collect-and-merge brings the body forward.
     cur = template_version.read_skill_version()
     for rel in ("CLAUDE.md", "facts/_INDEX.md", "claim-register.yaml"):
         text = (ws / rel).read_text(encoding="utf-8")
-        assert f"{template_version.STAMP_KEY}: {cur}" in text, rel
+        assert f"{template_version.STAMP_KEY}: 0.1.2" in text, rel
+        assert f"{template_version.STAMP_KEY}: {cur}" not in text, rel
     # init-report upgrade record
     report = json.loads((ws / "runs" / ".init-report.json")
                         .read_text(encoding="utf-8"))

@@ -168,3 +168,72 @@ def upgrade_warning(ws: Path, *, skill_version: str | None = None) -> str | None
     return (f"upgrade: workspace template version {ws_v} is older than the "
             f"skill version {skill_v} — re-run kunglao-init to align "
             f"(expected {STAMP_KEY}: {skill_v})")
+
+
+# --------------------------------------------------------------------------
+# #758 G4: frame-consistency signature (openspec .../issue-758-runtime-version,
+# design D3). The stamp must never outrun the body it stamps: an upgraded
+# workspace whose CLAUDE.md predates the current template carries a HONEST old
+# stamp until something merges the new template sections into it (Wave-2 G3).
+# --------------------------------------------------------------------------
+
+FRAME_HEADING_RE = re.compile(r"^#{1,6}\s")
+
+# Module-level so tests can aim it at an absent path (exercising the
+# fail-open branch); production value is repo-owned and receipt-checked.
+_FRAME_TMPL = _REPO_ROOT / "templates" / "CLAUDE.md.base.tmpl"
+
+
+def frame_headings_from_text(text: str) -> list[str]:
+    """Heading skeleton of (rendered) markdown: ^#{1,6} lines outside code
+    fences, `{{var}}` placeholders normalized to `<var>`. Fence toggles on
+    ```-leading lines so embedded bash comments (the android flow card) are
+    never counted as headings."""
+    out: list[str] = []
+    fenced = False
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if stripped.startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        if FRAME_HEADING_RE.match(stripped):
+            out.append(re.sub(r"\{\{[^{}]*\}\}", "<var>", stripped).rstrip())
+    return out
+
+
+def expected_frame_headings() -> list[str]:
+    """Heading skeleton of the CURRENT base-template render. Returns [] when
+    the template is unreadable — frame_section_current treats that as
+    fail-open (cannot verify != drift, design D3)."""
+    try:
+        return frame_headings_from_text(
+            _FRAME_TMPL.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return []
+
+
+def frame_section_current(ws: Path, rendered_expected: str | None = None) -> bool:
+    """True iff <ws>/CLAUDE.md carries the current template frame.
+
+    Subsequence semantics (D3): template headings must appear IN ORDER in
+    the workspace file, with any number of user-added sections interleaved;
+    renaming/dropping/reordering any template heading means the body is
+    stale — a fresh stamp on top would be the lying-stamp class (#717).
+
+      missing CLAUDE.md       -> False (nothing to be consistent with)
+      unreadable/empty tmpl   -> True  (fail-open; cannot verify != drift)
+    """
+    p = Path(ws) / "CLAUDE.md"
+    if not p.is_file():
+        return False
+    if rendered_expected is not None:
+        expected = frame_headings_from_text(rendered_expected)
+    else:
+        expected = expected_frame_headings()
+    if not expected:
+        return True
+    actual = iter(frame_headings_from_text(
+        p.read_text(encoding="utf-8", errors="replace")))
+    return all(any(h == probe for probe in actual) for h in expected)

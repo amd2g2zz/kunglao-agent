@@ -73,6 +73,27 @@ RC_OK = 0
 RC_UNKNOWN_ORIGIN = 3
 RC_IRON_RULE = 4
 
+# #758 G1a/G1b: advisory interpreter-pin echo of .python-version=3.11.
+PYTHON_PIN = (3, 11)
+
+
+def _warn_python_version() -> None:
+    """#758 G1b: stderr WARN when this CLI runs off the pinned series.
+
+    Advisory only — CI (UV_PYTHON=python3.11) is the blocking authority;
+    a local 3.13 run must still be able to upgrade a legacy workspace.
+    NOTE: #753's structured-event format is NOT merged upstream yet (no
+    consumer for `[event] name=` anywhere) — we emit the canonical tokens
+    on a plain stderr line and realign when #753 lands.
+    """
+    vi = tuple(sys.version_info[:3])
+    if vi[:2] != PYTHON_PIN:
+        got = ".".join(str(x) for x in vi)
+        pin = ".".join(str(x) for x in PYTHON_PIN)
+        print(f"kunglao-upgrade: WARN [event] name=python_version status=warn "
+              f"detail={got!r}!=pinned:{pin} — advisory, continuing",
+              file=sys.stderr)
+
 MigrationFn = Callable[[Path, bool], list[str]]
 
 
@@ -92,11 +113,30 @@ def _item_always_armed_repair(ws: Path, dry: bool) -> str:
     return f"always_armed_repair({','.join(ALWAYS_ARMED_HOOKS)})"
 
 
+def _guarded_stamp_refresh(ws: Path, *, version: str | None = None,
+                           warn: bool = True) -> str:
+    """#758 G4: a fresh stamp may only ride a CURRENT frame. Stamping a
+    stale CLAUDE.md body is the lying class that amplified #717 — instead we
+    keep the honest old stamp and let Wave-2 G3 (collect-and-merge, #755)
+    bring the body forward before re-stamping."""
+    if not template_version.frame_section_current(ws):
+        if warn:
+            print("kunglao-upgrade: WARN — frame section stale — G3 merge "
+                  "upgrade required (see #758)", file=sys.stderr)
+        return "template_stamp_refresh(skipped: frame-drift)"
+    written = (template_version.stamp_workspace(ws, version=version)
+               if version else template_version.stamp_workspace(ws))
+    return f"template_stamp_refresh({','.join(written) or 'noop'})"
+
+
 def _item_template_stamp_refresh(ws: Path, dry: bool) -> str:
-    if not dry:
-        written = template_version.stamp_workspace(ws)
-        return f"template_stamp_refresh({','.join(written) or 'noop'})"
-    return "template_stamp_refresh"
+    if dry:
+        # plan honesty (#758): the printed plan reflects the frame gate
+        # even though nothing is written on a dry run
+        if not template_version.frame_section_current(ws):
+            return "template_stamp_refresh(skipped: frame-drift)"
+        return "template_stamp_refresh"
+    return _guarded_stamp_refresh(ws)
 
 
 def _item_init_report_note(ws: Path, dry: bool) -> str:
@@ -410,8 +450,11 @@ def upgrade(ws: Path, dry_run: bool = False,
         return RC_IRON_RULE
 
     # stamp to target even when no migration entry exists for the gap
-    # (forward stamps ride the last migration's refresh; belt & braces):
-    template_version.stamp_workspace(ws, version=target)
+    # (forward stamps ride the last migration's refresh; belt & braces).
+    # #758 G4: gated by the SAME frame predicate as the migration item —
+    # otherwise this tail would bypass the gate and lie anyway. Silent:
+    # the item above already emitted the one WARN this run needs.
+    _guarded_stamp_refresh(ws, version=target, warn=False)
     _emit(ws, "upgrade", f"{origin}->{target} items={applied}")
     print(f"kunglao-upgrade: {origin} -> {target} "
           f"({applied} item(s), snapshot {snap_path.name})")
@@ -433,6 +476,7 @@ def main(argv: list[str] | None = None) -> int:
                         "items, iron_rule_hash, started_at, ended_at); "
                         "the human-readable plan still goes to stderr")
     a = p.parse_args(argv)
+    _warn_python_version()
     started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     items_out: list = []
     rc = upgrade(Path(a.workspace), a.dry_run, items_out)

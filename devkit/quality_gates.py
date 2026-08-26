@@ -337,15 +337,27 @@ def _observation_artifact_budget(verbose: bool = True,
             "        New artifact justification: <reason>")
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
+    """Parser factory (test seam). NOTE (#758 G1a fallout): argparse on the
+    PINNED py3.11 validates an empty `nargs="*"` against `choices` and dies
+    on a bare `quality_gates.py` invocation, so gate-range validation moved
+    out of choices into main() — behavior-neutral elsewhere."""
     p = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    p.add_argument("gates", nargs="*", type=int, choices=sorted(GATES),
+    p.add_argument("gates", nargs="*", type=int,
                    help="which gates to run (default: all)")
     p.add_argument("--quick", action="store_true",
                    help=f"run the CI quick set {QUICK_GATES} (stable name)")
     p.add_argument("--quiet", action="store_true",
                    help="suppress per-gate verbose output")
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = _build_parser()
     args = p.parse_args(argv)
+    bad = [g for g in args.gates if g not in GATES]
+    if bad:
+        p.error(f"invalid gate(s): {bad} (choose from {sorted(GATES)})")
 
     verbose = not args.quiet
     if getattr(args, "quick", False) and args.gates:

@@ -30,6 +30,8 @@ Checks:
   5. venv + sample     — SKILL-root venv python exists w/ cryptography+yaml
                          (#409: uv run --project <skill_root> is authoritative,
                          not ws/.venv); sample sha256
+  6. python_version   — running interpreter matches the 3.11 pin (.python-version,
+                         #758); drift is WARN-only (CI pins its own interpreter)
 
 FAIL grading (gate logic lives in hooks/env_check_gate.py):
   - flag check is HARD — a polluted session must not dispatch at all
@@ -72,6 +74,13 @@ import platform_paths  # noqa: E402
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/ skill root
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: truthy = FAIL; 0/false/off/empty = PASS
+
+# #758 G1a/G1b: the repo pins its runtime via .python-version (=3.11, the
+# series CI exercises through UV_PYTHON=python3.11). pyproject's
+# requires-python floor stays >=3.10 (tomli-backfill contract,
+# tests/test_python_floor.py) — the pin is the DEFAULT interpreter, the
+# floor is the supported INSTALL range; they answer different questions.
+PINNED_PYTHON = (3, 11)
 # Issue #228: NO machine-specific default. Unset = not configured — the check
 # FAILs with guidance instead of silently pointing at one operator's lab VM /
 # Ghidra install (a wrong default on any other machine is worse than a FAIL).
@@ -321,6 +330,26 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     return True, "venv deps OK" + ("; sample sha256 OK" if sample_sha256 else "")
 
 
+def check_python_version() -> tuple[str, str]:
+    """#758 G1b: interpreter-version drift — ADVISORY (WARN), never FAIL.
+
+    Local interpreters drift off the repo pin (.python-version); CI is the
+    blocking authority (UV_PYTHON=python3.11), so a drifted local run must
+    not abort a workspace checklist — it gets a loud WARN row instead
+    (same WARN-does-not-fail-overall semantics as hooks_deployed/#410).
+    """
+    vi = tuple(sys.version_info[:3])
+    got = ".".join(str(x) for x in vi)
+    if vi[:2] == PINNED_PYTHON:
+        return ("PASS",
+                f"python {got} matches the "
+                f"{PINNED_PYTHON[0]}.{PINNED_PYTHON[1]}.x pin")
+    return ("WARN",
+            f"python {got} is not the pinned "
+            f"{PINNED_PYTHON[0]}.{PINNED_PYTHON[1]}.x (.python-version / CI "
+            f"UV_PYTHON) — advisory drift, CI stays authoritative")
+
+
 def check_init_complete(ws: Path) -> tuple[bool, str]:
     """#304: init completeness check (HARD).
 
@@ -407,6 +436,8 @@ def run(ws: Path) -> tuple[int, dict]:
         # #536: TRI-STATE like hooks — WARN on stamp-less legacy workspace,
         # FAIL on genuine version drift (see check_template_version).
         "template_version": check_template_version(ws),
+        # #758 G1b: TRI-STATE like hooks — WARN-only version-drift row.
+        "python_version": check_python_version(),
     }
     report = {
         "ts": utc_now(),
