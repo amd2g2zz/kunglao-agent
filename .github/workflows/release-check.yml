@@ -11,6 +11,12 @@
 
 name: release-check
 
+concurrency:
+  # one live run per ref — a new push cancels the superseded run instead of
+  # queueing stale suites behind it on the 2-runner pool
+  group: release-check-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [ "dev", "master" ]
