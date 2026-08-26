@@ -19,7 +19,10 @@ on:
 
 jobs:
   release-check:
-    runs-on: self-hosted
+    # Route to runners that actually have python3.11 (kunglao-runner-py311).
+    # The fleet is heterogeneous: -b / -py310 lack python3.11 and fail fast
+    # with "command not found" — the python-3.11 label pins the right host.
+    runs-on: [self-hosted, python-3.11]
     env:
       # Runner image pre-installs python3.11 (default python3); uv picks the
       # interpreter via this env.
