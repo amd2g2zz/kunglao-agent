@@ -193,7 +193,37 @@ Five layers, in order of preference — static first, escalate only when the lay
 |---|---|---|
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `0` | MUST stay `0`/unset — truthy values route dispatches through the teammate channel (rejected by `env_check_gate`) |
 | `KUNGLAO_VM_HOST` | unset | VM lease host for dynamic analysis (vmr-shell :9876 / Frida :1337) |
+| `KUNGLAO_CHANNEL` | `vmr` | dynamic-analysis execution control plane: `vmr` \| `ssh` \| `docker` \| `adb` \| `local` (see [Bring your own analysis environment](#bring-your-own-analysis-environment)) |
+| `KUNGLAO_DOCKER_CONTAINER` | unset | optional docker execution target for the `ssh`/`docker` channels (probe runs a real `docker exec <c> true`) |
 | `GHIDRA_HOME` | unset | Ghidra install root (`support/analyzeHeadless.bat` under it) |
+
+## Bring your own analysis environment
+
+Dynamic debugging needs **an execution control plane the agent can drive**.
+`KUNGLAO_CHANNEL` selects one of five equivalent first-class channels —
+pick what your environment already has; nothing here is a degraded mode:
+
+| Channel | What it drives | Prerequisites |
+|---|---|---|
+| `vmr` (default) | VMware-driven VM, **any guest OS**. Snapshot/revert workflows are its irreplaceable value — a Linux VM may be driven by `vmr` (snapshots) or `ssh` (lighter), your choice | vmr-shell skill; `KUNGLAO_VM_HOST` + ports 9876/1337 |
+| `ssh` | Any ssh-reachable box: remote bare metal, cloud VM, mac, iOS host, or a remote docker host | `KUNGLAO_VM_HOST` + key auth (probe runs a real `ssh -o BatchMode=yes -p $KUNGLAO_VM_SHELL_PORT <host> true`; BatchMode) |
+| `docker` | Local or remote docker daemon — `docker exec` is equivalent to any other control path | `docker version` green (`DOCKER_HOST` for remote); optional `KUNGLAO_DOCKER_CONTAINER` as the execution target |
+| `adb` | Android emulator or real device | `adb devices` shows a device; `adb forward tcp:1337 tcp:1337` for frida |
+| `local` | **Static-only analysis on the host.** The right choice when static tooling answers the primary questions, or when no dynamic infrastructure exists | none — red line below |
+
+> **`local` red line:** local is a first-class channel for **static** work
+> only — never execute, debug, or inject the sample on the host. Any
+> dynamic requirement must switch `KUNGLAO_CHANNEL` to `vmr`/`ssh`/
+> `docker`/`adb`; init HARD-rejects a dynamic task on `local`.
+
+The channel probe runs only for dynamic tasks (static-only tasks skip all
+probes and report a WARN note). Execution on the `ssh` channel flows
+through the **ssh-mcp** control plane (`npm i -g ssh-mcp`, TOML profiles —
+tools `run-command`, `sftp-upload`, `sftp-download`, session suite);
+plain CLI ssh is the fallback. For remote docker over ssh, set
+`KUNGLAO_DOCKER_CONTAINER` and the ssh probe additionally verifies
+`docker exec` through the host.
+
 
 ## Internals
 
@@ -220,6 +250,7 @@ MCP supply: the single manifest source is `scripts/mcp_probe.py`; `kunglao-init`
 | `ida-pro-vm` | WARN | when IDA chosen | remote IDA analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
 | `gitnexus` | HARD | Android graph building | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
 | `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
+| `ssh-mcp` | WARN | channel | ssh execution control plane (KUNGLAO_CHANNEL=ssh dynamics; CLI ssh fallback) | `claude mcp add ssh-mcp -- ssh-mcp` |
 
 Trust gates (the components behind "verified"):
 
