@@ -82,3 +82,6 @@ analysis_space/
 # Dev worktrees (parallel branch isolation; #472-class hygiene: never tracked)
 .worktrees/
 docs/superpowers/
+
+# GC-harness lifecycle registries (identity/status/linkage only, local-only)
+.agent/

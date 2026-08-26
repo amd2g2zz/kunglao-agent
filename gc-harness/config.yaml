@@ -1,0 +1,17 @@
+# gc-harness/config.yaml — #720 v1 defaults (spec-of-record §11).
+spec:
+  require_existing_check: true
+  orphan_days: 90
+
+test:
+  quarantine_days: 30
+  stale_failure_days: 180
+
+worktree:
+  merged_days: 7
+  abandoned_days: 14
+
+budget:
+  max_new_spec: 1
+  max_new_test: 5
+  max_new_files: 20

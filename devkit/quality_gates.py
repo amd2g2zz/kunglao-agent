@@ -264,6 +264,78 @@ GATES = {
 QUICK_GATES = [1, 3, 4]
 
 
+def _observation_artifact_budget(verbose: bool = True,
+                                 repo_root: Path | None = None,
+                                 sink=None) -> None:
+    """Artifact-budget observation (#720): net NEW specs/tests/files added by
+    the current task vs gc-harness/config.yaml budgets.
+
+    NOT a gate — WARN-level observation per #720 P1 (HARD-ification is a
+    data-driven decision for a later release). Counts ADDED paths against a
+    diff base of origin/dev (fallback: HEAD — i.e. uncommitted work).
+    Over-budget without .agent/budget_justification.md content -> [warn]
+    with the required justification template; with justification -> [observe].
+    """
+    root = repo_root or REPO_ROOT
+    out = sink if sink is not None else print
+
+    def _git(*args: str) -> str:
+        r = subprocess.run(["git", "-C", str(root), *args],
+                           capture_output=True, text=True)
+        return r.stdout if r.returncode == 0 else ""
+
+    base = "origin/dev" if _git("rev-parse", "-q", "--verify",
+                                "origin/dev").strip() else "HEAD"
+    names = _git("diff", "--name-status", "-r", base)
+    added = [ln.split("\t", 1)[1].strip()
+             for ln in names.splitlines()
+             if ln.startswith("A") and "\t" in ln]
+    # untracked files are the most common mid-task state for NEW artifacts —
+    # `git diff` never sees them. Union both surfaces (exclude-standard keeps
+    # gitignored noise like .agent/ out).
+    untracked = _git("ls-files", "--others", "--exclude-standard").splitlines()
+    added = list(dict.fromkeys(added + [u.strip() for u in untracked if u.strip()]))
+    new_specs = {p.split("/", 2)[1] for p in added
+                 if p.startswith("openspec/changes/") and p.count("/") >= 3}
+    new_tests = [p for p in added
+                 if p.startswith("tests/") and Path(p).name.startswith("test_")]
+    cfg_path = root / "gc-harness" / "config.yaml"
+    budgets = {"max_new_spec": 1, "max_new_test": 5, "max_new_files": 20}
+    if cfg_path.is_file():
+        try:
+            loaded = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+            budgets.update((loaded or {}).get("budget", {}))
+        except Exception:  # noqa: BLE001 — observation must never raise
+            pass
+    counts = {
+        "max_new_spec": len(new_specs),
+        "max_new_test": len(new_tests),
+        "max_new_files": len(added),
+    }
+    over = {k: (counts[k], int(budgets[k]))
+            for k in counts if counts[k] > int(budgets[k])}
+    just = root / ".agent" / "budget_justification.md"
+    has_just = just.is_file() and bool(just.read_text(
+        encoding="utf-8", errors="replace").strip())
+    summary = (f"artifact budget: new_specs={counts['max_new_spec']}/"
+               f"{budgets['max_new_spec']} new_tests={counts['max_new_test']}/"
+               f"{budgets['max_new_test']} new_files={counts['max_new_files']}/"
+               f"{budgets['max_new_files']} (base={base})")
+    if not over:
+        if verbose:
+            out(f"  [observe] {summary}")
+        return
+    detail = "; ".join(f"{k}: {v[0]}/{v[1]}" for k, v in over.items())
+    if has_just:
+        out(f"  [observe] {summary} — over budget WITH justification "
+            f"(.agent/budget_justification.md): {detail}")
+    else:
+        out(f"  [warn] {summary} — OVER BUDGET without justification: {detail}")
+        out("  [warn] required in .agent/budget_justification.md:\n"
+            "        Existing artifact cannot satisfy because: <reason>\n"
+            "        New artifact justification: <reason>")
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     p.add_argument("gates", nargs="*", type=int, choices=sorted(GATES),
@@ -297,6 +369,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print("\n--- observation only (not a gate) ---")
     _observation_pass_rate(verbose=verbose)
+    _observation_artifact_budget(verbose=verbose)
 
     if failed:
         print(f"\n=== result: FAIL (gates {failed} failed) ===",
