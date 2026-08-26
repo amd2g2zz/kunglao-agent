@@ -168,6 +168,7 @@ import yaml  # noqa: E402  # #455: task_spec.yaml -> CLAUDE.md constraint sectio
 import env_manifest  # noqa: E402
 # #536: template version stamp — single source pyproject.toml, written on
 # the three text carriers at init, verified by hooks_selfcheck/env_check.
+import claudemd_frame  # noqa: E402  (#755 G2: frame marker wrap on render)
 import template_version  # noqa: E402
 # #534: observability lifeline — every init phase emits one structured
 # event under runs/logs/ (scaffold/toolchain/wire-up/cron-verify/render/
@@ -1497,6 +1498,11 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
                 "cannot render a partial web CLAUDE.md")
         qr_text = WEB_RE_QUICKREF.read_text(encoding="utf-8")
         text += chr(10) + qr_text
+
+    # #755 G2: the render ships wrapped in the versioned frame-marker pair
+    # (three-segment collect-and-merge contract; tests/fixtures/claudemd-golden
+    # are regenerated through the same sentinel path).
+    text = claudemd_frame.wrap_frame(text)
 
     target.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(target, text)

@@ -1,3 +1,4 @@
+<!-- kunglao:frame:v0.1.3 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -175,3 +176,4 @@ Any reusable analysis logic must land as a parameterized CLI script under `/kung
 ## Python venv
 
 Path: `.venv/`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts. Python 3.11.0.
+<!-- /kunglao:frame -->

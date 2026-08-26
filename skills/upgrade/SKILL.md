@@ -81,3 +81,35 @@ trips the rule.
 - `#726` — declarative convergence upgrade (CLI shape + migration registry).
 - `#739` — post-upgrade git snapshot for legacy no-git workspaces + explicit banner.
 - `#456` — single-source subcommand UX design D4 (this skill is a render surface of `skills/subcommands.yaml`).
+
+## Deploy-surface items (#755, migration entry 0.1.4)
+
+The `0.1.4` migration completes the deployment surface Wave-1 could not
+touch. Every item is idempotent and WARN-only (a degraded item never flips
+the exit code):
+
+| Item | Behavior |
+|------|----------|
+| `agents_refresh` | ws `.claude/agents/*.md` re-copied byte-exact from the executing install when md5s differ (#478 semantics) |
+| `claudemd_merge` | collect-and-merge: frame rebuilt from the CURRENT template; task_spec constraint block + out-of-frame sections stay byte-exact; unplaceable legacy bodies are skipped untouched |
+| `mcp_refresh` | missing `.mcp.json` -> init-parity scaffold; existing files are never clobbered |
+| `env_manifest_refresh` | missing `env-manifest.yaml` ledger backfilled via #727 channel resolution (defaulted-local WARNs); existing ledgers get only the `kunglao_version` bump |
+| `toolchain_manifest` | code-reality face: `runs/.init-report.json skill_version` refreshed; absence reports toward re-init, never fabricates state |
+| `uv_sync` | `uv sync --locked --project <install root>`, timeout-bounded; all failures are WARN faces |
+| `skill_staleness` | detect-only install lag report (below) |
+
+### Install staleness (`skill_install_staleness`)
+
+Read-only comparison of the executing install's HEAD against its remote
+ref (upstream when set, else `origin/<branch>` — no network fetch). The
+stderr trail carries the verdict:
+
+```
+[event] name=skill_install_staleness status=warn install=... behind=N
+[event] name=skill_install_staleness status=ok   install=... behind=0
+[event] name=skill_install_staleness status=skip (not a git clone)
+```
+
+`behind=N` means the running scaffold itself is older than upstream:
+update the skill package (`git -C <install>` pull / plugin update) and
+re-run `/kunglao-agent:upgrade` afterwards. Upgrade never self-updates.

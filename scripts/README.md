@@ -143,6 +143,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `references_recall.py` | references scored-recall CLI over the layered index — scenario → primary/supplementary; keyword → top-K ranked rows with score (no file dumps); `--list-categories` / `--scene-map` | tests, docs |
 | `wire_up_settings.py` | hook REGISTRY + deprecated alias -> hook_activation.register_hooks (#445; retirement #446) | hooks, lib(1), tests |
 | `install_reference.py` | multi-install reference hygiene — scanner/rewriter for stale `~/.claude/skills/<name>/` refs across `.claude/settings.json` + `CLAUDE.md` (#752; library-only: hook_activation verifier + kunglao_upgrade sweep) | scripts, tests |
+| `claudemd_frame.py` | CLAUDE.md three-segment framing — G2 frame-marker pair + G3 collect-and-merge split/classify/assemble primitives (#755; library-only: init write_claudemd wrap + kunglao_upgrade merge item) | scripts, tests |
 | `shell_defaults.py` | reusable CLI: idempotent shell env-default line management (check/apply/remove, powershell+bash; #276) | lib(1), tests |
 | `template_gen.py` | deterministic script-template generator CLI (templates/scripts/*.tmpl; exit 2/3/4/5, #278) | templates, tests, docs |
 | `template_render.py` | shared {{param}} render + leftover-detection engine (single source for template_gen + kunglao-init, #362) | lib(2), tests |

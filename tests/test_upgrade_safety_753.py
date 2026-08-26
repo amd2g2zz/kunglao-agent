@@ -271,7 +271,13 @@ def test_already_current_prints_no_reload_hint(up, tmp_path, capsys):
         _stamp_line(cur) + "\n", encoding="utf-8")
     (ws / "claim-register.yaml").write_text(
         _stamp_line(cur) + "\n", encoding="utf-8")
-    assert up.main([str(ws)]) == 0
+    # #755 T6 note: isolate the already-current print contract from the
+    # permanently-reachable patch entry ("0.1.4") — see design D1.
+    saved, up.MIGRATIONS = up.MIGRATIONS, []
+    try:
+        assert up.main([str(ws)]) == 0
+    finally:
+        up.MIGRATIONS = saved
     out = capsys.readouterr().out
     assert "already" in out.lower()
     assert "/reload-plugins" not in out

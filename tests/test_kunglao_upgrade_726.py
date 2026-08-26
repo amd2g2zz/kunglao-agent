@@ -162,12 +162,20 @@ def test_dry_run_prints_plan(up, tmp_path, capsys):
 
 
 def test_already_current_is_noop(up, tmp_path, capsys):
+    """#755 T6 note: this pins the DRIVER fast-path print. The registry now
+    keeps patch entries above the release stamp reachable ("0.1.4"), so a
+    stamped-cur workspace plans migrations by design; isolating the
+    fast-path contract with an empty registry is the honest unit here."""
     ws = synth_v012_ws(tmp_path)
     assert up.main([str(ws)]) == 0
     cur = template_version.read_skill_version()
     (ws / "CLAUDE.md").write_text(
         _stamp_line(cur) + "\n# fresh\n", encoding="utf-8")
-    rc = up.main([str(ws)])
+    saved, up.MIGRATIONS = up.MIGRATIONS, []
+    try:
+        rc = up.main([str(ws)])
+    finally:
+        up.MIGRATIONS = saved
     assert rc == 0
     assert "already" in capsys.readouterr().out.lower()
 

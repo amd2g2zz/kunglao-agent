@@ -49,19 +49,24 @@ JSON envelope (when `--json` is set):
 from __future__ import annotations
 
 import argparse
+import os
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Callable
 
+import yaml  # noqa: E402  (#755 A5: env-ledger YAML round trip)
+
 _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+import claudemd_frame  # noqa: E402  (#755 G3 pure split/assemble)
 import install_reference  # noqa: E402
 import template_version  # noqa: E402
 from hook_activation import (  # noqa: E402
@@ -149,6 +154,16 @@ def _item_template_stamp_refresh(ws: Path, dry: bool) -> str:
     return _guarded_stamp_refresh(ws)
 
 
+def _item_template_stamp_refresh_quiet(ws: Path, dry: bool) -> str:
+    """Same #758 gate as the loud variant, but WARN-silent (#755): when a
+    multi-entry plan runs (0.1.2 origins execute 0.1.3 THEN 0.1.4), only
+    the FIRST stamp gate may warn — every later guarded stamp stays silent
+    so one run produces exactly one stale-frame WARN."""
+    if dry:
+        return _item_template_stamp_refresh(ws, True)
+    return _guarded_stamp_refresh(ws, warn=False)
+
+
 def _item_init_report_note(ws: Path, dry: bool) -> str:
     if dry:
         return "init_report_note"
@@ -183,6 +198,260 @@ def _item_agent_metadata_seed(ws: Path, dry: bool) -> str:
     return "agent_metadata_seed"
 
 
+# --------------------------------------------------------------------------
+# lazy kunglao-init seam (#755) — deploy-surface single sources
+# --------------------------------------------------------------------------
+
+_INIT_MOD = None
+
+
+def _init_mod():
+    """kunglao-init.py loaded once (hyphen filename needs importlib). The
+    seam keeps the deploy-surface single sources (CORE_AGENTS / AGENTS_SRC
+    for #755 A2; the CLAUDE.md render core for G3) authoritative in init
+    while upgrade stays import-light at module level."""
+    global _INIT_MOD
+    if _INIT_MOD is None:
+        spec = importlib.util.spec_from_file_location(
+            "kunglao_init_upgrade_seam", _SCRIPTS / "kunglao-init.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _INIT_MOD = mod
+    return _INIT_MOD
+
+
+def _item_agents_refresh(ws: Path, dry: bool) -> str:
+    """#755 A2 (T1): L2 subagent re-copy. The executing install's agents/
+    are truth — a workspace `.claude/agents/*.md` whose md5 differs from the
+    source (or is missing entirely) is re-copied byte-exact, mirroring init
+    `_deploy_agents` (#478) semantics without re-running its env layer.
+    Iron-rule safe: agents are framework scaffolding outside the seven dirs.
+    WARN-only face: a missing SOURCE (repo-layout defect) or a copy I/O
+    error degrades to a warn label + event, never through the migration."""
+    if dry:
+        return "agents_refresh(dry)"
+    try:
+        init = _init_mod()
+        names: tuple[str, ...] = tuple(init.CORE_AGENTS)
+        src_dir = Path(init.AGENTS_SRC)
+        dst_dir = ws / ".claude" / "agents"
+        deployed: list[str] = []
+        unchanged = 0
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            src = src_dir / name
+            if not src.is_file():
+                raise RuntimeError(f"core agent source missing: {src}")
+            payload = src.read_bytes()
+            want = hashlib.md5(payload).hexdigest()
+            dst = dst_dir / name
+            if dst.is_file() and hashlib.md5(dst.read_bytes()).hexdigest() \
+                    == want:
+                unchanged += 1
+                continue
+            tmp = dst.with_name(dst.name + ".tmp755")
+            tmp.write_bytes(payload)
+            import os as _os
+            _os.replace(tmp, dst)
+            deployed.append(name)
+        detail = (f"deployed={','.join(deployed)}" if deployed else "noop") \
+            + f" unchanged={unchanged}"
+        _emit(ws, "agents_refresh", detail)
+        return f"agents_refresh({detail})"
+    except Exception as exc:  # noqa: BLE001 — WARN-only item posture (#755 D0)
+        why = f"{type(exc).__name__}: {exc}"
+        print(f"kunglao-upgrade: WARN — agents refresh skipped ({why})",
+              file=sys.stderr)
+        _emit_event("agents_refresh", "warn", why)
+        _emit(ws, "agents_refresh", f"warn:{why}")
+        return f"agents_refresh(warn: {type(exc).__name__})"
+
+
+# --------------------------------------------------------------------------
+# G3 collect-and-merge (#755, issue #758 Wave-2 tail) ----------------------
+# --------------------------------------------------------------------------
+
+_SAMPLE_ROW_RE = {
+    "sample_sha1": re.compile(r"\|\s*SHA1 \(filename\)\s*\|\s*`([^`]*)`\s*\|"),
+    "sample_sha256": re.compile(r"\|\s*SHA256\s*\|\s*`([^`]*)`\s*\|"),
+    "sample_type": re.compile(r"\|\s*Type\s*\|\s*`([^`]*)`\s*\|"),
+    "sample_path": re.compile(r"\|\s*Path\s*\|\s*`([^`]*)`\s*\|"),
+}
+
+
+def _parse_sample_rows(old_text: str) -> dict[str, str]:
+    """Carry the Sample-table values of the OLD render forward so the fresh
+    frame keeps the same sample identity (upgrade never re-hashes bins/)."""
+    out: dict[str, str] = {}
+    for key, rx in _SAMPLE_ROW_RE.items():
+        m = rx.search(old_text)
+        if m and m.group(1).strip():
+            out[key] = m.group(1).strip()
+    return out
+
+
+def _derive_project_type(ws: Path) -> str:
+    """.kunglao-init.json -> analysis_state.txt -> 'windows' (init default)."""
+    marker = ws / ".kunglao-init.json"
+    if marker.is_file():
+        try:
+            data = json.loads(marker.read_text(encoding="utf-8"))
+            pt = data.get("project_type")
+            if isinstance(pt, str) and pt.strip():
+                return pt.strip()
+        except (ValueError, OSError):
+            pass
+    state = ws / "analysis_state.txt"
+    if state.is_file():
+        try:
+            for line in state.read_text(encoding="utf-8").splitlines():
+                if line.startswith("project_type="):
+                    got = line.split("=", 1)[1].strip()
+                    if got:
+                        return got
+        except OSError:
+            pass
+    return "windows"
+
+
+def _build_current_frame(ws: Path, old_text: str,
+                         req_block: str | None) -> str:
+    """Render the CURRENT base template with init-parity params (#362 engine
+    through the lazy seam; D5 of the openspec design). req_block feeds the
+    {{task_spec_section}} slot so the requirement segment rides inside the
+    frame exactly where init would have placed it."""
+    init = _init_mod()
+    ptype = _derive_project_type(ws)
+
+    tmpl_path = init.CLAUDEMD_TMPL
+    if not tmpl_path.exists():
+        raise RuntimeError(f"base template missing: {tmpl_path}")
+    tmpl = tmpl_path.read_text(encoding="utf-8")
+
+    type_section = init.os_section(ptype)
+    try:  # #450 VM-conditioning parity (absent manifest -> unconditional)
+        import env_manifest as em
+        vm_req = em.vm_requirement_for(ws)
+        if vm_req is not None and not vm_req[0]:
+            type_section = em.conditionalize_vm_required(type_section,
+                                                         vm_req[1])
+    except Exception:  # noqa: BLE001 — parity best-effort, frame still renders
+        pass
+
+    venv_candidate = ws / ".venv"
+    venv_path = str(venv_candidate) if venv_candidate.exists() else ".venv/"
+
+    sample_name, sample_sha = "(unknown)", "(unknown)"
+    bins_dir = ws / "bins"
+    files = sorted(p for p in bins_dir.iterdir()
+                   if p.is_file()) if bins_dir.is_dir() else []
+    if len(files) == 1:
+        sample_name = files[0].name
+        sample_sha = hashlib.sha256(files[0].read_bytes()).hexdigest()
+    carried = _parse_sample_rows(old_text)
+    params = {
+        "type_section": type_section,
+        "task_spec_section": req_block or "",
+        "type": ptype,
+        "sample_sha1": carried.get("sample_sha1", sample_name),
+        "sample_sha256": carried.get("sample_sha256", sample_sha),
+        "sample_type": carried.get("sample_type",
+                                   "(detected at analysis time)"),
+        "sample_path": carried.get("sample_path", f"bins/{sample_name}"),
+        "skill_dir": canonical_install_root().as_posix(),
+        "venv_path": venv_path,
+    }
+    text = init.template_render.render_strict(
+        tmpl, params, source=str(tmpl_path))
+    py_version = f"{sys.version_info.major}." \
+                 f"{sys.version_info.minor}.{sys.version_info.micro}"
+    text = text.replace(
+        "Activate before running scripts.",
+        f"Activate before running scripts. Python {py_version}.")
+    if ptype == "web":
+        qr = getattr(init, "WEB_RE_QUICKREF", None)
+        if qr is not None and Path(qr).is_file():
+            text += "\n" + Path(qr).read_text(encoding="utf-8")
+    return text
+
+
+def _claudemd_read(ws: Path) -> str | None:
+    p = ws / "CLAUDE.md"
+    if not p.is_file():
+        return None
+    return p.read_text(encoding="utf-8", errors="replace")
+
+
+def _frame_label(before: str, after: str) -> str:
+    import difflib
+    adds = removed = 0
+    for line in difflib.unified_diff(before.splitlines(), after.splitlines(),
+                                     lineterm="", n=0):
+        if line.startswith("+") and not line.startswith("+++"):
+            adds += 1
+        elif line.startswith("-") and not line.startswith("---"):
+            removed += 1
+    return f"+{adds}/-{removed}"
+
+
+def _item_claudemd_merge(ws: Path, dry: bool) -> str:
+    """#755 G3 (T2/A3): three-segment collect-and-merge. Rebuild ONLY the
+    frame from the CURRENT template; 需求段 (task_spec constraint block) and
+    定制段 survive byte-exact (marked tails verbatim; legacy headed sections
+    in place; stray prose relocated with new-frame dedup). When even the
+    conservative heading-walk cannot place every current heading, the merge
+    REFUSES: skip + WARN, body untouched — 宁可旧也不要错删 (#758 posture).
+    After an applied merge the G4 stamp gate's positive path is unlocked."""
+    current = _claudemd_read(ws)
+    if current is None:
+        return "claudemd_merge(noop: no CLAUDE.md)"
+    expected = template_version.expected_frame_headings()
+    if not expected:
+        return "claudemd_merge(skip: no-template)"
+    parts = claudemd_frame.plan_legacy(
+        claudemd_frame.scrub_for_remerge(current), expected)
+    if dry:
+        return ("claudemd_merge(dry)" if parts.status == "applied"
+                else f"claudemd_merge(dry-skipped: {parts.reason})")
+    if parts.status != "applied":
+        print(f"kunglao-upgrade: WARN — CLAUDE.md merge skipped "
+              f"({parts.reason}); legacy body left untouched (#755 G3)",
+              file=sys.stderr)
+        _emit_event("claudemd_merge", "warn", parts.reason)
+        _emit(ws, "claudemd_merge", f"skipped:{parts.reason}")
+        return f"claudemd_merge(skipped: {parts.reason})"
+    frame_inner = _build_current_frame(ws, current, parts.req_block)
+    # Fixed-point hygiene: a rebuilt frame can legitimately CONTAIN blocks
+    # the classifier flagged as user content (parametric headings such as
+    # `## Hard constraints (<type>)` are outside the #758 skeleton yet come
+    # from the template itself), and unchanged template paragraphs classify
+    # as stray prose. Any captured block whose bytes ride verbatim inside
+    # the fresh render is a duplicate by construction — dropped; genuinely
+    # foreign fragments survive (worst case relocation, never loss).
+    parts.stray_prose = [b for b in parts.stray_prose
+                         if not (b.strip() and b.strip() in frame_inner)]
+    kept_us = []
+    for heading, body in parts.user_sections:
+        blk = (heading.rstrip("\n") + "\n" + body).strip()
+        if blk and blk in frame_inner:
+            continue
+        kept_us.append((heading, body))
+    parts.user_sections = kept_us
+    merged = claudemd_frame.assemble(parts,
+                                     claudemd_frame.wrap_frame(frame_inner))
+    if merged == current:
+        return "claudemd_merge(noop)"
+    target = ws / "CLAUDE.md"
+    tmp = target.with_name(target.name + ".tmp755")
+    tmp.write_text(merged, encoding="utf-8")
+    import os as _os
+    _os.replace(tmp, target)
+    detail = f"{_frame_label(current, merged)} sections={len(parts.user_sections)}"
+    _emit_event("claudemd_merge", "ok", detail)
+    _emit(ws, "claudemd_merge", detail)
+    return f"claudemd_merge(applied {detail})"
+
+
 def migrate_to_0_1_3(ws: Path, dry: bool) -> list[str]:
     """v0.1.2 -> current: hooks 9->11 (+orchestrator_tool_guard #608,
     +violation_capture #718), ALWAYS_ARMED repair (#717 L1), stamp refresh,
@@ -196,10 +465,33 @@ def migrate_to_0_1_3(ws: Path, dry: bool) -> list[str]:
     ]
 
 
+def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
+    """#755 deployment-surface completion (T6 ruling, design D1). A fresh
+    REGISTRY entry — not an extension of 0.1.3 — is what lets an
+    ALREADY-0.1.3-stamped workspace (live-run class) re-plan instead of
+    short-circuiting on `origin_key >= target_key`: the fast path stays
+    closed while a plan exists, so the repairs below run today and remain
+    reachable until release bumps the skill to 0.1.4. Transitional honesty:
+    on a 0.1.2 origin this list runs AFTER migrate_to_0_1_3's gate-guarded
+    stamp item; the belt-and-braces tail re-stamps AFTER the merge fixes
+    the frame, so the end state is always the honest one."""
+    return [
+        _item_agents_refresh(ws, dry),          # A2/T1
+        _item_claudemd_merge(ws, dry),          # G3+T2/A3
+        _item_mcp_refresh(ws, dry),             # A4/T3
+        _item_env_manifest_refresh(ws, dry),    # A5/T3
+        _item_toolchain_manifest(ws, dry),      # A6/T3
+        _item_uv_sync(ws, dry),                 # A7/T4
+        _item_skill_staleness_check(ws, dry),   # A1/T5 (detect+report)
+        _item_template_stamp_refresh_quiet(ws, dry)  # G4-gated carry
+    ]
+
+
 # Linear registry: every version that needs a migration step beyond
 # "re-stamp" (the stamp refresh itself is carried by the LAST migration).
 MIGRATIONS: list[tuple[str, MigrationFn]] = [
     ("0.1.3", migrate_to_0_1_3),
+    ("0.1.4", migrate_to_0_1_4),   # #755 deploy-surface completion (T6)
 ]
 
 
@@ -512,6 +804,315 @@ def _install_reference_sweep(ws: Path, apply: bool = True) -> dict:
                   file=sys.stderr)
         report["carriers"][carrier] = {"refs": refs}
     return report
+
+
+# --------------------------------------------------------------------------
+# config trio refresh (#755 T3: A4 .mcp.json / A5 env-ledger / A6 toolchain)
+# --------------------------------------------------------------------------
+
+def _atomic_write_bytes(target: Path, payload: bytes) -> None:
+    tmp = target.with_name(target.name + ".tmp755")
+    tmp.write_bytes(payload)
+    import os as _os
+    _os.replace(tmp, target)
+
+
+def _item_mcp_refresh(ws: Path, dry: bool) -> str:
+    """#755 A4: workspace .mcp.json backfill. Missing -> the init-parity
+    scaffold (mcp_probe.build_scaffold_json — the SAME builder init's
+    scaffold_mcp writes; mcpServers stays empty: a scaffold never shadows a
+    working user-level registration). Existing -> report-only: the user may
+    have registered servers there and upgrade never clobbers them."""
+    target = ws / ".mcp.json"
+    if target.is_file():
+        if dry:
+            return "mcp_refresh(dry-present)"
+        detail = f"present({target.stat().st_size}B) untouched"
+        _emit(ws, "mcp_scaffold_refresh", detail)
+        return "mcp_refresh(noop: present)"
+    if dry:
+        return "mcp_refresh(dry)"
+    try:
+        import mcp_probe
+        text = json.dumps(mcp_probe.build_scaffold_json(), indent=2,
+                          ensure_ascii=False) + "\n"
+        _atomic_write_bytes(target, text.encode("utf-8"))
+        detail = "created(init-parity scaffold)"
+        _emit(ws, "mcp_scaffold_refresh", detail)
+        return f"mcp_refresh({detail})"
+    except Exception as exc:  # noqa: BLE001 — WARN-only posture
+        why = f"{type(exc).__name__}: {exc}"
+        print(f"kunglao-upgrade: WARN — .mcp.json refresh skipped ({why})",
+              file=sys.stderr)
+        _emit(ws, "mcp_scaffold_refresh", f"warn:{why}")
+        return f"mcp_refresh(warn: {type(exc).__name__})"
+
+
+def _resolve_channel_for_backfill(ws: Path):
+    """#727 resolution with a conservative local fallback — the deep channel
+    semantics stay with parallel-wave #757; upgrade only ever CREATES."""
+    try:
+        import init_channel_default as icd
+        return icd.resolve_init_channel(ws)
+    except Exception as exc:  # noqa: BLE001 — fail-open to local
+        try:
+            import init_channel_default as icd
+            return icd.ChannelDecision(
+                selected=icd.LOCAL, defaulted_to_local=True, probes={},
+                warn_reason=f"channel resolve error: {exc}")
+        except Exception:  # noqa: BLE001 — import-defect last resort
+            raise
+
+
+_LEDGER_KEYS = ("generated", "project_type", "components")
+
+
+def _item_env_manifest_refresh(ws: Path, dry: bool) -> str:
+    """#755 A5: env-manifest.yaml (#478 deployment LEDGER shape) backfill /
+    metadata refresh. Missing -> write {generated, project_type, components}
+    (+ additive kunglao_version); the channel component row comes from #727's
+    fail-open resolution and a defaulted-local lanes a WARN. Existing ->
+    refresh ONLY the kunglao_version field; components/history untouched. A
+    `version:` key must never exist on this file — it is the exact shape the
+    env-facts loader uses to REJECT ledgers (#450 governance)."""
+    path = ws / "env-manifest.yaml"
+    cur = template_version.read_skill_version()
+    if dry:
+        return (f"env_ledger_refresh(dry-create)" if not path.is_file()
+                else "env_ledger_refresh(dry-refresh)")
+    if path.is_file():
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as exc:
+            why = f"unparseable ledger: {exc}".splitlines()[0]
+            print(f"kunglao-upgrade: WARN — env-manifest refresh skipped "
+                  f"({why})", file=sys.stderr)
+            _emit(ws, "env_ledger_refresh", f"warn:{why}")
+            return f"env_ledger_refresh(warn: unparseable)"
+        if not isinstance(data, dict):
+            _emit(ws, "env_ledger_refresh", "warn:non-mapping")
+            return "env_ledger_refresh(warn: non-mapping)"
+        if data.get("kunglao_version") == cur:
+            _emit(ws, "env_ledger_refresh", "noop(current)")
+            return "env_ledger_refresh(noop)"
+        data["kunglao_version"] = cur
+        payload = yaml.safe_dump(data, sort_keys=False,
+                                 allow_unicode=True)
+        _atomic_write_bytes(path, payload.encode("utf-8"))
+        detail = f"kunglao_version->{cur}"
+        _emit(ws, "env_ledger_refresh", f"refreshed {detail}")
+        return f"env_ledger_refresh(refreshed {detail})"
+    project_type = _derive_project_type(ws)
+    dec = _resolve_channel_for_backfill(ws)
+    status = "defaulted-local" if dec.defaulted_to_local else "resolved"
+    ledger = {
+        "generated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "project_type": project_type,
+        "kunglao_version": cur,
+        "components": [{
+            "name": "channel",
+            "status": status,
+            "detail": (f"selected={dec.selected} "
+                       f"(#727 upgrade backfill; deep channel semantics "
+                       f"-> #757)" + (
+                           f"; warn={dec.warn_reason}"
+                           if dec.warn_reason else "")),
+        }],
+    }
+    payload = yaml.safe_dump(ledger, sort_keys=False, allow_unicode=True)
+    _atomic_write_bytes(path, payload.encode("utf-8"))
+    if dec.defaulted_to_local or dec.warn_reason:
+        print(f"kunglao-upgrade: WARN — env-manifest backfill channel="
+              f"{dec.selected} ({dec.warn_reason or 'defaulted'})",
+              file=sys.stderr)
+        _emit_event("env_ledger_refresh", "warn",
+                    f"channel={dec.selected} {dec.warn_reason}")
+    _emit(ws, "env_ledger_refresh", f"created channel={dec.selected}")
+    return f"env_ledger_refresh(created channel={dec.selected})"
+
+
+def _item_toolchain_manifest(ws: Path, dry: bool) -> str:
+    """#755 A6 — toolchain-manifest face per CODE REALITY: init deploys no
+    dedicated toolchain lock file; the durable faces are runs/.init-report.json
+    telemetry (iron-rule exempt) and .kunglao-init.json. Contract: refresh the
+    report's skill_version field when behind; absence REPORTS pointing at
+    re-init — upgrade never fabricates init-completeness state (#625: an
+    invented state_hash would be a lying marker)."""
+    if dry:
+        return "toolchain_manifest_check(dry)"
+    report_path = ws / "runs" / ".init-report.json"
+    marker = ws / ".kunglao-init.json"
+    if not report_path.is_file():
+        which = [] if not marker.is_file() else ["report"]
+        label = ("missing"
+                 + ("-and-marker" if not marker.is_file() else ""))
+        detail = (f"{label} — re-init restores full deploy surface "
+                  f"(no fabrication)")
+        print(f"kunglao-upgrade: WARN — toolchain manifest faces absent: "
+              f"runs/.init-report.json{'' if marker.is_file() else ' and '}"
+              f".kunglao-init.json — {detail}", file=sys.stderr)
+        _emit_event("toolchain_manifest_check", "warn", detail)
+        _emit(ws, "toolchain_manifest_check", detail)
+        return f"toolchain_manifest_check({label})"
+    cur = template_version.read_skill_version()
+    try:
+        data = json.loads(report_path.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        why = f"unparseable report: {exc}".splitlines()[0]
+        _emit(ws, "toolchain_manifest_check", f"warn:{why}")
+        return "toolchain_manifest_check(warn: unparseable)"
+    got = data.get("skill_version")
+    if got == cur:
+        _emit(ws, "toolchain_manifest_check", "noop(current)")
+        return "toolchain_manifest_check(noop)"
+    data["skill_version"] = cur
+    _atomic_write_bytes(report_path,
+                        (json.dumps(data, sort_keys=True,
+                                    separators=(",", ":"),
+                                    ensure_ascii=False)
+                         + "\n").encode("utf-8"))
+    detail = f"skill_version {got}->{cur}"
+    _emit(ws, "toolchain_manifest_check", f"refreshed {detail}")
+    return f"toolchain_manifest_check(refreshed {detail})"
+
+
+# --------------------------------------------------------------------------
+# A7 install-venv sync (#755 T4)
+# --------------------------------------------------------------------------
+
+UV_SYNC_TIMEOUT = 120
+
+
+def _item_uv_sync(ws: Path, dry: bool) -> str:  # noqa: ARG001 — ws for item symmetry
+    """#755 A7: refresh the INSTALL venv (`uv sync --locked --project
+    <canonical_install_root>`) — the workspace analysis venv belongs to the
+    executing install (#752 seam), never inside the user's data tree.
+    WARN-only on every failure face (missing uv / timeout / non-zero rc):
+    the #753 git-binary precedent — an environment nicety must never flip a
+    migration exit code."""
+    if dry:
+        return "uv_sync(dry)"
+    # Operational opt-out (also the test-hermeticity switch): a CI runner or
+    # an offline operator can disable the real sync without code surgery.
+    if os.environ.get("KUNGLAO_UPGRADE_NO_UV_SYNC") == "1":
+        why = "skipped(KUNGLAO_UPGRADE_NO_UV_SYNC=1)"
+        print(f"kunglao-upgrade: venv sync {why}", file=sys.stderr)
+        _emit(ws, "uv_sync", why)
+        return "uv_sync(skipped: env-opt-out)"
+    import shutil
+    uv = shutil.which("uv")
+    if not uv:
+        why = "uv binary not found"
+        print(f"kunglao-upgrade: WARN — venv sync skipped ({why})",
+              file=sys.stderr)
+        _emit_event("uv_sync", "warn", why)
+        _emit(ws, "uv_sync", f"warn:{why}")
+        return "uv_sync(warn: uv-not-found)"
+    argv = [uv, "sync", "--locked",
+            "--project", str(canonical_install_root())]
+    try:
+        proc = subprocess.run(argv, timeout=UV_SYNC_TIMEOUT,
+                              capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+    except subprocess.TimeoutExpired:
+        why = f"timeout>{UV_SYNC_TIMEOUT}s"
+        print(f"kunglao-upgrade: WARN — venv sync {why}", file=sys.stderr)
+        _emit_event("uv_sync", "warn", why)
+        _emit(ws, "uv_sync", f"warn:{why}")
+        return "uv_sync(warn: timeout)"
+    except (FileNotFoundError, OSError) as exc:
+        why = f"{type(exc).__name__}: {exc}"
+        print(f"kunglao-upgrade: WARN — venv sync failed ({why})",
+              file=sys.stderr)
+        _emit_event("uv_sync", "warn", why)
+        _emit(ws, "uv_sync", f"warn:{why}")
+        return f"uv_sync(warn: {type(exc).__name__})"
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+        why = f"rc={proc.returncode}: {tail[-1] if tail else 'no output'}"
+        print(f"kunglao-upgrade: WARN — venv sync failed ({why})",
+              file=sys.stderr)
+        _emit_event("uv_sync", "warn", why)
+        _emit(ws, "uv_sync", f"warn:{why}")
+        return "uv_sync(warn: rc!=0)"
+    detail = f"ok({Path(str(canonical_install_root())).name}, locked)"
+    _emit_event("uv_sync", "ok", detail)
+    _emit(ws, "uv_sync", detail)
+    return f"uv_sync(ok)"
+
+
+# --------------------------------------------------------------------------
+# A1 canonical-skill install staleness detection (#755 T5)
+# --------------------------------------------------------------------------
+
+def _exec_install_root() -> Path:
+    """The executing skill install root (canonical seam of #752)."""
+    return canonical_install_root()
+
+
+def _git_at(root: Path, *args: str) -> subprocess.CompletedProcess:
+    """One read-only git invocation against an ARBITRARY root (the install,
+    not the workspace). Callers own every failure interpretation; the test
+    face monkeypatches this name."""
+    return subprocess.run(["git", "-C", str(root), *args],
+                          capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
+
+
+def _item_skill_staleness_check(ws: Path, dry: bool) -> str:
+    """#755 A1 (minimal wave): DETECT + REPORT whether the executing
+    install's git clone trails its remote — stderr event
+    `skill_install_staleness` (status=warn behind=N / ok parity). Self-update
+    is explicitly OUT of scope (installs move by the user's git pull /
+    plugin update); detection is read-only and never blocks a migration.
+    Non-clone installs (tarball copies) report status=skip quietly. A
+    dry-run plan probes nothing and emits nothing (zero-telemetry rule)."""
+    if dry:
+        return "skill_staleness(dry)"
+    root = _exec_install_root()
+    if not (Path(root) / ".git").exists():
+        return "skill_staleness(skip: not-a-clone)"
+    branch = _git_at(root, "rev-parse", "--abbrev-ref", "HEAD")
+    if branch.returncode != 0:
+        why = f"branch probe failed: {branch.stderr.strip() or 'rc!=0'}"
+        print(f"kunglao-upgrade: WARN — install staleness unreadable "
+              f"({why})", file=sys.stderr)
+        _emit_event("skill_install_staleness", "warn", why)
+        _emit(ws, "skill_install_staleness", f"warn:{why}")
+        return "skill_staleness(warn: probe-failed)"
+    br = branch.stdout.strip() or "HEAD"
+    upstream = _git_at(root, "rev-parse", "--symbolic-full-name", "@{u}")
+    if upstream.returncode == 0 and upstream.stdout.strip():
+        ref = upstream.stdout.strip()
+    else:
+        ref = f"origin/{br}"  # locally-known remote head — no network fetch
+    count = _git_at(root, "rev-list", "--count", f"HEAD..{ref}")
+    if count.returncode != 0:
+        why = f"behind-count failed vs {ref}"
+        print(f"kunglao-upgrade: WARN — install staleness unreadable "
+              f"({why})", file=sys.stderr)
+        _emit_event("skill_install_staleness", "warn", why)
+        _emit(ws, "skill_install_staleness", f"warn:{why}")
+        return "skill_staleness(warn: count-failed)"
+    behind = count.stdout.strip() or "0"
+    try:
+        n = int(behind)
+    except ValueError:
+        n = -1
+    detail = f"install={root.name} branch={br} vs {ref} behind={behind}"
+    if n > 0:
+        print(f"kunglao-upgrade: WARN — skill install is {n} commit(s) "
+              f"behind {ref}; git pull / plugin update brings the current "
+              f"scaffold forward", file=sys.stderr)
+        _emit_event("skill_install_staleness", "warn", detail)
+        _emit(ws, "skill_install_staleness", f"warn:{detail}")
+        return f"skill_staleness(behind={behind})"
+    _emit_event("skill_install_staleness", "ok",
+                detail if n == 0 else f"{detail} (unreadable)")
+    _emit(ws, "skill_install_staleness",
+          detail if n == 0 else f"unknown:{detail}")
+    return ("skill_staleness(current)" if n == 0
+            else "skill_staleness(unknown)")
 
 
 # --------------------------------------------------------------------------

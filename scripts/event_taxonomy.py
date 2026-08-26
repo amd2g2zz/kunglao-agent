@@ -158,6 +158,7 @@ ALL_EVENT_TYPES = [
 #                                toolchain_install #700 per-item install events
 #   git_snapshot_skipped  kunglao_upgrade.py / kunglao-init.py  #739 git snapshot WARN faces
 EMIT_ACTIONS = [
+    "agents_refresh",     # #755 A2 upgrade L2 subagents re-copy face
     "analysis_blocked",
     "analysis_recorded",
     "apkid_candidates",   # #669 hypothesis_seeder apkid→competitor_group extension
@@ -166,11 +167,13 @@ EMIT_ACTIONS = [
     "capability_switch",
     "channel_default",     # #727 init channel degradation/guidance WARN
     "claim_migrate",
+    "claudemd_merge",      # #755 G3 collect-and-merge rebuild face
     "converge",
     "death_verdict_rejected",
     "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face
     "dispatch",
     "env_incident",       # #718 violation_capture traceback/env-crash face
+    "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
     "failure_blocked",
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
@@ -185,18 +188,22 @@ EMIT_ACTIONS = [
     "lesson_deprecated",
     "lesson_match",
     "lesson_stage_transition",  # #525 lessons nursery draft → active
+    "mcp_scaffold_refresh",  # #755 A4 .mcp.json init-parity backfill face
     "must_ask",
     "must_stop",
     "plan_stall",
     "priority_deviation",
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face
+    "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "stale_plan_on_new_evidence",
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
+    "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
     "upgrade",            # #726 kunglao_upgrade summary (N->M migration)
     "upgrade_item",       # #726 per-item migration telemetry
+    "uv_sync",            # #755 A7 install-venv sync face (WARN-only)
     "verify",
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
     "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
