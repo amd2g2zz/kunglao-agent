@@ -178,6 +178,7 @@ EMIT_ACTIONS = [
     "install_attempt",    # #700 toolchain_install per-item install events
     "install_declined",   # #700 toolchain_install per-item install events
     "install_failed",     # #700 toolchain_install per-item install events
+    "install_reference_scan",  # #752 upgrade end-step sweep — stale cross-install refs reported+rewired (WARN-only face)
     "ladder_required",
     "lesson_burn",
     "lesson_citation",

@@ -22,11 +22,13 @@ hooks and blocked every session's tool calls. Project-level deployment makes
 hooks live and die WITH the workspace: no global pollution, no stale
 worktree-bound commands.
 
-Issue #269 (2026-08-13): hook COMMAND paths are absolute and point at the
-CANONICAL deployed skill install (~/.claude/skills/kunglao-agent/hooks) — a
---wire-up run from a dev worktree must not bind the commands to the
-worktree path, which dies with the worktree (#228 lesson). The canonical
-resolution now lives in hook_activation._canonical_hooks_dir / build_hook_entry.
+Issue #269/#752 (2026-08-13/27): hook COMMAND paths are absolute and point
+at the EXECUTING INSTALL's hooks dir — any durable ~/.claude/skills/<name>/
+package resolves to itself (production OR a long-lived dev co-install);
+ephemeral checkouts/.wt-* worktrees fall back to the production install so
+a worktree-bound command never outlives its checkout (#228 lesson). The
+single resolution authority is hook_activation.canonical_install_root /
+_canonical_hooks_dir — no second hardcoded kunglao-agent path exists.
 """
 from __future__ import annotations
 

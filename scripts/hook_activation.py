@@ -471,20 +471,40 @@ def build_hook_entry(hook_dir: Path, hook_file: str,
     return {"matcher": matcher, "hooks": hooks}
 
 
-def _canonical_hooks_dir() -> Path:
-    """Canonical deployed skill hooks dir — where hook COMMAND paths must point.
+def canonical_install_root() -> Path:
+    """THE executing install's skill root — where hook COMMAND paths must
+    point (#752).
 
-    Issue #269: hook commands are absolute paths into the CANONICAL skill
-    install (~/.claude/skills/kunglao-agent/hooks), never this module's own
-    location. This script may be run from a dev worktree (<HOME>/.claude/
-    .wt-*/); a worktree-bound command dies with the worktree — the #228
-    incident: 8 hooks went silent at once when the referenced path was
-    deleted. When this module IS deployed at the canonical location (the
-    normal production case), the two coincide and `here` wins.
+    Issue #269 modeled only two states (canonical vs worktree), so a dev
+    run from a LONG-LIVED co-install (`~/.claude/skills/kunglao-agent-dev`)
+    teleported every wire-up command back at the stale production install.
+    User ruling (2026-08-27): a dev install under ~/.claude/skills/ is a
+    durable install, NOT a worktree. Three states, one predicate:
+
+      durable    — this module executes from ANY <HOME>/.claude/skills/
+                   <name>/ package (production OR dev co-install OR an
+                   arbitrarily renamed install): THAT root wins;
+      ephemeral  — anything else (repo checkout, <HOME>/.claude/.wt-*/
+                   worktree): falls back to the canonical production
+                   install ~/.claude/skills/kunglao-agent — binding hook
+                   commands to the checkout dies with it (#228).
+
+    Both sides are resolved so macOS /var -> /private/var symlink spellings
+    compare equal. Reads Path.home() (never env vars) so test fake-homes
+    bind through the established monkeypatch seam.
     """
-    here = Path(__file__).resolve().parent.parent / "hooks"
-    canonical = Path.home() / ".claude" / "skills" / "kunglao-agent" / "hooks"
-    return here if here == canonical else canonical
+    here_pkg = Path(__file__).resolve().parent.parent
+    skills_root = (Path.home() / ".claude" / "skills").resolve()
+    if here_pkg.parent.resolve() == skills_root:
+        return here_pkg
+    return skills_root / "kunglao-agent"
+
+
+def _canonical_hooks_dir() -> Path:
+    """Canonical deployed skill hooks dir (#752 re-statement of #269):
+    `canonical_install_root() / "hooks"` — see that function for the
+    durable-vs-ephemeral ruling."""
+    return canonical_install_root() / "hooks"
 
 
 def _resolve_registration_target(workspace: Path | None,
@@ -529,8 +549,11 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
                  the re-read file (Pre/Post/Stop all scanned) — the v1.9.37
                  "settings rewrite dropped the hooks segment" class.
       shape    — every expected command is uv-form pointing into the
-                 declared hook_dir (default: the canonical deployed skill
-                 dir) — the #269 worktree-bound-command silent-death class.
+                 EXECUTING install's hooks dir, derived independently here
+                 via _canonical_hooks_dir (#752 D4+: the legacy hook_dir
+                 parameter is accepted but ignored for the verdict) — the
+                 #269 worktree-bound-command silent-death class plus the
+                 #752 self-certifying-variable class.
                  Path existence is deliberately NOT asserted (a canonical
                  install under a test HOME is a legitimate shape).
 
@@ -589,7 +612,15 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
                 "layer: user-global settings is not a project fire layer "
                 "(#258/#445 mis-wiring class)")
 
-    d = Path(hook_dir) if hook_dir is not None else _canonical_hooks_dir()
+    # #752 D4+: the shape expectation is recomputed HERE from the executing
+    # install (_canonical_hooks_dir) — never taken from a caller variable.
+    # The legacy hook_dir parameter stays ACCEPTED for API compatibility
+    # (#445 callers may still pass it) but feeds nothing: a checker handed
+    # the same wrong dir the writer wrote ("write whatever, verify
+    # whatever") must fail, not certify itself. Path existence is
+    # deliberately NOT asserted (a canonical install under a test HOME is a
+    # legitimate shape).
+    d = _canonical_hooks_dir()
     prefix = f"uv run --project {d.parent.as_posix()} "
     for c in cmds:
         base = c.replace("\\", "/").rsplit("/", 1)[-1]
@@ -603,6 +634,30 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
 
     return {"ok": not mismatches, "layer": layer, "target": str(target),
             "mismatches": mismatches, "present": present, "missing": missing}
+
+
+def verify_install_references(workspace: Path,
+                              active_root: Path | None = None) -> dict:
+    """#752 D5 residual-scavenger verifier — does any framework carrier of
+    this workspace still reference an install OTHER than the executing one?
+
+    Delegates the scan to install_reference.scan_workspace over the two
+    carriers (.claude/settings.json, CLAUDE.md). Pure check: returns
+
+        {"ok": <no stale refs>, "active_root": "<root>",
+         "stale": {carrier: [ref, ...]}, "stale_total": <n>}
+
+    and never raises for absent carriers. Rewiring is rewire_workspace's
+    job (exercised by kunglao_upgrade's end-step sweep); this stays
+    read-only so callers can gate on it without side effects.
+    """
+    import install_reference  # lazy: scripts/ sibling (#752 one-way dep)
+    root = Path(active_root) if active_root is not None \
+        else canonical_install_root()
+    stale = install_reference.scan_workspace(workspace, root)
+    total = sum(len(v) for v in stale.values())
+    return {"ok": total == 0, "active_root": str(root),
+            "stale": stale, "stale_total": total}
 
 
 def register_hooks(workspace: Path | None = None,
@@ -745,10 +800,11 @@ def register_hooks(workspace: Path | None = None,
     )
 
     # #445: written ≠ fired until verified — self-check re-reads the file.
+    # #752 D4+: no hook_dir forwarding — the checker derives its own
+    # expectation from the executing install (writer/checker separation).
     check = selfcheck_registration(
         settings_path,
         expected_files=_wire_up_hook_files(),
-        hook_dir=hook_dir,
         workspace=workspace,
         layer="user-opt-in" if global_opt_in else "project")
     if not check["ok"]:

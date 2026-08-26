@@ -1027,7 +1027,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--search", metavar="KEYWORDS", default=None,
                         help="search the lessons library by keywords/claim-tag (#41)")
     parser.add_argument("--library", default=None,
-                        help="lessons library dir (default: ~/.claude/skills/kunglao-agent/references/lessons)")
+                        help="lessons library dir "
+             "(default: executing install's references/lessons, #752)")
     parser.add_argument("--reflect-queue", default=None,
                         help="/reflect human queue file (default: ~/.claude/learnings-queue.json)")
     parser.add_argument("--json", action="store_true", help="machine-readable output")

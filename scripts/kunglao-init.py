@@ -1631,7 +1631,12 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
     selfcheck.ok=False and maps to RC_HOOK_WIRING via hook_deploy_rc —
     init FAIL, not a WARN.
     """
-    hook_dir = Path(__file__).resolve().parent.parent / "hooks"
+    # #752 D4+: the hooks dir is DERIVED from the executing install
+    # (durable ~/.claude/skills/<name>/ co-installs resolve to themselves;
+    # ephemeral checkouts/worktrees fall back to the production install) —
+    # previously this stamped its own module location into BOTH the written
+    # commands and the checker variable, the self-certifying loop of #752.
+    hook_dir = hook_activation._canonical_hooks_dir()
     if hooks_json is not None:
         target = Path(hooks_json).resolve()
         layer = "operator-declared"  # the operator named the file explicitly
@@ -1643,8 +1648,8 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
                     "reason": "no <workspace>/.claude/settings.json (HOME settings never written)"}
     added = _patch_settings(target, hook_dir)
     selfcheck = hook_activation.selfcheck_registration(
-        target, expected_files=HOOK_FILES, hook_dir=hook_dir,
-        workspace=ws, layer=layer)
+        target, expected_files=HOOK_FILES,
+        workspace=ws, layer=layer)  # no forwarding — derivation inside (#752)
     return {"deployed": True, "target": str(target), "added": added,
             "selfcheck": selfcheck}
 

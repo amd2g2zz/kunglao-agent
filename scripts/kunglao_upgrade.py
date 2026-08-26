@@ -62,8 +62,14 @@ _SCRIPTS = Path(__file__).resolve().parent
 if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
+import install_reference  # noqa: E402
 import template_version  # noqa: E402
-from hook_activation import ALWAYS_ARMED_HOOKS, always_arm, register_hooks  # noqa: E402
+from hook_activation import (  # noqa: E402
+    ALWAYS_ARMED_HOOKS,
+    always_arm,
+    canonical_install_root,
+    register_hooks,
+)
 
 USER_DATA_DIRS: tuple[str, ...] = (
     "claims", "facts", "runs", "hypotheses", "notes", "evidence", "oracle",
@@ -466,6 +472,49 @@ def ensure_git_snapshot(ws: Path) -> dict:
 
 
 # --------------------------------------------------------------------------
+# end-step install-reference sweep (#752 D6)
+# --------------------------------------------------------------------------
+
+def _sweep_detail(sweep: dict) -> str:
+    n = sum(len(c.get("refs", []))
+            for c in sweep.get("carriers", {}).values())
+    return f"{sweep['status']}({n})"
+
+
+def _install_reference_sweep(ws: Path, apply: bool = True) -> dict:
+    """Residual scavenger (issue #752 D6): every ~/.claude/skills/<name>/
+    reference in the workspace's framework carriers naming an install OTHER
+    than the executing one is reported on stderr AND auto-repaired
+    (rewire). WARN-only posture, mirroring #739's snapshot face — this must
+    never flip a migration exit code. Iron-rule safe: touches only
+    .claude/settings.json + CLAUDE.md, never the seven user-data dirs. The
+    already-current fast path sweeps too: a workspace mis-wired by a
+    pre-fix tool stamps CURRENT and would otherwise skip through the early
+    return forever."""
+    root = canonical_install_root()
+    scan = install_reference.scan_workspace(ws, root)
+    if not scan:
+        return {"status": "clean"}
+    rewired = install_reference.rewire_workspace(ws, root) if apply else {}
+    report: dict = {"status": "rewired" if apply else "planned",
+                    "root": str(root), "carriers": {}}
+    verb = "STALE+REWIRE" if apply else "PLANNED"
+    for carrier, refs in sorted(scan.items()):
+        print(f"kunglao-upgrade: install-reference {verb} [{carrier}] "
+              f"{len(refs)} ref(s)", file=sys.stderr)
+        for ref in refs:
+            print(f"kunglao-upgrade: install-reference   - {ref}",
+                  file=sys.stderr)
+        if apply:
+            got = rewired.get(carrier, {})
+            print(f"kunglao-upgrade: install-reference rewire [{carrier}]"
+                  f" -> {root.name} ({got.get('rewired', 0)})",
+                  file=sys.stderr)
+        report["carriers"][carrier] = {"refs": refs}
+    return report
+
+
+# --------------------------------------------------------------------------
 # driver
 # --------------------------------------------------------------------------
 
@@ -490,6 +539,10 @@ def upgrade(ws: Path, dry_run: bool = False,
     plan = [(v, fn) for v, fn in MIGRATIONS if _vkey(v) > origin_key]
     if origin_key >= target_key and not plan:
         print(f"kunglao-upgrade: already at version {origin}")
+        # #752 D6: a CURRENT-stamped workspace can still carry stale
+        # references (mis-wired by a pre-fix tool) — sweep applies here too.
+        sweep = _install_reference_sweep(ws)
+        _emit(ws, "install_reference_scan", _sweep_detail(sweep))
         return RC_OK
 
     if dry_run:
@@ -500,6 +553,11 @@ def upgrade(ws: Path, dry_run: bool = False,
                 if items_out is not None:
                     items_out.append({"name": item, "action": "noop",
                                        "detail": "dry-run"})
+        # #752 D6: planned sweep surfaces in the dry-run plan, writes nothing
+        stale_n = sum(len(v) for v in
+                      install_reference.scan_workspace(
+                          ws, canonical_install_root()).values())
+        print(f"  [{target}] install_reference_scan({stale_n} stale)")
         return RC_OK
 
     # ---- #753 B1: git-first rollback anchor -------------------------------
@@ -612,7 +670,26 @@ def upgrade(ws: Path, dry_run: bool = False,
                             str(snap.get("reason") or "skipped"))
             else:
                 _emit_event("git-snapshot", "ok", snap.get("status", ""))
-        # #753 B3 — the skill package just moved; Claude Code picks the new
+                # #752 D6 — residual-scavenger end step; WARN-only, exit code
+        # untouched. Guarded separately from #753's atomic finish: a sweep
+        # bug must neither flip this upgrade to RC_INCOMPLETE nor pass
+        # silently — it surfaces as one stderr WARN + a scan event.
+        try:
+            sweep = _install_reference_sweep(ws)
+            _emit(ws, "install_reference_scan", _sweep_detail(sweep))
+            if items_out is not None:
+                items_out.append({
+                    "name": "install_reference_scan",
+                    "action": ("applied" if sweep["status"] == "rewired"
+                               else "noop"),
+                    "detail": _sweep_detail(sweep)})
+        except Exception as sweep_exc:  # noqa: BLE001 — fail-open by design
+            _emit(ws, "install_reference_scan",
+                  f"error:{type(sweep_exc).__name__}")
+            print(f"kunglao-upgrade: WARN - install-reference sweep "
+                  f"skipped ({type(sweep_exc).__name__}: {sweep_exc})",
+                  file=sys.stderr)
+# #753 B3 — the skill package just moved; Claude Code picks the new
         # slash-commands/hooks up only after a plugin reload.
         print("kunglao-upgrade: skill package updated — run /reload-plugins "
               "in Claude Code to activate")

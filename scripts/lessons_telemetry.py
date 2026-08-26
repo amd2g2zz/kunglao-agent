@@ -141,9 +141,13 @@ def compute_utility(citation_count: int, burn_count: int) -> float:
 
 
 def _resolve_library(library: Path | str | None) -> Path:
-    return Path(library) if library is not None else Path(
-        "~/.claude/skills/kunglao-agent/references/lessons"
-    ).expanduser()
+    """#752: the default derives from the EXECUTING install (any durable
+    ~/.claude/skills/<name>/ package resolves to itself; ephemeral
+    checkouts fall back to the production install) — no second hardcoded
+    'kunglao-agent' path may exist outside hook_activation."""
+    from hook_activation import canonical_install_root  # lazy sibling import
+    return (Path(library) if library is not None
+            else canonical_install_root() / "references" / "lessons")
 
 
 def _resolve_workspace(workspace: Path | str | None) -> Path | None:
