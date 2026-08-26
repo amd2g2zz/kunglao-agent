@@ -11,6 +11,12 @@
 
 name: release-check
 
+concurrency:
+  # one live run per ref — a new push cancels the superseded run instead of
+  # queueing stale suites behind it on the 2-runner pool
+  group: release-check-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [ "dev", "master" ]
@@ -19,7 +25,10 @@ on:
 
 jobs:
   release-check:
-    runs-on: self-hosted
+    # Route to runners that actually have python3.11 (kunglao-runner-py311).
+    # The fleet is heterogeneous: -b / -py310 lack python3.11 and fail fast
+    # with "command not found" — the python-3.11 label pins the right host.
+    runs-on: [self-hosted, python-3.11]
     env:
       # Runner image pre-installs python3.11 (default python3); uv picks the
       # interpreter via this env.
@@ -27,11 +36,23 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Ensure git (baseline replay + receipt need it on gitless runners)
+      run: |
+        if ! command -v git >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y git
+        fi
+        git --version
+
     - name: Set up Python (pre-installed in runner image)
       run: python3.11 --version
 
     - name: Install uv (documented dependency manager)
-      run: python3.11 -m pip install uv
+      # pip --user lands in ~/.local/bin which is NOT on runner PATH by
+      # default — export via $GITHUB_PATH so every later step finds `uv`.
+      run: |
+        python3.11 -m pip install --user uv
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
     - name: CI YAML selfcheck (issue #147)
       run: uv run python scripts/release_check_selfcheck.py
@@ -68,6 +89,9 @@ jobs:
       run: uv run python scripts/release_receipt.py --pytest-junit .pytest-result.xml --out release-receipt.json
 
     - name: Upload release receipt
+      # observation artifact, not a gate — self-hosted runners hit transient
+      # ECONNRESET on the artifacts endpoint; the receipt is also printed in logs
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         name: release-receipt-${{ matrix.python-version }}-${{ github.sha }}
@@ -75,6 +99,7 @@ jobs:
         if-no-files-found: error
 
     - name: Upload coverage report (observation only, #463)
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         name: coverage-${{ matrix.python-version }}-${{ github.sha }}
