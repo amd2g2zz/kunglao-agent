@@ -133,6 +133,7 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
+import init_channel_default  # noqa: E402  # #727 channel resolution (local fallback)
 # #408: ask-then-install — interactive install prompts + MCP registration +
 # re-probe (graceful degrade on decline; --assume-yes for CI/headless).
 # #455: the interactive consent channel is gone (no stdin); ask_then_install
@@ -312,14 +313,17 @@ def archive_previous_init_report(target: Path) -> Path | None:
 
 
 def write_init_report(ws: Path, phases: list[dict], overall: str,
-                      exit_code: int) -> Path | None:
-    """#534 + #700: write runs/.init-report.json — the structured init
+                      exit_code: int, *,
+                      channel: dict | None = None) -> Path | None:
+    """#534 + #700 + #727: write runs/.init-report.json — the structured init
     telemetry envelope. Rotates any prior report to runs/.init-report.{n}.json
     (n = max+1, pruned to KUNGLAO_INIT_REPORT_KEEP, default 5) so a failed
     cycle preserves the previous cycle's telemetry for resume (#466).
-    Idempotent modulo the archive. Never raises — logging must never break
-    analysis. Returns the path on success, None on OSError (degraded to
-    stderr warning)."""
+    Idempotent modulo the archive. #727: optional channel block
+    (init_channel_default resolution) — omitted when None so pre-#727
+    callers/tests stay byte-identical. Never raises — logging must never
+    break analysis. Returns the path on success, None on OSError (degraded
+    to stderr warning)."""
     try:
         from template_version import read_skill_version
         skill_version = read_skill_version()
@@ -332,6 +336,8 @@ def write_init_report(ws: Path, phases: list[dict], overall: str,
         "overall": overall,
         "exit": exit_code,
     }
+    if channel is not None:
+        doc["channel"] = channel  # #727: resolved channel decision block
     target = ws / INIT_REPORT_PATH
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -2206,6 +2212,12 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     overall = "PASS"
     final_rc: int
 
+    # #727: channel resolution after the toolchain preflight, before
+    # scaffold — init never dead-ends on the environment. The decision
+    # (incl. the local fallback WARN, fail-open emit) lands in the report
+    # on both the success and error paths below.
+    channel_decision = init_channel_default.resolve_and_emit(ws)
+
     created = scaffold(ws)
     # #534: scaffold phase row
     phase_log.append({"name": "scaffold", "status": "PASS", "ts": utc_now()})
@@ -2233,7 +2245,9 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
             print(f"kunglao-init: kept pre-existing content (not created by this run, not deleted): "
                   f"{', '.join(preserved)}", file=sys.stderr)
         overall = "FAIL"
-        write_init_report(ws, phase_log, overall, RC_ERROR)
+        write_init_report(ws, phase_log, overall, RC_ERROR,
+                           channel=init_channel_default.report_block(
+                               channel_decision))
         kunglao_log.emit(ws, actor="init", action="write_blocked",
                          exit=RC_ERROR, detail="template render defect")
         return RC_ERROR
@@ -2258,7 +2272,9 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     overall = "PASS" if final_rc == RC_OK else "FAIL"
     phase_log.append({"name": "exit", "status": overall, "ts": utc_now(),
                       "exit": final_rc})
-    write_init_report(ws, phase_log, overall, final_rc)
+    write_init_report(ws, phase_log, overall, final_rc,
+                       channel=init_channel_default.report_block(
+                           channel_decision))
     kunglao_log.emit(ws, actor="init", action="write_blocked",
                      exit=final_rc, detail=f"init {overall}")
     return final_rc
