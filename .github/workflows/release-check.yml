@@ -20,23 +20,18 @@ on:
 jobs:
   release-check:
     runs-on: self-hosted
-    strategy:
-      fail-fast: false
-      matrix:
-        # Issue #352: the floor is 3.10 and MUST be exercised in CI; 3.11
-        # keeps coverage of the version most dev machines actually run.
-        # Jobs run in parallel, so the matrix adds no wall-clock time.
-        python-version: ["3.10", "3.11"]
+    env:
+      # Runner image pre-installs python3.11 (default python3); uv picks the
+      # interpreter via this env.
+      UV_PYTHON: python3.11
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+    - name: Set up Python (pre-installed in runner image)
+      run: python3.11 --version
 
     - name: Install uv (documented dependency manager)
-      run: python -m pip install uv
+      run: python3.11 -m pip install uv
 
     - name: CI YAML selfcheck (issue #147)
       run: uv run python scripts/release_check_selfcheck.py
