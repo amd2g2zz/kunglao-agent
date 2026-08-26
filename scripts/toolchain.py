@@ -404,6 +404,10 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "android_server": NextAction(
         "human-deploy", "adb push android_server to the device and run it"),
     "jdwp_debug": NextAction("human-configure"),
+    # #728 web (labs): direct-npx JS recovery tools — agent-invoked, so the
+    # command mirrors the FIXES text (first npx run installs).
+    "wakaru": NextAction("install", "npx -y wakaru --version"),
+    "webcrack": NextAction("install", "npx -y webcrack --version"),
 }
 
 

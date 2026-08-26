@@ -53,6 +53,16 @@ import convergence_check  # module under test (== baseline before #443 GREEN)
 BASELINE_COMMIT = "8804dcd"  # dev HEAD at the 2026-08-26 re-pin (#707 contradiction annotation is an intentional decide() semantics change)
 ANCHOR_FILE = Path(__file__).parent / "decide_anchor_8804dcd.json"
 
+# 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web-re-quickref.md
+# joined the anomaly baseline corpus (anomaly_detector._load_baseline ingests
+# re-library/*.md), shifting every lexical rarity score in the 4th decimal. This
+# is DATA drift, not decide() semantics drift — the 8804dcd baseline decide()
+# and the current decide() still agree on all 31 cases (channel 1 green); only
+# the frozen scores were stale. Re-captured via capture_from_git_baseline()
+# (baseline module + current corpus): 4 score floats across the 2 contradiction
+# cases moved (0.905840286055 -> 0.905067808708, 0.911799761621 -> 0.910599571734,
+# full precision in the anchor), nothing else changed.
+
 _CLEAN_INDEX = "# facts\n"
 _CONTRA_INDEX = (
     "# facts\n"

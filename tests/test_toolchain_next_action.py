@@ -201,6 +201,9 @@ def test_next_action_constructor_rejects_out_of_vocab_verb():
 # (a silent guidance gap is exactly what L-1 closes).
 _WARN_ONLY_CHECK_NAMES = frozenset({
     "docker", "gdbserver", "ebpf", "ebpf_android", "unidbg",
+    # #728 web (labs): docker channel presence — WARN by contract (labs
+    # never FAIL-HARD; toolchain.py _check_web emits PASS/WARN only)
+    "channel:docker",
 })
 
 
