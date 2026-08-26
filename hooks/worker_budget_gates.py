@@ -23,6 +23,8 @@ from pathlib import Path
 
 import yaml  # noqa: E402
 
+from _path_hygiene import on_path  # noqa: E402  # #671 sys.path hygiene authority
+
 from status_defs import TERMINAL  # noqa: E402,F401  # single source (#34, #95)
 
 """worker_budget_gates — dispatch admission checks (5 dispatch + 3 advisory + PROVEN/claim-status gates).
@@ -93,8 +95,8 @@ def compare_register_change_proven_gate(
         return True, 'no PROVEN promotions'
     # check BLIND gate for each — required, fail closed (#78)
     try:
-        sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
-        from blind_gate import check_proven_gate
+        with on_path(_SKILL_ROOT / 'scripts'):  # #671 scoped membership
+            from blind_gate import check_proven_gate
     except Exception as exc:
         return False, (f'PROMOTION GATE: blind_gate unavailable (fail closed) '
                        f'- {type(exc).__name__}: {exc}')
@@ -218,9 +220,9 @@ def check_workers_lt_3(paths: dict) -> tuple[bool, str]:
     if not ws:
         return True, ''
     try:
-        sys.path.insert(0, str(_SKILL_ROOT / 'hooks'))
-        from lib_kunglao import scan_active_workers
-        n, _stuck = scan_active_workers(Path(ws))
+        with on_path(_SKILL_ROOT / 'hooks'):  # #671 scoped membership
+            from lib_kunglao import scan_active_workers
+            n, _stuck = scan_active_workers(Path(ws))
     except Exception:
         return True, ''  # FAIL_OPEN — never block dispatch on scan failure
     if n >= MAX_WORKERS:

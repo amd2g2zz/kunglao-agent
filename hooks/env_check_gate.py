@@ -47,11 +47,13 @@ import os
 import sys
 from pathlib import Path
 
+from _path_hygiene import ensure_scripts_path, scripts_on_path  # #671 authority
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 # F6 (#304 review): shared init-completeness predicate lives in scripts/init_state.py.
-_SCRIPTS_DIR = SKILL_DIR / "scripts"
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
+# #671: module-level membership via the hygiene authority — idempotent,
+# position-stable (an existing session entry is never reordered).
+ensure_scripts_path()
 import init_state  # noqa: E402
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: only truthy rejects; 0/false/empty pass
@@ -152,9 +154,9 @@ def _emit_reject(ws: Path, detail: str) -> None:
     (dispatch_gate/_emit_trace precedent). Fail-open: observability never
     changes the hook verdict."""
     try:
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-        import kunglao_log  # noqa: E402
-        kunglao_log.emit(ws, "env_check_gate", "reject", exit=2, detail=detail)
+        with scripts_on_path():  # #671 scoped membership
+            import kunglao_log  # noqa: E402
+            kunglao_log.emit(ws, "env_check_gate", "reject", exit=2, detail=detail)
     except Exception:
         pass
 

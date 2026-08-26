@@ -16,6 +16,8 @@ from pathlib import Path
 
 import yaml
 
+from _path_hygiene import ensure_scripts_path  # #671 sys.path hygiene authority
+
 # ---------- constants ----------
 
 MAX_WORKERS = 3
@@ -36,10 +38,10 @@ RETRY_COUNTER_FILE = 'runs/.retry-counter.yaml'
 # scripts/kunglao-monitor.py advisory (drift detection uses the same value).
 # #597: the TTL VALUE is single-sourced in scripts/liveness_policy.py (THE
 # liveness-minutes source; hooks/ and scripts/ ship together, #444 posture).
+# #671: module-level membership via the hygiene authority (was a literal
+# existence check + insert — equivalent spellings could still stack).
 ENV_STATE_FILE = 'runs/env-state.json'
-_scripts_dir = str(Path(__file__).resolve().parent.parent / 'scripts')
-if _scripts_dir not in sys.path:
-    sys.path.insert(0, _scripts_dir)
+ensure_scripts_path()
 from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402
 
 PREFIX_RE = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\]')
@@ -72,7 +74,7 @@ HOST_FORBIDDEN_TOOLS = (
 # contract.md §1 — the DECIDE ranker, issue #2 VoI proxy). The legacy
 # weighted ranker is deprecated (retirement: #446).
 _SKILL_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
+ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     from priority_ratio import priority_ratio as _ratio_rank, EvidenceView as _EvidenceView
     from retract_claim import RETRACTED  # retracted = terminal (#331)
@@ -97,7 +99,7 @@ GENERIC_WORK_AGENT = 'kunglao-worker'
 # tool_error_policy.py (WARN=3 / DISABLE=5 hysteresis) had zero consumers —
 # this import + post_check application is the mechanical wiring; the policy
 # module stays the single sanctioned source (thresholds are never copied).
-sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
+ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     import tool_error_policy as _tep
     TOOL_ERROR_POLICY_LOADED = True
@@ -115,7 +117,7 @@ TOOL_ERRORS_FILE = 'runs/tool-errors.json'
 # the #459 target) — no new activation mechanism, no fourth liveness
 # representation (#446 F-class red line). Import-guarded fail-open: a hook
 # must stay usable even if the scripts/ modules move.
-sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
+ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     import hook_activation as _ha_link
 except Exception:  # pragma: no cover - hook stays usable if the module moves

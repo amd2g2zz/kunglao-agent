@@ -10,14 +10,18 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path as _P
+
+from _path_hygiene import ensure_on_path  # #671 sys.path hygiene authority
+
 _HERE = str(_P(__file__).resolve().parent)
 # Order-robust bootstrap (#568 CI regression): MOVE our dir to the FRONT
 # (a bare conditional insert leaves an earlier scripts/ insert winning, so
 # `from lib_kunglao import ...` resolves to scripts/lib_kunglao.py — which
 # lacks scan_active_workers — and standalone collection dies).
-if _HERE in sys.path:
-    sys.path.remove(_HERE)
-sys.path.insert(0, _HERE)
+# #671: move-to-front via the hygiene authority (front=True: remove any
+# copy, insert once at [0]) — the ONLY front=True call site; every other
+# membership call stays position-stable by design.
+ensure_on_path(_HERE, front=True)
 
 from lib_kunglao import scan_active_workers  # noqa: E402,F401  # AC-3 wiring (#444)
 from status_defs import TERMINAL  # noqa: E402,F401  # #34 pin: the shim re-affirms the single status source (core already puts scripts/ on sys.path)

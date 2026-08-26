@@ -52,6 +52,8 @@ import sys
 import time
 from pathlib import Path
 
+from _path_hygiene import on_path, scripts_on_path  # #671 authority
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 DISPATCH_RE = re.compile(
     r"\[T\s*([123])\s+tools\s*=\s*([^\]]*)\]\s*claim\s+([A-Z]+-\d+)",
@@ -68,8 +70,8 @@ STUCK_MIN = 20  # minutes — mirrors backtrack_gate default --stuck-min 20
 
 def _worker_lib():
     """hooks/lib_kunglao — the worker-status protocol single parse point (#444)."""
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import lib_kunglao
+    with on_path(Path(__file__).resolve().parent):  # #671 scoped membership
+        import lib_kunglao
     return lib_kunglao
 
 
@@ -132,8 +134,8 @@ def _kunglao_active(ws: Path) -> bool:
     if not state_path.exists():
         return False
     try:
-        sys.path.insert(0, str(SKILL_DIR / "scripts"))
-        import hook_activation as ha
+        with scripts_on_path():  # #671 scoped membership
+            import hook_activation as ha
         return ha.is_active_strict(ws, "worker_pulse")
     except Exception:
         return False
@@ -230,11 +232,11 @@ def _build_pulse(ws: Path) -> tuple[str, str | None]:
         # DLQ (#36): surface quarantined (DEAD) claim count. Fail-open — a
         # missing module or register must never break the convergence pulse.
         try:
-            sys.path.insert(0, str(SKILL_DIR / "scripts"))
-            import dead_letter as _dl  # sibling in scripts/
-            _quarantined = _dl.count_dead(ws)
-            if _quarantined:
-                flags.append(f"quarantined={_quarantined}")
+            with scripts_on_path():  # #671 scoped membership
+                import dead_letter as _dl  # sibling in scripts/
+                _quarantined = _dl.count_dead(ws)
+                if _quarantined:
+                    flags.append(f"quarantined={_quarantined}")
         except Exception:
             pass
         if flags:

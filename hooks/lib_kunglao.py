@@ -20,6 +20,25 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:  # normal load paths (hook subprocess: script dir; pytest: pythonpath)
+    from _path_hygiene import ensure_scripts_path, on_path  # #671 authority
+except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the eight
+    # scripts-side _load_worker_lib consumers (convergence_check,
+    # backtrack_gate, event_taxonomy, external_kicker, kunglao_status,
+    # progress_report, reconcile_workers, scripts/lib_kunglao) load THIS
+    # file via spec_from_file_location under "lib_kunglao_hooks"; their
+    # subprocess sys.path has scripts/ but not hooks/. Self-bootstrap the
+    # authority by path (registered under its canonical name so every
+    # later `import _path_hygiene` shares this one instance).
+    import importlib.util as _ilu
+    _hyg_spec = _ilu.spec_from_file_location(
+        "_path_hygiene", Path(__file__).resolve().parent / "_path_hygiene.py")
+    _hyg = _ilu.module_from_spec(_hyg_spec)
+    sys.modules["_path_hygiene"] = _hyg
+    _hyg_spec.loader.exec_module(_hyg)
+    ensure_scripts_path = _hyg.ensure_scripts_path
+    on_path = _hyg.on_path
+
 # ---- dispatch prefix regex (single source) ----
 # v0 protocol (legacy, still supported): "[T<N> tools=a,b] claim C-NN ..."
 DISPATCH_RE = re.compile(
@@ -240,12 +259,11 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
 
 # #597: the stuck threshold comes from scripts/liveness_policy.py (THE
 # single source for liveness minutes). hooks/ runs with its own dir at
-# sys.path[0], so the scripts dir goes on the path first (the _env_layout /
-# worker_budget_core precedent; missing module = broken install, not a
-# degraded mode — hooks/ and scripts/ ship together, #444 posture).
-_scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
-if str(_scripts_dir) not in sys.path:
-    sys.path.insert(0, str(_scripts_dir))
+# sys.path[0], so scripts/ membership is ensured first via the hygiene
+# authority — idempotent and position-stable (missing module = broken
+# install, not a degraded mode — hooks/ and scripts/ ship together, #444
+# posture). #671: was a literal existence check + bare insert.
+ensure_scripts_path()
 from liveness_policy import STUCK_MINUTES  # noqa: E402
 
 # #607: statuses that END a worker's liveness. Anything else — including
@@ -304,10 +322,9 @@ def _env_layout(ws: Path):
     used to live inline here). Missing module = broken install, not a
     degraded mode (#444 posture: hooks/ and scripts/ ship together)."""
     scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
-    if str(scripts_dir) not in sys.path:
-        sys.path.insert(0, str(scripts_dir))
     try:
-        import env_manifest
+        with on_path(scripts_dir):  # #671 scoped membership
+            import env_manifest
     except ImportError as exc:
         raise RuntimeError(
             f"env manifest module missing: {scripts_dir / 'env_manifest.py'} — "

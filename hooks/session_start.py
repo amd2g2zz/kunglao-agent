@@ -15,9 +15,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Add scripts/ to path for hook_activation
+from _path_hygiene import ensure_scripts_path  # #671 sys.path hygiene authority
+
+# Add scripts/ to path for hook_activation (#671: idempotent, position-stable
+# membership via the hygiene authority — was a bare leaking insert).
 _SKILL_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_SKILL_ROOT / "scripts"))
+ensure_scripts_path()
 
 from hook_activation import always_arm, renew, read_state
 

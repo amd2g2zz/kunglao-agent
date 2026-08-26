@@ -23,6 +23,8 @@ import re
 import sys
 from pathlib import Path
 
+from _path_hygiene import scripts_on_path  # #671 sys.path hygiene authority
+
 # Analysis binaries only the dispatched workers should invoke (worker_budget's
 # VM_TOOLS covers the dynamic-analysis family on the Agent face; this list is
 # the static/decompile face seen in the #608 incident).
@@ -54,11 +56,11 @@ def evaluate(payload: dict) -> tuple[int, str, str | None]:
     # durable trail (fail-open — the WARN never depends on logging succeeding)
     try:
         if cwd:
-            sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-            import kunglao_log  # noqa: E402
-            kunglao_log.emit(Path(cwd), "orchestrator", "orchestrator_tool_violation",
-                             detail=f"bash analysis-binary outside worker worktree: "
-                                    f"{cmd.split()[0] if cmd.split() else cmd}")
+            with scripts_on_path():  # #671 scoped membership
+                import kunglao_log  # noqa: E402
+                kunglao_log.emit(Path(cwd), "orchestrator", "orchestrator_tool_violation",
+                                 detail=f"bash analysis-binary outside worker worktree: "
+                                        f"{cmd.split()[0] if cmd.split() else cmd}")
     except Exception:
         pass
     return 0, "", CTX

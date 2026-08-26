@@ -48,9 +48,15 @@ import sys
 import tempfile
 from pathlib import Path
 
+from _path_hygiene import ensure_on_path, ensure_scripts_path  # #671 authority
+
 SKILL_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(SKILL_DIR / "scripts"))
-sys.path.insert(0, str(SKILL_DIR / "hooks"))
+# #671: module-level membership via the hygiene authority. Order-faithful to
+# the two bare inserts this replaces: hooks/ ends up AHEAD of scripts/ (the
+# lib_kunglao ambiguity — #568 lesson), so scripts/ is ensured first
+# (position-stable) and hooks/ move-to-front LAST lands it in front.
+ensure_scripts_path()
+ensure_on_path(SKILL_DIR / "hooks", front=True)
 
 RC_ALLOW = 0
 RC_BLOCK = 2

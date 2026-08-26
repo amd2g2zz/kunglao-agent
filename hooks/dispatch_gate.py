@@ -57,6 +57,22 @@ from pathlib import Path
 
 import yaml
 
+try:  # normal load paths (hook subprocess: script dir; pytest: pythonpath)
+    from _path_hygiene import on_path, scripts_on_path  # #671 authority
+except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the
+    # subprocess-driver pattern (tests/test_failopen_emit loads this file
+    # via spec_from_file_location inside a python tmp/driver.py whose
+    # sys.path has the driver dir, not hooks/). Self-bootstrap by path,
+    # registered under the canonical name so later imports share it.
+    import importlib.util as _ilu
+    _hyg_spec = _ilu.spec_from_file_location(
+        "_path_hygiene", Path(__file__).resolve().parent / "_path_hygiene.py")
+    _hyg = _ilu.module_from_spec(_hyg_spec)
+    sys.modules["_path_hygiene"] = _hyg
+    _hyg_spec.loader.exec_module(_hyg)
+    on_path = _hyg.on_path
+    scripts_on_path = _hyg.scripts_on_path
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 HOOK_STATE = Path(".hook_state.json")
 # #603: append-only top-1 REJECT ledger — one JSON row per REJECT, the
@@ -84,14 +100,12 @@ def _resolve_workspace(payload: dict) -> Path | None:
     discovery behavior byte-identical."""
     cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
     try:
-        # membership check mirrors lib_kunglao._env_layout (F5): each
-        # hook run is a fresh process so this never leaks in practice,
-        # but _resolve_workspace can be called repeatedly in-process
-        # (tests, embedders) — no unbounded path growth.
-        scripts_dir = str(SKILL_DIR / "scripts")
-        if scripts_dir not in sys.path:
-            sys.path.insert(0, scripts_dir)
-        import env_manifest
+        # #671: scoped membership (no leaked sys.path entry even when
+        # _resolve_workspace is called repeatedly in-process — tests,
+        # embedders); the in-process existence check is now the hygiene
+        # module's concern.
+        with scripts_on_path():
+            import env_manifest
     except ImportError as exc:  # broken install, not a degraded mode (#444 posture)
         raise RuntimeError(
             f"env manifest module missing: {SKILL_DIR / 'scripts' / 'env_manifest.py'} — "
@@ -139,8 +153,8 @@ def _kunglao_active(ws: Path) -> bool:
 def _failure_blocked_ids(ws: Path) -> set:
     """Claims with a failed attempt but no current failure_analysis."""
     try:
-        sys.path.insert(0, str(SKILL_DIR / "scripts"))
-        import failure_analysis_gate as fag
+        with scripts_on_path():  # #671 scoped membership
+            import failure_analysis_gate as fag
         return {b["claim_id"] for b in fag.scan_workspace(ws) if b.get("state") == "BLOCKED"}
     except Exception:
         return set()
@@ -173,8 +187,8 @@ def _parse_dispatch(text: str) -> tuple[str | None, str | None]:
     parser lives in hooks/lib_kunglao.py; this thin wrapper exists so the
     gate doesn't have to know about import order / sys.path tricks."""
     try:
-        sys.path.insert(0, str(SKILL_DIR / "hooks"))
-        from lib_kunglao import parse_dispatch as _shared_parse
+        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
+            from lib_kunglao import parse_dispatch as _shared_parse
     except Exception as exc:  # pragma: no cover — defensive
         # Fallback to local regex if lib_kunglao is somehow unimportable
         m = DISPATCH_RE.search(text)
@@ -208,8 +222,8 @@ def _declared_irreversible(text: str) -> bool:
     Prose sniffing lives in scripts/ask_for_direction_gate.py as a
     best-effort tripwire, never load-bearing."""
     try:
-        sys.path.insert(0, str(SKILL_DIR / "hooks"))
-        from lib_kunglao import parse_dispatch_json
+        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
+            from lib_kunglao import parse_dispatch_json
     except Exception:
         return False
     _, _, claim_id, meta = parse_dispatch_json(text)
@@ -338,8 +352,8 @@ def _emit_trace(ws: Path, action: str, claim_id: str, detail: str,
     carries the gate's rc on REJECT faces (#459). Logging never breaks the
     gate: fail-open, stderr note only."""
     try:
-        sys.path.insert(0, str(SKILL_DIR / "scripts"))
-        from kunglao_log import emit
+        with scripts_on_path():  # #671 scoped membership
+            from kunglao_log import emit
         emit(ws, "hook:dispatch_gate", action, claim=claim_id, detail=detail,
              exit=exit_code)
     except Exception as exc:  # noqa: BLE001 — a trace must never block dispatch
@@ -359,8 +373,8 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
     (FAIL_OPEN — a broken gate must not block dispatch; the failure-blocked
     slice keeps its own #495 injection path)."""
     try:
-        sys.path.insert(0, str(SKILL_DIR / "hooks"))
-        from worker_budget import check_priority
+        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
+            from worker_budget import check_priority
     except Exception as exc:  # noqa: BLE001 — scorer wiring unavailable -> fail open
         # #569 AUDIT: the gate is being bypassed silently — leave a trace so
         # post-mortem can see the FAIL_OPEN path was taken. detail carries
@@ -439,8 +453,8 @@ def _mcp_prefix_gate(prompt_text: str) -> int | None:
     (pass-through) when the dispatch declares no tools or only sanctioned
     ones. Returns rc=2 with REJECT guidance on the first offender."""
     try:
-        sys.path.insert(0, str(SKILL_DIR / "hooks"))
-        from lib_kunglao import check_mcp_prefix, parse_dispatch as _shared_parse
+        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
+            from lib_kunglao import check_mcp_prefix, parse_dispatch as _shared_parse
     except Exception:  # noqa: BLE001 — helper unavailable -> fail open
         return None
     try:
@@ -470,15 +484,15 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
     onto the promoted obstacle claim stays covered. FAIL_OPEN when the
     scorer, the register or the card is unavailable."""
     try:
-        sys.path.insert(0, str(SKILL_DIR / "scripts"))
-        import priority_ratio as pr
+        with scripts_on_path():  # #671 scoped membership
+            import priority_ratio as pr
     except Exception:  # noqa: BLE001 — scorer unavailable -> fail open
         return None
     tools: list[str] = []
     try:
-        sys.path.insert(0, str(SKILL_DIR / "hooks"))
-        from lib_kunglao import parse_dispatch
-        tools = parse_dispatch(prompt_text or "")[1]
+        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
+            from lib_kunglao import parse_dispatch
+            tools = parse_dispatch(prompt_text or "")[1]
     except Exception:  # noqa: BLE001 — unparseable tools -> no families -> open
         tools = []
     claim_ids = {claim_id}

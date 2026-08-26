@@ -44,6 +44,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _path_hygiene import ensure_scripts_path  # #671 sys.path hygiene authority
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 RECALL_SCRIPT = SKILL_DIR / "scripts" / "references_recall.py"
 RECALL_TIMEOUT = 5.0          # recall must never hold dispatch hostage
@@ -71,7 +73,8 @@ GO_SIGNALS = (
 )
 
 # tier_rules is the single source for T3/T2 feature detection (#241).
-sys.path.insert(0, str(SKILL_DIR / "scripts"))
+# #671: module-level membership via the hygiene authority (was bare insert).
+ensure_scripts_path()
 from tier_rules import tier_for_claim  # noqa: E402
 
 

@@ -46,6 +46,8 @@ import re
 import sys
 from pathlib import Path
 
+from _path_hygiene import scripts_on_path  # #671 sys.path hygiene authority
+
 SKILL_DIR = Path(__file__).resolve().parent.parent
 SCRIPTS = SKILL_DIR / "scripts"
 
@@ -134,8 +136,8 @@ def main(stdin_stream=None) -> int:
         return 0
     cwd = payload.get("cwd") or str(Path.cwd())
     try:
-        sys.path.insert(0, str(SCRIPTS))
-        import kunglao_log  # noqa: E402
+        with scripts_on_path():
+            import kunglao_log  # noqa: E402
         ws = None
         for base in (Path(cwd), Path(cwd).parent):
             if (base / "runs").is_dir():

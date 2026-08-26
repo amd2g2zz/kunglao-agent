@@ -46,6 +46,8 @@ import json
 import sys
 from pathlib import Path
 
+from _path_hygiene import scripts_on_path  # #671 sys.path hygiene authority
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 ORACLE_FILE = "task-oracle.yaml"
 
@@ -70,8 +72,11 @@ def _kunglao_active(ws: Path) -> bool:
     if not (ws / ".hook_state.json").exists():
         return False
     try:
-        sys.path.insert(0, str(SKILL_DIR / "scripts"))
-        import hook_activation as ha
+        # #671: scoped membership — the entry leaves sys.path with the block
+        # (a leaked scripts/ entry flipped the ambiguous lib_kunglao name in
+        # long pytest sessions; hooks/ before scripts/ is the load order).
+        with scripts_on_path():
+            import hook_activation as ha
         return ha.is_active_strict(ws, "completion_gate")
     except Exception:  # noqa: BLE001 — never block on an activation-check error
         return False
