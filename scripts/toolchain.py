@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """toolchain.py — type-aware toolchain probe matrix (#304, #474 probe tiers).
 
-Per-type manifests (windows/linux/android), tiers 0-3 (HARD/HARD/HARD/WARN).
+Per-type manifests (windows/linux/android/web), tiers 0-3
+(HARD/HARD/HARD/WARN). #728: web is labs — WARN-only face, no HARD items.
 Real probes (subprocess with timeouts, fail-open on probe crash but honest
 reporting). Dependency-cascade error messages that name the ROOT CAUSE.
 #474: every check carries a probe tier — PRESENCE (exists), LIVENESS
@@ -82,7 +83,9 @@ import mcp_probe  # noqa: E402  (same dir, sys.path injected above)
 # dependency kunglao-init already uses for the CLAUDE.md constraint block.
 import yaml  # noqa: E402
 
-VALID_TYPES = ("windows", "linux", "android")
+# #728: web mirrors init_state.VALID_TYPES (deliberate layer copy —
+# comment block at the original definition site).
+VALID_TYPES = ("windows", "linux", "android", "web")
 
 # F6 (#304 review): single source of truth for the init predicate component.
 from init_state import read_project_type  # noqa: E402
@@ -143,6 +146,20 @@ class ToolMeta:
 
 
 FIXES: dict[str, ToolMeta] = {
+    # #728 web (labs): direct-npx JS recovery tools (agent-invoked, never
+    # init-gated). url/package/verify_cmd verified against upstream
+    # READMEs + execution on 2026-08-26.
+    "wakaru": ToolMeta(
+        fix="npx -y wakaru --version (first use installs via npx)",
+        description="bundler-aware JS module recovery (unpack webpack/"
+                    "esbuild/Browserify/Metro + transpiler/minifier undo)",
+        url="https://github.com/pionxzh/wakaru",
+        package="wakaru", verify_cmd="npx wakaru --version"),
+    "webcrack": ToolMeta(
+        fix="npx -y webcrack --version (first use installs via npx)",
+        description="obfuscator.io-class JS deobfuscation + unminification",
+        url="https://github.com/j4k0xb/webcrack",
+        package="webcrack", verify_cmd="npx webcrack --version"),
     "pefile": ToolMeta(
         fix="pip install pefile",
         description="PE/COFF parsing and Authenticode signature extraction",
@@ -1611,6 +1628,37 @@ def _check_android(report: ToolchainReport, ws: Path,
     _check_mcp(report, ws, "android")
 
 
+# ---------- Web manifest (#728, labs: WARN-only) ----------
+
+def _check_web(report: ToolchainReport, ws: Path,
+               caps: bool = False,
+               reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """#728 web (labs) checks — minimal face, ZERO HARD items by contract
+    (labs: no robust toolchain validation; real-usage follow-up).
+
+    - camoufox-reverse MCP supply (WARN — mcp_probe manifest entry)
+    - docker channel presence (WARN; the web channel default is docker,
+      #698 owns the channel matrix itself)
+    No VM channel, no decompiler, no caps path — the web dynamic surface is
+    the browser, not a VM."""
+    _check_mcp(report, ws, "web")
+
+    docker = _shutil_which("docker")
+    if docker:
+        rc, out, err = _run_cmd(["docker", "--version"], timeout=10)
+        detail = (f"docker present ({out.strip()[:60] or err.strip()[:60]})"
+                  if rc == 0 else f"docker binary found but --version rc={rc}")
+        status = Status.PASS if rc == 0 else Status.WARN
+    else:
+        status = Status.WARN
+        detail = ("docker not on PATH — web channel default is docker; "
+                  "install Docker Desktop or set KUNGLAO_CHANNEL explicitly")
+    report.items.append(CheckResult(
+        name="channel:docker", status=status, tier=Tier.WARN,
+        detail=detail, probe=ProbeTier.PRESENCE,
+    ))
+
+
 # ---------- type resolution ----------
 # F6 (#304 review): read_project_type imported from init_state.py above —
 # single source of truth; no local duplicate.
@@ -1767,6 +1815,7 @@ def check(ws: Path, project_type: str | None = None,
         "windows": _check_windows,
         "linux": _check_linux,
         "android": _check_android,
+        "web": _check_web,
     }
     checkers[project_type](report, ws, caps=caps, reqs=reqs)
     return report

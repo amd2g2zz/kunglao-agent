@@ -15,6 +15,7 @@
 | methodology | field-notes, malware-analysis, malware-analysis-workflow, malware-analysis-quickstart, malware-triage, malware-dynamic-analysis, detection-engineer, malware-report-writer, phishing-case-study | Analysis methods and malware application domain (primary use case) |
 | osint | multi-search-engine, multi-search-engine-refs | Multi-engine OSINT search |
 | resources | awesome-re-resources | External RE resource collection |
+| web-labs | web-re-quickref | Browser JS reverse engineering quick-reference (web workspaces, camoufox MCP supply, layered peeling workflow, crypto signatures, anti-patterns) |
 | contracts | agent-three-state-charter, error-response-taxonomy, dispatch-protocol | Behavior contracts the orchestrator loads on scenario (ask/stop charter, error response taxonomy, dispatch protocol) |
 
 | Scenario | Domain |
@@ -28,6 +29,7 @@
 | Platform-specific | platforms |
 | Detection rules / reports | methodology (detection-engineer, malware-report-writer) |
 | Intelligence / search | osint |
+| Browser JS target (`--type web`) | web-labs |
 | Action error / tool-VM-install failure response | contracts (error-response-taxonomy) |
 | Ask-the-user / irreversible-action decision | contracts (agent-three-state-charter) |
 
@@ -35,7 +37,9 @@
 
 | File | Domain | Purpose | When to read |
 |------|--------|---------|-------------|
-| `_index-tools.md` | tools | File-level index for the tools domain. | When a worker is dispatched to tooling / static-analysis work. |
+| `_index-tools.md` | tools | File-level index for the tools domain.
+
+| `_index-web-labs.md` | web-labs | File-level index for the web-labs domain (quick-reference, camoufox MCP, peeling workflow). | When dispatched to a browser JS reverse engineering task (`--type web`). | When a worker is dispatched to tooling / static-analysis work. |
 | `_index-anti-analysis.md` | anti-analysis | File-level index for the anti-analysis domain. | When a worker faces anti-debug / anti-VM / anti-DBI samples. |
 | `_index-patterns.md` | patterns | File-level index for the patterns domain (general RE techniques). | When a worker needs pattern-recognition references. |
 | `_index-languages.md` | languages | File-level index for the languages domain. | When a worker has identified the sample's language. |

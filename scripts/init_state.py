@@ -16,7 +16,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-VALID_TYPES = ("windows", "linux", "android")
+# #728: "web" is the labs browser-JS type (WARN-only toolchain face,
+# docker-default channel — see openspec/changes/issue-728-web-labs-type).
+VALID_TYPES = ("windows", "linux", "android", "web")
 MARKER = "[initialized]"
 # #625: the dedicated state file is the PRIMARY init-completeness truth —
 # a text-editor rewrite of the YAML comment can no longer silently drop it.
@@ -84,7 +86,7 @@ def init_complete(ws: Path) -> tuple[bool, str]:
         if ptype not in VALID_TYPES:
             return False, (
                 f"invalid project_type={ptype!r} — "
-                "run kunglao-init.py <ws> --type <windows|linux|android>"
+                "run kunglao-init.py <ws> --type <windows|linux|android|web>"
             )
         return True, f"init complete: project_type={ptype} (state file)"
     reg = ws / "claim-register.yaml"
@@ -106,7 +108,7 @@ def init_complete(ws: Path) -> tuple[bool, str]:
     if ptype not in VALID_TYPES:
         return False, (
             f"invalid project_type={ptype!r} — "
-            "run kunglao-init.py <ws> --type <windows|linux|android>"
+            "run kunglao-init.py <ws> --type <windows|linux|android|web>"
         )
     return True, f"init complete: project_type={ptype}"
 
