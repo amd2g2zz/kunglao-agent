@@ -195,6 +195,7 @@ EMIT_ACTIONS = [
     "priority_deviation",
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face
+    "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "stale_plan_on_new_evidence",
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension

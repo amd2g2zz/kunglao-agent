@@ -281,6 +281,14 @@ ARTIFACTS_RE = re.compile(
     r"(?:^|\|)\s*artifacts?\s*:\s*([^|\n]+)", re.IGNORECASE | re.MULTILINE)
 _NO_ARTIFACTS_MARKERS = frozenset({"none", "-", "(none)"})
 
+# K2 sedimentation declarations (#762): same line-shape duality, SAME token
+# grammar as artifacts (`none`/`-`/`(none)` = explicit no-note marker,
+# exempt below). The owed-NESS of a note is NOT adjudicated here — that is
+# the Stop gate's notes_due face (D5 division: this layer only enforces
+# "a declared reference must be real", W-15 law).
+NOTES_RE = re.compile(
+    r"(?:^|\|)\s*notes\s*:\s*([^|\n]+)", re.IGNORECASE | re.MULTILINE)
+
 
 def parse_worker_status_tokens(text: str) -> list[str]:
     """All ``status:`` tokens in file order, lowercased.
@@ -312,6 +320,21 @@ def parse_declared_artifacts(text: str) -> list[str]:
     for m in ARTIFACTS_RE.finditer(text):
         for tok in re.split(r"[,;\s]+", m.group(1).strip()):
             if tok and tok not in out:
+                out.append(tok)
+    return out
+
+
+def parse_declared_notes(text: str) -> list[str]:
+    """Declared durable-result-note paths from ``notes:`` lines (#762 K2).
+
+    Same grammar as parse_declared_artifacts (comma/semicolon/whitespace
+    split, order preserved, deduped); ``notes: none`` and friends normalize
+    to []. Lives at THE single worker-status parse point per #444 AC-1."""
+    out: list[str] = []
+    for m in NOTES_RE.finditer(text):
+        for tok in re.split(r"[,;\s]+", m.group(1).strip()):
+            if (tok and tok.lower() not in _NO_ARTIFACTS_MARKERS
+                    and tok not in out):
                 out.append(tok)
     return out
 
@@ -372,6 +395,7 @@ def iter_worker_states(workspace: Path) -> list[dict]:
                 "status": tokens[-1] if tokens else None,
                 "mtime": mtime,
                 "artifacts": parse_declared_artifacts(text),
+                "notes": parse_declared_notes(text),  # #762 K2 sedimentation refs
             })
     return states
 
@@ -444,4 +468,15 @@ def scan_done_artifact_violations(workspace: Path, states: list | None = None) -
         if missing:
             violations.append({"worker": s["file"].stem,
                                "kind": "declared-missing", "missing": missing})
+        # #762 K2: same law for declared durable-note references. Opt-in like
+        # artifacts above — a done file with no `notes:` line (or `none`) is
+        # exempt here; whether a note was OWED at all is the Stop gate's
+        # notes_due adjudication, not liveness business.
+        note_missing = [t for t in s.get("notes") or []
+                        if not (Path(t) if Path(t).is_absolute()
+                                else s["root"] / t).exists()]
+        if note_missing:
+            violations.append({"worker": s["file"].stem,
+                               "kind": "declared-note-missing",
+                               "missing": note_missing})
     return violations

@@ -96,9 +96,15 @@ AND its artifacts (`facts/F<NNN>.md` / `runs/<ts>-<task>.md`) are verified.
 **Delivery checklist — on delivery confirmation, in order:**
 1. Confirm the final status (`done` / `blocked`) in `runs/worker-status-<id>.md`.
 2. Verify the artifacts exist and are readable (facts/F<NNN>.md, runs/ report).
-3. **TaskStop the background worker** — before any further dispatch /
+3. Verify the durable result note `notes/<claim-id>.md` exists for each closed
+   claim (worker sedimentation contract, #762): the DONE line declares it via
+   `| notes:` and `lib_kunglao.scan_done_artifact_violations` flags
+   declared-but-absent references. A closure that skipped the note resurfaces
+   as a completion-gate **NOTES_DUE** block (runs/notes-due.yaml owes until
+   the note lands).
+4. **TaskStop the background worker** — before any further dispatch /
    verifier / registry action.
-4. Then: dispatch the verifier, merge the worktree branch, update
+5. Then: dispatch the verifier, merge the worktree branch, update
    claim-register.yaml.
 
 Mechanical aid: `hooks/worker_pulse.py` injects a

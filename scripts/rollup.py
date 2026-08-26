@@ -52,6 +52,7 @@ import yaml  # noqa: E402
 from status_defs import LedgerLineType, TERMINAL  # noqa: E402
 import outcome_capture as _oc  # noqa: E402
 import failure_analysis_gate as _fag  # noqa: E402
+import kunglao_log  # noqa: E402
 
 LEDGER_NAME = ".convergence_ledger.jsonl"
 
@@ -160,15 +161,19 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
                reflect_queue: Path | None = None) -> dict:
     """Fire the terminal-transition write loop.
 
+    Accepted closing statuses: status_defs.TERMINAL plus RETRACTED (#762 K1a
+    — a withdrawal is a closure that owes a durable note; the extra value
+    comes from the #331 domain owner, never a local copy).
+
     Returns a per-step status dict:
-      - fired=False, reason='not-terminal'    status not in TERMINAL
+      - fired=False, reason='not-terminal'    status not in the closing set
       - fired=False, reason='no-register'     register missing
       - fired=False, reason='unknown-claim'   claim id not in register
       - fired=False, reason='already-rolled-up'  idempotent no-op
       - fired=True, with per-phase counters  all phases ran
     """
     status_upper = (terminal_status or "").upper()
-    if status_upper not in TERMINAL:
+    if status_upper not in _terminal_set():
         return {"fired": False, "reason": "not-terminal",
                 "terminal_status": status_upper}
 
@@ -231,15 +236,117 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
     }
 
 
+# ---------------------------------------------------------------------------
+# #762 K1a: mechanical terminal-claim sweep — the tick's rollup trigger
+#
+# Until #762 the rollup fired only when prose asked for it (SKILL.md L58
+# "claim terminal triggers rollup"); zero call sites enforced it and field
+# workspaces accumulated ZERO notes-due entries. The heartbeat tick now runs
+# `--sweep-terminal` every pass: reconciliation semantics (stateless scan of
+# the register + ledger idempotency) instead of a transition-state file, so
+# missed historical closures get repaired on the first post-upgrade tick too.
+# ---------------------------------------------------------------------------
+
+def _terminal_set() -> set[str]:
+    """TERMINAL ∪ {RETRACTED}: the sweep's closing set.
+
+    status_defs.TERMINAL stays canonical (#34); RETRACTED joins through its
+    domain owner (#331 retract_claim) so no local copy can drift."""
+    ts = set(TERMINAL)
+    try:
+        import retract_claim as _rc
+        ts.add(_rc.RETRACTED)
+    except ImportError:
+        pass  # pre-#331 install fragment — close on the canonical set only
+    return ts
+
+
+def pending_terminal_claims(workspace: Path) -> list[tuple[str, str]]:
+    """Terminal claims that still lack their ledger rollup row.
+
+    Returns [(claim_id, STATUS_UPPER), ...] in register order. Rescan-every-
+    tick is cheap (one ledger scan per pending claim) and idempotent by
+    construction — run_rollup returns already-rolled-up no-ops for anything
+    promoted between scans."""
+    claims, _reg, reg_path = _load_register(Path(workspace))
+    if not reg_path.exists():
+        return []
+    term = _terminal_set()
+    ws = Path(workspace)
+    out: list[tuple[str, str]] = []
+    for c in claims:
+        cid = str((c or {}).get("id", "") or "").strip()
+        status = str((c or {}).get("status", "") or "").strip().upper()
+        if not cid or status not in term:
+            continue
+        if not _rolled_up(ws, cid, status):
+            out.append((cid, status))
+    return out
+
+
+def rollup_terminal_claim(workspace: Path, claim_id: str,
+                          terminal_status: str) -> dict:
+    """Sweep face of run_rollup: fire the write loop AND record a structured
+    event (#762 event word `rollup_sweep`). Promotion-path callers keep
+    calling run_rollup directly (unchanged behavior) — only this mechanical
+    face emits, so existing telemetry keeps its blast radius."""
+    ws = Path(workspace)
+    res = run_rollup(ws, claim_id, terminal_status)
+    if res.get("fired"):
+        kunglao_log.emit(ws, actor="rollup", action="rollup_sweep",
+                         claim=claim_id,
+                         detail=f"terminal={res['terminal_status']} via tick sweep")
+    return res
+
+
+def sweep_terminal_claims(workspace: Path) -> dict:
+    """Roll up every pending terminal claim, one exception cage each.
+
+    Never raises (fail-open contract; the tick consumes this through a
+    subprocess whose rc is advisory-only). Summary shape:
+      ok       False iff the register could not be read / any claim crashed
+      fired    [claim_id] rolled up in this pass
+      skipped  [{claim_id, reason}] non-fired (already-rolled-up etc.)
+      errors   [{claim_id, error}] per-claim crashes
+    """
+    ws = Path(workspace)
+    summary: dict = {"ok": True, "fired": [], "skipped": [], "errors": []}
+    try:
+        pending = pending_terminal_claims(ws)
+    except Exception as exc:  # noqa: BLE001 — fail-open: never raise to the tick
+        summary["ok"] = False
+        summary["errors"].append({"claim_id": "*", "error": repr(exc)})
+        return summary
+    for cid, status in pending:
+        try:
+            res = rollup_terminal_claim(ws, cid, status)
+        except Exception as exc:  # noqa: BLE001 — one bad claim cannot stop the rest
+            summary["errors"].append({"claim_id": cid, "error": repr(exc)})
+            continue
+        if res.get("fired"):
+            summary["fired"].append(cid)
+        else:
+            summary["skipped"].append({"claim_id": cid,
+                                       "reason": str(res.get("reason", "?"))})
+    if summary["errors"]:
+        summary["ok"] = False
+    return summary
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="rollup.py",
         description="claim terminal transition -> outcome/lessons/checkpoint write loop (#524)",
     )
     parser.add_argument("workspace", help="workspace root")
-    parser.add_argument("claim_id", help="claim id (e.g. C-001)")
-    parser.add_argument("--status", required=True,
+    parser.add_argument("claim_id", nargs="?", default=None,
+                        help="claim id (e.g. C-001); omit with --sweep-terminal")
+    parser.add_argument("--status", default=None,
                         help="terminal status (PROVEN/VERIFIED/NEGATIVE/REFUTED/...)")
+    parser.add_argument("--sweep-terminal", dest="sweep_terminal",
+                        action="store_true",
+                        help="#762: roll up EVERY pending terminal claim in "
+                             "the register (heartbeat_tick mechanical trigger)")
     parser.add_argument("--library", default=None,
                         help="global lessons library dir (default: failure_analysis_gate default)")
     parser.add_argument("--reflect-queue", default=None,
@@ -249,8 +356,28 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     ws = Path(args.workspace)
+    if args.sweep_terminal:
+        if args.claim_id or args.status:
+            print("FAIL: --sweep-terminal sweeps the whole register; do not "
+                  "mix it with <claim-id> / --status", file=sys.stderr)
+            return 2
+        if args.dry_run:
+            pend = pending_terminal_claims(ws)
+            print(f"dry-run: would roll up {len(pend)} pending terminal claim(s): "
+                  + ", ".join(f"{c}({s})" for c, s in pend))
+            return 0
+        res = sweep_terminal_claims(ws)
+        print(json.dumps(res, ensure_ascii=False))
+        print(f"rollup sweep: fired={len(res['fired'])} "
+              f"skipped={len(res['skipped'])} errors={len(res['errors'])}")
+        return 0 if res["ok"] else 2
+
     if not (ws / "claim-register.yaml").exists():
         print(f"FAIL: no claim-register.yaml under {ws}", file=sys.stderr)
+        return 2
+    if not args.claim_id or not args.status:
+        print("FAIL: single-claim mode needs <claim-id> and --status "
+              "(or use --sweep-terminal)", file=sys.stderr)
         return 2
 
     if args.dry_run:

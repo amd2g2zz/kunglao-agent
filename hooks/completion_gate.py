@@ -27,6 +27,11 @@ Activation gating: current fail-open / fail-closed boundaries (post
     INTENT_UNMATCHED — the gate refuses PASS until every user concern is
     owned by a PQ; precedence 3>2>1>4>0 means this fires only at the
     would-be-PASS point)
+  - activated + oracle PASSes items + runs/notes-due.yaml still lists owed
+    durable result notes → block, exit 5 NOTES_DUE (#762 K1b — same
+    would-be-PASS interception pattern as exit 4; the queue names the
+    claims, writing notes/<claim-id>.md clears it on the next Stop.
+    Fail-open double-cage: missing/corrupt/malformed queue = pass-through)
   - stop_hook_active=true (second stop) → BLOCK unless task-oracle.yaml
     records adjudication.stop_hook_active = {second_stop: true,
     last_decision: PASS} (#147/#199: an unsanctioned second stop must not
@@ -50,6 +55,9 @@ from _path_hygiene import scripts_on_path  # #671 sys.path hygiene authority
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 ORACLE_FILE = "task-oracle.yaml"
+# #762 K1b: owed durable-result-note refusal code (shim-face only — judge()
+# stays workspace-pure; the scripts-side judge keeps its {0..4} table).
+EXIT_NOTES_DUE = 5
 
 
 # ---------- workspace + activation (mirror hooks/state_anchor.py #44) ----------
@@ -176,6 +184,25 @@ def process_event(payload: dict) -> int:
     except Exception:  # noqa: BLE001 — FAIL_OPEN on judge
         return 0
     if code == 0:
+        # #762 K1b: at the would-be-PASS point ONLY (#664 pattern — item-level
+        # defects, unsigned defers, INTENT_UNMATCHED all strictly outrank this;
+        # mid-run Blocks are never caused by notes), refuse closure while the
+        # owed durable-note queue (#628 runs/notes-due.yaml) still lists
+        # unwritten obligations. Double-caged fail-open: notes_due() itself
+        # degrades to [] on every malformed shape, and ANY exception here is
+        # swallowed — a telemetry file must never deadlock a session.
+        try:
+            owed = cg.notes_due(ws)
+        except Exception:  # noqa: BLE001 — FAIL_OPEN: never deadlock on the queue
+            owed = []
+        if owed:
+            reason = ("NOTES_DUE: durable result notes owed (#628/#762) - "
+                      "write notes/<claim-id>.md per worker contract "
+                      "(frontmatter id/claim_id/verify_status: pending; "
+                      "supersedes when correcting) for: " + ", ".join(owed))
+            print(json.dumps({"decision": "block", "reason": reason},
+                             ensure_ascii=False))
+            return EXIT_NOTES_DUE
         return 0  # PASS — let the session end
     # non-zero → block termination with the unclosed-items reason
     print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))

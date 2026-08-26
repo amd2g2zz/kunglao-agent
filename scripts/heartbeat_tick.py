@@ -214,6 +214,15 @@ def main(argv: list[str] | None = None) -> int:
     # finding must not fail the tick).
     report["verify_watch"] = run("verify_status_watch.py", ws, "--json")
 
+    # #762 K1a: mechanical notes-closure sweep — every terminal claim without
+    # its ledger rollup row gets the write loop now (outcomes -> lessons ->
+    # notes-due queue -> checkpoint). This is THE mechanical trigger that
+    # replaces the SKILL-prose-only contract ("claim terminal triggers rollup"
+    # had zero call sites enforcing it). Advisory like monitor/feedback/
+    # verify_watch: recorded in the report, NEVER weighed into rc/alert
+    # (a crashed sweep must not fail the tick; fail-open by construction).
+    report["rollup_sweep"] = run("rollup.py", ws, "--sweep-terminal")
+
     sc = report["selfcheck"].get("stdout", "")[:80]
     hb = report["heartbeat"].get("stdout", "")[:120]
     rc_sc = report["selfcheck"].get("rc", -1)

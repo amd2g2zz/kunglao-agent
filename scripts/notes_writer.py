@@ -218,3 +218,25 @@ def check_write(notes_dir: Path, note_text: str, note_name: str) -> list[str]:
             f"stamped) without `supersedes: {prior}` — corrections keep a "
             f"traceable chain, the prior conclusion is never silently "
             f"overwritten (#528)"]
+
+
+# ---------------------------------------------------------------------------
+# #762 K3 SEAM — placeholder ONLY. Do not implement here.
+#
+# Wave 3 wires hypothesis -> note supersession through this name once J3/H2
+# land (#759 hypothesis-persistence / #761). Until then ANY call must fail
+# loudly: a silent pass-through here would let a claim closure masquerade as
+# a hypothesis rewrite with no chain, re-opening the exact AES->ChaCha20
+# silent-overwrite class this module exists to prevent.
+# ---------------------------------------------------------------------------
+def note_supersedes_hypothesis(*args, **kwargs):
+    """TODO(#762 K3, Wave 3): thin interface for rewriting an assumption via
+    the notes/ supersedes chain (J3/H2 consumers land in #759/#761).
+
+    Deliberately NOT implemented in the K1+K2 slice — the shape of the
+    hypothesis face is Wave 3's decision; pre-welding it here would freeze
+    wrong seams (#762 design.md D6).
+    """
+    raise NotImplementedError(
+        "#762 K3 lands in Wave 3 (after #759/#761, J3/H2) - "
+        "note_supersedes_hypothesis is a reserved seam, not wired yet")

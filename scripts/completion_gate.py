@@ -37,7 +37,9 @@ judge(oracle, declaration_text=None) -> (exit_code, reason). Exit codes:
 
 Precedence: exit 3 > exit 2 > exit 1 > exit 4 > exit 0 (intent check fires at
 the would-be-PASS point; item-level defects and unsigned defers strictly
-outrank it).
+outrank it). #762 K1b adds a shim-face-only exit 5 (NOTES_DUE): the Stop hook
+consults notes_due() AFTER judge() returns 0 — item-level verdicts are never
+displaced by owed notes.
 
 The gate reads ONLY the oracle dict (+ optional declaration text for #54
 folding). No workspace state, no network. Heuristic + mechanical, never LLM.
@@ -105,23 +107,34 @@ _TIER_RE = re.compile(
 def notes_due(workspace: Path) -> list[str]:
     """#628: claim ids whose durable result note is still owed.
 
-    Reads runs/notes-due.yaml (written by rollup Step 2.5) and drops entries
-    whose notes/<id>.md now exists. Fail-open: absent/corrupt queue → [] (a
-    legacy workspace must never be blocked). judge() stays workspace-pure —
-    the Stop-face shim (hooks/completion_gate.py::process_event) consumes
-    this, refusing closure while obligations remain (judge-then-revise
-    doctrine: nothing auto-writes the note)."""
+    Reads runs/notes-due.yaml (written by rollup Step 2.5, now mechanically
+    swept every tick by heartbeat_tick --sweep-terminal, #762 K1a) and drops
+    entries whose notes/<id>.md now exists. THE CONSUMER is real since #762
+    K1b: hooks/completion_gate.py::process_event consults this at the
+    would-be-PASS point and refuses closure (exit 5 NOTES_DUE) while
+    obligations remain. Fail-open twice over: absent/corrupt queue → [], and
+    malformed SHAPES degrade to no obligation (non-mapping root, non-list
+    due, non-mapping entries carry no claim_id) — a legacy workspace must
+    never be blocked on a file it does not have. judge() stays
+    workspace-pure (judge-then-revise doctrine: nothing auto-writes the
+    note; the queue only makes the obligation impossible to forget)."""
     due_path = Path(workspace) / "runs" / "notes-due.yaml"
     if not due_path.exists():
         return []
     try:
-        data = yaml.safe_load(due_path.read_text(encoding="utf-8")) or {}
+        data = yaml.safe_load(due_path.read_text(encoding="utf-8"))
     except (yaml.YAMLError, OSError):
         return []
+    if not isinstance(data, dict):
+        return []
+    entries = data.get("due") or []
+    if not isinstance(entries, list):
+        return []
+    notes_dir = Path(workspace) / "notes"
     owed = []
-    for e in data.get("due") or []:
-        cid = e.get("claim_id")
-        if cid and not (Path(workspace) / "notes" / f"{cid}.md").exists():
+    for e in entries:
+        cid = e.get("claim_id") if isinstance(e, dict) else None
+        if cid and not (notes_dir / f"{cid}.md").exists():
             owed.append(cid)
     return owed
 

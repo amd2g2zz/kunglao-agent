@@ -55,11 +55,13 @@ That is your entire job.
    `[HH:MM] step: started <task> | status: in-progress`, append per step; facts
    written IMMEDIATELY after derivation, not batched; report + progress.txt last.
    When you flip to `status: done`, the SAME line must declare your deliverables:
-   `| status: done | artifacts: facts/F003-x.md, runs/<report>.md` (paths
-   relative to YOUR workspace root, comma-separated). The machine check
-   `lib_kunglao.scan_done_artifact_violations` re-verifies every declared path
-   exists — `artifacts: none` marks a zero-file completion and is flagged as a
-   W-15 failure (files are the deliverable).
+   `| status: done | artifacts: facts/F003-x.md, runs/<report>.md | notes: notes/C-302.md`
+   (paths relative to YOUR workspace root, comma-separated; `notes:` carries
+   your durable result note for this claim's closure — see 知识沉淀 below).
+   The machine check `lib_kunglao.scan_done_artifact_violations` re-verifies every
+   declared path exists (`notes` references included) — `artifacts: none`
+   marks a zero-file completion and is flagged as a W-15 failure (files are
+   the deliverable).
 5. **NO self-cap phrases** — "30 min", "5s window", "stop after 1 hour" in your
    dispatch/prompt = REJECTED by worker_budget `_SELF_CAP_RE`. Time discipline
    comes from the orchestrator's heartbeat. **You are NOT on a time budget.**
@@ -235,6 +237,47 @@ was discarded as untrusted). Write in this order:
 3. **Report** — `runs/<YYYY-MM-DD-HHMMSS>-<task>.md` (NOT `verify-*` — that
    filename is reserved for the verifier subagent).
 4. **LAST** — append one line to `progress.txt`: `[YYYY-MM-DD HH:MM] [W-<n> DONE] <summary>`.
+
+<!-- contract: knowledge-sedimentation -->
+## 知识沉淀 — durable result note (#762, added 2026-08-27)
+
+High-value content used to die in `runs/worker-status-*.md` — a telemetry
+file nobody reads after the claim closes (#762 field evidence: the live-run
+workspace's best findings sat in worker-status-C-302.md / C-102.md with zero
+consumers). **At claim close you MUST write `notes/<claim-id>.md`** — the
+durable result note — BEFORE you flip the final `status: done` line, and
+declare it on that line (`| notes: notes/<claim-id>.md`). Content: any of
+the three lanes, freely combined:
+
+- **(a) plan_vs_actual 偏差与教训** — where execution diverged from
+  `runs/plan-<task>.md`, WHY it diverged, and what to preflight differently
+  next time ("jdb method signature was wrong → javap -s first").
+- **(b) bonus 发现** — out-of-plan but valuable observations (an unrelated
+  string table you happened to map, a VM quirk, a tool behavior).
+- **(c) 假设改写** — which hypothesis/assumption this claim's evidence broke
+  ("fresh-spawn sleeps without C2 trigger — trigger-injection needed").
+
+Frontmatter follows the NotesWriter contract (scripts/notes_writer.py —
+what the convergence note-gate reads):
+
+```yaml
+---
+id: C-302                  # stem = file name = claim id by convention
+claim_id: C-302            # lint-required link to claims/C-302.md
+status: note
+verify_status: pending     # NEVER inherited; verifier signs off later
+# supersedes: N-001        # REQUIRED only when correcting a stamped prior
+---
+```
+
+Rules:
+- A correction of an existing same-claim stamped note is a NEW note carrying
+  `supersedes: <prior-id>` at `verify_status: pending` — the prior conclusion
+  is never deleted or silently overwritten (hooks/write_guard enforces this
+  at write time).
+- The Stop gate refuses session closure while an owed note is missing
+  (completion-gate NOTES_DUE, runs/notes-due.yaml). Writing nothing is not
+  an escape hatch; it just blocks the orchestrator later.
 
 ## Failure report protocol (v1.9.6 — added so the orchestrator's gate has inputs)
 
