@@ -190,6 +190,8 @@ EMIT_ACTIONS = [
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
+    "upgrade",            # #726 kunglao_upgrade summary (N->M migration)
+    "upgrade_item",       # #726 per-item migration telemetry
     "verify",
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
     "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
