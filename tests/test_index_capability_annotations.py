@@ -11,8 +11,9 @@ validator, extended per design.md D1):
   quality:    map {capability-tag: high|mid|floor}, keys == produces
   provider:   unique across entries (one entry per provider)
 
-The block is opt-in: an entry WITHOUT `provider` never raises annotation
-errors (the 30 legacy entries stay untouched — "no behavior change").
+The block is opt-in: an entry WITHOUT `provider` is tolerated ONLY for
+LEGACY_UNANNOTATED names (29 frozen names, Rule A). New names without a
+provider block are rejected (Rule A FAIL).
 
 Plus the shipped-index contract: the Android providers jadx / baksmali /
 apkid / gitnexus are registered with well-formed annotations.
@@ -140,8 +141,24 @@ def test_duplicate_provider_is_rejected():
 
 # ---------- opt-in: legacy entries unaffected ----------
 
-def test_entry_without_provider_never_raises_annotation_errors():
-    assert _errors_for(_valid_entry()) == []
+def test_legacy_entry_without_provider_passes():
+    """A LEGACY_UNANNOTATED entry (frozen set) without provider passes."""
+    entry = _valid_entry(
+        name="die-probe",      # in LEGACY_UNANNOTATED
+        capability="static:identify",
+    )
+    assert _errors_for(entry) == []
+
+
+def test_new_entry_without_provider_is_rejected():
+    """A brand-new entry without a provider block is rejected (Rule A)."""
+    entry = _valid_entry(
+        name="some-tool",     # NOT in LEGACY_UNANNOTATED
+        capability="static:disasm",
+    )
+    errs = _errors_for(entry)
+    assert errs, "new entry without provider should fail"
+    assert any("provider" in e for e in errs)
 
 
 def test_legacy_shipped_index_still_validates():

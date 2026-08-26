@@ -54,6 +54,52 @@ try:
 except (AttributeError, ValueError):
     pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 
+# ---- #729 annotation gate constants ------------------------------------
+# Rule A — LEGACY_UNANNOTATED whitelist (29 entries without provider blocks).
+# Frozen set: entries may ONLY be removed, never added. Every removal is a
+# deliberate annotation migration (one-way, never reversed). Annotating a
+# LEGACY entry is encouraged — it graduates to the real registry.
+_LEGACY_UNANNOTATED = frozenset({
+    "crypto-tool", "ghidra-recon", "ghidra-decompile-functions",
+    "ghidra-vtable-struct", "ghidra-evidence-annotations",
+    "ghidra-scan-pointer", "disasm-constant-check", "yara-scan",
+    "yara-gen", "extract-syscalls", "stack-strings", "binary-sweep",
+    "strings-classify", "go-buildinfo-carve", "rust-dep-strings",
+    "call-site-args", "pe-analyze", "overlay-scan", "disasm-dump",
+    "shellcode-scan", "die-probe", "c-normalize", "opaque-pred",
+    "build-evidence-index", "audit-legacy-proven", "capture-golden",
+    "measure-blind-coverage", "measure-cold-start", "sanitize-text",
+})
+
+# Rule B — CAPABILITY_TAGS closed vocabulary (#729).
+# Every <domain>:<operation> tag that appears in any `produces` field must
+# be listed here. Expanding this constant is an intentional, review-visible
+# design decision (one tool ≠ one tag; one tag = distinct routing
+# capability that changes tool-selection behaviour).
+#
+# Seeded from existing produces tags (9 android: tags from #692 WP1).
+# #728 (web labs type, in flight) will add: js_unbundle / js_deobfuscate.
+# Coordinate at merge time — update this comment block with the merged state.
+_CAPABILITY_TAGS = frozenset({
+    # android: — seeded from #692 WP1 provider entries
+    "android:algorithm-verify",
+    "android:bytecode-truth",
+    "android:call-graph",
+    "android:data-flow",
+    "android:dex-rewrite",
+    "android:java-source",
+    "android:packer-fingerprint",
+    "android:semantic-query",
+    "android:string-decrypt",
+    # web: — coordinate with #728 merge (js_unbundle / js_deobfuscate)
+    # "js:unbundle",
+    # "js:deobfuscate",
+    # ↑ uncomment and remove this block after #728 merges
+    # crypto: — legitimate routing tag for the crypto-tool family
+    "crypto:decode",
+})
+# ---- end annotation gate constants -------------------------------------
+
 CATEGORIES = ("crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines")
 TIERS = ("T1", "T2", "T3")
 COST_TIERS = ("probe", "cheap", "deep")
@@ -117,6 +163,19 @@ def _check_provider_annotations(entry: dict, loc: str, i: int,
                 produced.add(tag)
         if not produced:
             errors.append(f"{loc}: 'produces' holds no valid tags")
+
+    # #729 Rule B: every produces tag must be in the closed CAPABILITY_TAGS
+    # vocabulary. Expanding this vocabulary is an intentional design decision
+    # (one tool ≠ one tag; one tag = distinct routing capability).
+    if produced:
+        unknown_tags = produced - _CAPABILITY_TAGS
+        if unknown_tags:
+            errors.append(
+                f"{loc}: produces tag(s) {sorted(unknown_tags)} not in the "
+                "closed CAPABILITY_TAGS vocabulary — add to _CAPABILITY_TAGS "
+                f"only after deliberate review (current vocabulary: "
+                f"{sorted(_CAPABILITY_TAGS)})"
+            )
 
     requires = entry.get("requires")
     if not isinstance(requires, list):
@@ -226,6 +285,18 @@ def validate_index(data) -> list[str]:
         when_not = entry.get("when_not")
         if when_not is not None and not _is_nonempty_str(when_not):
             errors.append(f"{loc}: optional 'when_not' must be a non-empty string")
+
+        # #729 Rule A: new entries without a provider block are dead weight.
+        # LEGACY_UNANNOTATED (29 entries, frozen) get a WARN pass.
+        # Every other entry MUST carry a provider block.
+        if "provider" not in entry:
+            if name not in _LEGACY_UNANNOTATED:
+                errors.append(
+                    f"{loc}: entry '{name}' has no 'provider' block and is not "
+                    "in LEGACY_UNANNOTATED — new entries must carry annotation "
+                    f"blocks ({len(_LEGACY_UNANNOTATED)} legacy names are "
+                    "tolerated without annotation)"
+                )
 
         # #692 WP1: opt-in annotation block (skipped for legacy entries)
         if "provider" in entry:
