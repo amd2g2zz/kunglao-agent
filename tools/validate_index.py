@@ -91,11 +91,13 @@ _CAPABILITY_TAGS = frozenset({
     "android:packer-fingerprint",
     "android:semantic-query",
     "android:string-decrypt",
-    # web: — coordinated with #728 merge (js_unbundle / js_deobfuscate)
-    # Note: wakaru-unbundle produces js:unbundle; webcrack-deobfuscate produces js:deobfuscate
-    # These are the canonical routing tags for JS recovery pipelines.
-    "js:deobfuscate",
-    "js:unbundle",
+    # aux: — seeded from the #340 category contract test (auxiliary must be
+    # a legal category with at least one routable capability tag)
+    "aux:sanitize",
+    # web: — coordinate with #728 merge (js_unbundle / js_deobfuscate)
+    # "js:unbundle",
+    # "js:deobfuscate",
+    # ↑ uncomment and remove this block after #728 merges
     # crypto: — legitimate routing tag for the crypto-tool family
     "crypto:decode",
 })

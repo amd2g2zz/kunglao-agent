@@ -534,7 +534,7 @@ def build_brief(ws) -> dict:
     }
     if not has_state:
         next_step = (f"no resumable state under {ws} — initialize with "
-                     f"/kunglao-agent:init <workspace> [--type windows|linux|android|web]")
+                     f"/kunglao-agent:init <workspace> [--type windows|linux|android]")
     elif decision is None:
         next_step = NO_REGISTER_STEP
     else:

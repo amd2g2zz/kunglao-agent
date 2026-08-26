@@ -376,35 +376,3 @@ tools:
     requires: [dex, dexdc_wheel]
     cost_hint: {mem_gb: 1.0, time: deep}
     quality: {android:java-source: mid, android:call-graph: mid, android:data-flow: high, android:string-decrypt: high, android:algorithm-verify: high}
-  # #728 web (labs): direct-npx JS recovery tools. wakaru unbundles/minifies;
-  # webcrack deobfuscates classic (obfuscator.io-class) layers. Agent invokes
-  # via npx; not init-gated. Upstream verified: wakaru 1.10.0, webcrack 2.16.0,
-  # --version confirmed 2026-08-26.
-  - name: wakaru-unbundle
-    category: static
-    capability: js:unbundle
-    tier: T1
-    cost_tier: cheap
-    input_output: {input: "minified/bundled JS (webpack/esbuild/Browserify/Metro/Closure/ncc), output: module-tree + transpiler/minifier undo + type annotation removal"}
-    description: Unpacks bundler; reverses transpiler
-    when_not: "not for obfuscator.io/string-array/control-flow-flattening/VM-protected code (wakaru deliberately avoids these); try webcrack first for classic obfuscation"
-    provider: wakaru
-    produces: [js:unbundle]
-    requires: []
-    cost_hint: {mem_gb: 0.5, time: cheap}
-    quality: {js:unbundle: high}
-
-  - name: webcrack-deobfuscate
-    category: static
-    capability: js:deobfuscate
-    tier: T1
-    cost_tier: cheap
-    input_output: {input: "obfuscator.io / minified JS, output: deobfuscated source tree"}
-    description: Deobfuscates classic JS layers
-    when_not: "not for VM bytecode or environment-bound code; use wakaru on the output to recover module structure after deobfuscation"
-    provider: webcrack
-    produces: [js:deobfuscate]
-    requires: []
-    cost_hint: {mem_gb: 0.5, time: cheap}
-    quality: {js:deobfuscate: high}
-
