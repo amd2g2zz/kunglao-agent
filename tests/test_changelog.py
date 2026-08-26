@@ -2,9 +2,11 @@
 """tests/test_changelog.py — issue #352 release v0.1 contract (TDD).
 
 Contract: CHANGELOG.md exists as the single first-release record (Keep a
-Changelog 1.1), declares [0.1], covers Added/Changed/Fixed, and folds the
-internal v1.9.x iteration markers into a mapping section; the two real
-version sources (pyproject.toml + release-manifest.yaml) read 0.1.
+Changelog 1.1), declares [0.1], and covers Added/Changed/Fixed. The
+internal v1.9.x iteration markers were historical provenance only and
+have been retired along with the `## Internal version mapping` section
+(see PR #744); the two real version sources (pyproject.toml +
+release-manifest.yaml) read the current release.
 """
 from __future__ import annotations
 
@@ -34,17 +36,6 @@ def test_changelog_declares_v0_1():
     for sub in ("### Added", "### Changed", "### Fixed"):
         assert sub in v01, f"missing {sub} subsection under [0.1]"
 
-
-def test_changelog_has_internal_version_mapping():
-    text = _changelog_text()
-    assert "Internal version mapping" in text, "missing internal-version mapping section"
-    # The mapping must cover the top historical markers (v1.9.29/v1.9.24) and
-    # state that they belong to v0.1 scope.
-    assert "v1.9.29" in text and "v1.9.24" in text
-    assert "0.1" in text
-
-
-# ---------- Added-section reference format ----------
 
 def test_changelog_references_issue_numbers():
     text = _changelog_text()

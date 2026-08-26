@@ -6,28 +6,6 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
-## [0.1.1] - 2026-08-17
-
-### Added
-- Subcommand UX + guided entry (#413): plugin moved to the official skills/ layout (#413)
-- /kunglao-agent main entry — prints a subcommand menu on no args and WAITS, never silently runs; unknown subcommand prints the menu plus `unknown: <x>` (#413)
-- /kunglao-agent:init skill — workspace initialization flow, argument-hint `<workspace> [--type windows|linux|android]` (#413)
-- /kunglao-agent:analysis skill — convergence-loop entry, argument-hint `<workspace>` (#413)
-- /kunglao-agent:help skill — subcommand usage list; the full convergence contract moved to skills/kunglao-agent/SKILL.md (#413)
-- argument-hint frontmatter on every skill, shown at autocomplete; README gained a Command Reference table covering all four commands (#413)
-- MCP-first tool-supply (#407): decompiler passes on ida-pro-vm|ghidra MCP registration; CLI (GHIDRA_HOME/idat64) is fallback only; decompiler check deduplicated across windows/linux/android manifests (#407)
-- ask-then-install (#408): init prompts to install missing tools; consent auto-installs per-platform (pip/brew/choco/apt) + registers related MCP + re-probes; IDA never auto-installed (existing MCP URL registered on consent); --assume-yes for CI/headless (#408)
-- New scripts/toolchain_install.py — per-item install commands by platform, mocked-install tests (#408)
-- Release manifest + docs repointed to the moved main skill; structural checks updated (#413)
-
-### Fixed
-- Platform de-hardcoding (#409): analyzeHeadless resolved by sys.platform (.bat on Windows, extensionless on POSIX); venv python resolved by platform from the SKILL-root venv (uv run --project is authoritative) — no more false FAILs on macOS.
-- Hook deployment/check unification (#410): env_check accepts workspace-parent settings.json; unwired hooks are WARN/ASK, not FAIL.
-- Init workspace-path validation (#411): a sample directory passed as the workspace is refused (exit RC_PATH_SHAPE) with guidance; .claude/ stays at the workspace root; sniff reads bins/ only.
-- Init never produces analysis conclusions (#412): seed claims are structural facts only; no family/verdict before the operator defines the task.
-- Exit-code semantics audit (#414): RC matrix pinned by test; argparse usage errors normalized 2→1; cleanup removes only this-run artifacts.
-- Test-suite validity audit (#394): redundant/meaningless tests removed/merged (before/after counts in the PR).
-
 ## [0.1.3] - 2026-08-25
 
 ### Round 1 — Unattended Runtime & Long-Horizon Defects (priority per user)
@@ -616,6 +594,28 @@ release (see the mapping table at the end).
   (16-only) → Process.getModuleByName(mod).getExportByName(name), header
   comment notes Requires: frida >= 17 (#356)
 
+## [0.1.1] - 2026-08-17
+
+### Added
+- Subcommand UX + guided entry (#413): plugin moved to the official skills/ layout (#413)
+- /kunglao-agent main entry — prints a subcommand menu on no args and WAITS, never silently runs; unknown subcommand prints the menu plus `unknown: <x>` (#413)
+- /kunglao-agent:init skill — workspace initialization flow, argument-hint `<workspace> [--type windows|linux|android]` (#413)
+- /kunglao-agent:analysis skill — convergence-loop entry, argument-hint `<workspace>` (#413)
+- /kunglao-agent:help skill — subcommand usage list; the full convergence contract moved to skills/kunglao-agent/SKILL.md (#413)
+- argument-hint frontmatter on every skill, shown at autocomplete; README gained a Command Reference table covering all four commands (#413)
+- MCP-first tool-supply (#407): decompiler passes on ida-pro-vm|ghidra MCP registration; CLI (GHIDRA_HOME/idat64) is fallback only; decompiler check deduplicated across windows/linux/android manifests (#407)
+- ask-then-install (#408): init prompts to install missing tools; consent auto-installs per-platform (pip/brew/choco/apt) + registers related MCP + re-probes; IDA never auto-installed (existing MCP URL registered on consent); --assume-yes for CI/headless (#408)
+- New scripts/toolchain_install.py — per-item install commands by platform, mocked-install tests (#408)
+- Release manifest + docs repointed to the moved main skill; structural checks updated (#413)
+
+### Fixed
+- Platform de-hardcoding (#409): analyzeHeadless resolved by sys.platform (.bat on Windows, extensionless on POSIX); venv python resolved by platform from the SKILL-root venv (uv run --project is authoritative) — no more false FAILs on macOS.
+- Hook deployment/check unification (#410): env_check accepts workspace-parent settings.json; unwired hooks are WARN/ASK, not FAIL.
+- Init workspace-path validation (#411): a sample directory passed as the workspace is refused (exit RC_PATH_SHAPE) with guidance; .claude/ stays at the workspace root; sniff reads bins/ only.
+- Init never produces analysis conclusions (#412): seed claims are structural facts only; no family/verdict before the operator defines the task.
+- Exit-code semantics audit (#414): RC matrix pinned by test; argparse usage errors normalized 2→1; cleanup removes only this-run artifacts.
+- Test-suite validity audit (#394): redundant/meaningless tests removed/merged (before/after counts in the PR).
+
 ## [0.1] - 2026-08-16
 
 First public release: a convergence-driven reverse-engineering orchestration
@@ -698,40 +698,3 @@ throughout by mechanical gates.
 
 - Pre-release hygiene batch (#355) — one-off fix logs and session-plan leftovers deleted from docs/, HISTORICAL design docs moved into docs/design/archive/, specs/README broken links fixed (removing the untracked .research-tree-alignment dependency and the "no OpenSpec" contradiction), 51 delivered openspec/changes dirs archived to openspec/archive/, root DESIGN.md ruled HISTORICAL and archived, CHANGELOG v1.8.x mapping section completed, .claude/reviews/ session leftovers removed (git-hooks kept), .gitignore gains .research-tree*/ and .pytest_cache
 - Dead-code removal — memory/ subsystem deleted wholesale (staging/longterm/candidates corpus + memory/scripts distillation pipeline + references/memory-protocol.md, measured zero runtime consumers); the memory_capture ghost entries in hook_activation ALL_HOOKS and cost_gate advice cleared in the same stroke (#355, originally #358 Wave 6)
-
-## Internal version mapping
-
-The v1.8.x / v1.9.x markers in pre-v0.1 in-repo code comments are
-development-era feature-provenance annotations ("this gate landed at
-v1.9.24"), not released versions. They all belong to the v0.1 first-release
-scope, mapped as follows:
-
-| Internal marker | Representative features (not exhaustive) |
-|---|---|
-| v1.8.x | orchestrator failure-mode engineering era (design rationale archived in docs/design/archive/DESIGN.md): v1.8 iterative-deepening tier gating; v1.8.1 C0a PROVEN no-discount + self-cap brake; v1.8.2 F1-F6 failure-mode compact table (SKILL.md §6-pre) + self-cap-safe-prose (§7) + B1c blocker; v1.8.3-5 enforcement-gate suite (troubleshooting/search/active-intervention/backtrack/reuse/hook-activation/ask-for-direction, tests/test_v1_8_enforcement_gates.py); v1.8.15/16 complete-teardown search operator chain (scripts/complete_teardown.py) |
-| v1.9.0-1 | convergence-driven dispatch becomes the default scheduling mode |
-| v1.9.2-7 | failure-blocked claim interception (dispatch_gate), priority-ranking corrections |
-| v1.9.8 | worker_pulse convergence pulse, payload shape adaptation everywhere, fact naming fix |
-| v1.9.12/13/18/25/26 | worktree isolation and worker state ownership (the repeatedly regressed dispatch-loses-monitoring defect class) |
-| v1.9.17 | closeout checklist (guards against premature convergence) |
-| v1.9.19 | superseded-path no-go declaration |
-| v1.9.20/21 | liveness heartbeat (timestamps do not count), sanctioned SendMessage channel, smart ping protocol |
-| v1.9.22 | verifier must be BLIND |
-| v1.9.24 | facts-snapshot HARD-REQUIRED (guards against lost-state deception), best-first bias audit |
-| v1.9.28 | dispatch pre-checks heartbeat aliveness (mechanized into a gate) |
-| v1.9.29 | plan-drift/STALLED/stuck-worker gates, claim-status guard (the most-referenced marker) |
-| v1.9.31 | plan-to-execute gate (#239) |
-| v1.9.32 | tool-first gate (#294) |
-| v1.9.33 | agenttype specialist-first gate (#310) |
-| v1.9.36-38 | heartbeat trio (touch/tick/selfcheck) semantics unified |
-
-Distribution stats (re-measured for #355; scope: git-tracked files, excluding
-the frozen archives openspec/archive + docs/design|devlog archives +
-references/archive, excluding this file itself):
-**v1.9.x: 101 occurrences across 26 files in the live tree** — v1.9.29×26,
-v1.9.24×13, v1.9.8×6, v1.9.28×4, v1.9.25×4, v1.9.13×4, the rest 1-3 each;
-**v1.8.x: 19 occurrences across 8 files in the live tree** — v1.8.2×5,
-v1.8.5×4, v1.8.16×3, v1.8.1×2, v1.8.3×2, v1.8.4×2, v1.8.15×1 (another 22
-occurrences live inside the frozen archives). These comments stay untouched
-per the release decision — they are "when was this introduced" provenance
-anchors, not version declarations.
