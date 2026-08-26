@@ -104,6 +104,12 @@ FRIDA_PORT = _parse_port(os.environ.get("KUNGLAO_FRIDA_PORT"), 1337)
 # #356 W3: VM shell port env-configurable (was bare 9876 constant), same
 # defensive parse as FRIDA_PORT — default unchanged.
 VM_SHELL_PORT = _parse_port(os.environ.get("KUNGLAO_VM_SHELL_PORT"), 9876)
+
+# #698 dynamic channel: KUNGLAO_CHANNEL picks the agent's execution control
+# plane for dynamic debugging (five first-class, environment-equivalent
+# backends; default vmr keeps the pre-#698 behavior byte-identical).
+SSH_CONNECT_TIMEOUT = 5    # seconds, BatchMode connect timeout
+CHANNEL_CMD_TIMEOUT = 15   # seconds, channel capability probes (ssh/docker/adb)
 ANDROID_SERVER_PORT = 23946  # IDA android_server default listener port
 
 # #304 amendment (comment 304-5289955958): per-item friendly install commands.
@@ -1074,88 +1080,300 @@ def load_task_spec(ws: Path) -> dict | None:
     return data
 
 
-def _check_vm_channel(report: ToolchainReport,
-                      reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
-    """VM reachability + remote-debugger cascade (windows/linux manifests).
+def _channel_backend() -> tuple[str, str | None]:
+    """(#698) Parse KUNGLAO_CHANNEL -> (backend, warn_note).
 
-    #449 env = f(task_spec): a static-only task (constraints.dynamic_re=
-    forbidden) downgrades both items to WARN with the task_spec basis in
-    the detail — capability absence is REPORTED to the orchestrator, never
-    silently skipped, it just stops blocking init (same informational
-    posture as jdwp_debug). Any absent/unreadable task_spec keeps the HARD
-    status quo byte-identical (regression-pinned by tests). The two copies
-    this helper replaces (windows/linux) were byte-identical; #407's
-    _check_decompiler is the dedup pattern.
+    unset/"vmr" -> vmr (default; pre-#698 behavior byte-identical). Known
+    backends: ssh | docker | adb | local. Unknown value -> vmr fallback
+    with a note naming the offending value (never crash on config noise).
+    """
+    raw = (_env_get("KUNGLAO_CHANNEL") or "").strip().lower()
+    if raw in ("", "vmr"):
+        return "vmr", None
+    if raw in ("ssh", "docker", "adb", "local"):
+        return raw, None
+    return "vmr", f"(unknown KUNGLAO_CHANNEL={raw!r} - falling back to vmr backend)"
+
+
+def _ssh_base_args(vm_host: str) -> list[str]:
+    """BatchMode ssh argv prefix shared by the ssh channel probes."""
+    return ["ssh", "-p", str(VM_SHELL_PORT),
+            "-o", "BatchMode=yes",
+            "-o", f"ConnectTimeout={SSH_CONNECT_TIMEOUT}",
+            vm_host]
+
+
+def _docker_over_ssh_check(vm_host: str, container: str) -> tuple[bool, str]:
+    """(#698) Optional docker execution target reached THROUGH the ssh
+    channel: daemon reachable, then a real `docker exec <c> true`.
+    Docker tri-state detail: daemon unreachable / container missing /
+    exec rejected."""
+    rc, out, err = _run_cmd([*_ssh_base_args(vm_host), "docker", "version"],
+                            timeout=CHANNEL_CMD_TIMEOUT)
+    if rc != 0:
+        return False, (f"docker daemon unreachable (ssh docker version "
+                       f"rc={rc}: {(err or out).strip()[:80] or 'no output'})")
+    rc, out, err = _run_cmd([*_ssh_base_args(vm_host),
+                             "docker", "exec", container, "true"],
+                            timeout=CHANNEL_CMD_TIMEOUT)
+    if rc != 0:
+        blob = (err or out).lower()
+        if "no such container" in blob or "no such object" in blob:
+            return False, f"container missing ({container})"
+        return False, (f"docker exec rejected (rc={rc}: "
+                       f"{(err or out).strip()[:80] or 'no output'})")
+    return True, ""
+
+
+def _vm_probe_vmr(vm_host: str) -> tuple[bool, str, str, "ProbeTier"]:
+    """vmr backend: dual-port TCP liveness - the pre-#698 logic verbatim
+    (v6 'vmr unchanged'; PASS detail stays byte-identical, no backend tag)."""
+    ok_shell, err_shell = _tcp_connect(vm_host, VM_SHELL_PORT)
+    ok_frida, err_frida = _tcp_connect(vm_host, FRIDA_PORT)
+    ok = ok_shell and ok_frida
+    err = "; ".join(e for e in (err_shell, err_frida) if e)
+    detail = f"VM {vm_host} reachable on {VM_SHELL_PORT}+{FRIDA_PORT}"
+    return ok, detail, err, ProbeTier.LIVENESS
+
+
+def _vm_probe_ssh(vm_host: str) -> tuple[bool, str, str, "ProbeTier"]:
+    """ssh backend: CAPABILITY probe - TCP pre-check, then a real BatchMode
+    `ssh ... true`. Tri-state detail: port unreachable / auth failed /
+    channel dialect mismatch; frida port stays liveness; optional
+    KUNGLAO_DOCKER_CONTAINER adds the docker-over-ssh check."""
+    ok_shell, err_shell = _tcp_connect(vm_host, VM_SHELL_PORT)
+    if not ok_shell:
+        return False, "", f"port unreachable ({err_shell})", ProbeTier.CAPABILITY
+    rc, out, err = _run_cmd([*_ssh_base_args(vm_host), "true"],
+                            timeout=CHANNEL_CMD_TIMEOUT)
+    if rc != 0:
+        blob = (err or out or "").lower()
+        if rc == 255 and "permission denied" in blob:
+            return False, "", "auth failed (ssh rc=255, permission denied)", ProbeTier.CAPABILITY
+        return False, "", (f"channel dialect mismatch (ssh rc={rc}: "
+                           f"{(err or out).strip()[:100] or 'no output'})"), ProbeTier.CAPABILITY
+    ok_frida, err_frida = _tcp_connect(vm_host, FRIDA_PORT)
+    if not ok_frida:
+        return False, "", f"ssh ok but frida port closed ({err_frida})", ProbeTier.CAPABILITY
+    detail = (f"VM {vm_host} via ssh backend: shell exec ok "
+              f"(port {VM_SHELL_PORT}, BatchMode) + frida liveness on {FRIDA_PORT}")
+    container = _env_get("KUNGLAO_DOCKER_CONTAINER")
+    if container:
+        dok, derr = _docker_over_ssh_check(vm_host, container)
+        if not dok:
+            return False, "", f"docker: {derr}", ProbeTier.CAPABILITY
+        detail += f"; docker exec {container} ok"
+    return True, detail, "", ProbeTier.CAPABILITY
+
+
+def _vm_probe_docker() -> tuple[bool, str, str, "ProbeTier"]:
+    """docker backend: DIRECT channel - no ssh, no KUNGLAO_VM_HOST needed.
+    `docker version` honors DOCKER_HOST (local socket or remote daemon);
+    optional KUNGLAO_DOCKER_CONTAINER adds a real `docker exec <c> true`."""
+    rc, out, err = _run_cmd(["docker", "version"], timeout=CHANNEL_CMD_TIMEOUT)
+    if rc != 0:
+        return False, "", (f"docker daemon unreachable (docker version "
+                           f"rc={rc}: {(err or out).strip()[:80] or 'no output'})"), ProbeTier.CAPABILITY
+    detail = "docker daemon reachable via docker backend (DOCKER_HOST honored)"
+    container = _env_get("KUNGLAO_DOCKER_CONTAINER")
+    if container:
+        rc, out, err = _run_cmd(["docker", "exec", container, "true"],
+                                timeout=CHANNEL_CMD_TIMEOUT)
+        if rc != 0:
+            blob = (err or out).lower()
+            if "no such container" in blob or "no such object" in blob:
+                return False, "", f"container missing ({container})", ProbeTier.CAPABILITY
+            return False, "", (f"docker exec rejected (rc={rc}: "
+                               f"{(err or out).strip()[:80] or 'no output'})"), ProbeTier.CAPABILITY
+        detail += f"; docker exec {container} ok"
+    return True, detail, "", ProbeTier.CAPABILITY
+
+
+def _vm_probe_adb(vm_host: str | None = None) -> tuple[bool, str, str, "ProbeTier"]:
+    """adb backend: real `adb devices` (device/emulator online) + frida
+    liveness (KUNGLAO_VM_HOST or 127.0.0.1 - adb forward topology)."""
+    rc, out, err = _run_cmd(["adb", "devices"], timeout=CHANNEL_CMD_TIMEOUT)
+    if rc != 0:
+        return False, "", (f"no device (adb devices rc={rc}: "
+                           f"{(err or out).strip()[:80] or 'no output'})"), ProbeTier.CAPABILITY
+    lines = [ln.strip() for ln in out.splitlines()[1:] if ln.strip()
+             and not ln.strip().startswith("*")]
+    online = [ln for ln in lines if ln.endswith("device")]
+    unauthorized = [ln for ln in lines if "unauthorized" in ln]
+    if not online and unauthorized:
+        return False, "", ("unauthorized (adb devices shows unauthorized - "
+                           "accept the debugging prompt on the device)"), ProbeTier.CAPABILITY
+    if not online:
+        return False, "", ("no device (adb devices empty - start the "
+                           "emulator or plug the device in)"), ProbeTier.CAPABILITY
+    fhost = vm_host or "127.0.0.1"
+    ok_frida, err_frida = _tcp_connect(fhost, FRIDA_PORT)
+    if not ok_frida:
+        return False, "", (f"frida port closed ({err_frida}) - run "
+                           f"`adb forward tcp:{FRIDA_PORT} tcp:{FRIDA_PORT}`"), ProbeTier.CAPABILITY
+    serial = online[0].split()[0]
+    return True, (f"VM via adb backend: {len(online)} device(s) online "
+                  f"({serial}); frida liveness on {fhost}:{FRIDA_PORT}"), "", ProbeTier.CAPABILITY
+
+
+# Per-backend fix guidance for a FAILED dynamic check (vmr keeps the #451
+# inventory-driven fixes; remote backends get env-var-specific pointers).
+_CHANNEL_FIXES: dict[str, str] = {
+    "ssh": ("set KUNGLAO_VM_HOST=<remote host> and KUNGLAO_VM_SHELL_PORT; "
+            "verify key auth (ssh -o BatchMode=yes <host> true); the "
+            "execution layer is the ssh-mcp control plane (see README "
+            "'Bring your own analysis environment')"),
+    "docker": ("verify the docker daemon (docker version; set DOCKER_HOST "
+               "for a remote daemon) and KUNGLAO_DOCKER_CONTAINER for the "
+               "execution target"),
+    "adb": ("start the emulator or plug the device (adb devices), accept "
+            f"the debugging prompt, then `adb forward tcp:{FRIDA_PORT} "
+            f"tcp:{FRIDA_PORT}` for frida"),
+}
+
+
+def _check_dynamic_channel(report: ToolchainReport,
+                           reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """Dynamic-analysis control plane + remote-debugger cascade.
+
+    #698 (arbitration v6): KUNGLAO_CHANNEL picks one of five first-class
+    backends (vmr default | ssh | docker | adb | local) - the goal is to
+    give the agent an EXECUTION CONTROL PLANE for dynamic debugging.
+    needs-aware x channel matrix (design D3):
+      * static-only task, ANY channel -> whole block WARN, zero probe
+        subprocesses ("dynamic channel unchecked (static-only task)";
+        local says "local static-only channel").
+      * dynamic task + local -> HARD policy reject, no probes.
+      * dynamic task + vmr/ssh/docker/adb -> HARD probe (vmr liveness
+        byte-identical to pre-#698; ssh/docker/adb capability level).
+
+    #449 downgrade semantics preserved: capability absence is REPORTED
+    (WARN with the task_spec basis), never silently skipped. Absent/
+    unreadable task_spec keeps the HARD status quo byte-identical.
 
     Android has NO VM channel by design (#455: dynamics go through ADB +
-    device services; NEVER_CHECKS pins it) — windows/linux only.
+    device services; NEVER_CHECKS pins it) - windows/linux only.
     """
-    # T2: VM reachability (vmr-shell 9876 + frida custom port, default 1337)
-    # #451: the HARD FAIL surface embeds the read-only discovered-VM
-    # inventory + a dynamic fix/next_action derived from the candidate
-    # count (enumerate/start/reip) — the OPERATOR picks, never init.
-    vm_next: NextAction | None = None
+    backend, chan_warn = _channel_backend()
     vm_host = _env_get("KUNGLAO_VM_HOST")
-    if not vm_host:
-        vm_ok, vm_err = False, "KUNGLAO_VM_HOST unset"
-    else:
-        vm_ok_9876, err_9876 = _tcp_connect(vm_host, VM_SHELL_PORT)
-        vm_ok_frida, err_frida = _tcp_connect(vm_host, FRIDA_PORT)
-        vm_ok = vm_ok_9876 and vm_ok_frida
-        vm_err = "; ".join(e for e in (err_9876, err_frida) if e)
-    if vm_ok:
-        detail = f"VM {vm_host} reachable on {VM_SHELL_PORT}+{FRIDA_PORT}"
-        if not reqs.needs_vm:
-            detail += f" — not required by task_spec ({reqs.basis})"
+
+    # ---- local: policy channel, never probes -------------------------
+    if backend == "local":
+        if reqs.needs_vm:
+            report.items.append(CheckResult(
+                name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
+                detail=("local channel forbids dynamic analysis — switch "
+                        "KUNGLAO_CHANNEL to vmr/ssh/docker/adb"),
+                root_cause="VM", probe=ProbeTier.PRESENCE,
+            ))
+            report.items.append(CheckResult(
+                name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
+                detail=("Remote debugger unavailable (local channel "
+                        "forbids dynamic analysis)"),
+                root_cause="VM", probe=ProbeTier.PRESENCE,
+            ))
+        else:
+            report.items.append(CheckResult(
+                name="vm_reachable", status=Status.WARN, tier=Tier.WARN,
+                detail=(f"local static-only channel - not required by "
+                        f"task_spec ({reqs.basis})"),
+                probe=ProbeTier.PRESENCE,
+            ))
+            report.items.append(CheckResult(
+                name="remote_debugger", status=Status.WARN, tier=Tier.WARN,
+                detail=(f"local static-only channel - not required by "
+                        f"task_spec ({reqs.basis})"),
+                probe=ProbeTier.PRESENCE,
+            ))
+        return
+
+    # ---- static-only: WARN contract, zero probes ----------------------
+    if not reqs.needs_vm:
+        detail = (f"VM unreachable: dynamic channel unchecked (static-only "
+                  f"task) - not required by task_spec ({reqs.basis})")
+        if chan_warn:
+            detail += f" {chan_warn}"
         report.items.append(CheckResult(
-            name="vm_reachable", status=Status.PASS,
-            tier=Tier.HARD if reqs.needs_vm else Tier.WARN,
+            name="vm_reachable", status=Status.WARN, tier=Tier.WARN,
             detail=detail, probe=ProbeTier.LIVENESS,
         ))
-    elif reqs.needs_vm:
+        report.items.append(CheckResult(
+            name="remote_debugger", status=Status.WARN, tier=Tier.WARN,
+            detail=("VM unreachable - remote debugger unprobed; not required "
+                    f"by task_spec ({reqs.basis})"),
+            probe=ProbeTier.LIVENESS,
+        ))
+        return
+
+    # ---- dynamic task, remote backend: HARD probe ---------------------
+    vm_next: NextAction | None = None
+    if backend == "vmr":
+        if not vm_host:
+            vm_ok, vm_err = False, "KUNGLAO_VM_HOST unset"
+            probe_tier = ProbeTier.LIVENESS
+            pass_detail = ""
+        else:
+            vm_ok, pass_detail, vm_err, probe_tier = _vm_probe_vmr(vm_host)
+    elif backend == "ssh":
+        if not vm_host:
+            vm_ok, vm_err = False, ("KUNGLAO_VM_HOST unset (ssh backend "
+                                    "needs the remote host)")
+            probe_tier = ProbeTier.CAPABILITY
+            pass_detail = ""
+        else:
+            vm_ok, pass_detail, vm_err, probe_tier = _vm_probe_ssh(vm_host)
+    elif backend == "docker":
+        vm_ok, pass_detail, vm_err, probe_tier = _vm_probe_docker()
+    else:  # adb
+        vm_ok, pass_detail, vm_err, probe_tier = _vm_probe_adb(vm_host)
+
+    if vm_ok:
+        detail = pass_detail
+        if chan_warn:
+            detail += f" {chan_warn}"
+        report.items.append(CheckResult(
+            name="vm_reachable", status=Status.PASS,
+            tier=Tier.HARD, detail=detail, probe=probe_tier,
+        ))
+    elif backend == "vmr":
+        # #451 inventory-driven FAIL surface - vmr only, byte-identical.
         detail, fix, vm_next = _vm_fail_fixes(vm_host, vm_err)
+        if chan_warn:
+            detail += "\n" + chan_warn
         report.items.append(CheckResult(
             name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
             detail=detail,
-            root_cause="VM", probe=ProbeTier.LIVENESS,
+            root_cause="VM", probe=probe_tier,
             fix=fix, next_action=vm_next,
         ))
     else:
+        detail = (f"dynamic channel failed via {backend} backend: {vm_err}")
+        if chan_warn:
+            detail += f" {chan_warn}"
         report.items.append(CheckResult(
-            name="vm_reachable", status=Status.WARN, tier=Tier.WARN,
-            detail=f"VM unreachable: {vm_err} — not required by task_spec "
-                   f"({reqs.basis})",
-            probe=ProbeTier.LIVENESS,
+            name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
+            detail=detail, root_cause="VM", probe=probe_tier,
+            fix=_CHANNEL_FIXES[backend],
         ))
 
     # T2: remote debugger (x64dbg/ida_server/frida-server | gdbserver/
-    # linux_server64/frida-server) — cascade from VM
-    if reqs.needs_vm:
-        if not vm_ok:
-            report.items.append(CheckResult(
-                name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
-                detail="Remote debugger unreachable (VM not reachable)",
-                root_cause="VM", probe=ProbeTier.LIVENESS,
-                # #451: the cascade shares the VM's next_action — its root
-                # cause is the VM channel (fix the root cause first)
-                next_action=vm_next,
-            ))
-        else:
-            # Would need actual VM-side probing — mark as WARN if can't verify
-            report.items.append(CheckResult(
-                name="remote_debugger", status=Status.WARN, tier=Tier.HARD,
-                detail="VM reachable; remote debugger presence not verified",
-                probe=ProbeTier.LIVENESS,
-            ))
-    else:
-        state = ("VM unreachable — remote debugger unprobed" if not vm_ok
-                 else "VM reachable")
+    # linux_server64/frida-server) - cascade from the channel
+    if not vm_ok:
         report.items.append(CheckResult(
-            name="remote_debugger", status=Status.WARN, tier=Tier.WARN,
-            detail=f"{state}; not required by task_spec ({reqs.basis})",
-            probe=ProbeTier.LIVENESS,
+            name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
+            detail="Remote debugger unreachable (VM not reachable)",
+            root_cause="VM", probe=probe_tier,
+            # #451: the cascade shares the channel's next_action - its
+            # root cause is the channel (fix the root cause first)
+            next_action=vm_next,
         ))
-
+    else:
+        # Would need actual VM-side probing - mark as WARN if can't verify
+        report.items.append(CheckResult(
+            name="remote_debugger", status=Status.WARN, tier=Tier.HARD,
+            detail="VM reachable; remote debugger presence not verified",
+            probe=probe_tier,
+        ))
 
 # ---------- Windows manifest ----------
 
@@ -1200,7 +1418,7 @@ def _check_windows(report: ToolchainReport, ws: Path,
     # T2: VM channel (vmr-shell 9876 + frida 1337 + remote-debugger
     # cascade) — shared helper; #449 env = f(task_spec): static-only
     # task_spec downgrades the pair to WARN (basis in the detail).
-    _check_vm_channel(report, reqs)
+    _check_dynamic_channel(report, reqs)
 
     # T2: Docker (WARN)
     docker = _shutil_which("docker")
@@ -1247,7 +1465,7 @@ def _check_linux(report: ToolchainReport, ws: Path,
     # T2: VM channel (vmr-shell 9876 + frida 1337 + remote-debugger
     # cascade) — shared helper; #449 env = f(task_spec): static-only
     # task_spec downgrades the pair to WARN (basis in the detail).
-    _check_vm_channel(report, reqs)
+    _check_dynamic_channel(report, reqs)
 
     # T2: Docker (WARN)
     docker = _shutil_which("docker")

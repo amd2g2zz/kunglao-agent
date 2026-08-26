@@ -41,6 +41,7 @@ FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 ALL_MCP_NAMES = {
     "ghidra", "sequential-thinking", "x64dbg", "volatility",
     "ida-pro-vm", "gitnexus", "virustotal",
+    "ssh-mcp",  # #698 ssh-channel execution control plane (static decl)
 }
 
 
@@ -229,6 +230,7 @@ def test_probe_workspace_mcp_json_case_insensitive(fake_claude_json, ws):
             "sequential-thinking": reg("st"),
             "ida-pro-vm": reg("ida"),
             "virustotal": reg("vt"),
+            "ssh-mcp": reg("sshm"),  # #698 linux channel control plane
         },
     }), encoding="utf-8")
     r = run_mcp_probe(ws, "--type", "linux", "--json")
@@ -240,7 +242,8 @@ def test_probe_workspace_mcp_json_case_insensitive(fake_claude_json, ws):
     assert by_name["sequential-thinking"]["status"] == "PASS"
     # linux manifest does not include x64dbg/volatility/gitnexus
     assert {c["name"] for c in out["checks"]} == {
-        "ghidra", "sequential-thinking", "ida-pro-vm", "virustotal"}
+        "ghidra", "sequential-thinking", "ida-pro-vm", "virustotal",
+        "ssh-mcp"}  # #698 ssh-channel control plane (WARN, windows/linux)
 
 
 def test_probe_project_scoped_claude_json(fake_claude_json, ws):
@@ -248,7 +251,8 @@ def test_probe_project_scoped_claude_json(fake_claude_json, ws):
     write_claude_json(
         fake_claude_json,
         servers={"ghidra": reg("ghidra"), "sequential-thinking": reg("st"),
-                 "ida-pro-vm": reg("ida"), "virustotal": reg("vt")},
+                 "ida-pro-vm": reg("ida"), "virustotal": reg("vt"),
+                 "ssh-mcp": reg("sshm")},  # #698 windows channel plane
         project_servers={"x64dbg": reg("x64dbg"), "volatility": reg("vol")},
     )
     r = run_mcp_probe(ws, "--type", "windows", "--json")
@@ -266,7 +270,7 @@ def test_probe_json_and_reproduce_contract(fake_claude_json, ws):
     out = json.loads(r.stdout)
     assert out["project_type"] == "windows"
     assert out["overall"] == "FAIL"
-    assert len(out["checks"]) == 6  # windows manifest size
+    assert len(out["checks"]) == 7  # windows manifest size (+ssh-mcp #698)
     for c in out["checks"]:
         assert set(c) == {"name", "status", "tier", "detail", "fix"}
         if c["name"] == "ghidra":
@@ -297,7 +301,7 @@ def test_probe_reads_type_from_analysis_state(fake_claude_json, ws):
     r = run_mcp_probe(ws, "--json")
     assert r.returncode == 0, r.stdout + r.stderr
     assert json.loads(r.stdout)["project_type"] == "android"
-    assert len(json.loads(r.stdout)["checks"]) == 5  # android manifest size
+    assert len(json.loads(r.stdout)["checks"]) == 5  # android manifest size (ssh-mcp is windows/linux #698)
 
 
 def test_probe_missing_claude_json_fails_open(fake_claude_json, ws):

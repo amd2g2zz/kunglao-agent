@@ -74,6 +74,10 @@ MANIFEST_GROUPS: dict[str, list[str]] = {
     "optional_ida": ["ida-pro-vm"],
     "android_graph": ["gitnexus"],
     "cti": ["virustotal"],
+    # #698: supply-scaffold declaration (install guidance). WARN tier keeps
+    # a missing ssh-mcp informational — the channel probe (toolchain.py)
+    # never requires MCP liveness; CLI ssh is the fallback control plane.
+    "channel_ssh": ["ssh-mcp"],
 }
 
 MANIFEST: tuple[MCPItem, ...] = (
@@ -113,6 +117,17 @@ MANIFEST: tuple[MCPItem, ...] = (
         purpose="Android graph building (post-decompile graph)",
         source="gitnexus mcp (npm i -g gitnexus first)",
         register="claude mcp add gitnexus -- gitnexus mcp",
+    ),
+    # #698 ssh channel execution control plane. STATIC declaration:
+    # demanded by no MANIFEST_GROUPS entry (CLI ssh is the fallback
+    # probe path); liveness is mcp_probe's own domain, not the channel
+    # probe's. Upstream verified 2026-08-26: npm ssh-mcp, TOML
+    # profiles, tools run-command/sftp-upload/sftp-download/sessions.
+    MCPItem(
+        name="ssh-mcp", tier="WARN", types=("windows", "linux"),
+        purpose="SSH execution control plane (KUNGLAO_CHANNEL=ssh dynamics)",
+        source="ssh-mcp (npm i -g ssh-mcp; TOML profiles under ~/.config/ssh-mcp)",
+        register="claude mcp add ssh-mcp -- ssh-mcp",
     ),
     MCPItem(
         name="virustotal", tier="WARN", types=ALL_TYPES,
