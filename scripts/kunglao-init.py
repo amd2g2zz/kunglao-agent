@@ -1964,18 +1964,43 @@ def bootstrap_observability(ws: Path, hooks_json: Path | None = None,
 
 
 def emit_activation_handoff(ws) -> int:
-    """#593+#598 机械交接 (adjudication (b) — both red lines PRESERVED):
-    init never fakes loop registration (loop_registered stays false until the
-    /loop prompt's first real tick) and never self-activates hooks (dormant
-    until orchestrator Phase 0). What it DOES do: emit the exact artifacts the
-    operator/orchestrator needs next — the real /loop prompt body (via the
-    emitter, never an embedded copy) and the exact verify/activate commands.
-    Prose-only dead ends are the defect this closes."""
+    """#593+#598 机械交接, reworked by #754 (both red lines PRESERVED):
+
+    #754 precise semantics of the red line: "init 不伪造 loop_registered"
+    forbids init from touching runs/.heartbeat.json tick evidence — the
+    marker's definition (#461) is "the /loop prompt BODY really executed".
+    Writing the DURABLE SCHEDULER REGISTRY (<ws>/.claude/
+    scheduled_tasks.json via loop_scheduler.upsert_durable_loop) is a
+    different artifact entirely: it is Claude Code's own resume source for
+    durable schedules (#616 — session-only CronCreate dies with the process)
+    and carries no tick evidence. So init now:
+
+      1. upserts the durable schedule itself (no human CronCreate wait — the
+         2026-08-27 adjudication: users who don't know the heartbeat
+         machinery never reach a printed hint);
+      2. still emits the real /loop prompt body (via the emitter) for
+         transparency + the verify/activate commands;
+      3. prints the 7-day Claude Code expiry cap note.
+
+    loop_registered stays FALSE until the scheduled prompt's first real
+    execution; heartbeat_loop_prompt.py --verify remains the acceptance
+    check. Hooks stay dormant until orchestrator Phase 0.
+    """
+    try:
+        from loop_scheduler import upsert_durable_loop
+        upsert_durable_loop(ws)
+    except Exception as exc:  # scheduler write failure must not fail init,
+        # but it must be LOUD — a silent gap here would reopen the #754
+        # "cron never existed yet gate passed" blind spot downstream.
+        print(f"kunglao-init: durable /loop registration FAILED ({exc}) — "
+              f"register manually: python "
+              f"{Path(__file__).resolve().with_name('loop_scheduler.py')} "
+              f"{ws}", file=sys.stderr)
     try:
         from heartbeat_loop_prompt import build_prompt
         prompt = build_prompt(str(ws))
-        print("kunglao-init: /loop heartbeat prompt — pass to CronCreate "
-              "(*/5 * * * *) or /loop 5m, then accept with --verify:")
+        print("kunglao-init: durable /loop registered above — prompt body "
+              "(for reference / manual recreation):")
         print("---- /loop prompt body ----")
         print(prompt)
         print("---- end prompt body ----")
@@ -1983,15 +2008,21 @@ def emit_activation_handoff(ws) -> int:
         print(f"kunglao-init: /loop prompt emitter unavailable ({exc}) — "
               "run heartbeat_loop_prompt.py manually", file=sys.stderr)
     ha = Path(__file__).resolve().with_name("hook_activation.py")
+    ls = Path(__file__).resolve().with_name("loop_scheduler.py")
     print("kunglao-init: next steps (mechanical, copy-paste):")
-    print(f"  1. verify loop : python {ha} {ws} --heartbeat-on && "
-          "python heartbeat_loop_prompt.py --verify")
+    print(f"  1. first tick  : the registered schedule fires within one "
+          "interval; after TWO consecutive ticks accept it:")
+    print(f"                   python heartbeat_loop_prompt.py {ws} --verify")
     print(f"  2. arm hooks   : python {ha} {ws} --tier advisory "
           "(or --set-active dispatch_gate,worker_pulse) — hooks stay "
           "dormant until this Phase-0 arm (v1.9.7 default-inactive)")
-    print("kunglao-init: heartbeat registered (runs/.heartbeat.json, #461) — "
-          "loop registration is still pending: create the /loop cron and "
-          "accept it with heartbeat_loop_prompt.py --verify")
+    print(f"  3. re-register : python {ls} {ws} (idempotent; also run at "
+          "any analysis entry — or just re-run init) when the 7-day "
+          "Claude Code durable-schedule cap expires")
+    print("kunglao-init: heartbeat registered (runs/.heartbeat.json, #461); "
+          "durable /loop schedule registered (.claude/scheduled_tasks.json, "
+          "#754) — loop_registered flips true on the schedule's FIRST real "
+          "execution, then accept with two ticks + --verify")
     return RC_OK
 
 

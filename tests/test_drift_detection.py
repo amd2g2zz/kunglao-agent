@@ -265,8 +265,10 @@ def write_heartbeat(ws: Path, minutes_ago: int = 0) -> Path:
     runs = ws / "runs"
     runs.mkdir(exist_ok=True)
     stamp = ts(minutes_ago)
+    prev = ts(minutes_ago + 5)
     p = runs / ".heartbeat.json"
-    p.write_text(json.dumps({"last_tick_ts": stamp, "activity_ts": stamp}),
+    p.write_text(json.dumps({"last_tick_ts": stamp, "activity_ts": stamp,
+                             "tick_history": [prev, stamp]}),
                  encoding="utf-8")
     return p
 

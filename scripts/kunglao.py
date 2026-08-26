@@ -46,6 +46,12 @@ import template_version
 #       loop run against a stale workspace (the #717 三层闸门 escape pattern).
 RC_STALE_WORKSPACE = 5
 
+# #754 T3: analysis-entry heartbeat verify failure — monitoring is not
+# verifiably alive (<2 consecutive ticks / cadence gap > 2x interval /
+# last tick > STALE_MINUTES). Distinct from rc=5 so SKILL.md can map each
+# refusal to its exact remediation.
+RC_HEARTBEAT_VERIFY_FAIL = 6
+
 
 def cmd_decide(args) -> int:
     ws = Path(args.workspace).resolve()
@@ -235,6 +241,60 @@ def _gate_stale_workspace(ws: Path) -> int:
     return 0
 
 
+def _gate_heartbeat_rearm(ws: Path) -> int:
+    """#754 T3: the analysis-entry machine self-check (does not rely on the
+    orchestrator or the user remembering how heartbeats work):
+
+      1. durable reconcile — upsert <ws>/.claude/scheduled_tasks.json with our
+         idempotent loop entry (aging rebuild: a deleted/expired Claude Code
+         durable schedule is re-created here BEFORE anyone enters the loop);
+      2. continuous-tick verify — heartbeat_loop_prompt.verify_loop() with the
+         SAME evaluate_tick_continuity standard as the dispatch gate / 
+         --heartbeat-check (#754 E2): >=2 consecutive ticks, gaps <= 2x
+         interval_min, newest <= 35min.
+
+    Returns 0 when the entry is clear; RC_HEARTBEAT_VERIFY_FAIL (6) with an
+    explicit stderr hint otherwise. The reconcile is best-effort loud: a
+    scheduler-write failure warns but the VERIFY verdict stays authoritative.
+    """
+    try:
+        import loop_scheduler as ls
+        ls.upsert_durable_loop(ws)
+    except Exception as exc:  # noqa: BLE001 — advisory loud, verify decides
+        print(
+            f"kunglao: durable /loop reconcile FAILED ({exc}) - register "
+            f"manually: uv run --project <skill> <skill>/scripts/"
+            f"loop_scheduler.py {ws}",
+            file=sys.stderr)
+    import heartbeat_loop_prompt as hlp
+    if hlp.verify_loop(str(ws)) != 0:
+        print("heartbeat verify failed — run /kunglao-agent:resume for "
+              "re-arm guidance", file=sys.stderr)
+        return RC_HEARTBEAT_VERIFY_FAIL
+    print("OK: analysis entry clear - stale gate PASS, durable /loop "
+          f"registered ({ws / '.claude' / 'scheduled_tasks.json'}), "
+          "heartbeat ticking continuously")
+    return 0
+
+
+def cmd_analysis(args) -> int:
+    """#754 T3: the /kunglao-agent:analysis ENTRY gate chain — run once
+    before entering the convergence loop (SKILL.md contract):
+
+      1. _gate_stale_workspace (#748, same mount-point pattern as resume);
+      2. _gate_heartbeat_rearm (#754): durable-loop aging rebuild +
+         continuous-tick verify; rc=6 maps to the re-arm hint.
+
+    Pure gate/checker surface: entering the loop remains the orchestrator's
+    job (this command decides READINESS mechanically, then exits).
+    """
+    ws = Path(args.workspace).resolve()
+    rc = _gate_stale_workspace(ws)
+    if rc != 0:
+        return rc
+    return _gate_heartbeat_rearm(ws)
+
+
 def cmd_upgrade(args) -> int:
     """#726: workspace framework-scaffold migration — pure delegation to
     kunglao_upgrade.main. Hyphenated filename blocks a plain import; the
@@ -308,6 +368,14 @@ def main() -> int:
     p_up.add_argument("--dry-run", action="store_true",
                       help="print the migration plan, write nothing")
     p_up.set_defaults(func=cmd_upgrade)
+
+    p_analysis = sub.add_parser(
+        "analysis",
+        help="#754 analysis entry gate: stale gate (#748) -> durable /loop "
+             "reconcile -> continuous-tick verify; rc0=clear, 5=stale, "
+             "6=heartbeat verify failed")
+    p_analysis.add_argument("workspace", nargs="?", default=".")
+    p_analysis.set_defaults(func=cmd_analysis)
 
     args = ap.parse_args()
     return args.func(args)

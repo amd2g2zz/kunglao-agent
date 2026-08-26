@@ -180,9 +180,14 @@ def _healthy_ws(tmp_path) -> Path:
     from datetime import datetime, timezone
     ws = tmp_path
     (ws / 'runs').mkdir(parents=True, exist_ok=True)
-    now = datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    import datetime as _dtm
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat(timespec='seconds').replace('+00:00', 'Z')
+    prev = (now_dt - _dtm.timedelta(minutes=5)).isoformat(
+        timespec='seconds').replace('+00:00', 'Z')
     (ws / 'runs' / '.heartbeat.json').write_text(
-        json.dumps({'last_tick_ts': now, 'activity_ts': now}), encoding='utf-8')
+        json.dumps({'last_tick_ts': now, 'activity_ts': now, 'started_ts': prev,
+                    'tick_history': [prev, now]}), encoding='utf-8')
     (ws / 'runs' / 'plan-C001-strings.md').write_text(
         'goal: strings\nsteps:\nfallback:\n', encoding='utf-8')
     (ws / 'analysis_state.txt').write_text(

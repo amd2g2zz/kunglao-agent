@@ -138,8 +138,11 @@ def _healthy_ws(path: Path) -> Path:
     ws = path
     (ws / "runs").mkdir(parents=True, exist_ok=True)
     now = _iso(datetime.now(timezone.utc))
+    prev = _ago(5)
     (ws / "runs" / ".heartbeat.json").write_text(
-        json.dumps({"last_tick_ts": now, "activity_ts": now}), encoding="utf-8")
+        json.dumps({"last_tick_ts": now, "activity_ts": now,
+                    "started_ts": prev,
+                    "tick_history": [prev, now]}), encoding="utf-8")
     (ws / "runs" / "plan-C001-strings.md").write_text(
         "goal: strings\nsteps:\nfallback:\n", encoding="utf-8")
     (ws / "analysis_state.txt").write_text(
@@ -383,7 +386,11 @@ def test_dispatch_refreshes_heartbeat_last_tick(tmp_path, quiet_subprocess_gates
     (renew's existing side effect — a dispatching orchestrator IS alive)."""
     import worker_budget as wb
     ws = _healthy_ws(tmp_path / "tick")
-    before = json.dumps({"last_tick_ts": _ago(20), "activity_ts": _ago(20)})
+    # 20-min-old two-tick seed (#754): enough to pass the continuity GATE
+    # at pre_check time; the renewed tick that this test observes lands after.
+    before = json.dumps({"last_tick_ts": _ago(20), "activity_ts": _ago(20),
+                         "interval_min": 5,
+                         "tick_history": [_ago(21), _ago(20)]})
     (ws / "runs" / ".heartbeat.json").write_text(before, encoding="utf-8")
     rc = wb.pre_check(_dispatch_payload(), _paths_for(ws))
     assert rc == 0
@@ -487,8 +494,9 @@ def test_verify_passes_when_loop_registered(tmp_path):
     """loop_registered=true -> exit 0 with the OK line."""
     ws = tmp_path / "ws"
     ws.mkdir()
-    _write_hb(ws, {"started_ts": _ago(1), "interval_min": 5,
-                   "last_tick_ts": _ago(1), "loop_registered": True})
+    _write_hb(ws, {"started_ts": _ago(6), "interval_min": 5,
+                   "last_tick_ts": _ago(1), "loop_registered": True,
+                   "tick_history": [_ago(6), _ago(1)]})
     r = _run_verify(ws)
     assert r.returncode == 0, f"registered loop must verify PASS: {r.stderr}"
     assert "cron loop registered" in r.stdout, (

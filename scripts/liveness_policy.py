@@ -67,6 +67,18 @@ STALE_MINUTES = 35
 HEARTBEAT_STALE_MINUTES = 35
 
 # ---------------------------------------------------------------------------
+# Heartbeat tick continuity (#754 E2)
+# ---------------------------------------------------------------------------
+
+# scripts/heartbeat.py (#754): the tick interval assumed when .heartbeat.json
+# carries no interval_min (heartbeat_register writes 5; the /loop default is
+# 5m). The continuity gate doubles it as the maximum tolerated gap between
+# adjacent ticks (one missed tick is jitter; two is a dead cron). Named _MIN
+# not _MINUTES to stay outside the #597 bare-assignment drift-guard family —
+# this value is NEW in #754, not a surveyed pre-existing constant.
+TICK_INTERVAL_DEFAULT_MIN = 5
+
+# ---------------------------------------------------------------------------
 # Hook-activation TTL (the enforcement-liveness threshold, value 30)
 # ---------------------------------------------------------------------------
 

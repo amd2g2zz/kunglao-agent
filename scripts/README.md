@@ -58,6 +58,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `heartbeat.py` | convergence-gated heartbeat bookkeeping (lib for hook_activation) | lib(1), tests |
 | `heartbeat_tick.py` | heartbeat tick runner (hook-invoked + kunglao.py) | hooks, lib(1), tests |
 | `heartbeat_loop_prompt.py` | loop-prompt generator for the tick loop | hooks, tests |
+| `loop_scheduler.py` | durable /loop registration writer (#754): idempotent upsert of the kunglao-heartbeat entry into <ws>/.claude/scheduled_tasks.json (foreign entries preserved, unreadable/unrecognized files sidecar-backed); absorbs #616, rejects #618 crontab route | CLI, lib(1: heartbeat_loop_prompt), tests |
 | `hooks_selfcheck.py` | hook registration self-check (runs hook_activation) | lib(1), tests |
 | `verify_status_watch.py` | verify-stamp disk-vs-stream reconciliation — the anti-sed tamper watch (#718) | heartbeat_tick, tests |
 | `external_kicker.py` | external scheduler kicker (schtasks/crontab-friendly) | tests |

@@ -24,6 +24,9 @@ def _ts(dt: datetime) -> str:
 
 
 def _write_hb(ws: Path, *, registered: bool, last_tick: str | None) -> None:
+    # #754: liveness needs CONTINUITY — every fixture gets the standard 2-tick
+    # history (t-5min, t) whenever a tick timestamp exists. Failure-path cases
+    # exercise marker/staleness and stay failing regardless.
     runs = ws / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     state = {
@@ -33,6 +36,13 @@ def _write_hb(ws: Path, *, registered: bool, last_tick: str | None) -> None:
     }
     if last_tick is not None:
         state["last_tick_ts"] = last_tick
+        try:
+            prev_dt = datetime.fromisoformat(
+                last_tick.replace("Z", "+00:00")) - timedelta(minutes=5)
+        except ValueError:
+            pass  # corrupt-timestamp case: keep the legacy shape fail-closed
+        else:
+            state["tick_history"] = [_ts(prev_dt), last_tick]
     (runs / ".heartbeat.json").write_text(json.dumps(state), encoding="utf-8")
 
 

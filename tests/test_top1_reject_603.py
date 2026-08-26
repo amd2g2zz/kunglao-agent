@@ -242,8 +242,11 @@ def _armed_ws(tmp_path: Path) -> Path:
                     "blockers": [], "facts_total": 0}) + "\n",
         encoding="utf-8")
     (ws / "runs" / ".heartbeat.json").write_text(json.dumps({
+        "started_ts": "2099-08-20T00:00:00Z",
         "last_tick_ts": "2099-08-20T00:05:00Z",
-        "activity_ts": "2099-08-20T00:05:00Z"}), encoding="utf-8")
+        "activity_ts": "2099-08-20T00:05:00Z",
+        "tick_history": ["2099-08-20T00:00:00Z", "2099-08-20T00:05:00Z"]}),
+        encoding="utf-8")
     (ws / ".hook_state.json").write_text(json.dumps({
         "expires_at": "2099-01-01T00:00:00Z", "active_hooks": []}),
         encoding="utf-8")

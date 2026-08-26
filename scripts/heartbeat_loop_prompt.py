@@ -104,35 +104,31 @@ def verify_loop(ws: str) -> int:
             "heartbeat_loop_prompt.py <ws> and pass its output to "
             "CronCreate */5 * * * * (or /loop 5m <prompt>); the loop's "
             "first action marks loop_registered=true. Re-run this --verify "
-            "after the first tick (<= one interval); still failing then "
-            "means the CronCreate itself failed — re-create the cron.",
+            "after TWO consecutive ticks (<= 2x interval, #754); still "
+            "failing then means the CronCreate itself failed — re-create it.",
             file=sys.stderr)
         return 1
-    # #609: the marker is a self-written claim — cross-check liveness. A cron
-    # deleted after one successful fire must not keep verify vouching OK.
-    # Corrupt/absent last_tick_ts counts as not ticking (fail-closed).
-    last = data.get("last_tick_ts")
-    age_ok = False
-    if isinstance(last, str):
-        try:
-            from datetime import datetime, timedelta, timezone
-            from liveness_policy import STALE_MINUTES  # noqa: E402
-            last_dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
-            age_ok = datetime.now(tz=timezone.utc) - last_dt <= timedelta(minutes=STALE_MINUTES)
-        except (ValueError, TypeError):
-            age_ok = False
-    if not age_ok:
-        detail = f"last tick {last}" if last else "last_tick_ts absent"
+    # #609 + #754 E2: the marker is a self-written claim — cross-check liveness.
+    # A cron deleted after one successful fire must not keep verify vouching OK,
+    # and (the live-run blind spot) a LONE registration tick must neither. Same
+    # continuous-tick standard as the dispatch gate / --heartbeat-check: >=2
+    # ticks with cadence <= 2x interval_min, newest <= STALE_MINUTES. Corrupt /
+    # absent history counts as not ticking (fail-closed).
+    from heartbeat import evaluate_tick_continuity  # noqa: E402 (shared source)
+    alive, detail = evaluate_tick_continuity(data)
+    if not alive:
         print(
-            f"LOOP NOT TICKING (HARD, #609): loop_registered=true but {detail} — "
-            "the cron is registered yet not firing (deleted after first fire, "
-            "session ended, or never created). The marker is history, not "
-            "liveness. Fix: re-register the /loop cron "
-            "(heartbeat_loop_prompt.py <ws> → CronCreate), then re-verify.",
+            f"LOOP NOT TICKING (HARD, #609/#754): loop_registered=true but {detail} — "
+            "the cron is registered yet not firing continuously (deleted after "
+            "first fire, session ended, or never created). The marker is "
+            "history, not liveness. Fix: re-register the /loop cron DURABLE "
+            "(heartbeat_loop_prompt.py <ws> -> <ws>/.claude/"
+            "scheduled_tasks.json via loop_scheduler upsert or re-run init), "
+            "then re-run this --verify after TWO consecutive ticks.",
             file=sys.stderr)
         return 1
-    print(f"OK: cron loop registered (loop_registered=true, started "
-          f"{data.get('started_ts')})")
+    print(f"OK: cron loop registered AND ticking continuously "
+          f"(loop_registered=true, started {data.get('started_ts')}; {detail})")
     return 0
 
 

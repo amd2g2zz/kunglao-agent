@@ -4,6 +4,28 @@ Load this when you need the HOW behind worker monitoring, self-cap-safe
 dispatch prose, or the x64dbg VM-channel launch sequence. SKILL.md carries
 the principles; this file carries the mechanics.
 
+## Heartbeat registration & the #754 continuous-tick standard
+
+The heartbeat's liveness verdict is CONTINUITY-based and single-sourced in
+`scripts/heartbeat.py::evaluate_tick_continuity` — shared verbatim by three
+consumers: the dispatch gate (`hooks/worker_budget_sinks.check_heartbeat_alive`),
+`heartbeat_check` (--heartbeat-check), and `heartbeat_loop_prompt --verify`.
+Alive requires >= 2 recorded ticks (runs/.heartbeat.json `tick_history`,
+35-min rolling window, cap 12), adjacent gaps <= 2x interval_min, newest
+<= 35 min. A LONE registration tick is dead — that was the live-run incident
+(#754): last_tick_ts == started_ts with no cron behind it still passed the
+old 35-min window. Legacy files without tick_history REJECT by design; one
+real touch/tick rebuilds history.
+
+Registration is DURABLE: init upserts `.claude/scheduled_tasks.json`
+(`scripts/loop_scheduler.py`, id kunglao-heartbeat — Claude Code's own
+resume source for durable schedules; session-only CronCreate dies with the
+process). Claude Code caps durable schedules at 7 days; re-run init or
+`kunglao analysis <ws>` (the entry gate re-creates it idempotently), or
+re-register directly with loop_scheduler.py. Red line semantics unchanged:
+`scheduled_tasks.json` carries scheduling intent only — `loop_registered`
+flips true solely when the /loop prompt body executes its first action.
+
 ## Active workers heartbeat (the tick loop)
 
 The orchestrator is a daemon (convergence-loop behavior #4). **Workers are
