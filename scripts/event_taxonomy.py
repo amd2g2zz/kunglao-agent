@@ -163,7 +163,6 @@ EMIT_ACTIONS = [
     "ask_back",
     "capability_reject",
     "capability_switch",
-    "channel_default",     # #727 init channel degradation/guidance WARN
     "claim_migrate",
     "converge",
     "death_verdict_rejected",
