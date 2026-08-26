@@ -120,6 +120,7 @@ import os
 import re
 import shutil
 import struct
+import subprocess
 import sys
 import zipfile
 from collections.abc import Collection
@@ -363,6 +364,105 @@ def write_init_report(ws: Path, phases: list[dict], overall: str,
               file=sys.stderr)
         return None
     return target
+
+# #739 workspace git snapshot layer ------------------------------------------
+
+GIT_SNAPSHOT_COMMIT_MSG = "kunglao-init: initial workspace commit"
+GIT_SNAPSHOT_AUTHOR_NAME = "kunglao-init"
+GIT_SNAPSHOT_AUTHOR_EMAIL = "init@kunglao.local"
+
+# Snapshot hygiene (#739): git is the SNAPSHOT layer, not the state
+# authority — immutable input and runtime noise never belong in commits.
+# .venv/ goes beyond the #739 spec list as a measured pollution source:
+# the workspace venv sits under ws/ and would swamp the initial commit.
+GITIGNORE_SNAPSHOT = """\
+# kunglao-init snapshot hygiene (#739): git is the snapshot layer, not
+# the state authority. Immutable input + runtime noise stay out of commits.
+# bins/  = sample binary: immutable analysis input, never rewritten
+# runs/  = runtime telemetry noise (worker status, heartbeats, logs, init reports)
+# .venv/ = workspace virtualenv: environment artifact, not reviewable state
+bins/
+__pycache__/
+*.pyc
+*.log
+runs/
+.venv/
+"""
+
+
+def _git_cmd(ws: Path, *args: str) -> str:
+    """Run one `git -C <ws> ...` command (never a bare git: the workspace
+    may live inside a host repo and a bare git would walk up and hit the
+    WRONG repository). Raises FileNotFoundError (git binary missing) or
+    CalledProcessError (git refused) to the caller."""
+    cp = subprocess.run(["git", "-C", str(ws), *args],
+                        capture_output=True, text=True,
+                        encoding="utf-8", errors="replace")
+    if cp.returncode != 0:
+        raise subprocess.CalledProcessError(
+            cp.returncode, cp.args, output=cp.stdout, stderr=cp.stderr)
+    return cp.stdout.strip()
+
+
+def init_workspace_git(ws: Path) -> dict:
+    """#739: final init step — turn the workspace into a git repo with one
+    initial commit (the SNAPSHOT layer: review history / undo / experiment
+    branches). Never the state authority: convergence decisions read disk,
+    never git status.
+
+    Semantics:
+      - ws/.git already exists -> idempotent skip, {"status": "existing"};
+      - git binary missing / git failure -> WARN (stderr + kunglao_log
+        git_snapshot_skipped), return {"status": "skipped", ...}; init
+        never fails on this (WARN tier, not HARD — #739);
+      - success -> .gitignore + git init + add -A + initial commit with a
+        bot author (no dependency on the host git identity config), then
+        the multi-line [git-snapshot] banner teaching the three uses —
+        always in `git -C <workspace>` form (nested-repo discipline).
+
+    Returns {"status": "created", "commit": sha} on success.
+    """
+    if (ws / ".git").exists():
+        print("[git-snapshot] workspace is already a git repo — "
+              "snapshot layer kept as-is")
+        return {"status": "existing"}
+    try:
+        # never clobber a user-written .gitignore (scaffold discipline)
+        gitignore = ws / ".gitignore"
+        if not gitignore.exists():
+            atomic_write(gitignore, GITIGNORE_SNAPSHOT)
+        _git_cmd(ws, "init")
+        _git_cmd(ws, "add", "-A")
+        _git_cmd(ws, "-c", f"user.name={GIT_SNAPSHOT_AUTHOR_NAME}",
+                 "-c", f"user.email={GIT_SNAPSHOT_AUTHOR_EMAIL}",
+                 "commit", "-m", GIT_SNAPSHOT_COMMIT_MSG)
+        sha = _git_cmd(ws, "rev-parse", "HEAD")
+    except FileNotFoundError:
+        print("kunglao-init: WARNING git binary not found — workspace git "
+              "snapshot skipped (init continues without the snapshot layer)",
+              file=sys.stderr)
+        kunglao_log.emit(ws, actor="init", action="git_snapshot_skipped",
+                         detail="git binary not found")
+        return {"status": "skipped", "reason": "git-not-found"}
+    except (OSError, subprocess.CalledProcessError) as exc:
+        stderr_txt = ""
+        rc: int | None = None
+        if isinstance(exc, subprocess.CalledProcessError):
+            rc = exc.returncode
+            stderr_txt = exc.stderr or ""
+        hint = stderr_txt.strip().splitlines()
+        last = hint[-1] if hint else f"git unavailable ({exc})"
+        print(f"kunglao-init: WARNING git snapshot failed ({last}) — "
+              "skipped (init continues)", file=sys.stderr)
+        kunglao_log.emit(ws, actor="init", action="git_snapshot_skipped",
+                         exit=rc, detail=last)
+        return {"status": "skipped", "reason": "git-error"}
+    print("[git-snapshot] workspace is now a git repo (initial commit done)")
+    print("[git-snapshot] review history : git -C <workspace> log --oneline")
+    print("[git-snapshot] undo a mistake : git -C <workspace> revert <sha>   (snapshot layer — disk is truth, git is NOT the state authority)")
+    print("[git-snapshot] risky experiment: git -C <workspace> checkout -b exp/<name>  (merge back or abandon)")
+    return {"status": "created", "commit": sha}
+
 
 # #455: intake interaction order (zero-arg entry walks this sequence).
 INTAKE_GUIDANCE = (
@@ -2363,6 +2463,13 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                            channel_decision))
     kunglao_log.emit(ws, actor="init", action="write_blocked",
                      exit=final_rc, detail=f"init {overall}")
+    # #739: the git snapshot is the LAST init step, after the init
+    # report (runs/ telemetry is gitignored by design, so the report
+    # never lands in the snapshot). Only a completed init gets a
+    # baseline commit; the step is best-effort WARN — git missing or
+    # failed never changes rc.
+    if final_rc == RC_OK:
+        init_workspace_git(ws)
     return final_rc
 
 
