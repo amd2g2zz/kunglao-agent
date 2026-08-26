@@ -279,6 +279,6 @@ def test_analysis_hint_covers_alias_and_zero_args() -> None:
 def test_init_hint_declares_zero_args_guidance() -> None:
     """init hint keeps the --type choices and adds zero-args guidance."""
     hint = str(_frontmatter(INIT).get("argument-hint", ""))
-    for token in ("<workspace>", "--type", "windows", "linux", "android"):
+    for token in ("<workspace>", "--type", "windows", "linux", "android", "web"):
         assert token in hint, f"init hint lost '{token}': {hint}"
     assert re.search(r"no args", hint, re.I), f"init hint missing zero-args guidance: {hint}"

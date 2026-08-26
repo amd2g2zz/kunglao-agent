@@ -3,7 +3,7 @@
 """kunglao-init — workspace initialization + re-init protection (phase 3.5, E-init.1-4).
 
 Standalone CLI (not a kunglao.py subcommand, module-design L448):
-    python kunglao-init.py [<workspace>] [--type windows|linux|android]
+    python kunglao-init.py [<workspace>] [--type windows|linux|android|web]
         [--target <bins/ file>] [--resolve <answers.json>] [--force]
         [--hooks-json <path>] [--profile-root <path>]
 
@@ -497,7 +497,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="target workspace path (holds bins/, claim-register.yaml, etc.); "
                              "omitted -> pending decision (#455)")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
-                        help="project type: windows|linux|android (#304)")
+                        help="project type: windows|linux|android|web (#304; web=labs)")
     parser.add_argument("--target", metavar="NAME", default=None,
                         help="#455: explicit analysis target — a file name under bins/ "
                              "(containers get a target_object round)")
@@ -1146,6 +1146,10 @@ def write_project_type(ws: Path, project_type: str) -> bool:
 
 
 CLAUDEMD_TMPL = Path(__file__).resolve().parent.parent / "templates" / "CLAUDE.md.base.tmpl"
+
+# #728: quickref single-source for web workspace CLAUDE.md injection.
+# If missing, write_claudemd fails closed (never silently partial).
+WEB_RE_QUICKREF = Path(__file__).resolve().parent.parent / "references" / "re-library" / "web-re-quickref.md"
 SKILL_DIR = Path(__file__).resolve().parent.parent
 
 # #356 W2: per-OS constraint blocks injected into the base template's
@@ -1185,7 +1189,77 @@ APK -> aapt/apktool unpack -> jadx DEX->Java
     -> stuck fallback: frida hook + unidbg hybrid (AND three conditions)
 ```
 """,
+    "web": """## Hard constraints (web)
+
+- **Channel: docker** — `KUNGLAO_CHANNEL=docker` is the web default; set explicitly to override.
+- **camoufox-reverse MCP** — browser JS reverse engineering supply; register manually:
+  `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp`
+  (verify: `python -m camoufox_reverse_mcp --help`; optional flags: `--proxy`, `--geoip`, `--humanize`).
+- **No VM channel** — web dynamic analysis is the browser; VM channels (vmr-shell) do not apply.
+- **static-only analysis**: `KUNGLAO_CHANNEL` unset + no docker = local mode — no dynamic tooling, no dynamic RE. Read the CLAUDE.md quick-reference sections first.
+
+## Solution pattern decision tree
+
+Choose the delivery shape by evidence characteristics:
+
+| Evidence | Pattern | Delivery |
+|---|---|---|
+| Crypto logic extractable, no browser deps | **A: Pure Algorithm** | Standalone Node.js / Python protocol script |
+| Server ships obfuscated JS for cookie/token | **B: VM Sandbox** | jsdom + env-patches or sdenv |
+| Encryption inside WebAssembly | **C: WASM Loader** | wasm-loader template |
+| TLS fingerprint / complex env deps | **D: Browser Automation** | camoufox MCP (analysis only, not delivery) |
+| Algorithm bound to env, unextractable | **E: Environment Emulation** | Boundary strategy (hook I/O, not full devirtualization) |
+
+## camoufox operations card (core)
+
+```bash
+# Register
+claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp
+
+# Launch + navigate
+camoufox.launch_browser()            # anti-detection Firefox
+camoufox.navigate(url=..., pre_inject_hooks=[...])
+
+# Network
+camoufox.network_capture(action="start")
+camoufox.get_request_initiator(request_id)  # golden path to crypto code
+
+# Hooks
+camoufox.inject_hook_preset("xhr")           # preset: xhr/fetch/crypto/websocket/...
+camoufox.hook_function(function_path="sign", hook_code=..., position="before")
+camoufox.get_console_logs()                  # collect hook output
+
+# Verification
+camoufox.verify_signer_offline(request_id, signature)   # independent replay check
+```
+
+## Next: read the quick-reference sections below
+
+The six-section quick-reference (Hook & Breakpoint Quick Reference through Advanced Topics)
+documents the signed-parameter location workflow, layered peeling routing, crypto
+signatures, anti-patterns, and the advanced-topic index. Read it before opening
+the browser — it replaces the binary-RE playbook for web targets.
+""",
 }
+
+
+def _setup_web_env(ws: Path) -> None:
+    """#728: write the docker channel default into analysis_state.txt when
+    absent, and emit setup guidance to stderr (same channel as MCP notices).
+    Idempotent: second call leaves an existing channel line untouched.
+    Called from deploy_env when project_type == "web"."""
+    state = ws / "analysis_state.txt"
+    existing = state.read_text(encoding="utf-8") if state.exists() else ""
+    has_channel = any(
+        line.strip().startswith("KUNGLAO_CHANNEL=")
+        for line in existing.splitlines()
+    )
+    if not has_channel:
+        write_state_line(ws, "KUNGLAO_CHANNEL", "docker")
+    print("kunglao-init: web (labs) setup guidance:", file=sys.stderr)
+    print("  channel: KUNGLAO_CHANNEL=docker (set explicitly to override)", file=sys.stderr)
+    print("  MCP: claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp", file=sys.stderr)
+    print("  docs: references/re-library/web-re-quickref.md (auto-injected into workspace CLAUDE.md)", file=sys.stderr)
 
 
 def os_section(project_type: str | None) -> str:
@@ -1315,6 +1389,15 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
         "Activate before running scripts.",
         f"Activate before running scripts. Python {py_version}."
     )
+    # #728: inject quickref for web workspaces (fail-closed if missing).
+    if project_type == "web":
+        if not WEB_RE_QUICKREF.exists():
+            raise template_render.TemplateRenderError(
+                f"web quickref not found: {WEB_RE_QUICKREF} — "
+                "cannot render a partial web CLAUDE.md")
+        qr_text = WEB_RE_QUICKREF.read_text(encoding="utf-8")
+        text += chr(10) + qr_text
+
     target.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(target, text)
     return target
@@ -1611,6 +1694,9 @@ def deploy_env(ws: Path, project_type: str, hooks_json: Path | None = None,
                                "detail": hook_report.get("reason", "?")})
         components.extend(_deploy_agents(ws))
     components.extend(_record_mcp(ws, project_type))
+    # #728: web setup handler — idempotent docker-default channel write
+    if project_type == "web":
+        _setup_web_env(ws)
     try:
         components.append(_deploy_skills(ws, skills))
     except ValueError as exc:
@@ -2104,7 +2190,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         print(
             "kunglao-init: no analysis target found — place a sample into bins/ "
             "or specify a path, then re-run "
-            "kunglao-init.py <ws> --type <windows|linux|android>.",
+            "kunglao-init.py <ws> --type <windows|linux|android|web>.",
             file=sys.stderr,
         )
         return RC_NO_SAMPLE
