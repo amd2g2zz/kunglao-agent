@@ -38,6 +38,8 @@ must be initialized first with `/kunglao-agent:init`.
 | `0` | migrated / already at target / dry-run plan printed | "done" |
 | `3` | workspace has no version stamp | "refused, run init first" |
 | `4` | iron-rule violation — user data drifted | "user-data drift detected, snapshot at `<workspace>/.kunglao-upgrade-pre-snapshot/` kept on disk; restore from snapshot" |
+| `6` | dirty owned-repo (#753) — migration needs a clean rollback anchor | "refused: commit or stash first (commands on stderr), then re-run" |
+| `7` | incomplete (#753) — migration applied but the finish sequence aborted; re-run upgrade | "warning: re-run /kunglao-agent:upgrade to complete" |
 
 ## CLI
 
@@ -50,8 +52,9 @@ JSON envelope (when `--json` lands in a future commit):
 
 ```json
 {
-  "status": "ok" | "dry-run" | "already-current" | "refused" | "iron-rule-violation",
-  "rc": 0 | 3 | 4,
+  "status": "ok" | "dry-run" | "already-current" | "refused"
+          | "refused-dirty" | "iron-rule-violation" | "incomplete",
+  "rc": 0 | 3 | 4 | 6 | 7,
   "items": [{"name": "hooks_rewire", "action": "applied" | "noop" | "skipped", "detail": "..."}],
   "iron_rule_hash": {"pre": "...", "post": "..."},
   "started_at": "ISO-8601",

@@ -2135,6 +2135,10 @@ def initialize(ws: Path, hooks_json: Path | None,
                                  plugin_mode=plugin_mode)
     if rc != RC_OK:
         return rc
+    # #753 B3 — same activation hint as upgrade's success path: the skill
+    # package scaffold just landed; Claude Code only sees it after a reload.
+    print("kunglao-init: skill package installed — run /reload-plugins in "
+          "Claude Code to activate")
     return RC_OK
 
 

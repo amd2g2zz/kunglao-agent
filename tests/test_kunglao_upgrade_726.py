@@ -228,16 +228,20 @@ def _git(ws: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def test_no_git_workspace_gets_git_snapshot(up, tmp_path, capsys):
-    """#739 — a legacy no-git workspace leaves the upgrade with a .git dir,
-    exactly one snapshot commit, a hygiene .gitignore, and the usage
-    banner (log / revert / checkout -b exp)."""
+    """#739 + #753 — a legacy no-git workspace is anchored BEFORE migration:
+    the FIRST commit is the pre-upgrade anchor, the hygiene .gitignore is in
+    place, and the usage banner (log / revert / checkout -b exp) prints. The
+    migrated state lands as the second (post-upgrade state) commit."""
     ws = synth_v012_ws(tmp_path)
     assert not (ws / ".git").exists()
     assert up.main([str(ws)]) == 0
     assert (ws / ".git").is_dir()
-    subjects = _git(ws, "log", "--format=%s").stdout.splitlines()
-    assert len(subjects) == 1
-    assert "post-upgrade git snapshot" in subjects[0]
+    subjects = [s for s in _git(ws, "log", "--format=%s").stdout.splitlines()
+                if s.strip()]
+    assert len(subjects) == 2
+    # git log is newest-first: [0] = post-upgrade state, [-1] = the anchor
+    assert "pre-upgrade anchor" in subjects[-1]
+    assert "post-upgrade state" in subjects[0]
     gi = (ws / ".gitignore").read_text(encoding="utf-8")
     for pat in ("bins/", "__pycache__/", "*.pyc", "*.log", "runs/"):
         assert pat in gi, pat

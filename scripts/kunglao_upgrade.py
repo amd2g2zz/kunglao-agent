@@ -30,12 +30,16 @@ Exit codes (consumed by the slash-command SKILL.md UX layer):
     0  migrated / already at target / dry-run plan printed
     3  no version stamp on the workspace — direct to /kunglao-agent:init
     4  iron-rule violation — user data drifted, snapshot on disk
+    6  dirty owned-repo — commit/stash first, then re-run (#753 B1)
+    7  incomplete — migration applied but the finish sequence aborted
+       (#753 B4); re-run upgrade to complete stamping/cleanup
 
 JSON envelope (when `--json` is set):
 
     {
-      "status": "ok" | "dry-run" | "already-current" | "refused" | "iron-rule-violation",
-      "rc": 0 | 3 | 4,
+      "status": "ok" | "dry-run" | "already-current" | "refused"
+              | "refused-dirty" | "iron-rule-violation" | "incomplete",
+      "rc": 0 | 3 | 4 | 6 | 7,
       "items": [{"name": "hooks_rewire", "action": "applied" | "noop" | "skipped", "detail": "..."}],
       "iron_rule_hash": {"pre": "<sha256>", "post": "<sha256>"},
       "started_at": "<ISO-8601>",
@@ -72,6 +76,8 @@ _STAMP_CARRIERS = ("facts/_INDEX.md", "claim-register.yaml")
 RC_OK = 0
 RC_UNKNOWN_ORIGIN = 3
 RC_IRON_RULE = 4
+RC_DIRTY_WORKSPACE = 6
+RC_INCOMPLETE = 7
 
 # #758 G1a/G1b: advisory interpreter-pin echo of .python-version=3.11.
 PYTHON_PIN = (3, 11)
@@ -82,17 +88,15 @@ def _warn_python_version() -> None:
 
     Advisory only — CI (UV_PYTHON=python3.11) is the blocking authority;
     a local 3.13 run must still be able to upgrade a legacy workspace.
-    NOTE: #753's structured-event format is NOT merged upstream yet (no
-    consumer for `[event] name=` anywhere) — we emit the canonical tokens
-    on a plain stderr line and realign when #753 lands.
+    Realigned onto #753's structured-event emitter (their NOTE asked for
+    exactly this when #753 landed): one flushed [event] line.
     """
     vi = tuple(sys.version_info[:3])
     if vi[:2] != PYTHON_PIN:
         got = ".".join(str(x) for x in vi)
         pin = ".".join(str(x) for x in PYTHON_PIN)
-        print(f"kunglao-upgrade: WARN [event] name=python_version status=warn "
-              f"detail={got!r}!=pinned:{pin} — advisory, continuing",
-              file=sys.stderr)
+        _emit_event("python_version", "warn",
+                    f"{got}!=pinned:{pin} — advisory, continuing")
 
 MigrationFn = Callable[[Path, bool], list[str]]
 
@@ -296,12 +300,37 @@ def _emit(ws: Path, action: str, detail: str) -> None:
         pass
 
 
+def _emit_event(name: str, status: str, detail: str = "") -> None:
+    """#753 B2 — structured stderr trail. One flushed line per critical node
+    so an external kill leaves an exact last-event record (`name=` of the
+    furthest completed stage). Never raises."""
+    try:
+        line = f"[event] name={name} status={status} detail={detail}"
+        print(line.rstrip(), file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
+
+
 # --------------------------------------------------------------------------
 # git snapshot layer (#739)
 # --------------------------------------------------------------------------
 
 _SNAPSHOT_COMMIT_MSG = ("kunglao-upgrade: post-upgrade git snapshot "
                         "(legacy workspace had no git)")
+
+# #753 B1 — the migration's own rollback pair. The ANCHOR lands before the
+# first migration item (user ruling 2026-08-27: no commit, no upgrade); the
+# post-state commit lands after a clean finish so the operator is always one
+# `git revert` away from the pre-upgrade world.
+_ANCHOR_COMMIT_MSG = ("kunglao-upgrade: pre-upgrade anchor "
+                      "(rollback point before migration)")
+_POST_STATE_MSG = "kunglao-upgrade: post-upgrade state commit (migration applied)"
+
+# Shared identity + signing posture of #739: snapshot commits must not depend
+# on host git config. NB the -c overrides go BEFORE the `commit` subcommand.
+_GIT_IDENTITY = ("-c", "user.name=kunglao-upgrade",
+                 "-c", "user.email=kunglao-upgrade@localhost",
+                 "commit", "--no-gpg-sign")
 
 # bins/ = immutable sample input; the rest = runtime noise. Kept out of the
 # snapshot commit so a dirty status never masquerades as workspace truth.
@@ -337,6 +366,85 @@ def _print_git_banner(ws: Path) -> None:
     print(f"  experiment : git -C {w} checkout -b exp")
 
 
+def _probe_dirty(ws: Path) -> tuple[str, int]:
+    """#753 B1 gate — inspect the workspace repo without touching it.
+
+    Returns ("absent"|"clean"|"dirty"|"skipped", entry_count). "skipped"
+    covers a git binary/execution failure: the anchor cannot be verified, so
+    the caller degrades loudly (same posture as #739's WARN-only snapshot).
+    """
+    if not (ws / ".git").exists():
+        return ("absent", 0)
+    try:
+        proc = _run_git(ws, "status", "--porcelain")
+    except (FileNotFoundError, OSError):
+        return ("skipped", 0)
+    if proc.returncode != 0:
+        return ("skipped", 0)
+    n = sum(1 for ln in proc.stdout.splitlines() if ln.strip())
+    return ("dirty", n) if n else ("clean", 0)
+
+
+def _warn_git_skip(surface: str, why: str) -> None:
+    print(f"kunglao-upgrade: WARN — {surface} skipped: {why}", file=sys.stderr)
+
+
+def _git_bootstrap_commit(ws: Path, message: str, surface: str,
+                          skip_action: str, event_name: str) -> \
+        tuple[bool, str | None]:
+    """One hygiene pass: .gitignore -> init -> add -A -> commit(message).
+    Returns (ok, reason-label); every failure is already WARNed + recorded
+    under the given surface name (jsonl action + stderr event name) by the
+    time False comes back."""
+    try:
+        (ws / ".gitignore").write_text(_GITIGNORE_BODY, encoding="utf-8")
+        for label, args in (
+            ("init", ("init",)),
+            ("add", ("add", "-A")),
+            ("commit", (*_GIT_IDENTITY, "-m", message)),
+        ):
+            proc = _run_git(ws, *args)
+            if proc.returncode != 0:
+                tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+                why = tail[-1] if tail else f"exit {proc.returncode}"
+                _warn_git_skip(surface, f"`git {label}`: {why}")
+                _emit_event(event_name, "fail", f"{label}: {why}")
+                _emit(ws, skip_action, f"git {label}: {why}")
+                return (False, f"git {label}")
+    except FileNotFoundError:
+        _warn_git_skip(surface, "(git binary not found) — continuing "
+                      "WITHOUT a rollback anchor; abort now if you want the "
+                      "safety net")
+        _emit_event(event_name, "warn", "git binary not found")
+        _emit(ws, skip_action, "git binary not found")
+        return (False, "git-missing")
+    except OSError as exc:
+        _warn_git_skip(surface, str(exc))
+        _emit_event(event_name, "fail", str(exc))
+        _emit(ws, skip_action, str(exc))
+        return (False, "io-error")
+    return (True, None)
+
+
+def ensure_pre_upgrade_anchor(ws: Path) -> dict:
+    """#753 B1 — BEFORE any migration item runs, guarantee a rollback point:
+    a workspace with no .git gets git init + one pre-upgrade anchor commit.
+    Reuses #739's identity/signing posture. WARN-only on failure (degrades to
+    the #739 behavior), never blocks an otherwise-legal migration."""
+    ws = Path(ws)
+    ok, _reason = _git_bootstrap_commit(
+        ws, _ANCHOR_COMMIT_MSG, "pre-upgrade anchor",
+        "git_anchor_skipped", "git-anchor")
+    if not ok:
+        return {"status": "skipped"}
+    rev = _run_git(ws, "rev-parse", "--short", "HEAD")
+    sha = rev.stdout.strip() if rev.returncode == 0 else None
+    _emit_event("git-anchor", "ok",
+                f"pre-upgrade anchor {sha or 'unknown'}")
+    _print_git_banner(ws)
+    return {"status": "created", "commit": sha}
+
+
 def ensure_git_snapshot(ws: Path) -> dict:
     """#739 — legacy workspaces may predate git. After a successful upgrade,
     give them a snapshot repo (init + one commit) so every later change has
@@ -346,39 +454,11 @@ def ensure_git_snapshot(ws: Path) -> dict:
     ws = Path(ws)
     if (ws / ".git").exists():
         return {"status": "existing"}
-    try:
-        # .gitignore BEFORE the first add -A so the snapshot stays clean
-        (ws / ".gitignore").write_text(_GITIGNORE_BODY, encoding="utf-8")
-        # explicit identity + --no-gpg-sign: a snapshot commit must not
-        # depend on host git config (bare CI runners carry none). NB the
-        # -c config overrides go BEFORE the subcommand — after `commit`
-        # they mean "reuse that commit's message".
-        for label, args in (
-            ("init", ("init",)),
-            ("add", ("add", "-A")),
-            ("commit", ("-c", "user.name=kunglao-upgrade",
-                        "-c", "user.email=kunglao-upgrade@localhost",
-                        "commit", "--no-gpg-sign", "-m", _SNAPSHOT_COMMIT_MSG)),
-        ):
-            proc = _run_git(ws, *args)
-            if proc.returncode != 0:
-                tail = (proc.stderr or proc.stdout or "").strip().splitlines()
-                why = tail[-1] if tail else f"exit {proc.returncode}"
-                print(f"kunglao-upgrade: WARN — git snapshot skipped at "
-                      f"`git {label}`: {why}", file=sys.stderr)
-                _emit(ws, "git_snapshot_skipped", f"git {label}: {why}")
-                return {"status": "skipped", "reason": f"git {label}"}
-    except FileNotFoundError:
-        print("kunglao-upgrade: WARN — git snapshot skipped (git binary "
-              "not found); the upgrade itself is unaffected.",
-              file=sys.stderr)
-        _emit(ws, "git_snapshot_skipped", "git binary not found")
-        return {"status": "skipped", "reason": "git-missing"}
-    except OSError as exc:
-        print(f"kunglao-upgrade: WARN — git snapshot skipped: {exc}",
-              file=sys.stderr)
-        _emit(ws, "git_snapshot_skipped", str(exc))
-        return {"status": "skipped", "reason": "io-error"}
+    ok, reason = _git_bootstrap_commit(
+        ws, _SNAPSHOT_COMMIT_MSG, "git snapshot",
+        "git_snapshot_skipped", "git-snapshot")
+    if not ok:
+        return {"status": "skipped", "reason": reason}
     rev = _run_git(ws, "rev-parse", "--short", "HEAD")
     sha = rev.stdout.strip() if rev.returncode == 0 else None
     _print_git_banner(ws)
@@ -422,6 +502,32 @@ def upgrade(ws: Path, dry_run: bool = False,
                                        "detail": "dry-run"})
         return RC_OK
 
+    # ---- #753 B1: git-first rollback anchor -------------------------------
+    # User ruling 2026-08-27: 未提交不升、无 git 先锚——坏掉必须能回滚。
+    gate_state, dirty_n = _probe_dirty(ws)
+    if gate_state == "dirty":
+        _emit_event("gate-dirty", "fail", f"{dirty_n} uncommitted entries")
+        print(f"kunglao-upgrade: REFUSED (RC_DIRTY_WORKSPACE=6) — {ws} has "
+              f"{dirty_n} uncommitted change(s); migrating without a clean "
+              f"rollback anchor is unrecoverable (#753).", file=sys.stderr)
+        print("kunglao-upgrade: commit or stash first, then re-run:",
+              file=sys.stderr)
+        print(f"  git -C {ws} add -A && git -C {ws} commit --no-gpg-sign "
+              f"-m \"checkpoint before kunglao upgrade\"", file=sys.stderr)
+        print(f"  (or) git -C {ws} stash push --include-untracked",
+              file=sys.stderr)
+        return RC_DIRTY_WORKSPACE
+    anchor: dict = {"status": "clean"}
+    if gate_state == "absent":
+        _emit_event("gate-dirty", "ok", "no git — anchoring first")
+        anchor = ensure_pre_upgrade_anchor(ws)
+    elif gate_state == "clean":
+        _emit_event("gate-dirty", "ok", "clean owned repo")
+    else:
+        _emit_event("gate-dirty", "warn", "probe unreadable")
+        _warn_git_skip("git status probe unreadable",
+                       "cannot verify workspace cleanliness")
+
     pre = user_data_digest(ws)
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     snap_path = ws / "runs" / f"upgrade-snapshot.{ts}.json"
@@ -431,11 +537,13 @@ def upgrade(ws: Path, dry_run: bool = False,
                          encoding="utf-8")
 
     applied = 0
+    _emit_event("migration-start", "ok", f"{origin}->{target} migrations={len(plan)}")
     for v, fn in plan:
         for item in fn(ws, dry=False):
             applied += 1
             print(f"  [{v}] {item} ok")
             _emit(ws, "upgrade_item", item)
+            _emit_event("item", "ok", item)
             if items_out is not None:
                 items_out.append({"name": item, "action": "applied",
                                    "detail": f"version={v}"})
@@ -444,23 +552,78 @@ def upgrade(ws: Path, dry_run: bool = False,
     if pre != post:
         changed = sorted(k for k in set(pre) | set(post)
                          if pre.get(k) != post.get(k))
+        _emit_event("iron-rule", "fail",
+                    f"{len(changed)} file(s): {changed[:5]}...")
         print(f"kunglao-upgrade: IRON RULE VIOLATION — user data changed "
               f"({len(changed)} file(s): {changed[:5]}...). Snapshot kept: "
               f"{snap_path}", file=sys.stderr)
         return RC_IRON_RULE
+    _emit_event("iron-rule", "ok", f"{len(pre)} user-data file(s) invariant")
 
-    # stamp to target even when no migration entry exists for the gap
-    # (forward stamps ride the last migration's refresh; belt & braces).
-    # #758 G4: gated by the SAME frame predicate as the migration item —
-    # otherwise this tail would bypass the gate and lie anyway. Silent:
-    # the item above already emitted the one WARN this run needs.
-    _guarded_stamp_refresh(ws, version=target, warn=False)
-    _emit(ws, "upgrade", f"{origin}->{target} items={applied}")
-    print(f"kunglao-upgrade: {origin} -> {target} "
-          f"({applied} item(s), snapshot {snap_path.name})")
-    # #739 — snapshot layer for workspaces that predate git; WARN-only,
-    # never changes the exit code
-    ensure_git_snapshot(ws)
+    # ---- #753 B4: atomic finish sequence -----------------------------------
+    # The incident behind this issue died AFTER stamp but BEFORE the summary
+    # event, silently, with rc 0. From here on every step is guarded: any
+    # exception surfaces as RC_INCOMPLETE=7 plus a summary=fail event —
+    # never a silent RC_OK. (A hard external kill cannot be caught in-process;
+    # B1's anchor makes that revertable and the flushed [event] trail above
+    # records the exact last completed node.)
+    tail_error = ""
+    try:
+        # stamp to target even when no migration entry exists for the gap
+        # (forward stamps ride the last migration's refresh; belt & braces).
+        # #758 G4: gated by the SAME frame predicate as the migration item —
+        # otherwise this tail would bypass the gate and lie anyway. Silent:
+        # the item above already emitted the one WARN this run needs.
+        _guarded_stamp_refresh(ws, version=target, warn=False)
+        _emit_event("stamp", "ok", f"version={target}")
+        _emit(ws, "upgrade", f"{origin}->{target} items={applied}")
+        print(f"kunglao-upgrade: {origin} -> {target} "
+              f"({applied} item(s), snapshot {snap_path.name})")
+        _emit_event("summary", "ok", f"{origin}->{target} items={applied}")
+        # snapshot layer. When THIS run created the anchor we land the
+        # post-state commit ourselves (one `git revert` back to the anchor;
+        # the tree ends clean so later runs stay legal). Otherwise fall
+        # through to the #739 recovery attempt (skipped-anchor workspaces).
+        if anchor.get("status") == "created":
+            post = _run_git(ws, "add", "-A")
+            if post.returncode == 0:
+                post = _run_git(ws, *_GIT_IDENTITY, "-m", _POST_STATE_MSG)
+            if post.returncode != 0:
+                tail = (post.stderr or post.stdout or "").strip().splitlines()
+                why = tail[-1] if tail else f"exit {post.returncode}"
+                _warn_git_skip("post-upgrade state commit", why)
+                _emit(ws, "git_snapshot_skipped",
+                      f"post-state commit: {why}")
+                _emit_event("git-snapshot", "warn",
+                            f"anchor@{anchor.get('commit')} kept; "
+                            f"post-state skipped: {why}")
+            else:
+                rev = _run_git(ws, "rev-parse", "--short", "HEAD")
+                head = rev.stdout.strip() if rev.returncode == 0 else "?"
+                _emit_event("git-snapshot", "ok",
+                            f"anchor@{anchor.get('commit')} "
+                            f"post-state@{head}")
+        else:
+            # #739 — snapshot layer for workspaces that predate git; WARN-only,
+            # never changes the exit code
+            snap = ensure_git_snapshot(ws)
+            if snap.get("status") == "skipped":
+                _emit_event("git-snapshot", "warn",
+                            str(snap.get("reason") or "skipped"))
+            else:
+                _emit_event("git-snapshot", "ok", snap.get("status", ""))
+        # #753 B3 — the skill package just moved; Claude Code picks the new
+        # slash-commands/hooks up only after a plugin reload.
+        print("kunglao-upgrade: skill package updated — run /reload-plugins "
+              "in Claude Code to activate")
+    except Exception as exc:  # noqa: BLE001 — incomplete, not silent success
+        tail_error = f"{type(exc).__name__}: {exc}"
+        _emit_event("summary", "fail", tail_error)
+    if tail_error:
+        print(f"kunglao-upgrade: INCOMPLETE (RC_INCOMPLETE=7) — migration "
+              f"applied but the finish sequence aborted ({tail_error}); "
+              f"re-run upgrade to complete stamping/cleanup.", file=sys.stderr)
+        return RC_INCOMPLETE
     return RC_OK
 
 
@@ -487,6 +650,8 @@ def main(argv: list[str] | None = None) -> int:
             (RC_OK, False): "ok" if items_out else "already-current",
             RC_UNKNOWN_ORIGIN: "refused",
             RC_IRON_RULE: "iron-rule-violation",
+            RC_DIRTY_WORKSPACE: "refused-dirty",
+            RC_INCOMPLETE: "incomplete",
         }
         # pick first matching key
         chosen = "ok"

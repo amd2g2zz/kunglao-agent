@@ -172,6 +172,7 @@ EMIT_ACTIONS = [
     "dispatch",
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "failure_blocked",
+    "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "hypothesis_seed",    # #662 PQ scaffold seeding
     "install_attempt",    # #700 toolchain_install per-item install events
