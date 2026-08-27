@@ -325,7 +325,7 @@ def active_lessons(library: Path | str) -> list[Path]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="lessons_telemetry.py",
-        description="CBM quartet + utility_score + tombstone (#526)")
+        description="CBM quartet + utility_score + tombstone")
     ap.add_argument("library", help="lessons library directory")
     sub = ap.add_subparsers(dest="cmd", required=True)
 

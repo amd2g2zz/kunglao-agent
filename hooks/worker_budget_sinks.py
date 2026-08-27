@@ -414,7 +414,7 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                        f'agent={agent_name or "?"} (#461 linkage: renew + '
                        f'arm + phase=DISPATCH)')
     except Exception as exc:  # noqa: BLE001 - linkage never blocks dispatch
-        print(f'[kunglao-agent] dispatch linkage WARN (fail-open, #461): '
+        print(f'[kunglao-agent] dispatch linkage WARN (fail-open): '
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
 
 

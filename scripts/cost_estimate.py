@@ -111,7 +111,7 @@ def _tier_cheapness(claim: dict) -> float:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="cost_estimate.py",
-        description="pre-dispatch cost estimator (#309): claim + sample features -> "
+        description="pre-dispatch cost estimator: claim + sample features -> "
                     "estimated tokens/calls/cost")
     ap.add_argument("workspace", help="workspace root (claim-register.yaml + sample_features.yaml)")
     ap.add_argument("--claim", default=None, help="claim id (default: first OPEN claim)")

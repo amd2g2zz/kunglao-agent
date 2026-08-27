@@ -109,7 +109,7 @@ def mark_dependents(ws: Path, dry_run: bool = False) -> list:
 
 
 def main(argv: list | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Propagate refutation along claim deps (#241)")
+    parser = argparse.ArgumentParser(description="Propagate refutation along claim deps")
     parser.add_argument("workspace", help="workspace root")
     parser.add_argument("--dry-run", action="store_true",
                         help="report what would be marked without writing")

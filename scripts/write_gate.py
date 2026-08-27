@@ -478,7 +478,7 @@ def audit_workspace(ws: Path) -> list[dict]:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI: write_gate.py <ws> [--json]. 0 clean / 1 violations / 2 usage error."""
-    ap = argparse.ArgumentParser(description="write_gate — write-side gate auditor (#236)")
+    ap = argparse.ArgumentParser(description="write_gate — write-side gate auditor")
     ap.add_argument("ws", nargs="?", type=Path, help="workspace root")
     ap.add_argument("--json", action="store_true",
                     help="machine-readable JSON output")

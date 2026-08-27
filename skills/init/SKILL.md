@@ -17,7 +17,7 @@ analysis; a workspace that is not initialized is refused work.
 
 ## Flow
 
-0. **Task-spec intake (needs-first, #449)** — confirm the primary
+0. **Task-spec intake (needs-first)** — confirm the primary
    questions / scope / constraints / depth / success_criteria BEFORE any
    environment or scaffold decision: the environment is a function of the
    task (env = f(task_spec)), never of the project-type template alone.
@@ -30,7 +30,7 @@ analysis; a workspace that is not initialized is refused work.
    WARN; every field the task_spec does not answer stays HARD
    (conservative default — an absent task_spec is byte-identical to a
    VM-required workspace).
-1. **Target alignment (#455)** — run
+1. **Target alignment ** — run
    `python <SKILL_DIR>/scripts/kunglao-init.py <workspace>` FIRST; undecided
    intake items (workspace path -> analysis target -> project type) exit 8
    with a structured pending list on stdout (JSON). Collect the answers via
@@ -51,12 +51,12 @@ analysis; a workspace that is not initialized is refused work.
 5. **Toolchain probe** — run per-project-type probes (Windows: Ghidra-or-IDA
    + VM; Linux: Ghidra-or-IDA + remote debugger; Android: ADB + rooted
    device + frida-server — Android NEVER probes VMware/VBox or the 9876/1337
-   VM channel). The probe consumes `task_spec.yaml` when present (#449:
+   VM channel). The probe consumes `task_spec.yaml` when present (:
    static-only → the VM checks are WARN, not HARD); missing/unreadable
    fields stay HARD. Hard failures report root-cause guidance; the
    ask-then-install flow runs only under `--assume-yes` (stdin is not a user
    channel).
-6. **Deploy the engineering environment** (#478) — init itself deploys
+6. **Deploy the engineering environment** — init itself deploys
    hooks (creates `<ws>/.claude/settings.json` when absent, then registers
    + self-checks; `--no-hooks` is the only skip), copies the core 3
    subagents to `<ws>/.claude/agents/`, records the MCP supply state in
@@ -66,7 +66,7 @@ analysis; a workspace that is not initialized is refused work.
    deployment. Activation (which hooks FIRE) stays a separate
    orchestrator act:
    `python <SKILL_DIR>/scripts/hook_activation.py <workspace> --wire-up`
-   remains the canonical re-registration/repair entry (#445).
+   remains the canonical re-registration/repair entry .
 
 Repeat init on an existing workspace resumes idempotently from
 `analysis_state.txt` + `claim-register.yaml` — never rebuild or overwrite.
@@ -93,10 +93,10 @@ never guess, no bare argparse-style error dump.
 ## Missing `--type`
 
 With a workspace but no `--type`, never silently default to `windows`:
-route into the #455 intake type-alignment sequence — a magic-number sniff is
+route into the intake type-alignment sequence — a magic-number sniff is
 only a suggestion, the operator confirms the type before scaffolding, and
-an unresolved ambiguity is surfaced as a decision_pending item (#455's
-schema; not implemented here).
+an unresolved ambiguity is surfaced as a decision_pending item
+(schema; not implemented here).
 
 ## Examples
 

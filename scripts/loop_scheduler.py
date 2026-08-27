@@ -209,7 +209,7 @@ def upsert_durable_loop(ws: Path | str, interval: str = "5m") -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="loop_scheduler.py",
-                                 description="durable /loop registration (#754)")
+                                 description="durable /loop registration")
     ap.add_argument("workspace")
     ap.add_argument("--interval", default="5m")
     ap.add_argument("--check", action="store_true",

@@ -50,6 +50,6 @@ def check_quality_gate_ids() -> bool:
     missing = cited - registry
     if missing:
         print(f"SELF-FAIL: workflow cites gate ids {sorted(missing)} not in GATES "
-              f"{sorted(registry)} (stale numbering, #563)")
+              f"{sorted(registry)} (stale numbering)")
         return False
     return True

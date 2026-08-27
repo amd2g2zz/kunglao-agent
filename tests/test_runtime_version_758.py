@@ -182,7 +182,9 @@ class TestG4FrameGate:
         items: list = []
         assert up.upgrade(ws, False, items) == 0
         err = capsys.readouterr().err
-        assert "frame section stale" in err and "#758" in err
+        assert "frame section stale" in err
+        assert "G3 merge" in err, (
+            "the WARN must point at the G3 merge-upgrade remediation")
         assert err.count("frame section stale") == 1, (
             "item path warns once; belt-and-braces tail must skip silently")
         fresh = tv.stamp_line(CUR_VERSION)

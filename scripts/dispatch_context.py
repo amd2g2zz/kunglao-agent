@@ -403,7 +403,7 @@ def verifier_dispatch_view(ws: Path, claim_id: str) -> dict:
 def main() -> int:
     import argparse
     parser = argparse.ArgumentParser(
-        description="Build / validate / write a #527 dispatch context block")
+        description="Build / validate / write a dispatch context block")
     parser.add_argument("workspace", help="workspace root")
     parser.add_argument("--claim", required=True, help="claim id (C-NN)")
     parser.add_argument("--tier", type=int, default=1, choices=[1, 2, 3])

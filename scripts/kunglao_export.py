@@ -225,7 +225,7 @@ def verify_manifest(archive: Path) -> int:
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="workspace export tool (#540)")
+    ap = argparse.ArgumentParser(description="workspace export tool")
     sub = ap.add_subparsers(dest="cmd", required=True)
     
     p_exp = sub.add_parser("export", help="Export workspace")

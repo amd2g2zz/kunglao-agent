@@ -712,7 +712,7 @@ def migrate_workspace(ws: Path, *, backup: bool = False, dry_run: bool = False,
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="migrate old-format facts to the aligned schema (#336)")
+    ap = argparse.ArgumentParser(description="migrate old-format facts to the aligned schema")
     ap.add_argument("ws", type=Path, help="workspace root (contains facts/)")
     ap.add_argument("--backup", action="store_true",
                     help="backup facts/ to facts.bak-pre336/ before migrating")

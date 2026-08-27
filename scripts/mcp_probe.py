@@ -420,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
         pass
     parser = argparse.ArgumentParser(
         prog="mcp_probe",
-        description="MCP supply probe — per-type required/optional MCP servers (#316)",
+        description="MCP supply probe — per-type required/optional MCP servers",
     )
     parser.add_argument("workspace", help="workspace root path")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
@@ -432,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="user-level claude.json path (default: ~/.claude.json)")
     parser.add_argument(
         "--mcp-inventory", action="store_true",
-        help="enumeration face (#515): list every registered MCP server "
+        help="enumeration face: list every registered MCP server "
              "(name, mcp__<server>__* prefix, surfaces, manifest tier) as "
              "JSON; always exits 0; mutually exclusive with --json/--reproduce")
     args = parser.parse_args(argv)

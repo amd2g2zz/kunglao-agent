@@ -197,13 +197,13 @@ def mark_loop_registered(workspace: Path) -> int:
     path = workspace / "runs" / ".heartbeat.json"
     if not path.exists():
         print(f"FAIL: no {path} — register the heartbeat first "
-              f"(--heartbeat-on), then mark the loop (#461)", file=sys.stderr)
+              f"(--heartbeat-on), then mark the loop", file=sys.stderr)
         return 1
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         print(f"FAIL: {path} unreadable ({exc}) — re-register with "
-              f"--heartbeat-on (#461)", file=sys.stderr)
+              f"--heartbeat-on", file=sys.stderr)
         return 1
     state[LOOP_MARKER_KEY] = True
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
@@ -238,7 +238,7 @@ def heartbeat_check(workspace: Path) -> int:
     # #754 E2: same continuous-tick standard as the dispatch gate and --verify.
     alive, detail = evaluate_tick_continuity(state)
     if not alive:
-        print(f"HEARTBEAT NOT CONTINUOUS (#754): {detail}", file=sys.stderr)
+        print(f"HEARTBEAT NOT CONTINUOUS: {detail}", file=sys.stderr)
         return 1
     print(f"OK: heartbeat alive (started {state.get('started_ts')}, "
           f"last tick {state.get('last_tick_ts')}; {detail})")

@@ -84,7 +84,7 @@ def verify_loop(ws: str) -> int:
     """
     hb = Path(ws) / "runs" / ".heartbeat.json"
     if not hb.exists():
-        print("HEARTBEAT UNREGISTERED (HARD, #461): no "
+        print("HEARTBEAT UNREGISTERED (HARD): no "
               f"{hb} — monitoring was never started. Fix: run "
               "hook_activation.py <ws> --heartbeat-on, then register the "
               "cron below.", file=sys.stderr)
@@ -92,19 +92,19 @@ def verify_loop(ws: str) -> int:
     try:
         data = json.loads(hb.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
-        print(f"HEARTBEAT UNREADABLE (HARD, #461): {hb}: {exc} — "
+        print(f"HEARTBEAT UNREADABLE (HARD): {hb}: {exc} — "
               "re-register with --heartbeat-on.", file=sys.stderr)
         return 1
     if not data.get("loop_registered"):
         print(
-            "CRON NOT REGISTERED (HARD, #461): runs/.heartbeat.json exists "
+            "CRON NOT REGISTERED (HARD): runs/.heartbeat.json exists "
             "but loop_registered is not true — the /loop heartbeat cron was "
             "never created (or never fired). Monitoring is NOT running and "
             "proceeding silently is forbidden. Fix NOW: re-run "
             "heartbeat_loop_prompt.py <ws> and pass its output to "
             "CronCreate */5 * * * * (or /loop 5m <prompt>); the loop's "
             "first action marks loop_registered=true. Re-run this --verify "
-            "after TWO consecutive ticks (<= 2x interval, #754); still "
+            "after TWO consecutive ticks (<= 2x interval); still "
             "failing then means the CronCreate itself failed — re-create it.",
             file=sys.stderr)
         return 1
@@ -118,7 +118,7 @@ def verify_loop(ws: str) -> int:
     alive, detail = evaluate_tick_continuity(data)
     if not alive:
         print(
-            f"LOOP NOT TICKING (HARD, #609/#754): loop_registered=true but {detail} — "
+            f"LOOP NOT TICKING (HARD): loop_registered=true but {detail} — "
             "the cron is registered yet not firing continuously (deleted after "
             "first fire, session ended, or never created). The marker is "
             "history, not liveness. Fix: re-register the /loop cron DURABLE "

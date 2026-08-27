@@ -10,7 +10,7 @@ subcommands:
     invocation: "/kunglao-agent:init <workspace> [--type windows|linux|android|web|macos]"
     argument-hint: "<workspace> [--type windows|linux|android|web|macos] — no args → guided setup"
     zero-args: "guided setup prompt — workspace required, never guess, never a bare argparse error"
-    missing-args: "workspace without --type routes to the #455 intake type-alignment step — never silently default"
+    missing-args: "workspace without --type routes to the intake type-alignment step — never silently default"
     example: "/kunglao-agent:init ~/cases/synth-dropper --type windows"
     next-step: "uninitialized workspace → /kunglao-agent:init"
   analysis:

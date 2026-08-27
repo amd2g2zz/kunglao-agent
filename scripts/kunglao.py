@@ -312,7 +312,19 @@ def cmd_upgrade(args) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(prog="kunglao.py", description="kunglao-agent unified entry")
+    ap = argparse.ArgumentParser(
+        prog="kunglao.py",
+        description="kunglao-agent unified entry",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "refusal exit codes:\n"
+            "  5 = stale workspace (template stamp trails or predates the skill "
+            "version) — run /kunglao-agent:upgrade <ws> first\n"
+            "  6 = heartbeat verify failed (analysis entry) — run "
+            "/kunglao-agent:resume for re-arm guidance\n"
+            "(resume/check-stale return 5; analysis entry returns 5 or 6)"
+        ),
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p_decide = sub.add_parser("decide", help="convergence decision (M1)")
@@ -348,14 +360,14 @@ def main() -> int:
     p_health.set_defaults(func=cmd_health)
 
     p_resume = sub.add_parser("resume",
-                              help="crash/reboot recovery brief (#466, read-only)")
+                              help="crash/reboot recovery brief (read-only)")
     p_resume.add_argument("workspace", nargs="?", default=".")
     p_resume.add_argument("--json", action="store_true")
     p_resume.set_defaults(func=cmd_resume)
 
     p_check_stale = sub.add_parser(
         "check-stale",
-        help="stale-workspace gate (#748): JSON envelope + rc 0/5 "
+        help="stale-workspace gate: JSON envelope + rc 0/5 "
              "(status=current|stale|no-stamp); use this before "
              "/kunglao-agent:analysis or /kunglao-agent:resume on a "
              "workspace whose template stamp may trail the skill")
@@ -363,7 +375,7 @@ def main() -> int:
     p_check_stale.set_defaults(func=cmd_check_stale)
 
     p_up = sub.add_parser("upgrade",
-                          help="workspace framework-scaffold migration (#726)")
+                          help="workspace framework-scaffold migration")
     p_up.add_argument("workspace", nargs="?", default=".")
     p_up.add_argument("--dry-run", action="store_true",
                       help="print the migration plan, write nothing")
@@ -371,7 +383,7 @@ def main() -> int:
 
     p_analysis = sub.add_parser(
         "analysis",
-        help="#754 analysis entry gate: stale gate (#748) -> durable /loop "
+        help="analysis entry gate: stale gate -> durable /loop "
              "reconcile -> continuous-tick verify; rc0=clear, 5=stale, "
              "6=heartbeat verify failed")
     p_analysis.add_argument("workspace", nargs="?", default=".")

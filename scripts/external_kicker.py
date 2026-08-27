@@ -857,7 +857,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--settings", default=None,
                         help="project-level settings.json path (default: the "
                              "workspace-parent target from the wire_up_settings "
-                             "deployment registry — hook_deployment_targets[1], #410)")
+                             "deployment registry — hook_deployment_targets[1])")
     parser.add_argument("--claude-bin", default="claude", help="claude CLI binary")
     parser.add_argument("--stale-minutes", type=int, default=DEFAULT_STALE_MINUTES,
                         help="both heartbeat signals stale beyond this = session dead")

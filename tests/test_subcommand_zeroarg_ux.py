@@ -150,6 +150,23 @@ def test_root_menu_has_next_steps_guidance() -> None:
         assert command in body, f"next-steps missing command for {state}: {command}"
 
 
+def test_help_skill_usage_table_covers_registry() -> None:
+    """Render surface D: the /kunglao-agent:help body's Usage table must
+    cover every registry subcommand token plus its example. This table went
+    stale during the upgrade promotion while every other render surface was
+    linted — this closes that hole."""
+    body = _body(HELP)
+    m = re.search(r"^## Usage$(.*?)(?=^## )", body, re.S | re.M)
+    assert m, "help SKILL.md must keep the ## Usage section"
+    usage = m.group(1)
+    for name, rec in _registry().items():
+        command = rec["invocation"].split(None, 1)[0]
+        assert command in usage, (
+            f"help SKILL.md Usage table missing registry command: {command}")
+        assert str(rec["example"]) in usage, (
+            f"help SKILL.md missing example for {command}: {rec['example']}")
+
+
 def test_subcommand_hints_equal_registry_hints() -> None:
     """Render surface B: each subcommand frontmatter argument-hint equals the
     registry hint EXACTLY (a mirror is what drifted in #413 — init had a
@@ -228,7 +245,8 @@ def test_init_missing_type_routes_to_455_intake() -> None:
     body = _body(INIT)
     assert re.search(r"missing .--type.", body, re.I), (
         "init SKILL.md missing a 'missing --type' branch")
-    assert "#455" in body, "the missing-type branch must route to the #455 intake sequence"
+    assert "intake type-alignment" in body or "type-alignment sequence" in body, (
+        "the missing-type branch must route to the intake type-alignment sequence")
     assert re.search(r"never silently default", body, re.I), (
         "init must explicitly forbid silently defaulting the type")
 

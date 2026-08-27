@@ -4,10 +4,10 @@ Two template families live here:
 
 - `state/`, `CLAUDE.md.*.tmpl`, `fact-frontmatter.md` — workspace scaffold
   templates consumed by `/init` (see SKILL.md Phase 0).
-- `scripts/*.py.tmpl` — analysis script generation templates (issue #278),
+- `scripts/*.py.tmpl` — analysis script generation templates,
   instantiated deterministically by `scripts/template_gen.py`.
 
-## Script-generation templates (issue #278)
+## Script-generation templates
 
 Each `scripts/<name>.py.tmpl` carries `{{KEY}}` placeholders, a
 field-validated process skeleton, and explicit TODO markers for the parts
@@ -40,13 +40,13 @@ this catalog together.
 
 ### Classification framework (for future script absorption)
 
-The absorption half of #278 (migrating 236 field scripts from the Windows
+The absorption half (migrating 236 field scripts from the Windows
 host) classifies each script by reuse surface when that host becomes
 reachable:
 
 | Class | Criteria (any one promotes; all must hold to demote) | Action | Destination |
 | --- | --- | --- | --- |
-| Generic CLI | Logic is sample-independent or trivially parameterizable; reusable across same-class samples; no per-sample magic numbers | migrate — port as a standalone parameterized CLI (`scripts/`, #277 discipline), register in `tools/_INDEX.yaml` if an analysis tool | scripts/ + tools/_INDEX.yaml |
+| Generic CLI | Logic is sample-independent or trivially parameterizable; reusable across same-class samples; no per-sample magic numbers | migrate — port as a standalone parameterized CLI (`scripts/`, deterministic discipline), register in `tools/_INDEX.yaml` if an analysis tool | scripts/ + tools/_INDEX.yaml |
 | Semi-generic | Process is generic but carries per-sample constants (offsets, key addresses, stage table positions) | adapt — extract constants as parameters; sink the reusable skeleton into a template | templates/scripts/*.tmpl or scripts/ |
 | One-off | Ad-hoc code for a single sample, no reuse value or not parameterizable | template — keep as a reproducible skeleton, instantiated per sample by `template_gen.py` | templates/scripts/*.tmpl |
 

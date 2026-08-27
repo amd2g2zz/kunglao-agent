@@ -2142,7 +2142,7 @@ def check(ws: Path, project_type: str | None = None,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="toolchain",
-        description="Type-aware toolchain probe matrix (#304)",
+        description="Type-aware toolchain probe matrix",
     )
     parser.add_argument("workspace", help="workspace root path")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
@@ -2154,7 +2154,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--capability", action="store_true",
                         help="run CAPABILITY-tier trial probes (decompiler "
                              "import trial; minutes-long — init/on-demand "
-                             "only, #474)")
+                             "only)")
     args = parser.parse_args(argv)
 
     ws = Path(args.workspace).resolve()
@@ -2164,7 +2164,7 @@ def main(argv: list[str] | None = None) -> int:
         task_spec = load_task_spec(ws)
     except ValueError as exc:
         print(f"WARNING: {exc} — toolchain layers stay conservative HARD "
-              f"(#449; fix task_spec.yaml at needs-first intake)",
+              f"(fix task_spec.yaml at needs-first intake)",
               file=sys.stderr)
         task_spec = None
     try:

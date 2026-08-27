@@ -52,7 +52,7 @@ def session_start(workspace: Path) -> int:
 
 if __name__ == "__main__":
     import argparse
-    ap = argparse.ArgumentParser(description="#533 SessionStart hook")
+    ap = argparse.ArgumentParser(description="SessionStart hook")
     ap.add_argument("workspace", type=Path)
     args = ap.parse_args()
     sys.exit(session_start(args.workspace))

@@ -4,13 +4,13 @@ description: >-
   Migrate a legacy workspace's framework scaffold forward to the current
   kunglao-agent release. Hooks rewire, template refresh, ALWAYS_ARMED hook
   state repair, toolchain manifest refresh, event vocabulary updates, and
-  `#720` `.agent/` metadata seeding. **User data is never touched** — the
+  `.agent/` metadata seeding. **User data is never touched** — the
   seven user-data dirs (claims/ facts/ runs/ hypotheses/ notes/ evidence/
   oracle/) are sha256-normalized before/after; any byte difference aborts
   with `RC_IRON_RULE=4` and the pre-upgrade snapshot stays on disk for
   forensics. Use `--dry-run` to print the per-item plan without writing.
-  Wraps `scripts/kunglao_upgrade.py` (#726) + the post-upgrade git
-  snapshot path (#739, legacy no-git workspaces only). Use when an
+  Wraps `scripts/kunglao_upgrade.py` + the post-upgrade git
+  snapshot path (, legacy no-git workspaces only). Use when an
   initialized workspace's version stamp trails the skill package and you
   want it brought current without losing analysis data.
 arguments: [workspace]
@@ -38,8 +38,8 @@ must be initialized first with `/kunglao-agent:init`.
 | `0` | migrated / already at target / dry-run plan printed | "done" |
 | `3` | workspace has no version stamp | "refused, run init first" |
 | `4` | iron-rule violation — user data drifted | "user-data drift detected, snapshot at `<workspace>/.kunglao-upgrade-pre-snapshot/` kept on disk; restore from snapshot" |
-| `6` | dirty owned-repo (#753) — migration needs a clean rollback anchor | "refused: commit or stash first (commands on stderr), then re-run" |
-| `7` | incomplete (#753) — migration applied but the finish sequence aborted; re-run upgrade | "warning: re-run /kunglao-agent:upgrade to complete" |
+| `6` | dirty owned-repo — migration needs a clean rollback anchor | "refused: commit or stash first (commands on stderr), then re-run" |
+| `7` | incomplete — migration applied but the finish sequence aborted; re-run upgrade | "warning: re-run /kunglao-agent:upgrade to complete" |
 
 ## CLI
 
@@ -66,7 +66,7 @@ JSON envelope (when `--json` lands in a future commit):
 
 The seven user-data directories (`claims/`, `facts/`, `runs/`, `hypotheses/`,
 `notes/`, `evidence/`, `oracle/`) are read-only during the migration. Carriers
-whose framework stamp rides ON data files (`#536` comment form) have the stamp
+whose framework stamp rides ON data files (comment form) have the stamp
 line normalized away before hashing, so a sanctioned stamp refresh never
 trips the rule.
 
@@ -74,13 +74,13 @@ trips the rule.
 
 - Touching user data — abort + snapshot instead.
 - Initializing an un-stamped workspace — refuse and direct to `/kunglao-agent:init`.
-- Downgrading a workspace to an older stamp — `kunglao upgrade` is forward-only; downgrading is not in scope of #726.
+- Downgrading a workspace to an older stamp — `kunglao upgrade` is forward-only; downgrading is not in scope.
 
 ## Related
 
-- `#726` — declarative convergence upgrade (CLI shape + migration registry).
-- `#739` — post-upgrade git snapshot for legacy no-git workspaces + explicit banner.
-- `#456` — single-source subcommand UX design D4 (this skill is a render surface of `skills/subcommands.yaml`).
+- Declarative convergence upgrade (CLI shape + migration registry).
+- Post-upgrade git snapshot for legacy no-git workspaces + explicit banner.
+- Single-source subcommand UX design D4 (this skill is a render surface of `skills/subcommands.yaml`).
 
 ## Deploy-surface items (#755, migration entry 0.1.4)
 
@@ -90,10 +90,10 @@ the exit code):
 
 | Item | Behavior |
 |------|----------|
-| `agents_refresh` | ws `.claude/agents/*.md` re-copied byte-exact from the executing install when md5s differ (#478 semantics) |
+| `agents_refresh` | ws `.claude/agents/*.md` re-copied byte-exact from the executing install when md5s differ (semantics) |
 | `claudemd_merge` | collect-and-merge: frame rebuilt from the CURRENT template; task_spec constraint block + out-of-frame sections stay byte-exact; unplaceable legacy bodies are skipped untouched |
 | `mcp_refresh` | missing `.mcp.json` -> init-parity scaffold; existing files are never clobbered |
-| `env_manifest_refresh` | missing `env-manifest.yaml` ledger backfilled via #727 channel resolution (defaulted-local WARNs); existing ledgers get only the `kunglao_version` bump |
+| `env_manifest_refresh` | missing `env-manifest.yaml` ledger backfilled via channel resolution (defaulted-local WARNs); existing ledgers get only the `kunglao_version` bump |
 | `toolchain_manifest` | code-reality face: `runs/.init-report.json skill_version` refreshed; absence reports toward re-init, never fabricates state |
 | `uv_sync` | `uv sync --locked --project <install root>`, timeout-bounded; all failures are WARN faces |
 | `skill_staleness` | detect-only install lag report (below) |

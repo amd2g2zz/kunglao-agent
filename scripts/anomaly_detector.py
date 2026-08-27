@@ -516,7 +516,7 @@ def main(argv=None) -> int:
     parser.add_argument("--threshold", type=float, default=None,
                         help=f"anomaly threshold (default {DEFAULT_THRESHOLD})")
     parser.add_argument("--taint", action="store_true",
-                        help="#692 WP5: taint-findings observation mode "
+                        help="WP5: taint-findings observation mode "
                              "(distinct high-risk family concentration -> "
                              "notes/taint-observation.md)")
     args = parser.parse_args(argv)

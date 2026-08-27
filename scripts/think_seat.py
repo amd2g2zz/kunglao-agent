@@ -226,7 +226,7 @@ def maybe_think(ws: Path) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="think_seat.py",
-                                 description="#759 waiting-period THINK seat")
+                                 description="waiting-period THINK seat")
     ap.add_argument("workspace", help="workspace root")
     args = ap.parse_args(argv)
     try:

@@ -725,7 +725,7 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
             # degrade; the agent layer surfaces the exact command to the
             # user (the interactive menu is #451's negotiation interface).
             print(
-                "toolchain-install: IDA is not auto-installable (#408) — "
+                "toolchain-install: IDA is not auto-installable — "
                 "register your existing IDA MCP URL manually: "
                 "`claude mcp add --transport http ida-pro-vm <ida-mcp-url>`, "
                 "then re-run kunglao-init",
@@ -745,10 +745,10 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
             # refusal — "declined" is reserved for a real choice (a
             # --resolve answer in the negotiation menu). The prompt line is
             # flushed closed so the next stderr block cannot splice into it.
-            print(f"  no consent channel (non-interactive, #455) — "
+            print(f"  no consent channel (non-interactive) — "
                   f"{item.name} degrades automatically ({plan.degrade}); "
                   f"decide via kunglao-init's negotiation menu "
-                  f"(--resolve, #451) or re-run with --assume-yes",
+                  f"(--resolve) or re-run with --assume-yes",
                   flush=True)
             # #700: install_declined on the no-consent headless path (D3).
             _emit_install_event(ws, action="install_declined",
@@ -810,7 +810,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="toolchain-install",
-        description="ask-then-install for the kunglao toolchain (#408)",
+        description="ask-then-install for the kunglao toolchain",
     )
     parser.add_argument("workspace", help="workspace root path")
     parser.add_argument("--type", choices=toolchain.VALID_TYPES, default=None,
@@ -829,7 +829,7 @@ def main(argv: list[str] | None = None) -> int:
         task_spec = toolchain.load_task_spec(ws)
     except ValueError as exc:
         print(f"WARNING: {exc} — toolchain layers stay conservative HARD "
-              f"(#449; fix task_spec.yaml at needs-first intake)",
+              f"(fix task_spec.yaml at needs-first intake)",
               file=sys.stderr)
         task_spec = None
     try:
