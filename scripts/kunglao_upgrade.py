@@ -122,6 +122,12 @@ def _item_hooks_rewire(ws: Path, dry: bool) -> str:
     return "hooks_rewire"
 
 
+def _item_deployed_refresh(ws: Path, dry: bool) -> str:
+    """#783 T3/T4 face - delegates to deployed_refresh.item."""
+    import deployed_refresh as _dr
+    return _dr.item(ws, dry)
+
+
 def _item_always_armed_repair(ws: Path, dry: bool) -> str:
     if not dry:
         always_arm(ws)
@@ -477,6 +483,7 @@ def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
     the frame, so the end state is always the honest one."""
     return [
         _item_agents_refresh(ws, dry),          # A2/T1
+        _item_deployed_refresh(ws, dry),        # #783 T3/T4 framework copies
         _item_claudemd_merge(ws, dry),          # G3+T2/A3
         _item_mcp_refresh(ws, dry),             # A4/T3
         _item_env_manifest_refresh(ws, dry),    # A5/T3
