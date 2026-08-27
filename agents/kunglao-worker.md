@@ -129,7 +129,7 @@ derivation summary counts as insufficient-derivation: the orchestrator bounces i
 never silently waved through. THINK-role agents cite this section as the single source and add no variants.
 
 <!-- contract: plan-to-execute -->
-## Plan-to-Execute (v1.9.29)
+## Plan-to-execute
 
 After receiving a task, do **NOT execute immediately**. Trial-and-error is
 the most expensive path (c011 lesson: pass1 set a breakpoint on
@@ -267,7 +267,7 @@ write "task complete" while open questions remain on your claim.
   async callbacks — do them in synchronous context.
 
 <!-- contract: status-sync -->
-## State-write protocol (kunglao-agent §1c) — write files or you failed
+## Status reporting (state-write protocol, kunglao-agent §1c) — write files or you failed
 
 A worker that returns "done" without writing files has FAILED (the W-15
 lesson: it reported F001-F007 byte-verified but wrote zero files; its report

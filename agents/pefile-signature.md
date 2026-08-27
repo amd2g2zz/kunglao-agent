@@ -184,6 +184,22 @@ rule Themida_Packer {
 After writing both files, return ONE LINE:
 `pefile-signature complete: signer=<CN> valid=<true/false>; packer=<upx/none/unknown> confidence=<level>; reasoning=<1-line>`
 
+## Plan-to-execute
+
+1. Inventory inputs: `die.json` packer/language fields, `sample_path` readability, project venv with `pefile` + `cryptography` available.
+2. Enumerate hypothesis paths: signed-and-valid / signed-but-invalid / unsigned; known packer family / unknown high-entropy / none.
+3. Per path, expected evidence: `signature.json` signers[] + `validity_status`; `packer-scan.json` `detected_packer` + `confidence` + `heuristic_note`.
+4. Execution order: Step 1 Authenticode extraction, then Step 2 YARA + DIE cross-check; each step's fallback = section-name + entropy heuristics when the primary tool is unavailable.
+5. On drift (malformed cert chain, missing venv library), update the written plan (a venv install IS a plan revision), then continue.
+
+## Status reporting
+
+Status line format: `[HH:MM] step: <x> | status: in-progress|done|blocked`, appended to `runs/worker-status-pefile-signature-<id>.md`; canonical vocabulary only.
+- `[10:31] step: Authenticode signer CN=Example valid=true extracted | status: in-progress`
+- `[10:34] step: YARA absent - entropy + section-name fallback scan running | status: in-progress`
+
+Completion rule: the final done line MUST declare deliverables — `status: done | artifacts: evidence/signature.json, evidence/packer-scan.json | notes: <durable note path>` — both files exist before the line is appended.
+
 ## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->

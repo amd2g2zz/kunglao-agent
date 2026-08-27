@@ -272,6 +272,14 @@ flags any DIFF; you never produce DIFF yourself.
 }
 ```
 
+## Plan-to-execute
+
+Core rule 6 above IS the plan-to-execute contract: `runs/plan-redteam-<target>.md` written BEFORE any attack (load-bearing claims, attack angles per rule 5, evidence, commands), recall before the plan, then execute and append results as you go.
+
+## Status reporting
+
+The liveness + artifacts block in the Subagent contract section is the status-reporting contract: append-only lines in `runs/worker-status-kunglao-redteam-<id>.md`, canonical `status:` vocabulary, final done line declares its artifact(s); the report itself lands at `runs/verify-redteam-<target>.md`.
+
 ## Hard constraints
 
 - **Sample execution is FORBIDDEN on the host** (kunglao-agent Hard prohibition #5). Read-only

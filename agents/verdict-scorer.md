@@ -147,6 +147,22 @@ Read the output of `fact_contradiction_gate.py`. If it reports PROVEN facts on t
 - Do NOT reimplement contradiction detection — consume the gate's output.
 - Do NOT make external API calls or network requests.
 
+## Plan-to-execute
+
+1. Inventory inputs: `task_spec.yaml` primary_questions[], `claim-register.yaml`, fact frontmatter availability, contradiction-gate output.
+2. Enumerate hypothesis paths per question: answered-and-PROVEN / no answering claim / fact not PROVEN / C0b model_selection terminal-state pattern.
+3. Per path, expected evidence: cited_fact id + confidence_band value, honest gap text, contradictions[] sourced ONLY from the gate output.
+4. Execute over ALL primary_questions (Steps 1-4 in order); per-question fallback = record the gap in `unresolved[]` / `degraded[]` instead of inventing an answer.
+5. On drift (missing claim-register, unreadable fact), update the plan, then degrade honestly rather than guess.
+
+## Status reporting
+
+Status line format: `[HH:MM] step: <x> | status: in-progress|done|blocked`, appended to `runs/worker-status-verdict-scorer-<id>.md`; canonical vocabulary only.
+- `[09:12] step: q1-q4 coverage mapped to F003/F011/F027/F031 | status: in-progress`
+- `[09:15] step: gate flags PROVEN contradiction on same-topic facts - correct=false | status: in-progress`
+
+Completion rule: the final done line MUST declare deliverables — `status: done | artifacts: evidence/verdict.json | notes: <durable note path>` — the verdict file exists before the line is appended.
+
 ## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->

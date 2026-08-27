@@ -70,6 +70,22 @@ Recover Go symbols/types/itabs from pclntab via unstrip (no decompile) -> emit a
 ## Output
 4 files in `evidence_dir`. Return a one-line summary: function count, garble verdict, #annotations.
 
+## Plan-to-execute
+
+1. Inventory inputs: `die.json` language=Go confirmation, `binary_path` present, unstrip resolvable (PATH / analysis_state.txt / caller), prior evidence for `--data-at` targets.
+2. Enumerate hypothesis paths: symbols intact vs garble-hashed names (`garble_assist` route); suspicious-subset classification decrypt/c2/loader/persistence/exfil/recon.
+3. Per path, expected evidence: `unstrip-info.json` pclntab addr+size + garble verdict; `unstrip-symbols.json` Layer A counts + Layer B suspects; hints `annotations[]` markup plan.
+4. Execution order: `--info` -> default listing -> `--format ghidra` VERBATIM export -> `--xref` / `--data-at` deep dives; per-step fallback = widen suspicious-name patterns or move data targets to floss-flagged config/IOC addresses.
+5. On drift (non-Go `die.json`), update the plan, stop degraded (`status: blocked`) — never fabricate semantic names for hashed symbols.
+
+## Status reporting
+
+Status line format: `[HH:MM] step: <x> | status: in-progress|done|blocked`, appended to `runs/worker-status-go-symbols-<id>.md`; canonical vocabulary only.
+- `[11:20] step: --info parsed, 6800 funcs, garble=likely | status: in-progress`
+- `[11:26] step: annotations[] distilled, 42 targets across 6 categories | status: in-progress`
+
+Completion rule: the final done line MUST declare all four deliverables — `status: done | artifacts: evidence/unstrip-info.json, evidence/unstrip-symbols.json, evidence/unstrip-ghidra-apply.py, evidence/unstrip-ghidra-hints.json | notes: <durable note path>`.
+
 ## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->

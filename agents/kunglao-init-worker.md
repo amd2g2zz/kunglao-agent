@@ -146,6 +146,14 @@ commands, and the root-cause cascade. You never mark `done` while the init
 refused. The orchestrator compares the toolchain report against your status
 file (maker-checker: you report, the orchestrator verifies).
 
+## Plan-to-execute
+
+The Workflow section is the fixed execution order: read workspace state -> determine type with recorded reasoning -> run init (self-gating) -> relay blockers -> re-run after human install -> post-init confirmation. Write the plan into `runs/worker-status-kunglao-init-worker-<id>.md` BEFORE any state read; on exit-code drift update the plan, then take the matching branch.
+
+## Status reporting
+
+Report shape above is the status contract: one appended `[HH:MM] step: ... | status: ...` line per state change; blocked lines reference their blocker files by name; the final done line carries the artifacts declaration.
+
 ## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->

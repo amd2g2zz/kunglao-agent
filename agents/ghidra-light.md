@@ -321,6 +321,14 @@ After writing the JSON, return ONE LINE:
 Or on full failure:
 `ghidra-light degraded: <reason>`
 
+## Plan-to-execute
+
+Step 0's sequential-thinking preamble IS the plan-first contract: language -> IOCs -> MCP-or-headless tier choice -> postScript plan -> schema mapping, written into `runs/worker-status-ghidra-light-<id>.md` BEFORE any analysis tool call; on tier drift (MCP offline -> headless) update the plan, then continue, closing with `plan_vs_actual:`.
+
+## Status reporting
+
+The liveness + artifacts block in the Subagent contract section is the status-reporting contract: append-only lines (one per tier step and every state change) with canonical `status:` vocabulary; the final done line declares `artifacts: evidence/static-ghidra.json`.
+
 ## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->

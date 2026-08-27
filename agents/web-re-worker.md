@@ -156,6 +156,14 @@ crypto/websocket/debugger_bypass/cookie/runtime_probe before writing custom
 `hook_function` code, and remove hooks (`remove_hooks`) or reset state
 (`reset_browser_state`) between unrelated probes so captures stay attributable.
 
+## Plan-to-execute
+
+The peel-loop decision tree + five-step signed-parameter workflow above ARE the plan-first contract: write the plan into `runs/plan-web-re-<task>.md` BEFORE any tool call (parameter, carrying request, expected peeling tier), update on drift, close with `plan_vs_actual:`.
+
+## Status reporting
+
+The status-sync block above is the status contract: one appended line per state change in `runs/worker-status-web-re-<task>.md` (`[HH:MM] step: ... | status: ...`, canonical vocabulary); the final done line declares `artifacts:` (facts + unpack_out dirs) plus `notes: notes/<claim-id>.md`.
+
 ## Return format (3 lines, no prose padding)
 
 ```

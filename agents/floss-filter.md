@@ -193,6 +193,22 @@ floss-filter complete: <top-3 categories with counts>; <family_keyword_hits coun
 
 For example: `floss-filter complete: stack_strings=8500, paths=230, other=180; family_hits=0; outliers=2 (base64 in paths class, raw URL in other); reasoning: Go binary, K=200 cap, no family matches in 20k lines — Kaspersky Gsb.are hint NOT corroborated by binary strings`.
 
+## Plan-to-execute
+
+1. Inventory inputs first: raw line count of `floss-raw.txt`, noise-dict presence, family-keyword file presence, language hint.
+2. Enumerate hypothesis paths: (a) clean survivor set worth scoring, (b) input too small / encrypted (<100 bytes -> `input_too_small` error JSON), (c) Go runtime-symbol-dominated set needing the stack-string exception.
+3. Per path, name the expected evidence: Layer A inventory counts, Layer B per-category top-K entries, `family_keyword_hits`, outlier list shape.
+4. Execute in order: floors (Steps 2-4) -> family MUST-keep -> categorize -> score -> top-K -> statistics; each step's fallback = shift the threshold from the data and justify it in `provenance.reasoning_notes`.
+5. On drift (bimodal entropy distribution, category dominance), update the written plan FIRST, then continue filtering.
+
+## Status reporting
+
+Status line format: `[HH:MM] step: <x> | status: in-progress|done|blocked`, appended to `runs/worker-status-floss-filter-<id>.md`; canonical vocabulary only.
+- `[14:02] step: read 20k raw lines, noise exact-match drop complete | status: in-progress`
+- `[14:07] step: entropy floor shifted to 3.0 (bimodal), scoring pass started | status: in-progress`
+
+Completion rule: the final done line MUST declare deliverables — `status: done | artifacts: evidence/floss-filtered.json | notes: <durable note path>` — the artifact exists before the line is appended.
+
 ## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->
