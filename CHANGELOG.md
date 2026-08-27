@@ -8,6 +8,25 @@ release (see the mapping table at the end).
 
 ## [0.1.3] - 2026-08-25
 
+### Round 6 — Deployment Inversion, Agent Governance & Web-Lane Depth (2026-08-27)
+
+**Deployment-model inversion (#783)**
+
+- Workspace self-containment: init materializes the deployment manifest into `<workspace>/.claude/` (hooks + subagents + scaffold closure, sha256-guarded); registrations bind to those LOCAL copies with the workspace as project root
+- Upgrade overwrites drifted copies with forensic backups (`runs/deploy-backup-*`) and prunes unknown scaffolding only under double-confirm
+- Pre-inversion workspaces keep byte-identical behavior; inversion activates when copies exist
+
+**Agent definition governance (#790)**
+
+- Zero tracker refs / dated narration; English-only prose (functional CJK trigger keywords kept as machine data)
+- Plan-to-execute + Status reporting contracts on every definition (role-specific on specialists)
+- Capability/tooling matrix authority (docs/agent-tooling-matrix.md): dangerous analysis families explicitly denied per role; Skill default-off except worker/redteam
+- kunglao-redteam dynamic tools unlocked per ruling with WHEN-rules: x64dbg Windows-native targets only, frida native cross-platform and never in the web lane, escalate after static+file-level checks fail, terminate lifecycle
+
+**Web-lane depth**
+
+- JSVMP three-feature triage (`scripts/jsvmp_triage.py`): mechanically flags bytecode-VM bundles (big consumed array + dispatch switch + semantic-free handlers) so AST recovery stops early; full trace/replay pipeline tracked for v0.2
+
 ### Round 5 — Closeout Waves A–L (live-run/web live-run root causes, 2026-08-26/27)
 
 **Fixed**
