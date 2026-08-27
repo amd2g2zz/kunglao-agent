@@ -94,8 +94,13 @@ def test_no_reference_to_legacy_precommit_path():
     offenders = []
     self_file = Path(__file__).resolve()
     for p in ROOT.rglob("*"):
-        if not p.is_file() or ".git" in p.parts or ".review-gate" in p.parts:
-            continue  # runtime dirs (.git, review-gate evidence) are not repo content
+        # #799: `.review` prefix family (.review, .review-gate, ...) = local
+        # review evidence surface, not repo content (exact `.review-gate`
+        # match missed the retired .review/ dir).
+        if not p.is_file() or ".git" in p.parts or any(
+            part.startswith(".review") for part in p.parts
+        ):
+            continue  # runtime dirs (.git, review evidence) are not repo content
         if ".devfleet-worktrees" in p.parts or ".worktrees" in p.parts:
             continue  # git-worktree scratch dir (gitignored, not repo content)
         if p.resolve() == self_file:

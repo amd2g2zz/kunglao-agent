@@ -58,7 +58,12 @@ def test_no_legacy_precommit_reference():
     """#445: 单一 hook 注册路径,无 .claude/hooks/pre-commit 残留引用。"""
     offenders = []
     for p in ROOT.rglob("*"):
-        if not p.is_file() or ".git" in p.parts or ".review" in p.parts:
+        # #799: exclude the `.review` prefix family (.review, .review-gate,
+        # any .review-* sibling) — local review evidence surface, not repo
+        # content. Exact component match missed .review-gate (#799).
+        if not p.is_file() or ".git" in p.parts or any(
+            part.startswith(".review") for part in p.parts
+        ):
             continue
         if ".worktrees" in p.parts or "docs/superpowers" in str(p):
             continue
