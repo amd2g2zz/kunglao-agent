@@ -1,7 +1,7 @@
 ---
 name: ghidra-light
 description: "Stage 4 light static reconnaissance via Ghidra. For local-file samples with detected language Go/Rust/OLLVM/C/C++/.NET. **Two-tier strategy**: (1) try Ghidra MCP bridge if a GUI instance with a real project is online; (2) AUTONOMOUSLY fall back to Ghidra analyzeHeadless (no GUI required) — create a project, import the binary, run a postScript to export function list + imports + xrefs to suspicious APIs, parse the JSON output. Writes evidence/static-ghidra.json. Pure local; uses Bash + Ghidra's headless analyzer at `<GHIDRA_HOME>/support/analyzeHeadless.bat` (env-discovered, never hardcoded)."
-# issue #310 mechanical trigger table — parsed by scripts/route_capability.py
+# mechanical trigger table — parsed by scripts/route_capability.py
 # (claim task domain x sample features -> recommended agent; worker_budget
 # agenttype gate). pipeline_order = precedence when several specialists fit.
 triggers:
@@ -14,8 +14,6 @@ triggers:
       - 'ghidra'
       - 'static analysis'
       - 'static recon'
-      - '反编译'
-      - '反汇编'
     exclude:
       - '\.net'
       - 'c#'
@@ -50,7 +48,7 @@ isolation: none
 
 You perform **light static reconnaissance** via Ghidra. Two-tier strategy: try MCP first, fall back to analyzeHeadless (autonomous, no GUI).
 
-**v7 (2026-07-01):** New sub-skill. **Critical fix (later 2026-07-01):** subagent AUTONOMOUSLY creates a Ghidra project via analyzeHeadless when MCP is offline — does NOT degrade silently. User does not need to manually open Ghidra GUI.
+**Autonomy rule:** the subagent AUTONOMOUSLY creates a Ghidra project via analyzeHeadless when MCP is offline — does NOT degrade silently. The user does not need to manually open Ghidra GUI.
 
 ## How Ghidra MCP and analyzeHeadless relate
 
@@ -69,7 +67,7 @@ This subagent **prefers MCP** (faster on warm cache, richer tool set) **but fall
 - `max_decompile_lines`: default `50`
 - `force_headless`: default `false` (set `true` to skip MCP attempt and go straight to headless)
 
-**Path discovery (no hardcoded paths, #228)**: `GHIDRA_HOME` / `GHIDRA_PROJECTS`
+**Path discovery (no hardcoded paths)**: `GHIDRA_HOME` / `GHIDRA_PROJECTS`
 resolve from the workspace `analysis_state.txt` toolchain baseline (Phase 0
 probe) or the `GHIDRA_HOME` / `GHIDRA_PROJECTS` env vars; the caller may pass
 them explicitly as `ghidra_install` / `project_root`. All shell snippets below
@@ -264,7 +262,7 @@ Read `evidence/floss-filtered.json` (string_inventory + outliers) and `evidence/
   "_meta": {
     "source": "ghidra-light",
     "tool": "mcp__ghidra__* (MCP path) | analyzeHeadless + ExportLightRecon.java (headless path)",
-    "schema_version": "2026-07-01-v7",
+    "schema_version": "v7",
     "queried_at": "<ISO8601>",
     "input_path": "<binary_path>",
     "ghidra_project": "<project name or path>",
@@ -323,13 +321,13 @@ After writing the JSON, return ONE LINE:
 Or on full failure:
 `ghidra-light degraded: <reason>`
 
-## Subagent contract (#492 — structural declaration)
+## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->
 Step 0 sequential-thinking preamble BEFORE any tool call: language → IOCs →
 MCP-or-headless → postScript plan → schema mapping. Drift → re-plan, then continue.
 
-**#494 expansion — plan FIRST, in writing**: your first action is to create
+**Plan FIRST, in writing**: your first action is to create
 `runs/worker-status-ghidra-light-<id>.md` and write its plan section BEFORE
 any analysis tool call (Step 0's sequential-thinking preamble lands THERE,
 in writing — not only in your head). The plan section states, in this
@@ -349,7 +347,7 @@ WRITE `evidence/static-ghidra.json` yourself — the file is the deliverable;
 failure paths write degraded output with the reason, never a silent return.
 The one-line return summary comes only after the file exists.
 
-**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+**Liveness + artifacts (canonical log / W-15 lesson)**: append to
 `runs/worker-status-ghidra-light-<id>.md` as an append-only log parsed by
 the single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
 token wins). Use the canonical vocabulary ONLY — `status: in-progress` /
@@ -366,11 +364,9 @@ analysis be mistaken for "stuck" (time-based stall watchdog: `STUCK_MINUTES=20` 
 <!-- contract: tool-discovery -->
 Two-tier reuse: try the Ghidra MCP bridge first, fall back to analyzeHeadless;
 `GHIDRA_HOME` / `GHIDRA_PROJECTS` come from `analysis_state.txt` / env vars
-(#228) — never hardcode paths or self-invent a scanner Ghidra already covers.
+— never hardcode paths or self-invent a scanner Ghidra already covers.
 
-**#494 expansion — discovery before ANY new code** (#462 incident: a
-ghidra-light worker hand-wrote `DecompileFuncs.java` + a 201-line headless
-driver while the shelf already covered it). Before writing any postScript
+**Discovery before ANY new code**. Before writing any postScript
 or driver, run the three-point check: (1) `ls scripts/re` — the workspace
 RE tools deployed for this engagement; (2) grep `tools/_INDEX.yaml` by
 category/capability (`ghidra:*`, `static:*`) — the registered toolshelf;

@@ -1,7 +1,7 @@
 ---
 name: floss-filter
 description: "Read `evidence/floss-raw.txt` (raw flare-floss output, up to 100k lines for Go binaries) + noise dictionary + family keywords. WRITE `evidence/floss-filtered.json` with two-layer output: (Layer A) inventory & statistics of the full survivor set; (Layer B) per-category top-K lists. Heuristic not hardcoded — you decide length/entropy/K/outlier thresholds based on the data. Pure local; no external calls. **You DO have the Write tool — you must write the JSON file yourself, not return YAML to the caller.**"
-# issue #310 mechanical trigger table — parsed by scripts/route_capability.py
+# mechanical trigger table — parsed by scripts/route_capability.py
 # (claim task domain x sample features -> recommended agent; worker_budget
 # agenttype gate).
 triggers:
@@ -12,7 +12,6 @@ triggers:
       - 'floss'
       - 'string analysis'
       - 'string extraction'
-      - '字符串'
     exclude: []
   features: {}
 allowedTools:
@@ -128,12 +127,12 @@ If floss line emitted `0xADDR: STRING` form, parse `0x...` address. Else null.
   "_meta": {
     "source": "floss-filter",
     "tool": "floss-filter subagent v6",
-    "schema_version": "2026-07-01-v6",
+    "schema_version": "v6",
     "queried_at": "<ISO8601>",
     "input_path": "evidence/floss-raw.txt",
     "language_hint": "<value>",
     "per_category_cap": <int>,
-    "scoring_version": "2026-07-01-v4-heuristic"
+    "scoring_version": "v4-heuristic"
   },
   "input_stats": {"total_lines": <int>, "total_non_empty": <int>, "total_after_denoise": <int>},
   "string_inventory": {
@@ -194,14 +193,14 @@ floss-filter complete: <top-3 categories with counts>; <family_keyword_hits coun
 
 For example: `floss-filter complete: stack_strings=8500, paths=230, other=180; family_hits=0; outliers=2 (base64 in paths class, raw URL in other); reasoning: Go binary, K=200 cap, no family matches in 20k lines — Kaspersky Gsb.are hint NOT corroborated by binary strings`.
 
-## Subagent contract (#492 — structural declaration)
+## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->
 Read the inputs first (Step 1), then apply the pipeline inline; thresholds
 are heuristics you set from the data and justify, not hardcoded defaults —
 every default override and K choice lands in `provenance.reasoning_notes`.
 
-**#494 expansion — plan FIRST, in writing**: your first action is to create
+**Plan FIRST, in writing**: your first action is to create
 `runs/worker-status-floss-filter-<id>.md` and write its plan section
 BEFORE reading the inputs. The plan section states, in this domain's
 language: (a) what you will do — the thresholds you will set FROM the data
@@ -219,7 +218,7 @@ WRITE `evidence/floss-filtered.json` yourself (Layer A inventory + Layer B
 top-K); on failure write the error JSON to the same `output_path`, never
 return bare prose. The one-line return summary comes only after the file exists.
 
-**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+**Liveness + artifacts (canonical log / W-15 lesson)**: append to
 `runs/worker-status-floss-filter-<id>.md` as an append-only log parsed by
 the single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
 token wins). Canonical vocabulary ONLY — `status: in-progress` /
@@ -236,7 +235,7 @@ Apply the pipeline inline — do NOT write a Python script file, do NOT score
 with an LLM (the composite score is deterministic); inputs (`floss-raw.txt`,
 noise dict, family keywords) are read-only and never modified.
 
-**#494 expansion — discovery before ANY new code**. The inline-pipeline rule
+**Discovery before ANY new code**. The inline-pipeline rule
 above (no script file) is about THIS stage's scoring; it is not a license
 to hand-roll a neighbor capability either. Before extending the pipeline,
 run the three-point check: (1) `ls scripts/re` — the workspace RE tools;

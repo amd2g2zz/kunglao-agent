@@ -1,7 +1,7 @@
 ---
 name: pefile-signature
 description: "Read evidence/die.json + the local sample file. Extract Authenticode digital signature (subject/issuer/serial/validity/cert chain) via pefile + identify packer family via DIE + YARA packer signatures + write evidence/signature.json + evidence/packer-scan.json. Pure local."
-# issue #310 mechanical trigger table — parsed by scripts/route_capability.py
+# mechanical trigger table — parsed by scripts/route_capability.py
 # (claim task domain x sample features -> recommended agent; worker_budget
 # agenttype gate). Packer markers in import_hints are pefile-signature's domain.
 triggers:
@@ -14,19 +14,16 @@ triggers:
       - 'packer'
       - 'packed'
       - 'certificate'
-      - '签名'
-      - '加壳'
     exclude:
-      # #760 disambiguation: 签名 substring-matches web signed-parameter
-      # claims; a claim carrying any browser-domain token routes to
+      # Disambiguation: a claim carrying any browser-domain token routes to
       # web-re-worker instead (web-re-worker owns that phrase family).
       - 'webhook'
       - 'deobfuscate'
       - 'bundler'
-      - '前端'
-      - '网页'
-      - '风控'
-      - '爬虫'
+      - 'frontend'
+      - 'webpage'
+      - 'risk control'
+      - 'crawler'
   features:
     import_hints:
       any_contains:
@@ -187,14 +184,14 @@ rule Themida_Packer {
 After writing both files, return ONE LINE:
 `pefile-signature complete: signer=<CN> valid=<true/false>; packer=<upx/none/unknown> confidence=<level>; reasoning=<1-line>`
 
-## Subagent contract (#492 — structural declaration)
+## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->
 Fixed two-step pipeline in order: Step 1 Authenticode extraction, then Step 2
 packer scan; decide `validity_status` by the documented rules BEFORE writing
 output, not after.
 
-**#494 expansion — plan FIRST, in writing**: your first action is to create
+**Plan FIRST, in writing**: your first action is to create
 `runs/worker-status-pefile-signature-<id>.md` and write its plan section
 BEFORE touching the sample. The plan section states, in this domain's
 language: (a) what you will do — Step 1 Authenticode extraction then Step
@@ -213,7 +210,7 @@ WRITE both output files (`evidence/signature.json` + `evidence/packer-scan.json`
 yourself — failure modes still write JSON (degraded / `not a PE` / `invalid`),
 never a return without files. The one-line summary comes after both exist.
 
-**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+**Liveness + artifacts (canonical log / W-15 lesson)**: append to
 `runs/worker-status-pefile-signature-<id>.md` as an append-only log parsed
 by the single canonical parse point (`hooks/lib_kunglao.py` — LAST
 `status:` token wins). Canonical vocabulary ONLY — `status: in-progress` /
@@ -228,7 +225,7 @@ Reuse `pefile` + `cryptography` from the project venv (install into it if
 missing); when YARA is absent, fall back to DIE cross-check + entropy
 heuristics — never self-invent a certificate parser.
 
-**#494 expansion — discovery before ANY new code**. Before writing any
+**Discovery before ANY new code**. Before writing any
 parsing snippet, run the three-point check: (1) `ls scripts/re` — the
 workspace RE tools; (2) grep `tools/_INDEX.yaml` by capability —
 `pe-analyze` already has a `signature` subcommand (PE Authenticode table)
@@ -237,6 +234,6 @@ and `yara-scan` already runs rule files; (3) the matching
 idioms).
 Registered domain tools (verify in the index first): `pe-analyze`, `yara-scan`, `die-probe`, `overlay-scan`.
 Self-invention is forbidden: a missing capability = file an issue to
-upstream it into `tools/` (a hand-rolled certificate parser is the #462
-failure mode verbatim); a one-off shim must be labeled disposable and
-dropped after the run.
+upstream it into `tools/` (a hand-rolled certificate parser is exactly
+the failure this contract exists to prevent); a one-off shim must be
+labeled disposable and dropped after the run.

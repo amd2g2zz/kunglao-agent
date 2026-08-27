@@ -1,7 +1,7 @@
 ---
 name: go-symbols
 description: "Stage 3.9 Go symbol recovery via unstrip (Go samples only, die.json language=Go). Runs unstrip --info / default / --format ghidra / --xref / --data-at, parses output, and WRITES evidence/unstrip-info.json + unstrip-symbols.json + unstrip-ghidra-apply.py + unstrip-ghidra-hints.json. The hints file carries prioritized_targets + itab_dispatch + struct_types + xref_map + garble_assist + annotations[] (the persistent mark-up plan ghidra-light applies to the Ghidra project). Heuristic not hardcoded - you classify functions, pick --data-at targets, and craft actionable annotations. Pure local. You DO have the Write tool - write the files yourself, do not return YAML to the caller."
-# issue #310 mechanical trigger table — parsed by scripts/route_capability.py.
+# mechanical trigger table — parsed by scripts/route_capability.py.
 # Go symbol recovery precedes decompile: pipeline_order 1 wins over
 # ghidra-light (4) for Go samples.
 triggers:
@@ -16,7 +16,6 @@ triggers:
       - 'go sample'
       - 'pclntab'
       - 'unstrip'
-      - '符号恢复'
     exclude:
       - 'rust'
       - '\.net'
@@ -71,14 +70,14 @@ Recover Go symbols/types/itabs from pclntab via unstrip (no decompile) -> emit a
 ## Output
 4 files in `evidence_dir`. Return a one-line summary: function count, garble verdict, #annotations.
 
-## Subagent contract (#492 — structural declaration)
+## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->
 Pipeline step 1: sequentialthinking preamble BEFORE running unstrip — confirm
 Go, pick suspicious-name patterns, choose `--data-at` targets from prior evidence.
 Update the plan when the data argues otherwise, then continue.
 
-**#494 expansion — plan FIRST, in writing**: your first action is to create
+**Plan FIRST, in writing**: your first action is to create
 `runs/worker-status-go-symbols-<id>.md` and write its plan section BEFORE
 running `unstrip` (the sequentialthinking preamble lands THERE, in
 writing). The plan section states, in this domain's language: (a) what you
@@ -99,7 +98,7 @@ WRITE the four evidence files yourself (`unstrip-info.json` /
 return the one-line summary (function count, garble verdict, #annotations)
 only after the files exist — a run without files has FAILED.
 
-**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+**Liveness + artifacts (canonical log / W-15 lesson)**: append to
 `runs/worker-status-go-symbols-<id>.md` as an append-only log parsed by the
 single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
 token wins). Canonical vocabulary ONLY — `status: in-progress` /
@@ -116,7 +115,7 @@ Reuse `unstrip` (PATH or the `analysis_state.txt` toolchain path) — do not
 hand-roll pclntab parsing; garble assist names candidates, never fabricates
 semantic names.
 
-**#494 expansion — discovery before ANY new code**. Before writing any
+**Discovery before ANY new code**. Before writing any
 parser or wrapper, run the three-point check: (1) `ls scripts/re` — the
 workspace RE tools deployed for this engagement; (2) grep
 `tools/_INDEX.yaml` by category/capability (`static:*`, `ghidra:*`); (3)
