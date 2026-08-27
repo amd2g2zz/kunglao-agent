@@ -261,9 +261,15 @@ class TestRouteLinkage:
         assert name == "gitnexus-query", rationale
 
     def test_real_table_does_not_misroute_today(self):
+        # #760 landed agents/web-re-worker.md: a signature-tracing claim on a
+        # web sample now routes to the web specialist (must_any 'signature')
+        # — the exact hand-off #751 design D2 predicted. gitnexus-query stays
+        # reachable via its own intent words (fixture test above) and is the
+        # web-re-worker's query layer, not the first-hop specialist.
         table = _rc.load_specialist_table(REPO / "agents")
         name, _ = _rc.recommend_agent_type({}, CLAIM, table)
-        assert name is None or name == "gitnexus-query"
+        assert name in (None, "gitnexus-query", "web-re-worker"), (
+            f"misrouted to {name!r}")
 
 
 # ---------- T5: real-sample demo ----------
