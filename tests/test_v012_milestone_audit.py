@@ -19,6 +19,13 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# #794: behavioral env vars — values that rewrite a CLI's decision flow
+# rather than its infrastructure. Scrubbed unconditionally from every child
+# env _run_cli builds (see _run_cli docstring for the maintenance policy).
+_BEHAVIORAL_ENV_VARS = (
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",  # kunglao-init #276 Phase-0 gate
+)
+
 
 def test_milestone_issues_closed():
     """Sprint Goal: 大部分 milestone issues 已 closed (>= 70%)。"""
@@ -124,16 +131,38 @@ def _run_cli(args: list[str], cwd: Path, *, env: dict | None = None) -> subproce
     every CI matrix job), which supports the PEP 604 union syntax the
     scripts use. The old hard pin /usr/local/bin/python3.11 (#457) broke
     the 3.10 CI job with PermissionError, so we resolve dynamically.
+
+    Deterministic child environment (#794):
+    - Behavioral vars are scrubbed AFTER the env= merge — neither the parent
+      shell nor a caller may leak them in. `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
+      flips kunglao-init's #276 Phase-0 gate to HARD REJECT before the bins
+      logic, which made these replay tests report the launching shell's state
+      instead of the behavior they pin (issue #794 Windows symptom). Extend
+      the tuple only for vars that change a CLI's decision flow, each with a
+      citation; infrastructure vars (PATH, PYTHONPATH, venv) stay inherited —
+      a full env sandbox would break the dynamic sys.executable resolution
+      above (#457 lesson).
+    - UTF-8 is forced on both sides of the pipe: PYTHONUTF8=1 +
+      PYTHONIOENCODING=utf-8 via setdefault (explicit env= values still win —
+      override contract preserved), and the capture decodes utf-8/replace —
+      mirrors conftest.golden_master; bare text=True locale-decodes strictly,
+      so a GBK console host crashes the reader thread on any non-ASCII output
+      (same family as #457 items #2-#5).
     """
     full_env = dict(os.environ)
     if env:
         full_env.update(env)
+    for behavioral_var in _BEHAVIORAL_ENV_VARS:
+        full_env.pop(behavioral_var, None)
+    full_env.setdefault("PYTHONUTF8", "1")
+    full_env.setdefault("PYTHONIOENCODING", "utf-8")
     return subprocess.run(
         [sys.executable, *args],
         cwd=str(cwd),
         env=full_env,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=60,
     )
 

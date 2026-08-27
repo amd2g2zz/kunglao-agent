@@ -49,6 +49,12 @@ import env_repair_l1  # noqa: E402
 
 PY311 = sys.executable  # venv python (>= floor); #457 hard pin broke the 3.10 job
 
+# #794: behavioral env vars scrubbed from every child env _run builds
+# (same list/policy as test_v012_milestone_audit.py::_BEHAVIORAL_ENV_VARS).
+_BEHAVIORAL_ENV_VARS = (
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",  # kunglao-init #276 Phase-0 gate
+)
+
 
 # ---------- #565 DoD 9: contract (library-level, deterministic) ----------
 
@@ -171,17 +177,27 @@ def _build_fake_toolchain_wrapper(tmp_path: Path, ws: Path) -> Path:
 def _run(*args: str, cwd: Path | None = None,
          env: dict | None = None,
          timeout: int = 60) -> subprocess.CompletedProcess:
+    """Deterministic child env, same contract as
+    tests/test_v012_milestone_audit.py::_run_cli (#794): behavioral vars
+    (#276 AGENT_TEAMS gate — with it truthy the gate exits 3 before the
+    forced RC_TOOLCHAIN_REFUSE=4 this file pins) are scrubbed AFTER the env=
+    merge; UTF-8 forced on both pipe sides (encoding= explicit — bare
+    text=True locale-decodes strictly, the #457 GBK family)."""
     full_env = dict(os.environ)
     if env:
         full_env.update(env)
+    for behavioral_var in _BEHAVIORAL_ENV_VARS:
+        full_env.pop(behavioral_var, None)
+    full_env.setdefault("PYTHONUTF8", "1")
+    full_env.setdefault("PYTHONIOENCODING", "utf-8")
     return subprocess.run(
         [PY311, *args],
         cwd=str(cwd or REPO_ROOT),
         env=full_env,
         capture_output=True,
-        text=True,
-        timeout=timeout,
+        encoding="utf-8",
         errors="replace",
+        timeout=timeout,
     )
 
 
