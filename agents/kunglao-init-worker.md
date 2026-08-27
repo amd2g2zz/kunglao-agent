@@ -1,24 +1,44 @@
 ---
 name: kunglao-init-worker
-description: "INIT-WORKER for the kunglao-agent orchestrator. Runs needs-first workspace initialization: task-requirements intake FIRST (primary_questions / scope / constraints / depth / success_criteria into task_spec.yaml BEFORE any environment decision; env = f(task_spec): constraints.dynamic_re=forbidden, static-only, downgrades the windows/linux VM checks from HARD to WARN, unreadable fields stay HARD) -> target alignment as script intake step 0 (analysis target -> target_object for containers -> project type; undecided items exit 8 with a structured pending list on stdout, the agent collects answers via AskUserQuestion and re-enters with --resolve <answers.json> — no stdin, no silent sniff defaults) -> kunglao-init.py --type, which gates itself on toolchain.check BEFORE scaffold (HARD FAIL -> refuse exit 4 with per-item install commands; ask-then-install only under --assume-yes) -> relay install guidance to the HUMAN as blockers (HARD toolchain missing is a human-install event, NOT agent silent repair) -> after the human installs, re-run init until exit 0. Aligned with kunglao self-recovery L3 (env-fix worker); init-worker is the initialized form of env-fix. NOT an analysis worker — no claims, no facts. Env-repair scripts land as reusable CLIs under scripts/."
+description: 'INIT-WORKER for the kunglao-agent orchestrator. Runs needs-first workspace initialization:
+  task-requirements intake FIRST (primary_questions / scope / constraints / depth / success_criteria into
+  task_spec.yaml BEFORE any environment decision; env = f(task_spec): constraints.dynamic_re=forbidden,
+  static-only, downgrades the windows/linux VM checks from HARD to WARN, unreadable fields stay HARD)
+  -> target alignment as script intake step 0 (analysis target -> target_object for containers -> project
+  type; undecided items exit 8 with a structured pending list on stdout, the agent collects answers via
+  AskUserQuestion and re-enters with --resolve <answers.json> — no stdin, no silent sniff defaults) ->
+  kunglao-init.py --type, which gates itself on toolchain.check BEFORE scaffold (HARD FAIL -> refuse exit
+  4 with per-item install commands; ask-then-install only under --assume-yes) -> relay install guidance
+  to the HUMAN as blockers (HARD toolchain missing is a human-install event, NOT agent silent repair)
+  -> after the human installs, re-run init until exit 0. Aligned with kunglao self-recovery L3 (env-fix
+  worker); init-worker is the initialized form of env-fix. NOT an analysis worker — no claims, no facts.
+  Env-repair scripts land as reusable CLIs under scripts/.'
 allowedTools:
-  - Read
-  - Write
-  - Edit
-  - Glob
-  - Grep
-  - Bash
-  - WebFetch
-  - WebSearch
+- Read
+- Glob
+- Grep
+- Write
+- Edit
+- Bash
+- mcp__context7__resolve-library-id
+- mcp__context7__query-docs
+- mcp__sequential-thinking__sequentialthinking
 disallowedTools:
-  - Skill
-  - NotebookEdit
-  - mcp__x64dbg__start_session
-  - mcp__x64dbg__connect_to_session
-  - mcp__x64dbg__connect_to_instance
-  - mcp__x64dbg__terminate_session
-  - mcp__frida__spawn
-  - mcp__frida__attach
+- NotebookEdit
+- WebFetch
+- WebSearch
+- mcp__camoufox-reverse__*
+- mcp__gitnexus__*
+- mcp__ghidra__*
+- mcp__x64dbg__*
+- mcp__frida__spawn
+- mcp__frida__attach
+- mcp__frida__*
+- mcp__x64dbg__start_session
+- mcp__x64dbg__connect_to_session
+- mcp__x64dbg__connect_to_instance
+- mcp__x64dbg__terminate_session
+- mcp__volatility__*
 isolation: none
 ---
 

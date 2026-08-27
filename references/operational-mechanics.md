@@ -355,7 +355,7 @@ self-drive (kunglao-worker.md §6d):
    precedent / known solution / error-signature search.
 2. **TRY**: retry with ≥2 different methods using what you found. Boundary
    (#760 I2): TRY only applies when the capability MIGHT exist and needs
-   exploring. 能力不匹配 (capability mismatch — e.g. needing a filesystem when
+   exploring. 能力不匹配 (capability mismatch — e.g. needing a filesystem when Improvising through an adjacent capability (makeshift output) is forbidden.
    the only execution surface is a decompiler's in-process Python) goes
    STRAIGHT to ESCALATE: 用邻近能力凑合 (stopgap)
    (IDA py_eval as a shell, a decompiler as a file reader/writer) is

@@ -1,32 +1,41 @@
 ---
 name: verdict-scorer
-description: "Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and `fact_contradiction_gate.py` output. For each primary_question, find the answering fact via answers_question, verify PROVEN status + confidence_band (C0a/C0b mirrors convergence). Detect contradictions from gate output. WRITE `evidence/verdict.json` with analysis_verdict schema v11. Pure local Read + Write."
-# mechanical trigger table — parsed by scripts/route_capability.py
-# (claim task domain x sample features -> recommended agent; worker_budget
-# agenttype gate). pipeline_order 9: verdict is the final phase.
+description: Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and `fact_contradiction_gate.py`
+  output. For each primary_question, find the answering fact via answers_question, verify PROVEN status
+  + confidence_band (C0a/C0b mirrors convergence). Detect contradictions from gate output. WRITE `evidence/verdict.json`
+  with analysis_verdict schema v11. Pure local Read + Write.
 triggers:
   pipeline_order: 9
   intent:
     must_any:
-      - 'verdict'
-      - 'scoring'
-      - 'final assessment'
-      - 'primary_question'
-      - 'primary question'
-      - 'pq coverage'
+    - verdict
+    - scoring
+    - final assessment
+    - primary_question
+    - primary question
+    - pq coverage
     exclude: []
   features: {}
 allowedTools:
-  - Read
-  - Grep
-  - Write
-  - mcp__sequential-thinking__sequentialthinking
+- Read
+- Glob
+- Grep
+- mcp__sequential-thinking__sequentialthinking
 disallowedTools:
-  - Edit
-  - NotebookEdit
-  - Bash
-  - WebFetch
-  - WebSearch
+- NotebookEdit
+- Bash
+- mcp__camoufox-reverse__*
+- mcp__gitnexus__*
+- mcp__ghidra__*
+- mcp__x64dbg__*
+- mcp__frida__spawn
+- mcp__frida__attach
+- mcp__frida__*
+- mcp__x64dbg__start_session
+- mcp__x64dbg__connect_to_session
+- mcp__x64dbg__connect_to_instance
+- mcp__x64dbg__terminate_session
+- mcp__volatility__*
 isolation: none
 ---
 

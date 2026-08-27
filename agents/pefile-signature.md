@@ -1,49 +1,57 @@
 ---
 name: pefile-signature
-description: "Read evidence/die.json + the local sample file. Extract Authenticode digital signature (subject/issuer/serial/validity/cert chain) via pefile + identify packer family via DIE + YARA packer signatures + write evidence/signature.json + evidence/packer-scan.json. Pure local."
-# mechanical trigger table — parsed by scripts/route_capability.py
-# (claim task domain x sample features -> recommended agent; worker_budget
-# agenttype gate). Packer markers in import_hints are pefile-signature's domain.
+description: Read evidence/die.json + the local sample file. Extract Authenticode digital signature (subject/issuer/serial/validity/cert
+  chain) via pefile + identify packer family via DIE + YARA packer signatures + write evidence/signature.json
+  + evidence/packer-scan.json. Pure local.
 triggers:
   pipeline_order: 2
   intent:
     must_any:
-      - 'authenticode'
-      - 'pe signature'
-      - 'digital signature'
-      - 'packer'
-      - 'packed'
-      - 'certificate'
+    - authenticode
+    - pe signature
+    - digital signature
+    - packer
+    - packed
+    - certificate
     exclude:
-      # Disambiguation: a claim carrying any browser-domain token routes to
-      # web-re-worker instead (web-re-worker owns that phrase family).
-      - 'webhook'
-      - 'deobfuscate'
-      - 'bundler'
-      - 'frontend'
-      - 'webpage'
-      - 'risk control'
-      - 'crawler'
+    - webhook
+    - deobfuscate
+    - bundler
+    - frontend
+    - webpage
+    - risk control
+    - crawler
   features:
     import_hints:
       any_contains:
-        - 'upx'
-        - 'aspack'
-        - 'pecompact'
-        - 'mpress'
-        - 'themida'
-        - 'vmprotect'
+      - upx
+      - aspack
+      - pecompact
+      - mpress
+      - themida
+      - vmprotect
 allowedTools:
-  - Read
-  - Grep
-  - Bash
-  - Write
-  - mcp__sequential-thinking__sequentialthinking
+- Read
+- Glob
+- Grep
+- Write
+- Bash
 disallowedTools:
-  - WebFetch
-  - WebSearch
-  - Edit
-  - NotebookEdit
+- NotebookEdit
+- WebFetch
+- WebSearch
+- mcp__camoufox-reverse__*
+- mcp__gitnexus__*
+- mcp__ghidra__*
+- mcp__x64dbg__*
+- mcp__frida__spawn
+- mcp__frida__attach
+- mcp__frida__*
+- mcp__x64dbg__start_session
+- mcp__x64dbg__connect_to_session
+- mcp__x64dbg__connect_to_instance
+- mcp__x64dbg__terminate_session
+- mcp__volatility__*
 isolation: none
 ---
 

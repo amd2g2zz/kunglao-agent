@@ -55,3 +55,45 @@ def test_no_conflict_markers(path: Path) -> None:
     assert "<<<<<<<" not in text and ">>>>>>>" not in text, (
         f"{path.name}: leftover merge-conflict markers"
     )
+
+# ---------- #790 follow-up: tooling-matrix pins (docs/agent-tooling-matrix.md) ----------
+
+def _fm(role: str) -> dict:
+    import yaml
+    p = REPO_ROOT / "agents" / f"{role}.md"
+    return yaml.safe_load(p.read_text(encoding="utf-8").split("---")[1])
+
+
+def _allow(role: str):
+    return set(_fm(role)["allowedTools"])
+
+
+def _deny(role: str):
+    return set(_fm(role)["disallowedTools"])
+
+
+MATRIX_SPOT = {
+    # role: (must-have allow entries, must-have deny entries)
+    "verdict-scorer": (["Read", "mcp__sequential-thinking__sequentialthinking"], ["Bash"]),
+    "web-re-worker": (["mcp__camoufox-reverse__*", "mcp__gitnexus__*"],
+                      ["mcp__ghidra__*", "mcp__x64dbg__*",
+                       "mcp__frida__*", "mcp__volatility__*"]),
+    "kunglao-worker": (["mcp__ghidra__*", "Skill"],
+                       ["NotebookEdit"]),
+}
+
+
+def test_tooling_matrix_spot_pins():
+    import yaml as _y
+    for role, (need_allow, need_deny) in MATRIX_SPOT.items():
+        fm = _y.safe_load(
+            (REPO_ROOT / "agents" / f"{role}.md").read_text(encoding="utf-8")
+            .split("---")[1])
+        allow = [str(x) for x in fm.get("allowedTools") or []]
+        deny = [str(x) for x in fm.get("disallowedTools") or []]
+        for n in need_allow:
+            assert any(n in a for a in allow), (
+                f"{role}: expected allowance {n!r} missing -> {allow}")
+        for n in need_deny:
+            assert any(n in d for d in deny), (
+                f"{role}: expected explicit denial {n!r} missing -> {deny}")

@@ -1,30 +1,43 @@
 ---
 name: floss-filter
-description: "Read `evidence/floss-raw.txt` (raw flare-floss output, up to 100k lines for Go binaries) + noise dictionary + family keywords. WRITE `evidence/floss-filtered.json` with two-layer output: (Layer A) inventory & statistics of the full survivor set; (Layer B) per-category top-K lists. Heuristic not hardcoded — you decide length/entropy/K/outlier thresholds based on the data. Pure local; no external calls. **You DO have the Write tool — you must write the JSON file yourself, not return YAML to the caller.**"
-# mechanical trigger table — parsed by scripts/route_capability.py
-# (claim task domain x sample features -> recommended agent; worker_budget
-# agenttype gate).
+description: 'Read `evidence/floss-raw.txt` (raw flare-floss output, up to 100k lines for Go binaries)
+  + noise dictionary + family keywords. WRITE `evidence/floss-filtered.json` with two-layer output: (Layer
+  A) inventory & statistics of the full survivor set; (Layer B) per-category top-K lists. Heuristic not
+  hardcoded — you decide length/entropy/K/outlier thresholds based on the data. Pure local; no external
+  calls. **You DO have the Write tool — you must write the JSON file yourself, not return YAML to the
+  caller.**'
 triggers:
   pipeline_order: 3
   intent:
     must_any:
-      - 'strings'
-      - 'floss'
-      - 'string analysis'
-      - 'string extraction'
+    - strings
+    - floss
+    - string analysis
+    - string extraction
     exclude: []
   features: {}
 allowedTools:
-  - Read
-  - Grep
-  - Bash
-  - Write
-  - mcp__sequential-thinking__sequentialthinking
+- Read
+- Glob
+- Grep
+- Write
 disallowedTools:
-  - WebFetch
-  - WebSearch
-  - Edit
-  - NotebookEdit
+- NotebookEdit
+- Bash
+- WebFetch
+- WebSearch
+- mcp__camoufox-reverse__*
+- mcp__gitnexus__*
+- mcp__ghidra__*
+- mcp__x64dbg__*
+- mcp__frida__spawn
+- mcp__frida__attach
+- mcp__frida__*
+- mcp__x64dbg__start_session
+- mcp__x64dbg__connect_to_session
+- mcp__x64dbg__connect_to_instance
+- mcp__x64dbg__terminate_session
+- mcp__volatility__*
 isolation: none
 ---
 

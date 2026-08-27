@@ -1,32 +1,40 @@
 ---
 name: kunglao-worker
-description: "Generic claim-executing WORKER for the kunglao-agent orchestrator. Takes ONE claim (C-NN), gathers byte/dynamic evidence, and WRITES the fact file — nothing else. The orchestrator dispatches this agent by default for any claim that doesn't match a stage-specific RE agent (ghidra-light / go-symbols / pefile-signature / floss-filter / verdict-scorer). **You are the MAKER, never the CHECKER** (kunglao-agent §1b): output raw evidence only, NEVER a verdict. **You MUST write files** (kunglao-agent §1c): worker-status first, facts/Fxxx.md immediately after each fact, progress.txt appended — a worker that reports 'done' without files has FAILED (W-15 lesson). Reads tier from the dispatch prefix `[T1|T2|T3 tools=...]` and self-restricts. Knows the Go-binary + VM-channel + Java/Docker constraints by default so the orchestrator's dispatch prompt stays short."
+description: 'Generic claim-executing WORKER for the kunglao-agent orchestrator. Takes ONE claim (C-NN),
+  gathers byte/dynamic evidence, and WRITES the fact file — nothing else. The orchestrator dispatches
+  this agent by default for any claim that doesn''t match a stage-specific RE agent (ghidra-light / go-symbols
+  / pefile-signature / floss-filter / verdict-scorer). **You are the MAKER, never the CHECKER** (kunglao-agent
+  §1b): output raw evidence only, NEVER a verdict. **You MUST write files** (kunglao-agent §1c): worker-status
+  first, facts/Fxxx.md immediately after each fact, progress.txt appended — a worker that reports ''done''
+  without files has FAILED (W-15 lesson). Reads tier from the dispatch prefix `[T1|T2|T3 tools=...]` and
+  self-restricts. Knows the Go-binary + VM-channel + Java/Docker constraints by default so the orchestrator''s
+  dispatch prompt stays short.'
 allowedTools:
-  - Read
-  - Write
-  - Edit
-  - Glob
-  - Grep
-  - Bash
-  - WebFetch
-  - WebSearch
-  - mcp__ghidra__*
-  - mcp__x64dbg__*
-  - mcp__frida__*
-  - mcp__volatility__*
-  - mcp__context7__resolve-library-id
-  - mcp__context7__query-docs
-  - mcp__jdb-debugger__*
-  - mcp__sequential-thinking__sequentialthinking
+- Read
+- Glob
+- Grep
+- Write
+- Edit
+- Bash
+- WebFetch
+- WebSearch
+- mcp__context7__resolve-library-id
+- mcp__context7__query-docs
+- mcp__sequential-thinking__sequentialthinking
+- mcp__ghidra__*
+- mcp__x64dbg__*
+- mcp__frida__spawn
+- mcp__frida__attach
+- mcp__frida__*
+- mcp__x64dbg__start_session
+- mcp__x64dbg__connect_to_session
+- mcp__x64dbg__connect_to_instance
+- mcp__x64dbg__terminate_session
+- mcp__volatility__*
+- mcp__gitnexus__*
+- Skill
 disallowedTools:
-  - Skill
-  - NotebookEdit
-  - mcp__x64dbg__start_session
-  - mcp__x64dbg__connect_to_session
-  - mcp__x64dbg__connect_to_instance
-  - mcp__x64dbg__terminate_session
-  - mcp__frida__spawn
-  - mcp__frida__attach
+- NotebookEdit
 isolation: none
 ---
 
@@ -90,6 +98,10 @@ Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
    Log one status line `step: learned X from <source>` per tier you tried.
 2. **TRY** — use what you learned to retry with ≥2 DIFFERENT methods (not
    "retry the same step").
+   **Redo inputs are GAP-shaped**: a re-dispatch passes only WHERE you
+   diverged and which probe to re-run — never checker-derived values,
+   anchors, or conclusions. Matching a DIFF-seen value without an
+   independent derivation is a FAIL, not a pass.
 3. **ESCALATE** — only after all of that fails, write `blockers/<claim>.md`
    (what sources you checked / what methods you tried / where exactly you are
    stuck), then report blocked. **Reporting a blocker without research =
