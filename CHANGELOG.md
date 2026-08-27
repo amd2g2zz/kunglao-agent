@@ -8,6 +8,89 @@ release (see the mapping table at the end).
 
 ## [0.1.3] - 2026-08-25
 
+### Round 5 — Closeout Waves A–L (live-run/web live-run root causes, 2026-08-26/27)
+
+**Fixed**
+- hook delivery chain (#752): `canonical_install_root()` — any install dir
+  under `~/.claude/skills/` is durable and self-hosts its hook commands
+  (dev/renamed installs no longer rewire to the stale 0.1.2 canonical);
+  selfcheck re-derives its shape expectation independently (lying-caller
+  FAIL); `install_reference.py` scavenger (mixed-state rewire → 0 stale
+  references); upgrade scans workspace framework files for foreign install
+  references.
+- upgrade execution safety (#753): pre-migration git anchor (dirty → RC=6
+  refuse; no .git → init + pre-upgrade commit; post-upgrade state commit —
+  `git revert HEAD` returns to anchor); structured `[event]` stderr stream
+  (8 nodes — last line before a kill is the death site); /reload-plugins
+  hint (upgrade + init); tail atomicity (summary unemitted → RC_INCOMPLETE=7,
+  never a silent RC_OK).
+- toolchain misjudgment (#756): `_probe_native_so` reads the APK central
+  directory (zipfile) instead of the first 4KB (live-run sample with 60
+  lib/*.so now correctly True); has_native_so wiring pinned; decompiler
+  FAIL text treats Ghidra and IDA as equals.
+- env_check modernization (#757): type/channel-aware checks (android probes
+  no vmware; web omits vm/ghidra rows entirely); MCP registration check
+  (web → camoufox-reverse); blocking vs degraded FAIL tiers (T3-restricted
+  enters the loop; env_check_gate third check fail-open); runtime channel
+  derivation for legacy workspaces; channel=mcp first-class backend
+  (web's dynamic face is the browser, not a command channel);
+  KUNGLAO_VM_HOST consumption narrowed to the vmr backend.
+- deploy-surface parity (#755): upgrade now refreshes what init deploys —
+  agents re-copy (md5-guarded), .mcp.json/env-ledger/toolchain-face
+  backfill, uv sync (python 3.11 pinned via .python-version), install
+  staleness detection; migration registry entry 0.1.4.
+- runtime version + template lifecycle (#758): .python-version 3.11 (CI
+  parity); drift WARN in env_check/upgrade; CLAUDE.md three-segment frame
+  markers; collect-and-merge upgrade (needful/custom sections byte-preserved,
+  frame re-rendered); stamp refresh gated on frame currency (no new stamp
+  over stale prose).
+- sys.path pollution (#770): stray collection-time inserts routed through
+  the #671 hygiene authority; bare imports resolve to the real module.
+
+**Added**
+- heartbeat autonomy (#754, absorbs #616): durable /loop cron
+  (`loop_scheduler.py` writes `<ws>/.claude/scheduled_tasks.json` — survives
+  sessions; init self-writes, #593 red line preserved: registration is not a
+  faked tick); tick-continuity liveness (≥2 ticks at ≤2×interval — the
+  35-min single-tick blind window is closed); --verify mounted at the
+  analysis entry alongside the stale gate.
+- knowledge-sedimentation loop (#762): rollup mechanically triggered from
+  heartbeat_tick claim-terminal detection; Stop gate consumes notes-due
+  (EXIT_NOTES_DUE lists owed claims); worker contract mandates a durable
+  note per finished claim (plan_vs_actual deviations / bonus finds /
+  hypothesis rewrites — telemetry vs knowledge now layered); K3 wired via
+  #759.
+- orchestrator cognition (#759): THINK seat — waiting ticks produce
+  `runs/.think-<ts>.md` (patterns/hypotheses/value; action_taken never
+  EMPTY); value function (`runs/value-weights.yaml` sanctioned channel —
+  one user ruling reorders claims persistently); proactive triggers
+  (stall ≥3 → suggested_searches seeds); K3: note superseding a hypothesis
+  migrates it + emits + lists affected claims.
+- web knowledge layer (#761): web-risk-control.md (signal taxonomy /
+  adversarial decision tree with headless→emulation→headfull escalation /
+  stack fingerprints / locate-by-trigger loop) + web-crawler-engineering.md;
+  sequentialthinking contract as single source (worker complex reasoning +
+  redteam attack-path enumeration); planning state machine + three
+  mechanical replan triggers (revision-N audit trail); recall feedback loop
+  (recall_useful → dictionary demotion suggestions) + joint query; LEARN
+  ladder two-tier internal→WebSearch with URL+date evidence discipline.
+- web JS semantic index (#751): js:semantic-query / js:call-graph tags;
+  gitnexus-query dual-domain produces; quickref index step; route fixtures;
+  web_gitnexus_demo.py (real webcrack transform + gitnexus analyze +
+  buildSignature chain capture).
+- dispatch tool face (#760): tools= prefix mechanically validated against
+  agent allowedTools + §1c write floor (REJECT); TRY ladder boundary —
+  capability mismatch goes straight to ESCALATE (IDA py_eval as shell is a
+  forbidden stopgap); macos labs type (Mach-O, WARN-only);
+  agents/web-re-worker.md — five-step signature localization × camoufox
+  debug surfaces, headless-first + instrumentation-as-first-class rulings
+  encoded, dual precedence with pefile-signature.
+- blind redo (#772): verifier-divergence feedback reaches the re-dispatch
+  prompt as GAP only (where it diverged, never the verifier's derived
+  answer) — REDO slice in dispatch_context, symmetric to #527's BLIND;
+  leak heuristic WARN in dispatch_gate.
+
+
 ### Round 1 — Unattended Runtime & Long-Horizon Defects (priority per user)
 
 **Added**
