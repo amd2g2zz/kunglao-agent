@@ -36,6 +36,10 @@ disallowedTools:
 - mcp__x64dbg__connect_to_instance
 - mcp__x64dbg__terminate_session
 - mcp__volatility__*
+- Write
+- Edit
+- WebFetch
+- WebSearch
 isolation: none
 ---
 
