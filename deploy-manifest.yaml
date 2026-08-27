@@ -99,7 +99,7 @@ files:
   - src: agents/verdict-scorer.md
     dest: .claude/agents/verdict-scorer.md
     kind: agent
-    sha256: 46e17120c382995863794867bff52051a87d0c85a2cce4f518eb828608c521e1
+    sha256: 6f700788d75a05b2b1124e57143fb5ce65b25dead94bae5393eec932a6e47774
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
