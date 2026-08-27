@@ -145,16 +145,6 @@ def evaluate_tick_continuity(state: dict, *,
             f"{stamps[-1].strftime('%Y-%m-%dT%H:%M:%SZ')}, cadence <= "
             f"{int(2 * interval)}m)")
 
-# #461: the cron-registration marker. --heartbeat-on alone proves only that
-# the FILE was written (init / manual chain both can do that); the marker
-# flips to true only when the /loop prompt body itself executes (its first
-# action runs `--heartbeat-on --loop-registered`) — the prompt body running
-# is the one mechanical event that proves CronCreate accepted the
-# registration. heartbeat_loop_prompt.py --verify HARD-fails while it is
-# not true: a silently-failed cron registration was the 2026-08-19 v0.1.1
-# field report ("monitoring never started", zero error surfaced).
-LOOP_MARKER_KEY = "loop_registered"
-
 
 def utc_now() -> str:
     return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
