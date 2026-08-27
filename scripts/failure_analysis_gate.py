@@ -903,7 +903,7 @@ def _print_blocked(d: dict) -> None:
     print("  3. next_method         - what DIFFERENT method tests a different assumption?")
     print("                           (literal retry is forbidden; 'method was adequate' only if Q2=justified)")
     print()
-    print("And transduce the failure into typed artifacts (- the analysis does")
+    print("And transduce the failure into typed artifacts (the analysis does")
     print("not unblock without them):")
     print()
     print("  4. validated_capability - what this failure PROVED works (capability ok)")
