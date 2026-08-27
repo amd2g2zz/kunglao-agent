@@ -780,6 +780,24 @@ def register_hooks_deployed(ws: Path) -> int:
     print(f"OK: registered {added} deployed hook entries")
     return 0
 
+def resolve_deployment(ws: Path | None):
+    """#783 phase-2 inversion selector.
+
+    Returns (hook_dir, project). When the workspace carries .claude/hooks
+    (the manifest was materialized there), commands are rewritten to those
+    WORKSPACE-LOCAL copies with the workspace as the uv project root -- this
+    is what makes an initialized workspace self-contained against later
+    skill-package upgrades. Otherwise falls back to the canonical install
+    dir with no project override."""
+    if ws is None:
+        return _canonical_hooks_dir(), None
+    w = Path(ws).resolve()
+    local = w / ".claude" / "hooks"
+    if local.is_dir():
+        return local, w
+    return _canonical_hooks_dir(), None
+
+
 def register_hooks(workspace: Path | None = None,
                    global_opt_in: bool = False) -> int:
     """THE registration writer (#445) — register kunglao-agent hooks in the
@@ -816,10 +834,10 @@ def register_hooks(workspace: Path | None = None,
     pre = hooks.get("PreToolUse") or []
     post = hooks.get("PostToolUse") or []
 
-    # hook_dir: the CANONICAL deployed skill hooks dir — NOT this module's
-    # own location (#269; running from a worktree must not bind hook commands
-    # to the worktree path, which dies with it — #228).
-    hook_dir = _canonical_hooks_dir()
+    # hook_dir resolution (#783 phase-2): workspace-local copies win when
+    # materialized; canonical install dir otherwise (legacy + global path).
+    hook_dir, project_ws = resolve_deployment(
+        workspace if not global_opt_in else None)
 
     def _ensure(entries: list, matcher: str, hook_file: str) -> tuple[list, bool]:
         new = [e for e in entries if e.get("matcher") == matcher]
@@ -830,7 +848,8 @@ def register_hooks(workspace: Path | None = None,
             e for e in new
             if not any((h.get("command", "").replace("\\", "/").rsplit("/", 1)[-1] == hook_file) for h in e.get("hooks", []))
         ]
-        new.append(build_hook_entry(hook_dir, hook_file, matcher))
+        new.append(build_hook_entry(hook_dir, hook_file, matcher,
+                                    project=project_ws))
         return other + new, True
 
     def _ensure_stop(entries: list, hook_file: str) -> tuple[list, bool]:
@@ -848,7 +867,8 @@ def register_hooks(workspace: Path | None = None,
                 filtered.append(h)
             if filtered:
                 kept.append({"hooks": filtered})
-        kept.append(build_hook_entry(hook_dir, hook_file, None))
+        kept.append(build_hook_entry(hook_dir, hook_file, None,
+                                     project=project_ws))
         return kept, True
 
     count = 0
@@ -926,7 +946,8 @@ def register_hooks(workspace: Path | None = None,
         settings_path,
         expected_files=_wire_up_hook_files(),
         workspace=workspace,
-        layer="user-opt-in" if global_opt_in else "project")
+        layer="user-opt-in" if global_opt_in else "project",
+        deployed_project=project_ws)
     if not check["ok"]:
         raise HookWiringSelfcheckError(
             f"{settings_path} failed the post-registration self-check "

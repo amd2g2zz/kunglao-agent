@@ -135,7 +135,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: 6b43914af0a5daf4d10f94cafcd20245956ff77e01c43441327dd390e19b0e4e
+    sha256: 892c67ab19551671c5bfd2766f2951ee0d8d136b306a78f7369af34b94bea908
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
