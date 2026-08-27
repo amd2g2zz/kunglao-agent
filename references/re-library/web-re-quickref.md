@@ -130,6 +130,38 @@ visible. Both tools are direct npx calls; no wrapper exists or is needed
 (wakaru deliberately does not attack string arrays, control-flow flattening,
 or VM protectors — that division of labor *is* the routing).
 
+### Index the tree you just recovered
+
+A clean inspection ends the peeling loop — do not fall back to manual grep
+over the unwrapped modules. One pass builds the queryable layer:
+
+```
+gitnexus analyze <recovered-output-dir>     # Tree-sitter JS parse -> graph
+```
+
+With the graph built, the signature-trace questions become graph queries.
+The posture mirrors the signed-parameter workflow above — answer where,
+then what, then who reaches it:
+
+1. **Which function assembles the signed string?** Ask for the symbol the
+   initiator stack landed on (`search_code` hit); its callees expose the
+   concat/encoding steps feeding the parameter.
+2. **What does the signer call?** Outgoing call edges name the digest /
+   compression primitives — read their shape against the signature table
+   below for an algorithm family prior.
+3. **Which request entry point reaches it?** Follow incoming callers until
+   the chain terminates in a fetch/XHR wrapper; that wrapper must line up
+   with the captured request from Step 2 of the workflow — if it does not,
+   the wrong assembly site was identified.
+
+Re-index after every further peel: each transformation invalidates the
+previous graph. Semantic queries over stale trees are confident nonsense.
+
+Methodology note: the analysis system registers this capability pair as
+`js:semantic-query` / `js:call-graph`; the dispatching worker owns when and
+how the query carrier runs (worker contract), not whether it runs —
+manual-grep chaining in place of the graph is the anti-pattern.
+
 ## Crypto-algorithm signatures
 
 Read the captured value before reading the code — the shape narrows the

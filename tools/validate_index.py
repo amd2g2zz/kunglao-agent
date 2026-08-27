@@ -78,8 +78,8 @@ _LEGACY_UNANNOTATED = frozenset({
 # capability that changes tool-selection behaviour).
 #
 # Seeded from existing produces tags (9 android: tags from #692 WP1).
-# #728 (web labs type, in flight) will add: js_unbundle / js_deobfuscate.
-# Coordinate at merge time — update this comment block with the merged state.
+# #728 (web labs) landed js:unbundle / js:deobfuscate; #751 adds the
+# js-domain semantic pair mirroring android (#751 design D1).
 _CAPABILITY_TAGS = frozenset({
     # android: — seeded from #692 WP1 provider entries
     "android:algorithm-verify",
@@ -98,6 +98,8 @@ _CAPABILITY_TAGS = frozenset({
     # Note: wakaru-unbundle produces js:unbundle; webcrack-deobfuscate produces js:deobfuscate
     # These are the canonical routing tags for JS recovery pipelines.
     "js:deobfuscate",
+    "js:call-graph",      # #751: gitnexus over wakaru/webcrack output
+    "js:semantic-query",  # #751: graph RAG queries over a js source tree
     "js:unbundle",
     # crypto: — legitimate routing tag for the crypto-tool family
     "crypto:decode",

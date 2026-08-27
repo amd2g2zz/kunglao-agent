@@ -110,6 +110,9 @@ assets:
     - tools/static/rust-dep-strings.py
     - tools/static/shellcode_scan.py
     - tools/static/stack-strings.py
+    # #751: web JS semantic-index-layer regression demo (gitnexus over
+    # recovered bundles); fixtures in tests/fixtures/web751/
+    - tools/static/web_gitnexus_demo.py
     - tools/static/strings-classify.py
     - tools/static/yara-gen.py
     - tools/static/yara-rules/crypto-tables.yar

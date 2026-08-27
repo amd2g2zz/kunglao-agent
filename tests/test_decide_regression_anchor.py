@@ -53,6 +53,14 @@ import convergence_check  # module under test (== baseline before #443 GREEN)
 BASELINE_COMMIT = "8804dcd"  # dev HEAD at the 2026-08-26 re-pin (#707 contradiction annotation is an intentional decide() semantics change)
 ANCHOR_FILE = Path(__file__).parent / "decide_anchor_8804dcd.json"
 
+# 2026-08-27 corpus re-pin (#751): web-re-quickref.md grew the gitnexus
+# semantic-index step (~30 lines), shifting lexical rarity again. Same class:
+# DATA drift only, 4 score floats across the 2 contradiction cases
+# (0.905067808708 -> 0.907194994786, 0.910599571734 -> 0.912148070907).
+# Also: _load_baseline_module now ships hooks/_path_hygiene.py beside the
+# copied lib_kunglao.py — the #671 self-bootstrap FileNotFoundError'd the
+# regen path after that merge (regen was broken for every doc-touching wave).
+#
 # 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web-re-quickref.md
 # joined the anomaly baseline corpus (anomaly_detector._load_baseline ingests
 # re-library/*.md), shifting every lexical rarity score in the 4th decimal. This
@@ -517,6 +525,12 @@ def _load_baseline_module():
     (tmp / "hooks").mkdir()
     (tmp / "hooks" / "lib_kunglao.py").write_text(
         (ROOT / "hooks" / "lib_kunglao.py").read_text(encoding="utf-8"), encoding="utf-8")
+    # #671 self-bootstrap: the copied lib resolves hooks/_path_hygiene.py by
+    # its own __file__ — ship the sibling so exec_module does not FileNotFoundError
+    _hyg = ROOT / "hooks" / "_path_hygiene.py"
+    if _hyg.is_file():
+        (tmp / "hooks" / "_path_hygiene.py").write_text(
+            _hyg.read_text(encoding="utf-8"), encoding="utf-8")
     name = f"convergence_check_baseline_{BASELINE_COMMIT[:7]}"
     if name in sys.modules:  # one process, one baseline instance
         return sys.modules[name]

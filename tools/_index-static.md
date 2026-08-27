@@ -278,13 +278,13 @@
 
 ### gitnexus-query
 
-- **Purpose**: Semantic graph queries (dependency/call-chain/execution-flow + Graph RAG) over an INDEXED decompiled source tree (capability `android:semantic-query` sole, high; `android:call-graph` high).
+- **Purpose**: Semantic graph queries (dependency/call-chain/execution-flow + Graph RAG) over an INDEXED decompiled source tree (capability `android:semantic-query` high; `android:call-graph` high; #751 js domain adds `js:semantic-query` + `js:call-graph`, both high — js input is a recovered JS module tree registered as evidence `<run>.json` `unpack_out` by wakaru/webcrack).
 - **Usage**:
   ```bash
   python -m scripts.mcp_probe <workspace> --type android --json   # registration face; then the 16 gitnexus MCP tools over the indexed tree
   ```
 - never pre-run; marker `evidence/gitnexus_index.json` (`{source_root, indexed_at, tools}`).
-- **Inputs**: indexed source tree (jadx or dexdc output both qualify).
+- **Inputs**: indexed source tree (jadx/dexdc output on android; a wakaru/webcrack output directory on web).
 - **Outputs**: graph/RAG answers over the source tree.
 - **exit code**: 0 all-PASS / 1 HARD FAIL / 2 WARN-only (the scripts/mcp_probe.py face; MCP calls have no shell exit code).
 - **when_not**: Not a decompiler; not without an indexed source tree; not for DEX without source (dexdc CFG / baksmali xref).
@@ -311,7 +311,7 @@
   python -m scripts.toolchain <workspace> --type web --json   # web (labs) supply face; the wakaru CLI itself is agent-invoked: npx -y wakaru <bundle.js> (first npx run installs; verify with `npx wakaru --version`)
   ```
 - **Inputs**: minified/bundled JavaScript (webpack/esbuild/Browserify/Metro/Closure/ncc).
-- **Outputs**: module tree + transpiler/minifier undo + type annotation removal (input_output in [_INDEX.yaml](_INDEX.yaml)).
+- **Outputs**: module tree + transpiler/minifier undo + type annotation removal; register the output directory into evidence/<run>.json `unpack_out` so gitnexus-query can lazy-index it (#751; input_output in [_INDEX.yaml](_INDEX.yaml)).
 - **exit code**: external npx CLI — 0 success / non-zero failure; the invoking worker owns the interpretation (no repo gate wraps this provider, same as jadx's external CLI).
 - **when_not**: Not for obfuscator.io/string-array/control-flow-flattening/VM-protected code (wakaru deliberately avoids these); try webcrack-deobfuscate first for classic obfuscation.
 - **provider**: `wakaru` — external npm package, agent-invoked via npx, never init-gated; install guidance in the FIXES entry of scripts/toolchain.py; cost_hint `{mem_gb: 0.5, time: cheap}`.
@@ -324,7 +324,7 @@
   python -m scripts.toolchain <workspace> --type web --json   # web (labs) supply face; the webcrack CLI itself is agent-invoked: npx -y webcrack <input.js> (first npx run installs; verify with `npx webcrack --version`)
   ```
 - **Inputs**: obfuscator.io / minified JavaScript.
-- **Outputs**: deobfuscated source tree (input_output in [_INDEX.yaml](_INDEX.yaml)).
+- **Outputs**: deobfuscated source tree; register the output directory into evidence/<run>.json `unpack_out` so gitnexus-query can lazy-index it (#751; input_output in [_INDEX.yaml](_INDEX.yaml)).
 - **exit code**: external npx CLI — 0 success / non-zero failure; the invoking worker owns the interpretation (no repo gate wraps this provider).
 - **when_not**: Not for VM bytecode or environment-bound code; use wakaru-unbundle on the output to recover module structure after deobfuscation.
 - **provider**: `webcrack` — external npm package, agent-invoked via npx, never init-gated; install guidance in the FIXES entry of scripts/toolchain.py; cost_hint `{mem_gb: 0.5, time: cheap}`.

@@ -352,16 +352,16 @@ tools:
   - name: gitnexus-query
     category: static
     capability: android:semantic-query
-    description: Source-tree graph RAG queries
+    description: Graph-RAG source queries, android + js
     tier: T1
     cost_tier: deep
-    input_output: {input: "indexed decompiled source tree (16 MCP tools via the gitnexus server; index built lazily on claim demand, marker evidence/gitnexus_index.json)", output: "dependency/call-chain/execution-flow graph answers via Graph RAG"}
-    when_not: "not a decompiler; not without an indexed source tree (lazy build - never pre-run); not for DEX without source (dexdc CFG / baksmali xref instead)"
+    input_output: {input: "indexed decompiled source tree - jadx/dexdc output (android) OR a recovered JS module tree registered into evidence/<run>.json unpack_out by wakaru/webcrack (#751 js domain); 16 MCP tools via the gitnexus server; index built lazily on claim demand, marker evidence/gitnexus_index.json", output: "dependency/call-chain/execution-flow graph answers via Graph RAG; for web signature-trace posture see references/re-library/web-re-quickref.md"}
+    when_not: "not a decompiler; not without an indexed source tree (lazy build - never pre-run); on js targets run only AFTER recovery (wakaru/webcrack unpack first - gitnexus parses normal source, not bundles); not for DEX without source (dexdc CFG / baksmali xref instead)"
     provider: gitnexus
-    produces: [android:semantic-query, android:call-graph]
+    produces: [android:semantic-query, android:call-graph, js:semantic-query, js:call-graph]
     requires: [source_tree, gitnexus_index]
     cost_hint: {mem_gb: 1.0, time: deep}
-    quality: {android:semantic-query: high, android:call-graph: high}
+    quality: {android:semantic-query: high, android:call-graph: high, js:semantic-query: high, js:call-graph: high}
 
   - name: dexdc-decompile
     category: static
@@ -385,7 +385,7 @@ tools:
     capability: js:unbundle
     tier: T1
     cost_tier: cheap
-    input_output: {input: "minified/bundled JS (webpack/esbuild/Browserify/Metro/Closure/ncc), output: module-tree + transpiler/minifier undo + type annotation removal"}
+    input_output: {input: "minified/bundled JS (webpack/esbuild/Browserify/Metro/Closure/ncc), output: module-tree + transpiler/minifier undo + type annotation removal; register the output directory into evidence/<run>.json unpack_out so gitnexus-query can lazy-index it (#751)"}
     description: Unpacks bundler; reverses transpiler
     when_not: "not for obfuscator.io/string-array/control-flow-flattening/VM-protected code (wakaru deliberately avoids these); try webcrack first for classic obfuscation"
     provider: wakaru
@@ -399,7 +399,7 @@ tools:
     capability: js:deobfuscate
     tier: T1
     cost_tier: cheap
-    input_output: {input: "obfuscator.io / minified JS, output: deobfuscated source tree"}
+    input_output: {input: "obfuscator.io / minified JS, output: deobfuscated source tree; register the output directory into evidence/<run>.json unpack_out so gitnexus-query can lazy-index it (#751)"}
     description: Deobfuscates classic JS layers
     when_not: "not for VM bytecode or environment-bound code; use wakaru on the output to recover module structure after deobfuscation"
     provider: webcrack
