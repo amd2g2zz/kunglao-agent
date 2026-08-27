@@ -25,6 +25,10 @@ triggers:
     - webpage
     - 网页
     - risk control
+    - jsvmp
+    - vmp
+    - opcode
+    - a_bogus
     - 风控
     - crawler
     exclude:
@@ -80,6 +84,11 @@ and offline unpack/deobfuscate CLIs, then write the fact file. That is your job.
 > Tool boundary: binary-analysis suites (ghidra / x64dbg / frida / volatility) are OUT of scope for this lane. Browser-side instrumentation goes exclusively through camoufox/CDP.
 Knowledge source of record: `references/re-library/web-re-quickref.md` (the
 five-section methodology is internalized below; read the quickref for depth).
+> JSVMP branch: when the target logic is compiled into a bytecode VM
+> (big consumed array + dispatch switch -- confirmed by
+> scripts/jsvmp_triage.py), AST recovery is structurally impossible;
+> switch to the instruction-trace methodology before burning more
+> AST passes.
 
 ## ⚡ GOLDEN RULES
 

@@ -181,5 +181,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `run_test_matrix.py` | matrix-style scoped pytest runs (issue-lane suites); canonical full-suite entry stays the README Quick-start pytest line | lane tooling, tests |
 | `deploy_manifest.py` | deployment manifest builder/verifier - hooks+agents+scaffold closure, per-file sha256 (newline-normalized); feeds init copy-deploy and upgrade refresh | CLI, tests |
 | `deployed_refresh.py` | upgrade-side framework-copy refresh - overwrite semantics with forensic backups (runs/deploy-backup-*), orphan double-confirm prune; migration item face for #783 | tests, CLI via kunglao_upgrade chain |
+| `jsvmp_triage.py` | three-feature JSVMP/VMP triage over deobfuscated bundles -> structured JSON verdict; advisory posture | web-re-worker, tests |
 
 | `re_pin_references.py` | references/_INDEX.yaml pin regeneration — re-run after ANY references/ edit (drift fails test_replay_gate) | docs, tests |
