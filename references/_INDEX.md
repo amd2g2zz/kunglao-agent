@@ -16,6 +16,8 @@
 | osint | multi-search-engine, multi-search-engine-refs | Multi-engine OSINT search |
 | resources | awesome-re-resources | External RE resource collection |
 | web-labs | web-re-quickref | Browser JS reverse engineering quick-reference (web workspaces, camoufox MCP supply, layered peeling workflow, crypto signatures, anti-patterns) |
+| web-risk-control | web-risk-control | Web anti-bot defense-response doctrine (#761): signal taxonomy, adversarial decision tree (headless-first escalation), stack identification, detection-point localization loop |
+| web-crawler-engineering | web-crawler-engineering | Sustainable collection engineering (#761): session persistence, rate disguise, IP strategy, CAPTCHA triage |
 | contracts | agent-three-state-charter, error-response-taxonomy, dispatch-protocol | Behavior contracts the orchestrator loads on scenario (ask/stop charter, error response taxonomy, dispatch protocol) |
 
 | Scenario | Domain |
@@ -30,6 +32,7 @@
 | Detection rules / reports | methodology (detection-engineer, malware-report-writer) |
 | Intelligence / search | osint |
 | Browser JS target (`--type web`) | web-labs |
+| Anti-bot decisions & crawler ops (风控对抗/爬虫工程) | web-risk-control + web-crawler-engineering |
 | Action error / tool-VM-install failure response | contracts (error-response-taxonomy) |
 | Ask-the-user / irreversible-action decision | contracts (agent-three-state-charter) |
 
@@ -39,6 +42,8 @@
 |------|--------|---------|-------------|
 | `_index-tools.md` | tools | File-level index for the tools domain. | When a worker is dispatched to tooling / static-analysis work. |
 | `_index-web-labs.md` | web-labs | File-level index for the web-labs domain (quick-reference, camoufox MCP, peeling workflow). | When dispatched to a browser JS reverse engineering task (`--type web`). |
+| `_index-web-risk-control.md` | web-risk-control | File-level index for the anti-bot doctrine domain (#761). | When a web claim hits blocking / challenge / 风控 and must classify the signal, pick a decision-tree branch, or localize the detection point. |
+| `_index-web-crawler-engineering.md` | web-crawler-engineering | File-level index for the sustainable collection engineering domain (#761). | After access is solved on a web target — designing sessions, rate budgets, IP strategy, or CAPTCHA triage. |
 | `_index-anti-analysis.md` | anti-analysis | File-level index for the anti-analysis domain. | When a worker faces anti-debug / anti-VM / anti-DBI samples. |
 | `_index-patterns.md` | patterns | File-level index for the patterns domain (general RE techniques). | When a worker needs pattern-recognition references. |
 | `_index-languages.md` | languages | File-level index for the languages domain. | When a worker has identified the sample's language. |
@@ -117,4 +122,6 @@
 | `re-library/tools-crypto.md` | tools | Encryption/encoding/hashing tool quick-reference. | When needing to identify/decode/crack encrypted data. |
 | `re-library/tools-dynamic.md` | tools | Dynamic analysis tooling (Frida, angr, lldb, x64dbg, Qiling). | When performing runtime/dynamic analysis or function hooking. |
 | `re-library/tools.md` | tools | Core static RE tools (GDB, Radare2, Ghidra, Unicorn). | When setting up a reversing workspace. |
+| `re-library/web-crawler-engineering.md` | web-crawler-engineering | 爬虫工程 sustainable collection engineering (#761): 会话维持 cookie 池/登录态, 频率伪装 human cadence, IP 策略 住宅/机房/轮换/sticky, CAPTCHA 分类应对 slider/点选/re-challenge. | After access is solved on a `--type web` target — designing sustainable collection ops or triaging a CAPTCHA surface. |
 | `re-library/web-re-quickref.md` | web-labs | Browser JS reverse engineering quick-reference: hook/boundary quick reference, signed-parameter workflow, layered peeling (unbundle → deobfuscate → VM boundary), crypto signatures, anti-patterns. | Before opening the browser on a web target (`--type web`); injected into web workspace CLAUDE.md at init. |
+| `re-library/web-risk-control.md` | web-risk-control | 风控对抗 anti-bot doctrine (#761): 信号分类学 device-fingerprint/behavioral/environment-consistency/protocol, 对抗决策树 bypass→仿真→real + 无头升级链 (J6), 风控栈识别 加速乐/瑞数/自研, 检测点定位 触发→观察→归因 loop with camoufox CDP instrumentation (J7). | When a request is blocked / challenged / a signed param is rejected on a web target — classify the signal first, then pick the branch. |

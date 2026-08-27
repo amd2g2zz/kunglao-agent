@@ -289,6 +289,47 @@ _NO_ARTIFACTS_MARKERS = frozenset({"none", "-", "(none)"})
 NOTES_RE = re.compile(
     r"(?:^|\|)\s*notes\s*:\s*([^|\n]+)", re.IGNORECASE | re.MULTILINE)
 
+# J4 recall feedback (#761): verdict whitelist + optional term scope in
+# parens — `recall_useful: yes` or `recall_useful: misleading(risk control,
+# memory-layout)`. Same pipe-embedded duality as artifacts/notes. The parse
+# point stays HERE (single canonical parse, #444 AC-1); references_recall's
+# statistics face imports these helpers.
+RECALL_USEFUL_RE = re.compile(
+    r"recall_useful:\s*([A-Za-z]+)\s*(?:\(([^)]*)\))?", re.MULTILINE)
+RECALL_VERDICTS = frozenset({"yes", "no", "misleading"})
+
+
+def parse_declared_recall_useful(text: str) -> str | None:
+    """Orchestrator-facing recall-usefulness verdict from the DONE line
+    (#761 J4). Whitelisted tokens only; the LAST line wins (append-only
+    log). Unknown/absent -> None."""
+    verdict = None
+    for m in RECALL_USEFUL_RE.finditer(text):
+        v = m.group(1).lower()
+        if v in RECALL_VERDICTS:
+            verdict = v
+    return verdict
+
+
+def parse_recall_feedback(text: str) -> tuple[str | None, list[str]]:
+    """Finer-grained face of the same last ``recall_useful:`` line: (verdict,
+    scoped dictionary terms). Terms are lowercase-deduped order-preserved;
+    no parenthetical scope -> ([], the verdict attaches to no dictionary term
+    and is NOT counted toward term demotion)."""
+    verdict: str | None = None
+    terms: list[str] = []
+    for m in RECALL_USEFUL_RE.finditer(text):
+        v = m.group(1).lower()
+        if v not in RECALL_VERDICTS:
+            continue
+        verdict = v
+        raw = m.group(2) or ""
+        for tok in raw.split(","):
+            t = tok.strip().lower()
+            if t and t not in terms:
+                terms.append(t)
+    return verdict, terms
+
 
 def parse_worker_status_tokens(text: str) -> list[str]:
     """All ``status:`` tokens in file order, lowercased.
@@ -396,6 +437,7 @@ def iter_worker_states(workspace: Path) -> list[dict]:
                 "mtime": mtime,
                 "artifacts": parse_declared_artifacts(text),
                 "notes": parse_declared_notes(text),  # #762 K2 sedimentation refs
+                "recall_useful": parse_declared_recall_useful(text),  # #761 J4
             })
     return states
 

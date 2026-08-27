@@ -72,6 +72,41 @@ GO_SIGNALS = (
     "go runtime", "go symbol", "go function", "go 1.",
 )
 
+# Web-domain signals (#761 J1, ruling: 风控/爬虫知识 web 域专用): a claim that
+# mentions the anti-bot / crawler surface gets the two web-dictionary queries
+# prepended (web-risk-control.md / web-crawler-engineering.md top hits), before
+# the tier-based default. All anchors are compound/CJK — deliberately noise-
+# safe so legacy dispatch prompts never gain the extra queries (the pinned
+# test_recall_inject.py fixtures hit none of these).
+WEB_SIGNALS = (
+    "风控", "反爬", "风险控制", "爬虫", "验证码", "滑块", "点选",
+    "risk control", "risk-control", "anti-bot", "antibot",
+    "crawler", "captcha", "web target", "--type web", "camoufox",
+)
+
+# Recalled queries for a web-signal claim (#761 J1). "risk control" ranks
+# re-library/web-risk-control.md first (name+domain+purpose CJK tokens);
+# "crawler" surfaces web-crawler-engineering.md via its bilingual purpose row.
+WEB_QUERIES = ("risk control", "crawler")
+
+# Red-team dispatch detection (#761 J4 second trigger face): adversarial
+# knowledge injected BEFORE the checker plans its attacks — same FAIL_OPEN,
+# rc-always-0 semantics as the claim face. Claim-shaped prompts keep the
+# original flow; a red-team prompt without a `[T<N>] claim` shape takes this
+# branch.
+REDTEAM_RE = re.compile(r"(?:red[\s_-]*team|redteam|verify-redteam)", re.IGNORECASE)
+
+
+def queries_for_redteam(prompt_text: str) -> list[str]:
+    """Red-team recall queries (#761 J4): failure-modes domain by default
+    (how past checks failed -> attack angles); web signals add the anti-bot
+    doctrine so an adversarial pass on a web claim carries the decision tree."""
+    text = (prompt_text or "").lower()
+    queries = ["failure analysis"]
+    if any(s in text for s in WEB_SIGNALS):
+        queries.extend(WEB_QUERIES)
+    return queries
+
 # tier_rules is the single source for T3/T2 feature detection (#241).
 # #671: module-level membership via the hygiene authority (was bare insert).
 ensure_scripts_path()
@@ -111,9 +146,14 @@ def queries_for_features(prompt_text: str, tier: int) -> list[str]:
     verify-static-vs-dynamic.md); tier 2 (static-depth/disasm) and the tier 1
     default -> "static analysis" (disasm/static-analysis scene — "disasm" itself
     matches nothing in the layered index).
+    #761 J1: web-domain signals prepend "risk control" + "crawler" (the two new
+    web reference docs) — append-only semantics: every pre-existing mapping is
+    unchanged for prompts without web signals.
     """
     text = prompt_text.lower()
     queries: list[str] = []
+    if any(s in text for s in WEB_SIGNALS):
+        queries.extend(WEB_QUERIES)
     if any(s in text for s in GO_SIGNALS):
         queries.append("go")
     if tier == 3:
@@ -176,23 +216,35 @@ def _guidance(queries: list[str], files: list[str]) -> str:
 
 
 def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
-    """Hook decision for a PreToolUse(Agent) claim-dispatch payload (#268).
+    """Hook decision for a PreToolUse(Agent) dispatch payload (#268/#761 J4).
 
     Returns (exit_code, stderr_text, additional_context_or_None):
-      - (0, "", None) — not a kunglao workspace / not a claim dispatch /
-        recall failed or matched nothing (FAIL_OPEN: dispatch proceeds)
+      - (0, "", None) — not a kunglao workspace / not a claim or red-team
+        dispatch / recall failed or matched nothing (FAIL_OPEN: dispatch
+        proceeds)
       - (0, "", ctx)  — recall matched: guidance naming the reference files
     rc is ALWAYS 0 — this hook injects knowledge, never rejects.
+    Trigger faces: claim dispatch (`[T<N> tools=...] claim C-NN`, #268) and
+    red-team verification dispatch (#761 J4 — adversarial knowledge BEFORE
+    the checker plans its attacks).
     """
     ws = _resolve_workspace(payload)
     if ws is None:
         return 0, "", None
     prompt_text = _dispatch_text(payload)
-    if not prompt_text or not DISPATCH_RE.search(prompt_text):
-        return 0, "", None  # not a claim dispatch — silent
+    if not prompt_text:
+        return 0, "", None
 
-    tier = tier_for_claim({"statement": prompt_text})
-    queries = queries_for_features(prompt_text, tier)
+    is_claim = bool(DISPATCH_RE.search(prompt_text))
+    if not is_claim and not REDTEAM_RE.search(prompt_text):
+        return 0, "", None  # neither a claim nor a red-team dispatch
+
+    if is_claim:
+        tier = tier_for_claim({"statement": prompt_text})
+        queries = queries_for_features(prompt_text, tier)
+    else:
+        queries = queries_for_redteam(prompt_text)
+
     files: list[str] = []
     seen: set[str] = set()
     for query in queries:

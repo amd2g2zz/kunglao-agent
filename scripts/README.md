@@ -82,6 +82,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `explore_gate.py` | explore-before-dispatch gate (lib for kunglao-decide) | lib(1), tests |
 | `fact_contradiction_gate.py` | cross-fact contradiction detection | hooks, lib(3), tests |
 | `plan_drift_detector.py` | plan↔reality drift detection | hooks, tests |
+| `plan_reviser.py` | plan state machine + suggest_revision triggers + incremental revision segments | tests, SKILL contract |
 | `premature_termination_detect.py` | premature-done declaration detector | lib(1), tests |
 | `provenance_gate.py` | PROVEN provenance chain gate | lib(1), tests |
 | `reuse_gate.py` | evidence-reuse gate | tests |

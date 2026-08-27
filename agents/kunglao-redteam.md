@@ -84,6 +84,24 @@ pass.**
    not been self-consistency-checked — the whole point is that a second
    independent path either corroborates (PASS) or exposes a hole (DIFF).
 
+<!-- contract: sequential-thinking -->
+## Attack-path enumeration via sequential thinking (#761 J2)
+
+攻击路径枚举**必须走 `mcp__sequential-thinking__sequentialthinking` 链**（已在
+你的 allowedTools）——枚举是 red-team 质量的生命线，凭直觉列角度就是系统性遗漏：
+
+1. **枚举攻击面** — 第一个 thought 只做一件事：按五类攻击角（rule 5）× 目标
+   声明的载荷面列全候选清单；本步不评判可行性。
+2. **逐路径假设** — 每个候选一条 thought：若该路径成立，预期观测是什么、需要的
+   最小证据是什么。
+3. **反证 falsification** — 对每条假设找"什么观测能杀死它"，标注优先级；只有
+   反证失败的路径才进入实际执行。
+
+纪律：被反证杀死的路径记 "path killed: <观测>" 进 plan-redteam 的附录——杀死
+记录本身是 coverage 证据；跳过枚举直接深挖单一路径 = systematic-coverage miss，
+verdict 报告里的 overall_rationale 必须携带思考轨迹摘要（枚举面数、杀死数、
+存活路径），保证 verdict 可审计。
+
 ## Knowledge recall first (issue #268)
 
 Before planning any attack, run the reference recall:

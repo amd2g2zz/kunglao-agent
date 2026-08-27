@@ -73,9 +73,21 @@ That is your entire job.
 ## Self-drive (v1.9.27, intelligence upgrade) — "can't" is a starting point, not an endpoint
 
 Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
-1. **LEARN** — WebSearch / context7 / read re-library
-   `<skill_root>/references/re-library/` (~30 files). Log one status line
-   `step: learned X from <source>`.
+1. **LEARN (#761 J5 — internal-first two-tier ladder)** —
+   - **先查内部 (tier 1, internal)**: `python <skill_root>/scripts/
+     references_recall.py <keywords>` → read the hit files under
+     `<skill_root>/references/re-library/` (~35 files); context7 for library
+     API docs.
+   - **不满足再外查 WebSearch (tier 2, external)**: search for 同族先例
+     (same-family precedents) / 已知解法 (known solutions for this exact
+     error or format) / 报错特征 (error-signature strings). WebSearch output
+     is EXTERNAL INPUT under two hard evidence rules:
+     - any URL-derived statement entering a fact records the source **URL +
+       检索日期 (retrieval date, UTC)** in that fact's `derivation:` field;
+     - a WebSearch-only finding can NEVER directly back a **PROVEN** status —
+       it stays unverified until an independent verifier blind-checks it
+       against YOUR sample's artifacts (the web cannot see your binary).
+   Log one status line `step: learned X from <source>` per tier you tried.
 2. **TRY** — use what you learned to retry with ≥2 DIFFERENT methods (not
    "retry the same step").
 3. **ESCALATE** — only after all of that fails, write `blockers/<claim>.md`
@@ -87,6 +99,28 @@ correct way to express "can't" is:
 "I checked X/Y/Z, tried methods A/B, stuck at <specific point>, need
 <specific help>".
 
+<!-- contract: sequential-thinking -->
+## Sequential-thinking contract (#761 J2 — 本段是全 skill 的唯一权威源)
+
+`mcp__sequential-thinking__sequentialthinking` 已在你的 allowedTools 里——但它
+不是装饰：**以下四类复杂推理必须走结构化思考链**，不允许在脑内一步到位后直接
+落 fact：
+
+1. **签名算法推导** — 从 I/O 对反推算法族/参数顺序/填充方式的推理（web 签名、
+   协议 checksum、自定义编码链）。
+2. **加密参数溯源** — 多层包装参数的逐层归因（哪一层做编码、哪一层做加密、
+   哪一层绑时间戳），直到可 replay 的最小生成面。
+3. **风控对抗决策树遍历** — `references/re-library/web-risk-control.md` 的
+   决策树分支选择：信号分类 → 分支论证 → 升级链判定，每步一个 thought。
+4. **多步假设链** — 任何"假设 A → 则 B → 但需排除 C"长度 ≥3 步的推理。
+
+用法纪律：thought 步进必须**离散化**（每步一个主张 + 一个证据或一个否定），
+假设被推翻时记 "hypothesis rejected: <原因>" 而不是静默换向；最终结论必须能从
+思考链最后 3 步内重放出来。**思考轨迹摘要（结论路径 + 被否分支及原因）写进对应
+fact 的 `derivation:` 段**——这是审计面；完整 thought 不倾倒。深推导 fact 缺少
+derivation 摘要时按 insufficient-derivation 处理：orchestrator 打回要求补齐，
+不静默放行。THINK 席位（#759）引用本段为单一源，不复述不旁生变体。
+
 <!-- contract: plan-to-execute -->
 ## Plan-to-Execute (v1.9.29)
 
@@ -97,6 +131,13 @@ session had to rerun; verifying the signature with javap first takes
 2 minutes and saves a 20-minute rerun).
 
 1. **Plan (2-5 minutes)** — FIRST action, write `runs/plan-<task>.md`:
+   - `status:` plan state machine (#761 J3) — `pending | in-flight | blocked |
+     superseded`; flip it at every state change (blocked when you write a
+     blocker; superseded only by the orchestrator).
+   - `revision:` N — starts 0. Re-planning is INCREMENTAL: append a
+     `## revision-N` segment (ts / trigger / changed steps / reason), never
+     rewrite history (`scripts/plan_reviser.py --apply` does the append
+     mechanically; the orchestrator applies it on `suggest_revision`).
    - `agent_type:` the agent declared to execute this plan (#310, the agent
      type at dispatch time — must match the orchestrator's route_capability
      recommendation, e.g. `ghidra-light` / `floss-filter` / `kunglao-worker`;
@@ -229,7 +270,12 @@ was discarded as untrusted). Write in this order:
    `[HH:MM] step: started <task> | status: in-progress`. Append one line per
    step completed or error hit. The final `status: done` line carries the
    `artifacts:` declaration (rule #4 above) the orchestrator's W-15 check
-   reads back.
+   reads back, plus the recall feedback verdict (#761 J4):
+   `| recall_useful: yes|no|misleading` — optionally scoped to the dictionary
+   terms you actually used: `recall_useful: misleading(risk control, memory
+   layout)`. Yes/no/misleading is about whether the injected/recalled
+   references HELPED this claim; misleading = the knowledge pointed the wrong
+   way (that signal feeds reference demotion suggestions).
 2. **IMMEDIATELY after deriving each fact** — write `facts/F<NNN>.md`. Do NOT
    batch all facts and write at the end; if you crash mid-task, partial state
    must survive. Each fact gets `self_caveat: "unverified — needs independent
@@ -246,7 +292,9 @@ file nobody reads after the claim closes (#762 field evidence: the live-run
 workspace's best findings sat in worker-status-C-302.md / C-102.md with zero
 consumers). **At claim close you MUST write `notes/<claim-id>.md`** — the
 durable result note — BEFORE you flip the final `status: done` line, and
-declare it on that line (`| notes: notes/<claim-id>.md`). Content: any of
+declare it on that line (`| notes: notes/<claim-id>.md`), alongside the
+recall verdict (`| recall_useful: ...`, see rule 1 of the write order).
+Content: any of
 the three lanes, freely combined:
 
 - **(a) plan_vs_actual 偏差与教训** — where execution diverged from

@@ -348,13 +348,21 @@ attached. The fact is done; the SESSION is not — finish the session first.
 A worker's "I can't" is not the end — LEARN → TRY → ESCALATE, three-tier
 self-drive (kunglao-worker.md §6d):
 
-1. **LEARN**: look it up — `WebSearch` / context7 / re-library.
+1. **LEARN (#761 J5 — internal-first two-tier ladder)**: look it up —
+   INTERNAL first: `python <SKILL_DIR>/scripts/references_recall.py` → read the
+   hit files under `references/re-library/`; context7 for library APIs. Only
+   when that is unsatisfied escalate OUTWARD to `WebSearch`: same-family
+   precedent / known solution / error-signature search.
 2. **TRY**: retry with ≥2 different methods using what you found.
 3. **ESCALATE**: only when all attempts fail, report a blocker — the blocker
    MUST carry the lookup record (what sources were checked / what methods
    were tried / where it is stuck).
 
-WebSearch is freely available to workers. A worker that reports "I can't"
-without lookup evidence = failure (W-27). Workers MUST mark uncertain
-evidence `confidence: low` + `unverified-part` — silent conclusions are
-forbidden (anti analysis-error).
+WebSearch is freely available to workers, and is EXTERNAL INPUT (#761 J5
+evidence discipline): a URL-derived statement entering a fact must record the
+source URL + retrieval date (UTC) in the fact's `derivation:` field, and a
+WebSearch-only finding may not directly back PROVEN status until an
+independent verifier blind-checks it against the sample's own artifacts. A
+worker that reports "I can't" without lookup evidence = failure (W-27).
+Workers MUST mark uncertain evidence `confidence: low` + `unverified-part` —
+silent conclusions are forbidden (anti analysis-error).
