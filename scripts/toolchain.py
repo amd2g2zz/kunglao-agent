@@ -86,7 +86,9 @@ import yaml  # noqa: E402
 
 # #728: web mirrors init_state.VALID_TYPES (deliberate layer copy —
 # comment block at the original definition site).
-VALID_TYPES = ("windows", "linux", "android", "web")
+# #760: "macos" joins the labs pair (WARN-only face, no VM channel —
+# openspec/changes/issue-760-dispatch-tools D4).
+VALID_TYPES = ("windows", "linux", "android", "web", "macos")
 
 # F6 (#304 review): single source of truth for the init predicate component.
 from init_state import read_project_type  # noqa: E402
@@ -1926,6 +1928,47 @@ def _check_web(report: ToolchainReport, ws: Path,
     ))
 
 
+# ---------- macOS manifest (#760, labs: WARN-only) ----------
+
+def _check_macos(report: ToolchainReport, ws: Path,
+                 caps: bool = False,
+                 reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """#760 macos (labs) checks — minimal Mach-O face, ZERO HARD items by
+    contract (labs semantics, same shape as #728 web).
+
+    - otool / class-dump / swift-demangle presence probes (WARN — the static
+      Mach-O toolset; class-dump is a manual build, never auto-installed)
+    - Darwin runtime note (WARN): dynamic analysis needs a Darwin host;
+      non-Darwin analysis hosts keep the STATIC face without blocking
+    No VM channel (NEVER_CHECKS pins vm_reachable/remote_debugger absence —
+    the #698 channel matrix belongs to windows/linux), no caps path."""
+    for tool in ("otool", "class-dump", "swift-demangle"):
+        path = _shutil_which(tool)
+        if path:
+            report.items.append(CheckResult(
+                name=tool, status=Status.PASS, tier=Tier.WARN,
+                detail=f"found at {path}", probe=ProbeTier.PRESENCE,
+            ))
+        else:
+            report.items.append(CheckResult(
+                name=tool, status=Status.WARN, tier=Tier.WARN,
+                detail=(f"{tool} not on PATH (Xcode CLT via `xcode-select "
+                        f"--install`; class-dump is a manual build)"),
+                probe=ProbeTier.PRESENCE,
+            ))
+
+    darwin = sys.platform == "darwin"
+    report.items.append(CheckResult(
+        name="darwin_runtime", status=Status.PASS if darwin else Status.WARN,
+        tier=Tier.WARN,
+        detail=("Darwin host — Mach-O dynamic surface available" if darwin
+                else f"host is {sys.platform} — Mach-O DYNAMIC analysis needs "
+                     "a Darwin environment; the static face still works "
+                     "(not blocking, labs WARN tier)"),
+        probe=ProbeTier.PRESENCE,
+    ))
+
+
 # ---------- type resolution ----------
 # F6 (#304 review): read_project_type imported from init_state.py above —
 # single source of truth; no local duplicate.
@@ -1959,12 +2002,19 @@ CHECK_SETS: dict[str, frozenset[str]] = {
         "adb", "device_root", "debug_flag", "frida_server",
         "android_server", "jdwp_debug", "ebpf_android", "unidbg",
     }),
+    # #760: labs Mach-O face (WARN-only; mirrors the web labs posture)
+    "macos": frozenset({
+        "otool", "class-dump", "swift-demangle", "darwin_runtime",
+    }),
 }
 
 # The explicit negative declaration: items a type must NEVER produce.
 # Regression-pinned by tests/test_target_alignment.py (#455 checkbox 4).
 NEVER_CHECKS: dict[str, frozenset[str]] = {
     "android": frozenset({"vm_reachable", "remote_debugger"}),
+    # #760: the VM channel is the windows/linux contract; a macOS workspace
+    # runs dynamics natively on a Darwin host, never through vmr-shell.
+    "macos": frozenset({"vm_reachable", "remote_debugger"}),
 }
 
 # ---------- report formatting ----------
@@ -2083,6 +2133,7 @@ def check(ws: Path, project_type: str | None = None,
         "linux": _check_linux,
         "android": _check_android,
         "web": _check_web,
+        "macos": _check_macos,
     }
     checkers[project_type](report, ws, caps=caps, reqs=reqs)
     return report

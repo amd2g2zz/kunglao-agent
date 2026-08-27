@@ -16,7 +16,17 @@ triggers:
       - 'certificate'
       - '签名'
       - '加壳'
-    exclude: []
+    exclude:
+      # #760 disambiguation: 签名 substring-matches web signed-parameter
+      # claims; a claim carrying any browser-domain token routes to
+      # web-re-worker instead (web-re-worker owns that phrase family).
+      - 'webhook'
+      - 'deobfuscate'
+      - 'bundler'
+      - '前端'
+      - '网页'
+      - '风控'
+      - '爬虫'
   features:
     import_hints:
       any_contains:

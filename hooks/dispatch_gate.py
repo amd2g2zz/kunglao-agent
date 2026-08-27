@@ -42,6 +42,14 @@ SMART = narrow + alive-only:
   this hook emits a stderr warning + hookSpecificOutput warning so a broken
   prompt is NOT silent (the pre-#452 silent-return-0 hid protocol drift).
 
+#760 (I1 dispatch tool-face) — the dispatched `tools=` rack is mechanically
+  validated against the target agent's frontmatter allowedTools (subset,
+  wildcard-aware, case-insensitive) AND must keep a write-capable tool
+  (Write/Edit, §1c file contract floor). Agent identity: payload
+  subagent_type/name or v1 meta.agent; no identity / unknown agent -> skip.
+  Rides the #567 structural corridor: fires before activation — an
+  unfulfillable rack (mm_x86: ida-pro-mcp only) must not wait for a session.
+
 Wiring (in .claude/settings.json PreToolUse, Agent matcher — kunglao-agent
 dispatches via the Agent tool):
   {"matcher": "Agent", "hooks": [{"type": "command",
@@ -645,6 +653,149 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
               file=sys.stderr, flush=True)
 
 
+# #567 SECURITY: MCP tool prefix enforcement.
+DISPATCH_MCP_DOC = "mcp__unknown__*, mcp__external__*"  # doc anchor only
+
+# #760 I1: dispatch tools= mechanical validation against the target agent's
+# frontmatter allowedTools (+ the §1c write-capable-tool floor). The mm_x86
+# incident: an orchestrator narrowed a worker's rack to `ida-pro-mcp` free
+# text zero-checked — no Bash/Write -> the §1c file contract was unfulfillable
+# and the LEARN->TRY ladder got abused into "use IDA in-process python as
+# shell". The allowedTools racks are skill-owned static contracts in
+# agents/*.md, so like #567 this face is STRUCTURAL: it fires before the
+# activation check (a forbidden tool rack is not a session-level concern).
+#
+# Agent identity source order: payload.tool_input.subagent_type ->
+# payload.tool_input.name (worker_budget_sinks reads .name today) -> v1 JSON
+# meta.agent. No identity / unknown agents/<name>.md -> validation skips and
+# the pre-#760 path is untouched (legacy v0 text-only payloads never carry an
+# agent name; every historical dispatch-gate test stays byte-green).
+
+_FRONTMATTER_RE_760 = re.compile(r"\A---\s*\n(.*?)\n---", re.DOTALL)
+WRITE_CAPABLE_TOOLS = ("write", "edit")
+
+
+def _agent_allowed_tools(agent_name: str | None) -> list[str] | None:
+    """agents/<name>.md frontmatter allowedTools -> list (None if unknown).
+
+    Local twin of route_capability._parse_frontmatter: hooks must not depend
+    on scripts/ private API (#671 boundary); yaml is already imported here."""
+    if not agent_name:
+        return None
+    path = SKILL_DIR / "agents" / f"{agent_name}.md"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    m = _FRONTMATTER_RE_760.match(text)
+    if not m:
+        return None
+    try:
+        data = yaml.safe_load(m.group(1))
+    except yaml.YAMLError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    tools = data.get("allowedTools")
+    if isinstance(tools, str):
+        return [t.strip() for t in tools.split(",") if t.strip()]
+    if isinstance(tools, list):
+        return [str(t).strip() for t in tools if str(t).strip()]
+    return None
+
+
+def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
+    """Dispatched agent identity from the Agent tool payload or v1 meta."""
+    tool_input = payload.get("tool_input") or {}
+    if isinstance(tool_input, dict):
+        for key in ("subagent_type", "name"):
+            v = tool_input.get(key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    try:
+        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
+            from lib_kunglao import parse_dispatch_json
+        _, _, _claim_id, meta = parse_dispatch_json(prompt_text or "")
+        if isinstance(meta, dict):
+            v = meta.get("agent")
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    except Exception:  # noqa: BLE001 — metadata best-effort only
+        pass
+    return None
+
+
+def _tool_matches_allowed(pattern: str, tool: str) -> bool:
+    """One declared tool vs one allowedTools pattern.
+
+    - wildcard pattern `x*`   -> startswith prefix match;
+    - plain pattern           -> case-insensitive full equality (historical
+      v0 racks self-restrict with lowercase names: `grep` <-> Grep)."""
+    p = pattern.strip()
+    t = tool.strip()
+    if p.endswith("*"):
+        return bool(p[:-1]) and t.lower().startswith(p[:-1].lower())
+    return t.lower() == p.lower()
+
+
+def _tools_contract_violation(declared_tools: list[str],
+                              agent_name: str) -> str | None:
+    """Pure judgment: first §760 violation message, or None when clean.
+
+    - empty rack: no restriction declared -> nothing to enforce (the agent
+      keeps its full frontmatter rack; §1c satisfiable);
+    - subset rule: every declared tool must resolve into allowedTools;
+    - write floor: a non-empty rack MUST contain Write or Edit (§1c file
+      contract — Bash indirect writes do not count)."""
+    if not declared_tools:
+        return None
+    allowed = _agent_allowed_tools(agent_name) or []
+    offending = [
+        t for t in declared_tools
+        if not any(_tool_matches_allowed(p, t) for p in allowed)
+    ]
+    if offending:
+        return (
+            f"tool {offending[0]} not in {agent_name} allowedTools "
+            f"(dispatched rack declares {len(offending)} of "
+            f"{len(declared_tools)} unknown names)")
+    lowered = {t.lower() for t in declared_tools}
+    if not any(w in lowered for w in WRITE_CAPABLE_TOOLS):
+        return (
+            f"missing write-capable tool (§1c) — the rack "
+            f"[{', '.join(declared_tools)}] cannot fulfil the worker file "
+            f"contract (facts/Fxxx.md + worker-status)")
+    return None
+
+
+def _tools_rack_gate(payload: dict, prompt_text: str) -> int | None:
+    """#760 I1: tools= ⊆ <agent>.allowedTools + §1c write-capable floor.
+
+    Skips silently (None) when the dispatch carries no agent identity or the
+    agent file is unknown; REJECTs (rc=2, fix guidance) otherwise."""
+    try:
+        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
+            from lib_kunglao import parse_dispatch
+        _, declared_tools, _claim = parse_dispatch(prompt_text or "")
+    except Exception:  # noqa: BLE001 — unparseable protocol -> pre-existing warn face
+        return None
+    agent_name = _resolve_dispatch_agent(payload, prompt_text)
+    if agent_name is None or _agent_allowed_tools(agent_name) is None:
+        return None
+    violation = _tools_contract_violation(list(declared_tools or []),
+                                          agent_name)
+    if violation is None:
+        return None
+    return _reject_with_guidance(
+        "tools_rack", violation,
+        f"narrow the rack to tools inside agents/{agent_name}.md "
+        f"allowedTools AND keep at least one of Write/Edit so the §1c file "
+        f"contract (worker-status + facts/Fxxx.md) stays fulfilable — e.g. "
+        f"`[T<N> tools=Read,Write,Grep]`. A rack without a file writer "
+        f"(mm_x86: ida-pro-mcp only) forces the worker to fake files through "
+        f"in-process interpreters; that output is untrusted by design.")
+
+
 def main() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -664,7 +815,10 @@ def main() -> int:
         if claim_id is None:
             return 0
         rc = _mcp_prefix_gate(prompt_text)
-        return rc if rc is not None else 0
+        if rc is not None:
+            return rc
+        # #760 I1: same structural corridor as the prefix gate above.
+        return _tools_rack_gate(payload, prompt_text)
 
     # #567 SECURITY: MCP prefix gate runs BEFORE activation check — a
     # forbidden MCP namespace is a structural policy violation, NOT a
@@ -675,6 +829,12 @@ def main() -> int:
     claim_id, proto = _parse_dispatch(prompt_text)
     if claim_id is not None:
         rc = _mcp_prefix_gate(prompt_text)
+        if rc is not None:
+            return rc
+        # #760 I1: tools= ⊆ allowedTools + §1c write floor — the allowedTools
+        # racks are skill-owned static contracts, so this face rides the SAME
+        # structural corridor (fires pre-activation; unknown agent -> skip).
+        rc = _tools_rack_gate(payload, prompt_text)
         if rc is not None:
             return rc
 

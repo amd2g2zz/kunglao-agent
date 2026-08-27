@@ -353,7 +353,13 @@ self-drive (kunglao-worker.md §6d):
    hit files under `references/re-library/`; context7 for library APIs. Only
    when that is unsatisfied escalate OUTWARD to `WebSearch`: same-family
    precedent / known solution / error-signature search.
-2. **TRY**: retry with ≥2 different methods using what you found.
+2. **TRY**: retry with ≥2 different methods using what you found. Boundary
+   (#760 I2): TRY only applies when the capability MIGHT exist and needs
+   exploring. 能力不匹配 (capability mismatch — e.g. needing a filesystem when
+   the only execution surface is a decompiler's in-process Python) goes
+   STRAIGHT to ESCALATE: 用邻近能力凑合 (stopgap)
+   (IDA py_eval as a shell, a decompiler as a file reader/writer) is
+   FORBIDDEN — stopgap output is neither trustworthy nor auditable.
 3. **ESCALATE**: only when all attempts fail, report a blocker — the blocker
    MUST carry the lookup record (what sources were checked / what methods
    were tried / where it is stuck).

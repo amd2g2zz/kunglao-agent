@@ -19,7 +19,18 @@ triggers:
     exclude:
       - '\.net'
       - 'c#'
-  features: {}
+  features:
+    language:
+      any_of:
+        - 'Dylib'
+        - 'Mach-O'
+        - 'Objective-C'
+        - 'Swift'
+    machine:
+      any_contains:
+        - 'mach-o'
+        - 'macho'
+        - 'dylib'
 allowedTools:
   - Read
   - Grep

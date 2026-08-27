@@ -46,7 +46,7 @@ silently run the loop. The operator must pick a subcommand.
 ```
 kunglao-agent subcommands:
 
-  /kunglao-agent:init      <workspace> [--type windows|linux|android|web]
+  /kunglao-agent:init      <workspace> [--type windows|linux|android|web|macos]
                            initialize a workspace (scaffold + CLAUDE.md +
                            sample mount + task_spec intake + hooks)
                            example: /kunglao-agent:init ~/cases/synth-dropper --type windows

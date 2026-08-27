@@ -204,6 +204,8 @@ _WARN_ONLY_CHECK_NAMES = frozenset({
     # #728 web (labs): docker channel presence — WARN by contract (labs
     # never FAIL-HARD; toolchain.py _check_web emits PASS/WARN only)
     "channel:docker",
+    # #760 macos (labs): darwin runtime note — PASS/WARN only, never FAIL
+    "darwin_runtime",
 })
 
 

@@ -25,6 +25,7 @@ assets:
     - agents/pefile-signature.md
     - agents/go-symbols.md
     - agents/verdict-scorer.md
+    - agents/web-re-worker.md   # #760 web/browser JS RE specialist
     - agents/kunglao-init-worker.md   # #304 init worker agent
   hooks:
     - hooks/completion_gate.py

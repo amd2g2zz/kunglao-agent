@@ -288,11 +288,13 @@ def test_init_cli_rejects_bogus_type():
 
 
 def test_guidance_strings_list_web():
+    # #760 sync: the type enum grew macos across every guidance face.
     for path, needle in (
         (SCRIPTS / "kunglao-init.py", "--type windows|linux|android|web"),
         (SCRIPTS / "kunglao_resume.py", "--type windows|linux|android|web"),
-        (ROOT / "hooks" / "env_check_gate.py", "--type <windows|linux|android|web>"),
-        (SCRIPTS / "init_state.py", "--type <windows|linux|android|web>"),
+        (ROOT / "hooks" / "env_check_gate.py",
+        "--type <windows|linux|android|web|macos>"),
+        (SCRIPTS / "init_state.py", "--type <windows|linux|android|web"),
     ):
         assert needle in path.read_text(encoding="utf-8"), path.name
 

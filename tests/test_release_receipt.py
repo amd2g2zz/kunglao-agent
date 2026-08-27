@@ -29,6 +29,7 @@ MANIFEST_AGENTS = {
     "kunglao-worker.md", "kunglao-redteam.md", "ghidra-light.md", "floss-filter.md",
     "pefile-signature.md", "go-symbols.md",
     "verdict-scorer.md", "kunglao-init-worker.md",
+    "web-re-worker.md",  # issue #760 web RE specialist
 }
 ROUTER_SUBS = ["decide", "tick", "verify", "record", "health"]
 

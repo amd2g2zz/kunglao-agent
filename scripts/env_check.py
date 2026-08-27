@@ -391,7 +391,9 @@ def check_ghidra_typed(ws: Path, project_type: str | None) -> tuple[str, str]:
     """
     if project_type == "web":
         return ("PASS", "ghidra n/a for web (browser dynamic surface)")
-    if project_type in ("windows", "linux"):
+    if project_type in ("windows", "linux", "macos"):
+        # macos (#760): Mach-O decompiler expectation rides the same legacy
+        # GHIDRA_HOME semantics; a FAIL stays DEGRADED (non-blocking, T3).
         ok, msg = check_ghidra()
         return ("PASS" if ok else "FAIL"), msg
 

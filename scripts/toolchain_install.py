@@ -285,6 +285,15 @@ INSTALL_PLANS: dict[str, InstallPlan] = {
 # dynamic (mcp_probe.MANIFEST) and register-mcp, never install. Pinned
 # by tests: union == the full check surface, no overlap, no invention.
 NOT_AUTO_INSTALLABLE: dict[str, str] = {
+    # #760 macos labs face — macOS RE toolset classification
+    "otool": "ships with Xcode Command Line Tools (`xcode-select --install`) "
+             "- a human event, never auto-installed",
+    "class-dump": "manual build (upstream class-dump has no package channel); "
+                  "a miss surfaces as the WARN-tier presence item",
+    "swift-demangle": "ships with Xcode Command Line Tools / swift toolchain "
+                      "(`xcode-select --install`)",
+    "darwin_runtime": "the analysis host OS itself - not installable; dynamic "
+                      "Mach-O work moves to a Darwin host (labs WARN note)",
     "ghidra": "the already-present env face (set GHIDRA_HOME); a missing "
               "binary surfaces as the decompiler item",
     "aapt2": "the aapt item's found-face alias (surfaced when aapt2 is "

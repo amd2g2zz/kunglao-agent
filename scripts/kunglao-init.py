@@ -3,7 +3,7 @@
 """kunglao-init — workspace initialization + re-init protection (phase 3.5, E-init.1-4).
 
 Standalone CLI (not a kunglao.py subcommand, module-design L448):
-    python kunglao-init.py [<workspace>] [--type windows|linux|android|web]
+    python kunglao-init.py [<workspace>] [--type windows|linux|android|web|macos]
         [--target <bins/ file>] [--resolve <answers.json>] [--force]
         [--hooks-json <path>] [--profile-root <path>]
 
@@ -598,7 +598,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="target workspace path (holds bins/, claim-register.yaml, etc.); "
                              "omitted -> pending decision (#455)")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
-                        help="project type: windows|linux|android|web (#304; web=labs)")
+                        help="project type: windows|linux|android|web|macos (#304; web=labs)")
     parser.add_argument("--target", metavar="NAME", default=None,
                         help="#455: explicit analysis target — a file name under bins/ "
                              "(containers get a target_object round)")
@@ -1340,6 +1340,14 @@ The six-section quick-reference (Hook & Breakpoint Quick Reference through Advan
 documents the signed-parameter location workflow, layered peeling routing, crypto
 signatures, anti-patterns, and the advanced-topic index. Read it before opening
 the browser — it replaces the binary-RE playbook for web targets.
+""",
+    # #760: labs Mach-O type — Hard constraints 最小集 (static needs the
+    # class-dump/otool family; dynamics need a Darwin environment).
+    "macos": """## Hard constraints (macos)
+
+- **Static Mach-O analysis** needs the otool/class-dump family (`xcode-select --install` provides otool/swift-demangle; class-dump is a manual build) plus a disassembler face (Ghidra headless or IDA).
+- **Dynamic analysis needs Darwin** — Mach-O debugging/frida runs natively on a macOS host; there is NO VM channel for this type (`vm_reachable`/`remote_debugger` are NEVER_CHECKS, windows/linux contract only).
+- **Labs posture**: toolchain checks are WARN-only; a missing tool degrades capability reporting but never blocks scaffold.
 """,
 }
 
@@ -2336,7 +2344,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         print(
             "kunglao-init: no analysis target found — place a sample into bins/ "
             "or specify a path, then re-run "
-            "kunglao-init.py <ws> --type <windows|linux|android|web>.",
+            "kunglao-init.py <ws> --type <windows|linux|android|web|macos>.",
             file=sys.stderr,
         )
         return RC_NO_SAMPLE

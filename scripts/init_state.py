@@ -18,7 +18,9 @@ from pathlib import Path
 
 # #728: "web" is the labs browser-JS type (WARN-only toolchain face,
 # docker-default channel — see openspec/changes/issue-728-web-labs-type).
-VALID_TYPES = ("windows", "linux", "android", "web")
+# #760: "macos" is the labs Mach-O type (same WARN-only lab shape — otool/
+# class-dump presence probes, no VM channel; openspec/changes/issue-760-dispatch-tools).
+VALID_TYPES = ("windows", "linux", "android", "web", "macos")
 MARKER = "[initialized]"
 # #625: the dedicated state file is the PRIMARY init-completeness truth —
 # a text-editor rewrite of the YAML comment can no longer silently drop it.
@@ -86,7 +88,7 @@ def init_complete(ws: Path) -> tuple[bool, str]:
         if ptype not in VALID_TYPES:
             return False, (
                 f"invalid project_type={ptype!r} — "
-                "run kunglao-init.py <ws> --type <windows|linux|android|web>"
+                "run kunglao-init.py <ws> --type <windows|linux|android|web|macos>"
             )
         return True, f"init complete: project_type={ptype} (state file)"
     reg = ws / "claim-register.yaml"
@@ -108,7 +110,7 @@ def init_complete(ws: Path) -> tuple[bool, str]:
     if ptype not in VALID_TYPES:
         return False, (
             f"invalid project_type={ptype!r} — "
-            "run kunglao-init.py <ws> --type <windows|linux|android|web>"
+            "run kunglao-init.py <ws> --type <windows|linux|android|web|macos>"
         )
     return True, f"init complete: project_type={ptype}"
 

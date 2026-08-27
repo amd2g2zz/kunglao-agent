@@ -7,8 +7,8 @@
 # analysis had a bare one; the router answered the workspace question twice).
 subcommands:
   init:
-    invocation: "/kunglao-agent:init <workspace> [--type windows|linux|android|web]"
-    argument-hint: "<workspace> [--type windows|linux|android|web] — no args → guided setup"
+    invocation: "/kunglao-agent:init <workspace> [--type windows|linux|android|web|macos]"
+    argument-hint: "<workspace> [--type windows|linux|android|web|macos] — no args → guided setup"
     zero-args: "guided setup prompt — workspace required, never guess, never a bare argparse error"
     missing-args: "workspace without --type routes to the #455 intake type-alignment step — never silently default"
     example: "/kunglao-agent:init ~/cases/synth-dropper --type windows"

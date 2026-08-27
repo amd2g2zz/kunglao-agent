@@ -7,7 +7,7 @@ description: >-
   writes the workspace CLAUDE.md, mounts the sample, probes the toolchain,
   and deploys hooks. One fresh workspace per sample engagement.
 arguments: [workspace]
-argument-hint: <workspace> [--type windows|linux|android|web] — no args → guided setup
+argument-hint: <workspace> [--type windows|linux|android|web|macos] — no args → guided setup
 ---
 
 # kunglao-agent:init — workspace initialization
@@ -85,7 +85,7 @@ print the guided prompt below and WAIT — one prompt, enumerated choices,
 never guess, no bare argparse-style error dump.
 
 - State that `<workspace>` is required and show the canonical invocation:
-  `/kunglao-agent:init <workspace> [--type windows|linux|android|web]`.
+  `/kunglao-agent:init <workspace> [--type windows|linux|android|web|macos]`.
 - If the cwd already looks initialized (`claim-register.yaml` present), say
   so: point to `/kunglao-agent:analysis` for the loop, or note that re-run
   init resumes idempotently (never rebuild or overwrite).

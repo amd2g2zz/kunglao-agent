@@ -30,7 +30,7 @@ values (an MCP config may carry API keys in `env`; the inventory must be
 pasteable/committable). Consumed by `tools/ext-scan.py --with-mcp` to
 derive describe-only ext catalog entries.
 
-CLI: mcp_probe.py <workspace> [--type windows|linux|android|web] [--json]
+CLI: mcp_probe.py <workspace> [--type windows|linux|android|web|macos] [--json]
                      [--reproduce] [--claude-json PATH]
                      [--mcp-inventory]
 Exit codes (same contract as toolchain.py #304): 0 = all present,
@@ -51,7 +51,8 @@ from pathlib import Path
 # module-level sys.stdout.reconfigure would silently flip the IMPORTER's
 # stdout encoding (observed: test_kunglao_init subprocess decode breaks).
 
-VALID_TYPES = ("windows", "linux", "android", "web")
+# #760: macos joins the labs pair — zero manifest members by design
+VALID_TYPES = ("windows", "linux", "android", "web", "macos")
 ALL_TYPES = VALID_TYPES
 # #728: the desktop triple, explicit. "web" (labs) deliberately carries NO
 # desktop RE entry — web's sole manifest member is camoufox-reverse (WARN),

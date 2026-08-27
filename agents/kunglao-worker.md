@@ -94,6 +94,14 @@ Before declaring a blocker you MUST walk the LEARN→TRY→ESCALATE ladder:
    (what sources you checked / what methods you tried / where exactly you are
    stuck), then report blocked. **Reporting a blocker without research =
    failure** (W-27).
+
+**边界条款 (#760) — TRY 只适用于能力可能存在但需探索的场景。能力不匹配**
+**（如需要文件系统但只有反编译器进程内执行）→ 直接 ESCALATE 写 blocker——**
+**用邻近能力凑合（把 IDA py_eval 当 shell、把 decompiler 当文件读写器）是禁止项，**
+**凑合产物不可信也不可审计**：进程内解释器环境写出的"文件"没有 workspace 字节锚，
+verifier 无法独立复算（W-15 的镜像形态）。mm_x86 现场（2026-08-27）：worker 被
+`tools=ida-pro-mcp` 收窄后没有把"无 Bash/Write → §1c 不可履约"上报为 blocker，
+而是拿 py_eval 当 shell 走完梯子——本条款就是那次逃逸的封堵。
 **NEVER say "I can't / I don't know how" without research evidence.** The
 correct way to express "can't" is:
 "I checked X/Y/Z, tried methods A/B, stuck at <specific point>, need

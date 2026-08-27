@@ -167,7 +167,8 @@ def test_no_type_noninteractive_pending_fail_closed(init_ws: Path):
     ids = [d["decision_id"] for d in pending["decisions"]]
     assert "type" in ids, f"pending list lacks a type decision: {pending}"
     type_dec = next(d for d in pending["decisions"] if d["decision_id"] == "type")
-    assert type_dec["options"] == ["windows", "linux", "android", "web"]
+    # #760: macos joins the labs pair (#728 web precedent)
+    assert type_dec["options"] == ["windows", "linux", "android", "web", "macos"]
     assert type_dec["default"] is None, "sniffed type must not become a default"
     assert type_dec["context"].get("suggested_type") == "windows", \
         "sniff suggestion rides in context only"
