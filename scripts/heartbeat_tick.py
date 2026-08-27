@@ -30,6 +30,13 @@ Steps executed (idempotent, all safe to re-run):
                         (#475: env freshness bound to the tick by
                         construction — the only mechanically-enforced
                         periodic; probe failure never fails the tick)
+  10. think-seat      — #759 H1: a WAITING period (register present, ranking
+                        yields zero dispatchable actions) writes
+                        runs/.think-<ts>.md and its path REPLACES the empty
+                        action_taken (#711 E1: idle ≠ EMPTY — cognition is an
+                        action). Advisory like the other watchers: rc never
+                        enters the alert weights; unparseable seat output is
+                        treated as seat-unavailable (contract unchanged).
 
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
 1 = heartbeat stale, project hooks missing, or selfcheck failed (LLM must act;
@@ -66,7 +73,8 @@ SCRIPTS = SKILL_DIR / "scripts"
 # cadence-mismatched with the 30-min TTL renews just before expiry — the one
 # silent-gate case no other anomaly surfaces. 10 min = a third of the TTL:
 # enough lead time to act before the NEXT tick misses the renewal entirely.
-RENEW_MARGIN_LOW_MINUTES = 10
+# #597: the 10-min value is single-sourced in liveness_policy (rationale there).
+from liveness_policy import RENEW_MARGIN_LOW_MINUTES  # noqa: E402
 RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
 
 
@@ -197,19 +205,68 @@ def main(argv: list[str] | None = None) -> int:
     # the script itself crashed — recorded, not fatal).
     report["env_state"] = run("env_state_probe.py", ws)
 
-    out = ws / "runs" / ".heartbeat-tick.json"
+    # #620 Gap C: the monitor finally has a runtime consumer. #88 freeze:
+    # BACKGROUND advisory — recorded, never weighed into rc/alert (a crashed
+    # monitor must never fail the tick; its findings surface via the report).
+    report["monitor"] = run("kunglao-monitor.py", ws, "--json")
+
+    # #629: feedback.check_stale gets its mechanical caller (was standalone
+    # since #237 planned it). Same advisory posture as the monitor: recorded,
+    # never weighed into rc/alert.
+    report["feedback"] = run("feedback.py", ws, "--check-stale")
+
+    # #718 P3: verify-stamp disk-vs-stream reconciliation. Advisory like
+    # the monitor — an UNWITNESSED transition lands in the report + the
+    # event stream (verify_status_change), never in rc/alert (a watch
+    # finding must not fail the tick).
+    report["verify_watch"] = run("verify_status_watch.py", ws, "--json")
+
+    # #762 K1a: mechanical notes-closure sweep — every terminal claim without
+    # its ledger rollup row gets the write loop now (outcomes -> lessons ->
+    # notes-due queue -> checkpoint). This is THE mechanical trigger that
+    # replaces the SKILL-prose-only contract ("claim terminal triggers rollup"
+    # had zero call sites enforcing it). Advisory like monitor/feedback/
+    # verify_watch: recorded in the report, NEVER weighed into rc/alert
+    # (a crashed sweep must not fail the tick; fail-open by construction).
+    report["rollup_sweep"] = run("rollup.py", ws, "--sweep-terminal")
+
+    # #759 H1: THINK seat — the waiting period gets a cognitive action instead
+    # of an idle action_taken (#711 E1). Advisory like monitor/feedback/
+    # verify_watch/rollup_sweep: recorded in the report, NEVER weighed into
+    # rc/alert. Only a seat that REPORTS waiting with an artifact substitutes
+    # the field; anything else keeps the orchestrator-filled #237 contract.
+    report["think"] = run("think_seat.py", ws)
     try:
-        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+        think = json.loads(report["think"].get("stdout") or "{}")
+    except ValueError:
+        think = {}
+    if isinstance(think, dict) and think.get("waiting") and think.get("artifact"):
+        report["action_taken"] = f"THINK {think['artifact']}"
 
     sc = report["selfcheck"].get("stdout", "")[:80]
     hb = report["heartbeat"].get("stdout", "")[:120]
     rc_sc = report["selfcheck"].get("rc", -1)
     rc_renew = report["renew"].get("rc", -1)
     rc_hb = report["heartbeat"].get("rc", -1)
+    # #617: the decisive rc reaches the summary; failures carry a loud banner
+    # and a truncation-immune alert field in the persisted report.
+    first_failure = None
+    for name, rc in (("selfcheck", rc_sc), ("renew", rc_renew), ("heartbeat", rc_hb)):
+        if rc != 0 and first_failure is None:
+            first_failure = {"step": report[name].get("script", name), "rc": rc}
+    report["alert"] = first_failure is not None
+    report["first_failure"] = first_failure
+
+    out = ws / "runs" / ".heartbeat-tick.json"
+    try:
+        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
     action = report["action_taken"] or "(EMPTY — must be filled: what was dispatched/verified/resolved/reactivated)"
-    print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | {hb}")
+    print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | heartbeat_rc={rc_hb} | {hb}")
+    if first_failure is not None:
+        print(f"*** HEARTBEAT ALERT: step {first_failure['step']} failed (rc={first_failure['rc']}) — re-arm before next dispatch ***")
     print(f"action_taken: {action}")
     print(f"report: {out}")
     # #381: selfcheck rc weighs in — a crashed selfcheck (registry drift at

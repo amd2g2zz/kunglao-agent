@@ -21,16 +21,18 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SKILL_HOOKS = ROOT / "hooks"
 
-# The full entry set wire_up_settings registers: 10 entries / 9 distinct hook
-# files (worker_budget registered under BOTH PreToolUse(Agent) and
-# PostToolUse(Agent); #532 adds write_guard on Edit|Write|MultiEdit).
-WIRE_UP_ENTRIES = 10
-WIRE_UP_HOOK_FILES = {
-    "env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
-    "recall_inject.py",
-    "heartbeat_touch.py", "worker_pulse.py", "state_anchor.py",
-    "completion_gate.py", "write_guard.py",
-}
+# #675: anchors DERIVED from the registry (scripts/wire_up_settings.py) —
+# a registration change moves these expectations automatically. The
+# hand-pinned literals this replaces were the #608 anchor-drift class
+# (three test files broke on one registry addition). Sentinel literals
+# live only in tests/test_hook_registry_singlesource.py.
+import wire_up_settings  # pytest.ini pythonpath = . hooks scripts tools
+
+WIRE_UP_HOOK_FILES = wire_up_settings.WIRE_UP_HOOK_FILES
+# worker_budget (and anything else in DOUBLE_REGISTERED_HOOKS) rides two
+# event slots, so commands = files + extra registrations.
+WIRE_UP_ENTRIES = len(WIRE_UP_HOOK_FILES) + len(
+    wire_up_settings.DOUBLE_REGISTERED_HOOKS & WIRE_UP_HOOK_FILES)
 
 
 @pytest.fixture
@@ -54,6 +56,17 @@ def _collect_commands(settings: dict) -> list[str]:
 
 def _basenames(settings: dict) -> set[str]:
     return {c.replace("\\", "/").rsplit("/", 1)[-1] for c in _collect_commands(settings)}
+
+
+def test_count_anchors_are_registry_derived():
+    """#675 anti-repinning guard: WIRE_UP_ENTRIES / WIRE_UP_HOOK_FILES
+    must stay DERIVED from scripts/wire_up_settings.py. Re-hardcoding an
+    integer literal here is exactly how #608 drifted (three test files
+    broke on one registry addition)."""
+    reg = wire_up_settings.WIRE_UP_HOOK_FILES
+    assert WIRE_UP_HOOK_FILES == reg
+    assert WIRE_UP_ENTRIES == len(reg) + len(
+        wire_up_settings.DOUBLE_REGISTERED_HOOKS & reg)
 
 
 def test_wire_up_writes_project_settings_with_all_hooks(tmp_path, fake_home):
@@ -178,7 +191,7 @@ def test_wire_up_preserves_existing_keys(tmp_path, fake_home):
         "statusLine": {"type": "command", "command": "echo hi"},
         "hooks": {
             "PreToolUse": [{"matcher": "Bash",
-                            "hooks": [{"type": "command", "command": "python C:/other/hook.py"}]}],
+                            "hooks": [{"type": "command", "command": "python other/hook.py"}]}],
         },
     }), encoding="utf-8")
     sys.path.insert(0, str(SCRIPTS))
@@ -271,10 +284,9 @@ def test_selfcheck_rebuilds_project_level(tmp_path, fake_home, monkeypatch, caps
     assert not (fake_home / ".claude" / "settings.json").exists(), \
         "selfcheck rebuild must never write the user-global settings (#258)"
     assert rc == 0, "after project-level rebuild the selfcheck must pass"
-    assert {"env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
-            "recall_inject.py",
-            "heartbeat_touch.py", "worker_pulse.py", "state_anchor.py",
-            "completion_gate.py"} <= {
+    # #675: the full DERIVED registry (stronger than the hand-listed
+    # 8-file subset this replaces — registry growth now covered too).
+    assert WIRE_UP_HOOK_FILES <= {
                 c.replace("\\", "/").rsplit("/", 1)[-1]
                 for c in _collect_commands(proj)}, \
         "rebuilt project settings must carry the full kunglao hook set"

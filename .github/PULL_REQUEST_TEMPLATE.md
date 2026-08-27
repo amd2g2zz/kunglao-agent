@@ -23,3 +23,8 @@ answer blocks the PR.
 - [ ] `.venv/bin/python -m pytest <touched suites> -q`
 - [ ] `/usr/local/bin/ruff check <touched .py files>`
 - [ ] `python scripts/release_receipt.py --check` (if assets/manifest changed)
+## Release gating (maintainers only)
+
+- [ ] USER GATE: tag approved
+- [ ] USER GATE: dev -> master merge approved
+- [ ] USER GATE: GitHub Release published

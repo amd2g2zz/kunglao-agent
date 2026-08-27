@@ -1,6 +1,5 @@
 """v1.9.29 claim-status guard tests: worker self-promotion must be caught."""
 import sys, tempfile, pathlib
-sys.path.insert(0, 'hooks')
 import worker_budget as wb
 
 def make_register(claims):

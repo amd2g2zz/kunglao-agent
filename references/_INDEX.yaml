@@ -3,7 +3,6 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 1beffcb10396c2e284fa76b98bcd2865723f4afc436f89e7d33224f9040ae716
   references/_index-anti-analysis.md: 77ae0fe0834dde577e39d1124d4941962b1e4d7af1012434cac89c7d3f381431
   references/_index-languages.md: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
   references/_index-methodology.md: 4183b6f86c4ccd299452d41d2532fde6487301175804cb84729d41d3b4cf08aa
@@ -12,11 +11,16 @@ files:
   references/_index-platforms.md: eb4224a8cde683873a422a5a21ca62067b46efe09a46a7ff2c0f981ce57b6c7b
   references/_index-resources.md: d58750800fcd490ed014fbef7ee6dae2228180c44996d937a1130cc1c0f50196
   references/_index-tools.md: e28287ddfbb4006a0965a0f3dfb0206d6a54f711d6d7f9195c1d3d65f7f2a382
+  references/_index-web-crawler-engineering.md: 2df8708cfd912dcd0a2e808e08f445044fd59a6c4f22c8b2cfebb845d67f6482
+  references/_index-web-labs.md: 12a33e5641f3f39738f46cd7bbe38c2d5d8b1d4c06fc89b4ec44a203669faf95
+  references/_index-web-risk-control.md: b1dfc4eada8237536f95690986788735a136f75f940142d052a4e78c90841adf
+  references/_INDEX.md: 11cbe7ebe6108f1e6ea57da9794274cc7cbe591d720662b36c030fbd76abaf49
   references/agent-three-state-charter.md: eef047d075d57382b6c6736400f9f744e47d5dde916cafb9f249c2c47365d43e
+  references/anomaly-baseline.md: 0ea89669d45fd8ae5ebe9855b591451c8ea6bf239adfc60f81552f356749ae8b
   references/archive/long-horizon-architecture-2026-07.md: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
   references/case-book.md: 148c5dc4a7546d39e64f8e734882e770b65b9f398fb9abcc10db508d0fa633e0
   references/cli-script-checklist.md: 2ae29be865f82c17f357666da831993796b0bbccae28c81d8b7a58f6af768228
-  references/cold-start-contract.md: 808a31d11be26fd9d8030c49694b788814f4edb148b018cc21044ba5d24b3d01
+  references/cold-start-contract.md: d233b521af27c10da471d478e70e5ff9af0b4b53a931b8f5eb2dcd70cc3920a5
   references/convergence-loop.md: 6ef0a4f0c3b48fc632cd6cc8ebd3010ebc803863e782c416411149464cbbcb86
   references/decision-rights.md: 2332fb0c0ed0e95b2e97549f2c478b37656f7914f2d1d4212576448e6bdfcd75
   references/dispatch-protocol.md: 7168141f8fdd0eec0d957ea73e045605ff8f8d93c4aa6565afb0274d8ad79ec6
@@ -32,9 +36,11 @@ files:
   references/lessons/README.md: 2d7dd200a129cca4ad73435c9e381bf090bcb7aaaffc53c5f35708c5efcc8ace
   references/machine-check-contract.md: ad25084781c581d23108b260214a7d04c4b9000993019394a76d685d4c862a75
   references/malware-phase-routing.md: 00e6484afaa85da42ed5cdc2c919b3d9b22ca173da37ac4c6da0d691b0ced7f2
+  references/mechanisms.md: 9619a5bca668f4cb9202cad86d04defe5e74ef070de930af85c6c4215a86a8e6
   references/method-constraints.md: efcd26339f3a31a3133a83c59ad556331e33365edf02af1b9f1600c7f1a644f7
-  references/operational-mechanics.md: 5d3a054eb58d91b88daebb6280d74e6a6219c77590e102b7ae87220a0da2b183
+  references/operational-mechanics.md: 7156bb26ffdd0cfab1b14051dd48d26758252585220e775195b5b7211b10b7af
   references/optimization-2026-08.md: aa58f4fb6554779f856b74d60fe0afdc9a1943606cbf90ec65785e95ba084fc1
+  references/re-library/android-fingerprint-apis.md: 04b0abd2d9e29fe01e3d850658bc63ac6b08be57e2b6185d794d46e5c5fba2c8
   references/re-library/anti-analysis.md: 8534cc1640ba2707a9621d05521d317717b61778a3585e6b8c806de2897cf524
   references/re-library/awesome-re-resources.md: 8252476aa2b40d76b01572e7df910fc9c6a83337fc2e48385dd15885a1ab96f0
   references/re-library/detection-engineer.md: fc06be71641d31a6e8da60f3b2084197da9bc1b2bffc7ecf3d07b076b0aa9072
@@ -64,6 +70,9 @@ files:
   references/re-library/tools-crypto.md: 4c49547085ef4a173591eae2533e5845f998ef07a0ed534958b62d320e2bdfa5
   references/re-library/tools-dynamic.md: af6d0539a253366cf76b3266922bc4551478ebe32576fc216b68d91d0ea5f7de
   references/re-library/tools.md: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
+  references/re-library/web-crawler-engineering.md: 887b6ca7a08f2bb6cfaae81bf9d602f749d4a4c38373a13eb4d3a0a8a69545a2
+  references/re-library/web-re-quickref.md: b31c0b18b93bb762a9450f007b43eb75ec9b0ecf61782b1217e532408b77ef3a
+  references/re-library/web-risk-control.md: 1b98a6af1355410f8d2d1e1043c55333153dd3ba179d99890fe6c5c756c05cd4
   references/schema.md: 7e7e97005892d24fec5800cad12f1bb6aee8e554478fe82cbd65a407c0f4d112
   references/search-policy.md: 73f5cd3b71c83e06edbddc400aa8f44cd91fbd6c449f6e6d350fe3113b072180
   references/state-mapping.md: 906f7d9874fa0e1a2c69f90b02fe5945a9848b2f560ba0de4bb3813702a28fe2

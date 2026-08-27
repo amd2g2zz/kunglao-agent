@@ -78,7 +78,7 @@ def main():
         with open(keyfile, "w") as f:
             f.write(secrets.token_bytes(32).hex())
         os.chmod(keyfile, 0o600)
-        print(f"key written: {keyfile} (mode 0600)")
+        print("key written: " + keyfile + " (mode 0600)")
         return 0
 
     repo = sys.argv[2]

@@ -86,14 +86,14 @@ def test_detect_which_takes_priority(monkeypatch):
     assert winget[0].source == "PATH"
 
 
-def test_detect_known_path_fallback(monkeypatch):
+def test_detect_known_path_fallback(monkeypatch, tmp_path):
     """winget is inbox but often NOT on PATH in service contexts — the
     known-path fallback is what makes win32 detection honest."""
     pkg_detect = _load_pkg_detect()
     import os
 
     known = {"KUNGLAO_TEST_WINGET": ""}
-    monkeypatch.setenv("LOCALAPPDATA", "D:/fake-localappdata")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "fake-localappdata"))
     winget_known = pkg_detect.MANAGERS["winget"].known_paths[0]
     target = os.path.expandvars(winget_known)
 
@@ -229,6 +229,6 @@ def test_find_ghidra_install_none_when_no_dirs(monkeypatch):
     pkg_detect = _load_pkg_detect()
     monkeypatch.setenv("KUNGLAO_TOOL_DIRS", "")
     monkeypatch.delenv("GHIDRA_HOME", raising=False)
-    # default roots (C:/tools, D:/tools) may exist on this host — the
+    # the default tool roots may exist on this host — the
     # seam must be injectable; pass explicit empty roots for determinism
     assert pkg_detect.find_ghidra_install(tool_dirs=()) is None

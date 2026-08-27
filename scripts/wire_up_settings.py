@@ -22,11 +22,13 @@ hooks and blocked every session's tool calls. Project-level deployment makes
 hooks live and die WITH the workspace: no global pollution, no stale
 worktree-bound commands.
 
-Issue #269 (2026-08-13): hook COMMAND paths are absolute and point at the
-CANONICAL deployed skill install (~/.claude/skills/kunglao-agent/hooks) — a
---wire-up run from a dev worktree must not bind the commands to the
-worktree path, which dies with the worktree (#228 lesson). The canonical
-resolution now lives in hook_activation._canonical_hooks_dir / build_hook_entry.
+Issue #269/#752 (2026-08-13/27): hook COMMAND paths are absolute and point
+at the EXECUTING INSTALL's hooks dir — any durable ~/.claude/skills/<name>/
+package resolves to itself (production OR a long-lived dev co-install);
+ephemeral checkouts/.wt-* worktrees fall back to the production install so
+a worktree-bound command never outlives its checkout (#228 lesson). The
+single resolution authority is hook_activation.canonical_install_root /
+_canonical_hooks_dir — no second hardcoded kunglao-agent path exists.
 """
 from __future__ import annotations
 
@@ -62,7 +64,20 @@ WIRE_UP_HOOK_FILES = frozenset({
     "state_anchor.py",         # PostToolUse/Agent — per-turn state re-anchor (#44)
     "completion_gate.py",      # Stop — code-owned completion gate (#55)
     "write_guard.py",          # PreToolUse/Edit|Write — contract-carrier write gate (#532)
+    "orchestrator_tool_guard.py",  # PreToolUse/Bash — maker-checker WARN (#608, target-based #532-style)
+    "violation_capture.py",    # PostToolUse/Bash — mechanical violation recorder (#718)
 })
+
+# #675: hooks registered on MORE THAN ONE event slot by
+# hook_activation.register_hooks (worker_budget rides both
+# PreToolUse/Agent and PostToolUse/Agent). A fresh full wire-up writes
+# exactly len(WIRE_UP_HOOK_FILES) + len(DOUBLE_REGISTERED_HOOKS &
+# WIRE_UP_HOOK_FILES) command entries — tests derive their count anchors
+# from this pair instead of hand-pinned integers (the #608 anchor-drift
+# class: one registry addition broke three test files at once). The
+# scripts-side subset consumers already loud-fail via derive_hook_subset
+# (#381); this export gives the tests-side the same single source.
+DOUBLE_REGISTERED_HOOKS = frozenset({"worker_budget.py"})
 
 
 # #410: THE deployment-target registry — where kunglao hooks are written and

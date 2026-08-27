@@ -68,7 +68,6 @@ def _write_reg(ws: Path, claims: list) -> None:
 def test_worker_pulse_shows_quarantined_flag(tmp_path):
     """A workspace with a DEAD claim surfaces quarantined=1 in the pulse."""
     import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "hooks"))
     import worker_pulse as wp
 
     ws = tmp_path / "ws-dead"
@@ -84,7 +83,6 @@ def test_worker_pulse_shows_quarantined_flag(tmp_path):
 def test_worker_pulse_omits_quarantined_when_clean(tmp_path):
     """A workspace with no DEAD claim omits the quarantined flag."""
     import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "hooks"))
     import worker_pulse as wp
 
     ws = tmp_path / "ws-clean"

@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""acceptance_check.py — end-to-end acceptance (issue #6, plan §2.3/§9).
+"""acceptance_check.py — end-to-end acceptance (issue #6, plan §2.3/§9; #689).
 
 Static acceptance: verify the refactored core mechanisms are in place and
 runnable (dynamic real-sample runs belong to the production skill; deferred).
 Output: runs/e2e-acceptance-<ts>.json
+
+#689: test_suite_green runs a PINNED SMOKE SUBSET (scripts/acceptance_smoke.txt),
+not the full suite. Full-suite enforcement lives ONLY in devkit/quality_gates.py
+Gate 2 (Regression Safety) — pytest must not nest full pytest (the old embed
+cost 2x~301s = 60% of the 2026-08-25 suite runtime and grew O(n^2) with it).
+`--full` remains the explicit operator channel for a full-suite run.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -78,45 +83,43 @@ def _check_digest() -> dict:
         return {"name": "digest_builds", "passed": False, "detail": f"error: {exc}"}
 
 
-TEST_SUITE_TIMEOUT = 300  # no-load floor: suite ≈ 2.5 min on CI; 5 min budget for slower runners
-TEST_SUITE_TIMEOUT_CEILING = 1200  # #369: load-scaled budget hard cap (20 min) — never unbounded
-TEST_SUITE_TIMEOUT_ENV = "KUNGLAO_TEST_SUITE_TIMEOUT"  # #369: explicit operator override (>= floor)
+SMOKE_MANIFEST = SCRIPTS / "acceptance_smoke.txt"  # #689: pinned nodeids, module-adjacent
+SMOKE_SUITE_TIMEOUT = 120  # #689: pinned subset ≈ 2.5s idle; flat budget, deliberately NOT load-scaled
+FULL_SUITE_TIMEOUT = 1800  # #689: --full path only (Gate 2 owns always-on full enforcement)
 
 
-def _test_suite_timeout_s(loadavg: float | None = None, cpu_count: int | None = None) -> int:
-    """#369: 300s is a NO-LOAD floor, not a fixed budget.
+def _load_smoke_nodeids() -> list[str]:
+    """#689: pinned smoke manifest — one nodeid per line; '#' comments and
+    blank lines ignored. Empty/missing manifest fails loud (never silently
+    green)."""
+    if not SMOKE_MANIFEST.exists():
+        raise FileNotFoundError(f"smoke manifest missing: {SMOKE_MANIFEST}")
+    nodeids = [ln.strip() for ln in SMOKE_MANIFEST.read_text(encoding="utf-8").splitlines()]
+    nodeids = [n for n in nodeids if n and not n.startswith("#")]
+    if not nodeids:
+        raise ValueError(f"smoke manifest carries no nodeids: {SMOKE_MANIFEST}")
+    return nodeids
 
-    Under parallel machine load (multi-agent dev; load16-31 observed
-    2026-08-15 in #377's DEV run — the same suite stretched to 278s at
-    load≈26) test_suite_green flakes on the subprocess timeout, not on a
-    test failure. Scale the budget by 1-min load per core; the env override
-    wins (floored at TEST_SUITE_TIMEOUT); the load path is capped.
-    """
-    env = os.environ.get(TEST_SUITE_TIMEOUT_ENV, "").strip()
-    if env:
-        try:
-            return max(TEST_SUITE_TIMEOUT, int(env))
-        except ValueError:
-            pass  # garbage override: fall through to load scaling
+
+def _check_test_suite(full: bool = False) -> dict:
+    """#689: default = pinned smoke subset (seconds); --full = explicit operator
+    channel. The full suite is Gate 2's job (devkit/quality_gates.py), so the
+    default path never nests full pytest inside pytest again. `--ignore` of
+    tests/test_acceptance.py is kept on BOTH paths: a pinned acceptance nodeid
+    (or the full path) would otherwise recurse into run_acceptance itself."""
     try:
-        load = loadavg if loadavg is not None else os.getloadavg()[0]
-    except (AttributeError, OSError):  # pragma: no cover - platforms without
-        # getloadavg: win32 lacks the attribute entirely (AttributeError),
-        # POSIX raises OSError when unreadable — fail open to the floor (#457)
-        load = 0.0
-    cpus = cpu_count if cpu_count is not None else (os.cpu_count() or 1)
-    factor = max(1.0, load / cpus)
-    return min(TEST_SUITE_TIMEOUT_CEILING, int(TEST_SUITE_TIMEOUT * factor))
-
-
-def _check_test_suite() -> dict:
-    try:
-        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "--tb=no", "-p", "no:cacheprovider",
-                            "--ignore=tests/test_acceptance.py"],
-                           cwd=str(ROOT), capture_output=True, text=True,
-                           timeout=_test_suite_timeout_s())
+        cmd = [sys.executable, "-m", "pytest", "-q", "--tb=no", "-p", "no:cacheprovider",
+               "--ignore=tests/test_acceptance.py"]
+        if full:
+            mode, timeout = "full", FULL_SUITE_TIMEOUT
+        else:
+            nodeids = _load_smoke_nodeids()
+            cmd.extend(nodeids)
+            mode, timeout = f"smoke:{len(nodeids)}", SMOKE_SUITE_TIMEOUT
+        r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=timeout)
         last = (r.stdout or "").strip().splitlines()[-1] if r.stdout else ""
-        return {"name": "test_suite_green", "passed": r.returncode == 0, "detail": last[:120]}
+        return {"name": "test_suite_green", "passed": r.returncode == 0,
+                "detail": f"[{mode}] {last[:120]}"}
     except Exception as exc:
         return {"name": "test_suite_green", "passed": False, "detail": f"error: {exc}"}
 
@@ -124,9 +127,9 @@ def _check_test_suite() -> dict:
 CHECKS = [_check_oracle, _check_cli_surface, _check_priority_voi, _check_digest, _check_test_suite]
 
 
-def run_acceptance() -> dict:
+def run_acceptance(full_suite: bool = False) -> dict:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
-    results = [fn() for fn in CHECKS]
+    results = [fn(full=full_suite) if fn is _check_test_suite else fn() for fn in CHECKS]
     overall = all(r["passed"] for r in results)
     return {"ts": ts, "overall_passed": overall, "checks": results}
 
@@ -134,8 +137,11 @@ def run_acceptance() -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="acceptance_check.py", description="end-to-end static acceptance")
     ap.add_argument("--write", action="store_true")
+    ap.add_argument("--full", action="store_true",
+                    help="run the full pytest suite instead of the pinned smoke subset; "
+                         "always-on full enforcement lives in devkit/quality_gates.py Gate 2")
     args = ap.parse_args(argv)
-    report = run_acceptance()
+    report = run_acceptance(full_suite=args.full)
     if args.write:
         out = ROOT / "runs" / f"e2e-acceptance-{report['ts']}.json"
         out.parent.mkdir(parents=True, exist_ok=True)

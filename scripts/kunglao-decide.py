@@ -217,5 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     return out["exit_code"]
 
 
+from _entry import run
+
 if __name__ == "__main__":
-    sys.exit(main())
+    run(globals())

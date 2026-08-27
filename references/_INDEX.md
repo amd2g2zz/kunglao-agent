@@ -7,6 +7,7 @@
 | Domain | Files (re-library/) | Purpose |
 |---|---|---|
 | tools | tools, tools-dynamic, tools-advanced, tools-crypto | Static/dynamic/advanced/crypto tooling quick-reference |
+| android-fingerprint | android-fingerprint-apis | Device/sensor fingerprint API taint seeds (dexdc --seeds; #692 WP5) |
 | anti-analysis | anti-analysis | Anti-debug/anti-VM/anti-DBI detection and bypass |
 | patterns | patterns, patterns-simulation, patterns-decode, patterns-debugging | General RE techniques: patterns/simulation/decode/dynamic debugging |
 | languages | languages, languages-compiled, languages-go, languages-platforms | Language-specific RE (scripting/compiled/Go/platform stacks) |
@@ -14,6 +15,9 @@
 | methodology | field-notes, malware-analysis, malware-analysis-workflow, malware-analysis-quickstart, malware-triage, malware-dynamic-analysis, detection-engineer, malware-report-writer, phishing-case-study | Analysis methods and malware application domain (primary use case) |
 | osint | multi-search-engine, multi-search-engine-refs | Multi-engine OSINT search |
 | resources | awesome-re-resources | External RE resource collection |
+| web-labs | web-re-quickref | Browser JS reverse engineering quick-reference (web workspaces, camoufox MCP supply, layered peeling workflow, crypto signatures, anti-patterns) |
+| web-risk-control | web-risk-control | Web anti-bot defense-response doctrine (#761): signal taxonomy, adversarial decision tree (headless-first escalation), stack identification, detection-point localization loop |
+| web-crawler-engineering | web-crawler-engineering | Sustainable collection engineering (#761): session persistence, rate disguise, IP strategy, CAPTCHA triage |
 | contracts | agent-three-state-charter, error-response-taxonomy, dispatch-protocol | Behavior contracts the orchestrator loads on scenario (ask/stop charter, error response taxonomy, dispatch protocol) |
 
 | Scenario | Domain |
@@ -27,6 +31,8 @@
 | Platform-specific | platforms |
 | Detection rules / reports | methodology (detection-engineer, malware-report-writer) |
 | Intelligence / search | osint |
+| Browser JS target (`--type web`) | web-labs |
+| Anti-bot decisions & crawler ops (风控对抗/爬虫工程) | web-risk-control + web-crawler-engineering |
 | Action error / tool-VM-install failure response | contracts (error-response-taxonomy) |
 | Ask-the-user / irreversible-action decision | contracts (agent-three-state-charter) |
 
@@ -35,6 +41,9 @@
 | File | Domain | Purpose | When to read |
 |------|--------|---------|-------------|
 | `_index-tools.md` | tools | File-level index for the tools domain. | When a worker is dispatched to tooling / static-analysis work. |
+| `_index-web-labs.md` | web-labs | File-level index for the web-labs domain (quick-reference, camoufox MCP, peeling workflow). | When dispatched to a browser JS reverse engineering task (`--type web`). |
+| `_index-web-risk-control.md` | web-risk-control | File-level index for the anti-bot doctrine domain (#761). | When a web claim hits blocking / challenge / 风控 and must classify the signal, pick a decision-tree branch, or localize the detection point. |
+| `_index-web-crawler-engineering.md` | web-crawler-engineering | File-level index for the sustainable collection engineering domain (#761). | After access is solved on a web target — designing sessions, rate budgets, IP strategy, or CAPTCHA triage. |
 | `_index-anti-analysis.md` | anti-analysis | File-level index for the anti-analysis domain. | When a worker faces anti-debug / anti-VM / anti-DBI samples. |
 | `_index-patterns.md` | patterns | File-level index for the patterns domain (general RE techniques). | When a worker needs pattern-recognition references. |
 | `_index-languages.md` | languages | File-level index for the languages domain. | When a worker has identified the sample's language. |
@@ -53,6 +62,7 @@
 | `convergence-loop.md` | contracts | 5 convergence-driven behaviors with case evidence, spin-detection, failure-analysis gate. | When diagnosing a spinning/stalled loop or deciding on failed-attempt handling. |
 | `decision-rights.md` | governance | Decision rights matrix — 15-row three-way table (mechanical / LLM / user). | When resolving who decides a particular decision. |
 | `agent-three-state-charter.md` | contracts | 3-state ask/stop charter (allowed / must-ask / must-stop; mechanical-first, LLM backstops miss-recall). | Before any "should I ask the user" decision, an identity/scope/authorization ambiguity, or an irreversible action. |
+| `anomaly-baseline.md` | methodology | Anomaly detection baseline corpus sourcing + fail-open semantics + operator tuning knobs (#663). | When calibrating anomaly_detector thresholds or adding baseline corpus sources. |
 | `error-response-taxonomy.md` | contracts | Action-error classes → forced responses (STOP / ASK / RETRY-ONCE / ESCALATE); human-event gate > default-allowed priority. | Immediately after any tool/VM/install/action error, before choosing a response. |
 | `dispatch-protocol.md` | contracts | Dispatch prompt protocol v1 (JSON) + v0 (regex); `reversible: false` declaration field. | When writing a worker dispatch prompt or adding fields to the dispatch JSON. |
 | `downstream-contract.md` | governance | Downstream contract for skill maintainers — full contract table and rules. | When maintaining or extending the skill. |
@@ -66,8 +76,9 @@
 | `lessons/README.md` | failure-lessons | Global failure-lessons library (issue 41, cross-sample, never per-workspace): `scripts/failure_analysis_gate.py --lessons` aggregates closed-loop analyses at closeout into runtime lesson files; keyword retrieval (`similar_lessons`) runs automatically inside the gate at failure time. The README is the indexable face; runtime lesson files exist only in deployed copies. | After a closeout (`--lessons` aggregation), when choosing a method-ladder rung and past failures of the same shape matter, or when adding to / searching the library. |
 | `machine-check-contract.md` | contracts | Executable-oracle contract (#332): verification records must carry machine_check {command, expected, actual, passed}; exception path and mapping-table mirror of references/machine_check_map.yaml. | When validating a red-team verification record, writing one, or promoting a claim. |
 | `malware-phase-routing.md` | routing | Maps file types to analysis phases, VM isolation boundary. | At the start of a new malware engagement for phase decision. |
+| `mechanisms.md` | governance | Mechanism lifecycle ledger — retired/superseded mechanisms with replacements (#446); mirrored by hooks/lib_kunglao.MECHANISMS metadata. | When retiring or superseding a mechanism, or auditing retirement completeness. |
 | `method-constraints.md` | dispatch | Constraint table for known-incompatible scenarios. | Before dispatching a worker to include correct method constraints. |
-| `operational-mechanics.md` | mechanics | HOW behind heartbeat tick, worker ping, self-cap-safe dispatch, VM launch. | When implementing/debugging heartbeat, writing dispatch prose, or VM x64dbg launch. |
+| `operational-mechanics.md` | mechanics | HOW behind heartbeat tick/registration (loop_scheduler durable schedule, #754 continuous-tick standard), worker ping, self-cap-safe dispatch, VM launch; liveness_policy.py threshold single source (#597). | When implementing/debugging heartbeat, writing dispatch prose, VM x64dbg launch, or tuning a liveness/staleness threshold. |
 | `optimization-2026-08.md` | optimization | Background compendium: smart-ping, closeout checklist, worktree caveats. | When needing the full expanded text of a compact SKILL.md reference. |
 | `schema.md` | schema | All data schemas: boundary_type, fact.status, claim-register, etc. | When reading/writing structured state files. |
 | `state-mapping.md` | schema | Two-layer state mapping: claim-register workflow states ↔ fact status + verify_status; ICD-203 nine-rule landing fields (#336). | When writing/migrating facts, linting, or reconciling register vs frontmatter statuses. |
@@ -81,6 +92,7 @@
 
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
+| `re-library/android-fingerprint-apis.md` | android-fingerprint | Device/sensor fingerprint API taint seed table - the capability doc driving dexdc `--taint-api` seeds; hypotheses (risk-control vs tracking) and anomaly concentration. | When a claim asks whether the sample collects fingerprint identifiers and where they flow (#692). |
 | `re-library/anti-analysis.md` | anti-analysis | Anti-debugging, anti-VM, anti-DBI, code-integrity bypass. | When encountering binaries detecting debuggers/VMs/instrumentation. |
 | `re-library/awesome-re-resources.md` | resources | Curated RE resource repos, tools, tutorials. | When seeking external learning materials or specialized utilities. |
 | `re-library/detection-engineer.md` | malware | Transforming analysis findings into detection content. | When writing detection signatures or hunting queries. |
@@ -110,3 +122,6 @@
 | `re-library/tools-crypto.md` | tools | Encryption/encoding/hashing tool quick-reference. | When needing to identify/decode/crack encrypted data. |
 | `re-library/tools-dynamic.md` | tools | Dynamic analysis tooling (Frida, angr, lldb, x64dbg, Qiling). | When performing runtime/dynamic analysis or function hooking. |
 | `re-library/tools.md` | tools | Core static RE tools (GDB, Radare2, Ghidra, Unicorn). | When setting up a reversing workspace. |
+| `re-library/web-crawler-engineering.md` | web-crawler-engineering | 爬虫工程 sustainable collection engineering (#761): 会话维持 cookie 池/登录态, 频率伪装 human cadence, IP 策略 住宅/机房/轮换/sticky, CAPTCHA 分类应对 slider/点选/re-challenge. | After access is solved on a `--type web` target — designing sustainable collection ops or triaging a CAPTCHA surface. |
+| `re-library/web-re-quickref.md` | web-labs | Browser JS reverse engineering quick-reference: hook/boundary quick reference, signed-parameter workflow, layered peeling (unbundle → deobfuscate → VM boundary), crypto signatures, anti-patterns. | Before opening the browser on a web target (`--type web`); injected into web workspace CLAUDE.md at init. |
+| `re-library/web-risk-control.md` | web-risk-control | 风控对抗 anti-bot doctrine (#761): 信号分类学 device-fingerprint/behavioral/environment-consistency/protocol, 对抗决策树 bypass→仿真→real + 无头升级链 (J6), 风控栈识别 加速乐/瑞数/自研, 检测点定位 触发→观察→归因 loop with camoufox CDP instrumentation (J7). | When a request is blocked / challenged / a signed param is rejected on a web target — classify the signal first, then pick the branch. |

@@ -23,6 +23,13 @@
 | `opaque-pred` | Opaque predicate/MBA equivalence decision (z3) | Read when statically resolving opaque predicates/proving MBA equivalences; not when z3 is absent or the task is not expression-level |
 | `yara-scan` | YARA rule scanning (built-in crypto-tables) | Read for rule-based byte scanning (family/IOC evidence); not when yara-python is missing |
 | `yara-gen` | YARA rule text generation from analysis findings | Read when generating detection rules from hex/string traits; not without a rule-generation need |
+| `jadx-decompile` | DEX-to-Java decompiler (jadx; android:java-source high) | Read when java-like source is needed AND the apk_mem_gate verdict is jadx-ok/targeted-jadx; not for 1:1 bytecode truth (baksmali-xref) |
+| `baksmali-xref` | DEX 1:1 smali + xref index (android:bytecode-truth sole) | Read when bytecode truth / mechanical fact anchors are needed, or as floor java-source/call-graph fallback; not for java-like source |
+| `apkid-prescan` | APK packer/compiler/obfuscator fingerprint | Read at android intake; its obfuscator tag raises the deobf prior (WP6) only, it is not a D0-matrix provider |
+| `dexdc-decompile` | Rust DEX decompiler + taint/CFG (android:data-flow & string-decrypt & algorithm-verify sole) | Read when data-flow/source-to-sink, string decrypt via emulator, or algorithm verify is needed; no JVM - immune to jadx heap thrash; not the top java-source pick when jadx runs within budget |
+| `gitnexus-query` | Source-tree graph RAG queries (android:semantic-query sole) | Read when a claim needs semantic queries over an INDEXED source tree (lazy index, marker evidence/gitnexus_index.json); not a decompiler |
+| `wakaru-unbundle` | Bundler unpack + transpiler/minifier undo for bundled JS (`js:unbundle` sole, high; #728 web labs, external wakaru CLI) | Read when a webpack/esbuild/Browserify/Metro/Closure/ncc bundle must be split into modules; not for obfuscator.io/string-array/control-flow-flattening/VM-protected code (webcrack first) |
+| `webcrack-deobfuscate` | obfuscator.io-class JS deobfuscation + unminification (`js:deobfuscate` sole, high; #728 web labs, external webcrack CLI) | Read when classic JS obfuscation must be peeled; run BEFORE wakaru on obfuscated samples; not for VM bytecode or environment-bound code (wakaru recovers module structure after deobfuscation) |
 
 ## Contract entries
 
@@ -229,3 +236,95 @@
 - **Outputs**: YARA rule text (stdout).
 - **exit code**: 0 success / 2 error (missing --name or trait pattern).
 - **when_not**: Not when detection rules do not need to be generated from analysis findings.
+
+### jadx-decompile
+
+- **Purpose**: DEX-to-Java decompiler (external jadx CLI, worker-dispatched; capability `android:java-source`, quality high).
+- **Usage**:
+  ```bash
+  python tools/static/apk_mem_gate.py <workspace> <target>   # verdict gates this provider; the jadx CLI itself is worker-dispatched
+  ```
+- **Inputs**: APK/JAR target.
+- **Outputs**: decompiled Java source tree under `evidence/`.
+- **exit code**: 0 ok/unavailable from the gate (REFUSE is an expected outcome, not an error); the external jadx CLI's own exit code is the worker's concern (budget state is a PRECONDITION — verdict `smali-only`/`refuse` blocks this provider, per #692 the #670 gate is a provider precondition, not a pipeline stage).
+- **when_not**: Not when the mem-gate verdict is smali-only/refuse; not for 1:1 bytecode truth (baksmali-xref).
+- **provider**: `jadx` — requires `[dex, mem_budget_ok, jadx_bin]`; cost_hint `{mem_gb: 4.0, time: deep}`.
+
+### baksmali-xref
+
+- **Purpose**: DEX enumeration + xref into the gitnexus-shape index (`android:bytecode-truth` sole provider, high; floor fallback for java-source/call-graph).
+- **Usage**:
+  ```bash
+  python tools/static/baksmali_index.py <workspace> <apk>
+  ```
+- **Inputs**: APK/DEX target.
+- **Outputs**: `evidence/smali_index.json` — `{tool, version, target, classes[].methods[].xrefs{calls,called_by}, scanned_at}` (the #670 wire; dexdc_index.json shares this shape).
+- **exit code**: 0 ok/unavailable / 1 hard error (fail-open, never raises).
+- **when_not**: Not for java-like source (jadx/dexdc); not for graph RAG over source (gitnexus-query).
+- **provider**: `baksmali` — requires `[dex, smali_toolchain]`; quality `{bytecode-truth: high, java-source: floor, call-graph: floor, dex-rewrite: mid}`.
+
+### apkid-prescan
+
+- **Purpose**: APK packer/compiler/obfuscator/anti-* fingerprint pre-scan (capability `android:packer-fingerprint`).
+- **Usage**:
+  ```bash
+  python -m scripts.apkid_scanner <workspace> <apk>
+  ```
+- **Inputs**: APK target.
+- **Outputs**: `evidence/apkid.json` — summary per category; the obfuscator tag feeds the WP6 deobf prior.
+- **exit code**: 0 ok/unavailable (fail-open).
+- **when_not**: Not on non-Android targets; not a D0-matrix capability provider — its tags raise priors only.
+- **provider**: `apkid` — requires `[dex]`; cost_hint `{mem_gb: 0.5, time: cheap}`.
+
+### gitnexus-query
+
+- **Purpose**: Semantic graph queries (dependency/call-chain/execution-flow + Graph RAG) over an INDEXED decompiled source tree (capability `android:semantic-query` high; `android:call-graph` high; #751 js domain adds `js:semantic-query` + `js:call-graph`, both high — js input is a recovered JS module tree registered as evidence `<run>.json` `unpack_out` by wakaru/webcrack).
+- **Usage**:
+  ```bash
+  python -m scripts.mcp_probe <workspace> --type android --json   # registration face; then the 16 gitnexus MCP tools over the indexed tree
+  ```
+- never pre-run; marker `evidence/gitnexus_index.json` (`{source_root, indexed_at, tools}`).
+- **Inputs**: indexed source tree (jadx/dexdc output on android; a wakaru/webcrack output directory on web).
+- **Outputs**: graph/RAG answers over the source tree.
+- **exit code**: 0 all-PASS / 1 HARD FAIL / 2 WARN-only (the scripts/mcp_probe.py face; MCP calls have no shell exit code).
+- **when_not**: Not a decompiler; not without an indexed source tree; not for DEX without source (dexdc CFG / baksmali xref).
+- **provider**: `gitnexus` — requires `[source_tree, gitnexus_index]`; cost_hint `{mem_gb: 1.0, time: deep}`.
+
+### dexdc-decompile
+
+- **Purpose**: dex-decompiler provider wrapper (capability `android:java-source` mid fallback; SOLE provider for `android:data-flow` / `android:string-decrypt` / `android:algorithm-verify`, all high).
+- **Usage**:
+  ```bash
+  python tools/static/dexdc_scanner.py <workspace> --target <apk-or-dex> [--mode index|taint|both] [--method CLASS#METHOD ...] [--only-package PKG] [--seeds API ...]
+  ```
+- **Inputs**: APK/DEX target; optional targeted methods (index mode), package filter, taint seed APIs (default: the `references/re-library/android-fingerprint-seeds.yaml` table).
+- **Outputs**: `evidence/dexdc_index.json` (gitnexus-shape classes/methods/xrefs + per-method cfg nodes/edges) + `evidence/dexdc_taint.json` (`issues[].{rule, source, sink, traces}`, count).
+- **exit code**: 0 ok/unavailable (fail-open, never raises) / 1 hard usage error.
+- **when_not**: Not the highest-fidelity java source when jadx runs within budget (jadx stays high); its value is data-flow/string-decrypt/algorithm-verify which jadx lacks; not for dex rewrite (baksmali/dexlib2).
+- **provider**: `dexdc` — requires `[dex, dexdc_wheel]`; detection = PyO3 wheel `import dex_decompiler` first, then `dex-decompile` CLI; index mode is pyo3-face-only, taint mode is cli-face-only (each mode uses only documented upstream surfaces).
+
+### wakaru-unbundle
+
+- **Purpose**: Bundler-aware JS module recovery — unpacks webpack/esbuild/Browserify/Metro/Closure/ncc bundles and reverses transpiler/minifier transforms (capability `js:unbundle` sole, high; #728 web labs, external wakaru CLI).
+- **Usage**:
+  ```bash
+  python -m scripts.toolchain <workspace> --type web --json   # web (labs) supply face; the wakaru CLI itself is agent-invoked: npx -y wakaru <bundle.js> (first npx run installs; verify with `npx wakaru --version`)
+  ```
+- **Inputs**: minified/bundled JavaScript (webpack/esbuild/Browserify/Metro/Closure/ncc).
+- **Outputs**: module tree + transpiler/minifier undo + type annotation removal; register the output directory into evidence/<run>.json `unpack_out` so gitnexus-query can lazy-index it (#751; input_output in [_INDEX.yaml](_INDEX.yaml)).
+- **exit code**: external npx CLI — 0 success / non-zero failure; the invoking worker owns the interpretation (no repo gate wraps this provider, same as jadx's external CLI).
+- **when_not**: Not for obfuscator.io/string-array/control-flow-flattening/VM-protected code (wakaru deliberately avoids these); try webcrack-deobfuscate first for classic obfuscation.
+- **provider**: `wakaru` — external npm package, agent-invoked via npx, never init-gated; install guidance in the FIXES entry of scripts/toolchain.py; cost_hint `{mem_gb: 0.5, time: cheap}`.
+
+### webcrack-deobfuscate
+
+- **Purpose**: obfuscator.io-class JavaScript deobfuscation + unminification (capability `js:deobfuscate` sole, high; #728 web labs, external webcrack CLI).
+- **Usage**:
+  ```bash
+  python -m scripts.toolchain <workspace> --type web --json   # web (labs) supply face; the webcrack CLI itself is agent-invoked: npx -y webcrack <input.js> (first npx run installs; verify with `npx webcrack --version`)
+  ```
+- **Inputs**: obfuscator.io / minified JavaScript.
+- **Outputs**: deobfuscated source tree; register the output directory into evidence/<run>.json `unpack_out` so gitnexus-query can lazy-index it (#751; input_output in [_INDEX.yaml](_INDEX.yaml)).
+- **exit code**: external npx CLI — 0 success / non-zero failure; the invoking worker owns the interpretation (no repo gate wraps this provider).
+- **when_not**: Not for VM bytecode or environment-bound code; use wakaru-unbundle on the output to recover module structure after deobfuscation.
+- **provider**: `webcrack` — external npm package, agent-invoked via npx, never init-gated; install guidance in the FIXES entry of scripts/toolchain.py; cost_hint `{mem_gb: 0.5, time: cheap}`.

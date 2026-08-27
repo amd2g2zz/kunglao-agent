@@ -95,10 +95,14 @@ def test_no_tomllib_without_tomli_fallback():
 
 # ---------- CI exercises the floor ----------
 
-def test_release_check_ci_exercises_the_310_floor():
+def test_release_check_ci_exercises_the_ci_python():
+    # 2026-08-26 user decision: CI runs Python 3.11 only (self-hosted runner
+    # pre-installs python3.11; the 3.10 matrix leg needed runner toolcache
+    # entries that kept breaking). The floor contract stays enforced by the
+    # interpreter-version test above; CI pins the 3.11 it actually runs.
     wf = WORKFLOW.read_text(encoding="utf-8")
-    assert "3.10" in wf, (
-        "release-check.yml must run the suite on the 3.10 floor — CI is "
-        "the only place floor drift gets caught before a user install"
+    assert "3.11" in wf, (
+        "release-check.yml must run the suite on the CI python — 3.11 per "
+        "the 2026-08-26 self-hosted runner decision"
     )
     assert "uv" in wf, "release-check.yml must keep the documented uv flow"

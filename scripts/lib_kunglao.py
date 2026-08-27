@@ -41,7 +41,8 @@ from pathlib import Path
 # ---- drift thresholds (issue #43, tunable) ----
 ROTATION_WINDOW = 3            # consecutive identical signatures = drift detected
 DRIFT_ESCALATE_ROWS = 6        # persistent drift = escalate to a kick
-WORKER_PROGRESS_MINUTES = 20   # in-progress status file younger than this = moving
+# #597: minutes thresholds single-sourced in liveness_policy (values unchanged).
+from liveness_policy import WORKER_PROGRESS_MINUTES  # noqa: E402  # in-progress status file younger than this = moving
 
 LEDGER_FILE = ".convergence_ledger.jsonl"
 

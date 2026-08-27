@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -292,9 +293,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.revision:
         revision = args.revision
     else:
-        r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
-                           text=True, encoding="utf-8", errors="replace")
-        revision = r.stdout.strip() if r.returncode == 0 else "unknown"
+        try:
+            r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
+                               text=True, encoding="utf-8", errors="replace")
+            revision = r.stdout.strip() if r.returncode == 0 else \
+                os.environ.get("GITHUB_SHA", "unknown")
+        except FileNotFoundError:
+            # Self-hosted runners without git: actions/checkout falls back to
+            # the REST tarball (no .git on disk) — GITHUB_SHA carries the
+            # exact commit the workflow is validating.
+            revision = os.environ.get("GITHUB_SHA", "unknown")
 
     test_result = None
     if args.check:

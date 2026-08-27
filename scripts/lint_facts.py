@@ -47,7 +47,7 @@ except ImportError:  # pragma: no cover
 # the schema authority in the live skill dir. Bump ONLY on a
 # backward-incompatible frontmatter schema change (a new optional field is
 # not a revision bump).
-ACTIVE_SCHEMA_REV = 1
+ACTIVE_SCHEMA_REV = 2  # #663 anomaly detection schema bump
 
 VALID_STATUS = {"PROVEN", "INFERRED", "NEGATIVE", "REFUTED", "OPEN", "DEFERRED", "VERIFIED"}
 VALID_SOURCE = {
@@ -58,10 +58,11 @@ VALID_CONFIDENCE = {"high", "medium", "low"}
 VALID_BOUNDARY_TYPE = {
     "confirmed", "capability_not_executed", "link_not_closed", "source_derived",
     "observation", "coordinate", "pure_negative", "contradiction", "numeric",
+    "anomaly",
 }
 OPEN_BOUNDARY_TYPES = {"capability_not_executed", "link_not_closed",
                        "source_derived", "observation", "numeric"}
-EMPTY_GATE_TYPES = {"confirmed", "pure_negative", "contradiction", "coordinate"}
+EMPTY_GATE_TYPES = {"confirmed", "pure_negative", "contradiction", "coordinate", "anomaly"}
 VALID_VERIFY_STATUS = {"pending", "passes", "partial", "fails", "stale"}
 VALID_CONFIDENCE_ZH = {"可确认", "表明", "倾向于", "可关联", "不支持"}
 VALID_PROVENANCE_ROLES = {"sample_raw", "decompiled_c", "disassembled_s",
@@ -799,7 +800,7 @@ def lint_workspace(ws: Path):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="lint kunglao facts against the aligned schema (#336)")
+    ap = argparse.ArgumentParser(description="lint kunglao facts against the aligned schema")
     ap.add_argument("ws", type=Path, help="workspace root (contains facts/)")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args(argv)

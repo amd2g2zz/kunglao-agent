@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""liveness_policy.py — THE single source for liveness/staleness thresholds (#597).
+
+v0.1.3 root-cause survey finding: 10+ ``_MINUTES`` constants were hardcoded
+across hooks/ and scripts/ with zero shared source — at least 4 duplicated
+value-pairs drifted independently (a comment in event_taxonomy.py even
+restated a hard "20" that silently rots when the value changes).
+
+ADJUDICATION (v0.1.3 plan §D row #597): the VALUES stay exactly as they were
+(20/30/35 are each deliberate with their own rationale — this module does NOT
+unify numbers; changing any value needs its own adjudication). What changed
+is the SOURCE: every former definition site imports from here, so a future
+value change lands in exactly one place with its rationale attached.
+
+Import conventions (unchanged by this module):
+  - scripts/ consumers: plain ``import liveness_policy`` / ``from
+    liveness_policy import X`` (sys.path[0] is scripts/ when run as a script;
+    pytest.ini adds scripts/ to pythonpath).
+  - hooks/ consumers: hooks run with their own dir at sys.path[0], so they
+    insert the scripts dir first (worker_budget_core / session_start /
+    lib_kunglao._env_layout precedent — missing module = broken install,
+    not a degraded mode, #444 posture: hooks/ and scripts/ ship together).
+
+Drift guard: tests/test_liveness_policy_597.py fails on any bare
+``X_MINUTES = <int>`` assignment reintroduced in a consumer file.
+
+Pure stdlib. Constants only, no state, no imports of sibling modules
+(safe for hooks/ and scripts/ alike — no cycle in either direction).
+"""
+from __future__ import annotations
+
+# ---------------------------------------------------------------------------
+# Worker-status staleness (the stuck-family threshold, value 20 everywhere)
+# ---------------------------------------------------------------------------
+
+# hooks/lib_kunglao.py (#444): an in-progress worker-status file older than
+# this (mtime) with no status transition = stuck. The ONE canonical
+# worker-liveness parse point (scan_active_workers / iter_worker_states);
+# scripts-side consumers (event_taxonomy STUCK_SECONDS, kunglao_resume,
+# external_kicker FRESH_WORKER_MINUTES) all mirror this same 20.
+STUCK_MINUTES = 20
+
+# scripts/lib_kunglao.py (#43 drift detection D3): an in-progress status file
+# YOUNGER than this = the session is still moving (signature rotation vs
+# frozen loop). Same 20 as STUCK_MINUTES — freshness and stuckness are the
+# two sides of one worker-liveness line.
+WORKER_PROGRESS_MINUTES = 20
+
+# scripts/external_kicker.py (D3): worker status files fresher than this
+# block a kick (session mid-dispatch — kicking a live dispatch would
+# duplicate work). Mirrors STUCK_MINUTES by design: a worker the stuck
+# scan would call stuck is exactly one the kicker may kick.
+FRESH_WORKER_MINUTES = 20
+
+# ---------------------------------------------------------------------------
+# Heartbeat staleness (the monitoring-liveness threshold, value 35)
+# ---------------------------------------------------------------------------
+
+# scripts/heartbeat.py: a 5-min cron tick should refresh .heartbeat.json
+# continuously; > 35 min stale (5-min interval + jitter margin) means the
+# MONITORING itself is not running — not merely a quiet session. kunglao_resume
+# reuses the same predicate for its NEXT-dispatch prediction (HEARTBEAT_STALE_
+# MINUTES is the same 35, kept as a distinct name because its consumer-facing
+# meaning is "would the resume gate pass", not "is monitoring alive").
+STALE_MINUTES = 35
+HEARTBEAT_STALE_MINUTES = 35
+
+# ---------------------------------------------------------------------------
+# Heartbeat tick continuity (#754 E2)
+# ---------------------------------------------------------------------------
+
+# scripts/heartbeat.py (#754): the tick interval assumed when .heartbeat.json
+# carries no interval_min (heartbeat_register writes 5; the /loop default is
+# 5m). The continuity gate doubles it as the maximum tolerated gap between
+# adjacent ticks (one missed tick is jitter; two is a dead cron). Named _MIN
+# not _MINUTES to stay outside the #597 bare-assignment drift-guard family —
+# this value is NEW in #754, not a surveyed pre-existing constant.
+TICK_INTERVAL_DEFAULT_MIN = 5
+
+# ---------------------------------------------------------------------------
+# Hook-activation TTL (the enforcement-liveness threshold, value 30)
+# ---------------------------------------------------------------------------
+
+# scripts/hook_activation.py: activation is short-lived BY DESIGN — the
+# orchestrator must renew every 30 min or the hooks sleep, which makes
+# activation a real liveness signal (a stale activation from a dead/abandoned
+# session cannot keep firing hooks). external_kicker.ACTIVATION_TTL_MINUTES
+# is the SAME 30 (D6): the tick interval must stay below it or the
+# TTL-expiry→next-tick gap silently closes the gates.
+DEFAULT_TTL_MINUTES = 30
+ACTIVATION_TTL_MINUTES = 30
+
+# ---------------------------------------------------------------------------
+# Env-state freshness (the environment-liveness threshold, value 30)
+# ---------------------------------------------------------------------------
+
+# hooks/worker_budget_core.py (#475): runs/env-state.json older than this =
+# env drift — the dispatch gate REJECTS at 2x this line (worker_budget_sinks),
+# kunglao-monitor uses the same 30 as its advisory drift threshold. One
+# threshold, two severities — the value must not fork between them.
+ENV_STATE_TTL_MINUTES = 30
+
+# ---------------------------------------------------------------------------
+# Kicker / renewal margins (value 10)
+# ---------------------------------------------------------------------------
+
+# scripts/external_kicker.py (D1): both heartbeat signals stale beyond this
+# (in addition to DEFAULT_TICK_INTERVAL_MIN=15): 15+10 = worst-case detection
+# ≤ 25 min < 30-min TTL → the kick always lands BEFORE the old activation
+# expires (no silent window, with margin). NOT the heartbeat 35 — this is
+# the kicker's own dead-session bound, deliberately tighter.
+DEFAULT_STALE_MINUTES = 10
+
+# scripts/heartbeat_tick.py (#365): renewal-margin early warning — a tick
+# chain that is ALIVE but cadence-mismatched with the 30-min TTL renews
+# just before expiry (the one silent-gate case no other anomaly surfaces).
+# 10 min = a third of the TTL: enough lead time to act before the NEXT tick
+# misses the renewal entirely.
+RENEW_MARGIN_LOW_MINUTES = 10

@@ -130,8 +130,17 @@ def test_build_digest_includes_sec_g(tmp_path: Path) -> None:
 
 
 def test_build_digest_no_hypotheses_keeps_six_sections(tmp_path: Path) -> None:
-    """Pre-#528 workspaces: digest unchanged (six sections, no sec_g)."""
-    ws = _mini_ws(tmp_path)
+    """No-PQ workspaces: digest unchanged (six sections, no sec_g).
+
+    Post-#662 a workspace WITH primary_questions always gets seeded PQ
+    scaffolds at digest time (so sec_g appears); the six-section shape is
+    now pinned on a task_spec WITHOUT primary_questions instead."""
+    (tmp_path / "task_spec.yaml").write_text("primary_questions: []\n",
+                                             encoding="utf-8")
+    (tmp_path / "claim-register.yaml").write_text(
+        "claims:\n  - {id: C-1, status: OPEN, statement: s}\n",
+        encoding="utf-8")
+    ws = tmp_path
     md = digest_build.build_digest(ws)
     for marker in ["## head", "## sec_a", "## sec_b", "## sec_c",
                    "## sec_d", "## sec_e", "## sec_f"]:

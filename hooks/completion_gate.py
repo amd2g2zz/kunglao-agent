@@ -22,6 +22,16 @@ Activation gating: current fail-open / fail-closed boundaries (post
   - activated + oracle present + empty task_text → block, exit 3 (D6:
     malformed oracle is the genuine self-anchor fingerprint)
   - activated + oracle present + unsatisfied → block, exit 1/2
+  - activated + oracle would PASS items but task_text anchors are absent
+    from task_spec.yaml primary_questions → block, exit 4 (#664
+    INTENT_UNMATCHED — the gate refuses PASS until every user concern is
+    owned by a PQ; precedence 3>2>1>4>0 means this fires only at the
+    would-be-PASS point)
+  - activated + oracle PASSes items + runs/notes-due.yaml still lists owed
+    durable result notes → block, exit 5 NOTES_DUE (#762 K1b — same
+    would-be-PASS interception pattern as exit 4; the queue names the
+    claims, writing notes/<claim-id>.md clears it on the next Stop.
+    Fail-open double-cage: missing/corrupt/malformed queue = pass-through)
   - stop_hook_active=true (second stop) → BLOCK unless task-oracle.yaml
     records adjudication.stop_hook_active = {second_stop: true,
     last_decision: PASS} (#147/#199: an unsanctioned second stop must not
@@ -41,8 +51,13 @@ import json
 import sys
 from pathlib import Path
 
+from _path_hygiene import scripts_on_path  # #671 sys.path hygiene authority
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 ORACLE_FILE = "task-oracle.yaml"
+# #762 K1b: owed durable-result-note refusal code (shim-face only — judge()
+# stays workspace-pure; the scripts-side judge keeps its {0..4} table).
+EXIT_NOTES_DUE = 5
 
 
 # ---------- workspace + activation (mirror hooks/state_anchor.py #44) ----------
@@ -65,8 +80,11 @@ def _kunglao_active(ws: Path) -> bool:
     if not (ws / ".hook_state.json").exists():
         return False
     try:
-        sys.path.insert(0, str(SKILL_DIR / "scripts"))
-        import hook_activation as ha
+        # #671: scoped membership — the entry leaves sys.path with the block
+        # (a leaked scripts/ entry flipped the ambiguous lib_kunglao name in
+        # long pytest sessions; hooks/ before scripts/ is the load order).
+        with scripts_on_path():
+            import hook_activation as ha
         return ha.is_active_strict(ws, "completion_gate")
     except Exception:  # noqa: BLE001 — never block on an activation-check error
         return False
@@ -142,14 +160,49 @@ def process_event(payload: dict) -> int:
     try:
         import yaml
         oracle = yaml.safe_load((ws / ORACLE_FILE).read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001 — FAIL_OPEN on oracle read
-        return 0
+    except yaml.YAMLError as exc:
+        # #717: an UNREADABLE oracle in an activated workspace BLOCKS (exit 3),
+        # it does not pass through. The pre-#717 FAIL_OPEN here swallowed the
+        # sample-incident-01 L7 failure (a bare scalar with an inner colon —
+        # ScannerError "mapping values are not allowed here"), so the session
+        # ended cleanly with items open. A corrupted oracle is a
+        # fail-closed event in the D6 family, same as a missing one — the
+        # operator must repair task-oracle.yaml before completion can be
+        # judged. (OSError on read stays FAIL_OPEN per the module docstring:
+        # a transient IO error must not deadlock the session.)
+        reason = (f"task-oracle.yaml is unparseable YAML ({type(exc).__name__}: "
+                  f"{str(exc).splitlines()[0] if str(exc) else exc}) — repair "
+                  f"the oracle before completion can be judged (#717)")
+        print(json.dumps({"decision": "block", "reason": reason},
+                         ensure_ascii=False))
+        return 3
+    except OSError:
+        return 0  # transient IO failure — FAIL_OPEN (never deadlock)
     try:
         cg = _load_judge()
         code, reason = cg.judge(oracle)
     except Exception:  # noqa: BLE001 — FAIL_OPEN on judge
         return 0
     if code == 0:
+        # #762 K1b: at the would-be-PASS point ONLY (#664 pattern — item-level
+        # defects, unsigned defers, INTENT_UNMATCHED all strictly outrank this;
+        # mid-run Blocks are never caused by notes), refuse closure while the
+        # owed durable-note queue (#628 runs/notes-due.yaml) still lists
+        # unwritten obligations. Double-caged fail-open: notes_due() itself
+        # degrades to [] on every malformed shape, and ANY exception here is
+        # swallowed — a telemetry file must never deadlock a session.
+        try:
+            owed = cg.notes_due(ws)
+        except Exception:  # noqa: BLE001 — FAIL_OPEN: never deadlock on the queue
+            owed = []
+        if owed:
+            reason = ("NOTES_DUE: durable result notes owed (#628/#762) - "
+                      "write notes/<claim-id>.md per worker contract "
+                      "(frontmatter id/claim_id/verify_status: pending; "
+                      "supersedes when correcting) for: " + ", ".join(owed))
+            print(json.dumps({"decision": "block", "reason": reason},
+                             ensure_ascii=False))
+            return EXIT_NOTES_DUE
         return 0  # PASS — let the session end
     # non-zero → block termination with the unclosed-items reason
     print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))

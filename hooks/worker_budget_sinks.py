@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from worker_budget_core import (
@@ -254,58 +255,56 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
     dispatch with no live .heartbeat.json is REJECTED, forcing the
     orchestrator to register monitoring BEFORE dispatch. Closes the
     soft-constraint gap that prior versions could not.
+
+    #754 E2: 'alive' is now CONTINUITY-based via the shared evaluator
+    (scripts/heartbeat.py::evaluate_tick_continuity): >= 2 ticks, adjacent
+    gaps <= 2x interval_min, newest <= 35 min. The live-run incident (#754)
+    proved single-tick liveness blind: last_tick_ts == started_ts for the
+    whole session life with no cron behind it still passed inside the
+    window. #533 F-H2 semantics kept: TICK data only — activity_ts stays
+    the kicker's signal; and no cross-workspace masking beyond the original
+    cwd-side -> skill-install-dir probe (F-H3 posture).
     """
-    from datetime import datetime, timedelta, timezone
+    from _path_hygiene import ensure_scripts_path  # #671 sys.path authority
+    ensure_scripts_path()
+    from heartbeat import evaluate_tick_continuity  # noqa: E402
+
     if not state_path.exists():
         return True, 'no kunglao-agent workspace - heartbeat gate skipped'
-    # the heartbeat belongs to skill-level monitoring, not the analysis workspace: check the cwd side first, then fall back to the skill install dir
     hb = state_path.parent / 'runs' / '.heartbeat.json'
-    _skill = Path(__file__).resolve().parents[1]
-    hb_skill = _skill / 'runs' / '.heartbeat.json'
+    hb_skill = Path(__file__).resolve().parents[1] / 'runs' / '.heartbeat.json'
 
-    def _age(hb_path: Path):
-        # #533 F-H2: liveness = last_tick_ts ONLY — tick_fresh is the proof
-        # that the loop (cron+LLM) is running. activity_ts is kicker's signal
-        # (external_kicker.session_is_dead checks BOTH), not dispatch gate's.
+    def _load(hb_path: Path):
         try:
-            data = json.loads(hb_path.read_text(encoding='utf-8'))
-            v = data.get('last_tick_ts', '')
-            if v:
-                try:
-                    dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
-                    return (datetime.now(timezone.utc) - dt), v
-                except ValueError:
-                    pass
-            return None, ''
+            return json.loads(hb_path.read_text(encoding='utf-8'))
         except Exception:
-            return None, ''
+            return None
 
-    ws_age, ws_last = _age(hb) if hb.exists() else (None, '')
-    if ws_age is None or ws_age > timedelta(minutes=35):
-        sk_age, sk_last = _age(hb_skill) if hb_skill.exists() else (None, '')
-        if sk_age is not None and sk_age <= timedelta(minutes=35):
-            hb = hb_skill
-    if not hb.exists():
+    data = _load(hb) if hb.exists() else None
+    ws_alive, ws_detail = evaluate_tick_continuity(data) if data else (False, '')
+    if ws_alive:
+        return (True, f'heartbeat alive ({ws_detail})')
+    if hb_skill.exists():
+        sk_data = _load(hb_skill)
+        if sk_data:
+            sk_alive, sk_detail = evaluate_tick_continuity(sk_data)
+            if sk_alive:
+                return (True, f'heartbeat alive ({sk_detail})')
+            ws_detail = ws_detail or sk_detail
+        elif ws_detail == '':
+            ws_detail = f'skill-side {hb_skill.name} unreadable'
+    if data is None and not hb.exists() and not hb_skill.exists():
         return (False,
                 'heartbeat NOT registered. BEFORE dispatching, run:\n'
                 '  uv run --project <skill> <skill>/scripts/hook_activation.py <ws> --heartbeat-on\n'
                 '  CronCreate */5 * * * * <heartbeat_loop_prompt.py output>\n'
-                'S6.1b v1.9.28: dispatching a task != monitoring started.')
-    age, last_str = _age(hb)
-    if age is None:
-        return (False,
-                'heartbeat file unreadable / no parseable timestamps - re-register with --heartbeat-on')
-    if age > timedelta(minutes=35):
-        return (False,
-                f'heartbeat STALE ({int(age.total_seconds()//60)} min > 35) - cron not '
-                f'ticking AND no recent tool activity. Re-register: --heartbeat-on + CronCreate /loop 5m.')
-    return (True, f'heartbeat alive (last activity {last_str})')
+                '#754: register it DURABLE (<ws>/.claude/scheduled_tasks.json via '
+                '/kunglao-agent:init or loop_scheduler.py) - session-only crons '
+                'die with the process.')
+    detail = ws_detail or ('heartbeat file unreadable / no parseable timestamps - '
+                           're-register with hook_activation.py <ws> --heartbeat-on')
+    return (False, f'#754 continuous-tick liveness REJECT - {detail}')
 
-
-# v1.9.39 (#475): env-state freshness gate constants. TTL aligns with the
-    # #533 F-H3: removed skill-level fallback — cross-workspace masking bug.
-    # Each workspace has its own heartbeat; session must have its own.
-    ws_age, ws_last = _age(hb) if hb.exists() else (None, '')
 
 # module-level timedelta for the gate (datetime itself stays local-import,
 # same convention as check_heartbeat_alive)
@@ -415,7 +414,7 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
                        f'agent={agent_name or "?"} (#461 linkage: renew + '
                        f'arm + phase=DISPATCH)')
     except Exception as exc:  # noqa: BLE001 - linkage never blocks dispatch
-        print(f'[kunglao-agent] dispatch linkage WARN (fail-open, #461): '
+        print(f'[kunglao-agent] dispatch linkage WARN (fail-open): '
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
 
 

@@ -20,11 +20,42 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:  # normal load paths (hook subprocess: script dir; pytest: pythonpath)
+    from _path_hygiene import ensure_scripts_path, on_path  # #671 authority
+except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the eight
+    # scripts-side _load_worker_lib consumers (convergence_check,
+    # backtrack_gate, event_taxonomy, external_kicker, kunglao_status,
+    # progress_report, reconcile_workers, scripts/lib_kunglao) load THIS
+    # file via spec_from_file_location under "lib_kunglao_hooks"; their
+    # subprocess sys.path has scripts/ but not hooks/. Self-bootstrap the
+    # authority by path (registered under its canonical name so every
+    # later `import _path_hygiene` shares this one instance).
+    import importlib.util as _ilu
+    _hyg_spec = _ilu.spec_from_file_location(
+        "_path_hygiene", Path(__file__).resolve().parent / "_path_hygiene.py")
+    _hyg = _ilu.module_from_spec(_hyg_spec)
+    sys.modules["_path_hygiene"] = _hyg
+    _hyg_spec.loader.exec_module(_hyg)
+    ensure_scripts_path = _hyg.ensure_scripts_path
+    on_path = _hyg.on_path
+
 # ---- dispatch prefix regex (single source) ----
 # v0 protocol (legacy, still supported): "[T<N> tools=a,b] claim C-NN ..."
 DISPATCH_RE = re.compile(
     r"\[T(\d)\s+tools=([^\]]+)\]\s+claim\s+(C-\d+)"
 )
+
+# #446 governance metadata — the lifecycle ledger for retired/superseded
+# mechanisms living in this module. Consumed by test_mechanisms_retirement
+# (audit-trail completeness: every retired mechanism names its replacement).
+MECHANISMS = {
+    "v0_dispatch_RE": {
+        "lifecycle": "RETIRED",
+        "replacement": "v1 dispatch protocol — DISPATCH_JSON_START_RE + #452 JSON envelope",
+        "retired_note": "v0 regex prefix stays importable for replaying legacy "
+                        "transcripts; new dispatches MUST use the v1 envelope",
+    },
+}
 # v1 protocol marker — find the JSON object containing the
 # "kunglao_dispatch" key. We grab the surrounding braces by scanning
 # forward for balanced `{`/`}` rather than relying on a non-greedy
@@ -226,7 +257,19 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
 # the external_kicker.should_kick precedent: bare `import lib_kunglao` is
 # ambiguous under pytest because scripts/lib_kunglao.py shares the name).
 
-STUCK_MINUTES = 20
+# #597: the stuck threshold comes from scripts/liveness_policy.py (THE
+# single source for liveness minutes). hooks/ runs with its own dir at
+# sys.path[0], so scripts/ membership is ensured first via the hygiene
+# authority — idempotent and position-stable (missing module = broken
+# install, not a degraded mode — hooks/ and scripts/ ship together, #444
+# posture). #671: was a literal existence check + bare insert.
+ensure_scripts_path()
+from liveness_policy import STUCK_MINUTES  # noqa: E402
+
+# #607: statuses that END a worker's liveness. Anything else — including
+# unknown tokens (planning/preflight) and None — counts as active: an
+# invisible worker is worse than an extra slot (claim black-hole, #607).
+TERMINAL_WORKER_STATUSES = frozenset({"done", "failed", "blocked", "error"})
 
 WORKER_STATUS_RE = re.compile(r"status:\s*(\S+)")
 
@@ -237,6 +280,55 @@ WORKER_STATUS_RE = re.compile(r"status:\s*(\S+)")
 ARTIFACTS_RE = re.compile(
     r"(?:^|\|)\s*artifacts?\s*:\s*([^|\n]+)", re.IGNORECASE | re.MULTILINE)
 _NO_ARTIFACTS_MARKERS = frozenset({"none", "-", "(none)"})
+
+# K2 sedimentation declarations (#762): same line-shape duality, SAME token
+# grammar as artifacts (`none`/`-`/`(none)` = explicit no-note marker,
+# exempt below). The owed-NESS of a note is NOT adjudicated here — that is
+# the Stop gate's notes_due face (D5 division: this layer only enforces
+# "a declared reference must be real", W-15 law).
+NOTES_RE = re.compile(
+    r"(?:^|\|)\s*notes\s*:\s*([^|\n]+)", re.IGNORECASE | re.MULTILINE)
+
+# J4 recall feedback (#761): verdict whitelist + optional term scope in
+# parens — `recall_useful: yes` or `recall_useful: misleading(risk control,
+# memory-layout)`. Same pipe-embedded duality as artifacts/notes. The parse
+# point stays HERE (single canonical parse, #444 AC-1); references_recall's
+# statistics face imports these helpers.
+RECALL_USEFUL_RE = re.compile(
+    r"recall_useful:\s*([A-Za-z]+)\s*(?:\(([^)]*)\))?", re.MULTILINE)
+RECALL_VERDICTS = frozenset({"yes", "no", "misleading"})
+
+
+def parse_declared_recall_useful(text: str) -> str | None:
+    """Orchestrator-facing recall-usefulness verdict from the DONE line
+    (#761 J4). Whitelisted tokens only; the LAST line wins (append-only
+    log). Unknown/absent -> None."""
+    verdict = None
+    for m in RECALL_USEFUL_RE.finditer(text):
+        v = m.group(1).lower()
+        if v in RECALL_VERDICTS:
+            verdict = v
+    return verdict
+
+
+def parse_recall_feedback(text: str) -> tuple[str | None, list[str]]:
+    """Finer-grained face of the same last ``recall_useful:`` line: (verdict,
+    scoped dictionary terms). Terms are lowercase-deduped order-preserved;
+    no parenthetical scope -> ([], the verdict attaches to no dictionary term
+    and is NOT counted toward term demotion)."""
+    verdict: str | None = None
+    terms: list[str] = []
+    for m in RECALL_USEFUL_RE.finditer(text):
+        v = m.group(1).lower()
+        if v not in RECALL_VERDICTS:
+            continue
+        verdict = v
+        raw = m.group(2) or ""
+        for tok in raw.split(","):
+            t = tok.strip().lower()
+            if t and t not in terms:
+                terms.append(t)
+    return verdict, terms
 
 
 def parse_worker_status_tokens(text: str) -> list[str]:
@@ -273,16 +365,30 @@ def parse_declared_artifacts(text: str) -> list[str]:
     return out
 
 
+def parse_declared_notes(text: str) -> list[str]:
+    """Declared durable-result-note paths from ``notes:`` lines (#762 K2).
+
+    Same grammar as parse_declared_artifacts (comma/semicolon/whitespace
+    split, order preserved, deduped); ``notes: none`` and friends normalize
+    to []. Lives at THE single worker-status parse point per #444 AC-1."""
+    out: list[str] = []
+    for m in NOTES_RE.finditer(text):
+        for tok in re.split(r"[,;\s]+", m.group(1).strip()):
+            if (tok and tok.lower() not in _NO_ARTIFACTS_MARKERS
+                    and tok not in out):
+                out.append(tok)
+    return out
+
+
 def _env_layout(ws: Path):
     """#450: layout conventions from scripts/env_manifest.py (the layout
     single source — the .wt-*/malware-analysis-workspace/runs literals
     used to live inline here). Missing module = broken install, not a
     degraded mode (#444 posture: hooks/ and scripts/ ship together)."""
     scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
-    if str(scripts_dir) not in sys.path:
-        sys.path.insert(0, str(scripts_dir))
     try:
-        import env_manifest
+        with on_path(scripts_dir):  # #671 scoped membership
+            import env_manifest
     except ImportError as exc:
         raise RuntimeError(
             f"env manifest module missing: {scripts_dir / 'env_manifest.py'} — "
@@ -330,6 +436,8 @@ def iter_worker_states(workspace: Path) -> list[dict]:
                 "status": tokens[-1] if tokens else None,
                 "mtime": mtime,
                 "artifacts": parse_declared_artifacts(text),
+                "notes": parse_declared_notes(text),  # #762 K2 sedimentation refs
+                "recall_useful": parse_declared_recall_useful(text),  # #761 J4
             })
     return states
 
@@ -353,7 +461,10 @@ def scan_active_workers(workspace: Path, states: list | None = None) -> tuple[in
     cutoff = timedelta(minutes=STUCK_MINUTES)
     now = datetime.now(timezone.utc)
     for s in states:
-        if s["status"] != "in-progress":
+        # #607: only TERMINAL statuses end liveness — unknown statuses
+        # (planning/preflight/None) count active so aged ones reach the
+        # stuck list (#595 event) instead of vanishing with their claim.
+        if s["status"] in TERMINAL_WORKER_STATUSES:
             continue
         active += 1
         if (now - s["mtime"]) > cutoff:
@@ -382,7 +493,13 @@ def scan_done_artifact_violations(workspace: Path, states: list | None = None) -
             continue
         declared = s["artifacts"]
         if not declared:
-            continue  # legacy format — no declarations, W-15-exempt
+            # #550: bare done is a violation, full stop (user ruling 2026-08-25:
+            # no legacy-compat path). The production hole (C-400: done trusted,
+            # no facts file) lived exactly here — a done worker must declare
+            # what it delivered.
+            violations.append({"worker": s["file"].stem,
+                               "kind": "done-undeclared", "missing": []})
+            continue
         if all(t.lower() in _NO_ARTIFACTS_MARKERS for t in declared):
             violations.append({"worker": s["file"].stem,
                                "kind": "done-no-files", "missing": []})
@@ -393,4 +510,15 @@ def scan_done_artifact_violations(workspace: Path, states: list | None = None) -
         if missing:
             violations.append({"worker": s["file"].stem,
                                "kind": "declared-missing", "missing": missing})
+        # #762 K2: same law for declared durable-note references. Opt-in like
+        # artifacts above — a done file with no `notes:` line (or `none`) is
+        # exempt here; whether a note was OWED at all is the Stop gate's
+        # notes_due adjudication, not liveness business.
+        note_missing = [t for t in s.get("notes") or []
+                        if not (Path(t) if Path(t).is_absolute()
+                                else s["root"] / t).exists()]
+        if note_missing:
+            violations.append({"worker": s["file"].stem,
+                               "kind": "declared-note-missing",
+                               "missing": note_missing})
     return violations

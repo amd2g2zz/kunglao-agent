@@ -140,7 +140,7 @@ def check_stale(inbox: Path, max_ticks: int = DEFAULT_MAX_TICKS,
 
 
 def main(argv: list | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Feedback inbox + triage (#241)")
+    parser = argparse.ArgumentParser(description="Feedback inbox + triage")
     parser.add_argument("workspace", help="workspace root")
     parser.add_argument("command", choices=("enqueue", "list", "dispose", "stale"))
     parser.add_argument("payload", nargs="?", default=None,

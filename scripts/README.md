@@ -24,6 +24,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | Script | Role | Referenced from |
 | --- | --- | --- |
 | `kunglao.py` | unified entry point — subcommands compose script functions (JSON + exit codes frozen) | CLI, tests, release_receipt |
+| `init_channel_default.py` | default local-channel resolution + KUNGLAO_CHANNEL env contract (#727); static-only probe for local + explicit-channel-never-auto-switch; consumed by kunglao-init.write_init_report(channel=) | kunglao-init, tests |
 | `kunglao-init.py` | workspace init + re-init guard + deploy_env (#478: hooks/agents/mcp-record/skills + env-manifest ledger) | CLI, tests |
 | `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + explore_gate + priority_ratio | CLI, tests |
 | `kunglao-verify.py` | M3 VERIFY entry (thin wrapper → `kunglao_verify.py`) | CLI, tests |
@@ -31,6 +32,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch | CLI, tests |
 | `kunglao-digest.py` | digest mechanical generation (thin wrapper → `digest_build.py`) | CLI, tests |
 | `kunglao-eval.py` | eval harness CLI (thin wrapper → `kunglao_eval.py`) | CLI, CI, tests |
+| `_entry.py` | the shared `__main__` dispatcher for the kunglao-* entries (#585/#660): `run(globals())` resolves + calls main(); entry modules keep module-level main(argv) (#370) | lib(8 entries) |
 | `error_response.py` | action-error classifier (issue #448): vmrun / init-exit / tool-install signatures → STOP/ASK/RETRY-ONCE/ESCALATE (UNCLASSIFIED = ASK, rc=2) | lib(2), CLI, tests |
 | `mcp_probe.py` | MCP supply probe (#316): per-type manifest + ~/.claude.json + .mcp.json probe; `--mcp-inventory` enumeration face (#515): registered servers → `mcp__<server>__*` prefixes + manifest tier (read-only, secret-safe; consumed by `tools/ext-scan.py --with-mcp`) | CLI, lib(2), tests |
 
@@ -40,6 +42,10 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | --- | --- | --- |
 | `convergence_check.py` | convergence decision (DISPATCH/DISPATCH_VERIFIER/SATURATED/BLOCKED/CONVERGED) — the every-turn gate | hooks, CLI, lib(2), tests |
 | `convergence_health.py` | ledger-based HEALTHY/STALLED/SPINNING verdicts | hooks, CLI, lib(2), tests |
+| `anomaly_detector.py` | anomaly observation layer (#663): score_fact 3-dim + scan_anomalies + baseline corpus load (fail-open); feeds convergence ANOMALY_DETECTED; observe_taint taint-concentration observations (#692 WP5) | lib(1: convergence_check), CLI, tests |
+| `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669): seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` / `taint:<cat>:<api>` candidates | lib(1: digest_build), CLI, tests |
+| `apkid_scanner.py` | T1 apkid pre-scan wrapper (#669): fingerprints packer/compiler/obfuscator/anti-* into evidence/apkid.json (fail-open) | CLI, tests |
+| `provider_health.py` | runtime provider-failure memory (#692 WP4): record/query <ws>/provider_health.json, 24h window, fail-open; consumed by route_capability selection next round | CLI, lib(1: route_capability), tests |
 | `priority.py` | DEPRECATED weighted dispatch ranker (#499; authority `priority_ratio.py`, removal #446) | lib, tests |
 | `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4) | lib(3), tests |
 | `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |
@@ -52,7 +58,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `heartbeat.py` | convergence-gated heartbeat bookkeeping (lib for hook_activation) | lib(1), tests |
 | `heartbeat_tick.py` | heartbeat tick runner (hook-invoked + kunglao.py) | hooks, lib(1), tests |
 | `heartbeat_loop_prompt.py` | loop-prompt generator for the tick loop | hooks, tests |
+| `loop_scheduler.py` | durable /loop registration writer (#754): idempotent upsert of the kunglao-heartbeat entry into <ws>/.claude/scheduled_tasks.json (foreign entries preserved, unreadable/unrecognized files sidecar-backed); absorbs #616, rejects #618 crontab route | CLI, lib(1: heartbeat_loop_prompt), tests |
 | `hooks_selfcheck.py` | hook registration self-check (runs hook_activation) | lib(1), tests |
+| `verify_status_watch.py` | verify-stamp disk-vs-stream reconciliation — the anti-sed tamper watch (#718) | heartbeat_tick, tests |
 | `external_kicker.py` | external scheduler kicker (schtasks/crontab-friendly) | tests |
 | `kunglao_record.py` | RECORD implementation module (ledger writes) | lib(2), tests |
 | `kunglao_verify.py` | L1 mechanical verify implementation (reproduce + byte-exact) | lib(3), tests |
@@ -74,6 +82,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `explore_gate.py` | explore-before-dispatch gate (lib for kunglao-decide) | lib(1), tests |
 | `fact_contradiction_gate.py` | cross-fact contradiction detection | hooks, lib(3), tests |
 | `plan_drift_detector.py` | plan↔reality drift detection | hooks, tests |
+| `plan_reviser.py` | plan state machine + suggest_revision triggers + incremental revision segments | tests, SKILL contract |
 | `premature_termination_detect.py` | premature-done declaration detector | lib(1), tests |
 | `provenance_gate.py` | PROVEN provenance chain gate | lib(1), tests |
 | `reuse_gate.py` | evidence-reuse gate | tests |
@@ -87,6 +96,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 
 | Script | Role | Referenced from |
 | --- | --- | --- |
+| `kunglao_upgrade.py` | workspace upgrade via declarative convergence (#726): 5 idempotent migrations + version wall + user-data sha256 iron rule + dry-run/snapshot; dispatched from `kunglao upgrade` subcommand | kunglao, tests |
 | `claim_expiry.py` | STALE demotion after inactivity | lib(1), tests |
 | `complete_teardown.py` | full teardown helper | tests |
 | `dead_letter.py` | DEAD status + dead-letter quarantine | hooks, lib(1), tests |
@@ -98,6 +108,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `refutation_propagate.py` | refutation propagation across facts | tests |
 | `stale_blocker_prune.py` | stale blocker pruning | lib(1), tests |
 | `status_defs.py` | claim status constants — single source of truth | hooks, lib(13), tests |
+| `liveness_policy.py` | liveness/staleness minutes constants — single source (#597: stuck 20 / heartbeat 35 / activation+env 30 / kicker+margins 10, values adjudicated) | hooks, lib(9), tests |
 | `tier_rules.py` | claim tier rules | tests |
 | `loop_state.py` | loop state persistence | lib(1), tests |
 | `update_index.py` | facts/_INDEX.md maintenance | tools, tests |
@@ -110,6 +121,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `rollup.py` | terminal-transition write loop — claim→outcome_capture+lessons+narrative+checkpoint (#524) | tests |
 | `hypothesis_store.py` | hypothesis layer carrier (#528) — H-*.md parse + open→refuted/superseded state machine over `hypotheses/` | digest_build (sec_g), hooks/state_anchor, kunglao-init stub, tests |
 | `notes_writer.py` | notes/ result-layer writer (#528) — supersedes-chain enforcement + verify_status reset on corrections | tests; write-path contract behind hooks/write_guard (#532) |
+| `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |
 
 ## Observability sidecar (issue #287)
 
@@ -133,6 +145,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `fixture_excerpt_lint.py` | fixture excerpt lint (standalone CLI) | tests, docs |
 | `references_recall.py` | references scored-recall CLI over the layered index — scenario → primary/supplementary; keyword → top-K ranked rows with score (no file dumps); `--list-categories` / `--scene-map` | tests, docs |
 | `wire_up_settings.py` | hook REGISTRY + deprecated alias -> hook_activation.register_hooks (#445; retirement #446) | hooks, lib(1), tests |
+| `install_reference.py` | multi-install reference hygiene — scanner/rewriter for stale `~/.claude/skills/<name>/` refs across `.claude/settings.json` + `CLAUDE.md` (#752; library-only: hook_activation verifier + kunglao_upgrade sweep) | scripts, tests |
+| `claudemd_frame.py` | CLAUDE.md three-segment framing — G2 frame-marker pair + G3 collect-and-merge split/classify/assemble primitives (#755; library-only: init write_claudemd wrap + kunglao_upgrade merge item) | scripts, tests |
 | `shell_defaults.py` | reusable CLI: idempotent shell env-default line management (check/apply/remove, powershell+bash; #276) | lib(1), tests |
 | `template_gen.py` | deterministic script-template generator CLI (templates/scripts/*.tmpl; exit 2/3/4/5, #278) | templates, tests, docs |
 | `template_render.py` | shared {{param}} render + leftover-detection engine (single source for template_gen + kunglao-init, #362) | lib(2), tests |
@@ -164,4 +178,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `check_global_rule_subset.py` | global-rule subset compliance check | CI, tests |
 | `kunglao_export.py` | workspace export by zone (contract_carriers/evidence/scratch) + manifest (#540, D5) | tests |
 | `structural_check.py` | repo structure + broken-link + index drift check | CI, tests |
+| `run_test_matrix.py` | matrix-style scoped pytest runs (issue-lane suites); canonical full-suite entry stays the README Quick-start pytest line | lane tooling, tests |
+| `deploy_manifest.py` | deployment manifest builder/verifier - hooks+agents+scaffold closure, per-file sha256 (newline-normalized); feeds init copy-deploy and upgrade refresh | CLI, tests |
+| `deployed_refresh.py` | upgrade-side framework-copy refresh - overwrite semantics with forensic backups (runs/deploy-backup-*), orphan double-confirm prune; migration item face for #783 | tests, CLI via kunglao_upgrade chain |
+| `jsvmp_triage.py` | three-feature JSVMP/VMP triage over deobfuscated bundles -> structured JSON verdict; advisory posture | web-re-worker, tests |
+
 | `re_pin_references.py` | references/_INDEX.yaml pin regeneration — re-run after ANY references/ edit (drift fails test_replay_gate) | docs, tests |

@@ -144,13 +144,13 @@ def test_json_output_carries_next_action_object():
 def test_checkresult_fix_field_overrides_static_fixes_text():
     """item.fix (dynamic) wins over FIXES[name] in both surfaces."""
     import toolchain as tc
+    fix_text = "use the bundled die at tools/die"
     item = tc.CheckResult(name="die", status=tc.Status.FAIL,
                           tier=tc.Tier.HARD, detail="die not found in PATH",
-                          fix="use the bundled die at D:/tools/die")
+                          fix=fix_text)
     report = tc.ToolchainReport(project_type="windows", items=[item])
-    assert "D:/tools/die" in tc.format_human(report)
-    assert json.loads(tc.format_json(report))["checks"][0]["fix"] == \
-        "use the bundled die at D:/tools/die"
+    assert fix_text in tc.format_human(report)
+    assert json.loads(tc.format_json(report))["checks"][0]["fix"] == fix_text
 
 
 def test_next_action_verbs_form_closed_set():
@@ -201,6 +201,11 @@ def test_next_action_constructor_rejects_out_of_vocab_verb():
 # (a silent guidance gap is exactly what L-1 closes).
 _WARN_ONLY_CHECK_NAMES = frozenset({
     "docker", "gdbserver", "ebpf", "ebpf_android", "unidbg",
+    # #728 web (labs): docker channel presence — WARN by contract (labs
+    # never FAIL-HARD; toolchain.py _check_web emits PASS/WARN only)
+    "channel:docker",
+    # #760 macos (labs): darwin runtime note — PASS/WARN only, never FAIL
+    "darwin_runtime",
 })
 
 
@@ -249,9 +254,10 @@ def test_vm_multi_candidate_enumerate_never_auto_selects(
     ws = _ws_with_sample(tmp_path)
     _hermetic_env(monkeypatch, tmp_path)
     entries = [
-        _vm_entry("work_env", r"C:\vms\work_env.vmx", False,
+        _vm_entry("work_env", str(tmp_path / "vms" / "work_env.vmx"), False,
                   ["base", "idalib-mcp-ready-20260630"]),
-        _vm_entry("Windows 10 x64", r"C:\vms\win10.vmx", False, ["hr-6.0"]),
+        _vm_entry("Windows 10 x64", str(tmp_path / "vms" / "win10.vmx"),
+                  False, ["hr-6.0"]),
     ]
     monkeypatch.setattr(tc, "_vm_inventory", lambda: (entries, True, False))
     report = tc.check(ws, "windows")
@@ -281,14 +287,15 @@ def test_vm_single_off_candidate_starts(tmp_path, monkeypatch):
     import toolchain as tc
     ws = _ws_with_sample(tmp_path)
     _hermetic_env(monkeypatch, tmp_path)
-    entries = [_vm_entry("work_env", r"C:\vms\work_env.vmx", False)]
+    vmx = str(tmp_path / "vms" / "work_env.vmx")
+    entries = [_vm_entry("work_env", vmx, False)]
     monkeypatch.setattr(tc, "_vm_inventory", lambda: (entries, True, False))
     report = tc.check(ws, "windows")
     vm = next(i for i in report.items if i.name == "vm_reachable")
     na = tc.next_action_for(vm)
     assert na.action == "vm-start", vm
     assert 'vmrun -T ws start' in (na.command or "")
-    assert r"C:\vms\work_env.vmx" in (na.command or "")
+    assert vmx in (na.command or "")
 
 
 def test_vm_running_candidate_reip(tmp_path, monkeypatch):
@@ -297,7 +304,8 @@ def test_vm_running_candidate_reip(tmp_path, monkeypatch):
     import toolchain as tc
     ws = _ws_with_sample(tmp_path)
     _hermetic_env(monkeypatch, tmp_path)
-    entries = [_vm_entry("work_env", r"C:\vms\work_env.vmx", True)]
+    vmx = str(tmp_path / "vms" / "work_env.vmx")
+    entries = [_vm_entry("work_env", vmx, True)]
     monkeypatch.setattr(tc, "_vm_inventory", lambda: (entries, True, False))
     report = tc.check(ws, "windows")
     vm = next(i for i in report.items if i.name == "vm_reachable")
@@ -341,7 +349,8 @@ def test_remote_debugger_cascade_shares_vm_next_action(tmp_path, monkeypatch):
     import toolchain as tc
     ws = _ws_with_sample(tmp_path)
     _hermetic_env(monkeypatch, tmp_path)
-    entries = [_vm_entry("work_env", r"C:\vms\work_env.vmx", False)]
+    vmx = str(tmp_path / "vms" / "work_env.vmx")
+    entries = [_vm_entry("work_env", vmx, False)]
     monkeypatch.setattr(tc, "_vm_inventory", lambda: (entries, True, False))
     report = tc.check(ws, "windows")
     vm = next(i for i in report.items if i.name == "vm_reachable")
@@ -361,7 +370,8 @@ def test_static_only_warn_vm_keeps_plain_detail(tmp_path, monkeypatch):
     (ws / "task_spec.yaml").write_text(
         yaml.safe_dump({"constraints": {"dynamic_re": "forbidden"}}),
         encoding="utf-8")
-    entries = [_vm_entry("work_env", r"C:\vms\work_env.vmx", False)]
+    vmx = str(tmp_path / "vms" / "work_env.vmx")
+    entries = [_vm_entry("work_env", vmx, False)]
     monkeypatch.setattr(tc, "_vm_inventory", lambda: (entries, True, False))
     report = tc.check(ws, "windows", task_spec={"constraints":
                                                 {"dynamic_re": "forbidden"}})

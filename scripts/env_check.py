@@ -30,6 +30,22 @@ Checks:
   5. venv + sample     — SKILL-root venv python exists w/ cryptography+yaml
                          (#409: uv run --project <skill_root> is authoritative,
                          not ws/.venv); sample sha256
+  6. python_version   — running interpreter matches the 3.11 pin (.python-version,
+                         #758); drift is WARN-only (CI pins its own interpreter)
+
+#757 type/channel shaping: rows 2 (vm_reachability) and 3 (ghidra/decompiler)
+are CONDITIONAL on workspace context —
+  - windows/linux: vm row per KUNGLAO_CHANNEL backend (vmr legacy sockets |
+    ssh/docker/adb reuse toolchain probes | local static-only FAIL; mcp -> no
+    row), ghidra stays the analyzeHeadless face;
+  - android: no vm row (NEVER_CHECKS, #455); ghidra row becomes jadx/baksmali
+    primary + native-.so-conditional decompiler requirement (_probe_native_so,
+    #756);
+  - web: no vm row and NO ghidra row ("decompiler trials meaningless for
+    web", #728 design D5); the dynamic surface is MCP/browser (mcp_registered
+    row, #757 T2).
+KUNGLAO_VM_HOST is only read on the vmr branch and as ssh's remote host name
+(user ruling 2026-08-27: 只适用于 windows 的 VM 租约语义).
 
 FAIL grading (gate logic lives in hooks/env_check_gate.py):
   - flag check is HARD — a polluted session must not dispatch at all
@@ -55,6 +71,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -68,10 +85,20 @@ import wire_up_settings  # noqa: E402  # #372: hook registry single source
 import template_version  # noqa: E402
 # #409: platform-correct analyzeHeadless name + venv python location.
 import platform_paths  # noqa: E402
+# #757 T1: channel probes delegate to the toolchain implementations rather
+# than being rewritten here (single source of probe semantics, #698 D4).
+import toolchain as tc  # noqa: E402
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/ skill root
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 TRUTHY_VALUES = ("1", "true", "yes", "on")  # #276: truthy = FAIL; 0/false/off/empty = PASS
+
+# #758 G1a/G1b: the repo pins its runtime via .python-version (=3.11, the
+# series CI exercises through UV_PYTHON=python3.11). pyproject's
+# requires-python floor stays >=3.10 (tomli-backfill contract,
+# tests/test_python_floor.py) — the pin is the DEFAULT interpreter, the
+# floor is the supported INSTALL range; they answer different questions.
+PINNED_PYTHON = (3, 11)
 # Issue #228: NO machine-specific default. Unset = not configured — the check
 # FAILs with guidance instead of silently pointing at one operator's lab VM /
 # Ghidra install (a wrong default on any other machine is worse than a FAIL).
@@ -228,6 +255,179 @@ def check_ghidra() -> tuple[bool, str]:
             f"Set GHIDRA_HOME or install Ghidra — decompilation degraded.")
 
 
+# ---------- #757 T1: type/channel-aware check bodies ----------
+
+def check_vm_channel(ctx: dict) -> tuple[str, str] | None:
+    """vm_reachability rewritten channel-aware (#757 T1/F6).
+
+    - vmr      : the legacy dual-socket semantics verbatim (KUNGLAO_VM_HOST +
+                 TCP shell/frida) — #698 byte-parity.
+    - ssh      : delegates to toolchain._vm_probe_ssh (BatchMode capability;
+                 KUNGLAO_VM_HOST is the remote HOST NAME per D4 — F6 ruling
+                 narrows the "VM lease" reading, not ssh's host argument).
+    - docker   : toolchain._vm_probe_docker — `docker version`; docker reads
+                 NO KUNGLAO_VM_HOST ("no KUNGLAO_VM_HOST required", #698 D4).
+    - adb      : toolchain._vm_probe_adb (adb devices + frida liveness).
+    - local    : FAIL with fixed static-only detail; zero probes.
+    - mcp      : row NOT APPLICABLE -> returns None (web never reaches this
+                 function anyway; mcp carries no command control plane).
+
+    Probe exceptions fail-open to a FAIL detail (a crashed probe is an
+    unavailable probe), never a raised error out of Phase 0.
+    """
+    channel = ctx.get("channel", "")
+    if channel == "mcp":
+        return None
+    if channel == "local":
+        return ("FAIL",
+                "local static-only channel — dynamic analysis unavailable "
+                "here (static analysis proceeds); set KUNGLAO_CHANNEL or "
+                "run /kunglao-agent:upgrade for infra-backed channels")
+    if channel == "vmr":
+        ok, msg = check_vm()
+        return ("PASS" if ok else "FAIL"), msg
+
+    # remote backends reuse the toolchain probes — sync its import-time port
+    # globals to THIS run's env+​.env resolution first (toolchain parses
+    # os.environ only, at import).
+    tc.VM_SHELL_PORT, tc.FRIDA_PORT = VM_PORTS[0], VM_PORTS[1]
+    host = VM_HOST  # ssh backend's remote host name; docker/adb ignore it
+    try:
+        if channel == "ssh":
+            if not host:
+                return ("FAIL",
+                        "KUNGLAO_VM_HOST unset (ssh backend needs the remote "
+                        "host name) — dynamic channel unverified")
+            ok, pass_detail, err, _tier = tc._vm_probe_ssh(host)
+        elif channel == "docker":
+            ok, pass_detail, err, _tier = tc._vm_probe_docker()
+        elif channel == "adb":
+            ok, pass_detail, err, _tier = tc._vm_probe_adb(host or None)
+        else:
+            return ("FAIL",
+                    f"unknown channel {channel!r} after normalization — "
+                    "dynamic channel unverified")
+    except Exception as exc:  # noqa: BLE001 — crashed probe == unavailable
+        return ("FAIL",
+                f"dynamic channel probe crashed via {channel} backend: {exc}")
+    if ok:
+        return "PASS", (pass_detail
+                        or f"dynamic channel {channel} reachable")
+    return ("FAIL",
+            f"dynamic channel failed via {channel} backend: {err}")
+
+
+def _mcp_decompiler_supply(ws: Path) -> bool:
+    """MCP-first decompiler supply face (#407 口径): ghidra OR ida-pro-vm in
+    any registration surface. Fail-open on config read errors."""
+    try:
+        import mcp_probe
+        registered = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+        return "ghidra" in registered or "ida-pro-vm" in registered
+    except Exception:  # noqa: BLE001 — supply info must never crash Phase 0
+        return False
+
+
+def check_mcp_registered(ws: Path, project_type: str | None) -> tuple[str, str]:
+    """MCP registration row (#757 T2 / issue F2) — mcp_probe 口径.
+
+    Three registration surfaces via mcp_probe.registered_names (user-level
+    ~/.claude.json global + project-scoped, workspace <ws>/.mcp.json;
+    KUNGLAO_CLAUDE_JSON injects the user surface for tests):
+
+    - web           : camoufox-reverse expected — the ONLY manifest member for
+                      labs (#728). Missing -> FAIL (+ register command; T3
+                      grades it degraded, never blocking).
+    - android       : NO hard MCP expectation -> PASS with info (gitnexus is
+                      verified by the toolchain face).
+    - windows/linux : ghidra/ida-pro-vm either registered -> WARN "capability
+                      unverified" (#474 same口径: a registry read cannot reach
+                      into the MCP session; tools verify post-connect).
+                      Neither -> FAIL naming Ghidra install / ida-pro-vm MCP.
+    """
+    ptype = project_type if project_type in init_state.VALID_TYPES else "windows"
+    try:
+        import mcp_probe
+        found = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+    except Exception as exc:  # noqa: BLE001 — registry unreadable ≠ crash
+        return ("FAIL", f"MCP registry probe failed ({exc}) — supply unverified")
+    if ptype == "web":
+        if "camoufox-reverse" in found:
+            return ("PASS",
+                    "camoufox-reverse registered (registry read; tools verify "
+                    "at session connect)")
+        return ("FAIL",
+                "camoufox-reverse not registered — browser JS RE supply "
+                "degraded. Fix: claude mcp add camoufox-reverse -- "
+                "python -m camoufox_reverse_mcp")
+    if ptype == "android":
+        registered = ", ".join(sorted(found)[:8]) or "none"
+        return ("PASS",
+                f"no hard MCP requirement for android (gitnexus verified on "
+                f"the toolchain face); registered: {registered}")
+    desktop = sorted(n for n in ("ghidra", "ida-pro-vm") if n in found)
+    if desktop:
+        return ("WARN",
+                f"{', '.join(desktop)} registered — capability unverified "
+                "(#474口径: registry-only; tools verify post-connect)")
+    return ("FAIL",
+            "neither ghidra nor ida-pro-vm MCP registered — decompiler supply "
+            "unverified. Install Ghidra OR IDA, or register the ghidra/"
+            "ida-pro-vm MCP (#408 installer)")
+
+
+def check_ghidra_typed(ws: Path, project_type: str | None) -> tuple[str, str]:
+    """ghidra/decompiler row typed per project type (#757 T1).
+
+    - windows/linux : legacy GHIDRA_HOME semantics unchanged.
+    - android       : jadx/baksmali paths are the PRIMARY verdict; a native
+                      .so sample (toolchain._probe_native_so — the #756
+                      central-directory version) additionally requires SOME
+                      decompiler supply (analyzeHeadless | idat64 | MCP
+                      ghidra/ida-pro-vm). Pure-DEX stays PASS.
+    - web           : not applicable — callers omit the row entirely
+                      ("decompiler trials meaningless for web", #728 D5);
+                      defensively handled as PASS-info here.
+    """
+    if project_type == "web":
+        return ("PASS", "ghidra n/a for web (browser dynamic surface)")
+    if project_type in ("windows", "linux", "macos"):
+        # macos (#760): Mach-O decompiler expectation rides the same legacy
+        # GHIDRA_HOME semantics; a FAIL stays DEGRADED (non-blocking, T3).
+        ok, msg = check_ghidra()
+        return ("PASS" if ok else "FAIL"), msg
+
+    jadx = shutil.which("jadx")
+    baksmali = shutil.which("baksmali")
+    present = [n for n, p in (("jadx", jadx), ("baksmali", baksmali)) if p]
+    native = tc._probe_native_so(ws)
+    ida = shutil.which("idat64")
+    supply_items = [
+        face for face in (
+            f"analyzeHeadless at {GHIDRA_DEFAULT}" if GHIDRA_DEFAULT and GHIDRA_DEFAULT.exists() else "",
+            f"idat64 at {ida}" if ida else "",
+            "MCP ghidra/ida-pro-vm" if _mcp_decompiler_supply(ws) else "",
+        ) if face
+    ]
+    has_supply = bool(supply_items)
+    supply_face = ("decompiler supply: " + "; ".join(supply_items)) \
+        if supply_items else "decompiler supply: none"
+    if not present:
+        return ("FAIL",
+                f"jadx/baksmali not found in PATH — android static verdict "
+                f"degraded. ({supply_face})")
+    loci = "; ".join(f"{n} at {p}" for n, p in
+                     (("jadx", jadx), ("baksmali", baksmali)) if p)
+    if native and not has_supply:
+        return ("FAIL",
+                f"{loci}. Sample has native .so — decompiler REQUIRED for "
+                f"native code ({supply_face})")
+    detail = loci
+    if native:
+        detail += f". Native .so detected — {supply_face}"
+    return "PASS", detail
+
+
 def check_hooks(ws: Path) -> tuple[str, str]:
     """kunglao hooks registered in a PROJECT-level settings.json — TRI-STATE.
 
@@ -321,6 +521,26 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     return True, "venv deps OK" + ("; sample sha256 OK" if sample_sha256 else "")
 
 
+def check_python_version() -> tuple[str, str]:
+    """#758 G1b: interpreter-version drift — ADVISORY (WARN), never FAIL.
+
+    Local interpreters drift off the repo pin (.python-version); CI is the
+    blocking authority (UV_PYTHON=python3.11), so a drifted local run must
+    not abort a workspace checklist — it gets a loud WARN row instead
+    (same WARN-does-not-fail-overall semantics as hooks_deployed/#410).
+    """
+    vi = tuple(sys.version_info[:3])
+    got = ".".join(str(x) for x in vi)
+    if vi[:2] == PINNED_PYTHON:
+        return ("PASS",
+                f"python {got} matches the "
+                f"{PINNED_PYTHON[0]}.{PINNED_PYTHON[1]}.x pin")
+    return ("WARN",
+            f"python {got} is not the pinned "
+            f"{PINNED_PYTHON[0]}.{PINNED_PYTHON[1]}.x (.python-version / CI "
+            f"UV_PYTHON) — advisory drift, CI stays authoritative")
+
+
 def check_init_complete(ws: Path) -> tuple[bool, str]:
     """#304: init completeness check (HARD).
 
@@ -376,12 +596,168 @@ def check_template_version(ws: Path) -> tuple[str, str]:
     return "PASS", f"stamped {template_version.read_skill_version()} on all carriers"
 
 
+# ---------- #757: workspace context (type x channel) ----------
+
+# #757/T5: channel values (#698 enum + mcp). Kept as a literal tuple —
+# init_channel_default.ALL_CHANNELS is re-exported by value on import and a
+# lazy cross-module import inside run() would hide drift from the pins.
+CHANNEL_VALUES = ("vmr", "ssh", "docker", "adb", "local", "mcp")
+
+
+def _normalize_channel(raw: str | None) -> tuple[str, str]:
+    """(#698 D2 parity) strip/lower; unknown non-empty -> vmr fallback with
+    a note naming the offending value; unset/blank -> ("", "")."""
+    if raw is None:
+        return "", ""
+    stripped = raw.strip().lower()
+    if not stripped:
+        return "", ""
+    if stripped in CHANNEL_VALUES:
+        return stripped, ""
+    return "vmr", f"unknown KUNGLAO_CHANNEL={stripped!r} — falling back to vmr"
+
+
+def read_project_type_context(ws: Path) -> str | None:
+    """project_type for checklist shaping: .kunglao-init.json marker first
+    (#625 primary truth), then analysis_state.txt (init_state.read_project_type).
+    Invalid/absent -> None (untyped workspaces get the legacy global face)."""
+    marker = _load_json(Path(ws) / init_state.STATE_FILE)
+    ptype = marker.get("project_type")
+    if isinstance(ptype, str) and ptype in init_state.VALID_TYPES:
+        return ptype
+    return init_state.read_project_type(ws)
+
+
+def _explicit_channel_setting(ws: Path) -> str | None:
+    """Live explicit KUNGLAO_CHANNEL: os.environ first, <ws>/.env fills gaps.
+    Separate from load_dotenv's merged view because that view only overlays
+    environ keys already present in the .env file."""
+    val = os.environ.get("KUNGLAO_CHANNEL")
+    if val is None:
+        val = load_dotenv(ws).get("KUNGLAO_CHANNEL")
+    return val
+
+
+def _channel_from_init_report(ws: Path) -> str | None:
+    """#727 channel block in runs/.init-report.json (top-level `channel.selected`)."""
+    report = _load_json(Path(ws) / "runs" / ".init-report.json")
+    block = report.get("channel")
+    if isinstance(block, dict):
+        selected = block.get("selected")
+        if isinstance(selected, str) and selected.strip():
+            return selected
+    return None
+
+
+def _channel_from_state_file(ws: Path) -> str | None:
+    """`KUNGLAO_CHANNEL=<value>` line in analysis_state.txt (#728 web-default
+    writer's carrier)."""
+    state = Path(ws) / "analysis_state.txt"
+    if not state.exists():
+        return None
+    for line in state.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if line.startswith("KUNGLAO_CHANNEL="):
+            value = line.split("=", 1)[1].strip()
+            if value:
+                return value
+    return None
+
+
+def resolve_runtime_channel(ws: Path):
+    """Indirection over init_channel_default.resolve_init_channel (probe-only,
+    READ-ONLY). Injectable so tests never spawn real ssh/docker/adb probes.
+
+    Fail-open contract: resolution errors degrade to the local static-only
+    decision — this must never be the code path that breaks Phase 0."""
+    try:
+        import init_channel_default
+        return init_channel_default.resolve_init_channel(ws)
+    except Exception as exc:  # noqa: BLE001 — derivation is advisory
+        import init_channel_default as _icd
+        return _icd.ChannelDecision(
+            selected="local", defaulted_to_local=True, probes={},
+            warn_reason=f"resolver unavailable: {exc}")
+
+
+def read_channel_record(ws: Path) -> tuple[str | None, str]:
+    """Channel record chain (first hit wins): live env/.env setting ->
+    .init-report.json channel block -> analysis_state.txt line. Returns
+    (raw_value_or_None, source_label)."""
+    raw = _explicit_channel_setting(ws)
+    if raw is not None and raw.strip():
+        source = "env" if os.environ.get("KUNGLAO_CHANNEL") else ".env"
+        return raw, source
+    raw = _channel_from_init_report(ws)
+    if raw is not None:
+        return raw, ".init-report.json"
+    raw = _channel_from_state_file(ws)
+    if raw is not None:
+        return raw, "analysis_state.txt"
+    return None, ""
+
+
+def _workspace_context(ws: Path) -> dict:
+    """Type x channel context the checklist branches on (#757 T1/T4).
+
+    - project_type via #625 marker, analysis_state fallback.
+    - channel: recorded chain (env/.env wins — 变量跟通道走), then runtime
+      derivation. Derivation NEVER writes disk: persisting the resolved
+      channel is #755's upgrade item; the report marks it derived.
+    - web forces the mcp face (user ruling 2026-08-27: web needs NO command
+      control channel — the dynamic surface is MCP/browser). Any recorded
+      command channel is named in channel_note as ignored-for-web.
+    """
+    ptype = read_project_type_context(ws)
+
+    if ptype == "web":
+        rec_raw, rec_src = read_channel_record(ws)
+        _rec_ch, note = _normalize_channel(rec_raw)
+        ignored = f"recorded command channel '{rec_raw}' ignored-for-web ({rec_src})" \
+            if rec_raw else ""
+        note = " ".join(x for x in (note, ignored) if x)
+        return {
+            "project_type": ptype,
+            "channel": "mcp",
+            "channel_source": "web-type (mcp normal-state, #757 ruling)",
+            "channel_note": note,
+        }
+
+    raw, source = read_channel_record(ws)
+    if raw is not None:
+        channel, note = _normalize_channel(raw)
+        return {"project_type": ptype, "channel": channel,
+                "channel_source": source, "channel_note": note}
+
+    dec = resolve_runtime_channel(ws)
+    channel, dnote = _normalize_channel(dec.selected)
+    suffix = " (defaulted)" if getattr(dec, "defaulted_to_local", False) else ""
+    note = "; ".join(x for x in (dnote, getattr(dec, "warn_reason", "") or "") if x)
+    return {
+        "project_type": ptype,
+        "channel": channel,
+        "channel_source": f"derived{suffix} — run /kunglao-agent:upgrade to persist",
+        "channel_note": note,
+    }
+
+
 # ---------- main ----------
 
 def _norm(ok: bool, msg: str) -> tuple[str, str]:
     """Normalize a binary (ok, msg) check to the (status, msg) tri-state
     shape — PASS|FAIL, never WARN (only check_hooks produces WARN, #410)."""
     return ("PASS" if ok else "FAIL"), msg
+
+
+# #757 T3: mechanical FAIL grading. BLOCKING rows keep the legacy overall=FAIL
+# semantics; DEGRADED rows report FAIL but never flip overall/exit — they ride
+# into the loop flagged ("T3-restricted: ..." detail + top-level degraded list).
+BLOCKING_CHECKS = frozenset({
+    "init_complete", "agent_teams_flag", "hooks_deployed",
+    "venv_sample", "template_version",
+})
+DEGRADED_CHECKS = frozenset({"vm_reachability", "ghidra", "mcp_registered"})
+GATE_REPORT_TTL_SECONDS = 600  # mirrors hooks/env_check_gate.py third check
 
 
 def run(ws: Path) -> tuple[int, dict]:
@@ -397,34 +773,75 @@ def run(ws: Path) -> tuple[int, dict]:
         GHIDRA_DEFAULT = platform_paths.analyze_headless(_home)
     # #362: reachability probe ports derive from env/.env (toolchain parity)
     VM_PORTS = resolve_ports(ws)
+    # #757: workspace context (project_type x channel) shapes the checklist
+    ctx = _workspace_context(ws)
     checks = {
         "init_complete": _norm(*check_init_complete(ws)),
         "agent_teams_flag": _norm(*check_flag()),
-        "vm_reachability": _norm(*check_vm()),
-        "ghidra": _norm(*check_ghidra()),
         "hooks_deployed": check_hooks(ws),  # TRI-STATE: PASS|WARN|FAIL (#410)
         "venv_sample": _norm(*check_venv_sample(ws, read_sample_sha256(ws))),
         # #536: TRI-STATE like hooks — WARN on stamp-less legacy workspace,
         # FAIL on genuine version drift (see check_template_version).
         "template_version": check_template_version(ws),
+        # #758 G1b: TRI-STATE like hooks — WARN-only version-drift row.
+        "python_version": check_python_version(),
     }
+    # #757 T1: type/channel conditional rows.
+    ptype = ctx.get("project_type")
+    if ptype == "web":
+        # no vm row, no ghidra row ("decompiler trials meaningless for web",
+        # #728 design D5); the dynamic surface is the browser/MCP.
+        pass
+    elif ptype == "android":
+        checks["ghidra"] = check_ghidra_typed(ws, ptype)
+        # no vm_reachability row (android dynamics are ADB/device-side,
+        # NEVER_CHECKS precedent #455)
+    else:
+        vm_row = check_vm_channel(ctx)  # None when channel=mcp
+        if vm_row is not None:
+            # already tri-state shaped (status, detail) — NO _norm re-wrap:
+            # _norm treats a truthy status string as boolean success (#757)
+            checks["vm_reachability"] = vm_row
+        checks["ghidra"] = check_ghidra_typed(ws, ptype)
+    # #757 T2: MCP registration row for every type (per-type 口径 above)
+    checks["mcp_registered"] = check_mcp_registered(ws, ptype)
+    # #757 T3: mechanical grading — every row gets `blocking`; degradable FAILs
+    # get the "T3-restricted:" detail prefix and never flip overall.
+    graded: dict[str, dict] = {}
+    degraded: list[str] = []
+    for name, (status, detail) in checks.items():
+        blocking = name not in DEGRADED_CHECKS
+        if status == "FAIL" and not blocking:
+            detail = f"T3-restricted: {detail}"
+            degraded.append(name)
+        graded[name] = {"status": status, "detail": detail,
+                        "blocking": blocking}
+    overall_fail = any(v["status"] == "FAIL" and v["blocking"]
+                       for v in graded.values())
     report = {
         "ts": utc_now(),
         "workspace": str(ws.resolve()),
-        "checks": {name: {"status": status, "detail": detail}
-                   for name, (status, detail) in checks.items()},
+        "context": {k: ctx.get(k) for k in
+                    ("project_type", "channel", "channel_source",
+                     "channel_note")},
+        "checks": graded,
         # #410: WARN is NOT a failure — unwired hooks are per-workspace
-        # optional, so overall is FAIL only when some check FAILs.
-        "overall": "PASS" if all(st != "FAIL" for st, _ in checks.values()) else "FAIL",
+        # optional. #757: neither are DEGRADED_CHECKS FAILs — the loop enters
+        # flagged (T3-restricted), the gate only polices blocking FAILs.
+        "overall": "FAIL" if overall_fail else "PASS",
     }
+    if degraded:
+        report["degraded"] = degraded
     out = ws / "runs" / ".env-check.json"
     try:
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     except OSError as exc:
         print(f"WARN: cannot write {out}: {exc}", file=sys.stderr)
-    for name, (status, detail) in checks.items():
-        print(f"[{status}] {name}: {detail}")
+    for name, row in graded.items():
+        print(f"[{row['status']}] {name}: {row['detail']}")
+    if degraded:
+        print(f"DEGRADED (T3-restricted, non-blocking): {', '.join(degraded)}")
     print(f"OVERALL: {report['overall']}  (snapshot: {out})")
     return 0 if report["overall"] == "PASS" else 1
 

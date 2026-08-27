@@ -149,7 +149,12 @@ def test_validator_categories_pin_new_enum() -> None:
     data = {"tools": [{"name": "t-a", "category": "auxiliary",
                        "capability": "aux:sanitize", "tier": "T1",
                        "cost_tier": "probe", "input_output": "x",
-                       "description": "minimal fixture entry"}]}  # #356 W1: description required
+                       "description": "minimal fixture entry",
+                       "provider": "t-a-fixture",
+                       "produces": ["aux:sanitize"],
+                       "requires": [],
+                       "cost_hint": {"mem_gb": 0, "time": "probe"},
+                       "quality": {"aux:sanitize": "floor"}}]}  # #356 W1: description; #729 Rule A: annotation block for new entries
     assert vi.validate_index(data) == [], "auxiliary should be a legal category"
     data["tools"][0]["category"] = "pipelines"
     assert vi.validate_index(data) == [], "pipelines should be a legal category"

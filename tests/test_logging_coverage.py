@@ -69,7 +69,8 @@ TOP_20_MODULES = (
 # file self-contained (no cross-test dependency).
 ALLOWED_ACTIONS = frozenset({
     "analysis_blocked", "analysis_recorded", "ask_back",
-    "capability_reject", "capability_switch", "claim_migrate",
+    "capability_reject", "capability_switch", "channel_default",
+    "claim_migrate",
     "converge", "death_verdict_rejected", "dispatch",
     "failure_blocked", "ladder_required", "must_ask", "must_stop",
     "plan_stall", "priority_deviation", "stale_plan_on_new_evidence",

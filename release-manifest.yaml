@@ -6,7 +6,7 @@
 
 schema_version: "1.0"
 project: kunglao-agent
-version: "0.1.2"             # MUST equal pyproject.toml [project].version (receipt-checked)
+version: "0.1.3"             # MUST equal pyproject.toml [project].version (receipt-checked)
 requires_python: ">=3.10"
 
 dependencies:
@@ -25,6 +25,7 @@ assets:
     - agents/pefile-signature.md
     - agents/go-symbols.md
     - agents/verdict-scorer.md
+    - agents/web-re-worker.md   # #760 web/browser JS RE specialist
     - agents/kunglao-init-worker.md   # #304 init worker agent
   hooks:
     - hooks/completion_gate.py
@@ -36,8 +37,14 @@ assets:
     - hooks/session_start.py   # #533 SessionStart lifecycle (always_arm)
     - hooks/state_anchor.py
     - hooks/worker_budget.py
+    - hooks/worker_budget_core.py   # #568 split: budget core
+    - hooks/worker_budget_gates.py  # #568 split: gates consumer
+    - hooks/worker_budget_sinks.py  # #568 split: sinks persistence
     - hooks/worker_pulse.py
     - hooks/write_guard.py     # #532 four-carrier Write/Edit PreToolUse gate
+    - hooks/orchestrator_tool_guard.py  # #608 Bash maker-checker WARN (target-based)
+    - hooks/_path_hygiene.py  # #671 sys.path membership authority (sole bare-insert whitelist)
+    - hooks/violation_capture.py      # #718 Bash PostToolUse violation recorder
   templates:
     - templates/state/blocker.md
     - templates/state/claim_deps.yaml
@@ -86,6 +93,10 @@ assets:
     - tools/_lib/workspace_manifest.py
     - tools/auxiliary/measure_blind_coverage.py
     - tools/auxiliary/measure_cold_start.py
+    # #670: memory-gated jadx dispatch estimator (APK/JAR) + DEX xref
+    - tools/static/apk_mem_gate.py
+    - tools/static/baksmali_index.py
+    - tools/static/dexdc_scanner.py   # #692 WP2 dexdc provider
     - tools/static/binary-sweep.py
     - tools/static/c_normalize.py
     - tools/static/call-site-args.py
@@ -100,6 +111,9 @@ assets:
     - tools/static/rust-dep-strings.py
     - tools/static/shellcode_scan.py
     - tools/static/stack-strings.py
+    # #751: web JS semantic-index-layer regression demo (gitnexus over
+    # recovered bundles); fixtures in tests/fixtures/web751/
+    - tools/static/web_gitnexus_demo.py
     - tools/static/strings-classify.py
     - tools/static/yara-gen.py
     - tools/static/yara-rules/crypto-tables.yar

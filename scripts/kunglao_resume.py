@@ -73,16 +73,21 @@ RC_ERROR = 1
 # definition). The issue comment's "2x heartbeat period" (10 min) is kept
 # as data-age DISPLAY only: a 10-min rc line would false-STALE every
 # legitimate quick restart (design D3).
-HEARTBEAT_STALE_MINUTES = 35
+# legitimate quick restart (design D3). #597: minutes constants
+# single-sourced in liveness_policy (values unchanged).
+from liveness_policy import HEARTBEAT_STALE_MINUTES  # noqa: E402
 # Worker-status freshness: kicker D3 constant — an in-progress file older
 # than this is a dead session's stale worker, surfaced for reconcile.
-WORKER_FRESH_MINUTES = kicker.FRESH_WORKER_MINUTES
+from liveness_policy import FRESH_WORKER_MINUTES as WORKER_FRESH_MINUTES  # noqa: E402,F401
 # Claim-class staleness: claim_expiry's own line (24 h without activity).
 CLAIM_STALE_HOURS = 24
 # Plan freshness: issue #466 comment — a plan mtime ≥ 2 days old is drift
 # the plan_drift_detector cannot see (it checks claim↔plan mapping, not
 # plan freshness).
 PLAN_STALE_DAYS = 2
+# #603: how many gate-rejection rows the brief renders (bounded summary —
+# the full ledger stays in runs/gate-rejections.jsonl).
+GATE_REJECTIONS_LAST_N = 5
 # Decisions that require a manual step before the loop may continue (both
 # map to EXIT_BLOCKED in convergence_check.VERDICTS).
 MANUAL_DECISIONS = frozenset({"BLOCKED", "INVALID"})
@@ -305,6 +310,42 @@ def _open_hypotheses(ws: Path) -> dict:
         return {"open_count": 0, "pointers": []}
 
 
+def _gate_rejections(ws: Path) -> dict | None:
+    """#603: gate-rejections summary from runs/gate-rejections.jsonl — the
+    durable ledger hooks/dispatch_gate.py appends one row to per REJECT.
+
+    FAIL_OPEN: absent file -> None (the brief section is simply omitted —
+    a workspace with no rejections, or pre-#603, renders unchanged); an
+    unreadable/corrupt file also degrades to None (a broken ledger must
+    never break the recovery brief). Read-only: this function never
+    writes, matching resume's READ-ONLY CONTRACT.
+
+    Returns {"total": int, "last": [rows]} capped at
+    GATE_REJECTIONS_LAST_N most recent rows — the ledger is the replay
+    source, the brief is a summary, never the whole file.
+    """
+    p = ws / "runs" / "gate-rejections.jsonl"
+    try:
+        lines = [ln for ln in
+                 p.read_text(encoding="utf-8", errors="replace").splitlines()
+                 if ln.strip()]
+    except OSError:
+        return None
+    if not lines:
+        return None  # empty ledger == no rejections == section omitted
+    rows: list[dict] = []
+    for ln in lines:
+        try:
+            row = json.loads(ln)
+        except ValueError:
+            continue  # skip a corrupt row, keep the rest
+        if isinstance(row, dict):
+            rows.append(row)
+    if not rows:
+        return None
+    return {"total": len(rows), "last": rows[-GATE_REJECTIONS_LAST_N:]}
+
+
 def _data_age_rows(ws: Path, now: datetime) -> list[dict]:
     """The design D3 matrix as data: one row per declared source with its
     missing/stale verdict. CRITICAL rows are the only rc-moving ones."""
@@ -493,7 +534,7 @@ def build_brief(ws) -> dict:
     }
     if not has_state:
         next_step = (f"no resumable state under {ws} — initialize with "
-                     f"/kunglao-agent:init <workspace> [--type windows|linux|android]")
+                     f"/kunglao-agent:init <workspace> [--type windows|linux|android|web|macos]")
     elif decision is None:
         next_step = NO_REGISTER_STEP
     else:
@@ -518,6 +559,7 @@ def build_brief(ws) -> dict:
         "plan": plan,
         "timeline": _timeline(ws, now),
         "hypotheses": _open_hypotheses(ws),
+        "gate_rejections": _gate_rejections(ws),
         "next_step": next_step,
         "advice": advice,
         "sources": _sources_flags(data_age),
@@ -598,6 +640,17 @@ def render_text(brief: dict) -> str:
         L.append("## open hypotheses (re-hydrate at cold start)")
         L.append(f"open_count: {hyps['open_count']} | {ptrs}")
 
+    # #603: gate-rejections summary (fail-open — section absent when the
+    # ledger does not exist; read-only consumer of the REJECT ledger).
+    rej = b.get("gate_rejections")
+    if rej:
+        L.append("")
+        L.append(f"## gate-rejections (last {len(rej['last'])} of "
+                 f"total: {rej['total']})")
+        for r in rej["last"]:
+            L.append(f"{r.get('ts', '?')}  {r.get('gate', '?')} rejected "
+                     f"{r.get('claim', '?')}: {r.get('msg', '')}")
+
     L.append("")
     L.append("## next step")
     L.append(b["next_step"])
@@ -611,7 +664,7 @@ def render_text(brief: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="kunglao_resume.py",
-        description="kunglao-agent crash/reboot recovery brief (#466) — "
+        description="kunglao-agent crash/reboot recovery brief — "
                     "read-only: health, state summary, data age, breakpoint "
                     "timeline, next step (from convergence_check)")
     parser.add_argument("workspace", help="crashed workspace root")

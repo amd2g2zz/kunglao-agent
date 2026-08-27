@@ -130,9 +130,12 @@ def _drifted_scratch_skill(tmp_path: Path) -> Path:
     # kunglao_log.py rides the copy set (#534: heartbeat_tick module-level
     # emits on load — without it the tick ModuleNotFoundErrors before even
     # reaching the registry drift).
+    # liveness_policy.py rides the copy set (#597: heartbeat_tick/
+    # hook_activation/heartbeat import their minutes constants from it —
+    # a scratch copy without it dies on ModuleNotFoundError at import).
     for f in ("heartbeat_tick.py", "hook_activation.py", "hooks_selfcheck.py",
               "wire_up_settings.py", "reconcile_workers.py", "heartbeat.py",
-              "template_version.py", "kunglao_log.py"):
+              "template_version.py", "kunglao_log.py", "liveness_policy.py"):
         shutil.copy2(SCRIPTS / f, skill / "scripts" / f)
     wu = skill / "scripts" / "wire_up_settings.py"
     wu.write_text(

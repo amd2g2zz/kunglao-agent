@@ -19,7 +19,6 @@ from pathlib import Path
 
 _HERE = Path(__file__).parent
 sys.path.insert(0, str(_HERE))
-sys.path.insert(0, str(_HERE.parent / 'hooks'))
 from worker_budget import (  # noqa: E402
     parse_dispatch,
     tool_to_constraint,
@@ -731,11 +730,14 @@ def test_reject_fixes_are_actionable():
 def _fresh_hb(ws: Path) -> None:
     """Write a live heartbeat (both timestamps = now) so the heartbeat gate
     passes unless a scenario explicitly removes it."""
-    from datetime import datetime, timezone as _tz
-    now = datetime.now(_tz.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    from datetime import datetime, timedelta as _td, timezone as _tz
+    now_dt = datetime.now(_tz.utc)
+    now = now_dt.isoformat(timespec='seconds').replace('+00:00', 'Z')
+    prev = (now_dt - _td(minutes=5)).isoformat(timespec='seconds').replace('+00:00', 'Z')
     (ws / 'runs').mkdir(parents=True, exist_ok=True)
     (ws / 'runs' / '.heartbeat.json').write_text(
-        json.dumps({'last_tick_ts': now, 'activity_ts': now}), encoding='utf-8')
+        json.dumps({'last_tick_ts': now, 'activity_ts': now, 'started_ts': prev,
+                    'tick_history': [prev, now]}), encoding='utf-8')
 
 
 def _healthy_ws(tmp_path) -> Path:

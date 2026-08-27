@@ -22,9 +22,17 @@ import pytest
 _HERE = Path(__file__).parent
 SCRIPTS = _HERE.parent / "scripts"
 HOOKS = _HERE.parent / "hooks"
-sys.path.insert(0, str(SCRIPTS))
+# #770: bind the scripts TWIN by explicit path (#762 convention) — the ini
+# orders hooks before scripts, so a bare import of this shared name resolves
+# to the hooks side and is NOT what this suite exercises.
+import importlib.util
 
-import completion_gate as cg  # noqa: E402  (scripts/ on sys.path)
+_cg_spec = importlib.util.spec_from_file_location("completion_gate_scripts", SCRIPTS / "completion_gate.py")
+cg = importlib.util.module_from_spec(_cg_spec)
+import sys as _sys
+_sys.modules["completion_gate_scripts"] = cg
+_cg_spec.loader.exec_module(cg)
+
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +257,7 @@ def test_cli_all_closed_exits_0(tmp_path):
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "completion_gate.py"), str(p)],
         capture_output=True, text=True,
+        encoding="utf-8", errors="replace",  # #672/#317: GBK default breaks on em-dash in reason strings
     )
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
@@ -260,6 +269,7 @@ def test_cli_regression_exits_1(tmp_path):
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "completion_gate.py"), str(p)],
         capture_output=True, text=True,
+        encoding="utf-8", errors="replace",  # #672/#317: GBK default breaks on em-dash in reason strings
     )
     assert r.returncode == 1, r.stderr
     out = json.loads(r.stdout)
@@ -273,6 +283,7 @@ def test_cli_missing_file_exits_3(tmp_path):
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "completion_gate.py"), str(missing)],
         capture_output=True, text=True,
+        encoding="utf-8", errors="replace",  # #672/#317: GBK default breaks on em-dash in reason strings
     )
     assert r.returncode == 3, r.stderr
     # missing oracle → exit 3 (refuse self-anchor); clear message on stderr or stdout

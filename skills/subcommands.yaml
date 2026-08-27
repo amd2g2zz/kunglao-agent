@@ -7,10 +7,10 @@
 # analysis had a bare one; the router answered the workspace question twice).
 subcommands:
   init:
-    invocation: "/kunglao-agent:init <workspace> [--type windows|linux|android]"
-    argument-hint: "<workspace> [--type windows|linux|android] — no args → guided setup"
+    invocation: "/kunglao-agent:init <workspace> [--type windows|linux|android|web|macos]"
+    argument-hint: "<workspace> [--type windows|linux|android|web|macos] — no args → guided setup"
     zero-args: "guided setup prompt — workspace required, never guess, never a bare argparse error"
-    missing-args: "workspace without --type routes to the #455 intake type-alignment step — never silently default"
+    missing-args: "workspace without --type routes to the intake type-alignment step — never silently default"
     example: "/kunglao-agent:init ~/cases/synth-dropper --type windows"
     next-step: "uninitialized workspace → /kunglao-agent:init"
   analysis:
@@ -34,3 +34,10 @@ subcommands:
     missing-args: "takes no arguments — nothing can be missing"
     example: "/kunglao-agent:help"
     next-step: "unsure which command → /kunglao-agent:help"
+  upgrade:
+    invocation: "/kunglao-agent:upgrade <workspace>"
+    argument-hint: "<workspace> [--dry-run] — no args → guided workspace prompt"
+    zero-args: "guided workspace prompt — cwd candidate only with explicit confirm, never guess"
+    missing-args: "single positional — a missing workspace is the zero-args case"
+    example: "/kunglao-agent:upgrade ~/cases/synth-dropper"
+    next-step: "legacy workspace behind the skill package → /kunglao-agent:upgrade"

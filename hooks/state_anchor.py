@@ -58,14 +58,16 @@ import re
 import sys
 from pathlib import Path
 
+from _path_hygiene import ensure_scripts_path, scripts_on_path  # #671 authority
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 SCRIPTS_DIR = SKILL_DIR / "scripts"
 ANCHOR_CAP = 500  # issue requirement: <=500 chars
 
 # Import status_defs constants from scripts/ (single source of truth, #34, #95).
-# sys.path must include scripts/ before the import; same pattern as other hooks
-# (dispatch_gate, worker_budget, worker_pulse).
-sys.path.insert(0, str(SCRIPTS_DIR))
+# #671: module-level membership via the hygiene authority (idempotent,
+# position-stable — was a bare insert; same intent as other hooks).
+ensure_scripts_path()
 from status_defs import PARTIAL_STATUSES  # noqa: E402
 
 _LEDGER_FILE = ".convergence_ledger.jsonl"
@@ -123,8 +125,8 @@ def _kunglao_active(ws: Path) -> bool:
     if not (ws / ".hook_state.json").exists():
         return False
     try:
-        sys.path.insert(0, str(SKILL_DIR / "scripts"))
-        import hook_activation as ha
+        with scripts_on_path():  # #671 scoped membership
+            import hook_activation as ha
         return ha.is_active_strict(ws, "state_anchor")
     except Exception:  # noqa: BLE001 — never block on an activation-check error
         return False

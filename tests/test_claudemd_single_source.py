@@ -78,6 +78,25 @@ def test_base_carries_required_sections():
         assert section in text, f"base template missing section: {section}"
 
 
+def test_base_carries_memory_tiering_contract():
+    """#785 ruling 2026-08-27: the template must DECLARE how memory is
+    layered — including the host-harness native project memory as its own
+    tier (not lumped into generic 'preferences')."""
+    text = BASE_TMPL.read_text(encoding="utf-8")
+    for needle in (
+        "**Memory tiers**",
+        "T1 workspace carriers",
+        "T2 distilled lessons",
+        "T3 reference library",
+        "T4 project memory (Claude Code native)",
+        "index + typed files",
+        "Routing discipline",
+    ):
+        assert needle in text, f"memory-tier contract missing: {needle}"
+    # write triggers are part of the table, not prose afterthoughts
+    assert "Write trigger" in text
+
+
 def test_base_sample_and_venv_placeholders():
     text = BASE_TMPL.read_text(encoding="utf-8")
     # #362: placeholders migrated <UPPERCASE> -> {{lowercase}} (shared

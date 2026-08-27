@@ -32,7 +32,7 @@ def test_pending_decision_fields():
 
 
 def test_pending_list_roundtrip_through_json():
-    dl = decision_pending.PendingDecisionList(
+    dl = decision_pending.build_pending_doc(
         flow="kunglao-init", workspace=None,
         guidance="Collect answers, re-run with --resolve.",
         decisions=[
@@ -44,7 +44,7 @@ def test_pending_list_roundtrip_through_json():
         ],
         resume={"argv": ["kunglao-init.py", "<ws>", "--resolve", "<answers.json>"]},
     )
-    parsed = json.loads(dl.to_json())
+    parsed = json.loads(decision_pending.pending_doc_json(dl))
     assert parsed["schema_version"] == decision_pending.SCHEMA_VERSION
     assert parsed["flow"] == "kunglao-init"
     assert parsed["workspace"] is None

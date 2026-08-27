@@ -45,15 +45,31 @@ def main(argv: list[str] | None = None) -> int:
     ws = _resolve_ws(args[0] if args else None)
     heartbeat_file = ws / "runs" / ".heartbeat.json"
     heartbeat_file.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"ts": utc_now(), "touch": True}
-    heartbeat_file.write_text(
+    # #754 E2: a touch IS a tick. The old implementation OVERWROTE the whole
+    # state file (losing last_tick_ts / interval_min / loop_registered /
+    # tick_history) — a touch could silently unregister monitoring while
+    # claiming to refresh it. Merge into the existing state instead and
+    # append the shared continuous-tick history.
+    from heartbeat import append_tick  # noqa: E402 (#754 single writer)
+    now_str = utc_now()
+    try:
+        state = json.loads(heartbeat_file.read_text(encoding="utf-8"))
+        if not isinstance(state, dict):
+            state = {}
+    except (json.JSONDecodeError, OSError):
+        state = {}
+    state["last_tick_ts"] = now_str
+    payload = append_tick({**state, "ts": now_str, "touch": True})
+    tmp = heartbeat_file.with_suffix(".json.tmp")
+    tmp.write_text(
         json.dumps(payload, sort_keys=True, separators=(",", ":"),
                    ensure_ascii=False) + "\n",
         encoding="utf-8")
+    tmp.replace(heartbeat_file)  # F2 atomicity discipline, same as the hook
     # #534: emit the structured event (workspace is now in scope)
     kunglao_log.emit(ws, actor="heartbeat_touch", action="dispatch",
                      detail="heartbeat touched")
-    print(f"heartbeat_touch: {heartbeat_file} updated -> {payload['ts']}")
+    print(f"heartbeat_touch: {heartbeat_file} merged+tick -> {now_str}")
     return 0
 
 
