@@ -30,6 +30,13 @@ Steps executed (idempotent, all safe to re-run):
                         (#475: env freshness bound to the tick by
                         construction — the only mechanically-enforced
                         periodic; probe failure never fails the tick)
+  10. think-seat      — #759 H1: a WAITING period (register present, ranking
+                        yields zero dispatchable actions) writes
+                        runs/.think-<ts>.md and its path REPLACES the empty
+                        action_taken (#711 E1: idle ≠ EMPTY — cognition is an
+                        action). Advisory like the other watchers: rc never
+                        enters the alert weights; unparseable seat output is
+                        treated as seat-unavailable (contract unchanged).
 
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
 1 = heartbeat stale, project hooks missing, or selfcheck failed (LLM must act;
@@ -222,6 +229,19 @@ def main(argv: list[str] | None = None) -> int:
     # verify_watch: recorded in the report, NEVER weighed into rc/alert
     # (a crashed sweep must not fail the tick; fail-open by construction).
     report["rollup_sweep"] = run("rollup.py", ws, "--sweep-terminal")
+
+    # #759 H1: THINK seat — the waiting period gets a cognitive action instead
+    # of an idle action_taken (#711 E1). Advisory like monitor/feedback/
+    # verify_watch/rollup_sweep: recorded in the report, NEVER weighed into
+    # rc/alert. Only a seat that REPORTS waiting with an artifact substitutes
+    # the field; anything else keeps the orchestrator-filled #237 contract.
+    report["think"] = run("think_seat.py", ws)
+    try:
+        think = json.loads(report["think"].get("stdout") or "{}")
+    except ValueError:
+        think = {}
+    if isinstance(think, dict) and think.get("waiting") and think.get("artifact"):
+        report["action_taken"] = f"THINK {think['artifact']}"
 
     sc = report["selfcheck"].get("stdout", "")[:80]
     hb = report["heartbeat"].get("stdout", "")[:120]

@@ -37,6 +37,7 @@ writer rejects.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 _FM_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
@@ -221,22 +222,109 @@ def check_write(notes_dir: Path, note_text: str, note_name: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# #762 K3 SEAM — placeholder ONLY. Do not implement here.
+# #759 Wave-3 wiring (was the #762 K3 reserved seam) — a NOTE can now retire
+# an OPEN HYPOTHESIS: notes/<id>.md declaring `supersedes_hypothesis: H-NNN`
+# flips that hypothesis open→superseded with superseded_by=<note id> (the
+# assumption now lives in the result-layer note), emits the
+# `hypothesis_superseded` event, and returns affected_claims (the hyp's claim
+# + same competitor_group peers) so the caller/receipt exposes the re-rank
+# scope. NO automatic claim-register rewrite — the next value/priority recalc
+# absorbs the signal. Claim closures without any resolvable pointer are
+# rejected LOUDLY: a closure must never masquerade as a hypothesis rewrite
+# without a chain (#762 placeholder doctrine).
 #
-# Wave 3 wires hypothesis -> note supersession through this name once J3/H2
-# land (#759 hypothesis-persistence / #761). Until then ANY call must fail
-# loudly: a silent pass-through here would let a claim closure masquerade as
-# a hypothesis rewrite with no chain, re-opening the exact AES->ChaCha20
-# silent-overwrite class this module exists to prevent.
+# Pointer disambiguation vs the #528 note→note chain: plain `supersedes:` is
+# honored ONLY when it resolves under hypotheses/ and NOT under notes/
+# (both resolving = ambiguous = rejected).
 # ---------------------------------------------------------------------------
-def note_supersedes_hypothesis(*args, **kwargs):
-    """TODO(#762 K3, Wave 3): thin interface for rewriting an assumption via
-    the notes/ supersedes chain (J3/H2 consumers land in #759/#761).
+class InvalidHypothesisPointer(ValueError):
+    """The note names no hypothesis target this module can resolve."""
 
-    Deliberately NOT implemented in the K1+K2 slice — the shape of the
-    hypothesis face is Wave 3's decision; pre-welding it here would freeze
-    wrong seams (#762 design.md D6).
+
+def note_supersedes_hypothesis(notes_dir: Path, note_id: str, *,
+                               hypotheses_dir: Path | None = None,
+                               workspace: Path | None = None) -> dict:
+    """Retire an OPEN hypothesis via the notes/ supersedes chain (#759).
+
+    Returns {"ok", "note", "hypothesis", "status", "affected_claims"}.
+    Raises:
+      FileNotFoundError — the note does not exist.
+      InvalidHypothesisPointer — no pointer / unresolvable / ambiguous.
+      hypothesis_store.InvalidTransition — source hypothesis not open
+        (terminal states never reopen; write a NEW hypothesis, #528).
     """
-    raise NotImplementedError(
-        "#762 K3 lands in Wave 3 (after #759/#761, J3/H2) - "
-        "note_supersedes_hypothesis is a reserved seam, not wired yet")
+    from hypothesis_store import HypothesisStore, InvalidTransition
+
+    root = Path(notes_dir)
+    hyps_root = Path(hypotheses_dir) if hypotheses_dir else root.parent / "hypotheses"
+    fm = _frontmatter(root / f"{note_id}.md")
+    if not fm:
+        raise FileNotFoundError(f"note {note_id} does not exist under {root}")
+    pointer = (fm.get("supersedes_hypothesis") or "").strip()
+    if not pointer:
+        cand = (fm.get("supersedes") or "").strip()
+        if cand:
+            in_notes = (root / f"{cand}.md").exists()
+            in_hyps = (hyps_root / f"{cand}.md").exists()
+            if in_hyps and in_notes:
+                raise InvalidHypothesisPointer(
+                    f"supersedes: {cand} resolves to BOTH a note and a "
+                    f"hypothesis — ambiguous; use supersedes_hypothesis:")
+            if in_hyps:
+                pointer = cand
+    if not pointer or not (hyps_root / f"{pointer}.md").exists():
+        raise InvalidHypothesisPointer(
+            f"note {note_id} declares no resolvable hypothesis pointer "
+            f"(supersedes_hypothesis: H-NNN) — retiring an assumption "
+            f"requires naming it (#762 K3)")
+    store = HypothesisStore(hyps_root)
+    target = store.get(pointer)
+    if target.status != "open":
+        raise InvalidTransition(
+            f"{pointer} is {target.status!r} — decided hypotheses stay "
+            f"decided (#528); write a NEW hypothesis instead")
+    peers = [h.claim_id for h in store.list_all()
+             if h.id != pointer and h.competitor_group == target.competitor_group]
+    affected = sorted({target.claim_id, *peers})
+    store.transition(pointer, "superseded", superseded_by=note_id)
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="notes_writer", action="hypothesis_superseded",
+             artifact=f"notes/{note_id}.md",
+             detail=f"{pointer} <- {note_id} | affected_claims={','.join(affected)}")
+    except Exception:  # noqa: BLE001 — observability never gates the rewrite
+        pass
+    return {"ok": True, "note": note_id, "hypothesis": pointer,
+            "status": "superseded", "superseded_by": note_id,
+            "affected_claims": affected}
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI face: python notes_writer.py <ws> --supersede-hyp <NOTE_ID>
+    [--notes-dir notes] [--hypotheses-dir hypotheses]"""
+    import argparse
+    import json as _json
+    import sys as _sys
+
+    ap = argparse.ArgumentParser(prog="notes_writer.py")
+    ap.add_argument("workspace")
+    ap.add_argument("--supersede-hyp", metavar="NOTE_ID",
+                    help="retire the OPEN hypothesis named by this note's "
+                         "supersedes_hypothesis frontmatter")
+    ap.add_argument("--notes-dir", default="notes")
+    ap.add_argument("--hypotheses-dir", default="hypotheses")
+    args = ap.parse_args(argv)
+    ws = Path(args.workspace)
+    try:
+        out = note_supersedes_hypothesis(
+            ws / args.notes_dir, args.supersede_hyp,
+            hypotheses_dir=ws / args.hypotheses_dir, workspace=ws)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"supersede-hyp FAIL: {exc}", file=_sys.stderr)
+        return 2
+    print(_json.dumps(out, ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

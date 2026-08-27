@@ -120,6 +120,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `rollup.py` | terminal-transition write loop — claim→outcome_capture+lessons+narrative+checkpoint (#524) | tests |
 | `hypothesis_store.py` | hypothesis layer carrier (#528) — H-*.md parse + open→refuted/superseded state machine over `hypotheses/` | digest_build (sec_g), hooks/state_anchor, kunglao-init stub, tests |
 | `notes_writer.py` | notes/ result-layer writer (#528) — supersedes-chain enforcement + verify_status reset on corrections | tests; write-path contract behind hooks/write_guard (#532) |
+| `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |
 
 ## Observability sidecar (issue #287)
 

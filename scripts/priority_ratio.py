@@ -24,6 +24,15 @@ discriminator groups) and results (writing facts); ranking is zero-LLM.
   capability_switch_violation() is the pure judgment behind the
   dispatch-gate capability card; strategy_failures feeds novelty.
 
+#759 H2 value function: runs/value-weights.yaml carries the user's
+  structured worth ruling (claim_classes impact→weight, per-claim
+  overrides); the resolved multiplier applies to the final ratio
+  (score = VoI/cost × weight). Loading is fail-open per entry and whole
+  file — absent/corrupt/illegal → weight 1.0, byte-identical to the
+  pre-#759 formula. This is the SANCTIONED worth channel (#711 E2:
+  replaces hand-edited ranking inputs / SendMessage verdict hacks);
+  see SKILL.md "Value ordering".
+
 Usage:
   python priority_ratio.py <workspace> [--json]
 """
@@ -75,6 +84,9 @@ class EvidenceView:
     identified_obstacles: tuple[tuple[str, str], ...] = ()  # (claim_id, text)
     strategy_failures: dict[str, int] = field(default_factory=dict)
     claim_strategy: dict[str, str] = field(default_factory=dict)
+    # #759 H2: structured user worth ruling (fail-open loaded)
+    value_class_weights: dict[str, float] = field(default_factory=dict)
+    value_claim_overrides: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def from_workspace(cls, ws: Path) -> "EvidenceView":
@@ -127,8 +139,10 @@ class EvidenceView:
                     pass  # fail-open: broken register must not break ranking
         caps, obstacles, covers = _scan_failure_artifacts(ws)
         claim_strategy, strategy_failures = _load_strategy_view(ws, covers)
+        classes, overrides = load_value_weights(ws)
         return cls(frozenset(terminal_claims), verified, {}, lines,
-                   caps, obstacles, strategy_failures, claim_strategy)
+                   caps, obstacles, strategy_failures, claim_strategy,
+                   classes, overrides)
 
 
 @dataclass(frozen=True)
@@ -145,10 +159,12 @@ class Action:
     discriminator: float
     novelty: float
     cost: float
+    weight: float = 1.0  # #759 H2 value multiplier (appended field — the pre-#759 construction shape is positionally compatible)
 
     def to_dict(self) -> dict:
         return {"claim_id": self.claim_id, "action": self.action,
-                "score": round(self.score, 3), "skill": self.skill}
+                "score": round(self.score, 3), "skill": self.skill,
+                "weight": round(self.weight, 3)}
 
 
 def is_open(claim: dict) -> bool:
@@ -448,6 +464,87 @@ def capability_switch_violation(claim_ids, dispatch_tools: list[str],
             "dispatch_families": sorted(disp_fams), "capability": capability}
 
 
+# ===================== #759 H2 value function =====================
+
+VALUE_WEIGHTS_FILE = "runs/value-weights.yaml"
+
+# Mechanical claim→impact-class vocabulary (word-bounded ASCII tokens +
+# literal CJK phrases — no natural-language inference, mirroring
+# tool_families_from_text's posture). Map order is tie-break priority.
+_VALUE_CLASS_TOKENS: list[tuple[str, tuple[str, ...]]] = [
+    ("rce", ("rce", "remote code execution", "代码执行", "deserialization")),
+    ("dos", ("dos", "denial of service", "拒绝服务")),
+    ("sandbox_escape", ("sandbox escape", "逃逸", "escape")),
+    ("c2_extract", ("c2", "回连")),
+    ("credential_theft", ("credential theft", "凭据窃取", "credential")),
+    ("info_disclosure", ("information disclosure", "信息泄露")),
+]
+
+
+def _positive_weights(raw) -> dict[str, float]:
+    """Keep only strictly-positive numeric entries; anything else is
+    ignored per-entry (fail-open: a bad row must not neutralize the file)."""
+    out: dict[str, float] = {}
+    for k, v in (raw or {}).items():
+        if isinstance(v, bool):
+            continue
+        try:
+            w = float(v)
+        except (TypeError, ValueError):
+            continue
+        if w > 0:
+            out[str(k)] = w
+    return out
+
+
+def load_value_weights(ws: Path) -> tuple[dict[str, float], dict[str, float]]:
+    """(claim_class_weights, per_claim_overrides) from runs/value-weights.yaml.
+
+    Fail-open at every level: missing file → ({}, {}); unparsable YAML or a
+    non-mapping root → ({}, {}); illegal entries dropped individually."""
+    path = ws / VALUE_WEIGHTS_FILE
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}, {}
+    except Exception:  # noqa: BLE001 — corrupt weights never break ranking
+        return {}, {}
+    if not isinstance(data, dict):
+        return {}, {}
+    classes = data.get("claim_classes")
+    overrides = data.get("overrides")
+    return (_positive_weights(classes if isinstance(classes, dict) else None),
+            _positive_weights(overrides if isinstance(overrides, dict) else None))
+
+
+def classify_value_class(claim: dict) -> str | None:
+    """Statement + answers_question keyword match against the mechanical
+    vocabulary; no hit → None (weight stays 1.0)."""
+    text = " ".join([str(claim.get("statement", "")),
+                     str(claim.get("answers_question", ""))]).lower()
+    for cls_, tokens in _VALUE_CLASS_TOKENS:
+        for tok in tokens:
+            if re.search(r"(?<![A-Za-z0-9])" + re.escape(tok.lower())
+                         + r"(?![A-Za-z0-9])", text, re.IGNORECASE):
+                return cls_
+    return None
+
+
+def claim_value_weight(claim: dict,
+                       classes: dict[str, float],
+                       overrides: dict[str, float]) -> float:
+    """Resolution order: per-claim override > explicit value_class field >
+    keyword classification > 1.0."""
+    cid = str(claim.get("id") or "")
+    if cid and cid in overrides:
+        return overrides[cid]
+    cls_ = str(claim.get("value_class") or "").strip().lower() \
+        or classify_value_class(claim)
+    if cls_ and cls_ in classes:
+        return classes[cls_]
+    return 1.0
+
+
 def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> list[Action]:
     """VoI proxy / cost ranking (purely mechanical, zero LLM).
 
@@ -507,11 +604,16 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
         N = _novelty(action_cat, fact_counts, s_fails)
         cost = action_cost(c)
         numerator = WEIGHTS["L"] * L + WEIGHTS["D"] * D + WEIGHTS["N"] * N
-        score = round(numerator / cost, 3)
+        # #759 H2: the user's structured worth ruling multiplies the final
+        # ratio (absent weights → 1.0 → the pre-#759 formula byte-identical).
+        weight = claim_value_weight(c, evidence.value_class_weights,
+                                    evidence.value_claim_overrides)
+        score = round(numerator / cost * weight, 3)
         actions.append(Action(
             claim_id=cid, action=action_cat, score=score, skill=None,
             tier=action_tier(c), attempts=int(c.get("promotion_attempts", 0)),
             leverage=round(L, 3), discriminator=D, novelty=round(N, 3), cost=cost,
+            weight=weight,
         ))
     # score tie within ε → lower cost wins (mechanical ruling, no LLM); then stable by claim_id
     actions.sort(key=lambda a: (-a.score, a.cost, a.claim_id))

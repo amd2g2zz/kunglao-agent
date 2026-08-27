@@ -178,6 +178,7 @@ EMIT_ACTIONS = [
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "hypothesis_seed",    # #662 PQ scaffold seeding
+    "hypothesis_superseded",  # #759 note-supersedes-hypothesis wiring (K3)
     "install_attempt",    # #700 toolchain_install per-item install events
     "install_declined",   # #700 toolchain_install per-item install events
     "install_failed",     # #700 toolchain_install per-item install events

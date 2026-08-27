@@ -567,14 +567,24 @@ def _load_notes_writer():
     return mod
 
 
-def test_k3_seam_placeholder_points_at_wave_3():
-    """The hypothesis->note supersession interface exists as a NAMED seam but
-    refuses real work until Wave 3 lands (#759/#761). No implementation may
-    hide behind this test's green."""
-    import pytest
+def test_k3_seam_is_wired_for_wave_3(tmp_path):
+    """#759 Wave 3 landed the reserved seam (#762 K3): the name no longer
+    raises NotImplementedError — it performs the real hypothesis retirement.
+    Full trio coverage (transition + event + affected_claims) lives in
+    tests/test_cognition_759.py; here we pin only that the placeholder era
+    is over, so a future stub-regression turns red in THIS suite too."""
     nw = _load_notes_writer()
     assert hasattr(nw, "note_supersedes_hypothesis")
-    with pytest.raises(NotImplementedError) as ei:
-        nw.note_supersedes_hypothesis()
-    msg = str(ei.value)
-    assert "#759" in msg and "#761" in msg and "Wave 3" in msg
+    ws = tmp_path / "ws"
+    (ws / "notes").mkdir(parents=True)
+    hyp = ws / "hypotheses"
+    hyp.mkdir()
+    (hyp / "H-001.md").write_text(
+        "---\nid: H-001\nclaim_id: C-1\ncompetitor_group: g\ncandidates: []\n"
+        "status: open\nschema_rev: 1\n---\nbody\n", encoding="utf-8")
+    (ws / "notes" / "N-1.md").write_text(
+        "---\nid: N-1\nclaim_id: C-1\nverify_status: pending\n"
+        "supersedes_hypothesis: H-001\n---\nbody\n", encoding="utf-8")
+    out = nw.note_supersedes_hypothesis(ws / "notes", "N-1",
+                                        hypotheses_dir=hyp)
+    assert out["ok"] is True and out["affected_claims"] == ["C-1"]

@@ -164,7 +164,7 @@ MUSTs: `--wire-up` before the first dispatch (hooks silently drop from settings 
 
 **Oracle backfill (gate power-on)**: before the first dispatch, write the user's task VERBATIM into `<WORKSPACE>/task-oracle.yaml` `task_text:` (init registered the skeleton with a `pending-user-input-backfill` marker). Without the backfill the completion gate judges nothing — an unpowered gate chain is the documented closing-escape hole. The heartbeat tick reports `oracle_registered` each tick; a false value with the marker still in `task_text` means the backfill was skipped — do it now.
 
-**Tick binding**: run `python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — one-shot selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention required. Every convergence decision is a COMMAND with a required action (see the dispatch loop table); no action in a tick = idle fault. Stop the loop at closeout: after the §6.3 checklist + handoff-check PASS, run `python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
+**Tick binding**: run `python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — one-shot selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention required. Every convergence decision is a COMMAND with a required action (see the dispatch loop table); no action in a tick = idle fault. **THINK seat product**: while the tick waits (no dispatchable/verifiable action), heartbeat_tick writes `runs/.think-<ts>.md` - filling its three sections IS that tick's convergence action, and its `suggested_searches` MUST execute as the NEXT action when present (not searching is a deterministic loss - the field-evidence countermeasure). Stop the loop at closeout: after the §6.3 checklist + handoff-check PASS, run `python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
 
 ## Phase 2 Dispatch Loop
 
@@ -182,6 +182,7 @@ Act on the decision + exit code — it is a command, not a suggestion:
 | `DISPATCH_VERIFIER` | 2 | partial facts + free slots | Dispatch a verifier; do NOT declare PROVEN without sign-off |
 | `SATURATED` | 3 | open claims but 0 free slots | Poll stuck workers; do not idle |
 | `BLOCKED` | 4 | open claims all blocked | Resolve blockers (self-recovery), then re-check |
+| `THINK` | - | tick waiting period - heartbeat_tick fired the THINK seat | Read the seat's `runs/.think-<ts>.md` and fill its three sections (patterns / hypotheses / value) IN PLACE - that artifact IS this tick's action_taken (EMPTY forbidden); execute any `suggested_searches` as the NEXT action; structured branching goes through the sequentialthinking chain (contract detail owned by the parallel worker-contract wave) |
 | `CONVERGED` | 0 | no open claims, no partials, all PQs have passes-notes, completion transaction clean | claim loop done — CONVERGED now requires zero global contradictions, zero unconsumed discoveries, and PROVEN provenance (recomputed in `convergence_check.py` + `completion_gate.py`). STOP dispatch; deliver |
 
 Manual fallback (script unavailable): scan `claim-register.yaml` for OPEN/PARTIALLY-VERIFIED, confirm `active_workers < 3`, scan `facts/_INDEX.md` for PARTIAL facts. DISPATCH and DISPATCH_VERIFIER must be acted on before this turn ends — dispatched as background launches, never awaited inline. A worker notification is a signal, not a trigger: process the result, then re-run the convergence check.
@@ -226,11 +227,15 @@ Run `python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd tur
 
 **Dispatch policy**: claim-driven — `claim_deps.yaml` is the core; claims are nodes, dispatch/verify/propagate all key off claims, refutation propagates along deps. Tier-gated — broad cheap evidence (T1) on all claims before expensive (T3) on one (`worker_budget.check_tier_gate()`, iterative deepening by evidence cost). Greedy best-first — `scripts/priority_ratio.py` (VoI proxy [0.45·L+0.30·D+0.25·N]/cost, priority queue by rank). Pick the next open claim within the dep+tier constraints, ranked by that script. Search cadence (iteration 1 cheap → 5 medium → 8 cross-validate → 10+ stop) — see `references/_INDEX.md`. Tool inventory + CLI family — see `references/_INDEX.md`.
 
+**Value ordering - sanctioned channel**: the ranking honors the workspace's structured worth ruling in `runs/value-weights.yaml` (`claim_classes:` impact-to-weight map + `overrides:` per-claim multipliers; loaded fail-open - no/absent file = every weight 1.0). A user ruling (e.g. "RCE is the goal, DoS earns no bounty") is STRUCTURED BY THE ORCHESTRATOR into that file and takes effect on the next `priority_ratio.py` run. Hand-editing ranking inputs or relaying verdicts via SendMessage mid-loop is NOT the channel - it bypasses the audit trail and evaporates on restart.
+
 **Drift reality check**: run `python <SKILL_DIR>/scripts/plan_drift_detector.py <WORKSPACE>` each round — verify the plan's claim IDs against `claim_deps.yaml` and the next-step claims; unverified plan items are hypotheses — never execute on a stale plan.
 
 **Refutation propagation**: when a claim is refuted, run `python <SKILL_DIR>/scripts/refutation_propagate.py <WORKSPACE>` — mark dependents from `claim_deps.yaml` and propagate; do not re-plan wholesale.
 
 **Feedback inbox**: read the feedback inbox each tick — `python <SKILL_DIR>/scripts/feedback.py <WORKSPACE> read`; classify entries and dispose stale ones. User feedback enters as a `source: user_feedback` claim (hypothesis) — it does not jump the queue.
+
+**Assumption rewrite lane (note-supersedes-hypothesis)**: when verified evidence retires an OPEN hypothesis, write the correcting note under `notes/` (`verify_status: pending`, frontmatter `supersedes_hypothesis: H-NNN`) and run `python <SKILL_DIR>/scripts/notes_writer.py <WORKSPACE> --supersede-hyp <NOTE_ID>` - the state machine flips H-NNN open→superseded pointing at the note, emits `hypothesis_superseded`, and returns affected_claims (claim + same competitor_group peers) scoping the next priority recalc. Hand-editing `hypotheses/*.md` is not the channel; decided hypotheses never reopen - write a NEW hypothesis.
 
 **Tier rules**: run `python <SKILL_DIR>/scripts/tier_rules.py <WORKSPACE>` — assign a tier per claim; dispatch only within tier constraints.
 
