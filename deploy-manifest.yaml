@@ -103,7 +103,7 @@ files:
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
-    sha256: 849a79bf9d6df1c473f7de3eb0ee94a5ce66ef12ae449f9a870ba6285ef55657
+    sha256: 2adc0f8d640cc0c155f9b73d7f5e591bf5999f575161eb31f6ee6be056f1cdae
   - src: scripts/blind_gate.py
     dest: .claude/scripts/blind_gate.py
     kind: scaffold
