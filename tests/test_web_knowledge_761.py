@@ -42,7 +42,6 @@ SCRIPTS = ROOT / "scripts"
 # the canonical worker-status parse point lives in hooks/ (#444 AC-1); insert
 # BEFORE scripts so `import lib_kunglao` binds the hooks copy, not the
 # same-named scripts-side drift library
-sys.path.insert(0, str(ROOT / "hooks"))
 sys.path.insert(0, str(SCRIPTS))
 
 import references_recall as rr  # noqa: E402

@@ -66,7 +66,7 @@ from pathlib import Path
 import yaml
 
 try:  # normal load paths (hook subprocess: script dir; pytest: pythonpath)
-    from _path_hygiene import on_path, scripts_on_path  # #671 authority
+    from _path_hygiene import load_hooks_lib, on_path, scripts_on_path  # #671 authority
 except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the
     # subprocess-driver pattern (tests/test_failopen_emit loads this file
     # via spec_from_file_location inside a python tmp/driver.py whose
@@ -80,6 +80,7 @@ except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the
     _hyg_spec.loader.exec_module(_hyg)
     on_path = _hyg.on_path
     scripts_on_path = _hyg.scripts_on_path
+    load_hooks_lib = _hyg.load_hooks_lib
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 HOOK_STATE = Path(".hook_state.json")
@@ -195,8 +196,7 @@ def _parse_dispatch(text: str) -> tuple[str | None, str | None]:
     parser lives in hooks/lib_kunglao.py; this thin wrapper exists so the
     gate doesn't have to know about import order / sys.path tricks."""
     try:
-        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
-            from lib_kunglao import parse_dispatch as _shared_parse
+        _shared_parse = load_hooks_lib().parse_dispatch
     except Exception as exc:  # pragma: no cover — defensive
         # Fallback to local regex if lib_kunglao is somehow unimportable
         m = DISPATCH_RE.search(text)
@@ -208,8 +208,7 @@ def _parse_dispatch(text: str) -> tuple[str | None, str | None]:
         return (None, "v0/v1 both unmatched")
     # Re-detect which protocol matched by re-running the v1 path inline
     try:
-        from lib_kunglao import parse_dispatch_json
-        if parse_dispatch_json(text)[2] is not None:
+        if load_hooks_lib().parse_dispatch_json(text)[2] is not None:
             return (claim_id, "v1")
     except Exception:
         pass
@@ -230,8 +229,7 @@ def _declared_irreversible(text: str) -> bool:
     Prose sniffing lives in scripts/ask_for_direction_gate.py as a
     best-effort tripwire, never load-bearing."""
     try:
-        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
-            from lib_kunglao import parse_dispatch_json
+        parse_dispatch_json = load_hooks_lib().parse_dispatch_json
     except Exception:
         return False
     _, _, claim_id, meta = parse_dispatch_json(text)
@@ -461,8 +459,9 @@ def _mcp_prefix_gate(prompt_text: str) -> int | None:
     (pass-through) when the dispatch declares no tools or only sanctioned
     ones. Returns rc=2 with REJECT guidance on the first offender."""
     try:
-        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
-            from lib_kunglao import check_mcp_prefix, parse_dispatch as _shared_parse
+        _libk = load_hooks_lib()
+        check_mcp_prefix = _libk.check_mcp_prefix
+        _shared_parse = _libk.parse_dispatch
     except Exception:  # noqa: BLE001 — helper unavailable -> fail open
         return None
     try:
@@ -498,9 +497,7 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
         return None
     tools: list[str] = []
     try:
-        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
-            from lib_kunglao import parse_dispatch
-            tools = parse_dispatch(prompt_text or "")[1]
+        tools = load_hooks_lib().parse_dispatch(prompt_text or "")[1]
     except Exception:  # noqa: BLE001 — unparseable tools -> no families -> open
         tools = []
     claim_ids = {claim_id}
@@ -713,8 +710,7 @@ def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
             if isinstance(v, str) and v.strip():
                 return v.strip()
     try:
-        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
-            from lib_kunglao import parse_dispatch_json
+        parse_dispatch_json = load_hooks_lib().parse_dispatch_json
         _, _, _claim_id, meta = parse_dispatch_json(prompt_text or "")
         if isinstance(meta, dict):
             v = meta.get("agent")
@@ -774,9 +770,7 @@ def _tools_rack_gate(payload: dict, prompt_text: str) -> int | None:
     Skips silently (None) when the dispatch carries no agent identity or the
     agent file is unknown; REJECTs (rc=2, fix guidance) otherwise."""
     try:
-        with on_path(SKILL_DIR / "hooks"):  # #671 scoped membership
-            from lib_kunglao import parse_dispatch
-        _, declared_tools, _claim = parse_dispatch(prompt_text or "")
+        _, declared_tools, _claim = load_hooks_lib().parse_dispatch(prompt_text or "")
     except Exception:  # noqa: BLE001 — unparseable protocol -> pre-existing warn face
         return None
     agent_name = _resolve_dispatch_agent(payload, prompt_text)

@@ -130,3 +130,40 @@ def ensure_on_path(target: PathLike, *, front: bool = False) -> None:
 def ensure_scripts_path() -> None:
     """ensure_on_path(SKILL_DIR/scripts) — module-level long-lived form."""
     ensure_on_path(SCRIPTS_DIR)
+
+
+def collision_order_inverted(path: list[str] | None = None) -> bool:
+    """#770 regression probe: is any hooks/ dir ranked above any scripts/
+    dir? Under that ordering the three shared-name twins
+    (completion_gate / heartbeat_touch / lib_kunglao) resolve to their
+    hooks side on a bare import — the exact shadow the ini ordering exists
+    to prevent. Pure predicate over a path list; no mutation."""
+    entries = sys.path if path is None else path
+    hooks_rank = [i for i, p in enumerate(entries)
+                  if p and Path(p).name == "hooks"]
+    scripts_rank = [i for i, p in enumerate(entries)
+                    if p and Path(p).name == "scripts"]
+    if not hooks_rank or not scripts_rank:
+        return False
+    return min(hooks_rank) < min(scripts_rank)
+
+
+def load_hooks_lib():
+    """Canonical by-path loader for the hooks twin of lib_kunglao (#770).
+
+    A bare `import lib_kunglao` resolves by sys.path ORDER, so an ambient
+    scripts/ insert anywhere earlier in the session re-binds every lazy
+    consumer to the scripts twin (which lacks the worker-status protocol).
+    Loading by resolved path under an isolated module name is
+    order-independent and cached across call sites."""
+    name = "lib_kunglao_hooks"
+    m = sys.modules.get(name)
+    if m is not None:
+        return m
+    import importlib.util as _ilu
+    spec = _ilu.spec_from_file_location(
+        name, Path(__file__).resolve().parent / "lib_kunglao.py")
+    m = _ilu.module_from_spec(spec)
+    sys.modules[name] = m
+    spec.loader.exec_module(m)
+    return m

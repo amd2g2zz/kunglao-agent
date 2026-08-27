@@ -187,7 +187,10 @@ def test_canonical_module_owns_the_regex():
 # every consumer must reach the protocol through the canonical entry — the
 # static wiring half of AC-3's CI assertion (the behavioral half is below).
 WIRING = {
-    "hooks/worker_budget.py": "from lib_kunglao import scan_active_workers",
+    #770: worker_budget binds the hooks twin BY PATH under an isolated
+    # name (#762 convention) instead of a bare sys.path-order-dependent
+    # import; the isolated name is the canonical-consumption marker.
+    "hooks/worker_budget.py": "_worker_budget_lib_kunglao",
     "hooks/worker_pulse.py": "parse_worker_status",
     "scripts/convergence_check.py": _PROTOCOL_NAME,
     "scripts/lib_kunglao.py": _PROTOCOL_NAME,
@@ -371,7 +374,6 @@ def test_decide_exposes_w15(tmp_path):
 def test_worker_pulse_flags_w15(tmp_path):
     """hook 层 machine path: the pulse surfaces the W-15 violation at the
     delivery moment (same channel as the quarantined= flag, #36 precedent)."""
-    sys.path.insert(0, str(HOOKS))
     import worker_pulse as wp
     ws = tmp_path / "ws-pulse"
     ws.mkdir()
@@ -435,8 +437,10 @@ def test_two_layers_share_one_protocol_source():
     convergence_check loads the SAME file by path (lib_kunglao_hooks loader)."""
     wb = (ROOT / "hooks" / "worker_budget.py").read_text(encoding="utf-8")
     cc = (ROOT / "scripts" / "convergence_check.py").read_text(encoding="utf-8")
-    assert "from lib_kunglao import scan_active_workers" in wb, (
-        "hook layer must consume the canonical scan (worker_budget)"
+    assert "_worker_budget_lib_kunglao" in wb, (
+        "hook layer must consume the canonical scan via the #770 by-path "
+        "bind (position-stable; a bare lib_kunglao import resolves by "
+        "sys.path race)"
     )
     assert _PROTOCOL_NAME in cc, (
         "advisory layer must load the canonical protocol "
