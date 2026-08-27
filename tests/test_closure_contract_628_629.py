@@ -72,10 +72,22 @@ def test_rollup_idempotent_queue(tmp_path):
         "no duplicate queue entries on re-rollup"
 
 
+# #770: bind the scripts TWIN by explicit path (#762 convention) — the ini
+# orders hooks before scripts, so a bare import of this shared name resolves
+# to the hooks side and is NOT what this suite exercises.
+import importlib.util
+
+__cg_spec = importlib.util.spec_from_file_location("completion_gate_scripts", Path(__file__).resolve().parents[1] / "scripts" / "completion_gate.py")
+_cg = importlib.util.module_from_spec(__cg_spec)
+import sys as _sys
+_sys.modules["completion_gate_scripts"] = _cg
+__cg_spec.loader.exec_module(_cg)
+
+
 # ---------- #628: 完工门 reader ----------
 
 def test_completion_gate_notes_due_reader(tmp_path):
-    import completion_gate as cg
+    cg = _cg  # #770: by-path scripts twin
     ws = _ws_with_terminal_claim(tmp_path)
     (ws / "runs" / "notes-due.yaml").write_text(
         yaml.safe_dump({"due": [{"claim_id": "C-900", "terminal": "PROVEN"}]}),
@@ -84,13 +96,13 @@ def test_completion_gate_notes_due_reader(tmp_path):
 
 
 def test_completion_gate_passes_when_no_queue(tmp_path):
-    import completion_gate as cg
+    cg = _cg  # #770: by-path scripts twin
     ws = _ws_with_terminal_claim(tmp_path)
     assert cg.notes_due(ws) == [], "absent queue = fail-open (legacy ws)"
 
 
 def test_completion_gate_passes_when_note_written(tmp_path):
-    import completion_gate as cg
+    cg = _cg  # #770: by-path scripts twin
     ws = _ws_with_terminal_claim(tmp_path)
     (ws / "runs" / "notes-due.yaml").write_text(
         yaml.safe_dump({"due": [{"claim_id": "C-900"}]}), encoding="utf-8")

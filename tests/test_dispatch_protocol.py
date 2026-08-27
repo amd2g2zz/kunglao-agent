@@ -237,7 +237,6 @@ class TestDispatchMustStop:
         )
 
     def test_must_stop_unit_match(self) -> None:
-        sys.path.insert(0, str(REPO_ROOT / "hooks"))
         import importlib
         import dispatch_gate as dg
         importlib.reload(dg)

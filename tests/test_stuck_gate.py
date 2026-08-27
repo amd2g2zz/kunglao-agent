@@ -14,7 +14,6 @@ from pathlib import Path
 
 # scripts/ -> kunglao-agent/ ; hooks/ sits beside scripts/
 _SKILL = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_SKILL / "hooks"))
 
 import worker_budget as wb  # noqa: E402
 import worker_pulse as wp   # noqa: E402

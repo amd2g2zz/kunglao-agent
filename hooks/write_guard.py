@@ -56,7 +56,8 @@ SKILL_DIR = Path(__file__).resolve().parent.parent
 # lib_kunglao ambiguity — #568 lesson), so scripts/ is ensured first
 # (position-stable) and hooks/ move-to-front LAST lands it in front.
 ensure_scripts_path()
-ensure_on_path(SKILL_DIR / "hooks", front=True)
+# #770: position-stable membership (front=True reordered shared-name twins);
+ensure_on_path(SKILL_DIR / "hooks")
 
 RC_ALLOW = 0
 RC_BLOCK = 2
@@ -142,7 +143,8 @@ def _read_payload() -> dict:
 def resolve_workspace(payload: dict) -> Path | None:
     """cwd (or the target's ancestor) that carries kunglao workspace markers."""
     try:
-        from lib_kunglao import resolve_workspace as _rw
+        from _path_hygiene import load_hooks_lib  # #770 canonical twin bind
+        _rw = load_hooks_lib().resolve_workspace
     except Exception:  # noqa: BLE001 — degrade to the local walk below
         _rw = None
     if _rw is not None:

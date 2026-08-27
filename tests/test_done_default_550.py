@@ -17,9 +17,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(ROOT / "hooks"))
 
-import lib_kunglao  # noqa: E402
+# #770: this suite exercises the hooks TWIN of lib_kunglao
+# (scan_done_artifact_violations lives only there). Bind it by path under an
+# isolated module name instead of relying on sys.path race order (#762).
+import importlib.util
+
+_lk_spec = importlib.util.spec_from_file_location(
+    "hooks_lib_kunglao", ROOT / "hooks" / "lib_kunglao.py")
+lib_kunglao = importlib.util.module_from_spec(_lk_spec)
+sys.modules["hooks_lib_kunglao"] = lib_kunglao
+_lk_spec.loader.exec_module(lib_kunglao)
 
 
 def _mk_done(ws: Path, stem: str, tail: str = "", artifacts: str | None = None) -> Path:

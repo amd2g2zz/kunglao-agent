@@ -13,17 +13,25 @@ from pathlib import Path as _P
 
 from _path_hygiene import ensure_on_path  # #671 sys.path hygiene authority
 
-_HERE = str(_P(__file__).resolve().parent)
-# Order-robust bootstrap (#568 CI regression): MOVE our dir to the FRONT
-# (a bare conditional insert leaves an earlier scripts/ insert winning, so
-# `from lib_kunglao import ...` resolves to scripts/lib_kunglao.py — which
-# lacks scan_active_workers — and standalone collection dies).
-# #671: move-to-front via the hygiene authority (front=True: remove any
-# copy, insert once at [0]) — the ONLY front=True call site; every other
-# membership call stays position-stable by design.
-ensure_on_path(_HERE, front=True)
+_HERE = _P(__file__).resolve().parent
+# #770: position-stable membership only. As a standalone script python
+# already puts this file's dir first; the old front=True move-to-front
+# re-ordered SHARED-name twins (completion_gate/lib_kunglao/heartbeat_touch)
+# ahead of scripts/ for every later bare import in-process.
+ensure_on_path(str(_HERE))
 
-from lib_kunglao import scan_active_workers  # noqa: E402,F401  # AC-3 wiring (#444)
+# The hooks twin of lib_kunglao is bound BY PATH under an isolated module
+# name: a bare `from lib_kunglao import ...` resolves by sys.path order, and
+# under the canonical ordering (pytest.ini: scripts before hooks) it binds
+# the scripts twin — which lacks scan_active_workers (#762 convention).
+import importlib.util as _ilu
+
+_lk_spec = _ilu.spec_from_file_location("_worker_budget_lib_kunglao",
+                                        _HERE / "lib_kunglao.py")
+_lk_mod = _ilu.module_from_spec(_lk_spec)
+sys.modules.setdefault("_worker_budget_lib_kunglao", _lk_mod)
+_lk_spec.loader.exec_module(_lk_mod)
+scan_active_workers = _lk_mod.scan_active_workers  # noqa: F401  AC-3 wiring (#444)
 from status_defs import TERMINAL  # noqa: E402,F401  # #34 pin: the shim re-affirms the single status source (core already puts scripts/ on sys.path)
 from worker_budget_core import *  # noqa: E402,F401,F403
 from worker_budget_core import _claim_statuses  # noqa: E402,F401  # underscore names skip star-import; re-export for the #532 backstop tests

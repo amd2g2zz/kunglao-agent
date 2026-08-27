@@ -225,3 +225,44 @@ def test_real_hook_entry_leaves_sys_path_unchanged(tmp_path: Path, hygiene):
     snap = list(sys.path)
     cg._kunglao_active(tmp_path)
     assert sys.path == snap
+
+
+# ---------- #770: test-side hooks/ inserts + collision-order pins ----------
+
+# The ini (pytest.ini pythonpath) is the ONLY sanctioned insertion point for
+# hooks/. A bare top-level insert inside a test module reorders the shared-
+# name twins for every suite collected AFTER it (#770's exact defect).
+TOPLEVEL_HOOKS_INSERT_RE = re.compile(
+    r'^sys\.path\.insert\([^\n]*(?:[\'"]hooks[\'"]|[\/]+hooks)\)')
+
+
+def scan_tests_toplevel_hooks_inserts() -> list[str]:
+    out: list[str] = []
+    for py in sorted((ROOT / "tests").glob("*.py")):
+        text = py.read_text(encoding="utf-8", errors="replace")
+        for i, line in enumerate(text.splitlines(), 1):
+            if TOPLEVEL_HOOKS_INSERT_RE.match(line):
+                out.append(f"tests/{py.name}:{i}")
+    return out
+
+
+def test_no_test_module_inserts_hooks_at_toplevel():
+    """A top-level hooks insert flips completion_gate / heartbeat_touch /
+    lib_kunglao bindings for every later-collected suite. Load hook modules
+    by path under an isolated name (#762 convention; see lib_kunglao
+    consumers) instead."""
+    violations = scan_tests_toplevel_hooks_inserts()
+    assert not violations, (
+        f"{len(violations)} top-level hooks/ sys.path.insert site(s) under "
+        f"tests/ — they reorder shared-name module resolution (#770): "
+        f"{violations}")
+
+
+def test_collision_order_predicate():
+    """The conftest teardown guard's predicate: any hooks dir above any
+    scripts dir means the twins shadow their scripts originals."""
+    from _path_hygiene import collision_order_inverted as inv
+    assert inv(["x", "/a/hooks", "/b/scripts"])          # flipped end-state
+    assert not inv(["/b/scripts", "/a/hooks"])           # healthy (ini order)
+    assert not inv(["/a/hooks"])                         # no collision pair
+    assert not inv([])                                   # empty session path

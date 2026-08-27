@@ -28,7 +28,6 @@ import time
 from pathlib import Path
 
 _HERE = Path(__file__).parent
-sys.path.insert(0, str(_HERE.parent / 'hooks'))
 sys.path.insert(0, str(_HERE.parent / 'scripts'))
 import yaml  # noqa: E402
 from worker_budget import check_agent_type, pre_check  # noqa: E402

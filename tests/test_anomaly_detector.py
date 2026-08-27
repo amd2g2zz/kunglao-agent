@@ -30,8 +30,6 @@ SCRIPTS = ROOT / "scripts"
 HOOKS = ROOT / "hooks"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
-if str(HOOKS) not in sys.path:
-    sys.path.insert(0, str(HOOKS))
 
 
 # ---------- helpers ----------

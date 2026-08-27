@@ -22,9 +22,17 @@ import pytest
 _HERE = Path(__file__).parent
 SCRIPTS = _HERE.parent / "scripts"
 HOOKS = _HERE.parent / "hooks"
-sys.path.insert(0, str(SCRIPTS))
+# #770: bind the scripts TWIN by explicit path (#762 convention) — the ini
+# orders hooks before scripts, so a bare import of this shared name resolves
+# to the hooks side and is NOT what this suite exercises.
+import importlib.util
 
-import completion_gate as cg  # noqa: E402  (scripts/ on sys.path)
+_cg_spec = importlib.util.spec_from_file_location("completion_gate_scripts", SCRIPTS / "completion_gate.py")
+cg = importlib.util.module_from_spec(_cg_spec)
+import sys as _sys
+_sys.modules["completion_gate_scripts"] = cg
+_cg_spec.loader.exec_module(cg)
+
 
 
 # ---------------------------------------------------------------------------

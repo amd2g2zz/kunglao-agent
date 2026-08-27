@@ -42,7 +42,6 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-sys.path.insert(0, str(REPO_ROOT / "hooks"))
 
 # Exact same fixture shape as tests/test_decision_teeth.py::_top1_ws —
 # the authority rank is C-1 > C-2 > C-3, so dispatching C-3 with no
@@ -187,7 +186,6 @@ class TestRetryCounterFirewall:
         assert not counter.exists(), (
             "REJECT must not create or write runs/.retry-counter.yaml "
             "(#604 semantic contamination)")
-        sys.path.insert(0, str(REPO_ROOT / "hooks"))
         from worker_budget import read_retry_counter
         assert read_retry_counter(str(ws)) == {}
 
@@ -204,7 +202,6 @@ class TestRetryCounterFirewall:
             "the ledger — not the counter — is the durable record of the loop")
         assert not (ws / "runs" / ".retry-counter.yaml").exists(), (
             "3 REJECTs must still leave the #604 counter untouched")
-        sys.path.insert(0, str(REPO_ROOT / "hooks"))
         from worker_budget import check_max_retries
         ok, _msg = check_max_retries(str(ws), "kunglao-worker-01", "C-3")
         assert ok, (

@@ -23,7 +23,7 @@ from pathlib import Path
 
 import yaml  # noqa: E402
 
-from _path_hygiene import on_path  # noqa: E402  # #671 sys.path hygiene authority
+from _path_hygiene import load_hooks_lib, on_path  # noqa: E402  # #671 sys.path hygiene authority
 
 from status_defs import TERMINAL  # noqa: E402,F401  # single source (#34, #95)
 
@@ -220,9 +220,7 @@ def check_workers_lt_3(paths: dict) -> tuple[bool, str]:
     if not ws:
         return True, ''
     try:
-        with on_path(_SKILL_ROOT / 'hooks'):  # #671 scoped membership
-            from lib_kunglao import scan_active_workers
-            n, _stuck = scan_active_workers(Path(ws))
+        n, _stuck = load_hooks_lib().scan_active_workers(Path(ws))
     except Exception:
         return True, ''  # FAIL_OPEN — never block dispatch on scan failure
     if n >= MAX_WORKERS:
