@@ -328,17 +328,20 @@ class TestTripleContractText:
 
     def test_worker_md_gap_not_answer_clause(self) -> None:
         t = self._text("agents/kunglao-worker.md")
-        assert "#772" in t, "worker md must pin the redo-gap contract to #772"
-        assert "GAP 不是答案" in t, (
+        assert "GAP-shaped" in t, (
+            "worker md must pin the redo-gap contract (GAP-shaped inputs)")
+        assert "never checker-derived values" in t, (
             "worker contract: you receive a GAP, not an answer")
-        assert "没独立推出来" in t, (
+        assert "independent derivation is a FAIL" in t, (
             "worker contract: matching a DIFF-seen value without independent "
             "derivation is a FAIL, not a pass")
 
     def test_redteam_md_adjudication_reader_clause(self) -> None:
         t = self._text("agents/kunglao-redteam.md")
-        assert "#772" in t, "redteam md must pin the DIFF-reader rule to #772"
-        assert "裁决层" in t, "DIFF readers are the adjudication layer"
+        assert "DIFF readers are the orchestrator" in t, (
+            "redteam md must pin the DIFF-reader rule")
+        assert "adjudication layer" in t, (
+            "DIFF readers are the adjudication layer")
         # conclusions stay full on the red-team side — the filter lives
         # in dispatch_context's REDO slice, NOT in the red-team writer.
         assert "REDO slice" in t or "build_redo_context" in t

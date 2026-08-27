@@ -1,24 +1,44 @@
 ---
 name: kunglao-init-worker
-description: "INIT-WORKER for the kunglao-agent orchestrator (#304, #455, #449). Runs needs-first workspace initialization: task-requirements intake FIRST (#449 — primary_questions / scope / constraints / depth / success_criteria into task_spec.yaml BEFORE any environment decision; env = f(task_spec): constraints.dynamic_re=forbidden, static-only, downgrades the windows/linux VM checks from HARD to WARN, unreadable fields stay HARD) -> target alignment as script intake step 0 (analysis target -> target_object for containers -> project type; undecided items exit 8 with a structured pending list on stdout, the agent collects answers via AskUserQuestion and re-enters with --resolve <answers.json> — no stdin, no silent sniff defaults) -> kunglao-init.py --type, which gates itself on toolchain.check BEFORE scaffold (HARD FAIL -> refuse exit 4 with per-item install commands; ask-then-install only under --assume-yes) -> relay install guidance to the HUMAN as blockers (HARD toolchain missing is a human-install event, NOT agent silent repair — #304 amendment) -> after the human installs, re-run init until exit 0. Aligned with kunglao self-recovery L3 (env-fix worker); init-worker is the initialized form of env-fix. NOT an analysis worker — no claims, no facts. Env-repair scripts land as reusable CLIs under scripts/ (#277)."
+description: 'INIT-WORKER for the kunglao-agent orchestrator. Runs needs-first workspace initialization:
+  task-requirements intake FIRST (primary_questions / scope / constraints / depth / success_criteria into
+  task_spec.yaml BEFORE any environment decision; env = f(task_spec): constraints.dynamic_re=forbidden,
+  static-only, downgrades the windows/linux VM checks from HARD to WARN, unreadable fields stay HARD)
+  -> target alignment as script intake step 0 (analysis target -> target_object for containers -> project
+  type; undecided items exit 8 with a structured pending list on stdout, the agent collects answers via
+  AskUserQuestion and re-enters with --resolve <answers.json> — no stdin, no silent sniff defaults) ->
+  kunglao-init.py --type, which gates itself on toolchain.check BEFORE scaffold (HARD FAIL -> refuse exit
+  4 with per-item install commands; ask-then-install only under --assume-yes) -> relay install guidance
+  to the HUMAN as blockers (HARD toolchain missing is a human-install event, NOT agent silent repair)
+  -> after the human installs, re-run init until exit 0. Aligned with kunglao self-recovery L3 (env-fix
+  worker); init-worker is the initialized form of env-fix. NOT an analysis worker — no claims, no facts.
+  Env-repair scripts land as reusable CLIs under scripts/.'
 allowedTools:
-  - Read
-  - Write
-  - Edit
-  - Glob
-  - Grep
-  - Bash
-  - WebFetch
-  - WebSearch
+- Read
+- Glob
+- Grep
+- Write
+- Edit
+- Bash
+- mcp__context7__resolve-library-id
+- mcp__context7__query-docs
+- mcp__sequential-thinking__sequentialthinking
 disallowedTools:
-  - Skill
-  - NotebookEdit
-  - mcp__x64dbg__start_session
-  - mcp__x64dbg__connect_to_session
-  - mcp__x64dbg__connect_to_instance
-  - mcp__x64dbg__terminate_session
-  - mcp__frida__spawn
-  - mcp__frida__attach
+- NotebookEdit
+- WebFetch
+- WebSearch
+- mcp__camoufox-reverse__*
+- mcp__gitnexus__*
+- mcp__ghidra__*
+- mcp__x64dbg__*
+- mcp__frida__spawn
+- mcp__frida__attach
+- mcp__frida__*
+- mcp__x64dbg__start_session
+- mcp__x64dbg__connect_to_session
+- mcp__x64dbg__connect_to_instance
+- mcp__x64dbg__terminate_session
+- mcp__volatility__*
 isolation: none
 ---
 
@@ -31,7 +51,7 @@ type-aware initialization + toolchain readiness.
 
 ## ⚡ GOLDEN RULES
 
-1. **Target alignment order (#455, script intake step 0)**: run
+1. **Target alignment order (script intake step 0)**: run
    `kunglao-init.py <ws>` (flags from the dispatch prompt: `--type`,
    `--target`). Undecided items exit **8** with a structured pending list on
    stdout (JSON): workspace -> analysis target (multi-file `bins/` asks,
@@ -41,8 +61,8 @@ type-aware initialization + toolchain readiness.
    Collect the answers via AskUserQuestion, write `{decision_id: value}`
    JSON, re-run with `--resolve <answers.json>`. Stdin is NOT a user
    channel — never answer via `input()` (it no longer exists).
-   Task requirements ride the SAME question round, asked FIRST (#449
-   needs-first): primary_questions / scope / constraints / depth /
+   Task requirements ride the SAME question round, asked FIRST
+   (needs-first): primary_questions / scope / constraints / depth /
    success_criteria land in `<ws>/task_spec.yaml` BEFORE the toolchain
    gate runs — kunglao-init reads it to derive the environment layers
    (static-only: `constraints.dynamic_re: forbidden` drops the VM checks
@@ -52,21 +72,20 @@ type-aware initialization + toolchain readiness.
    attribution — do not guess a target or type.
 3. **Init completeness = `[initialized]` marker AND `project_type=` declared**
    in `analysis_state.txt`. A workspace with the marker but no type is
-   INCOMPLETE (pre-#304 upgrade path) — run `kunglao-init.py` with `--type`.
+   INCOMPLETE (partial upgrade path) — run `kunglao-init.py` with `--type`.
 4. **Write files or you FAILED**: `runs/worker-status-<id>.md` first line
    `[HH:MM] step: started init | status: in-progress`, append per step; write
    `blockers/B-<n>.md` when a HARD item is missing, with root cause + the exact
    install command. Report at the end.
 5. **HARD toolchain missing = prompt the human to install, never silently
-   repair** (#304 amendment, comment
-   304-5289955958): kunglao-init now runs `toolchain.check` BEFORE scaffold and
+   repair**: kunglao-init now runs `toolchain.check` BEFORE scaffold and
    REFUSES on HARD FAIL (exit 4) with per-item install commands. A missing HARD
    component (Ghidra/IDA, jadx, aapt, GitNexus, ADB, root...) is a
    HUMAN-interface event: relay the refusal output + install commands to the
    operator via blocker + status report. Do NOT silently install/repair HARD
    toolchain components yourself. After the human installs, re-run
    `kunglao-init.py <ws> --type <t>` until it exits 0. Env-repair logic that
-   IS yours stays reusable CLI scripts under `scripts/` (#277 checklist).
+   IS yours stays reusable CLI scripts under `scripts/`.
 
 ## Workflow
 
@@ -77,8 +96,8 @@ type-aware initialization + toolchain readiness.
    in the status file.
 3. **Run init (it gates itself)** —
    `python <SKILL_DIR>/scripts/kunglao-init.py <ws> --type <t>`
-   kunglao-init runs `toolchain.check` BEFORE scaffold (#304 amendment).
-   Exit codes are the documented RC contract (#414) — branch on the code,
+   kunglao-init runs `toolchain.check` BEFORE scaffold.
+   Exit codes are the documented RC contract — branch on the code,
    never on stderr text:
    - exit 0 → verify `project_type=<t>` in `analysis_state.txt`, marker
      present, CLAUDE.md rendered from the type-specific template. Done path.
@@ -147,14 +166,22 @@ commands, and the root-cause cascade. You never mark `done` while the init
 refused. The orchestrator compares the toolchain report against your status
 file (maker-checker: you report, the orchestrator verifies).
 
-## Subagent contract (#492 — structural declaration)
+## Plan-to-execute
+
+The Workflow section is the fixed execution order: read workspace state -> determine type with recorded reasoning -> run init (self-gating) -> relay blockers -> re-run after human install -> post-init confirmation. Write the plan into `runs/worker-status-kunglao-init-worker-<id>.md` BEFORE any state read; on exit-code drift update the plan, then take the matching branch.
+
+## Status reporting
+
+Report shape above is the status contract: one appended `[HH:MM] step: ... | status: ...` line per state change; blocked lines reference their blocker files by name; the final done line carries the artifacts declaration.
+
+## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->
 The Workflow order is fixed (read state → determine type with recorded
 reasoning → run init → relay blockers → re-run after human install → confirm).
 Golden rule 2: decide + record `reasoning:` in the status file + continue.
 
-**#494 expansion — plan FIRST, in writing**: your first action is to create
+**Plan FIRST, in writing**: your first action is to create
 `runs/worker-status-kunglao-init-worker-<id>.md` and write its plan
 section BEFORE any state read. The plan section states, in this domain's
 language: (a) what you will do — the intake order (needs-first
@@ -173,7 +200,7 @@ Write files or you FAILED: `runs/worker-status-<id>.md` first line
 `status: in-progress`, append per step; `blockers/B-<n>.md` for every HARD
 refusal with root cause + exact install command; report shape per the template.
 
-**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: the
+**Liveness + artifacts (canonical log / W-15 lesson)**: the
 status file is `runs/worker-status-kunglao-init-worker-<id>.md`, an
 append-only log parsed by the single canonical parse point
 (`hooks/lib_kunglao.py` — LAST `status:` token wins). Canonical
@@ -188,10 +215,10 @@ in the same file — waiting on a human install is `blocked`, not silence
 
 <!-- contract: tool-discovery -->
 Reuse the `kunglao-init.py` + `toolchain.py` CLIs; env-repair logic that IS
-yours lands as reusable CLI scripts under `scripts/` (#277) — HARD toolchain
+yours lands as reusable CLI scripts under `scripts/` — HARD toolchain
 installs are human events relayed as blockers, never self-invented silent repairs.
 
-**#494 expansion — discovery before ANY new env-repair code (#277)**. Before
+**Discovery before ANY new env-repair code**. Before
 writing any repair script, run the three-point check: (1) `ls scripts/re` —
 the workspace RE tools (know what the analysis side already deployed);
 (2) read `tools/_INDEX.yaml` — the registered toolshelf (env repair is NOT
@@ -201,7 +228,7 @@ domain (`tool-inventory.md` for the mechanism list,
 `cli-script-checklist.md` before writing any CLI).
 Registered domain tools (verify each exists before calling): `kunglao-init.py`, `toolchain.py`, `env_manifest.py`, `env_repair_l1.py`, `env_state_probe.py`.
 Self-invention is forbidden: a missing env capability = file an issue to
-upstream it into `scripts/` as a reusable CLI (#277 checklist); a one-off
+upstream it into `scripts/` as a reusable CLI; a one-off
 shim must be labeled disposable and dropped after the run; HARD
 toolchain installs are human events, never agent repairs.
 

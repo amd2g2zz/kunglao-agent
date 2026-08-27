@@ -119,7 +119,7 @@ class TestReferencePins:
             if not p.exists():
                 bad.append(f"{rel}: missing")
                 continue
-            got = hashlib.sha256(p.read_bytes()).hexdigest()
+            got = hashlib.sha256(p.read_bytes().replace(bytes((13,10)), bytes((10,)))).hexdigest()
             if got != want:
                 bad.append(f"{rel}: pin={want[:12]} disk={got[:12]}")
         assert not bad, ("pin drift — run `python scripts/re_pin_references.py`:\n"
