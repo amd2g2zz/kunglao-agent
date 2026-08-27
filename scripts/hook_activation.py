@@ -686,13 +686,21 @@ def deploy_workspace_copy(ws: Path) -> dict:
     Copies every manifest file (hooks/agents/scaffold closure) into the
     workspace, overwriting stale copies (D3: overwrite + WARN detail);
     identical-sha targets are skipped idempotently. Returns a report dict
-    {copied, skipped, entries}. Fail-loud on unreadable manifest — a
-    silently empty deployment would unregister the gates."""
-    import yaml as _yaml
-    from deploy_manifest import MANIFEST as _MF
+    {copied, skipped, entries, touched, digest}. Fail-loud on unreadable
+    manifest — a silently empty deployment would unregister the gates.
+
+    #783 T5: the deployment leaves the digest CARRIER
+    (<ws>/.claude/deployed-manifest.json) behind — the check-stale third
+    criterion and upgrade's refresh both key off it. The digest is the
+    build_entries() recomputation (the skill-side truth), not the yaml
+    bytes, so a green-repo deploy and a refresh carrier always agree
+    (design: deploy_manifest is the single digest authority)."""
+    from deploy_manifest import (MANIFEST as _MF, build_entries as _build,
+                                 manifest_digest, write_carrier)
 
     if not _MF.is_file():
         raise RuntimeError(f"deployment manifest missing: {_MF}")
+    import yaml as _yaml
     data = _yaml.safe_load(_MF.read_text(encoding="utf-8")) or {}
     ws = ws.resolve()
     copied = skipped = 0
@@ -709,8 +717,12 @@ def deploy_workspace_copy(ws: Path) -> dict:
         shutil.copy2(src, dst)
         copied += 1
         touched.append(str(e["dest"]))
+    entries = _build()
+    carrier = write_carrier(ws, entries)
     return {"copied": copied, "skipped": skipped,
-            "entries": len(data.get("files") or []), "touched": touched}
+            "entries": len(data.get("files") or []),
+            "touched": touched, "digest": carrier["deployed_digest"],
+            "carrier": carrier}
 
 
 

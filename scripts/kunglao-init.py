@@ -1651,6 +1651,13 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
     # previously this stamped its own module location into BOTH the written
     # commands and the checker variable, the self-certifying loop of #752.
     hook_dir = hook_activation._canonical_hooks_dir()
+    # #783 default-flip: init materializes the deployment manifest (hooks +
+    # agents + scaffold closure, WITH the #783 T5 digest carrier) BEFORE any
+    # registration, so bootstrap_observability's register_hooks hits the
+    # phase-2 resolve_deployment inversion and the workspace becomes
+    # self-contained (uv project = workspace). --no-hooks never reaches this
+    # function (deploy_env routes it away) — the opt-out face is unchanged.
+    deployed_manifest = hook_activation.deploy_workspace_copy(ws)
     if hooks_json is not None:
         target = Path(hooks_json).resolve()
         layer = "operator-declared"  # the operator named the file explicitly
@@ -1665,7 +1672,11 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
         target, expected_files=HOOK_FILES,
         workspace=ws, layer=layer)  # no forwarding — derivation inside (#752)
     return {"deployed": True, "target": str(target), "added": added,
-            "selfcheck": selfcheck}
+            "selfcheck": selfcheck,
+            "deployed_manifest": {
+                "entries": deployed_manifest["entries"],
+                "digest": deployed_manifest["digest"],
+            }}
 
 
 def _deploy_agents(ws: Path) -> list[dict]:

@@ -529,6 +529,12 @@ def _is_exempt(rel: str) -> bool:
         return True
     if rel.startswith("runs/upgrade-snapshot.") and rel.endswith(".json"):
         return True
+    # #783 T6: the deployed-refresh forensics dirs (deploy-backup-<ts>/,
+    # deploy-backup-orphan/) are framework-owned writes of the upgrade's own
+    # #791 refresh item — same D4 exemption class as upgrade-snapshot.
+    # Analysis data under runs/ stays byte-protected.
+    if rel.startswith("runs/deploy-backup-"):
+        return True
     return False
 
 
@@ -692,6 +698,50 @@ def _probe_dirty(ws: Path) -> tuple[str, int]:
 
 def _warn_git_skip(surface: str, why: str) -> None:
     print(f"kunglao-upgrade: WARN — {surface} skipped: {why}", file=sys.stderr)
+
+
+def _deploy_drift_now(ws: Path) -> bool:
+    """#783 T5: does this workspace's deployed-copy tree actually need a
+    refresh? Thin read-only face over deploy_manifest.deploy_drift; unreadable
+    probes (no manifest, etc.) answer True — fail towards doing the work."""
+    try:
+        import deploy_manifest as _dm
+        return bool(_dm.deploy_drift(ws).get("drift"))
+    except Exception:  # noqa: BLE001 — fail towards the refresh
+        return True
+
+
+def _refuse_dirty(ws: Path, dirty_n: int) -> int:
+    """#753 B1 refusal face — shared by the main migration path and the
+    #783 early-exit refresh (identical output; guidance pinned by tests)."""
+    _emit_event("gate-dirty", "fail", f"{dirty_n} uncommitted entries")
+    print(f"kunglao-upgrade: REFUSED (RC_DIRTY_WORKSPACE=6) — {ws} has "
+          f"{dirty_n} uncommitted change(s); migrating without a clean "
+          f"rollback anchor is unrecoverable.", file=sys.stderr)
+    print("kunglao-upgrade: commit or stash first, then re-run:",
+          file=sys.stderr)
+    print(f"  git -C {ws} add -A && git -C {ws} commit --no-gpg-sign "
+          f"-m \"checkpoint before kunglao upgrade\"", file=sys.stderr)
+    print(f"  (or) git -C {ws} stash push --include-untracked",
+          file=sys.stderr)
+    return RC_DIRTY_WORKSPACE
+
+
+def _post_state_commit(ws: Path) -> bool:
+    """Land the post-refresh state commit (early-exit refresh only — the
+    main path's variant is guarded inside its atomic finish sequence).
+    WARN-only: a failed commit never flips the exit code."""
+    post = _run_git(ws, "add", "-A")
+    if post.returncode == 0:
+        post = _run_git(ws, *_GIT_IDENTITY, "-m", _POST_STATE_MSG)
+    if post.returncode != 0:
+        tail = (post.stderr or post.stdout or "").strip().splitlines()
+        why = tail[-1] if tail else f"exit {post.returncode}"
+        _warn_git_skip("post-refresh state commit", why)
+        _emit(ws, "git_snapshot_skipped", f"post-state commit: {why}")
+        _emit_event("git-snapshot", "warn", f"post-state skipped: {why}")
+        return False
+    return True
 
 
 def _git_bootstrap_commit(ws: Path, message: str, surface: str,
@@ -1147,6 +1197,50 @@ def upgrade(ws: Path, dry_run: bool = False,
     plan = [(v, fn) for v, fn in MIGRATIONS if _vkey(v) > origin_key]
     if origin_key >= target_key and not plan:
         print(f"kunglao-upgrade: already at version {origin}")
+        # #783 T5 chain-hole: the already-current fast path must still
+        # refresh DEPLOYED framework copies (overwrite semantics are
+        # version-free) — otherwise check-stale's deploy-drift advice
+        # ("run /kunglao-agent:upgrade") would spin without effect. Only
+        # workspaces carrying deployed copies enter this item, and only
+        # when deploy_drift says a write is actually needed — the
+        # no-drift case stays the historic true noop (rc 0, no gate),
+        # pinned by #726's already-current contract.
+        if (ws / ".claude" / "hooks").is_dir() and _deploy_drift_now(ws):
+            if dry_run:
+                item = _item_deployed_refresh(ws, dry=True)
+                print(f"  [{target}] {item}")
+                if items_out is not None:
+                    items_out.append({"name": item, "action": "noop",
+                                       "detail": "dry-run"})
+            else:
+                # #753 B1 gate parity — the refresh writes the tree, so it
+                # needs the same rollback anchor as a migration.
+                gate_state, dirty_n = _probe_dirty(ws)
+                anchor: dict = {"status": "clean"}
+                if gate_state == "dirty":
+                    return _refuse_dirty(ws, dirty_n)
+                if gate_state == "absent":
+                    _emit_event("gate-dirty", "ok", "no git — anchoring first")
+                    anchor = ensure_pre_upgrade_anchor(ws)
+                elif gate_state == "clean":
+                    _emit_event("gate-dirty", "ok", "clean owned repo")
+                else:
+                    _emit_event("gate-dirty", "warn", "probe unreadable")
+                    _warn_git_skip("git status probe unreadable",
+                                   "cannot verify workspace cleanliness")
+                item = _item_deployed_refresh(ws, dry=False)
+                print(f"  [{target}] {item} ok")
+                _emit(ws, "upgrade_item", item)
+                _emit_event("item", "ok", item)
+                if items_out is not None:
+                    items_out.append({"name": item, "action": "applied",
+                                       "detail": "early-exit-refresh"})
+                if anchor.get("status") == "created":
+                    # anchor we created this run: land the post-state commit
+                    # so the tree ends clean (same promise as the main path).
+                    if _post_state_commit(ws):
+                        _emit_event("git-snapshot", "ok",
+                                    f"anchor@{anchor.get('commit')} post-state")
         # #752 D6: a CURRENT-stamped workspace can still carry stale
         # references (mis-wired by a pre-fix tool) — sweep applies here too.
         sweep = _install_reference_sweep(ws)
@@ -1172,17 +1266,7 @@ def upgrade(ws: Path, dry_run: bool = False,
     # User ruling 2026-08-27: 未提交不升、无 git 先锚——坏掉必须能回滚。
     gate_state, dirty_n = _probe_dirty(ws)
     if gate_state == "dirty":
-        _emit_event("gate-dirty", "fail", f"{dirty_n} uncommitted entries")
-        print(f"kunglao-upgrade: REFUSED (RC_DIRTY_WORKSPACE=6) — {ws} has "
-              f"{dirty_n} uncommitted change(s); migrating without a clean "
-              f"rollback anchor is unrecoverable.", file=sys.stderr)
-        print("kunglao-upgrade: commit or stash first, then re-run:",
-              file=sys.stderr)
-        print(f"  git -C {ws} add -A && git -C {ws} commit --no-gpg-sign "
-              f"-m \"checkpoint before kunglao upgrade\"", file=sys.stderr)
-        print(f"  (or) git -C {ws} stash push --include-untracked",
-              file=sys.stderr)
-        return RC_DIRTY_WORKSPACE
+        return _refuse_dirty(ws, dirty_n)
     anchor: dict = {"status": "clean"}
     if gate_state == "absent":
         _emit_event("gate-dirty", "ok", "no git — anchoring first")

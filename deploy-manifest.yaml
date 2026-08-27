@@ -115,7 +115,7 @@ files:
   - src: scripts/deploy_manifest.py
     dest: .claude/scripts/deploy_manifest.py
     kind: scaffold
-    sha256: 15d1a5f04498bcf544c0b73fb2ab49ca4bca3dce0bd1b99bebdce8e87d6813fb
+    sha256: edc62a0032f372e55de319bf059fdc14426221b6d86d90c44bd0e461edf3caf6
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold
@@ -135,7 +135,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: 892c67ab19551671c5bfd2766f2951ee0d8d136b306a78f7369af34b94bea908
+    sha256: e898c01605473e864c0ec649a304c691fb3a9176eb70a50a9a0ac3046f9e84f1
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold

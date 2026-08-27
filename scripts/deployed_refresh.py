@@ -17,6 +17,7 @@ detail) — mirrors agents_refresh posture.
 from __future__ import annotations
 
 import shutil
+import sys
 import time
 from pathlib import Path
 
@@ -98,11 +99,24 @@ def refresh(ws: Path, *, dry: bool = False,
                 continue
             pruned.append(rel)
 
+    # #783 T5: (re)stamp the digest carrier — the workspace-side witness the
+    # check-stale third criterion reads. Computed over the entries this run
+    # deployed (build_entries), so refresh and deploy faces always agree.
+    carrier_digest = None
+    try:
+        carrier = dm.write_carrier(ws, list(entries.values()))
+        carrier_digest = carrier["deployed_digest"]
+    except Exception as exc:  # noqa: BLE001 — WARN-only posture
+        print(f"deployed_refresh: WARN — carrier write failed ({exc!r})",
+              file=sys.stderr)
+
     parts = [f"manifest={len(entries)}"]
     if modified:
         parts.append(f"overwritten_modified={len(modified)}")
     if pruned:
         parts.append(f"pruned_orphans={len(pruned)}")
+    if carrier_digest:
+        parts.append(f"carrier={carrier_digest[:8]}")
     return "deployed_refresh(" + ",".join(parts) + ")"
 
 

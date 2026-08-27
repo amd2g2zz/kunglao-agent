@@ -42,6 +42,12 @@ Three terminal outcomes:
   explicitly run upgrade; do not auto-fix.
 - `status="no-stamp"` + `rc=5` → refuse and direct to
   `/kunglao-agent:init <workspace>` first.
+- `status="deploy-drift"` + `rc=5` → refuse. The workspace carries deployed
+  framework copies (`.claude/hooks`) whose digest no longer matches the
+  skill package's deployment manifest (#783 T5) — hand-edited copies,
+  missing digest carrier, or content deployed by an older skill build.
+  Same remediation: `/kunglao-agent:upgrade <workspace>` (its refresh
+  restores the copies and re-stamps the carrier), then re-run the gate.
 
 The gate runs in <50ms and produces a parseable contract — agents should
 call it once at entry rather than reasoning about stamps themselves.

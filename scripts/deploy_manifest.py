@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import re
 import sys
 from pathlib import Path
@@ -77,6 +78,115 @@ def build_entries() -> list[dict]:
         e["dest"] = f".claude/{parts[0]}/{parts[1]}"
         e["sha256"] = _sha(ROOT / e["src"])
     return ents
+
+
+# ---------------------------------------------------------------------------
+# #783 T5: deployed-manifest carrier + drift check
+# ---------------------------------------------------------------------------
+
+CARRIER_REL = ".claude/deployed-manifest.json"
+
+
+def load_manifest_entries() -> list[dict]:
+    """The committed deploy-manifest.yaml entries (the audited D1 contract).
+    Raises when the manifest is unreadable — a silently empty entry set would
+    stamp a lying carrier."""
+    import yaml
+    data = yaml.safe_load(MANIFEST.read_text(encoding="utf-8")) or {}
+    return list(data.get("files") or [])
+
+
+def manifest_digest(entries: list[dict]) -> str:
+    """THE #783 T5 digest algorithm — sha256 over the dest+sha256 entry
+    pairs concatenated in dest-sorted order. Single source: every consumer
+    (deploy_workspace_copy, deployed_refresh, check-stale) calls THIS, so
+    the workspace carrier, the skill-side expectation and the observed
+    bytes always speak the same language. Order-independence (dest sort)
+    makes the digest stable against manifest reordering."""
+    h = hashlib.sha256()
+    for e in sorted(entries, key=lambda x: str(x.get("dest", ""))):
+        h.update(str(e.get("dest", "")).encode("utf-8"))
+        h.update(str(e.get("sha256", "")).encode("utf-8"))
+    return h.hexdigest()
+
+
+def deployed_carrier_path(ws: Path) -> Path:
+    return Path(ws) / CARRIER_REL
+
+
+def write_carrier(ws: Path, entries: list[dict]) -> dict:
+    """Stamp the deployment carrier recording what was just written into
+    <ws>/.claude/ (both writer faces: deploy_workspace_copy at init,
+    deployed_refresh at upgrade)."""
+    import time
+    carrier = {
+        "schema_version": 1,
+        "deployed_digest": manifest_digest(entries),
+        "entries": len(entries),
+        "deployed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    path = deployed_carrier_path(ws)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(carrier, indent=2) + "\n", encoding="utf-8")
+    return carrier
+
+
+def observed_workspace_digest(ws: Path, entries: list[dict]) -> str | None:
+    """Digest over the workspace's ACTUAL deployed bytes for the manifest
+    dest set (newline-normalized like the manifest shas). Returns None when
+    any declared dest is missing — a hole is drift by definition."""
+    seen: list[dict] = []
+    for e in entries:
+        f = Path(ws) / str(e["dest"])
+        if not f.is_file():
+            return None
+        seen.append({"dest": e["dest"], "sha256": _sha(f)})
+    return manifest_digest(seen)
+
+
+def deploy_drift(ws: Path) -> dict:
+    """#783 T5 three-leg drift check for a copies-present workspace.
+
+    Legs (all must hold for 'current'):
+      carrier-present — <ws>/.claude/deployed-manifest.json exists and
+                        parses (pre-T5 deploys and hand-deletions land here);
+      carrier-fresh   — carrier digest == current manifest digest (catches
+                        same-version skill-content moves);
+      bytes-fresh     — digest recomputed over the workspace's deployed
+                        files == current manifest digest (catches hand
+                        tampering; makes the T6 tamper e2e observable).
+
+    Returns {"drift": bool, "reason": str|None, "observed": str|None,
+             "expected": str, "carrier_digest": str|None}. Callers gate on
+    `<ws>/.claude/hooks` being a directory BEFORE calling (legacy
+    workspaces without deployed copies never enter this criterion).
+    """
+    expected = manifest_digest(build_entries())
+    out: dict = {"drift": False, "reason": None, "observed": None,
+                 "expected": expected, "carrier_digest": None}
+    path = deployed_carrier_path(ws)
+    carrier_digest = None
+    if path.is_file():
+        try:
+            carrier_digest = str(json.loads(
+                path.read_text(encoding="utf-8")).get("deployed_digest"))
+        except (json.JSONDecodeError, OSError):
+            carrier_digest = None
+    if carrier_digest is None:
+        out.update(drift=True, reason="carrier-missing")
+        return out
+    out["carrier_digest"] = carrier_digest
+    if carrier_digest != expected:
+        out.update(drift=True, reason="carrier-stale")
+        return out
+    observed = observed_workspace_digest(ws, build_entries())
+    out["observed"] = observed
+    if observed is None:
+        out.update(drift=True, reason="copy-missing")
+        return out
+    if observed != expected:
+        out.update(drift=True, reason="copy-drift")
+    return out
 
 
 def render_yaml(entries: list[dict]) -> str:

@@ -39,7 +39,7 @@ verbatim:
 | 0 | all | success — `check-stale`: status=current; `upgrade`: migrated / already-current / dry-run plan printed | none |
 | 3 | `upgrade` | workspace has no version stamp | run `/kunglao-agent:init <workspace>` |
 | 4 | `upgrade` | iron-rule violation — the seven user-data dirs drifted byte-wise; pre-upgrade snapshot left on disk | inspect the snapshot, restore externally, re-run |
-| 5 | `analysis`, `resume`, `check-stale` | stale workspace — version stamp trails the skill package (or unparseable) | run `/kunglao-agent:upgrade <workspace>` first |
+| 5 | `analysis`, `resume`, `check-stale` | stale workspace — version stamp trails the skill package (or unparseable), or deployed framework copies drifted from the deployment manifest (`status=deploy-drift`, #783) | run `/kunglao-agent:upgrade <workspace>` first |
 | 6 | `analysis` (entry gate), `upgrade` (dirty owned repo) | `analysis`: heartbeat verify failed; `upgrade`: owned repo dirty | `analysis`: run `/kunglao-agent:resume` for re-arm; `upgrade`: commit/stash then re-run |
 | 7 | `upgrade` | incomplete — migration applied but finish sequence aborted | re-run `/kunglao-agent:upgrade <workspace>` |
 

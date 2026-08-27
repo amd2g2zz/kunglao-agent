@@ -130,7 +130,7 @@ def cmd_check_stale(args) -> int:
     JSON envelope:
 
         {
-          "status":     "stale" | "current" | "no-stamp",
+          "status":     "stale" | "current" | "no-stamp" | "deploy-drift",
           "rc":         0 | 5,
           "workspace_stamp": "0.1.0" | null,
           "skill_version":   "0.1.3",
@@ -175,6 +175,33 @@ def cmd_check_stale(args) -> int:
         }
         print(json.dumps(envelope, ensure_ascii=False))
         return RC_STALE_WORKSPACE
+    # #783 T5 third criterion: deployed framework copies are present
+    # (phase-2 semantics) — the manifest digest decides, not just the stamp.
+    # Priority: no-stamp > stale(version) > deploy-drift > current (a
+    # version upgrade overwrites the copies, so stale wins on purpose).
+    if (ws / ".claude" / "hooks").is_dir():
+        import deploy_manifest as deploy_manifest
+        try:
+            drift = deploy_manifest.deploy_drift(ws)
+        except Exception as exc:  # noqa: BLE001 — fail loud-ish, stay a gate
+            drift = {"drift": True, "reason": f"probe-error:{exc}",
+                     "observed": None, "expected": None,
+                     "carrier_digest": None}
+        if drift.get("drift"):
+            envelope = {
+                "status": "deploy-drift",
+                "rc": RC_STALE_WORKSPACE,
+                "workspace_stamp": ws_v,
+                "skill_version": skill_v,
+                "drift_reason": drift.get("reason"),
+                "deployed_digest": drift.get("carrier_digest"),
+                "observed_digest": drift.get("observed"),
+                "skill_manifest_digest": drift.get("expected"),
+                "advice": f"run /kunglao-agent:upgrade {ws} first "
+                          f"(framework copies drifted)",
+            }
+            print(json.dumps(envelope, ensure_ascii=False))
+            return RC_STALE_WORKSPACE
     envelope = {
         "status": "current",
         "rc": 0,
