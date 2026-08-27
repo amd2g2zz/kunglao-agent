@@ -194,6 +194,7 @@ EMIT_ACTIONS = [
     "must_stop",
     "plan_stall",
     "priority_deviation",
+    "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims

@@ -187,6 +187,16 @@ above), received by the orchestrator through the dispatch return (final
 report) — the reliable channel for an isolated subagent. SendMessage to the
 orchestrator remains permitted (not instructed).
 
+**DIFF readers are the adjudication layer, not the next maker (#772)**: your
+DIFF's读者是 orchestrator 的裁决层，不是下一版 maker prompt 的素材。Do NOT
+shorten, vague-out, or omit your derived values to "protect" a redo worker —
+结论行仍要写全（裁决需要 exact values to compare maker vs checker; a blurred
+DIFF breaks adjudication itself). The leak protection lives DOWNSTREAM in
+dispatch_context's REDO slice (`build_redo_context`, scripts/dispatch_context.py,
+#772): it mechanically withholds your derivation values from redo prompts while
+keeping your GAP shapes. You write for the judge; the slice writes for the
+redone worker.
+
 ## Verdict-layer mode (verification consolidation, issue #240)
 
 The orchestrator dispatches this agent in ONE of two modes via the `--target`

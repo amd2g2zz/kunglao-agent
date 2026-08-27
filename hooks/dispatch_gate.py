@@ -796,6 +796,87 @@ def _tools_rack_gate(payload: dict, prompt_text: str) -> int | None:
         f"in-process interpreters; that output is untrusted by design.")
 
 
+# ===================== #772 redo-leak WARN (L4) =====================
+
+# A prompt wearing a redo marker is subject to the GAP-ONLY contract (#772):
+# it must carry WHERE the prior attempt diverged, never the red team's
+# derived values. This face is a HEURISTIC tripwire — value-string overlap
+# between the prompt and the latest red-team DIFF. WARN, never REJECT:
+# false positives (a year, an unrelated constant) are far too costly for a
+# hard block, so the orchestrator self-checks instead.
+REDO_MARKERS = ("redo", "重做")
+REDO_DIFF_GLOB = "verify-redteam-*.md"
+_REDO_LEAK_NUM_RE = re.compile(r"\d{4,}")       # >=4-digit numbers
+_REDO_LEAK_HEX_RE = re.compile(r"\b[0-9a-fA-F]{16,}\b")  # >=16-char hex
+
+
+def _diff_value_strings(diff_text: str) -> list[str]:
+    """Extract candidate answer strings from a red-team DIFF."""
+    return _REDO_LEAK_NUM_RE.findall(diff_text) \
+        + _REDO_LEAK_HEX_RE.findall(diff_text)
+
+
+def _latest_redteam_diff_text(ws: Path) -> str | None:
+    """Most recently written runs/verify-redteam-*.md body, or None."""
+    runs = ws / "runs"
+    if not runs.is_dir():
+        return None
+    try:
+        hits = sorted(runs.glob(REDO_DIFF_GLOB),
+                      key=lambda p: p.stat().st_mtime)
+        if not hits:
+            return None
+        return hits[-1].read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def _redo_leak_check(ws: Path, prompt_text: str,
+                     claim_id: str | None = None) -> None:
+    """#772 L4: WARN-only leak heuristic on redo-marked dispatch prompts.
+
+    Fires pre-activation (rides the #567/#760 structural corridor) when the
+    prompt carries a redo/重做 marker AND overlaps the latest verify-redteam
+    DIFF on >=4-digit numbers or >=16-char hex strings. Both faces (stderr +
+    hookSpecificOutput.additionalContext) carry the overlap so the
+    orchestrator can see exactly which strings tripped and re-derive the
+    redo input via scripts/dispatch_context.py --redo-diff. Returns rc=0
+    path always — this function NEVER blocks."""
+    lowered = (prompt_text or "").lower()
+    if not any(m in lowered for m in REDO_MARKERS):
+        return
+    diff_text = _latest_redteam_diff_text(ws)
+    if not diff_text:
+        return
+    overlaps = sorted({v for v in _diff_value_strings(diff_text)
+                       if v in (prompt_text or "")})
+    if not overlaps:
+        return
+    sample = ", ".join(overlaps[:5])
+    print(
+        f"dispatch_gate: WARN redo-leak (#772) — redo-marked dispatch "
+        f"prompt overlaps the latest red-team DIFF on {len(overlaps)} "
+        f"value string(s): [{sample}]. Redo prompts must be GAP-ONLY "
+        f"(WHERE it diverged, never the verifier's derived answer). "
+        f"Re-check build_redo_context output before sending.",
+        file=sys.stderr, flush=True,
+    )
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": (
+                f"dispatch_gate: WARN redo-leak (#772). The redo-marked "
+                f"prompt carries value string(s) also present in the latest "
+                f"runs/verify-redteam-*.md: [{sample}]. Per #772 a redo "
+                f"dispatch must carry GAP shapes only — build the redo "
+                f"input with `dispatch_context.py <ws> --redo-diff <file>` "
+                f"and strip derived values."),
+        },
+    }, ensure_ascii=False), flush=True)
+    _emit_trace(ws, "redo_leak_warn", claim_id or "(no claim)",
+                f"overlaps={len(overlaps)}; sample={sample}")
+
+
 def main() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -837,6 +918,9 @@ def main() -> int:
         rc = _tools_rack_gate(payload, prompt_text)
         if rc is not None:
             return rc
+        # #772 L4: redo-marked prompts overlapping red-team DIFF value
+        # strings draw a WARN (never REJECT) — same structural corridor.
+        _redo_leak_check(ws, prompt_text, claim_id)
 
     if not _kunglao_active(ws):
         return 0  # kunglao-agent not activated or expired — hooks sleep

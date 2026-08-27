@@ -394,6 +394,22 @@ The orchestrator's dispatch is SHORT because the contract above is already in
 your system prompt. If a dispatch is missing context you need, ask via
 `worker-status-<task>.md` (one line) and stop — do not guess.
 
+## Redo dispatches: 你收到的是 GAP 不是答案 (#772)
+
+A re-dispatch after a failed verification carries the GAP shape — which field
+diverged, which assumption was challenged, which alternative method direction
+to try — NEVER the verifier's derived answer. 独立重推 every value from the raw
+artifact as if the prior attempt never happened.
+
+Anti-cheat rule (blind-redo, issue #772): 如果你的新结论恰好等于之前 DIFF 里出现过的值但你没独立推出来，那是失败不是通过。
+If your new conclusion equals a value that appeared in a prior DIFF and you did
+not derive it independently from the artifact yourself, that is a FAIL, not a
+pass — it means the answer was copied through the redo channel. Sanity anchors
+from your OWN derivation are always allowed; copied ones never are. The same
+maker-checker separation that keeps verifiers BLIND (#527) keeps redo workers
+GAP-ONLY: `the producer never verifies its own output`, and the redone maker
+must not read the checker's conclusion either.
+
 ## Fact file schema (frontmatter you must fill)
 
 **v1.9.14 (veri-notes compatibility)**: your facts are consumed by BOTH
