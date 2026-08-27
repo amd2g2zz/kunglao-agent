@@ -6,27 +6,393 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
-## [0.1.1] - 2026-08-17
+## [0.1.3] - 2026-08-25
 
-### Added
-- Subcommand UX + guided entry (#413): plugin moved to the official skills/ layout (#413)
-- /kunglao-agent main entry — prints a subcommand menu on no args and WAITS, never silently runs; unknown subcommand prints the menu plus `unknown: <x>` (#413)
-- /kunglao-agent:init skill — workspace initialization flow, argument-hint `<workspace> [--type windows|linux|android]` (#413)
-- /kunglao-agent:analysis skill — convergence-loop entry, argument-hint `<workspace>` (#413)
-- /kunglao-agent:help skill — subcommand usage list; the full convergence contract moved to skills/kunglao-agent/SKILL.md (#413)
-- argument-hint frontmatter on every skill, shown at autocomplete; README gained a Command Reference table covering all four commands (#413)
-- MCP-first tool-supply (#407): decompiler passes on ida-pro-vm|ghidra MCP registration; CLI (GHIDRA_HOME/idat64) is fallback only; decompiler check deduplicated across windows/linux/android manifests (#407)
-- ask-then-install (#408): init prompts to install missing tools; consent auto-installs per-platform (pip/brew/choco/apt) + registers related MCP + re-probes; IDA never auto-installed (existing MCP URL registered on consent); --assume-yes for CI/headless (#408)
-- New scripts/toolchain_install.py — per-item install commands by platform, mocked-install tests (#408)
-- Release manifest + docs repointed to the moved main skill; structural checks updated (#413)
+### Round 6 — Deployment Inversion, Agent Governance & Web-Lane Depth (2026-08-27)
 
-### Fixed
-- Platform de-hardcoding (#409): analyzeHeadless resolved by sys.platform (.bat on Windows, extensionless on POSIX); venv python resolved by platform from the SKILL-root venv (uv run --project is authoritative) — no more false FAILs on macOS.
-- Hook deployment/check unification (#410): env_check accepts workspace-parent settings.json; unwired hooks are WARN/ASK, not FAIL.
-- Init workspace-path validation (#411): a sample directory passed as the workspace is refused (exit RC_PATH_SHAPE) with guidance; .claude/ stays at the workspace root; sniff reads bins/ only.
-- Init never produces analysis conclusions (#412): seed claims are structural facts only; no family/verdict before the operator defines the task.
-- Exit-code semantics audit (#414): RC matrix pinned by test; argparse usage errors normalized 2→1; cleanup removes only this-run artifacts.
-- Test-suite validity audit (#394): redundant/meaningless tests removed/merged (before/after counts in the PR).
+**Deployment-model inversion (#783)**
+
+- Workspace self-containment: init materializes the deployment manifest into `<workspace>/.claude/` (hooks + subagents + scaffold closure, sha256-guarded); registrations bind to those LOCAL copies with the workspace as project root
+- Upgrade overwrites drifted copies with forensic backups (`runs/deploy-backup-*`) and prunes unknown scaffolding only under double-confirm
+- Pre-inversion workspaces keep byte-identical behavior; inversion activates when copies exist
+
+**Agent definition governance (#790)**
+
+- Zero tracker refs / dated narration; English-only prose (functional CJK trigger keywords kept as machine data)
+- Plan-to-execute + Status reporting contracts on every definition (role-specific on specialists)
+- Capability/tooling matrix authority (docs/agent-tooling-matrix.md): dangerous analysis families explicitly denied per role; Skill default-off except worker/redteam
+- kunglao-redteam dynamic tools unlocked per ruling with WHEN-rules: x64dbg Windows-native targets only, frida native cross-platform and never in the web lane, escalate after static+file-level checks fail, terminate lifecycle
+
+**Web-lane depth**
+
+- JSVMP three-feature triage (`scripts/jsvmp_triage.py`): mechanically flags bytecode-VM bundles (big consumed array + dispatch switch + semantic-free handlers) so AST recovery stops early; full trace/replay pipeline tracked for v0.2
+
+### Round 5 — Closeout Waves A–L (live-run/web live-run root causes, 2026-08-26/27)
+
+**Fixed**
+- hook delivery chain (#752): `canonical_install_root()` — any install dir
+  under `~/.claude/skills/` is durable and self-hosts its hook commands
+  (dev/renamed installs no longer rewire to the stale 0.1.2 canonical);
+  selfcheck re-derives its shape expectation independently (lying-caller
+  FAIL); `install_reference.py` scavenger (mixed-state rewire → 0 stale
+  references); upgrade scans workspace framework files for foreign install
+  references.
+- upgrade execution safety (#753): pre-migration git anchor (dirty → RC=6
+  refuse; no .git → init + pre-upgrade commit; post-upgrade state commit —
+  `git revert HEAD` returns to anchor); structured `[event]` stderr stream
+  (8 nodes — last line before a kill is the death site); /reload-plugins
+  hint (upgrade + init); tail atomicity (summary unemitted → RC_INCOMPLETE=7,
+  never a silent RC_OK).
+- toolchain misjudgment (#756): `_probe_native_so` reads the APK central
+  directory (zipfile) instead of the first 4KB (live-run sample with 60
+  lib/*.so now correctly True); has_native_so wiring pinned; decompiler
+  FAIL text treats Ghidra and IDA as equals.
+- env_check modernization (#757): type/channel-aware checks (android probes
+  no vmware; web omits vm/ghidra rows entirely); MCP registration check
+  (web → camoufox-reverse); blocking vs degraded FAIL tiers (T3-restricted
+  enters the loop; env_check_gate third check fail-open); runtime channel
+  derivation for legacy workspaces; channel=mcp first-class backend
+  (web's dynamic face is the browser, not a command channel);
+  KUNGLAO_VM_HOST consumption narrowed to the vmr backend.
+- deploy-surface parity (#755): upgrade now refreshes what init deploys —
+  agents re-copy (md5-guarded), .mcp.json/env-ledger/toolchain-face
+  backfill, uv sync (python 3.11 pinned via .python-version), install
+  staleness detection; migration registry entry 0.1.4.
+- runtime version + template lifecycle (#758): .python-version 3.11 (CI
+  parity); drift WARN in env_check/upgrade; CLAUDE.md three-segment frame
+  markers; collect-and-merge upgrade (needful/custom sections byte-preserved,
+  frame re-rendered); stamp refresh gated on frame currency (no new stamp
+  over stale prose).
+- sys.path pollution (#770): stray collection-time inserts routed through
+  the #671 hygiene authority; bare imports resolve to the real module.
+
+**Added**
+- heartbeat autonomy (#754, absorbs #616): durable /loop cron
+  (`loop_scheduler.py` writes `<ws>/.claude/scheduled_tasks.json` — survives
+  sessions; init self-writes, #593 red line preserved: registration is not a
+  faked tick); tick-continuity liveness (≥2 ticks at ≤2×interval — the
+  35-min single-tick blind window is closed); --verify mounted at the
+  analysis entry alongside the stale gate.
+- knowledge-sedimentation loop (#762): rollup mechanically triggered from
+  heartbeat_tick claim-terminal detection; Stop gate consumes notes-due
+  (EXIT_NOTES_DUE lists owed claims); worker contract mandates a durable
+  note per finished claim (plan_vs_actual deviations / bonus finds /
+  hypothesis rewrites — telemetry vs knowledge now layered); K3 wired via
+  #759.
+- orchestrator cognition (#759): THINK seat — waiting ticks produce
+  `runs/.think-<ts>.md` (patterns/hypotheses/value; action_taken never
+  EMPTY); value function (`runs/value-weights.yaml` sanctioned channel —
+  one user ruling reorders claims persistently); proactive triggers
+  (stall ≥3 → suggested_searches seeds); K3: note superseding a hypothesis
+  migrates it + emits + lists affected claims.
+- web knowledge layer (#761): web-risk-control.md (signal taxonomy /
+  adversarial decision tree with headless→emulation→headfull escalation /
+  stack fingerprints / locate-by-trigger loop) + web-crawler-engineering.md;
+  sequentialthinking contract as single source (worker complex reasoning +
+  redteam attack-path enumeration); planning state machine + three
+  mechanical replan triggers (revision-N audit trail); recall feedback loop
+  (recall_useful → dictionary demotion suggestions) + joint query; LEARN
+  ladder two-tier internal→WebSearch with URL+date evidence discipline.
+- web JS semantic index (#751): js:semantic-query / js:call-graph tags;
+  gitnexus-query dual-domain produces; quickref index step; route fixtures;
+  web_gitnexus_demo.py (real webcrack transform + gitnexus analyze +
+  buildSignature chain capture).
+- dispatch tool face (#760): tools= prefix mechanically validated against
+  agent allowedTools + §1c write floor (REJECT); TRY ladder boundary —
+  capability mismatch goes straight to ESCALATE (IDA py_eval as shell is a
+  forbidden stopgap); macos labs type (Mach-O, WARN-only);
+  agents/web-re-worker.md — five-step signature localization × camoufox
+  debug surfaces, headless-first + instrumentation-as-first-class rulings
+  encoded, dual precedence with pefile-signature.
+- blind redo (#772): verifier-divergence feedback reaches the re-dispatch
+  prompt as GAP only (where it diverged, never the verifier's derived
+  answer) — REDO slice in dispatch_context, symmetric to #527's BLIND;
+  leak heuristic WARN in dispatch_gate.
+
+
+### Round 1 — Unattended Runtime & Long-Horizon Defects (priority per user)
+
+**Added**
+- worker status contract (#607): unknown statuses (planning/preflight) count
+  ACTIVE — invisible workers reach the stuck list and the #595 event; stuck
+  workers' IN_PROGRESS claims reopen → OPEN (the loop's first machine path
+  out of IN_PROGRESS); backtrack_gate delegates to the canonical parser.
+- drift detection (#612): detect_drift() — stuck + empty evidence → advisory
+  events (runs/.drift-events.jsonl); production had 3 incidents with 0%
+  mechanical detection.
+- monitor wiring (#620 Gap C): heartbeat_tick runs the orphan monitor every
+  tick (#88 advisory frozen — rc never weighs).
+- top-1 REJECT ledger (#603): runs/gate-rejections.jsonl + kunglao_resume
+  consumer; retry-counter firewall pinned (REJECT never trips the #604 breaker).
+- init marker robustness (#625): .kunglao-init.json is the PRIMARY
+  completeness truth (survives YAML rewrites); YAML comment = legacy fallback.
+- orchestrator Bash guard (#608): PreToolUse/Bash WARN on analysis binaries
+  outside .wt-* worktrees (maker-checker, target-based #532-style) + durable
+  event; registered in all four hook tables.
+
+**Fixed**
+- liveness single-source (#597): liveness_policy.py — 10+ _MINUTES constants
+  unified (values unchanged); drift-guard test blocks bare assignments.
+- TTL expiry observability (#613): one-shot .hook-slept.json + stderr WARN.
+- tick rc surfacing (#617): heartbeat_rc reaches the summary line; ALERT
+  banner; alert/first_failure persisted (truncation-immune).
+- verify truthfulness (#609): --verify fails when registered-but-not-ticking
+  (last_tick_ts staleness, fail-closed).
+- prompt command ref (#611): /loop step-3 references the real --json
+  invocation.
+- plain-text crash (#610): priority_ratio default output iterates typed
+  actions (was AttributeError on every non---json run).
+
+### Round 2 — Init Handoff, Contracts & Intake
+
+**Added**
+- init mechanical handoff (#593 #598): init emits the REAL /loop prompt body
+  (via the build_prompt emitter) + exact --verify/--tier commands — both
+  by-design red lines PRESERVED (loop_registered never faked by init; hooks
+  stay dormant until Phase-0 arm).
+- intake preflight (#588 #590): quick_presence() PRESENCE-tier banner in
+  O(seconds) before step-0; preconditions decision group (context-only).
+- notes-due queue + completion reader (#628): rollup Step 2.5 queues terminal
+  claims lacking a durable note; nothing auto-writes (judge-then-revise).
+- closure wiring (#629): feedback.check_stale runs every tick (#88 advisory).
+- renew audit (#619): action=renew event (was_expired/expiry_gap_s) into
+  kunglao_log.
+- REJECT observability (#624): env_check_gate REJECTs leave a persistent
+  trail (both paths).
+
+**Fixed**
+- priority inputs (#594 #596): per-claim depends_on feeds the graph when
+  claim_deps is empty; register PROVEN claims form the terminal set when
+  _INDEX has no rows — fresh workspaces regain ranking gradient.
+- done-requires-artifacts (#550): bare done is a violation, full stop (user
+  ruling 2026-08-25: no legacy path) — the C-400 hole closed at W-15.
+- tool-first honesty (#630): marker must name the MATCHED tool (or
+  none+reasoning); post-side verify_tool_catalog resolves cited names.
+- gate numbering (#563): QUICK_GATES + --quick stable selector;
+  release_check_selfcheck fails loudly on stale workflow gate ids.
+- two-settings-levels doc (#589): README Internals section derived from
+  HOOK_DEPLOYMENT_TARGETS (registry named; HOME exclusion stated).
+
+### Hygiene (ponytail, adjudicated)
+
+- PendingDecisionList → function pair (#582); Classification → NamedTuple
+  view (#581); ledger writer → stdlib WatchedFileHandler, format
+  byte-identical (#584); the 8 kunglao-* entries share _entry.run (#585,
+  limited wave — the 89-file sweep defers to v0.2).
+- Closed as refuted by code facts: #578 #579 #583 (dead-code claims whose
+  cited targets have live callers / don't exist); #620 Gap B wontfix (hash
+  measures change; drift measures stagnation).
+- #580 (StrEnum) deferred to v0.2: blocked on the Python 3.10 floor.
+
+### Policy Decisions
+
+- #550: no legacy-compat for bare done (user ruling 2026-08-25).
+- #593/#598: init NEVER self-activates (both by-design red lines preserved;
+  mechanical handoff instead — adjudication (b)).
+
+### Round 3 — Post-Release Follow-ups (v0.1.3 milestone review)
+
+**Added**
+- anomaly detection layer (#663): `scripts/anomaly_detector.py` —
+  BaselineCorpus dataclass, score_fact (lexical-only when no claim
+  context), scan_anomalies (full 3-dim max per design.md D1), check_fact_anomaly
+  single-fact consumer, _load_baseline (RE-library refs + 2 future
+  sources, fail-open per design.md D5), CLI. `scripts/convergence_check.py`
+  gains `ANOMALY_DETECTED` DRAIN event between GLOBAL_CONTRADICTION and
+  DRAIN_CLEAN (per design.md D4) — anomalies surface as `BLOCKED` with
+  fact_id + score + top_dimension. `scripts/lint_facts.py` schema bump:
+  `VALID_BOUNDARY_TYPE` + `EMPTY_GATE_TYPES` add `'anomaly'`; `ACTIVE_SCHEMA_REV`
+  1 → 2 (additive per design.md D3); template + drift test bumped in lockstep.
+- references/anomaly-baseline.md: baseline corpus sourcing (RE-library refs +
+  prior samples + operator `baseline_corpus:` config), fail-open semantics
+  per design.md D5, operator tuning knobs (`anomaly_threshold` in
+  `analysis_state.txt`), maker-checker boundary (design.md D8 — anomaly is
+  observation, not verdict demotion; co-resident note via
+  `_write_anomaly_note` for analyst review).
+- tests/test_anomaly_detector.py: 9 RED → GREEN cases (RED1-RED6 unit,
+  RED7 convergence_check integration, RED8 claim_migrator invariant,
+  RED9 schema bump). Schema bump consistency for
+  tests/test_fact_schema_rev_536.py and templates/fact-frontmatter.md.
+- hypothesis seed layer (#662): `scripts/hypothesis_seeder.py` — mechanical
+  idempotent PQ scaffold seeder (every task_spec primary_question gets an
+  open `H-NNN` with `pq:<qid>` body marker, `candidates: []`,
+  `claim_id: C-PENDING`; marker lives in the body because HypothesisStore
+  rewrites drop unknown frontmatter keys — design D2). Wired into
+  `digest_build.build_digest` before sec_g (fail-open): seeding is
+  mechanically enforced at EVERY cold start, closing the "LLM must
+  remember to seed" gap. `scripts/convergence_check.py` DRAIN gains
+  `OPEN_HYPOTHESIS_AT_CLOSE` between NOTE_LAYER_GAP and
+  DISCOVERY_UNCONSUMED (#443 additive) — unadjudicated competing
+  explanations at delivery BLOCK convergence pending refute/supersede
+  (#528 terminal paths); decide() output gains open_hypotheses +
+  open_hypothesis_count (dict shape, mirrors anomalies).
+- tests/test_hypothesis_seeder.py: 8 RED → GREEN cases (RED1-RED4 seeder
+  unit, RED5 digest seed-then-list integration, RED6/RED7 convergence DRAIN
+  gate, RED8 scaffold shape). Fold-in cleanup: openspec change
+  issue-663-anomaly-detection archived post-#666-merge.
+- intent-aware strategic stopping (#664): `scripts/completion_gate.py`
+  gains exit code 4 (`INTENT_UNMATCHED`) — at the would-be-PASS point
+  (items closed, defers signed), the gate re-extracts content anchors
+  from `task_text` via #54 F1's `_extract_anchors` and verifies each
+  appears in some `task_spec.yaml` primary_question id or question text.
+  ≥1 unmatched anchor → exit 4 with the unmatched anchors named in the
+  reason. Precedence 3 > 2 > 1 > 4 > 0 (intent check fires only at the
+  would-be-PASS point — item-level defects and unsigned defers strictly
+  outrank it; design.md D1). All paths fail-open (D4): no `workspace_path`,
+  no `task_spec.yaml`, malformed YAML, empty PQs, zero anchors, anchor-
+  module import failure → check skipped, oracle verdict unchanged. CLI
+  verdict map gains `4: "INTENT_UNMATCHED"`; `hooks/completion_gate.py`
+  docstring exit-code table gains the 4 row (D5 — shim logic already
+  blocks on every non-zero exit, so no propagation change). Two new
+  helpers: `_pq_coverage_text(task_spec)` schema-tolerant corpus builder
+  (handles canonical `{id, q}`, legacy one-key `{Q1: text}`, plain-string
+  items, top-level mapping) and `_intent_unmatched(oracle, task_text)`.
+- tests/test_intent_aware_completion.py: 8 RED -> GREEN cases (RED1
+  unmatched-anchor returns 4 + names anchors, RED2 covered anchors ->
+  PASS unchanged, RED3 no workspace_path -> skip, RED4 no/malformed/
+  empty-PQ task_spec -> skip + no crash, RED5 unresolved items outrank
+  intent, RED6 CLI JSON verdict label).
+- apkid pre-scan at android intake (#669): `scripts/apkid_scanner.py`
+  (NEW) - T1-second YARA-based fingerprint scan before jadx dispatch.
+  Wraps `apkid scan --json <apk>`, writes `evidence/apkid.json` with the
+  schema `{tool, version, target, scanned_at, findings,
+  summary{packer,compiler,obfuscator,anti_vm,anti_debug,total},
+  status, reason}`. Fail-open on every layer: missing binary ->
+  `status:unavailable`, non-APK input -> `status:error` (no crash).
+  `scripts/toolchain.py` FIXES + `_STATIC_NEXT_ACTIONS` gain `apkid`
+  (FIXES line is the FIRST tool entry to embed its upstream URL inline
+  - `https://github.com/rednaga/APKiD` - addressing the user's "agents
+  have to search for tool addresses" feedback). `scripts/hypothesis_seeder.py`
+  gains `seed_apkid_candidates(ws)`: the "system optimum" wire per
+  the user's directive - apkid output feeds the EXISTING hypothesis
+  pipeline (pq-family competitor_groups get `apkid:<category>:<rule>`
+  candidates appended when their PQ id/question matches packer /
+  compiler / obfuscator / anti-debug / anti-vm tokens), not a parallel
+  pipe. Idempotent, fail-open. `scripts/kunglao_init.py` android flow
+  Phase 0 invokes the scanner after target alignment, before #670's
+  apk_mem_gate.
+- tests/test_apkid_scanner.py: 7 RED -> GREEN cases (RED1 happy-path
+  parse + summary rollup, RED2 missing-binary -> unavailable, RED3
+  non-APK -> error, RED4 schema shape always populated, RED5 toolchain
+  registers apkid, RED6 hypothesis_seeder appends candidates,
+  RED6b no apkid file -> noop).
+- memory-gated jadx dispatch (#670): `tools/static/apk_mem_gate.py` (NEW)
+  - T1 memory-aware estimator. Calibrated against a single data point
+  (395MB APK / 12GB heap / ~10h GC-thrashed completion): `est =
+  max(4GB, 50 * dex_bytes_total)`, `budget = 0.65 * avail_gb`. Verdict
+  selects dispatch path: `jadx-ok` (budget >= 1.5*est), `targeted-jadx`
+  (est <= budget < 1.5*est -> baksmali xref + per-class jadx), `smali-only`
+  (budget < est -> baksmali + smali semantic), `refuse` (JAR target -
+  pure Java has no smali fallback; analysis cannot proceed). Writes
+  `evidence/apk_mem_gate.json` ALWAYS (fail-open, operator audit). Stdlib
+  memory detection: ctypes GlobalMemoryStatusEx (Windows) / sysconf
+  (POSIX) with 4GB fallback on failure. Operator escape hatch via
+  `analysis_state.txt` (`apk_mem_override=jadx|baksmali|refuse`).
+  Calibration basis string travels in JSON per #54 numeric-fidelity.
+- `tools/static/baksmali_index.py` (NEW) - replaces gitnexus's role for
+  DEX (gitnexus is Java-only). Calls `baksmali list --format json` for
+  class enumeration + per-class `baksmali xref` for call graphs.
+  Emits `evidence/smali_index.json` in gitnexus-shape compat
+  (`{tool, version, target, classes:[{name, methods:[{name, signature,
+  xrefs:{calls, called_by}}]}], scanned_at}`) so downstream consumers
+  (#663 anomaly, #662 hypothesis) don't branch on tool identity. The
+  "system optimum" wire per user's "思考当前体系怎么最优的发挥作用"
+  directive.
+- `scripts/toolchain.py`: FIXES + `_STATIC_NEXT_ACTIONS` gain `baksmali`
+  (URL `https://github.com/baksmali/smali/releases` embedded inline -
+  second tool entry after #669 apkid to carry upstream URL; addresses
+  user's "agents have to search for tool addresses" feedback).
+- `scripts/convergence_check.py`: `Event` enum gains `JADX_INFEASIBLE`
+  (intake-level, NOT in DRAIN - the REFUSE verdict aborts intake BEFORE
+  convergence starts; name exists for observability consistency).
+- tests/test_apk_mem_gate.py: 9 RED -> GREEN cases (RED1 small APK +
+  9.5GB avail -> jadx-ok, RED2 large APK + 1GB avail -> smali-only,
+  RED3 90MB APK + 7.5GB avail -> targeted-jadx, RED4 JAR -> refuse
+  regardless of budget, RED5 dex_bytes_total = sum of dex sizes not zip
+  overhead, RED6 avail_gb fallback on detection failure, RED7
+  calibration_basis always populated, RED8 evidence JSON written even
+  on REFUSE, RED8b operator override apk_mem_override=jadx).
+- tests/test_baksmali_index.py: 4 RED -> GREEN cases (RED1 baksmali
+  missing -> noop + warning, RED2 schema shape, RED3 gitnexus-shape
+  compat, RED4 per-class xref fail-open).
+- Windows GBK subprocess fix (#672, redo of PR #683 on the post-#685
+  base): tests/test_completion_gate.py's three CLI-spawning subprocess
+  calls gain `encoding="utf-8", errors="replace"` — the GBK default
+  codec on Windows crashed `capture_output=True, text=True` on the
+  em-dash in completion-gate reason strings (the #317 canonical
+  safe-default, already the pattern in test_env_check.py:108).
+- CI release-check restoration (dev branch red since #661; 10 root-cause
+  classes fixed in one pass):
+  1. kunglao-init.py `from _entry import run` shadowed the module's own
+     business run(ws, force=...) -> alias _entry_run (#660 dispatcher
+     regression; ~180 cascade failures across init/toolchain/target tests).
+  2. hook_activation.register_hooks missed the orchestrator_tool_guard.py
+     writer call while the registry + self-check expected it (#608 landing
+     gap) -> PreToolUse/Bash entry now written.
+  3. decide() frozen anchor re-pinned at 619ebd3 after the intentional
+     #662/#663/#670 semantics additions (31 cases;
+     tests/decide_anchor_619ebd3.json machine-generated; c5cb1ae anchor
+     recoverable from history).
+  4. Event vocabulary pin gains STUCK_WORKERS_PRESENT (#595),
+     OPEN_HYPOTHESIS_AT_CLOSE (#662), ANOMALY_DETECTED (#663),
+     JADX_INFEASIBLE (#670).
+  5. release-manifest.yaml declares the #670 tools (apk_mem_gate.py,
+     baksmali_index.py) + both gain the #317 UTF-8 stdout guard.
+  6. EMIT_ACTIONS gains apkid_candidates/hypothesis_seed (#662/#669),
+     reject (#233 env gate face), renew (#619 TTL face).
+  7. scripts/README.md catalogs _entry/anomaly_detector/apkid_scanner/
+     hypothesis_seeder; references/_INDEX.md + _INDEX.yaml gain
+     anomaly-baseline.md + mechanisms.md; ext index regenerated.
+  8. Stale test pins brought to current contracts: wire-up entries 10->11
+     + registry set + env_check fixture + heartbeat REGISTRY tuple +
+     worker_budget status_defs import + hooks/lib_kunglao MECHANISMS
+     metadata (#446) + _entry.py docstring discipline + dedup_319
+     scanner exemption + digest_sec_g premise (no-PQ workspace) +
+     proven_backstop module-family scan + suite_health golden mtime
+     refresh (#595 stuck-scan determinism doctrine).
+  9. v012/exit4 replays use sys.executable (the #457 hard pin
+     /usr/local/bin/python3.11 broke the 3.10 job with PermissionError).
+  10. worker_budget.py shim: order-robust path bootstrap (moves hooks/
+     dir to sys.path FRONT — the conditional insert left scripts/
+     winning and lib_kunglao.scan_active_workers unresolvable
+     standalone) + explicit _claim_statuses re-export (underscore names
+     skip star-import) + scripts/kunglao_export.classify platform-stable
+     (as_posix + absolute paths skip the scratch-zone check — the CI
+     /tmp misclassification).
+
+### Round 4 — Android capability-provider registry (#692, batch card 8)
+
+**Added**
+- tools/_INDEX.yaml capability-provider annotations (#692 WP1): opt-in
+  `produces/requires/cost_hint/quality/provider` block structurally linted
+  by tools/validate_index.py (closed requires vocabulary; per-capability
+  quality map); new provider entries jadx-decompile, baksmali-xref,
+  apkid-prescan, gitnexus-query register the D0 capability x provider
+  matrix; tool_search count pins updated deliberately (33 entries).
+- tools/static/dexdc_scanner.py (#692 WP2): dex-decompiler provider wrapper
+  (PyO3 wheel `import dex_decompiler` first, `dex-decompile` CLI fallback)
+  emitting evidence/dexdc_index.json (gitnexus-shape #670 wire) +
+  evidence/dexdc_taint.json (IssueReport face); toolchain FIXES["dexdc"]
+  ToolMeta + NextAction (#680 pattern); release-manifest declared.
+- scripts/route_capability.py provider selection (#692 WP3):
+  select_providers ranks providers quality->cost from workspace state
+  (mem-gate verdict demoted to a jadx provider precondition);
+  scripts/provider_health.py fail-open runtime failure memory flips
+  preference next round; --capability direct-query CLI.
+- dispatch context providers block (#692 WP4): build_dispatch_context
+  carries the ranked provider list + constraints (optional key, #527
+  backward compat) — the worker holds in-flight degradation authority.
+- taint seeds + wiring (#692 WP5):
+  references/re-library/android-fingerprint-seeds.yaml (extensible
+  fingerprint-API seed table, yara-rules lifecycle);
+  hypothesis_seeder.seed_taint_candidates + anomaly_detector.observe_taint;
+  EMIT_ACTIONS "taint_candidates".
+- deobf composition prior (#692 WP6): apkid obfuscator tag raises the
+  string-decrypt/dex-rewrite prior via route capability_suggestions — no
+  fixed deobf stage sequence exists.
+- gitnexus semantic_query (#692 WP7): android:semantic-query declared with
+  the lazy-index precondition (marker evidence/gitnexus_index.json; the
+  selection pass never builds the index).
 
 ## [0.1.2] - 2026-08-23
 
@@ -330,6 +696,28 @@ release (see the mapping table at the end).
   (16-only) → Process.getModuleByName(mod).getExportByName(name), header
   comment notes Requires: frida >= 17 (#356)
 
+## [0.1.1] - 2026-08-17
+
+### Added
+- Subcommand UX + guided entry (#413): plugin moved to the official skills/ layout (#413)
+- /kunglao-agent main entry — prints a subcommand menu on no args and WAITS, never silently runs; unknown subcommand prints the menu plus `unknown: <x>` (#413)
+- /kunglao-agent:init skill — workspace initialization flow, argument-hint `<workspace> [--type windows|linux|android]` (#413)
+- /kunglao-agent:analysis skill — convergence-loop entry, argument-hint `<workspace>` (#413)
+- /kunglao-agent:help skill — subcommand usage list; the full convergence contract moved to skills/kunglao-agent/SKILL.md (#413)
+- argument-hint frontmatter on every skill, shown at autocomplete; README gained a Command Reference table covering all four commands (#413)
+- MCP-first tool-supply (#407): decompiler passes on ida-pro-vm|ghidra MCP registration; CLI (GHIDRA_HOME/idat64) is fallback only; decompiler check deduplicated across windows/linux/android manifests (#407)
+- ask-then-install (#408): init prompts to install missing tools; consent auto-installs per-platform (pip/brew/choco/apt) + registers related MCP + re-probes; IDA never auto-installed (existing MCP URL registered on consent); --assume-yes for CI/headless (#408)
+- New scripts/toolchain_install.py — per-item install commands by platform, mocked-install tests (#408)
+- Release manifest + docs repointed to the moved main skill; structural checks updated (#413)
+
+### Fixed
+- Platform de-hardcoding (#409): analyzeHeadless resolved by sys.platform (.bat on Windows, extensionless on POSIX); venv python resolved by platform from the SKILL-root venv (uv run --project is authoritative) — no more false FAILs on macOS.
+- Hook deployment/check unification (#410): env_check accepts workspace-parent settings.json; unwired hooks are WARN/ASK, not FAIL.
+- Init workspace-path validation (#411): a sample directory passed as the workspace is refused (exit RC_PATH_SHAPE) with guidance; .claude/ stays at the workspace root; sniff reads bins/ only.
+- Init never produces analysis conclusions (#412): seed claims are structural facts only; no family/verdict before the operator defines the task.
+- Exit-code semantics audit (#414): RC matrix pinned by test; argparse usage errors normalized 2→1; cleanup removes only this-run artifacts.
+- Test-suite validity audit (#394): redundant/meaningless tests removed/merged (before/after counts in the PR).
+
 ## [0.1] - 2026-08-16
 
 First public release: a convergence-driven reverse-engineering orchestration
@@ -412,40 +800,3 @@ throughout by mechanical gates.
 
 - Pre-release hygiene batch (#355) — one-off fix logs and session-plan leftovers deleted from docs/, HISTORICAL design docs moved into docs/design/archive/, specs/README broken links fixed (removing the untracked .research-tree-alignment dependency and the "no OpenSpec" contradiction), 51 delivered openspec/changes dirs archived to openspec/archive/, root DESIGN.md ruled HISTORICAL and archived, CHANGELOG v1.8.x mapping section completed, .claude/reviews/ session leftovers removed (git-hooks kept), .gitignore gains .research-tree*/ and .pytest_cache
 - Dead-code removal — memory/ subsystem deleted wholesale (staging/longterm/candidates corpus + memory/scripts distillation pipeline + references/memory-protocol.md, measured zero runtime consumers); the memory_capture ghost entries in hook_activation ALL_HOOKS and cost_gate advice cleared in the same stroke (#355, originally #358 Wave 6)
-
-## Internal version mapping
-
-The v1.8.x / v1.9.x markers in pre-v0.1 in-repo code comments are
-development-era feature-provenance annotations ("this gate landed at
-v1.9.24"), not released versions. They all belong to the v0.1 first-release
-scope, mapped as follows:
-
-| Internal marker | Representative features (not exhaustive) |
-|---|---|
-| v1.8.x | orchestrator failure-mode engineering era (design rationale archived in docs/design/archive/DESIGN.md): v1.8 iterative-deepening tier gating; v1.8.1 C0a PROVEN no-discount + self-cap brake; v1.8.2 F1-F6 failure-mode compact table (SKILL.md §6-pre) + self-cap-safe-prose (§7) + B1c blocker; v1.8.3-5 enforcement-gate suite (troubleshooting/search/active-intervention/backtrack/reuse/hook-activation/ask-for-direction, tests/test_v1_8_enforcement_gates.py); v1.8.15/16 complete-teardown search operator chain (scripts/complete_teardown.py) |
-| v1.9.0-1 | convergence-driven dispatch becomes the default scheduling mode |
-| v1.9.2-7 | failure-blocked claim interception (dispatch_gate), priority-ranking corrections |
-| v1.9.8 | worker_pulse convergence pulse, payload shape adaptation everywhere, fact naming fix |
-| v1.9.12/13/18/25/26 | worktree isolation and worker state ownership (the repeatedly regressed dispatch-loses-monitoring defect class) |
-| v1.9.17 | closeout checklist (guards against premature convergence) |
-| v1.9.19 | superseded-path no-go declaration |
-| v1.9.20/21 | liveness heartbeat (timestamps do not count), sanctioned SendMessage channel, smart ping protocol |
-| v1.9.22 | verifier must be BLIND |
-| v1.9.24 | facts-snapshot HARD-REQUIRED (guards against lost-state deception), best-first bias audit |
-| v1.9.28 | dispatch pre-checks heartbeat aliveness (mechanized into a gate) |
-| v1.9.29 | plan-drift/STALLED/stuck-worker gates, claim-status guard (the most-referenced marker) |
-| v1.9.31 | plan-to-execute gate (#239) |
-| v1.9.32 | tool-first gate (#294) |
-| v1.9.33 | agenttype specialist-first gate (#310) |
-| v1.9.36-38 | heartbeat trio (touch/tick/selfcheck) semantics unified |
-
-Distribution stats (re-measured for #355; scope: git-tracked files, excluding
-the frozen archives openspec/archive + docs/design|devlog archives +
-references/archive, excluding this file itself):
-**v1.9.x: 101 occurrences across 26 files in the live tree** — v1.9.29×26,
-v1.9.24×13, v1.9.8×6, v1.9.28×4, v1.9.25×4, v1.9.13×4, the rest 1-3 each;
-**v1.8.x: 19 occurrences across 8 files in the live tree** — v1.8.2×5,
-v1.8.5×4, v1.8.16×3, v1.8.1×2, v1.8.3×2, v1.8.4×2, v1.8.15×1 (another 22
-occurrences live inside the frozen archives). These comments stay untouched
-per the release decision — they are "when was this introduced" provenance
-anchors, not version declarations.

@@ -113,7 +113,8 @@ def test_references_index_pins_all_reference_files():
         if not p.exists():
             mismatches.append(f"{rel}: missing on disk")
             continue
-        actual = hashlib.sha256(p.read_bytes()).hexdigest()
+        # newline-normalized to match re_pin_references hashing
+        actual = hashlib.sha256(p.read_bytes().replace(bytes((13,10)), bytes((10,)))).hexdigest()
         if actual != expect:
             mismatches.append(f"{rel}: index={expect[:12]} actual={actual[:12]}")
     assert not mismatches, f"digest drift: {mismatches}"

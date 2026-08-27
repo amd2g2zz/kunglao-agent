@@ -41,17 +41,38 @@ Wiring (register_hooks / hook_activation --wire-up, PreToolUse):
 from __future__ import annotations
 
 import json
+import locale
+import os
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
+from _path_hygiene import ensure_on_path, ensure_scripts_path  # #671 authority
+
 SKILL_DIR = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(SKILL_DIR / "scripts"))
-sys.path.insert(0, str(SKILL_DIR / "hooks"))
+# #671: module-level membership via the hygiene authority. Order-faithful to
+# the two bare inserts this replaces: hooks/ ends up AHEAD of scripts/ (the
+# lib_kunglao ambiguity — #568 lesson), so scripts/ is ensured first
+# (position-stable) and hooks/ move-to-front LAST lands it in front.
+ensure_scripts_path()
+# #770: position-stable membership (front=True reordered shared-name twins);
+ensure_on_path(SKILL_DIR / "hooks")
 
 RC_ALLOW = 0
 RC_BLOCK = 2
+
+# #686: opt-in decision-flow trace. stderr is already the block channel, so
+# debug lines are additive and only appear when the env var is set — zero
+# effect on the exit contract otherwise. Exists because the #686 failure
+# (silent allow on must-block writes) was misattributed to the rule layer
+# for days with no in-tree way to see where the decision died.
+_DEBUG = os.environ.get("KUNGLAO_WG_DEBUG") == "1"
+
+
+def _dbg(msg: str) -> None:
+    if _DEBUG:
+        print(f"wg-debug: {msg}", file=sys.stderr)
 
 # The four contract carriers. Resolved by carrier_of(); the INDEX constant
 # exists because facts/_INDEX.md must beat the generic facts/** rule.
@@ -68,24 +89,62 @@ _SHADOW_FILES = ("claim-register.yaml", "analysis_state.txt")
 _SHADOW_RUNS_GLOBS = ("*-verify-*.md", "verify-*.json")
 
 
-def _read_payload() -> dict:
-    """Claude Code hands the hook one JSON object on stdin."""
+def _parse_payload_text(text: str) -> dict:
+    """JSON-parse the decoded stdin text; non-dict JSON degrades to {}.
+
+    #686: a list/scalar payload used to reach main() and crash on
+    payload.get() with an AttributeError traceback (rc=1 class); treat it
+    like every other unparseable payload — "not a file-writing tool call"."""
     try:
-        raw = sys.stdin.read()
+        obj = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return obj if isinstance(obj, dict) else {}
+
+
+def _read_payload() -> dict:
+    """Claude Code hands the hook one JSON object on stdin.
+
+    #686: stdin is read as BYTES and decoded through an explicit charset
+    chain — utf-8 (the Claude Code wire format), then the host locale (the
+    shape every locale-defaulting caller emits, e.g. a cp936/GBK Windows
+    host), then utf-8 with replacement so the JSON structure survives when
+    neither fits. Reading through the text layer used to raise
+    UnicodeDecodeError on the locale step (any non-ASCII byte, e.g. the
+    em-dash in fact bodies, GBK-encoded by the parent), which the bare
+    except swallowed into {} — main() then returned RC_ALLOW before the
+    target was ever known: every must-block carrier write sailed through
+    with rc=0 and empty stderr on cp936 hosts (Linux is utf-8 end-to-end,
+    so CI never saw it). Bytes + chain cannot raise on content."""
+    try:
+        buf = getattr(sys.stdin, "buffer", None)
+        raw = buf.read() if buf is not None else sys.stdin.read()
     except Exception:  # noqa: BLE001 — unreadable stdin is unadjudicable
         return {}
     if not raw.strip():
         return {}
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
+    if isinstance(raw, str):  # detached/replaced stdin with no buffer
+        return _parse_payload_text(raw)
+    text = None
+    for enc in ("utf-8", locale.getpreferredencoding(False)):
+        try:
+            text = raw.decode(enc)
+            _dbg(f"payload decoded as {enc} ({len(raw)} bytes)")
+            break
+        except (UnicodeDecodeError, LookupError):
+            continue
+    if text is None:
+        text = raw.decode("utf-8", errors="replace")
+        _dbg(f"payload decoded via utf-8 replacement ({len(raw)} bytes) — "
+             f"charset mismatch, structure may degrade")
+    return _parse_payload_text(text)
 
 
 def resolve_workspace(payload: dict) -> Path | None:
     """cwd (or the target's ancestor) that carries kunglao workspace markers."""
     try:
-        from lib_kunglao import resolve_workspace as _rw
+        from _path_hygiene import load_hooks_lib  # #770 canonical twin bind
+        _rw = load_hooks_lib().resolve_workspace
     except Exception:  # noqa: BLE001 — degrade to the local walk below
         _rw = None
     if _rw is not None:
@@ -211,36 +270,47 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
     violations: list[str] = []
     from lint_facts import lint_index, lint_workspace
     if carrier == CARRIER_INDEX:
-        violations += [f"lint[{code}] {msg}"
-                       for sev, code, msg in lint_index(shadow / "facts" / "_INDEX.md")
-                       if sev == "error"]
-        return violations
+        leg = [f"lint[{code}] {msg}"
+               for sev, code, msg in lint_index(shadow / "facts" / "_INDEX.md")
+               if sev == "error"]
+        _dbg(f"adjudicate[{carrier}] lint_index leg: {len(leg)} violation(s)")
+        return leg
     if carrier in (CARRIER_FACT, CARRIER_NOTE, CARRIER_REGISTER):
         errors, _warnings = lint_workspace(shadow)
-        violations += [f"lint[{code}] {msg}" for _sev, code, msg in errors]
+        added = [f"lint[{code}] {msg}" for _sev, code, msg in errors]
+        violations += added
+        _dbg(f"adjudicate[{carrier}] lint_workspace leg: {len(added)} "
+             f"violation(s)")
     if carrier in (CARRIER_FACT, CARRIER_NOTE):
         from write_gate import audit_workspace
         target_rel = rel.as_posix()
         target_name = Path(target_rel).name
+        n_gate = 0
         for v in audit_workspace(shadow):
             # Only violations attributable to THE FILE BEING WRITTEN block
             # this call — pre-existing violations elsewhere in the workspace
             # are the auditor's job, not this write's.
             if Path(str(v.get("file", ""))).name == target_name:
+                n_gate += 1
                 violations.append(
                     f"write_gate[{v.get('rule')}] {v.get('detail')}")
+        _dbg(f"adjudicate[{carrier}] write_gate leg: {n_gate} violation(s) "
+             f"attributable to {target_name}")
     if carrier == CARRIER_NOTE:
         try:
             from notes_writer import check_write
             pending_text = (shadow / rel).read_text(
                 encoding="utf-8", errors="replace")
+            msgs = list(check_write(shadow / "notes", pending_text, rel.name))
             violations += [f"supersedes[{i}] {msg}" for i, msg in enumerate(
-                check_write(shadow / "notes", pending_text, rel.name),
-                start=1)]
+                msgs, start=1)]
+            _dbg(f"adjudicate[{carrier}] supersedes leg: {len(msgs)} "
+                 f"violation(s)")
         except Exception as exc:  # noqa: BLE001 — checker crash = fail closed
             violations.append(
                 f"supersedes[?] adjudication crashed "
                 f"({type(exc).__name__}: {exc}); fail-closed.")
+    _dbg(f"adjudicate[{carrier}] total: {len(violations)} violation(s)")
     return violations
 
 
@@ -265,31 +335,43 @@ def main() -> int:
     ti = payload.get("tool_input") or {}
     raw_target = ti.get("file_path")
     if not raw_target:
+        _dbg("exit ALLOW rc=0 — no tool_input.file_path "
+             "(not a file-writing tool call, or unparseable payload)")
         return RC_ALLOW  # not a file-writing tool call
     target = Path(raw_target)
+    _dbg(f"payload tool={payload.get('tool_name')!r} target={target.as_posix()}")
     ws = resolve_workspace(payload)
+    _dbg(f"resolve_workspace -> {ws}")
     if ws is None:
         # Unresolvable workspace: only fail closed when the path SHAPE says
         # contract carrier (looks_like_carrier) — otherwise this hook would
         # block every edit in every non-kunglao repo the user opens.
-        if looks_like_carrier(target):
+        llc = looks_like_carrier(target)
+        _dbg(f"looks_like_carrier -> {llc}")
+        if llc:
             reason = ("write_guard: BLOCK — contract-carrier write in an "
                       "unresolvable workspace (no claim-register.yaml + facts/ "
                       "ancestor). #532 posture is fail-closed: a write we cannot "
                       "adjudicate is a write we do not allow.")
             print(reason, file=sys.stderr)
             _emit_block(None, payload, target.as_posix(), reason)
+            _dbg("exit BLOCK rc=2 — unresolvable workspace, carrier shape")
             return RC_BLOCK
         return RC_ALLOW
     carrier = carrier_of(ws, target)
+    _dbg(f"carrier_of -> {carrier}")
     if carrier is None:
+        _dbg("exit ALLOW rc=0 — target is not one of the four carriers")
         return RC_ALLOW
     text, reason = post_image(payload, target)
+    _img = "unadjudicable" if text is None else f"{len(text)} chars"
+    _dbg(f"post_image -> {_img}" + (f" ({reason})" if text is None else ""))
     if text is None:
         detail = (f"write_guard: BLOCK — cannot reconstruct the post-image "
                   f"({reason}); fail-closed on the {carrier} carrier.")
         print(detail, file=sys.stderr)
         _emit_block(ws, payload, target.as_posix(), detail)
+        _dbg("exit BLOCK rc=2 — post-image unadjudicable")
         return RC_BLOCK
     rel = Path(target).resolve().relative_to(Path(ws).resolve())
     with tempfile.TemporaryDirectory(prefix="kunglao-writeguard-") as tmp:
@@ -301,6 +383,8 @@ def main() -> int:
                       f"({type(exc).__name__}: {exc}); fail-closed.")
             print(detail, file=sys.stderr)
             _emit_block(ws, payload, rel.as_posix(), detail)
+            _dbg(f"exit BLOCK rc=2 — adjudication crashed "
+                 f"({type(exc).__name__}: {exc})")
             return RC_BLOCK
     if violations:
         joined = "\n  - ".join(violations)
@@ -308,7 +392,9 @@ def main() -> int:
                   f"on {rel.as_posix()}:\n  - {joined}")
         print(detail, file=sys.stderr)
         _emit_block(ws, payload, rel.as_posix(), detail)
+        _dbg(f"exit BLOCK rc=2 — {len(violations)} violation(s)")
         return RC_BLOCK
+    _dbg("exit ALLOW rc=0 — adjudication clean")
     return RC_ALLOW
 
 

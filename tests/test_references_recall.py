@@ -305,7 +305,7 @@ class TestCli:
         r = _cli("--list-categories")
         assert r.returncode == 0
         assert "tools (5)" in r.stdout
-        assert "governance (3)" in r.stdout
+        assert "governance (4)" in r.stdout  # +1: mechanisms.md cataloged 2026-08-25
 
     def test_cli_scene_map(self) -> None:
         r = _cli("--scene-map")

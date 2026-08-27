@@ -258,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="pkg-detect",
-        description="package-manager detection (#477)",
+        description="package-manager detection",
     )
     parser.add_argument("--json", action="store_true",
                         help="emit detected managers as JSON")

@@ -903,7 +903,7 @@ def _print_blocked(d: dict) -> None:
     print("  3. next_method         - what DIFFERENT method tests a different assumption?")
     print("                           (literal retry is forbidden; 'method was adequate' only if Q2=justified)")
     print()
-    print("And transduce the failure into typed artifacts (#495 - the analysis does")
+    print("And transduce the failure into typed artifacts (the analysis does")
     print("not unblock without them):")
     print()
     print("  4. validated_capability - what this failure PROVED works (capability ok)")
@@ -920,7 +920,7 @@ def _print_blocked(d: dict) -> None:
     print(f"  python scripts/failure_analysis_gate.py <ws> {cid} --record \\")
     print(f"      --assumption \"...\" --validity not-justified|justified-adequate --next-method \"...\" \\")
     print(f"      --validated-capability \"...\" --identified-obstacle \"...\" \\")
-    print(f"      --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance, #495)")
+    print(f"      --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance)")
     sim = d.get("similar_lessons") or []
     if sim:
         print()
@@ -932,7 +932,7 @@ def _print_blocked(d: dict) -> None:
     fm = _failure_modes_recall()
     if fm:
         print()
-        print("See failure-modes reference (recall #268): " + ", ".join(fm))
+        print("See failure-modes reference (recall): " + ", ".join(fm))
 
 
 def promote_lesson(lesson_path: Path, workspace: Path,
@@ -1016,18 +1016,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--what-happened", default=None,
                         help="free text: what actually happened (#41, required with --outcome)")
     parser.add_argument("--validated-capability", default=None,
-                        help="what this failure PROVED works — capability ok (#495 artifact)")
+                        help="what this failure PROVED works — capability ok (artifact)")
     parser.add_argument("--identified-obstacle", default=None,
-                        help="what specifically blocked you (#495 artifact; auto-promoted to a claim)")
+                        help="what specifically blocked you (artifact; auto-promoted to a claim)")
     parser.add_argument("--source", default=None,
-                        help="provenance of next_method (#495): "
+                        help="provenance of next_method: "
                              "lesson-hit | reference-hit | web-hit | novel-hypothesis")
     parser.add_argument("--lessons", action="store_true",
                         help="aggregate analyses into the global lessons library (#41)")
     parser.add_argument("--search", metavar="KEYWORDS", default=None,
                         help="search the lessons library by keywords/claim-tag (#41)")
     parser.add_argument("--library", default=None,
-                        help="lessons library dir (default: ~/.claude/skills/kunglao-agent/references/lessons)")
+                        help="lessons library dir "
+             "(default: executing install's references/lessons)")
     parser.add_argument("--reflect-queue", default=None,
                         help="/reflect human queue file (default: ~/.claude/learnings-queue.json)")
     parser.add_argument("--json", action="store_true", help="machine-readable output")

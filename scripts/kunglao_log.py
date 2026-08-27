@@ -113,7 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     """Read-only diagnostic CLI. `--tail <ws> [N]` → JSON lines on stdout."""
     ap = argparse.ArgumentParser(
         prog="kunglao_log.py",
-        description="unified event log (#287 sink, #459 read side)")
+        description="unified event log (sink read side)")
     ap.add_argument("--tail", metavar="WORKSPACE", default=None,
                     help="print the most recent N events of this workspace "
                          f"(default {DEFAULT_TAIL}), JSON lines, read-only")

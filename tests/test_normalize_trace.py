@@ -90,9 +90,13 @@ def test_frida_pointer_invariance():
 # ---------- semantic ----------
 
 def test_different_semantic_args_different_hash():
-    # Same api, different NON-pointer arg (path is semantic, kept)
-    t1 = {'api_calls': [{'name': 'CreateFile', 'args': ['path=C:\\foo']}]}
-    t2 = {'api_calls': [{'name': 'CreateFile', 'args': ['path=C:\\bar']}]}
+    # Same api, different NON-pointer arg (path is semantic, kept); the
+    # path values are built with os.sep per #690 (no path literals).
+    import os
+    p1 = "path=" + os.sep + "foo"
+    p2 = "path=" + os.sep + "bar"
+    t1 = {'api_calls': [{'name': 'CreateFile', 'args': [p1]}]}
+    t2 = {'api_calls': [{'name': 'CreateFile', 'args': [p2]}]}
     assert normalize(t1, 'qiling')[0][1] != normalize(t2, 'qiling')[0][1]
 
 

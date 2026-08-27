@@ -44,6 +44,10 @@ sys.path.insert(0, str(SCRIPTS))
 # Sentinels — MUST match the ones used to generate the golden fixtures at
 # e4e70e0 (tests/fixtures/claudemd-golden/). Deterministic across machines,
 # checkouts and python builds so the byte-equivalence proof is portable.
+# 2026-08-26 regen (#728 web labs): fixtures re-rendered through the same
+# sentinel path after the camoufox-reverse row joined the base-template MCP
+# table (required by tests/test_mcp_supply.py test_docs_tables_match_manifest);
+# the diff is exactly that one table row per fixture.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 

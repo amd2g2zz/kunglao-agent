@@ -3,7 +3,7 @@
 """kunglao-init — workspace initialization + re-init protection (phase 3.5, E-init.1-4).
 
 Standalone CLI (not a kunglao.py subcommand, module-design L448):
-    python kunglao-init.py [<workspace>] [--type windows|linux|android]
+    python kunglao-init.py [<workspace>] [--type windows|linux|android|web|macos]
         [--target <bins/ file>] [--resolve <answers.json>] [--force]
         [--hooks-json <path>] [--profile-root <path>]
 
@@ -120,6 +120,7 @@ import os
 import re
 import shutil
 import struct
+import subprocess
 import sys
 import zipfile
 from collections.abc import Collection
@@ -133,6 +134,7 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
+import init_channel_default  # noqa: E402  # #727 channel resolution (local fallback)
 # #408: ask-then-install — interactive install prompts + MCP registration +
 # re-probe (graceful degrade on decline; --assume-yes for CI/headless).
 # #455: the interactive consent channel is gone (no stdin); ask_then_install
@@ -146,7 +148,7 @@ import decision_pending  # noqa: E402
 # pending channel) + the exit-4 human-event lane split (#448 taxonomy).
 import toolchain_negotiation  # noqa: E402
 # F6 (#304 review): init-completeness predicate = single source in init_state.py
-from init_state import VALID_TYPES, is_init_complete, read_project_type  # noqa: E402
+from init_state import VALID_TYPES, is_init_complete, read_project_type, write_init_marker  # noqa: E402
 import mcp_probe  # noqa: E402  (#316: MCP supply manifest/scaffold single source of truth)
 # #454: wiring≠activation — the hooks-deployed output names the activation
 # TTL window from the single source (never a second hardcoded 30).
@@ -166,6 +168,7 @@ import yaml  # noqa: E402  # #455: task_spec.yaml -> CLAUDE.md constraint sectio
 import env_manifest  # noqa: E402
 # #536: template version stamp — single source pyproject.toml, written on
 # the three text carriers at init, verified by hooks_selfcheck/env_check.
+import claudemd_frame  # noqa: E402  (#755 G2: frame marker wrap on render)
 import template_version  # noqa: E402
 # #534: observability lifeline — every init phase emits one structured
 # event under runs/logs/ (scaffold/toolchain/wire-up/cron-verify/render/
@@ -244,12 +247,85 @@ INIT_REPORT_PATH = Path("runs") / ".init-report.json"
 INIT_PHASES = ("scaffold", "toolchain", "wire-up", "cron-verify", "render", "exit")
 
 
+def _parse_init_report_keep() -> int:
+    """#700 D2: KUNGLAO_INIT_REPORT_KEEP int ≥ 1, default 5. Parse
+    failures, zero, negative → default — a mistyped env var must not
+    break init (fail-open class)."""
+    raw = os.environ.get("KUNGLAO_INIT_REPORT_KEEP")
+    if not raw:
+        return 5
+    try:
+        n = int(raw)
+    except ValueError:
+        return 5
+    if n < 1:
+        return 5
+    return n
+
+
+_INIT_ARCHIVE_RE = re.compile(r"\.init-report\.(\d+)\.json$")
+
+
+def archive_previous_init_report(target: Path) -> Path | None:
+    """#700 D1: rotate the existing report at `target` to a fresh numbered
+    sibling (n = max+1) and prune the archive set to KUNGLAO_INIT_REPORT_KEEP.
+    Never raises — history rotation must not break init (spec: rotation
+    never breaks init). Returns the archive path, or None when nothing was
+    rotated. Non-numeric siblings (e.g. user-created `.init-report.abc.json`)
+    are ignored at scan, count, and prune."""
+    if not target.exists():
+        return None
+    parent = target.parent
+    max_n = 0
+    try:
+        for p in parent.iterdir():
+            m = _INIT_ARCHIVE_RE.fullmatch(p.name)
+            if m:
+                n = int(m.group(1))
+                if n > max_n:
+                    max_n = n
+    except OSError:
+        return None
+    archive = parent / f".init-report.{max_n + 1}.json"
+    try:
+        target.replace(archive)
+    except OSError:
+        return None
+    try:
+        print(f"kunglao-init: archived previous init report -> {archive}",
+              file=sys.stderr)
+    except Exception:
+        pass
+    keep = _parse_init_report_keep()
+    try:
+        archives: list[tuple[int, Path]] = []
+        for p in parent.iterdir():
+            m = _INIT_ARCHIVE_RE.fullmatch(p.name)
+            if m:
+                archives.append((int(m.group(1)), p))
+        archives.sort()  # oldest first
+        for _, p in archives[:-keep] if len(archives) > keep else []:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return archive
+
+
 def write_init_report(ws: Path, phases: list[dict], overall: str,
-                      exit_code: int) -> Path | None:
-    """#534: write runs/.init-report.json — the structured init telemetry
-    envelope. Idempotent: overwrites any prior report. Never raises
-    (logging must never break analysis). Returns the path on success,
-    None on OSError (degraded to stderr warning)."""
+                      exit_code: int, *,
+                      channel: dict | None = None) -> Path | None:
+    """#534 + #700 + #727: write runs/.init-report.json — the structured init
+    telemetry envelope. Rotates any prior report to runs/.init-report.{n}.json
+    (n = max+1, pruned to KUNGLAO_INIT_REPORT_KEEP, default 5) so a failed
+    cycle preserves the previous cycle's telemetry for resume (#466).
+    Idempotent modulo the archive. #727: optional channel block
+    (init_channel_default resolution) — omitted when None so pre-#727
+    callers/tests stay byte-identical. Never raises — logging must never
+    break analysis. Returns the path on success, None on OSError (degraded
+    to stderr warning)."""
     try:
         from template_version import read_skill_version
         skill_version = read_skill_version()
@@ -262,9 +338,25 @@ def write_init_report(ws: Path, phases: list[dict], overall: str,
         "overall": overall,
         "exit": exit_code,
     }
+    if channel is not None:
+        doc["channel"] = channel  # #727: resolved channel decision block
     target = ws / INIT_REPORT_PATH
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"kunglao-init: WARNING cannot mkdir {target.parent}: {exc}",
+              file=sys.stderr)
+        return None
+    # #700: rotate the prior report — fail-open at the call site too. The
+    # helper itself is fail-open (D1) and returns None on any I/O fluke,
+    # but a pathological archive (monkeypatched helper in tests, future
+    # bug, or a Windows rename race) must NOT abort the fresh write —
+    # the spec scenario pins this: "rotation never breaks init".
+    try:
+        archive_previous_init_report(target)
+    except Exception:
+        pass
+    try:
         atomic_write(target, json.dumps(doc, sort_keys=True,
                                         separators=(",", ":"),
                                         ensure_ascii=False) + "\n")
@@ -273,6 +365,105 @@ def write_init_report(ws: Path, phases: list[dict], overall: str,
               file=sys.stderr)
         return None
     return target
+
+# #739 workspace git snapshot layer ------------------------------------------
+
+GIT_SNAPSHOT_COMMIT_MSG = "kunglao-init: initial workspace commit"
+GIT_SNAPSHOT_AUTHOR_NAME = "kunglao-init"
+GIT_SNAPSHOT_AUTHOR_EMAIL = "init@kunglao.local"
+
+# Snapshot hygiene (#739): git is the SNAPSHOT layer, not the state
+# authority — immutable input and runtime noise never belong in commits.
+# .venv/ goes beyond the #739 spec list as a measured pollution source:
+# the workspace venv sits under ws/ and would swamp the initial commit.
+GITIGNORE_SNAPSHOT = """\
+# kunglao-init snapshot hygiene (#739): git is the snapshot layer, not
+# the state authority. Immutable input + runtime noise stay out of commits.
+# bins/  = sample binary: immutable analysis input, never rewritten
+# runs/  = runtime telemetry noise (worker status, heartbeats, logs, init reports)
+# .venv/ = workspace virtualenv: environment artifact, not reviewable state
+bins/
+__pycache__/
+*.pyc
+*.log
+runs/
+.venv/
+"""
+
+
+def _git_cmd(ws: Path, *args: str) -> str:
+    """Run one `git -C <ws> ...` command (never a bare git: the workspace
+    may live inside a host repo and a bare git would walk up and hit the
+    WRONG repository). Raises FileNotFoundError (git binary missing) or
+    CalledProcessError (git refused) to the caller."""
+    cp = subprocess.run(["git", "-C", str(ws), *args],
+                        capture_output=True, text=True,
+                        encoding="utf-8", errors="replace")
+    if cp.returncode != 0:
+        raise subprocess.CalledProcessError(
+            cp.returncode, cp.args, output=cp.stdout, stderr=cp.stderr)
+    return cp.stdout.strip()
+
+
+def init_workspace_git(ws: Path) -> dict:
+    """#739: final init step — turn the workspace into a git repo with one
+    initial commit (the SNAPSHOT layer: review history / undo / experiment
+    branches). Never the state authority: convergence decisions read disk,
+    never git status.
+
+    Semantics:
+      - ws/.git already exists -> idempotent skip, {"status": "existing"};
+      - git binary missing / git failure -> WARN (stderr + kunglao_log
+        git_snapshot_skipped), return {"status": "skipped", ...}; init
+        never fails on this (WARN tier, not HARD — #739);
+      - success -> .gitignore + git init + add -A + initial commit with a
+        bot author (no dependency on the host git identity config), then
+        the multi-line [git-snapshot] banner teaching the three uses —
+        always in `git -C <workspace>` form (nested-repo discipline).
+
+    Returns {"status": "created", "commit": sha} on success.
+    """
+    if (ws / ".git").exists():
+        print("[git-snapshot] workspace is already a git repo — "
+              "snapshot layer kept as-is")
+        return {"status": "existing"}
+    try:
+        # never clobber a user-written .gitignore (scaffold discipline)
+        gitignore = ws / ".gitignore"
+        if not gitignore.exists():
+            atomic_write(gitignore, GITIGNORE_SNAPSHOT)
+        _git_cmd(ws, "init")
+        _git_cmd(ws, "add", "-A")
+        _git_cmd(ws, "-c", f"user.name={GIT_SNAPSHOT_AUTHOR_NAME}",
+                 "-c", f"user.email={GIT_SNAPSHOT_AUTHOR_EMAIL}",
+                 "commit", "-m", GIT_SNAPSHOT_COMMIT_MSG)
+        sha = _git_cmd(ws, "rev-parse", "HEAD")
+    except FileNotFoundError:
+        print("kunglao-init: WARNING git binary not found — workspace git "
+              "snapshot skipped (init continues without the snapshot layer)",
+              file=sys.stderr)
+        kunglao_log.emit(ws, actor="init", action="git_snapshot_skipped",
+                         detail="git binary not found")
+        return {"status": "skipped", "reason": "git-not-found"}
+    except (OSError, subprocess.CalledProcessError) as exc:
+        stderr_txt = ""
+        rc: int | None = None
+        if isinstance(exc, subprocess.CalledProcessError):
+            rc = exc.returncode
+            stderr_txt = exc.stderr or ""
+        hint = stderr_txt.strip().splitlines()
+        last = hint[-1] if hint else f"git unavailable ({exc})"
+        print(f"kunglao-init: WARNING git snapshot failed ({last}) — "
+              "skipped (init continues)", file=sys.stderr)
+        kunglao_log.emit(ws, actor="init", action="git_snapshot_skipped",
+                         exit=rc, detail=last)
+        return {"status": "skipped", "reason": "git-error"}
+    print("[git-snapshot] workspace is now a git repo (initial commit done)")
+    print("[git-snapshot] review history : git -C <workspace> log --oneline")
+    print("[git-snapshot] undo a mistake : git -C <workspace> revert <sha>   (snapshot layer — disk is truth, git is NOT the state authority)")
+    print("[git-snapshot] risky experiment: git -C <workspace> checkout -b exp/<name>  (merge back or abandon)")
+    return {"status": "created", "commit": sha}
+
 
 # #455: intake interaction order (zero-arg entry walks this sequence).
 INTAKE_GUIDANCE = (
@@ -405,41 +596,41 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     # argparse usage error; --resolve supplies it on re-entry.
     parser.add_argument("workspace", nargs="?", default=None,
                         help="target workspace path (holds bins/, claim-register.yaml, etc.); "
-                             "omitted -> pending decision (#455)")
+                             "omitted -> pending decision")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
-                        help="project type: windows|linux|android (#304)")
+                        help="project type: windows|linux|android|web|macos (web=labs)")
     parser.add_argument("--target", metavar="NAME", default=None,
-                        help="#455: explicit analysis target — a file name under bins/ "
+                        help="explicit analysis target — a file name under bins/ "
                              "(containers get a target_object round)")
     parser.add_argument("--force", action="store_true",
                         help="rebuild: back up claim-register first, then re-initialize")
     parser.add_argument("--skip-toolchain", action="store_true",
                         help="skip the toolchain preflight gate (test/ops escape "
-                             "hatch from the #304 amendment; the production "
+                             "hatch from the amendment; the production "
                              "path never skips)")
     parser.add_argument("--hooks-json", metavar="PATH", default=None,
                         help="target settings.json copy for hook deployment; default <workspace>/.claude/settings.json if present, never write HOME")
     parser.add_argument("--profile-root", metavar="PATH", default=None,
-                        help="profile root directory (default Path.home(); injectable for tests; #276)")
+                        help="profile root directory (default Path.home(); injectable for tests;)")
     parser.add_argument("--no-mcp", action="store_true",
-                        help="skip workspace .mcp.json scaffold (#316)")
+                        help="skip workspace .mcp.json scaffold")
     parser.add_argument("--install-git-hooks", action="store_true",
-                        help="install the review-gate pre-commit hook (#367): copy "
+                        help="install the review-gate pre-commit hook: copy "
                              ".claude/git-hooks/pre-commit to .git/hooks/pre-commit with "
                              "this user's key path stamped in place of the placeholder")
     parser.add_argument("--no-hooks", action="store_true",
-                        help="#478: skip hook deployment entirely (the ONLY "
+                        help="skip hook deployment entirely (the ONLY "
                              "legal hooks skip; default deploys "
                              "<ws>/.claude/settings.json + self-check)")
     parser.add_argument("--skills", metavar="A,B", default=None,
-                        help="#478: deploy auxiliary skills (comma-separated "
+                        help="deploy auxiliary skills (comma-separated "
                              "names under skills/) to <ws>/.claude/skills/ — "
                              "pure opt-in, nothing installed without the flag")
     parser.add_argument("--assume-yes", action="store_true",
-                        help="#408: consent to every ask-then-install prompt "
+                        help="consent to every ask-then-install prompt "
                              "(CI/headless; non-interactive stdin declines by default)")
     parser.add_argument("--resolve", metavar="PATH", default=None,
-                        help="#455: answers file ({decision_id: value} JSON) collected "
+                        help="answers file ({decision_id: value} JSON) collected "
                              "by the agent after a pending-decision exit 8")
     try:
         return parser.parse_args(argv)
@@ -878,7 +1069,7 @@ def emit_pending(ws: Path | None,
     """Print the pending-decision list (stdout = machine channel, stderr =
     human guidance) and return RC_PENDING_DECISIONS. Zero scaffold is the
     caller's invariant: this runs before any write."""
-    doc = decision_pending.PendingDecisionList(
+    doc = decision_pending.build_pending_doc(
         flow="kunglao-init",
         workspace=str(ws) if ws is not None else None,
         guidance=INTAKE_GUIDANCE,
@@ -887,11 +1078,11 @@ def emit_pending(ws: Path | None,
                          str(ws) if ws is not None else "<workspace>",
                          "--resolve", "<answers.json>"]},
     )
-    print(doc.to_json())
+    print(decision_pending.pending_doc_json(doc))
     print(
         "kunglao-init: PENDING user decisions — collect via the agent's "
         "native question channel (AskUserQuestion), then re-run with "
-        "--resolve <answers.json> (#455; zero scaffold written)",
+        "--resolve <answers.json> (zero scaffold written)",
         file=sys.stderr,
     )
     return RC_PENDING_DECISIONS
@@ -1056,6 +1247,10 @@ def write_project_type(ws: Path, project_type: str) -> bool:
 
 
 CLAUDEMD_TMPL = Path(__file__).resolve().parent.parent / "templates" / "CLAUDE.md.base.tmpl"
+
+# #728: quickref single-source for web workspace CLAUDE.md injection.
+# If missing, write_claudemd fails closed (never silently partial).
+WEB_RE_QUICKREF = Path(__file__).resolve().parent.parent / "references" / "re-library" / "web-re-quickref.md"
 SKILL_DIR = Path(__file__).resolve().parent.parent
 
 # #356 W2: per-OS constraint blocks injected into the base template's
@@ -1095,7 +1290,85 @@ APK -> aapt/apktool unpack -> jadx DEX->Java
     -> stuck fallback: frida hook + unidbg hybrid (AND three conditions)
 ```
 """,
+    "web": """## Hard constraints (web)
+
+- **Channel: docker** — `KUNGLAO_CHANNEL=docker` is the web default; set explicitly to override.
+- **camoufox-reverse MCP** — browser JS reverse engineering supply; register manually:
+  `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp`
+  (verify: `python -m camoufox_reverse_mcp --help`; optional flags: `--proxy`, `--geoip`, `--humanize`).
+- **No VM channel** — web dynamic analysis is the browser; VM channels (vmr-shell) do not apply.
+- **static-only analysis**: `KUNGLAO_CHANNEL` unset + no docker = local mode — no dynamic tooling, no dynamic RE. Read the CLAUDE.md quick-reference sections first.
+
+## Solution pattern decision tree
+
+Choose the delivery shape by evidence characteristics:
+
+| Evidence | Pattern | Delivery |
+|---|---|---|
+| Crypto logic extractable, no browser deps | **A: Pure Algorithm** | Standalone Node.js / Python protocol script |
+| Server ships obfuscated JS for cookie/token | **B: VM Sandbox** | jsdom + env-patches or sdenv |
+| Encryption inside WebAssembly | **C: WASM Loader** | wasm-loader template |
+| TLS fingerprint / complex env deps | **D: Browser Automation** | camoufox MCP (analysis only, not delivery) |
+| Algorithm bound to env, unextractable | **E: Environment Emulation** | Boundary strategy (hook I/O, not full devirtualization) |
+
+## camoufox operations card (core)
+
+```bash
+# Register
+claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp
+
+# Launch + navigate
+camoufox.launch_browser()            # anti-detection Firefox
+camoufox.navigate(url=..., pre_inject_hooks=[...])
+
+# Network
+camoufox.network_capture(action="start")
+camoufox.get_request_initiator(request_id)  # golden path to crypto code
+
+# Hooks
+camoufox.inject_hook_preset("xhr")           # preset: xhr/fetch/crypto/websocket/...
+camoufox.hook_function(function_path="sign", hook_code=..., position="before")
+camoufox.get_console_logs()                  # collect hook output
+
+# Verification
+camoufox.verify_signer_offline(request_id, signature)   # independent replay check
+```
+
+## Next: read the quick-reference sections below
+
+The six-section quick-reference (Hook & Breakpoint Quick Reference through Advanced Topics)
+documents the signed-parameter location workflow, layered peeling routing, crypto
+signatures, anti-patterns, and the advanced-topic index. Read it before opening
+the browser — it replaces the binary-RE playbook for web targets.
+""",
+    # #760: labs Mach-O type — Hard constraints 最小集 (static needs the
+    # class-dump/otool family; dynamics need a Darwin environment).
+    "macos": """## Hard constraints (macos)
+
+- **Static Mach-O analysis** needs the otool/class-dump family (`xcode-select --install` provides otool/swift-demangle; class-dump is a manual build) plus a disassembler face (Ghidra headless or IDA).
+- **Dynamic analysis needs Darwin** — Mach-O debugging/frida runs natively on a macOS host; there is NO VM channel for this type (`vm_reachable`/`remote_debugger` are NEVER_CHECKS, windows/linux contract only).
+- **Labs posture**: toolchain checks are WARN-only; a missing tool degrades capability reporting but never blocks scaffold.
+""",
 }
+
+
+def _setup_web_env(ws: Path) -> None:
+    """#728: write the docker channel default into analysis_state.txt when
+    absent, and emit setup guidance to stderr (same channel as MCP notices).
+    Idempotent: second call leaves an existing channel line untouched.
+    Called from deploy_env when project_type == "web"."""
+    state = ws / "analysis_state.txt"
+    existing = state.read_text(encoding="utf-8") if state.exists() else ""
+    has_channel = any(
+        line.strip().startswith("KUNGLAO_CHANNEL=")
+        for line in existing.splitlines()
+    )
+    if not has_channel:
+        write_state_line(ws, "KUNGLAO_CHANNEL", "docker")
+    print("kunglao-init: web (labs) setup guidance:", file=sys.stderr)
+    print("  channel: KUNGLAO_CHANNEL=docker (set explicitly to override)", file=sys.stderr)
+    print("  MCP: claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp", file=sys.stderr)
+    print("  docs: references/re-library/web-re-quickref.md (auto-injected into workspace CLAUDE.md)", file=sys.stderr)
 
 
 def os_section(project_type: str | None) -> str:
@@ -1225,6 +1498,20 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
         "Activate before running scripts.",
         f"Activate before running scripts. Python {py_version}."
     )
+    # #728: inject quickref for web workspaces (fail-closed if missing).
+    if project_type == "web":
+        if not WEB_RE_QUICKREF.exists():
+            raise template_render.TemplateRenderError(
+                f"web quickref not found: {WEB_RE_QUICKREF} — "
+                "cannot render a partial web CLAUDE.md")
+        qr_text = WEB_RE_QUICKREF.read_text(encoding="utf-8")
+        text += chr(10) + qr_text
+
+    # #755 G2: the render ships wrapped in the versioned frame-marker pair
+    # (three-segment collect-and-merge contract; tests/fixtures/claudemd-golden
+    # are regenerated through the same sentinel path).
+    text = claudemd_frame.wrap_frame(text)
+
     target.parent.mkdir(parents=True, exist_ok=True)
     atomic_write(target, text)
     return target
@@ -1358,7 +1645,19 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
     selfcheck.ok=False and maps to RC_HOOK_WIRING via hook_deploy_rc —
     init FAIL, not a WARN.
     """
-    hook_dir = Path(__file__).resolve().parent.parent / "hooks"
+    # #752 D4+: the hooks dir is DERIVED from the executing install
+    # (durable ~/.claude/skills/<name>/ co-installs resolve to themselves;
+    # ephemeral checkouts/worktrees fall back to the production install) —
+    # previously this stamped its own module location into BOTH the written
+    # commands and the checker variable, the self-certifying loop of #752.
+    hook_dir = hook_activation._canonical_hooks_dir()
+    # #783 default-flip: init materializes the deployment manifest (hooks +
+    # agents + scaffold closure, WITH the #783 T5 digest carrier) BEFORE any
+    # registration, so bootstrap_observability's register_hooks hits the
+    # phase-2 resolve_deployment inversion and the workspace becomes
+    # self-contained (uv project = workspace). --no-hooks never reaches this
+    # function (deploy_env routes it away) — the opt-out face is unchanged.
+    deployed_manifest = hook_activation.deploy_workspace_copy(ws)
     if hooks_json is not None:
         target = Path(hooks_json).resolve()
         layer = "operator-declared"  # the operator named the file explicitly
@@ -1370,10 +1669,14 @@ def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
                     "reason": "no <workspace>/.claude/settings.json (HOME settings never written)"}
     added = _patch_settings(target, hook_dir)
     selfcheck = hook_activation.selfcheck_registration(
-        target, expected_files=HOOK_FILES, hook_dir=hook_dir,
-        workspace=ws, layer=layer)
+        target, expected_files=HOOK_FILES,
+        workspace=ws, layer=layer)  # no forwarding — derivation inside (#752)
     return {"deployed": True, "target": str(target), "added": added,
-            "selfcheck": selfcheck}
+            "selfcheck": selfcheck,
+            "deployed_manifest": {
+                "entries": deployed_manifest["entries"],
+                "digest": deployed_manifest["digest"],
+            }}
 
 
 def _deploy_agents(ws: Path) -> list[dict]:
@@ -1521,6 +1824,9 @@ def deploy_env(ws: Path, project_type: str, hooks_json: Path | None = None,
                                "detail": hook_report.get("reason", "?")})
         components.extend(_deploy_agents(ws))
     components.extend(_record_mcp(ws, project_type))
+    # #728: web setup handler — idempotent docker-default channel write
+    if project_type == "web":
+        _setup_web_env(ws)
     try:
         components.append(_deploy_skills(ws, skills))
     except ValueError as exc:
@@ -1666,15 +1972,76 @@ def bootstrap_observability(ws: Path, hooks_json: Path | None = None,
             print(f"kunglao-init: hooks selfcheck FAILED — {exc}", file=sys.stderr)
             return RC_HOOK_WIRING
         print(f"kunglao-init: hooks wired ({n} entries, canonical "
-              f"registration + selfcheck PASS, #461 bootstrap)")
+              f"registration + selfcheck PASS bootstrap)")
     else:
         print("kunglao-init: full wire-up skipped — operator owns the hook "
               "target (--hooks-json)")
     from heartbeat import heartbeat_register
     heartbeat_register(ws)
-    print("kunglao-init: heartbeat registered (runs/.heartbeat.json, #461) — "
-          "loop registration is still pending: create the /loop cron and "
-          "accept it with heartbeat_loop_prompt.py --verify")
+    emit_activation_handoff(ws)
+    return RC_OK
+
+
+def emit_activation_handoff(ws) -> int:
+    """#593+#598 机械交接, reworked by #754 (both red lines PRESERVED):
+
+    #754 precise semantics of the red line: "init 不伪造 loop_registered"
+    forbids init from touching runs/.heartbeat.json tick evidence — the
+    marker's definition (#461) is "the /loop prompt BODY really executed".
+    Writing the DURABLE SCHEDULER REGISTRY (<ws>/.claude/
+    scheduled_tasks.json via loop_scheduler.upsert_durable_loop) is a
+    different artifact entirely: it is Claude Code's own resume source for
+    durable schedules (#616 — session-only CronCreate dies with the process)
+    and carries no tick evidence. So init now:
+
+      1. upserts the durable schedule itself (no human CronCreate wait — the
+         2026-08-27 adjudication: users who don't know the heartbeat
+         machinery never reach a printed hint);
+      2. still emits the real /loop prompt body (via the emitter) for
+         transparency + the verify/activate commands;
+      3. prints the 7-day Claude Code expiry cap note.
+
+    loop_registered stays FALSE until the scheduled prompt's first real
+    execution; heartbeat_loop_prompt.py --verify remains the acceptance
+    check. Hooks stay dormant until orchestrator Phase 0.
+    """
+    try:
+        from loop_scheduler import upsert_durable_loop
+        upsert_durable_loop(ws)
+    except Exception as exc:  # scheduler write failure must not fail init,
+        # but it must be LOUD — a silent gap here would reopen the #754
+        # "cron never existed yet gate passed" blind spot downstream.
+        print(f"kunglao-init: durable /loop registration FAILED ({exc}) — "
+              f"register manually: python "
+              f"{Path(__file__).resolve().with_name('loop_scheduler.py')} "
+              f"{ws}", file=sys.stderr)
+    try:
+        from heartbeat_loop_prompt import build_prompt
+        prompt = build_prompt(str(ws))
+        print("kunglao-init: durable /loop registered above — prompt body "
+              "(for reference / manual recreation):")
+        print("---- /loop prompt body ----")
+        print(prompt)
+        print("---- end prompt body ----")
+    except Exception as exc:  # emitter failure must not fail init
+        print(f"kunglao-init: /loop prompt emitter unavailable ({exc}) — "
+              "run heartbeat_loop_prompt.py manually", file=sys.stderr)
+    ha = Path(__file__).resolve().with_name("hook_activation.py")
+    ls = Path(__file__).resolve().with_name("loop_scheduler.py")
+    print("kunglao-init: next steps (mechanical, copy-paste):")
+    print(f"  1. first tick  : the registered schedule fires within one "
+          "interval; after TWO consecutive ticks accept it:")
+    print(f"                   python heartbeat_loop_prompt.py {ws} --verify")
+    print(f"  2. arm hooks   : python {ha} {ws} --tier advisory "
+          "(or --set-active dispatch_gate,worker_pulse) — hooks stay "
+          "dormant until this Phase-0 arm (v1.9.7 default-inactive)")
+    print(f"  3. re-register : python {ls} {ws} (idempotent; also run at "
+          "any analysis entry — or just re-run init) when the 7-day "
+          "Claude Code durable-schedule cap expires")
+    print("kunglao-init: heartbeat registered (runs/.heartbeat.json); "
+          "durable /loop schedule registered (.claude/scheduled_tasks.json) "
+          "— loop_registered flips true on the schedule's FIRST real "
+          "execution, then accept with two ticks + --verify")
     return RC_OK
 
 
@@ -1758,13 +2125,17 @@ def initialize(ws: Path, hooks_json: Path | None,
     else:
         outcome = scaffold_mcp(ws)
         if outcome == "created":
-            print("kunglao-init: .mcp.json created (MCP supply scaffold, #316)")
+            print("kunglao-init: .mcp.json created (MCP supply scaffold)")
         else:
             print("kunglao-init: .mcp.json skipped (exists — idempotent, not overwritten)")
     draft = claim_register_text(sample, sample_sha, state_hash="", project_type=project_type)
     digest = compute_state_hash(ws, register_text=draft)
     reg = ws / "claim-register.yaml"
     atomic_write(reg, claim_register_text(sample, sample_sha, state_hash=digest, project_type=project_type))
+    # #625: dedicated state file is the PRIMARY completeness truth (YAML
+    # comment stays as legacy fallback) — a YAML rewrite can no longer drop it.
+    write_init_marker(ws, state_hash=digest, project_type=project_type,
+                      seed_count=reg.read_text(encoding="utf-8").count("id: C-"))
 
     written = reg.read_text(encoding="utf-8")
     seed_count = written.count("id: C-")
@@ -1825,6 +2196,10 @@ def initialize(ws: Path, hooks_json: Path | None,
                                  plugin_mode=plugin_mode)
     if rc != RC_OK:
         return rc
+    # #753 B3 — same activation hint as upgrade's success path: the skill
+    # package scaffold just landed; Claude Code only sees it after a reload.
+    print("kunglao-init: skill package installed — run /reload-plugins in "
+          "Claude Code to activate")
     return RC_OK
 
 
@@ -1960,7 +2335,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
             write_project_type(ws, project_type)
             print(
                 f"kunglao-init: upgraded {ws} — wrote project_type={project_type} "
-                f"(pre-#304 workspace: [initialized] without project_type)"
+                f"(pre-issue- workspace: [initialized] without project_type)"
             )
             # #461: legacy type-upgrade is an exit-0 path too — bootstrap
             # the observer spine so the upgraded workspace is self-armed.
@@ -1980,7 +2355,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         print(
             "kunglao-init: no analysis target found — place a sample into bins/ "
             "or specify a path, then re-run "
-            "kunglao-init.py <ws> --type <windows|linux|android>.",
+            "kunglao-init.py <ws> --type <windows|linux|android|web|macos>.",
             file=sys.stderr,
         )
         return RC_NO_SAMPLE
@@ -2024,13 +2399,13 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         except ValueError as exc:
             print(f"kunglao-init: WARNING {exc} — toolchain layers stay "
                   "conservative HARD; fix task_spec.yaml at needs-first "
-                  "intake (Flow step 0, #449)", file=sys.stderr)
+                  "intake (Flow step 0)", file=sys.stderr)
             task_spec = None
         else:
             if task_spec is None:
                 print("kunglao-init: task_spec.yaml absent — toolchain "
                       "layers default to HARD; fill it at needs-first intake "
-                      "(Flow step 0, #449) so env derives from the task",
+                      "(Flow step 0) so env derives from the task",
                       file=sys.stderr)
         if task_spec is None:
             report = toolchain.check(ws, project_type)
@@ -2088,6 +2463,12 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     overall = "PASS"
     final_rc: int
 
+    # #727: channel resolution after the toolchain preflight, before
+    # scaffold — init never dead-ends on the environment. The decision
+    # (incl. the local fallback WARN, fail-open emit) lands in the report
+    # on both the success and error paths below.
+    channel_decision = init_channel_default.resolve_and_emit(ws)
+
     created = scaffold(ws)
     # #534: scaffold phase row
     phase_log.append({"name": "scaffold", "status": "PASS", "ts": utc_now()})
@@ -2115,7 +2496,9 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
             print(f"kunglao-init: kept pre-existing content (not created by this run, not deleted): "
                   f"{', '.join(preserved)}", file=sys.stderr)
         overall = "FAIL"
-        write_init_report(ws, phase_log, overall, RC_ERROR)
+        write_init_report(ws, phase_log, overall, RC_ERROR,
+                           channel=init_channel_default.report_block(
+                               channel_decision))
         kunglao_log.emit(ws, actor="init", action="write_blocked",
                          exit=RC_ERROR, detail="template render defect")
         return RC_ERROR
@@ -2140,9 +2523,18 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     overall = "PASS" if final_rc == RC_OK else "FAIL"
     phase_log.append({"name": "exit", "status": overall, "ts": utc_now(),
                       "exit": final_rc})
-    write_init_report(ws, phase_log, overall, final_rc)
+    write_init_report(ws, phase_log, overall, final_rc,
+                       channel=init_channel_default.report_block(
+                           channel_decision))
     kunglao_log.emit(ws, actor="init", action="write_blocked",
                      exit=final_rc, detail=f"init {overall}")
+    # #739: the git snapshot is the LAST init step, after the init
+    # report (runs/ telemetry is gitignored by design, so the report
+    # never lands in the snapshot). Only a completed init gets a
+    # baseline commit; the step is best-effort WARN — git missing or
+    # failed never changes rc.
+    if final_rc == RC_OK:
+        init_workspace_git(ws)
     return final_rc
 
 
@@ -2212,9 +2604,13 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
     )
     for item in hard_fails:
         print(f"  [FAIL] {item.name}: {item.detail}", file=sys.stderr)
-        fix = item.fix or toolchain.FIXES.get(item.name)
+        fix = item.fix or toolchain.fix_text(item.name)
         if fix:
             print(f"      fix: {fix}", file=sys.stderr)
+        # #680: the upstream URL on its own line (unknown -> line omitted)
+        meta = toolchain.FIXES.get(item.name)
+        if meta is not None and meta.url:
+            print(f"      url: {meta.url}", file=sys.stderr)
         na = toolchain.next_action_for(item)
         if na is not None:
             print(f"      action: {na.action}", file=sys.stderr)
@@ -2260,5 +2656,11 @@ def main(argv: list[str] | None = None) -> int:
                no_hooks=args.no_hooks, skills=skills)
 
 
+# #660 dispatcher import — ALIASED: a bare `from _entry import run` would
+# shadow this module's business `run(ws, force=...)` (line ~1865), so
+# main()'s `return run(..., force=args.force, ...)` would resolve to the
+# dispatcher and raise TypeError (the CI regression fixed here).
+from _entry import run as _entry_run
+
 if __name__ == "__main__":
-    sys.exit(main())
+    _entry_run(globals())

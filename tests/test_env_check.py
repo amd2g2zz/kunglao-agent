@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 import platform_paths  # pytest.ini pythonpath = . hooks scripts tools
+import wire_up_settings  # pytest.ini pythonpath = . hooks scripts tools
 
 from env_check import (  # pytest.ini pythonpath = . hooks scripts tools
     FLAG_NAME,
@@ -41,11 +42,15 @@ def _kunglao_ws(tmp_path: Path) -> Path:
     """Minimal workspace: runs/ + FULLY initialized state (#304: [initialized]
     marker in claim-register.yaml + project_type in analysis_state.txt) so the
     snapshot write succeeds and init_complete passes. #536: carries the
-    template version stamp (a fully-initialized workspace has one)."""
+    template version stamp (a fully-initialized workspace has one).
+    #757: pins a vmr channel record so checklist shaping never hits the
+    runtime derivation probe path (tests control sockets explicitly)."""
     import template_version
     stamp = template_version.stamp_line(template_version.read_skill_version())
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
+    (ws / "runs" / ".init-report.json").write_text(
+        json.dumps({"channel": {"selected": "vmr"}}), encoding="utf-8")
     (ws / "facts").mkdir()
     (ws / "facts" / "_INDEX.md").write_text(stamp + "\n# _INDEX\n", encoding="utf-8")
     (ws / "CLAUDE.md").write_text(stamp + "\n# workspace\n", encoding="utf-8")
@@ -73,21 +78,41 @@ def _write_settings(target_root: Path) -> Path:
     pre_agent = ["worker_budget.py", "dispatch_gate.py", "env_check_gate.py",
                  "recall_inject.py"]
     pre = [{"matcher": "Agent", "hooks": [
-        {"type": "command", "command": f"python C:/skills/hooks/{h}"}]}
+        {"type": "command", "command": f"python hooks/{h}"}]}
         for h in pre_agent]
     post = [{"matcher": "Agent", "hooks": [
-        {"type": "command", "command": f"python C:/skills/hooks/{h}"}]}
+        {"type": "command", "command": f"python hooks/{h}"}]}
         for h in ("worker_budget.py", "worker_pulse.py", "state_anchor.py")]
+    post.append({"matcher": "Bash", "hooks": [
+        {"type": "command", "command": "python hooks/violation_capture.py"}]})
     pre.append({"matcher": "Bash", "hooks": [
-        {"type": "command", "command": "python C:/skills/hooks/heartbeat_touch.py"}]})
+        {"type": "command", "command": "python hooks/heartbeat_touch.py"},
+        {"type": "command", "command": "python hooks/orchestrator_tool_guard.py"}]})
     pre.append({"matcher": "Edit|Write|MultiEdit", "hooks": [
-        {"type": "command", "command": "python C:/skills/hooks/write_guard.py"}]})
+        {"type": "command", "command": "python hooks/write_guard.py"}]})
     stop = [{"hooks": [
-        {"type": "command", "command": "python C:/skills/hooks/completion_gate.py"}]}]
+        {"type": "command", "command": "python hooks/completion_gate.py"}]}]
     settings.write_text(json.dumps({"hooks": {"PreToolUse": pre,
                                               "PostToolUse": post,
                                               "Stop": stop}}),
                         encoding="utf-8")
+    # #675: the per-matcher grouping above mirrors register_hooks — the
+    # grouping lives only in its imperative _ensure sequence, so this
+    # guard (not derivation) is the loud-fail: registry growth without a
+    # fixture update fails HERE at construction with the symmetric
+    # difference, never as a downstream env-check mystery (#608 class).
+    covered = {
+        h["command"][len("python hooks/"):]
+        for group in (pre, post, stop)
+        for entry in group
+        for h in entry["hooks"]
+    }
+    registry = set(wire_up_settings.WIRE_UP_HOOK_FILES)
+    if covered != registry:
+        raise AssertionError(
+            "_write_settings drifted from wire_up_settings.WIRE_UP_HOOK_FILES"
+            f" (symmetric difference: {sorted(covered ^ registry)}) —"
+            " update the per-matcher groups to cover the registry (#675)")
     return settings
 
 
@@ -101,12 +126,12 @@ def _write_partial_settings(target_root: Path) -> Path:
     pre_agent = ["worker_budget.py", "dispatch_gate.py", "env_check_gate.py",
                  "recall_inject.py"]
     pre = [{"matcher": "Agent", "hooks": [
-        {"type": "command", "command": f"python C:/skills/hooks/{h}"}]}
+        {"type": "command", "command": f"python hooks/{h}"}]}
         for h in pre_agent]
     pre.append({"matcher": "Bash", "hooks": [
-        {"type": "command", "command": "python C:/skills/hooks/heartbeat_touch.py"}]})
+        {"type": "command", "command": "python hooks/heartbeat_touch.py"}]})
     post = [{"matcher": "Agent", "hooks": [
-        {"type": "command", "command": f"python C:/skills/hooks/{h}"}]}
+        {"type": "command", "command": f"python hooks/{h}"}]}
         for h in ("worker_budget.py", "worker_pulse.py", "state_anchor.py")]
     settings.write_text(json.dumps({"hooks": {"PreToolUse": pre,
                                               "PostToolUse": post}}),
@@ -124,6 +149,18 @@ def _stub_non_hook_checks(monkeypatch):
     monkeypatch.setattr(env_check, "check_venv_sample",
                         lambda ws, sha: ("PASS", "stubbed venv"))
     return env_check
+
+
+@pytest.fixture(autouse=True)
+def _isolated_claude_json(tmp_path, monkeypatch):
+    """#757: env_check now reads MCP registration surfaces — point the user
+    ~/.claude.json at an isolated file carrying a ghidra registration so the
+    desktop mcp_registered row lands on its deterministic WARN-unverified
+    branch and real-machine configs can never leak into these verdicts."""
+    p = tmp_path / ".claude.json"
+    p.write_text(json.dumps({"mcpServers": {"ghidra": {"command": "b"}}}),
+                 encoding="utf-8")
+    monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(p))
 
 
 def test_flag_set_fails_exit_1(monkeypatch, tmp_path):
@@ -192,7 +229,11 @@ def test_all_pass_exit_0(monkeypatch, tmp_path):
     assert rc == 0
     snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
     assert snap["overall"] == "PASS"
-    assert all(c["status"] == "PASS" for c in snap["checks"].values())
+    # #757: the mcp_registered row is intentionally WARN-unverified here
+    # (fixture registers ghidra; a registry read can never claim capability).
+    assert snap["checks"]["mcp_registered"]["status"] == "WARN"
+    others = {k: v for k, v in snap["checks"].items() if k != "mcp_registered"}
+    assert all(c["status"] == "PASS" for c in others.values())
 
 
 def test_snapshot_written_on_fail(monkeypatch, tmp_path):

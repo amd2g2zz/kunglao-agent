@@ -40,15 +40,29 @@ def utc_now() -> datetime:
 
 
 def parse_status(text: str) -> str | None:
+    """#607/#444: delegate to lib_kunglao.parse_worker_status (THE single
+    parse point). Legacy `## Status` section files keep working: the section
+    body is normalized to a ``status:`` token so the canonical parser reads
+    it — no more mirror regex drifting blind on inline-token files."""
+    import importlib.util
+    name = "lib_kunglao_hooks"
+    lib = sys.modules.get(name)
+    if lib is None:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        spec = importlib.util.spec_from_file_location(name, path)
+        lib = importlib.util.module_from_spec(spec)
+        sys.modules[name] = lib
+        spec.loader.exec_module(lib)
     m = STATUS_RE.search(text)
-    if not m:
-        return None
-    rest = text[m.end():]
-    for line in rest.splitlines():
-        s = line.strip().lower().replace("-", "_")  # normalize in-progress -> in_progress
-        if s:
-            return s if s in {"in_progress", "done", "blocked", "error"} else None
-    return None
+    if m:
+        rest = text[m.end():]
+        for line in rest.splitlines():
+            s = line.strip().lower()
+            if s:
+                text = text + f"\nstatus: {s}"
+                break
+    token = lib.parse_worker_status(text)
+    return token.replace("-", "_") if token else None
 
 
 def parse_backtrack(text: str) -> dict | None:

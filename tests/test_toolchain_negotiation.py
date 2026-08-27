@@ -162,12 +162,12 @@ def test_disk_candidates_enumerates_tool_dirs(tmp_path, monkeypatch):
     assert neg.disk_candidates("nosuchtool") == []
 
 
-def test_disk_candidates_defaults_and_missing_dirs(monkeypatch):
+def test_disk_candidates_defaults_and_missing_dirs(monkeypatch, tmp_path):
     """Default roots are the machine's common tool dirs; nonexistent roots
     fail open to []."""
     import toolchain_negotiation as neg
     monkeypatch.setenv("KUNGLAO_TOOL_DIRS",
-                       str(Path("Z:/definitely/not/here")))
+                       str(tmp_path / "definitely" / "not" / "here"))
     assert neg.disk_candidates("die") == []
     assert neg.DEFAULT_TOOL_DIRS  # non-empty default declaration
 
@@ -507,9 +507,11 @@ def test_init_vm_multi_candidate_stops_for_operator_choice(
     profile_root = _hermetic_env(monkeypatch, tmp_path)
     mod = _load_init_module()
     entries = [
-        tc.VMInventoryEntry(name="work_env", vmx=r"C:\vms\work_env.vmx",
+        tc.VMInventoryEntry(name="work_env",
+                            vmx=str(tmp_path / "vms" / "work_env.vmx"),
                             running=False, snapshots=["base"]),
-        tc.VMInventoryEntry(name="Windows 10 x64", vmx=r"C:\vms\win10.vmx",
+        tc.VMInventoryEntry(name="Windows 10 x64",
+                            vmx=str(tmp_path / "vms" / "win10.vmx"),
                             running=False, snapshots=["hr-6.0"]),
     ]
     monkeypatch.setattr(tc, "_vm_inventory", lambda: (entries, True, False))

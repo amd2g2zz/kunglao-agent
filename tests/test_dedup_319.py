@@ -94,8 +94,13 @@ def test_no_reference_to_legacy_precommit_path():
     offenders = []
     self_file = Path(__file__).resolve()
     for p in ROOT.rglob("*"):
-        if not p.is_file() or ".git" in p.parts or ".review-gate" in p.parts:
-            continue  # runtime dirs (.git, review-gate evidence) are not repo content
+        # #799: `.review` prefix family (.review, .review-gate, ...) = local
+        # review evidence surface, not repo content (exact `.review-gate`
+        # match missed the retired .review/ dir).
+        if not p.is_file() or ".git" in p.parts or any(
+            part.startswith(".review") for part in p.parts
+        ):
+            continue  # runtime dirs (.git, review evidence) are not repo content
         if ".devfleet-worktrees" in p.parts or ".worktrees" in p.parts:
             continue  # git-worktree scratch dir (gitignored, not repo content)
         if p.resolve() == self_file:
@@ -107,6 +112,10 @@ def test_no_reference_to_legacy_precommit_path():
         except UnicodeDecodeError:
             continue
         if ".claude/hooks/pre-commit" in text:
+            # Allow self-reference + the v012 audit scanner (it states the
+            # same prohibition to enforce it — mirrors its own allow-list)
+            if p.name in ("test_dedup_319.py", "test_v012_milestone_audit.py"):
+                continue
             offenders.append(str(p.relative_to(ROOT)))
     assert not offenders, (
         "no file may reference the retired .claude/hooks/pre-commit path:\n"

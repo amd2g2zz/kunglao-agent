@@ -40,6 +40,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -561,18 +562,24 @@ class Event(str, Enum):
     ORPHAN_TERMINAL_CLAIM = "ORPHAN_TERMINAL_CLAIM"    # M2 completeness gate
     PRIMARY_Q_UNVERIFIED = "PRIMARY_Q_UNVERIFIED"      # M2: BLIND-verified PROVEN, not STAMP
     NOTE_LAYER_GAP = "NOTE_LAYER_GAP"                  # DESIGN §8 C0
+    OPEN_HYPOTHESIS_AT_CLOSE = "OPEN_HYPOTHESIS_AT_CLOSE"  # #662 unadjudicated hypothesis gate
     DISCOVERY_UNCONSUMED = "DISCOVERY_UNCONSUMED"     # #147 discovery consumption
     GLOBAL_CONTRADICTION = "GLOBAL_CONTRADICTION"     # #147 completion transaction
+    ANOMALY_DETECTED = "ANOMALY_DETECTED"           # #663 anomaly observation gate
     DRAIN_CLEAN = "DRAIN_CLEAN"                        # DRAIN catch-all
     # SCHEDULE stage
     WORK_AND_FREE_SLOT = "WORK_AND_FREE_SLOT"
     PARTIALS_AND_FREE_SLOT = "PARTIALS_AND_FREE_SLOT"
+    STUCK_WORKERS_PRESENT = "STUCK_WORKERS_PRESENT"   # #595: silent-detect consumes stuck_workers
     WORK_NO_FREE_SLOT = "WORK_NO_FREE_SLOT"
     FAILURE_ARTIFACTS_DUE = "FAILURE_ARTIFACTS_DUE"    # #495: analysis lacks
     #      validated_capability / identified_obstacle (or is absent/stale)
     LADDER_REQUIRED_BLOCKER = "LADDER_REQUIRED_BLOCKER"    # #497 climb flavor
     LADDER_EXHAUSTED_BLOCKER = "LADDER_EXHAUSTED_BLOCKER"  # #497 exhaustion marker
     UNEXPECTED_STATE = "UNEXPECTED_STATE"                  # SCHEDULE catch-all
+    # #670 intake-level (NOT in DRAIN) - the REFUSE verdict aborts intake
+    # BEFORE convergence_check starts; the name exists for observability.
+    JADX_INFEASIBLE = "JADX_INFEASIBLE"
 
 
 # Terminal state -> (decision, exit_code). Single binding point: a new
@@ -615,6 +622,48 @@ class _DecideInputs:
     _discovery_reason: str | None = field(default=None, repr=False)
     _contradiction_reason: str | None = field(default=None, repr=False)
     _ladder_ids: list | None = field(default=None, repr=False)
+    _anomalies: list | None = field(default=None, repr=False)
+    _open_hyps: list | None = field(default=None, repr=False)
+
+    def open_hypotheses(self) -> list:
+        """#662 unadjudicated-hypothesis gate input (lazy + cached).
+
+        Reads hypothesis_store.HypothesisStore.list_open(). Fail-open on
+        LAYER ERRORS ONLY (unreadable dir / parse explosion -> [] -> gate
+        silent); genuinely-open hypotheses BLOCK at DRAIN — that is the
+        feature (design D5/D7), not a failure mode.
+        """
+        if self._open_hyps is None:
+            hyps: list = []
+            try:
+                from hypothesis_store import HypothesisStore
+                hyps = HypothesisStore(self.workspace / "hypotheses").list_open()
+            except Exception:
+                hyps = []  # layer error — fail-open per design D7
+            self._open_hyps = hyps
+        return self._open_hyps
+
+    def anomaly_reason(self) -> list:
+        """#663 anomaly observation gate (fail-open per design.md D5).
+
+        Lazy + cached. Returns the anomaly list from scripts/anomaly_detector.
+        Fail-open: any import / scan error returns [] (the anomaly detector
+        is an informational observation, not a correctness gate — a broken
+        anomaly detector MUST NOT block convergence, only the contradiction
+        gate may block).
+        """
+        if self._anomalies is None:
+            anomalies: list = []
+            try:
+                import anomaly_detector as ad  # local import; never block
+                anomalies = ad.scan_anomalies(
+                    self.workspace / "facts" / "_INDEX.md",
+                    self.workspace / "facts",
+                )
+            except Exception:
+                anomalies = []  # fail-open per design.md D5
+            self._anomalies = anomalies
+        return self._anomalies
 
     def discovery_reason(self) -> str:
         """#147 discovery scan, cached. Computed only when DRAIN asks for it."""
@@ -745,6 +794,13 @@ def _note_layer_gap(s: _DecideInputs) -> bool:
     return bool(s.pq_note_gaps)
 
 
+def _open_hypothesis_at_close(s: _DecideInputs) -> bool:
+    # #662: unadjudicated competing explanations at delivery — the exact
+    # "contradictory self-report" defect class. Layer errors fail-open
+    # (empty list); genuinely-open hypotheses fire (design D5).
+    return bool(s.open_hypotheses())
+
+
 def _discovery_unconsumed(s: _DecideInputs) -> bool:
     # #147: disclosed payloads must be obligations before CONVERGED.
     return bool(s.discovery_reason())
@@ -753,6 +809,14 @@ def _discovery_unconsumed(s: _DecideInputs) -> bool:
 def _global_contradiction(s: _DecideInputs) -> bool:
     # #147: any global contradiction downgrades the completion.
     return bool(s.contradiction_reason())
+
+
+def _anomaly_detected(s: _DecideInputs) -> bool:
+    # #663: anomaly facts observed — informational observation that blocks
+    # convergence pending analyst review (co-resident note + verify/refute).
+    # Per design.md D5 the gate fires only when anomalies exist; empty
+    # baseline (cold-start) returns [] and never blocks.
+    return bool(s.anomaly_reason())
 
 
 def _drain_clean(s: _DecideInputs) -> bool:
@@ -765,6 +829,13 @@ def _work_and_free_slot(s: _DecideInputs) -> bool:
 
 def _partials_and_free_slot(s: _DecideInputs) -> bool:
     return bool(s.partials) and s.free_slots > 0
+
+
+def _stuck_workers_present(s: _DecideInputs) -> bool:
+    # #595: silent-detect — collected stuck_workers were never consumed by the
+    # machine. Firing here escalates to BLOCKED so orchestrator intervention
+    # can resolve instead of looping against a frozen worker.
+    return bool(s.stuck)
 
 
 def _work_no_free_slot(s: _DecideInputs) -> bool:
@@ -803,11 +874,14 @@ _EVENT_PREDICATES = {
     Event.ORPHAN_TERMINAL_CLAIM: _orphan_terminal,
     Event.PRIMARY_Q_UNVERIFIED: _pq_unverified,
     Event.NOTE_LAYER_GAP: _note_layer_gap,
+    Event.OPEN_HYPOTHESIS_AT_CLOSE: _open_hypothesis_at_close,
     Event.DISCOVERY_UNCONSUMED: _discovery_unconsumed,
     Event.GLOBAL_CONTRADICTION: _global_contradiction,
+    Event.ANOMALY_DETECTED: _anomaly_detected,
     Event.DRAIN_CLEAN: _drain_clean,
     Event.WORK_AND_FREE_SLOT: _work_and_free_slot,
     Event.PARTIALS_AND_FREE_SLOT: _partials_and_free_slot,
+    Event.STUCK_WORKERS_PRESENT: _stuck_workers_present,
     Event.WORK_NO_FREE_SLOT: _work_no_free_slot,
     Event.FAILURE_ARTIFACTS_DUE: _failure_artifacts_due,
     Event.LADDER_REQUIRED_BLOCKER: _ladder_required_blocker,
@@ -841,6 +915,91 @@ def _act_note_gap(s: _DecideInputs) -> str:
             f"Run verify-note.py before delivery.")
 
 
+def _scan_proven_facts(workspace: Path) -> dict[str, str]:
+    """Lightweight _INDEX scan for PROVEN fact id->conclusion map (fail-open).
+
+    Same pattern as _partial_facts (line 164). No schema validation, no YAML
+    parsing, no exceptions on malformed rows."""
+    idx = workspace / "facts" / "_INDEX.md"
+    if not idx.exists():
+        return {}
+    proven: dict[str, str] = {}
+    try:
+        text = idx.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return {}
+    for line in text.splitlines():
+        if "|" not in line:
+            continue
+        parts = [p.strip() for p in line.split("|")]
+        if len(parts) < 4:
+            continue
+        if parts[1].upper() == "PROVEN":
+            proven[parts[0]] = parts[3]
+    return proven
+
+
+# Negation keywords for Path B (candidate heuristic). Lowercase; matched
+# after lowercasing the conclusion text.
+_NEGATION_KEYWORDS = ("not ", "never ", "rather than ", "instead of ", "is not ", "are not ")
+
+
+def _detect_contradiction(hyp_body: str, candidates: list[str],
+                          proven: dict[str, str]) -> str | None:
+    """Return an annotation snippet if hyp_body / candidates are contradicted
+    by a PROVEN fact, else None.
+
+    Path A — explicit PROVEN fact reference in hypothesis body:
+      scans hyp_body for F<digits> patterns, verifies each is in `proven`.
+    Path B — candidate negation heuristic:
+      for each PROVEN fact conclusion containing a negation keyword,
+      checks whether a candidate appears after the negation keyword.
+    Both paths are fail-open: any exception produces None."""
+    try:
+        # Path A: explicit fact ID in body
+        for m in re.finditer(r"F[-\s]?(\d+)", hyp_body):
+            fid = f"F{m.group(1)}"
+            if fid in proven:
+                snippet = proven[fid][:80]
+                return f"Contradicted: {fid} (conclusion: {snippet})"
+        # Path B: candidate negation
+        for fid, conclusion in proven.items():
+            lc = conclusion.lower()
+            for kw in _NEGATION_KEYWORDS:
+                idx2 = lc.find(kw)
+                if idx2 >= 0:
+                    after = lc[idx2 + len(kw):].rstrip(".,;")
+                    for cand in candidates:
+                        if cand.lower() == after:
+                            snippet = conclusion[:80]
+                            return f"Contradicted: {fid} ({kw.rstrip()} {cand}, conclusion: {snippet})"
+    except Exception:
+        pass
+    return None
+
+
+def _act_open_hypothesis(s: _DecideInputs) -> str:
+    hyps = s.open_hypotheses()
+    ids = ", ".join(h.id for h in hyps)
+    base = (f"Cannot CONVERGE: {len(hyps)} open hypothesis(ies) {ids} — "
+            f"adjudicate before delivery (refute via refuting_fact_id / "
+            f"supersede via superseded_by, per #528 state machine). Scaffold "
+            f"candidates=[] must be filled or refuted.")
+    # Scan PROVEN facts for contradiction annotations
+    try:
+        proven = _scan_proven_facts(s.workspace)
+    except Exception:
+        proven = {}
+    annotations: list[str] = []
+    for h in hyps:
+        ann = _detect_contradiction(h.body, h.candidates, proven)
+        if ann:
+            annotations.append(f"  {h.id}: {ann}")
+    if annotations:
+        return base + "\n" + "\n".join(annotations)
+    return base
+
+
 def _act_discovery(s: _DecideInputs) -> str:
     return f"Cannot CONVERGE: {s.discovery_reason()}"
 
@@ -848,6 +1007,16 @@ def _act_discovery(s: _DecideInputs) -> str:
 def _act_contradiction(s: _DecideInputs) -> str:
     return (f"Cannot CONVERGE: {s.contradiction_reason()} -> resolve via "
             f"fact_contradiction_gate or supersedes links.")
+
+
+def _act_anomaly(s: _DecideInputs) -> str:
+    anomalies = s.anomaly_reason()
+    items = "; ".join(
+        f"{a['fact_id']} score={a['score']:.3f} ({a['top_dimension']})"
+        for a in anomalies
+    )
+    return (f"Cannot CONVERGE: {len(anomalies)} anomaly fact(s) above threshold "
+            f"(review or refute; co-resident notes in notes/<fact_id>.md): {items}")
 
 
 def _act_converged(s: _DecideInputs) -> str:
@@ -869,6 +1038,98 @@ def _act_verify_partials(s: _DecideInputs) -> str:
 def _act_saturated_queue(s: _DecideInputs) -> str:
     return (f"All {WORKER_CAP} slots busy with {len(s.unblocked_open)} open claim(s) queued. "
             f"Poll workers - do not wait idly.")
+
+
+def _act_stuck_workers(s: _DecideInputs) -> str:
+    """#595: a worker older than STUCK_MINUTES is the loud signal we were
+    silently collecting. Escalate to BLOCKED + drop a per-workspace
+    ``runs/.stuck-report.md`` so the orchestrator can see WHICH worker is
+    stuck and for HOW LONG. Report write is non-fatal (try/except) — the
+    state machine must still return a verdict even on a read-only filesystem
+    or a permission error. Order probe (SCHEDULE index 2) gates this: it
+    fires BEFORE WORK_NO_FREE_SLOT/FAILURE/LADDER/UNEXPECTED, so a stuck
+    worker always wins over those flavors."""
+    stems = ", ".join(f"{w['worker']} ({w['age_min']}m)" for w in s.stuck)
+    summary = (f"Stuck worker(s) detected: {stems}. "
+               f"Older than {_load_worker_lib().STUCK_MINUTES}m with status "
+               f"in-progress. Orchestrator intervention required before any "
+               f"further dispatch.")
+    try:
+        report = s.workspace / "runs" / ".stuck-report.md"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        lines = [f"# Stuck Workers Report (#595)", ""]
+        lines.append(f"Workspace: {s.workspace}")
+        lines.append(f"Detected: {len(s.stuck)} worker(s) older than "
+                     f"{_load_worker_lib().STUCK_MINUTES}m still in-progress.")
+        lines.append("")
+        lines.append("## Workers")
+        for w in s.stuck:
+            lines.append(f"- **{w['worker']}** — age {w['age_min']} min")
+        lines.append("")
+        lines.append("## Action")
+        lines.append("Investigate each worker above. Either: (a) restart the "
+                     "worker if it is genuinely hung, or (b) close the worker "
+                     "if the claim should be re-dispatched. Do NOT dispatch "
+                     "more work while stuck workers remain.")
+        report.write_text("\n".join(lines), encoding="utf-8")
+    except OSError:
+        # Non-fatal: the verdict and summary still surface to the caller.
+        pass
+    # #607 闭环: a stuck worker must FREE its claim — claim_expiry covers
+    # IN_PROGRESS but has zero mechanical callers, so the loop had NO machine
+    # path out of IN_PROGRESS. Reopen stuck workers' IN_PROGRESS claims →
+    # OPEN with an audit comment. Fail-open: register IO must not block the
+    # verdict. Never touches PROVEN/terminal claims.
+    try:
+        reopened = _reopen_stuck_claims(s)
+        if reopened:
+            summary += (f" Reopened {len(reopened)} stuck IN_PROGRESS claim(s) "
+                        f"→ OPEN for re-dispatch: {', '.join(reopened)}.")
+    except OSError:
+        pass
+    return summary
+
+
+def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
+    """#607: map stuck worker stems → claim ids → flip IN_PROGRESS → OPEN.
+
+    Worker stem convention is ``worker-status-<claim-ish>-<suffix>``; match by
+    prefix (``worker-status-C-400*`` → claim ``C-400``). Returns the reopened
+    claim ids; OSError family propagates to the caller's fail-open."""
+    import yaml as _yaml
+    reg = s.workspace / "claim-register.yaml"
+    if not reg.exists():
+        return []
+    data = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+    claims = data.get("claims") or []
+    prefixes = []
+    for w in s.stuck:
+        stem = w["worker"].removeprefix("worker-status-")
+        # strip ONE trailing retry/version token (C-400v2 → C-400, C400v2 →
+        # C400) but never the id's own digits (C-400 stays C-400: only a
+        # trailing [vV]<digits> suffix or a separate hyphenated numeric tail
+        # is removed).
+        m = re.search(r"^(.*?)[vV]\d+$", stem) or re.search(r"^(.*)-\d+$", stem)
+        prefixes.append(m.group(1) if m and m.group(1) else stem)
+    reopened: list[str] = []
+    now = utc_now()
+    norm = lambda x: x.replace("-", "").replace("_", "").lower()
+    for c in claims:
+        cid = c.get("id")
+        if not cid or c.get("status") != "IN_PROGRESS":
+            continue
+        # shape-insensitive compare: C400 ≡ C-400 (worker stems drop the id's hyphen)
+        if any(norm(cid) == norm(p) or norm(cid).startswith(norm(p))
+               or norm(p).startswith(norm(cid)) for pfx in prefixes for p in [pfx]):
+            c["status"] = "OPEN"
+            hist = c.setdefault("history", [])
+            hist.append(f"#607 reopened from IN_PROGRESS (worker stuck) {now}")
+            reopened.append(cid)
+    if reopened:
+        data["_audit"] = (data.get("_audit") or []) + [
+            f"#607 stuck-worker reopen: {', '.join(reopened)} @ {now}"]
+        reg.write_text(_yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    return reopened
 
 
 def _act_failure_analysis(s: _DecideInputs) -> str:
@@ -899,13 +1160,19 @@ STAGE_PROBES = {
     # regression anchor (orphan > unverified > note-gap > discovery >
     # contradiction > clean).
     State.DRAIN: [Event.ORPHAN_TERMINAL_CLAIM, Event.PRIMARY_Q_UNVERIFIED,
-                  Event.NOTE_LAYER_GAP, Event.DISCOVERY_UNCONSUMED,
-                  Event.GLOBAL_CONTRADICTION, Event.DRAIN_CLEAN],
+                  Event.NOTE_LAYER_GAP, Event.OPEN_HYPOTHESIS_AT_CLOSE,
+                  Event.DISCOVERY_UNCONSUMED,
+                  Event.GLOBAL_CONTRADICTION, Event.ANOMALY_DETECTED,
+                  Event.DRAIN_CLEAN],
     # SCHEDULE: dispatchable work first, then saturation, then WHY nothing
     # is dispatchable (#495 failure artifacts, #497 ladder flavors), then
     # the catch-all (reachable: opens==0 + partials>0 + slots==0).
+    # #595: STUCK_WORKERS_PRESENT at index 2 — silent-detect fires BEFORE
+    # the saturation/failure/ladder tail so a stuck worker can never be
+    # masked by an unblocked-open claim whose dispatch would collide.
     State.SCHEDULE: [Event.WORK_AND_FREE_SLOT, Event.PARTIALS_AND_FREE_SLOT,
-                     Event.WORK_NO_FREE_SLOT, Event.FAILURE_ARTIFACTS_DUE,
+                     Event.STUCK_WORKERS_PRESENT, Event.WORK_NO_FREE_SLOT,
+                     Event.FAILURE_ARTIFACTS_DUE,
                      Event.LADDER_EXHAUSTED_BLOCKER, Event.LADDER_REQUIRED_BLOCKER,
                      Event.UNEXPECTED_STATE],
 }
@@ -917,11 +1184,14 @@ TRANSITIONS = {
     (State.DRAIN, Event.ORPHAN_TERMINAL_CLAIM): (State.BLOCKED, _act_orphans),
     (State.DRAIN, Event.PRIMARY_Q_UNVERIFIED): (State.SATURATED, _act_pq_unverified),
     (State.DRAIN, Event.NOTE_LAYER_GAP): (State.DISPATCH_VERIFIER, _act_note_gap),
+    (State.DRAIN, Event.OPEN_HYPOTHESIS_AT_CLOSE): (State.BLOCKED, _act_open_hypothesis),
     (State.DRAIN, Event.DISCOVERY_UNCONSUMED): (State.DISPATCH, _act_discovery),
     (State.DRAIN, Event.GLOBAL_CONTRADICTION): (State.BLOCKED, _act_contradiction),
+    (State.DRAIN, Event.ANOMALY_DETECTED): (State.BLOCKED, _act_anomaly),
     (State.DRAIN, Event.DRAIN_CLEAN): (State.CONVERGED, _act_converged),
     (State.SCHEDULE, Event.WORK_AND_FREE_SLOT): (State.DISPATCH, _act_dispatch_top),
     (State.SCHEDULE, Event.PARTIALS_AND_FREE_SLOT): (State.DISPATCH_VERIFIER, _act_verify_partials),
+    (State.SCHEDULE, Event.STUCK_WORKERS_PRESENT): (State.BLOCKED, _act_stuck_workers),
     (State.SCHEDULE, Event.WORK_NO_FREE_SLOT): (State.SATURATED, _act_saturated_queue),
     (State.SCHEDULE, Event.FAILURE_ARTIFACTS_DUE): (State.BLOCKED, _act_failure_analysis),
     (State.SCHEDULE, Event.LADDER_REQUIRED_BLOCKER): (State.BLOCKED, _act_all_blocked),
@@ -969,6 +1239,12 @@ def decide(workspace: Path) -> dict:
         "failure_blocked": snap.failure_blocked_ids,
         "partial_facts": snap.partials,
         "partial_count": len(snap.partials),
+        "anomalies": snap.anomaly_reason(),
+        "anomaly_count": len(snap.anomaly_reason()),
+        "open_hypotheses": [{"id": h.id, "claim_id": h.claim_id,
+                             "competitor_group": h.competitor_group}
+                            for h in snap.open_hypotheses()],
+        "open_hypothesis_count": len(snap.open_hypotheses()),
         "active_workers": snap.active,
         "free_slots": snap.free_slots,
         "worker_cap": WORKER_CAP,

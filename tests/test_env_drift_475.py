@@ -29,7 +29,6 @@ MONITOR = SCRIPTS / "kunglao-monitor.py"
 ENV_STATE = Path("runs") / "env-state.json"
 
 sys.path.insert(0, str(SCRIPTS))
-sys.path.insert(0, str(ROOT / "hooks"))
 
 
 def _iso(dt: datetime) -> str:

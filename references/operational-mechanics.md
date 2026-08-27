@@ -4,9 +4,36 @@ Load this when you need the HOW behind worker monitoring, self-cap-safe
 dispatch prose, or the x64dbg VM-channel launch sequence. SKILL.md carries
 the principles; this file carries the mechanics.
 
+## Heartbeat registration & the #754 continuous-tick standard
+
+The heartbeat's liveness verdict is CONTINUITY-based and single-sourced in
+`scripts/heartbeat.py::evaluate_tick_continuity` — shared verbatim by three
+consumers: the dispatch gate (`hooks/worker_budget_sinks.check_heartbeat_alive`),
+`heartbeat_check` (--heartbeat-check), and `heartbeat_loop_prompt --verify`.
+Alive requires >= 2 recorded ticks (runs/.heartbeat.json `tick_history`,
+35-min rolling window, cap 12), adjacent gaps <= 2x interval_min, newest
+<= 35 min. A LONE registration tick is dead — that was the live-run incident
+(#754): last_tick_ts == started_ts with no cron behind it still passed the
+old 35-min window. Legacy files without tick_history REJECT by design; one
+real touch/tick rebuilds history.
+
+Registration is DURABLE: init upserts `.claude/scheduled_tasks.json`
+(`scripts/loop_scheduler.py`, id kunglao-heartbeat — Claude Code's own
+resume source for durable schedules; session-only CronCreate dies with the
+process). Claude Code caps durable schedules at 7 days; re-run init or
+`kunglao analysis <ws>` (the entry gate re-creates it idempotently), or
+re-register directly with loop_scheduler.py. Red line semantics unchanged:
+`scheduled_tasks.json` carries scheduling intent only — `loop_registered`
+flips true solely when the /loop prompt body executes its first action.
+
 ## Active workers heartbeat (the tick loop)
 
-The orchestrator is a daemon (convergence-loop behavior #4). Each tick,
+The orchestrator is a daemon (convergence-loop behavior #4). **Workers are
+launched in the BACKGROUND and never awaited inline (#704)** — a foreground
+Task call that blocks until the worker finishes kills this whole loop
+(parallelism → 1, pings never fire, stuck workers invisible). Dispatch and
+keep moving; completion is discovered by the tick below, not by waiting.
+Each tick,
 enumerate ALL workers (not just the last-dispatched) and act per row:
 
 | Worker | age_min | status | ping_sent | pings | action |
@@ -91,9 +118,15 @@ AND its artifacts (`facts/F<NNN>.md` / `runs/<ts>-<task>.md`) are verified.
 **Delivery checklist — on delivery confirmation, in order:**
 1. Confirm the final status (`done` / `blocked`) in `runs/worker-status-<id>.md`.
 2. Verify the artifacts exist and are readable (facts/F<NNN>.md, runs/ report).
-3. **TaskStop the background worker** — before any further dispatch /
+3. Verify the durable result note `notes/<claim-id>.md` exists for each closed
+   claim (worker sedimentation contract, #762): the DONE line declares it via
+   `| notes:` and `lib_kunglao.scan_done_artifact_violations` flags
+   declared-but-absent references. A closure that skipped the note resurfaces
+   as a completion-gate **NOTES_DUE** block (runs/notes-due.yaml owes until
+   the note lands).
+4. **TaskStop the background worker** — before any further dispatch /
    verifier / registry action.
-4. Then: dispatch the verifier, merge the worktree branch, update
+5. Then: dispatch the verifier, merge the worktree branch, update
    claim-register.yaml.
 
 Mechanical aid: `hooks/worker_pulse.py` injects a
@@ -111,6 +144,16 @@ tick proceeds on file state (`worker-status-*.md` freshness,
 `.heartbeat.json`), and the monitor's `next` verdict is a suggestion, not a
 gate. Do not design the tick loop around monitor results, and never block a
 scheduled action waiting for the monitor process to produce output.
+
+## Liveness thresholds single source (#597, 2026-08-24)
+
+Every liveness/staleness minutes constant (worker stuck 20, heartbeat stale
+35, activation/env-state TTL 30, kicker dead-session + renewal margin 10)
+lives in ONE module — `scripts/liveness_policy.py` — with the per-value
+rationale attached to each number. Consumers import; they never restate a
+number. When debugging "why did X fire at N minutes", read the rationale
+comment next to the constant there — not this file, and not the consumer's
+local history (pre-#597 copies were the drift source).
 
 ## Subagent-model switch caveat (A4, #317)
 
@@ -305,13 +348,27 @@ attached. The fact is done; the SESSION is not — finish the session first.
 A worker's "I can't" is not the end — LEARN → TRY → ESCALATE, three-tier
 self-drive (kunglao-worker.md §6d):
 
-1. **LEARN**: look it up — `WebSearch` / context7 / re-library.
-2. **TRY**: retry with ≥2 different methods using what you found.
+1. **LEARN (#761 J5 — internal-first two-tier ladder)**: look it up —
+   INTERNAL first: `python <SKILL_DIR>/scripts/references_recall.py` → read the
+   hit files under `references/re-library/`; context7 for library APIs. Only
+   when that is unsatisfied escalate OUTWARD to `WebSearch`: same-family
+   precedent / known solution / error-signature search.
+2. **TRY**: retry with ≥2 different methods using what you found. Boundary
+   (#760 I2): TRY only applies when the capability MIGHT exist and needs
+   exploring. 能力不匹配 (capability mismatch — e.g. needing a filesystem when Improvising through an adjacent capability (makeshift output) is forbidden.
+   the only execution surface is a decompiler's in-process Python) goes
+   STRAIGHT to ESCALATE: 用邻近能力凑合 (stopgap)
+   (IDA py_eval as a shell, a decompiler as a file reader/writer) is
+   FORBIDDEN — stopgap output is neither trustworthy nor auditable.
 3. **ESCALATE**: only when all attempts fail, report a blocker — the blocker
    MUST carry the lookup record (what sources were checked / what methods
    were tried / where it is stuck).
 
-WebSearch is freely available to workers. A worker that reports "I can't"
-without lookup evidence = failure (W-27). Workers MUST mark uncertain
-evidence `confidence: low` + `unverified-part` — silent conclusions are
-forbidden (anti analysis-error).
+WebSearch is freely available to workers, and is EXTERNAL INPUT (#761 J5
+evidence discipline): a URL-derived statement entering a fact must record the
+source URL + retrieval date (UTC) in the fact's `derivation:` field, and a
+WebSearch-only finding may not directly back PROVEN status until an
+independent verifier blind-checks it against the sample's own artifacts. A
+worker that reports "I can't" without lookup evidence = failure (W-27).
+Workers MUST mark uncertain evidence `confidence: low` + `unverified-part` —
+silent conclusions are forbidden (anti analysis-error).

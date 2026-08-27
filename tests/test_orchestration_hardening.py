@@ -69,12 +69,12 @@ def test_apply_policy_embeds_claim_for_blocker_attribution():
 def test_parse_env_file_basic():
     text = ("# comment\n"
             "KUNGLAO_VM_HOST=192.168.20.128\n"
-            "GHIDRA_HOME=D:/ghidra_12.1.2_PUBLIC\n"
+            "GHIDRA_HOME=opt/ghidra_public\n"
             "\n"
             "EMPTY=\n")
     assert env_file.parse_env_file(text) == {
         "KUNGLAO_VM_HOST": "192.168.20.128",
-        "GHIDRA_HOME": "D:/ghidra_12.1.2_PUBLIC",
+        "GHIDRA_HOME": "opt/ghidra_public",
         "EMPTY": "",
     }
 

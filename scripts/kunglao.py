@@ -36,6 +36,21 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import convergence_check as cc
 import heartbeat_tick as hbt
+import template_version
+
+
+# Exit codes used by the stale-workspace gate (#748).
+#   5 = workspace template stamp is older than the active skill version, or
+#       the stamp is missing entirely — refuse with an explicit "run
+#       /kunglao-agent:upgrade <ws> first" rather than silently letting the
+#       loop run against a stale workspace (the #717 三层闸门 escape pattern).
+RC_STALE_WORKSPACE = 5
+
+# #754 T3: analysis-entry heartbeat verify failure — monitoring is not
+# verifiably alive (<2 consecutive ticks / cadence gap > 2x interval /
+# last tick > STALE_MINUTES). Distinct from rc=5 so SKILL.md can map each
+# refusal to its exact remediation.
+RC_HEARTBEAT_VERIFY_FAIL = 6
 
 
 def cmd_decide(args) -> int:
@@ -106,18 +121,237 @@ def cmd_health(args) -> int:
     return r["exit_code"]
 
 
+def cmd_check_stale(args) -> int:
+    """#748: stale-workspace gate — emit a JSON envelope and exit 5 when the
+    workspace stamp is older than the active skill version (or missing
+    entirely). Used by `/kunglao-agent:analysis` and `/kunglao-agent:resume`
+    SKILL.md bodies as the first step of entry.
+
+    JSON envelope:
+
+        {
+          "status":     "stale" | "current" | "no-stamp" | "deploy-drift",
+          "rc":         0 | 5,
+          "workspace_stamp": "0.1.0" | null,
+          "skill_version":   "0.1.3",
+          "advice":     "run /kunglao-agent:upgrade <workspace> first" | null
+        }
+    """
+    ws = Path(args.workspace).resolve()
+    skill_v = template_version.read_skill_version()
+    ws_v = template_version.read_workspace_version(ws)
+    if ws_v is None:
+        envelope = {
+            "status": "no-stamp",
+            "rc": RC_STALE_WORKSPACE,
+            "workspace_stamp": None,
+            "skill_version": skill_v,
+            "advice": f"run /kunglao-agent:init {ws} first",
+        }
+        print(json.dumps(envelope, ensure_ascii=False))
+        return RC_STALE_WORKSPACE
+    try:
+        ws_key = template_version._semver_tuple(ws_v)
+        skill_key = template_version._semver_tuple(skill_v)
+    except Exception:
+        envelope = {
+            "status": "stale",
+            "rc": RC_STALE_WORKSPACE,
+            "workspace_stamp": ws_v,
+            "skill_version": skill_v,
+            "advice": f"workspace stamp {ws_v!r} not parseable — "
+                      f"run /kunglao-agent:init {ws} first",
+        }
+        print(json.dumps(envelope, ensure_ascii=False))
+        return RC_STALE_WORKSPACE
+    if ws_key < skill_key:
+        envelope = {
+            "status": "stale",
+            "rc": RC_STALE_WORKSPACE,
+            "workspace_stamp": ws_v,
+            "skill_version": skill_v,
+            "advice": f"run /kunglao-agent:upgrade {ws} first "
+                      f"(stamp {ws_v} < skill {skill_v})",
+        }
+        print(json.dumps(envelope, ensure_ascii=False))
+        return RC_STALE_WORKSPACE
+    # #783 T5 third criterion: deployed framework copies are present
+    # (phase-2 semantics) — the manifest digest decides, not just the stamp.
+    # Priority: no-stamp > stale(version) > deploy-drift > current (a
+    # version upgrade overwrites the copies, so stale wins on purpose).
+    if (ws / ".claude" / "hooks").is_dir():
+        import deploy_manifest as deploy_manifest
+        try:
+            drift = deploy_manifest.deploy_drift(ws)
+        except Exception as exc:  # noqa: BLE001 — fail loud-ish, stay a gate
+            drift = {"drift": True, "reason": f"probe-error:{exc}",
+                     "observed": None, "expected": None,
+                     "carrier_digest": None}
+        if drift.get("drift"):
+            envelope = {
+                "status": "deploy-drift",
+                "rc": RC_STALE_WORKSPACE,
+                "workspace_stamp": ws_v,
+                "skill_version": skill_v,
+                "drift_reason": drift.get("reason"),
+                "deployed_digest": drift.get("carrier_digest"),
+                "observed_digest": drift.get("observed"),
+                "skill_manifest_digest": drift.get("expected"),
+                "advice": f"run /kunglao-agent:upgrade {ws} first "
+                          f"(framework copies drifted)",
+            }
+            print(json.dumps(envelope, ensure_ascii=False))
+            return RC_STALE_WORKSPACE
+    envelope = {
+        "status": "current",
+        "rc": 0,
+        "workspace_stamp": ws_v,
+        "skill_version": skill_v,
+        "advice": None,
+    }
+    print(json.dumps(envelope, ensure_ascii=False))
+    return 0
+
+
 def cmd_resume(args) -> int:
     """#466: crash/reboot recovery brief — pure delegation to
-    kunglao_resume.main (READ-ONLY: decide() direct, never cc.main())."""
+    kunglao_resume.main (READ-ONLY: decide() direct, never cc.main()).
+
+    #748: stale-workspace gate runs first; if the workspace template stamp
+    trails the skill version, refuse with RC=5 and direct the operator to
+    `/kunglao-agent:upgrade <workspace>` (user must explicitly act —
+    no auto-fix per #748 user ruling 2026-08-26).
+    """
+    ws = Path(args.workspace).resolve()
+    rc = _gate_stale_workspace(ws)
+    if rc != 0:
+        return rc
     import kunglao_resume as kresume
-    argv = [str(args.workspace)]
+    argv = [str(ws)]
     if args.json:
         argv.append("--json")
     return kresume.main(argv)
 
 
+def _gate_stale_workspace(ws: Path) -> int:
+    """Shared #748 gate — emits the check-stale envelope to stderr and
+    returns RC_STALE_WORKSPACE on a stale workspace, 0 otherwise. Used by
+    cmd_resume; cmd_check_stale emits its own envelope and does not call
+    this (it is the canonical consumer)."""
+    import sys
+    skill_v = template_version.read_skill_version()
+    ws_v = template_version.read_workspace_version(ws)
+    if ws_v is None:
+        print(
+            f"kunglao: workspace {ws} has no version stamp — "
+            f"run /kunglao-agent:init {ws} first.",
+            file=sys.stderr,
+        )
+        return RC_STALE_WORKSPACE
+    try:
+        ws_key = template_version._semver_tuple(ws_v)
+        skill_key = template_version._semver_tuple(skill_v)
+    except Exception:
+        print(
+            f"kunglao: workspace stamp {ws_v!r} is not parseable — "
+            f"run /kunglao-agent:init {ws} first.",
+            file=sys.stderr,
+        )
+        return RC_STALE_WORKSPACE
+    if ws_key < skill_key:
+        print(
+            f"kunglao: workspace stamp {ws_v} trails skill version {skill_v} — "
+            f"run /kunglao-agent:upgrade {ws} first.",
+            file=sys.stderr,
+        )
+        return RC_STALE_WORKSPACE
+    return 0
+
+
+def _gate_heartbeat_rearm(ws: Path) -> int:
+    """#754 T3: the analysis-entry machine self-check (does not rely on the
+    orchestrator or the user remembering how heartbeats work):
+
+      1. durable reconcile — upsert <ws>/.claude/scheduled_tasks.json with our
+         idempotent loop entry (aging rebuild: a deleted/expired Claude Code
+         durable schedule is re-created here BEFORE anyone enters the loop);
+      2. continuous-tick verify — heartbeat_loop_prompt.verify_loop() with the
+         SAME evaluate_tick_continuity standard as the dispatch gate / 
+         --heartbeat-check (#754 E2): >=2 consecutive ticks, gaps <= 2x
+         interval_min, newest <= 35min.
+
+    Returns 0 when the entry is clear; RC_HEARTBEAT_VERIFY_FAIL (6) with an
+    explicit stderr hint otherwise. The reconcile is best-effort loud: a
+    scheduler-write failure warns but the VERIFY verdict stays authoritative.
+    """
+    try:
+        import loop_scheduler as ls
+        ls.upsert_durable_loop(ws)
+    except Exception as exc:  # noqa: BLE001 — advisory loud, verify decides
+        print(
+            f"kunglao: durable /loop reconcile FAILED ({exc}) - register "
+            f"manually: uv run --project <skill> <skill>/scripts/"
+            f"loop_scheduler.py {ws}",
+            file=sys.stderr)
+    import heartbeat_loop_prompt as hlp
+    if hlp.verify_loop(str(ws)) != 0:
+        print("heartbeat verify failed — run /kunglao-agent:resume for "
+              "re-arm guidance", file=sys.stderr)
+        return RC_HEARTBEAT_VERIFY_FAIL
+    print("OK: analysis entry clear - stale gate PASS, durable /loop "
+          f"registered ({ws / '.claude' / 'scheduled_tasks.json'}), "
+          "heartbeat ticking continuously")
+    return 0
+
+
+def cmd_analysis(args) -> int:
+    """#754 T3: the /kunglao-agent:analysis ENTRY gate chain — run once
+    before entering the convergence loop (SKILL.md contract):
+
+      1. _gate_stale_workspace (#748, same mount-point pattern as resume);
+      2. _gate_heartbeat_rearm (#754): durable-loop aging rebuild +
+         continuous-tick verify; rc=6 maps to the re-arm hint.
+
+    Pure gate/checker surface: entering the loop remains the orchestrator's
+    job (this command decides READINESS mechanically, then exits).
+    """
+    ws = Path(args.workspace).resolve()
+    rc = _gate_stale_workspace(ws)
+    if rc != 0:
+        return rc
+    return _gate_heartbeat_rearm(ws)
+
+
+def cmd_upgrade(args) -> int:
+    """#726: workspace framework-scaffold migration — pure delegation to
+    kunglao_upgrade.main. Hyphenated filename blocks a plain import; the
+    module is loaded via importlib (same pattern the test suite uses for
+    kunglao-init)."""
+    import importlib.util
+    mod_path = Path(__file__).resolve().parent / "kunglao_upgrade.py"
+    spec = importlib.util.spec_from_file_location("kunglao_upgrade", mod_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    argv = [str(args.workspace)]
+    if args.dry_run:
+        argv.append("--dry-run")
+    return mod.main(argv)
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(prog="kunglao.py", description="kunglao-agent unified entry")
+    ap = argparse.ArgumentParser(
+        prog="kunglao.py",
+        description="kunglao-agent unified entry",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "refusal exit codes:\n"
+            "  5 = stale workspace (template stamp trails or predates the skill "
+            "version) — run /kunglao-agent:upgrade <ws> first\n"
+            "  6 = heartbeat verify failed (analysis entry) — run "
+            "/kunglao-agent:resume for re-arm guidance\n"
+            "(resume/check-stale return 5; analysis entry returns 5 or 6)"
+        ),
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p_decide = sub.add_parser("decide", help="convergence decision (M1)")
@@ -153,10 +387,34 @@ def main() -> int:
     p_health.set_defaults(func=cmd_health)
 
     p_resume = sub.add_parser("resume",
-                              help="crash/reboot recovery brief (#466, read-only)")
+                              help="crash/reboot recovery brief (read-only)")
     p_resume.add_argument("workspace", nargs="?", default=".")
     p_resume.add_argument("--json", action="store_true")
     p_resume.set_defaults(func=cmd_resume)
+
+    p_check_stale = sub.add_parser(
+        "check-stale",
+        help="stale-workspace gate: JSON envelope + rc 0/5 "
+             "(status=current|stale|no-stamp); use this before "
+             "/kunglao-agent:analysis or /kunglao-agent:resume on a "
+             "workspace whose template stamp may trail the skill")
+    p_check_stale.add_argument("workspace", nargs="?", default=".")
+    p_check_stale.set_defaults(func=cmd_check_stale)
+
+    p_up = sub.add_parser("upgrade",
+                          help="workspace framework-scaffold migration")
+    p_up.add_argument("workspace", nargs="?", default=".")
+    p_up.add_argument("--dry-run", action="store_true",
+                      help="print the migration plan, write nothing")
+    p_up.set_defaults(func=cmd_upgrade)
+
+    p_analysis = sub.add_parser(
+        "analysis",
+        help="analysis entry gate: stale gate -> durable /loop "
+             "reconcile -> continuous-tick verify; rc0=clear, 5=stale, "
+             "6=heartbeat verify failed")
+    p_analysis.add_argument("workspace", nargs="?", default=".")
+    p_analysis.set_defaults(func=cmd_analysis)
 
     args = ap.parse_args()
     return args.func(args)

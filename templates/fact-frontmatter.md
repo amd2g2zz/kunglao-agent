@@ -1,4 +1,4 @@
-# Fact Frontmatter Template — kunglao × malware-veri-notes aligned schema (#336)
+# Fact Frontmatter Template — kunglao × malware-veri-notes aligned schema
 
 Authoritative template for kunglao fact files (`facts/F<NNN>-<slug>.md`).
 The schema is defined by `malware-veri-notes/references/frontmatter-schema.md`
@@ -24,12 +24,12 @@ fails lint is unqualified and must not enter the fact base.
 | 11 | `promotion_gate` | The promotion CONDITION, not a verification command. Empty exactly for `confirmed`/`pure_negative`/`contradiction`/`coordinate` |
 | 12 | `provenance` | ≥1 entry, each with `role` + `path`/`url`/`bytes` + `content_sha256` + `credibility` |
 
-Plus the schema pin (#536): every fact carries `schema_rev: 1` in its
+Plus the schema pin: every fact carries `schema_rev: 2` in its
 frontmatter — the revision of THIS template it was written against. The
 schema authority lives in the live skill dir
 (`malware-veri-notes/references/frontmatter-schema.md`); the pin makes
 silent semantic drift mechanically detectable (`lint_facts` reports
-`active_schema_rev: 1` so consumers can compare).
+`active_schema_rev: 2` so consumers can compare).
 
 ## source enum (8 values)
 
@@ -72,7 +72,7 @@ provenance:
 ## kunglao extension layer (above the schema)
 
 kunglao keeps four fields the schema does not define. They are an explicit
-extension layer — consumed by `scripts/kunglao_verify.py` (#332), NOT part of
+extension layer — consumed by `scripts/kunglao_verify.py`, NOT part of
 the 12 mandatory fields, but REQUIRED on every kunglao fact:
 
 | Field | Meaning |
@@ -91,7 +91,7 @@ Plus the verifier gate: `verify_status` ∈ `pending`/`partial`/`passes`/`fails`
 ---
 id: F999-example-c2-endpoint
 type: fact
-schema_rev: 1
+schema_rev: 2
 title: "C2 endpoint extraction from XOR-encoded config"
 status: PROVEN
 verify_status: passes

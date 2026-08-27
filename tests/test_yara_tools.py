@@ -66,7 +66,7 @@ def test_scan_bad_rule_path_exit_2(tmp_path):
     blob = tmp_path / "nope.bin"
     blob.write_bytes(b"\x00" * 16)
     r = run_cli("yara-scan.py", "--binary", str(blob), "--rules",
-                "C:/definitely/not/here.yar")
+                str(tmp_path / "definitely" / "not" / "here.yar"))
     assert r.returncode == 2
     assert "rule path not found" in r.stderr
 

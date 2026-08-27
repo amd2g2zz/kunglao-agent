@@ -216,7 +216,6 @@ def test_compare_register_change_blocks_orchestrator_proven_without_blind(ws_fac
     ws = ws_factory(claims=[{"id": "C-20", "status": "VERIFIED"}])
     _write_fact(ws, "C-20", "# no signoff")
     import sys
-    sys.path.insert(0, str(ROOT / "hooks"))
     import worker_budget as wb
     # point wb at this workspace's facts_dir via monkey-patching the helper
     before = {"C-20": "VERIFIED"}
@@ -235,7 +234,6 @@ def test_compare_register_change_allows_orchestrator_proven_with_blind(ws_factor
     ws = ws_factory(claims=[{"id": "C-21", "status": "VERIFIED"}])
     _write_fact(ws, "C-21", VALID_SIGNOFF)
     import sys
-    sys.path.insert(0, str(ROOT / "hooks"))
     import worker_budget as wb
     before = {"C-21": "VERIFIED"}
     reg_path = ws / "claim-register.yaml"

@@ -19,6 +19,9 @@ from pathlib import Path
 
 import pytest
 
+import hook_activation
+from hook_activation import canonical_install_root
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
@@ -114,9 +117,15 @@ def _seed_hooks_json(init_ws: Path, pre_command: str, post_command: str) -> Path
 def test_init_rerun_upgrades_legacy_bare_python_hook(init_ws: Path, isolated_home) -> None:
     """#389 F2: init hook deployment REPLACES a legacy bare-python
     worker_budget entry with the uv form — the same-name skip must not leave
-    the stale entry (bare python is 2.x on this machine)."""
-    hook_file = ROOT / "hooks" / "worker_budget.py"
-    uv_form = f"uv run --project {ROOT.as_posix()} {hook_file.as_posix()}"
+    the stale entry (bare python is 2.x on this machine).
+
+    #752: the entry target is the EXECUTING INSTALL's root (derived by
+    hook_activation.canonical_install_root — durable skills/<name>
+    co-installs resolve to themselves, ephemeral checkouts fall back to the
+    production install), no longer the repo checkout's own location."""
+    root = canonical_install_root().resolve()
+    hook_file = root / "hooks" / "worker_budget.py"
+    uv_form = f"uv run --project {root.as_posix()} {hook_file.as_posix()}"
     legacy = f"python {hook_file.as_posix()}"
     hooks_json = _seed_hooks_json(init_ws, legacy, legacy)
     r = _run_init(init_ws, ["--hooks-json", str(hooks_json)])

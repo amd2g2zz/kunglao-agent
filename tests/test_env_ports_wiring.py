@@ -109,11 +109,14 @@ def test_run_rebinds_ports_from_dotenv(clean_ports, monkeypatch, tmp_path):
         "KUNGLAO_VM_SHELL_PORT=11111\n"
         "KUNGLAO_FRIDA_PORT=22222\n",
         encoding="utf-8")
+    # #757: pin the vmr channel record so run() takes the legacy socket branch
+    # (an untyped workspace without any record would derive its channel)
+    (ws / "runs" / ".init-report.json").write_text(
+        '{"channel": {"selected": "vmr"}}', encoding="utf-8")
     monkeypatch.delenv("KUNGLAO_VM_HOST", raising=False)
     monkeypatch.setattr(env_check, "VM_HOST", "", raising=False)
 
     rc = env_check.run(ws)
-    assert rc == 1  # overall FAIL (host unreachable stub) — expected
     assert env_check.VM_PORTS == [11111, 22222], \
         "run() must rebind VM_PORTS from the .env-configured ports"
     assert dialed == [("10.255.255.1", 11111), ("10.255.255.1", 22222)], \

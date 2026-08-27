@@ -80,16 +80,14 @@ import hook_activation
 
 # D6: activation TTL from hook_activation.py DEFAULT_TTL_MINUTES — the tick
 # interval MUST stay below it or the TTL-expiry→next-tick gap silently closes
-# the gates (issue requirement).
-ACTIVATION_TTL_MINUTES = 30
+# the gates (issue requirement). #597: the three minutes constants below are
+# single-sourced in liveness_policy (values unchanged; rationale there).
+from liveness_policy import (  # noqa: E402
+    ACTIVATION_TTL_MINUTES,
+    DEFAULT_STALE_MINUTES,
+    FRESH_WORKER_MINUTES,
+)
 DEFAULT_TICK_INTERVAL_MIN = 15
-# D1: both heartbeat signals stale beyond this → dead. 15+10 = worst-case
-# detection ≤ 25 min < 30-min TTL → the kick always lands before the old
-# activation expires (no silent window, with margin).
-DEFAULT_STALE_MINUTES = 10
-# D3: worker status files fresher than this block the kick (session mid-dispatch).
-# Mirrors lib_kunglao STUCK_MINUTES (20).
-FRESH_WORKER_MINUTES = 20
 # #45: fired-predicate resume prompt bounds — the open-claims list is truncated
 # by priority (priority.rank_claims order) when over either bound.
 DEFAULT_MAX_PROMPT_CHARS = 4000
@@ -126,6 +124,8 @@ _KICKER_SKIP_FILES = frozenset({
     "state_anchor.py",      # state re-anchor — full --wire-up restores it
     "completion_gate.py",   # Stop completion gate — full --wire-up restores it
     "write_guard.py",       # carrier write gate (#532) — full --wire-up restores it
+    "orchestrator_tool_guard.py",  # Bash maker-checker WARN (#608) — full --wire-up restores it
+    "violation_capture.py", # Bash violation recorder (#718) — full --wire-up restores it
 })
 _KICKER_ENTRY_FILES = frozenset(f for _, _, f in KUNGLAO_HOOK_ENTRIES)
 
@@ -857,7 +857,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--settings", default=None,
                         help="project-level settings.json path (default: the "
                              "workspace-parent target from the wire_up_settings "
-                             "deployment registry — hook_deployment_targets[1], #410)")
+                             "deployment registry — hook_deployment_targets[1])")
     parser.add_argument("--claude-bin", default="claude", help="claude CLI binary")
     parser.add_argument("--stale-minutes", type=int, default=DEFAULT_STALE_MINUTES,
                         help="both heartbeat signals stale beyond this = session dead")

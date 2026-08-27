@@ -73,6 +73,13 @@ def _armed_ws(tmp_path: Path, *, name: str = "ws",
         (ws / "task_spec.yaml").write_text(
             "primary_questions:\n  - q1: sample family\n", encoding="utf-8")
 
+    # #748: stamp the workspace template version so the stale-workspace
+    # gate (RC=5) passes — these tests are about resume's delegation
+    # behavior, not about the gate itself.
+    ws_version = "0.1.3"
+    (ws / "CLAUDE.md").write_text(
+        f"# kunglao_template_version: {ws_version}\n", encoding="utf-8")
+
     facts = ws / "facts"
     facts.mkdir(exist_ok=True)
     (facts / "_INDEX.md").write_text("# _INDEX\n", encoding="utf-8")
@@ -516,8 +523,12 @@ def _registry() -> dict:
 
 def test_registry_covers_four_commands() -> None:
     reg = _registry()
-    assert set(reg) == {"init", "analysis", "help", "resume"}, (
-        f"#466 acceptance: registry must be the four-command set, got {sorted(reg)}")
+    # #466 acceptance: registry must be the four-command set; #746 added
+    # upgrade to the user-facing slash-command UX surface (the CLI was
+    # workspace-internal via #726, now promoted per user 2026-08-26).
+    assert set(reg) == {"init", "analysis", "help", "resume", "upgrade"}, (
+        f"#466 acceptance: registry must be the four-command set (now five "
+        f"after #746): got {sorted(reg)}")
 
 
 def test_registry_resume_record_complete() -> None:

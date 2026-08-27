@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 import time
 from contextlib import contextmanager
@@ -231,3 +232,41 @@ def _serialize_load_sensitive(request):
         return
     with load_sensitive_lock():
         yield
+
+
+# ---------- #770: sys.path mutation guard (session teardown) ----------
+#
+# Shared-name twins (completion_gate / heartbeat_touch / lib_kunglao) resolve
+# by sys.path ORDER, so any test module that inserts scripts/ or hooks/ at
+# import time silently re-binds the twins for every LATER suite — CI passes
+# while a different local ordering fails (#770's exact shape). Every twin
+# consumer now binds by path (#762 convention); the guard enforces that no
+# test mutates sys.path at all between session start and teardown.
+
+@pytest.fixture(scope="session", autouse=True)
+def _syspath_collision_order_guard():
+    def _wins() -> dict:
+        out = {}
+        for p in sys.path:
+            try:
+                name = Path(p).name
+            except (OSError, ValueError):
+                continue
+            if name in ("hooks", "scripts") and name not in out:
+                out[name] = p
+        return out
+
+    baseline = _wins()
+    yield
+    end = _wins()
+    if end != baseline:
+        pytest.fail(
+            "#770: shared-name twin resolution changed during this pytest "
+            f"session (start={baseline}, end={end}). The first "
+            "completion_gate / heartbeat_touch / lib_kunglao binding every "
+            "later suite sees must be stable — test modules must not insert "
+            "scripts/hooks onto sys.path (pytest.ini pythonpath is the only "
+            "insertion point); load twin modules by path under an isolated "
+            "name instead (see lib_kunglao / completion_gate consumers).",
+            pytrace=False,
+        )

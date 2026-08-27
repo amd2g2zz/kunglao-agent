@@ -39,7 +39,7 @@ RELEASE_MANIFEST = ROOT / "release-manifest.yaml"
 CHANGELOG = ROOT / "CHANGELOG.md"
 README = ROOT / "README.md"
 
-EXPECTED_VERSION = "0.1.1"
+EXPECTED_VERSION = "0.1.3"
 # The #366 field set: identity metadata only (issue body scope item 1).
 REQUIRED_FIELDS = {"name", "description", "version", "author", "homepage", "license"}
 # Component-path fields that would change runtime behavior (#364, not #366).

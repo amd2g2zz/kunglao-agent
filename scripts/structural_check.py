@@ -69,7 +69,7 @@ def check_references_index_drift(root):
         if not p.exists():
             issues.append(f'ERROR INDEX_DRIFT: {rel} missing on disk')
             continue
-        actual = hashlib.sha256(p.read_bytes()).hexdigest()
+        actual = hashlib.sha256(p.read_bytes().replace(bytes((13,10)), bytes((10,)))).hexdigest()
         if actual != expect:
             issues.append(f'ERROR INDEX_DRIFT: {rel} (digest mismatch)')
     return issues

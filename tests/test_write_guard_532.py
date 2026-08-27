@@ -228,7 +228,6 @@ def test_subset_tables_absorb_the_registry_growth():
 def test_all_four_carriers_are_matched(tmp_path, carrier):
     """The matcher must recognize all four contract carriers as in-scope."""
     ws = _mk_ws(tmp_path)
-    sys.path.insert(0, str(ROOT / "hooks"))
     import write_guard
     assert write_guard.carrier_of(ws, ws / carrier) is not None, (
         f"{carrier} must be recognized as a contract carrier")

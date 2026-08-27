@@ -302,7 +302,7 @@ def check_retracted_references(workspace: Path, anchors_file: Path | None = None
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="retract_claim.py",
-        description="Retract a claim (RETRACTED + blast-radius reopening) or gate report anchors (#331)",
+        description="Retract a claim (RETRACTED + blast-radius reopening) or gate report anchors",
     )
     parser.add_argument("workspace", help="workspace root (contains claim-register.yaml)")
     parser.add_argument("claim_id", nargs="?", help="claim id to retract (e.g. C-001)")

@@ -35,10 +35,13 @@ Exit codes: 0 = matches found; 1 = no match (closest categories listed);
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:  # PyYAML is a repo dependency; degrade gracefully when absent.
@@ -58,10 +61,17 @@ USAGE = (
     "Usage: references_recall.py <query>\n"
     "       references_recall.py --list-categories\n"
     "       references_recall.py --scene-map\n"
+    "       references_recall.py --joint <workspace> [--joint-limit N]\n"
+    "       references_recall.py --record-feedback <ws> term=verdict[,term=verdict...]\n"
+    "       references_recall.py --harvest-feedback <ws>\n"
+    "       references_recall.py --feedback-stats <ws>\n"
     "Scored recall over the layered references index (references/_INDEX.md +\n"
     "per-domain _index-<domain>.md): scenario label -> primary/supplementary\n"
     "files; otherwise top-K entries ranked by relevance score. Output rows\n"
-    "carry path + purpose + when-to-read + score (never file contents)."
+    "carry path + purpose + when-to-read + score (never file contents).\n"
+    "#761 J4: verdict feedback statistics (runs/.recall-stats.json, demotion\n"
+    "SUGGESTIONS only) and the joint claim+facts-index query construction for\n"
+    "the #759 THINK seat."
 )
 
 # ---- scoring weights (filename > category/domain > symptom > purpose > when) ----
@@ -338,6 +348,208 @@ def _load_symptom_map(index_path: Path) -> dict[str, str]:
         return {}
 
 
+# ---------- J4 recall feedback statistics (#761) ----------
+
+STATS_FILE = ".recall-stats.json"
+DEMOTION_STREAK = 3          # consecutive misleading -> demotion SUGGESTION
+FEEDBACK_VERDICTS = ("yes", "no", "misleading")
+
+
+def _feedback_parser():
+    """The single parse point lives in hooks/lib_kunglao.py (#444 AC-1).
+
+    NOTE: a different ``scripts/lib_kunglao.py`` (scripts-side drift lib)
+    shares the module NAME, and a caller may have already imported that one
+    into sys.modules. Import by explicit FILE path so the hooks-side grammar
+    owner is loaded regardless of sys.path order or module-cache pollution."""
+    import importlib.util  # noqa: PLC0415
+
+    mod = sys.modules.get("lib_kunglao")
+    if mod is not None and hasattr(mod, "parse_recall_feedback"):
+        return mod.parse_recall_feedback
+    hooks_dir = Path(__file__).resolve().parents[1] / "hooks"
+    # lib_kunglao itself imports _path_hygiene from its own directory
+    if str(hooks_dir) not in sys.path:
+        sys.path.insert(0, str(hooks_dir))
+    hooks_copy = hooks_dir / "lib_kunglao.py"
+    spec = importlib.util.spec_from_file_location("kunglao_hooks_lib", hooks_copy)
+    if spec is None or spec.loader is None:  # pragma: no cover
+        raise ImportError(f"hooks/lib_kunglao.py unreadable: {hooks_copy}")
+    mod = importlib.util.module_from_spec(spec)
+    # its own deps (_path_hygiene/liveness_policy) live in hooks/ + scripts/
+    spec.loader.exec_module(mod)
+    return mod.parse_recall_feedback
+
+
+def _stats_path(ws: Path) -> Path:
+    return Path(ws) / "runs" / STATS_FILE
+
+
+def load_stats(ws: Path) -> dict:
+    p = _stats_path(ws)
+    if not p.is_file():
+        return {"version": 1, "terms": {}}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8") or "{}")
+    except (OSError, json.JSONDecodeError):
+        return {"version": 1, "terms": {}}
+    data.setdefault("version", 1)
+    data.setdefault("terms", {})
+    return data
+
+
+def save_stats(ws: Path, stats: dict) -> None:
+    """Atomic write (tmp+replace) — a crash mid-update must never corrupt."""
+    stats["updated"] = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    runs = Path(ws) / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    p = runs / STATS_FILE
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(stats, ensure_ascii=False, indent=2,
+                              sort_keys=True), encoding="utf-8")
+    os.replace(tmp, p)
+
+
+def record_feedback(ws: Path, pairs) -> int:
+    """Accumulate (term, verdict) pairs into runs/.recall-stats.json.
+    Streak counts CONSECUTIVE misleading verdicts per term; any other verdict
+    resets it. Pure runtime telemetry inside the workspace's own runs/ — the
+    recall DICTIONARY itself is never touched here (#761: demotion is a human
+    adjudication face, lessons-nursery style #525)."""
+    ws = Path(ws)
+    stats = load_stats(ws)
+    terms = stats["terms"]
+    recorded = 0
+    for raw_term, verdict in pairs:
+        term = (raw_term or "").strip().lower()
+        verdict = (verdict or "").strip().lower()
+        if not term or verdict not in FEEDBACK_VERDICTS:
+            continue
+        e = terms.setdefault(term, {"yes": 0, "no": 0, "misleading": 0})
+        e[verdict] += 1
+        e["streak"] = e.get("streak", 0) + 1 if verdict == "misleading" else 0
+        e["last_verdict"] = verdict
+        recorded += 1
+    if recorded:
+        save_stats(ws, stats)
+    return recorded
+
+
+def harvest_feedback(ws: Path) -> tuple[int, int]:
+    """Scan runs/worker-status-*.md; attribute each file's LAST declared
+    verdict to its scoped dictionary terms (parse point = lib_kunglao).
+    Returns (records_written, files_scanned)."""
+    parser = _feedback_parser()
+    ws = Path(ws)
+    runs = ws / "runs"
+    if not runs.is_dir():
+        return 0, 0
+    pairs: list[tuple[str, str]] = []
+    scanned = 0
+    for status_file in sorted(runs.glob("worker-status-*.md")):
+        try:
+            text = status_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        scanned += 1
+        verdict, scoped = parser(text)
+        if verdict is None or not scoped:
+            continue
+        for t in scoped:
+            pairs.append((t, verdict))
+    return (record_feedback(ws, pairs), scanned) if pairs else (0, scanned)
+
+
+def demotion_suggestions(ws: Path) -> list[tuple[str, int]]:
+    """Terms whose trailing consecutive-misleading streak reached
+    DEMOTION_STREAK. SUGGESTIONS ONLY — applying a dictionary demotion is a
+    human edit, never an automated one."""
+    terms = load_stats(Path(ws))["terms"]
+    return [(t, int(e.get("streak", 0)))
+            for t, e in sorted(terms.items())
+            if int(e.get("streak", 0)) >= DEMOTION_STREAK]
+
+
+def print_feedback_stats(ws: Path) -> None:
+    stats = load_stats(Path(ws))
+    terms = stats["terms"]
+    print(f"# recall feedback stats ({len(terms)} term(s)) — {STATS_FILE}")
+    print("# term | yes | no | misleading | streak")
+    for t in sorted(terms):
+        e = terms[t]
+        print(f"{t} | {e.get('yes', 0)} | {e.get('no', 0)} | "
+              f"{e.get('misleading', 0)} | {e.get('streak', 0)}")
+    sugg = demotion_suggestions(ws)
+    if sugg:
+        print("# DEMOTION SUGGESTIONS (manual adjudication required — the "
+              "dictionary is NOT auto-edited)")
+        for t, streak in sugg:
+            print(f"{t} = consecutive_misleading:{streak}")
+    else:
+        print("# DEMOTION SUGGESTIONS: none")
+
+
+# ---------- J4 joint query construction (for the #759 THINK seat) ----------
+
+def build_joint_query(claim_text: str, facts_title_lines: list[str],
+                      max_titles: int = 12, max_len: int = 240) -> str:
+    """Claim-text tokens UNION facts/_INDEX title tokens (first max_titles
+    non-empty lines), deduped order-preserved, hard-capped so the recall
+    query stays a query and never becomes a dump."""
+    toks: list[str] = []
+    seen: set[str] = set()
+
+    def add_text(s: str) -> None:
+        for tok in _tokenize(s):
+            if tok not in seen:
+                seen.add(tok)
+                toks.append(tok)
+
+    add_text(claim_text or "")
+    used = 0
+    for line in facts_title_lines:
+        s = line.strip()
+        if not s:
+            continue
+        add_text(s)
+        used += 1
+        if used >= max_titles:
+            break
+    out: list[str] = []
+    n = 0
+    for tok in toks:
+        if n + len(tok) + 1 > max_len:
+            break
+        out.append(tok)
+        n += len(tok) + 1
+    return " ".join(out)
+
+
+def gather_joint_inputs(ws: Path, max_titles: int) -> tuple[str, list[str]]:
+    """Workspace joint-query inputs: claim-register statements + the head of
+    facts/_INDEX.md. Both sources degrade to empty on any read problem."""
+    ws = Path(ws)
+    claims_text = ""
+    reg = ws / "claim-register.yaml"
+    if reg.is_file() and _yaml is not None:
+        try:
+            data = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+            stmts = [str(c.get("statement", "")).strip()
+                     for c in (data.get("claims") or [])]
+            claims_text = "\n".join(s for s in stmts if s)
+        except Exception:  # noqa: BLE001 — degraded mode: no claim text
+            claims_text = ""
+    lines: list[str] = []
+    facts_idx = ws / "facts" / "_INDEX.md"
+    if facts_idx.is_file():
+        try:
+            lines = facts_idx.read_text(
+                encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            lines = []
+    return claims_text, lines[:max(max_titles * 4, 20)]
+
+
 # ---------- top-level index assembly ----------
 
 def build_index(index_path: Path) -> Index:
@@ -610,6 +822,42 @@ def main(argv: list[str]) -> int:
         print(USAGE)
         return 0 if len(argv) >= 2 else 2
 
+    # ---- #761 J4 feedback faces (no index needed) ----
+    if argv[1] == "--record-feedback":
+        if len(argv) < 4:
+            print(USAGE, file=sys.stderr)
+            return 2
+        pairs = []
+        for chunk in " ".join(argv[3:]).split(","):
+            spec = chunk.strip()
+            if not spec:
+                continue
+            term, _, verdict = spec.partition("=")
+            pairs.append((term, verdict))
+        written = record_feedback(Path(argv[2]), pairs)
+        print(f"# recorded {written} feedback item(s) into "
+              f"{STATS_FILE}")
+        for term, streak in demotion_suggestions(Path(argv[2])):
+            print(f"# suggestion: '{term}' consecutive_misleading:{streak}")
+        return 0
+    if argv[1] == "--harvest-feedback":
+        if len(argv) < 3:
+            print(USAGE, file=sys.stderr)
+            return 2
+        ws_path = Path(argv[2])
+        written, scanned = harvest_feedback(ws_path)
+        print(f"# harvested {written} verdict item(s) from {scanned} "
+              f"worker-status file(s)")
+        for term, streak in demotion_suggestions(ws_path):
+            print(f"# suggestion: '{term}' consecutive_misleading:{streak}")
+        return 0
+    if argv[1] == "--feedback-stats":
+        if len(argv) < 3:
+            print(USAGE, file=sys.stderr)
+            return 2
+        print_feedback_stats(Path(argv[2]))
+        return 0
+
     index_path = default_index_path()
     if not index_path.is_file():
         print(f"error: _INDEX.md not found at {index_path}", file=sys.stderr)
@@ -624,6 +872,27 @@ def main(argv: list[str]) -> int:
         return 0
     if arg == "--scene-map":
         print_scene_map(scenes)
+        return 0
+    if arg == "--joint":  # THINK-seat joint query (#761 J4 -> #759)
+        args = argv[2:]
+        if not args or not Path(args[0]).is_dir():
+            print(USAGE, file=sys.stderr)
+            return 2
+        limit = int(args[args.index("--joint-limit") + 1]) \
+            if "--joint-limit" in args else 12
+        claims_text, title_lines = gather_joint_inputs(Path(args[0]), limit)
+        joint_query = build_joint_query(claims_text, title_lines,
+                                        max_titles=limit)
+        if not joint_query.strip():
+            print("# joint query: (empty inputs)", )
+            print_no_match("(joint: empty workspace inputs)", entries)
+            return 1
+        print(f"# joint query: {joint_query}")
+        result = recall(entries, scenes, joint_query)
+        if result.kind == "none":
+            print_no_match(joint_query, entries)
+            return 1
+        print_result(result, entries)
         return 0
 
     result = recall(entries, scenes, arg)

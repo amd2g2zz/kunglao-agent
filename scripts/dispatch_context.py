@@ -50,6 +50,7 @@ BLIND guarantees (issue #527 verifier BLIND 硬排除):
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -216,6 +217,31 @@ def _sibling_claims(ws: Path, claim_id: str) -> list[dict]:
 
 # ---------- public API ----------
 
+def _providers_block(ws: Path, capability: str | None) -> dict | None:
+    """#692 WP4 (design D5): the ranked provider block for one capability.
+
+    Fail-open: any failure (missing index, unparseable state, selection
+    error) omits the block — the context build never raises. Returns the
+    select_providers result {capability, providers, recommendation,
+    rationale} or None when there is no capability / no provider rows.
+    """
+    if not capability:
+        return None
+    try:
+        import route_capability as rc  # sibling (scripts/ on sys.path)
+
+        tools = rc.load_index(rc.DEFAULT_INDEX)
+        if not tools:
+            return None
+        state = rc.load_workspace_state(ws)
+        result = rc.select_providers(capability, tools, state)
+        if not result.get("providers"):
+            return None
+        return result
+    except Exception:  # noqa: BLE001 — fail-open, never block dispatch
+        return None
+
+
 def build_dispatch_context(
     *,
     ws: Path,
@@ -223,6 +249,7 @@ def build_dispatch_context(
     tier: int,
     tools: list[str],
     agent_name: str,
+    capability: str | None = None,
 ) -> dict:
     """Build the FULL dispatch context block (orchestrator-side view).
 
@@ -232,7 +259,19 @@ def build_dispatch_context(
 
     Returns a plain dict (caller decides serialization / injection)."""
     ws = Path(ws)
-    return {
+    # #692 WP4: providers ride the context (fail-open, optional key) so the
+    # worker holds in-flight degradation authority; explicit capability
+    # wins, else the claim's validated capability. NOT in
+    # VERIFIER_SAFE_KEYS — the verifier stays BLIND to the dispatch
+    # contract (same class as tier/tools).
+    try:
+        providers = _providers_block(
+            ws,
+            capability or _validated_capability(
+                ws, claim_id).get("capability"))
+    except Exception:  # noqa: BLE001 — context build never raises
+        providers = None
+    ctx = {
         "version": CONTEXT_BLOCK_VERSION,
         "claim_id": claim_id,
         "tier": tier,
@@ -246,6 +285,9 @@ def build_dispatch_context(
         "plan_ref": _plan_ref(ws, claim_id),
         "sibling_claims": _sibling_claims(ws, claim_id),
     }
+    if providers is not None:
+        ctx["providers"] = providers
+    return ctx
 
 
 def validate_context_shape(ctx: dict) -> None:
@@ -288,6 +330,16 @@ def validate_context_shape(ctx: dict) -> None:
     if not str(ctx["dispatch_ts"]).endswith("Z"):
         raise ValueError(
             f"context dispatch_ts {ctx['dispatch_ts']!r} is not UTC Z-form")
+    # #692 WP4: providers is OPTIONAL (#527 backward compat); when present
+    # it must be the select_providers face: {capability, providers, ...}.
+    if "providers" in ctx:
+        prov = ctx["providers"]
+        if not isinstance(prov, dict) or "capability" not in prov \
+                or "providers" not in prov:
+            raise ValueError(
+                "context 'providers' must be a dict carrying "
+                "'capability' and 'providers' keys (the #692 "
+                "select_providers face)")
 
 
 def apply_dispatch_context(ws: Path, ctx: dict) -> Path:
@@ -347,14 +399,264 @@ def verifier_dispatch_view(ws: Path, claim_id: str) -> dict:
     return {k: v for k, v in raw.items() if k in VERIFIER_SAFE_KEYS}
 
 
+# ---------- redo GAP slice (issue #772 重做方向盲性缺口) ----------
+
+REDO_CONTEXT_VERSION = 1
+
+# The DIFF's on-disk form is runs/verify-redteam-<target>.md (issue 取证:
+# kunglao-redteam's only write contract; the issue title's guessed
+# redteam-status-C*.md / evidence/redteam-*.json shapes do not exist).
+REDO_DIFF_GLOB = "runs/verify-redteam-*.md"
+
+# Section headers whose BODY is the red team's own derivation — i.e. the
+# answer a redo worker would copy. Content under them is withheld wholesale
+# (the header line itself degrades to an explicit placeholder so the
+# orchestrator can see something was deliberately cut, not lost).
+_REDO_WITHHELD_SECTION_MARKERS = (
+    "my independent derivation",
+)
+
+# machine_check fences (#332) carry expected/actual literals BY CONTRACT —
+# exactly what a redo worker must never see.
+_REDO_FENCE_RES = (
+    re.compile(r"```[^\n]*machine[-_]check[^\n]*\n.*?```", re.DOTALL | re.I),
+    re.compile(r"```[^\n]*\n(?:(?!```)[^\n])*\b(?:expected|actual)\b(?:(?!```)[^\n])*```", re.DOTALL | re.I),
+)
+
+# Conclusion-led lines (English-only on principle, same posture as
+# dispatch_gate._DISPATCH_MUST_STOP_PATTERNS): value-carrying derivation
+# lines, not gap-shape lines.
+_REDO_DROP_LINE_RES = tuple(
+    re.compile(p, re.IGNORECASE) for p in (
+        r"^\s*(?:[-*]|\d+[.)]\s*)?(?:my\s+|our\s+)?(?:re)?computed\b.*\d",
+        r"\bproducer claimed\b.*\d",
+        r"\b(actual|expected)\s+(?:anchor|value|result|output|byte|offset)\b",
+        r"^(?:[-*]|\s)*\s*(?:actual|expected)\s*[:=]",
+        r"\bderivation chain\b",
+    )
+)
+
+# Token-level scrubbing. Order matters: ids are PROTECTED first (they are
+# bookkeeping references, not derived answers), then addresses / hex /
+# decimal magnitudes are redacted. Over-redaction is acceptable — leaking
+# an answer is not.
+_REDO_ID_PROTECT_RE = re.compile(r"\b([FC]-?\d{3})\b")
+_REDO_ADDR_RE = re.compile(r"0[xX][0-9a-fA-F]+")
+_REDO_HEX_RE = re.compile(r"\b[0-9a-fA-F]{8,}\b")
+_REDO_NUM_RE = re.compile(r"\d{3,}")
+
+_REDO_TITLE_RE = re.compile(r"^#\s*Red-team verification:\s*(.+)$", re.I)
+_REDO_CLAIM_RE = re.compile(r"\b(C-\d+)\b")
+_REDO_VERDICT_RE = re.compile(
+    r"RED-TEAM VERDICT:\s*(CONFIRMED|REFUTED|UNVERIFIED-WITH-GAP)", re.I)
+_HEADER_RE = re.compile(r"^#{1,6}\s+")
+
+
+def _classify_divergence(text: str) -> str:
+    """Keyword classification of the divergence SHAPE (never its values):
+    anchor_mismatch > method_challenged > evidence_gap > unclassified."""
+    t = text.lower()
+    if any(k in t for k in ("anchor", "mismatch", "offset", "disagree",
+                            "differs")):
+        return "anchor_mismatch"
+    if any(k in t for k in ("method", "assumption", "granularity",
+                            "blind spot", "invalid", "encoding")):
+        return "method_challenged"
+    if any(k in t for k in ("gap", "unproven", "insufficient",
+                            "missing evidence", "coverage")):
+        return "evidence_gap"
+    return "unclassified"
+
+
+def _redact_tokens(line: str, counter: list[int]) -> str:
+    """Scrub answer-bearing tokens from one kept line.
+
+    Protected claim/fact ids are swapped to digit-free placeholders for the
+    duration of the numeric passes — a sentinel that itself contains digits
+    would be scrubbed by its own pipeline."""
+    saved: list[str] = []
+
+    def prot(m: "re.Match[str]") -> str:
+        saved.append(m.group(1))
+        return f"\x00{len(saved)}\x00"
+
+    def bump(tag: str) -> str:
+        counter[0] += 1
+        return f"<redacted-{tag}>"
+
+    out = _REDO_ID_PROTECT_RE.sub(prot, line)
+    out = _REDO_ADDR_RE.sub(lambda m: bump("addr"), out)
+    out = _REDO_HEX_RE.sub(lambda m: bump("token"), out)
+    out = _REDO_NUM_RE.sub(lambda m: bump("num"), out)
+    return re.sub("\x00(\\d+)\x00",
+                  lambda m: saved[int(m.group(1)) - 1], out)
+
+
+def _sanitize_diff_body(text: str) -> tuple[list[str], int]:
+    """Three mechanical passes over the DIFF text -> kept lines + count.
+
+    1. fenced blocks dropped (machine_check carries expected/actual)
+    2. withheld-section bodies dropped (independent derivation = the answer)
+    3. conclusion-led lines dropped per regex, surviving tokens redacted
+    """
+    kept: list[str] = []
+    counter = [0]
+    body = text
+    for fence_re in _REDO_FENCE_RES:
+        body = fence_re.sub("[redacted machine-check block]", body)
+    in_withheld = False
+    for raw_line in body.splitlines():
+        stripped = raw_line.strip()
+        # F1 (#772 r1 review): real DIFF headers carry MD hashes — strip the
+        # prefix BEFORE marker comparison or "## My independent derivation"
+        # never matches and the answer body rides straight through.
+        lowered = stripped.lstrip("#").strip().lower()
+        if any(lowered.startswith(m) for m in _REDO_WITHHELD_SECTION_MARKERS):
+            in_withheld = True
+            kept.append("## [redacted section: independent derivation "
+                        "withheld from redo slice (#772)]")
+            continue
+        if in_withheld and _HEADER_RE.match(stripped) \
+                and not lowered.startswith("my independent derivation"):
+            in_withheld = False  # next real section resumes
+        if in_withheld:
+            continue
+        if any(rx.search(stripped) for rx in _REDO_DROP_LINE_RES):
+            continue
+        if stripped.startswith("```"):
+            continue
+        kept.append(_redact_tokens(raw_line.rstrip(), counter))
+    return kept, counter[0]
+
+
+def _extract_claim_id(title_text: str, name: str) -> str | None:
+    m = _REDO_CLAIM_RE.search(title_text or "")
+    if m:
+        return m.group(1)
+    m = re.search(r"(C-\d+)", name or "")
+    return m.group(1) if m else None
+
+
+def latest_redteam_diff(ws: Path) -> Path | None:
+    """Most recently written runs/verify-redteam-*.md, or None (fail-open)."""
+    runs = ws / "runs"
+    if not runs.is_dir():
+        return None
+    try:
+        hits = sorted(runs.glob(Path(REDO_DIFF_GLOB).name),
+                      key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return None
+    return hits[-1] if hits else None
+
+
+def build_redo_context(ws: Path, diff_path: Path | None = None) -> dict:
+    """GAP-only redo slice from a red-team DIFF (issue #772).
+
+    Desanitized boundary — the redo worker learns WHERE the prior attempt
+    diverged (field mismatch / challenged assumption / alternative method
+    direction), NEVER what the red team derived (values, anchors,
+    conclusions). Symmetric to #527's verifier BLIND slice but on the
+    OPPOSITE edge of maker-checker. Fail-open: a missing/unreadable diff
+    yields an honest error-marker dict; this function never raises.
+    """
+    ws = Path(ws)
+    diff_ref: str | None = None
+    path: Path | None = None
+    if diff_path is not None:
+        path = Path(diff_path)
+    else:
+        path = latest_redteam_diff(ws)
+    error: str | None = None
+    text: str | None = None
+    if path is None:
+        error = "diff_not_found"
+    elif not path.exists():
+        error = "diff_not_found"
+    else:
+        diff_ref = str(path.name)
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            error = "diff_unreadable"
+    ctx: dict[str, Any] = {
+        "version": REDO_CONTEXT_VERSION,
+        "kind": "REDO",
+        "diff_ref": diff_ref,
+        "claim_id": None,
+        "verdict": None,
+        "divergence_class": "unclassified",
+        "gap": "",
+        "challenged": [],
+        "hint_direction": (
+            "re-derive independently from the raw artifact; the redo must "
+            "NOT reuse values seen in prior DIFFs"),
+        "sanitized": True,
+        "redactions": 0,
+    }
+    if error is not None or text is None:
+        ctx["error"] = error or "diff_not_found"
+        return ctx
+
+    title_m = _REDO_TITLE_RE.search(text)
+    verdict_m = _REDO_VERDICT_RE.search(text)
+    claim_id = _extract_claim_id(
+        title_m.group(1) if title_m else "", path.name)
+    kept_lines, n_redactions = _sanitize_diff_body(text)
+
+    # gap summary: prefer the GAPs section body (the where-diverged goldmine)
+    gaps_header_re = re.compile(r"^#{1,6}\s+gaps\b", re.IGNORECASE)
+    gap_body: list[str] = []
+    in_gaps = False
+    challenged: list[str] = []
+    for line in kept_lines:
+        s = line.strip()
+        low = s.lower()
+        if low.startswith("#"):
+            in_gaps = bool(gaps_header_re.match(s))
+            continue
+        if not s or s.startswith("[redacted"):
+            continue
+        if in_gaps:
+            gap_body.append(s.lstrip("-* ").strip())
+        if "assumption" in low or "假设" in s:
+            c = s.lstrip("-* ").strip()
+            if len(c) > 160:
+                c = c[:157] + "..."
+            if c not in challenged:
+                challenged.append(c)
+    gap = "; ".join(gap_body)[:600]
+    # fall back to Attack attempts shape when no GAPs section exists
+    if not gap:
+        fallback = [
+            ln.strip().lstrip("-* ").strip()
+            for ln in kept_lines
+            if ln.strip() and not ln.strip().startswith(("#", "[redacted"))
+        ]
+        gap = "; ".join(fallback)[:600]
+    # classify over ALL sanitized shape text — a GAPs body can be neutral
+    # prose while the divergence shape lives in Attack attempts
+    classification_src = "\n".join(gap_body) + "\n" + "\n".join(kept_lines)
+    ctx.update({
+        "claim_id": claim_id,
+        "verdict": verdict_m.group(1).upper() if verdict_m else None,
+        "divergence_class": _classify_divergence(classification_src),
+        "gap": gap,
+        "challenged": challenged[:5],
+        "redactions": n_redactions,
+    })
+    return ctx
+
+
 # ---------- CLI (smoke test) ----------
 
 def main() -> int:
     import argparse
     parser = argparse.ArgumentParser(
-        description="Build / validate / write a #527 dispatch context block")
+        description="Build / validate / write a dispatch context block")
     parser.add_argument("workspace", help="workspace root")
-    parser.add_argument("--claim", required=True, help="claim id (C-NN)")
+    parser.add_argument("--claim", default=None,
+                        help="claim id (C-NN); optional with --redo-diff")
     parser.add_argument("--tier", type=int, default=1, choices=[1, 2, 3])
     parser.add_argument("--tools", default="", help="comma-separated tools")
     parser.add_argument("--agent", default="kunglao-worker",
@@ -365,11 +667,18 @@ def main() -> int:
                         help="print the prompt-injectable string")
     parser.add_argument("--verifier-blind", action="store_true",
                         help="print the BLIND verifier slice instead")
+    parser.add_argument("--redo-diff", default=None,
+                        help="#772: print the GAP-only redo slice built from "
+                             "this red-team DIFF file (runs/verify-redteam-*.md)")
     args = parser.parse_args()
     ws = Path(args.workspace)
     if args.verifier_blind:
         blind = verifier_dispatch_view(ws, args.claim)
         print(json.dumps(blind, ensure_ascii=False, indent=2))
+        return 0
+    if args.redo_diff:
+        redo = build_redo_context(ws, Path(args.redo_diff))
+        print(json.dumps(redo, ensure_ascii=False, indent=2))
         return 0
     tools = [t.strip() for t in args.tools.split(",") if t.strip()]
     ctx = build_dispatch_context(ws=ws, claim_id=args.claim, tier=args.tier,

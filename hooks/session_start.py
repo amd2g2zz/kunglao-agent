@@ -15,9 +15,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Add scripts/ to path for hook_activation
+from _path_hygiene import ensure_scripts_path  # #671 sys.path hygiene authority
+
+# Add scripts/ to path for hook_activation (#671: idempotent, position-stable
+# membership via the hygiene authority — was a bare leaking insert).
 _SKILL_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_SKILL_ROOT / "scripts"))
+ensure_scripts_path()
 
 from hook_activation import always_arm, renew, read_state
 
@@ -49,7 +52,7 @@ def session_start(workspace: Path) -> int:
 
 if __name__ == "__main__":
     import argparse
-    ap = argparse.ArgumentParser(description="#533 SessionStart hook")
+    ap = argparse.ArgumentParser(description="SessionStart hook")
     ap.add_argument("workspace", type=Path)
     args = ap.parse_args()
     sys.exit(session_start(args.workspace))

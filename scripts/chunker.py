@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="chunker.py",
         description="split a function batch into chunks within a measured "
-                    "prompt-length budget (#309)")
+                    "prompt-length budget")
     ap.add_argument("--input", required=True, help="JSON file: list or {'functions': [...]}")
     ap.add_argument("--budget-tokens", type=int, required=True,
                     help="model token budget per chunk")

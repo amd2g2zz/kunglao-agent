@@ -8,8 +8,8 @@ description: >-
   "失败归因", "实际进度和计划不匹配", "kunglao-agent stuck / not moving", "plan doesn't
   match reality", "worker reports problem / 卡住", "VM 网络不通", "should just ping".
   Command router: prints the subcommand menu on no args and routes to the
-  per-command skills under skills/ (init / analysis / help). The full
-  convergence contract lives in skills/kunglao-agent/SKILL.md.
+  per-command skills under skills/ (init / analysis / resume / upgrade / help).
+  The full convergence contract lives in skills/kunglao-agent/SKILL.md.
 triggers:
   - run kunglao-agent
   - continue kunglao-agent
@@ -28,7 +28,7 @@ triggers:
   - RE orchestrator
   - run the RE loop
 arguments: [request]
-argument-hint: init <workspace> | analysis <workspace> | help
+argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | upgrade <workspace> | help
 ---
 
 # kunglao-agent — command router
@@ -46,10 +46,14 @@ silently run the loop. The operator must pick a subcommand.
 ```
 kunglao-agent subcommands:
 
-  /kunglao-agent:init      <workspace> [--type windows|linux|android]
+  /kunglao-agent:init      <workspace> [--type windows|linux|android|web|macos]
                            initialize a workspace (scaffold + CLAUDE.md +
                            sample mount + task_spec intake + hooks)
                            example: /kunglao-agent:init ~/cases/synth-dropper --type windows
+
+  Web environments (`--type web`): labs positioning, docker-default channel,
+  camoufox-reverse MCP for browser JS reverse engineering. Quick reference:
+  references/re-library/web-re-quickref.md.
 
   /kunglao-agent:analysis  <workspace>   (alias: analyze)
                            enter the convergence loop on an initialized
@@ -59,8 +63,16 @@ kunglao-agent subcommands:
   /kunglao-agent:resume   <workspace>
                            crash/reboot recovery: read-only breakpoint brief
                            (health + state + timeline + next step); advises
-                           the #461 re-arm chain when the heartbeat is dead
+                           the re-arm chain when the heartbeat is dead
                            example: /kunglao-agent:resume ~/cases/synth-dropper
+
+  /kunglao-agent:upgrade  <workspace> [--dry-run]
+                           migrate a legacy workspace's framework scaffold
+                           forward to the current skill package (hooks,
+                           templates, ALWAYS_ARMED hook state, event vocab,
+                           .agent/ metadata). User data is never
+                           touched (iron rule; RC=4 on byte drift).
+                           example: /kunglao-agent:upgrade ~/cases/synth-dropper
 
   /kunglao-agent:help      [no args]
                            print this usage list
@@ -70,11 +82,12 @@ Next steps:
   uninitialized workspace → /kunglao-agent:init
   initialized workspace   → /kunglao-agent:analysis
   crashed / rebooted ws   → /kunglao-agent:resume
+  legacy / behind ws      → /kunglao-agent:upgrade
   unsure which command    → /kunglao-agent:help
   partial arguments       → the subcommand prints its own guided prompt
                            (see its SKILL.md "No arguments" section)
-(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table;
- #456: zero-args guard below the router, per-command examples + next steps —
+(feat: subcommand UX + guided entry — skills/ layout, menu, hints, README table;
+ zero-args guard below the router, per-command examples + next steps —
  menu/hints render skills/subcommands.yaml, the single source)
 ```
 
@@ -87,7 +100,10 @@ Next steps:
 - `analysis <workspace>` (alias `analyze`) → read and follow
   `skills/analysis/SKILL.md`; the convergence loop is the destination.
 - `resume <workspace>` → read and follow `skills/resume/SKILL.md`
-  (read-only crash/reboot recovery brief, #466).
+  (read-only crash/reboot recovery brief).
+- `upgrade <workspace>` → read and follow `skills/upgrade/SKILL.md`
+  (forward-only workspace framework-scaffold migration; user data
+  read-only per iron rule; pairs with git snapshot).
 - `help` → read and follow `skills/help/SKILL.md` (usage list).
 - Natural-language RE request (e.g. "what does this binary do") → map to
   `analysis`: read `skills/analysis/SKILL.md` then
@@ -107,5 +123,6 @@ not `skills/kunglao-agent/`.
 - `/kunglao-agent init ~/cases/synth-dropper --type windows`
 - `/kunglao-agent analysis ~/cases/synth-dropper`
 - `/kunglao-agent resume ~/cases/synth-dropper`
+- `/kunglao-agent upgrade ~/cases/synth-dropper`
 - `/kunglao-agent help`
-(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table)
+(feat: subcommand UX + guided entry — skills/ layout, menu, hints, README table)

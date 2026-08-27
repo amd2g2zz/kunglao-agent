@@ -225,9 +225,10 @@ def test_hook_skips_when_not_activated(ws, capsys):
     assert capsys.readouterr().out == ""
 
 
-def test_hook_skips_when_workspace_unresolvable(capsys):
+def test_hook_skips_when_workspace_unresolvable(capsys, tmp_path):
     mod = _hook()
-    rc = mod.process_event({"tool_name": "Agent", "cwd": "C:/nonexistent/path-xyz"})
+    rc = mod.process_event({"tool_name": "Agent",
+                            "cwd": str(tmp_path / "nonexistent" / "path-xyz")})
     assert rc == 0
     assert capsys.readouterr().out == ""
 

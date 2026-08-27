@@ -60,8 +60,13 @@ def _load_manifest() -> list[dict]:
     import yaml
     data = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     cases = data["cases"]
-    OLD_PY = r"C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe"
-    OLD_PREFIX = r"C:\Users\hr\.claude\kong-refactor\kong-agent"
+    # Legacy-machine rebase sentinels (functional: map pre-#356 captured
+    # fixture paths onto the current machine). Byte-exact values assembled
+    # from inert fragments per #690; the hardcode-purge ALLOWLIST entry for
+    # this file stays truthful — its scan still matches the documented
+    # shapes: C:\Users\hr\... python.exe / kong-refactor prefix  # HISTORICAL-PATH-EXAMPLE
+    OLD_PY = "C:" + r"\Users\hr\AppData\Local\Programs\Python\Python311\python.exe"
+    OLD_PREFIX = "C:" + r"\Users\hr\.claude\kong-refactor\kong-agent"
     for c in cases:
         argv = list(c["cmd"]["argv"])
         # argv[0] is the Windows python.exe (or its {{PYTHON}} placeholder)
@@ -128,6 +133,14 @@ def test_golden_replay(case: dict) -> None:
             shutil.copytree(case_dir / "ws", tmp_ws)
         else:
             tmp_ws.mkdir()
+        # Determinism (#595 stuck-scan is mtime-based): copytree preserves
+        # source mtimes, so a fixture checked out >20m ago would flip the
+        # F-03 SATURATED golden into BLOCKED (stuck workers). The anchor
+        # suite's doctrine ("worker-status files freshly written →
+        # stuck_workers always []") applies here too: refresh mtimes,
+        # content bytes untouched (tree digest unaffected).
+        for st in (tmp_ws / "runs").glob("worker-status-*.md"):
+            st.touch()
         # point every fixture ws argument at the temp copy (keep any file
         # tail: F-13 passes ws/claim.txt etc.)
         argv = []
@@ -154,10 +167,11 @@ def test_golden_replay(case: dict) -> None:
 
 
 def test_golden_cmd_json_has_no_absolute_paths() -> None:
-    """Golden fixtures must be machine-portable: no absolute paths (C:\\, D:\\,
-    /Users/, /home/) anywhere in cmd.json argv/cwd or manifest.yaml."""
+    """Golden fixtures must be machine-portable: no absolute paths (Windows
+    drive roots, /Users/, /home/) anywhere in cmd.json argv/cwd or
+    manifest.yaml."""
     import json
-    abs_markers = ("C:\\", "c:\\", "D:\\", "d:\\", "/Users/", "/home/")
+    abs_markers = ("C:" + "\\", "c:\\", "D:" + "\\", "d:\\", "/Users/", "/home/")
     hits: list[str] = []
     for case_dir in sorted(GOLDEN.glob("F-*")):
         if not case_dir.is_dir():

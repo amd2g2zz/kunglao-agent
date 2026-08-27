@@ -42,8 +42,34 @@ if str(SCRIPTS) not in sys.path:
 
 import convergence_check  # module under test (== baseline before #443 GREEN)
 
-BASELINE_COMMIT = "c5cb1ae"  # origin/dev at v012/issue-443-decide-state-machine branch point
-ANCHOR_FILE = Path(__file__).parent / "decide_anchor_c5cb1ae.json"
+# 2026-08-25 re-pin: the anchor was re-frozen at 619ebd3 after the
+# INTENTIONAL decide() semantics additions of #662 (hypothesis seed:
+# open_hypotheses field + OPEN_HYPOTHESIS_AT_CLOSE event) and #663 (anomaly
+# detection: anomalies field + ANOMALY_DETECTED event), plus #670's
+# Event.JADX_INFEASIBLE. Those merges shipped without re-pinning the anchor,
+# so 31 frozen cases failed from that point on. The c5cb1ae anchor remains
+# recoverable from git history (and documents the original #443
+# zero-semantics-change proof). Machine-generated via .tmp/regen_anchor.py.
+BASELINE_COMMIT = "8804dcd"  # dev HEAD at the 2026-08-26 re-pin (#707 contradiction annotation is an intentional decide() semantics change)
+ANCHOR_FILE = Path(__file__).parent / "decide_anchor_8804dcd.json"
+
+# 2026-08-27 corpus re-pin (#751): web-re-quickref.md grew the gitnexus
+# semantic-index step (~30 lines), shifting lexical rarity again. Same class:
+# DATA drift only, 4 score floats across the 2 contradiction cases
+# (0.905067808708 -> 0.907194994786, 0.910599571734 -> 0.912148070907).
+# Also: _load_baseline_module now ships hooks/_path_hygiene.py beside the
+# copied lib_kunglao.py — the #671 self-bootstrap FileNotFoundError'd the
+# regen path after that merge (regen was broken for every doc-touching wave).
+#
+# 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web-re-quickref.md
+# joined the anomaly baseline corpus (anomaly_detector._load_baseline ingests
+# re-library/*.md), shifting every lexical rarity score in the 4th decimal. This
+# is DATA drift, not decide() semantics drift — the 8804dcd baseline decide()
+# and the current decide() still agree on all 31 cases (channel 1 green); only
+# the frozen scores were stale. Re-captured via capture_from_git_baseline()
+# (baseline module + current corpus): 4 score floats across the 2 contradiction
+# cases moved (0.905840286055 -> 0.905067808708, 0.911799761621 -> 0.910599571734,
+# full precision in the anchor), nothing else changed.
 
 _CLEAN_INDEX = "# facts\n"
 _CONTRA_INDEX = (
@@ -455,7 +481,22 @@ def build_case(name: str, base: Path | None = None) -> Path:
 # ------------------------------------------------------------- baseline IO
 
 def _canonical(d: dict) -> str:
-    return json.dumps(d, sort_keys=True, ensure_ascii=False, default=str)
+    """Canonical JSON for anchor equality — floats rounded to 12 decimals.
+
+    Rationale (#692 CI, 2026-08-26): anomaly scores are mean-of-ratios whose
+    last significant digit is a 1-ULP platform artifact (Windows CPython vs
+    Linux CPython libm differ at the 16th sig fig: 0.9058402860548272 vs
+    0.905840286054827). Rounding lives in the COMPARISON layer only — fact
+    values keep full precision; semantic drift beyond 1e-12 still fails."""
+    def _round(obj):
+        if isinstance(obj, float):
+            return round(obj, 12)
+        if isinstance(obj, dict):
+            return {k: _round(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_round(v) for v in obj]
+        return obj
+    return json.dumps(_round(d), sort_keys=True, ensure_ascii=False, default=str)
 
 
 class BaselineUnavailable(RuntimeError):
@@ -484,6 +525,12 @@ def _load_baseline_module():
     (tmp / "hooks").mkdir()
     (tmp / "hooks" / "lib_kunglao.py").write_text(
         (ROOT / "hooks" / "lib_kunglao.py").read_text(encoding="utf-8"), encoding="utf-8")
+    # #671 self-bootstrap: the copied lib resolves hooks/_path_hygiene.py by
+    # its own __file__ — ship the sibling so exec_module does not FileNotFoundError
+    _hyg = ROOT / "hooks" / "_path_hygiene.py"
+    if _hyg.is_file():
+        (tmp / "hooks" / "_path_hygiene.py").write_text(
+            _hyg.read_text(encoding="utf-8"), encoding="utf-8")
     name = f"convergence_check_baseline_{BASELINE_COMMIT[:7]}"
     if name in sys.modules:  # one process, one baseline instance
         return sys.modules[name]
