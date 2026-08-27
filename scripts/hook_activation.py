@@ -81,7 +81,9 @@ except NameError:
     pass
 
 import argparse
+import hashlib
 import json
+import shutil
 import sys
 import warnings
 from collections.abc import Collection
@@ -455,7 +457,8 @@ class HookWiringSelfcheckError(RuntimeError):
 
 
 def build_hook_entry(hook_dir: Path, hook_file: str,
-                     matcher: str | None) -> dict:
+                    matcher: str | None = None,
+                    *, project: Path | None = None) -> dict:
     """THE hook-entry construction source (#445) — every writer derives its
     entries from this one function (pre-#445: three hand-rolled copies).
     matcher=None -> a Stop-style entry (no matcher key: Stop hooks fire on
@@ -467,10 +470,13 @@ def build_hook_entry(hook_dir: Path, hook_file: str,
     python can resolve to 2.x and kill every registered hook; uv uses the
     skill's own project venv (python 3.11+).
     """
-    skill_root = Path(hook_dir).parent
+    # #783: deployed copies run under the WORKSPACE project root so an
+    # upgrade of the skill package never mutates existing workspaces;
+    # legacy (undeployed) callers fall back to the installing skill dir.
+    project_root = Path(project).resolve() if project else Path(hook_dir).parent
     p = (Path(hook_dir) / hook_file).as_posix()
     hooks = [{"type": "command",
-              "command": f"uv run --project {skill_root.as_posix()} {p}"}]
+              "command": f"uv run --project {project_root.as_posix()} {p}"}]
     if matcher is None:
         return {"hooks": hooks}
     return {"matcher": matcher, "hooks": hooks}
@@ -536,7 +542,8 @@ _SELFCHECK_LAYERS = ("project", "user-opt-in", "operator-declared")
 def selfcheck_registration(target: Path, *, expected_files: Collection[str],
                            hook_dir: Path | None = None,
                            workspace: Path | None = None,
-                           layer: str = "project") -> dict:
+                           layer: str = "project",
+                           deployed_project: Path | None = None) -> dict:
     """#445 post-registration self-check — the written-location vs
     actual-fire-layer assertion, run AFTER every registration write.
 
@@ -625,8 +632,16 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
     # whatever") must fail, not certify itself. Path existence is
     # deliberately NOT asserted (a canonical install under a test HOME is a
     # legitimate shape).
-    d = _canonical_hooks_dir()
-    prefix = f"uv run --project {d.parent.as_posix()} "
+    # #783: in deploy mode the executing authority is the WORKSPACE copy —
+    # the declared mode comes from the registration contract (deployed_project),
+    # so a checker handed the same wrong mode still fails; bare-skill fallback
+    # recomputes from the executing install as before.
+    if deployed_project is not None:
+        d = deployed_project.resolve() / ".claude" / "hooks"
+        prefix = f"uv run --project {deployed_project.resolve().as_posix()} "
+    else:
+        d = _canonical_hooks_dir()
+        prefix = f"uv run --project {d.parent.as_posix()} "
     for c in cmds:
         base = c.replace("\\", "/").rsplit("/", 1)[-1]
         if base not in expected:
@@ -664,6 +679,106 @@ def verify_install_references(workspace: Path,
     return {"ok": total == 0, "active_root": str(root),
             "stale": stale, "stale_total": total}
 
+
+def deploy_workspace_copy(ws: Path) -> dict:
+    """#783: materialize the deployment manifest into <ws>/.claude/.
+
+    Copies every manifest file (hooks/agents/scaffold closure) into the
+    workspace, overwriting stale copies (D3: overwrite + WARN detail);
+    identical-sha targets are skipped idempotently. Returns a report dict
+    {copied, skipped, entries}. Fail-loud on unreadable manifest — a
+    silently empty deployment would unregister the gates."""
+    import yaml as _yaml
+    from deploy_manifest import MANIFEST as _MF
+
+    if not _MF.is_file():
+        raise RuntimeError(f"deployment manifest missing: {_MF}")
+    data = _yaml.safe_load(_MF.read_text(encoding="utf-8")) or {}
+    ws = ws.resolve()
+    copied = skipped = 0
+    touched: list[str] = []
+    for e in data.get("files") or []:
+        src = Path(__file__).resolve().parent.parent / str(e["src"])
+        dst = ws / str(e["dest"])
+        if not src.is_file():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if dst.is_file() and hashlib.sha256(dst.read_bytes()).hexdigest() == e.get("sha256"):
+            skipped += 1
+            continue
+        shutil.copy2(src, dst)
+        copied += 1
+        touched.append(str(e["dest"]))
+    return {"copied": copied, "skipped": skipped,
+            "entries": len(data.get("files") or []), "touched": touched}
+
+
+
+_DEPLOY_AGENT_MATCHER = {"heartbeat_touch.py": "Bash"}
+
+
+def register_hooks_deployed(ws: Path) -> int:
+    """#783 opt-in inverted deployment: workspace-local hooks + registration.
+
+    Copies the deployment manifest into <ws>/.claude/, then registers the
+    canonical WIRE_UP registry against those LOCAL copies with
+    `uv run --project <workspace>` commands. Fire layers mirror the
+    legacy writer's contract (Agent pre-face; Bash heartbeats; Stop
+    completion); the post-write self-check runs in DEPLOYED mode so the
+    checker validates against the same declared authority."""
+    report = deploy_workspace_copy(ws)
+    print(f"OK: deployed framework files (copied={report['copied']}, "
+          f"unchanged={report['skipped']})")
+    ws = Path(ws).resolve()
+    hooks_dir = ws / ".claude" / "hooks"
+    settings_path = ws / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    existing = {}
+    if settings_path.exists():
+        try:
+            existing = json.loads(settings_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+
+    hooks = existing.setdefault("hooks", {})
+    registry = sorted(_wire_up_hook_files())
+
+    def _basename_used(matcher: str, hf: str) -> bool:
+        for e in hooks.get(matcher) or []:
+            for h in e.get("hooks", []):
+                cmd = str(h.get("command", "")).replace("\\", "/")
+                if cmd.rsplit("/", 1)[-1] == hf:
+                    return True
+        return False
+
+    added = 0
+    for hf in registry:
+        matcher = _DEPLOY_AGENT_MATCHER.get(hf,
+                                            "Stop" if hf == "completion_gate.py" else "Agent")
+        bucket = hooks.get(matcher) or []
+        if _basename_used(matcher, hf):
+            continue
+        bucket.append(build_hook_entry(hooks_dir, hf, matcher, project=ws))
+        hooks[matcher] = bucket
+        added += 1
+
+    settings_path.write_text(
+        json.dumps(existing, indent=2, ensure_ascii=False),
+        encoding="utf-8")
+
+    check = selfcheck_registration(
+        settings_path,
+        expected_files=_wire_up_hook_files(),
+        workspace=ws,
+        layer="project",
+        deployed_project=ws)
+    if not check["ok"]:
+        raise HookWiringSelfcheckError(
+            f"{settings_path} failed the deployed-mode self-check "
+            f"({', '.join(check['mismatches'])})")
+    print(f"OK: registered {added} deployed hook entries")
+    return 0
 
 def register_hooks(workspace: Path | None = None,
                    global_opt_in: bool = False) -> int:
@@ -851,6 +966,14 @@ def main() -> int:
                              "with the worktree). Idempotent: merges into existing hooks config, "
                              "preserves other keys. Called at Phase 0 by the orchestrator; fixes "
                              "'hooks never fired' recurrences.")
+    parser.add_argument("--deploy-local", action="store_true",
+                        help="#783 opt-in inverted deployment: copy the "
+                             "deployment manifest into <workspace>/.claude/ "
+                             "(hooks + agents + scaffold closure) and "
+                             "register the canonical registry against those "
+                             "WORKSPACE-LOCAL copies (uv project = workspace). "
+                             "Makes the workspace self-contained against later "
+                             "skill-package upgrades.")
     parser.add_argument("--reconcile", action="store_true",
                         help="rebuild [active_workers] from the GROUND TRUTH — worker status "
                              "files in every .wt-*/ worktree (last status line == in-progress). Removes "
@@ -891,6 +1014,8 @@ def main() -> int:
     workspace = Path(args.workspace)
 
     # T-2 split: delegated jobs live in focused modules
+    if args.deploy_local:
+        return register_hooks_deployed(Path(args.workspace).resolve())
     if args.wire_up:
         # #445: THE canonical registration entry. Post-write self-check is
         # part of the registration itself — a wiring that lands on a layer

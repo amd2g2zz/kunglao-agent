@@ -179,4 +179,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao_export.py` | workspace export by zone (contract_carriers/evidence/scratch) + manifest (#540, D5) | tests |
 | `structural_check.py` | repo structure + broken-link + index drift check | CI, tests |
 | `run_test_matrix.py` | matrix-style scoped pytest runs (issue-lane suites); canonical full-suite entry stays the README Quick-start pytest line | lane tooling, tests |
+| `deploy_manifest.py` | deployment manifest builder/verifier - hooks+agents+scaffold closure, per-file sha256 (newline-normalized); feeds init copy-deploy and upgrade refresh | CLI, tests |
+
 | `re_pin_references.py` | references/_INDEX.yaml pin regeneration — re-run after ANY references/ edit (drift fails test_replay_gate) | docs, tests |
