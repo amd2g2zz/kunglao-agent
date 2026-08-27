@@ -62,6 +62,25 @@ Analysis is driven by `/kunglao-agent` (skill at `{{skill_dir}}`). Key scripts u
 
 ## Memory carriers (write/recall contract)
 
+**Memory tiers** — every persistable signal has exactly one tier; routing by signal type, not convenience:
+
+| Tier | Host | What belongs | Write trigger | Lifecycle |
+|------|------|--------------|---------------|-----------|
+| T0 transient | `runs/`, `scratch/` | Per-turn scratch, status lines, heartbeat, verify records | Every state change | Ephemeral; never cited as memory |
+| T1 workspace carriers | The six-carrier table below | Single-sample facts, claims, blockers, plans, oracle | Evidence emerges / claim transitions | Lives and dies with the workspace |
+| T2 distilled lessons | `{{skill_dir}}/references/lessons/` (two-stage nursery, rollup at claim terminal) | A pitfall or method outcome that would help ANY future SAMPLE | Claim terminal + outcome capture | Draft -> active gate -> tombstone |
+| T3 reference library | `{{skill_dir}}/references/re-library/` | Curated domain knowledge (family playbooks, tool lore) — proposals only, never auto-written from one hit | Curation decision | Curated |
+| T4 project memory (Claude Code native) | `<auto>` Claude Code per-project memory dir (`MEMORY.md` index + typed files: user / feedback / project / reference) | How-we-work knowledge for THIS repo across sessions: user rulings and their WHY, governance policies, collaboration corrections, validated judgment calls, pointers to external trackers | User correction ("don't X"), explicit ruling, non-obvious approach validated in-session | Persists across sessions; update/remove stale entries rather than re-writing |
+| T5 operator global | Host-global harness config outside this repo | Machine-level conventions shared by every project | Setup-time only | Cross-everything |
+
+Routing discipline:
+
+- Sample evidence NEVER leaves T1; collaboration/process learnings NEVER enter T1. A repeated mistake that is sample-specific -> T1 blocker/note; one that is process-specific -> T4 feedback entry.
+- Distillation upward requires repetition or a terminal-state rollup: one hit does not justify T2/T3 writes.
+- User rulings about value/priority enter ONLY the structured channels (`task_spec.yaml` constraints / `runs/value-weights.yaml`); T4 records the ruling's EXISTENCE and rationale pointer, prose retellings drift (numeric-fidelity).
+- Library-worthy technique observed once: record the fact in T1, note the candidate in the claim's outcome; do not edit shared libraries mid-analysis.
+- T4 is indexed (MEMORY.md stays a short pointer list); stale entries get updated or removed, never silently contradicted.
+
 Notes travel in six carriers; each row is the contract for what lands there, who writes it, when it is recalled, and how corrections work. Blanket note-write directives do not exist — the per-carrier rule below is the authority. Recall is gated by `convergence_check.py` every round (see Loop enforcement): disk is truth.
 
 | Carrier | Write what | Who writes, when | When to recall | Correction semantics |
