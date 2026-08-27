@@ -27,7 +27,12 @@ REFS = ROOT / "references"
 
 
 def _sha256(p: Path) -> str:
-    return hashlib.sha256(p.read_bytes()).hexdigest()
+    # newline-normalized: CI checks out LF while Windows trees are CRLF --
+    # otherwise every pin drifts across environments.
+    data = p.read_bytes()
+    CR, LF = bytes((13,)), bytes((10,))
+    return hashlib.sha256(
+        data.replace(CR + LF, LF).replace(CR, LF)).hexdigest()
 
 
 def _discover() -> list[str]:

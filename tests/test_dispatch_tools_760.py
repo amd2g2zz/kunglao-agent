@@ -237,8 +237,9 @@ class TestI2LadderBoundary:
                              ids=["worker-md", "operational-mechanics"])
     def test_boundary_clause_present(self, path: Path) -> None:
         text = path.read_text(encoding="utf-8")
-        for keyword in ("能力不匹配", "凑合"):
-            assert keyword in text, f"{path.name}: missing {keyword!r}"
+        for keyword in ("capability mismatch", "makeshift"):
+            assert keyword.lower() in text.lower(), (
+                f"{path.name}: missing {keyword!r}")
 
     def test_worker_clause_names_the_incident_shaped_forbidden_pair(self) -> None:
         text = WORKER_MD.read_text(encoding="utf-8")
@@ -250,7 +251,7 @@ class TestI2LadderBoundary:
         idx_ladder = text.find("LEARN→TRY→ESCALATE")
         assert idx_ladder >= 0
         window = text[idx_ladder:idx_ladder + 2000]
-        assert "能力不匹配" in window
+        assert 'capability mismatch' in window.lower()
 
 
 # ==========================================================================

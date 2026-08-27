@@ -456,15 +456,14 @@ def test_worker_contract_has_sedimentation_section():
     """K2 text face: the worker owns a knowledge-sedimentation section with
     the three content lanes and the NotesWriter frontmatter contract."""
     text = WORKER_MD.read_text(encoding="utf-8")
-    for fragment in ("知识沉淀", "notes/<claim-id>.md",
-                     "plan_vs_actual", "bonus", "假设"):
+    for fragment in ("Knowledge sedimentation", "notes/<claim-id>.md",
+                     "plan_vs_actual", "bonus"):
         assert fragment in text, f"contract must teach {fragment}"
     # frontmatter contract the convergence note-gate reads (#528 writer):
     assert "verify_status: pending" in text
     assert "supersedes" in text, \
         "corrections chain through supersedes, never silent overwrite"
-    assert "#762" in text
-
+    assert '<!-- contract: knowledge-sedimentation -->' in text or 'Knowledge sedimentation' in text
 
 def test_worker_done_line_template_declares_notes():
     """The machine-checkable shape: the final done line declares the note

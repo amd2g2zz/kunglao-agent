@@ -43,8 +43,11 @@ BANNED_TERMS = [
 ]
 
 # Required frontmatter fields that must remain
+# #790 governance: scorer is a PURE READ-SIDE judge (docs/agent-tooling-matrix.md)
+# — Write removed; Bash/WEB/mcp analysis families explicitly denied.
 REQUIRED_FRONTMATTER = {
-    "allowedTools": ["Read", "Grep", "Write", "mcp__sequential-thinking__sequentialthinking"],
+    "allowedTools": ["Read", "Glob", "Grep",
+                     "mcp__sequential-thinking__sequentialthinking"],
 }
 
 # Keys that only appear in quotes in the spec (e.g. JSON keys) — matched
@@ -111,7 +114,8 @@ class TestVerdictScorerFrontmatterUnchanged:
 
     def test_disallowed_tools_present(self):
         text = _read_agent()
-        for tool in ["Edit", "NotebookEdit", "Bash", "WebFetch", "WebSearch"]:
+        for tool in ["Edit", "NotebookEdit", "Bash", "WebFetch", "WebSearch",
+                     "Write"]:
             assert tool in text, f"disallowedTool '{tool}' missing from verdict-scorer.md frontmatter"
 
     def test_isolation_none(self):
