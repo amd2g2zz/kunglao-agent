@@ -54,17 +54,17 @@ After the stale gate passes — and before any dispatch — run:
 kunglao analysis <workspace>
 ```
 
-One command, three machine steps: the #748 stale gate → durable `/loop`
+One command, three machine steps: the stale gate → durable `/loop`
 reconcile → continuous-tick verify. Exit contract (never proceed on failure):
 
 - `rc=0` — entry is clear: the durable schedule is registered in
   `<workspace>/.claude/scheduled_tasks.json` and the heartbeat verifies with
   the continuous-tick standard (>=2 consecutive ticks, gaps <= 2x interval,
   last tick <= 35 min). Enter the loop.
-- `rc=5` — identical to check-stale refusal (#748): stale or missing stamp.
+- `rc=5` — identical to check-stale refusal : stale or missing stamp.
 - `rc=6` + stderr `heartbeat verify failed — run /kunglao-agent:resume for
   re-arm guidance` — monitoring is NOT verifiably alive (a lone registration
-  tick counts as dead: that was the #754 blind spot). Direct to
+  tick counts as dead: that was the blind spot). Direct to
   `/kunglao-agent:resume`; do not hand-wave a dispatch through.
 
 The durable reconcile inside this command is idempotent: if Claude Code's

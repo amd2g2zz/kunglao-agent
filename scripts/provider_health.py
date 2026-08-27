@@ -99,7 +99,7 @@ def recent_failures(ws: Path | str,
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
-        description="provider-health runtime failure memory (#692 WP4)")
+        description="provider-health runtime failure memory (WP4)")
     sub = ap.add_subparsers(dest="cmd", required=True)
     rec = sub.add_parser("record", help="append an outcome entry")
     rec.add_argument("workspace", type=Path)

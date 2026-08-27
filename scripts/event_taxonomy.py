@@ -464,7 +464,7 @@ def round_digest_text(ws: Path) -> str:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="event_taxonomy.py",
-        description="25-class event taxonomy over kunglao sources (#309/#287)")
+        description="25-class event taxonomy over kunglao sources")
     ap.add_argument("workspace", help="workspace root")
     ap.add_argument("--json", action="store_true",
                     help="print statusline JSON instead of the round digest")

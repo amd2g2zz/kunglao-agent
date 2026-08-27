@@ -15,20 +15,20 @@ description: >-
   demand from references/.
 
 v0.1.2 additions (this version):
-- SessionStart enforcement persistence (#533) — always_arm() + renew() on session start
-- Observability lifeline (#534) — init full-path log + 19 silent modules wired
-- Rollup write-loop automation (#524) — claim terminal state triggers lessons/outcome
-- Lessons nursery two-stage lifecycle (#525) — draft → active + trigger_precision gate
-- Lessons utility telemetry + deprecate (#526) — CBM quartet + tombstone
-- Dispatch context block mechanization (#527) — worker channel + verifier BLIND
-- Hypothesis persistence + restart rehydration (#528)
-- Strategy convergence four metrics (#529) — regret / cost-to-slope / P(faster|hit) / competence
-- Workspace export tool (#540) — zone-based routing (carrier/evidence/scratch)
-- v0.1.2 milestone audit (#539) — 4-piece set: white-box + black-box + log + regression
-- MCP prefix enforcement (security, #567) — rejects mcp__unknown__/mcp__external__
-- Worker budget refactor (#568) — split into core/gates/sinks modules
-- Coverage OBSERVATION-only policy (#564) — drift guard tests
-- E2E DoD 9 regression (#565) — init exit-4 → no subsequent repair
+- SessionStart enforcement persistence — always_arm + renew on session start
+- Observability lifeline — init full-path log + 19 silent modules wired
+- Rollup write-loop automation — claim terminal state triggers lessons/outcome
+- Lessons nursery two-stage lifecycle — draft → active + trigger_precision gate
+- Lessons utility telemetry + deprecate — CBM quartet + tombstone
+- Dispatch context block mechanization — worker channel + verifier BLIND
+- Hypothesis persistence + restart rehydration 
+- Strategy convergence four metrics — regret / cost-to-slope / P(faster|hit) / competence
+- Workspace export tool — zone-based routing (carrier/evidence/scratch)
+- v0.1.2 milestone audit — 4-piece set: white-box + black-box + log + regression
+- MCP prefix enforcement (security) — rejects mcp__unknown__/mcp__external__
+- Worker budget refactor — split into core/gates/sinks modules
+- Coverage OBSERVATION-only policy — drift guard tests
+- E2E DoD 9 regression — init exit-4 → no subsequent repair
 
 triggers:
   - run kunglao-agent
@@ -67,7 +67,7 @@ triggers:
   - strategy metric compute
   - workspace export import
 arguments: [request]
-argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | help
+argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | upgrade <workspace> | help
 ---
 
 # kunglao-agent — RE orchestrator looper (contract)
@@ -109,7 +109,7 @@ Run the steps in order; any FAIL blocks the next step.
 
 ## Arguments
 
-Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand (`init` / `analysis` / `resume` / `help` / legacy passthrough) or a natural-language need. The workspace is an explicit positional argument; when absent the subcommand runs its guided no-args prompt (never a silent default, never a guess).
+Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand (`init` / `analysis` / `resume` / `upgrade` / `help` / legacy passthrough) or a natural-language need. The workspace is an explicit positional argument; when absent the subcommand runs its guided no-args prompt (never a silent default, never a guess).
 
 **No arguments → menu, WAIT.** An empty `$ARGUMENTS` prints the subcommand menu below and STOPS — never silently run the loop. Operators must pick a subcommand. (`help` also prints the menu.)
 
@@ -121,6 +121,7 @@ Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand 
    | `help` | print the subcommand usage list |
    | `verify [fact_id]` | run only the M3 verify chain (L1 mechanical + L2 redteam) |
    | `resume <workspace>` | crash/reboot recovery: read-only breakpoint brief (health, state summary, timeline, next step) + re-arm advice — full flow in `skills/resume/SKILL.md` |
+   | `upgrade <workspace> [--dry-run]` | migrate a stale workspace's framework scaffold to the current skill version (`scripts/kunglao_upgrade.py`; user data read-only, RC=4 on byte drift) — full flow in `skills/upgrade/SKILL.md` |
    | `decide` `tick` `verify` `record` `health` | mechanical CLI passthrough — `scripts/kunglao.py` subcommands |
    | `monitor` `digest` `eval` | mechanical CLI passthrough — standalone CLIs (`scripts/kunglao-monitor.py` / `kunglao-digest.py` / `kunglao-eval.py`), not kunglao.py subcommands |
 

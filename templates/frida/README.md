@@ -1,7 +1,7 @@
 # templates/frida/ — Frida script templates
 
-Issue #278 P3: CFG (caller→callee call-graph) capture and analysis
-templates, for VM-side dynamic instrumentation (layering per #282: tool
+CFG (caller→callee call-graph) capture and analysis
+templates, for VM-side dynamic instrumentation (layering: tool
 home = tools/frida/, templates = templates/frida/).
 
 > **VM-only (hard prohibition #5)**: scripts instantiated from these
@@ -14,7 +14,7 @@ home = tools/frida/, templates = templates/frida/).
 | Template | What it generates | Required params |
 | --- | --- | --- |
 | `cfg-hook.js.tmpl` | Frida CFG capture hook: `Interceptor.attach` on every target export, recording (caller, target, args_count, thread_id, ts) into a shared buffer, flushed in batches as JSONL to OUTFILE | TARGET_MODULE, TARGET_EXPORTS (comma-separated list), CALL_DEPTH, OUTFILE, SAMPLE_SHA256 |
-| `cfg-analyze.py.tmpl` | trace reduction analyzer: unique caller→callee edge table + per-callee call counts + top-N callers, writing edges.csv + summary.md (#277: deterministic ordering, idempotent overwrite, explicit inputs/outputs) | TRACE_FILE, SAMPLE_SHA256, OUT_DIR |
+| `cfg-analyze.py.tmpl` | trace reduction analyzer: unique caller→callee edge table + per-callee call counts + top-N callers, writing edges.csv + summary.md (deterministic ordering, idempotent overwrite, explicit inputs/outputs) | TRACE_FILE, SAMPLE_SHA256, OUT_DIR |
 
 ## When to use
 

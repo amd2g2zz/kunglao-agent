@@ -800,7 +800,7 @@ def lint_workspace(ws: Path):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="lint kunglao facts against the aligned schema (#336)")
+    ap = argparse.ArgumentParser(description="lint kunglao facts against the aligned schema")
     ap.add_argument("ws", type=Path, help="workspace root (contains facts/)")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args(argv)

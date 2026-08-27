@@ -1,6 +1,6 @@
 # templates/scripts/ — script-generation templates
 
-Issue #278 templated half: reusable analysis-script generation templates,
+Templated reusable analysis-script generation templates,
 deterministically instantiated by `scripts/template_gen.py` (placeholder
 `{{KEY}}` substitution + generated header).
 

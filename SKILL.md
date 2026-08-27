@@ -63,14 +63,14 @@ kunglao-agent subcommands:
   /kunglao-agent:resume   <workspace>
                            crash/reboot recovery: read-only breakpoint brief
                            (health + state + timeline + next step); advises
-                           the #461 re-arm chain when the heartbeat is dead
+                           the re-arm chain when the heartbeat is dead
                            example: /kunglao-agent:resume ~/cases/synth-dropper
 
   /kunglao-agent:upgrade  <workspace> [--dry-run]
                            migrate a legacy workspace's framework scaffold
                            forward to the current skill package (hooks,
                            templates, ALWAYS_ARMED hook state, event vocab,
-                           #720 .agent/ metadata). User data is never
+                           .agent/ metadata). User data is never
                            touched (iron rule; RC=4 on byte drift).
                            example: /kunglao-agent:upgrade ~/cases/synth-dropper
 
@@ -86,8 +86,8 @@ Next steps:
   unsure which command    → /kunglao-agent:help
   partial arguments       → the subcommand prints its own guided prompt
                            (see its SKILL.md "No arguments" section)
-(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table;
- #456: zero-args guard below the router, per-command examples + next steps —
+(feat: subcommand UX + guided entry — skills/ layout, menu, hints, README table;
+ zero-args guard below the router, per-command examples + next steps —
  menu/hints render skills/subcommands.yaml, the single source)
 ```
 
@@ -100,10 +100,10 @@ Next steps:
 - `analysis <workspace>` (alias `analyze`) → read and follow
   `skills/analysis/SKILL.md`; the convergence loop is the destination.
 - `resume <workspace>` → read and follow `skills/resume/SKILL.md`
-  (read-only crash/reboot recovery brief, #466).
+  (read-only crash/reboot recovery brief).
 - `upgrade <workspace>` → read and follow `skills/upgrade/SKILL.md`
-  (forward-only workspace framework-scaffold migration, #726; user data
-  read-only per iron rule; pairs with #739 git snapshot).
+  (forward-only workspace framework-scaffold migration; user data
+  read-only per iron rule; pairs with git snapshot).
 - `help` → read and follow `skills/help/SKILL.md` (usage list).
 - Natural-language RE request (e.g. "what does this binary do") → map to
   `analysis`: read `skills/analysis/SKILL.md` then
@@ -125,4 +125,4 @@ not `skills/kunglao-agent/`.
 - `/kunglao-agent resume ~/cases/synth-dropper`
 - `/kunglao-agent upgrade ~/cases/synth-dropper`
 - `/kunglao-agent help`
-(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table)
+(feat: subcommand UX + guided entry — skills/ layout, menu, hints, README table)

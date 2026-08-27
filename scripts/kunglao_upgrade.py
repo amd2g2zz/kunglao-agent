@@ -137,7 +137,7 @@ def _guarded_stamp_refresh(ws: Path, *, version: str | None = None,
     if not template_version.frame_section_current(ws):
         if warn:
             print("kunglao-upgrade: WARN — frame section stale — G3 merge "
-                  "upgrade required (see #758)", file=sys.stderr)
+                  "upgrade required", file=sys.stderr)
         return "template_stamp_refresh(skipped: frame-drift)"
     written = (template_version.stamp_workspace(ws, version=version)
                if version else template_version.stamp_workspace(ws))
@@ -415,7 +415,7 @@ def _item_claudemd_merge(ws: Path, dry: bool) -> str:
                 else f"claudemd_merge(dry-skipped: {parts.reason})")
     if parts.status != "applied":
         print(f"kunglao-upgrade: WARN — CLAUDE.md merge skipped "
-              f"({parts.reason}); legacy body left untouched (#755 G3)",
+              f"({parts.reason}); legacy body left untouched (G3)",
               file=sys.stderr)
         _emit_event("claudemd_merge", "warn", parts.reason)
         _emit(ws, "claudemd_merge", f"skipped:{parts.reason}")
@@ -1168,7 +1168,7 @@ def upgrade(ws: Path, dry_run: bool = False,
         _emit_event("gate-dirty", "fail", f"{dirty_n} uncommitted entries")
         print(f"kunglao-upgrade: REFUSED (RC_DIRTY_WORKSPACE=6) — {ws} has "
               f"{dirty_n} uncommitted change(s); migrating without a clean "
-              f"rollback anchor is unrecoverable (#753).", file=sys.stderr)
+              f"rollback anchor is unrecoverable.", file=sys.stderr)
         print("kunglao-upgrade: commit or stash first, then re-run:",
               file=sys.stderr)
         print(f"  git -C {ws} add -A && git -C {ws} commit --no-gpg-sign "
@@ -1308,7 +1308,7 @@ def upgrade(ws: Path, dry_run: bool = False,
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(
         description="kunglao-upgrade — workspace framework-scaffold "
-                    "migration (#726); user data is byte-invariant")
+                    "migration; user data is byte-invariant")
     p.add_argument("workspace", help="workspace root")
     p.add_argument("--dry-run", action="store_true",
                    help="print the migration plan, write nothing")

@@ -248,9 +248,9 @@ def _print_stale_plan_warns(warns: list) -> None:
     """WARN block for stale-plan-on-new-evidence (observation, not a gate)."""
     if not warns:
         return
-    print(f"WARN (observe-only, #497): {len(warns)} STALE_PLAN_ON_NEW_EVIDENCE item(s) —")
+    print(f"WARN (observe-only): {len(warns)} STALE_PLAN_ON_NEW_EVIDENCE item(s) —")
     print("  new evidence landed after the last plan update; the plan is a derived")
-    print("  view (#498) and should be re-derived (model changed -> re-plan is the")
+    print("  view and should be re-derived (model changed -> re-plan is the")
     print("  norm; only an information-free pivot is not):")
     for w in warns[:5]:
         print(f"    - {w['claim_id']}: {w['fix']}")
@@ -501,7 +501,7 @@ def main() -> int:
     parser.add_argument("--auto", action="store_true",
                         help="integration face: remap exit codes to "
                              "0=no-drift / 3=WARN-only(SATURATED) / 2=blocked "
-                             "for hooks/dispatch_gate.py L621 wire-up (#602)")
+                             "for hooks/dispatch_gate.py L621 wire-up")
     args = parser.parse_args()
     if args.auto:
         return check_auto(Path(args.workspace), active_only=args.active_only)

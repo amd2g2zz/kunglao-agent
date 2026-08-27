@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="acceptance_check.py", description="end-to-end static acceptance")
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--full", action="store_true",
-                    help="run the full pytest suite instead of the pinned smoke subset (#689); "
+                    help="run the full pytest suite instead of the pinned smoke subset; "
                          "always-on full enforcement lives in devkit/quality_gates.py Gate 2")
     args = ap.parse_args(argv)
     report = run_acceptance(full_suite=args.full)

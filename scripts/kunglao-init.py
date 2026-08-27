@@ -596,41 +596,41 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     # argparse usage error; --resolve supplies it on re-entry.
     parser.add_argument("workspace", nargs="?", default=None,
                         help="target workspace path (holds bins/, claim-register.yaml, etc.); "
-                             "omitted -> pending decision (#455)")
+                             "omitted -> pending decision")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
-                        help="project type: windows|linux|android|web|macos (#304; web=labs)")
+                        help="project type: windows|linux|android|web|macos (web=labs)")
     parser.add_argument("--target", metavar="NAME", default=None,
-                        help="#455: explicit analysis target — a file name under bins/ "
+                        help="explicit analysis target — a file name under bins/ "
                              "(containers get a target_object round)")
     parser.add_argument("--force", action="store_true",
                         help="rebuild: back up claim-register first, then re-initialize")
     parser.add_argument("--skip-toolchain", action="store_true",
                         help="skip the toolchain preflight gate (test/ops escape "
-                             "hatch from the #304 amendment; the production "
+                             "hatch from the amendment; the production "
                              "path never skips)")
     parser.add_argument("--hooks-json", metavar="PATH", default=None,
                         help="target settings.json copy for hook deployment; default <workspace>/.claude/settings.json if present, never write HOME")
     parser.add_argument("--profile-root", metavar="PATH", default=None,
-                        help="profile root directory (default Path.home(); injectable for tests; #276)")
+                        help="profile root directory (default Path.home(); injectable for tests;)")
     parser.add_argument("--no-mcp", action="store_true",
-                        help="skip workspace .mcp.json scaffold (#316)")
+                        help="skip workspace .mcp.json scaffold")
     parser.add_argument("--install-git-hooks", action="store_true",
-                        help="install the review-gate pre-commit hook (#367): copy "
+                        help="install the review-gate pre-commit hook: copy "
                              ".claude/git-hooks/pre-commit to .git/hooks/pre-commit with "
                              "this user's key path stamped in place of the placeholder")
     parser.add_argument("--no-hooks", action="store_true",
-                        help="#478: skip hook deployment entirely (the ONLY "
+                        help="skip hook deployment entirely (the ONLY "
                              "legal hooks skip; default deploys "
                              "<ws>/.claude/settings.json + self-check)")
     parser.add_argument("--skills", metavar="A,B", default=None,
-                        help="#478: deploy auxiliary skills (comma-separated "
+                        help="deploy auxiliary skills (comma-separated "
                              "names under skills/) to <ws>/.claude/skills/ — "
                              "pure opt-in, nothing installed without the flag")
     parser.add_argument("--assume-yes", action="store_true",
-                        help="#408: consent to every ask-then-install prompt "
+                        help="consent to every ask-then-install prompt "
                              "(CI/headless; non-interactive stdin declines by default)")
     parser.add_argument("--resolve", metavar="PATH", default=None,
-                        help="#455: answers file ({decision_id: value} JSON) collected "
+                        help="answers file ({decision_id: value} JSON) collected "
                              "by the agent after a pending-decision exit 8")
     try:
         return parser.parse_args(argv)
@@ -1082,7 +1082,7 @@ def emit_pending(ws: Path | None,
     print(
         "kunglao-init: PENDING user decisions — collect via the agent's "
         "native question channel (AskUserQuestion), then re-run with "
-        "--resolve <answers.json> (#455; zero scaffold written)",
+        "--resolve <answers.json> (zero scaffold written)",
         file=sys.stderr,
     )
     return RC_PENDING_DECISIONS
@@ -1961,7 +1961,7 @@ def bootstrap_observability(ws: Path, hooks_json: Path | None = None,
             print(f"kunglao-init: hooks selfcheck FAILED — {exc}", file=sys.stderr)
             return RC_HOOK_WIRING
         print(f"kunglao-init: hooks wired ({n} entries, canonical "
-              f"registration + selfcheck PASS, #461 bootstrap)")
+              f"registration + selfcheck PASS bootstrap)")
     else:
         print("kunglao-init: full wire-up skipped — operator owns the hook "
               "target (--hooks-json)")
@@ -2027,9 +2027,9 @@ def emit_activation_handoff(ws) -> int:
     print(f"  3. re-register : python {ls} {ws} (idempotent; also run at "
           "any analysis entry — or just re-run init) when the 7-day "
           "Claude Code durable-schedule cap expires")
-    print("kunglao-init: heartbeat registered (runs/.heartbeat.json, #461); "
-          "durable /loop schedule registered (.claude/scheduled_tasks.json, "
-          "#754) — loop_registered flips true on the schedule's FIRST real "
+    print("kunglao-init: heartbeat registered (runs/.heartbeat.json); "
+          "durable /loop schedule registered (.claude/scheduled_tasks.json) "
+          "— loop_registered flips true on the schedule's FIRST real "
           "execution, then accept with two ticks + --verify")
     return RC_OK
 
@@ -2114,7 +2114,7 @@ def initialize(ws: Path, hooks_json: Path | None,
     else:
         outcome = scaffold_mcp(ws)
         if outcome == "created":
-            print("kunglao-init: .mcp.json created (MCP supply scaffold, #316)")
+            print("kunglao-init: .mcp.json created (MCP supply scaffold)")
         else:
             print("kunglao-init: .mcp.json skipped (exists — idempotent, not overwritten)")
     draft = claim_register_text(sample, sample_sha, state_hash="", project_type=project_type)
@@ -2324,7 +2324,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
             write_project_type(ws, project_type)
             print(
                 f"kunglao-init: upgraded {ws} — wrote project_type={project_type} "
-                f"(pre-#304 workspace: [initialized] without project_type)"
+                f"(pre-issue- workspace: [initialized] without project_type)"
             )
             # #461: legacy type-upgrade is an exit-0 path too — bootstrap
             # the observer spine so the upgraded workspace is self-armed.
@@ -2388,13 +2388,13 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         except ValueError as exc:
             print(f"kunglao-init: WARNING {exc} — toolchain layers stay "
                   "conservative HARD; fix task_spec.yaml at needs-first "
-                  "intake (Flow step 0, #449)", file=sys.stderr)
+                  "intake (Flow step 0)", file=sys.stderr)
             task_spec = None
         else:
             if task_spec is None:
                 print("kunglao-init: task_spec.yaml absent — toolchain "
                       "layers default to HARD; fill it at needs-first intake "
-                      "(Flow step 0, #449) so env derives from the task",
+                      "(Flow step 0) so env derives from the task",
                       file=sys.stderr)
         if task_spec is None:
             report = toolchain.check(ws, project_type)

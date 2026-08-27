@@ -23,7 +23,7 @@ The only interface is Claude Code: you talk to it and read its reports. The Pyth
 
 ### 1. Install
 
-kunglao-agent is a **single-skill plugin**: the skill's `SKILL.md` lives at the repository root (the single-skill plugin layout), so installing the plugin IS installing the skill — invoked as `/kunglao-agent`. The repo carries `.claude-plugin/plugin.json` (identity manifest: name, description, version `0.1.3`). The per-workspace machinery (hooks, gates, router CLIs) is wired by `kunglao-init` into each analysis workspace during initialization, not by plugin component wiring (that migration is tracked in #364).
+kunglao-agent is a **single-skill plugin**: the skill's `SKILL.md` lives at the repository root (the single-skill plugin layout), so installing the plugin IS installing the skill — invoked as `/kunglao-agent`. The repo carries `.claude-plugin/plugin.json` (identity manifest: name, description, version `0.1.3`). The per-workspace machinery (hooks, gates, router CLIs) is wired by `kunglao-init` into each analysis workspace during initialization, not by plugin component wiring (migration tracked separately).
 
 **Recommended — marketplace install** (v0.1.3 ships `.claude-plugin/marketplace.json`; the marketplace resolves the repo's default branch, so the release tag must exist there). From any directory, in Claude Code:
 
@@ -52,8 +52,7 @@ or, manually (the clone carries its pinned environment; first use in Claude Code
 git clone https://github.com/amd2g2zz/kunglao-agent.git ~/.claude/skills/kunglao-agent
 ```
 
-`kunglao-init` deploys the workspace-level engineering environment itself
-(#478): hooks (`<ws>/.claude/settings.json`, created when absent — the old
+`kunglao-init` deploys the workspace-level engineering environment itself: hooks (`<ws>/.claude/settings.json`, created when absent — the old
 deadlock where a missing file silently skipped deployment is gone), the core
 subagents (`<ws>/.claude/agents/`: kunglao-worker / kunglao-redteam /
 kunglao-init-worker), and an `env-manifest.yaml` deployment ledger. The
@@ -69,7 +68,7 @@ One fresh workspace per sample engagement — in Claude Code:
 
 Options: `--skip-toolchain` (skip the toolchain preflight — test/ops escape hatch), `--no-mcp` (skip the workspace `.mcp.json` scaffold), `--install-git-hooks` (install the review-gate pre-commit hook), `--force` (re-init after backing up the claim register).
 
-Init exit codes (documented RC contract, #414): `0` success/resume, `1` generic error (usage error / template defect), `2` post-init idempotency verify failed, `3` agent-teams flag reject (unset `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and restart the session), `4` toolchain HARD FAIL — human must install the missing tools, `5` no sample in `bins/`. Branch on the exit code, never on stderr text.
+Init exit codes (documented RC contract): `0` success/resume, `1` generic error (usage error / template defect), `2` post-init idempotency verify failed, `3` agent-teams flag reject (unset `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and restart the session), `4` toolchain HARD FAIL — human must install the missing tools, `5` no sample in `bins/`. Branch on the exit code, never on stderr text.
 
 Init confirms the project type, scaffolds the workspace, writes the type-appropriate `CLAUDE.md`, and runs per-type toolchain probes (Android: ADB + rooted device + renamed frida-server on a custom port; Linux: Ghidra-or-IDA + remote debugger; Windows: Ghidra-or-IDA + VM). Hard failures are reported with root-cause guidance; a workspace that is not initialized is refused work.
 
@@ -98,7 +97,7 @@ Every `/kunglao-agent` command, its arguments, and an example:
 | `/kunglao-agent:init` | `<workspace> [--type windows\|linux\|android\|web\|macos]` | initialize a workspace (scaffold + CLAUDE.md + sample mount + task_spec intake + hooks) | `/kunglao-agent:init ~/cases/synth-dropper --type windows` |
 | `/kunglao-agent:analysis` | `<workspace>` | enter the convergence loop on an initialized workspace | `/kunglao-agent:analysis ~/cases/synth-dropper` |
 | `/kunglao-agent:resume` | `<workspace>` | crash/reboot recovery: read-only breakpoint brief (health, state summary, timeline, next step) + re-arm advice | `/kunglao-agent:resume ~/cases/synth-dropper` |
-| `/kunglao-agent:upgrade` | `<workspace> [--dry-run]` | forward-only workspace framework-scaffold migration (hooks rewire, template refresh, ALWAYS_ARMED hook state, event vocab, #720 .agent/ metadata). User data is read-only (iron rule; RC=4 on byte drift). | `/kunglao-agent:upgrade ~/cases/synth-dropper` |
+| `/kunglao-agent:upgrade` | `<workspace> [--dry-run]` | forward-only workspace framework-scaffold migration (hooks rewire, template refresh, ALWAYS_ARMED hook state, event vocab .agent/ metadata). User data is read-only (iron rule; RC=4 on byte drift). | `/kunglao-agent:upgrade ~/cases/synth-dropper` |
 | `/kunglao-agent:help` | none | print the subcommand usage list | `/kunglao-agent:help` |
 
 The namespaced form (`/kunglao-agent:init`) is the plugin-manager surface;
@@ -109,7 +108,7 @@ never guess, never a bare argparse-style error (see each skill's "No
 arguments" section); the menu's next-steps block maps operator state to a
 command (uninitialized → init, initialized → analysis, crashed/rebooted → resume,
 unsure → help). The
-menu and hints render `skills/subcommands.yaml`, the single source. (#456)
+menu and hints render `skills/subcommands.yaml`, the single source. 
 
 ## A worked analysis case
 
@@ -300,7 +299,7 @@ The release contract is revision-owned: `pyproject.toml` + `uv.lock` (pinned dep
 - 46 legacy `PROVEN` claims audited (10 have-raw / 18 derivation-only / 19 unverifiable) — re-verification is follow-up work
 - ICD-203 conformance is partial (tradecraft #1/#2/#5/#8/#9; full certification out of scope)
 - Dynamic analysis requires per-session authorization; sample execution is VM-only, host execution is blocked by a hook
-- Type-aware init (Windows/Linux/Android toolchain matrix) and the remaining script-absorption batch are in development (issues #304, #278)
+- Type-aware init (Windows/Linux/Android toolchain matrix) and the remaining script-absorption batch are in development (issues)
 
 ## Safety
 
@@ -320,7 +319,7 @@ kunglao hooks live at TWO levels (registry: `scripts/wire_up_settings.py`
 
 | Level | File | Written by | Carries |
 |---|---|---|---|
-| workspace | `<ws>/.claude/settings.json` | `--wire-up` (#258) | the kunglao hook registrations |
+| workspace | `<ws>/.claude/settings.json` | `--wire-up` | the kunglao hook registrations |
 | workspace-parent | `<ws>/../.claude/settings.json` | external_kicker (D2 recovery) | env secrets + mcpServers + block_malware_exec |
 
 The user HOME (`~/.claude/settings.json`) is deliberately NEVER written

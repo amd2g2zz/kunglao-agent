@@ -336,7 +336,7 @@ def sweep_terminal_claims(workspace: Path) -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="rollup.py",
-        description="claim terminal transition -> outcome/lessons/checkpoint write loop (#524)",
+        description="claim terminal transition -> outcome/lessons/checkpoint write loop",
     )
     parser.add_argument("workspace", help="workspace root")
     parser.add_argument("claim_id", nargs="?", default=None,
@@ -345,7 +345,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="terminal status (PROVEN/VERIFIED/NEGATIVE/REFUTED/...)")
     parser.add_argument("--sweep-terminal", dest="sweep_terminal",
                         action="store_true",
-                        help="#762: roll up EVERY pending terminal claim in "
+                        help="roll up EVERY pending terminal claim in "
                              "the register (heartbeat_tick mechanical trigger)")
     parser.add_argument("--library", default=None,
                         help="global lessons library dir (default: failure_analysis_gate default)")

@@ -301,7 +301,7 @@ def _warn_must_stop(claim_id: str | None, prompt_text: str) -> int:
     excerpt = prompt_text[:300].replace("\n", " ")
     cid = claim_id or "(no claim)"
     print(
-        f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447) — irreversible "
+        f"dispatch_gate: HARD_PAUSE Type S (must-stop) — irreversible "
         f"action detected in dispatch for {cid}. Refusing to dispatch.",
         file=sys.stderr,
         flush=True,

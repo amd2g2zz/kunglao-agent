@@ -733,7 +733,7 @@ def _load_features(args: argparse.Namespace):
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="deterministic feature→capability router "
-                    "(issue #278 P4-b)")
+                    "(issue P4-b)")
     ap.add_argument("--features-file", default=None,
                     help="feature_probe.py --json output file (canonical)")
     ap.add_argument("--features", default=None,
@@ -755,7 +755,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="agents dir with specialist trigger frontmatter "
                          "(default: agents/)")
     ap.add_argument("--capability", default=None,
-                    help="#692 direct provider-selection query: rank "
+                    help="direct provider-selection query: rank "
                          "providers for this capability tag from "
                          "--workspace state")
     ap.add_argument("--json", action="store_true",

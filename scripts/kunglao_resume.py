@@ -664,7 +664,7 @@ def render_text(brief: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="kunglao_resume.py",
-        description="kunglao-agent crash/reboot recovery brief (#466) — "
+        description="kunglao-agent crash/reboot recovery brief — "
                     "read-only: health, state summary, data age, breakpoint "
                     "timeline, next step (from convergence_check)")
     parser.add_argument("workspace", help="crashed workspace root")

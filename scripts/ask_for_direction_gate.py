@@ -523,7 +523,7 @@ def check(workspace: Path, text: str) -> int:
     must_stop = find_must_stop_signals(text)
     if must_stop:
         excerpt = text[:300].replace("\n", " ")
-        print(f"HARD_PAUSE Type S (must-stop, #447): {len(must_stop)} irreversible-action signal(s):")
+        print(f"HARD_PAUSE Type S (must-stop): {len(must_stop)} irreversible-action signal(s):")
         for pat, match in must_stop[:5]:
             print(f"  '{match}' (pattern: {pat})")
         print()
@@ -541,7 +541,7 @@ def check(workspace: Path, text: str) -> int:
     must_ask = find_must_ask_signals(text)
     if must_ask:
         excerpt = text[:300].replace("\n", " ")
-        print(f"HARD_PAUSE Type D (must-ask, #447): {len(must_ask)} ambiguity / scope signal(s):")
+        print(f"HARD_PAUSE Type D (must-ask): {len(must_ask)} ambiguity / scope signal(s):")
         for pat, match in must_ask[:5]:
             print(f"  '{match}' (pattern: {pat})")
         print()
@@ -565,7 +565,7 @@ def check(workspace: Path, text: str) -> int:
         excerpt = text[:300].replace("\n", " ")
         exhausted = find_ladder_exhaustion(workspace)
         if exhausted:
-            print(f"HARD_PAUSE Type D (must-ask, #497): blocker signal "
+            print(f"HARD_PAUSE Type D (must-ask): blocker signal "
                   f"'{blockers[0][1]}' with ladder EXHAUSTED on "
                   f"{', '.join(exhausted[:3])}:")
             print()
@@ -580,13 +580,13 @@ def check(workspace: Path, text: str) -> int:
                 f"type=D ladder-exhausted on {', '.join(exhausted[:3])} "
                 f"match={blockers[0][1]!r}", 2)
             return 2
-        print(f"REJECT Type D-blocker (charter v2, #497): '{blockers[0][1]}' is an")
+        print(f"REJECT Type D-blocker (charter v2): '{blockers[0][1]}' is an")
         print("in-authorization-boundary hard error -> allowed + FORCED LADDER,")
         print("not must-ask (climb the ladder, then re-evaluate / 走梯后复评):")
         print("  1. method-ladder: python scripts/failure_analysis_gate.py <ws> <C-NN>")
         print("       --record --assumption ... --validity not-justified")
         print("       --next-method ... --validated-capability ...")
-        print("       --identified-obstacle ... --source lesson-hit (#495)")
+        print("       --identified-obstacle ... --source lesson-hit")
         print("  2. env-ladder: self-recovery L1 same-tool different mode ->")
         print("       L2 owning skill setup.sh -> L3 env-fix worker")
         print("  3. re-evaluate after the ladder; only exhaustion (no candidates,")
@@ -606,7 +606,7 @@ def check(workspace: Path, text: str) -> int:
         excerpt = text[:300].replace("\n", " ")
         evidence = find_death_evidence(workspace)
         if not evidence:
-            print(f"REJECT Type E (death declaration, #497): {len(death)} verdict signal(s):")
+            print(f"REJECT Type E (death declaration): {len(death)} verdict signal(s):")
             for pat, match in death[:5]:
                 print(f"  '{match}' (pattern: {pat})")
             print()
@@ -615,7 +615,7 @@ def check(workspace: Path, text: str) -> int:
             print("fires. Without evidence it is NOT a terminal. The orchestrator")
             print("MUST climb the ladder and re-evaluate (走梯复评), or produce the")
             print("evidence:")
-            print("  - record failure_analysis with the #495 three artifacts")
+            print("  - record failure_analysis with the three artifacts")
             print("    (validated_capability / identified_obstacle / --source) —")
             print("    the obstacle auto-promotes to a claim;")
             print("  - a legal terminal requires the obstacle claim REFUTED or a")
@@ -627,7 +627,7 @@ def check(workspace: Path, text: str) -> int:
                                f"type=E match={death[0][1]!r}", 1)
             return 1
         print(f"OK: death declaration backed by evidence "
-              f"({'; '.join(evidence[:3])}) — legal terminal (#497)")
+              f"({'; '.join(evidence[:3])}) — legal terminal")
         # fall through to Type A/B checks
 
     # #497 plan-stall (declarative Type B equivalent): a next-step
@@ -642,14 +642,14 @@ def check(workspace: Path, text: str) -> int:
         excerpt = text[:300].replace("\n", " ")
         if not _action_since_last_declaration(workspace):
             _append_event(workspace, excerpt, "plan-stall-decl:")
-            print("REJECT plan-stall (Type B equivalent, #497): next-step declaration")
+            print("REJECT plan-stall (Type B equivalent): next-step declaration")
             print(f"  '{decl.group(0)}' with NO tool action after the previous declaration.")
             print()
             print("ORCHESTRATOR MUST execute the declared step or declare the blocker")
             print("(执行该下一步,或声明阻塞原因 — waiting is not an option, per")
             print("section 6d.1 / Type B):")
             print("  - execute: dispatch / run the declared step now;")
-            print("  - or record the blocker via failure_analysis (#495), then the")
+            print("  - or record the blocker via failure_analysis, then the")
             print("    ladder applies.")
             print()
             print(f"Excerpt: {excerpt}")

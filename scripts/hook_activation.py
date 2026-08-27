@@ -687,7 +687,7 @@ def register_hooks(workspace: Path | None = None,
     if global_opt_in:
         print(f"WARNING: wiring kunglao-agent hooks into the USER-GLOBAL "
               f"{settings_path} — hooks must live in the project-level "
-              f".claude/settings.json (issue #258); global deployment is "
+              f".claude/settings.json; global deployment is "
               f"explicit opt-in ONLY.", file=sys.stderr)
 
     existing = {}
@@ -846,7 +846,7 @@ def main() -> int:
                         help="refresh activation expiry (orchestrator-only; subagents forbidden)")
     parser.add_argument("--wire-up", action="store_true",
                         help="register kunglao-agent hooks in <workspace>/.claude/settings.json "
-                             "(project-level; NOT global — issue #258: the pre-#258 default wrote "
+                             "(project-level; NOT global — issue: the pre-issue- default wrote "
                              "the user-global settings, binding hooks to a worktree path that dies "
                              "with the worktree). Idempotent: merges into existing hooks config, "
                              "preserves other keys. Called at Phase 0 by the orchestrator; fixes "
@@ -862,7 +862,7 @@ def main() -> int:
                              "'monitoring is running' is a checked file state, not a self-claim. "
                              "Call at Phase 0 right after the /loop cron is created.")
     parser.add_argument("--loop-registered", action="store_true",
-                        help="#461: mark the cron loop registration "
+                        help="mark the cron loop registration "
                              "(loop_registered=true in <ws>/runs/.heartbeat.json). "
                              "Passed by the heartbeat loop prompt's FIRST action — "
                              "the prompt body executing is the proof CronCreate "
@@ -877,7 +877,7 @@ def main() -> int:
                              "have refreshed it); exit 1 if missing/stale = monitoring is NOT running. "
                              "Call every heartbeat tick and before declaring CONVERGED.")
     parser.add_argument("--heartbeat-off", action="store_true",
-                        help="STOP the heartbeat (converged teardown, issue #237 dual-constraint) — "
+                        help="STOP the heartbeat (converged teardown dual-constraint) — "
                              "deletes <ws>/runs/.heartbeat.json ONLY when convergence_check.py returns "
                              "CONVERGED (exit 0), else rejects with guidance. Cleaning up early breaks "
                              "dispatch gating (check_heartbeat_alive); cleaning up late burns tokens on "

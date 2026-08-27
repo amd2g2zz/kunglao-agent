@@ -174,7 +174,7 @@ def run(workspace: Path | str, apk_path: str) -> int:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
-        description="apkid pre-scan wrapper (#669). Writes evidence/apkid.json.",
+        description="apkid pre-scan wrapper. Writes evidence/apkid.json.",
     )
     parser.add_argument("workspace", type=Path, help="workspace root (writes evidence/)")
     parser.add_argument("apk_path", help="absolute path to the APK to scan")
