@@ -292,6 +292,10 @@ uv run python scripts/release_receipt.py --check
 gh pr create --base dev
 ```
 
+The `pytest` line above is the authoritative full-suite entry; matrix-style
+scoped runs go through `scripts/run_test_matrix.py` (same environment, no
+extra flags needed).
+
 The release contract is revision-owned: `pyproject.toml` + `uv.lock` (pinned deps), `release-manifest.yaml` (declared asset inventory), `release_receipt.py` (observed inventory: per-asset sha256, CLI `--help` exit codes, test results). CI runs it on every PR. Depth lives in `docs/` (design, loop engineering), `specs/`, and `AGENTS.md`.
 
 ## Limitations
