@@ -45,8 +45,8 @@ def test_arm_env_flag_wiring():
     assert br.arm_env("O") == {}
 
 
-def test_lane_a_plans_n_serial():
-    plan = br.build_plan(_manifest(Path("/tmp/unused")), "S3", lane="A")
+def test_lane_a_plans_n_serial(tmp_path):
+    plan = br.build_plan(_manifest(tmp_path), "S3", lane="A")
     assert all(spec["arm"] == "N" for spec in plan)
     assert all(spec["serial"] is True for spec in plan)
     assert len(plan) == 3
@@ -55,8 +55,8 @@ def test_lane_a_plans_n_serial():
     assert plan[0]["wall_cap_s"] == s3["wall_h"] * 3600
 
 
-def test_lane_b_plans_o_parallel():
-    plan = br.build_plan(_manifest(Path("/tmp/unused")), "S1", lane="B")
+def test_lane_b_plans_o_parallel(tmp_path):
+    plan = br.build_plan(_manifest(tmp_path), "S1", lane="B")
     assert all(spec["arm"] == "O" and spec["serial"] is False
                for spec in plan)
 
