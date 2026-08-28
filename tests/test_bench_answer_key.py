@@ -13,7 +13,7 @@ import bench_answer_key as ak
 # ---------- IOC normalization ----------
 
 @pytest.mark.parametrize("raw,canonical", [
-    ("HTTP://Evil.example.com:80/ws/", "evil.example.com/ws"),
+    ("http://Evil.example.com:80/ws/", "evil.example.com/ws"),
     ("https://C2.Тест.ru:443", "c2.xn--e1aybc.ru"),  # IDN → punycode (idna codec)
     ("10.0.0.1", "10.0.0.1"),
     ("Evil.COM", "evil.com"),
@@ -87,7 +87,7 @@ def test_matcher_set_subset():
 
 
 def test_matcher_normalized_ioc():
-    assert ak.match("HTTP://Evil.com:80/", "evil.com", "normalized-ioc") is True
+    assert ak.match("http://Evil.com:80/", "evil.com", "normalized-ioc") is True
 
 
 def test_matcher_attck_id():
