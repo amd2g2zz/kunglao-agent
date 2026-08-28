@@ -1,0 +1,52 @@
+name: auto-update plugin version
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump plugin.json version
+        uses: tj-actions/json-files-action@v1
+        with:
+          files: .claude-plugin/plugin.json
+          fields: '["version"]'
+          values: '${{ steps.version.outputs.VERSION }}'
+
+      - name: Bump marketplace.json plugin entry version
+        uses: tj-actions/json-files-action@v1
+        with:
+          files: .claude-plugin/marketplace.json
+          jq-path: '.plugins[] | select(.name == "kunglao-agent") | .version = $v'
+          values: '${{ steps.version.outputs.VERSION }}'
+
+      - name: Open auto-bump PR
+        run: |
+          git config user.name 'kunglao-bumper'
+          git config user.email 'bumper@users.noreply.github.com'
+          git checkout -b auto-bump-v${{ steps.version.outputs.VERSION }}
+          git add .claude-plugin/plugin.json .claude-plugin/marketplace.json
+          git commit -m "chore: auto-bump version to ${{ steps.version.outputs.VERSION }}"
+          git push -u origin auto-bump-v${{ steps.version.outputs.VERSION }}
+          gh pr create \
+            --repo amd2g2zz/kunglao-agent \
+            --base master \
+            --head auto-bump-v${{ steps.version.outputs.VERSION }} \
+            --title "chore: auto-bump plugin manifest to ${{ steps.version.outputs.VERSION }}" \
+            --body "Triggered by tag \`${{ steps.version.outputs.VERSION }}\` via .github/workflows/auto-update.yml."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
