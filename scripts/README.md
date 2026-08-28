@@ -43,11 +43,16 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `convergence_check.py` | convergence decision (DISPATCH/DISPATCH_VERIFIER/SATURATED/BLOCKED/CONVERGED) — the every-turn gate | hooks, CLI, lib(2), tests |
 | `convergence_health.py` | ledger-based HEALTHY/STALLED/SPINNING verdicts | hooks, CLI, lib(2), tests |
 | `anomaly_detector.py` | anomaly observation layer (#663): score_fact 3-dim + scan_anomalies + baseline corpus load (fail-open); feeds convergence ANOMALY_DETECTED; observe_taint taint-concentration observations (#692 WP5) | lib(1: convergence_check), CLI, tests |
+| `rho_checkpoint.py` | P2 ρ progress signal + V/D/ETA (#823): per-PQ grade expectation, σ(w·x+b) priors fallback chain, decide() value_signals attach (flag-gated shadow) | lib(1: convergence_check), tests |
+| `value_replay.py` | P1 offline replay settlement (#823): z_self four-channel relabel, evidence-gated reward score, bucket priors value-priors.yaml, replay-validation gate | CLI, lib(2: rho_checkpoint, priority_ratio), tests |
+| `infeasible_signal.py` | P3 doomed-trajectory signal (#823/#815): flat V × zero marginal discovery → infeasible_candidate event (shadow) | lib, tests |
+| `zero_output_fingerprint.py` | P3 same-type action thrash circuit (#823/#634): (tool,target) hash streaks N=3 zero belief change → break + failure_analysis inject (shadow) | lib, tests |
 | `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669): seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` / `taint:<cat>:<api>` candidates | lib(1: digest_build), CLI, tests |
 | `apkid_scanner.py` | T1 apkid pre-scan wrapper (#669): fingerprints packer/compiler/obfuscator/anti-* into evidence/apkid.json (fail-open) | CLI, tests |
 | `provider_health.py` | runtime provider-failure memory (#692 WP4): record/query <ws>/provider_health.json, 24h window, fail-open; consumed by route_capability selection next round | CLI, lib(1: route_capability), tests |
 | `priority.py` | DEPRECATED weighted dispatch ranker (#499; authority `priority_ratio.py`, removal #446) | lib, tests |
-| `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4) | lib(3), tests |
+| `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4); #823 A3 feed-side terms behind KUNGLAO_VALUE_ALGO | lib(3), tests |
+| `value_config.py` | AB-VALUE experiment flag KUNGLAO_VALUE_ALGO (#823) — fail-loud arm switch; off = byte-identical dev behavior | lib(4), tests |
 | `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |
 | `hook_activation.py` | THE canonical hook registration entry (#445): register_hooks/--wire-up + post-write self-check + tier activation | hooks, CLI, lib(6), tests |
@@ -168,6 +173,18 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `event_taxonomy.py` | 25-class event taxonomy (#309) | tests |
 | `recov_metrics.py` | symbol/type recovery quality metrics (#309) | lib(1), tests |
 | `tool_error_policy.py` | same-tool consecutive-error hysteresis (#309) | tests |
+
+## Experiment bench (kunglao-bench — #823 AB-VALUE)
+
+| Script | Role | Referenced from |
+| --- | --- | --- |
+| `bench_intake.py` | fail-closed manifest gate (sha256/recency/truth-source/outside-repo) + --check-safety 3-check pre-run refusal | tests, bench_runner, COMPLIANCE |
+| `bench_answer_key.py` | per-stratum key schemas, canonical IOC normalization, mechanical matchers, leak-free task-spec PQs | lib(1: bench_grade), tests |
+| `bench_tokens.py` | transcript → token/wall/human-turn receipt (the bench's only metering piece) | lib, tests |
+| `bench_runner.py` | lane runner — deterministic seed plans, locked budget table, terminal done/timeout/crashed receipts | CLI, tests |
+| `bench_grade.py` | zero-LLM L1 scoring + z_self + arm-blind sealed map + 12-case oracle selfcheck | CLI, tests |
+| `bench_redteam.py` | L2 divergent-only arm-blind red-team pipeline (briefs + merge-back) | CLI, tests |
+| `bench_analyze.py` | stdlib statistics — exact McNemar, Wilcoxon, tuition slopes, H1-H4 pre-registered verdicts, --demo | CLI, tests |
 
 ## Release & CI support
 
