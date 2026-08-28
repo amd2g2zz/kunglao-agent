@@ -213,7 +213,7 @@ def _depth(ws: Path) -> str:
     return str(spec.get("depth") or "unknown").strip().lower()
 
 
-def _dominant_family(ws: Path) -> str:
+def dominant_family(ws: Path) -> str:
     fams: Counter = Counter()
     logs = Path(ws) / "runs" / "logs"
     if logs.is_dir():
@@ -239,7 +239,7 @@ def build_priors(ws_list: list[Path]) -> dict:
     buckets: dict[str, dict] = {}
     for ws in ws_list:
         ws = Path(ws)
-        key = f"{_depth(ws)}|{_dominant_family(ws)}"
+        key = f"{_depth(ws)}|{dominant_family(ws)}"
         z = z_self(ws)
         b = buckets.setdefault(key, {"n": 0, "p_complete": 0.0,
                                      "token_median": None, "token_variance": None,

@@ -1228,7 +1228,7 @@ def decide(workspace: Path) -> dict:
     snap = _decide_inputs(workspace)
     state, action = _run_machine(snap)
     decision, exit_code = VERDICTS[state]
-    return {
+    decision = {
         "decision": decision,
         "exit_code": exit_code,
         "action": action,
@@ -1261,6 +1261,11 @@ def decide(workspace: Path) -> dict:
         "note_layer_gaps": snap.pq_note_gaps,
         "pq_parse_error": snap.pq_error,
     }
+    # #823 A2: N-arm first-order value signals — shadow posture, flag-gated.
+    # Flag off → the dict comes back untouched (no key, no emit).
+    # Flag misread raises FlagError by design (experiment fail-loud contract).
+    import rho_checkpoint
+    return rho_checkpoint.attach_signals(workspace, decision)
 
 
 def _human(d: dict) -> str:
