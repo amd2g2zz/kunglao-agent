@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -116,14 +117,56 @@ def check(manifest_path: Path,
     return {"ok": not violations, "violations": violations, "counts": counts}
 
 
+def check_safety(vault_root: Path, vm_snapshot: str | None = None) -> dict:
+    """B9 pre-run mechanical gate — three checks, ANY red refuses the
+    run (plan B9 §8). Never auto-repairs; a red check is a human action."""
+    vault_root = Path(vault_root)
+    checks = {
+        # §1: the vault must carry the encryption marker written by the
+        # vault setup procedure (7z-AES / age container)
+        "vault_encrypted": (vault_root / ".encrypted").is_file(),
+        # §3: a VM snapshot base must be named for the pre-run restore
+        "vm_snapshot": bool(vm_snapshot),
+    }
+    try:
+        status = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "status", "--porcelain",
+             "kunglao-bench"],
+            capture_output=True, text=True, check=False)
+        gitignore = (REPO_ROOT / "kunglao-bench" / ".gitignore")
+        ignores_samples = gitignore.is_file() and "samples/" in gitignore.read_text(
+            encoding="utf-8", errors="replace")
+        checks["git_clean"] = (status.returncode == 0
+                               and not status.stdout.strip()
+                               and ignores_samples)
+    except OSError:
+        checks["git_clean"] = False
+    return {"ok": all(checks.values()), "checks": checks}
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="bench_intake.py",
                                  description="kunglao-bench manifest gate")
     ap.add_argument("manifest", help="path to kunglao-bench/manifest.yaml")
     ap.add_argument("--strict-counts", action="store_true",
                     help=f"enforce full layer counts {FULL_COUNTS}")
+    ap.add_argument("--check-safety", metavar="VAULT_ROOT", default=None,
+                    help="B9 pre-run gate: vault encryption / git clean / "
+                         "VM snapshot (name via KUNGLAO_BENCH_VM_SNAPSHOT)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
+    if args.check_safety:
+        import os
+        report = check_safety(Path(args.check_safety),
+                              vm_snapshot=os.environ.get(
+                                  "KUNGLAO_BENCH_VM_SNAPSHOT"))
+        if args.json:
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            for name, ok in report["checks"].items():
+                print(f"{name}: {'PASS' if ok else 'RED'}")
+            print("SAFETY " + ("PASS" if report["ok"] else "REFUSE"))
+        return 0 if report["ok"] else 1
     report = check(Path(args.manifest),
                    expect_counts=FULL_COUNTS if args.strict_counts else None)
     if args.json:
