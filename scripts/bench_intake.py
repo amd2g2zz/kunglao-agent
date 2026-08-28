@@ -117,6 +117,19 @@ def check(manifest_path: Path,
     return {"ok": not violations, "violations": violations, "counts": counts}
 
 
+def _git_porcelain(root: Path) -> tuple[int, str]:
+    """(returncode, stdout) of `git status --porcelain kunglao-bench` —
+    module-level so tests can inject."""
+    try:
+        status = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain",
+             "kunglao-bench"],
+            capture_output=True, text=True, check=False)
+        return status.returncode, status.stdout
+    except OSError:
+        return 1, ""
+
+
 def check_safety(vault_root: Path, vm_snapshot: str | None = None) -> dict:
     """B9 pre-run mechanical gate — three checks, ANY red refuses the
     run (plan B9 §8). Never auto-repairs; a red check is a human action."""
@@ -128,19 +141,11 @@ def check_safety(vault_root: Path, vm_snapshot: str | None = None) -> dict:
         # §3: a VM snapshot base must be named for the pre-run restore
         "vm_snapshot": bool(vm_snapshot),
     }
-    try:
-        status = subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "status", "--porcelain",
-             "kunglao-bench"],
-            capture_output=True, text=True, check=False)
-        gitignore = (REPO_ROOT / "kunglao-bench" / ".gitignore")
-        ignores_samples = gitignore.is_file() and "samples/" in gitignore.read_text(
-            encoding="utf-8", errors="replace")
-        checks["git_clean"] = (status.returncode == 0
-                               and not status.stdout.strip()
-                               and ignores_samples)
-    except OSError:
-        checks["git_clean"] = False
+    rc, out = _git_porcelain(REPO_ROOT)
+    gitignore = (REPO_ROOT / "kunglao-bench" / ".gitignore")
+    ignores_samples = gitignore.is_file() and "samples/" in gitignore.read_text(
+        encoding="utf-8", errors="replace")
+    checks["git_clean"] = (rc == 0 and not out.strip() and ignores_samples)
     return {"ok": all(checks.values()), "checks": checks}
 
 

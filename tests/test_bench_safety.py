@@ -24,9 +24,14 @@ def _bench_dir(tmp: Path) -> None:
     (bench_dir / ".gitignore").write_text("samples/\n", encoding="utf-8")
 
 
+def _clean_git(monkeypatch):
+    monkeypatch.setattr(bi, "_git_porcelain", lambda root: (0, ""))
+
+
 def test_all_green_passes(tmp_path, monkeypatch):
     monkeypatch.setattr(bi, "REPO_ROOT", tmp_path)
     _bench_dir(tmp_path)
+    _clean_git(monkeypatch)
     out = bi.check_safety(_vault(tmp_path), vm_snapshot="clean-baseline")
     assert out["ok"] is True and all(out["checks"].values())
 
@@ -34,6 +39,7 @@ def test_all_green_passes(tmp_path, monkeypatch):
 def test_unencrypted_vault_refuses(tmp_path, monkeypatch):
     monkeypatch.setattr(bi, "REPO_ROOT", tmp_path)
     _bench_dir(tmp_path)
+    _clean_git(monkeypatch)
     out = bi.check_safety(_vault(tmp_path, encrypted=False),
                           vm_snapshot="snap")
     assert out["ok"] is False
@@ -43,6 +49,7 @@ def test_unencrypted_vault_refuses(tmp_path, monkeypatch):
 def test_missing_vm_snapshot_refuses(tmp_path, monkeypatch):
     monkeypatch.setattr(bi, "REPO_ROOT", tmp_path)
     _bench_dir(tmp_path)
+    _clean_git(monkeypatch)
     out = bi.check_safety(_vault(tmp_path), vm_snapshot=None)
     assert out["ok"] is False
     assert out["checks"]["vm_snapshot"] is False
@@ -53,6 +60,7 @@ def test_gitignore_without_samples_rule_refuses(tmp_path, monkeypatch):
     bench_dir = tmp_path / "kunglao-bench"
     bench_dir.mkdir()
     (bench_dir / ".gitignore").write_text("runs/\n", encoding="utf-8")
+    _clean_git(monkeypatch)
     out = bi.check_safety(_vault(tmp_path), vm_snapshot="snap")
     assert out["ok"] is False
     assert out["checks"]["git_clean"] is False
