@@ -57,11 +57,13 @@ from pathlib import Path
 
 import yaml
 
+import value_config
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES
 
 WEIGHTS = {"L": 0.45, "D": 0.30, "N": 0.25}
 TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
 NOVELTY_BASE = 3  # 3 terminal facts in a category → N=0 (saturated)
+CAPABILITY_BONUS = 1.5  # #823 A3: multiplier for claims holding a validated capability card
 
 # #496: the strategy dispatch log (single writer: hooks/dispatch_gate.py on
 # its PASS path; the interface is deliberately optional — no marker, no row).
@@ -87,6 +89,9 @@ class EvidenceView:
     # #759 H2: structured user worth ruling (fail-open loaded)
     value_class_weights: dict[str, float] = field(default_factory=dict)
     value_claim_overrides: dict[str, float] = field(default_factory=dict)
+    # #823 A3 (N-arm): replay prior P(complete) for this workspace's bucket;
+    # 1.0 = neutral → pre-#823 cost math. Resolved only when the flag is on.
+    prior_p_complete: float = 1.0
 
     @classmethod
     def from_workspace(cls, ws: Path) -> "EvidenceView":
@@ -140,9 +145,10 @@ class EvidenceView:
         caps, obstacles, covers = _scan_failure_artifacts(ws)
         claim_strategy, strategy_failures = _load_strategy_view(ws, covers)
         classes, overrides = load_value_weights(ws)
+        prior_p = _resolve_prior_p(ws) if value_config.is_enabled() else 1.0
         return cls(frozenset(terminal_claims), verified, {}, lines,
                    caps, obstacles, strategy_failures, claim_strategy,
-                   classes, overrides)
+                   classes, overrides, prior_p)
 
 
 @dataclass(frozen=True)
@@ -545,6 +551,35 @@ def claim_value_weight(claim: dict,
     return 1.0
 
 
+def _resolve_prior_p(ws: Path) -> float:
+    """#823 A3: this workspace's bucket P(complete) from the A1 replay
+    priors (same bucket derivation as build_priors). Deferred imports —
+    value_replay imports this module at top level (cycle breaker).
+    Any read failure → 1.0 (neutral: a missing prior must not reshape
+    the ranking, mirroring the #759 fail-open posture)."""
+    try:
+        import rho_checkpoint
+        import value_replay
+        priors = {}
+        p = ws / "runs" / "value-priors.yaml"
+        if p.exists():
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                priors = data
+        spec = {}
+        sp = ws / "task_spec.yaml"
+        if sp.exists():
+            data = yaml.safe_load(sp.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                spec = data
+        depth = str(spec.get("depth") or "unknown").strip().lower()
+        v, _source, _band = rho_checkpoint.v_from_priors(
+            priors, depth, value_replay.dominant_family(ws))
+        return float(v)
+    except (OSError, yaml.YAMLError, ImportError):
+        return 1.0
+
+
 def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> list[Action]:
     """VoI proxy / cost ranking (purely mechanical, zero LLM).
 
@@ -608,7 +643,17 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
         # ratio (absent weights → 1.0 → the pre-#759 formula byte-identical).
         weight = claim_value_weight(c, evidence.value_class_weights,
                                     evidence.value_claim_overrides)
-        score = round(numerator / cost * weight, 3)
+        # #823 A3 (N-arm only): feed-side terms — cost inflated by the
+        # bucket's inverse P(complete) (rework expectation, floored at 0.05
+        # to bound the inflation) and the capability bonus. Flag off → both
+        # neutral, byte-identical to the pre-#823 formula.
+        cost_eff, bonus = cost, 1.0
+        if value_config.is_enabled():
+            cost_eff = cost / max(evidence.prior_p_complete, 0.05)
+            if any(cid == cap_cid
+                   for cap_cid, _ in evidence.validated_capabilities):
+                bonus = CAPABILITY_BONUS
+        score = round(numerator / cost_eff * weight * bonus, 3)
         actions.append(Action(
             claim_id=cid, action=action_cat, score=score, skill=None,
             tier=action_tier(c), attempts=int(c.get("promotion_attempts", 0)),
