@@ -1,0 +1,8 @@
+schema: kunglao-bench-manifest/1
+seed: 42
+# samples[] filled at C1 (Stage 0 intake); entry schema:
+# {id, stratum: S1|S2|S3|S4, path, sha256, first_seen: YYYY-MM,
+#  truth_tier: A+|A|B, truth_sources: [..], scoring_pqs, excluded_pqs}
+# paths MUST point outside the repo (vault); bench_intake --strict-counts
+# enforces 8-7-8-7 at full-experiment time.
+samples: []
