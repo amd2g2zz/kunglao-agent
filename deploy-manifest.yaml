@@ -219,7 +219,11 @@ files:
   - src: scripts/rho_checkpoint.py
     dest: .claude/scripts/rho_checkpoint.py
     kind: scaffold
-    sha256: 9655820e1d5070a8b86bd1f7736ef008676f6593a6d63aa776e53310c4cf07c0
+    sha256: 926b51c743b4a0dcefc68249f8ee71b1ce602ad01340f66915af3fb2bc593392
+  - src: scripts/rho_verifier.py
+    dest: .claude/scripts/rho_verifier.py
+    kind: scaffold
+    sha256: 2e9a7f4b118b2eec47944be71180fdc183f67bc5fd5509f7e2cf980ed091f603
   - src: scripts/route_capability.py
     dest: .claude/scripts/route_capability.py
     kind: scaffold
