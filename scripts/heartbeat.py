@@ -155,20 +155,18 @@ def evaluate_tick_continuity(state: dict, *,
                     if ts is not None:
                         durable.append(ts)
     durable_source = bool(durable)
+    durable_prefix = "durable log: " if durable_source else ""
     if durable_source:
         stamps = sorted(durable)
     else:
+        if not isinstance(raw, list) or not raw:
+            return (False, durable_prefix +
+                    "no tick_history (pre-#754 single-tick state, the 35-min blind "
+                    "spot shape) - build it with ONE real tick now: python "
+                    "<skill>/scripts/heartbeat_touch.py <ws> (only heartbeat_tick.py "
+                    "<ws>), then re-dispatch")
         stamps = sorted(ts for ts in (_parse_hb_ts(v) for v in raw if isinstance(v, str))
                         if ts is not None)
-    # #830: when the verdict rides the durable sidecar, say so in every
-    # detail line so operators can see which substrate won (D1/D2/D3).
-    durable_prefix = "durable log: " if durable_source else ""
-    if not durable_source and (not isinstance(raw, list) or not raw):
-        return (False, durable_prefix +
-                "no tick_history (pre-#754 single-tick state, the 35-min blind "
-                "spot shape) - build it with ONE real tick now: python "
-                "<skill>/scripts/heartbeat_touch.py <ws> (or heartbeat_tick.py "
-                "<ws>), then re-dispatch")
     if len(stamps) < 2:
         return (False, durable_prefix +
                 "single tick only (registration-time tick, cron never fired again) "
