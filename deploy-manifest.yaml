@@ -4,6 +4,10 @@ files:
     dest: .claude/hooks/_path_hygiene.py
     kind: hook
     sha256: 5953514bfadadde5207664551851ac83e5118a727fe74589c618e7ff08e75da1
+  - src: hooks/bash_fact_guard.py
+    dest: .claude/hooks/bash_fact_guard.py
+    kind: hook
+    sha256: 23fcc71453ab5563217916a06ddd9e0fa4c26f72c34e0124bfe6e11b302535da
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
@@ -139,7 +143,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: 8c139ebf6db7c2c18edc372b2c5bdd78afb3b13107383f9a4bda6e51e9b401ab
+    sha256: b761fa8fbed836c57f49513dcdfc47ba284cb585fc7e1011e914816cbe00ec8b
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
@@ -163,7 +167,7 @@ files:
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
-    sha256: 36ad56edd60682a4cec4ed7fe6980a810b5ff2d64c7e3f5057d84416fe5bdc50
+    sha256: 45e74e5c4fc4f380f855bcd50d5c42f88f4c7476c41868c58b590fbcdc91dfa4
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
