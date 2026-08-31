@@ -14,11 +14,18 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "hooks"))
 
 import value_config
 import zero_output_fingerprint as zf
-import worker_budget_gates as gates
+
+# #762 convention: load hook modules by path under an isolated name —
+# a top-level hooks/ sys.path.insert reorders shared-name module
+# resolution for later-collected suites (#770 hygiene gate).
+import importlib.util as _ilu
+_gates_path = Path(__file__).resolve().parents[1] / "hooks" / "worker_budget_gates.py"
+_spec = _ilu.spec_from_file_location("canary_worker_budget_gates", _gates_path)
+gates = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(gates)
 
 
 def _mk_ws(tmp_path: Path, name: str = "ws") -> Path:
