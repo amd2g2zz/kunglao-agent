@@ -38,7 +38,7 @@ def _mk_ws(tmp_path):
 
 def _verify(ws, claim, verdict):
     d = ws / "runs"
-    (d / f"2026-08-31_verify-{claim}.md").write_text(
+    (d / f"2026-08-31-verify-{claim}.md").write_text(
         f"---\nclaim_id: {claim}\n---\n\n## Overall verdict\n{verdict}\n",
         encoding="utf-8")
 
@@ -148,7 +148,10 @@ def test_new_claim_direct_proven_is_gated(tmp_path):
     assert any("C-009" in v for v in res["violations"])
 
 
-def test_ledger_outcome_rows_count(tmp_path):
+def test_ledger_row_alone_not_sufficient(tmp_path):
+    """Design decision (#819): the gate reads the PRIMARY evidence source
+    (runs/*.md, same as outcome_capture) only. A ledger OUTCOME row whose
+    runs file is gone is stale bookkeeping, not evidence."""
     ws = _mk_ws(tmp_path)
     import json
     row = {"type": "outcome", "ts": "2026-08-31T00:00:00+00:00",
@@ -157,4 +160,4 @@ def test_ledger_outcome_rows_count(tmp_path):
         f.write(json.dumps(row) + "\n")
     _redteam(ws, "C-001", "CONFIRMED")
     res = check_register_transitions(ws, NEW, OLD)
-    assert res["ok"] is True, res["violations"]
+    assert res["ok"] is False

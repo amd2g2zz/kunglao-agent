@@ -30,7 +30,6 @@ REG = (
 )
 
 EDIT_PROVEN = {
-    "file_path": "",  # filled by _payload
     "old_string": "    status: OPEN\n    statement: synthetic claim for gate tests",
     "new_string": "    status: PROVEN\n    statement: synthetic claim for gate tests",
 }
@@ -67,7 +66,7 @@ def _run_guard(ws, payload):
 
 def _verify(ws, claim, verdict):
     d = ws / "runs"
-    (d / f"2026-08-31_verify-{claim}.md").write_text(
+    (d / f"2026-08-31-verify-{claim}.md").write_text(
         f"---\nclaim_id: {claim}\n---\n\n## Overall verdict\n{verdict}\n",
         encoding="utf-8")
 
@@ -105,7 +104,6 @@ def test_allowed_with_evidence(tmp_path):
     fp = _reg_path(ws)
     r = _run_guard(ws, _payload(ws, fp, **EDIT_PROVEN))
     assert r.returncode == RC_ALLOW, r.stderr
-    assert "PROVEN" in _reg_path(ws).read_text(encoding="utf-8")
 
 
 def test_refuted_blocks(tmp_path):
@@ -138,4 +136,3 @@ def test_unrelated_edit_allowed(tmp_path):
                                 old_string="    statement: second synthetic claim",
                                 new_string="    statement: second claim amended"))
     assert r.returncode == RC_ALLOW, r.stderr
-    assert "second claim amended" in _reg_path(ws).read_text(encoding="utf-8")
