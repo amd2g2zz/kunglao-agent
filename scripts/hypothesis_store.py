@@ -51,7 +51,7 @@ from pathlib import Path
 SCHEMA_VERSION = "1"
 
 # The state machine vocabulary. Order matters for error messages only.
-HYPOTHESIS_STATUSES = ("open", "refuted", "superseded")
+HYPOTHESIS_STATUSES = ("open", "refuted", "superseded", "confirmed")
 _TERMINAL_STATUSES = frozenset(("refuted", "superseded"))
 
 _FRONT_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
@@ -70,6 +70,10 @@ class Hypothesis:
     status: str = "open"  # one of HYPOTHESIS_STATUSES
     refuting_fact_id: str | None = None
     superseded_by: str | None = None
+    predicted_observation: str = ""   # #711: falsifiable bet — what a probe should show
+    confirming_fact_id: str | None = None  # #711: evidence that confirmed the bet
+    body: str = ""
+    path: Path | None = None
     body: str = ""
     path: Path | None = None
 
@@ -83,8 +87,13 @@ class Hypothesis:
             f"status: {self.status}",
             f"schema_rev: {SCHEMA_VERSION}",
         ]
+        if self.predicted_observation:
+            lines.append("predicted_observation: " +
+                         self.predicted_observation.replace("\n", " "))
         if self.refuting_fact_id:
             lines.append(f"refuting_fact_id: {self.refuting_fact_id}")
+        if self.confirming_fact_id:
+            lines.append(f"confirming_fact_id: {self.confirming_fact_id}")
         if self.superseded_by:
             lines.append(f"superseded_by: {self.superseded_by}")
         return "\n".join(lines) + "\n---\n"
@@ -118,6 +127,17 @@ class HypothesisStore:
             raise KeyError(hyp_id)
         return self._parse(p)
 
+    def create(self, h: Hypothesis) -> Hypothesis:
+        """File a NEW hypothesis file. Overwrites nothing — an id collision
+        raises FileExistsError so a bet can never silently replace another."""
+        p = self.root / f"{h.id}.md"
+        if p.exists():
+            raise FileExistsError(
+                f"{h.id} already exists — bets never overwrite bets")
+        self.root.mkdir(parents=True, exist_ok=True)
+        self._write(h)
+        return h
+
     def transition(
         self,
         hyp_id: str,
@@ -125,6 +145,7 @@ class HypothesisStore:
         *,
         refuting_fact_id: str | None = None,
         superseded_by: str | None = None,
+        confirming_fact_id: str | None = None,
     ) -> Hypothesis:
         """Apply a state-machine transition and write it back to disk.
 
@@ -147,6 +168,10 @@ class HypothesisStore:
             raise InvalidTransition(
                 "refuting_fact_id required when refuting a hypothesis — "
                 "the 'why was I wrong' trail may not be empty")
+        if new_status == "confirmed" and not confirming_fact_id:
+            raise InvalidTransition(
+                "confirming_fact_id required when confirming a hypothesis "
+                "— a bet settles only against evidence (#711)")
         if new_status == "superseded" and not superseded_by:
             raise InvalidTransition(
                 "superseded_by required when superseding a hypothesis — "
@@ -154,6 +179,7 @@ class HypothesisStore:
         h.status = new_status
         h.refuting_fact_id = refuting_fact_id
         h.superseded_by = superseded_by
+        h.confirming_fact_id = confirming_fact_id
         self._write(h)
         return h
 
@@ -186,6 +212,8 @@ class HypothesisStore:
             status=status,
             refuting_fact_id=fields.get("refuting_fact_id") or None,
             superseded_by=fields.get("superseded_by") or None,
+            predicted_observation=fields.get("predicted_observation", ""),
+            confirming_fact_id=fields.get("confirming_fact_id") or None,
             body=body.strip(),
             path=path,
         )
