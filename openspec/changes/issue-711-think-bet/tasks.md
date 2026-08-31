@@ -1,0 +1,6 @@
+- [x] hypothesis_store: predicted_observation + confirmed 状态 + create()
+- [ ] TDD 红：失败事件后必有下注 / predicted_observation 可结算 / 空 predicted_observation 拒绝 / 失败触发先例检索
+- [ ] think_seat: bets_owed + ## bets 区 + 失败触发 suggested_searches
+- [ ] EMIT_ACTIONS 注册（字母序）
+- [ ] 质量门：pytest 全量 + ext-scan + deploy_manifest --verify
+- [ ] push + PR(base=dev)
