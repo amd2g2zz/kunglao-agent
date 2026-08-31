@@ -128,6 +128,10 @@ files:
     dest: .claude/scripts/failure_analysis_gate.py
     kind: scaffold
     sha256: 14f33db92f3506108af054ab83023fef025b9332ba48f105b85037618f8611df
+  - src: scripts/gate_telemetry.py
+    dest: .claude/scripts/gate_telemetry.py
+    kind: scaffold
+    sha256: 6b781ebf1b7f79e26e2e5da83eecb806adaeeb1d84681ca573b55397a2e92d9c
   - src: scripts/heartbeat.py
     dest: .claude/scripts/heartbeat.py
     kind: scaffold
@@ -180,6 +184,10 @@ files:
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
     sha256: 3a9258e5391ab7702c242ae2e5edb8ec651c79a47d7c50269810ad9adab39461
+  - src: scripts/plan_drift_detector.py
+    dest: .claude/scripts/plan_drift_detector.py
+    kind: scaffold
+    sha256: 48ec9900a96ebb9a9a0c4d05d4a1a08eea6b0511bcfb55784e88d281be0724c1
   - src: scripts/platform_paths.py
     dest: .claude/scripts/platform_paths.py
     kind: scaffold
@@ -243,7 +251,7 @@ files:
   - src: scripts/write_gate.py
     dest: .claude/scripts/write_gate.py
     kind: scaffold
-    sha256: ef61eace955bbc31c5ebf483143cba342a28cd5fa9981f9092284975388375e9
+    sha256: d2cd2865dbd0b8dc5f5dfea1070ec96f56fbc587598665e13643e343b32f534c
   - src: scripts/zero_output_fingerprint.py
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold

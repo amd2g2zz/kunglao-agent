@@ -52,6 +52,8 @@ import re
 import sys
 from pathlib import Path
 
+from plan_drift_detector import credible_redteam_files  # #827 反模板筛选层
+
 # fact statuses counting as "stamped" (terminal subset of references/schema.md fact.status)
 FACT_VERIFIED_STATUSES = ("PROVEN", "VERIFIED")
 # W-2 (#532): a fact does not escape the R1 verification requirement by
@@ -226,7 +228,9 @@ def _fact_runs_records(fid: str, ws: Path) -> tuple[bool, str]:
     runs = ws / "runs"
     if not runs.is_dir():
         return False, "no runs/ directory"
-    for f in sorted(runs.glob("verify-redteam-*.md")):
+    # #827: redteam md 走 credible 筛选（存在性≠验证发生；模板簇/无 marker
+    # 文件不作验证记录）。同目录 import，避免与既有 json 路径语义交叉。
+    for f in credible_redteam_files(runs):
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
         except OSError:

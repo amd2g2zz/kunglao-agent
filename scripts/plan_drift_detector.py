@@ -55,6 +55,7 @@ import gate_telemetry as _gt
 from status_defs import TERMINAL
 
 import argparse
+import hashlib
 import re
 import sys
 from datetime import datetime, timezone
@@ -156,18 +157,83 @@ def extract_verified_claim_ids(runs_dir: Path) -> set:
     """Claim ids covered by runs/verify-redteam-*.md files (canonical form).
 
     A redteam verify run is the independent reality check behind a PROVEN
-    claim (maker-checker: worker=maker, verifier=checker). Presence of the
-    file is the mechanical proxy for "the check happened" — its verdict
-    content is outcome_capture.py's business.
+    claim (maker-checker: worker=maker, verifier=checker). #827: existence
+    + claim-id-in-filename was the entire check, and a 265ms burst of 8
+    byte-identical substitution templates defeated it — existence is NOT
+    verification. Files must survive the #827 content-level screening
+    (:func:`credible_redteam_files`); the verdict CONTENT remains
+    outcome_capture.py's business.
     """
     out = set()
     if not runs_dir.exists():
         return out
-    for p in runs_dir.glob("verify-redteam-*.md"):
+    for p in credible_redteam_files(runs_dir):
         m = re.search(r"C-?\d+", p.name)
         if m:
             out.add(_normalize_cid(m.group(0)))
     return out
+
+
+# --- #827: redteam-file credibility screening (anti batch-template) -------
+
+_VERDICT_MARKER_RE = re.compile(r"red[-_ ]?team", re.IGNORECASE)
+_VERDICT_WORD_RE = re.compile(
+    r"\b(CONFIRMED|REFUTED|UNVERIFIED|GAP|verdict)\b", re.IGNORECASE)
+_BURST_MIN_FILES = 3
+_BURST_WINDOW_S = 5.0
+
+
+def _template_hash(text: str) -> str:
+    """id-打码归一化体 hash：claim/fact id → §，空白折叠，大小写归一。"""
+    collapsed = re.sub(
+        r"\s+", " ", _REDACT_IDS_RE.sub("§", text)).strip().lower()
+    return hashlib.sha256(collapsed.encode("utf-8")).hexdigest()
+
+
+_REDACT_IDS_RE = re.compile(r"C-?\d+|F-?\d+")
+
+
+def credible_redteam_files(runs_dir: Path) -> list:
+    """#827 反模板筛选层：verify-redteam-*.md → 可信文件列表。
+
+    两条内容级规则（cheap hardening 层；#825 dispatch ledger 落地后由其
+    接管为身份级修复）：
+      (b) 授权标记：body 须含 redteam 词 + verdict 词——canonical 生产者
+          词表（"RED-TEAM VERDICT:" / "## redteam <fid>\nverdict:"），事故
+          模板（"KEEP status: PROVEN"）不命中
+      (a) 爆发簇：≥3 个 marker 通过的文件归一化体全同（id 打码后 sha256
+          相等）且 mtime 跨度 ≤5s → 整簇排除（模板 fan-out 特征；独立于
+          (b)，marker 齐全的同构簇同样死）
+    结构门语义（fail-closed on 判定）；不可读文件跳过。既有语义保留：
+    1-2 个同构文件（<3）与 mtime 分散的同构文件不触发簇排除。
+    """
+    if not runs_dir.exists():
+        return []
+    passing: list = []
+    for p in sorted(runs_dir.glob("verify-redteam-*.md")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if (_VERDICT_MARKER_RE.search(text)
+                and _VERDICT_WORD_RE.search(text)):
+            passing.append(p)
+    groups: dict = {}
+    for p in passing:
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+            mtime = p.stat().st_mtime
+        except OSError:
+            continue
+        groups.setdefault(_template_hash(text), []).append((p, mtime))
+    out: list = []
+    for group in groups.values():
+        if len(group) >= _BURST_MIN_FILES:
+            times = sorted(t for _, t in group)
+            if times[-1] - times[0] <= _BURST_WINDOW_S:
+                continue
+        out.extend(p for p, _ in group)
+    return sorted(out)
 
 
 def extract_low_confidence_claim_ids(facts_dir: Path) -> set:
