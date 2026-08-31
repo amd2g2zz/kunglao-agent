@@ -147,7 +147,7 @@ files:
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
-    sha256: 14a963724ca3bcf15843edd76607562625e080a8d31b1068343cfb0166b90e4c
+    sha256: 2d36e392bf264cfb7ced294d675ceb82f3b10fb19d223d53aba7e28ab583e6d5
   - src: scripts/infeasible_signal.py
     dest: .claude/scripts/infeasible_signal.py
     kind: scaffold
