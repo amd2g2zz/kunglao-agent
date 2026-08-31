@@ -63,6 +63,9 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
    DISPATCH   → MUST dispatch priority_ratio.py #1, no idling allowed
    BLOCKED    → MUST self-recover (resolve / stale_blocker_prune) or reactivate the failed claim
    DEFERRED   → MUST check whether reactivation is possible (e.g. VM reachable again → restore the claim and dispatch)
+   PARK       → legal idle on external gates (#634): record the wake_condition, then python {h} {ws} --heartbeat-off
+                (revive via mission_stall.py when the wake condition is met); tick rc=2 with idle_circuit_breaker
+                is a MANDATORY stop — do not re-tick through it
    SATURATED  → MUST poll all active workers (no idle waiting)
    CONVERGED  → run the §6.3 checklist (5 items) + independent verification (blind_gate sign-off spot-check
               + kunglao-verify.py L1 re-run) + handoff-check PASS first

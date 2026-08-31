@@ -34,7 +34,7 @@ import test_decide_regression_anchor as anchor
 
 STAGES = ("SCHEMA", "DRAIN", "SCHEDULE")
 VERDICT_STATES = ("INVALID", "CONVERGED", "DISPATCH", "DISPATCH_VERIFIER",
-                  "SATURATED", "BLOCKED")
+                  "SATURATED", "BLOCKED", "PARK")  # #634: PARK 5th verdict
 
 
 def _surface(name: str):
@@ -169,6 +169,7 @@ def test_verdict_mapping_matches_exit_constants() -> None:
         State.DISPATCH_VERIFIER: ("DISPATCH_VERIFIER", cc.EXIT_VERIFY),
         State.SATURATED: ("SATURATED", cc.EXIT_SATURATED),
         State.BLOCKED: ("BLOCKED", cc.EXIT_BLOCKED),
+        State.PARK: ("PARK", cc.EXIT_PARK),  # #634: 5th verdict, legal idle
     }
     assert VERDICTS == expected, "verdict/exit-code mapping drifted"
     assert set(VERDICTS) == {State[s] for s in VERDICT_STATES}, \

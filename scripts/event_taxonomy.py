@@ -168,6 +168,7 @@ EMIT_ACTIONS = [
     "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face
     "channel_default",    # #727 init channel degradation/guidance WARN
     "claim_migrate",
+    "claim_revive",       # #634 PARK → OPEN revival (mission_stall.revive)
     "claudemd_merge",     # #755 G3 collect-and-merge rebuild face
     "converge",
     "death_verdict_rejected",
@@ -194,6 +195,7 @@ EMIT_ACTIONS = [
     "lesson_stage_transition",  # #525 lessons nursery draft → active
     "mcp_scaffold_refresh",  # #755 A4 .mcp.json init-parity backfill face
     "mission_snapshot",   # #823-P1 mission ledger coverage/value checkpoint
+    "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",
     "must_stop",
     "plan_stall",

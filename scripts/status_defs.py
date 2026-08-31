@@ -77,6 +77,12 @@ IN_PROGRESS_STATUSES = {"IN_PROGRESS"}
 
 ACTIVE_STATUSES = {"OPEN", "IN_PROGRESS"}
 
+SUSPENDED = {"PARK"}
+"""#634: PARK = suspension on an external gate. NOT terminal (revivable via
+mission_stall.revive), NOT dispatchable (excluded from open-claim fronts;
+a PARK claim must carry a non-empty wake_condition — carrier-consistency
+rule (f) refuses wake-less PARKs)."""
+
 
 class LedgerLineType:
     """Ledger row kinds. See module docstring for the row contract."""

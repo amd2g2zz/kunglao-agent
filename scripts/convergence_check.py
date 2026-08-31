@@ -49,7 +49,7 @@ from pathlib import Path
 
 import yaml
 
-from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES
+from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES, SUSPENDED
 # RETRACTED lives in retract_claim.py (retraction domain owner, #331):
 # status_defs.TERMINAL is frozen for this change. TERMINAL_WITH_RETRACTED is
 # the dispatch-facing terminal set; RETRACTED is a withdrawn verdict, NOT an
@@ -64,6 +64,7 @@ EXIT_DISPATCH = 1
 EXIT_VERIFY = 2
 EXIT_SATURATED = 3
 EXIT_BLOCKED = 4
+EXIT_PARK = 5  # #634: suspended on external gates — legal idle with wake_condition
 
 
 def utc_now() -> datetime:
@@ -156,6 +157,8 @@ def _open_claims(reg: dict):
     out = []
     for c in (reg.get("claims") or []):
         status = (c.get("status") or "UNKNOWN").upper()
+        if status in SUSPENDED:
+            continue  # #634: PARK = suspended on external gate, not frontier work
         if status not in TERMINAL_WITH_RETRACTED and status not in IN_PROGRESS_STATUSES:
             out.append({"id": c.get("id"), "status": status, "blocked": bool(c.get("blocked"))})
     return out
@@ -546,6 +549,7 @@ class State(str, Enum):
     DISPATCH_VERIFIER = "DISPATCH_VERIFIER"
     SATURATED = "SATURATED"
     BLOCKED = "BLOCKED"
+    PARK = "PARK"  # #634: suspended on external gates — legal idle, wake_condition mandatory
 
 
 class Event(str, Enum):
@@ -591,6 +595,7 @@ VERDICTS = {
     State.DISPATCH_VERIFIER: ("DISPATCH_VERIFIER", EXIT_VERIFY),
     State.SATURATED: ("SATURATED", EXIT_SATURATED),
     State.BLOCKED: ("BLOCKED", EXIT_BLOCKED),
+    State.PARK: ("PARK", EXIT_PARK),
 }
 
 
@@ -1261,6 +1266,47 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
         "note_layer_gaps": snap.pq_note_gaps,
         "pq_parse_error": snap.pq_error,
     }
+    # #634 Part A: PARK — every open claim waits on an EXTERNAL gate
+    # (blocker external:true), no active workers, no partials pending.
+    # That is legal idle, not a coerced BLOCKED/DISPATCH that burns ticks
+    # on dispatch_gate rejections. Emits reason + wake_condition drawn
+    # from the external blockers (revive via mission_stall.revive).
+    if decision["decision"] in ("BLOCKED", "DISPATCH"):
+        try:
+            reg_p = _load_yaml(Path(workspace) / "claim-register.yaml")
+            opens_p = [c for c in (reg_p.get("claims") or [])
+                       if str(c.get("status") or "").upper() == "OPEN"]
+            ext = [c for c in opens_p
+                   if c.get("blocked") and c.get("external")]
+            if (opens_p and len(ext) == len(opens_p)
+                    and not snap.partials and snap.active == 0):
+                wake = "; ".join(
+                    f"{c.get('id')}: {c.get('blocker')}" for c in ext)
+                decision["decision"] = "PARK"
+                decision["exit_code"] = EXIT_PARK
+                decision["reason"] = ("all open claims gated on external "
+                                      "blockers; no active workers; no "
+                                      "pending partials")
+                decision["wake_condition"] = wake
+        except Exception:  # noqa: BLE001 — downgrade is advisory-safe
+            pass
+    # #634: mission-level stall fingerprint — ΔV_m flat K checkpoints while
+    # open work remains. Proposal semantics: annotate + emit, never mutate
+    # the verdict (P3's Q-table consumes it for ordering). Key attached ONLY
+    # when stalled (byte-frozen anchors stay identical otherwise — #829
+    # conditional-key precedent).
+    try:
+        from mission_stall import stall_mission
+        ms = stall_mission(workspace)
+        if ms.get("stalled"):
+            decision["mission_stall"] = ms
+            if emit_snapshot:
+                from kunglao_log import emit as _emit_stall
+                _emit_stall(workspace, actor="convergence_check",
+                            action="mission_stall",
+                            detail=json.dumps(ms, ensure_ascii=False))
+    except Exception:  # noqa: BLE001 — fingerprint unavailable → no annotation
+        pass
     # #823 A2: N-arm first-order value signals — shadow posture, flag-gated.
     # Flag off → the dict comes back untouched (no key, no emit).
     # Flag misread raises FlagError by design (experiment fail-loud contract).
