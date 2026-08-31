@@ -131,7 +131,7 @@ files:
   - src: scripts/heartbeat.py
     dest: .claude/scripts/heartbeat.py
     kind: scaffold
-    sha256: a99b0beebb1a72bfdaa9589be2b821040a30e167d2b36b5a2ba3e79a8fecaf2a
+    sha256: 703e13c4a6408cf9ac7aeb144e1191a2cbdf62590d38725e3efe03691cd8a4aa
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
