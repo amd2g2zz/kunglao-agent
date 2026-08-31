@@ -41,6 +41,7 @@ import yaml
 
 from priority_ratio import EvidenceView, classify_action, is_open, priority_ratio
 from status_defs import TERMINAL
+from hypothesis_store import HypothesisStore, Hypothesis  # #711: bets
 
 # H3 knob: consecutive zero-progress waiting ticks before retrieval is forced.
 STALL_TICKS_FOR_SEARCH = 3
@@ -138,6 +139,7 @@ def suggested_searches(ws: Path, stall_ticks: int) -> list[str]:
     refinement is the orchestrator's job; EXISTENCE is ours (#759 H3)."""
     if stall_ticks < STALL_TICKS_FOR_SEARCH:
         return []
+    return precedent_rows(ws)
     claims = [c for c in _load_yaml(ws / "claim-register.yaml").get("claims") or []
               if c.get("id") and is_open(c)]
     rows: list[str] = []
@@ -155,6 +157,121 @@ def suggested_searches(ws: Path, stall_ticks: int) -> list[str]:
     return rows
 
 
+def precedent_rows(ws: Path) -> list[str]:
+    """Precedent-retrieval seed rows over OPEN claims (#711 E3 不搜=确定性损失)."""
+    claims = [c for c in _load_yaml(
+        ws / "claim-register.yaml").get("claims") or []
+        if c.get("id") and is_open(c)]
+    rows: list[str] = []
+    seen: set[str] = set()
+    for c in claims[:MAX_SUGGESTED_CLAIMS]:
+        cat = classify_action(c)
+        label = _HUMAN_CATEGORY.get(cat, f"{cat} precedent")
+        if label in seen:
+            continue
+        seen.add(label)
+        rows.append(f"- websearch: {label} — public sample teardown matching "
+                    f"claim {c['id']} (refine the query before running)")
+        rows.append(f"- reference-library: `{cat}` scenario — "
+                    f"`references_recall.py {cat}`, read the hit domain file")
+    return rows
+
+
+FAILURE_ACTIONS = frozenset(("death_verdict_rejected", "top1_reject"))
+K_FAILURE_WINDOW = 10          # ledger rows scanned back for failure events
+BET_GROUP = "think-bet"        # separates bets from #528 competitor lineage
+
+
+def recent_failures(ws: Path, k: int = K_FAILURE_WINDOW) -> list[dict]:
+    """近 K 条失败事件（新→旧）。kunglao-*.jsonl 全文件 glob 扫描（跨日安全）。"""
+    rows: list[dict] = []
+    logs = sorted((ws / "runs" / "logs").glob("kunglao-*.jsonl"))
+    for p in reversed(logs):
+        try:
+            lines = p.read_text(encoding="utf-8",
+                                errors="replace").splitlines()
+        except OSError:
+            continue
+        for ln in reversed(lines):
+            try:
+                row = json.loads(ln)
+            except ValueError:
+                continue
+            if row.get("action") in FAILURE_ACTIONS:
+                rows.append({"action": str(row.get("action")),
+                             "claim_id": str(row.get("claim") or "")})
+                if len(rows) >= k:
+                    return rows
+    return rows
+
+
+def bets_owed(ws: Path) -> list[str]:
+    """失败 claim 无 think-bet 覆盖 → 欠注名单。"""
+    covered = {h.claim_id for h in HypothesisStore(
+        ws / "hypotheses").list_all()
+        if h.competitor_group == BET_GROUP}
+    owed: list[str] = []
+    for f in recent_failures(ws):
+        cid = f["claim_id"]
+        if cid and cid not in covered and cid not in owed:
+            owed.append(cid)
+    return owed
+
+
+def file_bet(ws: Path, claim_id: str, statement: str,
+             predicted_observation: str):
+    """立案可证伪赌注。空 predicted_observation 拒绝——无预测的思考不被
+    采纳（文书零奖励的入口面）。"""
+    if not (statement and statement.strip()):
+        raise ValueError("bet statement must not be empty")
+    if not (predicted_observation and predicted_observation.strip()):
+        raise ValueError(
+            "predicted_observation must not be empty — a bet without a "
+            "falsifiable prediction is narrative, not thinking (#711)")
+    store = HypothesisStore(ws / "hypotheses")
+    n = 1
+    existing = {x.id for x in store.list_all()}
+    while f"H-{n:03d}" in existing:
+        n += 1
+    h = store.create(Hypothesis(
+        id=f"H-{n:03d}", claim_id=claim_id, competitor_group=BET_GROUP,
+        candidates=[], status="open",
+        predicted_observation=predicted_observation.strip(),
+        body=statement.strip()))
+    try:
+        import kunglao_log
+        kunglao_log.emit(ws, "orchestrator", "bet_filed", claim=claim_id,
+                         artifact=f"hypotheses/{h.id}.md",
+                         hypothesis_ref=h.id,
+                         detail=predicted_observation.strip())
+    except Exception:  # noqa: BLE001 — advisory emit must never raise
+        pass
+    return h
+
+
+def settle_bet(ws: Path, hyp_id: str, outcome: str,
+               evidence_id: str | None):
+    """结算赌注：confirmed（需 confirming 证据）/ refuted（需 refuting 证据）。
+    clawback 留 #823-P4，本批次只记账。"""
+    if outcome not in ("confirmed", "refuted"):
+        raise ValueError(f"unknown bet outcome: {outcome!r}")
+    store = HypothesisStore(ws / "hypotheses")
+    h = store.transition(
+        hyp_id, outcome,
+        refuting_fact_id=evidence_id if outcome == "refuted" else None,
+        confirming_fact_id=evidence_id if outcome == "confirmed" else None)
+    try:
+        import kunglao_log
+        kunglao_log.emit(ws, "orchestrator", "bet_settled", claim=h.claim_id,
+                         artifact=f"hypotheses/{h.id}.md",
+                         hypothesis_ref=h.id,
+                         exit=1 if outcome == "confirmed" else 0,
+                         detail=f"{outcome} by {evidence_id}")
+    except Exception:  # noqa: BLE001 — advisory emit must never raise
+        pass
+    return h
+
+
 def _render_artifact(ws: Path, ts: str, digest: tuple[int, int],
                      stall_ticks: int) -> str:
     weights_file = ws / "runs" / "value-weights.yaml"
@@ -163,7 +280,13 @@ def _render_artifact(ws: Path, ts: str, digest: tuple[int, int],
                     "absent — neutral weights (every claim weight 1.0)")
     hyp_rows = open_hypothesis_rows(ws) or ["(none open)"]
     idx_lines = facts_index_tail(ws) or ["(no facts yet)"]
-    search = suggested_searches(ws, stall_ticks)
+    owed = bets_owed(ws)
+    search = suggested_searches(ws, stall_ticks) or (
+        precedent_rows(ws) if owed else [])
+    bet_lines = ([f"  - OWED for {cid}: file a falsifiable bet "
+                  f"(file_bet: claim / 含义 / predicted_observation)"
+                  for cid in owed] or
+                 ["(none — every recent failure has a filed bet)"])
     blocks = [
         f"# THINK {ts} — waiting-period cognitive action (#759 H1)",
         "",
@@ -179,6 +302,11 @@ def _render_artifact(ws: Path, ts: str, digest: tuple[int, int],
         "## hypotheses — open list to update / verify / refute",
         *[f"  - {r}" for r in hyp_rows],
         "(pending orchestrator)",
+        "",
+        "## bets — falsifiable bets owed (#711: 文书零奖励，下注才算思考)",
+        *bet_lines,
+        "(file via file_bet: statement + predicted_observation; settle via "
+        "settle_bet confirmed/refuted with evidence id)",
         "",
         "## value — worth ordering under current value weights",
         f"(weights: {weights_note})",
@@ -218,10 +346,13 @@ def maybe_think(ws: Path) -> dict:
                 "artifact": None}
     digest = progress_digest(ws)
     stall = update_stall_state(ws, digest)
-    art = _write_artifact(ws, _render_artifact(ws, _utc_compact(), digest, stall))
+    owed = bets_owed(ws)
+    art = _write_artifact(ws, _render_artifact(ws, _utc_compact(), digest,
+                                               stall))
     return {"waiting": True, "reason": "no-dispatchable-action",
             "artifact": art, "terminal_facts": digest[0],
-            "open_claims": digest[1], "stall_ticks": stall}
+            "open_claims": digest[1], "stall_ticks": stall,
+            "bets_owed": owed, "bet_required": bool(owed)}
 
 
 def main(argv: list[str] | None = None) -> int:

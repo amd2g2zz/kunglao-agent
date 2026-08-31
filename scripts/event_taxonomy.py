@@ -163,6 +163,8 @@ EMIT_ACTIONS = [
     "analysis_recorded",
     "apkid_candidates",   # #669 hypothesis_seeder apkid→competitor_group extension
     "ask_back",
+    "bet_filed",          # #711 falsifiable-bet filing face (think seat)
+    "bet_settled",        # #711 bet settlement (confirmed/refuted) face
     "capability_reject",
     "capability_switch",
     "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face
