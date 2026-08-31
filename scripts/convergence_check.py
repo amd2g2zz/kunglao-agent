@@ -1265,6 +1265,27 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
     # Flag off → the dict comes back untouched (no key, no emit).
     # Flag misread raises FlagError by design (experiment fail-loud contract).
     import rho_checkpoint
+    # #829: cross-carrier consistency — CONVERGED may not stand on drifting
+    # carriers. Checker exception counts as drift (fail-closed for the
+    # CONVERGED verdict only; other decisions unaffected, no deadlock).
+    if decision["decision"] == "CONVERGED":
+        try:
+            from carrier_consistency import check as _carrier_check
+            cv = _carrier_check(workspace)
+        except Exception as exc:  # noqa: BLE001 — drift includes checker error
+            cv = {"ok": False,
+                  "violations": ["(x) carrier checker error: " + str(exc)]}
+        if not cv.get("ok", True):
+            if emit_snapshot:
+                from kunglao_log import emit as _emit_drift
+                _emit_drift(workspace, actor="convergence_check",
+                            action="carrier_drift",
+                            detail=json.dumps(
+                                {"violations": cv["violations"]},
+                                ensure_ascii=False))
+            decision["decision"] = "DISPATCH"
+            decision["exit_code"] = 1
+            decision["carrier_drift"] = cv["violations"]
     result = rho_checkpoint.attach_signals(workspace, decision)
     if emit_snapshot:
         _emit_decision_snapshot(workspace, result)
