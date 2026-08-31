@@ -255,7 +255,7 @@ files:
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
-    sha256: b307a0606faab2d9f556a8dddb8833d7438d4c946018a514b7c5f51f6893dabe
+    sha256: 7ac2312903574a3de59b2c7d78103c3f13df9b4d3dea27868dadec3660f405be
   - src: scripts/write_gate.py
     dest: .claude/scripts/write_gate.py
     kind: scaffold
