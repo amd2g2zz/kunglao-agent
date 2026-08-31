@@ -98,6 +98,54 @@ def append_tick_log(workspace, actor: str = "tick") -> None:
         fh.write(line + chr(10))
 
 
+def newest_sidecar_ts(workspace) -> str | None:
+    """#618: newest durable tick ts from runs/.heartbeat.log (JSONL sidecar,
+    #830). None when the sidecar is absent/unreadable — the caller decides
+    whether absence means anything (registration check's job, not ours)."""
+    log = heartbeat_log_path(workspace)
+    if not log.exists():
+        return None
+    last = None
+    try:
+        with log.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    last = line
+    except OSError:
+        return None
+    if not last:
+        return None
+    try:
+        ts = json.loads(last).get("ts")
+        return str(ts) if ts else None
+    except json.JSONDecodeError:
+        return None
+
+
+def gap_alarm(workspace, *, threshold_minutes: int | None = None,
+              now: datetime | None = None) -> dict:
+    """#618/#795: dead-window alarm off the durable sidecar.
+
+    Returns {alarm, gap_min, newest_ts}:
+      alarm=None  — no sidecar / unparseable (absence of a heartbeat face is
+                    NOT deadness; that verdict belongs to the registration
+                    check. Never a false positive here.)
+      alarm=bool  — newest tick age > threshold (default STALE_MINUTES=35)
+    """
+    newest = newest_sidecar_ts(workspace)
+    if newest is None:
+        return {"alarm": None, "gap_min": None, "newest_ts": None}
+    ts = _parse_hb_ts(newest)
+    if ts is None:
+        return {"alarm": None, "gap_min": None, "newest_ts": newest}
+    moment = now or datetime.now(timezone.utc)
+    threshold = threshold_minutes or STALE_MINUTES
+    gap_min = (moment - ts).total_seconds() / 60.0
+    return {"alarm": gap_min > threshold, "gap_min": round(gap_min, 2),
+            "newest_ts": newest}
+
+
 def _parse_hb_ts(value):
     """Parse an ISO-Z heartbeat timestamp -> aware datetime | None."""
     if not isinstance(value, str) or not value:

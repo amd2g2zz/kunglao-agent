@@ -1332,6 +1332,23 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             decision["decision"] = "DISPATCH"
             decision["exit_code"] = 1
             decision["carrier_drift"] = cv["violations"]
+    # #618: dead-window alarm off the durable heartbeat sidecar (#830
+    # substrate). Annotation + event only — never mutates the verdict
+    # (unattended dead-window must be VISIBLE, and P3's value ordering
+    # consumes the signal). alarm=None (no sidecar) stays silent — absence
+    # of a heartbeat face is a registration-check verdict, not deadness.
+    try:
+        from heartbeat import gap_alarm as _gap_alarm
+        gap = _gap_alarm(Path(workspace))
+    except Exception:  # noqa: BLE001 — advisory-safe, never deadlock decide
+        gap = None
+    if gap is not None and gap.get("alarm") is True:
+        decision["heartbeat_gap"] = gap
+        if emit_snapshot:
+            from kunglao_log import emit as _emit_gap
+            _emit_gap(workspace, actor="convergence_check",
+                      action="heartbeat_gap",
+                      detail=json.dumps(gap, ensure_ascii=False))
     result = rho_checkpoint.attach_signals(workspace, decision)
     if emit_snapshot:
         _emit_decision_snapshot(workspace, result)

@@ -776,6 +776,16 @@ def register_hooks_deployed(ws: Path) -> int:
         bucket.append(build_hook_entry(hooks_dir, hf, matcher, project=ws))
         hooks[matcher] = bucket
         added += 1
+        # #618: heartbeat_touch rides a second slot — Stop. The session's
+        # last beat per turn must land even when no Bash tool ran (pure
+        # Read/Grep analysis stretches would otherwise leave the durable
+        # sidecar cold). Mirrors worker_budget's double-registration shape.
+        if hf == "heartbeat_touch.py":
+            bucket = hooks.get("Stop") or []
+            if not _basename_used("Stop", hf):
+                bucket.append(build_hook_entry(hooks_dir, hf, None, project=ws))
+                hooks["Stop"] = bucket
+                added += 1
 
     settings_path.write_text(
         json.dumps(existing, indent=2, ensure_ascii=False),
