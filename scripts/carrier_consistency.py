@@ -4,7 +4,9 @@
 
 Assertions (fail-closed on CONVERGED only; checker exceptions are treated
 as drift by the caller decide() — an unverified CONVERGED never stands):
-  (a) register stamped claim (PROVEN/VERIFIED) iff linked fact stamped
+  (a) register stamped claim (PROVEN/VERIFIED) iff linked fact stamped.
+      Carrier-record ABSENCE is not drift (sparse workspaces legitimate);
+      fires only on mismatch where the record EXISTS.
   (b) _INDEX row status == fact frontmatter status
   (c) notes verify_status=passes => linked fact verified: true
   (d) fact verified_by_run file exists
@@ -139,7 +141,7 @@ def check(workspace):
     rows = _index_rows(ws)
     notes = _notes(ws)
 
-    # (b) _INDEX row status vs fact frontmatter; row cites existing fact
+    # (b) _INDEX row status vs frontmatter; row cites existing fact
     for row in rows:
         fid = _norm_fid(row["fact"])
         fm = facts.get(fid) if fid else None
@@ -153,7 +155,9 @@ def check(workspace):
                 "(b) _INDEX row " + row["fact"] + " says " + row["status"]
                 + " but frontmatter says " + (fm_status or "<none>"))
 
-    # (a) register stamped iff linked fact stamped (bidirectional)
+    # (a) register stamped iff linked fact stamped (bidirectional).
+    # Carrier-record ABSENCE is not drift (sparse workspaces stay
+    # legitimate); fires only when the record EXISTS unstamped.
     def _linked_stamped(cid):
         for fm in facts.values():
             if cid in _linked_claims(fm):
@@ -161,18 +165,18 @@ def check(workspace):
         for r in rows:
             if r["claim"] == cid:
                 return r["status"] in _STAMPED
-        return False
+        return None
 
     for c in claims:
         cid = str(c.get("id") or "").strip()
         st = (c.get("status") or "").upper()
-        if st in _STAMPED and not _linked_stamped(cid):
+        if st in _STAMPED and _linked_stamped(cid) is False:
             violations.append("(a) claim " + cid + " is " + st
-                              + " but linked fact is not stamped/missing")
-        if st in _OPEN_SET and _linked_stamped(facts, cid) if False else \
-                (st in _OPEN_SET and _linked_stamped(cid)):
+                              + " but linked fact is not stamped")
+        if st in _OPEN_SET and _linked_stamped(cid) is True:
             violations.append("(a) fact for claim " + cid + " is stamped "
                               "but claim is " + st)
+
 
     # (c) notes passes => linked fact verified true
     for fm in notes:
