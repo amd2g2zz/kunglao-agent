@@ -200,6 +200,7 @@ EMIT_ACTIONS = [
     "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",
     "must_stop",
+    "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
     "priority_deviation",
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
