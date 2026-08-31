@@ -24,7 +24,7 @@ import lint_facts as lf
 import migrate_facts as mf
 
 MAP_JSON = str(Path(__file__).resolve().parents[1] /
-                  "openspec" / "changes" / "issue-809-migrate-facts-fix" /
+                  "openspec" / "archive" / "issue-809-migrate-facts-fix" /
                   "migration-map-865e8eb4.json")
 
 ROOT = Path(__file__).resolve().parents[1]
