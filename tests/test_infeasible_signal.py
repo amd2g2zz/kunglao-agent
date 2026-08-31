@@ -59,9 +59,11 @@ def test_flat_v_but_still_discovering_does_not_fire(tmp_path):
 def test_event_emitted_on_fire(tmp_path):
     ws = _mk_ws(tmp_path, [0.05, 0.05, 0.05], terminal_count=2)
     def _all_rows():
-        return [json.loads(line)
-                for p in (ws / "runs" / "logs").glob("kunglao-*.jsonl")
-                for line in p.read_text(encoding="utf-8").splitlines()]
+        rows = []
+        for p in sorted((ws / "runs" / "logs").glob("kunglao-*.jsonl")):
+            rows.extend(json.loads(line)
+                        for line in p.read_text(encoding="utf-8").splitlines())
+        return rows
     before = len(_all_rows())
     isg.evaluate(ws)
     rows = _all_rows()  # emit writes to TODAY-dated file, not the fixture file
