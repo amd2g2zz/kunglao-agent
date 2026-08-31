@@ -131,9 +131,12 @@ def test_attach_signals_flag_on_emits(tmp_path, monkeypatch):
     assert "d" in sig and "eta_min" in sig
     logs = list((ws / "runs" / "logs").glob("kunglao-*.jsonl"))
     assert logs, "shadow emit missing"
-    row = json.loads(logs[0].read_text(encoding="utf-8").splitlines()[-1])
-    assert row["actor"] == "rho_checkpoint"
-    assert row["action"] == "rho_checkpoint"
+    # emit writes to TODAY-dated file; search all ledgers for the rho row
+    rows = [json.loads(line)
+            for p in logs for line in p.read_text(encoding="utf-8").splitlines()]
+    rho_rows = [r for r in rows if r.get("action") == "rho_checkpoint"]
+    assert rho_rows, "rho_checkpoint row not found in any ledger"
+    assert rho_rows[-1]["actor"] == "rho_checkpoint"
 
 
 def test_attach_signals_flag_off_noop(tmp_path, monkeypatch):

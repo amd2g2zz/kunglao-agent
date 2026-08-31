@@ -58,10 +58,12 @@ def test_flat_v_but_still_discovering_does_not_fire(tmp_path):
 
 def test_event_emitted_on_fire(tmp_path):
     ws = _mk_ws(tmp_path, [0.05, 0.05, 0.05], terminal_count=2)
-    before = len((ws / "runs" / "logs" / "kunglao-2026-08-28.jsonl").read_text(
-        encoding="utf-8").splitlines())
+    def _all_rows():
+        return [json.loads(line)
+                for p in (ws / "runs" / "logs").glob("kunglao-*.jsonl")
+                for line in p.read_text(encoding="utf-8").splitlines()]
+    before = len(_all_rows())
     isg.evaluate(ws)
-    lines = (ws / "runs" / "logs" / "kunglao-2026-08-28.jsonl").read_text(
-        encoding="utf-8").splitlines()
-    assert len(lines) == before + 1
-    assert json.loads(lines[-1])["action"] == "infeasible_candidate"
+    rows = _all_rows()  # emit writes to TODAY-dated file, not the fixture file
+    assert len(rows) == before + 1
+    assert rows[-1]["action"] == "infeasible_candidate"

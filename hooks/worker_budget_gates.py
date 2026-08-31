@@ -950,3 +950,45 @@ def check_agent_type(paths: dict, desc: str, prompt: str,
 
 
 # ---------- issue #270: REJECT guidance via hookSpecificOutput.additionalContext ----------
+
+
+def check_zero_output_circuit(workspace: str | Path) -> tuple[bool, str]:
+    """#823 A4 canary graduation: same-type zero-output thrash breaker.
+
+    Shadow posture (count + emit only) graduates here: with
+    KUNGLAO_VALUE_ALGO enabled, a tripped circuit (ZERO_OUTPUT_N=3
+    consecutive same-type actions with no belief change) REJECTS the
+    dispatch until a failure_analysis step lands (#634 design).
+    Flag OFF or any read failure -> pass (byte-identical / fail-open,
+    matching this gate family's stance: a broken gate must not
+    deadlock the loop).
+
+    Returns (ok, reason). ok=False means REJECT the dispatch.
+    """
+    if not workspace:
+        return (True, 'no workspace - zero-output circuit skipped')
+    try:
+        import value_config
+        import zero_output_fingerprint
+        if not value_config.is_enabled():
+            return (True, 'flag off - zero-output circuit bypassed')
+        state_path = Path(workspace) / zero_output_fingerprint.STATE_FILE
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return (True, 'no circuit state - zero-output circuit passed')
+        streaks = state.get("streaks") or {}
+        tripped = {fp: n for fp, n in streaks.items()
+                   if int(n) >= zero_output_fingerprint.ZERO_OUTPUT_N}
+        if not tripped:
+            return (True, 'no tripped fingerprint - zero-output circuit passed')
+        return (False, (
+            'BLOCKED: zero-output circuit tripped (#823 A4 canary) - '
+            f'{len(tripped)} same-type action fingerprint(s) at >= '
+            f'{zero_output_fingerprint.ZERO_OUTPUT_N} consecutive checkpoints '
+            'with no belief change. Interrupt and run failure_analysis '
+            '(runs/failure-analysis.md) before retrying this action family; '
+            'the streak resets automatically once the workspace belief moves.'
+        ))
+    except Exception:
+        return (True, 'zero-output circuit error - fail-open')
