@@ -140,6 +140,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `optimizer_bandit.py` | #833 机制开关通道 — β-Bernoulli 后验(arm=机制×泳道)+ledger 归因+demotion_queue(四阶段门降级候选,不直接生效) | tests |
 | `plan_stages.py` | plan 阶段模型 (#822) — runs/plan-stages.yaml 工件 + BIG_BANG_PLAN 检测(校验面 fail-closed) + 盘点裁决 maintain/adjust/replan(adjust/replan 必带 reason) + plan_review 落账 | CLI, tests |
 | `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |
+| `tuition_curve.py` | 学费曲线聚合器 + 座舱 V/D/ETA 数据面 (#823-P4) — settled rho_pair → mission 记录, stratum 聚合, got_cheaper 判定, cockpit_summary | tests |
+| `tuition_refit.py` | Platt 系数重拟合面 (#823-P4) — ledger (ρ,z_self) 对 → fit_platt → optimizer_core 提案（只提案不生效, 宪法隔离继承） | tests |
 
 ## Observability sidecar (issue #287)
 
