@@ -131,6 +131,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `write_guard_unlock.py` | #820 连坐解锁通道 — lint 打击面按目标文件归因; unlock/quarantine/list 三命令全落账 | hooks, tests |
 | `carrier_consistency.py` | 跨载体一致性门 (#829) — register/_INDEX/facts/notes 五规则断言; decide() CONVERGED 前置降级 + carrier_drift 落账 | hooks, tests |
 | `mission_ledger.py` | 主线欠账表 + V_m (#823-P1, shadow) — PQ 三态 CRUD + 防傻断言(边角料全 PROVEN→增量=0) + mission_snapshot 落盘 | tests |
+| `mission_stall.py` | 主线停滞指纹 + PARK 合法化 (#634) — ΔV_m 平坦×K 检测 / PARK 必带 wake_condition / revive 通道(落账 claim_revive) | convergence_check, hooks(carrier rule f), tests |
 | `notes_discriminator.py` | notes 结构判别器 (#834) — 复制即拒/零引用/悬空引用三规则; completion_gate NOTES_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
 | `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |
 

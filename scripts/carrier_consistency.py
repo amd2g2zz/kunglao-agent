@@ -202,6 +202,15 @@ def check(workspace):
             violations.append("(d) fact " + fid + " verified_by_run cites "
                               "missing file: " + ref)
 
+    # (f) #634: PARK legality — a suspended claim must carry a non-empty
+    # wake_condition; a wake-less PARK is an unbounded wait in disguise.
+    for c in claims:
+        if str(c.get("status") or "").upper() != "PARK":
+            continue
+        if not str(c.get("wake_condition") or "").strip():
+            violations.append("(f) claim " + str(c.get("id") or "<unknown>")
+                              + " is PARK without wake_condition")
+
     return {"ok": not violations, "violations": violations,
             "checked": len(claims)}
 

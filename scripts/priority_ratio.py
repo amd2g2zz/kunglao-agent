@@ -58,7 +58,7 @@ from pathlib import Path
 import yaml
 
 import value_config
-from status_defs import TERMINAL, IN_PROGRESS_STATUSES
+from status_defs import TERMINAL, IN_PROGRESS_STATUSES, SUSPENDED
 
 WEIGHTS = {"L": 0.45, "D": 0.30, "N": 0.25}
 TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
@@ -174,8 +174,11 @@ class Action:
 
 
 def is_open(claim: dict) -> bool:
-    """Not terminal and not IN_PROGRESS (same rule as priority.py L60-64)."""
-    return claim.get("status") not in TERMINAL and claim.get("status") not in IN_PROGRESS_STATUSES
+    """Not terminal, not IN_PROGRESS, not PARK (#634: suspended claims exit
+    the dispatch frontier; revival is explicit via mission_stall.revive)."""
+    st = claim.get("status")
+    return (st not in TERMINAL and st not in IN_PROGRESS_STATUSES
+            and st not in SUSPENDED)
 
 
 # ---------- action classification (unchanged, feeds the novelty region + worker hints) ----------

@@ -160,6 +160,54 @@ ORACLE_MISSING_LINE = (
 )
 
 
+def noop_breaker(ws: Path, current_hash: str,
+                 threshold: int | None = None) -> dict:
+    """#634 Part B: no-progress circuit breaker state machine.
+
+    Same content hash as the previous tick → consecutive_noop += 1; any
+    change resets. At >= threshold (env KUNGLAO_NOOP_BREAKER_N, default 6)
+    the breaker trips: the loop prompt treats rc=2 as a mandatory stop,
+    not a warning. Pure state helper — main() owns persistence+rc.
+    """
+    import json as _json
+    import os
+    ws = Path(ws)
+    n = threshold if threshold is not None else int(
+        os.environ.get("KUNGLAO_NOOP_BREAKER_N", "6"))
+    state_path = ws / "runs" / ".heartbeat-noop.json"
+    prev = {}
+    try:
+        prev = _json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — absent/corrupt → fresh counter
+        prev = {}
+    if prev.get("hash") == current_hash:
+        count = int(prev.get("count", 0)) + 1
+    else:
+        count = 1
+    try:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(_json.dumps(
+            {"hash": current_hash, "count": count}), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — telemetry must not break the tick
+        pass
+    return {"tripped": count >= n, "consecutive_noop": count, "threshold": n}
+
+
+def state_fingerprint(ws: Path) -> str:
+    """#634 Part B hash input: register + _INDEX + mission ledger. Any real
+    state advance changes at least one of these."""
+    import hashlib
+    ws = Path(ws)
+    h = hashlib.sha256()
+    for rel in ("claim-register.yaml", "facts/_INDEX.md",
+                "runs/mission_ledger.yaml"):
+        p = ws / rel
+        if p.exists():
+            h.update(rel.encode("utf-8"))
+            h.update(p.read_bytes())
+    return h.hexdigest()
+
+
 def main(argv: list[str] | None = None) -> int:
     """argv: explicit CLI args (defaults to sys.argv[1:]) — lets the kunglao.py
     router pass the caller's workspace instead of the router's own argv
@@ -263,6 +311,31 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:
         pass
 
+    # #634 Part B: no-progress circuit breaker — N consecutive identical
+    # state fingerprints is the suspended-workspace burn the issue documented
+    # ($230+ of self-referential TTL renewal). rc=2 is a MANDATORY stop for
+    # the loop prompt, mirroring how BLOCKED forces self-recovery.
+    breaker_rc = None
+    try:
+        br = noop_breaker(ws, state_fingerprint(ws))
+        if br["tripped"]:
+            report["idle_circuit_breaker"] = {
+                "tripped": True,
+                "consecutive_noop": br["consecutive_noop"],
+                "threshold": br["threshold"],
+            }
+            try:
+                out.write_text(json.dumps(report, indent=2),
+                               encoding="utf-8")
+            except Exception:
+                pass
+            print(f"*** IDLE CIRCUIT BREAKER: {br['consecutive_noop']} "
+                  f"consecutive no-op ticks (>= {br['threshold']}) — "
+                  f"PARK or end the session (#634) ***")
+            breaker_rc = 2
+    except Exception:  # noqa: BLE001 — breaker failure must not fail the tick
+        breaker_rc = None
+
     action = report["action_taken"] or "(EMPTY — must be filled: what was dispatched/verified/resolved/reactivated)"
     print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | heartbeat_rc={rc_hb} | {hb}")
     if first_failure is not None:
@@ -271,6 +344,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"report: {out}")
     # #381: selfcheck rc weighs in — a crashed selfcheck (registry drift at
     # import, failed rebuild) must fail the tick, not ride it silently.
+    if breaker_rc is not None:
+        return breaker_rc
     return 0 if rc_hb == 0 and rc_renew == 0 and rc_sc == 0 else 1
 
 
