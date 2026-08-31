@@ -182,6 +182,8 @@ EMIT_ACTIONS = [
     "hypothesis_seed",    # #662 PQ scaffold seeding
     "hypothesis_superseded",  # #759 note-supersedes-hypothesis wiring (K3)
     "infeasible_candidate",  # #823 A4 doomed-trajectory early-stop signal
+    "infeasible_filed",     # #815 gated INFEASIBLE proposal filed (DEFERRED)
+    "infeasible_woken",     # #815 wake face: infeasible-DEFERRED revived
     "install_attempt",    # #700 toolchain_install per-item install events
     "install_declined",   # #700 toolchain_install per-item install events
     "install_failed",     # #700 toolchain_install per-item install events
