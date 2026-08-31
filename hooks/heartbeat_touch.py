@@ -26,6 +26,16 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# #618: durable-sidecar access via the #671 path-hygiene authority (same
+# pattern as completion_gate) — the hook lands its pulse in the #830
+# append-only substrate, not just the cache file.
+from _path_hygiene import scripts_on_path  # noqa: E402
+
+# #618: minimum seconds between durable sidecar appends from THIS hook —
+# PreToolUse/Bash + Stop fire often; the sidecar is a liveness substrate,
+# not a tool-call trace (growth stays ~cadence-shaped, not tool-shaped).
+PULSE_DEDUP_SECONDS = 60
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -49,6 +59,23 @@ def main() -> int:
             tmp = hb.with_suffix(hb.suffix + ".tmp")
             tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
             tmp.replace(hb)
+            # #618: land the pulse in the durable sidecar too (same single
+            # source as tick/touch — #830), deduped to 60s. Fail-open: a
+            # sidecar error must never break the tool call.
+            try:
+                with scripts_on_path():
+                    import heartbeat as hbmod
+                newest = hbmod.newest_sidecar_ts(ws)
+                dedup = False
+                if newest:
+                    ts0 = hbmod._parse_hb_ts(newest)
+                    if ts0 is not None:
+                        delta = (datetime.now(timezone.utc) - ts0).total_seconds()
+                        dedup = 0 <= delta < PULSE_DEDUP_SECONDS
+                if not dedup:
+                    hbmod.append_tick_log(ws, actor="hook")
+            except Exception:  # noqa: BLE001 — liveness substrate best-effort
+                pass
             return 0
         except Exception as exc:  # noqa: BLE001 — never break the tool call
             print(f"heartbeat_touch: heartbeat refresh failed ({exc})",

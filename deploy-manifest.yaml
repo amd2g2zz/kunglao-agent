@@ -23,7 +23,7 @@ files:
   - src: hooks/heartbeat_touch.py
     dest: .claude/hooks/heartbeat_touch.py
     kind: hook
-    sha256: bd7e2f122c31038e427ab962cd89fdee1cfde03a4b34f806b4e3cd64fe041007
+    sha256: 52ea4455736877f6b207610a9e92a918722da025884acfe0fa4295b2bc8760f8
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
@@ -139,11 +139,11 @@ files:
   - src: scripts/heartbeat.py
     dest: .claude/scripts/heartbeat.py
     kind: scaffold
-    sha256: 703e13c4a6408cf9ac7aeb144e1191a2cbdf62590d38725e3efe03691cd8a4aa
+    sha256: 00101e88a46d48f6ac200f8023f34f65ab804ce0a19644a71cdbcecf8af2cbeb
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: b761fa8fbed836c57f49513dcdfc47ba284cb585fc7e1011e914816cbe00ec8b
+    sha256: 7ed7e3244b56a202b9f9fc59cbab19af66c9ab57bf8f5df319a86db6abd74f64
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
