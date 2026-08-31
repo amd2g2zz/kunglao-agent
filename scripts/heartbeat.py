@@ -68,6 +68,36 @@ def append_tick(state: dict, *, now: datetime | None = None) -> dict:
     return out
 
 
+# ===========================================================================
+# #830: durable tick sidecar - runs/.heartbeat.log (JSONL, append-only)
+# ===========================================================================
+HEARTBEAT_LOG_NAME = ".heartbeat.log"
+
+
+def heartbeat_log_path(workspace: Path) -> Path:
+    """Durable tick sidecar path: <ws>/runs/.heartbeat.log."""
+    return Path(workspace) / "runs" / HEARTBEAT_LOG_NAME
+
+
+def append_tick_log(workspace, actor: str = "tick") -> None:
+    """#830: append one durable tick line {"ts","actor"} to
+    runs/.heartbeat.log (JSONL, append-only).
+
+    Dedicated sidecar, NOT the convergence ledger: (a) the incident itself
+    deleted the ledger twice - anchoring liveness in it inherits the same
+    weakness; (b) the kunglao event stream is TODAY-dated (midnight split)
+    and its row schema is a cross-PR contract (#818 schema drift broke PR
+    #836 CI) - a single-file sidecar keeps the liveness substrate
+    contract-free and midnight-stable. Append-only discipline: writers only
+    ever append; no rotation (growth ~288 lines/day at 5-min cadence).
+    """
+    log = heartbeat_log_path(workspace)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps({"ts": utc_now(), "actor": str(actor)})
+    with log.open("a", encoding="utf-8") as fh:
+        fh.write(line + chr(10))
+
+
 def _parse_hb_ts(value):
     """Parse an ISO-Z heartbeat timestamp -> aware datetime | None."""
     if not isinstance(value, str) or not value:
@@ -80,7 +110,8 @@ def _parse_hb_ts(value):
 
 def evaluate_tick_continuity(state: dict, *,
                              now: datetime | None = None,
-                             stale_minutes: int = STALE_MINUTES) -> tuple[bool, str]:
+                             stale_minutes: int = STALE_MINUTES,
+                             log_path=None) -> tuple[bool, str]:
     """#754 E2: THE liveness verdict shared by gate / check / verify.
 
     Alive requires ALL of:
@@ -104,16 +135,40 @@ def evaluate_tick_continuity(state: dict, *,
                 "heartbeat state unreadable (not an object) - re-register "
                 "with hook_activation.py <ws> --heartbeat-on")
     raw = state.get(TICK_HISTORY_KEY)
-    if not isinstance(raw, list) or not raw:
-        return (False,
-                "no tick_history (pre-#754 single-tick state, the 35-min blind "
-                "spot shape) - build it with ONE real tick now: python "
-                "<skill>/scripts/heartbeat_touch.py <ws> (or heartbeat_tick.py "
-                "<ws>), then re-dispatch")
-    stamps = sorted(ts for ts in (_parse_hb_ts(v) for v in raw if isinstance(v, str))
-                    if ts is not None)
+    # #830: the durable tick sidecar is authoritative when it carries
+    # parseable ticks. Deleting/tampering the .heartbeat.json cache cannot
+    # erase history: the old ticks stay in the sidecar, so deletion cannot
+    # hide the cadence gap around the incident (D2/D3).
+    durable = []
+    if log_path is not None:
+        lp = Path(log_path)
+        if lp.exists():
+            for line in lp.read_text(encoding="utf-8", errors="replace").splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    obj = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(obj, dict):
+                    ts = _parse_hb_ts(obj.get("ts"))
+                    if ts is not None:
+                        durable.append(ts)
+    durable_source = bool(durable)
+    durable_prefix = "durable log: " if durable_source else ""
+    if durable_source:
+        stamps = sorted(durable)
+    else:
+        if not isinstance(raw, list) or not raw:
+            return (False, durable_prefix +
+                    "no tick_history (pre-#754 single-tick state, the 35-min blind "
+                    "spot shape) - build it with ONE real tick now: python "
+                    "<skill>/scripts/heartbeat_touch.py <ws> (only heartbeat_tick.py "
+                    "<ws>), then re-dispatch")
+        stamps = sorted(ts for ts in (_parse_hb_ts(v) for v in raw if isinstance(v, str))
+                        if ts is not None)
     if len(stamps) < 2:
-        return (False,
+        return (False, durable_prefix +
                 "single tick only (registration-time tick, cron never fired again) "
                 "- wait for the SECOND tick (<= 2x interval) or check the /loop cron "
                 f"is alive; tick_history={raw}")
@@ -129,7 +184,7 @@ def evaluate_tick_continuity(state: dict, *,
     for prev, nxt in zip(stamps, stamps[1:]):
         gap = nxt - prev
         if gap > max_gap:
-            return (False,
+            return (False, durable_prefix +
                     f"cadence GAP between adjacent ticks ({int(gap.total_seconds()//60)} min "
                     f"> {int(2 * interval)} min = 2x{interval:g}m): "
                     f"{prev.strftime('%Y-%m-%dT%H:%M:%SZ')} -> "
@@ -137,10 +192,10 @@ def evaluate_tick_continuity(state: dict, *,
                     "heartbeat_tick.py <ws> or re-register the /loop")
     age = moment - stamps[-1]
     if age > timedelta(minutes=stale_minutes):
-        return (False,
+        return (False, durable_prefix +
                 f"heartbeat STALE (last tick {int(age.total_seconds()//60)} min ago > "
                 f"{stale_minutes}) - continuous-tick history present but the loop died")
-    return (True,
+    return (True, durable_prefix +
             f"continuous ticks OK ({len(stamps)} in window, latest "
             f"{stamps[-1].strftime('%Y-%m-%dT%H:%M:%SZ')}, cadence <= "
             f"{int(2 * interval)}m)")
@@ -182,6 +237,9 @@ def heartbeat_register(workspace: Path, loop_registered: bool = False) -> int:
         now=moment)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    # #830: registration appends to the durable sidecar - re-registering
+    # after a cache deletion CANNOT reset the tick history (D3).
+    append_tick_log(workspace, "register")
     print(f"OK: heartbeat registered at {path} (interval 5m)")
     return 0
 
@@ -236,7 +294,9 @@ def heartbeat_check(workspace: Path) -> int:
         return 1
 
     # #754 E2: same continuous-tick standard as the dispatch gate and --verify.
-    alive, detail = evaluate_tick_continuity(state)
+    # #830: judge from the durable sidecar when present (cache is a cache).
+    alive, detail = evaluate_tick_continuity(
+        state, log_path=heartbeat_log_path(workspace))
     if not alive:
         print(f"HEARTBEAT NOT CONTINUOUS: {detail}", file=sys.stderr)
         return 1

@@ -328,7 +328,7 @@ def renew(workspace: Path, ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
     if hb.exists():
         try:
             import json as _json
-            from heartbeat import append_tick  # noqa: E402 (#754 shared writer)
+            from heartbeat import append_tick, append_tick_log  # noqa: E402 (#754 shared writer)
             hstate = _json.loads(hb.read_text(encoding="utf-8"))
             # #754 E2: a renew IS a tick — appending keeps the continuous-tick
             # history fed from the same place last_tick_ts is refreshed (cron
@@ -336,6 +336,8 @@ def renew(workspace: Path, ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
             hstate["last_tick_ts"] = utc_now()
             hstate = append_tick(hstate)
             hb.write_text(_json.dumps(hstate, indent=2), encoding="utf-8")
+            # #830: a renew tick lands in the durable sidecar as well.
+            append_tick_log(workspace, "renew")
         except Exception:
             pass  # heartbeat file corrupt — --heartbeat-check will report it
     return state
