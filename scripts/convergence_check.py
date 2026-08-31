@@ -1300,6 +1300,21 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
         ms = stall_mission(workspace)
         if ms.get("stalled"):
             decision["mission_stall"] = ms
+            # #823-P3: stall response face — THINK bet guidance, flag-gated.
+            # Conditional-key (anchored snapshots stay identical otherwise).
+            try:
+                import value_config as _vc
+                if _vc.is_enabled():
+                    from think_seat import bets_owed as _bets_owed
+                    decision["stall_response"] = {
+                        "bets_owed": _bets_owed(Path(workspace)),
+                        "guidance": ("stall confirmed - file a falsifiable "
+                                     "bet via think_seat.file_bet "
+                                     "(predicted_observation required); the "
+                                     "bet leads the next dispatch"),
+                    }
+            except Exception:  # noqa: BLE001 — advisory face only
+                pass
             if emit_snapshot:
                 from kunglao_log import emit as _emit_stall
                 _emit_stall(workspace, actor="convergence_check",

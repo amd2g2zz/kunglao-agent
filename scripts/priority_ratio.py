@@ -92,6 +92,10 @@ class EvidenceView:
     # #823 A3 (N-arm): replay prior P(complete) for this workspace's bucket;
     # 1.0 = neutral → pre-#823 cost math. Resolved only when the flag is on.
     prior_p_complete: float = 1.0
+    # #823-P3: remaining gap weight per PQ (answered→0, blocked→(1−β)·w,
+    # unattempted→w); mission_active only when flag ON + positive gaps.
+    mission_gap: dict[str, float] = field(default_factory=dict)
+    mission_active: bool = False
 
     @classmethod
     def from_workspace(cls, ws: Path) -> "EvidenceView":
@@ -146,9 +150,28 @@ class EvidenceView:
         claim_strategy, strategy_failures = _load_strategy_view(ws, covers)
         classes, overrides = load_value_weights(ws)
         prior_p = _resolve_prior_p(ws) if value_config.is_enabled() else 1.0
+        mission_gap: dict[str, float] = {}
+        mission_active = False
+        if value_config.is_enabled():
+            # #823-P3: mission gap weights from the欠账表 (fail-open).
+            try:
+                led_path = ws / "runs" / "mission_ledger.yaml"
+                if led_path.exists():
+                    led = yaml.safe_load(
+                        led_path.read_text(encoding="utf-8")) or {}
+                    beta = float(led.get("mission", {}).get("beta", 0.3))
+                    for p in led.get("mission", {}).get("pqs", []):
+                        w = float(p.get("weight", 1.0))
+                        st = p.get("state")
+                        mission_gap[str(p.get("id"))] = (
+                            0.0 if st == "answered" else
+                            (1.0 - beta) * w if st == "blocked" else w)
+                    mission_active = any(v > 0 for v in mission_gap.values())
+            except Exception:  # noqa: BLE001 — fail-open
+                mission_gap, mission_active = {}, False
         return cls(frozenset(terminal_claims), verified, {}, lines,
                    caps, obstacles, strategy_failures, claim_strategy,
-                   classes, overrides, prior_p)
+                   classes, overrides, prior_p, mission_gap, mission_active)
 
 
 @dataclass(frozen=True)
@@ -166,6 +189,7 @@ class Action:
     novelty: float
     cost: float
     weight: float = 1.0  # #759 H2 value multiplier (appended field — the pre-#759 construction shape is positionally compatible)
+    gap_bucket: int = 0  # #823-P3: 1 = answers an open-PQ gap (leads the sort when flag ON)
 
     def to_dict(self) -> dict:
         return {"claim_id": self.claim_id, "action": self.action,
@@ -656,15 +680,28 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
             if any(cid == cap_cid
                    for cap_cid, _ in evidence.validated_capabilities):
                 bonus = CAPABILITY_BONUS
+        # #823-P3: gap-hit bucket — claims answering an OPEN PQ gap lead the
+        # ranking (缺口命中 > tier > VoI). Flag off → bucket stays 0 for all.
+        gap_bucket = 0
+        if value_config.is_enabled() and evidence.mission_active:
+            pq = str(c.get("answers_question") or "").strip()
+            if pq and evidence.mission_gap.get(pq, 0.0) > 0.0:
+                gap_bucket = 1
         score = round(numerator / cost_eff * weight * bonus, 3)
         actions.append(Action(
             claim_id=cid, action=action_cat, score=score, skill=None,
             tier=action_tier(c), attempts=int(c.get("promotion_attempts", 0)),
             leverage=round(L, 3), discriminator=D, novelty=round(N, 3), cost=cost,
-            weight=weight,
+            weight=weight, gap_bucket=gap_bucket,
         ))
-    # score tie within ε → lower cost wins (mechanical ruling, no LLM); then stable by claim_id
-    actions.sort(key=lambda a: (-a.score, a.cost, a.claim_id))
+    # score tie within ε → lower cost wins (mechanical ruling, no LLM); then stable by claim_id.
+    # #823-P3: flag ON → gap-bucket leads; uniform buckets (or flag off) reduce
+    # to the legacy key, so the result order is byte-identical there.
+    if value_config.is_enabled():
+        actions.sort(key=lambda a: (0 if a.gap_bucket else 1,
+                                    -a.score, a.cost, a.claim_id))
+    else:
+        actions.sort(key=lambda a: (-a.score, a.cost, a.claim_id))
     return actions
 
 
