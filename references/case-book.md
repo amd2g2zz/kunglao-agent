@@ -54,3 +54,5 @@ and resolve the 5 drift types it reports.
 
 **Addresses M6** (state drift). v1.9 fix: convergence_check.py surface-level
 check of open/blocked claims per turn; health check detects flatline.
+
+recall_useful: pending

@@ -38,3 +38,5 @@ needed for one-off overrides or workers other than `kunglao-worker`.
 - references/re-library/anti-analysis.md (anti-analysis bypass ladders when
   constraints conflict with target anti-RE)
 - references/guardrails.md §1b (verifier mechanism — the 5 failure types caught by the §1b verifier pass, each mapping to one of the NEW 2026-07-30 rows above)
+
+recall_useful: pending

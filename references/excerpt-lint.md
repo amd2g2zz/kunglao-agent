@@ -88,3 +88,5 @@ documented `*1000` failure, quietly on clean faithful excerpts.
 - `openspec/changes/fixture-excerpt-lint/` — full SDD (proposal/design/spec/tasks).
 - malware-veri-notes fixture spec — may reference/invoke this lint in a future
   cross-skill change (follow-up; not modified by #58).
+
+recall_useful: pending

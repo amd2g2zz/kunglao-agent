@@ -26,3 +26,5 @@ Counts: **Mechanical 8** (rows 1-5, 8, 12) · **LLM 6** (rows 6, 7, 9-11) · **U
 Mechanical rows run on every tick without LLM; LLM rows may be re-checked by
 the next tick's mechanical gates; user rows are the only ones that wait on
 human input. See `references/guardrails.md` for the full decision protocol.
+
+recall_useful: pending

@@ -94,3 +94,5 @@ overwhelming the x64dbg-automate ZMQ control channel. Plugin desynced; `connect`
 revert**. Any concrete IP in this file's examples is stale-by-default — **discover the live lease
 first** (env discovery: `KUNGLAO_VM_HOST` / `vmr_client discover.sh` / `vmr_server health` on the
 live IP) before `connect_remote`; cached IPs will time out.
+
+recall_useful: pending

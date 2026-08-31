@@ -80,3 +80,5 @@ Acceptance: all 4 fire on the issue #54 symptom-section regression fixture; 0 fi
 clean genuine completion. The detector is DETECTION only — the hard Stop-hook
 gate is #55's scope (completion_gate.py + task-oracle.yaml), which consumes
 this detector's JSON report.
+
+recall_useful: pending

@@ -372,3 +372,5 @@ independent verifier blind-checks it against the sample's own artifacts. A
 worker that reports "I can't" without lookup evidence = failure (W-27).
 Workers MUST mark uncertain evidence `confidence: low` + `unverified-part` —
 silent conclusions are forbidden (anti analysis-error).
+
+recall_useful: pending

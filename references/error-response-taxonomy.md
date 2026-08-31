@@ -63,3 +63,5 @@ STOP+转告,继续执行即违规。两份文本(#304 修正案 vs 硬禁止 #1)
 - [x] 分类表文档 + ≥3 关键路径 gate 化(工具安装 / VM 操作签名 / init exit code)
 - [x] 规则文本含优先级声明段落(本文 + rules/kunglao-convergence-loop.md)
 - [x] 冲突场景回归测试(tests/test_error_response.py: init exit 4 → STOP 且 allowed_actions 为空)
+
+recall_useful: pending

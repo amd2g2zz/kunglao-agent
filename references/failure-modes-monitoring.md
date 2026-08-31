@@ -93,3 +93,5 @@ fault (`stalled` / `never reconnected` / `reconnect` / `未触发` / `timeout`):
 drawn from a dynamic miss under a self-reported env fault? If yes — did I do
 static xref first, or am I inferring 'absent' from a stalled debuggee?
 (else `check_inference_blind_scope` downgrades PROVEN to STAMP.)"
+
+recall_useful: pending

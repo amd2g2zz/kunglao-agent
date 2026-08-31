@@ -57,3 +57,5 @@ Three layers, each real and machine-checkable:
 ## Competing hypotheses (v1.7) nest inside the priority
 
 `need: model_selection` questions expand to K mutually-exclusive claims (`competitor_group`). They score `value=0.6` and accumulate evidence that prunes losers - an internal greedy tactic, not a third search algorithm.
+
+recall_useful: pending
