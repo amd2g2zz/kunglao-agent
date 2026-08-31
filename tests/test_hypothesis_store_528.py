@@ -75,7 +75,10 @@ def test_store_creates_missing_dir(tmp_path: Path) -> None:
 
 
 def test_status_vocabulary_is_the_state_machine() -> None:
-    assert HYPOTHESIS_STATUSES == ("open", "refuted", "superseded")
+    # #711: "confirmed" joins the vocabulary — a falsifiable bet settles
+    # positively too (confirming_fact_id required, symmetric with refuted).
+    assert HYPOTHESIS_STATUSES == ("open", "refuted", "superseded",
+                                   "confirmed")
 
 
 # ---------- 2. transitions ----------
