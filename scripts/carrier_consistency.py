@@ -178,13 +178,17 @@ def check(workspace):
                               "but claim is " + st)
 
 
-    # (c) notes passes => linked fact verified true
+    # (c) notes passes => linked fact verified true.
+    # Linked-fact ABSENCE is not drift (sparse-workspace axiom, same as (a)):
+    # fires only when linked facts EXIST but none carries verified: true.
     for fm in notes:
         if fm.get("verify_status", "").strip().lower() != "passes":
             continue
         cid = fm.get("claim_id", "").strip()
         linked = [f for f, fm2 in facts.items()
                   if cid in _linked_claims(fm2)]
+        if not linked:
+            continue
         verified = any((facts[f].get("verified") or "").lower() == "true"
                        for f in linked)
         if not verified:
