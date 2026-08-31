@@ -80,6 +80,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `active_intervention.py` | stuck-worker intervention decisions | lib(1), tests |
 | `ask_for_direction_gate.py` | orchestrator ask-back-pattern gate | lib(1), tests |
 | `backtrack_gate.py` | stuck worker backtrack decision | hooks, lib(1), tests |
+| `bash_fact_guard.py` | PostToolUse/Bash facts-写入纳管 (#809) — 命中 facts/*.md 逐文件 lint, 违规 write_blocked 落账 + additionalContext; recorder 姿态 fail-open | hooks, tests |
 | `blind_gate.py` | blind-verification gate on promotion | hooks, lib(1), tests |
 | `calibration_gate.py` | calibration/confidence gate | tests |
 | `completion_gate.py` | completion transaction gate | hooks, tests |
