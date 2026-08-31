@@ -35,7 +35,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: c34b19e5ed0cf0d338759be0dfeac436dbb0d8900c02bd2ffd039adb7af19a3a
+    sha256: 8d844748825876c588c1d2b9658cc05ee25100cbb13c5afc8f9f8bbba6d97648
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook

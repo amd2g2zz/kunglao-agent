@@ -206,6 +206,8 @@ EMIT_ACTIONS = [
     "plan_stall",
     "priority_deviation",
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
+    "recall_injected",    # #814 recall hook injected knowledge files
+    "recall_skip",        # #814 recall hook pass-through with attribution
     "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face

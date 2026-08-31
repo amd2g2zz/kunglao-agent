@@ -157,7 +157,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `content_hash.py` | fact/content hashing (golden capture too) | tools, tests |
 | `normalize_trace.py` | dynamic trace normalization | tools, tests |
 | `fixture_excerpt_lint.py` | fixture excerpt lint (standalone CLI) | tests, docs |
-| `references_recall.py` | references scored-recall CLI over the layered index — scenario → primary/supplementary; keyword → top-K ranked rows with score (no file dumps); `--list-categories` / `--scene-map` | tests, docs |
+| `references_recall.py` | references scored-recall CLI over the layered index — scenario → primary/supplementary; keyword → top-K ranked rows with score (no file dumps); `--list-categories` / `--scene-map` / `--ws` | tests, docs |
+| `recall_metrics.py` | recall 注入质量度量面 (#814) — record/summarize over runs/.recall-metrics.jsonl (injected/skipped/no_match)；#833 优化器输入口 | hooks, tests |
 | `wire_up_settings.py` | hook REGISTRY + deprecated alias -> hook_activation.register_hooks (#445; retirement #446) | hooks, lib(1), tests |
 | `install_reference.py` | multi-install reference hygiene — scanner/rewriter for stale `~/.claude/skills/<name>/` refs across `.claude/settings.json` + `CLAUDE.md` (#752; library-only: hook_activation verifier + kunglao_upgrade sweep) | scripts, tests |
 | `claudemd_frame.py` | CLAUDE.md three-segment framing — G2 frame-marker pair + G3 collect-and-merge split/classify/assemble primitives (#755; library-only: init write_claudemd wrap + kunglao_upgrade merge item) | scripts, tests |
