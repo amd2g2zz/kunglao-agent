@@ -171,7 +171,8 @@ def test_write_gate_credible_record_accepted(tmp_path):
     ws = _mk_ws(tmp_path)
     runs = ws / "runs"
     (runs / "verify-redteam-C100.md").write_text(
-        "RED-TEAM VERDICT: CONFIRMED\nredteam analysis of fact F001: "
+        "RED-TEAM VERDICT: CONFIRMED\nverifier-identity: rt-ws-8f21\n"
+        "redteam analysis of fact F001: "
         "the F001 offset claim reproduces; adversarial probes agree.\n",
         encoding="utf-8")
     (ws / "facts").mkdir()

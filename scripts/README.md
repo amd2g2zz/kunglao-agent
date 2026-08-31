@@ -126,6 +126,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `template_version.py` | workspace template version stamp — write/verify/upgrade-warning (#536) | kunglao-init, hooks_selfcheck, env_check, kunglao-status, kunglao-resume, tests |
 | `rollup.py` | terminal-transition write loop — claim→outcome_capture+lessons+narrative+checkpoint (#524) | tests |
 | `hypothesis_store.py` | hypothesis layer carrier (#528) — H-*.md parse + open→refuted/superseded state machine over `hypotheses/` | digest_build (sec_g), hooks/state_anchor, kunglao-init stub, tests |
+| `verifier_identity.py` | verifier machine-identity extraction + verdict anchoring (#825) — md header / l2 field; ledger verdict_anchor append-only | register_proven_gate, write_gate, tests |
 | `notes_writer.py` | notes/ result-layer writer (#528) — supersedes-chain enforcement + verify_status reset on corrections | tests; write-path contract behind hooks/write_guard (#532) |
 | `notes_discriminator.py` | notes 结构判别器 (#834) — 复制即拒/零引用/悬空引用三规则; completion_gate NOTES_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
 | `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |

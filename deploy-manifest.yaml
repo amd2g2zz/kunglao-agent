@@ -128,10 +128,6 @@ files:
     dest: .claude/scripts/failure_analysis_gate.py
     kind: scaffold
     sha256: 14f33db92f3506108af054ab83023fef025b9332ba48f105b85037618f8611df
-  - src: scripts/gate_telemetry.py
-    dest: .claude/scripts/gate_telemetry.py
-    kind: scaffold
-    sha256: 6b781ebf1b7f79e26e2e5da83eecb806adaeeb1d84681ca573b55397a2e92d9c
   - src: scripts/heartbeat.py
     dest: .claude/scripts/heartbeat.py
     kind: scaffold
@@ -184,10 +180,6 @@ files:
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
     sha256: 3a9258e5391ab7702c242ae2e5edb8ec651c79a47d7c50269810ad9adab39461
-  - src: scripts/plan_drift_detector.py
-    dest: .claude/scripts/plan_drift_detector.py
-    kind: scaffold
-    sha256: 48ec9900a96ebb9a9a0c4d05d4a1a08eea6b0511bcfb55784e88d281be0724c1
   - src: scripts/platform_paths.py
     dest: .claude/scripts/platform_paths.py
     kind: scaffold
@@ -207,7 +199,7 @@ files:
   - src: scripts/register_proven_gate.py
     dest: .claude/scripts/register_proven_gate.py
     kind: scaffold
-    sha256: 5baa020281fe2c9a5873fa026fe2be00c754406b2210745fe091e49b89c208d7
+    sha256: ce7a0a58af312dc569b0a9037f952e43f3d256ffcba7663d1c8866c6fb457665
   - src: scripts/retract_claim.py
     dest: .claude/scripts/retract_claim.py
     kind: scaffold
@@ -244,6 +236,10 @@ files:
     dest: .claude/scripts/value_replay.py
     kind: scaffold
     sha256: c92fefc0c1350895eefa311a13b03360a8c6c1d3e2aa7f108a50608eb21cce5b
+  - src: scripts/verifier_identity.py
+    dest: .claude/scripts/verifier_identity.py
+    kind: scaffold
+    sha256: f6131a3dbfc65ff2a0641290aed8a3f13bfd917d6cb3fa4031af4d324d03d797
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
@@ -251,7 +247,7 @@ files:
   - src: scripts/write_gate.py
     dest: .claude/scripts/write_gate.py
     kind: scaffold
-    sha256: d2cd2865dbd0b8dc5f5dfea1070ec96f56fbc587598665e13643e343b32f534c
+    sha256: e49e452f3472ff6a2f22fdcae2083b29d6d1b2669eb3fd053116b99afe906a58
   - src: scripts/zero_output_fingerprint.py
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold

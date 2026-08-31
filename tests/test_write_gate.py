@@ -122,7 +122,7 @@ def _write_redteam_record(ws: Path, fid: str, *, verdict: str = "CONFIRMED") -> 
     runs = ws / "runs"
     runs.mkdir(parents=True, exist_ok=True)
     (runs / "verify-redteam-20260812.md").write_text(
-        f"## redteam {fid}\nverdict: {verdict}\n", encoding="utf-8")
+        f"## redteam {fid}\nverdict: {verdict}\n\nverifier-identity: rt-worker-1", encoding="utf-8")
 
 
 def _write_verify_json(ws: Path, fid: str, *, overall: str = "VERIFIED",
@@ -132,7 +132,7 @@ def _write_verify_json(ws: Path, fid: str, *, overall: str = "VERIFIED",
     runs.mkdir(parents=True, exist_ok=True)
     (runs / f"verify-{fid}-20260811T000000Z.json").write_text(
         json.dumps({"fact_id": fid, "claim_id": "C-1", "overall": overall,
-                    "l2": {"verdict": l2 or "NOT-RUN", "gaps": []},
+                    "l2": {"verdict": l2 or "NOT-RUN", "gaps": [], "verifier_identity": "rt-worker-1"},
                     "l1": {"verdict": "PASS" if overall == "VERIFIED" else "FAIL",
                            "actual_sha256": _HASH, "cmd": "python -c 1"}}),
         encoding="utf-8")
@@ -243,7 +243,7 @@ def test_r1_fact_verified_by_run_with_verify_json_clean(tmp_path):
     """verified_by_run + the actor's runs/verify-<fid>-*.json VERIFIED → clean."""
     ws = tmp_path / "ws"
     _write_fact(ws, "F-1", status="PROVEN", verified_by_run="kunglao-redteam-w2")
-    _write_verify_json(ws, "F-1", overall="VERIFIED")
+    _write_verify_json(ws, "F-1", overall="VERIFIED", l2="CONFIRMED")
     assert write_gate.audit_workspace(ws) == []
 
 
@@ -293,7 +293,7 @@ def test_r2_independent_verified_by_run_clean(tmp_path):
     _write_fact(ws, "F-1", status="PROVEN", expected=_HASH,
                 verified_by_run="kunglao-redteam-w2",
                 provenance_lines=["- {role: recompute_script, path: scripts/re/adapt_final.py}"])
-    _write_verify_json(ws, "F-1", overall="VERIFIED")
+    _write_verify_json(ws, "F-1", overall="VERIFIED", l2="CONFIRMED")
     assert write_gate.audit_workspace(ws) == []
 
 
@@ -303,7 +303,7 @@ def test_r2_basename_resolution_catches_self_anchor(tmp_path):
     _write_fact(ws, "F-1", status="PROVEN", expected=_HASH,
                 verified_by_run="adapt_final.py",
                 provenance_lines=["- {role: recompute_script, path: scripts/re/adapt_final.py}"])
-    _write_verify_json(ws, "F-1", overall="VERIFIED")
+    _write_verify_json(ws, "F-1", overall="VERIFIED", l2="CONFIRMED")
     violations = write_gate.audit_workspace(ws)
     assert "R2" in _rules(violations)
 
