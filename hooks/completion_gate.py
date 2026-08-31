@@ -46,9 +46,11 @@ _kunglao_active + FAIL_OPEN structure (#44).
 """
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from _path_hygiene import scripts_on_path  # #671 sys.path hygiene authority
@@ -60,6 +62,70 @@ ORACLE_FILE = "task-oracle.yaml"
 EXIT_NOTES_DUE = 5
 # #834: notes structural-discrimination refusal (same shim-face-only rule).
 EXIT_NOTES_FAKE = 6
+# #831: ledger-anchored second-stop sanction event type (ledger CONTRACT line
+# format identical to rollup._append_ledger: json.dumps ensure_ascii=False).
+SECOND_STOP_EVENT = "second_stop_pass"
+
+
+def _secondstop_record_sha(adj: dict) -> str:
+    """Canonical sha256 of the oracle's stop_hook_active adjudication map."""
+    canonical = json.dumps(adj, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _append_anchor(ledger: Path, entry: dict) -> None:
+    """Minimal append writer with the #584 line CONTRACT (json.dumps
+    ensure_ascii=False + newline); the shim must not import the whole
+    rollup machinery for one append."""
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    with open(ledger, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _secondstop_anchor(ws: Path, adj: dict) -> tuple[bool, str | None]:
+    """#831: reconcile the oracle's second-stop exemption against the
+    append-only ledger. First sanctioned sighting anchors it (legacy
+    back-anchor); later divergence (rewrite/backdate) fails closed.
+    Ledger unreadable / anchor write failure → BLOCK (cannot prove the
+    sanction). Returns (allow, block_reason)."""
+    h = _secondstop_record_sha(adj)
+    ledger = ws / ".convergence_ledger.jsonl"
+    anchored: set = set()
+    if ledger.exists():
+        try:
+            for line in ledger.read_text(
+                    encoding="utf-8", errors="replace").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if row.get("type") == SECOND_STOP_EVENT:
+                    anchored.add(row.get("record_sha256"))
+        except OSError as exc:
+            return False, (f"second-stop sanction unverifiable - ledger "
+                           f"unreadable ({type(exc).__name__}) (#831)")
+    if h in anchored:
+        return True, None
+    if anchored:
+        return False, ("second-stop exemption record does not match the "
+                       "ledger anchor - the oracle adjudication was "
+                       f"rewritten or backdated after its first sanction "
+                       f"(#831)")
+    # first sighting → anchor it (legacy back-anchor, #831 item 3)
+    entry = {"type": SECOND_STOP_EVENT, "action": SECOND_STOP_EVENT,
+             "actor": "completion_gate", "record_sha256": h,
+             "ts": datetime.now(tz=timezone.utc).strftime(
+                 "%Y-%m-%dT%H:%M:%SZ"),
+             "detail": "second-stop PASS sanction anchored (#831)"}
+    try:
+        _append_anchor(ledger, entry)
+    except OSError as exc:
+        return False, (f"second-stop sanction could not be anchored - "
+                       f"ledger write failed ({type(exc).__name__}) (#831)")
+    return True, None
 
 
 # ---------- workspace + activation (mirror hooks/state_anchor.py #44) ----------
@@ -117,7 +183,9 @@ def process_event(payload: dict) -> int:
     # makes this decision: it reads the oracle's stop_hook_active block and
     # only passes when the oracle records a sanctioned PASS. Anything else
     # (no sanction on record, unreadable oracle) blocks — an unsanctioned
-    # second stop must not silently pass (#199).
+    # second stop must not silently pass (#199). #831: the exemption record
+    # is additionally reconciled against the append-only ledger anchor —
+    # a record rewritten or backdated after its first sanction fails closed.
     if payload.get("stop_hook_active"):
         ws_early = _resolve_workspace(payload)
         if ws_early is not None:
@@ -125,12 +193,20 @@ def process_event(payload: dict) -> int:
                 import yaml as _yaml
                 oracle_early = _yaml.safe_load(
                     (ws_early / ORACLE_FILE).read_text(encoding="utf-8"))
-                adj = (oracle_early or {}).get("adjudication", {}).get(
-                    "stop_hook_active", {})
-                if adj.get("second_stop") and adj.get("last_decision") == "PASS":
-                    return 0
-            except Exception:  # noqa: BLE001 — no sanction readable → block
-                pass
+            except Exception:  # noqa: BLE001 — unreadable oracle → generic block
+                oracle_early = None
+            if isinstance(oracle_early, dict):
+                adj = (oracle_early.get("adjudication") or {}).get(
+                    "stop_hook_active") or {}
+                if (isinstance(adj, dict) and adj.get("second_stop")
+                        and adj.get("last_decision") == "PASS"):
+                    allow, why = _secondstop_anchor(ws_early, adj)
+                    if allow:
+                        return 0
+                    reason = why
+                    print(json.dumps({"decision": "block", "reason": reason},
+                                     ensure_ascii=False))
+                    return 1
         # No sanctioned PASS on record → block. (The plan sketch said "fall
         # through to the normal judge path, which blocks while items remain
         # unresolved", but judge() PASSES an oracle with zero open_items — the
