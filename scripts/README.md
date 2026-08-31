@@ -136,6 +136,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `mission_ledger.py` | 主线欠账表 + V_m (#823-P1, shadow) — PQ 三态 CRUD + 防傻断言(边角料全 PROVEN→增量=0) + mission_snapshot 落盘 | tests |
 | `mission_stall.py` | 主线停滞指纹 + PARK 合法化 (#634) — ΔV_m 平坦×K 检测 / PARK 必带 wake_condition / revive 通道(落账 claim_revive) | convergence_check, hooks(carrier rule f), tests |
 | `notes_discriminator.py` | notes 结构判别器 (#834) — 复制即拒/零引用/悬空引用三规则; completion_gate NOTES_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
+| `optimizer_core.py` | #833 θ 数值通道 — PARAM_SPEC(opt-theta-v1)+宪法隔离(CONSTITUTIONAL_KEYS 不可入 spec/提案)+SPSA(衰减步长)+replay_loss 规则近似+提案 JSON(只出提案不生效) | tests |
+| `optimizer_bandit.py` | #833 机制开关通道 — β-Bernoulli 后验(arm=机制×泳道)+ledger 归因+demotion_queue(四阶段门降级候选,不直接生效) | tests |
 | `plan_stages.py` | plan 阶段模型 (#822) — runs/plan-stages.yaml 工件 + BIG_BANG_PLAN 检测(校验面 fail-closed) + 盘点裁决 maintain/adjust/replan(adjust/replan 必带 reason) + plan_review 落账 | CLI, tests |
 | `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |
 
