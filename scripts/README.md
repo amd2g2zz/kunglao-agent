@@ -46,6 +46,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `rho_checkpoint.py` | P2 ρ progress signal + V/D/ETA (#823): per-PQ grade expectation, σ(w·x+b) priors fallback chain, decide() value_signals attach (flag-gated shadow) | lib(1: convergence_check), tests |
 | `value_replay.py` | P1 offline replay settlement (#823): z_self four-channel relabel, evidence-gated reward score, bucket priors value-priors.yaml, replay-validation gate | CLI, lib(2: rho_checkpoint, priority_ratio), tests |
 | `infeasible_signal.py` | P3 doomed-trajectory signal (#823/#815): flat V × zero marginal discovery → infeasible_candidate event (shadow) | lib, tests |
+| `infeasible_proposal.py` | #815 早停接线 — gated INFEASIBLE 立案（阶梯 L1/L2/L3+清单+wake_condition 要件, REJECT 零变更）+ wake 复活面; DEFERRED 自动退出派发 | hooks, tests |
 | `zero_output_fingerprint.py` | P3 same-type action thrash circuit (#823/#634): (tool,target) hash streaks N=3 zero belief change → break + failure_analysis inject (shadow) | lib, tests |
 | `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669): seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` / `taint:<cat>:<api>` candidates | lib(1: digest_build), CLI, tests |
 | `apkid_scanner.py` | T1 apkid pre-scan wrapper (#669): fingerprints packer/compiler/obfuscator/anti-* into evidence/apkid.json (fail-open) | CLI, tests |
