@@ -128,6 +128,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `hypothesis_store.py` | hypothesis layer carrier (#528) — H-*.md parse + open→refuted/superseded state machine over `hypotheses/` | digest_build (sec_g), hooks/state_anchor, kunglao-init stub, tests |
 | `verifier_identity.py` | verifier machine-identity extraction + verdict anchoring (#825) — md header / l2 field; ledger verdict_anchor append-only | register_proven_gate, write_gate, tests |
 | `notes_writer.py` | notes/ result-layer writer (#528) — supersedes-chain enforcement + verify_status reset on corrections | tests; write-path contract behind hooks/write_guard (#532) |
+| `write_guard_unlock.py` | #820 连坐解锁通道 — lint 打击面按目标文件归因; unlock/quarantine/list 三命令全落账 | hooks, tests |
 | `carrier_consistency.py` | 跨载体一致性门 (#829) — register/_INDEX/facts/notes 五规则断言; decide() CONVERGED 前置降级 + carrier_drift 落账 | hooks, tests |
 | `notes_discriminator.py` | notes 结构判别器 (#834) — 复制即拒/零引用/悬空引用三规则; completion_gate NOTES_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
 | `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |

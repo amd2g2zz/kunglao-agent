@@ -277,10 +277,23 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
         return leg
     if carrier in (CARRIER_FACT, CARRIER_NOTE, CARRIER_REGISTER):
         errors, _warnings = lint_workspace(shadow)
-        added = [f"lint[{code}] {msg}" for _sev, code, msg in errors]
+        if carrier == CARRIER_REGISTER:
+            # #820: register writes are adjudicated by the proven-gate leg
+            # and the transition checks themselves. Workspace-wide fact lint
+            # is the audit face — it never blocks a register write again
+            # (豆包: F001/F002 连坐 F007/F010 的病理面)。
+            added = []
+        else:
+            # #820: lint violations attribute to their own file (lint_facts
+            # messages start with "<file>: "); only the target's own
+            # violations block this write. One dirty legacy fact can no
+            # longer deadlock every future write.
+            target_name = rel.name
+            added = [f"lint[{code}] {msg}" for _sev, code, msg in errors
+                     if msg.split(":", 1)[0] == target_name]
         violations += added
         _dbg(f"adjudicate[{carrier}] lint_workspace leg: {len(added)} "
-             f"violation(s)")
+             f"violation(s) attributed to target")
     if carrier in (CARRIER_FACT, CARRIER_NOTE):
         from write_gate import audit_workspace
         target_rel = rel.as_posix()
@@ -343,6 +356,35 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
             violations.append(
                 f"proven-gate: adjudication crashed "
                 f"({type(exc).__name__}: {exc}); fail-closed.")
+    # #820: an active per-file waiver (runs/write-guard-waivers.yaml, written
+    # by scripts/write_guard_unlock.py unlock) exempts the TARGET's own lint
+    # violations for migration-mode rewrites. Only lint-leg violations are
+    # waived; R1/R2 stamps, supersedes, and the proven gate are never waived.
+    # Every consumption is observable (ledger row), mirroring proven_waiver_used.
+    if carrier in (CARRIER_FACT, CARRIER_NOTE) and violations:
+        try:
+            import yaml as _yaml
+            _wp = ws / "runs" / "write-guard-waivers.yaml"
+            _wdata = (_yaml.safe_load(_wp.read_text(encoding="utf-8")) or {}) \
+                if _wp.is_file() else {}
+            waiver = _wdata.get(rel.name) if isinstance(_wdata, dict) else None
+        except Exception:  # noqa: BLE001 — waiver store unreadable → no waiver
+            waiver = None
+        if waiver:
+            kept = [v for v in violations if not v.startswith("lint[")]
+            used = len(violations) - len(kept)
+            if used:
+                violations = kept
+                try:
+                    import kunglao_log
+                    kunglao_log.emit(ws, actor="hook",
+                                     action="write_guard_waiver_used",
+                                     artifact=rel.name,
+                                     detail=(f"{used} lint violation(s) "
+                                             f"waived: "
+                                             f"{str(waiver.get('reason', ''))[:300]}"))
+                except Exception:  # noqa: BLE001 — logging never breaks gate
+                    pass
     _dbg(f"adjudicate[{carrier}] total: {len(violations)} violation(s)")
     return violations
 
@@ -420,11 +462,27 @@ def main() -> int:
                  f"({type(exc).__name__}: {exc})")
             return RC_BLOCK
     if violations:
+        # #820: surface the repair surface — this write is blocked only by
+        # its own violations; other files' violations are audit info (the
+        # repair/unlock targets), never blockers here.
+        try:
+            from collections import Counter
+            from lint_facts import lint_workspace as _lw
+            real_errors, _w2 = _lw(ws)
+            cnt = Counter(m.split(":", 1)[0] for _s, _c, m in real_errors
+                          if ":" in m)
+            other = [f"{k}x{n}" for k, n in sorted(cnt.items()) if k != rel.name]
+        except Exception:  # noqa: BLE001 — audit info must never crash the gate
+            other = []
+        audit = ("workspace audit (#820): blocked only by own violations; "
+                 "other-file violations do not block unrelated writes"
+                 + (" - repair surface: " + ", ".join(other) if other else ""))
         joined = "\n  - ".join(violations)
         detail = (f"write_guard: BLOCK — {len(violations)} write-side violation(s) "
-                  f"on {rel.as_posix()}:\n  - {joined}")
+                  f"on {rel.as_posix()}:\n  - {joined}\n{audit}")
         print(detail, file=sys.stderr)
         _emit_block(ws, payload, rel.as_posix(), detail)
+        _dbg(f"workspace audit: {other}")
         _dbg(f"exit BLOCK rc=2 — {len(violations)} violation(s)")
         return RC_BLOCK
     _dbg("exit ALLOW rc=0 — adjudication clean")

@@ -71,7 +71,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: 1f7d97c71f786b9b5344b3c62fa7fbb26025e855e9f4fe54bd383a14e71bd6bd
+    sha256: a373ff1b3a8fcc8fe6a7acd9eeea7c14d2fc59dd6518abc320e7098d8b93c373
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
