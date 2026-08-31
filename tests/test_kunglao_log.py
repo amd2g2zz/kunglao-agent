@@ -20,7 +20,8 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from kunglao_log import emit, log_path  # noqa: E402
 
 ALL_FIELDS = {"ts", "actor", "action", "claim", "tool", "artifact",
-              "duration_ms", "exit", "detail"}
+              "duration_ms", "exit", "detail",
+              "arm", "epoch", "version", "hypothesis_ref"}
 
 ISO_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")
