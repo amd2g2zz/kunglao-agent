@@ -346,16 +346,25 @@ class TestStopFaceNotesDue:
 
     def test_writing_the_note_allows_closure(self, tmp_path, capsys):
         """judge-then-revise: orchestrator writes the owed note → next Stop
-        passes (reader drops the written entry; nothing auto-writes it)."""
+        passes (reader drops the written entry; nothing auto-writes it).
+        #834 起 note 合同要求引用型叙事：夹具带 fact + evidence 引用行。"""
         shim = _load_shim()
         ws = _make_ws(tmp_path, [{"id": "C-302", "status": "PROVEN"}])
         rollup.sweep_terminal_claims(ws)
         _activated_state(ws)
         _would_pass_oracle(ws)
+        (ws / "facts").mkdir(exist_ok=True)
+        (ws / "facts" / "F001-crash.md").write_text(
+            "the payload registers its exception handler at 0x14002abcd "
+            "and allocates 0x150 bytes via a size gate comparison.\n",
+            encoding="utf-8")
         (ws / "notes").mkdir(exist_ok=True)
         (ws / "notes" / "C-302.md").write_text(
             "---\nid: C-302\nclaim_id: C-302\nverify_status: pending\n"
-            "---\n# durable result\n", encoding="utf-8")
+            "---\n# durable result\n\n"
+            "Timing analysis: the size gate precedes the handler write. "
+            "Evidence: F001.\n",
+            encoding="utf-8")
         rc = shim.process_event({"cwd": str(ws)})
         assert rc == 0, f"written note must clear the obligation, got rc={rc}"
         assert capsys.readouterr().out.strip() == "", \

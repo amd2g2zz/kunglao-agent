@@ -58,6 +58,8 @@ ORACLE_FILE = "task-oracle.yaml"
 # #762 K1b: owed durable-result-note refusal code (shim-face only — judge()
 # stays workspace-pure; the scripts-side judge keeps its {0..4} table).
 EXIT_NOTES_DUE = 5
+# #834: notes structural-discrimination refusal (same shim-face-only rule).
+EXIT_NOTES_FAKE = 6
 
 
 # ---------- workspace + activation (mirror hooks/state_anchor.py #44) ----------
@@ -203,6 +205,24 @@ def process_event(payload: dict) -> int:
             print(json.dumps({"decision": "block", "reason": reason},
                              ensure_ascii=False))
             return EXIT_NOTES_DUE
+        # #834: a note that survives NOTES_DUE must be a reference-style
+        # narrative, NOT a copied fact body. Double-caged FAIL_OPEN like the
+        # queue above — a discriminator error must never deadlock a session
+        # (structural fail-closed semantics live inside the discriminator).
+        try:
+            with scripts_on_path():
+                import notes_discriminator as nd
+            verdict = nd.check(ws / "notes", ws / "facts")
+        except Exception:  # noqa: BLE001 — FAIL_OPEN: never deadlock on notes
+            verdict = None
+        if verdict is not None and not verdict.get("ok", True):
+            detail = "; ".join(verdict.get("violations", []))
+            reason = ("NOTES_FAKE: notes fail structural discrimination "
+                      "(#834) - copied fact bodies or missing/dangling "
+                      f"fact-id references: {detail}")
+            print(json.dumps({"decision": "block", "reason": reason},
+                             ensure_ascii=False))
+            return EXIT_NOTES_FAKE
         return 0  # PASS — let the session end
     # non-zero → block termination with the unclosed-items reason
     print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
