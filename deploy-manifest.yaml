@@ -7,7 +7,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: f21129b340e006e9da888977e82f49b645556f66d2751a65cfac293a6d2c57db
+    sha256: 8fbc98ad275dca11270f20d083b8f69aa4605932a51c32432f66dcb61d5e2bf4
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
@@ -168,6 +168,10 @@ files:
     dest: .claude/scripts/mcp_probe.py
     kind: scaffold
     sha256: d565d39864effae264012c425946cd30912acc4c069f1699bd5db8f033a5b59d
+  - src: scripts/notes_discriminator.py
+    dest: .claude/scripts/notes_discriminator.py
+    kind: scaffold
+    sha256: 2553703d1ab0ff8bb58463d89d962dc583b5a116938f0157185971763a178154
   - src: scripts/notes_writer.py
     dest: .claude/scripts/notes_writer.py
     kind: scaffold
