@@ -59,7 +59,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 4770256d117c27c20aa424a10137c5bb576faea0d86741c9b99487ab16469fca
+    sha256: 0d07b82a7fe5ac846f789a5136978406dd768733d902871b8e9899f07149f95b
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -131,11 +131,11 @@ files:
   - src: scripts/heartbeat.py
     dest: .claude/scripts/heartbeat.py
     kind: scaffold
-    sha256: d3cc6f8c36e7ed3f2187c8cfc019e4358822680ddde3aca33d85c36ade298013
+    sha256: a99b0beebb1a72bfdaa9589be2b821040a30e167d2b36b5a2ba3e79a8fecaf2a
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: e898c01605473e864c0ec649a304c691fb3a9176eb70a50a9a0ac3046f9e84f1
+    sha256: 8c139ebf6db7c2c18edc372b2c5bdd78afb3b13107383f9a4bda6e51e9b401ab
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold

@@ -115,7 +115,8 @@ def verify_loop(ws: str) -> int:
     # ticks with cadence <= 2x interval_min, newest <= STALE_MINUTES. Corrupt /
     # absent history counts as not ticking (fail-closed).
     from heartbeat import evaluate_tick_continuity  # noqa: E402 (shared source)
-    alive, detail = evaluate_tick_continuity(data)
+    alive, detail = evaluate_tick_continuity(
+        data, log_path=Path(ws) / "runs" / ".heartbeat.log")
     if not alive:
         print(
             f"LOOP NOT TICKING (HARD): loop_registered=true but {detail} — "

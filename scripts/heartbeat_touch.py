@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
     # tick_history) — a touch could silently unregister monitoring while
     # claiming to refresh it. Merge into the existing state instead and
     # append the shared continuous-tick history.
-    from heartbeat import append_tick  # noqa: E402 (#754 single writer)
+    from heartbeat import append_tick, append_tick_log  # noqa: E402 (#754 single writer)
     now_str = utc_now()
     try:
         state = json.loads(heartbeat_file.read_text(encoding="utf-8"))
@@ -66,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
                    ensure_ascii=False) + "\n",
         encoding="utf-8")
     tmp.replace(heartbeat_file)  # F2 atomicity discipline, same as the hook
+    # #830: a touch IS a tick - land it in the durable sidecar too.
+    append_tick_log(ws, "touch")
     # #534: emit the structured event (workspace is now in scope)
     kunglao_log.emit(ws, actor="heartbeat_touch", action="dispatch",
                      detail="heartbeat touched")

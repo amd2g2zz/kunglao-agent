@@ -281,13 +281,16 @@ def check_heartbeat_alive(state_path: Path) -> tuple[bool, str]:
             return None
 
     data = _load(hb) if hb.exists() else None
-    ws_alive, ws_detail = evaluate_tick_continuity(data) if data else (False, '')
+    ws_log = hb.parent / '.heartbeat.log'
+    ws_alive, ws_detail = (evaluate_tick_continuity(data, log_path=ws_log)
+                           if data else (False, ''))
     if ws_alive:
         return (True, f'heartbeat alive ({ws_detail})')
     if hb_skill.exists():
         sk_data = _load(hb_skill)
         if sk_data:
-            sk_alive, sk_detail = evaluate_tick_continuity(sk_data)
+            sk_alive, sk_detail = evaluate_tick_continuity(
+                sk_data, log_path=hb_skill.parent / '.heartbeat.log')
             if sk_alive:
                 return (True, f'heartbeat alive ({sk_detail})')
             ws_detail = ws_detail or sk_detail
