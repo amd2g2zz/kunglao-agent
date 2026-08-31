@@ -193,6 +193,7 @@ EMIT_ACTIONS = [
     "lesson_match",
     "lesson_stage_transition",  # #525 lessons nursery draft → active
     "mcp_scaffold_refresh",  # #755 A4 .mcp.json init-parity backfill face
+    "mission_snapshot",   # #823-P1 mission ledger coverage/value checkpoint
     "must_ask",
     "must_stop",
     "plan_stall",
