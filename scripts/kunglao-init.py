@@ -134,6 +134,7 @@ if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
+import intake_promise  # noqa: E402  # #813: Phase 0 prescan promise (apkid/DIE/混淆先验/java 可达性显式落盘)
 import init_channel_default  # noqa: E402  # #727 channel resolution (local fallback)
 # #408: ask-then-install — interactive install prompts + MCP registration +
 # re-probe (graceful degrade on decline; --assume-yes for CI/headless).
@@ -2449,6 +2450,24 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                     return emit_pending(ws, menu)
                 if resolved.overall_status == toolchain.Status.FAIL:
                     return refuse_toolchain(ws, resolved)
+
+    # #813: Phase 0 预扫描 promise — apkid/DIE 探测状态、混淆先验、java
+    # 可达性显式落盘（消灭"跳过且不记录"）。WARN-tier：promise 写失败不卡
+    # init，但必须 ERROR + env_incident 落账——静默跳过才是病理。
+    if not skip_toolchain:
+        try:
+            _promise = intake_promise.build(report, task_spec, ws)
+            _promise_path = intake_promise.apply(ws, _promise)
+        except Exception as exc:  # noqa: BLE001 — 不卡 init，但要显式可见
+            print(f"kunglao-init: ERROR intake-promise failed: {exc}",
+                  file=sys.stderr)
+            try:
+                kunglao_log.emit(ws, actor="init", action="env_incident",
+                                 detail=f"intake-promise: {exc}")
+            except Exception:  # noqa: BLE001 — telemetry never deadlocks
+                pass
+        else:
+            print(f"kunglao-init: intake-promise written: {_promise_path}")
 
     # #362: template defect (unfilled {{placeholder}}) → hard error, not a
     # silent partial CLAUDE.md. Clean up THIS RUN's scaffold entries (the

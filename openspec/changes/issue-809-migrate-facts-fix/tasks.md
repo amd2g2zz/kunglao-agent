@@ -1,0 +1,8 @@
+- [x] 删除内置 FACT_MIGRATION_MAP/SAMPLE_HASH → --map 显式加载
+- [x] 样本指纹 gate（inert + env_incident 落账）
+- [x] malformed map 预检 fail-closed
+- [x] _INDEX 头去他样本哈希
+- [x] migration 审计 emit（start/done/inert）
+- [x] hooks/bash_fact_guard.py + hook_activation 接线
+- [x] TDD：撞键/指纹/幂等/Bash 纳管用例
+- [x] 质量门 + catalog/manifests

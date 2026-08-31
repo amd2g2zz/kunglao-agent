@@ -123,7 +123,10 @@ CLAIM_REF_FIELDS = ("claim_id", "claim_ids", "claims")
 
 # L-3 (#532): the closed set of legal frontmatter keys. Anything else warns
 # (never errors — schema growth must not hard-block a write). Drawn from
-# lint_fact() + the template + migrate_facts output (grep 2026-08-21).
+# lint_fact() + the template are the golden basis; a per-workspace curated
+# migrate output is NOT part of it (#809: migration is opt-in --map +
+# fingerprint-gated — un-gated migrate output is exactly how the live-run
+# workspace got poisoned).
 KNOWN_FRONTMATTER_KEYS = frozenset({
     "id", "type", "title", "status", "claim_id", "claim_ids", "claims", "claim",
     "created", "last_reviewed", "boundary_type", "promotion_gate", "source",

@@ -84,7 +84,8 @@ def _write_settings(target_root: Path) -> Path:
         {"type": "command", "command": f"python hooks/{h}"}]}
         for h in ("worker_budget.py", "worker_pulse.py", "state_anchor.py")]
     post.append({"matcher": "Bash", "hooks": [
-        {"type": "command", "command": "python hooks/violation_capture.py"}]})
+        {"type": "command", "command": "python hooks/violation_capture.py"},
+        {"type": "command", "command": "python hooks/bash_fact_guard.py"}]})
     pre.append({"matcher": "Bash", "hooks": [
         {"type": "command", "command": "python hooks/heartbeat_touch.py"},
         {"type": "command", "command": "python hooks/orchestrator_tool_guard.py"}]})

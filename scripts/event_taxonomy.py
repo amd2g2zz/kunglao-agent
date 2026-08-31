@@ -165,9 +165,10 @@ EMIT_ACTIONS = [
     "ask_back",
     "capability_reject",
     "capability_switch",
-    "channel_default",     # #727 init channel degradation/guidance WARN
+    "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face
+    "channel_default",    # #727 init channel degradation/guidance WARN
     "claim_migrate",
-    "claudemd_merge",      # #755 G3 collect-and-merge rebuild face
+    "claudemd_merge",     # #755 G3 collect-and-merge rebuild face
     "converge",
     "death_verdict_rejected",
     "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face

@@ -45,6 +45,7 @@ assets:
     - hooks/orchestrator_tool_guard.py  # #608 Bash maker-checker WARN (target-based)
     - hooks/_path_hygiene.py  # #671 sys.path membership authority (sole bare-insert whitelist)
     - hooks/violation_capture.py      # #718 Bash PostToolUse violation recorder
+    - hooks/bash_fact_guard.py        # #809 Bash PostToolUse facts-write lint recorder
   templates:
     - templates/state/blocker.md
     - templates/state/claim_deps.yaml
