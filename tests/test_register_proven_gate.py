@@ -46,7 +46,7 @@ def _verify(ws, claim, verdict):
 def _redteam(ws, claim, verdict):
     d = ws / "runs"
     (d / f"verify-redteam-{claim}.md").write_text(
-        f"---\ntarget: {claim}\n---\n\nRED-TEAM VERDICT: {verdict}\nclaim: {claim}\n",
+        f"---\ntarget: {claim}\n---\n\nRED-TEAM VERDICT: {verdict}\nclaim: {claim}\n\nverifier-identity: rt-worker-1",
         encoding="utf-8")
 
 

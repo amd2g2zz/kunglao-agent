@@ -19,6 +19,7 @@ from pathlib import Path
 
 import yaml
 
+import verifier_identity as vi  # noqa: F401  (#825)
 from outcome_capture import _parse_run
 
 PROVEN = "PROVEN"
@@ -112,6 +113,18 @@ def _waiver(ws: Path, claim_id: str) -> dict | None:
             "justify": (m.group(1).strip() if m else "")}
 
 
+def _record_identity(ws: Path, source: str | None) -> str | None:
+    """#825: verifier-identity header from a runs/ record's raw text."""
+    if not source:
+        return None
+    try:
+        text = (ws / "runs" / source).read_text(encoding="utf-8",
+                                                errors="replace")
+    except OSError:
+        return None
+    return vi.extract_from_md(text)
+
+
 def check_register_transitions(ws: Path, new_text: str,
                                old_text: str | None = None) -> dict:
     """Fail-closed →PROVEN evidence gate. Returns {ok, violations, waivers}.
@@ -154,5 +167,36 @@ def check_register_transitions(ws: Path, new_text: str,
             violations.append(
                 f"{cid}: latest red-team verdict REFUTED — PROVEN over a live "
                 f"refutation is the exact #819 pathology")
+            continue
+        # #825: verifier identity machine-binding + maker/checker collapse +
+        # provenance ordering + append-only anchor on accept
+        ident = _record_identity(ws, rt.get("source"))
+        vn_ident = _record_identity(ws, vn.get("source"))
+        if not ident:
+            violations.append(
+                f"{cid}: redteam record {rt.get('source')} has no "
+                f"verifier-identity header (#825) - an unattributed verdict "
+                f"is not independent verification")
+            continue
+        if vn_ident and ident == vn_ident:
+            violations.append(
+                f"{cid}: redteam record {rt.get('source')} carries the same "
+                f"verifier identity as verify-note {vn.get('source')} - "
+                f"maker/checker collapse (#825)")
+            continue
+        try:
+            rt_m = (ws / "runs" / rt["source"]).stat().st_mtime
+            vn_m = (ws / "runs" / vn["source"]).stat().st_mtime
+            if rt_m < vn_m:
+                violations.append(
+                    f"{cid}: redteam record {rt.get('source')} predates "
+                    f"maker verify-note {vn.get('source')} (#825 provenance)")
+                continue
+        except OSError:
+            pass
+        try:
+            vi.anchor(ws, cid, rt["source"], ident)
+        except OSError:
+            pass  # anchor is audit-grade, never a block reason
     ok = not violations
     return {"ok": ok, "violations": violations, "waivers": waivers}
