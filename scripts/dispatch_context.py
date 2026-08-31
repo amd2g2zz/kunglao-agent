@@ -271,6 +271,14 @@ def build_dispatch_context(
                 ws, claim_id).get("capability"))
     except Exception:  # noqa: BLE001 — context build never raises
         providers = None
+    # #812: tool-tier selection table rides the contract (same optional-key
+    # pattern as providers — fail-open, key absent on loader failure; NOT in
+    # VERIFIER_SAFE_KEYS, same orchestrator-side class as tier/tools).
+    try:
+        import tool_tiers as _tt
+        tool_tiers_block = _tt.inject_for_workspace(ws)
+    except Exception:  # noqa: BLE001 — context build never raises
+        tool_tiers_block = None
     ctx = {
         "version": CONTEXT_BLOCK_VERSION,
         "claim_id": claim_id,
@@ -287,6 +295,8 @@ def build_dispatch_context(
     }
     if providers is not None:
         ctx["providers"] = providers
+    if tool_tiers_block is not None:
+        ctx["tool_tiers"] = tool_tiers_block
     return ctx
 
 
