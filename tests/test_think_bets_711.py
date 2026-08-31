@@ -52,6 +52,16 @@ def _mk_failure_ledger(ws: Path, rows: list[tuple[str, str]]) -> None:
             }, ensure_ascii=False) + "\n")
 
 
+def _ledger_rows(ws: Path) -> list[dict]:
+    rows = []
+    for p in sorted((ws / "runs" / "logs").glob("kunglao-*.jsonl")):
+        for ln in p.read_text(encoding="utf-8",
+                              errors="replace").splitlines():
+            if ln.strip():
+                rows.append(json.loads(ln))
+    return rows
+
+
 def test_failure_events_demand_bets(tmp_path, monkeypatch):
     _seat_only(monkeypatch)
     ws = _mk_ws(tmp_path)
