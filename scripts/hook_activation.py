@@ -936,6 +936,12 @@ def register_hooks(workspace: Path | None = None,
     # matcher, fail-open) with the WARN-record semantics of #608.
     post, added = _ensure(post, "Bash", "violation_capture.py")
     count += added
+    # bash_fact_guard (#809): PostToolUse/Bash facts-写入纳管面——命令命中
+    # facts/*.md 且文件已落盘时逐文件 lint，违规落账 + additionalContext
+    # 响亮提示。RECORDER+signal 姿态（fail-open，永不打断 Bash）；裁决权
+    # 仍在 write_guard 的结构门，本 face 负责"盲区不再无声"。
+    post, added = _ensure(post, "Bash", "bash_fact_guard.py")
+    count += added
 
     # completion_gate (#55): the code-owned completion gate. Stop hook — fires
     # at session termination, blocks when task-oracle.yaml is unsatisfied.
