@@ -777,6 +777,56 @@ def l2_redteam(claim_id: str, ws: Path, dispatcher=None) -> tuple[str, list[str]
     return (verdict, list(gaps or []))
 
 
+# ---- #828: rewrite-after-fail gate (expected hash lock) ----
+# Incident: maker runs verify -> L1 FAIL -> rewrites fact frontmatter
+# `expected:` to the observed output -> re-runs -> PASS (F008: 8s after FAIL;
+# F017: 7 REJECTED iterations then hand-aligned). F3 covers tautology only;
+# this gate covers the SEQUENTIAL rewrite. Anchor source = the verify JSON
+# history itself (runs/verify-<fid>-*.json are append-only, timestamp-named);
+# no second truth source (.lock) to drift.
+
+def prior_expected_history(ws: Path, fact_id: str) -> list[dict]:
+    """#828: prior runs/verify-<fact_id>-*.json (mtime order) ->
+    [{"l1","overall","expected_hash","file"}]; unreadable entries skipped."""
+    recs = []
+    for p in sorted((ws / "runs").glob(f"verify-{fact_id}-*.json"),
+                    key=lambda p: p.stat().st_mtime):
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ValueError):
+            continue
+        eh = d.get("expected_hash")
+        if not eh:
+            continue
+        recs.append({"l1": str((d.get("l1") or {}).get("verdict", "")),
+                     "overall": str(d.get("overall", "")),
+                     "expected_hash": str(eh),
+                     "file": p.name})
+    return recs
+
+
+def check_rewrite_after_fail(ws: Path, fact: dict, fact_id: str) -> tuple[bool, str]:
+    """#828 fail-closed: expected != last-recorded expected while the last
+    run's L1 was FAIL -> EXPECTED_TAMPERED (rewrite-after-fail forgery),
+    unless frontmatter carries a non-empty `expected_correction:` note
+    (supersedes semantics; the correction lands in lint reason + ledger).
+    First run (no history) anchors; same-expected reruns are no-ops."""
+    current = _expected_hash(str(fact.get("expected", "")))
+    recs = prior_expected_history(ws, fact_id)
+    if not recs:
+        return True, ""
+    last = recs[-1]
+    if last["l1"] != "FAIL" or last["expected_hash"] == current:
+        return True, ""
+    correction = str(fact.get("expected_correction", "")).strip()
+    if correction:
+        return True, f"expected_correction honored: {correction}"
+    return False, ("EXPECTED_TAMPERED: expected changed since last FAIL "
+                   f"({last['file']}) without expected_correction note - "
+                   "aligning expected to observed output after a FAIL is the "
+                   "rewrite-after-fail forgery pattern (#828)")
+
+
 def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
            binary_path: Path | None = None) -> dict:
     """M3.4 state machine (L282-293): lint → L1 → (L2 + anchor_check only when semantics needed).
@@ -794,11 +844,16 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
     anchors = fact.get("anchors", [])
 
     # Combined lint gate: #49 assignment-class binding + #238 F3 expected
-    # anchor source. Any rejection → lint_ok=False (REJECTED, no promotion).
+    # anchor source + #828 rewrite-after-fail hash lock. Any rejection →
+    # lint_ok=False (REJECTED, no promotion).
+    ok0, r0 = check_rewrite_after_fail(ws, fact, fact_id)
     ok1, r1 = check_assignment_expected(fact, grace=grace)
     ok2, r2 = check_expected_anchor_source(fact)
-    lint_ok = ok1 and ok2
-    lint_reason = r1 if lint_ok else " | ".join(r for ok, r in ((ok1, r1), (ok2, r2)) if not ok)
+    lint_ok = ok0 and ok1 and ok2
+    if lint_ok:
+        lint_reason = r0 or r1
+    else:
+        lint_reason = " | ".join(r for ok, r in ((ok0, r0), (ok1, r1), (ok2, r2)) if not ok)
     lint = {"ok": lint_ok, "reason": lint_reason, "grace": grace}
 
     # #238 F6: cross_workflow without a redteam record → WARN (into warnings, non-blocking)
@@ -880,14 +935,22 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
                 overall = "UNVERIFIED-WITH-GAP"
 
     out = {"fact_id": fact_id, "claim_id": claim_id, "l1": l1, "l2": l2,
-           "anchors": anchors, "overall": overall, "lint": lint, "warnings": warnings}
+           "anchors": anchors, "overall": overall, "lint": lint, "warnings": warnings,
+           "expected_hash": _expected_hash(str(fact.get("expected", "")))}
     if disasm is not None:
         out["disasm"] = disasm
     if machine_check is not None:
         out["machine_check"] = machine_check
     runs = ws / "runs"
     runs.mkdir(parents=True, exist_ok=True)
-    (runs / f"verify-{fact_id}-{utc_now().replace(':', '')}.json").write_text(
+    ts = utc_now().replace(":", "")
+    vp = runs / f"verify-{fact_id}-{ts}.json"
+    _k = 1
+    while vp.exists():
+        # #828: same-second collisions overwrite → erase the hash-lock history
+        vp = runs / f"verify-{fact_id}-{ts}-{_k}.json"
+        _k += 1
+    vp.write_text(
         json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
     # #287 observability: mirror the verdict to the structured event log.
     # Guarded — logging must never break verification.
@@ -896,7 +959,8 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
         emit(ws, actor="orchestrator", action="verify", claim=claim_id,
              artifact=fact_id, duration_ms=None,
              exit=0 if overall == "VERIFIED" else 1,
-             detail=f"L1={l1['verdict']} L2={l2['verdict']} overall={overall}")
+             detail=(f"L1={l1['verdict']} L2={l2['verdict']} overall={overall}"
+                     + (f" | {r0}" if (ok0 and r0) else "")))
     except Exception:
         pass
     return out
