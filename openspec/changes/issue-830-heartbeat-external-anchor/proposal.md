@@ -1,4 +1,4 @@
-# Heartbeat liveness has no anchor outside the deletable file (#828)
+# bug(v0.1.4): heartbeat liveness anchored only in deletable .heartbeat.json (#830)
 
 Child of #825.
 

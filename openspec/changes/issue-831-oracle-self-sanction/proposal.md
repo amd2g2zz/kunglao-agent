@@ -1,4 +1,4 @@
-# completion_gate second-stop PASS accepts self-authored sanction (#829)
+# bug(v0.1.4): completion_gate second-stop PASS self-authorable and backdatable (#831)
 
 Child of #825.
 

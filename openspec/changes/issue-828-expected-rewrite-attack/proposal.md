@@ -1,4 +1,4 @@
-# kunglao-verify expected can be rewritten by the maker after a mismatch (#827)
+# bug(v0.1.4): kunglao-verify expected rewriteable after FAIL — F3 covers tautology only (#828)
 
 Child of #825.
 

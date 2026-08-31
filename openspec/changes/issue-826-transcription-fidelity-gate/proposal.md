@@ -1,4 +1,4 @@
-# User-facing summary has zero constraints: uncertainty vanishes in transcription (#831)
+# bug(v0.1.4): user-facing summary unconstrained — uncertainty vanishes in transcription (#826)
 
 Child of #825.
 

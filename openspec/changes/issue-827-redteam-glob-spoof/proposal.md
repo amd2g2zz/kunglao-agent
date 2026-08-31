@@ -1,4 +1,4 @@
-# plan_drift_detector UNVERIFIED_EVIDENCE is spoofable by batch-template files (#826)
+# bug(v0.1.4): plan_drift_detector UNVERIFIED_EVIDENCE spoofable by batch templates (#827)
 
 Child of #825.
 

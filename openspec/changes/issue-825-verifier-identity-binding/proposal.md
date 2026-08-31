@@ -1,4 +1,4 @@
-# Verifier identity is not machine-bound: maker/checker collapse (#825)
+# bug(v0.1.4): verifier identity is not machine-bound — maker/checker collapse (#825)
 
 > Parent issue for #826-#831. All six children amplify this single root cause.
 

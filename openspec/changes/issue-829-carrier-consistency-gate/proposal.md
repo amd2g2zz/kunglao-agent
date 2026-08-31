@@ -1,4 +1,4 @@
-# No cross-carrier consistency gate: four state layers drift independently (#830)
+# bug(v0.1.4): no cross-carrier consistency gate — four state layers drift (#829)
 
 Child of #825.
 
