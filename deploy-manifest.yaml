@@ -7,7 +7,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: 8fbc98ad275dca11270f20d083b8f69aa4605932a51c32432f66dcb61d5e2bf4
+    sha256: 5a5ed2659b8150f7957697af303c7019bdfe7c63eab513a1e026c199bee45334
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
