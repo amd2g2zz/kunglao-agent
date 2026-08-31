@@ -249,10 +249,13 @@ class TestRecall:
     def test_cjk_keyword_scored_with_score(self, index_dir: Path) -> None:
         idx = _index(index_dir)
         r = rr.recall(list(idx.entries), list(idx.scenes), "编解码")
-        assert r.kind == "scored"
-        assert r.scored[0].entry.path == "re-library/tools-crypto.md"
-        assert r.scored[0].score > 0
-        assert r.scored[0].reasons                       # matched fields reported
+        # #814 去污染合同演进：purpose-only CJK 单词碰撞被阻尼，curated
+        # scene 可以胜出——但文档必须仍然可达（两种 kind 都暴露 files）。
+        assert r.kind in ("scored", "scene")
+        assert "re-library/tools-crypto.md" in r.files
+        if r.kind == "scored":
+            assert r.scored[0].score > 0
+            assert r.scored[0].reasons
 
     def test_scored_results_are_sorted_descending(self, index_dir: Path) -> None:
         idx = _index(index_dir)

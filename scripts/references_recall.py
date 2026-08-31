@@ -82,6 +82,15 @@ W_SYMPTOM = 1.5
 W_PURPOSE = 1.0
 W_WHEN = 0.5
 
+# #814 打分去污染：purpose/when 单字段碰撞（泛文档单词蹭分）阻尼乘子；
+# name/category/domain/symptom 任一强字段命中则不受阻尼。
+W_SINGLE_FIELD = 0.3
+# #814 demotion 闭环：.recall-stats.json streak≥3 的词按此乘子压分
+#（demotion_map(ws) 生成；乘子连乘，命中即衰减）。
+DEMOTION_W = 0.25
+# #814 注入门槛：阻尼/demotion 乘子后低于此分的条目不进 top-K
+MIN_SCORE = 0.1
+
 
 @dataclass(frozen=True)
 class Entry:
@@ -470,6 +479,12 @@ def demotion_suggestions(ws: Path) -> list[tuple[str, int]]:
             if int(e.get("streak", 0)) >= DEMOTION_STREAK]
 
 
+def demotion_map(ws: Path) -> dict[str, float]:
+    """#814 闭环：workspace 反馈统计 → 打分乘子表（suggestion → multiplier）。
+    打分侧自动生效（与字典本体的人工裁决面分离——这里只压检索分，不改词库）。"""
+    return {t: DEMOTION_W for t, _ in demotion_suggestions(ws)}
+
+
 def print_feedback_stats(ws: Path) -> None:
     stats = load_stats(Path(ws))
     terms = stats["terms"]
@@ -661,8 +676,14 @@ def parse_index(index_path: Path) -> tuple[list[Entry], list[Scene]]:
 
 # ---------- scoring ----------
 
-def _score_entry(entry: Entry, qset: set[str], q_norm: str) -> tuple[float, tuple[str, ...]]:
-    """Relevance score for one entry against the query token set."""
+def _score_entry(entry: Entry, qset: set[str], q_norm: str,
+                 demotions: dict[str, float] | None = None
+                 ) -> tuple[float, tuple[str, ...]]:
+    """Relevance score for one entry against the query token set.
+
+    #814: purpose/when-only 单字段碰撞乘 W_SINGLE_FIELD 阻尼；命中词命中
+    demotion 乘子表时逐词连乘压分（闭环 references_recall 的反馈统计）。
+    """
     stem = Path(entry.path).stem
     name_toks = set(_tokenize(stem))
     cat_toks = set(_tokenize(entry.category))
@@ -673,28 +694,34 @@ def _score_entry(entry: Entry, qset: set[str], q_norm: str) -> tuple[float, tupl
 
     score = 0.0
     reasons: list[str] = []
+    strong = False
 
     name_hits = qset & name_toks
     if name_hits:
         score += W_NAME * len(name_hits)
+        strong = True
         reasons.append("name:" + ",".join(sorted(name_hits)))
     if _norm(stem) == q_norm:
         score += W_NAME_EXACT
+        strong = True
         reasons.append("name-exact")
 
     cat_hits = qset & cat_toks
     if cat_hits:
         score += W_CAT_DOMAIN * len(cat_hits)
+        strong = True
         reasons.append("category:" + ",".join(sorted(cat_hits)))
 
     dom_hits = qset & dom_toks
     if dom_hits:
         score += W_CAT_DOMAIN * len(dom_hits)
+        strong = True
         reasons.append("domain:" + ",".join(sorted(dom_hits)))
 
     sym_hits = qset & sym_toks
     if sym_hits:
         score += W_SYMPTOM * len(sym_hits)
+        strong = True
         reasons.append("symptom:" + ",".join(sorted(sym_hits)))
 
     purp_hits = qset & purpose_toks
@@ -707,6 +734,19 @@ def _score_entry(entry: Entry, qset: set[str], q_norm: str) -> tuple[float, tupl
         score += W_WHEN * len(when_hits)
         reasons.append("when:" + ",".join(sorted(when_hits)))
 
+    # #814 单字段碰撞阻尼：仅 purpose/when 蹭分的泛文档压分
+    if score > 0 and not strong and (purp_hits or when_hits):
+        score *= W_SINGLE_FIELD
+        reasons.append("single-field-collision")
+
+    # #814 demotion 闭环：命中 demoted 词逐个连乘压分
+    if demotions:
+        hit_demoted = sorted(t for t in qset if t in demotions)
+        for t in hit_demoted:
+            score *= demotions[t]
+        if hit_demoted:
+            reasons.append("demotion:" + ",".join(hit_demoted))
+
     return round(score, 3), tuple(reasons)
 
 
@@ -717,9 +757,11 @@ def _scene_score(scene: Scene, qset: set[str]) -> tuple[float, set[str]]:
 
 
 def recall(entries: list[Entry], scenes: list[Scene], query: str,
-           top_k: int = 10) -> RecallResult:
+           top_k: int = 10,
+           demotions: dict[str, float] | None = None) -> RecallResult:
     """Scored recall: scene label match (primary/supplementary) wins on tie or
-    better; otherwise top-K entries ranked by relevance score descending."""
+    better; otherwise top-K entries ranked by relevance score descending.
+    #814: demotions（term→乘子）透传打分，闭环反馈统计。"""
     q_tokens = _tokenize(query)
     qset = set(q_tokens)
     q_norm = _norm(query)
@@ -733,8 +775,8 @@ def recall(entries: list[Entry], scenes: list[Scene], query: str,
 
     scored: list[ScoredEntry] = []
     for e in entries:
-        sc, reasons = _score_entry(e, qset, q_norm)
-        if sc > 0:
+        sc, reasons = _score_entry(e, qset, q_norm, demotions=demotions)
+        if sc >= MIN_SCORE:
             scored.append(ScoredEntry(entry=e, score=sc, reasons=reasons))
     scored.sort(key=lambda se: (-se.score, entries.index(se.entry)))
 
@@ -895,7 +937,15 @@ def main(argv: list[str]) -> int:
         print_result(result, entries)
         return 0
 
-    result = recall(entries, scenes, arg)
+    # #814: optional --ws <path> → demotion 乘子闭环进打分
+    ws_arg = None
+    if "--ws" in argv:
+        i = argv.index("--ws")
+        if i + 1 < len(argv):
+            ws_arg = Path(argv[i + 1])
+    demotions = demotion_map(ws_arg) if ws_arg else None
+
+    result = recall(entries, scenes, arg, demotions=demotions)
     if result.kind == "none":
         print_no_match(arg, entries)
         return 1

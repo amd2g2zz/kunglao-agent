@@ -181,10 +181,14 @@ def _parse_files(stdout: str) -> tuple[str, ...]:
 
 def _run_recall(query: str, cwd: Path | None = None) -> tuple[int, str]:
     """One recall query as a subprocess. Returns (rc, stdout). Any failure
-    (missing script, timeout, unreadable index) -> (rc != 0, '')."""
+    (missing script, timeout, unreadable index) -> (rc != 0, '').
+    #814: passes --ws so workspace demotion multipliers close the loop."""
+    cmd = [sys.executable, str(RECALL_SCRIPT), query]
+    if cwd is not None:
+        cmd += ["--ws", str(cwd)]
     try:
         r = subprocess.run(
-            [sys.executable, str(RECALL_SCRIPT), query],
+            cmd,
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             cwd=str(cwd) if cwd else None, timeout=RECALL_TIMEOUT,
         )
@@ -215,6 +219,33 @@ def _guidance(queries: list[str], files: list[str]) -> str:
     )
 
 
+def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
+           ) -> None:
+    """#814: fail-open ≠ fail-silent — every recall path leaves a trace
+    (kunglao_log emit + recall_metrics record). Telemetry must never block
+    dispatch: any error is swallowed. Modules load by explicit file path
+    (this hook has no scripts/ sys.path injection of its own)."""
+    import importlib.util
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "kunglao_log_recall814", SKILL_DIR / "scripts" / "kunglao_log.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.emit(ws, "recall_inject", action, tool="Agent", detail=detail)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "recall_metrics_recall814",
+            SKILL_DIR / "scripts" / "recall_metrics.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.record(ws, kind=kind, query=detail[:80], files=files,
+                   reason=action)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
     """Hook decision for a PreToolUse(Agent) dispatch payload (#268/#761 J4).
 
@@ -237,6 +268,9 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
 
     is_claim = bool(DISPATCH_RE.search(prompt_text))
     if not is_claim and not REDTEAM_RE.search(prompt_text):
+        # #814: fail-open ≠ fail-silent — 留痕后放行
+        _trace(ws, "skipped", "recall_skip",
+               "not_a_claim_or_redteam_dispatch")
         return 0, "", None  # neither a claim nor a red-team dispatch
 
     if is_claim:
@@ -253,7 +287,11 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
                 seen.add(f)
                 files.append(f)
     if not files:
+        _trace(ws, "no_match", "recall_skip", "no_recall_results: "
+               + ",".join(queries[:3]))
         return 0, "", None  # no knowledge to inject
+    _trace(ws, "injected", "recall_injected",
+           "files:" + ",".join(files[:MAX_FILES]), files=len(files))
     return 0, "", _guidance(queries, files[:MAX_FILES])
 
 
