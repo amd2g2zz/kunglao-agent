@@ -212,6 +212,14 @@ def attach_signals(ws: Path, decision: dict) -> dict:
         sig["v_flat_rounds"] = infeasible.get("v_flat_rounds", 0)
     except Exception:
         sig["infeasible_candidate"] = False
+    # #823-P2: checkpoint rho sampling + (rho, z) pairing rides the same
+    # flag-gated mount, caged: any failure degrades to no-signal (never
+    # disturb decide()). Shadow: sample_and_pair records only.
+    try:
+        import rho_verifier
+        rho_verifier.sample_and_pair(ws)
+    except Exception:  # noqa: BLE001 - shadow cage: signals never disturb
+        pass
     decision["value_signals"] = sig
     kunglao_log.emit(ws, actor="rho_checkpoint", action="rho_checkpoint",
                      detail=json.dumps(sig, sort_keys=True))
