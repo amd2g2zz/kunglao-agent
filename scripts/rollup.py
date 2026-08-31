@@ -293,9 +293,22 @@ def rollup_terminal_claim(workspace: Path, claim_id: str,
     ws = Path(workspace)
     res = run_rollup(ws, claim_id, terminal_status)
     if res.get("fired"):
+        # #819 item 2: the sweep is ACCOUNTING for an already-terminal claim —
+        # it never sets status (that is the register's job, now evidence-gated).
+        # Detail says so and carries the evidence refs behind the PROVEN
+        # transition (#818 correlation style).
+        try:
+            from register_proven_gate import evidence_refs
+            refs = evidence_refs(ws, claim_id)
+        except Exception:  # noqa: BLE001 — wording must never break the sweep
+            refs = {}
+        detail = (f"rollup of already-terminal claim (accounting only; status "
+                  f"set by register): terminal={res['terminal_status']}; "
+                  f"verify_note={refs.get('verify_note')}; "
+                  f"redteam={refs.get('redteam')}; "
+                  f"waiver={bool(refs.get('waiver'))}")
         kunglao_log.emit(ws, actor="rollup", action="rollup_sweep",
-                         claim=claim_id,
-                         detail=f"terminal={res['terminal_status']} via tick sweep")
+                         claim=claim_id, detail=detail)
     return res
 
 

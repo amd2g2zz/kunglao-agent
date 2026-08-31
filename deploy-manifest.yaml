@@ -67,7 +67,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: 866f9da0ccbf5441581ea70825cf5ca2c3c82f2f23f6d262af5a0198b491c02a
+    sha256: 1f7d97c71f786b9b5344b3c62fa7fbb26025e855e9f4fe54bd383a14e71bd6bd
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -192,6 +192,10 @@ files:
     dest: .claude/scripts/reconcile_workers.py
     kind: scaffold
     sha256: 9dc16e9d97fd25b3d9cf9babf47ab27069580c7d7b98d671a480c58f63024796
+  - src: scripts/register_proven_gate.py
+    dest: .claude/scripts/register_proven_gate.py
+    kind: scaffold
+    sha256: 5baa020281fe2c9a5873fa026fe2be00c754406b2210745fe091e49b89c208d7
   - src: scripts/retract_claim.py
     dest: .claude/scripts/retract_claim.py
     kind: scaffold
