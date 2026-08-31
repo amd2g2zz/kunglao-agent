@@ -39,7 +39,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCES_DIR = REPO_ROOT / "references"
 MECHANISMS_LEDGER = REFERENCES_DIR / "mechanisms.md"
 MECHANISMS_STATUS = (
-    REPO_ROOT / "openspec" / "changes" / "issue-446-governance-fg"
+    REPO_ROOT / "openspec" / "archive" / "issue-446-governance-fg"
     / "mechanisms-status.md"
 )
 
