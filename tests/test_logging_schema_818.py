@@ -59,9 +59,10 @@ def test_emit_absent_fields_are_null_keys(tmp_path):
     ws = _mk_ws(tmp_path)
     kunglao_log.emit(ws, "test", "converge")
     row = _rows(ws)[-1]
-    for field in ("arm", "epoch", "version", "hypothesis_ref"):
-        assert field in row
-        assert row[field] is None
+    assert row["arm"] is None
+    assert row["epoch"] is None
+    assert row["hypothesis_ref"] is None
+    assert row["version"] is None or isinstance(row["version"], str)
 
 
 def test_emit_version_autofills_git_sha_or_none(tmp_path):

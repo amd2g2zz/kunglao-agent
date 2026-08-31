@@ -1224,7 +1224,7 @@ def _run_machine(snap: _DecideInputs):
     return State.SATURATED, _act_unexpected(snap)
 
 
-def decide(workspace: Path) -> dict:
+def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
     snap = _decide_inputs(workspace)
     state, action = _run_machine(snap)
     decision, exit_code = VERDICTS[state]
@@ -1265,7 +1265,40 @@ def decide(workspace: Path) -> dict:
     # Flag off → the dict comes back untouched (no key, no emit).
     # Flag misread raises FlagError by design (experiment fail-loud contract).
     import rho_checkpoint
-    return rho_checkpoint.attach_signals(workspace, decision)
+    result = rho_checkpoint.attach_signals(workspace, decision)
+    if emit_snapshot:
+        _emit_decision_snapshot(workspace, result)
+    return result
+
+
+def _emit_decision_snapshot(ws, d: dict) -> None:
+    """#818 batch-1: ONE decision_snapshot event per verdict (actor=
+    convergence_check): claims status counts + top-5 priority (id, score).
+    Fail-open — logging must never block the decision (#287 contract)."""
+    try:
+        reg = _load_yaml(Path(ws) / "claim-register.yaml")
+        claims = reg.get("claims") or []
+        counts: dict = {}
+        for c in claims:
+            st = (c.get("status") or "UNKNOWN").upper()
+            counts[st] = counts.get(st, 0) + 1
+        top: list = []
+        try:
+            import priority_ratio as pr
+            rows = pr.priority_ratio(claims, {}, pr.EvidenceView())
+            top = [{"id": r.claim_id, "score": round(float(r.score), 4)}
+                   for r in rows[:5]]
+        except Exception:
+            top = []
+        from kunglao_log import emit
+        emit(ws, actor="convergence_check", action="decision_snapshot",
+             detail=json.dumps({
+                 "decision": d.get("decision"),
+                 "status_counts": counts,
+                 "top_priorities": top,
+             }, ensure_ascii=False))
+    except Exception:
+        pass
 
 
 def _human(d: dict) -> str:
