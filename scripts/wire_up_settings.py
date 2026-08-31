@@ -66,6 +66,7 @@ WIRE_UP_HOOK_FILES = frozenset({
     "write_guard.py",          # PreToolUse/Edit|Write — contract-carrier write gate (#532)
     "orchestrator_tool_guard.py",  # PreToolUse/Bash — maker-checker WARN (#608, target-based #532-style)
     "violation_capture.py",    # PostToolUse/Bash — mechanical violation recorder (#718)
+    "bash_fact_guard.py",      # PostToolUse/Bash — facts-write lint recorder (#809)
 })
 
 # #675: hooks registered on MORE THAN ONE event slot by

@@ -1,0 +1,391 @@
+{
+ "sample_sha256": "865e8eb489b2935b745502026a81e1ef9a6ad6b9",
+ "facts": {
+  "F001": {
+   "slug": "sample-overview",
+   "title": "Sample Overview — MSVC 19.43, no packer",
+   "source": "static-decompile",
+   "promotion_gate": "Runtime execution capture showing the process runs without unpacking: EP memory matches on-disk .text layout, no section allocation/decompression (dynamic confirmation of DIE packer=null)",
+   "extra_provenance": [
+    [
+     "other",
+     "evidence/die.json",
+     "B2"
+    ],
+    [
+     "other",
+     "evidence/signature.json",
+     "B3"
+    ],
+    [
+     "decompiled_c",
+     "evidence/static-ghidra.json",
+     "A2"
+    ]
+   ]
+  },
+  "F002": {
+   "slug": "family-attribution",
+   "title": "Family Attribution — Steam fake CDK scam, DLL hijack",
+   "source": "vt-pivot",
+   "promotion_gate": "Dynamic capture linking the executed sample to the attributed infrastructure: VT/sandbox execution_parents chain or VM traffic to *.steam.work domains from this sample's process",
+   "extra_provenance": [
+    [
+     "other",
+     "evidence/cti-vt.json",
+     "C5"
+    ],
+    [
+     "other",
+     "evidence/cti-correlated.json",
+     "C5"
+    ]
+   ],
+   "alternatives": [
+    {
+     "hypothesis": "Attributed to a named threat actor (APT)",
+     "rejected_because": "H0_unattributed — commodity consumer-scam profile (9/12), community-grade CTI only, no APT TTP/infrastructure; body: 'Attribution: H0_unattributed — no named threat actor'"
+    }
+   ]
+  },
+  "F003": {
+   "slug": "obfuscation-xor-cfg",
+   "title": "Obfuscation — XOR key=index+0x4d, CFG",
+   "source": "static-decompile",
+   "promotion_gate": "Runtime capture of XOR decode executed at load — decoded cdk.steam.work string recovered from process memory before C2 use",
+   "extra_provenance": [
+    [
+     "other",
+     "evidence/die.json",
+     "B2"
+    ],
+    [
+     "decompiled_c",
+     "evidence/static-ghidra.json",
+     "A2"
+    ]
+   ]
+  },
+  "F004": {
+   "slug": "import-table",
+   "title": "Imports — 601 imports/16 DLLs, capability map",
+   "source": "static-decompile",
+   "promotion_gate": "Runtime IAT walk confirming 601 imports/16 DLLs resolved at load — matches static table byte-exact",
+   "extra_provenance": [
+    [
+     "other",
+     "evidence/imports-categorized.json",
+     "B3"
+    ]
+   ],
+   "excerpt": "```python\npe = pefile.PE(SAMPLE)\nimps = [i.name for e in pe.DIRECTORY_ENTRY_IMPORT for i in e.imports if i.name]\nprint(f'imports={len(imps)} dlls={len(pe.DIRECTORY_ENTRY_IMPORT)}')\n```\nFull script: runs/verify-f004.py"
+  },
+  "F005": {
+   "slug": "xor-string-decode",
+   "title": "XOR Decode — cdk.steam.work@0x21A640",
+   "source": "static-decompile",
+   "promotion_gate": "Runtime breakpoint at 0x21A640 after decode showing plaintext cdk.steam.work in memory",
+   "extra_provenance": [
+    [
+     "recompute_script",
+     "evidence/xor-decode.py",
+     "A2"
+    ]
+   ],
+   "excerpt": "```python\nXOR_BASE = 0x4D\ndef xor_decode(blob): return bytes([(b ^ ((i + XOR_BASE) & 0xFF)) for i, b in enumerate(blob)])\n# Test 1: known encoded form of \"cdk.steam.work\" at file offset 0x21A640\nencoded_cdk = binary[0x21A640:enc_end]\ndecoded_cdk_text = xor_decode(encoded_cdk).split(b\"\\x00\")[0]\n```\nFull script: runs/verify-f005.py"
+  },
+  "F006": {
+   "slug": "entry-flow",
+   "title": "Entry Flow — EP→FUN_140005040 dispatcher",
+   "source": "static-decompile",
+   "promotion_gate": "VM debugger trace of EP 0x18989c → CRT init → FUN_140005040 dispatch",
+   "extra_provenance": [
+    [
+     "decompiled_c",
+     "evidence/callgraph.txt",
+     "A2"
+    ]
+   ]
+  },
+  "F007": {
+   "slug": "c2-wininet",
+   "title": "C2 Protocol — WININET HTTP full stack",
+   "source": "static-decompile",
+   "promotion_gate": "Frida hook capture of WININET HttpOpenRequestW/HttpSendRequestW session to cdk.steam.work from this process",
+   "extra_provenance": [
+    [
+     "decompiled_c",
+     "evidence/callgraph.txt",
+     "A2"
+    ]
+   ],
+   "depends_on": [
+    "F005-xor-string-decode",
+    "F006-entry-flow"
+   ]
+  },
+  "F008": {
+   "slug": "dll-hijack",
+   "title": "DLL Hijack — dropper plants hid.dll",
+   "source": "static-decompile",
+   "promotion_gate": "VM capture of pws.ps1.txt → hid.dll write → LoadLibrary(NewSteamValve.exe) chain in one execution session",
+   "extra_provenance": [
+    [
+     "decompiled_c",
+     "evidence/callgraph.txt",
+     "A2"
+    ],
+    [
+     "other",
+     "evidence/cti-vt-related-11649357498f.json",
+     "C5"
+    ],
+    [
+     "other",
+     "evidence/strings-raw.json",
+     "B3"
+    ]
+   ]
+  },
+  "F009": {
+   "slug": "anti-analysis",
+   "title": "Anti-Analysis — only IsDebuggerPresent",
+   "source": "static-decompile",
+   "promotion_gate": "VM execution showing only the IsDebuggerPresent anti-analysis call and no anti-VM/anti-sandbox behavior",
+   "extra_provenance": [
+    [
+     "decompiled_c",
+     "evidence/callgraph.txt",
+     "A2"
+    ],
+    [
+     "decompiled_c",
+     "evidence/static-ghidra.json",
+     "A2"
+    ]
+   ]
+  },
+  "F010": {
+   "slug": "file-proc-reg",
+   "title": "File/Proc/Reg — file active, proc kill, reg absent",
+   "source": "static-decompile",
+   "promotion_gate": "Runtime API monitor confirming file I/O (CreateFileW/WriteFile), process enumeration + TerminateProcess, and no registry writes",
+   "extra_provenance": [
+    [
+     "decompiled_c",
+     "evidence/callgraph.txt",
+     "A2"
+    ]
+   ],
+   "depends_on": [
+    "F004-import-table"
+   ]
+  },
+  "F011": {
+   "slug": "ioc-extraction",
+   "title": "IOC Extraction — network/host/behavior indicators",
+   "source": "inference",
+   "promotion_gate": "Live telemetry/DNS capture confirming extracted IOCs (cdk.steam.work query, StoreCDK#1 mutex) from the sample's own execution",
+   "depends_on": [
+    "F001-sample-overview",
+    "F002-family-attribution",
+    "F003-obfuscation-xor-cfg",
+    "F004-import-table",
+    "F005-xor-string-decode",
+    "F006-entry-flow",
+    "F007-c2-wininet",
+    "F008-dll-hijack",
+    "F009-anti-analysis",
+    "F010-file-proc-reg",
+    "F013-mutex",
+    "F014-resources",
+    "F015-dropper-chain",
+    "F016-sections",
+    "F017-crypto-negative",
+    "F018-code-structure"
+   ]
+  },
+  "F013": {
+   "slug": "mutex",
+   "title": "Mutex — StoreCDK#1 single-instance",
+   "source": "static-decompile",
+   "promotion_gate": "Frida hook capture of CreateMutexW(name=StoreCDK#1) returning a valid handle",
+   "extra_provenance": [
+    [
+     "decompiled_c",
+     "evidence/callgraph.txt",
+     "A2"
+    ],
+    [
+     "other",
+     "mal-recon/865e8eb489b2935b745502026a81e1ef9a6ad6b9/report.json",
+     "B3"
+    ]
+   ]
+  },
+  "F014": {
+   "slug": "resources",
+   "title": "Resources — icons+manifest, no version",
+   "source": "static-decompile",
+   "promotion_gate": "Runtime capture of resource load — manifest parsed, icons rendered, no RT_VERSION read",
+   "extra_provenance": [
+    [
+     "other",
+     "runs/worker-c014-resources.json",
+     "B3"
+    ],
+    [
+     "recompute_script",
+     "runs/worker-c014-extract.py",
+     "A2"
+    ]
+   ],
+   "excerpt": "```python\npe = pefile.PE(SAMPLE)\nrsrc = [s for s in pe.sections if s.Name.rstrip(b'\\x00') == b'.rsrc'][0]\nneedle = 'VS_VERSION_INFO'.encode('utf-16-le')\nprint('rsrc_va=%s rsrc_raw=%d vs_version=%d' % (hex(rsrc.VirtualAddress),\n      rsrc.SizeOfRawData, data.count(needle)))\n```\nFull script: runs/verify-f014.py"
+  },
+  "F015": {
+   "slug": "dropper-chain",
+   "title": "Dropper Chain — pws.ps1.txt→hid.dll→NewSteamValve",
+   "source": "vt-pivot",
+   "boundary_type": "link_not_closed",
+   "promotion_gate": "Our-VM capture of the complete drop chain in one session (pws.ps1.txt fetched → hid.dll written → NewSteamValve.exe loaded) with stage hashes matching the VT-derived values",
+   "extra_provenance": [
+    [
+     "other",
+     "evidence/cti-vt.json",
+     "C5"
+    ],
+    [
+     "other",
+     "evidence/cti-vt-related-11649357498f.json",
+     "C5"
+    ]
+   ],
+   "depends_on": [
+    "F008-dll-hijack"
+   ]
+  },
+  "F016": {
+   "slug": "sections",
+   "title": "Sections — 6 sections, no anomalies",
+   "source": "static-decompile",
+   "promotion_gate": "Runtime VirtualQuery over section VA ranges matching the on-disk layout with no RWX anomaly",
+   "excerpt": "```python\nfor i, sec in enumerate(pe.sections):\n    name = sec.Name.rstrip(b\"\\x00\").decode(\"ascii\", errors=\"replace\")\n    entropy = shannon_entropy(raw_bytes)\n    # anomaly flags: RWX if (chars & 0xE0000000) == 0xE0000000,\n    # HIGH_ENTROPY if entropy > 7.0, VIRTUAL_SIZE > rsd*3\n```\nFull script: runs/verify-f016.py"
+  },
+  "F017": {
+   "slug": "crypto-negative",
+   "title": "Crypto — no standard primitives",
+   "source": "static-decompile",
+   "promotion_gate": "",
+   "excerpt": "```python\naes_sbox = bytes([0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, ...])  # first 32 bytes\nfindings[\"AES\"][\"Sbox_first32\"] = {\"hits\": len(search_bytes(data, aes_sbox))}\n# plus: hash IV constants (0x67452301 MD5 H0, 0x428a2f98 SHA256 K[0], ...),\n# CRC32 poly 0xEDB88320, base64 alphabets, crypto keywords — hit counts only\n```\nFull script: runs/verify-f017.py"
+  },
+  "F018": {
+   "slug": "code-structure",
+   "title": "Code Structure — 7198 funcs, MFC framework",
+   "source": "static-decompile",
+   "promotion_gate": "Runtime trace of MFC framework init (AfxWinMain/CWinApp dispatch) confirming the 7198-function structure",
+   "extra_provenance": [
+    [
+     "decompiled_c",
+     "evidence/callgraph.txt",
+     "A2"
+    ]
+   ],
+   "depends_on": [
+    "F006-entry-flow"
+   ]
+  },
+  "F020": {
+   "slug": "killchain",
+   "title": "Killchain — 7-stage static reconstruction",
+   "source": "inference",
+   "promotion_gate": "VM dynamic execution (C-012) confirming the 7 killchain stages in sequence",
+   "depends_on": [
+    "F001-sample-overview",
+    "F002-family-attribution",
+    "F003-obfuscation-xor-cfg",
+    "F004-import-table",
+    "F005-xor-string-decode",
+    "F006-entry-flow",
+    "F007-c2-wininet",
+    "F008-dll-hijack",
+    "F009-anti-analysis",
+    "F010-file-proc-reg",
+    "F011-ioc-extraction",
+    "F013-mutex",
+    "F014-resources",
+    "F015-dropper-chain",
+    "F016-sections",
+    "F017-crypto-negative",
+    "F018-code-structure"
+   ]
+  },
+  "F021": {
+   "slug": "verdict",
+   "title": "Final Verdict — MALICIOUS commodity CDK-scam dropper",
+   "source": "inference",
+   "promotion_gate": "C-012 dynamic confirmation of malicious behaviors + independent redteam verdict CONFIRMED on all primary questions",
+   "extra_provenance": [
+    [
+     "other",
+     "evidence/verdict.json",
+     "B3"
+    ]
+   ],
+   "depends_on": [
+    "F001-sample-overview",
+    "F002-family-attribution",
+    "F003-obfuscation-xor-cfg",
+    "F004-import-table",
+    "F005-xor-string-decode",
+    "F006-entry-flow",
+    "F007-c2-wininet",
+    "F008-dll-hijack",
+    "F009-anti-analysis",
+    "F010-file-proc-reg",
+    "F011-ioc-extraction",
+    "F013-mutex",
+    "F014-resources",
+    "F015-dropper-chain",
+    "F016-sections",
+    "F017-crypto-negative",
+    "F018-code-structure",
+    "F020-killchain"
+   ],
+   "alternatives": [
+    {
+     "hypothesis": "APT or targeted attack tool",
+     "rejected_because": "body 'IS NOT: APT, ransomware, worm, packed, or the payload itself' — ordinary commodity level, no APT TTP"
+    },
+    {
+     "hypothesis": "Benign or PUA software",
+     "rejected_because": "9/12 maliciousness score, VT 37/71, dropper chain + revoked-cert hid.dll payload — body verdict MALICIOUS"
+    }
+   ]
+  },
+  "F022": {
+   "slug": "xoradd-enc-layer",
+   "title": "C-022 加密层识别与明文恢复 — XOR/ADD self-syncing stream key=0x01",
+   "source": "inference",
+   "boundary_type": "observation",
+   "promotion_gate": "独立 verifier 复现 xor-add --mode decrypt --key 1 → dec1 sha256 fd92b2d9418444e7b3fa93fdff5cc0cd63442fd21ed9c3c916fe88c526edc190 比对通过且结构自洽确认",
+   "provenance_override": [
+    [
+     "sample_raw",
+     "test-scope/sample_enc.bin",
+     "A1"
+    ],
+    [
+     "recompute_script",
+     "tools/crypto/crypto-tool.py",
+     "A2"
+    ]
+   ],
+   "extension_override": {
+    "claim": "C-022 加密层识别与明文恢复 (test-scope/sample_enc.bin)",
+    "reproduce": "python tools/crypto/crypto-tool.py xor-add --mode decrypt --key 1 --in ../test-scope/sample_enc.bin --reproduce",
+    "expected": "output_sha256=fd92b2d9418444e7b3fa93fdff5cc0cd63442fd21ed9c3c916fe88c526edc190",
+    "verified": "pending"
+   }
+  }
+ }
+}
