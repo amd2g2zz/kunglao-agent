@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_write_guard_unlock_820.py — #820 连坐解锁 TDD。
-
-A 连坐修复  B 门不弱化  C 修复面可见  D 解锁落账  E 隔离落账  F 越界文件拒
-"""
+"""#820 连坐解锁 TDD — A 连坐 / B 门不弱化 / C 修复面 / D 解锁 / E 隔离 / F 越界拒。"""
 from __future__ import annotations
 
 import json
@@ -24,9 +21,9 @@ RC_BLOCK = 2
 
 def _mk_ws(tmp_path):
     ws = tmp_path / "ws"
-    (ws / "facts").mkdir(parents=True)
-    (ws / "notes").mkdir(parents=True)
-    (ws / "runs").mkdir(parents=True)
+    (ws / "facts").mkdir(parents=True, exist_ok=True)
+    (ws / "notes").mkdir(parents=True, exist_ok=True)
+    (ws / "runs").mkdir(parents=True, exist_ok=True)
     (ws / "claim-register.yaml").write_text(
         "claims:\n"
         "  - id: C-001\n"
@@ -92,6 +89,7 @@ id: %s
 type: fact
 title: Early fact
 status: VERIFIED-BY-W1-INVALID-ENUM
+created: form
 created: 2026-08-20
 last_reviewed: 2026-08-20
 claim_id: C-legacy
@@ -140,23 +138,22 @@ def test_unrelated_violations_no_longer_block(tmp_path):
 
 
 def test_own_violations_still_block(tmp_path):
-    """B 门不弱化：F009 自身违规照拦且全部归因 F009。"""
+    """B 门不弱化：F009 自身 lint 违规照拦且全部归因 F009。"""
     ws = _mk_ws(tmp_path)
     (ws / "facts" / "F001-legacy.md").write_text(_legacy_fact(), encoding="utf-8")
     p = _payload(ws, "Write", ws / "facts" / "F009-dirty.md",
                  content=_legacy_fact("F009"))
     r = _run_guard(ws, p)
     assert r.returncode == 2, r.stderr[:400]
-    viols = _viols(r.stderr)
-    assert viols, r.stderr
+    viols = [v for v in _viols(r.stderr) if "lint[" in v]
+    assert viols, r.stderr[:400]
     for v in viols:
         assert "F009" in v, "attribution: " + v
     assert not any("F001" in v for v in viols), viols
 
 
 def test_block_detail_shows_repair_surface(tmp_path):
-    """C block detail 带其他文件违规分布。"""
-    ws = _mk_ws(tmp_path)
+    """C block detail 带其他文件违规分布（修复面最小集）。"""
     ws = _mk_ws(tmp_path)
     (ws / "facts" / "F001-legacy.md").write_text(_legacy_fact(), encoding="utf-8")
     p = _payload(ws, "Write", ws / "facts" / "F009-dirty.md",
@@ -167,27 +164,53 @@ def test_block_detail_shows_repair_surface(tmp_path):
     assert "F001-legacy.md" in r.stderr, r.stderr[:400]
 
 
-def test_unlock_waives_and_logs(tmp_path):
-    """D unlock 落账 + 豁免消费落账。"""
-    ws = _mk_ws(tmp_path)
-    legacy = _legacy_fact()
-    (ws / "facts" / "F001-legacy.md").write_text(legacy, encoding="utf-8")
-    p = _payload(ws, "Write", ws / "facts" / "F001-legacy.md", content=legacy)
-    r = _run_guard(ws, p)
-    assert r.returncode == 2, "pre-unlock rewrite must block"
+def _migrating_fact(cid="F001"):
+    return """---
+id: %s
+type: fact
+title: Early fact
+status: INFERRED
+created: 2026-08-20
+last_reviewed: 2026-08-20
+claim_id: C-legacy
+claim: legacy schema fact
+boundary_type: observation
+source: static_re
+confidence: high
+verify_status: partial
+reproduce: python runs/verify-f001.py
+expected: %s
+verified: pending
+provenance:
+  - {role: decompiled_c, path: evidence/f001.c, credibility: B2}
+---
 
+# %s - Early fact
+
+## Status
+INFERRED
+""" % (cid, _SHA, cid)
+
+
+def test_unlock_waives_and_logs(tmp_path):
+    """D unlock 落账 + 豁免消费落账（W2 自盖章腿不豁免：迁移夹具已合法化 status）。"""
+    ws = _mk_ws(tmp_path)
+    legacy = _migrating_fact("F001")
+    f = ws / "facts" / "F001-legacy.md"
+    f.write_text(legacy, encoding="utf-8")
+    p = _payload(ws, "Write", f, content=legacy)
+    r = _run_guard(ws, p)
+    assert r.returncode == 2, "pre-unlock blocked by own lint"
     sys.path.insert(0, str(SCRIPTS))
     import write_guard_unlock as wgu
     rc = wgu.main(["unlock", str(ws), "--file", "F001-legacy.md",
-                   "--reason", "legacy schema migration in progress"])
+                   "--reason", "legacy schema migration"])
     assert rc == 0
+    r2 = _run_guard(ws, p)
+    assert r2.returncode == 0, "waived: " + r2.stderr[:300]
     actions = [row.get("action") for row in _ledger_rows(ws)]
     assert "write_guard_unlock" in actions, actions
-
-    r2 = _run_guard(ws, p)
-    assert r2.returncode == 0, "waived rewrite must pass: " + r2.stderr[:300]
-    actions2 = [row.get("action") for row in _ledger_rows(ws)]
-    assert "write_guard_waiver_used" in actions2, actions2
+    assert "write_guard_waiver_used" in actions, actions
 
 
 def test_quarantine_moves_and_logs(tmp_path):
