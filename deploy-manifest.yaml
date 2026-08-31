@@ -55,7 +55,7 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: c996f36f7448f93c9a7c472ac24274992330cf5e90d574e536ba1b4501596955
+    sha256: 2371d62ac910036b2b06fe2e3a79ccfc8fc15d620ed5db559ee0e6ee65aa8f26
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
@@ -140,6 +140,10 @@ files:
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
     sha256: 14a963724ca3bcf15843edd76607562625e080a8d31b1068343cfb0166b90e4c
+  - src: scripts/infeasible_signal.py
+    dest: .claude/scripts/infeasible_signal.py
+    kind: scaffold
+    sha256: fbf441b8a71c0ce1df40be73f0eb97b97430951829a2b1d212acef274fbe5a01
   - src: scripts/init_state.py
     dest: .claude/scripts/init_state.py
     kind: scaffold
@@ -195,7 +199,7 @@ files:
   - src: scripts/rho_checkpoint.py
     dest: .claude/scripts/rho_checkpoint.py
     kind: scaffold
-    sha256: 77685ede092b98f68cad8ea11d109fe206f96fedffae8eaa53c7071bdac8d13c
+    sha256: 9655820e1d5070a8b86bd1f7736ef008676f6593a6d63aa776e53310c4cf07c0
   - src: scripts/route_capability.py
     dest: .claude/scripts/route_capability.py
     kind: scaffold
@@ -232,3 +236,7 @@ files:
     dest: .claude/scripts/write_gate.py
     kind: scaffold
     sha256: ef61eace955bbc31c5ebf483143cba342a28cd5fa9981f9092284975388375e9
+  - src: scripts/zero_output_fingerprint.py
+    dest: .claude/scripts/zero_output_fingerprint.py
+    kind: scaffold
+    sha256: e189a0f71e3f09131f2d33f7586b3e222771fff36b4f3f69825729decb001660
