@@ -133,7 +133,8 @@ REARM_ADVICE = (
 # SEAM (issue #370 family): decide is injected under a private name so
 # tests can pin the decision without building exotic fixtures; production
 # always runs the real #443 machine.
-_decide = cc.decide
+from functools import partial
+_decide = partial(cc.decide, emit_snapshot=False)  # #466 read-only contract: resume must not write
 
 
 def _utc_now() -> datetime:

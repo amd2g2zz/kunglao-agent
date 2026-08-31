@@ -155,7 +155,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: 7e9a4c796b1b8dea82c08075897f9821a5404efb6d6be1ff0774391e2e21669d
+    sha256: 472ebd6b289f0d6939e5c1e02e900f33782c455013de99f85fd18910da3c748c
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold

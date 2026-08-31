@@ -39,6 +39,31 @@ from pathlib import Path
 RC_USAGE = 64  # bad invocation (missing workspace / N < 1) — fail fast
 DEFAULT_TAIL = 20
 
+_REPO_SHA: str | None = None
+_REPO_SHA_RESOLVED = False
+
+
+def _repo_sha() -> str | None:
+    """Cached git SHA of the running checkout (subprocess, #818 batch-1).
+
+    None on any failure (not a repo / git missing / timeout) — logging must
+    never block analysis."""
+    global _REPO_SHA, _REPO_SHA_RESOLVED
+    if _REPO_SHA_RESOLVED:
+        return _REPO_SHA
+    _REPO_SHA_RESOLVED = True
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(Path(__file__).resolve().parent.parent),
+            capture_output=True, text=True, timeout=5)
+        sha = out.stdout.strip() if out.returncode == 0 else ""
+        _REPO_SHA = sha or None
+    except Exception:
+        _REPO_SHA = None
+    return _REPO_SHA
+
 
 def log_path(ws: Path) -> Path:
     """runs/logs/kunglao-<date>.jsonl — one file per UTC day."""
@@ -54,9 +79,17 @@ def _utc_now() -> str:
 def emit(ws, actor: str, action: str, *, claim: str | None = None,
          tool: str | None = None, artifact: str | None = None,
          duration_ms: int | None = None, exit: int | None = None,
-         detail: str | None = None) -> None:
+         detail: str | None = None,
+         arm: str | None = None, epoch: int | None = None,
+         hypothesis_ref: str | None = None,
+         version: str | None = None) -> None:
     """Append one structured event line. Never raises — write failure degrades
-    to a stderr warning so logging can never break analysis."""
+    to a stderr warning so logging can never break analysis.
+
+    #818 batch-1: arm/epoch/hypothesis_ref per #823 attribution contract;
+    version auto-fills with the checkout git SHA when omitted (None on
+    failure). Absent optional fields are explicit null keys — stable schema,
+    old consumers use .get()."""
     event = {
         "ts": _utc_now(),
         "actor": actor,
@@ -67,6 +100,10 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         "duration_ms": int(duration_ms) if duration_ms is not None else None,
         "exit": int(exit) if exit is not None else None,
         "detail": str(detail) if detail is not None else None,
+        "arm": str(arm) if arm is not None else None,
+        "epoch": int(epoch) if epoch is not None else None,
+        "hypothesis_ref": str(hypothesis_ref) if hypothesis_ref is not None else None,
+        "version": str(version) if version else _repo_sha(),
     }
     line = json.dumps(event, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=False) + "\n"
