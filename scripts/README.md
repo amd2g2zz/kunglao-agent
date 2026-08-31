@@ -111,6 +111,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `reconcile_intents.py` | plan↔claims intent reconciliation | tests |
 | `reconcile_workers.py` | worker status reconciliation | lib(1), tests |
 | `refutation_propagate.py` | refutation propagation across facts | tests |
+| `register_proven_gate.py` | claim-register →PROVEN evidence gate (#819) — latest verify=passes + red-team ran (≠REFUTED) or justified waiver; wired as write_guard register leg | hooks/write_guard, tests |
 | `stale_blocker_prune.py` | stale blocker pruning | lib(1), tests |
 | `status_defs.py` | claim status constants — single source of truth | hooks, lib(13), tests |
 | `liveness_policy.py` | liveness/staleness minutes constants — single source (#597: stuck 20 / heartbeat 35 / activation+env 30 / kicker+margins 10, values adjudicated) | hooks, lib(9), tests |

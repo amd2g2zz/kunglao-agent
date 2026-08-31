@@ -310,6 +310,39 @@ def adjudicate(ws: Path, shadow: Path, carrier: str, rel: Path) -> list[str]:
             violations.append(
                 f"supersedes[?] adjudication crashed "
                 f"({type(exc).__name__}: {exc}); fail-closed.")
+    if carrier == CARRIER_REGISTER:
+        # #819: evidence-gated ->PROVEN. Evidence lives in runs/*.md of the
+        # REAL workspace (not the shadow — this tool call does not write
+        # evidence). Fail-closed: a crashed gate blocks the write.
+        try:
+            from register_proven_gate import check_register_transitions
+            try:
+                old_text = (ws / "claim-register.yaml").read_text(
+                    encoding="utf-8")
+            except OSError:
+                old_text = None
+            new_text = (shadow / "claim-register.yaml").read_text(
+                encoding="utf-8")
+            res = check_register_transitions(ws, new_text, old_text)
+            violations += [f"proven-gate: {v}" for v in res["violations"]]
+            for wv in res["waivers"]:
+                # waiver usage is observable (#532 item 5): one ledger row per
+                # exemption consumed, with the stated justify
+                try:
+                    import kunglao_log
+                    kunglao_log.emit(ws, actor="hook",
+                                     action="proven_waiver_used",
+                                     claim=str(wv.get("claim_id", "")),
+                                     detail=str(wv.get("justify", ""))[:2000])
+                except Exception:  # noqa: BLE001 — logging must not break the gate
+                    pass
+            _dbg(f"adjudicate[{carrier}] proven-gate leg: "
+                 f"{len(res['violations'])} violation(s), "
+                 f"{len(res['waivers'])} waiver(s)")
+        except Exception as exc:  # noqa: BLE001 — gate crash = fail closed
+            violations.append(
+                f"proven-gate: adjudication crashed "
+                f"({type(exc).__name__}: {exc}); fail-closed.")
     _dbg(f"adjudicate[{carrier}] total: {len(violations)} violation(s)")
     return violations
 
