@@ -179,7 +179,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 843345076f30a3db650fdb44460cbabd3b7979782eac8879d473bb84ecbfa6f1
+    sha256: 646c1db798a5f9b6f907b12f5b88013d26309c6fb931c5a948f29cb7a6b41d60
   - src: scripts/provider_health.py
     dest: .claude/scripts/provider_health.py
     kind: scaffold
@@ -192,6 +192,10 @@ files:
     dest: .claude/scripts/retract_claim.py
     kind: scaffold
     sha256: bbab9654c21d5782272888662b2465dc052be22f7852bae0973a58840772d531
+  - src: scripts/rho_checkpoint.py
+    dest: .claude/scripts/rho_checkpoint.py
+    kind: scaffold
+    sha256: 77685ede092b98f68cad8ea11d109fe206f96fedffae8eaa53c7071bdac8d13c
   - src: scripts/route_capability.py
     dest: .claude/scripts/route_capability.py
     kind: scaffold
@@ -212,6 +216,14 @@ files:
     dest: .claude/scripts/toolchain.py
     kind: scaffold
     sha256: 45edcee110a8290ca36c714a27c8cf9bed2eaf089ba379227dd1454845f5f498
+  - src: scripts/value_config.py
+    dest: .claude/scripts/value_config.py
+    kind: scaffold
+    sha256: 02592aab172348017a9f2f3784a6b0595070fc725dc53296208dc2fdadf22b2e
+  - src: scripts/value_replay.py
+    dest: .claude/scripts/value_replay.py
+    kind: scaffold
+    sha256: c92fefc0c1350895eefa311a13b03360a8c6c1d3e2aa7f108a50608eb21cce5b
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold

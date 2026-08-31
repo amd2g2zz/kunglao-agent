@@ -179,6 +179,7 @@ EMIT_ACTIONS = [
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "hypothesis_seed",    # #662 PQ scaffold seeding
     "hypothesis_superseded",  # #759 note-supersedes-hypothesis wiring (K3)
+    "infeasible_candidate",  # #823 A4 doomed-trajectory early-stop signal
     "install_attempt",    # #700 toolchain_install per-item install events
     "install_declined",   # #700 toolchain_install per-item install events
     "install_failed",     # #700 toolchain_install per-item install events
@@ -197,6 +198,7 @@ EMIT_ACTIONS = [
     "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face
+    "rho_checkpoint",     # #823 P2 N-arm V/D/ETA shadow signal face
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "stale_plan_on_new_evidence",
@@ -211,6 +213,7 @@ EMIT_ACTIONS = [
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
     "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
     "write_blocked",
+    "zero_output_break",  # #823 A4 same-type action thrash circuit face
 ]
 
 LEDGER_EVENT_MAP = {
