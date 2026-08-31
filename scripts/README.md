@@ -185,6 +185,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `bench_grade.py` | zero-LLM L1 scoring + z_self + arm-blind sealed map + 12-case oracle selfcheck | CLI, tests |
 | `bench_redteam.py` | L2 divergent-only arm-blind red-team pipeline (briefs + merge-back) | CLI, tests |
 | `bench_analyze.py` | stdlib statistics — exact McNemar, Wilcoxon, tuition slopes, H1-H4 pre-registered verdicts, --demo | CLI, tests |
+| `answer_key_lint.py` | answer-key quality gate: schema + PQ-to-top-level consistency + IOC normalizability | CLI |
+| `intake_one.py` | single manifest entry immediate validation (sha256/first_seen/sources/pq lists) | CLI |
 
 ## Release & CI support
 

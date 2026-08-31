@@ -203,6 +203,15 @@ def attach_signals(ws: Path, decision: dict) -> dict:
     eta = eta_minutes(budget, 1.0)
     sig = {"v": round(v, 4), "source": source, "error_band": round(band, 4),
            "d": round(difficulty, 4), "eta_min": round(eta, 1)}
+    # #823 A4 canary graduation: doomed-trajectory early-stop signal rides
+    # the same flag-gated mount (flag off -> never evaluated, byte-identical)
+    try:
+        import infeasible_signal
+        infeasible = infeasible_signal.evaluate(Path(ws))
+        sig["infeasible_candidate"] = infeasible.get("infeasible_candidate", False)
+        sig["v_flat_rounds"] = infeasible.get("v_flat_rounds", 0)
+    except Exception:
+        sig["infeasible_candidate"] = False
     decision["value_signals"] = sig
     kunglao_log.emit(ws, actor="rho_checkpoint", action="rho_checkpoint",
                      detail=json.dumps(sig, sort_keys=True))
