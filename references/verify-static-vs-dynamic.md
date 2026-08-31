@@ -25,3 +25,5 @@ Re-running a worker-specified tool + inputs is VERIFICATION (orchestrator's job)
 ## Orchestrator-authored composite notes
 
 Orchestrator may write composite notes (synthesis) but they MUST pass `<malware-veri-notes>/scripts/verify-note.py` (independent verifier subagent). No self-stamping.
+
+recall_useful: pending

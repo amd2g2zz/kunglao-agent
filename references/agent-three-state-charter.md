@@ -116,3 +116,5 @@ failure_analysis outcome)决定,不由 orchestrator 自行声明。
 - `scripts/ask_for_direction_gate.py` — Type A/B/D/E 检测 + plan-stall
 - `openspec/changes/issue-447-three-state-charter/` — 完整 spec
 - `openspec/changes/issue-497-decision-grammar-v2/` — v2 校准 spec
+
+recall_useful: pending

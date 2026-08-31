@@ -107,3 +107,5 @@ $ python scripts/anomaly_detector.py tests/_fixtures/workspace --json
 - `templates/fact-frontmatter.md` — schema_rev bumped to 2 (consistency)
 - Issue #663 — origin discussion
 - #358 P4 v0.2 batch — re-library gap-fill will grow the baseline (planned)
+
+recall_useful: pending

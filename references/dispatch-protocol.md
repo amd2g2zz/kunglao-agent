@@ -86,3 +86,5 @@ gate 解析失败时:
 - `scripts/priority_ratio.py` — 能力卡纯判据 + strategy novelty 消费(#496)
 - `openspec/changes/issue-452-dispatch-protocol/` — 完整 spec/design
 - `openspec/changes/issue-496-decision-teeth/` — 决策上牙 spec/design
+
+recall_useful: pending

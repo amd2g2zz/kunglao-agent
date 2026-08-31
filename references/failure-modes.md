@@ -56,3 +56,5 @@ python scripts/progress_report.py <ws> && \
 See `failure-modes-state.md` § "Implementation-Bug Class" for script-level bug
 patterns (state drift, race conditions, schema mismatch, phantom entries).
 These complement the F1-F18 LLM-behavior taxonomy.
+
+recall_useful: pending

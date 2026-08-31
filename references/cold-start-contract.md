@@ -126,3 +126,5 @@ dynamic analysis — switch KUNGLAO_CHANNEL to vmr/ssh/docker/adb").
 Execution layer: vmr-shell skill (snapshots), ssh-mcp (`npm i -g ssh-mcp`;
 run-command / sftp-upload / sftp-download) with CLI ssh fallback; docker
 and adb flow through the existing skill layer.
+
+recall_useful: pending

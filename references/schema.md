@@ -135,3 +135,5 @@ list of `references/machine_check_map.yaml` AND matches the fact's `boundary_typ
 enforcement: `kunglao_verify.check_machine_check_contract` /
 `machine_check_gate` / `verify()` L2-CONFIRMED gate (failure → overall=PARTIAL +
 warning `MACHINE_CHECK_FAILED`).
+
+recall_useful: pending

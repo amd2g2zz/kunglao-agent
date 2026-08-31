@@ -54,6 +54,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `priority.py` | DEPRECATED weighted dispatch ranker (#499; authority `priority_ratio.py`, removal #446) | lib, tests |
 | `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4); #823 A3 feed-side terms behind KUNGLAO_VALUE_ALGO | lib(3), tests |
 | `value_config.py` | AB-VALUE experiment flag KUNGLAO_VALUE_ALGO (#823) — fail-loud arm switch; off = byte-identical dev behavior | lib(4), tests |
+| `relib_audit.py` | re-library 审查器 (#817) — 孤儿/tracker 残留/声明行缺失三类检查 + quarantine 可逆移动 + 质量度量; _INDEX.yaml pin 契约(改库必 re-pin) | hooks, tests |
 | `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |
 | `hook_activation.py` | THE canonical hook registration entry (#445): register_hooks/--wire-up + post-write self-check + tier activation | hooks, CLI, lib(6), tests |

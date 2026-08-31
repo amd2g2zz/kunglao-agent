@@ -56,3 +56,5 @@ during S3 hardening — distinct failure modes where the code itself is wrong.
 2. **Schema contract check**: script output fields match declared schema keys exactly
 3. **Phantom reference check**: every hook/gate referenced in paused/active lists exists in the canonical registry
 4. **Race condition check**: state files that undergo read-modify-write have no concurrent writer paths
+
+recall_useful: pending

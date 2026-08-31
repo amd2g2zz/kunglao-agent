@@ -57,3 +57,5 @@
    - the relevant `mechanisms-status.md` row (PENDING → implemented).
 4. Run `uv run pytest tests/test_mechanisms_retirement.py -q` — the
    ledger contract tests must remain green.
+
+recall_useful: pending

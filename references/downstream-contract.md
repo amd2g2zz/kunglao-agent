@@ -27,3 +27,5 @@ If you ship a Claude skill that issues x64dbg MCP calls (or Frida MCP / rev-frid
 ## Modules available (descriptive — you and workers choose when; see DESIGN §6)
 
 sample-class detection (DIE) · static RE (ghidra-malware/re/light, mcp__ghidra__*, pefile-signature, mal-recon) · dynamic RE **on VM only** (malware-framework Qiling first, rev-frida, mcp__x64dbg__connect_remote, vmr-shell last) — see Hard prohibition #5 + `references/dynamic-re-tool-priority.md` for the host-vs-VM channel split · memory dump (mcp__volatility__*) · verify (malware-veri-notes) · verdict (verdict-scorer agent, optional post-convergence).
+
+recall_useful: pending
