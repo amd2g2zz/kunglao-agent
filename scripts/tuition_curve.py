@@ -3,8 +3,8 @@
 """tuition_curve.py — #823-P4 学费曲线聚合器 + 座舱 V/D/ETA 数据面。
 
 全部离线：只消费 ledger（rho_pair 结算行）与 runs/mission_ledger.yaml。
-cost 代理边界（proposal 诚实声明）：rho_pair 行无任务级成本字段，取
-duration_ms 为代理，缺失行不入样；stratum 暂固定 "default"。
+cost 口径（#873 起）：rho_pair 行携带真实 cost（cost_events 最新
+amount，会话累计口径）；无 cost 字段的行不入样。stratum 暂固定 "default"。
 """
 from __future__ import annotations
 
@@ -13,6 +13,37 @@ from pathlib import Path
 
 _LEDGER = "runs/logs"
 _WINDOW = 5
+
+
+COST_EVENTS = "cost_events.jsonl"
+HARD_CAP_DEFAULT = 50.0
+
+
+def cost_state(ws, hard_cap: float = HARD_CAP_DEFAULT) -> dict:
+    """cost_events.jsonl → {"spent","remaining","latest"}（#873 缺口2/3）。
+
+    文件缺失/空 = 零花销；坏行跳过。remaining = hard_cap − spent（下限 0）。
+    """
+    ws = Path(ws)
+    spent = 0.0
+    latest = None
+    p = ws / COST_EVENTS
+    if p.exists():
+        for line in p.read_text(encoding="utf-8",
+                                errors="replace").splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            amt = row.get("amount")
+            if isinstance(amt, (int, float)):
+                spent += float(amt)
+                latest = float(amt)
+    return {"spent": round(spent, 4),
+            "remaining": round(max(hard_cap - spent, 0.0), 4),
+            "latest": latest}
 
 
 def missions_from_ledger(ws):
@@ -38,11 +69,11 @@ def missions_from_ledger(ws):
                     continue
             if not isinstance(d, dict) or d.get("z") is None:
                 continue
-            dur = r.get("duration_ms")
-            if dur is None:
-                continue
+            cost = d.get("cost")
+            if cost is None:
+                continue  # #873: 无真实 cost 的行不入样（duration 代理已废）
             rows.append({"stratum": "default", "ordinal": len(rows),
-                         "cost": float(dur),
+                         "cost": float(cost),
                          "passed": float(d["z"]) >= 1.0})
     return rows
 
@@ -119,11 +150,15 @@ def cockpit_summary(ws):
     slope = _slope(hist[-_WINDOW:])
     eta = ((total_w - v) / slope) if slope > 0 else None
     recs = missions_from_ledger(ws)
+    cs_cost = cost_state(ws)
     return {"v": v, "d_slope": round(slope, 6),
             "eta_checkpoints": eta, "total_weight": total_w,
             "answered": sum(1 for p in pqs if p.get("state") == "answered"),
             "blocked": sum(1 for p in pqs if p.get("state") == "blocked"),
             "unattempted": sum(1 for p in pqs
                                if p.get("state") == "unattempted"),
+            "cost": cs_cost["latest"],
+            "burn": {"spent": cs_cost["spent"],
+                     "remaining": cs_cost["remaining"]},
             "tuition": {"got_cheaper": got_cheaper(recs, "default"),
                         "n_missions": len(recs)}}

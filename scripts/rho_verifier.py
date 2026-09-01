@@ -149,13 +149,37 @@ def sample_and_pair(ws, z=None):
     if z is None and mission and mission.get("n_pqs") and \
             mission["n_answered"] == mission["n_pqs"]:
         z = 1.0
+    # #873: rho_pair 携带真实 cost——cost_events.jsonl 最新 amount
+    # （会话累计口径，与 cost_gate 解析一致）。缺源时置 None 不阻断采样；
+    # 学费曲线只认有 cost 的行（duration 代理已废）。
+    try:
+        from tuition_curve import cost_state
+        cost = cost_state(ws)["latest"]
+    except Exception:  # noqa: BLE001 — cost 缺源不阻断采样
+        cost = None
     kunglao_log.emit(
         Path(ws), actor="rho_verifier", action="rho_pair",
         detail=json.dumps({"rho": out["rho"], "z": z,
                            "backend": out["backend"],
                            "level": out.get("level"),
-                           "lexical": out.get("lexical")},
+                           "lexical": out.get("lexical"),
+                           "cost": cost},
                           ensure_ascii=False))
+    # #873: per-checkpoint 座舱持久化 — V/D/ETA + burn 面与 rho_pair 同节奏
+    # 落账，座舱渲染/学费重放可仅凭 ledger 离线重建趋势。shadow 持久化
+    # 失败不阻塞采样面（fail-open），与 rho_pair 的传播语义分层。
+    try:
+        import cost_gate
+        import tuition_curve
+        cs = tuition_curve.cockpit_summary(Path(ws))
+        events = cost_gate.load_events(Path(ws))
+        kunglao_log.emit(
+            Path(ws), actor="rho_verifier", action="cockpit_sample",
+            detail=json.dumps({**cs, "cost_spent": cost_spent,
+                               "n_cost_events": len(events)},
+                              ensure_ascii=False, default=str))
+    except Exception:  # noqa: BLE001 — 持久化永不破坏采样
+        pass
     out["z"] = z
     return out
 

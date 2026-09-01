@@ -801,6 +801,8 @@ _DEPLOYED_WIRING = (
     ("PostToolUse", "Agent", "state_anchor.py"),
     ("PostToolUse", "Bash", "violation_capture.py"),
     ("PostToolUse", "Bash", "bash_fact_guard.py"),  # #809 Post wiring
+    ("PostToolUse", "Edit|Write|MultiEdit|Agent",
+     "cost_input_capture.py"),  # #873 cost 输入捕获
     ("Stop", "", "completion_gate.py"),
 )
 
@@ -1026,6 +1028,11 @@ def register_hooks(workspace: Path | None = None,
     # 响亮提示。RECORDER+signal 姿态（fail-open，永不打断 Bash）；裁决权
     # 仍在 write_guard 的结构门，本 face 负责"盲区不再无声"。
     post, added = _ensure(post, "Bash", "bash_fact_guard.py")
+    count += added
+    # cost_input_capture (#873): PostToolUse 成本输入捕获——COST WARNING/
+    # CRITICAL 文本 → cost_events.jsonl（recorder，fail-open 永不打断）。
+    post, added = _ensure(post, "Edit|Write|MultiEdit|Agent",
+                          "cost_input_capture.py")
     count += added
 
     # completion_gate (#55): the code-owned completion gate. Stop hook — fires

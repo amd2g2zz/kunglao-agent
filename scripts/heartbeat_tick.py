@@ -336,6 +336,19 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:  # noqa: BLE001 — breaker failure must not fail the tick
         breaker_rc = None
 
+    # #873: per-checkpoint 座舱采样——V/D/ETA + cost/burn 落账。
+    # mission_ledger 缺失的旧 workspace 跳过（零噪声）；异常 fail-open。
+    try:
+        if (ws / "runs" / "mission_ledger.yaml").exists():
+            from tuition_curve import cockpit_summary
+            kunglao_log.emit(
+                Path(ws), actor="heartbeat_tick",
+                action="cockpit_sample",
+                detail=json.dumps(cockpit_summary(ws),
+                                  ensure_ascii=False))
+    except Exception:  # noqa: BLE001 — cockpit 采样永不打断 tick
+        pass
+
     action = report["action_taken"] or "(EMPTY — must be filled: what was dispatched/verified/resolved/reactivated)"
     print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | heartbeat_rc={rc_hb} | {hb}")
     if first_failure is not None:
