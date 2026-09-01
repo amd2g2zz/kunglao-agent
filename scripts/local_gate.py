@@ -7,8 +7,8 @@
 自定位仓库根并 os.chdir，任何 cwd 下行为一致。
 
 用法（前台/后台等价）：
-    python <worktree>/scripts/local_gate.py            # 全量：pytest+ext-scan+manifest
-    python <worktree>/scripts/local_gate.py --skip-pytest  # 只跑 ext-scan+manifest
+    python <worktree>/scripts/local_gate.py            # 全量：pytest+discovery-gate+ext-scan+manifest
+    python <worktree>/scripts/local_gate.py --skip-pytest  # 只跑 gate+ext-scan+manifest
 Exit：任一步失败非零。输出固定追加到 stdout（后台重定向友好）。
 """
 from __future__ import annotations
@@ -40,6 +40,9 @@ def main() -> int:
     if not args.skip_pytest:
         if _run([sys.executable, "-m", "pytest", "tests", "-q"]) != 0:
             failures.append("pytest")
+    qg = ROOT / "devkit" / "quality_gates.py"
+    if _run([sys.executable, str(qg), "9", "--quiet"]) != 0:
+        failures.append("discovery-gate")
     if _run([sys.executable, str(ROOT / "tools" / "ext-scan.py")]) != 0:
         failures.append("ext-scan")
     dm = ROOT / "scripts" / "deploy_manifest.py"

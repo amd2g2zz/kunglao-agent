@@ -1,0 +1,33 @@
+# devkit/.discovery-gate-baseline.txt — #866 discovery-face debt ledger
+# One repo-relative tools/ CLI source key per line (retirement-gate ratchet
+# shape). These are EXISTING CLIs that predate the #866 gate; their
+# disposition (register tools/_INDEX.yaml + teach in skills/ or references/,
+# or retire) belongs to PR 866-b. The ratchet only shrinks: a NEW unregistered
+# CLI can never be added here — the gate turns red on it instead.
+tools/auxiliary/audit_legacy_proven.py	# existing debt — disposition in #866-b
+tools/auxiliary/capture_golden.py	# existing debt — disposition in #866-b
+tools/auxiliary/measure_blind_coverage.py	# existing debt — disposition in #866-b
+tools/auxiliary/measure_cold_start.py	# existing debt — disposition in #866-b
+tools/auxiliary/sanitize.py	# existing debt — disposition in #866-b
+tools/ghidra/ghidra_diff.py	# existing debt — disposition in #866-b
+tools/ghidra/ghidra_job.py	# existing debt — disposition in #866-b
+tools/ghidra/run_ghidra_postscript.py	# existing debt — disposition in #866-b
+tools/pipelines/build_evidence_index.py	# existing debt — disposition in #866-b
+tools/static/apk_mem_gate.py	# existing debt — disposition in #866-b
+tools/static/baksmali_index.py	# existing debt — disposition in #866-b
+tools/static/binary-sweep.py	# existing debt — disposition in #866-b
+tools/static/c_normalize.py	# existing debt — disposition in #866-b
+tools/static/call-site-args.py	# existing debt — disposition in #866-b
+tools/static/die_probe.py	# existing debt — disposition in #866-b
+tools/static/disasm_constant_check.py	# existing debt — disposition in #866-b
+tools/static/disasm_dump.py	# existing debt — disposition in #866-b
+tools/static/extract-syscalls.py	# existing debt — disposition in #866-b
+tools/static/go-buildinfo-carve.py	# existing debt — disposition in #866-b
+tools/static/opaque_pred.py	# existing debt — disposition in #866-b
+tools/static/overlay_scan.py	# existing debt — disposition in #866-b
+tools/static/pe_analyze.py	# existing debt — disposition in #866-b
+tools/static/shellcode_scan.py	# existing debt — disposition in #866-b
+tools/static/stack-strings.py	# existing debt — disposition in #866-b
+tools/static/web_gitnexus_demo.py	# existing debt — disposition in #866-b
+tools/static/yara-gen.py	# existing debt — disposition in #866-b
+tools/static/yara-scan.py	# existing debt — disposition in #866-b
