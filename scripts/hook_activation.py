@@ -477,8 +477,13 @@ def build_hook_entry(hook_dir: Path, hook_file: str,
     # legacy (undeployed) callers fall back to the installing skill dir.
     project_root = Path(project).resolve() if project else Path(hook_dir).parent
     p = (Path(hook_dir) / hook_file).as_posix()
+    # #811: hooks inherit the invoking shell's locale — a GBK console turns
+    # every encoding-less IO in the hook into a decode bomb. PYTHONUTF8=1
+    # (PEP 540) pins UTF-8 for the whole subprocess tree, covering legacy
+    # call sites before the #811 explicit-encoding sweep reaches them.
     hooks = [{"type": "command",
-              "command": f"uv run --project {project_root.as_posix()} {p}"}]
+              "command": (f"PYTHONUTF8=1 "
+                          f"uv run --project {project_root.as_posix()} {p}")}]
     if matcher is None:
         return {"hooks": hooks}
     return {"matcher": matcher, "hooks": hooks}
@@ -1148,4 +1153,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # #811 入口 UTF-8 保险
+    force_utf8()
     sys.exit(main())

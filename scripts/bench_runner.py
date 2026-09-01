@@ -108,7 +108,7 @@ def _default_executor(spec: dict) -> dict:
              "--permission-mode", "acceptEdits",
              "--max-turns", str(spec["max_turns"])],
             timeout=spec["wall_cap_s"], env=env,
-            capture_output=True, text=True, check=False)
+            capture_output=True, text=True, check=False, encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired:
         return {"outcome": "timeout", "transcript": None,
                 "compaction_count": None,
@@ -180,4 +180,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # #811 入口 UTF-8 保险
+    force_utf8()
     sys.exit(main())

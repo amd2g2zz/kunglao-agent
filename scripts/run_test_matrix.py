@@ -50,7 +50,7 @@ def _run(cmd: list[str], cwd: Path, timeout: int, env: dict | None = None) -> tu
     start = time.monotonic()
     try:
         r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                            timeout=timeout, env=full_env)
+                            timeout=timeout, env=full_env, encoding="utf-8", errors="replace")
         duration = time.monotonic() - start
         return r.returncode, r.stdout, r.stderr, duration
     except subprocess.TimeoutExpired as e:
@@ -531,4 +531,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # #811 入口 UTF-8 保险
+    force_utf8()
     sys.exit(main())

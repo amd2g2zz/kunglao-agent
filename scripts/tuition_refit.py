@@ -22,7 +22,7 @@ _PLATT_B_BOUNDS = (-5.0, 5.0)   # PARAM_SPEC platt_b
 def _git_sha() -> str:
     try:
         r = subprocess.run(["git", "rev-parse", "HEAD"],
-                           capture_output=True, text=True, timeout=10)
+                           capture_output=True, text=True, timeout=10, encoding="utf-8", errors="replace")
         return (r.stdout or "").strip() or "unknown"
     except Exception:  # noqa: BLE001 — sha 缺失不阻塞提案
         return "unknown"

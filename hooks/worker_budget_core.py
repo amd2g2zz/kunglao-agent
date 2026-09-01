@@ -140,7 +140,7 @@ def _run_py(args, cwd=None):
         return subprocess.run(
             [sys.executable] + args,
             capture_output=True, text=True, timeout=20,
-            cwd=cwd,
+            cwd=cwd, encoding="utf-8", errors="replace",
         )
     except (subprocess.SubprocessError, OSError):
         return None

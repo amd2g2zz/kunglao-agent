@@ -103,7 +103,7 @@ def _probe_ssh(host: str | None = None, port: int | None = None) -> tuple[bool, 
     cmd = ["ssh", "-p", str(port), "-o", "BatchMode=yes",
            "-o", "ConnectTimeout=5", host, "true"]
     try:
-        r = subprocess.run(cmd, timeout=10, capture_output=True, text=True)
+        r = subprocess.run(cmd, timeout=10, capture_output=True, text=True, encoding="utf-8", errors="replace")
     except FileNotFoundError:
         return False, "ssh binary not found"
     except subprocess.TimeoutExpired:
@@ -118,7 +118,7 @@ def _probe_ssh(host: str | None = None, port: int | None = None) -> tuple[bool, 
 def _probe_docker() -> tuple[bool, str]:
     try:
         r = subprocess.run(["docker", "version"], timeout=10,
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
     except FileNotFoundError:
         return False, "docker binary not found"
     except subprocess.TimeoutExpired:
@@ -133,7 +133,7 @@ def _probe_docker() -> tuple[bool, str]:
 def _probe_adb() -> tuple[bool, str]:
     try:
         r = subprocess.run(["adb", "devices"], timeout=10,
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
     except FileNotFoundError:
         return False, "adb binary not found"
     except subprocess.TimeoutExpired:

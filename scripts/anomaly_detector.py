@@ -558,4 +558,6 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # #811 入口 UTF-8 保险
+    force_utf8()
     sys.exit(main())
