@@ -146,14 +146,36 @@ def review(ws, verdict, stage_id, reason="", new_stages=None) -> dict:
     return _commit_review(ws, data, stage, verdict, reason, new_stages)
 
 
+def _stages_diff(old_stages: list, new_stages: list) -> dict:
+    """Structural diff by stage id — the #879 lineage face of a replan
+    (topology change = lifecycle event + edge, never a silent rewrite).
+    added/removed: ids only present on one side; changed: same id, different
+    content (dict equality on the normalized stage maps)."""
+    old_by_id = {s.get("id"): s for s in (old_stages or []) if s.get("id")}
+    new_by_id = {s.get("id"): s for s in (new_stages or []) if s.get("id")}
+    return {
+        "added": sorted(new_by_id.keys() - old_by_id.keys()),
+        "removed": sorted(old_by_id.keys() - new_by_id.keys()),
+        "changed": sorted(
+            i for i in (old_by_id.keys() & new_by_id.keys())
+            if old_by_id[i] != new_by_id[i]),
+    }
+
+
 def _commit_review(ws, data, stage, verdict, reason, new_stages) -> dict:
     """裁决三落盘：yaml reviews[] + runs/plan-review-<ts>.md + ledger 事件。"""
     ts = _utc_now()
     entry = {"ts": ts, "verdict": verdict, "stage_id": stage["id"],
              "reason": reason}
+    stages_diff = None
     if verdict == "replan":
+        stages_diff = _stages_diff(data.get("stages") or [], new_stages or [])
         data["stages"] = new_stages
         entry["stages_replaced"] = True
+        # #879: the plan_review event (and the durable review history)
+        # carries the structural diff so the re-planned chain stays
+        # followable ("re-plan 改拓扑时链不断").
+        entry["stages_diff"] = stages_diff
     data.setdefault("reviews", []).append(entry)
     p = ws / ARTIFACT
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -169,7 +191,8 @@ def _commit_review(ws, data, stage, verdict, reason, new_stages) -> dict:
     kunglao_log.emit(ws, actor="orchestrator", action="plan_review",
                      claim=stage["id"], artifact=doc.name,
                      detail=json.dumps({"verdict": verdict,
-                                        "reason": reason},
+                                        "reason": reason,
+                                        "stages_diff": stages_diff},
                                        ensure_ascii=False))
     return {"ok": True, "violations": []}
 
