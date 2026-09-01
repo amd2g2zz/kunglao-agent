@@ -149,6 +149,13 @@ PROBES: list[dict] = [
      "severity": "WARN", "short_code": "[stall]", "enabled": True,
      "detail": "#882 backtrack loop: settlements since the last policy "
                "retro (runs/.retro-state.json)"},
+    # ---- #878: the scheduler registry's own health line ------------------
+    {"id": "mechanism_health", "dimension": "moving",
+     "probe": "probe_mechanism_health", "threshold": None,
+     "unit": "tick", "staleness_budget": "1 tick",
+     "severity": "WARN", "short_code": "[mech]", "enabled": True,
+     "detail": "#878 scheduler registry: any mechanism whose last run "
+               "failed (last_rc not in {0, null}) — runs/.mechanisms-state.json"},
 ]
 
 
@@ -339,6 +346,23 @@ def probe_backtrack_lag(ws: Path, entry: dict) -> dict:
                        f"backtrack lag {l} > {threshold} settlements "
                        "since the last policy retro")
     return _detail(entry, True, f"backtrack lag {l} ok")
+
+
+def probe_mechanism_health(ws: Path, entry: dict) -> dict:
+    """#878 moving probe: scheduler-registered mechanisms must run clean —
+    any last_rc outside {0, null} flags the failing mechanism by name
+    (见红即知看哪个文件: runs/.mechanisms-state.json). Fail-open like every
+    probe: a missing/unreadable state file is "no fault evidence", not down."""
+    try:
+        from mechanism_scheduler import mechanisms_health
+        bad = mechanisms_health(ws)
+    except Exception as exc:  # noqa: BLE001 — a probe never kills the tick
+        return _detail(entry, True,
+                       f"mechanism health unavailable (fail-open): {exc}")
+    if bad:
+        return _detail(entry, False,
+                       "mechanism failure(s): " + ", ".join(bad[:4]))
+    return _detail(entry, True, "all scheduler mechanisms clean")
 
 
 def _make_run_probe(registry: list[dict]):
@@ -579,6 +603,15 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         backtrack = {"backtrack_lag": 0, "unattributed_rate": 0.0,
                      "pending_proposals": 0}
 
+    # #878: mechanisms health section — per registered mechanism
+    # {last_run, next_eligible, drops}. Fail-open like the trio above: the
+    # registry face degrades to an empty section, never breaks the snapshot.
+    try:
+        from mechanism_scheduler import mechanisms_view
+        mech_rows = mechanisms_view(ws)
+    except Exception:  # noqa: BLE001 — 快照永不打断 tick
+        mech_rows = []
+
     elapsed = {"ticks": pq["elapsed_ticks"], "started_ts": pq["started_ts"]}
     tick = int(prev.get("tick", 0)) + 1 if prev else max(1, pq["elapsed_ticks"])
     state_since = now_iso = utc_now()
@@ -620,6 +653,7 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         "activity": {"events_recent": activity["events_recent"],
                      "spark_count": activity["spark_count"]},
         "backtrack": backtrack,
+        "mechanisms": mech_rows,
         "flash": flash,
         "audit": {"age_min": audit_age_min,
                   "source": "runs/.hooks-selfcheck.json"},
