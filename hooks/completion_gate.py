@@ -62,6 +62,9 @@ ORACLE_FILE = "task-oracle.yaml"
 EXIT_NOTES_DUE = 5
 # #834: notes structural-discrimination refusal (same shim-face-only rule).
 EXIT_NOTES_FAKE = 6
+# #826: summary structural-contract refusal (uncertainty must not evaporate
+# in the user-facing transcription).
+EXIT_SUMMARY_FAKE = 7
 # #831: ledger-anchored second-stop sanction event type (ledger CONTRACT line
 # format identical to rollup._append_ledger: json.dumps ensure_ascii=False).
 SECOND_STOP_EVENT = "second_stop_pass"
@@ -299,6 +302,24 @@ def process_event(payload: dict) -> int:
             print(json.dumps({"decision": "block", "reason": reason},
                              ensure_ascii=False))
             return EXIT_NOTES_FAKE
+        # #826: the user-facing summary must not evaporate uncertainty —
+        # completion vocabulary without a provisional section, unconveyed
+        # uncertain facts, and unanswered primary questions are refused.
+        # Double-caged FAIL_OPEN exactly like NOTES_FAKE above.
+        try:
+            with scripts_on_path():
+                import summary_discriminator as sd
+            verdict = sd.check(ws / "summary.md", ws / "facts")
+        except Exception:  # noqa: BLE001 — FAIL_OPEN: never deadlock on summary
+            verdict = None
+        if verdict is not None and not verdict.get("ok", True):
+            detail = "; ".join(verdict.get("violations", []))
+            reason = ("SUMMARY_FAKE: summary fails structural contract "
+                      "(#826) - uncertainty evaporating in transcription: "
+                      f"{detail}")
+            print(json.dumps({"decision": "block", "reason": reason},
+                             ensure_ascii=False))
+            return EXIT_SUMMARY_FAKE
         return 0  # PASS — let the session end
     # non-zero → block termination with the unclosed-items reason
     print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
