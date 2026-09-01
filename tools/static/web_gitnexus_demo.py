@@ -39,10 +39,11 @@ import sys
 
 # UTF-8 stdout convention (#317): non-ASCII detail strings must survive a
 # GBK console without a UnicodeEncodeError traceback.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
 import subprocess
 import sys
 import tempfile
@@ -420,4 +421,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    ensure_utf8_stdout()
     sys.exit(main())

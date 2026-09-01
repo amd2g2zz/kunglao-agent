@@ -41,6 +41,12 @@ Usage:
   python tools/validate_index.py my-index.yaml
 """
 from __future__ import annotations
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+
 
 import argparse
 import sys
@@ -49,10 +55,6 @@ from pathlib import Path
 # UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
 # decode(errors="replace")) must not crash a GBK console — stdout unified on
 # UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 
 # ---- #729 annotation gate constants ------------------------------------
 # Rule A — LEGACY_UNANNOTATED whitelist (29 entries without provider blocks).
@@ -349,4 +351,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    ensure_utf8_stdout()
     sys.exit(main())

@@ -231,8 +231,30 @@ def test_red4c_toolchain_fixes_dexdc_toolmeta_official_url():
 
 
 def test_red4d_utf8_stdout_guard_present():
+    """#863 委托化后的结构绊线：guard 不再内联 reconfigure，而是经
+    tools/_lib/stdio.py 单体在 CLI 入口触发。AST 断言 import 与
+    __main__ 入口调用同时成立；import 期不得触发（纯净性合同同
+    test_ext_index.TestImportPurity）。"""
+    import ast
     src = (TOOLS_STATIC / "dexdc_scanner.py").read_text(encoding="utf-8")
-    assert "reconfigure" in src and "utf-8" in src
+    tree = ast.parse(src)
+    imported = any(
+        isinstance(n, ast.ImportFrom) and n.module == "_lib.stdio"
+        and any(a.name == "ensure_utf8_stdout" for a in n.names)
+        for n in ast.walk(tree))
+    assert imported, "dexdc_scanner must import the shared stdio guard"
+    entry_calls = []
+    for n in tree.body:
+        if (isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
+                and isinstance(n.test.left, ast.Name)
+                and n.test.left.id == "__name__"):
+            entry_calls = [
+                s for s in n.body
+                if isinstance(s, ast.Expr) and isinstance(s.value, ast.Call)
+                and isinstance(s.value.func, ast.Name)
+                and s.value.func.id == "ensure_utf8_stdout"]
+    assert entry_calls, (
+        "guard must fire on CLI entry (__main__ block), never at import")
 
 
 def test_red4e_static_index_catalog_row():

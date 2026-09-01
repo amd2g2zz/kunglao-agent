@@ -90,6 +90,9 @@ assets:
     - tools/ghidra/GhidraScanPointer.java
     - tools/ghidra/run_ghidra_postscript.py
     - tools/_lib/lib_disasm.py
+    # #863: shared tools/ CLI UTF-8 stdio guard (enforcement-by-mechanism)
+    - tools/_lib/stdio.py
+
     # #538: shared facts/_INDEX schema+parser (update_index + digest_build)
     - tools/_lib/index_schema.py
     # #538: workspace carrier manifest writer (resume #466 diff source)
