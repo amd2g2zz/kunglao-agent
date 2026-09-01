@@ -97,6 +97,7 @@
 | `re-library/awesome-re-resources.md` | resources | Curated RE resource repos, tools, tutorials. | When seeking external learning materials or specialized utilities. |
 | `re-library/detection-engineer.md` | malware | Transforming analysis findings into detection content. | When writing detection signatures or hunting queries. |
 | `re-library/field-notes.md` | field-notes | Binary type quirks, anti-debug bypasses, specialized patterns. | After triage, when diving into specific binary type analysis. |
+| `re-library/jsvmp-triage.md` | jsvmp-triage | JSVMP/VMP bytecode-VM triage knowledge card (#884): three-feature thresholds (F1 big array / F2 dispatch loop / F3 semantic-free case bodies anchored on case-table presence), three-of-two verdict + confidence tiers, trace/OPCODE_MAP/replay methodology outline. | When a deobfuscated web bundle may hide a bytecode VM — read with the `jsvmp-triage` CLI verdict (tools/web/jsvmp_triage.py) to decide AST vs instruction-trace. |
 | `re-library/languages-compiled.md` | languages | Reversing compiled languages beyond C: Go, Rust, Swift, etc. | When encountering a non-C compiled binary. |
 | `re-library/languages-go.md` | languages | End-to-end Go binary reversing. | When analyzing a statically-linked Go binary. |
 | `re-library/languages-platforms.md` | languages | Platform/framework-specific RE (Android, Electron, SGX, etc.). | When reversing binaries tied to specific platforms/frameworks. |

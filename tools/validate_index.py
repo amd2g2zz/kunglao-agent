@@ -4,7 +4,7 @@
 Validates the machine-readable tool index against the contract:
 
   name:         unique, non-empty (lowercase kebab-case tool id)
-  category:     one of crypto|static|ghidra|dynamic|auxiliary|pipelines
+  category:     one of crypto|static|ghidra|dynamic|auxiliary|pipelines|web
                 (#340: category id == tools/<category>/ directory name; the
                 only dir-less exception is dynamic — external MCP capability)
   capability:   "<domain>:<operation>" tag (e.g. crypto:decode), non-empty
@@ -96,19 +96,19 @@ _CAPABILITY_TAGS = frozenset({
     # aux: — seeded from the #340 category contract test (auxiliary must be
     # a legal category with at least one routable capability tag)
     "aux:sanitize",
-    # web: — coordinated with #728 merge (js_unbundle / js_deobfuscate)
-    # Note: wakaru-unbundle produces js:unbundle; webcrack-deobfuscate produces js:deobfuscate
-    # These are the canonical routing tags for JS recovery pipelines.
+    # web: — #728 (js recovery pipelines) + #884 (JSVMP/VMP triage CLI)
     "js:deobfuscate",
     "js:call-graph",      # #751: gitnexus over wakaru/webcrack output
     "js:semantic-query",  # #751: graph RAG queries over a js source tree
     "js:unbundle",
+    "web:triage",         # #884: three-feature JSVMP/VMP triage verdict
     # crypto: — legitimate routing tag for the crypto-tool family
     "crypto:decode",
 })
 # ---- end annotation gate constants -------------------------------------
 
-CATEGORIES = ("crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines")
+CATEGORIES = ("crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines",
+              "web")
 TIERS = ("T1", "T2", "T3")
 COST_TIERS = ("probe", "cheap", "deep")
 # #692 WP1: closed precondition vocabulary (design D2) + quality tiers.
