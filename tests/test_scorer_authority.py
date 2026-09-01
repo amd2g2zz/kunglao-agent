@@ -45,6 +45,10 @@ LIVE_PATH_SURFACES = (
     "hooks/worker_budget.py",
     "scripts/heartbeat_loop_prompt.py",
     "scripts/convergence_check.py",
+    # #867 closeout: the kicker's resume prompt prescribes the scorer, and
+    # evals pin expected orchestrator behavior — both are instruction faces.
+    "scripts/external_kicker.py",
+    "evals/evals.json",
     "skills/kunglao-agent/SKILL.md",
     "rules/kunglao-convergence-loop.md",
     "references/decision-rights.md",
