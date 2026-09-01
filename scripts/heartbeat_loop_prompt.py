@@ -54,6 +54,8 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
 0. python {tk} {ws}              # v1.9.38 one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check
                                  # (all mechanical steps folded into 1 command; manual handling only when exit=1)
                                  # oracle_registered=false in the report → run the Phase 0 task-oracle.yaml backfill now
+                                 # mechanisms face: the tick schedules every registered mechanism (mechanisms.yaml, #878);
+                                 # `python scripts/mechanism_scheduler.py {ws} --plan` answers "what runs when"
 1. Read the runs/.heartbeat-tick.json report: exit=0 → only cognitive steps remain (ping active workers / handle finished workers)
 2. Smart-ping every active worker (§6.1a): SendMessage "[ping HH:MM] step? stuck? eta?"
    → append structured replies to runs/.ping-log.jsonl
