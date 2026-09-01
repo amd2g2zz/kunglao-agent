@@ -76,6 +76,7 @@ assets:
     - tools/crypto/__init__.py
     - tools/crypto/algorithms.py
     - tools/crypto/crypto-tool.py
+    - tools/web/jsvmp_triage.py   # #884: web category, JSVMP triage CLI
     - tools/static/disasm_constant_check.py
     - tools/ghidra/DecompileFunctions.java
     # #308: Ghidra async job protocol + binary diff (merged after #320 snapshot)

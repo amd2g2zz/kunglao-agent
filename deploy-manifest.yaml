@@ -115,7 +115,7 @@ files:
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
-    sha256: 2adc0f8d640cc0c155f9b73d7f5e591bf5999f575161eb31f6ee6be056f1cdae
+    sha256: fb83d7ffc5631c0869315d342ddad77f107593bda956091919a9c0c13314be96
   - src: scripts/_entry.py
     dest: .claude/scripts/_entry.py
     kind: scaffold
@@ -392,10 +392,6 @@ files:
     dest: .claude/scripts/intake_promise.py
     kind: scaffold
     sha256: 34f00ba717965b3687526609f56b1885081c4794c2cf57587fe2b5ec0d969f03
-  - src: scripts/jsvmp_triage.py
-    dest: .claude/scripts/jsvmp_triage.py
-    kind: scaffold
-    sha256: 54cdd2cdb7a717de7d53b3701bdf986cfccb6ecdd78a1f6a911204d38b9623cf
   - src: scripts/kunglao-decide.py
     dest: .claude/scripts/kunglao-decide.py
     kind: scaffold
@@ -839,11 +835,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 11cbe7ebe6108f1e6ea57da9794274cc7cbe591d720662b36c030fbd76abaf49
+    sha256: 3048763302984d5f4014fe2d4f5644bb471592fc55022c946137d09482c1914c
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 2e8f8cf273691f9d0c0c32ff3c3c8c164b0ccfdc555bd0b6e224cede26f5ce93
+    sha256: 0f09ab10e198a7436ea16016f5a1b45b59bda51bd8de2fef01c46a11670e279d
   - src: references/agent-three-state-charter.md
     dest: .claude/references/agent-three-state-charter.md
     kind: asset
@@ -972,6 +968,10 @@ files:
     dest: .claude/references/re-library/field-notes.md
     kind: asset
     sha256: 8afaff77a88e61173f7981aa421e775c7ca6447825fcdb41bebb722ef2a18436
+  - src: references/re-library/jsvmp-triage.md
+    dest: .claude/references/re-library/jsvmp-triage.md
+    kind: asset
+    sha256: 179a621ffb5e992ae7474bf48ee840f29a165f803d3828810b0a32f99a54a500
   - src: references/re-library/languages-compiled.md
     dest: .claude/references/re-library/languages-compiled.md
     kind: asset
@@ -1196,6 +1196,10 @@ files:
     dest: .claude/tools/_index-static.md
     kind: asset
     sha256: 44eb974201850d2db2e3556556b6a631230062741955bb891adc6c894aa7f2f9
+  - src: tools/_index-web.md
+    dest: .claude/tools/_index-web.md
+    kind: asset
+    sha256: 2ec793eb4f398b6f73a02ba120223c108facc9cf54b463d3a81f1cffe3b5236e
   - src: tools/_INDEX.ext.map.yaml
     dest: .claude/tools/_INDEX.ext.map.yaml
     kind: asset
@@ -1203,15 +1207,15 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 835e7f8abd5fb872eee83c8026c64ce6c18349138f64b3dfcd452962e2445b8d
+    sha256: 6aa64739d0f0d193dcfede07da38b2cc00b82e27a75c464884145a269c3128ee
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
-    sha256: 297e131e28b2e87b86b3073acc0e42e307cd162bad8d240640991a759c9a6ff8
+    sha256: c30387c5e38bb78c5a87c9ec412d851081d72c8dff14c36184ec3a08a6f6b3b0
   - src: tools/_INDEX.yaml
     dest: .claude/tools/_INDEX.yaml
     kind: asset
-    sha256: 16dfa0d5dc11bb7791ba299cc01092203d4ce0730f811765b2240a4eeedc423c
+    sha256: 8a83cf384313f18b721980f54f344d376e0227a6e30f46f696e128dbbb46a8f4
   - src: tools/_lib/index_schema.py
     dest: .claude/tools/_lib/index_schema.py
     kind: asset
@@ -1439,4 +1443,12 @@ files:
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
-    sha256: 99eb9c56d48c6b172acff6b8c967282f29b5e70892527e2b64b8354caa490c68
+    sha256: d6c3af61a5058c88b81089a7e794ad3192b0030d1aeb1222417d70effaa8424d
+  - src: tools/web/jsvmp_triage.py
+    dest: .claude/tools/web/jsvmp_triage.py
+    kind: asset
+    sha256: 16a424faa3f94176e18a95c77af41262a2fb34fa88e090294753716fe98fdb7a
+  - src: tools/web/README.md
+    dest: .claude/tools/web/README.md
+    kind: asset
+    sha256: c5ee3f7f845f418f6e8b197bcf5e91a96793ef315b034724bb6b47b45db5f14c

@@ -61,6 +61,14 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_8804dcd.json"
 # copied lib_kunglao.py — the #671 self-bootstrap FileNotFoundError'd the
 # regen path after that merge (regen was broken for every doc-touching wave).
 #
+# 2026-09-01 corpus re-pin (#884): references/re-library/jsvmp-triage.md
+# joined the anomaly baseline corpus (re-library/*.md is ingested by
+# anomaly_detector._load_baseline), shifting lexical rarity in the 4th
+# decimal. Same class: DATA drift only, 4 score floats across the 2
+# contradiction cases; channel 1 (baseline decide() == current decide())
+# stays green on all cases. Re-captured via capture_from_git_baseline()
+# (baseline module + current corpus) per the design §5 command.
+#
 # 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web-re-quickref.md
 # joined the anomaly baseline corpus (anomaly_detector._load_baseline ingests
 # re-library/*.md), shifting every lexical rarity score in the 4th decimal. This

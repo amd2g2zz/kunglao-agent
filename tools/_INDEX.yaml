@@ -3,12 +3,13 @@ purpose: >-
   Machine-readable tool index for the kunglao-agent toolshelf. Each entry is one
   tool with its capability tag, execution tier, cost tier, and input/output
   contract. Validated by tools/validate_index.py (issue #283). Human entry
-  points: tools/_INDEX.md (6-category domain index) + tools/_index-<category>.md
+  points: tools/_INDEX.md (7-category domain index) + tools/_index-<category>.md
   (per-category skeletons, progressive disclosure).
 
 # ---- entry schema (machine contract) ---------------------------------------
 #   name:         unique tool id, lowercase kebab-case (e.g. chacha-string-layer)
-#   category:     one of crypto|static|ghidra|dynamic|auxiliary|pipelines (== dir name, #340)
+#   category:     one of crypto|static|ghidra|dynamic|auxiliary|pipelines|web
+#                 (== dir name, #340; web added by #884)
 #   capability:   "<domain>:<operation>" capability tag, e.g. crypto:decode
 #   tier:         T1 static tool | T2 emulation | T3 VM-dynamic
 #   cost_tier:    probe | cheap | deep
@@ -408,3 +409,22 @@ tools:
     cost_hint: {mem_gb: 0.5, time: cheap}
     quality: {js:deobfuscate: high}
 
+
+  # #884 web category: three-feature JSVMP/VMP triage CLI over ALREADY-
+  # DEOBFUSCATED bundles (wakaru/webcrack output). Advisory static heuristic
+  # (#816 adoptee relocated from scripts/ and folded into the standard face);
+  # verdict = three-of-two votes (F1 big consumed array / F2 dispatch-switch
+  # loop / F3 semantic-free case bodies), confidence high(3/3)/medium(2/3).
+  - name: jsvmp_triage
+    category: web
+    capability: web:triage
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: "deobfuscated JS bundle(s) (wakaru/webcrack output) as file paths", output: "JSON verdict per file: vmp_suspected / votes / confidence high|medium|low + per-feature evidence (big consumed array, dispatch switch, semantic-free case-body ratio)"}
+    description: JSVMP three-feature triage CLI
+    when_not: "not a proof of VMP — runtime confirmation requires a single-generation opcode/stack trace (CP3 of the trace methodology); use on already-deobfuscated bundles, not raw minified input"
+    provider: jsvmp-triage
+    produces: [web:triage]
+    requires: []
+    cost_hint: {mem_gb: 0.1, time: cheap}
+    quality: {web:triage: mid}

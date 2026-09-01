@@ -12,6 +12,7 @@
 | dynamic | `_index-dynamic.md` | x64dbg-remote, frida-remote | VM dynamic debugging/runtime analysis (no local directory, MCP-provided) |
 | pipelines | `_index-pipelines.md` | build-evidence-index | evidence index/report pipeline |
 | auxiliary | `_index-auxiliary.md` | sanitize-text, measure-cold-start | auxiliary/miscellaneous tools |
+| web | `_index-web.md` | jsvmp-triage | browser/JS RE tools: JSVMP/VMP bytecode-VM triage (#884) |
 
 | Scenario | Category |
 |---|---|
@@ -21,6 +22,7 @@
 | Runtime dynamic validation (single-step/breakpoints/hooks, VM-only) | dynamic |
 | Evidence registration / index building / report generation | pipelines |
 | Hashing / file metadata / small chores | auxiliary |
+| JSVMP/VMP bytecode-VM triage on deobfuscated web bundles | web |
 
 ## External capabilities (not on this toolshelf, not registered in `_INDEX.yaml`)
 
@@ -40,6 +42,7 @@
 | `_index-dynamic.md` | dynamic | VM dynamic tool contract entries (MCP-provided, same template) | when a worker is dispatched to dynamic-debugging tasks |
 | `_index-pipelines.md` | pipelines | pipelines tool contract entries (same template) | when a worker is dispatched to evidence-registration/report tasks |
 | `_index-auxiliary.md` | auxiliary | auxiliary tool contract entries (same template) | when a worker needs small tasks like hashing/file metadata |
+| `_index-web.md` | web | web tool contract entries (same template) | when a worker is dispatched to JSVMP/VMP triage on web/JS bundles |
 
 ## Top-level tools files
 
@@ -55,6 +58,7 @@
 | File | Category | Purpose | When to read |
 |------|----------|---------|-------------|
 | `crypto/crypto-tool.py` | crypto | 8-algorithm encrypt/decrypt/decode CLI (chacha/xor-add/rolling-xor/lzss/lzma-raw/rsa-unpad/go-byte-transform/va-to-off) | when identifying/trial-decrypting an encryption/encoding/compression layer |
+| `web/jsvmp_triage.py` | web | three-feature JSVMP/VMP triage CLI (three-of-two votes, #884) | when a deobfuscated web bundle may hide a bytecode VM |
 | `auxiliary/audit_legacy_proven.py` | auxiliary | audits legacy PROVEN fact states | when cleaning up old fact states |
 | `pipelines/build_evidence_index.py` | pipelines | evidence index builder (evidence/_index.json + _INDEX.md) | when registering the index after evidence lands |
 | `auxiliary/capture_golden.py` | auxiliary | golden case capture | when updating golden fixtures |

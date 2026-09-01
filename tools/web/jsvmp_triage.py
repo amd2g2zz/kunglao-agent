@@ -13,7 +13,7 @@ eyeball pass. It is NOT proof; runtime trace confirmation stays with the
 operator.
 
 Usage:
-  python scripts/jsvmp_triage.py <file.js> [more.js ...] [--json]
+  python tools/web/jsvmp_triage.py <file.js> [more.js ...] [--json]
 
 Exit 0 always (advisory lint posture, mirrors think_seat).
 """
@@ -24,6 +24,14 @@ import json
 import re
 import sys
 from pathlib import Path
+
+# UTF-8 stdout guard via the shared tools/ _lib (#863), import-pure at
+# module level; the guard itself fires in __main__ only (#476 review L2).
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
 
 MIN_ARRAY_ITEMS = 100          # "hundreds" per methodology; below = noise
 MIN_CASE_COUNT = 8             # dispatch switches have real opcode tables
@@ -82,30 +90,39 @@ def _dispatch(text: str) -> dict | None:
     return best
 
 
-def _semantics_ratio(text: str) -> float:
+def _semantics_ratio(text: str) -> tuple[float, bool]:
     """Share of case-body lines WITHOUT business/env semantics.
 
     VMP handlers are stack-machine primitives: push/pop/splice/arith only.
-    Plain control-flow flattening leaves readable calls around."""
+    Plain control-flow flattening leaves readable calls around.
+
+    Returns (ratio, has_cases). has_cases anchors F3 (#884): with no case
+    table at all the ratio would read 1.0 by absence -- a hollow truth that
+    would let any big array vote F3. Absence must not vote.
+    """
 
     case_bodies = re.findall(
         r"case\s+\d+\s*:(.*?)(?=case\s+\d+\s*:|default:|\Z)", text, re.S)
     if not case_bodies:
-        return 1.0   # nothing looks like a dispatch table -> not VMP-shaped
+        return 1.0, False   # no dispatch table shape -> F3 cannot vote
     semantic = sum(1 for b in case_bodies if SEMANTIC_HINT_RE.search(b))
-    return 1.0 - (semantic / max(1, len(case_bodies)))
+    return 1.0 - (semantic / max(1, len(case_bodies))), True
 
 
 def triage(text: str, source: str) -> dict:
     arrays = _arrays(text)
     disp = _dispatch(text)
-    sem_ratio = round(_semantics_ratio(text), 3)
+    sem_ratio, has_cases = _semantics_ratio(text)
+    sem_ratio = round(sem_ratio, 3)
 
     f1 = bool(arrays)
     f2 = disp is not None
-    f3 = sem_ratio >= 0.9
+    f3 = has_cases and sem_ratio >= 0.9
 
-    confident = f1 and f2
+    # Three-of-two verdict (#884 spec): any two independent features suspect.
+    # The former `f1 and f2` hard gate silently missed {F1,F3} and {F2,F3}.
+    votes = int(f1) + int(f2) + int(f3)
+    confident = votes >= 2
     signals = []
     if arrays:
         signals.append(f"large array: {arrays[0]['items']} items "
@@ -113,18 +130,21 @@ def triage(text: str, source: str) -> dict:
     if disp:
         signals.append(f"dispatch switch: {disp['cases']} numeric cases"
                        + (" + pc indexing" if disp["pc_indexing"] else ""))
-    signals.append(f"semantic-free case-body ratio: {sem_ratio}")
+    signals.append(f"semantic-free case-body ratio: {sem_ratio}"
+                   + ("" if has_cases else " (no case table: F3 not voting)"))
 
     verdict = {
         "source": source,
         "vmp_suspected": confident,
-        "confidence": ("high" if confident and f3 else
-                       "medium" if confident else "low"),
+        "votes": votes,
+        "confidence": ("high" if votes == 3 else
+                       "medium" if votes == 2 else "low"),
         "features": {
             "f1_bytecode_array": arrays,
             "f2_dispatch_loop": disp,
             "f3_semanticless_handlers": {"ratio": sem_ratio,
-                                         "threshold": 0.9},
+                                         "threshold": 0.9,
+                                         "case_bodies_found": has_cases},
         },
         "signals": signals,
         "note": ("advisory triage only -- runtime confirmation requires a "
@@ -156,6 +176,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
-    force_utf8()
+    ensure_utf8_stdout()
     sys.exit(main())
