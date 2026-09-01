@@ -653,10 +653,8 @@ def test_pre_check_rejects_dispatch_matching_tool_without_marker(tmp_path, capsy
         encoding='utf-8')
     payload = _dispatch_payload(
         '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
-        '"tools": ["grep"], "agent": "w-test"}}
-'
-        'facts-snapshot: 1 facts
-decode the crypto layer')
+        '"tools": ["grep"], "agent": "w-test"}}\n'
+        'facts-snapshot: 1 facts\ndecode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     captured = capsys.readouterr()
     assert rc == 2
@@ -673,11 +671,8 @@ def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
         encoding='utf-8')
     payload = _dispatch_payload(
         '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
-        '"tools": ["grep"], "agent": "w-test"}}
-'
-        'facts-snapshot: 1 facts
-tool-catalog: crypto-tool
-decode the crypto layer')
+        '"tools": ["grep"], "agent": "w-test"}}\n'
+        'facts-snapshot: 1 facts\ntool-catalog: crypto-tool\ndecode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
 
@@ -781,8 +776,7 @@ def _budget_payload(prompt=None, desc=''):
     env = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
            '"tools": ["grep"], "agent": "w-test"}}')
     if prompt is None:
-        prompt = env + '
-facts-snapshot: 1 facts'
+        prompt = env + '\nfacts-snapshot: 1 facts'
     return {'tool_input': {'name': 'w-test', 'description': desc, 'prompt': prompt}}
 
 
@@ -839,8 +833,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     _write_task_spec(ws / 'task_spec.yaml', {'vm_detonation': 'forbidden'})
     scenarios.append(('tools', 'vm_detonation',
                       lambda ws=ws: wb.pre_check(
-                          _budget_payload(prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["vmr-shell"], "agent": "w-test"}}
-facts-snapshot: 1 facts'),
+                          _budget_payload(prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["vmr-shell"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'),
                           _paths_for(ws))))
 
     # 4 hostchan — host-channel x64dbg tool (VM-only policy)
@@ -865,8 +858,7 @@ facts-snapshot: 1 facts'),
          'evidence_tier_attempted': 0}])
     scenarios.append(('tier', 'evidence_tier',
                       lambda ws=ws: wb.pre_check(
-                          _budget_payload(prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 2, "tools": ["grep"], "agent": "w-test"}}
-facts-snapshot: 1 facts'),
+                          _budget_payload(prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 2, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'),
                           _paths_for(ws))))
 
     # 7 selfcap — self-imposed time cap with no authorised budget
