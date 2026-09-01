@@ -18,6 +18,13 @@ from pathlib import Path
 
 import pytest
 
+try:  # POSIX only; Windows dev/CI is single-tenant and unaffected (#369)
+    import fcntl
+    _HAVE_FLOCK = hasattr(fcntl, "flock")
+except ImportError:  # pragma: no cover - Windows
+    _HAVE_FLOCK = False
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 # ---------- #369: load-sensitive serialization (cross-process file lock) ----------

@@ -653,8 +653,11 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
         base = c.replace("\\", "/").rsplit("/", 1)[-1]
         if base not in expected:
             continue  # unrelated entries are not this registration's claim
-        if not (c.startswith(prefix)
-                and c[len(prefix):].startswith(d.as_posix() + "/")):
+        # #811: entries carry an optional PYTHONUTF8=1 env prefix (PEP 540
+        # injection from build_hook_entry) — strip it before the shape check.
+        body = c[len("PYTHONUTF8=1 "):] if c.startswith("PYTHONUTF8=1 ") else c
+        if not (body.startswith(prefix)
+                and body[len(prefix):].startswith(d.as_posix() + "/")):
             mismatches.append(
                 f"shape: command for {base} is not canonical (must be "
                 f"uv-form into the declared hooks dir {d}): {c}")
