@@ -21,7 +21,8 @@ from kunglao_log import emit, log_path  # noqa: E402
 
 ALL_FIELDS = {"ts", "actor", "action", "claim", "tool", "artifact",
               "duration_ms", "exit", "detail",
-              "arm", "epoch", "version", "hypothesis_ref"}
+              "arm", "epoch", "version", "hypothesis_ref",
+              "matched_rule"}  # #601 additive field
 
 ISO_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$")

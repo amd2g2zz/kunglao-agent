@@ -82,6 +82,7 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
          detail: str | None = None,
          arm: str | None = None, epoch: int | None = None,
          hypothesis_ref: str | None = None,
+         matched_rule: str | None = None,
          version: str | None = None) -> None:
     """Append one structured event line. Never raises — write failure degrades
     to a stderr warning so logging can never break analysis.
@@ -89,7 +90,12 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
     #818 batch-1: arm/epoch/hypothesis_ref per #823 attribution contract;
     version auto-fills with the checkout git SHA when omitted (None on
     failure). Absent optional fields are explicit null keys — stable schema,
-    old consumers use .get()."""
+    old consumers use .get().
+
+    #601: matched_rule — the gate rule id / namespace glob a WARN/REJECT face
+    matched (e.g. must_stop_chmod_permissive, jadx, mcp__ghidra__*). Additive
+    in the #818 batch-1 style: absent -> explicit null key, old consumers
+    keep working via .get()."""
     event = {
         "ts": _utc_now(),
         "actor": actor,
@@ -103,6 +109,7 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         "arm": str(arm) if arm is not None else None,
         "epoch": int(epoch) if epoch is not None else None,
         "hypothesis_ref": str(hypothesis_ref) if hypothesis_ref is not None else None,
+        "matched_rule": str(matched_rule) if matched_rule is not None else None,
         "version": str(version) if version else _repo_sha(),
     }
     line = json.dumps(event, sort_keys=True, separators=(",", ":"),

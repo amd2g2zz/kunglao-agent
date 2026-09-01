@@ -81,6 +81,7 @@ SCHEMA_FIELDS = {
     "ts", "actor", "action", "claim", "tool", "artifact",
     "duration_ms", "exit", "detail",
     "arm", "epoch", "version", "hypothesis_ref",
+    "matched_rule",  # #601 additive field
 }
 
 
