@@ -527,6 +527,142 @@ def test_convergence_resolve_ws_custom_layout(tmp_path, monkeypatch):
     assert _resolve_ws(None) == ws
 
 
+# ---- #863 Family C: all four pre-fix _resolve_ws shapes, 4-shape coverage
+# ---- + the B2 two-state pin (layout override honored / absent manifest
+# ---- keeps the pre-#450 default, byte-identical).
+
+_QUIET_WS_MODULES = ("convergence_check", "failure_analysis_gate", "priority",
+                     "route_capability")
+_STRICT_WS_MODULES = ("heartbeat_tick", "hooks_selfcheck", "heartbeat_touch",
+                      "statusline_snapshot")
+
+
+def _import_ws_module(name):
+    import importlib
+    return importlib.import_module(name)
+
+
+def test_ws_quiet_shapes_default_layout(tmp_path, monkeypatch):
+    """B2 state 1 (缺省 → 原默认): no manifest — every quiet-shape copy
+    finds the default-named sibling, else falls back to cwd."""
+    for name in _QUIET_WS_MODULES:
+        resolve = _import_ws_module(name)._resolve_ws
+        parent = tmp_path / f"run-{name}"
+        ws = parent / "malware-analysis-workspace"
+        ws.mkdir(parents=True)
+        (ws / "claim-register.yaml").write_text("claims: []\n",
+                                                encoding="utf-8")
+        monkeypatch.chdir(parent)
+        assert resolve(None) == ws, name
+        empty = tmp_path / f"empty-{name}"
+        empty.mkdir()
+        monkeypatch.chdir(empty)
+        assert resolve(None) == empty, name
+
+
+def test_ws_quiet_shapes_custom_layout_b2_fix(tmp_path, monkeypatch):
+    """B2 state 2 (override 传入 → 生效): a manifest layout override
+    redirects EVERY quiet-shape copy — the 3 hardcoded siblings used to
+    ignore it (silent cwd fallback = silent empty reads)."""
+    for name in _QUIET_WS_MODULES:
+        resolve = _import_ws_module(name)._resolve_ws
+        parent = tmp_path / f"run-{name}"
+        parent.mkdir()
+        _write_manifest(parent / "malware-analysis-workspace",
+                        {"version": 1, "layout": {"workspace_dir": "malws"}})
+        ws = parent / "malws"
+        ws.mkdir()
+        (ws / "claim-register.yaml").write_text("claims: []\n",
+                                                encoding="utf-8")
+        monkeypatch.chdir(parent)
+        assert resolve(None) == ws, (
+            f"{name} must honor the layout.workspace_dir override (B2 fix)")
+        # the manifest (sought at the default name) is not itself a sentinel:
+        assert resolve(None) != parent / "malware-analysis-workspace", name
+
+
+def test_ws_quiet_custom_claim_register_name(tmp_path, monkeypatch):
+    """The claim-register name is layout data too (dispatch_gate parity)."""
+    from convergence_check import _resolve_ws
+    parent = tmp_path / "run"
+    parent.mkdir()
+    _write_manifest(parent / "malware-analysis-workspace",
+                    {"version": 1, "layout": {"workspace_dir": "malws",
+                                              "claim_register": "claims.yaml"}})
+    ws = parent / "malws"
+    ws.mkdir()
+    (ws / "claims.yaml").write_text("claims: []\n", encoding="utf-8")
+    monkeypatch.chdir(parent)
+    assert _resolve_ws(None) == ws
+
+
+def test_ws_ledger_sentinel_shape(tmp_path, monkeypatch):
+    """convergence_health keeps its own sentinel (the convergence ledger,
+    NOT the claim register): a claim-register-only sibling must NOT count
+    as the workspace (falls back to cwd)."""
+    from convergence_health import _resolve_ws
+    parent = tmp_path / "run"
+    ws = parent / "malware-analysis-workspace"
+    ws.mkdir(parents=True)
+    (ws / ".convergence_ledger.jsonl").write_text("{}\n", encoding="utf-8")
+    monkeypatch.chdir(parent)
+    assert _resolve_ws(None) == ws
+    # sentinel distinction: claim-register alone is invisible here
+    other = tmp_path / "other"
+    ws2 = other / "malware-analysis-workspace"
+    ws2.mkdir(parents=True)
+    (ws2 / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+    monkeypatch.chdir(other)
+    assert _resolve_ws(None) == other
+
+
+def test_ws_strict_shapes_default_layout(tmp_path, monkeypatch):
+    """Strict shape (#228 family), default names: cwd itself counts when it
+    holds a sentinel (cwd-first order), the sibling counts otherwise,
+    and nothing found is a hard exit 2."""
+    for name in _STRICT_WS_MODULES:
+        resolve = _import_ws_module(name)._resolve_ws
+        # cwd-first: a sentinel directly in cwd wins over the sibling
+        parent = tmp_path / f"cwd-{name}"
+        parent.mkdir()
+        (parent / "analysis_state.txt").write_text("state\n", encoding="utf-8")
+        monkeypatch.chdir(parent)
+        assert resolve(None) == parent, name
+        # sibling probe
+        parent = tmp_path / f"sib-{name}"
+        ws = parent / "malware-analysis-workspace"
+        ws.mkdir(parents=True)
+        (ws / "claim-register.yaml").write_text("claims: []\n",
+                                                encoding="utf-8")
+        monkeypatch.chdir(parent)
+        assert resolve(None) == ws, name
+        # nothing in sight → exit 2
+        empty = tmp_path / f"empty-{name}"
+        empty.mkdir()
+        monkeypatch.chdir(empty)
+        with pytest.raises(SystemExit) as exc:
+            resolve(None)
+        assert exc.value.code == 2, name
+
+
+def test_ws_strict_shapes_custom_layout_b2_fix(tmp_path, monkeypatch):
+    """B2 fix, strict family: a layout override redirects the sibling probe
+    — the 4 copies used to hard-exit 2 on an overridden workspace."""
+    for name in _STRICT_WS_MODULES:
+        resolve = _import_ws_module(name)._resolve_ws
+        parent = tmp_path / f"run-{name}"
+        parent.mkdir()
+        _write_manifest(parent / "malware-analysis-workspace",
+                        {"version": 1, "layout": {"workspace_dir": "malws"}})
+        ws = parent / "malws"
+        ws.mkdir()
+        (ws / "claim-register.yaml").write_text("claims: []\n",
+                                                encoding="utf-8")
+        monkeypatch.chdir(parent)
+        assert resolve(None) == ws.resolve(), (
+            f"{name} must honor the layout.workspace_dir override (B2 fix)")
+
+
 def test_worktree_scan_custom_layout(tmp_path):
     """lib_kunglao.iter_worker_states: the .wt-* glob, the workspace dir
     name and the runs dir all come from the layout — an override redirects

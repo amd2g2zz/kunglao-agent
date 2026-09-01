@@ -68,6 +68,8 @@ from status_defs import TERMINAL, IN_PROGRESS_STATUSES
 # withdrawn verdict — never ranked; its reopened dependents dispatch normally
 # (a RETRACTED parent counts as terminal for the depends_on gate).
 from retract_claim import TERMINAL_WITH_RETRACTED
+# #863 Family C: workspace resolution is single-sourced in ws_layout.
+from ws_layout import resolve_quiet as _resolve_ws  # noqa: E402
 
 DEPRECATED = True  # #499 - authority is scripts/priority_ratio.py; retirement: #446
 AUTHORITY = 'scripts/priority_ratio.py'
@@ -78,14 +80,6 @@ DEFAULT_WEIGHTS = {'value': 0.4, 'leverage': 0.3, 'cheapness': 0.2, 'novelty': 0
 
 def _load(p):
     return (yaml.safe_load(p.read_text(encoding='utf-8')) or {}) if p.exists() else {}
-
-
-def _resolve_ws(arg):
-    if arg:
-        return Path(arg)
-    cwd = Path(os.getcwd())
-    sub = cwd / 'malware-analysis-workspace'
-    return sub if (sub / 'claim-register.yaml').exists() else cwd
 
 
 def _is_open(c):

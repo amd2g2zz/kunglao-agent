@@ -56,6 +56,9 @@ from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671
 # the dispatch-facing terminal set; RETRACTED is a withdrawn verdict, NOT an
 # open claim and NOT an orphan (a retracted claim answers no question by design).
 from retract_claim import RETRACTED, TERMINAL_WITH_RETRACTED
+# #863 Family C: workspace resolution is single-sourced in ws_layout (this
+# module used to be the ONLY manifest-aware copy — now every consumer is).
+from ws_layout import resolve_quiet as _resolve_ws
 
 WORKER_CAP = 3
 
@@ -74,20 +77,6 @@ def utc_now() -> datetime:
 
 def _load_yaml(p: Path):
     return (yaml.safe_load(p.read_text(encoding="utf-8")) or {}) if p.exists() else {}
-
-
-def _resolve_ws(arg) -> Path:
-    if arg:
-        return Path(arg)
-    cwd = Path(os.getcwd())
-    # #450: layout names from the env manifest (single source — the
-    # pre-#450 literal lived here). Absent manifest → DEFAULT_LAYOUT,
-    # behavior byte-identical to the hardcoded version.
-    import env_manifest  # (same scripts/ dir; function-level: keep the
-    # module import graph of the hot CLI path unchanged)
-    layout = env_manifest.layout_conventions(cwd)
-    sub = cwd / layout.workspace_dir
-    return sub if (sub / layout.claim_register).exists() else cwd
 
 
 def _load_worker_lib():
