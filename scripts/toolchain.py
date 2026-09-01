@@ -509,6 +509,35 @@ def _shutil_which(name: str) -> str | None:
     return shutil.which(name)
 
 
+def _which_items(tools, tier: "Tier", missing_status: "Status | None" = None,
+                 missing_detail: str = "{tool} not found in PATH",
+                 found_detail: str = "found at {path}") -> list["CheckResult"]:
+    """#863 Family D: which→CheckResult 单源。
+
+    tools = 命令名序列；每个命令 which 命中 → PASS(found at path)，
+    未命中 → missing_status（默认 tier==WARN→WARN 否则 FAIL）+ missing_detail。
+    """
+    out = []
+    for name in tools:
+        path = _shutil_which(name)
+        if path:
+            out.append(CheckResult(
+                name=name, status=Status.PASS, tier=tier,
+                detail=found_detail.format(tool=name, path=path),
+                probe=ProbeTier.PRESENCE,
+            ))
+        else:
+            out.append(CheckResult(
+                name=name, status=(missing_status or
+                                   (Status.WARN if tier == Status.WARN
+                                    else Status.FAIL)),
+                tier=tier,
+                detail=missing_detail.format(tool=name),
+                probe=ProbeTier.PRESENCE,
+            ))
+    return out
+
+
 def _run_cmd(args: list[str], timeout: int = 10) -> tuple[int, str, str]:
     """Run a command with timeout; returns (rc, stdout, stderr).
     Fail-open on crash: return (1, "", str(exc)).
@@ -1489,17 +1518,11 @@ def _check_windows(report: ToolchainReport, ws: Path,
     _check_dynamic_channel(report, reqs)
 
     # T2: Docker (WARN)
-    docker = _shutil_which("docker")
-    if docker:
-        report.items.append(CheckResult(
-            name="docker", status=Status.PASS, tier=Tier.WARN,
-            detail=f"docker at {docker}", probe=ProbeTier.PRESENCE,
-        ))
-    else:
-        report.items.append(CheckResult(
-            name="docker", status=Status.WARN, tier=Tier.WARN,
-            detail="docker not found (optional)", probe=ProbeTier.PRESENCE,
-        ))
+    report.items.extend(_which_items(
+        ("docker",), Tier.WARN,
+        missing_status=Status.WARN,
+        missing_detail="docker not found (optional)",
+        found_detail="docker at {path}"))
 
     # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
     _check_mcp(report, ws, "windows")
@@ -1512,19 +1535,8 @@ def _check_linux(report: ToolchainReport, ws: Path,
                  reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
     """Linux toolchain checks (ELF)."""
     # T0: venv + binutils (file/readelf/objdump)
-    for tool in ("file", "readelf", "objdump"):
-        path = _shutil_which(tool)
-        if path:
-            report.items.append(CheckResult(
-                name=tool, status=Status.PASS, tier=Tier.HARD,
-                detail=f"found at {path}", probe=ProbeTier.PRESENCE,
-            ))
-        else:
-            report.items.append(CheckResult(
-                name=tool, status=Status.FAIL, tier=Tier.HARD,
-                detail=f"{tool} not found in PATH",
-                probe=ProbeTier.PRESENCE,
-            ))
+    report.items.extend(_which_items(
+        ("file", "readelf", "objdump"), Tier.HARD))
 
     # T1: Ghidra or IDA (#407: MCP-first, CLI fallback — one shared helper;
     # #474: three-state honest, caps plumbs the capability trial)
@@ -1536,17 +1548,11 @@ def _check_linux(report: ToolchainReport, ws: Path,
     _check_dynamic_channel(report, reqs)
 
     # T2: Docker (WARN)
-    docker = _shutil_which("docker")
-    if docker:
-        report.items.append(CheckResult(
-            name="docker", status=Status.PASS, tier=Tier.WARN,
-            detail=f"docker at {docker}", probe=ProbeTier.PRESENCE,
-        ))
-    else:
-        report.items.append(CheckResult(
-            name="docker", status=Status.WARN, tier=Tier.WARN,
-            detail="docker not found (optional)", probe=ProbeTier.PRESENCE,
-        ))
+    report.items.extend(_which_items(
+        ("docker",), Tier.WARN,
+        missing_status=Status.WARN,
+        missing_detail="docker not found (optional)",
+        found_detail="docker at {path}"))
 
     # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
     _check_mcp(report, ws, "linux")
@@ -1646,19 +1652,8 @@ def _check_android(report: ToolchainReport, ws: Path,
             ))
 
     # T1: jadx + apktool
-    for tool in ("jadx", "apktool"):
-        path = _shutil_which(tool)
-        if path:
-            report.items.append(CheckResult(
-                name=tool, status=Status.PASS, tier=Tier.HARD,
-                detail=f"found at {path}", probe=ProbeTier.PRESENCE,
-            ))
-        else:
-            report.items.append(CheckResult(
-                name=tool, status=Status.FAIL, tier=Tier.HARD,
-                detail=f"{tool} not found in PATH",
-                probe=ProbeTier.PRESENCE,
-            ))
+    report.items.extend(_which_items(
+        ("jadx", "apktool"), Tier.HARD))
 
     # T1: GitNexus (real probe: gitnexus --version)
     gn_path = _shutil_which("gitnexus")
