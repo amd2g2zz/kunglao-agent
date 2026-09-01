@@ -44,6 +44,10 @@ files:
     dest: .claude/hooks/state_anchor.py
     kind: hook
     sha256: 83268d01142f4330b3570f447d8bc127e73ffca2ab4c955311349cab81f69eb4
+  - src: hooks/user_signal_capture.py
+    dest: .claude/hooks/user_signal_capture.py
+    kind: hook
+    sha256: 41e35653e86428ce665b340c4ca904cbc597a9dd4d7505c406228fa39b55d5b0
   - src: hooks/violation_capture.py
     dest: .claude/hooks/violation_capture.py
     kind: hook
@@ -108,10 +112,26 @@ files:
     dest: .claude/agents/web-re-worker.md
     kind: agent
     sha256: 2adc0f8d640cc0c155f9b73d7f5e591bf5999f575161eb31f6ee6be056f1cdae
+  - src: scripts/anomaly_detector.py
+    dest: .claude/scripts/anomaly_detector.py
+    kind: scaffold
+    sha256: 576dfb490af608d3ce9023536af6144b64ad54268c64a7853cc1c73528e3034b
+  - src: scripts/ask_for_direction_gate.py
+    dest: .claude/scripts/ask_for_direction_gate.py
+    kind: scaffold
+    sha256: 290a2acdcd4af3558495f7184c7de22c155fac0094206f1ba89c2dcc9a25c687
   - src: scripts/blind_gate.py
     dest: .claude/scripts/blind_gate.py
     kind: scaffold
     sha256: 3ef2b919186e71c1e894f81ff19630e736659bf09a751740ea0a86f24e334f9b
+  - src: scripts/carrier_consistency.py
+    dest: .claude/scripts/carrier_consistency.py
+    kind: scaffold
+    sha256: 4458c2b53cc8dc0a3a4545f4686d1e5fef1da8d0dd5840be4cfeb2461d596ebc
+  - src: scripts/convergence_check.py
+    dest: .claude/scripts/convergence_check.py
+    kind: scaffold
+    sha256: 47e7447d11a101c39ab9925c701c05cdba4560f26b7b192e81ae115cf57af1e5
   - src: scripts/dead_letter.py
     dest: .claude/scripts/dead_letter.py
     kind: scaffold
@@ -120,6 +140,10 @@ files:
     dest: .claude/scripts/deploy_manifest.py
     kind: scaffold
     sha256: edc62a0032f372e55de319bf059fdc14426221b6d86d90c44bd0e461edf3caf6
+  - src: scripts/dual_gate.py
+    dest: .claude/scripts/dual_gate.py
+    kind: scaffold
+    sha256: dc93272e2ebc1bf6663175ddc6fa6ab2ff83613c38f42663a2addf4b9547e2fe
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold
@@ -143,7 +167,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: 7ed7e3244b56a202b9f9fc59cbab19af66c9ab57bf8f5df319a86db6abd74f64
+    sha256: 3663915d060993c6006dc8147c6bb380c7be42e08d55e2b7f5c49415eeff8ed0
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
@@ -176,6 +200,14 @@ files:
     dest: .claude/scripts/mcp_probe.py
     kind: scaffold
     sha256: d565d39864effae264012c425946cd30912acc4c069f1699bd5db8f033a5b59d
+  - src: scripts/mission_ledger.py
+    dest: .claude/scripts/mission_ledger.py
+    kind: scaffold
+    sha256: 506e936162a2d050ec94e507513fa3c1d2f8d3ff60e454e5f7bb55e9d3731508
+  - src: scripts/mission_stall.py
+    dest: .claude/scripts/mission_stall.py
+    kind: scaffold
+    sha256: cfef2ea24db5c2ee06a57d6f811cb5f2f6d8710718f7c713d5607f2430c3e3d3
   - src: scripts/notes_discriminator.py
     dest: .claude/scripts/notes_discriminator.py
     kind: scaffold
@@ -184,6 +216,10 @@ files:
     dest: .claude/scripts/notes_writer.py
     kind: scaffold
     sha256: 4c8b1e5e8c641094d7670bdd9065d97e65dd6ce5078fe01237bd6676c8334293
+  - src: scripts/obligation_discovery.py
+    dest: .claude/scripts/obligation_discovery.py
+    kind: scaffold
+    sha256: 4d4b15c26886adfd78ac4ee7757a784e07420daa1c1c7710cefa8d616e9292e8
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
@@ -236,6 +272,10 @@ files:
     dest: .claude/scripts/summary_discriminator.py
     kind: scaffold
     sha256: 73537b5e7c1377d5463a27a34acc077e203312da9d8379acb528f9539d6d852d
+  - src: scripts/think_seat.py
+    dest: .claude/scripts/think_seat.py
+    kind: scaffold
+    sha256: beade0b98f982fc8a871bb74ee520fc1291903801ec29ad0ead56273f882ada5
   - src: scripts/tier_rules.py
     dest: .claude/scripts/tier_rules.py
     kind: scaffold
@@ -248,6 +288,10 @@ files:
     dest: .claude/scripts/toolchain.py
     kind: scaffold
     sha256: 45edcee110a8290ca36c714a27c8cf9bed2eaf089ba379227dd1454845f5f498
+  - src: scripts/user_signal.py
+    dest: .claude/scripts/user_signal.py
+    kind: scaffold
+    sha256: 0bcf0e11a8d836d4be120ac10f659152f020c636c48c218c52d1a14c8bc7b4d9
   - src: scripts/value_config.py
     dest: .claude/scripts/value_config.py
     kind: scaffold

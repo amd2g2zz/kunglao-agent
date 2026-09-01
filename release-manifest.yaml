@@ -32,6 +32,7 @@ assets:
     - hooks/dispatch_gate.py
     - hooks/env_check_gate.py
     - hooks/heartbeat_touch.py
+    - hooks/user_signal_capture.py  # #868 UserPromptSubmit user-signal capture
     - hooks/lib_kunglao.py
     - hooks/recall_inject.py   # #268 wired by wire_up_settings.py:152
     - hooks/session_start.py   # #533 SessionStart lifecycle (always_arm)

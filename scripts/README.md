@@ -130,6 +130,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `rollup.py` | terminal-transition write loop — claim→outcome_capture+lessons+narrative+checkpoint (#524) | tests |
 | `hypothesis_store.py` | hypothesis layer carrier (#528) — H-*.md parse + open→refuted/superseded state machine over `hypotheses/` | digest_build (sec_g), hooks/state_anchor, kunglao-init stub, tests |
 | `verifier_identity.py` | verifier machine-identity extraction + verdict anchoring (#825) — md header / l2 field; ledger verdict_anchor append-only | register_proven_gate, write_gate, tests |
+| `dual_gate.py` | #868 双门验证引擎 — redteam 反例切分(disclosed/held-out) + verifier 正向核验 + 失败签名分流(CEGAR/Goodhart) + N=3 升级; 宪法隔离只出裁决 | hooks, tests |
+| `user_signal.py` | #868 用户信号核心 — 本体三分类（意愿/事实/元）路由 + 意愿域 repin 生效 + 事实域双门立案 + 座舱数据面 | hooks, tests |
 | `notes_writer.py` | notes/ result-layer writer (#528) — supersedes-chain enforcement + verify_status reset on corrections | tests; write-path contract behind hooks/write_guard (#532) |
 | `write_guard_unlock.py` | #820 连坐解锁通道 — lint 打击面按目标文件归因; unlock/quarantine/list 三命令全落账 | hooks, tests |
 | `carrier_consistency.py` | 跨载体一致性门 (#829) — register/_INDEX/facts/notes 五规则断言; decide() CONVERGED 前置降级 + carrier_drift 落账 | hooks, tests |
