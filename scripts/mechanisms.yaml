@@ -1,0 +1,247 @@
+# mechanisms.yaml — #878 mechanism registry (schema kunglao.mechanisms/1)
+#
+# THE single declaration source for kunglao mechanisms (issue #878): the
+# scheduler ONLY ever dispatches entries declared here — 不入册不许跑.
+# Three go-live prerequisites are enforced mechanically by
+# mechanism_scheduler.validate_registry (guarded by
+# tests/test_mechanism_scheduler_878.py); missing ANY one is rejected:
+#   trigger.gate / cost_class / cockpit_signal
+#
+# Field contract:
+#   name            unique mechanism id
+#   entry           script path (repo-relative) — the honest "what runs" answer
+#   channel         host | tick | hooks | os | cli
+#                     host  = the single time host itself (never dispatched)
+#                     tick  = scheduler-dispatched each heartbeat_tick pass
+#                     hooks = host lifecycle channel (NOT migrated, issue #878
+#                             explicit exclusion — declaration only)
+#                     os    = OS scheduler channel (schtasks/cron; declaration
+#                             only — out-of-session mechanism)
+#                     cli   = human/chain CLI (declaration only)
+#   trigger.type    tick | event | settlement | stall | manual
+#   trigger.gate    gate id — must exist in mechanism_scheduler.GATES
+#   trigger.host    true only on the channel=host entry
+#   trigger.events  wake classes consumed from the ledger event bus
+#                   (subset of event_classes)
+#   cost_class      cheap | medium | expensive — queue order within a tick
+#                   (cheap gates first; expensive mechanisms queue last and
+#                   are sacrificed first when the time cap is hit)
+#   depth           os | session | workspace | mission
+#   cockpit_signal  THE observable the cockpit/statusline can read — a
+#                   mechanism with no signal is not allowed to go live
+#                   (同 logging-is-product-lifeline: 不进常开观测面 = 不存在)
+#   owner           owning script/module
+#   argv            extra CLI args the scheduler passes to the runner
+#
+# CONSTITUTIONAL ISOLATION: the scheduler is a pacemaker, not a power center.
+# It schedules PROPOSAL-class mechanisms only; decision-class actions (replan
+# application / PROVEN promotion / budget waivers) keep their own gates.
+
+schema: kunglao.mechanisms/1
+
+cost_classes: [cheap, medium, expensive]
+trigger_types: [tick, event, settlement, stall, manual]
+event_classes: [settlement, stall, plan_review]
+channels: [host, tick, hooks, os, cli]
+depths: [os, session, workspace, mission]
+
+mechanisms:
+  # ---- the single time host (never dispatched by its own scheduler) -------
+  - name: tick_host
+    entry: scripts/heartbeat_tick.py
+    channel: host
+    trigger:
+      type: tick
+      gate: always
+      host: true
+    cost_class: cheap
+    depth: session
+    cockpit_signal: "runs/.heartbeat-tick.json (per-tick report + action_taken)"
+    owner: scripts/heartbeat_tick.py
+    description: >
+      The ONE-command heartbeat tick (#237 lineage): liveness core
+      (selfcheck/reconcile/renew/heartbeat-check) + registry-driven mechanism
+      traversal. The only in-session time host (#878).
+
+  # ---- declaration-only channels (execution stays on their own rails) ----
+  - name: heartbeat_register
+    entry: scripts/heartbeat.py
+    channel: cli
+    trigger:
+      type: manual
+      gate: always
+    cost_class: cheap
+    depth: session
+    cockpit_signal: "runs/.heartbeat.json (last_tick_ts / loop_registered / tick_history)"
+    owner: scripts/heartbeat.py
+    description: >
+      Heartbeat register/verify/stop as verifiable file state (#754 E2
+      continuous-tick liveness). Human/chain-invoked; lifecycle, not cadence.
+
+  - name: loop_birth
+    entry: scripts/heartbeat_loop_prompt.py
+    channel: cli
+    trigger:
+      type: manual
+      gate: loop_unregistered
+    cost_class: cheap
+    depth: session
+    cockpit_signal: "runs/.heartbeat.json (loop_registered marker, #461)"
+    owner: scripts/heartbeat_loop_prompt.py
+    description: >
+      /loop prompt birth — registration born with the loop, verified by
+      --verify (a silently failed cron registration must never stay silent).
+
+  - name: liveness_touch
+    entry: hooks/heartbeat_touch.py
+    channel: hooks
+    trigger:
+      type: event
+      gate: always
+    cost_class: cheap
+    depth: session
+    cockpit_signal: "runs/.heartbeat.json (activity_ts per tool call, #754 E2)"
+    owner: hooks/heartbeat_touch.py
+    description: >
+      PreToolUse/Bash liveness refresh on every tool call. Hooks channel is
+      host lifecycle — NOT migrated to the scheduler (issue #878 explicit
+      exclusion); registered here so the cockpit answer stays complete.
+
+  - name: dead_session_kicker
+    entry: scripts/external_kicker.py
+    channel: os
+    trigger:
+      type: tick
+      gate: session_dead
+    cost_class: cheap
+    depth: os
+    cockpit_signal: "ledger actor=external_kicker rows + runs/.heartbeat.json revival"
+    owner: scripts/external_kicker.py
+    description: >
+      OS-level dead-session recovery (#39): schtasks/cron cadence, gate
+      session_is_dead (heartbeat missing or both last_tick_ts + activity_ts
+      stale). Out-of-session by definition — host=os, never tick-dispatched.
+
+  - name: decide_cli
+    entry: scripts/kunglao-decide.py
+    channel: cli
+    trigger:
+      type: manual
+      gate: policy_due
+    cost_class: expensive
+    depth: workspace
+    cockpit_signal: "ledger action=decide_fail_open + runs/retro-agenda-*.md DECIDE section"
+    owner: scripts/kunglao-decide.py
+    description: >
+      M1 DECIDE standalone CLI (5-branch matrix + explore gate + priority
+      ratio). Its AUTOMATIC invocation face moved under policy_retro
+      scheduling (#878); the human CLI face stays.
+
+  # ---- scheduler-dispatched mechanisms (channel: tick) --------------------
+  - name: env_probe
+    entry: scripts/env_state_probe.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    cockpit_signal: "runs/env-state.json (liveness-subset env snapshot, #475)"
+    owner: scripts/env_state_probe.py
+    description: >
+      Env freshness snapshot bound to the tick by construction (#475);
+      probe failure never fails the tick.
+
+  - name: workspace_monitor
+    entry: scripts/kunglao-monitor.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    argv: ["--json"]
+    cockpit_signal: "runs/.drift-events.jsonl (advisory drift record, #612)"
+    owner: scripts/kunglao-monitor.py
+    description: >
+      M5 MONITOR background advisory (#88 freeze, #620 runtime consumer):
+      heartbeat/stuck/help/health watchers; next is a suggestion, not a gate.
+
+  - name: stale_feedback
+    entry: scripts/feedback.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    argv: ["--check-stale"]
+    cockpit_signal: "runs/.heartbeat-tick.json (feedback step stdout tail)"
+    owner: scripts/feedback.py
+    description: >
+      feedback.check_stale mechanical caller (#629 — was standalone since
+      #237 planned it). Stdout-only face (no durable artifact yet).
+
+  - name: verify_watch
+    entry: scripts/verify_status_watch.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: workspace
+    argv: ["--json"]
+    cockpit_signal: "ledger action=verify_status_change (unwitnessed transitions, #718)"
+    owner: scripts/verify_status_watch.py
+    description: >
+      Disk-vs-event-stream reconciliation for verify stamps (#718 P3) —
+      closes the out-of-band tamper class, not just the sed instance.
+
+  - name: notes_rollup
+    entry: scripts/rollup.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: cheap
+    depth: mission
+    argv: ["--sweep-terminal"]
+    cockpit_signal: "ledger action=rollup_sweep (#762 sweep face)"
+    owner: scripts/rollup.py
+    description: >
+      Mechanical notes-closure sweep (#762 K1a): every terminal claim gets
+      its outcomes -> lessons -> notes-due -> checkpoint write loop.
+
+  - name: think_seat
+    entry: scripts/think_seat.py
+    channel: tick
+    trigger:
+      type: tick
+      gate: always
+    cost_class: medium
+    depth: session
+    cockpit_signal: "runs/.think-*.md artifacts + tick action_taken THINK face"
+    owner: scripts/think_seat.py
+    description: >
+      #759 H1 / #711 E1: the waiting period gets a cognitive action instead
+      of an idle action_taken. The seat self-arbitrates waiting internally
+      (no cheap external gate); idle != EMPTY.
+
+  - name: policy_retro
+    entry: scripts/backtrack_loop.py
+    channel: tick
+    trigger:
+      type: settlement
+      gate: policy_due
+      events: [settlement, stall, plan_review]
+    cost_class: expensive
+    depth: mission
+    argv: ["--policy"]
+    cockpit_signal: "runs/.retro-state.json (backtrack_lag) + ledger action=retro_policy"
+    owner: scripts/backtrack_loop.py
+    description: >
+      #882 policy retro (touchpoint 3): every-N-settlements / stall
+      fingerprint / plan_review ritual gate; window aggregation + drift +
+      kunglao-decide land as agenda DATA + PROPOSAL lines — never auto-
+      executed (constitutional isolation). Migrated from the hand-wired
+      heartbeat_tick line to the scheduler (#878).
