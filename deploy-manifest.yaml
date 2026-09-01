@@ -1231,19 +1231,19 @@ files:
   - src: tools/auxiliary/audit_legacy_proven.py
     dest: .claude/tools/auxiliary/audit_legacy_proven.py
     kind: asset
-    sha256: 66b7ccf48fbb4c5831b44def2ba762e72e7fa7e078012255ca5d6d0e39285327
+    sha256: 73346d5e36a486e8a169be9d9da1f3323b07377ee4fb206132a5e7680f0272be
   - src: tools/auxiliary/capture_golden.py
     dest: .claude/tools/auxiliary/capture_golden.py
     kind: asset
-    sha256: 2686b51ea88b1099f1be270acaec806bbb6520abb454b3d7a8ff3176364ad49c
+    sha256: 928d5b0af18b5f8aa2572992d6af0c04aeb0e79c5f131bf7139cb5f6700eaf75
   - src: tools/auxiliary/measure_blind_coverage.py
     dest: .claude/tools/auxiliary/measure_blind_coverage.py
     kind: asset
-    sha256: 882b33010fe30c9b2fd6315730ac91cfdbdabab44fedd34a25fdd023a2e5064c
+    sha256: 033c0e0214a29a6d05c0d7fd4e85d0af8e2a6ede9c95c5772660875ce0fa61c7
   - src: tools/auxiliary/measure_cold_start.py
     dest: .claude/tools/auxiliary/measure_cold_start.py
     kind: asset
-    sha256: ce4813125ac0f7123470682957220c8986b31b577727b99ad7a326fd5b4d57d4
+    sha256: 67db05376295c7cbcf6a23ec72e9b91436880bb7e84db84f1f55b87687778d6b
   - src: tools/auxiliary/README.md
     dest: .claude/tools/auxiliary/README.md
     kind: asset
@@ -1251,7 +1251,7 @@ files:
   - src: tools/auxiliary/sanitize.py
     dest: .claude/tools/auxiliary/sanitize.py
     kind: asset
-    sha256: 906bd1ea6e5ef357e02a57113a1c44d62ccc04731f6f87cadcbb2f5037316773
+    sha256: 7120a19c9be74858351ff5b225bf533b60927242a1a6e7c31907b4eb2478f158
   - src: tools/crypto/__init__.py
     dest: .claude/tools/crypto/__init__.py
     kind: asset
@@ -1263,7 +1263,7 @@ files:
   - src: tools/crypto/crypto-tool.py
     dest: .claude/tools/crypto/crypto-tool.py
     kind: asset
-    sha256: a8f4be599ee567948fa5930085c387f5d58b562f3b077f1421bf0135394e9e32
+    sha256: 2b546466c45e83bd503b69d0413a209cb0e0a1fe9a65207ed5b88b057f4a1fcf
   - src: tools/crypto/README.md
     dest: .claude/tools/crypto/README.md
     kind: asset
@@ -1271,7 +1271,7 @@ files:
   - src: tools/ext-scan.py
     dest: .claude/tools/ext-scan.py
     kind: asset
-    sha256: 65cd3c94eaad29c1057499412c53cff9474851f95e1df65333de2d03de973740
+    sha256: f342609c6c3b1204fa411b5a1e199eec1072c30d87cbb92144a7e4bf8d6af712
   - src: tools/ghidra/DecompileFunctions.java
     dest: .claude/tools/ghidra/DecompileFunctions.java
     kind: asset
@@ -1279,11 +1279,11 @@ files:
   - src: tools/ghidra/ghidra_diff.py
     dest: .claude/tools/ghidra/ghidra_diff.py
     kind: asset
-    sha256: 0649c76b45ec515e8bb853e24dc24ae3e1b859c4f1655ecc84bf9343abf56428
+    sha256: 4cc43417d98ffcccf5ac3ccb8e986c7a4ee7628926f9a4c54c68eebd5999798b
   - src: tools/ghidra/ghidra_job.py
     dest: .claude/tools/ghidra/ghidra_job.py
     kind: asset
-    sha256: d6d50dcb67ce506795d7ad690f6fa26c2e35a515ea2a70892fe0e96b8cdb4d9c
+    sha256: 147ce241302bf92f6a4f7d38875f58d13253cfae18a2236a7fb99853e6772255
   - src: tools/ghidra/GhidraBindiff.java
     dest: .claude/tools/ghidra/GhidraBindiff.java
     kind: asset
@@ -1319,11 +1319,11 @@ files:
   - src: tools/ghidra/run_ghidra_postscript.py
     dest: .claude/tools/ghidra/run_ghidra_postscript.py
     kind: asset
-    sha256: 234be74695dc05ba85e9f6d12965233bcc6ce5a223f4a60041133f91f6210da7
+    sha256: 0b0d9450f5f4d0a57e80d25f377c01b4f02106d2faef7b8e401a721c5c571ffd
   - src: tools/pipelines/build_evidence_index.py
     dest: .claude/tools/pipelines/build_evidence_index.py
     kind: asset
-    sha256: 259f9e88ab3503e616405b426a6b53844b87c6f9dc14d97ad942794294628d27
+    sha256: 222ce2a48b0defc1c6f0222ed7dc37838431876373f904e599b71b97d5c7ec9a
   - src: tools/pipelines/README.md
     dest: .claude/tools/pipelines/README.md
     kind: asset
@@ -1335,23 +1335,23 @@ files:
   - src: tools/static/apk_mem_gate.py
     dest: .claude/tools/static/apk_mem_gate.py
     kind: asset
-    sha256: e28c5bad14ec5f6ea6db36413e2f3ecbb1fc2b1ae3fd9bd98526af3c6904b7cf
+    sha256: 9150e16e2c70aa54ed550fc6a609c9cb35808412419c72c36f613d9ebb7cb701
   - src: tools/static/baksmali_index.py
     dest: .claude/tools/static/baksmali_index.py
     kind: asset
-    sha256: de101302563c031fb387445a90bd01817eae873339e698eeef2138cff76d4aee
+    sha256: dd0d55d1ab0d9e15fb4a40274a05b414e09e5b61595cff64d36a2c19ebe7e2ab
   - src: tools/static/binary-sweep.py
     dest: .claude/tools/static/binary-sweep.py
     kind: asset
-    sha256: 9894e80bdc8a287967847d34d61f9a1b2913875d48fdeb81a84809afbfbd82ba
+    sha256: 84ad7604a70c8eaf7e6542d2c5ae85c3b2b3285387dcaedc365dced28595a756
   - src: tools/static/c_normalize.py
     dest: .claude/tools/static/c_normalize.py
     kind: asset
-    sha256: 400e5d73c2f8d69ce9b125ed2766bb319c0e6999aafd76e8413876d8b30392c8
+    sha256: 490350f3f8ba7284915d35b3a2dc8f38e44ffb2e92a58913da972ef68eacb299
   - src: tools/static/call-site-args.py
     dest: .claude/tools/static/call-site-args.py
     kind: asset
-    sha256: 7c0dff1e07d410a8dded65e85d064f84dcb48081218b845f6f7e463d91c8c344
+    sha256: 7398ca4b95c2ea0e232023ef79b89e3ec81b7da418ea9b1a1864769167809c0d
   - src: tools/static/common.py
     dest: .claude/tools/static/common.py
     kind: asset
@@ -1359,39 +1359,39 @@ files:
   - src: tools/static/dexdc_scanner.py
     dest: .claude/tools/static/dexdc_scanner.py
     kind: asset
-    sha256: 7d128a5109b78de1f6f7172d26f4b63f699bb86dad4f10e3002461157780661f
+    sha256: 4c506de4de751386773b4f1ddf4b8517df4618c2cf22f07181ca1c79fc1343b8
   - src: tools/static/die_probe.py
     dest: .claude/tools/static/die_probe.py
     kind: asset
-    sha256: 52fd1eb671536d959b4975b6922a3a65caf6a79d5f01c58458b96603f5fa1ca2
+    sha256: 32e98f4c58f7800c6f5500170da4301476f9aff584b7d17f495fa9599d5d4796
   - src: tools/static/disasm_constant_check.py
     dest: .claude/tools/static/disasm_constant_check.py
     kind: asset
-    sha256: 3c3e08692046ca2d790c3e7eb4d6e6d94996ac51138d587671807b7fff13b60c
+    sha256: 5b80f3c63ce7299b04678aa7e643dec0803402da8b65ccdd4842f9388e50ab3e
   - src: tools/static/disasm_dump.py
     dest: .claude/tools/static/disasm_dump.py
     kind: asset
-    sha256: a69938c56dcc584df5418555a9a9b212ba8076926433870ee20d0a093df4f9e2
+    sha256: c791caf1f26ca044573b758fea1e2120fc748b298d793271a1f24105fc3b3261
   - src: tools/static/extract-syscalls.py
     dest: .claude/tools/static/extract-syscalls.py
     kind: asset
-    sha256: 2b6244c0c9250a04bad10d663c8fd88e2ee13f4b925d1b8972cd0fe55bb4f8cf
+    sha256: 35cb00ab30f4521671ec5f9cfdb71dbd5eb104cf7a8fd518114ed5d83dc45d65
   - src: tools/static/go-buildinfo-carve.py
     dest: .claude/tools/static/go-buildinfo-carve.py
     kind: asset
-    sha256: 477a18076892d68d0a233bac640572072401f6c7dcbe87806ce5d629ce379811
+    sha256: 44e2c06d5150f72bef2ee5b16384ba0313ada8ee1c2fa658f2a27d8d91386516
   - src: tools/static/opaque_pred.py
     dest: .claude/tools/static/opaque_pred.py
     kind: asset
-    sha256: 02aac19f7b7d11bd99bdae77002d6ef44a3c34a016f114d3eb9db774a50f9ee1
+    sha256: b988f22e21d18f5084c758f31ebf654a88d8338ebeb27f4b9b471eaf11f94019
   - src: tools/static/overlay_scan.py
     dest: .claude/tools/static/overlay_scan.py
     kind: asset
-    sha256: 1bd4b10564d89c4bb29f505d7a82e624e526667ac36f1f8013f700793a43f324
+    sha256: de8a763e0cb43257891d6f9b77ee479cb263c29062179c11fb75083ac9b18988
   - src: tools/static/pe_analyze.py
     dest: .claude/tools/static/pe_analyze.py
     kind: asset
-    sha256: be8af94212a2b9c0e12da5aaeb5f79926d161f108057bf5ea113ddf168825cf2
+    sha256: 7544e87783399828536c4a33b56701c6d3e859f529e78247028625f94abadb25
   - src: tools/static/README.md
     dest: .claude/tools/static/README.md
     kind: asset
@@ -1399,27 +1399,27 @@ files:
   - src: tools/static/rust-dep-strings.py
     dest: .claude/tools/static/rust-dep-strings.py
     kind: asset
-    sha256: ac45675fb4cebb0c3cc6da708b36969c6748d82006e299961d9d2897826d4a64
+    sha256: 7e60498bc417fc86c6cc4b300c6cf3e3b81bb927356d895c1cf9b073a2f01c77
   - src: tools/static/shellcode_scan.py
     dest: .claude/tools/static/shellcode_scan.py
     kind: asset
-    sha256: 8c55abb359a74787f66aea5557be955073d367fd71ba07aa57b9107fe73c0fa3
+    sha256: 87915d83cd08e72728ac29e4e06a00b2944aad89cb94c495563620e442830305
   - src: tools/static/stack-strings.py
     dest: .claude/tools/static/stack-strings.py
     kind: asset
-    sha256: 7a18731731bb3c2c2b07663cfa40da14635475170566d70aeec1a64335e3191c
+    sha256: a6bc33d13c88dcc5923bd1058edab52059948a9e4f1d7d2fdae0067ed309f68c
   - src: tools/static/strings-classify.py
     dest: .claude/tools/static/strings-classify.py
     kind: asset
-    sha256: 186d393f8dc846d2acd52908dbd457cc4b05bfde5514b9f008f23c2b6ace39d2
+    sha256: 8284f096e2999e54aec976a01d0be7f5ed6b5eaad0031c95039c4891d4b5541c
   - src: tools/static/web_gitnexus_demo.py
     dest: .claude/tools/static/web_gitnexus_demo.py
     kind: asset
-    sha256: 1ebcf41b02353716670b476ace52a3d28c92b816d801d92046c43ecf83d7c406
+    sha256: 5601a053d2bd453d874495a3677905b16f5858c994a9b937405def4b17fc1e3a
   - src: tools/static/yara-gen.py
     dest: .claude/tools/static/yara-gen.py
     kind: asset
-    sha256: b47ce3547f105b76b412308b6f0a5ede9fdb8fd250fe392314e92d3a086092e1
+    sha256: b93db5a5391951f47744f1182fa9b45a5e678da289171c65397fe92aa6d73c80
   - src: tools/static/yara-rules/crypto-tables.yar
     dest: .claude/tools/static/yara-rules/crypto-tables.yar
     kind: asset
@@ -1431,12 +1431,12 @@ files:
   - src: tools/static/yara-scan.py
     dest: .claude/tools/static/yara-scan.py
     kind: asset
-    sha256: f7399f68414f44d222c2f244c507528c084d3c6ff8cb52f0e137856414b8e5f4
+    sha256: 29d3b578cf2b746a7fd7f81ab4eb9ad6a065932fa35c8161f5189cafa3f3c5aa
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: ae9034adb44ea2c89cb9e82d739646702ddf5d664443c7bea345a24522782092
+    sha256: 981de141cea75ae4b21dfbd87fbd6228d9a30b671db926227152a6fb4b0f5a27
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
-    sha256: 401270a5e1d10fb36cd05be52069a1edf37b55c68c3b7f920d0a3a4ae2795932
+    sha256: 99eb9c56d48c6b172acff6b8c967282f29b5e70892527e2b64b8354caa490c68
