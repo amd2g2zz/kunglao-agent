@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""UTF-8 stdout convention contract (#317, #314 A1): every tools/ CLI must
-reconfigure sys.stdout to UTF-8 under a try/except guard.
+"""UTF-8 stdout convention contract (#317, #314 A1; mechanism replaced by
+#863 enforcement-by-mechanism): every tools/ CLI must delegate its UTF-8
+stdio guard to the shared ``tools/_lib/stdio.py::ensure_utf8_stdout``.
 
 Background: three independent tool batches (1b: tools/static, 1c:
 _common.py + die_probe, 2b: qiling-tool) each hit the same defect — tool
@@ -58,55 +59,15 @@ def _cli_files() -> list[tuple[str, str]]:
 
 
 def _guard_status(src: str) -> str:
-    """Return "ok", or a human-readable reason the UTF-8 guard is missing.
-
-    Contract: a call ``sys.stdout.reconfigure(encoding="utf-8",
-    errors="replace")`` inside a try block whose handlers catch both
-    AttributeError and ValueError (the canonical #317 guard shape).
-    """
+    """#863 delegation contract: the CLI must call the shared
+    ensure_utf8_stdout() (any inline reconfigure copy is legacy)."""
     tree = ast.parse(src)
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Try):
-            continue
-        call = None
-        for stmt in node.body:
-            for sub in ast.walk(stmt):
-                if (isinstance(sub, ast.Call)
-                        and isinstance(sub.func, ast.Attribute)
-                        and sub.func.attr == "reconfigure"
-                        and isinstance(sub.func.value, ast.Attribute)
-                        and sub.func.value.attr == "stdout"
-                        and isinstance(sub.func.value.value, ast.Name)
-                        and sub.func.value.value.id == "sys"):
-                    call = sub
-                    break
-            if call is not None:
-                break
-        if call is None:
-            continue
-        kwargs = {kw.arg: kw.value for kw in call.keywords}
-        enc = kwargs.get("encoding")
-        errs = kwargs.get("errors")
-        if not (isinstance(enc, ast.Constant) and enc.value == "utf-8"):
-            return (f"reconfigure present but encoding="
-                    f"{ast.unparse(enc) if enc is not None else None!r}")
-        if not (isinstance(errs, ast.Constant) and errs.value == "replace"):
-            return (f"reconfigure present but errors="
-                    f"{ast.unparse(errs) if errs is not None else None!r}")
-        caught: set[str] = set()
-        for handler in node.handlers:
-            if handler.type is None:
-                caught.add("bare-except")
-            elif isinstance(handler.type, ast.Tuple):
-                caught.update(e.id for e in handler.type.elts
-                              if isinstance(e, ast.Name))
-            elif isinstance(handler.type, ast.Name):
-                caught.add(handler.type.id)
-        if not ({"AttributeError", "ValueError"} <= caught):
-            return f"guard present but try/except catches {sorted(caught)}"
-        return "ok"
-    return ('missing sys.stdout.reconfigure(encoding="utf-8", '
-            'errors="replace") try/except guard')
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == "ensure_utf8_stdout"):
+            return "ok"
+    return "missing ensure_utf8_stdout() delegation call"
 
 
 def test_every_tools_cli_has_utf8_stdout_guard():
