@@ -170,10 +170,24 @@ def test_real_repo_opaque_pred_is_unwired():
 
 
 def test_real_repo_full_run_shape():
+    # NO absolute subject-count pin here: the CI runner workspace carries
+    # transient scripts/*.py noise, and a hard number would break on it
+    # (172 != 169 lesson). Pin the self-consistency of the split and the
+    # disposition-ledger memberships instead; snapshot numbers live in the
+    # README/Recon with an as-of label.
     r = relib_audit.audit_production(ROOT)
-    assert r["counts"]["subjects_scripts"] == 169
-    assert r["counts"]["subjects_tools"] == 32
-    assert r["counts"]["unwired_total"] == 45
+    subjects = relib_audit.production_subjects(ROOT)
+    n_scripts = sum(1 for rel in subjects if rel.startswith("scripts/"))
+    n_tools = sum(1 for rel in subjects if rel.startswith("tools/"))
+    assert r["counts"]["subjects_scripts"] == n_scripts
+    assert r["counts"]["subjects_tools"] == n_tools
+    assert (r["counts"]["wired_scripts"]
+            + r["counts"]["unwired_scripts"]) == n_scripts
+    assert (r["counts"]["wired_tools"]
+            + r["counts"]["unwired_tools"]) == n_tools
+    assert "tools/ghidra/ghidra_job.py" in r["unwired"]["tools"]
+    assert "tools/crypto/crypto-tool.py" in r["wired"]["tools"]
+    assert r["counts"]["unwired_total"] >= 40  # the #866-b debt is real
 
 
 # ---- README dual-metric anti-whitewash regression guard ----
