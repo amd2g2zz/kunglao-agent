@@ -408,25 +408,63 @@ def _reject_with_guidance(name: str, msg: str, fix: str) -> int:
 
 def _emit_trace(ws: Path, action: str, claim_id: str, detail: str,
                 exit_code: int | None = None,
-                matched_rule: str | None = None) -> None:
+                matched_rule: str | None = None,
+                trace_id: str | None = None) -> None:
     """Deviation/disproof/REJECT trace into the unified event log (kunglao_log,
-    the #459 face #461 dispatch events already use — self_redirects.jsonl
-    is the #447 ask-back VIOLATION counter and must stay unpolluted).
+    the #459 face #461 dispatch events already use — self_redirects.jsonl is
+    the #447 ask-back VIOLATION counter and must stay unpolluted).
     Action words are registered in event_taxonomy.EMIT_ACTIONS; exit_code
-    carries the gate's rc on REJECT faces (#459). Logging never breaks the
-    gate: fail-open, stderr note only. #601: matched_rule forwards the
-    #601 additive schema field (must-stop face) — None for the legacy faces."""
+    carries the gate's rc on REJECT faces (#459). #601: matched_rule forwards
+    the additive schema field (must-stop face) — None for the legacy faces.
+    #879: trace_id joins the row into its mission chain. Logging never breaks
+    the gate: fail-open, stderr note only."""
     try:
         with scripts_on_path():  # #671 scoped membership
             from kunglao_log import emit
         emit(ws, "hook:dispatch_gate", action, claim=claim_id, detail=detail,
-             exit=exit_code, matched_rule=matched_rule)
+             exit=exit_code, matched_rule=matched_rule, trace_id=trace_id)
     except Exception as exc:  # noqa: BLE001 — a trace must never block dispatch
         print(f"dispatch_gate: trace emit failed ({action}: {exc!r})",
               file=sys.stderr, flush=True)
 
 
-def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
+def _resolve_dispatch_trace(ws: Path, prompt_text: str) -> tuple[str | None, bool]:
+    """#879: trace_id resolution at the dispatch face (the path EVERY
+    kunglao dispatch passes once it survives activation + parse).
+
+    Source order:
+      1. v1 envelope `trace_id` (meta passthrough, format-valid) — the
+         orchestrator-declared chain id, reused verbatim (mission-stable);
+      2. otherwise the mission-stable allocator (kunglao_log.allocate_trace_id,
+         state in runs/.trace-state.json) — same mission keeps ONE id.
+
+    Returns (trace_id, allocated). Invalid declared values draw a stderr
+    WARN + fresh allocation. Never raises — a trace must never block
+    dispatch."""
+    declared = None
+    try:
+        meta = load_hooks_lib().parse_dispatch_json(prompt_text or "")[3]
+        if isinstance(meta, dict):
+            declared = meta.get("trace_id")
+    except Exception:  # noqa: BLE001 — metadata best-effort only
+        declared = None
+    try:
+        with scripts_on_path():
+            from kunglao_log import allocate_trace_id, validate_trace_id
+        if isinstance(declared, str) and validate_trace_id(declared):
+            return declared, False
+        tid, created = allocate_trace_id(ws)
+        if declared is not None:
+            print(f"dispatch_gate: WARN trace_id {declared!r} invalid "
+                  f"(want tr-<mission>-<seq>, #879); allocated {tid}",
+                  file=sys.stderr, flush=True)
+        return tid, created
+    except Exception:  # noqa: BLE001 — trace must never block dispatch
+        return (declared if isinstance(declared, str) else None), False
+
+
+def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str,
+                      trace_id: str | None = None) -> int | None:
     """① #496: top-1 enforcement — exact copy of the #310 agenttype-deviation
     pattern with the ranking source swapped for worker_budget.check_priority
     (which ranks by priority_ratio, the #499 authority — reusing it keeps
@@ -446,7 +484,8 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
         # the exception class so the post-mortem can distinguish scorer
         # unavailable from audit crash without re-reading the source.
         _emit_trace(ws, "top1_fail_open", claim_id,
-                    f"reason=scorer_unavailable; exc={type(exc).__name__}")
+                    f"reason=scorer_unavailable; exc={type(exc).__name__}",
+                    trace_id=trace_id)
         return None
     try:
         _ok, msg, deviated = check_priority(
@@ -456,7 +495,8 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
         # #569 AUDIT: same as above — the audit itself crashed, the gate
         # fails open, but the audit log must record the bypass.
         _emit_trace(ws, "top1_fail_open", claim_id,
-                    f"reason=audit_crash; exc={type(exc).__name__}: {exc}")
+                    f"reason=audit_crash; exc={type(exc).__name__}: {exc}",
+                    trace_id=trace_id)
         return None
     if not deviated:
         if msg:
@@ -464,11 +504,12 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str) -> int | None:
         return None
     if "agent-reasoning:" in (prompt_text or "").lower():
         print(f"TOP1 (deviation recorded): {msg}", file=sys.stderr, flush=True)
-        _emit_trace(ws, "priority_deviation", claim_id, msg)
+        _emit_trace(ws, "priority_deviation", claim_id, msg, trace_id=trace_id)
         return None
     # #459: the REJECT face reaches the unified log too (the excused side
     # already traces; a blocked deviation is the event the post-mortem needs)
-    _emit_trace(ws, "top1_reject", claim_id, msg, exit_code=2)
+    _emit_trace(ws, "top1_reject", claim_id, msg, exit_code=2,
+                trace_id=trace_id)
     # #603: a REJECT must be DURABLE, not trace-only. Pre-#603 this face
     # emitted a stderr/stdout trace and nothing else — an orchestrator
     # looping on the same deviation accumulated rejections silently. One
@@ -607,7 +648,8 @@ def _emit_capability_dormant(ws: Path, claim_id: str) -> None:
               file=sys.stderr, flush=True)
 
 
-def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
+def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
+                      trace_id: str | None = None) -> int | None:
     """②(a) #496: capability card — a validated capability in hand (the
     #495 artifact, read via priority_ratio.EvidenceView) constrains tool
     choice. Switching to a disjoint declared tool family REJECTs unless the
@@ -666,13 +708,15 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
                       f"{sorted(disp_fams)}", file=sys.stderr, flush=True)
                 _emit_trace(ws, "capability_switch", claim_id,
                             f"disproof shown; validated={sorted(cap_fams)} "
-                            f"dispatch={sorted(disp_fams)}")
+                            f"dispatch={sorted(disp_fams)}",
+                            trace_id=trace_id)
         return None
     # #459: the capability REJECT face reaches the unified log (trajectory-1
     # pivots must be visible in the event stream, not stderr-only)
     _emit_trace(ws, "capability_reject", claim_id,
                 f"validated={v['validated_families']} "
-                f"dispatch={v['dispatch_families']}", exit_code=2)
+                f"dispatch={v['dispatch_families']}", exit_code=2,
+                trace_id=trace_id)
     return _reject_with_guidance(
         "capability",
         f"{claim_id} has a validated capability in hand "
@@ -1072,6 +1116,12 @@ def main() -> int:
     if _declared_irreversible(prompt_text) or rule is not None:
         return _warn_must_stop(ws, claim_id, prompt_text, rule)
 
+    # #879: resolve the mission trace BEFORE the decision teeth so excused
+    # deviation rows attribute to the chain; allocation is mission-stable
+    # (runs/.trace-state.json) so a REJECTed dispatch wastes nothing — the
+    # next passing dispatch of the same mission reuses the id.
+    trace_id, trace_allocated = _resolve_dispatch_trace(ws, prompt_text)
+
     blocked = _failure_blocked_ids(ws)
     if claim_id in blocked:
         # INJECT corrective guidance (not hard block — orchestrator can
@@ -1106,16 +1156,22 @@ def main() -> int:
     # #496 decision teeth, in order: top-1 first (the most fundamental
     # deviation), then the capability card, then the strategy log on the
     # pass path. Each REJECTs (exit 2) or returns None to fall through.
-    rc = _top1_enforcement(ws, claim_id, prompt_text)
+    rc = _top1_enforcement(ws, claim_id, prompt_text, trace_id=trace_id)
     if rc is not None:
         return rc
-    rc = _capability_guard(ws, claim_id, prompt_text)
+    rc = _capability_guard(ws, claim_id, prompt_text, trace_id=trace_id)
     if rc is not None:
         return rc
     # #567 SECURITY: MCP prefix gate runs BEFORE this point (see main()
     # ordering) — a forbidden MCP namespace is a structural violation,
     # not a session-level concern, so it cannot be deferred to the
     # activated path.
+    # #879: first allocation in a mission leaves one durable row (the
+    # reuse face is silent — the linkage dispatch row carries the id).
+    if trace_allocated:
+        _emit_trace(ws, "trace_allocated", claim_id,
+                    "mission-stable allocation (envelope trace_id absent "
+                    "or format-invalid)", trace_id=trace_id)
     _log_strategy_dispatch(ws, claim_id, prompt_text)
     return 0
 
