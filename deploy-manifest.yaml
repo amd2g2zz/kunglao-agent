@@ -299,7 +299,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 7e244837dd2874d5ec8041926e546359584dfe2880169584819efb0d3ec9e6c4
+    sha256: 4cace0a34fb105468009914dc29215fb72b3d00e945dc26271421b4e44f23c9e
   - src: scripts/explore_gate.py
     dest: .claude/scripts/explore_gate.py
     kind: scaffold
@@ -339,7 +339,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: f94a51c9a2788ca77088f2144a9adb8f9859b517af4f2107e8c9ec9f6b3f98cf
+    sha256: c67aaf9d907b8e08fd4016eddbebf209236c992094e9135ad030a795660f5087
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -439,7 +439,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: a113ab4320869bccd257047c906300eeb122159b8f5b278e2d70dece261e98ac
+    sha256: d22afc01b7f892f379617348ccd63e09ece5bd589779eae899dffe8117e72ca3
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -680,6 +680,10 @@ files:
     dest: .claude/scripts/status_defs.py
     kind: scaffold
     sha256: a9c67f730d758dbe49a514a59e7eaec1b7e286d11bd1a623f218a093b154845a
+  - src: scripts/statusline_snapshot.py
+    dest: .claude/scripts/statusline_snapshot.py
+    kind: scaffold
+    sha256: bd03fd4a348ec3fd89356b1878cad5f3acb0d2166d5e060620e7a2cf7cb28bf8
   - src: scripts/strategy_metrics.py
     dest: .claude/scripts/strategy_metrics.py
     kind: scaffold
@@ -1207,7 +1211,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: ac376bc7ea52d9711b2b84babdf3be2a947f69c5b81f8e1ab899770d9eb1c02a
+    sha256: 238f27c2a9b88575d63a94c2160d7f28a0e4ffea3f69d8c76e68bdf9e8ec59fe
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

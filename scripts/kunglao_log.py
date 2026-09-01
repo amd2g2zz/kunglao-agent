@@ -85,6 +85,7 @@ LEGACY_ACTORS = frozenset({
     "plan_drift", "plan_drift_detector", "priority", "priority_ratio",
     "queue", "recall_inject", "refutation_propagate", "rho_checkpoint",
     "rollup", "retract_claim", "rho_verifier", "scan_worker_budget",
+    "statusline_snapshot",  # #883 per-tick statusline health-snapshot writer
     "telemetry", "think_seat", "toolchain_install", "tuition_curve",
     "update_index", "upgrade", "user", "user_signal", "verdict_scorer",
     "verify_status_watch", "verifier", "violation_capture",

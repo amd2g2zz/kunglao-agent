@@ -349,6 +349,15 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:  # noqa: BLE001 — cockpit 采样永不打断 tick
         pass
 
+    # #883: pre-write the statusline health snapshot (O(1) atomic; the user's
+    # combined-statusline.mjs only reads this file — zero spawn). Fail-open
+    # like the cockpit sample above: a snapshot crash must never fail the tick.
+    try:
+        import statusline_snapshot as _sls
+        _sls.write_snapshot(ws)
+    except Exception:  # noqa: BLE001 — 快照永不打断 tick
+        pass
+
     action = report["action_taken"] or "(EMPTY — must be filled: what was dispatched/verified/resolved/reactivated)"
     print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | heartbeat_rc={rc_hb} | {hb}")
     if first_failure is not None:

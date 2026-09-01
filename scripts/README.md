@@ -117,6 +117,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `register_proven_gate.py` | claim-register →PROVEN evidence gate (#819) — latest verify=passes + red-team ran (≠REFUTED) or justified waiver; wired as write_guard register leg | hooks/write_guard, tests |
 | `stale_blocker_prune.py` | stale blocker pruning | lib(1), tests |
 | `status_defs.py` | claim status constants — single source of truth | hooks, lib(13), tests |
+| `statusline_snapshot.py` | #883 statusline health-snapshot writer: probe registry + semantic state machine + atomic pre-write of runs/.kunglao-statusline.json per tick (Node reads it, zero spawn); attached from heartbeat_tick, fail-open | heartbeat_tick step 11, tests |
 | `liveness_policy.py` | liveness/staleness minutes constants — single source (#597: stuck 20 / heartbeat 35 / activation+env 30 / kicker+margins 10, values adjudicated) | hooks, lib(9), tests |
 | `tier_rules.py` | claim tier rules | tests |
 | `loop_state.py` | loop state persistence | lib(1), tests |

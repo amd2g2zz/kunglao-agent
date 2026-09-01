@@ -224,6 +224,7 @@ EMIT_ACTIONS = [
     "signal_gate_reject",    # #868 dual-gate rejection w/ disclosure mode
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "stale_plan_on_new_evidence",
+    "statusline_snapshot",  # #883 per-tick statusline health-snapshot write face
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
