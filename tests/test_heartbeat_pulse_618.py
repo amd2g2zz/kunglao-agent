@@ -97,8 +97,8 @@ def test_stop_face_registered(tmp_path):
     faces = {event for event, entries in hooks.items()
              for grp in (entries or [])
              if "heartbeat_touch" in json.dumps(grp)}
-    assert "Bash" in faces, faces
-    assert "Stop" in faces, faces
+    assert "PreToolUse" in faces, faces   # matcher=Bash under PreToolUse
+    assert "Stop" in faces, faces         # #618 second slot, no matcher
 
 
 def test_gap_alarm_over_threshold(tmp_path):

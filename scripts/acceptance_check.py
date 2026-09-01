@@ -116,7 +116,7 @@ def _check_test_suite(full: bool = False) -> dict:
             nodeids = _load_smoke_nodeids()
             cmd.extend(nodeids)
             mode, timeout = f"smoke:{len(nodeids)}", SMOKE_SUITE_TIMEOUT
-        r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
         last = (r.stdout or "").strip().splitlines()[-1] if r.stdout else ""
         return {"name": "test_suite_green", "passed": r.returncode == 0,
                 "detail": f"[{mode}] {last[:120]}"}
@@ -154,4 +154,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

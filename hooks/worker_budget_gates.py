@@ -4,7 +4,7 @@ from __future__ import annotations
 from worker_budget_core import (
     MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, MAX_RETRIES, RETRY_COUNTER_FILE,
     ENV_STATE_FILE, ENV_STATE_TTL_MINUTES,
-    PREFIX_RE, CLAIM_RE, VM_TOOLS, KNOWN_TOOLS, HOST_FORBIDDEN_TOOLS,
+    VM_TOOLS, KNOWN_TOOLS, HOST_FORBIDDEN_TOOLS,
     TOOL_ERRORS_FILE, GENERIC_WORK_AGENT, _SKILL_ROOT,
     _ratio_rank, _EvidenceView, _PRIORITY_AVAILABLE,
     _load_specialist_table, _recommend_agent_type, _AGENTTYPE_AVAILABLE,

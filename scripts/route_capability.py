@@ -552,7 +552,7 @@ def _fallback() -> dict:
         proc = subprocess.run(
             [sys.executable, str(DEFAULT_TOOL_SEARCH), "--capability",
              FALLBACK_GUESS, "--json"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace",
         )
         names = ([t.get("name") for t in
                   json.loads(proc.stdout).get("tools", [])]
@@ -808,4 +808,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

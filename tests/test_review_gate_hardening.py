@@ -8,7 +8,7 @@ GATE = REPO / 'scripts' / 'review_gate.py'
 
 def _run_gate(args, cwd=None):
     result = subprocess.run([sys.executable, str(GATE)] + args,
-                           capture_output=True, text=True, cwd=cwd or REPO)
+                           capture_output=True, text=True, cwd=cwd or REPO, encoding="utf-8", errors="replace")
     return result.returncode, result.stdout + result.stderr
 
 def test_mint_rejects_empty_key():
@@ -61,5 +61,5 @@ def test_key_init_creates_file():
         rc, out = _run_gate(['key-init', str(k)])
         assert rc == 0
         assert k.exists()
-        content = k.read_text().strip()
+        content = k.read_text(encoding='utf-8').strip()
         assert len(content) >= 64

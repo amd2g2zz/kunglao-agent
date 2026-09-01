@@ -105,7 +105,7 @@ def run(script: str, ws: Path, *extra: str) -> dict:
     try:
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / script), str(ws), *extra],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace",
         )
         # stdout AND stderr tails both ride the report (#381): a crashed step
         # (e.g. hooks_selfcheck import-time registry drift) prints its
@@ -350,4 +350,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

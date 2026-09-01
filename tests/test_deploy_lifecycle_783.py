@@ -148,7 +148,7 @@ def test_deploy_workspace_copy_writes_carrier(tmp_path: Path):
 
     carrier = _carrier(ws)
     expected = dm.manifest_digest(dm.build_entries())
-    assert carrier["schema_version"] == 1
+    assert carrier["schema_version"] == 2  # #810: dests list added
     assert carrier["deployed_digest"] == expected
     assert carrier["entries"] == len(dm.build_entries())
     assert carrier["deployed_at"]  # UTC iso stamp present

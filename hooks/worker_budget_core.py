@@ -16,7 +16,10 @@ from pathlib import Path
 
 import yaml
 
-from _path_hygiene import ensure_scripts_path  # #671 sys.path hygiene authority
+from _path_hygiene import (  # #671 sys.path hygiene authority
+    ensure_scripts_path,
+    load_hooks_lib,
+)
 
 # ---------- constants ----------
 
@@ -43,9 +46,10 @@ RETRY_COUNTER_FILE = 'runs/.retry-counter.yaml'
 ENV_STATE_FILE = 'runs/env-state.json'
 ensure_scripts_path()
 from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402
+# #861 单源化保留：无 claim 的 v0 裸前缀（非 claim 派发）是 budget 本地边缘
+# 合同——claim 派发的识别已单源到 lib_kunglao.parse_dispatch。
+_V0_PREFIX_FALLBACK = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\]')
 
-PREFIX_RE = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\]')
-CLAIM_RE = re.compile(r'\bclaim\s+(C-\d+)')
 
 VM_TOOLS = {'vmr-shell', 'rev-frida'}
 KNOWN_TOOLS = ('vmr-shell', 'rev-frida', 'malware-framework')
@@ -140,7 +144,7 @@ def _run_py(args, cwd=None):
         return subprocess.run(
             [sys.executable] + args,
             capture_output=True, text=True, timeout=20,
-            cwd=cwd,
+            cwd=cwd, encoding="utf-8", errors="replace",
         )
     except (subprocess.SubprocessError, OSError):
         return None
@@ -276,17 +280,23 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
 # ---------- parsing ----------
 
 def parse_dispatch(description: str) -> tuple[int, list[str], str | None]:
-    """Parse '[TN tools=a,b] claim C-NN ...' → (tier, tools, claim_id).
+    """Parse the dispatch shape -> (tier, tools, claim_id). #861 单源化。
 
-    Returns (0, [], None) if the prefix is absent.
-    """
-    m = PREFIX_RE.match(description)
-    if not m:
-        return (0, [], None)
-    tier = int(m.group(1))
-    tools = [t.strip() for t in m.group(2).split(',') if t.strip()]
-    cm = CLAIM_RE.search(description)
-    cid = cm.group(1) if cm else None
+    Delegates to hooks/lib_kunglao.py:parse_dispatch — v1 canonical JSON
+    envelope takes precedence, v0 claim prefix retained as legacy-replay
+    fallback. Previously parsed the v0 prefix only, silently disarming the
+    budget cid gates on v1 dispatches (issue #861, B1).
+
+    边缘合同保留：无 claim 的 v0 裸前缀（非 claim 派发，如 init-worker 类）
+    是 budget 本地合同——lib 单源只建模 claim 派发，故此回退留在本地。"""
+    lib = load_hooks_lib()
+    tier, tools, cid = lib.parse_dispatch(description)
+    if tier == 0:
+        m = _V0_PREFIX_FALLBACK.match(description)
+        if m:
+            return (int(m.group(1)),
+                    [t.strip() for t in m.group(2).split(',') if t.strip()],
+                    None)
     return (tier, tools, cid)
 
 

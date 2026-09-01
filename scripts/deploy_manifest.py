@@ -31,6 +31,59 @@ SKILL_SCRIPTS = ROOT / "scripts"
 IMPORT_RE = re.compile(
     r"^\s*(?:import|from)\s+([A-Za-z_]\w*)", re.MULTILINE)
 
+# #810: dynamic run-by-path references (`_run_py([str(root / 'scripts' /
+# <name dot py>)])`) are invisible to import-AST closure. Scan
+# BOTH source trees for the literal `scripts/<name>.py` string forms and
+# treat them as first-class deployment obligations (validation face — the
+# manifest itself is now a full mirror, so this set must be a subset).
+_DYNAMIC_REF_RE = re.compile(
+    r"['\"]scripts/([A-Za-z0-9_.-]+\.py)['\"]"          # plain-slash form
+    r"|['\"]scripts['\"]\s*/\s*['\"]([A-Za-z0-9_.-]+\.py)['\"]")  # /-chain form
+
+# #810: non-code assets materialize with hooks/agents (full mirror).
+_ASSET_DIRS = ("references", "templates", "tools")
+
+
+def _iter_asset_files():
+    for d in _ASSET_DIRS:
+        base = ROOT / d
+        if not base.is_dir():
+            continue
+        for p in sorted(base.rglob("*")):
+            if p.is_file() and "__pycache__" not in p.parts:
+                yield d, p
+
+
+def dynamic_script_refs() -> set:
+    """`scripts/<name>.py` literal path references across hooks/ + scripts/
+    source trees — the class #783's import-AST closure could not see."""
+    out: set = set()
+    for base in (ROOT / "hooks", SKILL_SCRIPTS):
+        for p in base.glob("*.py"):
+            try:
+                src = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for m in _DYNAMIC_REF_RE.finditer(src):
+                name = m.group(1) or m.group(2)
+                if name:
+                    out.add(f"scripts/{name}")
+    return out
+
+
+def closure_validation(entries) -> list:
+    """#810 validation face (was the trimming basis — now gate only):
+    every dynamically-referenced scripts/<name>.py must be in the deployed
+    set. Returns human-readable missing lines (empty = green)."""
+    srcs = {str(e.get("src", "")) for e in entries}
+    missing = []
+    for ref in sorted(dynamic_script_refs()):
+        if ref not in srcs:
+            missing.append(
+                f"{ref}: dynamically referenced (hooks/scripts source scan) "
+                f"but absent from the deployment manifest")
+    return missing
+
 
 def _sha(p: Path) -> str:
     # Normalize newlines before hashing: CI checks out LF while Windows
@@ -66,13 +119,22 @@ def scaffold_closure() -> list[str]:
 
 
 def build_entries() -> list[dict]:
+    """#810 FULL MIRROR: hooks + agents + ALL scripts/*.py + data assets
+    (references/ templates/ tools/). The import-AST closure is no longer
+    the trimming basis (it was blind to dynamic path calls, scripts-to-
+    scripts chains and non-code assets — the live-run 15/30 REJECT root).
+    Trimming is forbidden; `closure_validation` keeps the dynamic-reference
+    scan as a gate-only validation face."""
     ents: list[dict] = []
     for p in sorted((ROOT / "hooks").glob("*.py")):
         ents.append({"src": f"hooks/{p.name}", "kind": "hook"})
     for p in sorted((ROOT / "agents").glob("*.md")):
         ents.append({"src": f"agents/{p.name}", "kind": "agent"})
-    for stem in scaffold_closure():
-        ents.append({"src": f"scripts/{stem}.py", "kind": "scaffold"})
+    for p in sorted(SKILL_SCRIPTS.glob("*.py")):
+        ents.append({"src": f"scripts/{p.name}", "kind": "scaffold"})
+    for d, p in _iter_asset_files():
+        ents.append({"src": f"{d}/{p.relative_to(ROOT / d).as_posix()}",
+                     "kind": "asset"})
     for e in ents:
         parts = e["src"].split("/", 1)
         e["dest"] = f".claude/{parts[0]}/{parts[1]}"
@@ -117,12 +179,14 @@ def deployed_carrier_path(ws: Path) -> Path:
 def write_carrier(ws: Path, entries: list[dict]) -> dict:
     """Stamp the deployment carrier recording what was just written into
     <ws>/.claude/ (both writer faces: deploy_workspace_copy at init,
-    deployed_refresh at upgrade)."""
+    deployed_refresh at upgrade). #810: dests list added so the activation
+    completeness face can verify the deployed surface without the manifest."""
     import time
     carrier = {
-        "schema_version": 1,
+        "schema_version": 2,
         "deployed_digest": manifest_digest(entries),
         "entries": len(entries),
+        "dests": sorted(str(e.get("dest", "")) for e in entries),
         "deployed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     path = deployed_carrier_path(ws)
@@ -210,8 +274,11 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     if args.write:
-        MANIFEST.write_text(render_yaml(build_entries()), encoding="utf-8")
-        print(f"OK: wrote {MANIFEST.name}")
+        entries = build_entries()
+        MANIFEST.write_text(render_yaml(entries), encoding="utf-8")
+        total = sum((ROOT / e["src"]).stat().st_size for e in entries)
+        print(f"OK: wrote {MANIFEST.name} ({len(entries)} entries, "
+              f"{total} bytes deployed surface)")  # #810 P2 size audit
         return 0
 
     text = MANIFEST.read_text(encoding="utf-8")
@@ -226,6 +293,19 @@ def main(argv: list[str] | None = None) -> int:
         p = ROOT / str(e["src"])
         if not p.is_file() or _sha(p) != e.get("sha256"):
             bad.append(e["src"])
+    # #810: validation face — dynamic refs must be a subset of deployed.
+    # The live-run REJECT was exactly this class: run-by-path scripts invisible
+    # to import-AST closure, silently undeployed.
+    missing_dyn = closure_validation(data.get("files") or [])
+    if bad:
+        print("FAIL: stale entries — run --write:", file=sys.stderr)
+        print("\n".join(sorted(bad)), file=sys.stderr)
+        return 1
+    if missing_dyn:
+        print("FAIL: dynamic script references not deployed — "
+              "run --write:", file=sys.stderr)
+        print("\n".join(missing_dyn), file=sys.stderr)
+        return 1
     if bad:
         print("FAIL: stale entries — run --write:", file=sys.stderr)
         print("\n".join(sorted(bad)), file=sys.stderr)
@@ -235,4 +315,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

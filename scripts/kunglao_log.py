@@ -57,7 +57,7 @@ def _repo_sha() -> str | None:
         out = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             cwd=str(Path(__file__).resolve().parent.parent),
-            capture_output=True, text=True, timeout=5)
+            capture_output=True, text=True, timeout=5, encoding="utf-8", errors="replace")
         sha = out.stdout.strip() if out.returncode == 0 else ""
         _REPO_SHA = sha or None
     except Exception:
@@ -180,4 +180,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

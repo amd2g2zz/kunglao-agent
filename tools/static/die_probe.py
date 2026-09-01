@@ -89,7 +89,7 @@ def resolve_die(die_arg: str | None, env: dict | None = None) -> Path | None:
 def run_diec(die: Path, target: Path, flags: list[str], timeout: int) -> dict:
     cmd = [str(die), "-j"] + flags + [str(target)]
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired as exc:
         return {"_error": f"timeout after {timeout}s: {exc}", "flags": flags}
     except OSError as exc:

@@ -259,6 +259,43 @@ def _emit_hook_slept_once(workspace: Path, state: dict, exp: datetime) -> None:
         pass  # fail-open: observability must never change the gate verdict
 
 
+def completeness_report(ws: Path) -> list:
+    """#810: deployed-surface completeness — carrier dests vs disk.
+    No carrier (legacy/pre-T5 workspaces) → [] (the #783 drift face owns
+    that verdict); carrier with dests → every missing file is listed."""
+    carrier = ws / ".claude" / "deployed-manifest.json"
+    if not carrier.is_file():
+        return []
+    try:
+        data = json.loads(carrier.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    dests = data.get("dests") or []
+    if not dests:
+        return []
+    return [d for d in dests if not (Path(ws) / d).is_file()]
+
+
+def _emit_surface_incident(ws: Path) -> None:
+    """#810: activation faces emit env_incident with the missing list when
+    the deployed surface is incomplete — a crippled deployment must NEVER
+    fail silently (the live-run REJECT was exactly this)."""
+    try:
+        missing = completeness_report(ws)
+        if not missing:
+            return
+        import kunglao_log  # noqa: E402 (scripts/ dir on path)
+        kunglao_log.emit(
+            ws, "hook_activation", "env_incident",
+            detail="deployed-surface incomplete - "
+                   + "; ".join(missing[:20])
+                   + (f" (+{len(missing) - 20} more)" if len(missing) > 20
+                      else ""),
+            exit=1)
+    except Exception:
+        pass  # observability must never break the activation writer
+
+
 def update_state(workspace: Path, tier: str, phase: str,
                  set_active=None,
                  set_paused=None,
@@ -287,6 +324,7 @@ def update_state(workspace: Path, tier: str, phase: str,
         "expires_at": (datetime.now(tz=timezone.utc) + timedelta(minutes=ttl_minutes)).isoformat(timespec="seconds").replace("+00:00", "Z"),
     }
     write_state(workspace, new_state)
+    _emit_surface_incident(workspace)  # #810: crippled deployment never fails silently
     return new_state
 
 
@@ -324,6 +362,7 @@ def renew(workspace: Path, ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
     state["ts"] = utc_now()
     state["expires_at"] = (datetime.now(tz=timezone.utc) + timedelta(minutes=ttl_minutes)).isoformat(timespec="seconds").replace("+00:00", "Z")
     write_state(workspace, state)
+    _emit_surface_incident(workspace)  # #810: renew face — same completeness guard
     # heartbeat liveness = renew ticks (only if registered)
     hb = workspace / "runs" / ".heartbeat.json"
     if hb.exists():
@@ -478,8 +517,13 @@ def build_hook_entry(hook_dir: Path, hook_file: str,
     # legacy (undeployed) callers fall back to the installing skill dir.
     project_root = Path(project).resolve() if project else Path(hook_dir).parent
     p = (Path(hook_dir) / hook_file).as_posix()
+    # #811: hooks inherit the invoking shell's locale — a GBK console turns
+    # every encoding-less IO in the hook into a decode bomb. PYTHONUTF8=1
+    # (PEP 540) pins UTF-8 for the whole subprocess tree, covering legacy
+    # call sites before the #811 explicit-encoding sweep reaches them.
     hooks = [{"type": "command",
-              "command": f"uv run --project {project_root.as_posix()} {p}"}]
+              "command": (f"PYTHONUTF8=1 "
+                          f"uv run --project {project_root.as_posix()} {p}")}]
     if matcher is None:
         return {"hooks": hooks}
     return {"matcher": matcher, "hooks": hooks}
@@ -603,6 +647,12 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
     missing = sorted(expected - bases)
     present = sorted(expected & bases)
     mismatches: list[str] = []
+    # #810: shape contract — pseudo-event keys ("Agent"/"Bash" promoted into
+    # the key slot) are the bug shape; assert the canonical form the writer
+    # emits and every event-keyed checker reads.
+    mismatches.extend(
+        "shape: " + s for s in
+        wire_up_settings.registration_shape_issues(settings))
     if missing:
         mismatches.append(
             f"coverage: hook entries missing from written file: {missing}")
@@ -649,8 +699,11 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
         base = c.replace("\\", "/").rsplit("/", 1)[-1]
         if base not in expected:
             continue  # unrelated entries are not this registration's claim
-        if not (c.startswith(prefix)
-                and c[len(prefix):].startswith(d.as_posix() + "/")):
+        # #811: entries carry an optional PYTHONUTF8=1 env prefix (PEP 540
+        # injection from build_hook_entry) — strip it before the shape check.
+        body = c[len("PYTHONUTF8=1 "):] if c.startswith("PYTHONUTF8=1 ") else c
+        if not (body.startswith(prefix)
+                and body[len(prefix):].startswith(d.as_posix() + "/")):
             mismatches.append(
                 f"shape: command for {base} is not canonical (must be "
                 f"uv-form into the declared hooks dir {d}): {c}")
@@ -729,7 +782,27 @@ def deploy_workspace_copy(ws: Path) -> dict:
 
 
 
-_DEPLOY_AGENT_MATCHER = {"heartbeat_touch.py": "Bash"}
+# #810 correction (audit B5 CONFIRMED): deployed-mode registration MUST emit
+# the same canonical event-keyed shape as register_hooks — matcher lives
+# under `matcher`, NEVER promoted into the event-key slot ("Agent"/"Bash"
+# are not Claude Code event names; the old shape made env_check blind while
+# both selfchecks passed — three checkers, three answers).
+_DEPLOYED_WIRING = (
+    # (event, matcher, hook_file) — mirrors register_hooks exactly.
+    ("PreToolUse", "Agent", "env_check_gate.py"),
+    ("PreToolUse", "Agent", "worker_budget.py"),
+    ("PreToolUse", "Agent", "dispatch_gate.py"),
+    ("PreToolUse", "Agent", "recall_inject.py"),
+    ("PreToolUse", "Bash", "heartbeat_touch.py"),
+    ("PreToolUse", "Bash", "orchestrator_tool_guard.py"),
+    ("PreToolUse", "Edit|Write|MultiEdit", "write_guard.py"),
+    ("PostToolUse", "Agent", "worker_budget.py"),   # #675 double registration
+    ("PostToolUse", "Agent", "worker_pulse.py"),
+    ("PostToolUse", "Agent", "state_anchor.py"),
+    ("PostToolUse", "Bash", "violation_capture.py"),
+    ("PostToolUse", "Bash", "bash_fact_guard.py"),  # #809 Post wiring
+    ("Stop", "", "completion_gate.py"),
+)
 
 
 def register_hooks_deployed(ws: Path) -> int:
@@ -737,10 +810,10 @@ def register_hooks_deployed(ws: Path) -> int:
 
     Copies the deployment manifest into <ws>/.claude/, then registers the
     canonical WIRE_UP registry against those LOCAL copies with
-    `uv run --project <workspace>` commands. Fire layers mirror the
-    legacy writer's contract (Agent pre-face; Bash heartbeats; Stop
-    completion); the post-write self-check runs in DEPLOYED mode so the
-    checker validates against the same declared authority."""
+    `uv run --project <workspace>` commands. #810: entries are keyed by
+    canonical event names with matcher under `matcher` — identical shape to
+    register_hooks, so env_check and both selfchecks read the same truth.
+    Idempotent per (event, matcher, command-basename)."""
     report = deploy_workspace_copy(ws)
     print(f"OK: deployed framework files (copied={report['copied']}, "
           f"unchanged={report['skipped']})")
@@ -757,10 +830,11 @@ def register_hooks_deployed(ws: Path) -> int:
             existing = {}
 
     hooks = existing.setdefault("hooks", {})
-    registry = sorted(_wire_up_hook_files())
 
-    def _basename_used(matcher: str, hf: str) -> bool:
-        for e in hooks.get(matcher) or []:
+    def _basename_used(event: str, matcher: str, hf: str) -> bool:
+        for e in hooks.get(event) or []:
+            if matcher and e.get("matcher") != matcher:
+                continue
             for h in e.get("hooks", []):
                 cmd = str(h.get("command", "")).replace("\\", "/")
                 if cmd.rsplit("/", 1)[-1] == hf:
@@ -768,25 +842,25 @@ def register_hooks_deployed(ws: Path) -> int:
         return False
 
     added = 0
-    for hf in registry:
-        matcher = _DEPLOY_AGENT_MATCHER.get(hf,
-                                            "Stop" if hf == "completion_gate.py" else "Agent")
-        bucket = hooks.get(matcher) or []
-        if _basename_used(matcher, hf):
+    for event, matcher, hf in _DEPLOYED_WIRING:
+        if _basename_used(event, matcher, hf):
             continue
-        bucket.append(build_hook_entry(hooks_dir, hf, matcher, project=ws))
-        hooks[matcher] = bucket
+        bucket = hooks.get(event) or []
+        bucket.append(build_hook_entry(hooks_dir, hf, matcher or None,
+                                       project=ws))
+        hooks[event] = bucket
         added += 1
-        # #618: heartbeat_touch rides a second slot — Stop. The session's
-        # last beat per turn must land even when no Bash tool ran (pure
-        # Read/Grep analysis stretches would otherwise leave the durable
-        # sidecar cold). Mirrors worker_budget's double-registration shape.
-        if hf == "heartbeat_touch.py":
-            bucket = hooks.get("Stop") or []
-            if not _basename_used("Stop", hf):
-                bucket.append(build_hook_entry(hooks_dir, hf, None, project=ws))
-                hooks["Stop"] = bucket
-                added += 1
+
+    # #618: heartbeat_touch rides a second slot — Stop. The session's last
+    # beat per turn must land even when no Bash tool ran (pure Read/Grep
+    # analysis stretches would otherwise leave the durable sidecar cold).
+    # Mirrors worker_budget's double-registration shape.
+    hb = "heartbeat_touch.py"
+    if not _basename_used("Stop", "", hb):
+        stop_bucket = hooks.get("Stop") or []
+        stop_bucket.append(build_hook_entry(hooks_dir, hb, None, project=ws))
+        hooks["Stop"] = stop_bucket
+        added += 1
 
     settings_path.write_text(
         json.dumps(existing, indent=2, ensure_ascii=False),
@@ -1149,4 +1223,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

@@ -169,7 +169,7 @@ def main() -> int:
         ws = make_ws(cdir, case["claims"], case.get("extra"))
 
         argv = _argv(case, ws)
-        r = subprocess.run(argv, cwd=str(ROOT), capture_output=True, text=True, timeout=120)
+        r = subprocess.run(argv, cwd=str(ROOT), capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace")
         exp_dir = cdir / "expected"
         exp_dir.mkdir(exist_ok=True)
         (exp_dir / "stdout.txt").write_text(r.stdout, encoding="utf-8")

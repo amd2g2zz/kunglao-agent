@@ -31,7 +31,7 @@ def test_manifest_exists_and_schema():
     assert data["schema_version"] == "1"
     for e in data["files"]:
         assert {"src", "dest", "kind", "sha256"} <= set(e)
-        assert e["kind"] in ("hook", "agent", "scaffold")
+        assert e["kind"] in ("hook", "agent", "scaffold", "asset")  # #810 data assets
         assert e["dest"].startswith(".claude/")
 
 

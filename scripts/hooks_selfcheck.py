@@ -108,15 +108,26 @@ def check_settings(settings_path: Path) -> dict:
     hooks = s.get("hooks")
     if not hooks:
         return {"exists": True, "hooks_segment": False, "present": [], "missing": list(KONG_HOOK_FILES)}
+    # #810: canonical shape — non-event keys ("Agent"/"Bash" promoted into
+    # the key slot) are the bug shape; their entries never fire and must not
+    # count toward `present`.
+    try:
+        import wire_up_settings as _wus
+        shape_issues = _wus.registration_shape_issues(s)
+    except Exception:
+        shape_issues = []
     cmds = []
     for ev, entries in hooks.items():
+        if ev not in getattr(_wus, "HOOK_EVENTS", frozenset()):
+            continue
         for e in entries:
             for h in e.get("hooks", []):
                 cmds.append(h.get("command", ""))
     present, missing = [], []
     for hf in KONG_HOOK_FILES:
         (present if any(hf in c for c in cmds) else missing).append(hf)
-    return {"exists": True, "hooks_segment": True, "present": present, "missing": missing}
+    return {"exists": True, "hooks_segment": True, "present": present,
+            "missing": missing, "shape_issues": shape_issues}
 
 
 def rebuild_project_level(workspace: Path) -> dict:
@@ -127,7 +138,7 @@ def rebuild_project_level(workspace: Path) -> dict:
     try:
         r = subprocess.run(
             [sys.executable, str(script), str(workspace), "--wire-up"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace",
         )
         return {"rebuilt": True, "rc": r.returncode, "stdout_tail": r.stdout.strip()[-200:]}
     except Exception as exc:
@@ -207,4 +218,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

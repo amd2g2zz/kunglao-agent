@@ -55,10 +55,6 @@ from pathlib import Path
 from _path_hygiene import load_hooks_lib, on_path, scripts_on_path  # #671 authority
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
-DISPATCH_RE = re.compile(
-    r"\[T\s*([123])\s+tools\s*=\s*([^\]]*)\]\s*claim\s+([A-Z]+-\d+)",
-    re.IGNORECASE,
-)
 
 # v1.9.29 (#38): soft stale-worker detection for the non-dispatch PostToolUse
 # path. Worker-status parsing lives in lib_kunglao (THE single parse point,
@@ -155,7 +151,8 @@ def _was_dispatch(payload: dict) -> bool:
                 prompt_parts.append(str(v))
     else:
         prompt_parts = [str(tool_input)]
-    return bool(DISPATCH_RE.search(" ".join(prompt_parts)))
+    lib = load_hooks_lib()
+    return bool(lib.parse_dispatch(" ".join(prompt_parts))[2] is not None)
 
 
 def _run_py(args: list, ws: Path):
@@ -166,7 +163,7 @@ def _run_py(args: list, ws: Path):
         return subprocess.run(
             [sys.executable] + args,
             capture_output=True, text=True, timeout=20,
-            cwd=str(ws),
+            cwd=str(ws), encoding="utf-8", errors="replace",
         )
     except (subprocess.SubprocessError, OSError):
         return None

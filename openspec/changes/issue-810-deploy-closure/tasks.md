@@ -1,0 +1,6 @@
+- [x] dynamic_script_refs() 扫描（hooks+scripts 源码 `scripts/<name>.py` 形态）
+- [x] build_entries() 全量镜像（scripts 全量 + references/templates/tools 资产）
+- [x] closure_validation() 校验面（动态引用 ⊆ 已部署；--verify fail-closed）
+- [x] write_carrier dests 扩展 + hook_activation.completeness_report + 激活接线
+- [x] TDD：豆包 15 缺失名 / 资产条目 / 全量镜像数 / 校验面正反 / 完整性报告 / env_incident 接线
+- [x] P2 体积审计（--write 输出 entries+bytes）

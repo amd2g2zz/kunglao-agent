@@ -204,7 +204,7 @@ def check_flag() -> tuple[bool, str]:
                 r = subprocess.run(
                     ["powershell", "-NoProfile", "-Command",
                      f"[Environment]::GetEnvironmentVariable('{FLAG_NAME}','{scope}')"],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True, text=True, timeout=10, encoding="utf-8", errors="replace",
                 )
                 val = r.stdout.strip()
                 if val and is_truthy(val):
@@ -457,10 +457,16 @@ def check_hooks(ws: Path) -> tuple[str, str]:
     """
     settings_paths = wire_up_settings.hook_deployment_targets(ws)
     found: list[str] = []
+    shape_problems: list[str] = []
     for sp in settings_paths:
         if not sp.exists():
             continue
         s = _load_json(sp)
+        # #810: shape contract — pseudo-event keys are the bug shape that
+        # made this very checker blind; a violated shape is a loud FAIL.
+        shape_problems.extend(
+            f"{sp}: {line}" for line in
+            wire_up_settings.registration_shape_issues(s))
         cmds = []
         for event in ("PreToolUse", "PostToolUse", "Stop"):
             for entry in s.get("hooks", {}).get(event, []) or []:
@@ -468,6 +474,12 @@ def check_hooks(ws: Path) -> tuple[str, str]:
                     cmds.append(str(h.get("command", "")))
         found.extend(h for h in HOOK_FILES if any(h in c for c in cmds))
     present = set(found)
+    if shape_problems:
+        return ("FAIL",
+                "registration shape contract violated (#810): "
+                + "; ".join(shape_problems)
+                + " — deployed hooks never fire in this shape; re-run "
+                "python <skill>/scripts/hook_activation.py <ws> --deploy-local")
     if present == set(HOOK_FILES):
         # activation state (soft — 30-min TTL expected during a live loop)
         state = _load_json(ws / ".hook_state.json")
@@ -500,7 +512,7 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     if venv_py.exists():
         try:
             r = subprocess.run([str(venv_py), "-c", "import cryptography, yaml"],
-                               capture_output=True, text=True, timeout=30)
+                               capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 problems.append(f"venv missing deps (cryptography/yaml): {r.stderr.strip()[:80]}")
         except Exception as exc:
@@ -855,4 +867,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())
