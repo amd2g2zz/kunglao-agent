@@ -166,8 +166,11 @@ def _paths_for(ws: Path) -> dict:
     }
 
 
-def _dispatch_payload(prompt: str = "facts-snapshot: 1 facts",
-                      desc: str = "[T1 tools=grep] claim C-001 strings") -> dict:
+def _dispatch_payload(prompt: str = ("[T1 tools=grep] claim C-001 strings" + chr(10) +
+                      "facts-snapshot: 1 facts"),
+                      desc: str = "w-test bootstrap dispatch") -> dict:
+    # #862: dispatch 形状走合同通道（prompt 前缀）——description 通道在
+    # budget 归一后不再武装 cid 门（fixture 同步到 canonical 通道）。
     return {"tool_input": {"name": "w-test", "description": desc, "prompt": prompt}}
 
 

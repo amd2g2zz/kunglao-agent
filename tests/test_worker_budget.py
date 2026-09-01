@@ -360,11 +360,11 @@ def _min_paths(ws: Path) -> dict:
     }
 
 
-def _dispatch_payload(prompt: str) -> dict:
+def _dispatch_payload(prompt: str, description: str = '') -> dict:
     return {
         'tool_input': {
             'name': 'w-test',
-            'description': '[T1 tools=grep] claim C-001 strings',
+            'description': description,
             'prompt': prompt,
         },
     }
@@ -480,7 +480,7 @@ def test_pre_check_rejects_dispatch_without_plan(tmp_path, capsys):
     """#239 e2e: dispatching claim C-001 with no plan file and no plan path in
     the prompt is REJECTED by the 12th pre_check gate."""
     ws = tmp_path / 'ws'
-    payload = _dispatch_payload('facts-snapshot: 1 facts')
+    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts')
     rc = pre_check(payload, _min_paths(ws))
     captured = capsys.readouterr()
     assert rc == 2
@@ -651,8 +651,10 @@ def test_pre_check_rejects_dispatch_matching_tool_without_marker(tmp_path, capsy
     (ws / 'runs' / 'plan-C001-crypto.md').write_text(
         'goal: decode the crypto layer\nsteps: try known algorithms\nfallback: brute force\n',
         encoding='utf-8')
-    payload = _dispatch_payload('facts-snapshot: 1 facts')
-    payload['tool_input']['description'] = '[T1 tools=grep] claim C-001 decode the crypto layer'
+    payload = _dispatch_payload(
+        '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
+        '"tools": ["grep"], "agent": "w-test"}}\n'
+        'facts-snapshot: 1 facts\ndecode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     captured = capsys.readouterr()
     assert rc == 2
@@ -667,8 +669,10 @@ def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
     (ws / 'runs' / 'plan-C001-crypto.md').write_text(
         'goal: decode the crypto layer\nsteps: try crypto-tool xor-add\nfallback: brute force\n',
         encoding='utf-8')
-    payload = _dispatch_payload('facts-snapshot: 1 facts; tool-catalog: crypto-tool')
-    payload['tool_input']['description'] = '[T1 tools=grep] claim C-001 decode the crypto layer'
+    payload = _dispatch_payload(
+        '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
+        '"tools": ["grep"], "agent": "w-test"}}\n'
+        'facts-snapshot: 1 facts\ntool-catalog: crypto-tool\ndecode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
 
@@ -703,7 +707,7 @@ REJECT_FIX_KEYWORDS = {
     'toolfirst': 'tool-catalog',
     'agenttype': 'agent-reasoning',
     'snapshot': 'facts-snapshot',
-    'devreason': 'reasoning',
+    'devreason': 'agent-reasoning',
     'envfresh': 'env_repair_l1',   # #475: L1 repair script must be named
 }
 
@@ -740,6 +744,14 @@ def _fresh_hb(ws: Path) -> None:
                     'tick_history': [prev, now]}), encoding='utf-8')
 
 
+    # #830/#857: seed the durable tick sidecar with 2 spaced ticks -
+    # the continuous-liveness gate reads this, not the JSON cache.
+    (ws / 'runs' / '.heartbeat.log').parent.mkdir(parents=True, exist_ok=True)
+    import json as _json
+    with (ws / 'runs' / '.heartbeat.log').open('a', encoding='utf-8') as _f:
+        _f.write(_json.dumps({'ts': prev, 'actor': 'tick'}) + '\n')
+        _f.write(_json.dumps({'ts': now, 'actor': 'tick'}) + '\n')
+
 def _healthy_ws(tmp_path) -> Path:
     """A workspace where EVERY pre_check gate passes; scenarios toggle one off."""
     ws = tmp_path
@@ -768,8 +780,11 @@ def _paths_for(ws: Path) -> dict:
     }
 
 
-def _budget_payload(prompt='facts-snapshot: 1 facts',
-                    desc='[T1 tools=grep] claim C-001 strings') -> dict:
+def _budget_payload(prompt=None, desc=''):
+    env = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
+           '"tools": ["grep"], "agent": "w-test"}}')
+    if prompt is None:
+        prompt = env + '\nfacts-snapshot: 1 facts'
     return {'tool_input': {'name': 'w-test', 'description': desc, 'prompt': prompt}}
 
 
@@ -793,15 +808,22 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     env_check_gate injection. drift/health/backtrack (subprocess gates) are
     covered in test_e2e_subprocess_gates_reject_emits_guidance."""
     import worker_budget as wb
+    import worker_budget_core
+    import worker_budget_sinks
     from types import SimpleNamespace
 
-    # subprocess gates deterministic: all pass (rc 0)
-    monkeypatch.setattr(wb, '_run_py',
+    # subprocess gates deterministic: all pass (rc 0). #863: patch the OWNING
+    # modules — the wb shim propagation was removed. _run_py is imported into
+    # BOTH core and sinks; pre_check lives in sinks, so patch both faces.
+    monkeypatch.setattr(worker_budget_core, '_run_py',
+                        lambda args, cwd=None: SimpleNamespace(
+                            returncode=0, stderr='', stdout=''))
+    monkeypatch.setattr(worker_budget_sinks, '_run_py',
                         lambda args, cwd=None: SimpleNamespace(
                             returncode=0, stderr='', stdout=''))
     # priority deviation forced for the devreason scenario (other scenarios
     # reject before priority is consulted, so the patch is harmless)
-    monkeypatch.setattr(wb, 'check_priority',
+    monkeypatch.setattr(worker_budget_core, 'check_priority',
                         lambda *a, **k: (True, 'ADVISORY: C-001 rank #2', True))
 
     scenarios = []
@@ -826,7 +848,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     _write_task_spec(ws / 'task_spec.yaml', {'vm_detonation': 'forbidden'})
     scenarios.append(('tools', 'vm_detonation',
                       lambda ws=ws: wb.pre_check(
-                          _budget_payload(desc='[T1 tools=vmr-shell] claim C-001'),
+                          _budget_payload(prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["vmr-shell"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'),
                           _paths_for(ws))))
 
     # 4 hostchan — host-channel x64dbg tool (VM-only policy)
@@ -834,7 +856,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     scenarios.append(('hostchan', 'connect_remote',
                       lambda ws=ws: wb.pre_check(
                           _budget_payload(
-                              desc='[T1 tools=mcp__x64dbg__start_session] claim C-001'),
+                              prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["mcp__x64dbg__start_session"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'),
                           _paths_for(ws))))
 
     # 5 deadline — time budget exhausted
@@ -851,7 +873,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
          'evidence_tier_attempted': 0}])
     scenarios.append(('tier', 'evidence_tier',
                       lambda ws=ws: wb.pre_check(
-                          _budget_payload(desc='[T2 tools=grep] claim C-001 strings'),
+                          _budget_payload(prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 2, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'),
                           _paths_for(ws))))
 
     # 7 selfcap — self-imposed time cap with no authorised budget
@@ -883,8 +905,15 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
 
     # 11 devreason — priority deviation without a reasoning field
     ws = _healthy_ws(tmp_path / 'devreason')
-    scenarios.append(('devreason', 'reasoning',
-                      lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
+    _write_register(ws / 'claim-register.yaml', [
+        {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 3},
+        {'id': 'C-002', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 1},
+    ])
+    env_c002 = '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'
+    scenarios.append(('devreason', 'agent-reasoning',
+                      lambda ws=ws: wb.pre_check(_budget_payload(prompt=env_c002), _paths_for(ws))))
 
     # 12 agenttype — #310: claim statement recommends ghidra-light but the
     # dispatch sends kunglao-worker with no `agent-reasoning:` (specialist-first
@@ -894,7 +923,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
         {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
          'evidence_tier_attempted': 1,
          'statement': 'decompile and disassemble the main function'}])
-    payload = _budget_payload(desc='[T1 tools=grep] claim C-001 do the task')
+    payload = _budget_payload()
     payload['tool_input']['name'] = 'kunglao-worker'
     scenarios.append(('agenttype', 'agent-reasoning',
                       lambda ws=ws: wb.pre_check(payload, _paths_for(ws))))
@@ -936,8 +965,8 @@ def test_main_stdin_reject_emits_context_json(tmp_path):
         'hook_event_name': 'PreToolUse',
         'cwd': str(ws),
         'tool_input': {'name': 'w-test',
-                       'description': '[T1 tools=grep] claim C-001 strings',
-                       'prompt': 'facts-snapshot: 1 facts'},
+                       'description': '',
+                       'prompt': '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'},
     }
     r = subprocess.run(
         [sys.executable, str(Path(__file__).resolve().parents[1] / 'hooks'
@@ -1087,8 +1116,7 @@ def test_pre_check_mcp_wildcard_covering_host_channels_rejects(tmp_path, capsys)
     """(c) at the hook level: the wildcard form mcp__frida__* is rejected
     by the hostchan gate (covers spawn/attach)."""
     ws = _healthy_ws(tmp_path)
-    payload = _budget_payload(
-        desc='[T3 tools=mcp__frida__*] claim C-001 strings')
+    payload = _budget_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 3, "tools": ["mcp__frida__*"], "agent": "w-test"}}\nfacts-snapshot: 1 facts')
     rc = pre_check(payload, _paths_for(ws))
     assert rc == 2
     assert 'REJECT hostchan' in capsys.readouterr().err

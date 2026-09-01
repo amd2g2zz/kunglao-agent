@@ -198,7 +198,7 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     'devreason': {
         'additionalContext': (
             'priority deviation without justification (anti-spoof v1.9.24). '
-            'Fix: add "reasoning: <why C-<NN> instead of the ranked #1 '
+            'Fix: add "agent-reasoning: <why C-<NN> instead of the ranked #1 '
             'C-<MM>>" to the dispatch prompt, or dispatch the top-ranked claim '
             'instead - the deviation must be recorded, not silently skipped.'
         ),
@@ -425,7 +425,19 @@ def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
     prompt = payload.get('tool_input', {}).get('prompt', '')
     agent_name = payload.get('tool_input', {}).get('name') or ''
-    tier, tools, cid = parse_dispatch(desc)
+    # #862: the dispatch shape belongs to the contract channel (prompt,
+    # protocol v1 JSON envelope; v1-first per #861 single-source). The
+    # description channel is deprecated replay-only — a shape found there
+    # is exactly the B4 silent-dead-gates posture -> fail-closed.
+    tier, tools, cid = parse_dispatch(prompt)
+    if (tier, tools, cid) == (0, [], None):
+        _d_tier, _d_tools, d_cid = parse_dispatch(desc)
+        if d_cid:
+            return _reject('devchannel',
+                           'dispatch shape found in the deprecated '
+                           'description channel - protocol v1 requires the '
+                           'kunglao_dispatch JSON envelope in the prompt '
+                           '(B4/#862).', paths)
     checks = [
         ('workers', check_workers_lt_3(paths)),
         ('cap', check_promotion_attempts(paths['register'], cid)),
@@ -466,7 +478,7 @@ def pre_check(payload: dict, paths: dict) -> int:
         # check. route_capability recommends the specialist for the claim
         # (task domain x sample features); a deviating dispatch REJECTS
         # without `agent-reasoning:` (same anti-spoof shape as devreason).
-        ('agenttype', check_agent_type(paths, desc, prompt, agent_name)),
+        ('agenttype', check_agent_type(paths, cid, prompt, agent_name)),
     ]
     for name, (ok, msg) in checks:
         if not ok:
@@ -488,10 +500,10 @@ def pre_check(payload: dict, paths: dict) -> int:
     _pok, pmsg, deviated = check_priority(paths.get('register'), paths.get('deps'), paths.get('task_spec'), cid, paths.get('workspace'))
     if deviated:
         desc = payload.get('tool_input', {}).get('prompt', '')
-        if 'reasoning:' not in desc:
+        if 'agent-reasoning:' not in prompt:
             return _reject('devreason',
                            'dispatch deviates from priority #1 but has no '
-                           '`reasoning:` field (v1.9.24 anti-spoof). '
+                           '`agent-reasoning:` field (v1.9.24 anti-spoof). '
                            f'PRIORITY: {pmsg}', paths)
         print(f'PRIORITY (deviated w/ reasoning): {pmsg}', file=sys.stderr)
     elif pmsg:

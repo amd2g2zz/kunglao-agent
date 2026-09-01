@@ -1,0 +1,6 @@
+- [x] SDD 提交
+- [ ] 红测：prompt 注入→门生效；desc-only→devchannel 拒；agent-reasoning 归一
+- [ ] 实现：pre_check 走 prompt + devchannel fail-closed + token 归一
+- [ ] 测试通道矫正（helper 默认 + 645/829/854/897）
+- [ ] SKILL.md 措辞归一
+- [ ] 全量门 + push + PR
