@@ -153,6 +153,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao_resume.py` | /kunglao-agent:resume — crash-recovery brief (read-only: health/13-source summary/open-hypothesis pointers/table-lookup next-step; issue #466, #528) | CLI, tests |
 | `heartbeat_touch.py` | lightweight heartbeat timestamp refresh — companion to heartbeat_tick.py (one-shot, no side effects; #534) | hooks, tests |
 | `strategy_metrics.py` | strategy convergence four metrics — regret / cost-to-slope / P(faster|hit) / competence (#529) | lib(1), tests |
+| `summary_discriminator.py` | summary 结构合同判别器 (#826) — R1 完成词需暂定节 / R2 不确定性传播(fact-id 或 WAIVED) / R3 未答主问题节; completion_gate SUMMARY_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
 
 ## Support libraries & utilities
 
