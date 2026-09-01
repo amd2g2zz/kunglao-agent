@@ -12,6 +12,19 @@
 CLI:
   python scripts/relib_audit.py <lib_dir> [--json]
   python scripts/relib_audit.py --quarantine <lib_dir> <file.md> --reason <why>
+
+Production-semantics tier (#866 de-whitewash):
+  python scripts/relib_audit.py --production <repo_root> [--json]
+
+  Judges every scripts/*.py module and every tools/ ``__main__`` CLI by
+  production wiring, not by "tests mention it": seed faces are
+  hooks/ skills/ agents/ devkit/ .github/workflows/ and the execution
+  registry tools/_INDEX.yaml (consumed by the toolfirst gate);
+  tests/openspec/docs/references, the describe-only ext index, the human
+  catalogs, and both manifests (deploy-manifest now ships 100% of both
+  trees — zero discrimination; release-manifest is packaging) are
+  DIAGNOSTIC only. A subject consumed by an already-wired subject
+  (filename literal or ``import/from <stem>``) is wired transitively.
 """
 from __future__ import annotations
 
@@ -25,6 +38,222 @@ from pathlib import Path
 _TRACKER_RE = re.compile(r"#\d{3}\b")
 _MD_REF_RE = re.compile(r"\b([A-Za-z0-9-]+\.md)\b")
 _DECL = "recall_useful:"
+
+
+# ---- production-semantics tier (#866) --------------------------------------
+
+# tools-root infra trio: by their own discipline the generator/querier never
+# enters the registry it serves (ext-scan docstring) — they are not subjects.
+_PROD_INFRA = {
+    "tools/ext-scan.py",
+    "tools/tool-search.py",
+    "tools/validate_index.py",
+}
+
+# Seed faces: a hit in these surfaces is production wiring.
+# index_yaml = tools/_INDEX.yaml, the execution registry that
+# hooks/worker_budget_gates._load_tool_index_keywords consumes at dispatch
+# time — a row there makes a CLI discoverable by the production gate.
+_PROD_SEED_FACES = {
+    "hooks": ("hooks/**/*.py",),
+    "skills": ("skills/**/*.md", "skills/**/*.py", "skills/*.yaml"),
+    "agents": ("agents/*.md",),
+    "devkit": ("devkit/**",),
+    "ci": (".github/workflows/*.yml", ".github/workflows/*.yaml"),
+    "index_yaml": ("tools/_INDEX.yaml",),
+}
+
+# Diagnostic faces: recorded per subject, never counted (the #817 lesson —
+# "tests count as references" was the single-metric whitewash; shipping in a
+# manifest is the same lie one level up once deploy-manifest grew to the
+# full tree).
+_PROD_DIAG_FACES = {
+    "tests": ("tests/**",),
+    "openspec": ("openspec/**",),
+    "docs": ("docs/**",),
+    "references": ("references/**",),
+    "ext_index": ("tools/_INDEX.ext.yaml",),
+    "catalogs_md": ("tools/_INDEX.md", "tools/_index-*.md"),
+    "deploy_manifest": ("deploy-manifest.yaml",),
+    "release_manifest": ("release-manifest.yaml",),
+    "scripts_readme": ("scripts/README.md",),
+    "gc_harness": ("gc-harness/**",),
+    "eval": ("eval/**", "evals/**"),
+    "kunglao_bench": ("kunglao-bench/**",),
+}
+
+
+def _variant_re(variant: str) -> "re.Pattern":
+    """Whole-token match so stem 'gen' never hits inside 'widget-gen'."""
+    return re.compile(
+        r"(?<![A-Za-z0-9_-])" + re.escape(variant) + r"(?![A-Za-z0-9_-])")
+
+
+def _face_corpus(root: Path, globs) -> str:
+    """Concatenated text of every file the globs reach. A pattern ending in
+    bare '**' yields DIRECTORIES on pathlib — when a dir comes back, walk
+    it recursively so the face corpus is never silently empty."""
+    def _read(p: Path) -> str:
+        try:
+            return p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+
+    parts = []
+    for g in globs:
+        for f in sorted(root.glob(g)):
+            if f.is_dir():
+                parts.extend(_read(sub) for sub in sorted(f.rglob("*"))
+                             if sub.is_file())
+            elif f.is_file():
+                parts.append(_read(f))
+    return "\n".join(parts)
+
+
+def _prod_subjects(root: Path) -> dict:
+    """Subject repo-relative path -> source text (scripts/*.py + tools/
+    ``__main__`` CLIs). Keys are repo-relative POSIX paths."""
+    subjects: dict = {}
+    scripts = root / "scripts"
+    if scripts.is_dir():
+        for p in sorted(scripts.glob("*.py")):
+            try:
+                subjects[p.relative_to(root).as_posix()] = p.read_text(
+                    encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+    tools = root / "tools"
+    if tools.is_dir():
+        for p in sorted(tools.rglob("*.py")):
+            rel = p.relative_to(root).as_posix()
+            if rel in _PROD_INFRA or "_lib" in p.parts:
+                continue
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if "__main__" in text:
+                subjects[rel] = text
+    return subjects
+
+
+def _token_hit(text: str, token: str) -> bool:
+    """Whole-token containment: token must not be flanked by name chars
+    (alnum/underscore/hyphen) — keeps stem 'gen' from matching inside
+    'widget-gen'. Uses C-speed str.find first, so this is cheap even on
+    multi-megabyte face corpora."""
+    start = 0
+    n = len(text)
+    while True:
+        i = text.find(token, start)
+        if i < 0:
+            return False
+        a = text[i - 1] if i > 0 else " "
+        j = i + len(token)
+        b = text[j] if j < n else " "
+        if not (a.isalnum() or a in "_-") and not (b.isalnum() or b in "_-"):
+            return True
+        start = j
+
+
+_IMPORT_PAT_CACHE: dict = {}
+
+
+def _hits(rel: str, text: str, *, bare_stem: bool) -> bool:
+    """True when `text` references subject `rel`: filename literal,
+    repo-relative path, import/from of the stem — plus the bare stem
+    (how catalogs/teaching faces name a tool) only when bare_stem.
+
+    bare_stem=False (consumption closure): a scripts/ module stem can
+    equal a HOOK name registered as a plain string elsewhere (e.g.
+    reuse_gate), a different identity class — bare-stem closure would
+    wire the script on a name collision.
+    """
+    name = Path(rel).name
+    stem = Path(rel).stem
+    for v in ((name, rel, stem) if bare_stem else (name, rel)):
+        if v in text and _token_hit(text, v):
+            return True
+    if stem in text:
+        pat = _IMPORT_PAT_CACHE.get(stem)
+        if pat is None:
+            pat = _IMPORT_PAT_CACHE[stem] = re.compile(
+                r"(?:import|from)\s+" + re.escape(stem) + r"\b")
+        if pat.search(text):
+            return True
+    return False
+
+
+def audit_production(root) -> dict:
+    """#866 production-wiring audit over scripts/ + tools/ CLIs.
+
+    Returns subjects/wired/unwired per side, per-subject face hits (seed
+    faces + diagnostics + 'lib_closure'), and LOC of the unwired set.
+    """
+    root = Path(root)
+    subjects = _prod_subjects(root)
+    faces_def = {**_PROD_SEED_FACES, **_PROD_DIAG_FACES}
+    corpus = {face: _face_corpus(root, globs)
+              for face, globs in faces_def.items()}
+
+    wired: set = set()
+    faces: dict = {}
+    for rel in subjects:
+        hit = [face for face in _PROD_SEED_FACES
+               if _hits(rel, corpus[face], bare_stem=True)]
+        diag = [face for face in _PROD_DIAG_FACES
+                if _hits(rel, corpus[face], bare_stem=True)]
+        faces[rel] = hit + diag
+        if hit:
+            wired.add(rel)
+
+    # Transitive closure along real consumption edges (issue: 产线语义传递闭包):
+    # a subject is wired when a wired subject's source consumes it.
+    wired_texts = [(rel, subjects[rel]) for rel in subjects if rel in wired]
+    changed = True
+    while changed:
+        changed = False
+        for rel in subjects:
+            if rel in wired:
+                continue
+            for _other, text in wired_texts:
+                if _hits(rel, text, bare_stem=False):
+                    wired.add(rel)
+                    faces[rel].append("lib_closure")
+                    wired_texts.append((rel, subjects[rel]))
+                    changed = True
+                    break
+
+    unwired = [rel for rel in subjects if rel not in wired]
+    by_side = lambda rels, prefix: sorted(r for r in rels if r.startswith(prefix))
+    unwired_scripts = by_side(unwired, "scripts/")
+    unwired_tools = by_side(unwired, "tools/")
+    unwired_loc = sum(len(subjects[r].splitlines()) for r in unwired)
+    n_scripts = sum(1 for r in subjects if r.startswith("scripts/"))
+    n_tools = len(subjects) - n_scripts
+    return {
+        "subjects": {
+            "scripts": by_side(subjects, "scripts/"),
+            "tools": by_side(subjects, "tools/"),
+        },
+        "wired": {
+            "scripts": by_side(wired, "scripts/"),
+            "tools": by_side(wired, "tools/"),
+        },
+        "unwired": {"scripts": unwired_scripts, "tools": unwired_tools},
+        "faces": faces,
+        "counts": {
+            "subjects_scripts": n_scripts,
+            "subjects_tools": n_tools,
+            "wired_scripts": len(by_side(wired, "scripts/")),
+            "wired_tools": len(by_side(wired, "tools/")),
+            "unwired_scripts": len(unwired_scripts),
+            "unwired_tools": len(unwired_tools),
+            "unwired_total": len(unwired),
+            "unwired_loc": unwired_loc,
+        },
+        "metrics": {"files_total": len(subjects)},
+    }
 
 
 def _catalog(lib: Path) -> set:
@@ -95,11 +324,40 @@ def quarantine(lib_dir, name: str, reason: str):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="re-library 审查器 (#817)")
-    ap.add_argument("lib_dir")
+    ap.add_argument("lib_dir", nargs="?", default=None,
+                    help="library dir (legacy lib audit) or repo root "
+                         "(with --production)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--quarantine", metavar="FILE")
     ap.add_argument("--reason", default="orphan-audit")
+    ap.add_argument("--production", action="store_true",
+                    help="#866 production-wiring audit over scripts/ + tools/ "
+                         "CLIs (lib_dir is the repo root)")
     args = ap.parse_args()
+    if args.production:
+        if not args.lib_dir:
+            ap.error("--production needs the repo root as lib_dir")
+        r = audit_production(args.lib_dir)
+        if args.json:
+            print(json.dumps(r, ensure_ascii=False, indent=1))
+        else:
+            c = r["counts"]
+            print(f"production audit: scripts={c['subjects_scripts']} "
+                  f"tools_cli={c['subjects_tools']} "
+                  f"unwired={c['unwired_total']} "
+                  f"(scripts {c['unwired_scripts']}, tools {c['unwired_tools']}, "
+                  f"~{c['unwired_loc']} LOC)")
+            if r["unwired"]["tools"]:
+                print("  unwired tools:")
+                for rel in r["unwired"]["tools"]:
+                    print(f"    {rel}")
+            if r["unwired"]["scripts"]:
+                print("  unwired scripts:")
+                for rel in r["unwired"]["scripts"]:
+                    print(f"    {rel}")
+        return 0
+    if not args.lib_dir:
+        ap.error("lib_dir is required (or pass --production <repo_root>)")
     lib = Path(args.lib_dir)
     if args.quarantine:
         dest = quarantine(lib, args.quarantine, args.reason)

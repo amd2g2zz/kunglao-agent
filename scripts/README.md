@@ -5,12 +5,26 @@ Every `.py` in this directory is classified by role and by where it is
 referenced. The reference map below is the definitive answer to "who uses
 this script?" — used to keep documentation, hooks, CI, and tests in sync.
 
-- **Total scripts**: 94 (72 cataloged at #318 close; +15 by #236/#271/#287/
-  #304/#309/#316; +4 by #310/#331/#336 merged after the #320 snapshot;
-  +1 by #409; +2 by #477 — per-script provenance in the tables below).
-- **Orphans**: 0 — every script has at least one live reference
-  (tests/ count as references; a script referenced only by tests is
-  categorized `TEST`, not orphan).
+- **Total scripts**: 169 (`scripts/*.py` at #866 recon, 2026-09-02; the
+  historical #318-era count lineage — 72 cataloged at #318 close; +15 by
+  #236/#271/#287/#304/#309/#316; +4 by #310/#331/#336 merged after the
+  #320 snapshot; +1 by #409; +2 by #477 — is superseded by the live
+  per-script provenance in the tables below).
+- **Orphans — test semantics**: 0 — every script has at least one live
+  reference (tests/ count as references; a script referenced only by tests
+  is categorized `TEST`, not orphan). This is the #230-era metric.
+- **Orphans — production semantics (#866)**: 46 unwired of 201 subjects
+  (scripts 32 + tools 14, ~11.6k LOC) as of the 2026-09-02 recon at
+  e958297 — the honest counter-metric: a script/tool is production-wired
+  only if hooks/, skills/, agents/, devkit/, CI, or the execution registry
+  `tools/_INDEX.yaml` reaches it (transitively via real consumption
+  edges); tests/openspec/docs/references, the describe-only ext index,
+  and both manifests (deploy-manifest now ships 100% of both trees, so
+  presence there carries zero wiring signal) do NOT count. Reproduce and
+  re-baseline with:
+  `python scripts/relib_audit.py --production .` (add `--json` for the
+  machine payload; the unwired list is the #866 disposition ledger —
+  register-or-retire per issue #866, not documentation debt).
 - **Broken references**: 0 after #230 (all intra-script imports resolve;
   all hook/CI/subprocess targets exist; SKILL.md-mentioned scripts exist).
 
