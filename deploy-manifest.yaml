@@ -11,7 +11,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: 5a5ed2659b8150f7957697af303c7019bdfe7c63eab513a1e026c199bee45334
+    sha256: dbc3af2b0968f058d62081ed75c7c2756e35e40082db8a3edfeb48861b78256c
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
@@ -668,6 +668,10 @@ files:
     dest: .claude/scripts/structural_check.py
     kind: scaffold
     sha256: 37c97ffed21c7369b2c587d207632a034c9e0173c8bbb6d0efe2ef2e0c3d2ee9
+  - src: scripts/summary_discriminator.py
+    dest: .claude/scripts/summary_discriminator.py
+    kind: scaffold
+    sha256: 73537b5e7c1377d5463a27a34acc077e203312da9d8379acb528f9539d6d852d
   - src: scripts/template_gen.py
     dest: .claude/scripts/template_gen.py
     kind: scaffold
