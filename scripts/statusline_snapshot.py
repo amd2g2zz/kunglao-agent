@@ -46,6 +46,10 @@ from pathlib import Path
 
 import yaml
 
+# #863 Family C: workspace resolution is single-sourced in ws_layout
+# (the #228 strict family: arg wins, probe, exit 2 — never guess).
+from ws_layout import resolve_strict as _resolve_ws
+
 # #597: staleness constants are single-sourced in liveness_policy.
 from liveness_policy import HEARTBEAT_STALE_MINUTES, TICK_INTERVAL_DEFAULT_MIN
 
@@ -595,22 +599,6 @@ def write_snapshot(ws: Path, now: datetime.datetime | None = None) -> Path:
     except Exception:  # noqa: BLE001 — logging never breaks the write
         pass
     return out
-
-
-def _resolve_ws(arg: str | None) -> Path:
-    """Workspace root: explicit arg wins; else probe cwd (sibling convention,
-    #228: never guess a workspace)."""
-    if arg:
-        return Path(arg).resolve()
-    cwd = Path(os.getcwd())
-    for cand in (cwd, cwd / "malware-analysis-workspace"):
-        if (cand / "claim-register.yaml").exists() or (cand
-                / "analysis_state.txt").exists():
-            return cand.resolve()
-    print(f"ERROR: no workspace found under cwd ({cwd}); pass the workspace "
-          f"explicitly: python {Path(sys.argv[0]).name} <workspace>",
-          file=sys.stderr)
-    sys.exit(2)
 
 
 def main(argv: list[str] | None = None) -> int:

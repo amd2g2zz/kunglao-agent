@@ -71,3 +71,77 @@ Package 2（纯兼容删除九项 + lint_facts 仲裁裁决）已先行交付（
 - grep 验收口径：`git grep spec_from_file_location`（非测试）预期 = util 定义 1 + #671 自举 2
   （物理不可约，见上）+ 2 处文档性注释提及；Family B 目标复制（22 前导）清零由 confinement 测试
   机械断言。
+
+## Recon（863-c，2026-09-02 实测）
+
+### 锚点表（计划/issue 锚点 vs 实测）
+
+| issue/计划表述 | 实测 | 结论 |
+|---|---|---|
+| `_resolve_ws` 8 份、4 形状 | **9 份定义**（grep `def _resolve_ws`）：`convergence_check.py:79`、`convergence_health.py:63`、`heartbeat_tick.py:85`、`failure_analysis_gate.py:183`、`hooks_selfcheck.py:82`、`heartbeat_touch.py:30`、`priority.py:83`、`route_capability.py:674`、`statusline_snapshot.py:600` | 第 9 份 statusline_snapshot 为 #883（7b76e49）审计后新增、形状与 strict 族 byte-equivalent。同属 Family C 符号族、纳入收敛——否则 grep 验收无法清零。计数非削减方向（多收 1 份），按全量处理 |
+| 4 形状 | A manifest-aware quiet（仅 convergence_check，读 `env_manifest.layout_conventions`，arg→`Path(arg)` 不 resolve）；B hardcoded quiet claim-register（failure_analysis_gate/priority/route_capability，route 用 `Path.cwd()` 与 `os.getcwd()` 等价）；C quiet ledger 哨兵（convergence_health，探 `LEDGER_NAME`=`.convergence_ledger.jsonl` 而非 claim-register）；D #228 hard-error strict（heartbeat_tick/hooks_selfcheck/heartbeat_touch/statusline_snapshot，cwd-first 探 claim-register OR analysis_state.txt，全 resolve，缺省 exit 2 stderr 指引 byte-identical ×4） | 确认 4 形状（B/C 按哨兵分型） |
+| 7/8 忽略 workspace_dir（B2） | 除 convergence_check 外**全部 8 份**硬编码 sibling 名 `malware-analysis-workspace` + `claim-register.yaml`，manifest `layout.workspace_dir/claim_register` override 一律失明 | 确认（修复后实数 8/9 忽略 → 0/9） |
+| 守护测试 `test_env_manifest.py:517-531` | 实测 `test_convergence_resolve_ws_default_layout`:502-514 + `test_convergence_resolve_ws_custom_layout`:517-527——仅 convergence_check 一个形状、`from convergence_check import _resolve_ws` 符号导入 | 行号漂移按符号定位；扩到 4 形状全覆盖 + B2 两态钉 |
+| 其余 9 份无守护 | grep 全 tests/：无任何测试引用其余 8 个模块的 `_resolve_ws`（dispatch_gate._resolve_workspace 是另一函数，#450 已 manifest-aware） | 确认（本卡新增覆盖） |
+
+### B2 行为修复影响面分析（fix-first 裁决执行）
+
+- **显式传 workspace 参数的调用面（9/9）**：arg-wins 语义不动（quiet arg→`Path(arg)` 不 resolve；
+  strict arg→`Path(arg).resolve()`），零影响。调用点：convergence_check:1438、convergence_health:292、
+  heartbeat_tick:225、failure_analysis_gate:1037（parser :1008 nargs="?"）、hooks_selfcheck:164、
+  heartbeat_touch:45、priority:290、route_capability:685+772、statusline_snapshot:618。
+- **缺省路径、无 manifest**：`layout_conventions` → DEFAULT_LAYOUT，`workspace_dir` = 原硬编码字面量
+  → **byte-identical**（#450 向后兼容锚点，env_manifest.py:131-134 自证）。
+- **缺省路径、有 manifest override**：修复前 8 份找不到 override 后的 workspace——quiet 形状静默回退
+  cwd（priority 静默空读注册表、convergence_health 静默回退 cwd 读不到 ledger）、strict 形状
+  exit 2（heartbeat_tick 自检误报"no workspace found"）。修复后与 dispatch_gate._resolve_workspace
+  （hooks/dispatch_gate.py:111-134，#450 契约面）语义一致。
+- **依赖旧行为的调用方排查**：`workspace_dir` 全库 grep——仅 env_manifest（定义）+
+  convergence_check/_resolve_workspace（消费）+ 其守护测试引用。**无任何调用方/测试依赖
+  "override 不生效"旧行为 → 无 RECON-DEVIATION，放行**。
+- **自相矛盾边角（记录，不阻断）**：manifest 声明 override 但 workspace 物理仍在默认名 → 修复前
+  B/C 形状能找到、修复后按 manifest 探测不到（与 dispatch_gate 同帧一致化——#450 既定语义
+  "override 改变探测位置"）；属配置自相矛盾场景，非回归。
+
+### 方案（落点 + delegation assert）
+
+- **util 落点：`scripts/ws_layout.py`（新）**。WHY 不入 env_manifest.py：env_manifest 是严格
+  facts 载体（753 行近 800 上限；fail-closed 面），sys.exit(2) 的 CLI 解析行为与其契约异质；
+  9/9 消费方全在 scripts/（无跨树），裸导入即可——**无需 Family B 式 _hooks_path 桥**。
+  单用途小模块惯例同型：utf8_boot / liveness_policy / status_defs / retract_claim。
+- API：`resolve_quiet(arg, *, sentinel=None)`（A+B+C 形状；sentinel=None→layout.claim_register，
+  convergence_health 传 LEDGER_NAME）+ `resolve_strict(arg)`（D 形状，cwd-first + analysis_state.txt
+  哨兵 + exit 2 消息 byte-identical，仍用调用时 `sys.argv[0]`）。布局名全部来自
+  `env_manifest.layout_conventions`。
+- **delegation 形态**：7 点纯别名 `from ws_layout import resolve_quiet/resolve_strict as _resolve_ws`
+  （最强委托形态）；convergence_health 2 行 def（哨兵变体）。priority.py 虽 #499 deprecated，
+  其 `_resolve_ws` 仍在本符号族（retirement 前必须继续工作）。
+- **执法测试**（镜像 tests/test_loader_delegation_863b.py 三段式）：新增
+  `tests/test_ws_layout_delegation_863c.py`——(1) confinement：全库扫描 `def _resolve_ws` 函数体，
+  禁含 `malware-analysis-workspace` 字面量与自行 `layout_conventions` 调用（探测逻辑禁再现于消费方）；
+  (2) wiring：9 文件均引用 ws_layout + 7 别名点做**身份级**断言 `mod._resolve_ws is ws_layout.<fn>`；
+  (3) util 契约钉。`tests/test_env_manifest.py` 扩 4 形状行为全覆盖（B2 两态：override 传入→生效；
+  缺省→原默认）。README 行（test_declaration_scan 门）+ deploy-manifest --write（FULL MIRROR
+  自动收编，test_deploy_closure_810 门）。
+
+### 基线
+
+- 受影响 14 测试文件（env_manifest/heartbeat_tick/heartbeat_off/route_capability/
+  selfcheck_stamps_536/statusline_health_883/failure_analysis_transducer/failure_lessons/
+  rank_claims/decision_teeth/orchestration_priority_cost/convergence_completeness/
+  worker_liveness_protocol/mission_stall_634）：**222 passed**（提取前，Windows 本地）。
+- `release_receipt.py --check` RC=0。
+
+### 界外观察（不顺手做，留给后续卡/讨论）
+
+hooks/ 侧**非 `_resolve_ws` 命名**的同类硬编码 sibling probe：`hooks/completion_gate.py:141`、
+`hooks/bash_fact_guard.py:40`、`hooks/cost_input_capture.py:32`；scripts/ 侧
+`reconcile_workers.py:40`、`search_gate.py:49`。不属 Family C 符号族（issue 表按 `_resolve_ws`
+符号定界），不受本卡 grep 验收约束；其中 hooks 侧三者是否应入 #450 layout-consumer 名录
+（现名录仅 dispatch_gate/convergence_check/lib_kunglao）值得单独一卡。
+
+### 偏航记录（实现级，非 RECON-DEVIATION）
+
+- 计数 8→9（#883 新增份纳入，见锚点表首行）——家族同一性由符号 grep 定义，方案与验收不变。
+- util 落点 scripts/ws_layout.py（WHY 见方案节）；convergence_check 的函数级 `import env_manifest`
+  热路径注释随探测逻辑一并移入 util（import 图不变：消费方 → ws_layout → env_manifest）。
