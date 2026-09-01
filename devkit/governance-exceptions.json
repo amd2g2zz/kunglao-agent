@@ -1,0 +1,4 @@
+{
+  "_comment": "Governance-binding exceptions (#867). Each entry allow-lists one reference class that would otherwise trip a Gate 8 sub-check. evals_allowed_refs: [{file, pattern, reason}] — file is the repo-relative evals path, pattern is a substring of the flagged string. Keep this list EMPTY unless a new audit explicitly justifies pinning deprecated-mechanism behavior.",
+  "evals_allowed_refs": []
+}

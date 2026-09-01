@@ -92,12 +92,17 @@ def test_gate_new_finding_blocks():
 
 
 def test_real_repo_findings_within_baseline():
-    """真仓状态：findings ⊆ 基线（当前唯一已知债务挂账 #867）。"""
+    """真仓状态：#867 已清偿挂账债务 → 零 findings、基线空。
+
+    原 #861 状态钉（findings == [priority<-external_kicker]）随 #867 收口
+    （external_kicker 改走 priority_ratio）一并翻转：任何 finding 都是
+    新违规（NEW），不得再入基线。"""
     baseline_path = ROOT / "scripts" / ".retirement-gate-baseline.txt"
     baseline = [ln.strip() for ln in
                 baseline_path.read_text(encoding="utf-8").splitlines()
                 if ln.strip()] if baseline_path.exists() else []
     r = rg.scan(ROOT, baseline)
     assert r["ok"] is True, r
-    assert r["findings"] == [
-        "deprecated_live_caller:priority<-scripts/external_kicker.py"], r
+    assert r["findings"] == [], (
+        "#867 cleared the last baselined debt; a finding here is NEW — "
+        f"retire it, never re-baseline silently: {r['findings']}")

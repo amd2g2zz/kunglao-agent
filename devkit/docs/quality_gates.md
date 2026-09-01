@@ -9,7 +9,9 @@
 
 > 本页图示为 #463 初版门集(初版门数见 git 史)。后续门按注册表追加:Gate 5
 > Subagent Review(#462)、Gate 6 Agents Contract(#492)、Gate 7 Doc Sync
-> (#446)。**门清单的唯一来源是 `devkit/quality_gates.py` 的 GATES
+> (#446)、Gate 8 Governance Binding(#867 — 弃用符号活体 caller / SKILL
+> 教学形状 vs 检测器 / evals 期望值对账,见 devkit/governance_binding.py)。
+> **门清单的唯一来源是 `devkit/quality_gates.py` 的 GATES
 > 注册表** — 本文不复制计数(派生不复制,#446 G 类)。
 
 ```

@@ -46,6 +46,12 @@ Gate semantics:
      the devkit/workflows face, un-re-pinned references/ edits,
      unregistered new scripts, and ext-index inconsistency (devkit/
      doc_sync.py, #446 + #476).
+  8. Governance Binding — machine-binds governance WORDING to code
+     (#867): (a) deprecated live callers via scripts/retirement_gate.py
+     (baseline ratchet); (b) SKILL.md-taught kunglao_dispatch envelope
+     samples must parse through hooks/lib_kunglao.py:parse_dispatch_json;
+     (c) evals/*.json must not pin DEPRECATED-module behavior (devkit/
+     governance_binding.py).
 """
 from __future__ import annotations
 
@@ -248,6 +254,38 @@ def _observation_pass_rate(verbose: bool = True) -> None:
           f"failed={failures + errors} skipped={skipped})")
 
 
+def _gate8_governance_binding(verbose: bool = True) -> bool:
+    """Governance Binding — Gate 8 (issue #867).
+
+    Machine-binds the repo's governance wording to its code (the #819
+    closeout-audit generalization). Three sub-checks in
+    devkit/governance_binding.py:
+      (a) deprecated live callers — scripts/retirement_gate.py scan with
+          its baseline ratchet (the #867 closeout emptied the baseline,
+          so any finding is a violation);
+      (b) SKILL teaching shape — SKILL.md's kunglao_dispatch envelope
+          samples must parse through the real detector
+          (hooks/lib_kunglao.parse_dispatch_json), and any legacy v0
+          prefix mention must carry a replay-only marker;
+      (c) evals reconciliation — evals/*.json must not pin DEPRECATED
+          modules as expected behavior (registry derived mechanically;
+          exceptions in devkit/governance-exceptions.json).
+
+    Fail-closed: missing SKILL/evals surfaces or zero envelope samples
+    are violations.
+    """
+    try:
+        sys.path.insert(0, str(REPO_ROOT / "devkit"))
+        from governance_binding import check as _gov_check
+    except Exception as exc:
+        print(f"  [fail] governance_binding import error: {exc!r}")
+        return False
+    rc = _gov_check()
+    # governance_binding.check() returns 0 (pass) or 1 (violations).
+    # bool(rc==0) — same truthiness trap guard as Gates 5-7.
+    return bool(rc == 0)
+
+
 GATES = {
     1: ("Requirement Correctness", _gate1_requirement_correctness),
     2: ("Regression Safety",      _gate2_regression_safety),
@@ -256,6 +294,7 @@ GATES = {
     5: ("Subagent Review",        _gate5_subagent_review),
     6: ("Agents Contract",        _gate6_agents_contract),
     7: ("Doc Sync",               _gate7_doc_sync),
+    8: ("Governance Binding",     _gate8_governance_binding),
 }
 
 
