@@ -125,7 +125,9 @@ def test_init_rerun_upgrades_legacy_bare_python_hook(init_ws: Path, isolated_hom
     production install), no longer the repo checkout's own location."""
     root = canonical_install_root().resolve()
     hook_file = root / "hooks" / "worker_budget.py"
-    uv_form = f"uv run --project {root.as_posix()} {hook_file.as_posix()}"
+    # #811 起新 canonical 形态带可选 PYTHONUTF8=1 env 前缀（PEP 540 注入）
+    uv_form = (f"PYTHONUTF8=1 "
+               f"uv run --project {root.as_posix()} {hook_file.as_posix()}")
     legacy = f"python {hook_file.as_posix()}"
     hooks_json = _seed_hooks_json(init_ws, legacy, legacy)
     r = _run_init(init_ws, ["--hooks-json", str(hooks_json)])

@@ -135,11 +135,11 @@ def test_ensure_project_hooks_exact_commands(tmp_path):
     # skill's hooks dir (#269); the project root is the skill root.
     skill_root = Path(hook_dir).parent.as_posix()
     assert commands == [
-        f"uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_budget.py",
-        f"uv run --project {skill_root} {Path(hook_dir).as_posix()}/dispatch_gate.py",
-        f"uv run --project {skill_root} {Path(hook_dir).as_posix()}/heartbeat_touch.py",
-        f"uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_budget.py",
-        f"uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_pulse.py",
+        f"PYTHONUTF8=1 uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_budget.py",
+        f"PYTHONUTF8=1 uv run --project {skill_root} {Path(hook_dir).as_posix()}/dispatch_gate.py",
+        f"PYTHONUTF8=1 uv run --project {skill_root} {Path(hook_dir).as_posix()}/heartbeat_touch.py",
+        f"PYTHONUTF8=1 uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_budget.py",
+        f"PYTHONUTF8=1 uv run --project {skill_root} {Path(hook_dir).as_posix()}/worker_pulse.py",
     ]
 
 
@@ -151,7 +151,7 @@ def test_ensure_project_hooks_uv_on_this_machine(tmp_path):
     out, _ = ensure_project_hooks({}, str(tmp_path / "hooks"))
     commands = [h["command"] for ev in out["hooks"].values() for e in ev for h in e["hooks"]]
     assert commands, "ensure_project_hooks must emit hook commands"
-    assert all(c.startswith("uv run --project ") for c in commands), commands
+    assert all(c.startswith("PYTHONUTF8=1 uv run --project ") for c in commands), commands
     assert not any(c.split()[0] in ("python", "python3") for c in commands), commands
 
 

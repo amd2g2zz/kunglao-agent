@@ -69,7 +69,7 @@ TIMEOUT_QUERY = 120
 def _run(cmd: list[str], cwd: Path | None = None,
          timeout: int = TIMEOUT_PROBE) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=str(cwd) if cwd else None,
-                          capture_output=True, text=True, timeout=timeout)
+                          capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
 
 
 def _tool_base(name: str) -> list[str] | None:

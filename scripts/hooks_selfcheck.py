@@ -138,7 +138,7 @@ def rebuild_project_level(workspace: Path) -> dict:
     try:
         r = subprocess.run(
             [sys.executable, str(script), str(workspace), "--wire-up"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace",
         )
         return {"rebuilt": True, "rc": r.returncode, "stdout_tail": r.stdout.strip()[-200:]}
     except Exception as exc:
@@ -218,4 +218,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

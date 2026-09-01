@@ -516,8 +516,13 @@ def build_hook_entry(hook_dir: Path, hook_file: str,
     # legacy (undeployed) callers fall back to the installing skill dir.
     project_root = Path(project).resolve() if project else Path(hook_dir).parent
     p = (Path(hook_dir) / hook_file).as_posix()
+    # #811: hooks inherit the invoking shell's locale — a GBK console turns
+    # every encoding-less IO in the hook into a decode bomb. PYTHONUTF8=1
+    # (PEP 540) pins UTF-8 for the whole subprocess tree, covering legacy
+    # call sites before the #811 explicit-encoding sweep reaches them.
     hooks = [{"type": "command",
-              "command": f"uv run --project {project_root.as_posix()} {p}"}]
+              "command": (f"PYTHONUTF8=1 "
+                          f"uv run --project {project_root.as_posix()} {p}")}]
     if matcher is None:
         return {"hooks": hooks}
     return {"matcher": matcher, "hooks": hooks}
@@ -693,8 +698,11 @@ def selfcheck_registration(target: Path, *, expected_files: Collection[str],
         base = c.replace("\\", "/").rsplit("/", 1)[-1]
         if base not in expected:
             continue  # unrelated entries are not this registration's claim
-        if not (c.startswith(prefix)
-                and c[len(prefix):].startswith(d.as_posix() + "/")):
+        # #811: entries carry an optional PYTHONUTF8=1 env prefix (PEP 540
+        # injection from build_hook_entry) — strip it before the shape check.
+        body = c[len("PYTHONUTF8=1 "):] if c.startswith("PYTHONUTF8=1 ") else c
+        if not (body.startswith(prefix)
+                and body[len(prefix):].startswith(d.as_posix() + "/")):
             mismatches.append(
                 f"shape: command for {base} is not canonical (must be "
                 f"uv-form into the declared hooks dir {d}): {c}")
@@ -1214,4 +1222,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

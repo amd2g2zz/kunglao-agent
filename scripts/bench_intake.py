@@ -124,7 +124,7 @@ def _git_porcelain(root: Path) -> tuple[int, str]:
         status = subprocess.run(
             ["git", "-C", str(root), "status", "--porcelain",
              "kunglao-bench"],
-            capture_output=True, text=True, check=False)
+            capture_output=True, text=True, check=False, encoding="utf-8", errors="replace")
         return status.returncode, status.stdout
     except OSError:
         return 1, ""
@@ -185,4 +185,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

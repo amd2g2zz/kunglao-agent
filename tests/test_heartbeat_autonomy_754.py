@@ -179,7 +179,7 @@ class TestAppendTickAndWriters:
         ws = tmp_path
         rc = hb_mod.heartbeat_register(ws)
         assert rc == 0
-        data = json.loads((ws / "runs" / ".heartbeat.json").read_text())
+        data = json.loads((ws / "runs" / ".heartbeat.json").read_text(encoding="utf-8"))
         assert data[hb_mod.TICK_HISTORY_KEY]
         assert data["loop_registered"] is False
 
@@ -189,7 +189,7 @@ class TestAppendTickAndWriters:
         hb_mod.heartbeat_register(ws)
         hb_mod.mark_loop_registered(ws)
         hb_mod.heartbeat_register(ws)  # re-register mid-flight
-        data = json.loads((ws / "runs" / ".heartbeat.json").read_text())
+        data = json.loads((ws / "runs" / ".heartbeat.json").read_text(encoding="utf-8"))
         assert data["loop_registered"] is True
         # one fresh entry, NOT polluted by the pre-marker history
         assert len(data["tick_history"]) == 1
@@ -200,10 +200,10 @@ class TestAppendTickAndWriters:
         ha.update_state(ws, "none", "IDLE")   # active session state first:
         # renew() over cold state bootstraps .hook_state.json and returns
         # before the heartbeat block — the tick path always has live state.
-        before = json.loads((ws / "runs" / ".heartbeat.json").read_text())
+        before = json.loads((ws / "runs" / ".heartbeat.json").read_text(encoding="utf-8"))
         assert len(before["tick_history"]) == 1
         ha.renew(ws)
-        after = json.loads((ws / "runs" / ".heartbeat.json").read_text())
+        after = json.loads((ws / "runs" / ".heartbeat.json").read_text(encoding="utf-8"))
         assert len(after["tick_history"]) == 2
         assert after["last_tick_ts"] >= before["last_tick_ts"]
 
@@ -218,7 +218,7 @@ class TestAppendTickAndWriters:
                            capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=60)
         assert r.returncode == 0, r.stderr
-        data = json.loads((ws / "runs" / ".heartbeat.json").read_text())
+        data = json.loads((ws / "runs" / ".heartbeat.json").read_text(encoding="utf-8"))
         assert data.get("loop_registered") is True, "touch must not erase marker"
         assert data.get("interval_min") == 5, "touch must not erase fields"
         assert len(data["tick_history"]) == 2
@@ -322,7 +322,7 @@ class TestDurableLoopScheduler:
         (ws / "runs").mkdir(parents=True)
         hb_mod.heartbeat_register(ws)           # init's own step (bootstrap)
         mod.emit_activation_handoff(ws)          # + scheduler upsert inside
-        hb_data = json.loads((ws / "runs" / ".heartbeat.json").read_text())
+        hb_data = json.loads((ws / "runs" / ".heartbeat.json").read_text(encoding="utf-8"))
         assert hb_data.get("loop_registered") is not True, (
             "#593/#754: writing .claude/scheduled_tasks.json must never flip "
             "the tick-evidence marker")
@@ -340,14 +340,14 @@ class TestDurableLoopScheduler:
         sched.parent.mkdir(parents=True, exist_ok=True)
         sched.write_text(json.dumps({"jobs": foreign}), encoding="utf-8")
         assert ls.upsert_durable_loop(ws) == 0
-        jobs = json.loads(sched.read_text())["jobs"]
+        jobs = json.loads(sched.read_text(encoding="utf-8"))["jobs"]
         ids = [j["id"] for j in jobs]
         assert ids.count("kunglao-heartbeat") == 1
         assert ids.count("someone-else") == 1
         first_prompt = [j for j in jobs if j["id"] == "kunglao-heartbeat"][0]["prompt"]
         # idempotent: second run replaces, never stacks
         assert ls.upsert_durable_loop(ws) == 0
-        jobs2 = json.loads(sched.read_text())["jobs"]
+        jobs2 = json.loads(sched.read_text(encoding="utf-8"))["jobs"]
         ids2 = [j["id"] for j in jobs2]
         assert ids2.count("kunglao-heartbeat") == 1
         assert ids2.count("someone-else") == 1
@@ -364,7 +364,7 @@ class TestDurableLoopScheduler:
         assert ls.upsert_durable_loop(ws) == 0
         backups = list(sched.parent.glob("scheduled_tasks.json.corrupt*"))
         assert backups, "corrupt prior content must be preserved side-by-side"
-        assert backups[0].read_text() == "{not json"
+        assert backups[0].read_text(encoding="utf-8") == "{not json"
 
     def test_unrecognized_but_valid_shape_backed_up(self, tmp_path):
         """r3-M1: valid JSON our reader does not understand (schedules key,
@@ -378,9 +378,9 @@ class TestDurableLoopScheduler:
         sched.write_text(raw, encoding="utf-8")
         assert ls.upsert_durable_loop(ws) == 0
         sidecars = list(sched.parent.glob("scheduled_tasks.json.unrecognized-*"))
-        assert sidecars and sidecars[0].read_text() == raw
+        assert sidecars and sidecars[0].read_text(encoding="utf-8") == raw
         # foreign JOB entry itself still survives inside the rewrite
-        entries = json.loads(sched.read_text())["jobs"]
+        entries = json.loads(sched.read_text(encoding="utf-8"))["jobs"]
         assert any(e.get("id") == "foreign" for e in entries)
         assert any(e.get("id") == ls.JOB_ID for e in entries)
         # {"schedules": ...} (no jobs key) -> whole file preserved, ours added
@@ -390,7 +390,7 @@ class TestDurableLoopScheduler:
         raw2 = json.dumps({"schedules": [{"weird": True}]})
         op.write_text(raw2, encoding="utf-8")
         assert ls.upsert_durable_loop(other) == 0
-        assert list(op.parent.glob("*.unrecognized-*"))[0].read_text() == raw2
+        assert list(op.parent.glob("*.unrecognized-*"))[0].read_text(encoding="utf-8") == raw2
         assert ls.loop_entry_exists(other) is True
 
     def test_bom_file_not_treated_as_corrupt(self, tmp_path):
@@ -402,7 +402,7 @@ class TestDurableLoopScheduler:
             b"\xef\xbb\xbf" + json.dumps([{"id": "plain"}]).encode())
         assert ls.upsert_durable_loop(ws) == 0
         assert not list(sched.parent.glob("*.corrupt-*"))
-        ids = [e["id"] for e in json.loads(sched.read_text())]
+        ids = [e["id"] for e in json.loads(sched.read_text(encoding="utf-8"))]
         assert ids.count(ls.JOB_ID) == 1
 
     def test_cron_expression_rejects_unclean_steps(self, tmp_path):
@@ -456,7 +456,7 @@ class TestAnalysisEntryGate:
         # aging rebuild happened at the entry too
         sched = ws / ".claude" / "scheduled_tasks.json"
         assert sched.exists()
-        entries = json.loads(sched.read_text())
+        entries = json.loads(sched.read_text(encoding="utf-8"))
         entries = entries["jobs"] if isinstance(entries, dict) else entries
         assert any(e.get("id") == "kunglao-heartbeat" for e in entries)
 

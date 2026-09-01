@@ -412,7 +412,7 @@ def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -
     )
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900, encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired as exc:
         print(f"error: analyzeHeadless timed out: {exc}", file=sys.stderr)
         if cleanup is not None and not args.keep_project:

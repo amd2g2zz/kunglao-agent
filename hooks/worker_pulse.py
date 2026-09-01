@@ -163,7 +163,7 @@ def _run_py(args: list, ws: Path):
         return subprocess.run(
             [sys.executable] + args,
             capture_output=True, text=True, timeout=20,
-            cwd=str(ws),
+            cwd=str(ws), encoding="utf-8", errors="replace",
         )
     except (subprocess.SubprocessError, OSError):
         return None

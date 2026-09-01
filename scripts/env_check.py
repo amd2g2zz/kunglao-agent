@@ -204,7 +204,7 @@ def check_flag() -> tuple[bool, str]:
                 r = subprocess.run(
                     ["powershell", "-NoProfile", "-Command",
                      f"[Environment]::GetEnvironmentVariable('{FLAG_NAME}','{scope}')"],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True, text=True, timeout=10, encoding="utf-8", errors="replace",
                 )
                 val = r.stdout.strip()
                 if val and is_truthy(val):
@@ -512,7 +512,7 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     if venv_py.exists():
         try:
             r = subprocess.run([str(venv_py), "-c", "import cryptography, yaml"],
-                               capture_output=True, text=True, timeout=30)
+                               capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 problems.append(f"venv missing deps (cryptography/yaml): {r.stderr.strip()[:80]}")
         except Exception as exc:
@@ -867,4 +867,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())
