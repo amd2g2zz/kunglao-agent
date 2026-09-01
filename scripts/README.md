@@ -139,6 +139,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `update_index.py` | facts/_INDEX.md maintenance | tools, tests |
 | `lint_facts.py` | facts × malware-veri-notes aligned frontmatter lint (#336) | CLI, tests |
 | `migrate_facts.py` | old-format facts → aligned schema migration (#336) | CLI, tests |
+| `mechanism_scheduler.py` | 机制调度器 (#878) — mechanisms.yaml 注册表（schema `kunglao.mechanisms/1`，trigger.gate/cost_class/cockpit_signal 三项上线前置缺一即拒，**不入册不许跑**；册坏 fail-closed 整轮拒跑 + `mech_reject` 落账）+ 单宿主调度（heartbeat_tick 唯一时间宿主，廉价门先行→cost_class 排队→单 tick time cap，默认 90s `KUNGLAO_MECH_BUDGET_S`；runner 注入保留 tick 逐脚本 seam）+ 账本事件总线（settlement/stall/plan_review 事件类 byte-offset 增量读，镜像 #883 有界读惯例）+ 座舱健康段（每机制 {last_run,next_eligible,drops} → statusline mechanisms 段 + mechanism_health 探针 [mech] 码）；一条命令 `--plan` 答"什么机制在什么时候跑"；`--check`/`--status`/`--run` 同文件；**只调度提案类机制，不改任何决策权归属**（hooks 通道不迁移） | heartbeat_tick, statusline_snapshot, tests |
+| `mechanisms.yaml` | 机制注册表数据 (#878) — 13 条目（8 机制入口裁定 + tick advisory 子步骤迁入），schema/词表由 mechanism_scheduler.validate_registry 机械校验（tests/test_mechanism_scheduler_878.py 守卫） | mechanism_scheduler, tests |
 | `retract_claim.py` | RETRACTED terminal state + dependency blast-radius reopening (#331) | CLI, tests |
 | `progress_report.py` | one-block progress report | tests |
 | `init_state.py` | init-completeness single source of truth (#304) | hooks, lib(3), tests |
