@@ -81,6 +81,7 @@ the 12 mandatory fields, but REQUIRED on every kunglao fact:
 | `reproduce` | L1 mechanical reproduce command (runs with cwd=facts/) |
 | `expected` | L1 oracle: sha256 of reproduce stdout, or assignment-class `field=value` assertions |
 | `verified` | date of last L1 pass (`pending` when none yet) |
+| `trace_id` | #879 mission chain id `tr-<mission>-<seq>` (optional; worker echo, same channel as `claim_id`) |
 
 Plus the verifier gate: `verify_status` ∈ `pending`/`partial`/`passes`/`fails`/`stale`
 (schema Layer-4 field). Two-layer mapping: `references/state-mapping.md`.

@@ -295,6 +295,11 @@ was discarded as untrusted). Write in this order:
    layout)`. Yes/no/misleading is about whether the injected/recalled
    references HELPED this claim; misleading = the knowledge pointed the wrong
    way (that signal feeds reference demotion suggestions).
+   Trace echo: when the dispatch envelope carries `trace_id`
+   (`tr-<mission>-<seq>`), copy it into EVERY worker-status line
+   (`| trace: <trace_id>`) and into the frontmatter of each fact you write
+   (`trace_id: <trace_id>`) — the same channel as `claim_id`. This is what
+   joins your rows to the mission chain (dispatch→worker→settlement).
 2. **IMMEDIATELY after deriving each fact** — write `facts/F<NNN>.md`. Do NOT
    batch all facts and write at the end; if you crash mid-task, partial state
    must survive. Each fact gets `self_caveat: "unverified — needs independent

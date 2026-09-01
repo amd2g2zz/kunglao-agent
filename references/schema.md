@@ -36,7 +36,18 @@
   status: OPEN                    # one of VALID_STATUS
   source: cti                     # cti | static_re | dynamic_re | user_feedback | synthesis
   competitor_group: null          # q_id for model_selection (v1.7), else null
+  supersedes: [C-001]             # #879 lineage (optional): claims this one replaces
+  superseded_by: C-002            # #879 lineage (optional): the replacing claim
+  derived_from: []                # #879 lineage (optional): derivation (non-replacement) edges
 ```
+
+**Lineage (#879)**: supersedes / superseded_by / derived_from are additive
+optional fields; every target must be an existing claim id, self-reference
+and supersedes/superseded_by cycles are violations — enforced as
+carrier_consistency violation class `(g)`. The mechanical writer for the
+replacement edge is `retract_claim.py --reason superseded --superseded-by
+C-NN` (writes BOTH sides); a SUPERSEDED-status claim without an edge is
+the "谁替代谁" gap #879 closes.
 
 ## claim_deps.yaml
 ```yaml
