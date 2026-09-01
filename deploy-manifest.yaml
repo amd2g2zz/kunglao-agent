@@ -839,7 +839,7 @@ files:
   - src: references/_index-tools.md
     dest: .claude/references/_index-tools.md
     kind: asset
-    sha256: e28287ddfbb4006a0965a0f3dfb0206d6a54f711d6d7f9195c1d3d65f7f2a382
+    sha256: d83a45b5c67afaaa72c537edb42501181a51b4cfd2d3cebba7f7a7e0faf2b431
   - src: references/_index-web-crawler-engineering.md
     dest: .claude/references/_index-web-crawler-engineering.md
     kind: asset
@@ -855,11 +855,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 3048763302984d5f4014fe2d4f5644bb471592fc55022c946137d09482c1914c
+    sha256: 329b3956179ebd4966253835c84d19808863c22c35410d11bb58fc05edc894b0
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: da7c7e6429312e0be8327537d24387a128a70417ae599472df1a334b0b47052b
+    sha256: 87d4220b8c077e05c267fe7153931fa79ee9196b878f010b5a3ee116b636a087
   - src: references/agent-three-state-charter.md
     dest: .claude/references/agent-three-state-charter.md
     kind: asset
@@ -992,6 +992,10 @@ files:
     dest: .claude/references/re-library/jsvmp-triage.md
     kind: asset
     sha256: 179a621ffb5e992ae7474bf48ee840f29a165f803d3828810b0a32f99a54a500
+  - src: references/re-library/kunglao-toolshelf.md
+    dest: .claude/references/re-library/kunglao-toolshelf.md
+    kind: asset
+    sha256: 6ffccd0d3008c086e9109779a09337914e36ea48a4199b9bb9fb87cfeae7bb41
   - src: references/re-library/languages-compiled.md
     dest: .claude/references/re-library/languages-compiled.md
     kind: asset
@@ -1207,7 +1211,7 @@ files:
   - src: tools/_index-ghidra.md
     dest: .claude/tools/_index-ghidra.md
     kind: asset
-    sha256: 9dce2ec554de4ca9beb837c3233d8fe5712652447d9f23641d20ab42d348b873
+    sha256: 183ea40d0af0a7ce8152a06fb0fe8f072bf448bc74c5a2f11ddcc88ede8449d7
   - src: tools/_index-pipelines.md
     dest: .claude/tools/_index-pipelines.md
     kind: asset
@@ -1227,15 +1231,15 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 16363b5c964a9f9aa721cd2edf8276138c7e93db48fdb2e8c65f2e244e7a6ab0
+    sha256: dadc0bfb0445d22f57570ee318aecb1e56fa054386ba9ac1cb42f4f4b875945b
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
-    sha256: c30387c5e38bb78c5a87c9ec412d851081d72c8dff14c36184ec3a08a6f6b3b0
+    sha256: f816bd40e0664f39fd402f40283c475ec1d23fb22f685044a18807b98c197fea
   - src: tools/_INDEX.yaml
     dest: .claude/tools/_INDEX.yaml
     kind: asset
-    sha256: 8a83cf384313f18b721980f54f344d376e0227a6e30f46f696e128dbbb46a8f4
+    sha256: 8f52bf336508ac5813b156546bf395a2d718303a13fce751eed99acbc119b996
   - src: tools/_lib/index_schema.py
     dest: .claude/tools/_lib/index_schema.py
     kind: asset
@@ -1339,7 +1343,7 @@ files:
   - src: tools/ghidra/README.md
     dest: .claude/tools/ghidra/README.md
     kind: asset
-    sha256: 149810aed3e66aa1fcbf100a899641e21144c6a3ccf3c0db97055bdb6e5b37b8
+    sha256: 01d4ff69d05299ac02285571f77a32c33a3835146846d2c6df35dc5159870d2c
   - src: tools/ghidra/run_ghidra_postscript.py
     dest: .claude/tools/ghidra/run_ghidra_postscript.py
     kind: asset
@@ -1463,7 +1467,7 @@ files:
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
-    sha256: d6c3af61a5058c88b81089a7e794ad3192b0030d1aeb1222417d70effaa8424d
+    sha256: 337ee1bc3a6a645d6f0ea9cf84e6a8f5f6016d11f42361a464bef53cc4630c44
   - src: tools/web/jsvmp_triage.py
     dest: .claude/tools/web/jsvmp_triage.py
     kind: asset

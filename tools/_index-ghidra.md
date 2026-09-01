@@ -11,6 +11,7 @@
 | `ghidra-vtable-struct` | vtable/callback-table structure recovery | Read when recovering a vtable/callback table structure; not without a clear vtable address or for text-only tasks |
 | `ghidra-evidence-annotations` | TSV evidence annotation write-back/validation (fail-closed) | Read when writing evidence TSV back to / validating a Ghidra project; not without an evidence TSV |
 | `ghidra-scan-pointer` | xref lookup / 8-byte pointer scan into a range | Read when checking address references or scanning pointers; for string location use ghidra-decompile-functions |
+| `ghidra_diff` | Function-level binary diff over Ghidra Version Tracking (#308, bindiff.v1 artifact) | Read when two samples/variants need added/changed/removed function diffing; not for fresh single-sample recon |
 
 ## Contract entries
 

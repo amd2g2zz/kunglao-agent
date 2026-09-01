@@ -307,7 +307,7 @@ class TestCli:
     def test_cli_list_categories(self) -> None:
         r = _cli("--list-categories")
         assert r.returncode == 0
-        assert "tools (5)" in r.stdout
+        assert "tools (6)" in r.stdout  # 6 since #866-b (kunglao-toolshelf.md joined the tools domain)
         assert "governance (4)" in r.stdout  # +1: mechanisms.md cataloged 2026-08-25
 
     def test_cli_scene_map(self) -> None:
