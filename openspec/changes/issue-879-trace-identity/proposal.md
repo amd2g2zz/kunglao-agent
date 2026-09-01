@@ -84,3 +84,24 @@
 
 无规格级偏航。计划锚点漂移（§0.7 预期内）：`_emit_trace` 与 dispatch 事件发射点实测分别在
 dispatch_gate.py:352 与 worker_budget_sinks.py:414（计划未给行号，方案不受影响）。
+
+### Rebase 冲突处置（rebase onto origin/dev 74879e8，2026-09-01）
+
+dev 上 #600（`_emit_capability_dormant` + sentinel + `capability_dormant` 词）与 #601
+（must-stop 规则 id + `matched_rule` schema 字段）与#884/#886 合并后，本卡 5 commits 重放，
+3 处冲突全部语义合并（双方语义都活）：
+
+1. `scripts/kunglao_log.py` emit — `matched_rule` 与 `trace_id` 同为 additive kwarg，
+   双保留 + 双 docstring 段；模块 schema 列表补 `matched_rule` 行。
+2. `tests/test_kunglao_log.py` ALL_FIELDS / `tests/test_logging_coverage.py`
+   SCHEMA_FIELDS — `matched_rule` 与 `trace_id` 并入同一字段集（15 字段 schema 钉子，
+   两字段共存已实测：同行可同时携带 `matched_rule="mcp__ghidra__*"` +
+   `trace_id="tr-m-0001"`，join 语义不受影响）。
+3. `hooks/dispatch_gate.py` — `_emit_trace` 双形参（matched_rule + trace_id）；dev 的
+   `_emit_capability_dormant` 函数整体保留 + 本卡 `_capability_guard` trace_id 形参合并；
+   main() 自动合并后语义核对：#601 must-stop rule face → 本卡 trace 解析 → teeth
+   （trace 透传）→ pass 路径 `trace_allocated` 发射，顺序不变、双方 face 均在。
+4. 生成面按序刷新（先 `tools/ext-scan.py` 再 `deploy_manifest.py --write/--verify`，
+   规避 ext-index 哈希落后于 manifest 的顺序陷阱）：363 entries verified；
+   `references/_INDEX.yaml` re-pin 无漂移。
+
