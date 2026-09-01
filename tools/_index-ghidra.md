@@ -1,6 +1,6 @@
 # ghidra domain index (tool layer)
 
-> Domain: Ghidra disassembly / function-level analysis. When a worker is dispatched to function disassembly, import/xref export, or structure-recovery tasks, read this file first, then load on demand. Contract field meanings are in [README.md](README.md); the machine contract is [_INDEX.yaml](_INDEX.yaml). All 5 tools are invoked uniformly via `tools/ghidra/run_ghidra_postscript.py` (an analyzeHeadless wrapper; `--key=value` is forwarded to the postScript).
+> Domain: Ghidra disassembly / function-level analysis. When a worker is dispatched to function disassembly, import/xref export, or structure-recovery tasks, read this file first, then load on demand. Contract field meanings are in [README.md](README.md); the machine contract is [_INDEX.yaml](_INDEX.yaml). The 5 postscript tools are invoked uniformly via `tools/ghidra/run_ghidra_postscript.py` (an analyzeHeadless wrapper; `--key=value` is forwarded to the postScript); async submit/poll/fetch over that wrapper goes through `tools/ghidra/ghidra_job.py` (+ `job_store.py`, the dir-backed job lib). `ghidra_diff` is its own CLI and drives the same async protocol.
 
 ## Tool catalog
 
@@ -73,3 +73,15 @@
 - **Outputs**: JSON (xref / raw 8-byte pointer scan hits).
 - **exit code**: 0 success / 2 error (missing GHIDRA_HOME / bad arguments / postScript failure).
 - **when_not**: Not for string location only — use ghidra-decompile-functions.
+
+### ghidra_diff
+
+- **Purpose**: Function-level binary diff over Ghidra Version Tracking (#308): two samples into one project, GhidraBindiff.java emits a bindiff.v1 artifact; query subcommands slice it (no Ghidra needed for queries).
+- **Usage**:
+  ```bash
+  python tools/ghidra/ghidra_diff.py create --base <base-sample> --target <target-sample> --out <artifact.json>
+  ```
+- **Inputs**: Two binaries (`--base`/`--target`) + subcommand (`create|status|cancel|delete|diff-summary|diff-list-functions|diff-function <addr>`); optional `--timeout`/`--ghidra-home`/`--keep-project`; queries take `--artifact` or `--job <id>` and `--side base|target`.
+- **Outputs**: `bindiff.v1` JSON artifact (match statistics; identical/changed/added/removed function lists; per-function callee-change + bodyBytesChanged lenses — bodyBytesChanged is always present for matched functions).
+- **exit code**: 0 success / 1 negative finding (e.g. diff-function address not in the diff) / 2 error (bad args / missing or invalid artifact / postScript failure); structured error JSON on stderr, never a traceback.
+- **when_not**: Not for fresh single-sample recon (use ghidra-recon); not when an external BinDiff/Diaphora export already covers the pair.

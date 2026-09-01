@@ -104,6 +104,8 @@ _CAPABILITY_TAGS = frozenset({
     "web:triage",         # #884: three-feature JSVMP/VMP triage verdict
     # crypto: — legitimate routing tag for the crypto-tool family
     "crypto:decode",
+    # ghidra: — #866-b registration of the Ghidra Version Tracking binary diff
+    "ghidra:diff",
 })
 # ---- end annotation gate constants -------------------------------------
 
