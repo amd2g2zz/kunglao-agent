@@ -189,6 +189,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
 | `toolchain.py` | type-aware toolchain probe matrix (#304) with probe tiers presence/liveness/capability + jdwp handshake (#474) | lib(1), tests, docs |
 | `tool_tiers.py` | 工具族档位表加载/选择/契约注入 (#812) — 场景×工具→四档降级链（#670 估算 + C-006 实录），dispatch_context 可选键 | dispatch_context, tests |
+| `tool_value.py` | 工具价值聚合器 (#881) — 四输入（toolfirst 行/facts steps/结算+runs outcome/operation label）按 claim id join → (scene,operation,tool) cite/burn/reject + β-Bernoulli utility（先验=静态链 rank）；runs/.tool-value.json 表；CLI --report 查询；接线 tool_tiers 排序与 recall_files rerank | tool_tiers, hooks/recall_inject, dispatch_context, tests |
 | `toolchain_install.py` | ask-then-install: (manager, package) data x pkg_detect detection + MCP registration + re-probe + env-facts installed ledger (#408, #477) | CLI, lib(1), tests |
 | `pkg_detect.py` | package-manager detection (winget/choco/scoop/brew/apt/dnf/apk/pacman/pip/uv/npm; which-first + known-path, read-only) + unpacked-ghidra half-state (#477) | CLI, lib(1), tests |
 | `deploy_shim.py` | device-side idempotent deploy (frida-server rename+custom port / android-server, re-probe gated, installed ledger) + #462 one-off shim records under scripts/shims/ (#477) | CLI, tests |
