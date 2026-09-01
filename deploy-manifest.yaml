@@ -39,7 +39,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: 367072967ae4208e65378ae29373a5099f6491ec3bd2c1d44f44fa7e293e9721
+    sha256: 44a21ead9a273c84eabfb9183057704a0e3e79a6bf65f72c069a9d8e31ffc856
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -731,7 +731,11 @@ files:
   - src: scripts/tool_tiers.py
     dest: .claude/scripts/tool_tiers.py
     kind: scaffold
-    sha256: 9a548f2de9fd7810b0732412f4992bbde1eead00a2823b2df621d4ba68e091c3
+    sha256: 82498f2771b7fb0a33d779fa69c5d80029e4be25dc2a70bcac80511596187eb0
+  - src: scripts/tool_value.py
+    dest: .claude/scripts/tool_value.py
+    kind: scaffold
+    sha256: cfd9604098e468186770ce3d908b5af55e887d568126fead55416d5dfc442cc4
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
@@ -1223,7 +1227,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 81868f230aa39a980f4cb02024dc2cc738711e82d22b8f0524631e3df80f19d6
+    sha256: 16363b5c964a9f9aa721cd2edf8276138c7e93db48fdb2e8c65f2e244e7a6ab0
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

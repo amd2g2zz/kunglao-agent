@@ -204,10 +204,44 @@ def _run_recall(query: str, cwd: Path | None = None) -> tuple[int, str]:
         return 1, ""
 
 
+def _utility_rerank(files: tuple[str, ...], ws: Path) -> tuple[str, ...]:
+    """#881 wiring 2: post-recall utility rerank — recall was pure query-match
+    with no value signal; reference docs whose filename names a tool with a
+    high pooled runtime utility rise, low-utility ones sink. Files naming no
+    tool keep a neutral score and their original relative order (stable sort).
+    FAIL_OPEN at every layer: missing/corrupt table or any error -> the
+    original order — rerank must never break recall (it is guidance only)."""
+    try:
+        from tool_value import line_tool_hits, load_table, pooled_utilities
+        table = load_table(ws)
+        if not table:
+            return files
+        pooled = pooled_utilities(table)
+        if not pooled:
+            return files
+    except Exception:  # noqa: BLE001 — recall must NEVER block dispatch
+        return files
+
+    def score(path: str) -> float:
+        best = 0.5  # neutral: no tool named in the filename
+        for name in line_tool_hits(Path(path).name, pooled):
+            if pooled[name]["utility"] > best:
+                best = pooled[name]["utility"]
+        return best
+
+    return tuple(sorted(files, key=lambda f: -score(f)))
+
+
 def recall_files(query: str, cwd: Path | None = None,
                  recall_runner=None) -> tuple[str, ...]:
     """Matched reference files for one query (empty on any failure). Public so
-    siblings (failure_analysis_gate #268 item 3) reuse the same recall path."""
+    siblings (failure_analysis_gate #268 item 3) reuse the same recall path.
+
+    #881 wiring 2: when a workspace is supplied (cwd != None — the claim-dispatch
+    face) and a tool-value table exists, the result is reranked by pooled tool
+    utility. Callers without a workspace (failure_analysis_gate._failure_modes_recall)
+    are structurally unaffected. Fail-open: no table / corrupt table / any
+    error -> the original query-match order."""
     runner = recall_runner if recall_runner is not None else _run_recall
     try:
         rc, stdout = runner(query)
@@ -215,7 +249,10 @@ def recall_files(query: str, cwd: Path | None = None,
         return ()
     if rc != 0 or not stdout:
         return ()
-    return _parse_files(stdout)
+    files = _parse_files(stdout)
+    if cwd is not None:
+        files = _utility_rerank(files, Path(cwd))
+    return tuple(files)
 
 
 def _guidance(queries: list[str], files: list[str]) -> str:
