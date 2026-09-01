@@ -54,7 +54,14 @@ def _register(ws: Path, statement: str) -> Path:
 
 
 def _desc(task: str = 'do the task') -> str:
-    return f'[T1 tools=grep] claim C-001 {task}'
+    # #862 通道归一：description 退化为纯描述；形状走 prompt（canonical）
+    return f'w-test dispatch: {task}'
+
+
+def _prompt(task: str = 'do the task') -> str:
+    # canonical prompt = 形状行 + facts-snapshot 标记行（S1c 门要求两者）
+    return (f'[T1 tools=grep] claim C-001 {task}' + chr(10)
+            + 'facts-snapshot: 1 facts')
 
 
 PROMPT = 'facts-snapshot: 1 facts'
@@ -66,7 +73,7 @@ def test_match_agent_passes(tmp_path):
     """dispatch agent == recommended specialist -> pass."""
     ws = tmp_path
     _register(ws, 'decompile and disassemble the main function')
-    ok, msg = check_agent_type(_paths(ws), _desc(), PROMPT, 'ghidra-light')
+    ok, msg = check_agent_type(_paths(ws), 'C-001', _prompt(), 'ghidra-light')
     assert ok, msg
     assert 'ghidra-light' in msg
 
@@ -77,7 +84,7 @@ def test_mismatch_with_reasoning_passes(tmp_path):
     ws = tmp_path
     _register(ws, 'decompile and disassemble the main function')
     prompt = PROMPT + '\nagent-reasoning: kunglao-worker does the raw xref pass first'
-    ok, msg = check_agent_type(_paths(ws), _desc(), prompt, 'kunglao-worker')
+    ok, msg = check_agent_type(_paths(ws), 'C-001', prompt, 'kunglao-worker')
     assert ok, msg
     assert 'recorded' in msg
 
@@ -87,7 +94,7 @@ def test_mismatch_without_reasoning_rejects(tmp_path):
     REJECT (the acceptance case from issue #310)."""
     ws = tmp_path
     _register(ws, 'decompile and disassemble the main function')
-    ok, msg = check_agent_type(_paths(ws), _desc(), PROMPT, 'kunglao-worker')
+    ok, msg = check_agent_type(_paths(ws), 'C-001', _prompt(), 'kunglao-worker')
     assert not ok
     assert 'agent-reasoning' in msg
     assert 'ghidra-light' in msg
@@ -98,7 +105,7 @@ def test_no_specialist_recommended_silent(tmp_path):
     no REJECT; the informational msg is not emitted on ok)."""
     ws = tmp_path
     _register(ws, 'analyze the file structure')
-    ok, msg = check_agent_type(_paths(ws), _desc(), PROMPT, 'kunglao-worker')
+    ok, msg = check_agent_type(_paths(ws), 'C-001', _prompt(), 'kunglao-worker')
     assert ok and 'kunglao-worker allowed' in msg
 
 
@@ -110,7 +117,7 @@ def test_role_agent_dispatch_skipped(tmp_path):
     ws = tmp_path
     _register(ws, 'decompile and disassemble the main function')
     for role in ('kunglao-redteam', 'kunglao-init-worker', 'verdict-redteam'):
-        ok, msg = check_agent_type(_paths(ws), _desc(), PROMPT, role)
+        ok, msg = check_agent_type(_paths(ws), 'C-001', _prompt(), role)
         assert ok, f'{role}: {msg}'
 
 
@@ -146,7 +153,7 @@ def test_workspace_features_route_go_sample(tmp_path):
     (ws / 'runs' / 'feature-probe.json').write_text(
         json.dumps({'language': 'Go', 'machine': 'AMD64'}), encoding='utf-8')
     _register(ws, 'identify the main function and its callees')
-    ok, msg = check_agent_type(_paths(ws), _desc(), PROMPT, 'ghidra-light')
+    ok, msg = check_agent_type(_paths(ws), 'C-001', _prompt(), 'ghidra-light')
     assert not ok
     assert 'go-symbols' in msg
 
@@ -158,7 +165,7 @@ def test_feature_probe_file_unparseable_does_not_crash(tmp_path):
     (ws / 'runs').mkdir(parents=True)
     (ws / 'runs' / 'feature-probe.json').write_text('{broken', encoding='utf-8')
     _register(ws, 'decompile the main function')
-    ok, msg = check_agent_type(_paths(ws), _desc(), PROMPT, 'kunglao-worker')
+    ok, msg = check_agent_type(_paths(ws), 'C-001', _prompt(), 'kunglao-worker')
     assert not ok  # claim text alone still recommends ghidra-light
     assert 'agent-reasoning' in msg
 
@@ -169,7 +176,7 @@ def test_explicit_agent_type_declaration_matches_gate(tmp_path):
     ws = tmp_path
     _register(ws, 'decompile and disassemble the main function')
     prompt = PROMPT + '\nagent_type: ghidra-light'
-    ok, msg = check_agent_type(_paths(ws), _desc(), prompt, 'ghidra-light')
+    ok, msg = check_agent_type(_paths(ws), 'C-001', prompt, 'ghidra-light')
     assert ok, msg
 
 
@@ -204,7 +211,7 @@ def _payload(agent: str, prompt: str, desc: str) -> dict:
 
 def test_pre_check_rejects_specialist_mismatch_without_reasoning(tmp_path, capsys):
     ws = _healthy_ws(tmp_path)
-    rc = pre_check(_payload('kunglao-worker', PROMPT, _desc()), _paths(ws))
+    rc = pre_check(_payload('kunglao-worker', _prompt(), _desc()), _paths(ws))
     captured = capsys.readouterr()
     assert rc == 2
     assert 'REJECT agenttype' in captured.err
@@ -216,11 +223,11 @@ def test_pre_check_rejects_specialist_mismatch_without_reasoning(tmp_path, capsy
 def test_pre_check_accepts_mismatch_with_reasoning(tmp_path, capsys):
     ws = _healthy_ws(tmp_path)
     prompt = PROMPT + '\nagent-reasoning: worker first pass, specialist after'
-    rc = pre_check(_payload('kunglao-worker', prompt, _desc()), _paths(ws))
+    rc = pre_check(_payload('kunglao-worker', _prompt() + chr(10) + 'agent-reasoning: worker first pass, specialist after', _desc()), _paths(ws))
     assert rc == 0, capsys.readouterr().err
 
 
 def test_pre_check_accepts_recommended_specialist(tmp_path, capsys):
     ws = _healthy_ws(tmp_path)
-    rc = pre_check(_payload('ghidra-light', PROMPT, _desc()), _paths(ws))
+    rc = pre_check(_payload('ghidra-light', _prompt(), _desc()), _paths(ws))
     assert rc == 0, capsys.readouterr().err
