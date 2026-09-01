@@ -736,6 +736,107 @@ def _is_diagnostic_exempt(text: str) -> bool:
     return False
 
 
+def _toolfirst_evaluate(text_lower: str, cited: str | None) -> dict:
+    """#880: the tool-first attribution computation, extracted PURE from
+    check_tool_first so the pass face can emit the (keyword->tool) payload the
+    reason string used to discard (issue #880 RC2) and the claim face can
+    persist it as the operation label.
+
+    Returns {mode, keywords, tool, reason}: mode is one of
+      matched        pass — cited tool is the keyword match (keywords = the
+                     text keywords that map to the cited tool)
+      optout         pass — explicit `none (reasoning: ...)` opt-out
+      exempt         pass — one-off diagnostic declaration
+      no_index       pass — no tools/_INDEX.yaml keywords to match
+      no_match       pass — no keyword hit (gate stays silent by design)
+      reject         REJECT — either a keyword hit without a marker
+                     (missing_marker) or a marker naming an unmatched tool
+                     (self_attestation); `detail_mode` carries which.
+    Determinism: keyword hits iterate sorted (the pre-#880 matched_tools set
+    had arbitrary iteration order).
+    """
+    import re as _re630
+    keywords = _load_tool_index_keywords(_SKILL_ROOT)
+    kw_re = {kw: _re630.compile(_ASCII_BOUNDARY.format(kw=_re630.escape(kw)))
+             for kw in keywords}
+    stopworded = {kw: tn for kw, tn in keywords.items()
+                  if kw not in _TOOLFIRST_STOPWORDS}
+    hits = sorted(kw for kw in stopworded
+                  if kw_re[kw].search(text_lower))
+    tool_of = lambda kw: stopworded[kw]  # noqa: E731
+
+    if cited is not None:
+        if cited.startswith('none'):
+            return {'mode': 'optout', 'keywords': [], 'tool': None,
+                    'detail_mode': 'optout',
+                    'reason': 'tool-catalog: none (explicit opt-out)'}
+        if not keywords:
+            return {'mode': 'no_index', 'keywords': [], 'tool': None,
+                    'detail_mode': 'no_index',
+                    'reason': ('no tools/_INDEX.yaml keywords to match - '
+                               'tool-first skipped')}
+        for tool in sorted({tool_of(kw) for kw in hits}):
+            if tool and tool.lower() in cited:
+                return {'mode': 'matched', 'tool': tool,
+                        'keywords': [kw for kw in hits if tool_of(kw) == tool],
+                        'detail_mode': 'matched',
+                        'reason': f'tool-catalog: {tool} (matched)'}
+        return {'mode': 'reject', 'keywords': hits, 'tool': None,
+                'detail_mode': 'self_attestation',
+                'reason': (
+                    "`tool-catalog:` marker names a tool the dispatch text "
+                    "does not actually match (self-attestation, #630). Cite "
+                    "the tool your text references, or `tool-catalog: none "
+                    "(reasoning: <why not>)`.")}
+    if _is_diagnostic_exempt(text_lower):
+        return {'mode': 'exempt', 'keywords': [], 'tool': None,
+                'detail_mode': 'exempt',
+                'reason': 'one-off diagnostic - tool-first exempt'}
+    if not keywords:
+        return {'mode': 'no_index', 'keywords': [], 'tool': None,
+                'detail_mode': 'no_index',
+                'reason': ('no tools/_INDEX.yaml keywords to match - '
+                           'tool-first skipped')}
+    if hits:
+        kw = hits[0]
+        return {'mode': 'reject', 'keywords': [kw], 'tool': tool_of(kw),
+                'detail_mode': 'missing_marker',
+                'reason': (
+                    f"dispatch text matches registered tool '{tool_of(kw)}' "
+                    f"(keyword '{kw}') but carries no `tool-catalog:` marker. "
+                    f"Add `tool-catalog: {tool_of(kw)}` if you will try it, "
+                    f"or `tool-catalog: none (reasoning: <why not>)` if it "
+                    f"genuinely does not apply, then re-dispatch.")}
+    return {'mode': 'no_match', 'keywords': [], 'tool': None,
+            'detail_mode': 'no_match',
+            'reason': 'no tool-catalog keyword match'}
+
+
+def _toolfirst_emit(ws, ev: dict) -> None:
+    """#880: the tool-first gate's REJECT face reaches the unified ledger
+    (dual_gate._emit mirror shape: detail = JSON payload). Fail-open —
+    observability never gates a decision (#459 contract).
+
+    The PASS face deliberately does NOT emit here: check_tool_first runs
+    mid-battery, BEFORE gates that may still reject the dispatch
+    (heartbeat #754 pins "a rejected dispatch emits no lifecycle noise" —
+    test_heartbeat_bootstrap). The pass row fires at the APPROVAL point via
+    toolfirst_pass_record instead, so ledger rows describe real dispatches.
+    """
+    if not ws or ev['mode'] != 'reject':
+        return
+    try:
+        import kunglao_log
+        kunglao_log.emit(
+            Path(ws), 'hook:worker_budget', 'toolfirst_reject',
+            detail=json.dumps({'mode': ev['detail_mode'],
+                               'keywords': ev['keywords'],
+                               'tool': ev['tool']},
+                              ensure_ascii=False))
+    except Exception:  # noqa: BLE001 — logging never breaks the gate
+        pass
+
+
 def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
     """Issue #294: a dispatch touching a registered tool's domain must cite it.
 
@@ -746,54 +847,126 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
     MUST contain `tool-catalog:` (either naming the matched tool or an
     explicit `none (reasoning: ...)` opt-out) or the dispatch is REJECTED.
 
+    #880: the REJECT face emits (toolfirst_reject) with the structured
+    (keyword->tool) payload; the PASS face emits at the approval point
+    (toolfirst_pass_record) so rejected dispatches stay lifecycle-silent
+    (#754). Decisions are byte-identical with the pre-#880 gate (the emit is
+    strictly additive, fail-open).
+
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
-    text = f'{desc}\n{prompt}'
-    text_lower = text.lower()
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    text_lower = f'{desc}\n{prompt}'.lower()
+    cited = None
     if 'tool-catalog:' in text_lower:
-        # #630: the marker must be HONEST — `none (reasoning: ...)` is the
-        # explicit opt-out; otherwise the named tool must be one the keyword
-        # scan would actually match (a bare marker or an unrelated name is
-        # self-attestation, which was the hole).
-        import re as _re630
-        m = _re630.search(r'tool-catalog:\s*(.+)', text_lower)
+        m = re.search(r'tool-catalog:\s*(.+)', text_lower)
         cited = (m.group(1).strip() if m else '')
-        if cited.startswith('none'):
-            return (True, 'tool-catalog: none (explicit opt-out)')
-        keywords = _load_tool_index_keywords(_SKILL_ROOT)
-        if not keywords:
-            return (True, 'no tools/_INDEX.yaml keywords to match - tool-first skipped')
-        matched_tools = set()
-        for kw, tool_name in keywords.items():
-            if kw in _TOOLFIRST_STOPWORDS:
-                continue
-            if _re630.search(_ASCII_BOUNDARY.format(kw=_re630.escape(kw)), text_lower):
-                matched_tools.add(tool_name)
-        for tool in matched_tools:
-            if tool and tool.lower() in cited:
-                return (True, f'tool-catalog: {tool} (matched)')
-        return (False, (
-            "`tool-catalog:` marker names a tool the dispatch text does not "
-            "actually match (self-attestation, #630). Cite the tool your text "
-            "references, or `tool-catalog: none (reasoning: <why not>)`."
-        ))
-    if _is_diagnostic_exempt(text):
-        return (True, 'one-off diagnostic - tool-first exempt')
-    keywords = _load_tool_index_keywords(_SKILL_ROOT)
-    if not keywords:
-        return (True, 'no tools/_INDEX.yaml keywords to match - tool-first skipped')
-    for kw, tool_name in keywords.items():
-        if kw in _TOOLFIRST_STOPWORDS:
-            continue
-        if re.search(_ASCII_BOUNDARY.format(kw=re.escape(kw)), text_lower):
-            return (False, (
-                f"dispatch text matches registered tool '{tool_name}' "
-                f"(keyword '{kw}') but carries no `tool-catalog:` marker. Add "
-                f"`tool-catalog: {tool_name}` if you will try it, or "
-                f"`tool-catalog: none (reasoning: <why not>)` if it genuinely "
-                f"does not apply, then re-dispatch."
-            ))
-    return (True, 'no tool-catalog keyword match')
+    ev = _toolfirst_evaluate(text_lower, cited)
+    _toolfirst_emit(ws, ev)
+    return (ev['mode'] != 'reject', ev['reason'])
+
+
+# ---------- #880: operation label (toolfirst attribution -> claim attr) ------
+
+# string TEMPLATE (not pre-compiled — the claim id is interpolated per call)
+_CLAIM_BLOCK_TPL = (
+    r'(?ms)^[ \t]*-[ \t]+id:[ \t]*{cid}\b.*?(?=^[ \t]*-[ \t]+id:|\Z)')
+
+
+def _claim_block_span(text: str, claim_id: str) -> tuple[int, int] | None:
+    """[start, end) of the claim's YAML block (`- id: C-NN` up to the next
+    `- id:` or EOF). None when the claim is absent."""
+    m = re.search(_CLAIM_BLOCK_TPL.format(
+        cid=re.escape(claim_id.lstrip('-').strip().upper())), text)
+    return (m.start(), m.end()) if m else None
+
+
+def set_claim_operation(ws, claim_id: str, keywords: list[str],
+                        tool: str | None) -> bool:
+    """#880: persist the toolfirst attribution as a claim attribute — the
+    "operation label 白捡" of issue #880 (attribution granularity rises from
+    scene to scene x operation with zero new vocabulary: the keywords ARE the
+    tools/_INDEX.yaml categories/capabilities).
+
+    Text-surgical (never a whole-file yaml round-trip — an LLM-authored
+    register may carry comments/shape that safe_dump would flatten):
+    `operation: <kw,kw>` + `operation_tool: <tool>` lines are inserted at the
+    END of the claim's block, reusing the block's attribute indentation. An
+    existing label is replaced (re-dispatch re-attribution is the UPDATE
+    face). Fail-open: False on any IO/shape problem, never raises.
+    """
+    try:
+        reg = Path(ws) / 'claim-register.yaml'
+        if not reg.is_file() or not claim_id:
+            return False
+        text = reg.read_text(encoding='utf-8')
+        span = _claim_block_span(text, claim_id)
+        if span is None:
+            return False
+        start, end = span
+        block = text[start:end]
+        # attribute indent = the indent of the claim's OWN attribute lines
+        # (the line after the `- id:` opener), NOT the opener's dash indent
+        lines = block.split('\n')
+        ind = re.match(r'([ \t]+)(?=\S)', lines[1]) if len(lines) > 1 else None
+        if ind is not None:
+            indent = ind.group(1)
+        else:
+            first = re.match(r'([ \t]*)', lines[0])
+            indent = (first.group(1) if first else '') + '  '
+        label = f'{indent}operation: {",".join(keywords)}\n'
+        label += f'{indent}operation_tool: {tool or "none"}\n'
+        block = re.sub(
+            r'(?m)^[ \t]+operation(?:_tool)?:[^\n]*\n', '', block)
+        if not block.endswith('\n'):
+            block += '\n'
+        new_text = text[:start] + block + label + text[end:]
+        _atomic_write(reg, new_text)
+        return True
+    except Exception:  # noqa: BLE001 — label is observability, fail-open
+        return False
+
+
+def toolfirst_pass_record(paths: dict, claim_id: str | None,
+                          desc: str, prompt: str) -> bool:
+    """#880: the APPROVAL-point face — the pre_check caller invokes this only
+    AFTER the whole gate battery passed, so the emitted toolfirst_pass rows
+    (and the operation-label claim attributes) describe real dispatches. A
+    dispatch rejected by any earlier gate stays silent here (heartbeat #754
+    zero-noise contract; the tool-first gate's own REJECT face already emits
+    from check_tool_first).
+
+    Returns True iff a pass row was emitted. Fail-open, never raises.
+    """
+    if not claim_id:
+        return False
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return False
+    text_lower = f'{desc}\n{prompt}'.lower()
+    cited = None
+    if 'tool-catalog:' in text_lower:
+        m = re.search(r'tool-catalog:\s*(.+)', text_lower)
+        cited = (m.group(1).strip() if m else '')
+    ev = _toolfirst_evaluate(text_lower, cited)
+    if ev['mode'] == 'reject':
+        return False  # a reject at this point would double-emit the face
+    emitted = False
+    try:
+        import kunglao_log
+        kunglao_log.emit(
+            Path(ws), 'hook:worker_budget', 'toolfirst_pass',
+            claim=str(claim_id),
+            detail=json.dumps({'mode': ev['detail_mode'],
+                               'keywords': ev['keywords'],
+                               'tool': ev['tool']},
+                              ensure_ascii=False))
+        emitted = True
+    except Exception:  # noqa: BLE001 — logging never breaks the dispatch
+        pass
+    if ev['mode'] == 'matched' and ev['keywords']:
+        set_claim_operation(ws, claim_id, ev['keywords'], ev['tool'])
+    return emitted
 
 
 def verify_tool_catalog(ws) -> list:

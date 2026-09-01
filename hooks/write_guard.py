@@ -485,6 +485,22 @@ def main() -> int:
         _dbg(f"workspace audit: {other}")
         _dbg(f"exit BLOCK rc=2 — {len(violations)} violation(s)")
         return RC_BLOCK
+    if carrier == CARRIER_REGISTER:
+        # #880: the write passed every gate and WILL land — claim transitions
+        # in the post-image settle here (claim_settled rows + negative-sample
+        # lesson burns). Fail-open: observability never moves the ALLOW.
+        try:
+            from register_proven_gate import emit_settlements
+            try:
+                old_text = (ws / "claim-register.yaml").read_text(
+                    encoding="utf-8")
+            except OSError:
+                old_text = None
+            n = emit_settlements(ws, text, old_text)
+            if n:
+                _dbg(f"settlement leg: {n} claim_settled row(s)")
+        except Exception as exc:  # noqa: BLE001 — never moves the ALLOW
+            _dbg(f"settlement leg crashed (fail-open): {type(exc).__name__}")
     _dbg("exit ALLOW rc=0 — adjudication clean")
     return RC_ALLOW
 

@@ -15,16 +15,22 @@ regexes; latest = max mtime. Posture: fail-closed (structure gate).
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
 import verifier_identity as vi  # noqa: F401  (#825)
 from outcome_capture import _parse_run
+from status_defs import TERMINAL  # single source (#34, #95)
 
 PROVEN = "PROVEN"
 WAIVER_PREFIX = "proven-waiver-"
 WAIVER_JUSTIFY_RE = re.compile(r"^\s*justify:\s*(\S.*)$", re.M)
+
+# #880: negative-sample terminal statuses — the settlement face burns the
+# claim's lesson lineage here (see emit_settlements).
+NEGATIVE_SETTLEMENTS = {"REFUTED", "NEGATIVE", "DEAD"}
 
 
 def _load_statuses(text: str) -> dict:
@@ -200,3 +206,128 @@ def check_register_transitions(ws: Path, new_text: str,
             pass  # anchor is audit-grade, never a block reason
     ok = not violations
     return {"ok": ok, "violations": violations, "waivers": waivers}
+
+
+# ---------------- #880: settlement rows at claim transitions -----------------
+
+def _last_dispatch_row(ws: Path, claim_id: str) -> dict | None:
+    """The claim's most recent `dispatch` event from the unified ledger
+    (kunglao_log). None when the ledger is absent/unreadable — the settlement
+    row then honestly carries tools=[] / duration_ms=None."""
+    try:
+        from kunglao_log import _all_rows
+        rows = [r for r in _all_rows(Path(ws))
+                if r.get("action") == "dispatch"
+                and str(r.get("claim") or "") == claim_id]
+        return rows[-1] if rows else None
+    except Exception:  # noqa: BLE001 — settlement must never block the write
+        return None
+
+
+def _lesson_lineage_slug(ws: Path, claim_id: str) -> str | None:
+    """The lesson slug the claim's method lineage references, from
+    analyses/failure-<claim>.yaml (next_method_source == lesson-hit,
+    candidates from the _score_lessons ladder). None without that shape."""
+    p = ws / "analyses" / f"failure-{claim_id}.yaml"
+    if not p.is_file():
+        return None
+    try:
+        entry = yaml.safe_load(p.read_text(encoding="utf-8",
+                                           errors="replace")) or {}
+    except yaml.YAMLError:
+        return None
+    if str(entry.get("next_method_source") or "").strip().lower() != "lesson-hit":
+        return None
+    candidates = entry.get("candidates") or []
+    if not candidates:
+        return None
+    fname = str(candidates[0].get("file") or "")
+    if not fname.startswith("lesson-") or not fname.endswith(".md"):
+        return None
+    return fname.removeprefix("lesson-").removesuffix(".md")
+
+
+def _burn_lesson_lineage(ws: Path, claim_id: str) -> None:
+    """#880 pre-ruling: record_burn hangs at the NEGATIVE-SAMPLE settlement
+    point — the lesson's method was consumed (next_method_source=lesson-hit)
+    and the closed loop ended negative. Fail-open, never blocks settlement."""
+    slug = _lesson_lineage_slug(ws, claim_id)
+    if not slug:
+        return
+    try:
+        from lessons_telemetry import record_burn
+        record_burn(None, slug, workspace=ws)
+    except Exception:  # noqa: BLE001 — lessons counting never blocks the gate
+        pass
+
+
+def _parse_dispatch_ts(ts) -> int | None:
+    """Ledger ts (ISO8601 Z) -> epoch ms; None on any parse failure."""
+    try:
+        return int(datetime.fromisoformat(
+            str(ts).replace("Z", "+00:00")).timestamp() * 1000)
+    except (ValueError, TypeError, OSError):
+        return None
+
+
+def emit_settlements(ws, new_text: str, old_text: str | None = None) -> int:
+    """#880: settlement rows for claim status transitions (the issue's
+    "claim 状态转换（register_proven_gate 钩子）发结算行").
+
+    Called from write_guard's register-carrier ALLOW path — the write has
+    passed every gate and WILL land, so the settlement is real. Only
+    `to ∈ status_defs.TERMINAL` transitions settle (OPEN→IN_PROGRESS is
+    churn, not a settlement). Row shape (all existing kunglao_log fields,
+    zero schema change):
+
+      action="claim_settled"  actor="hook:write_guard"  claim=C-NN
+      trace_id=<mission-stable id (allocate_trace_id reuse face)>
+      duration_ms=<now − the claim's latest dispatch event ts, ledger-measured>
+      detail=JSON {"from", "to", "tools", "outcome"}
+
+    Negative samples additionally burn the claim's lesson lineage (see
+    _burn_lesson_lineage). Fail-open: returns the emitted-row count; any
+    failure inside one settlement never blocks the write (the write_guard
+    ALLOW decision was already made)."""
+    ws = Path(ws)
+    old = _load_statuses(old_text or "")
+    new = _load_statuses(new_text)
+    if not new:
+        return 0
+    from kunglao_log import allocate_trace_id
+    try:
+        trace_id = allocate_trace_id(ws)[0]
+    except Exception:  # noqa: BLE001 — identity is best-effort
+        trace_id = None
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+    import json as _json
+    count = 0
+    for cid, to in new.items():
+        if to not in TERMINAL:
+            continue
+        frm = old.get(cid)
+        if frm == to:
+            continue  # not a transition (already in this terminal state)
+        dispatch_row = _last_dispatch_row(ws, cid)
+        tools: list = []
+        duration_ms = None
+        if dispatch_row:
+            detail = str(dispatch_row.get("detail") or "")
+            m = re.search(r"\btools=([^;\s]+)", detail)
+            if m:
+                tools = [t for t in m.group(1).split(",") if t]
+            ts_ms = _parse_dispatch_ts(dispatch_row.get("ts"))
+            if ts_ms is not None:
+                duration_ms = max(now_ms - ts_ms, 0)
+        try:
+            from kunglao_log import emit
+            emit(ws, "hook:write_guard", "claim_settled", claim=cid,
+                 trace_id=trace_id, duration_ms=duration_ms,
+                 detail=_json.dumps({"from": frm, "to": to, "tools": tools,
+                                     "outcome": to}, ensure_ascii=False))
+            count += 1
+        except Exception:  # noqa: BLE001 — logging never breaks the gate
+            pass
+        if to in NEGATIVE_SETTLEMENTS:
+            _burn_lesson_lineage(ws, cid)
+    return count

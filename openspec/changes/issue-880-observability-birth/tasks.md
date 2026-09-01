@@ -1,0 +1,14 @@
+- [x] Recon：锚点表 + 孤儿扫描 + 挂点判定 + 基线绿（见 proposal.md ## Recon）
+- [x] 红测：双向门（人造孤儿红 / 人造未注册 literal 红 / tool_call 放行）
+- [x] 实现：scripts/emit_gate.py 双向门（commit 2f771fe）
+- [x] 红测：toolfirst 归因 payload 双面 emit + operation label round-trip
+- [x] 实现：_toolfirst_evaluate + 双面 emit + label 块内写入（sinks.pre_check 挂载）
+- [x] 红测：结算行落账（字段齐 + trace_id 在 + 负样本 burn 计数 +1）
+- [x] 实现：register_proven_gate.emit_settlements + write_guard ALLOW 挂载
+- [x] 红测：lessons citation 计数 +1（record_analysis lesson-hit 面）
+- [x] 实现：failure_analysis_gate record_citation 接线
+- [x] 红测：tool_call 发射者（post_check claim 粒度）
+- [x] 实现：post_check worker 条目回读 + scan_actual_tools emit
+- [x] 资产面：tools/ext-scan.py → deploy_manifest --write → --verify（364 entries OK）
+- [ ] 全量本地门（pytest 100% / release_receipt --check 绿）
+- [ ] push + gh pr create --base dev + CI 绿（不 merge）

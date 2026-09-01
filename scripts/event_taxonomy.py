@@ -166,6 +166,7 @@ EMIT_ACTIONS = [
     "channel_default",    # #727 init channel degradation/guidance WARN
     "claim_migrate",
     "claim_revive",       # #634 PARK → OPEN revival (mission_stall.revive)
+    "claim_settled",      # #880 claim terminal-transition settlement row (write_guard register-carrier ALLOW face)
     "claudemd_merge",     # #755 G3 collect-and-merge rebuild face
     "cockpit_sample",   # #873 per-checkpoint cockpit persistence: V/D/ETA + burn cost face
     "converge",
@@ -220,7 +221,10 @@ EMIT_ACTIONS = [
     "stale_plan_on_new_evidence",
     "statusline_snapshot",  # #883 per-tick statusline health-snapshot write face
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
+    "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
     "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
+    "toolfirst_pass",     # #880 tool-first gate pass face w/ (keyword→tool) attribution payload
+    "toolfirst_reject",   # #880 tool-first gate reject face w/ attribution payload
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
     "trace_allocated",    # #879 dispatch_gate mission-stable trace allocation face
