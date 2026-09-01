@@ -8,7 +8,7 @@
 |---|---|---|---|
 | crypto | `_index-crypto.md` | crypto-tool | encryption/decryption/encoding/hashing tools |
 | static | `_index-static.md` | die-probe, pe-analyze, yara-scan | static identification/trait-extraction tools |
-| ghidra | `_index-ghidra.md` | ghidra-recon, ghidra-decompile-functions, ghidra-vtable-struct, ghidra-evidence-annotations, ghidra-scan-pointer | Ghidra disassembly/function-level analysis |
+| ghidra | `_index-ghidra.md` | ghidra-recon, ghidra-decompile-functions, ghidra-vtable-struct, ghidra-evidence-annotations, ghidra-scan-pointer, ghidra_diff | Ghidra disassembly/function-level analysis |
 | dynamic | `_index-dynamic.md` | x64dbg-remote, frida-remote | VM dynamic debugging/runtime analysis (no local directory, MCP-provided) |
 | pipelines | `_index-pipelines.md` | build-evidence-index | evidence index/report pipeline |
 | auxiliary | `_index-auxiliary.md` | sanitize-text, measure-cold-start | auxiliary/miscellaneous tools |

@@ -48,7 +48,7 @@ tools:
     description: First-pass Ghidra recon sweep
     tier: T1
     cost_tier: deep
-    input_output: {input: sample + --search-terms/--expected-exports/--sha256/--sha1, output: JSON(meta/imports/exports/functions/strings_of_interest/suspicious_api_calls/focus_functions/go/findings)}
+    input_output: {input: 'input: sample + --search-terms/--expected-exports/--sha256/--sha1 (executed via tools/ghidra/run_ghidra_postscript.py; async submit/poll/fetch via tools/ghidra/ghidra_job.py + job_store.py)', output: JSON(meta/imports/exports/functions/strings_of_interest/suspicious_api_calls/focus_functions/go/findings)}
     when_not: not for single-function disassembly — use ghidra-decompile-functions
 
   - name: ghidra-decompile-functions
@@ -87,6 +87,21 @@ tools:
     input_output: {input: sample + --mode xref|window(--addresses/--center), output: JSON(xref/raw 8-byte pointer scan hits)}
     when_not: not for string location only — use ghidra-decompile-functions
 
+  # -- ghidra: binary diff over Ghidra Version Tracking (issue #308; #866-b registration) --
+  - name: ghidra_diff
+    category: ghidra
+    capability: ghidra:diff
+    description: Function-level binary diff CLI
+    tier: T1
+    cost_tier: deep
+    input_output: {input: "two binaries (--base/--target) + subcommand (create|status|cancel|delete|diff-summary|diff-list-functions|diff-function <addr>); async run driven through tools/ghidra/ghidra_job.py + job_store.py executing the GhidraBindiff.java postScript", output: "bindiff.v1 JSON artifact (match statistics; identical/changed/added/removed function lists; per-function callee-change + bodyBytesChanged lenses)"}
+    when_not: not for fresh single-sample recon (use ghidra-recon); not when an external BinDiff/Diaphora export already covers the pair
+    provider: ghidra
+    produces: [ghidra:diff]
+    requires: []
+    cost_hint: {mem_gb: 4.0, time: deep}
+    quality: {ghidra:diff: mid}
+
   # -- static: byte-exact disassembly constant validation (issue #284 registration) --
   - name: disasm-constant-check
     category: static
@@ -94,7 +109,7 @@ tools:
     description: Byte-exact disasm constant check
     tier: T1
     cost_tier: cheap
-    input_output: {input: fact/report code listing + PE binary (VA-anchored assertions), output: byte-exact assertion validation JSON(ok/mismatches/errors/skipped)}
+    input_output: {input: 'input: fact/report code listing + PE binary (VA-anchored assertions) (CLI: tools/static/disasm_constant_check.py)', output: byte-exact assertion validation JSON(ok/mismatches/errors/skipped)}
     when_not: not when VA-anchored constant validation is unnecessary or there is no binary sample
 
   # -- static: YARA rule scanning/generation (issue #313, absorbing the findcrypt-yara rule assets) --
@@ -185,7 +200,7 @@ tools:
     description: PE table parse, structural view
     tier: T1
     cost_tier: cheap
-    input_output: {input: sample PE (--binary) + subcommand (headers|sections|imports|exports|resources|overlay|pdb|tls|signature|all), output: the requested PE table/data JSON + --reproduce field=value}
+    input_output: {input: 'input: sample PE (--binary) + subcommand (headers|sections|imports|exports|resources|overlay|pdb|tls|signature|all) (CLI: tools/static/pe_analyze.py)', output: the requested PE table/data JSON + --reproduce field=value}
     when_not: not for instruction-level disassembly or function-level views — use disasm-dump / ghidra-recon
 
   - name: overlay-scan
@@ -194,7 +209,7 @@ tools:
     description: PE overlay characterization
     tier: T1
     cost_tier: cheap
-    input_output: {input: sample PE (--binary) + --mode reloc|true|mz|all, output: overlay characterization JSON (reloc table/entropy/Go evidence/embedded-PE hits)}
+    input_output: {input: 'input: sample PE (--binary) + --mode reloc|true|mz|all (CLI: tools/static/overlay_scan.py)', output: overlay characterization JSON (reloc table/entropy/Go evidence/embedded-PE hits)}
     when_not: not when the PE has no overlay or there is no embedded-payload suspicion
 
   - name: disasm-dump
@@ -203,7 +218,7 @@ tools:
     description: Capstone disasm per VA list
     tier: T1
     cost_tier: cheap
-    input_output: {input: sample PE (--binary) + --rvas/--vas list + optional --prologs/--strings, output: per-address capstone instruction listing JSON (VA→file-offset reuse of tools/_lib/lib_disasm.py)}
+    input_output: {input: 'input: sample PE (--binary) + --rvas/--vas list + optional --prologs/--strings (CLI: tools/static/disasm_dump.py)', output: per-address capstone instruction listing JSON (VA→file-offset reuse of tools/_lib/lib_disasm.py)}
     when_not: not for function-level semantics/decompilation — use ghidra-recon / ghidra-decompile-functions
 
   - name: shellcode-scan
@@ -212,7 +227,7 @@ tools:
     description: Shellcode region detection
     tier: T1
     cost_tier: cheap
-    input_output: {input: binary blob/PE (--binary) + --scan/--entry/--prologs/--peb/--strings, output: shellcode candidate regions + trait JSON (PEB access/prologues/strings/entry disassembly)}
+    input_output: {input: 'input: binary blob/PE (--binary) + --scan/--entry/--prologs/--peb/--strings (CLI: tools/static/shellcode_scan.py)', output: shellcode candidate regions + trait JSON (PEB access/prologues/strings/entry disassembly)}
     when_not: not for non-shellcode/blob detection tasks
 
   - name: die-probe
@@ -221,7 +236,7 @@ tools:
     description: DIE identify language/packer
     tier: T1
     cost_tier: probe
-    input_output: {input: sample PE (--binary) + DIE executable (--die/$KUNGLAO_DIE), output: DIE 5-call merge JSON (language/compiler/packer/entropy/resources); missing die → exit 2 + install guidance}
+    input_output: {input: 'input: sample PE (--binary) + DIE executable (--die/$KUNGLAO_DIE) (CLI: tools/static/die_probe.py)', output: DIE 5-call merge JSON (language/compiler/packer/entropy/resources); missing die → exit 2 + install guidance}
     when_not: not when DIE is not installed and installing is not allowed
 
   # -- static: decompiled-C post-processing (issue #306 absorption, C text layer) --
@@ -231,7 +246,7 @@ tools:
     description: Normalize decompiled C idioms
     tier: T1
     cost_tier: cheap
-    input_output: {input: decompiled C text (--in or stdin) + --heuristics, output: normalized C (modulo idiom x-(x/N)*N→x%N / dead-store elimination; --heuristics enables undefined4/8 type heuristics) + rule_hits/diff stats; exit 0 transformed/1 unchanged/2 error}
+    input_output: {input: 'input: decompiled C text (--in or stdin) + --heuristics (CLI: tools/static/c_normalize.py)', output: normalized C (modulo idiom x-(x/N)*N→x%N / dead-store elimination; --heuristics enables undefined4/8 type heuristics) + rule_hits/diff stats; exit 0 transformed/1 unchanged/2 error}
     when_not: not for semantic deobfuscation or expression truth-value decisions — use opaque-pred
 
   - name: opaque-pred
@@ -240,7 +255,7 @@ tools:
     description: Resolve opaque predicates via z3
     tier: T1
     cost_tier: probe
-    input_output: {input: C expression (--expr "...") or expression pair (--simplify "lhs -> rhs"), output: always_true/always_false/unknown + simplified constant or MBA rewrite suggestion (z3 32-bit semantics); missing z3 → exit 2 + install guidance}
+    input_output: {input: 'input: C expression (--expr "...") or expression pair (--simplify "lhs -> rhs") (CLI: tools/static/opaque_pred.py)', output: always_true/always_false/unknown + simplified constant or MBA rewrite suggestion (z3 32-bit semantics); missing z3 → exit 2 + install guidance}
     when_not: not for non-single-expression truth-value/MBA-equivalence decisions; not when z3-solver is not installed and installing is not allowed
 
   # -- pipeline: evidence index building (issue #284 registration) --
@@ -250,7 +265,7 @@ tools:
     description: Index evidence with sha256
     tier: T1
     cost_tier: cheap
-    input_output: {input: the workspace's raw evidence in evidence/ + analysis_artifacts/, output: evidence/_index.json + _INDEX.md (eid/path/sha256/source_reliability)}
+    input_output: {input: 'input: the workspace''s raw evidence in evidence/ + analysis_artifacts/ (CLI: tools/pipelines/build_evidence_index.py)', output: evidence/_index.json + _INDEX.md (eid/path/sha256/source_reliability)}
     when_not: not for pure analysis without evidence registration
 
   # -- aux: legacy PROVEN audit (issue #284 registration) --
@@ -260,7 +275,7 @@ tools:
     description: Audit legacy PROVEN claims
     tier: T1
     cost_tier: cheap
-    input_output: {input: workspace (claim-register.yaml + facts/_INDEX.md), output: legacy PROVEN claim audit (BLIND signature dimension + index traceability)}
+    input_output: {input: 'input: workspace (claim-register.yaml + facts/_INDEX.md) (CLI: tools/auxiliary/audit_legacy_proven.py)', output: legacy PROVEN claim audit (BLIND signature dimension + index traceability)}
     when_not: not needed when no legacy PROVEN claims require audit cleanup
 
   # -- aux: golden master capture (issue #284 registration) --
@@ -270,7 +285,7 @@ tools:
     description: Capture golden-master fixtures
     tier: T1
     cost_tier: cheap
-    input_output: {input: 'the CASES list (synthetic workspaces + CLI arguments)', output: 'tests/fixtures/golden/{manifest.yaml, F-NN/expected/stdout.txt}'}
+    input_output: {input: 'input: ''the CASES list (synthetic workspaces + CLI arguments)'' (CLI: tools/auxiliary/capture_golden.py)', output: 'tests/fixtures/golden/{manifest.yaml, F-NN/expected/stdout.txt}'}
     when_not: --refresh re-capture is only for contract-change flows; not for routine analysis
 
   # -- aux: BLIND coverage measurement (issue #284 registration) --
@@ -280,7 +295,7 @@ tools:
     description: BLIND coverage of PROVEN facts
     tier: T1
     cost_tier: cheap
-    input_output: {input: workspace (claim-register.yaml + verifier_sign_off from facts/*.md), output: BLIND coverage JSON (PROVEN/blind_signed/unverified/coverage)}
+    input_output: {input: 'input: workspace (claim-register.yaml + verifier_sign_off from facts/*.md) (CLI: tools/auxiliary/measure_blind_coverage.py)', output: BLIND coverage JSON (PROVEN/blind_signed/unverified/coverage)}
     when_not: not needed when blind-verification coverage is not being evaluated
 
   # -- aux: cold-start token baseline measurement (issue #284 registration) --
@@ -290,7 +305,7 @@ tools:
     description: Cold-start token baseline
     tier: T1
     cost_tier: probe
-    input_output: {input: workspace state-file inventory (claim-register.yaml/_INDEX/ledger/progress etc.), output: docs/baselines/cold-start-tokens.json (per-file token estimates)}
+    input_output: {input: 'input: workspace state-file inventory (claim-register.yaml/_INDEX/ledger/progress etc.) (CLI: tools/auxiliary/measure_cold_start.py)', output: docs/baselines/cold-start-tokens.json (per-file token estimates)}
     when_not: not for non-cold-start-baseline measurement
 
   # -- aux: prompt-injection sanitization of sample content (issue #307 registration) --
@@ -300,7 +315,7 @@ tools:
     description: Sanitize text vs prompt injection
     tier: T1
     cost_tier: probe
-    input_output: {input: sample-derived text (--in/stdin) + --mode zero-width|homoglyph|markers|full + --report-only, output: sanitized text or JSON (zwx_count/homoglyph_count/marker_count/suspicious/sha256) + --reproduce field=value}
+    input_output: {input: 'input: sample-derived text (--in/stdin) + --mode zero-width|homoglyph|markers|full + --report-only (CLI: tools/auxiliary/sanitize.py)', output: sanitized text or JSON (zwx_count/homoglyph_count/marker_count/suspicious/sha256) + --reproduce field=value}
     when_not: not needed when the text is not consumed by an LLM worker
 
 
@@ -356,7 +371,7 @@ tools:
     description: Graph-RAG source queries, android + js
     tier: T1
     cost_tier: deep
-    input_output: {input: "indexed decompiled source tree - jadx/dexdc output (android) OR a recovered JS module tree registered into evidence/<run>.json unpack_out by wakaru/webcrack (#751 js domain); 16 MCP tools via the gitnexus server; index built lazily on claim demand, marker evidence/gitnexus_index.json", output: "dependency/call-chain/execution-flow graph answers via Graph RAG; for web signature-trace posture see references/re-library/web-re-quickref.md"}
+    input_output: {input: "indexed decompiled source tree - jadx/dexdc output (android) OR a recovered JS module tree registered into evidence/<run>.json unpack_out by wakaru/webcrack (#751 js domain); 16 MCP tools via the gitnexus server; index built lazily on claim demand, marker evidence/gitnexus_index.json", output: "dependency/call-chain/execution-flow graph answers via Graph RAG; for web signature-trace posture see references/re-library/web-re-quickref.md; end-to-end regression demo CLI: tools/static/web_gitnexus_demo.py (--selfcheck offline)"}
     when_not: "not a decompiler; not without an indexed source tree (lazy build - never pre-run); on js targets run only AFTER recovery (wakaru/webcrack unpack first - gitnexus parses normal source, not bundles); not for DEX without source (dexdc CFG / baksmali xref instead)"
     provider: gitnexus
     produces: [android:semantic-query, android:call-graph, js:semantic-query, js:call-graph]
