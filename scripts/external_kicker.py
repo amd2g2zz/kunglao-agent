@@ -89,7 +89,8 @@ from liveness_policy import (  # noqa: E402
 )
 DEFAULT_TICK_INTERVAL_MIN = 15
 # #45: fired-predicate resume prompt bounds — the open-claims list is truncated
-# by priority (priority.rank_claims order) when over either bound.
+# by priority (priority_ratio order — the sanctioned scorer, #867 closeout)
+# when over either bound.
 DEFAULT_MAX_PROMPT_CHARS = 4000
 DEFAULT_MAX_OPEN_CLAIMS = 15
 
@@ -619,15 +620,19 @@ def _facts_total(ws: Path, snapshot: dict | None) -> int:
 
 
 def _priority_ordered_ids(open_ids: list[str], ws: Path) -> list[str]:
-    """Order open ids by priority.rank_claims score desc; unranked keep register order.
+    """Order open ids by priority_ratio score desc; unranked keep register order.
 
     The loop dispatches by THIS ranker (the single sanctioned one), so
-    truncation keeps exactly the claims the loop would dispatch next. The
-    module is optional — any failure falls back to register order (recovery
-    must not depend on optional modules).
+    truncation keeps exactly the claims the loop would dispatch next.
+    #867 closeout: ranks via priority_ratio (specs/phase-4/contract.md §1 —
+    the #499 authority) instead of the DEPRECATED priority shim, so the
+    shim's eventual #446 removal can no longer silently degrade this
+    ordering to register order. The module is optional — any failure falls
+    back to register order (recovery must not depend on optional modules),
+    but the fallback is now SIGNALLED on stderr (never silent).
     """
     try:
-        import priority
+        import priority_ratio
         import yaml
         reg = {}
         p = ws / "claim-register.yaml"
@@ -637,10 +642,14 @@ def _priority_ordered_ids(open_ids: list[str], ws: Path) -> list[str]:
         dp = ws / "claim_deps.yaml"
         if dp.exists():
             deps = yaml.safe_load(dp.read_text(encoding="utf-8")) or {}
-        rows = priority.rank_claims(reg, deps, priority.DEFAULT_WEIGHTS)
-        ranked = [r["id"] for r in rows]
+        evidence = priority_ratio.EvidenceView.from_workspace(ws)
+        actions = priority_ratio.priority_ratio(
+            reg.get("claims") or [], deps, evidence)
+        ranked = [a.claim_id for a in actions]
         return ranked + [i for i in open_ids if i not in ranked]
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — recovery path, but never silent
+        print(f"kicker: priority_ratio ranking unavailable, falling back to "
+              f"register order: {exc!r}", file=sys.stderr)
         return open_ids
 
 
@@ -656,9 +665,9 @@ def build_resume_prompt(ws, *,
     in-progress runs/worker-status-*.md. NEVER reads progress.txt /
     analysis_state.txt (LLM self-descriptions, not events — research F4:
     "an LLM saying done is not an event"). The open-claims list is truncated
-    by priority (priority.rank_claims order) when over max_open_claims or
-    when the assembled prompt exceeds max_chars, with an explicit
-    "(+N more truncated by priority)" marker.
+    by priority (priority_ratio order — the sanctioned scorer) when over
+    max_open_claims or when the assembled prompt exceeds max_chars, with an
+    explicit "(+N more truncated by priority)" marker.
     """
     ws = Path(ws)
     snapshot, round_n = _ledger_last_snapshot(ws)
@@ -684,7 +693,7 @@ def build_resume_prompt(ws, *,
     facts_total = _facts_total(ws, snapshot)
 
     if open_ids:
-        next_step = ("dispatch top claim via scripts/priority.py rank_claims "
+        next_step = ("dispatch top claim via scripts/priority_ratio.py --json "
                      "(<=3 workers cap + tier gate); worker done → verify facts → "
                      "update claim-register + _INDEX")
     else:
