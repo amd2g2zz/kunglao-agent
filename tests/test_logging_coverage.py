@@ -82,6 +82,7 @@ SCHEMA_FIELDS = {
     "duration_ms", "exit", "detail",
     "arm", "epoch", "version", "hypothesis_ref",
     "matched_rule",  # #601 additive field
+    "trace_id",  # #879 additive field
 }
 
 
