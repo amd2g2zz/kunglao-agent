@@ -44,7 +44,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _path_hygiene import ensure_scripts_path  # #671 sys.path hygiene authority
+from _path_hygiene import (  # #671 sys.path hygiene authority
+    ensure_scripts_path,
+    load_hooks_lib,
+)
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 RECALL_SCRIPT = SKILL_DIR / "scripts" / "references_recall.py"
@@ -57,12 +60,15 @@ FILES_PER_QUERY = 3           # top hits only — guidance stays compact
 # (the recall-ranking pin); move data source and pin in the same commit.
 MAX_FILES = 8                 # global cap across all queries
 
-# dispatch_gate's exact claim-dispatch shape — mirror it so the hook fires on
-# the same dispatches the other gates police.
-DISPATCH_RE = re.compile(
-    r"\[T\s*([123])\s+tools\s*=\s*([^\]]*)\]\s*claim\s+([A-Z]+-\d+)",
-    re.IGNORECASE,
-)
+def _is_claim_dispatch(text: str) -> bool:
+    """v1-first claim-dispatch detection — single source (#861).
+
+    Routes through lib_kunglao.parse_dispatch (v1 canonical envelope takes
+    precedence, v0 prefix retained for legacy-replay only). Replaces the
+    local v0-only regex copy that silently missed v1 dispatches (B1)."""
+    lib = load_hooks_lib()
+    return lib.parse_dispatch(text)[2] is not None
+
 
 # Go-binary signals (tier_rules has no go signals — those live here). Substring
 # matches; "go" alone is too noisy ("goal", "google", "cargo") so signals are
@@ -266,7 +272,7 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
     if not prompt_text:
         return 0, "", None
 
-    is_claim = bool(DISPATCH_RE.search(prompt_text))
+    is_claim = _is_claim_dispatch(prompt_text)
     if not is_claim and not REDTEAM_RE.search(prompt_text):
         # #814: fail-open ≠ fail-silent — 留痕后放行
         _trace(ws, "skipped", "recall_skip",

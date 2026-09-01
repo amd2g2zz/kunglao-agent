@@ -35,7 +35,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: 8d844748825876c588c1d2b9658cc05ee25100cbb13c5afc8f9f8bbba6d97648
+    sha256: 587ca12f1a33fbe506b258a50159e2023ee5c84237aba46f277f0e9c4cf66c82
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -55,11 +55,11 @@ files:
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
-    sha256: 513057db9f1b2a60c6fa8f7794b3355a808d3fb9c6d7f5fec0238e1c78b28ca1
+    sha256: 05ba914b16611fc4c048b67bc2cd0cde9ae2e4971a2f58193fe2ec1653b16fe4
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 2371d62ac910036b2b06fe2e3a79ccfc8fc15d620ed5db559ee0e6ee65aa8f26
+    sha256: 0c46eea528276c6d3ac37d51dfbfdfa587abfe8ef73123701fd7db3630fc06cd
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
@@ -67,7 +67,7 @@ files:
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
-    sha256: 7bf29cef68573e0689e38d7b0131a7bd265ccf74c30d9b261a81b75cdc8cc69f
+    sha256: 761c95e73dc8affe4e97a9f6e66c76d1433105ebbde9194a9ffeaaa1c8670483
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
@@ -612,6 +612,10 @@ files:
     dest: .claude/scripts/report_consistency_check.py
     kind: scaffold
     sha256: 303b54d7767999ec334bf5cadc89a779392c276b4b36f44f653ce7787a21aa89
+  - src: scripts/retirement_gate.py
+    dest: .claude/scripts/retirement_gate.py
+    kind: scaffold
+    sha256: 346fabd157a6db1f78104d9784369499b15e5517e5ba5a03ba47ad2d67228c84
   - src: scripts/retract_claim.py
     dest: .claude/scripts/retract_claim.py
     kind: scaffold
@@ -1171,7 +1175,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 2c55480b0ddd758dc05c8598878628024f723dbd8c9a6e53ea0e6e794a9e8d6e
+    sha256: a92c78d8568bdb1bc3cd3ee234c2d3f8a3786bbe36c1f962218b2b94f3ef8343
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
