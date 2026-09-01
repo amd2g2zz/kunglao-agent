@@ -480,7 +480,7 @@ def test_pre_check_rejects_dispatch_without_plan(tmp_path, capsys):
     """#239 e2e: dispatching claim C-001 with no plan file and no plan path in
     the prompt is REJECTED by the 12th pre_check gate."""
     ws = tmp_path / 'ws'
-    payload = _dispatch_payload('facts-snapshot: 1 facts')
+    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts')
     rc = pre_check(payload, _min_paths(ws))
     captured = capsys.readouterr()
     assert rc == 2
@@ -800,15 +800,22 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     env_check_gate injection. drift/health/backtrack (subprocess gates) are
     covered in test_e2e_subprocess_gates_reject_emits_guidance."""
     import worker_budget as wb
+    import worker_budget_core
+    import worker_budget_sinks
     from types import SimpleNamespace
 
-    # subprocess gates deterministic: all pass (rc 0)
-    monkeypatch.setattr(wb, '_run_py',
+    # subprocess gates deterministic: all pass (rc 0). #863: patch the OWNING
+    # modules — the wb shim propagation was removed. _run_py is imported into
+    # BOTH core and sinks; pre_check lives in sinks, so patch both faces.
+    monkeypatch.setattr(worker_budget_core, '_run_py',
+                        lambda args, cwd=None: SimpleNamespace(
+                            returncode=0, stderr='', stdout=''))
+    monkeypatch.setattr(worker_budget_sinks, '_run_py',
                         lambda args, cwd=None: SimpleNamespace(
                             returncode=0, stderr='', stdout=''))
     # priority deviation forced for the devreason scenario (other scenarios
     # reject before priority is consulted, so the patch is harmless)
-    monkeypatch.setattr(wb, 'check_priority',
+    monkeypatch.setattr(worker_budget_core, 'check_priority',
                         lambda *a, **k: (True, 'ADVISORY: C-001 rank #2', True))
 
     scenarios = []
