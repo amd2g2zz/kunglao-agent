@@ -307,7 +307,7 @@ files:
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
-    sha256: 5fc3066a96f722e251fd3364cb0f4fd0db1a3203ce9acd60e8bcdfb382854f34
+    sha256: 1851af73219bf8926fd6eb4da50376ae429519ab9deabc4f94fadaa5e06b270a
   - src: scripts/fact_contradiction_gate.py
     dest: .claude/scripts/fact_contradiction_gate.py
     kind: scaffold
