@@ -144,7 +144,8 @@ def test_validator_categories_pin_new_enum() -> None:
     sys.path.insert(0, str(TOOLS))
     import validate_index as vi  # noqa: E402
     assert vi.CATEGORIES == (
-        "crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines"), (
+        "crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines",
+        "web"), (
         f"validate_index.CATEGORIES must be the id==dirname enum, got: {vi.CATEGORIES}")
     data = {"tools": [{"name": "t-a", "category": "auxiliary",
                        "capability": "aux:sanitize", "tier": "T1",
