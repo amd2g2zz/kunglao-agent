@@ -67,6 +67,9 @@ from pathlib import Path
 
 import yaml
 
+# #863 Family C: workspace resolution is single-sourced in ws_layout.
+from ws_layout import resolve_quiet as _resolve_ws
+
 CONFIDENCE_CAP = 0.95
 CORROBORATION_BONUS = 0.05
 FALLBACK_CONFIDENCE = 0.4
@@ -669,14 +672,6 @@ def format_text(result: dict) -> str:
         lines.append("agent_rationale:")
         lines.extend(f"  - {r}" for r in result["agent_rationale"])
     return "\n".join(lines)
-
-
-def _resolve_ws(arg: str | None) -> Path:
-    if arg:
-        return Path(arg)
-    cwd = Path.cwd()
-    sub = cwd / "malware-analysis-workspace"
-    return sub if (sub / "claim-register.yaml").exists() else cwd
 
 
 def _register_path(args: argparse.Namespace) -> Path:

@@ -107,6 +107,9 @@ from pathlib import Path
 import yaml
 
 from status_defs import TERMINAL
+# #863 Family C: workspace resolution is single-sourced in ws_layout
+# (manifest-aware — the former inline copy hardcoded the sibling name).
+from ws_layout import resolve_quiet as _resolve_ws
 
 ANALYSES_DIR = "analyses"
 
@@ -178,14 +181,6 @@ def _emit_analysis_recorded(workspace: Path, claim_id: str, entry: dict) -> None
                     f"candidates={len(entry.get('candidates') or [])}")
     except Exception:
         pass
-
-
-def _resolve_ws(arg) -> Path:
-    if arg:
-        return Path(arg)
-    cwd = Path(os.getcwd())
-    sub = cwd / "malware-analysis-workspace"
-    return sub if (sub / "claim-register.yaml").exists() else cwd
 
 
 def _load_claims(workspace: Path):

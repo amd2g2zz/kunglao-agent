@@ -40,6 +40,11 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# #863 Family C: workspace resolution is single-sourced in ws_layout; this
+# consumer keeps its own sentinel (the convergence ledger, not the claim
+# register) via the sentinel parameter.
+from ws_layout import resolve_quiet
+
 LEDGER_NAME = ".convergence_ledger.jsonl"
 
 # Thresholds (conservative — hard claims legitimately take time)
@@ -60,12 +65,11 @@ EXIT_SPINNING = 2
 EXIT_NO_DATA = 3
 
 
-def _resolve_ws(arg) -> Path:
-    if arg:
-        return Path(arg)
-    cwd = Path(os.getcwd())
-    sub = cwd / "malware-analysis-workspace"
-    return sub if (sub / LEDGER_NAME).exists() else cwd
+def _resolve_ws(arg):
+    """#863 Family C: delegate to the ws_layout single source; this
+    consumer's sentinel is the convergence ledger (LEDGER_NAME), not the
+    claim register."""
+    return resolve_quiet(arg, sentinel=LEDGER_NAME)
 
 
 def _read_ledger(workspace: Path):

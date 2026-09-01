@@ -37,6 +37,10 @@ import wire_up_settings
 # same shape as the state_hash contract).
 import template_version  # noqa: E402
 
+# #863 Family C: workspace resolution is single-sourced in ws_layout
+# (the #228 strict family: arg wins, probe, exit 2 — never guess).
+from ws_layout import resolve_strict as _resolve_ws  # noqa: E402
+
 # #381: KONG_HOOK_FILES is a DELIBERATE narrow subset of the hook registry
 # (wire_up_settings.WIRE_UP_HOOK_FILES) — the mechanical liveness chain this
 # self-repair verifies (the 4 hooks from the v1.9.37 'heartbeat lost'
@@ -77,25 +81,6 @@ USER_SETTINGS = Path.home() / ".claude" / "settings.json"
 
 def utc_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def _resolve_ws(arg: str | None) -> Path:
-    """Workspace root: explicit arg wins; else probe cwd; else hard error.
-
-    Issue #228: the old fallback defaulted to one operator's absolute Windows
-    workspace path — silently wrong on any other machine. Never guess
-    a workspace: a wrong one means state written to the wrong tree.
-    """
-    if arg:
-        return Path(arg).resolve()
-    cwd = Path(os.getcwd())
-    for cand in (cwd, cwd / "malware-analysis-workspace"):
-        if (cand / "claim-register.yaml").exists() or (cand / "analysis_state.txt").exists():
-            return cand.resolve()
-    print(f"ERROR: no workspace found under cwd ({cwd}); pass the workspace "
-          f"explicitly: python {Path(sys.argv[0]).name} <workspace>",
-          file=sys.stderr)
-    sys.exit(2)
 
 
 def check_settings(settings_path: Path) -> dict:

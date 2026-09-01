@@ -136,10 +136,15 @@ def _drifted_scratch_skill(tmp_path: Path) -> Path:
     # utf8_boot.py rides the copy set (#811: heartbeat_tick entry imports
     # force_utf8 — a scratch copy without it dies on ModuleNotFoundError
     # instead of the intended registry-drift ValueError).
+    # ws_layout.py + env_manifest.py ride the copy set (#863 Family C:
+    # heartbeat_tick delegates _resolve_ws to ws_layout, which resolves
+    # layout names from env_manifest — a scratch copy without either dies
+    # on ModuleNotFoundError instead of the intended registry-drift
+    # ValueError).
     for f in ("heartbeat_tick.py", "hook_activation.py", "hooks_selfcheck.py",
               "wire_up_settings.py", "reconcile_workers.py", "heartbeat.py",
               "template_version.py", "kunglao_log.py", "liveness_policy.py",
-              "utf8_boot.py"):
+              "utf8_boot.py", "ws_layout.py", "env_manifest.py"):
         shutil.copy2(SCRIPTS / f, skill / "scripts" / f)
     wu = skill / "scripts" / "wire_up_settings.py"
     wu.write_text(

@@ -20,24 +20,14 @@ from pathlib import Path
 
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
+# #863 Family C: workspace resolution is single-sourced in ws_layout
+# (the #228 strict family: arg wins, probe, exit 2 — never guess).
+from ws_layout import resolve_strict as _resolve_ws  # noqa: E402
 
 
 def utc_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat(
         timespec="seconds").replace("+00:00", "Z")
-
-
-def _resolve_ws(arg: str | None) -> Path:
-    if arg:
-        return Path(arg).resolve()
-    cwd = Path(os.getcwd())
-    for cand in (cwd, cwd / "malware-analysis-workspace"):
-        if (cand / "claim-register.yaml").exists() or (cand / "analysis_state.txt").exists():
-            return cand.resolve()
-    print(f"ERROR: no workspace found under cwd ({cwd}); pass the workspace "
-          f"explicitly: python {Path(sys.argv[0]).name} <workspace>",
-          file=sys.stderr)
-    sys.exit(2)
 
 
 def main(argv: list[str] | None = None) -> int:

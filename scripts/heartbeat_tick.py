@@ -77,28 +77,13 @@ SCRIPTS = SKILL_DIR / "scripts"
 from liveness_policy import RENEW_MARGIN_LOW_MINUTES  # noqa: E402
 RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
 
+# #863 Family C: workspace resolution is single-sourced in ws_layout
+# (the #228 strict family: arg wins, probe, exit 2 — never guess).
+from ws_layout import resolve_strict as _resolve_ws  # noqa: E402
+
 
 def utc_now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def _resolve_ws(arg: str | None) -> Path:
-    """Workspace root: explicit arg wins; else probe cwd; else hard error.
-
-    Issue #228: the old fallback defaulted to one operator's absolute Windows
-    workspace path — silently wrong on any other machine. Never guess
-    a workspace: a wrong one means state written to the wrong tree.
-    """
-    if arg:
-        return Path(arg).resolve()
-    cwd = Path(os.getcwd())
-    for cand in (cwd, cwd / "malware-analysis-workspace"):
-        if (cand / "claim-register.yaml").exists() or (cand / "analysis_state.txt").exists():
-            return cand.resolve()
-    print(f"ERROR: no workspace found under cwd ({cwd}); pass the workspace "
-          f"explicitly: python {Path(sys.argv[0]).name} <workspace>",
-          file=sys.stderr)
-    sys.exit(2)
 
 
 def run(script: str, ws: Path, *extra: str) -> dict:
