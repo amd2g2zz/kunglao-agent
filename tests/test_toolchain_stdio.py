@@ -147,12 +147,29 @@ _UTF8_STDERR_CALL_SITE_SCRIPTS = (
 )
 
 
+def test_utf8_stderr_helpers_delegate_to_utf8_boot_863f():
+    """#863 Family H: the three per-script `_ensure_utf8_stderr` copies
+    (3x9, byte-identical bodies) are single-sourced as
+    `utf8_boot.ensure_utf8_stderr` (#811 stdio-insurance module) and each
+    script binds the SHARED function object by alias — the identity assert
+    is the strongest delegation form (the former textual helper-shape
+    tripwire could not tell a delegation from a fourth copy)."""
+    import toolchain as tc
+    import toolchain_install as ti
+    import utf8_boot
+
+    for mod in (tc, ti, _load_init_module()):
+        assert mod._ensure_utf8_stderr is utf8_boot.ensure_utf8_stderr, (
+            f"{mod.__name__}._ensure_utf8_stderr must BE "
+            f"utf8_boot.ensure_utf8_stderr (#863 Family H delegation)")
+
+
 def test_utf8_stderr_call_sites_pinned_in_source():
-    """Fault-inject M8 (SURVIVOR -> killed): the three helper tests above
-    pin the helper's BEHAVIOR, not its CALLERS — deleting the
-    `_ensure_utf8_stderr(sys.stderr)` call while keeping the helper passed
-    all 67 tests (GBK stderr regains the 乱码 path, zero interception).
-    Source tripwire, same手法 as the FAIL-face scan in
+    """Fault-inject M8 (SURVIVOR -> killed), restated under #863 Family H:
+    delegation single-sources the HELPER, but the 乱码 fix is the CALL —
+    deleting the `_ensure_utf8_stderr(sys.stderr)` call while keeping the
+    helper passed all 67 tests (GBK stderr regains the 乱码 path, zero
+    interception). Source tripwire, same手法 as the FAIL-face scan in
     test_toolchain_next_action.py: each script must contain the call
     EXACTLY once — deletion (0) or accidental duplication (2+) is red."""
     for name in _UTF8_STDERR_CALL_SITE_SCRIPTS:
@@ -161,7 +178,7 @@ def test_utf8_stderr_call_sites_pinned_in_source():
         assert n == 1, (
             f"{name}: expected exactly 1 `_ensure_utf8_stderr(sys.stderr)` "
             f"call site, found {n} — the 乱码 fix is the CALL, not the "
-            f"helper; restore the call site (#451, fault-inject M8)")
+            f"helper; restore the call site (#451 fault-inject M8, #863)")
 
 
 # ---------- 伪装: headless degrade never wears the "declined" label ----------

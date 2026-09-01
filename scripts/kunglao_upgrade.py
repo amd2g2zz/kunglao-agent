@@ -142,8 +142,8 @@ def _guarded_stamp_refresh(ws: Path, *, version: str | None = None,
     bring the body forward before re-stamping."""
     if not template_version.frame_section_current(ws):
         if warn:
-            print("kunglao-upgrade: WARN — frame section stale — G3 merge "
-                  "upgrade required", file=sys.stderr)
+            _warn_line("kunglao-upgrade: WARN — frame section stale — G3 merge "
+                       "upgrade required")
         return "template_stamp_refresh(skipped: frame-drift)"
     written = (template_version.stamp_workspace(ws, version=version)
                if version else template_version.stamp_workspace(ws))
@@ -266,10 +266,8 @@ def _item_agents_refresh(ws: Path, dry: bool) -> str:
         return f"agents_refresh({detail})"
     except Exception as exc:  # noqa: BLE001 — WARN-only item posture (#755 D0)
         why = f"{type(exc).__name__}: {exc}"
-        print(f"kunglao-upgrade: WARN — agents refresh skipped ({why})",
-              file=sys.stderr)
-        _emit_event("agents_refresh", "warn", why)
-        _emit(ws, "agents_refresh", f"warn:{why}")
+        _warn(f"kunglao-upgrade: WARN — agents refresh skipped ({why})",
+              why, "agents_refresh", ws)
         return f"agents_refresh(warn: {type(exc).__name__})"
 
 
@@ -420,11 +418,10 @@ def _item_claudemd_merge(ws: Path, dry: bool) -> str:
         return ("claudemd_merge(dry)" if parts.status == "applied"
                 else f"claudemd_merge(dry-skipped: {parts.reason})")
     if parts.status != "applied":
-        print(f"kunglao-upgrade: WARN — CLAUDE.md merge skipped "
+        _warn(f"kunglao-upgrade: WARN — CLAUDE.md merge skipped "
               f"({parts.reason}); legacy body left untouched (G3)",
-              file=sys.stderr)
-        _emit_event("claudemd_merge", "warn", parts.reason)
-        _emit(ws, "claudemd_merge", f"skipped:{parts.reason}")
+              parts.reason, "claudemd_merge", ws,
+              ledger_detail=f"skipped:{parts.reason}")
         return f"claudemd_merge(skipped: {parts.reason})"
     frame_inner = _build_current_frame(ws, current, parts.req_block)
     # Fixed-point hygiene: a rebuilt frame can legitimately CONTAIN blocks
@@ -622,6 +619,35 @@ def _emit_event(name: str, status: str, detail: str = "") -> None:
         pass
 
 
+def _warn_line(msg: str) -> None:
+    """#863 Family E: the only direct printer of a `kunglao-upgrade: WARN`
+    stderr line — the stderr-only WARN face for the deliberately quiet
+    sites (guard-stamp single-WARN posture, git-skip, sweep fail-open).
+    Composition base of `_warn`."""
+    print(msg, file=sys.stderr)
+
+
+def _warn(msg: str, why: str, event: str, ws: Path | None = None, *,
+          ledger_detail: str | None = None) -> None:
+    """#863 Family E: the WARN triple, single-sourced (#755 posture).
+
+    One degradation = up to three signals, never an exit code:
+      1. stderr WARN line — `msg` is caller-owned text (wording differences
+         across sites are load-bearing test pins, kept byte-identical)
+      2. structured [event] trail — `_emit_event(event, "warn", why)`
+         (#753 B2)
+      3. workspace ledger emit (design D6) — silent when `ws is None`;
+         detail is `warn:{why}` unless `ledger_detail` overrides (the
+         claudemd `skipped:` and toolchain-manifest plain-detail variants
+         carry their own prefix)
+    """
+    _warn_line(msg)
+    _emit_event(event, "warn", why)
+    if ws is not None:
+        _emit(ws, event,
+              ledger_detail if ledger_detail is not None else f"warn:{why}")
+
+
 # --------------------------------------------------------------------------
 # git snapshot layer (#739)
 # --------------------------------------------------------------------------
@@ -697,7 +723,7 @@ def _probe_dirty(ws: Path) -> tuple[str, int]:
 
 
 def _warn_git_skip(surface: str, why: str) -> None:
-    print(f"kunglao-upgrade: WARN — {surface} skipped: {why}", file=sys.stderr)
+    _warn_line(f"kunglao-upgrade: WARN — {surface} skipped: {why}")
 
 
 def _deploy_drift_now(ws: Path) -> bool:
@@ -899,8 +925,7 @@ def _item_mcp_refresh(ws: Path, dry: bool) -> str:
         return f"mcp_refresh({detail})"
     except Exception as exc:  # noqa: BLE001 — WARN-only posture
         why = f"{type(exc).__name__}: {exc}"
-        print(f"kunglao-upgrade: WARN — .mcp.json refresh skipped ({why})",
-              file=sys.stderr)
+        _warn_line(f"kunglao-upgrade: WARN — .mcp.json refresh skipped ({why})")
         _emit(ws, "mcp_scaffold_refresh", f"warn:{why}")
         return f"mcp_refresh(warn: {type(exc).__name__})"
 
@@ -942,8 +967,8 @@ def _item_env_manifest_refresh(ws: Path, dry: bool) -> str:
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as exc:
             why = f"unparseable ledger: {exc}".splitlines()[0]
-            print(f"kunglao-upgrade: WARN — env-manifest refresh skipped "
-                  f"({why})", file=sys.stderr)
+            _warn_line(f"kunglao-upgrade: WARN — env-manifest refresh skipped "
+                       f"({why})")
             _emit(ws, "env_ledger_refresh", f"warn:{why}")
             return f"env_ledger_refresh(warn: unparseable)"
         if not isinstance(data, dict):
@@ -979,11 +1004,10 @@ def _item_env_manifest_refresh(ws: Path, dry: bool) -> str:
     payload = yaml.safe_dump(ledger, sort_keys=False, allow_unicode=True)
     _atomic_write_bytes(path, payload.encode("utf-8"))
     if dec.defaulted_to_local or dec.warn_reason:
-        print(f"kunglao-upgrade: WARN — env-manifest backfill channel="
+        _warn(f"kunglao-upgrade: WARN — env-manifest backfill channel="
               f"{dec.selected} ({dec.warn_reason or 'defaulted'})",
-              file=sys.stderr)
-        _emit_event("env_ledger_refresh", "warn",
-                    f"channel={dec.selected} {dec.warn_reason}")
+              f"channel={dec.selected} {dec.warn_reason}",
+              "env_ledger_refresh")
     _emit(ws, "env_ledger_refresh", f"created channel={dec.selected}")
     return f"env_ledger_refresh(created channel={dec.selected})"
 
@@ -1005,11 +1029,10 @@ def _item_toolchain_manifest(ws: Path, dry: bool) -> str:
                  + ("-and-marker" if not marker.is_file() else ""))
         detail = (f"{label} — re-init restores full deploy surface "
                   f"(no fabrication)")
-        print(f"kunglao-upgrade: WARN — toolchain manifest faces absent: "
+        _warn(f"kunglao-upgrade: WARN — toolchain manifest faces absent: "
               f"runs/.init-report.json{'' if marker.is_file() else ' and '}"
-              f".kunglao-init.json — {detail}", file=sys.stderr)
-        _emit_event("toolchain_manifest_check", "warn", detail)
-        _emit(ws, "toolchain_manifest_check", detail)
+              f".kunglao-init.json — {detail}", detail,
+              "toolchain_manifest_check", ws, ledger_detail=detail)
         return f"toolchain_manifest_check({label})"
     cur = template_version.read_skill_version()
     try:
@@ -1060,10 +1083,8 @@ def _item_uv_sync(ws: Path, dry: bool) -> str:  # noqa: ARG001 — ws for item s
     uv = shutil.which("uv")
     if not uv:
         why = "uv binary not found"
-        print(f"kunglao-upgrade: WARN — venv sync skipped ({why})",
-              file=sys.stderr)
-        _emit_event("uv_sync", "warn", why)
-        _emit(ws, "uv_sync", f"warn:{why}")
+        _warn(f"kunglao-upgrade: WARN — venv sync skipped ({why})",
+              why, "uv_sync", ws)
         return "uv_sync(warn: uv-not-found)"
     argv = [uv, "sync", "--locked",
             "--project", str(canonical_install_root())]
@@ -1073,24 +1094,18 @@ def _item_uv_sync(ws: Path, dry: bool) -> str:  # noqa: ARG001 — ws for item s
                               encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired:
         why = f"timeout>{UV_SYNC_TIMEOUT}s"
-        print(f"kunglao-upgrade: WARN — venv sync {why}", file=sys.stderr)
-        _emit_event("uv_sync", "warn", why)
-        _emit(ws, "uv_sync", f"warn:{why}")
+        _warn(f"kunglao-upgrade: WARN — venv sync {why}", why, "uv_sync", ws)
         return "uv_sync(warn: timeout)"
     except (FileNotFoundError, OSError) as exc:
         why = f"{type(exc).__name__}: {exc}"
-        print(f"kunglao-upgrade: WARN — venv sync failed ({why})",
-              file=sys.stderr)
-        _emit_event("uv_sync", "warn", why)
-        _emit(ws, "uv_sync", f"warn:{why}")
+        _warn(f"kunglao-upgrade: WARN — venv sync failed ({why})",
+              why, "uv_sync", ws)
         return f"uv_sync(warn: {type(exc).__name__})"
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout or "").strip().splitlines()
         why = f"rc={proc.returncode}: {tail[-1] if tail else 'no output'}"
-        print(f"kunglao-upgrade: WARN — venv sync failed ({why})",
-              file=sys.stderr)
-        _emit_event("uv_sync", "warn", why)
-        _emit(ws, "uv_sync", f"warn:{why}")
+        _warn(f"kunglao-upgrade: WARN — venv sync failed ({why})",
+              why, "uv_sync", ws)
         return "uv_sync(warn: rc!=0)"
     detail = f"ok({Path(str(canonical_install_root())).name}, locked)"
     _emit_event("uv_sync", "ok", detail)
@@ -1132,10 +1147,8 @@ def _item_skill_staleness_check(ws: Path, dry: bool) -> str:
     branch = _git_at(root, "rev-parse", "--abbrev-ref", "HEAD")
     if branch.returncode != 0:
         why = f"branch probe failed: {branch.stderr.strip() or 'rc!=0'}"
-        print(f"kunglao-upgrade: WARN — install staleness unreadable "
-              f"({why})", file=sys.stderr)
-        _emit_event("skill_install_staleness", "warn", why)
-        _emit(ws, "skill_install_staleness", f"warn:{why}")
+        _warn(f"kunglao-upgrade: WARN — install staleness unreadable "
+              f"({why})", why, "skill_install_staleness", ws)
         return "skill_staleness(warn: probe-failed)"
     br = branch.stdout.strip() or "HEAD"
     upstream = _git_at(root, "rev-parse", "--symbolic-full-name", "@{u}")
@@ -1146,10 +1159,8 @@ def _item_skill_staleness_check(ws: Path, dry: bool) -> str:
     count = _git_at(root, "rev-list", "--count", f"HEAD..{ref}")
     if count.returncode != 0:
         why = f"behind-count failed vs {ref}"
-        print(f"kunglao-upgrade: WARN — install staleness unreadable "
-              f"({why})", file=sys.stderr)
-        _emit_event("skill_install_staleness", "warn", why)
-        _emit(ws, "skill_install_staleness", f"warn:{why}")
+        _warn(f"kunglao-upgrade: WARN — install staleness unreadable "
+              f"({why})", why, "skill_install_staleness", ws)
         return "skill_staleness(warn: count-failed)"
     behind = count.stdout.strip() or "0"
     try:
@@ -1158,11 +1169,9 @@ def _item_skill_staleness_check(ws: Path, dry: bool) -> str:
         n = -1
     detail = f"install={root.name} branch={br} vs {ref} behind={behind}"
     if n > 0:
-        print(f"kunglao-upgrade: WARN — skill install is {n} commit(s) "
+        _warn(f"kunglao-upgrade: WARN — skill install is {n} commit(s) "
               f"behind {ref}; git pull / plugin update brings the current "
-              f"scaffold forward", file=sys.stderr)
-        _emit_event("skill_install_staleness", "warn", detail)
-        _emit(ws, "skill_install_staleness", f"warn:{detail}")
+              f"scaffold forward", detail, "skill_install_staleness", ws)
         return f"skill_staleness(behind={behind})"
     _emit_event("skill_install_staleness", "ok",
                 detail if n == 0 else f"{detail} (unreadable)")
@@ -1378,9 +1387,8 @@ def upgrade(ws: Path, dry_run: bool = False,
         except Exception as sweep_exc:  # noqa: BLE001 — fail-open by design
             _emit(ws, "install_reference_scan",
                   f"error:{type(sweep_exc).__name__}")
-            print(f"kunglao-upgrade: WARN - install-reference sweep "
-                  f"skipped ({type(sweep_exc).__name__}: {sweep_exc})",
-                  file=sys.stderr)
+            _warn_line(f"kunglao-upgrade: WARN - install-reference sweep "
+                       f"skipped ({type(sweep_exc).__name__}: {sweep_exc})")
 # #753 B3 — the skill package just moved; Claude Code picks the new
         # slash-commands/hooks up only after a plugin reload.
         print("kunglao-upgrade: skill package updated — run /reload-plugins "

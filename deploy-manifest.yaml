@@ -419,7 +419,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 533383d29fa586376e02161b1448667d89d6e0e0c9b35f4e08a9684b239b8e6b
+    sha256: 9c017efa4a3567f191666202040e4a1e6729bde75a7e52e4996ed8b52f11736f
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -467,7 +467,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 7400b937e9e0017d36f11efc570180aec9ac678065c27f0aa3e1bc0eb31b4b43
+    sha256: bbf30b793694546c661d0a31ce739d34119fb1d1491c9ea56d2fefc4aa68e7b7
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -747,11 +747,11 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: b8ba4d2385dd97fc3eeeecb59f90e71c3ded20df23dd3a9109705170f6292e28
+    sha256: 7598f3ee2720d88db4a0aa7cb89cd20af40444494d6094788fadf4325b116b74
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
-    sha256: 4e0391b52c719e61a5aca95ac95cd033df5ea46c949eb2e4746d06e6eeef0364
+    sha256: 3dbe7947e99802ff722c9d345365779f695749b645ac93fe27bf6711b4826851
   - src: scripts/toolchain_negotiation.py
     dest: .claude/scripts/toolchain_negotiation.py
     kind: scaffold
@@ -779,7 +779,7 @@ files:
   - src: scripts/utf8_boot.py
     dest: .claude/scripts/utf8_boot.py
     kind: scaffold
-    sha256: 71ce2c6b6f6198011a24cd4a1c81d62a6d96067f0d437590509c055fe382b75b
+    sha256: fe7a76e44374f298d0b3a5b3af0d395f5d2ef82be58cdff2583fc8772eee80e0
   - src: scripts/value_config.py
     dest: .claude/scripts/value_config.py
     kind: scaffold

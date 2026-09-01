@@ -1,5 +1,7 @@
 - [x] Family A: stdio 单体 + 34 CLI 委托转换 + 执法测试 delegation 重写
 - [x] Family B: loader util + 前导委托（实测 22 调用点/21 文件 → `hooks/_path_hygiene.load_module_by_path` 单体；scripts 侧经新增 `scripts/_hooks_path.py` 桥；#671 自举 2 处 named-allowlist 保留）
 - [x] Family C: _resolve_ws manifest-aware 单源（闭合 #865 主体）——实测 9 份（issue 8 + #883 新增 statusline_snapshot）/4 形状 → `scripts/ws_layout.py` resolve_quiet/resolve_strict 单源；B2 修复（8 份硬编码 sibling → 全部尊重 layout.workspace_dir/claim_register）；守护测试 4 形状全覆盖 + delegation/confinement 执法
-- [ ] Family D: toolchain `_which_items()` helper
+- [x] Family D: toolchain `_which_items()` helper（#877 已交付；863-f 复核 CONFIRMED 单源无残留，见 proposal.md Recon）
+- [x] Family E: kunglao_upgrade WARN-triple 单源（16 处 print → `_warn`/`_warn_line` 模块内单源 + delegation/confinement 执法测试）
+- [x] Family H: `_ensure_utf8_stderr` 3×9 → `scripts/utf8_boot.ensure_utf8_stderr` 纯别名委托；textual tripwire 改身份级 delegation 断言
 - [ ] 全量质量门 + CI

@@ -145,3 +145,65 @@ hooks/ 侧**非 `_resolve_ws` 命名**的同类硬编码 sibling probe：`hooks/
 - 计数 8→9（#883 新增份纳入，见锚点表首行）——家族同一性由符号 grep 定义，方案与验收不变。
 - util 落点 scripts/ws_layout.py（WHY 见方案节）；convergence_check 的函数级 `import env_manifest`
   热路径注释随探测逻辑一并移入 util（import 图不变：消费方 → ws_layout → env_manifest）。
+
+## Recon（863-f，2026-09-02 实测）
+
+### Family D 核验（orchestrator 初证 → 本卡复核 CONFIRMED，无需重做）
+
+- `git grep _which_items`：仅 `scripts/toolchain.py` 5 处（def :512-538 + 调用 :1521/:1538/:1551/:1655），
+  带 `#863 Family D` docstring——由 #877（commit e3d640c）交付。
+- 覆盖形态核对：2 个 hard-loop（windows/linux 的 file/readelf/objdump，:1521/:1551）+ 2 个 docker-block
+  （windows/linux，:1538/:1655）+ jadx/apktool（Android）全部经 `_which_items`；issue 计数口径
+  "intra ~90" = toolchain.py 文件内复制，与现状吻合。
+- 残留扫描：`shutil.which` 在 scripts/hooks/tools 的其余命中（apkid_scanner:44、deploy_shim:154、
+  env_check:400-404、env_manifest:553、env_repair_l1、env_state_probe、intake_promise:194、
+  kunglao_upgrade:1060、pkg_detect、toolchain_install:453/458、tools/static 若干）全部是**单命令
+  专用探针**（各自二进制、各自用途），非 which→CheckResult 列表循环族；Family D 符号族清零成立。
+- 守护：无 `_which_items` 符号级测试（与 issue 表"behavior tests only"执法口径一致）——行为由
+  test_probe_tiers_474 / toolchain 面测试钉住。结论：**D 已完成，本卡零代码改动，仅记录**。
+
+### 锚点表（计划/issue 锚点 vs 实测）
+
+| issue/计划表述 | 实测 | 结论 |
+|---|---|---|
+| Family E "WARN-triple 11 exact +4"（`warn()` ~50 LOC） | `kunglao_upgrade.py` 内 WARN print 共 **16 处**（grep `WARN.*file=sys.stderr` 族）：**8 处全 triple**（print + `_emit_event(..., "warn", why)` + `_emit(ws, ev, f"warn:{why}")`）：agents_refresh :268-272、uv_sync ×4 :1062-1093、staleness ×3 :1133-1165；**2 处 near-triple**（第三信号 detail 非默认）：claudemd `skipped:` 前缀 :422-427、toolchain_manifest 明文 detail :1008-1012；**1 处双信号**（print+event 无 ledger）：backfill channel :981-986；**2 处双信号**（print+ledger 无 event）：mcp :900-904、env_ledger unparseable :943-947；**3 处 print-only**：frame-stale :144-146、`_warn_git_skip` :699-700（已是具名单源，7 调用点）、sweep :1381-1383（注意该处连字符 `-` 非 em-dash，字节保真保留） | 行号/计数全漂移（issue 基于旧版；#739/#752/#753/#755/#758 增量）；按 16 处全量处理，triple 形状确认 |
+| Family E 守护测试 `test_deploy_surface_755.py:349-361` | `test_failure_is_warn_not_fatal` :348-359（行为断言：warn label + stderr 含 WARN+uv_sync）+ `test_timeout_is_warn` :361-372 等——**行为测试，非 textual**；按 863-b 先例：行为测试保留 + 新增 delegation/confinement 执法测试 | 行号漂移按符号定位 |
+| Family H `_ensure_utf8_stderr` 3×9 | 3 份函数体逐字节等价（9 行）：`toolchain.py:49-63`（调用 :66 module-level）、`toolchain_install.py:56-70`（调用 :73 module-level）、`kunglao-init.py:566-580`（调用 :2654 main() 首语句）；docstring 微漂移（toolchain_install 缺 `REFUSE —` 例） | 确认 3×9 |
+| Family H 守护测试 `test_toolchain_stdio.py:160-163` | `test_utf8_stderr_call_sites_pinned_in_source` :150-164（`source.count("_ensure_utf8_stderr(sys.stderr)")==1` textual tripwire，fault-inject M8 语义）+ 3 个行为测试 :109-137（recorder 断言 encoding=utf-8/errors=replace/fail-open False） | 行号漂移；textual 改 delegation，行为测试保留 |
+
+### 方案（落点 + delegation 形态）
+
+- **Family E 落点：`kunglao_upgrade.py` 模块内 `_warn()` / `_warn_line()`**（issue 明示"one warn()
+  helper ~50 LOC"；16 处副本全部在同一文件内，无跨文件消费方 → 模块内单源即清零，无需新 util 模块）。
+  形态：`_warn(msg, why, event, ws=None, *, ledger_detail=None)` = stderr 行 + `[event]` 轨 + ledger
+  三信号（`ws=None` 保持 ledger 面静默；`ledger_detail` 覆盖默认 `warn:{why}`——claudemd 的
+  `skipped:` 前缀与 toolchain_manifest 的明文 detail 由此保真）；`_warn_line(msg)` = 纯 stderr 面
+  （print-only 三处 + 双信号两处的 print 腿），`_warn` 组合 `_warn_line`。
+  **双信号两处（mcp/env-unparseable）不升格为 triple**——加 `[event]` 行即输出变化，违反行为等价。
+- **Family H 落点：`scripts/utf8_boot.py::ensure_utf8_stderr(stream=None) -> bool`**。WHY：#811
+  stdio 保险层模块，docstring 自declares"本模块管 stdio 与子进程树"——主题同源；3/3 消费方全在
+  scripts/（裸导入，无 Family B 式桥）。delegation 形态 = **纯别名**（863-c 最强委托形态）：
+  三处 `def` 原位替换为 `from utf8_boot import ensure_utf8_stderr as _ensure_utf8_stderr`（原位 =
+  module-level 调用时序不变，toolchain.py stdout 先于 stderr reconfigure 的既有顺序保持）；
+  `_ensure_utf8_stderr(sys.stderr)` 调用点一律不动（M8 tripwire 的钉就是调用本身）。
+- **执法测试**：Family H——`test_toolchain_stdio.py` 的 textual tripwire 改写为**身份级 delegation
+  断言**（`mod._ensure_utf8_stderr is utf8_boot.ensure_utf8_stderr` ×3）+ 保留调用点 count==1 pin
+  （M8 语义：乱码 fix 是 CALL 不是 helper）；3 个行为测试保留（经别名仍绿）。Family E——新增
+  `tests/test_warn_delegation_863f.py`：(1) confinement：`kunglao_upgrade.py` 内直连
+  `print("kunglao-upgrade: WARN` 计数 == 0（全部 WARN 行经 `_warn`/`_warn_line`）；
+  (2) triple 唯一性：`_emit_event(event, "warn", why)` 在源内恰 1 次（即 `_warn` 体内）；
+  (3) util 契约钉：monkeypatch 双 emit 面断言三信号/`ws=None`/`ledger_detail` 覆盖三态。
+  行为等价由既有 test_deploy_surface_755 行为组（不改）兜底。
+
+### 基线
+
+- `tests/test_toolchain_stdio.py + test_deploy_surface_755.py`：**40 passed, 1 failed**——failed 为
+  `TestT6Registry::test_already_at_target_still_plans_deploy_items`（KeyError 'notes/keep.md'），
+  改动前即失败，属计划已列 7 个 Windows 环境性基线失败中的 test_deploy_surface_755（CI Linux 权威）。
+
+### 偏航记录（实现级，非 RECON-DEVIATION）
+
+- Family E 计数：issue "11 exact +4" vs 实测 16 print 处（8 triple + 2 near + 1 backfill + 2 双信号
+  + 3 print-only）——#739/#752/#753/#755/#758 增量所致；按 16 处全量收编，非削减方向。
+- Family H 落点 utf8_boot.py 而非新建模块——消费方全在 scripts/ 且主题同源（#811），镜像 ws_layout
+  先例"按消费方分布定夺"。

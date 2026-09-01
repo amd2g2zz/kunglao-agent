@@ -45,22 +45,10 @@ try:
 except (AttributeError, ValueError):
     pass
 
-
-def _ensure_utf8_stderr(stream=None) -> bool:
-    """#451 乱码 fix: stderr unified to utf-8/replace (stdout already is).
-
-    A GBK-default stderr next to a utf-8 stdout garbles the mixed terminal
-    stream (`REFUSE —` -> `REFUSE ??`, 2026-08-17 transcript). Fail-open on
-    streams without reconfigure (returns False, never raises)."""
-    target = sys.stderr if stream is None else stream
-    reconfigure = getattr(target, "reconfigure", None)
-    if reconfigure is None:
-        return False
-    try:
-        reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        return False
-    return True
+# #863 Family H: single source in utf8_boot (#811 stdio-insurance module);
+# alias binds the SHARED function so the module-level call below keeps its
+# exact position in module-init order (stdout first, then stderr).
+from utf8_boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
 
 
 _ensure_utf8_stderr(sys.stderr)
