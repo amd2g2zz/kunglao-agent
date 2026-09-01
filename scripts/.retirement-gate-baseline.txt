@@ -1,0 +1,1 @@
+deprecated_live_caller:priority<-scripts/external_kicker.py
