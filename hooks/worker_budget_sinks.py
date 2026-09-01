@@ -19,6 +19,7 @@ from worker_budget_gates import (
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
     compare_register_change, compare_register_change_proven_gate,
     register_worker, remove_worker,
+    toolfirst_pass_record,  # #880 approval-point pass face + operation label
 )  # noqa: E402,F401
 
 import json
@@ -530,6 +531,16 @@ def pre_check(payload: dict, paths: dict) -> int:
     elif pmsg:
         print(f'PRIORITY: {pmsg}', file=sys.stderr)
     worker_id = agent_name or f'w{int(time.time())}'
+    # #880: the toolfirst PASS face fires here (approval point) with the
+    # (keyword->tool) attribution payload, and a MATCHED evaluation persists
+    # the claim attributes (operation: / operation_tool:). Gates that reject
+    # above keep the dispatch lifecycle-silent (#754); the toolfirst gate's
+    # own REJECT face already emitted from check_tool_first.
+    # NOTE: use the ORIGINAL description channel — the local `desc` was
+    # reassigned to the prompt by the facts-snapshot check above.
+    toolfirst_pass_record(paths, cid,
+                          payload.get('tool_input', {}).get('description', ''),
+                          prompt)
     # #461: a PASSING dispatch is a lifecycle event — renew TTL / complete
     # the activation set / flip phase to DISPATCH / log the dispatch event
     # (fail-open inside; rejected dispatches above never reach this line).
@@ -634,11 +645,52 @@ def _mark_env_capability_failed(runs: Path, tool: str) -> None:
         pass
 
 
+def _emit_tool_calls(paths: dict, payload: dict, tool_result: str) -> None:
+    """#880 RC1: `tool_call` gets a REAL emitter — the Agent PostToolUse face.
+
+    Claim-granularity v1 (explicitly allowed by the card): the subagent's
+    transcript arrives only at completion, so per-tool timing is not
+    observable — one tool_call row per actually-invoked tool (scan_actual_tools
+    over the result), carrying claim / tool / trace_id. duration_ms stays null
+    here (fabricating per-tool durations would lie; the claim duration belongs
+    to the claim_settled settlement row). Fail-open: the worker entry is gone
+    or the log write fails -> no rows, never a crash.
+    """
+    ws = paths.get('workspace')
+    if not ws:
+        return
+    worker_id = payload.get('tool_input', {}).get('name') or ''
+    try:
+        entry = next((w for w in read_active_workers(paths['state'])
+                      if w.get('worker_id') == worker_id), None)
+    except Exception:  # noqa: BLE001 — liveness IO is best-effort
+        entry = None
+    if not entry or not entry.get('claim_id'):
+        return
+    tools = scan_actual_tools(tool_result)
+    if not tools or _klog is None:
+        return
+    cid = entry['claim_id']
+    trace_id = _declared_trace_id(payload.get('tool_input', {}).get('prompt', ''))
+    try:
+        for tool in tools:
+            _klog.emit(Path(ws), 'hook:worker_budget', 'tool_call', claim=cid,
+                       tool=tool, trace_id=trace_id,
+                       detail='claim-granularity v1 (#880): tool observed in '
+                              'the completed worker transcript')
+    except Exception as exc:  # noqa: BLE001 — logging never breaks post_check
+        print(f'[kunglao-agent] tool_call emit WARN (fail-open): '
+              f'{type(exc).__name__}: {exc}', file=sys.stderr)
+
+
 def post_check(payload: dict, paths: dict) -> int:
     worker_id = payload.get('tool_input', {}).get('name') or ''
+    tool_result = str(payload.get('tool_result', ''))
+    # #880: BEFORE remove_worker — the [active_workers] entry carries the
+    # claim_id the tool_call rows attribute to.
+    _emit_tool_calls(paths, payload, tool_result)
     if worker_id:
         remove_worker(paths['state'], worker_id)
-    tool_result = str(payload.get('tool_result', ''))
     scan_actual_tools(tool_result)  # post-hoc audit (informational)
     # #475: same-tool consecutive-error hysteresis — the #309 policy's first
     # mechanical consumer (warn at 3, disable+escalate at 5, success resets).

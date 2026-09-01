@@ -433,6 +433,22 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
     # #459: the landing event fires after the entry + promotion are on disk
     # (a tail reader never sees a recorded event for a half-written state).
     _emit_analysis_recorded(workspace, claim_id, entry)
+    # #880 (pre-ruling): the CITATION face of the lessons quartet lives here —
+    # a record that DECLARES its next_method came from a lesson hit
+    # (next_method_source == "lesson-hit", candidates from the ladder) is the
+    # mechanical point where "recall 注入被 worker 实际引用" becomes true.
+    # Cite the top candidate of the EXACT library the ladder searched.
+    if (source_norm == "lesson-hit" and entry.get("candidates")
+            and candidates):
+        try:
+            from lessons_telemetry import record_citation
+            record_citation(
+                Path(library) if library else LESSONS_DIR_DEFAULT,
+                str(candidates[0].get("file") or "").removeprefix("lesson-")
+                .removesuffix(".md"),
+                workspace=workspace)
+        except Exception:  # noqa: BLE001 — lessons counting never blocks a record
+            pass
     return {"recorded": True, "entry": entry, "obstacle_claim": promotion}
 
 

@@ -141,6 +141,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `mission_stall.py` | 主线停滞指纹 + PARK 合法化 (#634) — ΔV_m 平坦×K 检测 / PARK 必带 wake_condition / revive 通道(落账 claim_revive) | convergence_check, hooks(carrier rule f), tests |
 | `notes_discriminator.py` | notes 结构判别器 (#834) — 复制即拒/零引用/悬空引用三规则; completion_gate NOTES_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
 | `encoding_lint.py` | 裸 IO 编码扫描器 (#811) — AST 版 write_text/read_text/open/subprocess 无 encoding 检出; 残留清零后挂机械门防复发 | tests, CI |
+| `emit_gate.py` | EMIT_ACTIONS 双向门 (#880) — 正向: 词表孤儿扫描(每个 action 须有 ≥1 生产发射者, quoted-literal 宽网); 反向: emit-site literal 未注册扫描(#459 pattern 表); CI 挂 tests/test_emit_gate_880.py | tests, CI |
 | `utf8_boot.py` | CLI 入口 UTF-8 双保险 (#811) — PYTHONUTF8 setdefault + stdout/stderr reconfigure; 全入口 __main__ 接线 | hooks, tests |
 | `optimizer_core.py` | #833 θ 数值通道 — PARAM_SPEC(opt-theta-v1)+宪法隔离(CONSTITUTIONAL_KEYS 不可入 spec/提案)+SPSA(衰减步长)+replay_loss 规则近似+提案 JSON(只出提案不生效) | tests |
 | `optimizer_bandit.py` | #833 机制开关通道 — β-Bernoulli 后验(arm=机制×泳道)+ledger 归因+demotion_queue(四阶段门降级候选,不直接生效) | tests |

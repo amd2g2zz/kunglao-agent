@@ -67,11 +67,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 883c292f635b0d8e954e0d70bbf3bfedb0a016eed1ec7b4d21b9efe69e8994c6
+    sha256: 88eca3d9faa0a4d01d32f887de013d9a866afde42f265c87b8746c718d3d20e6
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 68fb4fc27919c6588a9afa069bac8aec520207a5285a7e7fe19c2bcc0c2b716e
+    sha256: c04ced1f2ce740e8a58a147c54c3e200180323e662a90683a4609485dd802b19
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -79,7 +79,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: a373ff1b3a8fcc8fe6a7acd9eeea7c14d2fc59dd6518abc320e7098d8b93c373
+    sha256: 6cd4d33c260bff6e3fd9b1bfd225749414da05142e9255058604f02851efd469
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -272,6 +272,10 @@ files:
     dest: .claude/scripts/dual_gate.py
     kind: scaffold
     sha256: dc93272e2ebc1bf6663175ddc6fa6ab2ff83613c38f42663a2addf4b9547e2fe
+  - src: scripts/emit_gate.py
+    dest: .claude/scripts/emit_gate.py
+    kind: scaffold
+    sha256: 8757728e3eb1674dd09a73aaf7d2380006a317e65046196252e64cd9b19df521
   - src: scripts/encoding_lint.py
     dest: .claude/scripts/encoding_lint.py
     kind: scaffold
@@ -303,7 +307,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 97695852e4ba5fffac51c9f802ee2da989879ebc59bce8681eb72374a8f4218c
+    sha256: 83a5a960d2e88e56aafab77111c07a3f6ad12b3cb1a4d9b55894f4e4756ae58a
   - src: scripts/explore_gate.py
     dest: .claude/scripts/explore_gate.py
     kind: scaffold
@@ -319,7 +323,7 @@ files:
   - src: scripts/failure_analysis_gate.py
     dest: .claude/scripts/failure_analysis_gate.py
     kind: scaffold
-    sha256: f352b961fa9f59689413744570d4b07cc73e0959238c3302d9373764278f2a00
+    sha256: a92e7e6e94677f7e5cba03445ff9d9a51d9facb7fedb40d471b544ce81080129
   - src: scripts/feedback.py
     dest: .claude/scripts/feedback.py
     kind: scaffold
@@ -615,7 +619,7 @@ files:
   - src: scripts/register_proven_gate.py
     dest: .claude/scripts/register_proven_gate.py
     kind: scaffold
-    sha256: ce7a0a58af312dc569b0a9037f952e43f3d256ffcba7663d1c8866c6fb457665
+    sha256: 4854702ce39dea2271543a922cee4795b59757274d5b6b61d2111b7772c2bffd
   - src: scripts/release_check_selfcheck.py
     dest: .claude/scripts/release_check_selfcheck.py
     kind: scaffold
@@ -1219,7 +1223,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 238f27c2a9b88575d63a94c2160d7f28a0e4ffea3f69d8c76e68bdf9e8ec59fe
+    sha256: 81868f230aa39a980f4cb02024dc2cc738711e82d22b8f0524631e3df80f19d6
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
