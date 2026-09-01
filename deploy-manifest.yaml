@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 7f3457fca0fd830fd12b9989f3180ddd801b9c02f79e5dcae8fca66537168c77
+    sha256: 140dde9b93dea7ddfb514f49193785bce70c2744690d6b09017119ff1300318d
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -35,7 +35,7 @@ files:
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
-    sha256: aa2a8b4aac0b047337ecffbb310d5ae133bfac32176c5a74ce7fe1b490996853
+    sha256: edc5d7cb617638aef43a97b7e1649abd70030bd2383a80d2ade97fca71ddbecb
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
@@ -299,7 +299,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 7a48ec2041d4dea4eac2b168f45945f0e866b5027c0a3a8ce655c6aa3438831b
+    sha256: a492b0b1c9866c644f429d9e392f4426316241c36896f271df045a072b585259
   - src: scripts/explore_gate.py
     dest: .claude/scripts/explore_gate.py
     kind: scaffold
@@ -347,7 +347,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: a98f1c65a870aee824c6310984bcb0e291bd6dd4e5f44541e9633dc8b0b716c5
+    sha256: d5739df4ae1871bc0fb77a7fde752353e610e567b7a2a96c143da043e1aa8c16
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -443,7 +443,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: b37d6ff962f45d4f4e88026720a990f5d39c247c75f11afc2a0ddc36ff1f422d
+    sha256: 6324e84bbe6f33510669cec9be1f89f7a1df7a3406d026e51c19a3b45e14ef4b
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -779,7 +779,7 @@ files:
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
-    sha256: a6d33f3ba6ee6a4fbd4eae690c599afd77d93bf94d1f20ccf2f201192504198e
+    sha256: 3bc530203aec8521c9d84da93b5590b7864b6790659b96e9978a1d9776e05546
   - src: scripts/write_gate.py
     dest: .claude/scripts/write_gate.py
     kind: scaffold
@@ -1203,7 +1203,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 835e7f8abd5fb872eee83c8026c64ce6c18349138f64b3dfcd452962e2445b8d
+    sha256: bed27a5ba5807494d5697b4105a6361aaf11220c89289b78da5ee25f3b47b26c
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

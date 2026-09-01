@@ -537,7 +537,7 @@ ext:
     capability: "unknown"
     source: "hooks/orchestrator_tool_guard.py"
     usage: "hook hooks/orchestrator_tool_guard.py (settings.json wiring; JSON on stdin; exit code = verdict)"
-    description: "orchestrator_tool_guard.py — PreToolUse/Bash WARN gate (#608)."
+    description: "orchestrator_tool_guard.py — PreToolUse/Bash + MCP host-channel guard."
   - name: "outcome_capture"
     capability: "unknown"
     source: "scripts/outcome_capture.py"
