@@ -21,7 +21,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -29,29 +28,24 @@ from pathlib import Path
 import yaml
 
 from status_defs import TERMINAL as TERMINAL_STATUSES
+from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
 
 
 def _worker_protocol():
-    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
-    path under the unique name lib_kunglao_hooks (bare `import lib_kunglao`
-    is ambiguous under pytest — scripts/lib_kunglao.py shares the name).
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444).
     Review F-1: this module previously counted active workers by SUBSTRING
     presence ("in-progress" in text), which counts every normally-completed
     worker (its append-only file keeps historical in-progress lines) as
-    active — the exact double representation #444 removes."""
-    name = "lib_kunglao_hooks"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        if not path.exists():
-            raise RuntimeError(
-                f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
-                "ship together; reinstall the kunglao-agent skill")
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
-    return lib
+    active — the exact double representation #444 removes.
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_hooks_lib, via scripts/_hooks_path) — the
+    loud-missing guard stays HERE (its message is part of the contract)."""
+    path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+    if not path.exists():
+        raise RuntimeError(
+            f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
+            "ship together; reinstall the kunglao-agent skill")
+    return load_hooks_lib()
 
 
 def utc_now() -> datetime:

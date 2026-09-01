@@ -6,13 +6,14 @@ Extracted from hook_activation.py (T-2 split) — the --heartbeat-on /
 """
 from __future__ import annotations
 
-import importlib.util
 import json
 import math
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from _hooks_path import load_module_by_path  # #863 Family B: loader delegation (#671 authority)
 
 # A 5-min cron tick should refresh .heartbeat.json continuously; >35 min
 # stale (5-min interval + jitter margin) means monitoring is NOT running.
@@ -406,10 +407,9 @@ def heartbeat_off(workspace: Path, force: bool = False) -> int:
                   file=sys.stderr)
             return 1
         try:
-            spec = importlib.util.spec_from_file_location(
-                "_cg_heartbeat", Path(__file__).resolve().parent / "completion_gate.py")
-            cg = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(cg)
+            cg = load_module_by_path(
+                "_cg_heartbeat",
+                Path(__file__).resolve().parent / "completion_gate.py")
             oracle_code, oracle_reason = cg.judge(oracle)
         except Exception as exc:  # noqa: BLE001 — judge failure = refuse
             print(f"Completion gate judge failed ({type(exc).__name__}) — "

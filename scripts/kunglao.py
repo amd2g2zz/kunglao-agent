@@ -38,6 +38,8 @@ import convergence_check as cc
 import heartbeat_tick as hbt
 import template_version
 
+from _hooks_path import load_module_by_path  # #863 Family B: loader delegation (#671 authority)
+
 
 # Exit codes used by the stale-workspace gate (#748).
 #   5 = workspace template stamp is older than the active skill version, or
@@ -326,12 +328,10 @@ def cmd_upgrade(args) -> int:
     """#726: workspace framework-scaffold migration — pure delegation to
     kunglao_upgrade.main. Hyphenated filename blocks a plain import; the
     module is loaded via importlib (same pattern the test suite uses for
-    kunglao-init)."""
-    import importlib.util
+    kunglao-init). #863 Family B: by-path prologue collapsed into the
+    canonical loader (via scripts/_hooks_path)."""
     mod_path = Path(__file__).resolve().parent / "kunglao_upgrade.py"
-    spec = importlib.util.spec_from_file_location("kunglao_upgrade", mod_path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    mod = load_module_by_path("kunglao_upgrade", mod_path)
     argv = [str(args.workspace)]
     if args.dry_run:
         argv.append("--dry-run")

@@ -47,13 +47,12 @@ _kunglao_active + FAIL_OPEN structure (#44).
 from __future__ import annotations
 
 import hashlib
-import importlib.util
 import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from _path_hygiene import scripts_on_path  # #671 sys.path hygiene authority
+from _path_hygiene import load_module_by_path, scripts_on_path  # #671 sys.path hygiene authority
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 ORACLE_FILE = "task-oracle.yaml"
@@ -163,17 +162,11 @@ def _kunglao_active(ws: Path) -> bool:
 
 def _load_judge():
     """Load scripts/completion_gate.py under a unique module name (avoid clash
-    with this shim's basename). Cached in sys.modules for prod+test sharing."""
-    name = "completion_gate_scripts"
-    mod = sys.modules.get(name)
-    if mod is not None:
-        return mod
-    spec = importlib.util.spec_from_file_location(
-        name, SKILL_DIR / "scripts" / "completion_gate.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
+    with this shim's basename). Cached in sys.modules for prod+test sharing.
+    #863 Family B: delegates to the canonical loader (load_module_by_path) —
+    get-or-create semantics unchanged (tests preload the same name+file)."""
+    return load_module_by_path(
+        "completion_gate_scripts", SKILL_DIR / "scripts" / "completion_gate.py")
 
 
 # ---------- the Stop-event core ----------

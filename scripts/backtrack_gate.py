@@ -31,6 +31,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
+
 STATUS_RE = re.compile(r"^## Status\s*$", re.MULTILINE)
 ALLOWED_DECISIONS = {"continue", "retry_different", "escalate", "redispatch"}
 
@@ -44,15 +46,7 @@ def parse_status(text: str) -> str | None:
     parse point). Legacy `## Status` section files keep working: the section
     body is normalized to a ``status:`` token so the canonical parser reads
     it — no more mirror regex drifting blind on inline-token files."""
-    import importlib.util
-    name = "lib_kunglao_hooks"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
+    lib = load_hooks_lib()
     m = STATUS_RE.search(text)
     if m:
         rest = text[m.end():]

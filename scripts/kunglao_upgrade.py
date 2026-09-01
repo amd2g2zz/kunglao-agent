@@ -51,7 +51,6 @@ from __future__ import annotations
 import argparse
 import os
 import hashlib
-import importlib.util
 import json
 import re
 import subprocess
@@ -75,6 +74,7 @@ from hook_activation import (  # noqa: E402
     canonical_install_root,
     register_hooks,
 )
+from _hooks_path import load_module_by_path  # noqa: E402  # #863 Family B: loader delegation (#671 authority)
 
 USER_DATA_DIRS: tuple[str, ...] = (
     "claims", "facts", "runs", "hypotheses", "notes", "evidence", "oracle",
@@ -218,11 +218,11 @@ def _init_mod():
     while upgrade stays import-light at module level."""
     global _INIT_MOD
     if _INIT_MOD is None:
-        spec = importlib.util.spec_from_file_location(
+        # #863 Family B: by-path prologue collapsed into the canonical
+        # loader (via scripts/_hooks_path); the global keeps the
+        # load-once seam contract for existing readers.
+        _INIT_MOD = load_module_by_path(
             "kunglao_init_upgrade_seam", _SCRIPTS / "kunglao-init.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        _INIT_MOD = mod
     return _INIT_MOD
 
 

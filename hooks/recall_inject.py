@@ -47,6 +47,7 @@ from pathlib import Path
 from _path_hygiene import (  # #671 sys.path hygiene authority
     ensure_scripts_path,
     load_hooks_lib,
+    load_module_by_path,
 )
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
@@ -230,22 +231,18 @@ def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
     """#814: fail-open ≠ fail-silent — every recall path leaves a trace
     (kunglao_log emit + recall_metrics record). Telemetry must never block
     dispatch: any error is swallowed. Modules load by explicit file path
-    (this hook has no scripts/ sys.path injection of its own)."""
-    import importlib.util
+    (this hook has no scripts/ sys.path injection of its own) — #863
+    Family B: via the canonical loader, fail-open wrappers unchanged."""
     try:
-        spec = importlib.util.spec_from_file_location(
+        mod = load_module_by_path(
             "kunglao_log_recall814", SKILL_DIR / "scripts" / "kunglao_log.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
         mod.emit(ws, "recall_inject", action, tool="Agent", detail=detail)
     except Exception:  # noqa: BLE001
         pass
     try:
-        spec = importlib.util.spec_from_file_location(
+        mod = load_module_by_path(
             "recall_metrics_recall814",
             SKILL_DIR / "scripts" / "recall_metrics.py")
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
         mod.record(ws, kind=kind, query=detail[:80], files=files,
                    reason=action)
     except Exception:  # noqa: BLE001

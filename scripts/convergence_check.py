@@ -50,6 +50,7 @@ from pathlib import Path
 import yaml
 
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES, PARTIAL_STATUSES, SUSPENDED
+from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
 # RETRACTED lives in retract_claim.py (retraction domain owner, #331):
 # status_defs.TERMINAL is frozen for this change. TERMINAL_WITH_RETRACTED is
 # the dispatch-facing terminal set; RETRACTED is a withdrawn verdict, NOT an
@@ -106,21 +107,17 @@ def _load_worker_lib():
     fallback would resurrect the exact double-representation this change
     removes (#444 AC-1). hooks/ and scripts/ ship together in one skill
     install; a missing file means a broken install, not a degraded mode.
+
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_hooks_lib, via scripts/_hooks_path) — the
+    loud-missing guard stays HERE (its message is part of the contract).
     """
-    import importlib.util
-    name = "lib_kunglao_hooks"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        if not path.exists():
-            raise RuntimeError(
-                f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
-                "ship together; reinstall the kunglao-agent skill")
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
-    return lib
+    path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+    if not path.exists():
+        raise RuntimeError(
+            f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
+            "ship together; reinstall the kunglao-agent skill")
+    return load_hooks_lib()
 
 
 def _scan_workers(workspace: Path):

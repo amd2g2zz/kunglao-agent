@@ -78,6 +78,9 @@ import wire_up_settings
 # import time (lazy imports only), so no cycle exists in either direction.
 import hook_activation
 
+from _hooks_path import (  # #863 Family B: loader delegation (#671 authority)
+    load_hooks_lib, load_module_by_path)
+
 # D6: activation TTL from hook_activation.py DEFAULT_TTL_MINUTES — the tick
 # interval MUST stay below it or the TTL-expiry→next-tick gap silently closes
 # the gates (issue requirement). #597: the three minutes constants below are
@@ -161,20 +164,11 @@ wire_up_settings.derive_hook_subset(
     owner="external_kicker KUNGLAO_HOOK_ENTRIES")
 
 def _worker_protocol():
-    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
-    path under the unique name lib_kunglao_hooks (same pattern as the
-    lib_kunglao_scripts loader in should_kick below: bare `import
-    lib_kunglao` is ambiguous under pytest)."""
-    import importlib.util
-    name = "lib_kunglao_hooks"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
-    return lib
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444).
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_hooks_lib, via scripts/_hooks_path) — the
+    unique-name + by-path semantics are unchanged."""
+    return load_hooks_lib()
 
 
 def utc_now() -> str:
@@ -377,16 +371,13 @@ def should_kick(workspace: Path) -> bool:
     hooks/lib_kunglao.py). Production is unambiguous (this script runs with
     scripts/ at sys.path[0]); the test harness loads the same module by
     explicit path under the same unique name, so both share one instance.
+
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_module_by_path, via scripts/_hooks_path) —
+    unique name + registration semantics unchanged.
     """
-    import importlib.util
-    name = "lib_kunglao_scripts"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent / "lib_kunglao.py"
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
+    lib = load_module_by_path(
+        "lib_kunglao_scripts", Path(__file__).resolve().parent / "lib_kunglao.py")
     return (lib.drift_detected(workspace)
             and lib.signature_rotation(workspace) >= lib.DRIFT_ESCALATE_ROWS)
 

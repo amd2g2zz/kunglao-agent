@@ -31,6 +31,8 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
+
 CLAIM_RE = re.compile(r"claim\s*:?\s+([A-Za-z0-9][\w.-]*)")
 STEP_RE = re.compile(r"step\s*:?\s+(\S+)")
 LEDGER_NAME = ".convergence_ledger.jsonl"
@@ -39,21 +41,13 @@ TREND_LIMIT = 10
 
 
 def _worker_protocol():
-    """hooks/lib_kunglao.py — THE worker-status protocol owner (#444), by
-    path under the unique name lib_kunglao_hooks (bare `import lib_kunglao`
-    is ambiguous under pytest — scripts/lib_kunglao.py shares the name).
+    """hooks/lib_kunglao.py — THE worker-status protocol owner (#444).
     CLAIM_RE / STEP_RE below are display-only field extraction, not liveness
-    parsing, so they stay local."""
-    import importlib.util
-    name = "lib_kunglao_hooks"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
-    return lib
+    parsing, so they stay local.
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_hooks_lib, via scripts/_hooks_path) — the
+    unique-name + by-path semantics are unchanged."""
+    return load_hooks_lib()
 
 
 def _bold(s: str, color: bool) -> str:

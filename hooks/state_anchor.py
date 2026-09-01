@@ -58,7 +58,7 @@ import re
 import sys
 from pathlib import Path
 
-from _path_hygiene import ensure_scripts_path, scripts_on_path  # #671 authority
+from _path_hygiene import ensure_scripts_path, load_module_by_path, scripts_on_path  # #671 authority
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 SCRIPTS_DIR = SKILL_DIR / "scripts"
@@ -87,19 +87,11 @@ def _load_drift_lib():
     (the exact external_kicker.should_kick / tests/test_drift_detection
     precedent). Cached in sys.modules so prod and pytest share one instance.
     FAIL_OPEN -> None on any failure (the anchor summary does not depend on
-    the drift warning)."""
-    import importlib.util
-    name = "lib_kunglao_scripts"
-    lib = sys.modules.get(name)
-    if lib is not None:
-        return lib
+    the drift warning). #863 Family B: delegates to load_module_by_path —
+    get-or-create + fail-open semantics unchanged."""
     try:
-        path = SKILL_DIR / "scripts" / "lib_kunglao.py"
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
-        return lib
+        return load_module_by_path(
+            "lib_kunglao_scripts", SKILL_DIR / "scripts" / "lib_kunglao.py")
     except Exception:  # noqa: BLE001 — FAIL_OPEN: drift warning is optional
         return None
 

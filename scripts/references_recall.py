@@ -44,6 +44,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _hooks_path import load_module_by_path  # #863 Family B: loader delegation (#671 authority)
+
 try:  # PyYAML is a repo dependency; degrade gracefully when absent.
     import yaml as _yaml
 except Exception:  # pragma: no cover
@@ -370,24 +372,19 @@ def _feedback_parser():
     NOTE: a different ``scripts/lib_kunglao.py`` (scripts-side drift lib)
     shares the module NAME, and a caller may have already imported that one
     into sys.modules. Import by explicit FILE path so the hooks-side grammar
-    owner is loaded regardless of sys.path order or module-cache pollution."""
-    import importlib.util  # noqa: PLC0415
+    owner is loaded regardless of sys.path order or module-cache pollution.
 
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_module_by_path, via scripts/_hooks_path); the
+    drifted sys.path.insert(0, hooks) is gone — hooks/lib_kunglao
+    self-bootstraps _path_hygiene by path, so that membership was dead
+    weight (and a #671 reorder hazard)."""
     mod = sys.modules.get("lib_kunglao")
     if mod is not None and hasattr(mod, "parse_recall_feedback"):
         return mod.parse_recall_feedback
     hooks_dir = Path(__file__).resolve().parents[1] / "hooks"
-    # lib_kunglao itself imports _path_hygiene from its own directory
-    if str(hooks_dir) not in sys.path:
-        sys.path.insert(0, str(hooks_dir))
-    hooks_copy = hooks_dir / "lib_kunglao.py"
-    spec = importlib.util.spec_from_file_location("kunglao_hooks_lib", hooks_copy)
-    if spec is None or spec.loader is None:  # pragma: no cover
-        raise ImportError(f"hooks/lib_kunglao.py unreadable: {hooks_copy}")
-    mod = importlib.util.module_from_spec(spec)
-    # its own deps (_path_hygiene/liveness_policy) live in hooks/ + scripts/
-    spec.loader.exec_module(mod)
-    return mod.parse_recall_feedback
+    return load_module_by_path(
+        "kunglao_hooks_lib", hooks_dir / "lib_kunglao.py").parse_recall_feedback
 
 
 def _stats_path(ws: Path) -> Path:

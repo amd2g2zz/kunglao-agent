@@ -6,26 +6,19 @@ Extracted from hook_activation.py (T-2 split) — the --reconcile job.
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
+
+from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
 
 
 def _worker_protocol():
-    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
-    path under the unique name lib_kunglao_hooks (bare `import lib_kunglao`
-    is ambiguous under pytest — scripts/lib_kunglao.py shares the name).
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444).
     seg_re below is the [active_workers] segment WRITE format of
-    analysis_state.txt, a different protocol — it stays local."""
-    import importlib.util
-    name = "lib_kunglao_hooks"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
-    return lib
+    analysis_state.txt, a different protocol — it stays local.
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_hooks_lib, via scripts/_hooks_path) — the
+    unique-name + by-path semantics are unchanged."""
+    return load_hooks_lib()
 
 
 def reconcile_workers(workspace: Path) -> int:

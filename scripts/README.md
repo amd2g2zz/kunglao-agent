@@ -183,6 +183,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `dispatch_context.py` | structured dispatch context block (fact snapshot + priority state + validated capability + plan + siblings; #527) | lib(3), tests |
 | `lessons_telemetry.py` | per-lesson CBM quartet + utility score + tombstone (#526) | tests |
 | `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
+| `_hooks_path.py` | scripts-side bridge to hooks/_path_hygiene — the canonical by-path loader delegation (#863 Family B, #671 authority; guarded append, never reorders) | hooks, lib(13), tests |
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
 | `toolchain.py` | type-aware toolchain probe matrix (#304) with probe tiers presence/liveness/capability + jdwp handshake (#474) | lib(1), tests, docs |
 | `tool_tiers.py` | 工具族档位表加载/选择/契约注入 (#812) — 场景×工具→四档降级链（#670 估算 + C-006 实录），dispatch_context 可选键 | dispatch_context, tests |

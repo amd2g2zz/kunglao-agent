@@ -186,20 +186,23 @@ def test_canonical_module_owns_the_regex():
 
 # every consumer must reach the protocol through the canonical entry — the
 # static wiring half of AC-3's CI assertion (the behavioral half is below).
+# #863 Family B: by-path prologues were consolidated into the canonical
+# loader (hooks/_path_hygiene.load_hooks_lib via scripts/_hooks_path), so
+# the wiring marker IS the delegation call.
 WIRING = {
     #770: worker_budget binds the hooks twin BY PATH under an isolated
     # name (#762 convention) instead of a bare sys.path-order-dependent
     # import; the isolated name is the canonical-consumption marker.
-    "hooks/worker_budget.py": "_worker_budget_lib_kunglao",
+    "hooks/worker_budget.py": "load_module_by_path",
     "hooks/worker_pulse.py": "parse_worker_status",
-    "scripts/convergence_check.py": _PROTOCOL_NAME,
-    "scripts/lib_kunglao.py": _PROTOCOL_NAME,
-    "scripts/external_kicker.py": _PROTOCOL_NAME,
-    "scripts/event_taxonomy.py": _PROTOCOL_NAME,
-    "scripts/kunglao_status.py": _PROTOCOL_NAME,
-    "scripts/reconcile_workers.py": _PROTOCOL_NAME,
+    "scripts/convergence_check.py": "load_hooks_lib",
+    "scripts/lib_kunglao.py": "load_hooks_lib",
+    "scripts/external_kicker.py": "load_hooks_lib",
+    "scripts/event_taxonomy.py": "load_hooks_lib",
+    "scripts/kunglao_status.py": "load_hooks_lib",
+    "scripts/reconcile_workers.py": "load_hooks_lib",
     # review F-1: the 9th consumer found post-GREEN (substring count → canonical)
-    "scripts/progress_report.py": _PROTOCOL_NAME,
+    "scripts/progress_report.py": "load_hooks_lib",
 }
 
 
@@ -437,12 +440,12 @@ def test_two_layers_share_one_protocol_source():
     convergence_check loads the SAME file by path (lib_kunglao_hooks loader)."""
     wb = (ROOT / "hooks" / "worker_budget.py").read_text(encoding="utf-8")
     cc = (ROOT / "scripts" / "convergence_check.py").read_text(encoding="utf-8")
-    assert "_worker_budget_lib_kunglao" in wb, (
+    assert "load_module_by_path" in wb, (
         "hook layer must consume the canonical scan via the #770 by-path "
-        "bind (position-stable; a bare lib_kunglao import resolves by "
-        "sys.path race)"
+        "bind (#863 Family B: through the canonical loader; a bare "
+        "lib_kunglao import resolves by sys.path race)"
     )
-    assert _PROTOCOL_NAME in cc, (
-        "advisory layer must load the canonical protocol "
-        "(scripts-side lib_kunglao_hooks by-path loader)"
+    assert "load_hooks_lib" in cc, (
+        "advisory layer must load the canonical protocol through the "
+        "scripts-side loader delegation (#863 Family B)"
     )

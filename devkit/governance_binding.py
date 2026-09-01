@@ -36,11 +36,18 @@ Exit codes: 0 = pass; 1 = violations; 2 = usage.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import re
 import sys
 from pathlib import Path
+
+# #863 Family B: reach the canonical by-path loader in hooks/. devkit is its
+# own sys.path domain, so bridge once here — guarded APPEND (never insert(0):
+# reordering hooks/ ahead of scripts/ is the #671 shared-name-twin shadow).
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent / "hooks")
+if _HOOKS_DIR not in sys.path:
+    sys.path.append(_HOOKS_DIR)
+from _path_hygiene import load_module_by_path  # noqa: E402  (#671 authority)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -65,10 +72,10 @@ _PLACEHOLDER_SUBS = (
 
 
 def _load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+    """#863 Family B: delegate to the canonical by-path loader (the util
+    adds sys.modules registration under the unique govbind names — pure-def
+    modules, cached reuse is behavior-equivalent)."""
+    return load_module_by_path(name, path)
 
 
 def _retirement_gate(root: Path):

@@ -148,6 +148,31 @@ def collision_order_inverted(path: list[str] | None = None) -> bool:
     return min(hooks_rank) < min(scripts_rank)
 
 
+def load_module_by_path(name: str, path):
+    """#863 Family B: the ONE by-path module loader (get-or-create).
+
+    Returns the instance already registered under `name` in sys.modules when
+    present; otherwise loads `path` by file location under `name`, registers
+    it, executes it, and returns it. Import errors and missing files RAISE —
+    callers keep their own fail-open or loud-missing policies on top.
+
+    Every former `spec_from_file_location` loader prologue (issue table: 21
+    copies, 5 byte-identical) delegates here; the raw call survives only in
+    this util and the two #671 self-bootstrap fallbacks (dispatch_gate /
+    hooks lib_kunglao load THIS module by path when hooks/ is not
+    importable — a load cannot delegate to the loader it is bootstrapping).
+    """
+    import importlib.util as _ilu
+    m = sys.modules.get(name)
+    if m is not None:
+        return m
+    spec = _ilu.spec_from_file_location(name, path)
+    m = _ilu.module_from_spec(spec)
+    sys.modules[name] = m
+    spec.loader.exec_module(m)
+    return m
+
+
 def load_hooks_lib():
     """Canonical by-path loader for the hooks twin of lib_kunglao (#770).
 
@@ -155,15 +180,8 @@ def load_hooks_lib():
     scripts/ insert anywhere earlier in the session re-binds every lazy
     consumer to the scripts twin (which lacks the worker-status protocol).
     Loading by resolved path under an isolated module name is
-    order-independent and cached across call sites."""
-    name = "lib_kunglao_hooks"
-    m = sys.modules.get(name)
-    if m is not None:
-        return m
-    import importlib.util as _ilu
-    spec = _ilu.spec_from_file_location(
-        name, Path(__file__).resolve().parent / "lib_kunglao.py")
-    m = _ilu.module_from_spec(spec)
-    sys.modules[name] = m
-    spec.loader.exec_module(m)
-    return m
+    order-independent and cached across call sites. #863 Family B: the
+    prologue collapsed into load_module_by_path (identical get-or-create
+    semantics)."""
+    return load_module_by_path(
+        "lib_kunglao_hooks", Path(__file__).resolve().parent / "lib_kunglao.py")
