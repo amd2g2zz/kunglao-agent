@@ -276,6 +276,15 @@ def main(argv: list[str] | None = None) -> int:
     if isinstance(think, dict) and think.get("waiting") and think.get("artifact"):
         report["action_taken"] = f"THINK {think['artifact']}"
 
+    # #882: policy retro gate (settlements-since-retro / stall fingerprint /
+    # plan_review ritual) — the kunglao-decide revive face (decide is invoked
+    # inside backtrack_loop when the gate trips). Advisory like rollup_sweep:
+    # recorded, NEVER weighed into rc/alert (a crashed retro must not fail
+    # the tick). Sits BEFORE the report write so the persisted report carries
+    # the step, and before the cockpit sample + snapshot (both then reflect
+    # the post-retro lag).
+    report["backtrack"] = run("backtrack_loop.py", ws, "--policy")
+
     sc = report["selfcheck"].get("stdout", "")[:80]
     hb = report["heartbeat"].get("stdout", "")[:120]
     rc_sc = report["selfcheck"].get("rc", -1)
