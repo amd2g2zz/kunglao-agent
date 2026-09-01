@@ -902,7 +902,7 @@ def _load_workspace_features(ws) -> dict:
     return {'language': lang} if lang else {}
 
 
-def check_agent_type(paths: dict, desc: str, prompt: str,
+def check_agent_type(paths: dict, cid: str, prompt: str,
                      agent_name: str) -> tuple[bool, str]:
     """Issue #310: dispatch agent type vs route_capability recommendation.
 
@@ -911,7 +911,6 @@ def check_agent_type(paths: dict, desc: str, prompt: str,
     that the dispatched agent is not, and the prompt records no
     `agent-reasoning:` deviation.
     """
-    _, _, cid = parse_dispatch(desc)
     if not cid or not agent_name:
         return (True, 'no claim id or no agent name - agenttype skipped')
     if not _AGENTTYPE_AVAILABLE:

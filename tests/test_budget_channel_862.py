@@ -78,18 +78,29 @@ def test_description_only_shape_rejected(tmp_path):
 
 
 def test_devreason_requires_canonical_marker(tmp_path):
-    """#862: 偏差场景下裸 `reasoning:` 不再过 devreason 门，canonical
-    `agent-reasoning:` 通过。"""
+    """#862: 偏差场景（派发 rank#2 的 C-001）下裸 reasoning: 不再过门，
+    canonical agent-reasoning: 通过。"""
     ws = _healthy_ws(tmp_path)
-    rc, err, _ = _run(_payload(_env() + "\nfacts-snapshot: 1 facts\n"
-                               "reasoning: why not rank1"), _paths_for(ws))
+    _write_register(ws / "claim-register.yaml", [
+        {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 3,
+         'statement': 'decompile main'},
+        {'id': 'C-002', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 1,
+         'statement': 'strings triage of packer; xor decode; config extract'},
+    ])
+    (ws / 'runs' / 'plan-C002-x.md').write_text(
+        'goal: c2' + chr(10) + 'steps:' + chr(10) + 'fallback:' + chr(10),
+        encoding='utf-8')
+    env_c001 = ENV.replace('"tier": 1', '"tier": 2')
+    rc, err, _ = _run(_payload(env_c001 + chr(10) + 'facts-snapshot: 1 facts' + chr(10)
+                               + 'reasoning: why not rank1'), _paths_for(ws))
     assert rc == 2, err
-    assert "devreason" in err, err
-    rc2, err2, _ = _run(_payload(_env() + "\nfacts-snapshot: 1 facts\n"
-                                 "agent-reasoning: why not rank1"),
+    assert 'devreason' in err, err
+    rc2, err2, _ = _run(_payload(env_c001 + chr(10) + 'facts-snapshot: 1 facts' + chr(10)
+                                 + 'agent-reasoning: why not rank1'),
                         _paths_for(ws))
     assert rc2 == 0, err2
-
 
 def test_no_shape_anywhere_passthrough(tmp_path):
     """无形状（非 kunglao Agent 调用）→ cid 门空转（既有语义，不回归）。"""

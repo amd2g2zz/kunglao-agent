@@ -744,6 +744,14 @@ def _fresh_hb(ws: Path) -> None:
                     'tick_history': [prev, now]}), encoding='utf-8')
 
 
+    # #830/#857: seed the durable tick sidecar with 2 spaced ticks -
+    # the continuous-liveness gate reads this, not the JSON cache.
+    (ws / 'runs' / '.heartbeat.log').parent.mkdir(parents=True, exist_ok=True)
+    import json as _json
+    with (ws / 'runs' / '.heartbeat.log').open('a', encoding='utf-8') as _f:
+        _f.write(_json.dumps({'ts': prev, 'actor': 'tick'}) + '\n')
+        _f.write(_json.dumps({'ts': now, 'actor': 'tick'}) + '\n')
+
 def _healthy_ws(tmp_path) -> Path:
     """A workspace where EVERY pre_check gate passes; scenarios toggle one off."""
     ws = tmp_path
@@ -848,7 +856,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     scenarios.append(('hostchan', 'connect_remote',
                       lambda ws=ws: wb.pre_check(
                           _budget_payload(
-                              desc='[T1 tools=mcp__x64dbg__start_session] claim C-001'),
+                              prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["mcp__x64dbg__start_session"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'),
                           _paths_for(ws))))
 
     # 5 deadline — time budget exhausted
@@ -897,8 +905,15 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
 
     # 11 devreason — priority deviation without a reasoning field
     ws = _healthy_ws(tmp_path / 'devreason')
-    scenarios.append(('devreason', 'reasoning',
-                      lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
+    _write_register(ws / 'claim-register.yaml', [
+        {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 3},
+        {'id': 'C-002', 'status': 'OPEN', 'promotion_attempts': 0,
+         'evidence_tier_attempted': 1},
+    ])
+    env_c002 = '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'
+    scenarios.append(('devreason', 'agent-reasoning',
+                      lambda ws=ws: wb.pre_check(_budget_payload(prompt=env_c002), _paths_for(ws))))
 
     # 12 agenttype — #310: claim statement recommends ghidra-light but the
     # dispatch sends kunglao-worker with no `agent-reasoning:` (specialist-first
@@ -950,8 +965,8 @@ def test_main_stdin_reject_emits_context_json(tmp_path):
         'hook_event_name': 'PreToolUse',
         'cwd': str(ws),
         'tool_input': {'name': 'w-test',
-                       'description': '[T1 tools=grep] claim C-001 strings',
-                       'prompt': 'facts-snapshot: 1 facts'},
+                       'description': '',
+                       'prompt': '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'},
     }
     r = subprocess.run(
         [sys.executable, str(Path(__file__).resolve().parents[1] / 'hooks'
@@ -1101,8 +1116,7 @@ def test_pre_check_mcp_wildcard_covering_host_channels_rejects(tmp_path, capsys)
     """(c) at the hook level: the wildcard form mcp__frida__* is rejected
     by the hostchan gate (covers spawn/attach)."""
     ws = _healthy_ws(tmp_path)
-    payload = _budget_payload(
-        desc='[T3 tools=mcp__frida__*] claim C-001 strings')
+    payload = _budget_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 3, "tools": ["mcp__frida__*"], "agent": "w-test"}}\nfacts-snapshot: 1 facts')
     rc = pre_check(payload, _paths_for(ws))
     assert rc == 2
     assert 'REJECT hostchan' in capsys.readouterr().err
