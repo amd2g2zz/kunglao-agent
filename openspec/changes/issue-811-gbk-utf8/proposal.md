@@ -19,3 +19,11 @@ Windows locale（GBK/cp936）与仓库 UTF-8 内容的编码假设冲突是 v0.1
 - 受益：全部 Windows 用户的文件 IO/subprocess 解码确定性
 - 风险：批量修改可能改变成功路径行为 → 逐块 py_compile + 全量 pytest 兜底
 - 边界：tests/ 不在扫描面（tmp 夹具为主）；CI 的 GBK-locale job（P2 CI 面）留后续 PR
+
+## 范围变更记录（coordinator 纠正, 2026-09-01）
+
+Issue 评论区 B6 CONFIRMED 审计实证并入本卡（优先级最高）：根 conftest.py 与
+tests/conftest.py 定义同 5 个夹具，根副本 golden_master 裸 text=True 是活体
+GBK 陷阱（删 tests/conftest.py 的方案已被仲裁否决）。已按仲裁执行：根
+conftest.py 删除 5 个被遮蔽夹具定义（保留 #369 锁 + #770 守卫），全部夹具
+单源于 tests/conftest.py（其 golden_master 带 #317 errors="replace" 修复）。
