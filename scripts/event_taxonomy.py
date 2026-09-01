@@ -165,6 +165,7 @@ EMIT_ACTIONS = [
     "ask_back",
     "bet_filed",          # #711 falsifiable-bet filing face (think seat)
     "bet_settled",        # #711 bet settlement (confirmed/refuted) face
+    "capability_dormant",  # #600 one-time dormant WARN face: the capability tooth is a no-op while no claim carries obstacle_for
     "capability_reject",
     "capability_switch",
     "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face

@@ -92,6 +92,13 @@ HOOK_STATE = Path(".hook_state.json")
 # (v0.1.3 adjudication — REJECT is pre-dispatch, worker attribution is
 # structurally unreliable).
 GATE_REJECTIONS_LOG = Path("runs/gate-rejections.jsonl")
+# #600: one-time dormant-WARN sentinel for the capability-card tooth
+# (②(a)). The gate runs as a fresh process per dispatch, so the
+# "exactly once" guarantee must live on disk (same discipline as the
+# runs/.retry-counter.yaml state file). Written AFTER the WARN lands;
+# a failed write only degrades to a repeated WARN later — never a
+# blocked dispatch and never a silent gate.
+DORMANT_SENTINEL = Path("runs/.capability-dormant-warned")
 # Backward-compat re-export: imports of `DISPATCH_RE` from this module keep
 # working. The real parser is hooks/lib_kunglao.py:parse_dispatch which
 # handles v0 (regex) + v1 (JSON).
@@ -481,6 +488,73 @@ def _mcp_prefix_gate(prompt_text: str) -> int | None:
     return None
 
 
+def _emit_capability_dormant(ws: Path, claim_id: str) -> None:
+    """#600: the capability-card tooth (②(a)) arms from the OPTIONAL
+    `obstacle_for` field (#497/#495 trajectory-1 promotion writes it).
+    When NO claim in the register carries it, capability_switch_violation()
+    returns None for every dispatch — the whole #496 capability-switch
+    enforcement is a silent no-op (same class as #594/#596: an
+    operator-absent field makes a gate mute). The fix is observability,
+    NOT a required field (that would break every greenfield workspace):
+    emit a ONE-TIME capability_dormant WARN — stderr + additionalContext
+    + unified-log trace, the same shape as the #772 redo_leak_warn face
+    — so the operator sees the arming state and how to arm it
+    (obstacle_for is the arming field; #495 promotion writes it).
+
+    Fail-open: an unreadable register guesses nothing; an empty register
+    (no claims) has no enforcement expectation and stays silent; a failed
+    sentinel write only degrades to a repeated WARN on a later dispatch.
+    """
+    try:
+        reg = yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+        claims = reg.get("claims") or []
+    except Exception:  # noqa: BLE001 — unreadable register -> guess nothing
+        return
+    if not claims or any(
+            isinstance(c, dict) and c.get("obstacle_for")
+            for c in claims):
+        return
+    if (ws / DORMANT_SENTINEL).exists():
+        return
+    print(
+        f"dispatch_gate: WARN capability-dormant (#600) — no claim in "
+        f"claim-register.yaml carries `obstacle_for`, so the #496 "
+        f"capability-switch tooth (②(a)) is a silent no-op. Capability "
+        f"cards arm from the obstacle_for parent edge; promote obstacle "
+        f"claims (#495 failure-analysis promotion) to arm the gate.",
+        file=sys.stderr, flush=True,
+    )
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": (
+                "dispatch_gate: WARN capability-dormant (#600). The #496 "
+                "capability-switch gate is DORMANT: no claim in "
+                "claim-register.yaml carries `obstacle_for` (the arming "
+                "field). Capability cards only constrain tool choice via "
+                "the obstacle_for parent edge; promote obstacle claims "
+                "(#495 failure-analysis promotion) to arm the gate."
+            ),
+        },
+    }, ensure_ascii=False), flush=True)
+    _emit_trace(ws, "capability_dormant", claim_id,
+                f"reason=no_obstacle_for; claims={len(claims)}; #496 "
+                f"capability-switch tooth is dormant (arming field "
+                f"obstacle_for absent)")
+    try:
+        sentinel = ws / DORMANT_SENTINEL
+        sentinel.parent.mkdir(parents=True, exist_ok=True)
+        sentinel.write_text(
+            datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+            .replace("+00:00", "Z")
+            + " #600 capability_dormant WARN emitted once\n",
+            encoding="utf-8")
+    except OSError as exc:
+        print(f"dispatch_gate: dormant sentinel write failed ({exc!r})",
+              file=sys.stderr, flush=True)
+
+
 def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
     """②(a) #496: capability card — a validated capability in hand (the
     #495 artifact, read via priority_ratio.EvidenceView) constrains tool
@@ -489,7 +563,15 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str) -> int | None:
     switch passes and leaves a capability_switch trace. The card scope is
     the target claim PLUS its obstacle_for parent — the trajectory-1 pivot
     onto the promoted obstacle claim stays covered. FAIL_OPEN when the
-    scorer, the register or the card is unavailable."""
+    scorer, the register or the card is unavailable.
+
+    #600: arming observability — the tooth above is conditional on the
+    OPTIONAL obstacle_for field; with none anywhere in the register it
+    silently no-ops. The guard entrance emits the ONE-TIME dormant
+    WARN (sentinel runs/.capability-dormant-warned) BEFORE any check
+    so the arming state is visible even on the fail-open faces.
+    """
+    _emit_capability_dormant(ws, claim_id)
     try:
         with scripts_on_path():  # #671 scoped membership
             import priority_ratio as pr

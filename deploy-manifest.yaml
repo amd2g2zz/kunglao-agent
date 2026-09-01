@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 15d475be3411ca5b833b260933830ab66c32d1a64e95a01a239ddfb9882add33
+    sha256: 7f3457fca0fd830fd12b9989f3180ddd801b9c02f79e5dcae8fca66537168c77
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -299,7 +299,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 507cd4a9acf502d7d6d075dce4fc703fd52b64b8f73e8aa6117d9c3f046ee0c1
+    sha256: 7a48ec2041d4dea4eac2b168f45945f0e866b5027c0a3a8ce655c6aa3438831b
   - src: scripts/explore_gate.py
     dest: .claude/scripts/explore_gate.py
     kind: scaffold
