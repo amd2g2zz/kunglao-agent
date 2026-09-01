@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 5e10a5a701b96c074336caa2278e945e309f92c9cd2b2e65fdb8b3888326cd26
+    sha256: d597acc8f76b3a86f617c30373de58113d551c8194413822db3dad3ea9f40c05
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -152,6 +152,10 @@ files:
     dest: .claude/scripts/backtrack_gate.py
     kind: scaffold
     sha256: a4a8a70949e67e8d06a2a6ac6cb9aa82f2e83f1d12df58eaae8b306a1b9c0e3e
+  - src: scripts/backtrack_loop.py
+    dest: .claude/scripts/backtrack_loop.py
+    kind: scaffold
+    sha256: 80cb65f978ccbb35c4e07263dc6a35ee024dfcc329437b65ee31a7bdb5e54da7
   - src: scripts/bench_analyze.py
     dest: .claude/scripts/bench_analyze.py
     kind: scaffold
@@ -307,7 +311,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 83a5a960d2e88e56aafab77111c07a3f6ad12b3cb1a4d9b55894f4e4756ae58a
+    sha256: 6b527ce7213e421c5571c7a321e9b6913204925426acb490b0b197851b8a7881
   - src: scripts/explore_gate.py
     dest: .claude/scripts/explore_gate.py
     kind: scaffold
@@ -347,7 +351,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: f3f7224bc23dbba350c9925a11dfd721e977cb4e8aeaf030bdf2573c571d5ba1
+    sha256: 7f23ddba4e481b733e5d50429fa9404f0736cd4eff5c3b1331d4fdc567eb94a2
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -447,7 +451,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: d22afc01b7f892f379617348ccd63e09ece5bd589779eae899dffe8117e72ca3
+    sha256: b5a2bb8e63cc8f346839038753a82f2a76c2baf0093bc87c6b1b409a34f0422c
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -619,7 +623,7 @@ files:
   - src: scripts/register_proven_gate.py
     dest: .claude/scripts/register_proven_gate.py
     kind: scaffold
-    sha256: 4854702ce39dea2271543a922cee4795b59757274d5b6b61d2111b7772c2bffd
+    sha256: 51a8e65d0af96eea2adb27f4bbadaa38cd397ebb26a59f8b1fe6ed902df10dc8
   - src: scripts/release_check_selfcheck.py
     dest: .claude/scripts/release_check_selfcheck.py
     kind: scaffold
@@ -691,7 +695,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: 9b77599fe35ca43ca52641f4c7f19c6932cfdfd33d59c2c84af22db075f7205a
+    sha256: 79b56b442876af6f524cf92824a3c5fba7205d95c9f8144df53319d7ca4cf518
   - src: scripts/strategy_metrics.py
     dest: .claude/scripts/strategy_metrics.py
     kind: scaffold
@@ -755,7 +759,7 @@ files:
   - src: scripts/tuition_curve.py
     dest: .claude/scripts/tuition_curve.py
     kind: scaffold
-    sha256: e6243f96edfda6758bc1556ad28d41f983c136cbe7cd9d2862bceda0e4e34705
+    sha256: 18e029aff07a6a360e1e543c5e289023ece7cb2ca82edea509b2dcc40bd4d4da
   - src: scripts/tuition_refit.py
     dest: .claude/scripts/tuition_refit.py
     kind: scaffold
@@ -1227,7 +1231,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 16363b5c964a9f9aa721cd2edf8276138c7e93db48fdb2e8c65f2e244e7a6ab0
+    sha256: 1750efe2963af965892548f72d3b18000d78045376db515d5810f48e80e30bc3
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

@@ -70,6 +70,7 @@ ACTOR_RE = re.compile(
 # every NEW literal vocabulary-or-red; legacy names stop growing.
 LEGACY_ACTORS = frozenset({
     "anomaly_detector", "ask_for_direction", "ask_for_direction_gate",
+    "backtrack_loop",  # #882 retrospective-loop host (retro_report/retro_policy faces)
     "bash_fact_guard", "blind_gate", "carrier_consistency", "cockpit_summary",
     "complete_teardown", "completion_gate", "convergence_check",
     "decision_pending", "digest_build", "dispatch_context", "dual_gate",

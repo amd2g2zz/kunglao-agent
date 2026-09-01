@@ -211,6 +211,8 @@ EMIT_ACTIONS = [
     "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face
+    "retro_policy",       # #882 policy retro window face (heartbeat_tick advisory step)
+    "retro_report",       # #882 settlement retro report face (runs/<ts>-retro-<claim>.md)
     "rho_checkpoint",     # #823 P2 N-arm V/D/ETA shadow signal face
     "rho_pair",          # #823-P2 (rho,z) checkpoint pairing face
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
