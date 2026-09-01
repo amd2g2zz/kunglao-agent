@@ -83,6 +83,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `active_intervention.py` | stuck-worker intervention decisions | lib(1), tests |
 | `ask_for_direction_gate.py` | orchestrator ask-back-pattern gate | lib(1), tests |
 | `backtrack_gate.py` | stuck worker backtrack decision | hooks, lib(1), tests |
+| `backtrack_loop.py` | 回溯环宿主 (#882) — 三触点（dispatch 微回溯 O(1) 前车之鉴块 / register_proven_gate 结算回放 runs/<ts>-retro-<claim>.md / heartbeat_tick 策略回溯门控）+ 四产出（结算行消费 / 链回放 / 模式报告+hypothesis_store 假设种子 / 修订提案议程 retro-agenda-*.md，**不自动执行**）+ 座舱三字段（backtrack_lag/unattributed_rate/pending_proposals → cockpit_summary → statusline 快照）；kunglao-decide 经 --policy 挂入复活 | heartbeat_tick, hooks/dispatch_gate, scripts/register_proven_gate, statusline_snapshot, tuition_curve, tests |
 | `blind_gate.py` | blind-verification gate on promotion | hooks, lib(1), tests |
 | `calibration_gate.py` | calibration/confidence gate | tests |
 | `completion_gate.py` | completion transaction gate | hooks, tests |
