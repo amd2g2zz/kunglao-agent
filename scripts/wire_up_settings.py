@@ -81,6 +81,32 @@ WIRE_UP_HOOK_FILES = frozenset({
 DOUBLE_REGISTERED_HOOKS = frozenset({"worker_budget.py"})
 
 
+# #810 (audit B5 CONFIRMED): canonical Claude Code hook EVENT keys. The
+# deployed writer historically promoted matchers ("Agent"/"Bash") into the
+# key slot; env_check scanned only real events (blind) while both selfchecks
+# scanned agnostically (PASS) — three checkers, three answers. The shape
+# contract single-source lives here: the writer emits it, all three checkers
+# assert it.
+HOOK_EVENTS = frozenset({
+    "PreToolUse", "PostToolUse", "Stop", "UserPromptSubmit",
+    "Notification", "PreCompact", "SessionStart", "SessionEnd",
+    "SubagentStop",
+})
+
+
+def registration_shape_issues(settings: dict) -> list:
+    """#810 shape contract: every hooks-map key must be a canonical event
+    name. Returns human-readable issue lines (empty = the written shape is
+    readable by every standard event-keyed checker)."""
+    issues: list = []
+    for key in ((settings or {}).get("hooks") or {}):
+        if key not in HOOK_EVENTS:
+            issues.append(
+                f"non-event key {key!r} in hooks map (matcher promoted "
+                f"into the event-key slot is the #810 bug shape)")
+    return issues
+
+
 # #410: THE deployment-target registry — where kunglao hooks are written and
 # read. --wire-up writes the WORKSPACE-level file (the #258 PROJECT-scoped
 # target), while the external_kicker's dead-session recovery reads/re-writes
