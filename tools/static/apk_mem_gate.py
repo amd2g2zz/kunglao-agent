@@ -19,6 +19,13 @@ never raises. Operators can audit / retry with apk_mem_override.
 Spec: openspec/changes/issue-670-mem-gated-jadx/specs/mem-gated-jadx/spec.md
 """
 from __future__ import annotations
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+ensure_utf8_stdout()
+
 
 import argparse
 import json
@@ -28,11 +35,6 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass
 
 from typing import Any
 

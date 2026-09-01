@@ -60,16 +60,19 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import NoReturn
 
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass  # captured stream without reconfigure (pytest capsys)
 
 _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
 import run_ghidra_postscript as rp  # noqa: E402
+
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+ensure_utf8_stdout()
 from job_store import (  # noqa: E402 — shared substrate, re-exported for callers
     ACTIVE_STATES,
     ALLOWED_TRANSITIONS,

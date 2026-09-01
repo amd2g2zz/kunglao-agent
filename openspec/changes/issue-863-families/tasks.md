@@ -1,0 +1,5 @@
+- [x] Family A: stdio 单体 + 34 CLI 委托转换 + 执法测试 delegation 重写
+- [ ] Family B: loader util + 20 份前导委托
+- [ ] Family C: _resolve_ws manifest-aware 单源（闭合 #865 主体）
+- [ ] Family D: toolchain `_which_items()` helper
+- [ ] 全量质量门 + CI
