@@ -360,11 +360,11 @@ def _min_paths(ws: Path) -> dict:
     }
 
 
-def _dispatch_payload(prompt: str) -> dict:
+def _dispatch_payload(prompt: str, description: str = '') -> dict:
     return {
         'tool_input': {
             'name': 'w-test',
-            'description': '[T1 tools=grep] claim C-001 strings',
+            'description': description,
             'prompt': prompt,
         },
     }
@@ -651,8 +651,12 @@ def test_pre_check_rejects_dispatch_matching_tool_without_marker(tmp_path, capsy
     (ws / 'runs' / 'plan-C001-crypto.md').write_text(
         'goal: decode the crypto layer\nsteps: try known algorithms\nfallback: brute force\n',
         encoding='utf-8')
-    payload = _dispatch_payload('facts-snapshot: 1 facts')
-    payload['tool_input']['description'] = '[T1 tools=grep] claim C-001 decode the crypto layer'
+    payload = _dispatch_payload(
+        '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
+        '"tools": ["grep"], "agent": "w-test"}}
+'
+        'facts-snapshot: 1 facts
+decode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     captured = capsys.readouterr()
     assert rc == 2
@@ -667,8 +671,13 @@ def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
     (ws / 'runs' / 'plan-C001-crypto.md').write_text(
         'goal: decode the crypto layer\nsteps: try crypto-tool xor-add\nfallback: brute force\n',
         encoding='utf-8')
-    payload = _dispatch_payload('facts-snapshot: 1 facts; tool-catalog: crypto-tool')
-    payload['tool_input']['description'] = '[T1 tools=grep] claim C-001 decode the crypto layer'
+    payload = _dispatch_payload(
+        '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
+        '"tools": ["grep"], "agent": "w-test"}}
+'
+        'facts-snapshot: 1 facts
+tool-catalog: crypto-tool
+decode the crypto layer')
     rc = pre_check(payload, _min_paths(ws))
     assert rc == 0, capsys.readouterr().err
 
@@ -703,7 +712,7 @@ REJECT_FIX_KEYWORDS = {
     'toolfirst': 'tool-catalog',
     'agenttype': 'agent-reasoning',
     'snapshot': 'facts-snapshot',
-    'devreason': 'reasoning',
+    'devreason': 'agent-reasoning',
     'envfresh': 'env_repair_l1',   # #475: L1 repair script must be named
 }
 
@@ -768,8 +777,12 @@ def _paths_for(ws: Path) -> dict:
     }
 
 
-def _budget_payload(prompt='facts-snapshot: 1 facts',
-                    desc='[T1 tools=grep] claim C-001 strings') -> dict:
+def _budget_payload(prompt=None, desc=''):
+    env = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
+           '"tools": ["grep"], "agent": "w-test"}}')
+    if prompt is None:
+        prompt = env + '
+facts-snapshot: 1 facts'
     return {'tool_input': {'name': 'w-test', 'description': desc, 'prompt': prompt}}
 
 
@@ -826,7 +839,8 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     _write_task_spec(ws / 'task_spec.yaml', {'vm_detonation': 'forbidden'})
     scenarios.append(('tools', 'vm_detonation',
                       lambda ws=ws: wb.pre_check(
-                          _budget_payload(desc='[T1 tools=vmr-shell] claim C-001'),
+                          _budget_payload(prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["vmr-shell"], "agent": "w-test"}}
+facts-snapshot: 1 facts'),
                           _paths_for(ws))))
 
     # 4 hostchan — host-channel x64dbg tool (VM-only policy)
@@ -851,7 +865,8 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
          'evidence_tier_attempted': 0}])
     scenarios.append(('tier', 'evidence_tier',
                       lambda ws=ws: wb.pre_check(
-                          _budget_payload(desc='[T2 tools=grep] claim C-001 strings'),
+                          _budget_payload(prompt='{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 2, "tools": ["grep"], "agent": "w-test"}}
+facts-snapshot: 1 facts'),
                           _paths_for(ws))))
 
     # 7 selfcap — self-imposed time cap with no authorised budget
@@ -894,7 +909,7 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
         {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
          'evidence_tier_attempted': 1,
          'statement': 'decompile and disassemble the main function'}])
-    payload = _budget_payload(desc='[T1 tools=grep] claim C-001 do the task')
+    payload = _budget_payload()
     payload['tool_input']['name'] = 'kunglao-worker'
     scenarios.append(('agenttype', 'agent-reasoning',
                       lambda ws=ws: wb.pre_check(payload, _paths_for(ws))))
