@@ -66,6 +66,9 @@ D_SLOPE_NOMINAL = 0.05                             # healthy settle rate / tick
 FLASH_EVERY_N_TICKS = 10                           # periodic flash cadence
 MILESTONES = (0.25, 0.50, 0.75)
 LEDGER_TAIL_BYTES = 65_536                         # bounded O(64KB) tail read
+# #882 probe thresholds (the cockpit trio's WARN lines)
+BACKTRACK_LAG_WARN = 8                             # settlements since retro
+UNATTRIBUTED_RATE_WARN = 0.30                      # unattributed fraction
 
 # Color semantics are COMPUTED Python-side (kunglao logic stays out of Node);
 # Node only interpolates brightness on its render clock (breathing) and ramps
@@ -133,17 +136,26 @@ PROBES: list[dict] = [
      "severity": "WARN", "short_code": "[audit]", "enabled": True,
      "detail": "audit-grade artifact age (runs/.hooks-selfcheck.json) — "
                "displayed as age, never presented as real-time"},
-    # ---- slots: declared now, wired when their data sources land ----
+    # ---- #882: the two slots go live (data sources landed #879/#882) ----
     {"id": "unattributed_rate", "dimension": "moving",
-     "probe": None, "threshold": None, "unit": "tick",
-     "staleness_budget": None, "severity": "WARN", "short_code": "[stall]",
-     "enabled": False,
-     "detail": "slot — #879 trace identity lands the unattributed-rate source"},
+     "probe": "probe_unattributed_rate", "threshold": UNATTRIBUTED_RATE_WARN,
+     "unit": "tick", "staleness_budget": "1 tick",
+     "severity": "WARN", "short_code": "[stall]", "enabled": True,
+     "detail": "#879 trace identity: ledger rows with null trace_id "
+               "(kunglao_log.unattributed_rate)"},
     {"id": "backtrack_lag", "dimension": "moving",
-     "probe": None, "threshold": None, "unit": "tick",
-     "staleness_budget": None, "severity": "WARN", "short_code": "[stall]",
-     "enabled": False,
-     "detail": "slot — #882 backtrack loop lands the lag source"},
+     "probe": "probe_backtrack_lag", "threshold": BACKTRACK_LAG_WARN,
+     "unit": "tick", "staleness_budget": "1 tick",
+     "severity": "WARN", "short_code": "[stall]", "enabled": True,
+     "detail": "#882 backtrack loop: settlements since the last policy "
+               "retro (runs/.retro-state.json)"},
+    # ---- #878: the scheduler registry's own health line ------------------
+    {"id": "mechanism_health", "dimension": "moving",
+     "probe": "probe_mechanism_health", "threshold": None,
+     "unit": "tick", "staleness_budget": "1 tick",
+     "severity": "WARN", "short_code": "[mech]", "enabled": True,
+     "detail": "#878 scheduler registry: any mechanism whose last run "
+               "failed (last_rc not in {0, null}) — runs/.mechanisms-state.json"},
 ]
 
 
@@ -301,6 +313,56 @@ def probe_audit_age(ws: Path, entry: dict) -> dict:
                        f"audit stale {int(age_min)}min > "
                        f"{entry['threshold']}min")
     return _detail(entry, True, f"audit age {int(age_min)}min")
+
+
+def probe_unattributed_rate(ws: Path, entry: dict) -> dict:
+    """#882 moving 探针（#879 数据源上线）：未归因率 = 无 trace_id 行占比。
+    数据源 kunglao_log.unattributed_rate；读失败 fail-open（ok）。"""
+    rate = None
+    try:
+        import kunglao_log
+        rate = float(kunglao_log.unattributed_rate(ws).get("rate") or 0.0)
+    except Exception:  # noqa: BLE001 — a probe never kills the tick
+        return _detail(entry, True, "unattributed rate unavailable (fail-open)")
+    threshold = entry["threshold"] or UNATTRIBUTED_RATE_WARN
+    if rate > threshold:
+        return _detail(entry, False,
+                       f"unattributed_rate {rate:.2f} > {threshold:.2f} "
+                       "(legacy rows outrun the trace chain)")
+    return _detail(entry, True, f"unattributed_rate {rate:.2f} ok")
+
+
+def probe_backtrack_lag(ws: Path, entry: dict) -> dict:
+    """#882 moving 探针：回溯滞后 = 自上次策略回溯以来的结算数
+    (runs/.retro-state.json，backtrack_loop 维护)。读失败 fail-open。"""
+    try:
+        from backtrack_loop import lag
+        l = lag(ws)
+    except Exception:  # noqa: BLE001 — a probe never kills the tick
+        return _detail(entry, True, "backtrack lag unavailable (fail-open)")
+    threshold = entry["threshold"] or BACKTRACK_LAG_WARN
+    if l > threshold:
+        return _detail(entry, False,
+                       f"backtrack lag {l} > {threshold} settlements "
+                       "since the last policy retro")
+    return _detail(entry, True, f"backtrack lag {l} ok")
+
+
+def probe_mechanism_health(ws: Path, entry: dict) -> dict:
+    """#878 moving probe: scheduler-registered mechanisms must run clean —
+    any last_rc outside {0, null} flags the failing mechanism by name
+    (见红即知看哪个文件: runs/.mechanisms-state.json). Fail-open like every
+    probe: a missing/unreadable state file is "no fault evidence", not down."""
+    try:
+        from mechanism_scheduler import mechanisms_health
+        bad = mechanisms_health(ws)
+    except Exception as exc:  # noqa: BLE001 — a probe never kills the tick
+        return _detail(entry, True,
+                       f"mechanism health unavailable (fail-open): {exc}")
+    if bad:
+        return _detail(entry, False,
+                       "mechanism failure(s): " + ", ".join(bad[:4]))
+    return _detail(entry, True, "all scheduler mechanisms clean")
 
 
 def _make_run_probe(registry: list[dict]):
@@ -532,6 +594,24 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
                           failed_claims=failed_claims, pq=pq, toss=activity["toss"],
                           stall_ok=stall_ok)
 
+    # #882: the cockpit trio rides the snapshot (Node renders the section
+    # verbatim — zero kunglao logic client-side). Fail-open to zeros.
+    try:
+        from backtrack_loop import cockpit_backtrack
+        backtrack = cockpit_backtrack(ws)
+    except Exception:  # noqa: BLE001 — 快照永不打断 tick
+        backtrack = {"backtrack_lag": 0, "unattributed_rate": 0.0,
+                     "pending_proposals": 0}
+
+    # #878: mechanisms health section — per registered mechanism
+    # {last_run, next_eligible, drops}. Fail-open like the trio above: the
+    # registry face degrades to an empty section, never breaks the snapshot.
+    try:
+        from mechanism_scheduler import mechanisms_view
+        mech_rows = mechanisms_view(ws)
+    except Exception:  # noqa: BLE001 — 快照永不打断 tick
+        mech_rows = []
+
     elapsed = {"ticks": pq["elapsed_ticks"], "started_ts": pq["started_ts"]}
     tick = int(prev.get("tick", 0)) + 1 if prev else max(1, pq["elapsed_ticks"])
     state_since = now_iso = utc_now()
@@ -572,6 +652,8 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         "elapsed": elapsed,
         "activity": {"events_recent": activity["events_recent"],
                      "spark_count": activity["spark_count"]},
+        "backtrack": backtrack,
+        "mechanisms": mech_rows,
         "flash": flash,
         "audit": {"age_min": audit_age_min,
                   "source": "runs/.hooks-selfcheck.json"},

@@ -328,6 +328,17 @@ def emit_settlements(ws, new_text: str, old_text: str | None = None) -> int:
             count += 1
         except Exception:  # noqa: BLE001 — logging never breaks the gate
             pass
+        # #882 settlement retro: index the settlement (micro-retro O(1) read
+        # face + backlog lag) and replay the claim's trace subgraph locally
+        # (runs/<ts>-retro-<claim>.md). Fail-open, never blocks settlement —
+        # same posture as the lesson burn below.
+        try:
+            from backtrack_loop import record_settlement, settlement_retro
+            record_settlement(ws, cid, to, tools=tools, outcome=to,
+                              trace_id=trace_id)
+            settlement_retro(ws, cid, to=to, frm=frm, trace_id=trace_id)
+        except Exception:  # noqa: BLE001 — backtrack never blocks settlement
+            pass
         if to in NEGATIVE_SETTLEMENTS:
             _burn_lesson_lineage(ws, cid)
     return count

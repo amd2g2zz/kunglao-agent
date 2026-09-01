@@ -136,17 +136,18 @@ class TestProbeRegistry:
         for pid in ("heartbeat_mtime", "ledger_tail",
                     "hooks_declared_vs_disk", "stall_fingerprint"):
             assert ids.get(pid, {}).get("enabled") is True, pid
-        # slots declared but inert until #879/#882 land
+        # slots went LIVE when their data sources landed (#879 -> rate,
+        # #882 -> lag); both are guarded probes now (see test_backtrack_loop_882)
         for pid in ("unattributed_rate", "backtrack_lag"):
-            assert pid in ids, f"slot {pid} missing from registry"
-            assert ids[pid].get("enabled") is False
+            assert ids.get(pid, {}).get("enabled") is True, pid
 
-    def test_slots_never_execute(self, tmp_path):
+    def test_slots_execute_with_sources(self, tmp_path):
+        """(#882 evolution of test_slots_never_execute): the former inert
+        slots run and report like any guarded probe."""
         ws = _make_ws(tmp_path)
         snap = sls.build_snapshot(ws)
         ran = {d["id"] for d in snap["probe_detail"]}
-        assert "unattributed_rate" not in ran
-        assert "backtrack_lag" not in ran
+        assert {"unattributed_rate", "backtrack_lag"} <= ran
 
     def test_new_probe_declaration_auto_wires(self, tmp_path, monkeypatch):
         """注册表驱动：声明即接入——新增探针条目无需改 writer 代码即出现在快照。"""

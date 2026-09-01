@@ -196,6 +196,8 @@ EMIT_ACTIONS = [
     "lesson_match",
     "lesson_stage_transition",  # #525 lessons nursery draft → active
     "mcp_scaffold_refresh",  # #755 A4 .mcp.json init-parity backfill face
+    "mech_reject",        # #878 scheduler registry schema-gate REJECT face (fail-closed, nothing ran)
+    "mech_run",           # #878 one scheduler pass: ran/skipped/dropped mechanisms + event classes
     "mission_snapshot",   # #823-P1 mission ledger coverage/value checkpoint
     "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",
@@ -211,6 +213,8 @@ EMIT_ACTIONS = [
     "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face
+    "retro_policy",       # #882 policy retro window face (heartbeat_tick advisory step)
+    "retro_report",       # #882 settlement retro report face (runs/<ts>-retro-<claim>.md)
     "rho_checkpoint",     # #823 P2 N-arm V/D/ETA shadow signal face
     "rho_pair",          # #823-P2 (rho,z) checkpoint pairing face
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims

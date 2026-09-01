@@ -151,14 +151,22 @@ def cockpit_summary(ws):
     eta = ((total_w - v) / slope) if slope > 0 else None
     recs = missions_from_ledger(ws)
     cs_cost = cost_state(ws)
-    return {"v": v, "d_slope": round(slope, 6),
-            "eta_checkpoints": eta, "total_weight": total_w,
-            "answered": sum(1 for p in pqs if p.get("state") == "answered"),
-            "blocked": sum(1 for p in pqs if p.get("state") == "blocked"),
-            "unattempted": sum(1 for p in pqs
-                               if p.get("state") == "unattempted"),
-            "cost": cs_cost["latest"],
-            "burn": {"spent": cs_cost["spent"],
-                     "remaining": cs_cost["remaining"]},
-            "tuition": {"got_cheaper": got_cheaper(recs, "default"),
-                        "n_missions": len(recs)}}
+    out = {"v": v, "d_slope": round(slope, 6),
+           "eta_checkpoints": eta, "total_weight": total_w,
+           "answered": sum(1 for p in pqs if p.get("state") == "answered"),
+           "blocked": sum(1 for p in pqs if p.get("state") == "blocked"),
+           "unattempted": sum(1 for p in pqs
+                              if p.get("state") == "unattempted"),
+           "cost": cs_cost["latest"],
+           "burn": {"spent": cs_cost["spent"],
+                    "remaining": cs_cost["remaining"]},
+           "tuition": {"got_cheaper": got_cheaper(recs, "default"),
+                       "n_missions": len(recs)}}
+    # #882: cockpit trio (回溯滞后 / 未归因率 / 提案待审数). Additive +
+    # fail-open: an absent backtrack state just ships zeros.
+    try:
+        from backtrack_loop import cockpit_backtrack
+        out["backtrack"] = cockpit_backtrack(ws)
+    except Exception:  # noqa: BLE001 — cockpit sampling never raises
+        pass
+    return out

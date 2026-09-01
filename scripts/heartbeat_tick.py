@@ -26,17 +26,19 @@ Steps executed (idempotent, all safe to re-run):
   8. oracle-check     — task-oracle.yaml registered (#473 gate power-on;
                         report field oracle_registered + actionable line
                         when missing; report-only, never fails the tick)
-  9. env-probe        — liveness-subset env snapshot → runs/env-state.json
-                        (#475: env freshness bound to the tick by
-                        construction — the only mechanically-enforced
-                        periodic; probe failure never fails the tick)
-  10. think-seat      — #759 H1: a WAITING period (register present, ranking
-                        yields zero dispatchable actions) writes
-                        runs/.think-<ts>.md and its path REPLACES the empty
-                        action_taken (#711 E1: idle ≠ EMPTY — cognition is an
-                        action). Advisory like the other watchers: rc never
-                        enters the alert weights; unparseable seat output is
-                        treated as seat-unavailable (contract unchanged).
+  9. mechanisms       — #878: registry-driven scheduling pass. The tick is
+                        the ONLY time host; every mechanism declared in
+                        scripts/mechanisms.yaml (trigger/cost_class/
+                        cockpit_signal schema-gated, 不入册不许跑) is
+                        scheduled here — cheap gates first, expensive
+                        mechanisms queued, single-pass time cap. Legacy
+                        report keys (env_state/monitor/feedback/
+                        verify_watch/rollup_sweep/think/backtrack) are
+                        back-filled from the scheduler results; the full
+                        face rides report["mechanisms"]. Think-seat
+                        contract unchanged: a waiting seat REPLACES the
+                        empty action_taken (#711 E1). Whole pass is
+                        advisory — never weighed into rc/alert.
 
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
 1 = heartbeat stale, project hooks missing, or selfcheck failed (LLM must act;
@@ -193,6 +195,32 @@ def state_fingerprint(ws: Path) -> str:
     return h.hexdigest()
 
 
+def _run_mechanisms(ws: Path, runner) -> dict:
+    """#878 mechanism-scheduler face: one registry-driven scheduling pass
+    (mechanisms.yaml, schema-gated + fail-closed on a broken registry),
+    with the legacy tick-report keys back-filled from the scheduler results.
+
+    The migration moves the TRIGGER, not the report contract: the loop
+    prompt and the per-step wiring tests still consume
+    env_state / monitor / feedback / verify_watch / rollup_sweep / think /
+    backtrack verbatim, and `runner` stays THIS module's execution seam so
+    per-script wiring keeps its monkeypatch point. Returns
+    {"mechanisms": <compact face>, <legacy_key>: <result>, ...}."""
+    import mechanism_scheduler as ms
+    sched = ms.run_due(ws, runner=runner)
+    payload = {"mechanisms": {
+        "ts": sched["ts"], "ran": sched["ran"], "skipped": sched["skipped"],
+        "dropped": sched["dropped"], "events_seen": sched["events_seen"],
+        "budget_s": sched["budget_s"], "elapsed_ms": sched["elapsed_ms"],
+        "error": sched["error"],
+        "mechanisms": sched["mechanisms"]}}
+    for name, key in ms.LEGACY_REPORT_KEYS.items():
+        res = sched["results"].get(name)
+        if res is not None:
+            payload[key] = dict(res)
+    return payload
+
+
 def main(argv: list[str] | None = None) -> int:
     """argv: explicit CLI args (defaults to sys.argv[1:]) — lets the kunglao.py
     router pass the caller's workspace instead of the router's own argv
@@ -230,51 +258,33 @@ def main(argv: list[str] | None = None) -> int:
     report["oracle_registered"] = _oracle_registered(ws)
     if not report["oracle_registered"]:
         print(ORACLE_MISSING_LINE)
-    # step 9 — env-probe (#475): liveness-subset snapshot into
-    # runs/env-state.json (check_env_fresh / env_drift_watch consume it).
-    # The subprocess rc is advisory-only: env drift is surfaced by the
-    # monitor + the fresh gate, and a probe crash must never fail the tick
-    # (env_state_probe itself exits 0 on probe failure; rc!=0 here means
-    # the script itself crashed — recorded, not fatal).
-    report["env_state"] = run("env_state_probe.py", ws)
-
-    # #620 Gap C: the monitor finally has a runtime consumer. #88 freeze:
-    # BACKGROUND advisory — recorded, never weighed into rc/alert (a crashed
-    # monitor must never fail the tick; its findings surface via the report).
-    report["monitor"] = run("kunglao-monitor.py", ws, "--json")
-
-    # #629: feedback.check_stale gets its mechanical caller (was standalone
-    # since #237 planned it). Same advisory posture as the monitor: recorded,
-    # never weighed into rc/alert.
-    report["feedback"] = run("feedback.py", ws, "--check-stale")
-
-    # #718 P3: verify-stamp disk-vs-stream reconciliation. Advisory like
-    # the monitor — an UNWITNESSED transition lands in the report + the
-    # event stream (verify_status_change), never in rc/alert (a watch
-    # finding must not fail the tick).
-    report["verify_watch"] = run("verify_status_watch.py", ws, "--json")
-
-    # #762 K1a: mechanical notes-closure sweep — every terminal claim without
-    # its ledger rollup row gets the write loop now (outcomes -> lessons ->
-    # notes-due queue -> checkpoint). This is THE mechanical trigger that
-    # replaces the SKILL-prose-only contract ("claim terminal triggers rollup"
-    # had zero call sites enforcing it). Advisory like monitor/feedback/
-    # verify_watch: recorded in the report, NEVER weighed into rc/alert
-    # (a crashed sweep must not fail the tick; fail-open by construction).
-    report["rollup_sweep"] = run("rollup.py", ws, "--sweep-terminal")
-
-    # #759 H1: THINK seat — the waiting period gets a cognitive action instead
-    # of an idle action_taken (#711 E1). Advisory like monitor/feedback/
-    # verify_watch/rollup_sweep: recorded in the report, NEVER weighed into
-    # rc/alert. Only a seat that REPORTS waiting with an artifact substitutes
-    # the field; anything else keeps the orchestrator-filled #237 contract.
-    report["think"] = run("think_seat.py", ws)
+    # #878: registry-driven mechanism scheduling — the tick is the ONLY time
+    # host, so the advisory children are no longer hand-wired here. The
+    # scheduler walks mechanisms.yaml (schema gate: trigger/cost_class/
+    # cockpit_signal prerequisites, 不入册不许跑), evaluates cheap gates
+    # first, queues expensive mechanisms by cost class, and enforces the
+    # single-pass time cap. Fail-open like every other watcher: a crashed
+    # scheduler is recorded and NEVER fails the tick. Sits where the old
+    # hand-wired advisory block sat — before the report write and before the
+    # cockpit sample + snapshot, so both still reflect the post-retro lag.
     try:
-        think = json.loads(report["think"].get("stdout") or "{}")
-    except ValueError:
-        think = {}
-    if isinstance(think, dict) and think.get("waiting") and think.get("artifact"):
-        report["action_taken"] = f"THINK {think['artifact']}"
+        payload = _run_mechanisms(ws, runner=run)
+    except Exception as exc:  # noqa: BLE001 — a crashed scheduler never fails the tick
+        payload = {"mechanisms": {"error": [f"scheduler unavailable: {exc}"],
+                                  "ran": [], "skipped": [], "dropped": []}}
+    report["mechanisms"] = payload.pop("mechanisms")
+    report.update(payload)
+    # #759 H1: THINK seat contract — a seat that REPORTS waiting with an
+    # artifact substitutes action_taken (idle != EMPTY, #711 E1); anything
+    # else keeps the orchestrator-filled #237 contract. Guarded: a scheduler
+    # face without the think key (crash / registry fail-closed) skips too.
+    if isinstance(report.get("think"), dict):
+        try:
+            think = json.loads(report["think"].get("stdout") or "{}")
+        except ValueError:
+            think = {}
+        if isinstance(think, dict) and think.get("waiting") and think.get("artifact"):
+            report["action_taken"] = f"THINK {think['artifact']}"
 
     sc = report["selfcheck"].get("stdout", "")[:80]
     hb = report["heartbeat"].get("stdout", "")[:120]

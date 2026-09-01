@@ -463,6 +463,21 @@ def _resolve_dispatch_trace(ws: Path, prompt_text: str) -> tuple[str | None, boo
         return (declared if isinstance(declared, str) else None), False
 
 
+def _micro_retro_block(ws: Path, claim_id: str) -> str | None:
+    """#882 micro-retro: the "前车之鉴" block for the dispatch contract —
+    the K most recent settlements at the same (scene, operation), read O(1)
+    from backtrack_loop's settlement index (runs/.retro-index.json; the
+    register-carrier settlement face maintains it). Advisory context only —
+    it never moves the ALLOW — and None when the key has no settlement
+    history (zero-noise #754)."""
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            from backtrack_loop import micro_lessons_context
+        return micro_lessons_context(ws, claim_id)
+    except Exception:  # noqa: BLE001 — a retro must never block dispatch
+        return None
+
+
 def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str,
                       trace_id: str | None = None) -> int | None:
     """① #496: top-1 enforcement — exact copy of the #310 agenttype-deviation
@@ -1162,6 +1177,18 @@ def main() -> int:
     rc = _capability_guard(ws, claim_id, prompt_text, trace_id=trace_id)
     if rc is not None:
         return rc
+    # #882 micro-retro: inject the 前车之鉴 block (same-key settlement
+    # history) BEFORE the allow-row faces. additionalContext only — the
+    # ALLOW path continues below (no early return, so the #879
+    # trace_allocated row and the #496 strategy log keep their faces).
+    micro = _micro_retro_block(ws, claim_id)
+    if micro:
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": micro,
+            }
+        }, ensure_ascii=False))
     # #567 SECURITY: MCP prefix gate runs BEFORE this point (see main()
     # ordering) — a forbidden MCP namespace is a structural violation,
     # not a session-level concern, so it cannot be deferred to the
