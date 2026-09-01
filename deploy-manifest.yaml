@@ -839,7 +839,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 2e8f8cf273691f9d0c0c32ff3c3c8c164b0ccfdc555bd0b6e224cede26f5ce93
+    sha256: 0f09ab10e198a7436ea16016f5a1b45b59bda51bd8de2fef01c46a11670e279d
   - src: references/agent-three-state-charter.md
     dest: .claude/references/agent-three-state-charter.md
     kind: asset
