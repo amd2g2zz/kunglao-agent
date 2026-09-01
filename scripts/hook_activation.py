@@ -1029,11 +1029,6 @@ def register_hooks(workspace: Path | None = None,
     # 仍在 write_guard 的结构门，本 face 负责"盲区不再无声"。
     post, added = _ensure(post, "Bash", "bash_fact_guard.py")
     count += added
-    # cost_input_capture (#873): PostToolUse 成本输入捕获——COST WARNING/
-    # CRITICAL 文本 → cost_events.jsonl（recorder，fail-open 永不打断）。
-    post, added = _ensure(post, "Edit|Write|MultiEdit|Agent",
-                          "cost_input_capture.py")
-    count += added
 
     # completion_gate (#55): the code-owned completion gate. Stop hook — fires
     # at session termination, blocks when task-oracle.yaml is unsatisfied.
