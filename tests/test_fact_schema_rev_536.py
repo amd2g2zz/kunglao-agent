@@ -46,7 +46,7 @@ def test_lint_facts_json_output_carries_schema_rev(tmp_path: Path) -> None:
     facts_dir.mkdir()
     result = subprocess.run(
         [sys.executable, str(LINT), "--json", str(tmp_path)],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, check=False, encoding="utf-8", errors="replace",
     )
     data = json.loads(result.stdout)
     assert data["active_schema_rev"] >= 1, data
@@ -57,7 +57,7 @@ def test_lint_facts_text_output_carries_schema_rev(tmp_path: Path) -> None:
     facts_dir.mkdir()
     result = subprocess.run(
         [sys.executable, str(LINT), str(tmp_path)],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, check=False, encoding="utf-8", errors="replace",
     )
     combined = result.stdout + result.stderr
     assert "active_schema_rev" in combined, (

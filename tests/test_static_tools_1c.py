@@ -474,7 +474,7 @@ import die_probe as dp  # noqa: E402
 
 
 def _fake_die_run(ok: bool = True):
-    def _run(cmd, capture_output=True, text=True, timeout=120):
+    def _run(cmd, capture_output=True, text=True, timeout=120, encoding=None, errors=None):
         class R:
             returncode = 0
             stdout = ""

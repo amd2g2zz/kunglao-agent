@@ -155,7 +155,7 @@ def test_dual_coexist_wiring_never_crosses(fake_home, monkeypatch):
     cmds_b = _commands(ws_b / ".claude" / "settings.json")
     assert len(cmds_b) == WIRE_UP_ENTRIES
     for c in cmds_b:
-        assert c.startswith(f"uv run --project {dev.as_posix()} "), c
+        assert c.startswith(f"PYTHONUTF8=1 uv run --project {dev.as_posix()} "), c
         assert f"{dev.as_posix()}/" in c and f"{prod.as_posix()}/" not in c, c
 
     ws_a = fake_home.parent / "ws-A"
@@ -165,7 +165,7 @@ def test_dual_coexist_wiring_never_crosses(fake_home, monkeypatch):
     cmds_a = _commands(ws_a / ".claude" / "settings.json")
     assert len(cmds_a) == WIRE_UP_ENTRIES
     for c in cmds_a:
-        assert c.startswith(f"uv run --project {prod.as_posix()} "), c
+        assert c.startswith(f"PYTHONUTF8=1 uv run --project {prod.as_posix()} "), c
         assert f"{prod.as_posix()}/" in c and f"{dev.as_posix()}/" not in c, c
 
 
@@ -198,7 +198,7 @@ def _write_at(root: Path, ws: Path, hook_file: str = "env_check_gate.py",
     target.write_text(json.dumps({
         "hooks": {"PreToolUse": [{"matcher": matcher, "hooks": [
             {"type": "command",
-             "command": f"uv run --project {skill_root.as_posix()} "
+             "command": f"PYTHONUTF8=1 uv run --project {skill_root.as_posix()} "
                         f"{(root / hook_file).as_posix()}"}]}]}}),
         encoding="utf-8")
     return target
@@ -316,7 +316,7 @@ def test_mixed_state_rewire_all_commands_at_executing_root(fake_home,
         entries = [{"matcher": None if event == "Stop" else "Agent",
                     "hooks": [
                         {"type": "command",
-                         "command": f"uv run --project {prod.as_posix()} "
+                         "command": f"PYTHONUTF8=1 uv run --project {prod.as_posix()} "
                                     f"{(dev / 'hooks' / f).as_posix()}"}]}
                    for f in files]
         seeded[event] = [{k: v for k, v in e.items() if v is not None}
@@ -331,7 +331,7 @@ def test_mixed_state_rewire_all_commands_at_executing_root(fake_home,
     cmds = _commands(target)
     assert len(cmds) == WIRE_UP_ENTRIES, cmds
     for c in cmds:
-        assert c.startswith(f"uv run --project {dev.as_posix()} "), c
+        assert c.startswith(f"PYTHONUTF8=1 uv run --project {dev.as_posix()} "), c
         assert f"{(dev / 'hooks').as_posix()}/" in c, c
         assert f"{prod.as_posix()}/" not in f"{c}/".replace(
             f"{prod.as_posix()}-", ""), c  # slash-guarded containment
@@ -458,7 +458,7 @@ def _seed_stale_carriers(ws: Path, prod: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     entries = [{"matcher": "Agent", "hooks": [
         {"type": "command",
-         "command": f"uv run --project {prod.as_posix()} "
+         "command": f"PYTHONUTF8=1 uv run --project {prod.as_posix()} "
                     f"{(prod / 'hooks' / f).as_posix()}"}]}
         for f in ("env_check_gate.py", "worker_budget.py")]
     target.write_text(json.dumps({"hooks": {"PreToolUse": entries}}),

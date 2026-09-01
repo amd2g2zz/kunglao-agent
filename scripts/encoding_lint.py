@@ -34,14 +34,30 @@ SKIP_FILES = {
     "migrate_facts.py",
 }
 SUBPROC_FUNCS = {"run", "Popen", "check_output", "check_call"}
+# .open 的模块接收者黑名单——这些 .open 签名无 encoding 参数
+MODULE_OPEN_RECEIVERS = {"os", "tarfile", "gzip", "bz2", "zipfile", "shelve",
+                         "webbrowser", "codecs", "io", "builtins", "tokenize"}
 
 
 def _flag_call(node: ast.Call) -> str | None:
     """返回违规形态标签，合规返回 None。"""
     f = node.func
-    # Path.write_text / read_text
-    if isinstance(f, ast.Attribute) and f.attr in ("write_text", "read_text"):
+    # Path.write_text / read_text / .open()（pathlib 属性形态同管；
+    # 模块接收者黑名单：os.open/tarfile.open 等签名无 encoding，不归本扫描器）
+    if isinstance(f, ast.Attribute) and f.attr in (
+            "write_text", "read_text", "open"):
+        if f.attr == "open" and isinstance(f.value, ast.Name) and \
+                f.value.id in MODULE_OPEN_RECEIVERS:
+            return None
         if not any(kw.arg == "encoding" for kw in node.keywords):
+            mode = "r"
+            if f.attr == "open" and node.args:
+                # 接收者即路径对象：mode 是 args[0]（不是 args[1]）
+                a = node.args[0]
+                if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                    mode = a.value
+                if "b" in mode:
+                    return None
             return f.attr
         return None
     # open() 文本模式
@@ -135,6 +151,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # #811 入口 UTF-8 保险
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
     force_utf8()
     sys.exit(main())

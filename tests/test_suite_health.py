@@ -29,7 +29,7 @@ def test_collection_no_error() -> None:
     """pytest collection of the full test-file set has no ERROR (incl. test_claim_status_guard.py's hooks import)."""
     r = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
-        cwd=ROOT, capture_output=True, text=True, timeout=120,
+        cwd=ROOT, capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace",
     )
     assert r.returncode == 0, f"collection had errors:\n{r.stdout}\n{r.stderr}"
 
@@ -38,7 +38,7 @@ def test_claim_status_guard_importable() -> None:
     """hooks/worker_budget.py importable from any CWD (pythonpath fix)."""
     r = subprocess.run(
         [sys.executable, "-c", "import sys; sys.path.insert(0,'.'); import worker_budget; print('ok')"],
-        cwd=ROOT / "hooks", capture_output=True, text=True, timeout=60,
+        cwd=ROOT / "hooks", capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace",
     )
     assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr
 
@@ -151,7 +151,7 @@ def test_golden_replay(case: dict) -> None:
             argv.append(a)
         r = subprocess.run(
             argv, cwd=cmd.get("cwd", str(ROOT)),
-            env=env, capture_output=True, text=True, timeout=120,
+            env=env, capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace",
         )
     assert _tree_digest(case_dir / "ws") == digest_before, \
         f"golden replay mutated fixture ws dir: {case_dir / 'ws'}"

@@ -427,7 +427,7 @@ def test_cli_record_rejects_missing_source(tmp_path):
                         "--validity", "not-justified", "--next-method", "b",
                         "--validated-capability", "c",
                         "--identified-obstacle", "o"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
 
     # Assert
     assert r.returncode == 1, r.stdout + r.stderr
@@ -459,7 +459,7 @@ def test_cli_record_full_transducer_path(tmp_path):
                         "--identified-obstacle", "spawn times out under selinux",
                         "--source", "lesson-hit",
                         "--library", str(lib)],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
 
     # Assert
     assert r.returncode == 0, r.stdout + r.stderr
