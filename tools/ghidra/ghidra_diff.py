@@ -41,7 +41,6 @@ _TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _
 if str(_TOOLS_DIR) not in _sys_io.path:
     _sys_io.path.insert(0, str(_TOOLS_DIR))
 from _lib.stdio import ensure_utf8_stdout  # noqa: E402
-ensure_utf8_stdout()
 
 _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
@@ -485,4 +484,5 @@ def main(argv: list[str] | None = None, environ: dict[str, str] | None = None) -
 
 
 if __name__ == "__main__":
+    ensure_utf8_stdout()
     sys.exit(main())
