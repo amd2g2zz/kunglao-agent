@@ -6,7 +6,7 @@
 
 | Tool | Purpose (one-liner) | When to read / when not |
 |---|---|---|
-| `jsvmp-triage` | Three-feature JSVMP/VMP triage CLI (verdict = three-of-two votes) | Read when a deobfuscated web bundle may hide a bytecode VM; not a proof — runtime trace confirmation stays with the operator |
+| `jsvmp_triage` | Three-feature JSVMP/VMP triage CLI (verdict = three-of-two votes) | Read when a deobfuscated web bundle may hide a bytecode VM; not a proof — runtime trace confirmation stays with the operator |
 
 ## Three-feature thresholds
 
@@ -20,7 +20,7 @@ Verdict: `votes = F1+F2+F3`; suspected ⇔ votes ≥ 2; confidence high(3/3) / m
 
 ## Contract entries
 
-### jsvmp-triage
+### jsvmp_triage
 
 - **Purpose**: Mechanically answer whether an ALREADY-DEOBFUSCATED bundle (wakaru/webcrack output) carries a bytecode VM — big consumed array + dispatch-switch loop + stack-op handler bodies — so AST recovery stops and the operator switches to the instruction-trace methodology.
 - **Usage**:

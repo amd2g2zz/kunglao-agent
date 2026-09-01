@@ -415,7 +415,7 @@ tools:
   # (#816 adoptee relocated from scripts/ and folded into the standard face);
   # verdict = three-of-two votes (F1 big consumed array / F2 dispatch-switch
   # loop / F3 semantic-free case bodies), confidence high(3/3)/medium(2/3).
-  - name: jsvmp-triage
+  - name: jsvmp_triage
     category: web
     capability: web:triage
     tier: T1
