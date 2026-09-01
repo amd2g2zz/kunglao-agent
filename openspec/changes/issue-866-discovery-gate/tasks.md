@@ -15,7 +15,7 @@
       1 3 4 8 9；scripts/local_gate.py 同帧挂门
 - [x] 门红/绿两态演示（未登记假 CLI → 红；登记 → 绿）——pytest 夹具 + 真仓演示记 Recon
 - [x] 本地门全绿（pytest 5050 passed，仅 7 个文档化 Windows 环境性基线失败；release_receipt --check 绿；deploy-manifest --write 后 --verify 364 条绿；ext-scan --check 绿；Gate 9 单跑 PASS）
-- [ ] push + gh pr create --base dev + CI 绿（不 merge，orchestrator 串行合并）
+- [x] push + gh pr create --base dev + CI 绿（不 merge，orchestrator 串行合并）——PR #894
 
 ## PR 866-b（另行派发：存量逐个鉴定 + Ghidra 四件套 + scripts 鉴定表）
 
