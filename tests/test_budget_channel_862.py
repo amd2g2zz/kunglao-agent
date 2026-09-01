@@ -6,20 +6,34 @@ B4 CONFIRMED: battery 只从 description 解析 dispatch 形状 → 生产通道
 JSON envelope）。弃用通道（description 形状）→ fail-closed REJECT `devchannel`。
 pass-token 归一：devreason 只认 canonical `agent-reasoning:`。
 """
+import contextlib
+import importlib.util
 import io
 import json
 import sys
-import contextlib
 from pathlib import Path
 
 _HERE = Path(__file__).parent
-sys.path.insert(0, str(_HERE))
-sys.path.insert(0, str(_HERE.parent / "hooks"))
+# #770: hooks/scripts 以 importlib 隔离名加载，禁止顶层 sys.path.insert
+# （共享名模块解析顺序会被本文件改写，殃及后续套件）。
 
-from worker_budget_sinks import pre_check  # noqa: E402
-from test_worker_budget import (  # noqa: E402
-    _healthy_ws, _paths_for, _write_register,
-)
+
+def _load(name, relpath):
+    path = _HERE.parent / relpath
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_pre_check_mod = _load("worker_budget_sinks_862", "hooks/worker_budget_sinks.py")
+pre_check = _pre_check_mod.pre_check
+
+_tb = _load("test_worker_budget_862", "tests/test_worker_budget.py")
+_healthy_ws = _tb._healthy_ws
+_paths_for = _tb._paths_for
+_write_register = _tb._write_register
 
 ENV = ('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
        '"tools": ["grep"], "agent": "w-test"}}')
