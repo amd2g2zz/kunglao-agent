@@ -25,15 +25,15 @@ def _mk_ws(tmp_path):
 
 
 def _seed_pairs(ws, rows):
-    """rows: (rho, z, duration_ms)；z=None 不计对。"""
+    """rows: (rho, z, cost)；z=None 不计对。#873 起 cost 为真实字段。"""
     p = ws / "runs" / "logs" / "kunglao-2026-09-01.jsonl"
     with p.open("w", encoding="utf-8") as f:
-        for rho, z, dur in rows:
+        for rho, z, cost in rows:
             f.write(json.dumps({
                 "ts": "2026-09-01T00:00:00Z", "actor": "rho_verifier",
                 "action": "rho_pair", "claim": None, "tool": None,
-                "artifact": None, "duration_ms": dur, "exit": None,
-                "detail": json.dumps({"rho": rho, "z": z}),
+                "artifact": None, "exit": None,
+                "detail": json.dumps({"rho": rho, "z": z, "cost": cost}),
             }, ensure_ascii=False) + "\n")
 
 
