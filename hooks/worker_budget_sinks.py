@@ -7,6 +7,7 @@ from worker_budget_core import (
     VM_TOOLS, KNOWN_TOOLS,
     check_priority, check_plan_drift, check_convergence_health, check_backtrack_gate,
     parse_dispatch, detect_self_cap, scan_actual_tools,
+    load_hooks_lib,
     _ratio_rank, _EvidenceView, _PRIORITY_AVAILABLE,
     _tep, TOOL_ERROR_POLICY_LOADED, _ha_link, _klog,
     _load_yaml, _run_py, _atomic_write, read_active_workers,
@@ -391,8 +392,27 @@ def check_env_fresh(paths: dict, tier: int = 0, tools: list[str] | None = None) 
     return True, ''
 
 
+def _declared_trace_id(prompt: str) -> str | None:
+    """#879: the v1 envelope's optional `trace_id` (meta passthrough), or
+    None. Format-invalid declarations degrade to None (the dispatch row stays
+    un-attributed — honest; dispatch_gate's WARN face covers the drift)."""
+    try:
+        lib = load_hooks_lib()
+        meta = lib.parse_dispatch_json(prompt or "")[3]
+        v = meta.get("trace_id") if isinstance(meta, dict) else None
+        if isinstance(v, str):
+            if _klog is not None:
+                return v if _klog.TRACE_ID_RE.match(v) else None
+            import re as _re
+            return v if _re.match(r"^tr-[a-z0-9][a-z0-9._-]*-\d+$", v) else None
+    except Exception:  # noqa: BLE001 - linkage never blocks dispatch
+        return None
+    return None
+
+
 def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
-                        cid: str | None, agent_name: str) -> None:
+                        cid: str | None, agent_name: str,
+                        prompt: str = '') -> None:
     """#461: apply the dispatch linkage at the approval point — renew the
     activation TTL (auto --renew), complete the active set, flip phase to
     DISPATCH (via hook_activation.dispatch_linkage), and append the
@@ -413,6 +433,7 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
         if _klog is not None:
             _klog.emit(
                 ws_path, 'hook:worker_budget', 'dispatch', claim=cid,
+                trace_id=_declared_trace_id(prompt),
                 detail=f'tier={tier} tools={",".join(tools)} '
                        f'agent={agent_name or "?"} (#461 linkage: renew + '
                        f'arm + phase=DISPATCH)')
@@ -512,7 +533,7 @@ def pre_check(payload: dict, paths: dict) -> int:
     # #461: a PASSING dispatch is a lifecycle event — renew TTL / complete
     # the activation set / flip phase to DISPATCH / log the dispatch event
     # (fail-open inside; rejected dispatches above never reach this line).
-    _dispatch_lifecycle(paths, tier, tools, cid, agent_name)
+    _dispatch_lifecycle(paths, tier, tools, cid, agent_name, prompt=prompt)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',

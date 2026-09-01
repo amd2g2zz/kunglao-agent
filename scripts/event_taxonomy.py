@@ -228,6 +228,7 @@ EMIT_ACTIONS = [
     "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
+    "trace_allocated",    # #879 dispatch_gate mission-stable trace allocation face
     "upgrade",            # #726 kunglao_upgrade summary (N->M migration)
     "upgrade_item",       # #726 per-item migration telemetry
     "user_signal",           # #868 UserPromptSubmit capture face

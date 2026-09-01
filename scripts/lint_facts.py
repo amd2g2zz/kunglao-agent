@@ -135,6 +135,7 @@ KNOWN_FRONTMATTER_KEYS = frozenset({
     "expected_sha256", "output", "output_sha256", "verified", "facts_used",
     "depends_on", "alternatives", "supersedes", "superseded_by", "iocs",
     "hypothesis",
+    "trace_id",  # #879 trace identity: mission chain id (worker echo channel)
 })
 
 # L-4 (#532): the body '## Status' line must reconcile with frontmatter status.

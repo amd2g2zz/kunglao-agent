@@ -23,7 +23,7 @@ files:
   references/cold-start-contract.md: 7b0e9375cc55475a6f5d9a8f67637af5cc6436175f06cbb835c03acd3187bfce
   references/convergence-loop.md: 96911db12b3a8cb8a0f736bade3617b916c27dc4d9f64d767acdcf99256ec495
   references/decision-rights.md: 61758c425b2b3f5c98ef4b188d95a73c0dcde686a84a44fe0b72e7f06742df8d
-  references/dispatch-protocol.md: fdebd7b2a6c1c80fa4ed3ca70e14f0d7301473b751f74d906169738118d313a6
+  references/dispatch-protocol.md: 1ec38838a5b3781a4b6bcaffb124f3991458ea8eecb5b99f544461c2b6d1135c
   references/downstream-contract.md: c3940d2264d11332cfcf246b1eee7497df20e29d44904c9dce7344865c7db0b5
   references/dynamic-re-tool-priority.md: e40a8b6492f0c79c63366007ba3660d590d595463842cf7ee82bda4bdf3b4b39
   references/error-response-taxonomy.md: bf34e24173b528cc1817724323c8f3c82679785f9f27444c158f15ddd6ba6531
@@ -74,7 +74,7 @@ files:
   references/re-library/web-crawler-engineering.md: 887b6ca7a08f2bb6cfaae81bf9d602f749d4a4c38373a13eb4d3a0a8a69545a2
   references/re-library/web-re-quickref.md: b31c0b18b93bb762a9450f007b43eb75ec9b0ecf61782b1217e532408b77ef3a
   references/re-library/web-risk-control.md: 1b98a6af1355410f8d2d1e1043c55333153dd3ba179d99890fe6c5c756c05cd4
-  references/schema.md: 653cc42f28224e26c21ece2fd30d997c6fec088a180dfd5b35cc148da2b1dc16
+  references/schema.md: 4fd092588c2e0be19f1dc71b81e8c0ff5b4acb9a62bed99e9b85151b00e51d5a
   references/search-policy.md: 46807e75ef0cf4381b747ffc9495618aad9c0eb320d5007f1c9bfc4bb7cf547f
   references/state-mapping.md: d2cb9b62780b2c35044bc5cf0d724dafb337238480306e29fa909ad2e6bfc08f
   references/tool-inventory.md: 5bddc786cc4723732c37f94b9af2d7e4fab6e699082fda0a599c569f90a692eb

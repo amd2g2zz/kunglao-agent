@@ -211,8 +211,68 @@ def check(workspace):
             violations.append("(f) claim " + str(c.get("id") or "<unknown>")
                               + " is PARK without wake_condition")
 
+    # (g) #879: claim lineage edges — supersedes / superseded_by /
+    # derived_from must reference EXISTING claims, never the claim itself,
+    # and the supersedes chain must be acyclic (a cycle makes "who replaced
+    # whom" unanswerable — the exact gap the trace identity layer closes).
+    violations.extend(_lineage_violations(claims))
+
     return {"ok": not violations, "violations": violations,
             "checked": len(claims)}
+
+
+def _lineage_violations(claims: list) -> list:
+    """(g) checker: dangling targets, self-reference, supersedes-cycle."""
+    by_id = {c.get("id"): c for c in claims if c.get("id")}
+    out: list = []
+    edges: dict = {}
+    for c in claims:
+        cid = c.get("id") or "<unknown>"
+        for key in ("supersedes", "derived_from"):
+            targets = c.get(key) or []
+            if isinstance(targets, str):
+                targets = [targets]
+            for t in targets:
+                if t not in by_id:
+                    out.append(f"(g) claim {cid} {key} references unknown "
+                               f"claim {t}")
+                elif t == cid:
+                    out.append(f"(g) claim {cid} {key} references itself")
+            edges.setdefault(key, {})[cid] = list(targets)
+        sb = c.get("superseded_by")
+        if isinstance(sb, str):
+            sb = [sb]
+        sb = list(sb or [])
+        for t in sb:
+            if t not in by_id:
+                out.append(f"(g) claim {cid} superseded_by references "
+                           f"unknown claim {t}")
+            elif t == cid:
+                out.append(f"(g) claim {cid} superseded_by references itself")
+        edges.setdefault("superseded_by", {})[cid] = sb
+
+    # cycle detection over supersedes edges (normalized: an edge either
+    # direction closes a replacement cycle)
+    sup: dict = {}
+    for src, tgts in edges.get("supersedes", {}).items():
+        sup.setdefault(src, set()).update(tgts)
+    for src, tgts in edges.get("superseded_by", {}).items():
+        for t in tgts:
+            sup.setdefault(t, set()).add(src)
+    for start in sup:
+        seen = {start}
+        stack = list(sup.get(start, ()))
+        while stack:
+            cur = stack.pop()
+            if cur == start:
+                out.append(f"(g) supersedes cycle reachable from claim "
+                           f"{start} (who-replaced-whom is unanswerable)")
+                break
+            if cur in seen or cur not in sup:
+                continue
+            seen.add(cur)
+            stack.extend(sup.get(cur, ()))
+    return out
 
 
 def main():
