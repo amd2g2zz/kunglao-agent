@@ -44,6 +44,10 @@ files:
     dest: .claude/hooks/state_anchor.py
     kind: hook
     sha256: 83268d01142f4330b3570f447d8bc127e73ffca2ab4c955311349cab81f69eb4
+  - src: hooks/user_signal_capture.py
+    dest: .claude/hooks/user_signal_capture.py
+    kind: hook
+    sha256: 41e35653e86428ce665b340c4ca904cbc597a9dd4d7505c406228fa39b55d5b0
   - src: hooks/violation_capture.py
     dest: .claude/hooks/violation_capture.py
     kind: hook
@@ -256,6 +260,10 @@ files:
     dest: .claude/scripts/dispatch_context.py
     kind: scaffold
     sha256: 3503fbc033c5dd28f33d9ac49d6f9ffda06f05ddc71fd44eb9f164bdf0840f9a
+  - src: scripts/dual_gate.py
+    dest: .claude/scripts/dual_gate.py
+    kind: scaffold
+    sha256: dc93272e2ebc1bf6663175ddc6fa6ab2ff83613c38f42663a2addf4b9547e2fe
   - src: scripts/encoding_lint.py
     dest: .claude/scripts/encoding_lint.py
     kind: scaffold
@@ -287,7 +295,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: d22a74c141b92745c8d2b332ccf664e2177b0e0fa2b30add262db34e5e0f3e95
+    sha256: 1e21aace06b4fb69ea9899c63103549d13dbca9120278948bb3ee11274911ed0
   - src: scripts/explore_gate.py
     dest: .claude/scripts/explore_gate.py
     kind: scaffold
@@ -335,7 +343,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: efc5c8201c5ccd7a8a6f05c178c7bcaff61936b809af4d8fc48e9d7ff8f94a5b
+    sha256: 6fdbd62d07a97029c7866fec6522de0020a2c70e6c77caa080ae44d5e61ead98
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -491,7 +499,7 @@ files:
   - src: scripts/mission_ledger.py
     dest: .claude/scripts/mission_ledger.py
     kind: scaffold
-    sha256: 17371e0b5f8e300c3ddf4585f84654d7b9d8853e3f0a0f83034b89a703ce3f76
+    sha256: 506e936162a2d050ec94e507513fa3c1d2f8d3ff60e454e5f7bb55e9d3731508
   - src: scripts/mission_stall.py
     dest: .claude/scripts/mission_stall.py
     kind: scaffold
@@ -736,6 +744,10 @@ files:
     dest: .claude/scripts/update_index.py
     kind: scaffold
     sha256: ef8da383de7d3547121560cfbe391d8b4bb671c6f779a8fc7d78a1362253f0ef
+  - src: scripts/user_signal.py
+    dest: .claude/scripts/user_signal.py
+    kind: scaffold
+    sha256: 0bcf0e11a8d836d4be120ac10f659152f020c636c48c218c52d1a14c8bc7b4d9
   - src: scripts/utf8_boot.py
     dest: .claude/scripts/utf8_boot.py
     kind: scaffold
@@ -1183,7 +1195,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 6dd68224814b8b823c5348debf9b4420c154a203bd0f2894a5efc467e9995afb
+    sha256: 068ade0e734b51de28416a6ea1a14b067719d9d055bf09bec470d89dd31e3022
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

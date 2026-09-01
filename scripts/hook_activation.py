@@ -109,6 +109,7 @@ ALL_HOOKS = {
     "worker_pulse",
     "state_anchor",
     "completion_gate",
+    "user_signal_capture",   # #868 UserPromptSubmit: user-signal capture face
 }
 
 TIER_DEFAULTS = {

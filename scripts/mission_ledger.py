@@ -204,3 +204,29 @@ def emit_snapshot(ws, epoch: int | None = None, arm: str | None = None,
     except Exception as exc:  # noqa: BLE001 — snapshot 永不打断主流程
         import sys
         print(f"[mission_ledger] snapshot degraded: {exc}", file=sys.stderr)
+
+
+def repin(ws, add=(), remove=(), note: str | None = None) -> dict:
+    """#868 意愿类信号：欠账表 delta re-pin（最后者赢，历史留痕）。
+
+    已答 PQ 不被重置；remove 连同其作答一并移除；add 幂等（已存在跳过）。
+    """
+    led = load(ws)
+    mission = led.get("mission", {})
+    pqs = mission.get("pqs", [])
+    for rid in remove:
+        pqs[:] = [p for p in pqs if str(p.get("id")) != str(rid)]
+    existing = {str(p.get("id")) for p in pqs}
+    for pid in add:
+        if str(pid) in existing:
+            continue
+        pqs.append(dict(id=str(pid), question=str(pid), state="unattempted",
+                        coverage=0.0, answered_by=[], blocker=None,
+                        wake=None, weight=1.0))
+        existing.add(str(pid))
+    mission.setdefault("history", []).append({
+        "ts": _utc_now(), "action": "repin",
+        "add": [str(a) for a in add], "remove": [str(r) for r in remove],
+        "note": note})
+    _save(ws, led)
+    return led

@@ -215,6 +215,9 @@ EMIT_ACTIONS = [
     "rho_checkpoint",     # #823 P2 N-arm V/D/ETA shadow signal face
     "rho_pair",          # #823-P2 (rho,z) checkpoint pairing face
     "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
+    "signal_gate_escalate",  # #868 dual-gate: Goodhart/replan-limit escalation
+    "signal_gate_pass",      # #868 dual-gate unanimous pass w/ search boundary
+    "signal_gate_reject",    # #868 dual-gate rejection w/ disclosure mode
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "stale_plan_on_new_evidence",
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
@@ -223,6 +226,8 @@ EMIT_ACTIONS = [
     "top1_reject",
     "upgrade",            # #726 kunglao_upgrade summary (N->M migration)
     "upgrade_item",       # #726 per-item migration telemetry
+    "user_signal",           # #868 UserPromptSubmit capture face
+    "user_signal_processed", # #868 four-route processing result
     "uv_sync",            # #755 A7 install-venv sync face (WARN-only)
     "verify",
     "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
