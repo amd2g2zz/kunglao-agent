@@ -172,6 +172,7 @@ EMIT_ACTIONS = [
     "claim_migrate",
     "claim_revive",       # #634 PARK → OPEN revival (mission_stall.revive)
     "claudemd_merge",     # #755 G3 collect-and-merge rebuild face
+    "cockpit_sample",   # #873 per-checkpoint cockpit persistence: V/D/ETA + burn cost face
     "converge",
     "death_verdict_rejected",
     "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face

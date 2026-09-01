@@ -127,6 +127,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `progress_report.py` | one-block progress report | tests |
 | `init_state.py` | init-completeness single source of truth (#304) | hooks, lib(3), tests |
 | `template_version.py` | workspace template version stamp — write/verify/upgrade-warning (#536) | kunglao-init, hooks_selfcheck, env_check, kunglao-status, kunglao-resume, tests |
+| `local_gate.py` | 本地质量门统一入口 (#873) — __file__ 自定位 cwd 免疫；pytest+ext-scan+deploy_manifest 一条命令 | CLI |
 | `rollup.py` | terminal-transition write loop — claim→outcome_capture+lessons+narrative+checkpoint (#524) | tests |
 | `hypothesis_store.py` | hypothesis layer carrier (#528) — H-*.md parse + open→refuted/superseded state machine over `hypotheses/` | digest_build (sec_g), hooks/state_anchor, kunglao-init stub, tests |
 | `verifier_identity.py` | verifier machine-identity extraction + verdict anchoring (#825) — md header / l2 field; ledger verdict_anchor append-only | register_proven_gate, write_gate, tests |

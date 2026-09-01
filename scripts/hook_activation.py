@@ -801,6 +801,8 @@ _DEPLOYED_WIRING = (
     ("PostToolUse", "Agent", "state_anchor.py"),
     ("PostToolUse", "Bash", "violation_capture.py"),
     ("PostToolUse", "Bash", "bash_fact_guard.py"),  # #809 Post wiring
+    ("PostToolUse", "Edit|Write|MultiEdit|Agent",
+     "cost_input_capture.py"),  # #873 cost 输入捕获
     ("Stop", "", "completion_gate.py"),
 )
 
