@@ -491,7 +491,7 @@ files:
   - src: scripts/local_gate.py
     dest: .claude/scripts/local_gate.py
     kind: scaffold
-    sha256: 986435b85b6349d3028c005d4b35686467162f767b87e4b33ec5dfdc093287ce
+    sha256: 53a1c5185c68fd0cdb52580dd1391ca1ae6ff13379259d42be511a87e7584f28
   - src: scripts/log_setup.py
     dest: .claude/scripts/log_setup.py
     kind: scaffold
@@ -635,7 +635,7 @@ files:
   - src: scripts/relib_audit.py
     dest: .claude/scripts/relib_audit.py
     kind: scaffold
-    sha256: 543d0744e589b36b781854e1d1574d17bde2ea6db5562b34ee3efa13884672d7
+    sha256: 4be8a4172e022669aefcc34f4da179651b47670deef374dfdf436fefdc2b8092
   - src: scripts/report_consistency_check.py
     dest: .claude/scripts/report_consistency_check.py
     kind: scaffold
