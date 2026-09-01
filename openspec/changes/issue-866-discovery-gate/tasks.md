@@ -4,16 +4,16 @@
 
 ## PR 866-a（本卡：产线语义档 + README 双口径 + 发现面 CI 门）
 
-- [ ] Recon：锚点表 + 镜像样例 + 基线绿（proposal.md ## Recon）
-- [ ] relib_audit 产线语义档：`audit_production()` + `--production` 模式（TDD，
+- [x] Recon：锚点表 + 镜像样例 + 基线绿（proposal.md ## Recon）
+- [x] relib_audit 产线语义档：`audit_production()` + `--production` 模式（TDD，
       tests/test_relib_audit_production_866a.py）
-- [ ] 全仓首跑数字记入 Recon（46 未接线 = scripts 32 + tools 14，~11,310 LOC）
-- [ ] scripts/README.md Orphans 双口径声明 + 总数漂移修正 + 防删行回归测试
-- [ ] devkit/discovery_gate.py：tools/ 新 CLI 两面登记门（_INDEX.yaml + SKILL/references）
+- [x] 全仓首跑数字记入 Recon（45 未接线 = scripts 31 + tools 14，~11.2k LOC）
+- [x] scripts/README.md Orphans 双口径声明 + 总数漂移修正 + 防删行回归测试
+- [x] devkit/discovery_gate.py：tools/ 新 CLI 两面登记门（_INDEX.yaml + SKILL/references）
       + 基线棘轮 devkit/.discovery-gate-baseline.txt（TDD，tests/test_discovery_gate_866a.py）
-- [ ] Gate 9 注册进 devkit/quality_gates.py GATES；release-check.yml 步骤 1 3 4 8 →
+- [x] Gate 9 注册进 devkit/quality_gates.py GATES；release-check.yml 步骤 1 3 4 8 →
       1 3 4 8 9；scripts/local_gate.py 同帧挂门
-- [ ] 门红/绿两态演示（未登记假 CLI → 红；登记 → 绿）——pytest 夹具 + 真仓演示记 Recon
+- [x] 门红/绿两态演示（未登记假 CLI → 红；登记 → 绿）——pytest 夹具 + 真仓演示记 Recon
 - [ ] 本地门全绿（pytest 100% / release_receipt --check / deploy-manifest 不变免 write）
 - [ ] push + gh pr create --base dev + CI 绿（不 merge，orchestrator 串行合并）
 

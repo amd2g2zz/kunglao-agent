@@ -23,9 +23,9 @@
    杜绝单口径洗白；配机械回归测试防"删行回洗"。
 3. **发现面 CI 门**（`devkit/discovery_gate.py`，注册为 quality_gates Gate 9）：
    tools/ 带 `__main__` 的新 CLI 必须同帧登记 tools/_INDEX.yaml +（SKILL 教学段或
-   references 条目），缺失即红；基线棘轮（`devkit/.discovery-gate-baseline.txt`）
-   承接存量债务（866-b 清偿），新未登记 CLI → exit 1。CI release-check 步骤与
-   scripts/local_gate.py 同步挂门。
+   references 条目），缺失即红；基线棘轮（`devkit/.discovery-gate-baseline.txt`，
+   27 个存量 CLI 挂账）承接存量债务（866-b 清偿），新未登记 CLI → exit 1。CI
+   release-check 步骤（1 3 4 8 9）与 scripts/local_gate.py 同步挂门。
 
 ## 约束
 
@@ -101,3 +101,25 @@
 ### 变更前测试基线
 
 `python -m pytest tests/test_relib_audit_817.py -q` → 9 passed（0.16s）。
+
+### 门两态演示（真仓，2026-09-02）
+
+- 状态 A：`tools/static/zz_gate_demo.py`（带 `__main__`，零登记）→ `discovery_gate.py`
+  exit 1，逐字点名该文件（"missing discovery face(s): registry+teaching"）；
+- 状态 B：同帧补 `tools/_INDEX.yaml` 行 + SKILL 教学注释 → exit 0；
+- 状态 C：还原全部三文件 → exit 0（工作树零残留，git 核对）。
+- 同样的两态以夹具固定在 tests/test_discovery_gate_866a.py
+  （test_red_green_two_state_demo）。
+- 教训入代码：登记名必须与文件 stem 全字一致（schema kebab-case 约束下 underscore
+  文件用 underscore 名；toolfirst 关键字派生同口径）。
+
+### 实现期修正（TDD 过程发现，全部有测试钉住）
+
+1. pathlib `glob("dir/**")` 只返回目录——devkit 等 face 语料曾静默为空；
+   `_face_corpus` 遇目录即 rglob 递归收文件。
+2. 债务清单自引用泄漏：基线文件列出未接线路径，若计入 face 语料会给它们全部"接线"；
+   `_PROD_BOOKKEEPING` 将记账文件排除于所有语料（副产品：relib_audit 本身经
+   discovery_gate 引擎消费转为真实接线，未接线 46→45）。
+3. 闭包边不含裸 stem：scripts 模块 stem 可能与 hook 注册名字符串同类（reuse_gate
+   案例），裸 stem 闭包会误接线（identity 类碰撞）。
+4. 消费边/登记名匹配用全 token 边界（stem 'gen' 不得命中 'widget-gen'）。
