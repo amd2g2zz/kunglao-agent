@@ -347,7 +347,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: 85c7ed27e0acbbccab5ff5ef6f0081d2d2869361ea55b8a74c3af809c3786bd3
+    sha256: a98f1c65a870aee824c6310984bcb0e291bd6dd4e5f44541e9633dc8b0b716c5
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
