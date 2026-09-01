@@ -65,7 +65,10 @@ def test_double_registered_hooks_sentinel() -> None:
     doubled = wire_up_settings.DOUBLE_REGISTERED_HOOKS
     assert isinstance(doubled, frozenset), (
         "DOUBLE_REGISTERED_HOOKS must be a frozenset (immutable)")
-    assert doubled == frozenset({"worker_budget.py"}), (
+    assert doubled == frozenset({"worker_budget.py",
+                                 # #601: second PreToolUse matcher row — MCP
+                                 # host-channel face beside the Bash face
+                                 "orchestrator_tool_guard.py"}), (
         f"DOUBLE_REGISTERED_HOOKS drifted: {sorted(doubled)} — a membership "
         "change means register_hooks double-registers differently; update "
         "this sentinel deliberately and verify the count anchors follow")

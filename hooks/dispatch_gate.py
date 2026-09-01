@@ -273,30 +273,74 @@ def _warn_unparseable(claim_id: str | None, reason: str | None) -> None:
 
 # #447 Type S — irreversible-action dispatcher. English-only on principle
 # (mixing languages in regex is brittle, user directive).
-_DISPATCH_MUST_STOP_PATTERNS = [
+# #601: (rule_id, pattern) pairs — the rule id rides the must_stop trace
+# row's matched_rule field so post-hoc triage can tell WHAT fired (the
+# pre-#601 list returned matched text only, unjudgable after the fact).
+# English-only + word boundaries + argument shapes; controls for every
+# family live in tests/test_must_stop_coverage_601.py.
+_DISPATCH_MUST_STOP_RULES: tuple[tuple[str, str], ...] = (
     # VM / snapshot destruction
-    r"\b(?:rm|delete|remove|destroy)\s+(?:vm|VM|vmx|snapshot)\b",
-    r"\b(?:snapshot\s+delete|snapshot\s+revert|vmrun\s+delete)\b",
+    ("must_stop_vm_destruct",
+     r"\b(?:rm|delete|remove|destroy)\s+(?:vm|VM|vmx|snapshot)\b"),
+    ("must_stop_snapshot_ops",
+     r"\b(?:snapshot\s+delete|snapshot\s+revert|vmrun\s+delete)\b"),
     # destructive git
-    r"\bgit\s+push\s+--force\b",
-    r"\bgit\s+reset\s+--hard\b",
-    r"\bgit\s+clean\s+-fd\b",
+    ("must_stop_git_force_push", r"\bgit\s+push\s+--force\b"),
+    ("must_stop_git_hard_reset", r"\bgit\s+reset\s+--hard\b"),
+    ("must_stop_git_clean_force", r"\bgit\s+clean\s+-fd\b"),
     # public publish
-    r"\b(?:public\s+publish|public\s+release|publish\s+to\s+pypi|publish\s+to\s+npm)\b",
-]
+    ("must_stop_public_publish",
+     r"\b(?:public\s+publish|public\s+release|publish\s+to\s+pypi|publish\s+to\s+npm)\b"),
+    # #601 family 1 — chmod wide grant (world/group-writable numeric modes,
+    # optionally recursive; optional leading sticky bit). o+w symbolic too.
+    # Controls: 755/644/+x must NOT fire.
+    ("must_stop_chmod_permissive",
+     r"\bchmod\s+(?:-[a-zA-Z]+\s+)*(?:[0-2]?[67][67][67]\b|o\+w\b)"),
+    # #601 family 2 — recursive directory destruction WITHOUT the VM keyword
+    # (rm with any r-bearing short flag cluster or --recursive). The legacy
+    # VM-anchored rules above keep firing for VM paths; this closes the
+    # no-VM gap. Controls: `rm notes.txt` (no r flag) must NOT fire.
+    ("must_stop_rm_recursive",
+     r"\brm\s+(?:(?:-[a-zA-Z]*r[a-zA-Z]*|--recursive)\s+)+"),
+    # #601 family 3 — pipe a fetched URL straight into an interpreter
+    # (network-fetched code execution). The [^|;&] bound keeps the pipe
+    # inside the fetcher's own segment. Controls: plain download (no pipe)
+    # and local pipes (cat | grep) must NOT fire.
+    ("must_stop_pipe_remote_exec",
+     r"\b(?:curl|wget|curl\.exe)\b[^|;&]{0,300}\|\s*"
+     r"(?:\S+\s+)?(?:bash|sh|zsh|dash|ksh|python3?|pwsh|powershell)\b"),
+    # #601 family 4 — privileged-execute wrapper followed by a command
+    # (query carve-outs: -l / -V / -h / --list; the (?![\s-]) keeps `-l`
+    # itself from satisfying \S). Controls: sudo -l/-V must NOT fire.
+    ("must_stop_priv_exec",
+     r"\b(?:sudo|doas|pkexec)\s+(?!-l\b|-V\b|-h\b|--list\b)(?:--?\S+\s+)*(?![\s-])\S"),
+)
+
+# Back-compat name (dispatch_context.py:437 cites it; no code imports it —
+# the tuple form above replaced the bare pattern list in #601).
+_DISPATCH_MUST_STOP_PATTERNS = [p for _r, p in _DISPATCH_MUST_STOP_RULES]
 
 
 def _must_stop_dispatch(prompt_text: str) -> str | None:
-    """Return the first matching irreversible-action pattern, or None."""
-    for pat in _DISPATCH_MUST_STOP_PATTERNS:
-        m = re.search(pat, prompt_text, re.IGNORECASE)
-        if m:
-            return m.group(0)
+    """Return the FIRST matching rule id, or None (#601: rule identity, not
+    matched text — the id rides the trace row's matched_rule field; the only
+    pre-existing consumers assert truthiness, so the shape change is
+    compatible)."""
+    for rule_id, pat in _DISPATCH_MUST_STOP_RULES:
+        if re.search(pat, prompt_text, re.IGNORECASE):
+            return rule_id
     return None
 
 
-def _warn_must_stop(claim_id: str | None, prompt_text: str) -> int:
+def _warn_must_stop(ws: Path, claim_id: str | None, prompt_text: str,
+                    rule: str | None) -> int:
     """#447 must-stop hook: emit stderr + hookSpecificOutput + HARD_PAUSE.
+
+    #601: adds the third piece of the #600 WARN face shape — a unified-log
+    trace (action=must_stop, already in event_taxonomy.EMIT_ACTIONS) whose
+    matched_rule field says WHICH rule fired (`declared:reversible_false`
+    when the v1 declared field fired with no grammar match). The trace is
+    fail-open: emit failure never changes the HARD_PAUSE decision.
 
     Unlike scripts/ask_for_direction_gate.py which sees the orchestrator's
     PRINTED text, this hook sees the dispatch PROMPT itself — catching
@@ -305,9 +349,11 @@ def _warn_must_stop(claim_id: str | None, prompt_text: str) -> int:
     of any other state (precedence over Type C convergence)."""
     excerpt = prompt_text[:300].replace("\n", " ")
     cid = claim_id or "(no claim)"
+    rule_label = rule or "declared:reversible_false"
     print(
-        f"dispatch_gate: HARD_PAUSE Type S (must-stop) — irreversible "
-        f"action detected in dispatch for {cid}. Refusing to dispatch.",
+        f"dispatch_gate: HARD_PAUSE Type S (must-stop, rule={rule_label}) — "
+        f"irreversible action detected in dispatch for {cid}. "
+        f"Refusing to dispatch.",
         file=sys.stderr,
         flush=True,
     )
@@ -315,14 +361,18 @@ def _warn_must_stop(claim_id: str | None, prompt_text: str) -> int:
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "additionalContext": (
-                f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447). "
-                f"Irreversible action detected in dispatch for {cid}. "
+                f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447, "
+                f"rule={rule_label}). Irreversible action detected in "
+                f"dispatch for {cid}. "
                 f"Per references/agent-three-state-charter.md, irreversible actions "
                 f"MUST be explicitly approved by the user. Refusing to "
                 f"dispatch this worker. Excerpt: {excerpt!r}"
             ),
         },
     }, ensure_ascii=False), flush=True)
+    _emit_trace(ws, "must_stop", claim_id,
+                f"matched_rule={rule_label}; excerpt={excerpt}", exit_code=2,
+                matched_rule=rule_label)
     return 2
 
 
@@ -357,18 +407,20 @@ def _reject_with_guidance(name: str, msg: str, fix: str) -> int:
 
 
 def _emit_trace(ws: Path, action: str, claim_id: str, detail: str,
-                exit_code: int | None = None) -> None:
+                exit_code: int | None = None,
+                matched_rule: str | None = None) -> None:
     """Deviation/disproof/REJECT trace into the unified event log (kunglao_log,
     the #459 face #461 dispatch events already use — self_redirects.jsonl
     is the #447 ask-back VIOLATION counter and must stay unpolluted).
     Action words are registered in event_taxonomy.EMIT_ACTIONS; exit_code
     carries the gate's rc on REJECT faces (#459). Logging never breaks the
-    gate: fail-open, stderr note only."""
+    gate: fail-open, stderr note only. #601: matched_rule forwards the
+    #601 additive schema field (must-stop face) — None for the legacy faces."""
     try:
         with scripts_on_path():  # #671 scoped membership
             from kunglao_log import emit
         emit(ws, "hook:dispatch_gate", action, claim=claim_id, detail=detail,
-             exit=exit_code)
+             exit=exit_code, matched_rule=matched_rule)
     except Exception as exc:  # noqa: BLE001 — a trace must never block dispatch
         print(f"dispatch_gate: trace emit failed ({action}: {exc!r})",
               file=sys.stderr, flush=True)
@@ -1014,8 +1066,11 @@ def main() -> int:
     # Fires BEFORE the failure-blocked lookup — an irreversible action in
     # a healthy claim's dispatch is just as irreversible. Single source:
     # references/agent-three-state-charter.md.
-    if _declared_irreversible(prompt_text) or _must_stop_dispatch(prompt_text):
-        return _warn_must_stop(claim_id, prompt_text)
+    # #601: the grammar returns its rule id; both faces land in the trace
+    # row's matched_rule field (declared face -> declared:reversible_false).
+    rule = _must_stop_dispatch(prompt_text)
+    if _declared_irreversible(prompt_text) or rule is not None:
+        return _warn_must_stop(ws, claim_id, prompt_text, rule)
 
     blocked = _failure_blocked_ids(ws)
     if claim_id in blocked:

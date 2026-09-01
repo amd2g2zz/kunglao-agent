@@ -78,7 +78,10 @@ WIRE_UP_HOOK_FILES = frozenset({
 # class: one registry addition broke three test files at once). The
 # scripts-side subset consumers already loud-fail via derive_hook_subset
 # (#381); this export gives the tests-side the same single source.
-DOUBLE_REGISTERED_HOOKS = frozenset({"worker_budget.py"})
+# #601: orchestrator_tool_guard joins — same FILE, second PreToolUse
+# matcher row (MCP host-channel face beside the Bash face).
+DOUBLE_REGISTERED_HOOKS = frozenset({"worker_budget.py",
+                                     "orchestrator_tool_guard.py"})
 
 
 # #810 (audit B5 CONFIRMED): canonical Claude Code hook EVENT keys. The

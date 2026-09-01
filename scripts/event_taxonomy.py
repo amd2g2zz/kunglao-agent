@@ -205,6 +205,8 @@ EMIT_ACTIONS = [
     "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",
     "must_stop",
+    "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
+    "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
     "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
     "priority_deviation",

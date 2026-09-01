@@ -787,6 +787,13 @@ def deploy_workspace_copy(ws: Path) -> dict:
 # under `matcher`, NEVER promoted into the event-key slot ("Agent"/"Bash"
 # are not Claude Code event names; the old shape made env_check blind while
 # both selfchecks passed — three checkers, three answers).
+# #601: MCP host-channel matcher — main-agent direct calls to the three
+# VM-only dynamic-analysis namespaces ride the SAME orchestrator_tool_guard
+# hook file (second PreToolUse entry; workers inside .wt-* pass in-script).
+# Double-registration bookkeeping: wire_up_settings.DOUBLE_REGISTERED_HOOKS.
+ORCHESTRATOR_MCP_MATCHER = (
+    "mcp__ghidra__.*|mcp__x64dbg__.*|mcp__frida__.*")
+
 _DEPLOYED_WIRING = (
     # (event, matcher, hook_file) — mirrors register_hooks exactly.
     ("PreToolUse", "Agent", "env_check_gate.py"),
@@ -795,6 +802,7 @@ _DEPLOYED_WIRING = (
     ("PreToolUse", "Agent", "recall_inject.py"),
     ("PreToolUse", "Bash", "heartbeat_touch.py"),
     ("PreToolUse", "Bash", "orchestrator_tool_guard.py"),
+    ("PreToolUse", ORCHESTRATOR_MCP_MATCHER, "orchestrator_tool_guard.py"),  # #601
     ("PreToolUse", "Edit|Write|MultiEdit", "write_guard.py"),
     ("PostToolUse", "Agent", "worker_budget.py"),   # #675 double registration
     ("PostToolUse", "Agent", "worker_pulse.py"),
@@ -998,6 +1006,14 @@ def register_hooks(workspace: Path | None = None,
     # the self-check then failed every wire-up with "missing
     # ['orchestrator_tool_guard.py']" (the CI regression fixed here).
     pre, added = _ensure(pre, "Bash", "orchestrator_tool_guard.py")
+    count += added
+    # #601: same hook file, second matcher — MCP host-channel REJECT face
+    # (mcp__ghidra__* / mcp__x64dbg__* / mcp__frida__* for the MAIN agent;
+    # workers pass in-script via the .wt-* arming check). Structural second
+    # registration of orchestrator_tool_guard.py — pinned by
+    # wire_up_settings.DOUBLE_REGISTERED_HOOKS.
+    pre, added = _ensure(pre, ORCHESTRATOR_MCP_MATCHER,
+                         "orchestrator_tool_guard.py")
     count += added
     # write_guard (#532): the four-carrier write gate on the Edit/Write face.
     # NOT activation-gated by design (its docstring records why: the failure
