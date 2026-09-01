@@ -76,17 +76,19 @@
 ### 全仓实测数字（产线语义档首跑，as-of e958297）
 
 - 主体：scripts/*.py **169** + tools/ `__main__` CLI **32** = **201**
-- 产线未接线：**46（scripts 32 + tools 14），约 11,310 LOC**
+- 产线未接线：**45（scripts 31 + tools 14），约 11.2k LOC**
 - tools 侧 14：audit_legacy_proven / capture_golden / measure_blind_coverage /
   measure_cold_start / ghidra_diff / ghidra_job / run_ghidra_postscript / c_normalize /
   die_probe / disasm_dump / opaque_pred / overlay_scan / shellcode_scan /
   web_gitnexus_demo
-- scripts 侧 32 含：lessons_telemetry、plan_stages、bench_* 7 件、optimizer_core/
-  bandit、acceptance_check、local_gate、relib_audit 本身等（README "lib(2)/hooks/CI"
-  多处引用声明经查已失效——error_response 实际零 importer、encoding_lint/relib_audit
-  不在任何 workflow/hook）
+- scripts 侧 31 含：lessons_telemetry、plan_stages、bench_* 7 件、optimizer_core/
+  bandit、acceptance_check、local_gate 等（README "lib(2)/hooks/CI" 多处引用声明经查
+  已失效——error_response 实际零 importer、encoding_lint 不在任何 workflow/hook；
+  relib_audit 本身由本 PR 的 discovery_gate 引擎消费后转为接线——CI 门是真实产线消费者）
 - 口径声明：种子面命中或被产线已接线主体以 filename/import 消费即算接线；
-  docstring 纯提及不算（除 filename 字符串字面量，保守接受此近似并在此声明）。
+  docstring 纯提及不算（除 filename 字符串字面量，保守接受此近似并在此声明）；
+  门的债务清单（.discovery-gate-baseline.txt）是记账不是消费，明确排除在所有
+  face 语料外（自引用泄漏防护，见 relib_audit._PROD_BOOKKEEPING）。
 
 ### 达标正负例（产线语义档判定）
 

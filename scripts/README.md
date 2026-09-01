@@ -13,8 +13,8 @@ this script?" — used to keep documentation, hooks, CI, and tests in sync.
 - **Orphans — test semantics**: 0 — every script has at least one live
   reference (tests/ count as references; a script referenced only by tests
   is categorized `TEST`, not orphan). This is the #230-era metric.
-- **Orphans — production semantics (#866)**: 46 unwired of 201 subjects
-  (scripts 32 + tools 14, ~11.6k LOC) as of the 2026-09-02 recon at
+- **Orphans — production semantics (#866)**: 45 unwired of 201 subjects
+  (scripts 31 + tools 14, ~11.2k LOC) as of the 2026-09-02 recon at
   e958297 — the honest counter-metric: a script/tool is production-wired
   only if hooks/, skills/, agents/, devkit/, CI, or the execution registry
   `tools/_INDEX.yaml` reaches it (transitively via real consumption

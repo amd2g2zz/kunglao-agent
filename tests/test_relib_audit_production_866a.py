@@ -173,7 +173,7 @@ def test_real_repo_full_run_shape():
     r = relib_audit.audit_production(ROOT)
     assert r["counts"]["subjects_scripts"] == 169
     assert r["counts"]["subjects_tools"] == 32
-    assert r["counts"]["unwired_total"] == 46
+    assert r["counts"]["unwired_total"] == 45
 
 
 # ---- README dual-metric anti-whitewash regression guard ----

@@ -83,34 +83,42 @@ _PROD_DIAG_FACES = {
 }
 
 
-def _variant_re(variant: str) -> "re.Pattern":
-    """Whole-token match so stem 'gen' never hits inside 'widget-gen'."""
-    return re.compile(
-        r"(?<![A-Za-z0-9_-])" + re.escape(variant) + r"(?![A-Za-z0-9_-])")
+# The discovery gate's own debt ledger lists unwired CLI paths by design —
+# counting it as a face would wire every CLI it lists (self-reference
+# leak). Bookkeeping is not consumption; same for the lib audit's
+# quarantine manifest.
+_PROD_BOOKKEEPING = {
+    "devkit/.discovery-gate-baseline.txt",
+    "references/archive/quarantine-manifest.yaml",
+}
 
 
 def _face_corpus(root: Path, globs) -> str:
     """Concatenated text of every file the globs reach. A pattern ending in
     bare '**' yields DIRECTORIES on pathlib — when a dir comes back, walk
-    it recursively so the face corpus is never silently empty."""
+    it recursively so the face corpus is never silently empty. Bookkeeping
+    files (_PROD_BOOKKEEPING) never enter any corpus."""
     def _read(p: Path) -> str:
         try:
             return p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return ""
 
+    def _bookkeeping(p: Path) -> bool:
+        return p.relative_to(root).as_posix() in _PROD_BOOKKEEPING
+
     parts = []
     for g in globs:
         for f in sorted(root.glob(g)):
             if f.is_dir():
                 parts.extend(_read(sub) for sub in sorted(f.rglob("*"))
-                             if sub.is_file())
-            elif f.is_file():
+                             if sub.is_file() and not _bookkeeping(sub))
+            elif f.is_file() and not _bookkeeping(f):
                 parts.append(_read(f))
     return "\n".join(parts)
 
 
-def _prod_subjects(root: Path) -> dict:
+def production_subjects(root: Path) -> dict:
     """Subject repo-relative path -> source text (scripts/*.py + tools/
     ``__main__`` CLIs). Keys are repo-relative POSIX paths."""
     subjects: dict = {}
@@ -191,7 +199,7 @@ def audit_production(root) -> dict:
     faces + diagnostics + 'lib_closure'), and LOC of the unwired set.
     """
     root = Path(root)
-    subjects = _prod_subjects(root)
+    subjects = production_subjects(root)
     faces_def = {**_PROD_SEED_FACES, **_PROD_DIAG_FACES}
     corpus = {face: _face_corpus(root, globs)
               for face, globs in faces_def.items()}

@@ -52,6 +52,12 @@ Gate semantics:
      samples must parse through hooks/lib_kunglao.py:parse_dispatch_json;
      (c) evals/*.json must not pin DEPRECATED-module behavior (devkit/
      governance_binding.py).
+  9. Discovery Face — machine-binds tool DECLARATION (#866): every
+     tools/ __main__ CLI must be discoverable in the same change that
+     adds it — a tools/_INDEX.yaml registry row AND a SKILL teaching
+     mention or references/ entry — with a baseline ratchet for
+     pre-gate debt (devkit/discovery_gate.py,
+     devkit/.discovery-gate-baseline.txt; disposition via PR 866-b).
 """
 from __future__ import annotations
 
@@ -286,6 +292,28 @@ def _gate8_governance_binding(verbose: bool = True) -> bool:
     return bool(rc == 0)
 
 
+def _gate9_discovery_face(verbose: bool = True) -> bool:
+    """Discovery Face — Gate 9 (issue #866).
+
+    Machine-binds the three-layer split's DECLARATION layer: a tools/
+    ``__main__`` CLI that is not discoverable (tools/_INDEX.yaml registry
+    row + SKILL teaching or references entry) never enters the candidate
+    set — "built then sealed away" is now a red build, not a doc request.
+    Existing debt rides the baseline ratchet
+    (devkit/.discovery-gate-baseline.txt) and shrinks via PR 866-b.
+    """
+    try:
+        sys.path.insert(0, str(REPO_ROOT / "devkit"))
+        from discovery_gate import check as _discovery_check
+    except Exception as exc:
+        print(f"  [fail] discovery_gate import error: {exc!r}")
+        return False
+    rc = _discovery_check()
+    # discovery_gate.check() returns 0 (pass) or 1 (violations).
+    # bool(rc==0) — same truthiness trap guard as Gates 5-8.
+    return bool(rc == 0)
+
+
 GATES = {
     1: ("Requirement Correctness", _gate1_requirement_correctness),
     2: ("Regression Safety",      _gate2_regression_safety),
@@ -295,6 +323,7 @@ GATES = {
     6: ("Agents Contract",        _gate6_agents_contract),
     7: ("Doc Sync",               _gate7_doc_sync),
     8: ("Governance Binding",     _gate8_governance_binding),
+    9: ("Discovery Face",         _gate9_discovery_face),
 }
 
 
