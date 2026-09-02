@@ -27,6 +27,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 from convergence_check import decide, _open_claims
 from convergence_health import assess, _dedup_consecutive, _flatline_run
+from _factories import write_claims_register
 
 
 # ---------- helpers ----------
@@ -52,21 +53,8 @@ def _make_ws(tmp_path: Path, claims: list[dict], primary_questions: list | None 
     ws.mkdir(parents=True)
     (ws / "runs").mkdir()
 
-    # claim-register.yaml
-    lines = ["claims:"]
-    for c in claims:
-        lines.append(f"- id: {c['id']}")
-        for k, v in c.items():
-            if k != "id":
-                if isinstance(v, str):
-                    lines.append(f"  {k}: {v}")
-                elif isinstance(v, bool):
-                    lines.append(f"  {k}: {str(v).lower()}")
-                elif isinstance(v, list):
-                    lines.append(f"  {k}: {json.dumps(v)}")
-                else:
-                    lines.append(f"  {k}: {v}")
-    (ws / "claim-register.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # claim-register.yaml (863-h factory, sparse dialect)
+    write_claims_register(ws, claims)
 
     # task_spec.yaml with primary_questions
     if ts_text is not None:

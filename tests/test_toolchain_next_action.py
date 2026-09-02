@@ -28,6 +28,7 @@ import re
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -51,8 +52,7 @@ _OPTION_LINE_RE = re.compile(r"^\s*option (\d+): (.+?)\s*$", re.MULTILINE)
 
 def _ws_with_sample(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     return ws
 
 

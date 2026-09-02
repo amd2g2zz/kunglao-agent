@@ -12,6 +12,7 @@
 import importlib.util
 import sys
 from pathlib import Path
+from _factories import write_hook_state
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -59,22 +60,11 @@ def test_task_oracle_template_has_persistent_adjudication():
 # =====================================================================
 
 def _activated_state(ws: Path) -> None:
-    """Write .hook_state.json that is_active_strict accepts for completion_gate
-    (real schema: ts/tier/phase/active_hooks/paused_hooks/user_override/expires_at)."""
-    import datetime as dt
-    import json
-
-    expires = (dt.datetime.now(tz=dt.timezone.utc) + dt.timedelta(minutes=30)
-               ).isoformat(timespec="seconds").replace("+00:00", "Z")
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "ts": "2026-08-13T00:00:00Z",
-        "tier": "none",
-        "phase": "IDLE",
-        "active_hooks": ["completion_gate"],
-        "paused_hooks": [],
-        "user_override": {},
-        "expires_at": expires,
-    }, indent=2), encoding="utf-8")
+    """Strict-activation state for completion_gate (863-h Family L)."""
+    write_hook_state(ws, active_hooks=["completion_gate"],
+                     ts="2026-08-13T00:00:00Z", tier="none",
+                     phase="IDLE", user_override={},
+                     expires_minutes=30)
 
 
 def test_second_stop_pass_requires_oracle_second_stop_marker(tmp_path):

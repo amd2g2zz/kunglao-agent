@@ -1,6 +1,9 @@
 - [x] Family A: stdio 单体 + 34 CLI 委托转换 + 执法测试 delegation 重写
 - [x] Family B: loader util + 前导委托（实测 22 调用点/21 文件 → `hooks/_path_hygiene.load_module_by_path` 单体；scripts 侧经新增 `scripts/_hooks_path.py` 桥；#671 自举 2 处 named-allowlist 保留）
 - [x] Family C: _resolve_ws manifest-aware 单源（闭合 #865 主体）——实测 9 份（issue 8 + #883 新增 statusline_snapshot）/4 形状 → `scripts/ws_layout.py` resolve_quiet/resolve_strict 单源；B2 修复（8 份硬编码 sibling → 全部尊重 layout.workspace_dir/claim_register）；守护测试 4 形状全覆盖 + delegation/confinement 执法
+- [x] Family G: conftest fork 清零 —— #811 裁决(34e1603)已删 5 个被遮蔽 root fixtures；本卡补防复活机械钉 test_conftest_single_source_863g(4 钉：root 禁 5 名/必持 5 夹具/golden_master #317 UTF-8 解码/fixture 行为解析钉)
+- [x] Family L: test fixture families → conftest factories —— tests/_factories.py 三工厂(write_hook_state 29 点/24 文件收编（4 形状 + extra 键）；write_claims_register canonical+sparse 双方言；seed_bins 34 点/26 文件) + conftest 薄再导出 + ws_factory 委托；12 形状等价钉 test_fixture_factories_863l
+- [ ] Family D: toolchain `_which_items()` helper
 - [x] Family D: toolchain `_which_items()` helper（#877 已交付；863-f 复核 CONFIRMED 单源无残留，见 proposal.md Recon）
 - [x] 863-e #1: wire_up_settings deprecated alias 删除（注册表本体保留）+ DEPRECATED_ALIASES 清账 + 测试改调 register_hooks
 - [x] 863-e #2: worker_budget._ShimModule + _PROPAGATE_TO 删除 + 3 测试文件直 patch 源模块

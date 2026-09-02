@@ -34,6 +34,7 @@ if str(SCRIPTS) not in sys.path:
 import claudemd_frame as cf  # noqa: E402
 import template_version as tv  # noqa: E402
 from event_taxonomy import EMIT_ACTIONS  # noqa: E402
+from _factories import seed_bins
 
 CUR_VERSION = tv.read_skill_version()
 STAMP = tv.stamp_line(CUR_VERSION)
@@ -80,8 +81,7 @@ def render_ws(tmp_path: Path) -> tuple[Path, str]:
     beyond what production writes)."""
     init = _load_init()
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(PAYLOAD)
+    seed_bins(ws, payload=PAYLOAD)
     target = init.write_claudemd(ws, "sample.exe", SAMPLE_SHA,
                                  project_type="windows")
     return ws, target.read_text(encoding="utf-8")

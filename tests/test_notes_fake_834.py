@@ -19,6 +19,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import rollup  # noqa: E402
+from _factories import write_hook_state, write_claims_register
 
 HOOKS = ROOT / "hooks"
 
@@ -38,24 +39,16 @@ def _load_shim():
 def _make_ws(tmp_path, claims):
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
-    (ws / "claim-register.yaml").write_text(
-        yaml.safe_dump({"claims": claims}, allow_unicode=True), encoding="utf-8")
+    write_claims_register(ws, claims)
     return ws
 
 
 def _activated_state(ws):
-    import datetime as dt
-    expires = (dt.datetime.now(tz=dt.timezone.utc) + dt.timedelta(minutes=30)
-               ).isoformat(timespec="seconds").replace("+00:00", "Z")
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "ts": "2026-08-13T00:00:00Z",
-        "tier": "none",
-        "phase": "IDLE",
-        "active_hooks": ["completion_gate"],
-        "paused_hooks": [],
-        "user_override": {},
-        "expires_at": expires,
-    }), encoding="utf-8")
+    """Strict-activation state for completion_gate (863-h Family L)."""
+    write_hook_state(ws, active_hooks=["completion_gate"],
+                     ts="2026-08-13T00:00:00Z", tier="none",
+                     phase="IDLE", user_override={},
+                     expires_minutes=30)
 
 
 def _would_pass_oracle(ws):

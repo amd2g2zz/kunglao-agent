@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "workspace-manifest.md"
@@ -124,7 +125,7 @@ def test_init_creates_every_contract_dir(tmp_path):
     """End-to-end: a real init run materializes every contract directory."""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws)
     r = _run_init_cli(ws, tmp_path)
     assert r.returncode == 0, f"init failed: {r.stderr}"
     missing = [d for d in CONTRACT_DIRS if not (ws / d).is_dir()]

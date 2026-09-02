@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from _factories import write_claims_register
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -44,9 +45,7 @@ def _make_ws(tmp_path: Path, claims: list[dict] | None = None,
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     if register:
-        (ws / "claim-register.yaml").write_text(
-            yaml.safe_dump({"claims": claims or []}, allow_unicode=True),
-            encoding="utf-8")
+        write_claims_register(ws, claims or [])
         (ws / "claim_deps.yaml").write_text(deps, encoding="utf-8")
         facts = ws / "facts"
         facts.mkdir(exist_ok=True)

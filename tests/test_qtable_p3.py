@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import value_config  # noqa: E402
 import priority_ratio as pr  # noqa: E402
 import mission_ledger as ml  # noqa: E402
+from _factories import write_claims_register
 
 
 def _ws(tmp_path, claims, pqs=None, ledger=True):
@@ -30,10 +31,9 @@ def _ws(tmp_path, claims, pqs=None, ledger=True):
     ts = {"primary_questions": pqs or [
         {"id": "q1", "question": "RCE reachability?"}]}
     (ws / "task_spec.yaml").write_text(yaml.safe_dump(ts), encoding="utf-8")
-    (ws / "claim-register.yaml").write_text(yaml.safe_dump(
-        {"claims": claims}, allow_unicode=True), encoding="utf-8")
+    write_claims_register(ws, claims)
     (ws / "facts").mkdir()
-    (ws / "facts" / "_INDEX.md").write_text("", encoding="INDEX" and "utf-8")
+    (ws / "facts" / "_INDEX.md").write_text("", encoding="utf-8")
     if ledger:
         ml.init(ws)
     return ws

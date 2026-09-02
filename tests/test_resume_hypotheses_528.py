@@ -19,6 +19,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 
 import kunglao_resume as kr  # noqa: E402
+from _factories import write_hook_state
 
 
 def _armed_ws(tmp_path: Path, with_ledger: bool = True) -> Path:
@@ -42,9 +43,8 @@ def _armed_ws(tmp_path: Path, with_ledger: bool = True) -> Path:
     (ws / "runs" / ".heartbeat.json").write_text(json.dumps({
         "last_tick_ts": "2026-08-20T00:05:00Z",
         "activity_ts": "2026-08-20T00:05:00Z"}), encoding="utf-8")
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "expires_at": "2099-01-01T00:00:00Z", "active_hooks": []}),
-        encoding="utf-8")
+    write_hook_state(ws, active_hooks=[], paused_hooks=None,
+                     expires_at="2099-01-01T00:00:00Z")
     return ws
 
 

@@ -36,6 +36,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import completion_gate as cg  # noqa: E402
 import hook_activation as ha  # noqa: E402
+from _factories import write_hook_state
 
 # The exact L7 defect: an unquoted scalar value containing "colon+space"
 # (结构判定: 本地自损) — yaml.safe_load raises ScannerError "mapping values
@@ -70,24 +71,11 @@ def _load_hook_module():
 
 
 def _live_state(ws: Path, active_hooks=("active_intervention",)):
-    """The incident's state file shape: live activation that OMITS the
-    completion gate from active_hooks (a partial writer) — not expired."""
-    expires = (dt.datetime.now(tz=dt.timezone.utc) + dt.timedelta(minutes=30)
-               ).isoformat(timespec="seconds").replace("+00:00", "Z")
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "ts": "2026-08-25T19:31:27Z",
-        "tier": "advisory",
-        "phase": "IDLE",
-        "active_hooks": list(active_hooks),
-        "paused_hooks": [],
-        "user_override": {},
-        "expires_at": expires,
-    }), encoding="utf-8")
-
-
-# ---------------------------------------------------------------------------
-# L1 — is_active_strict honors ALWAYS_ARMED membership
-# ---------------------------------------------------------------------------
+    """Live activation omitting completion_gate - the incident shape."""
+    write_hook_state(ws, active_hooks=list(active_hooks),
+                     ts="2026-08-25T19:31:27Z", tier="advisory",
+                     phase="IDLE", user_override={},
+                     expires_minutes=30)
 
 def test_l1_gate_fires_when_state_omits_it(tmp_path):
     """ALWAYS_ARMED membership alone activates the gate (init's always_arm

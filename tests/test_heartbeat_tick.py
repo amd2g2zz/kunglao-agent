@@ -19,6 +19,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from _factories import write_hook_state
 
 ROOT = Path(__file__).resolve().parents[1]
 TICK = ROOT / "scripts" / "heartbeat_tick.py"
@@ -42,15 +43,9 @@ def _make_ws(tmp_path: Path) -> Path:
 
 def _set_hook_state(ws: Path, expires_at: str) -> None:
     """Fabricate .hook_state.json with a controlled expires_at."""
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "ts": _iso(datetime.now(timezone.utc)),
-        "tier": "none",
-        "phase": "IDLE",
-        "active_hooks": ["cost_gate"],
-        "paused_hooks": [],
-        "user_override": {},
-        "expires_at": expires_at,
-    }), encoding="utf-8")
+    write_hook_state(ws, active_hooks=["cost_gate"], ts=_iso(datetime.now(timezone.utc)),
+                     tier="none", phase="IDLE", user_override={},
+                     expires_at=expires_at)
 
 
 def _tick(ws: Path) -> tuple[dict, str]:

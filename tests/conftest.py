@@ -13,6 +13,11 @@ from pathlib import Path
 
 import pytest
 
+# 863-h Family L: shared fixture factories. Plain functions live in
+# tests/_factories.py; tests/ is on sys.path under pytest's prepend
+# import mode, so the bare module name resolves to THIS directory.
+from _factories import seed_bins, write_claims_register, write_hook_state  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "schemas"
 
@@ -43,15 +48,7 @@ def ws_factory(tmp_path):
         if with_runs:
             (ws / "runs").mkdir()
         reg = claims if claims is not None else []
-        (ws / "claim-register.yaml").write_text(
-            "claims:\n" + "".join(
-                f"- id: {c['id']}\n  status: {c.get('status', 'OPEN')}\n"
-                f"  boundary_type: {c.get('boundary_type', 'positive_observation')}\n"
-                f"  evidence_tier_attempted: {c.get('evidence_tier_attempted', 0)}\n"
-                f"  promotion_attempts: {c.get('promotion_attempts', 0)}\n"
-                f"  depends_on: {c.get('depends_on', '[]')}\n"
-                for c in reg
-            ), encoding="utf-8")
+        write_claims_register(ws, reg, defaults=True)
         if with_deps:
             (ws / "claim_deps.yaml").write_text("depends_on: {}\n", encoding="utf-8")
         if with_index:
@@ -133,3 +130,23 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     return home
+
+
+# ---------- 863-h Family L: thin fixture re-exports of tests/_factories ----------
+
+@pytest.fixture
+def hook_state_seed():
+    """Factory writing .hook_state.json (plain fn: tests/_factories)."""
+    return write_hook_state
+
+
+@pytest.fixture
+def claims_seed():
+    """Factory writing claim-register.yaml (plain fn: tests/_factories)."""
+    return write_claims_register
+
+
+@pytest.fixture
+def bins_seed():
+    """Factory seeding bins/ with a synthetic sample (plain fn)."""
+    return seed_bins

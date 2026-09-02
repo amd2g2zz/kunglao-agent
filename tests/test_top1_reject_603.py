@@ -39,6 +39,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from _factories import write_hook_state
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -68,11 +69,7 @@ def _top1_ws(root: Path) -> Path:
     _write(ws / "claim_deps.yaml", {
         "depends_on": {}, "competitor_groups": {"g1": ["C-1", "C-3"]}})
     _write(ws / "task_spec.yaml", {"primary_questions": []})
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "active_hooks": ["dispatch_gate"],
-        "paused_hooks": [],
-        "expires_at": "2099-12-31T23:59:59Z",
-    }), encoding="utf-8")
+    write_hook_state(ws, active_hooks=["dispatch_gate"])
     return ws
 
 
@@ -244,9 +241,8 @@ def _armed_ws(tmp_path: Path) -> Path:
         "activity_ts": "2099-08-20T00:05:00Z",
         "tick_history": ["2099-08-20T00:00:00Z", "2099-08-20T00:05:00Z"]}),
         encoding="utf-8")
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "expires_at": "2099-01-01T00:00:00Z", "active_hooks": []}),
-        encoding="utf-8")
+    write_hook_state(ws, active_hooks=[], paused_hooks=None,
+                     expires_at="2099-01-01T00:00:00Z")
     return ws
 
 

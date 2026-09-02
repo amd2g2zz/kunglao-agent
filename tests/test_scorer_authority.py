@@ -29,6 +29,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _factories import write_hook_state
 
 _HERE = Path(__file__).parent
 sys.path.insert(0, str(_HERE))
@@ -104,14 +105,9 @@ def _authority_ws(path: Path, *, failure_case: bool = False) -> Path:
     (path / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
     (path / "runs" / "worker-status-W-1.md").write_text(
         "[12:00] step: work done | status: done\n", encoding="utf-8")
-    (path / ".hook_state.json").write_text(json.dumps({
-        "tier": "none",
-        "phase": "test",
-        "expires_at": None,
-        "active_hooks": ["worker_pulse"],
-        "paused_hooks": [],
-        "user_override": {},
-    }), encoding="utf-8")
+    write_hook_state(path, active_hooks=["worker_pulse"],
+                     phase="test", tier="none", user_override={},
+                     expires_at=None)
     return path
 
 
