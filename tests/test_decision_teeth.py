@@ -35,6 +35,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from _factories import write_hook_state
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -49,12 +50,8 @@ def _write(path: Path, data: dict) -> None:
 
 
 def _activate(ws: Path) -> None:
-    """Make dispatch_gate ACTIVE on this workspace (v1.9.7 TTL discipline)."""
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "active_hooks": ["dispatch_gate"],
-        "paused_hooks": [],
-        "expires_at": "2099-12-31T23:59:59Z",
-    }), encoding="utf-8")
+    """Make dispatch_gate ACTIVE on this workspace (v1.9.7 TTL)."""
+    write_hook_state(ws, active_hooks=["dispatch_gate"])
 
 
 def _top1_ws(root: Path) -> Path:

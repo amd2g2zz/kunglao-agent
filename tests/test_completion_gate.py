@@ -30,6 +30,7 @@ import importlib.util
 _cg_spec = importlib.util.spec_from_file_location("completion_gate_scripts", SCRIPTS / "completion_gate.py")
 cg = importlib.util.module_from_spec(_cg_spec)
 import sys as _sys
+from _factories import write_hook_state
 _sys.modules["completion_gate_scripts"] = cg
 _cg_spec.loader.exec_module(cg)
 
@@ -339,18 +340,9 @@ def _load_hook_module():
 
 def _activated_state(ws: Path):
     """Write a .hook_state.json that strict-activates completion_gate."""
-    import datetime as dt
-    expires = (dt.datetime.now(tz=dt.timezone.utc) + dt.timedelta(minutes=30)
-               ).isoformat(timespec="seconds").replace("+00:00", "Z")
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "ts": "2026-08-11T12:00:00Z",
-        "tier": "none",
-        "phase": "IDLE",
-        "active_hooks": ["completion_gate"],
-        "paused_hooks": [],
-        "user_override": {},
-        "expires_at": expires,
-    }), encoding="utf-8")
+    write_hook_state(ws, active_hooks=["completion_gate"],
+                     ts="2026-08-11T12:00:00Z", tier="none", phase="IDLE",
+                     user_override={}, expires_minutes=30)
 
 
 def _run_hook(ws: Path, stop_hook_active=False):

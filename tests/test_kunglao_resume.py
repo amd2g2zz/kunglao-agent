@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
+from _factories import write_hook_state
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -97,11 +98,8 @@ def _armed_ws(tmp_path: Path, *, name: str = "ws",
             json.dumps(snap) + "\n", encoding="utf-8")
 
     if with_hook_state:
-        (ws / ".hook_state.json").write_text(json.dumps({
-            "expires_at": _iso(now + timedelta(minutes=10)),
-            "active_hooks": ["worker_budget.py", "dispatch_gate.py"],
-            "paused_hooks": [],
-        }), encoding="utf-8")
+        write_hook_state(ws, active_hooks=["worker_budget.py", "dispatch_gate.py"],
+                         expires_at=_iso(now + timedelta(minutes=10)))
 
     if with_event_log:
         logs = ws / "runs" / "logs"

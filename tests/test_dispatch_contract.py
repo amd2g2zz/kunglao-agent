@@ -61,6 +61,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from _factories import write_hook_state
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
@@ -263,14 +264,9 @@ def _make_worker_ws(path: Path, status: str = "done") -> Path:
     line = ("[12:00] step: work done | status: done\n" if status == "done"
             else "[12:00] step: working | status: in-progress\n")
     (path / "runs" / "worker-status-W-1.md").write_text(line, encoding="utf-8")
-    (path / ".hook_state.json").write_text(json.dumps({
-        "tier": "none",
-        "phase": "test",
-        "expires_at": None,
-        "active_hooks": ["worker_pulse"],
-        "paused_hooks": [],
-        "user_override": {},
-    }), encoding="utf-8")
+    write_hook_state(path, active_hooks=["worker_pulse"],
+                     phase="test", tier="none", user_override={},
+                     expires_at=None)
     return path
 
 

@@ -31,16 +31,14 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import route_capability as rc  # noqa: E402
+from _factories import write_hook_state
 
 
 # ---------- shared harness (shape mirrors tests/test_decision_teeth.py) ------
 
 def _activate(ws: Path) -> None:
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "active_hooks": ["dispatch_gate"],
-        "paused_hooks": [],
-        "expires_at": "2099-12-31T23:59:59Z",
-    }), encoding="utf-8")
+    """Arm dispatch_gate via the shared factory (863-h Family L)."""
+    write_hook_state(ws, active_hooks=["dispatch_gate"])
 
 
 def _minimal_ws(root: Path, *, activate: bool = True,

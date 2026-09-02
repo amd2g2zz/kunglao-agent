@@ -43,6 +43,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 import backtrack_loop as bl  # noqa: E402
 import kunglao_log  # noqa: E402
+from _factories import write_hook_state
 
 
 # ---------------------------------------------------------------- helpers --
@@ -188,9 +189,8 @@ class TestMicroRetro:
     def _run_gate(self, root: Path, ws: Path) -> subprocess.CompletedProcess:
         expires = (datetime.now(timezone.utc)
                    + timedelta(minutes=30)).isoformat().replace("+00:00", "Z")
-        (ws / ".hook_state.json").write_text(json.dumps(
-            {"active_hooks": ["dispatch_gate"], "expires_at": expires}),
-            encoding="utf-8")
+        write_hook_state(ws, active_hooks=["dispatch_gate"],
+                         paused_hooks=None, expires_at=expires)
         payload = json.dumps({
             "cwd": str(root), "workspace": str(ws),
             "tool_input": {"prompt":
