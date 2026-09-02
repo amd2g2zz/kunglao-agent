@@ -558,26 +558,12 @@ SCAFFOLD_FILES = {
 }
 
 
-def utc_now() -> str:
-    """UTC ISO-8601 seconds precision, Z suffix (same shape as hooks_selfcheck)."""
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
-def _ensure_utf8_stderr(stream=None) -> bool:
-    """#451 乱码 fix: stderr unified to utf-8/replace (stdout already is).
-
-    A GBK-default stderr next to a utf-8 stdout garbles the mixed terminal
-    stream (`REFUSE —` -> `REFUSE ??`, 2026-08-17 transcript). Fail-open on
-    streams without reconfigure (returns False, never raises)."""
-    target = sys.stderr if stream is None else stream
-    reconfigure = getattr(target, "reconfigure", None)
-    if reconfigure is None:
-        return False
-    try:
-        reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        return False
-    return True
+# #863 Family H: single source in utf8_boot (#811 stdio-insurance module);
+# alias binds the SHARED function; the call site stays in main() unchanged.
+from utf8_boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
 
 
 def atomic_write(path: Path, text: str) -> None:

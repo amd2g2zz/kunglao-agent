@@ -79,8 +79,7 @@ KONG_HOOK_FILES = list(_KONG_CHAIN_FILES)
 USER_SETTINGS = Path.home() / ".claude" / "settings.json"
 
 
-def utc_now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def check_settings(settings_path: Path) -> dict:

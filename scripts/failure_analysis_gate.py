@@ -101,7 +101,6 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -136,8 +135,7 @@ REFLECT_QUEUE_DEFAULT = Path.home() / ".claude" / "learnings-queue.json"
 REFLECT_ITEM_TYPE = "failure-lesson-candidate"
 
 
-def utc_now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+from harness_common import utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 def _emit_failure_blocked(workspace: Path, d: dict) -> None:
@@ -636,72 +634,6 @@ def _reflect_reason(outcome: str | None, redteam_ok: bool) -> str:
     return ""
 
 
-def _read_lesson_frontmatter(path: Path) -> tuple[str, str, dict]:
-    """Return (raw_text, fm_yaml, parsed_dict). Tolerant to malformed."""
-    text = path.read_text(encoding="utf-8")
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return text, "", {}
-    try:
-        fm = yaml.safe_load(parts[1]) or {}
-        if not isinstance(fm, dict):
-            fm = {}
-    except Exception:
-        fm = {}
-    return text, parts[1], fm
-
-
-def promote_lesson(lesson_path: Path, workspace: Path | None = None,
-                   promoted_by: str = "kunglao-verify",
-                   evidence: str = "",
-                   demote_to: str | None = None) -> dict:
-    """#525: flip a lesson's frontmatter stage draft → active, stamp
-    promoted_at / promoted_by / promoted_evidence, and emit a
-    lesson_stage_transition row to the kunglao_log. Idempotent on
-    already-active (no rewrite, no audit row). Demotion is forbidden —
-    lessons only retire (separate signal); attempts raise ValueError."""
-    if demote_to is not None:
-        raise ValueError(
-            f"demotion to {demote_to!r} is not supported by promote_lesson; "
-            "retire the lesson instead (separate signal, #525).")
-    lesson_path = Path(lesson_path)
-    text, fm_yaml, fm = _read_lesson_frontmatter(lesson_path)
-    current = str(fm.get("stage", "draft")).strip().lower() or "draft"
-    if current == "active":
-        return {"promoted": False, "already_active": True,
-                "lesson": str(lesson_path)}
-    fm["stage"] = "active"
-    fm["promoted_at"] = utc_now_iso()
-    fm["promoted_by"] = promoted_by
-    if evidence:
-        fm["promoted_evidence"] = evidence
-    new_yaml = yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).strip()
-    new_text = text.replace(fm_yaml, new_yaml, 1)
-    if new_text == text:
-        # frontmatter never matched — defensive rewrite
-        new_text = "---\n" + new_yaml + "\n---\n" + text.split("---", 2)[-1]
-    lesson_path.write_text(new_text, encoding="utf-8")
-
-    # Audit row: lesson_stage_transition, actor=nursery, claim=<first source>.
-    sources = fm.get("sources") or []
-    claim_id = str(sources[0]) if sources else ""
-    detail = (f"draft→active promoted_by={promoted_by}")
-    if evidence:
-        detail += f" evidence={evidence}"
-    try:
-        if workspace is not None:
-            from kunglao_log import emit
-            emit(Path(workspace), actor="nursery",
-                 action="lesson_stage_transition", claim=claim_id,
-                 detail=detail)
-    except Exception:
-        pass  # logging never blocks promotion
-    return {"promoted": True, "already_active": False,
-            "lesson": str(lesson_path),
-            "promoted_at": fm["promoted_at"],
-            "promoted_by": promoted_by}
-
-
 def _append_reflect_queue(queue_path: Path, entries: list[dict]) -> int:
     """Append items to the claude-reflect learnings queue (JSON array, plugin
     schema + failure fields); idempotent on claim_id|reason."""
@@ -959,6 +891,12 @@ def promote_lesson(lesson_path: Path, workspace: Path,
     Re-promoting an active lesson is an idempotent no-op (already_active).
     Demotion (active → draft) is rejected with ValueError — lessons do not
     regress; retirement is a separate signal.
+
+    #863: single definition — an earlier same-name def in this file
+    (tolerant parse + FileNotFoundError raising + conditional evidence
+    stamp) was DEAD CODE shadowed by this later def and has been deleted;
+    the consolidation is behavior-preserving by construction (every caller
+    already resolved here).
     """
     if demote_to is not None:
         raise ValueError(

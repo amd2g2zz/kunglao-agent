@@ -52,8 +52,54 @@ sys.path.insert(0, str(Path(__file__).parent))
 from lint_facts import (  # type: ignore
     ID_RE,
     VALID_CONFIDENCE_ZH,
-    parse_frontmatter,
+    _parse_kv_block,
 )
+
+
+# #863 conflict ruling: migrate_facts carries its OWN frontmatter parser.
+# This is a one-shot migration tool — it parses PRE-migration fact shapes,
+# so it keeps the full tolerant semantics (yaml-first, kv fallback) inline
+# instead of importing lint_facts.parse_frontmatter (whose lint-side
+# contract hardens independently of this tool; the tool retires with its
+# own luggage). The low-level kv block parser stays in lint_facts (#863
+# ruling keeps it there) and is reused as-is.
+def _coerce_yaml_scalars(obj):
+    if isinstance(obj, datetime.datetime):
+        return obj.date().isoformat()
+    if isinstance(obj, datetime.date):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: _coerce_yaml_scalars(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_coerce_yaml_scalars(v) for v in obj]
+    return obj
+
+
+def _parse_frontmatter(text: str):
+    """Return (fm, body, error). fm={} when no fence; error set when
+    unparseable. Tolerant semantics: yaml-first, kv fallback (the pre-
+    migration shapes this tool exists to migrate are not strict YAML)."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}, text, "no-frontmatter"
+    end = None
+    for i, line in enumerate(lines[1:], 1):
+        if line.strip() == "---":
+            end = i
+            break
+    if end is None:
+        return {}, text, "no-closing-fence"
+    fm_text = "\n".join(lines[1:end])
+    body = "\n".join(lines[end + 1:])
+    if yaml is not None:
+        try:
+            fm = yaml.safe_load(fm_text)
+            if isinstance(fm, dict):
+                return _coerce_yaml_scalars(fm), body, None
+        except yaml.YAMLError:
+            pass
+    fm = _parse_kv_block(lines[1:end])
+    return fm, body, "yaml-unparseable"
 
 try:
     import yaml  # type: ignore
@@ -357,7 +403,7 @@ def migrate_fact(path: Path, ws: Path, claim_map: dict, errors: list, warnings: 
                  map_facts: dict | None = None) -> bool:
     """Migrate one fact file in place. Returns True when the file was rewritten."""
     text = path.read_text(encoding="utf-8", errors="replace")
-    fm, body, perr = parse_frontmatter(text)
+    fm, body, perr = _parse_frontmatter(text)
     fid = str(fm.get("id") or "")
     m = re.fullmatch(r"F(\d{3,})", fid or "") or re.fullmatch(r"F(\d{3,})", path.stem)
     if not m:
@@ -476,13 +522,13 @@ def migrate_workspace(ws: Path, *, backup: bool = False, dry_run: bool = False,
         if only and key != only:
             continue
         if dry_run:
-            fm, _body, _ = parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
+            fm, _body, _ = _parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
             report["migrated"].append({"file": p.name, "dry_run": True})
             continue
         changed = migrate_fact(p, ws, claim_map, report["errors"], report["warnings"],
                                map_facts=migration_map)
         if changed:
-            fm, _b, _e = parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
+            fm, _b, _e = _parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
             new_id = str(fm.get("id") or "")
             old_id = f"F{int(m.group(1)):03d}"
             if new_id and new_id != old_id:

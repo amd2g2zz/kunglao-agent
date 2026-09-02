@@ -250,8 +250,7 @@ def evaluate_tick_continuity(state: dict, *,
             f"{int(2 * interval)}m)")
 
 
-def utc_now() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def heartbeat_register(workspace: Path, loop_registered: bool = False) -> int:

@@ -19,12 +19,12 @@
 
 ## PR 866-b（另行派发：存量逐个鉴定 + Ghidra 四件套 + scripts 鉴定表）
 
-- [ ] tools 侧产线未接线 14 个逐个鉴定：真有用（opaque_pred/stack-strings 类 RE 刚需）
+- [x] tools 侧产线未接线 14 个逐个鉴定：真有用（opaque_pred/stack-strings 类 RE 刚需）
       → 补 SKILL 教学段 + references 条目 + recall 语料条目并出基线；过时 → 按退役政策删
-- [ ] "在册但零教学面"清单（22 口径下的 8 个）补教学面或绑定价值排序说明
-- [ ] Ghidra 四件套（ghidra_diff/ghidra_job/run_ghidra_postscript/job_store，~1,928L）
-      登记或显式退役；基线同步收缩
-- [ ] scripts 侧 32 个鉴定表：绑定在途 change 标注 / SUSPECT→DEAD 按产线语义档输出
+- [x] "在册但零教学面"清单（22 口径下的 8 个，实测 10 个缺教学）补教学面（references/re-library/kunglao-toolshelf.md）
+- [x] Ghidra 四件套（ghidra_diff/ghidra_job/run_ghidra_postscript/job_store，~1,928L）
+      登记或显式退役；基线同步收缩（ghidra_diff 独立条目+契约条目；job_store 按 lib 处置；基线 27 到 0）
+- [x] scripts 侧 29 个鉴定表（31 减 capture_golden 闭包翻转 2）：绑定在途 change 标注 / SUSPECT→DEAD 判定按产线语义档输出（退役=0；ledger 落 scripts/README.md）
 - [ ] deploy-manifest 对账：发布面与登记面对齐佐证条目（deploy 全树收录退化的纠偏
       属此节评估）
-- [ ] 基线清偿后 devkit/.discovery-gate-baseline.txt 归零核对
+- [x] 基线清偿后 devkit/.discovery-gate-baseline.txt 归零核对（27 到 0，门 exit 0）

@@ -57,22 +57,10 @@ from pathlib import Path
 # UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
 
 # ---- #729 annotation gate constants ------------------------------------
-# Rule A — LEGACY_UNANNOTATED whitelist (29 entries without provider blocks).
-# Frozen set: entries may ONLY be removed, never added. Every removal is a
-# deliberate annotation migration (one-way, never reversed). Annotating a
-# LEGACY entry is encouraged — it graduates to the real registry.
-_LEGACY_UNANNOTATED = frozenset({
-    "crypto-tool", "ghidra-recon", "ghidra-decompile-functions",
-    "ghidra-vtable-struct", "ghidra-evidence-annotations",
-    "ghidra-scan-pointer", "disasm-constant-check", "yara-scan",
-    "yara-gen", "extract-syscalls", "stack-strings", "binary-sweep",
-    "strings-classify", "go-buildinfo-carve", "rust-dep-strings",
-    "call-site-args", "pe-analyze", "overlay-scan", "disasm-dump",
-    "shellcode-scan", "die-probe", "c-normalize", "opaque-pred",
-    "build-evidence-index", "audit-legacy-proven", "capture-golden",
-    "measure-blind-coverage", "measure-cold-start", "sanitize-text",
-})
-
+# Rule A — annotation gate (#863): EVERY entry must carry a provider block.
+# The LEGACY_UNANNOTATED whitelist (29 frozen names tolerated without
+# annotation) is retired — the mechanical catalog backfill landed the
+# annotation blocks in tools/_INDEX.yaml, so the tolerated set is empty.
 # Rule B — CAPABILITY_TAGS closed vocabulary (#729).
 # Every <domain>:<operation> tag that appears in any `produces` field must
 # be listed here. Expanding this constant is an intentional, review-visible
@@ -104,6 +92,74 @@ _CAPABILITY_TAGS = frozenset({
     "web:triage",         # #884: three-feature JSVMP/VMP triage verdict
     # crypto: — legitimate routing tag for the crypto-tool family
     "crypto:decode",
+    # aux: — #863 mechanical catalog backfill: the legacy CLIs' own primary
+    # capabilities joined the closed vocabulary (1:1 from the entries'
+    # capability fields — no invented semantics).
+    "aux:blind-coverage",
+    "aux:cold-start-metrics",
+    "aux:golden-capture",
+    "aux:proven-audit",
+    # ghidra: — #863 mechanical backfill (legacy ghidra family primaries)
+    "ghidra:annotate",
+    "ghidra:decompile",
+    "ghidra:recon",
+    "ghidra:vtable",
+    "ghidra:xref-scan",
+    # pipeline: — #863 mechanical backfill
+    "pipeline:evidence-index",
+    # static: — #863 mechanical backfill (legacy static family primaries)
+    "static:buildinfo-carve",
+    "static:byte-sweep",
+    "static:callsite-args",
+    "static:decompile-normalize",
+    "static:disasm",
+    "static:disasm-check",
+    "static:identify",
+    "static:opaque-predicate",
+    "static:overlay-scan",
+    "static:pe-parse",
+    "static:rust-dep-strings",
+    "static:shellcode-scan",
+    "static:stack-strings",
+    "static:strings-classify",
+    "static:syscall-extract",
+    "static:yara-gen",
+    "static:yara-scan",
+    # ghidra: — #866-b registration of the Ghidra Version Tracking binary diff
+    "ghidra:diff",
+    # aux: — #863 mechanical catalog backfill: the legacy CLIs' own primary
+    # capabilities joined the closed vocabulary (1:1 from the entries'
+    # capability fields — no invented semantics).
+    "aux:blind-coverage",
+    "aux:cold-start-metrics",
+    "aux:golden-capture",
+    "aux:proven-audit",
+    # ghidra: — #863 mechanical backfill (legacy ghidra family primaries)
+    "ghidra:annotate",
+    "ghidra:decompile",
+    "ghidra:recon",
+    "ghidra:vtable",
+    "ghidra:xref-scan",
+    # pipeline: — #863 mechanical backfill
+    "pipeline:evidence-index",
+    # static: — #863 mechanical backfill (legacy static family primaries)
+    "static:buildinfo-carve",
+    "static:byte-sweep",
+    "static:callsite-args",
+    "static:decompile-normalize",
+    "static:disasm",
+    "static:disasm-check",
+    "static:identify",
+    "static:opaque-predicate",
+    "static:overlay-scan",
+    "static:pe-parse",
+    "static:rust-dep-strings",
+    "static:shellcode-scan",
+    "static:stack-strings",
+    "static:strings-classify",
+    "static:syscall-extract",
+    "static:yara-gen",
+    "static:yara-scan",
 })
 # ---- end annotation gate constants -------------------------------------
 
@@ -145,7 +201,8 @@ def _check_provider_annotations(entry: dict, loc: str, i: int,
                                 errors: list[str]) -> None:
     """#692 WP1: the opt-in capability-provider annotation block (D1).
 
-    Only runs when `provider` is present — legacy entries are untouched.
+    Only runs when `provider` is present (#863: present on every entry —
+    the legacy tolerance is retired).
     """
     provider = entry.get("provider")
     if not _is_nonempty_str(provider):
@@ -294,17 +351,15 @@ def validate_index(data) -> list[str]:
         if when_not is not None and not _is_nonempty_str(when_not):
             errors.append(f"{loc}: optional 'when_not' must be a non-empty string")
 
-        # #729 Rule A: new entries without a provider block are dead weight.
-        # LEGACY_UNANNOTATED (29 entries, frozen) get a WARN pass.
-        # Every other entry MUST carry a provider block.
+        # #729 Rule A / #863: EVERY entry must carry a provider block — the
+        # LEGACY_UNANNOTATED whitelist is retired (mechanical catalog
+        # backfill landed annotations for all formerly-legacy entries).
         if "provider" not in entry:
-            if name not in _LEGACY_UNANNOTATED:
-                errors.append(
-                    f"{loc}: entry '{name}' has no 'provider' block and is not "
-                    "in LEGACY_UNANNOTATED — new entries must carry annotation "
-                    f"blocks ({len(_LEGACY_UNANNOTATED)} legacy names are "
-                    "tolerated without annotation)"
-                )
+            errors.append(
+                f"{loc}: entry '{name}' has no 'provider' block — every "
+                "entry must carry an annotation block (#863 retired the "
+                "legacy unannotated tolerance)"
+            )
 
         # #692 WP1: opt-in annotation block (skipped for legacy entries)
         if "provider" in entry:

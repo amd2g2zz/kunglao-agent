@@ -232,6 +232,37 @@ def test_promote_active_lesson_is_noop(tmp_path):
     assert _lesson_frontmatter(lesson_path)["promoted_at"] == first
 
 
+def test_promote_soft_fails_on_missing_or_malformed_lessons(tmp_path):
+    """#863 consolidation: the surviving promote_lesson soft-fails with a
+    reason dict (no exception) on a missing lesson file, a lesson without
+    a frontmatter fence, or unparseable frontmatter — no rewrite, no audit
+    row. (The shadowed dead definition raised FileNotFoundError instead;
+    the live definition is the pinned semantics.)"""
+    fag = _import_fag()
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    missing = tmp_path / "lib" / "lesson-nope.md"
+    res = fag.promote_lesson(missing, workspace=ws, promoted_by="kunglao-verify",
+                             evidence="e")
+    assert res["promoted"] is False and "not found" in res["reason"]
+
+    no_fm = tmp_path / "lesson-nofm.md"
+    no_fm.write_text("just prose, no fence\n", encoding="utf-8")
+    res = fag.promote_lesson(no_fm, workspace=ws, promoted_by="kunglao-verify",
+                             evidence="e")
+    assert res["promoted"] is False and "frontmatter" in res["reason"]
+
+    broken = tmp_path / "lesson-broken.md"
+    broken.write_text("---\nstage: [unclosed\n---\nbody\n", encoding="utf-8")
+    res = fag.promote_lesson(broken, workspace=ws, promoted_by="kunglao-verify",
+                             evidence="e")
+    assert res["promoted"] is False and "reason" in res
+
+    # nothing was rewritten
+    assert no_fm.read_text(encoding="utf-8") == "just prose, no fence\n"
+    assert broken.read_text(encoding="utf-8") == "---\nstage: [unclosed\n---\nbody\n"
+
+
 def test_promote_rejects_demotion(tmp_path):
     """promote_lesson() must not silently move active → draft; lessons
     only retire (separate signal). Demotion attempt raises."""

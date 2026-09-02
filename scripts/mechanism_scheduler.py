@@ -110,9 +110,7 @@ LEGACY_REPORT_KEYS = {
 }
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(
-        timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 # ---------------------------------------------------------------------------

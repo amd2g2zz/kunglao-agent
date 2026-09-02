@@ -69,7 +69,6 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -106,9 +105,7 @@ _FACT_INDEX_LINE = re.compile(r"^\s*F0*(\d+)\s*\|")
 _FACT_REF = re.compile(r"\bF(\d+)\b", re.IGNORECASE)
 
 
-def utc_now_iso() -> str:
-    """ISO-8601 UTC with a trailing Z (matches dead_letter/claim_expiry stamps)."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 def _load_yaml(p: Path) -> dict:

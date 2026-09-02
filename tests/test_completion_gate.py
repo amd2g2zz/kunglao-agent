@@ -456,7 +456,7 @@ def test_stop_activated_no_oracle_blocks(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# (9) wire_up_settings Stop section + ALL_HOOKS membership
+# (9) hook registration Stop section + ALL_HOOKS membership
 # ---------------------------------------------------------------------------
 
 def _patch_home(tmp_path, monkeypatch):
@@ -482,8 +482,8 @@ def test_wire_up_registers_stop_completion_gate(tmp_path, monkeypatch):
     fake_home = _patch_home(tmp_path, monkeypatch)
     ws = tmp_path / "ws"
     ws.mkdir()
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings_path = ws / ".claude" / "settings.json"
     assert settings_path.exists(), "wire_up_settings must write the PROJECT settings.json"
     assert not (fake_home / ".claude" / "settings.json").exists(), \
@@ -503,9 +503,9 @@ def test_wire_up_stop_idempotent(tmp_path, monkeypatch):
     fake_home = _patch_home(tmp_path, monkeypatch)
     ws = tmp_path / "ws"
     ws.mkdir()
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
-    wire_up_settings(workspace=ws)  # re-run — must be a fixed point
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
+    register_hooks(workspace=ws)  # re-run — must be a fixed point
     settings_path = ws / ".claude" / "settings.json"
     assert not (fake_home / ".claude" / "settings.json").exists()
     settings = json.loads(settings_path.read_text(encoding="utf-8"))

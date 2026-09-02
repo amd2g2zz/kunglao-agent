@@ -141,13 +141,16 @@ def test_duplicate_provider_is_rejected():
 
 # ---------- opt-in: legacy entries unaffected ----------
 
-def test_legacy_entry_without_provider_passes():
-    """A LEGACY_UNANNOTATED entry (frozen set) without provider passes."""
+def test_removed_whitelist_name_without_provider_fails():
+    """#863: the LEGACY_UNANNOTATED whitelist is gone — die-probe without a
+    provider block now FAILs (every shipped entry must carry annotations)."""
     entry = _valid_entry(
-        name="die-probe",      # in LEGACY_UNANNOTATED
+        name="die-probe",      # formerly in LEGACY_UNANNOTATED
         capability="static:identify",
     )
-    assert _errors_for(entry) == []
+    errs = _errors_for(entry)
+    assert any("provider" in e for e in errs), (
+        f"formerly-legacy name without provider must fail: {errs}")
 
 
 def test_new_entry_without_provider_is_rejected():

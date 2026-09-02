@@ -4,4 +4,15 @@
 - [x] Family G: conftest fork 清零 —— #811 裁决(34e1603)已删 5 个被遮蔽 root fixtures；本卡补防复活机械钉 test_conftest_single_source_863g(4 钉：root 禁 5 名/必持 5 夹具/golden_master #317 UTF-8 解码/fixture 行为解析钉)
 - [x] Family L: test fixture families → conftest factories —— tests/_factories.py 三工厂(write_hook_state 29 点/24 文件收编（4 形状 + extra 键）；write_claims_register canonical+sparse 双方言；seed_bins 34 点/26 文件) + conftest 薄再导出 + ws_factory 委托；12 形状等价钉 test_fixture_factories_863l
 - [ ] Family D: toolchain `_which_items()` helper
+- [x] Family D: toolchain `_which_items()` helper（#877 已交付；863-f 复核 CONFIRMED 单源无残留，见 proposal.md Recon）
+- [x] 863-e #1: wire_up_settings deprecated alias 删除（注册表本体保留）+ DEPRECATED_ALIASES 清账 + 测试改调 register_hooks
+- [x] 863-e #2: worker_budget._ShimModule + _PROPAGATE_TO 删除 + 3 测试文件直 patch 源模块
+- [x] 863-e #3: validate_index._LEGACY_UNANNOTATED 白名单删除 + _INDEX.yaml 29 条目机械回填 + _CAPABILITY_TAGS 扩 27 标签
+- [x] 863-e #4: digest_build pre-contract `<ws>/_INDEX.md` fallback 删除
+- [x] 863-e #5: promote_lesson 死定义（:654，被 :949 遮蔽）删除 + helper `_read_lesson_frontmatter` 清理 + soft-fail 行为钉
+- [x] 863-e #6: kunglao_verify --grace/--grace-scan 一次性迁移旗标退役（含 kunglao.py 镜像 + schema.md 段 + 配对测试）
+- [x] 863-e #7: lint_facts/migrate_facts 裁决落地（YAMLError 硬错 + PARTIALLY-VERIFIED 出 status 集 + _parse_kv_block 保留 + migrate_facts 内联 _parse_frontmatter）
+- [x] Family E: kunglao_upgrade WARN-triple 单源（16 处 print → `_warn`/`_warn_line` 模块内单源 + delegation/confinement 执法测试）
+- [x] Family H: `_ensure_utf8_stderr` 3×9 → `scripts/utf8_boot.ensure_utf8_stderr` 纯别名委托；textual tripwire 改身份级 delegation 断言
+- [ ] Family F: utc_now 重数（四说 7/33/50/20 → 实数 53 份定义：datetime 8 / strftime-Z 23 / isoformat-Z 20 / +00:00 2）→ `scripts/harness_common.py` utc_now/utc_now_z/utc_now_iso 单源 + 53 份委托（B/C 字节等价收敛、D 真变体保留）；守护测试 confinement/wiring/identity/契约钉
 - [ ] 全量质量门 + CI

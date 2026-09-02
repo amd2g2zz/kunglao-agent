@@ -98,13 +98,10 @@ def detect_drift(ws: Path) -> list[dict]:
     return events
 
 
-def utc_now() -> str:
-    """UTC ISO-8601, second precision, Z suffix (schema ts pattern)."""
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
-def _utc_now_dt() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
+from harness_common import utc_now as _utc_now_dt  # #863 Family F: single source (was a local def)
 
 
 def heartbeat_check(ws: Path) -> tuple[str, str]:

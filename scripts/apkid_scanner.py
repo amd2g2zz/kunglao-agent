@@ -20,7 +20,6 @@ import json
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -28,8 +27,7 @@ from typing import Any
 _CATEGORIES = ("packer", "compiler", "obfuscator", "anti_vm", "anti_debug")
 
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def _empty_summary() -> dict[str, Any]:

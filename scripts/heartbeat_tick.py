@@ -84,8 +84,7 @@ RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cad
 from ws_layout import resolve_strict as _resolve_ws  # noqa: E402
 
 
-def utc_now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def run(script: str, ws: Path, *extra: str) -> dict:

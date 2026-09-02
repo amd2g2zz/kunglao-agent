@@ -39,7 +39,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -47,9 +46,7 @@ import yaml
 
 # ---------- UTC stamp (matches retract_claim / failure_analysis_gate) ----
 
-def _utc_now_iso() -> str:
-    """ISO-8601 UTC with a trailing Z — same convention as the rest of the kunglao code."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as _utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 # ---------- emit helper (fail-open — observation must never break counting)

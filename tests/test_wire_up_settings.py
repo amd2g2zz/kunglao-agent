@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """wire_up_settings — issue #258 project-level hook deployment.
 
-#258 (2026-08-12): wire_up_settings() must deploy kunglao-agent hooks to the
+#258 (2026-08-12): hook registration must deploy kunglao-agent hooks to the
 PROJECT-level settings.json (<workspace>/.claude/settings.json) and NEVER the
 user-global ~/.claude/settings.json (the pre-#258 default bound hooks to a
 worktree path that died with the worktree — 8 hooks went silent at once).
@@ -73,8 +73,8 @@ def test_wire_up_writes_project_settings_with_all_hooks(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings_path = ws / ".claude" / "settings.json"
     assert settings_path.exists(), "project settings.json must be created"
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -88,8 +88,8 @@ def test_wire_up_never_writes_global(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     assert not (fake_home / ".claude" / "settings.json").exists(), \
         "user-global ~/.claude/settings.json must NOT be created"
 
@@ -99,8 +99,8 @@ def test_wire_up_global_opt_in_writes_home(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws, global_opt_in=True)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws, global_opt_in=True)
     assert (fake_home / ".claude" / "settings.json").exists(), \
         "global_opt_in=True must write the user-global settings"
 
@@ -109,9 +109,9 @@ def test_wire_up_idempotent(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
-    wire_up_settings(workspace=ws)  # re-run — fixed point
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
+    register_hooks(workspace=ws)  # re-run — fixed point
     settings_path = ws / ".claude" / "settings.json"
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     cmds = _collect_commands(settings)
@@ -129,8 +129,8 @@ def test_wire_up_hook_paths_point_to_canonical_skill(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings = json.loads((ws / ".claude" / "settings.json").read_text(encoding="utf-8"))
     canonical = (fake_home / ".claude" / "skills" / "kunglao-agent" / "hooks").as_posix()
     skill_root = (fake_home / ".claude" / "skills" / "kunglao-agent").as_posix()
@@ -156,8 +156,8 @@ def test_wire_up_commands_use_uv_on_this_machine(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings = json.loads((ws / ".claude" / "settings.json").read_text(encoding="utf-8"))
     cmds = _collect_commands(settings)
     assert cmds, "wire_up must emit hook commands"
@@ -171,8 +171,8 @@ def test_wire_up_cwd_probe(tmp_path, fake_home, monkeypatch):
     ws.mkdir()
     monkeypatch.chdir(ws)
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings()
+    from hook_activation import register_hooks
+    register_hooks()
     settings_path = ws / ".claude" / "settings.json"
     assert settings_path.exists(), "cwd probe must create <cwd>/.claude/settings.json"
     assert not (fake_home / ".claude" / "settings.json").exists()
@@ -195,8 +195,8 @@ def test_wire_up_preserves_existing_keys(tmp_path, fake_home):
         },
     }), encoding="utf-8")
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     assert settings["env"]["KUNGLAO_VM_HOST"] == "192.168.20.128", "env keys preserved"
     assert settings["statusLine"]["command"] == "echo hi", "statusLine preserved"

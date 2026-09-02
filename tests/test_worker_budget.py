@@ -937,6 +937,7 @@ def test_e2e_subprocess_gates_reject_emits_guidance(tmp_path, capsys, monkeypatc
     """#270 e2e for the 3 subprocess-backed gates (drift / health / backtrack):
     each rejects with exit 2, stderr REJECT and non-empty additionalContext."""
     import worker_budget as wb
+    import worker_budget_core
     from types import SimpleNamespace
 
     cases = [
@@ -946,8 +947,10 @@ def test_e2e_subprocess_gates_reject_emits_guidance(tmp_path, capsys, monkeypatc
     ]
     for name, script, rc_val, keyword in cases:
         ws = _healthy_ws(tmp_path / name)
+        # #863: patch the OWNING module — the wb shim propagation was
+        # removed and the gates' _run_py resolves in core's globals.
         monkeypatch.setattr(
-            wb, '_run_py',
+            worker_budget_core, '_run_py',
             lambda args, cwd=None, s=script, rv=rc_val: SimpleNamespace(
                 returncode=rv if (args and Path(args[0]).name == s) else 0,
                 stderr='fake', stdout=''))

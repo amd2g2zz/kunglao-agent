@@ -195,9 +195,9 @@ def _write_hook_state(ws: Path, *, phase: str = "IDLE",
 def quiet_subprocess_gates(monkeypatch):
     """Deterministic drift/health/backtrack gates (rc 0) — mirrors the
     monkeypatch in test_worker_budget.test_e2e_every_reject_emits_guidance."""
-    import worker_budget as wb
+    import worker_budget_core as wbc
     from types import SimpleNamespace
-    monkeypatch.setattr(wb, "_run_py",
+    monkeypatch.setattr(wbc, "_run_py",
                         lambda args, cwd=None: SimpleNamespace(
                             returncode=0, stderr="", stdout=""))
 

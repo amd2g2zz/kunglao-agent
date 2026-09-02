@@ -141,7 +141,7 @@ def test_no_register_degrades_to_warning_not_error(tmp_path):
 @pytest.mark.parametrize("row,ok", [
     ("| F001-x | PROVEN | C-001 | imports resolved at runtime |", True),
     ("F001-x | PROVEN | C-001 | imports resolved at runtime", True),
-    ("F001-x | PARTIALLY-VERIFIED | C-001 | migrated workflow word", True),
+    ("F001-x | PARTIALLY-VERIFIED | C-001 | migrated workflow word", False),
     ("| F001-x | endpoints-and-auth (login path) | C-001 | x |", False),
     ("| F001-x | PROVEN | C-001 |", False),
     ("| | PROVEN | C-001 | x |", False),
@@ -173,9 +173,12 @@ def test_lint_index_flags_status_column_drift(tmp_path):
         f"W-4: the drifted status column must be caught; got {issues}")
 
 
-def test_lint_index_accepts_the_538_canonical_form(tmp_path):
-    """The #538 single-schema form (no pipes, migrate_facts output shape,
-    including the PARTIALLY-VERIFIED workflow word) must lint clean."""
+def test_lint_index_538_canonical_form_status_set(tmp_path):
+    """The #538 single-schema form (no pipes, migrate_facts output shape)
+    lints clean for schema statuses. #863 ruling: the workflow word
+    PARTIALLY-VERIFIED is dropped from the linter's status set — the
+    workflow layer belongs to claim-register/state-mapping, not the
+    facts index column."""
     ws = _ws(tmp_path)
     idx = ws / "facts" / "_INDEX.md"
     idx.write_text(
@@ -183,7 +186,34 @@ def test_lint_index_accepts_the_538_canonical_form(tmp_path):
         "F001-sample-overview | PROVEN | C-001 | Sample Overview\n"
         "F005-xor-string-decode | PARTIALLY-VERIFIED | C-005 | XOR Decode\n",
         encoding="utf-8")
-    assert lint_facts.lint_index(idx) == []
+    issues = lint_facts.lint_index(idx)
+    schema_rows = [i for i in issues if "F001-sample-overview" in i[2]]
+    assert schema_rows == [], f"schema-status rows must lint clean: {schema_rows}"
+    assert any(i[1] == "BAD_INDEX_STATUS" and "PARTIALLY-VERIFIED" in i[2]
+               for i in issues), f"workflow word must be flagged: {issues}"
+
+
+# ---------- #863 ruling: YAML error is a hard lint error ----------
+
+def test_yaml_unparseable_frontmatter_is_a_hard_error(tmp_path):
+    """#863 conflict ruling: a yaml.YAMLError is a HARD lint error even when
+    the tolerant kv fallback yields a parseable block. The tolerant parse
+    stays available to the runtime gate (hooks/bash_fact_guard), but the
+    lint must never silently pass hand-broken YAML."""
+    ws = _ws(tmp_path)
+    (ws / "facts" / "F006-x.md").write_text(
+        "---\n"
+        "provenance:\n"
+        "  - {role: sample_raw, path: x\n"   # unclosed flow mapping: YAMLError
+        "---\n"
+        "body\n", encoding="utf-8")
+    fm, _body, perr = lint_facts.parse_frontmatter(
+        (ws / "facts" / "F006-x.md").read_text(encoding="utf-8"))
+    assert perr == "yaml-unparseable" and fm, (
+        "precondition: kv fallback must yield a non-empty parse + marker")
+    errors, _warnings = lint_facts.lint_workspace(ws)
+    assert any(code == "UNPARSEABLE_FRONTMATTER" for _s, code, _m in errors), (
+        f"yaml-unparseable must hard-error even with a kv parse: {errors}")
 
 
 # ---------- L-7: NO_FRONTMATTER no longer skips the whole file ----------

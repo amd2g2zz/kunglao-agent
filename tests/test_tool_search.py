@@ -62,7 +62,7 @@ def test_capability_prefix_matches_domain():
     r = run_cli("--capability", "ghidra", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 5
+    assert out["count"] == 6  # 6 since #866-b (ghidra_diff registration)
     assert all(t["capability"].startswith("ghidra:") for t in out["tools"])
 
 
@@ -81,7 +81,7 @@ def test_tier_t1_returns_all_entries():
     r = run_cli("--tier", "T1", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 37  # 37 since #884 (jsvmp-triage); 36 since #728
+    assert out["count"] == 38  # 38 since #866-b (ghidra_diff); 37 since #884 (jsvmp-triage); 36 since #728
 
 
 # ---------------------------------------------------------------------------

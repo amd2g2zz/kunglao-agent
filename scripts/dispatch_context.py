@@ -51,7 +51,6 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -80,9 +79,7 @@ VERIFIER_SAFE_KEYS: frozenset[str] = frozenset({
 
 # ---------- helpers ----------
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def _claim_key(claim_id: str) -> str:

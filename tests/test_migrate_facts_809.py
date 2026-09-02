@@ -62,7 +62,7 @@ def test_map_inert_on_sample_mismatch(tmp_path):
     r = migrate_facts.migrate_workspace(ws, map_path=mp)
     assert r["errors"] == []
     assert any("INERT" in w for w in r["warnings"]), r["warnings"]
-    fm, _b, _e = migrate_facts.parse_frontmatter(
+    fm, _b, _e = migrate_facts._parse_frontmatter(
         (ws / "facts" / "F001.md").read_text(encoding="utf-8"))
     assert fm["title"] != "Curated Title A"
     assert fm["source"] == "inference"
@@ -77,7 +77,7 @@ def test_map_applies_on_fingerprint_match(tmp_path):
     mp = _map(tmp_path, sha)
     r = migrate_facts.migrate_workspace(ws, map_path=mp)
     assert r["errors"] == []
-    fm, _b, _e = migrate_facts.parse_frontmatter(
+    fm, _b, _e = migrate_facts._parse_frontmatter(
         (ws / "facts" / "F001.md").read_text(encoding="utf-8"))
     assert fm["title"] == "Curated Title A"
     assert fm["source"] == "static-decompile"
@@ -90,7 +90,7 @@ def test_no_map_conservative(tmp_path):
     ws = _mk_ws(tmp_path)
     r = migrate_facts.migrate_workspace(ws)
     assert r["errors"] == []
-    fm, _b, _e = migrate_facts.parse_frontmatter(
+    fm, _b, _e = migrate_facts._parse_frontmatter(
         (ws / "facts" / "F001.md").read_text(encoding="utf-8"))
     assert fm["source"] == "inference"
     assert any("inference" in w for w in r["warnings"])

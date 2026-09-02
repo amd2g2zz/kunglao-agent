@@ -120,11 +120,10 @@ fail-open on missing binary/capstone/pefile); the report pipeline invokes
 pre-handoff to cross-check the listing against the fact's expected map AND the
 disassembly (the a2b5e25c problem-1 cross-layer defense).
 
-### migration (`--grace` / `--grace-scan`)
-Existing PROVEN facts whose `expected` is assignment-class-but-no-assertions need
-backfilling. Run `kunglao-verify.py <ws> --grace-scan` to enumerate them, then
-either backfill value assertions or run a single verify pass with `--grace`
-(warn-only, non-blocking) for one migration cycle.
+The one-cycle migration flags `--grace` / `--grace-scan` (#49, warn-only
+lint + enumeration of affected facts) were retired in #863 — the migration
+window they served is closed; assignment-class `expected` must bind value
+assertions unconditionally.
 
 ### BREAKING (a2b5e25c)
 This is a breaking change for any existing assignment-class fact whose `expected`

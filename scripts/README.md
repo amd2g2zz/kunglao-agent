@@ -13,9 +13,14 @@ this script?" — used to keep documentation, hooks, CI, and tests in sync.
 - **Orphans — test semantics**: 0 — every script has at least one live
   reference (tests/ count as references; a script referenced only by tests
   is categorized `TEST`, not orphan). This is the #230-era metric.
-- **Orphans — production semantics (#866)**: 45 unwired of 201 subjects
-  (scripts 31 + tools 14, ~11.2k LOC) as of the 2026-09-02 recon at
-  e958297 — the honest counter-metric: a script/tool is production-wired
+- **Orphans — production semantics (#866)**: 29 unwired of 205 subjects
+  (scripts 29 + tools 0, ~6.0k LOC) as of the 2026-09-02 post-866-b sweep —
+  the tools side was fully dispositioned by PR 866-b (all 27 pre-gate CLIs
+  registered: tools/_INDEX.yaml registry mention + skills/references
+  teaching; the 27-key gate baseline `devkit/.discovery-gate-baseline.txt`
+  cleared to zero); the remaining scripts-side debt is ledgered in the
+  "#866 unwired-live disposition ledger" section below — the honest
+  counter-metric: a script/tool is production-wired
   only if hooks/, skills/, agents/, devkit/, CI, or the execution registry
   `tools/_INDEX.yaml` reaches it (transitively via real consumption
   edges); tests/openspec/docs/references, the describe-only ext index,
@@ -203,6 +208,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
 | `_hooks_path.py` | scripts-side bridge to hooks/_path_hygiene — the canonical by-path loader delegation (#863 Family B, #671 authority; guarded append, never reorders) | hooks, lib(13), tests |
 | `ws_layout.py` | manifest-aware workspace resolution single source — resolve_quiet/resolve_strict (#863 Family C; B2 fix: all 9 former _resolve_ws copies honor layout.workspace_dir/claim_register) | lib(9), tests |
+| `harness_common.py` | harness-wide time-stamp single source (#863 Family F) — utc_now (tz-aware datetime) / utc_now_z ("YYYY-MM-DDTHH:MM:SSZ", byte-equivalent collapse of the 43 strftime/isoformat copies) / utc_now_iso (+00:00 variant); 53 former def copies delegate | lib(52: scripts+hooks/heartbeat_touch+tools/static trio), tests |
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
 | `toolchain.py` | type-aware toolchain probe matrix (#304) with probe tiers presence/liveness/capability + jdwp handshake (#474) | lib(1), tests, docs |
 | `tool_tiers.py` | 工具族档位表加载/选择/契约注入 (#812) — 场景×工具→四档降级链（#670 估算 + C-006 实录），dispatch_context 可选键 | dispatch_context, tests |
@@ -249,3 +255,40 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `deployed_refresh.py` | upgrade-side framework-copy refresh - overwrite semantics with forensic backups (runs/deploy-backup-*), orphan double-confirm prune; migration item face for #783 | tests, CLI via kunglao_upgrade chain |
 
 | `re_pin_references.py` | references/_INDEX.yaml pin regeneration — re-run after ANY references/ edit (drift fails test_replay_gate) | docs, tests |
+
+## #866 unwired-live disposition ledger (PR 866-b, 2026-09-02)
+
+Production-semantics verdict for the scripts side of the #866 sweep
+(`python scripts/relib_audit.py --production .` -> 29 unwired scripts, tools
+side cleared to 0). Per-issue disposition rule: live value -> register or
+annotate; DEAD without in-flight binding -> retire. **Retirement count: 0** —
+every script below is issue- or protocol-backed, test-covered, and touched
+inside the last 30 days; the issue's "outdated" bucket came back empty on
+per-script evidence. Two former members flipped to production-wired by the
+registration itself: `content_hash.py` + `reconcile_intents.py` are consumed
+by the now-registered `tools/auxiliary/capture_golden.py` golden cases
+(F-13/F-15) — lib_closure, not ledger material anymore.
+
+| Script | Binding (issue/change, status) | Disposition |
+| --- | --- | --- |
+| `bench_intake.py` / `bench_answer_key.py` / `bench_tokens.py` / `bench_runner.py` / `bench_grade.py` / `bench_redteam.py` / `bench_analyze.py` | #823 AB-VALUE (B1-B7), MERGED — kunglao-bench pipeline; `bench_runner` is the lane entry | REGISTERED as the kunglao-bench harness; consumer = bench runs, not repo runtime. Follow-up value channel: #881 aggregation |
+| `infeasible_proposal.py` | #815 early-stop wiring, MERGED — INFEASIBLE-as-claim proposal semantics (L1/L2/L3 + evidence gate) | REGISTERED (proposal generator); consumer = orchestrator loop on recovery-ladder exhaustion |
+| `plan_stages.py` | #822 plan stage model, MERGED — `runs/plan-stages.yaml` + BIG_BANG detection + inventory rulings | REGISTERED; consumer = plan-phase ritual |
+| `optimizer_core.py` / `optimizer_bandit.py` | #833, MERGED — theta (SPSA-on-replay) + beta-Bernoulli arm accounting; constitutional isolation (proposal-only, zero auto-apply paths) | REGISTERED; consumers = proposal/derad queue faces; value wiring in #881 |
+| `tuition_refit.py` | #823-P4, MERGED — Platt refit proposals from `rho_pair` ledger rows (proposal-only) | REGISTERED; consumer = #881 aggregation side |
+| `emit_gate.py` | #880, MERGED — EMIT vocabulary double-ended gate (write-side actions must have >=1 emitter; read-side consumers must exist) | REGISTERED (CI-runnable checker); consumer = release-check extension candidate |
+| `search_gate.py` | user-painpoint-driven (search-before-research gate; no issue ref) | REGISTERED as orchestrator-loop gate; consumer = post-worker fact promotion |
+| `reuse_gate.py` | user-painpoint-driven (reuse-before-recompute; no issue ref) | REGISTERED as dispatch-side gate; consumer = dispatch audit chain |
+| `complete_teardown.py` | search-problem abstraction (user-verbatim driven; no issue ref) — 1-call operator chain returning a fact bundle | REGISTERED as search-operator entry; consumer = deep-search scenario |
+| `strategy_metrics.py` | #529, MERGED — convergence four metrics, pure functions atop `priority_ratio` | REGISTERED as lib+CLI; consumer = convergence reporting |
+| `acceptance_check.py` | #6/#689, MERGED — end-to-end static acceptance | REGISTERED as milestone-acceptance entry (same family as `run_test_matrix.py`) |
+| `run_test_matrix.py` | v0.1.3 acceptance orchestrator (`docs/v0.1.3-test-plan.md`) | REGISTERED as milestone-acceptance entry |
+| `report_consistency_check.py` | #57, MERGED — report-INTERNAL contradiction checker | REGISTERED; consumer = report QA phase (hr-report pipeline sibling) |
+| `fixture_excerpt_lint.py` | #58, MERGED — condensed-excerpt conversion/speculation lint | REGISTERED; consumer = report QA phase |
+| `chunker.py` | #309, MERGED — length-measured batch chunking (kong absorption) | REGISTERED as utility lib; consumer = batch dispatch flows |
+| `env_file.py` | #309, MERGED — CLAUDE_ENV_FILE loader (stdlib parser) | REGISTERED as init-path lib; consumer = env bootstrap |
+| `kunglao_export.py` | #540, MERGED — workspace export by zone | REGISTERED as workspace utility CLI |
+| `local_gate.py` | dev-loop infra (2026-09-01): cwd-immune unified local quality gate — pytest + Gate 9 + ext-scan + deploy-manifest verify (Gate 9 wired by PR 866-a) | REGISTERED as the per-PR local-gate entry (plan §0.5 workflow) |
+| `encoding_lint.py` | #811, MERGED — AST bare-IO encoding scanner over the production IO face | REGISTERED as dev-loop linter; CI/local_gate wiring = follow-up card |
+| `error_response.py` | #448, MERGED — mechanical layer of `references/error-response-taxonomy.md` (the taxonomy doc is the live LLM channel; zero code importers — 866-a verified) | REGISTERED as the taxonomy's enforcement layer; CLI wiring = follow-up card |
+| `answer_key_lint.py` / `intake_one.py` | SUSPECT — docstrings bind to `COLLECTION_PROTOCOL.md` §5 steps 5/7, which does NOT exist anywhere in the repo; zero tests, zero consumers; function overlap with the merged `bench_answer_key.validate_key` (#823) | SUSPECT, not DEAD (answer-key files from `bench_answer_key` may still be linted manually). Retirement candidate for the follow-up governance card after owner ruling on the missing protocol doc |

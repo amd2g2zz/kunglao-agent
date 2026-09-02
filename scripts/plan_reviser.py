@@ -46,7 +46,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 VALID_PLAN_STATUSES = ("pending", "in-flight", "blocked", "superseded")
@@ -66,8 +66,7 @@ USAGE = (
 )
 
 
-def utc_now() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 # ---------- plan header parsing ----------

@@ -157,16 +157,19 @@ def test_real_repo_crypto_tool_is_wired():
     assert "tools/crypto/crypto-tool.py" in r["wired"]["tools"]
 
 
-def test_real_repo_ghidra_job_is_unwired():
-    # PR 866-b: registering ghidra_job flips this pin — update it to the
-    # new truth in the same commit as the registration.
+def test_real_repo_ghidra_job_is_registered_wired():
+    # PR 866-b flipped this pin (was: unwired): the tools/_INDEX.yaml
+    # registry mention + SKILL/references teaching registered ghidra_job,
+    # so the index_yaml seed face now reaches it.
     r = relib_audit.audit_production(ROOT)
-    assert "tools/ghidra/ghidra_job.py" in r["unwired"]["tools"]
+    assert "tools/ghidra/ghidra_job.py" in r["wired"]["tools"]
 
 
-def test_real_repo_opaque_pred_is_unwired():
+def test_real_repo_opaque_pred_is_registered_wired():
+    # PR 866-b flipped this pin (was: unwired) via the _INDEX.yaml registry
+    # mention on the opaque-pred entry (issue-named RE-necessity tool).
     r = relib_audit.audit_production(ROOT)
-    assert "tools/static/opaque_pred.py" in r["unwired"]["tools"]
+    assert "tools/static/opaque_pred.py" in r["wired"]["tools"]
 
 
 def test_real_repo_full_run_shape():
@@ -185,9 +188,12 @@ def test_real_repo_full_run_shape():
             + r["counts"]["unwired_scripts"]) == n_scripts
     assert (r["counts"]["wired_tools"]
             + r["counts"]["unwired_tools"]) == n_tools
-    assert "tools/ghidra/ghidra_job.py" in r["unwired"]["tools"]
+    # PR 866-b cleared the tools-side debt: every tools/ CLI is registry-
+    # registered now, so the remaining production-unwired debt is scripts-only.
+    assert "tools/ghidra/ghidra_job.py" in r["wired"]["tools"]
     assert "tools/crypto/crypto-tool.py" in r["wired"]["tools"]
-    assert r["counts"]["unwired_total"] >= 40  # the #866-b debt is real
+    assert r["counts"]["unwired_tools"] == 0
+    assert r["counts"]["unwired_total"] >= 25  # scripts-side #866 debt remains (ledger in scripts/README.md); lower bound, not exact: CI runners carry transient scripts/*.py noise
 
 
 # ---- README dual-metric anti-whitewash regression guard ----

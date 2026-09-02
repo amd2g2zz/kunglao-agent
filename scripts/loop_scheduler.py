@@ -42,7 +42,6 @@ import argparse
 import json
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -54,8 +53,7 @@ PROMPT_MARKERS = ("kunglao-agent heartbeat", "--heartbeat-on")
 SCHEDULE_FILE_REL = Path(".claude") / "scheduled_tasks.json"
 
 
-def utc_now() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def interval_to_cron(interval: str = "5m") -> str:

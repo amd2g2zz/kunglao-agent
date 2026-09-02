@@ -33,7 +33,6 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from status_defs import LedgerLineType, ledger_line_type
@@ -58,9 +57,7 @@ RESULT_SCORE = {
 }
 
 
-def utc_now_iso() -> str:
-    """UTC ISO-8601, second precision (Z-suffix form for ledger consistency)."""
-    return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+from harness_common import utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 def read_outcome_rows(workspace: Path) -> list[dict]:

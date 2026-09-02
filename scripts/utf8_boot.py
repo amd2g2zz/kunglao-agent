@@ -39,3 +39,21 @@ def force_utf8() -> None:
                 stream.reconfigure(encoding="utf-8", errors="replace")
         except Exception:  # noqa: BLE001
             pass
+
+
+def ensure_utf8_stderr(stream=None) -> bool:
+    """#451 乱码 fix — #863 Family H single source: stderr unified to
+    utf-8/replace (stdout already is).
+
+    A GBK-default stderr next to a utf-8 stdout garbles the mixed terminal
+    stream (`REFUSE —` -> `REFUSE ??`, 2026-08-17 transcript). Fail-open on
+    streams without reconfigure (returns False, never raises)."""
+    target = sys.stderr if stream is None else stream
+    reconfigure = getattr(target, "reconfigure", None)
+    if reconfigure is None:
+        return False
+    try:
+        reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        return False
+    return True

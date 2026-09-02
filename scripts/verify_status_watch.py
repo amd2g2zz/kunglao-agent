@@ -32,7 +32,6 @@ from __future__ import annotations
 import json
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---", re.DOTALL)
@@ -45,9 +44,7 @@ VERIFY_RE = re.compile(r"^verify_status:\s*(\S+)", re.MULTILINE)
 WITNESS_ACTIONS = {"verify_status_change", "verify", "write_blocked"}
 
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def scan_stamps(ws: Path) -> dict[str, str]:
