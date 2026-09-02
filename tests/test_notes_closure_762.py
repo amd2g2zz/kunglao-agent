@@ -38,13 +38,13 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import rollup  # noqa: E402
+from _factories import write_claims_register
 
 
 def _make_ws(tmp_path: Path, claims: list[dict]) -> Path:
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
-    (ws / "claim-register.yaml").write_text(
-        yaml.safe_dump({"claims": claims}, allow_unicode=True), encoding="utf-8")
+    write_claims_register(ws, claims)
     return ws
 
 

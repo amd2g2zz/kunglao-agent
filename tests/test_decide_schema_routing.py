@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _factories import write_claims_register
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -47,21 +48,11 @@ def _run_kd(ws: Path) -> dict:
 
 
 def _make_ws(tmp_path, claims=None) -> Path:
-    """Minimal workspace with claim-register.yaml."""
+    """Minimal workspace with claim-register.yaml (863-h factory)."""
     ws = tmp_path / "ws"
     ws.mkdir()
     (ws / "runs").mkdir()
-    claims_text = ""
-    if claims:
-        claims_text = "claims:\n" + "".join(
-            f"- id: {c['id']}\n  status: {c.get('status', 'OPEN')}\n"
-            f"  boundary_type: {c.get('boundary_type', 'positive_observation')}\n"
-            f"  evidence_tier_attempted: {c.get('evidence_tier_attempted', 0)}\n"
-            f"  promotion_attempts: {c.get('promotion_attempts', 0)}\n"
-            f"  depends_on: {c.get('depends_on', '[]')}\n"
-            for c in claims
-        )
-    (ws / "claim-register.yaml").write_text(claims_text or "claims:\n", encoding="utf-8")
+    write_claims_register(ws, claims or [], defaults=True)
     return ws
 
 

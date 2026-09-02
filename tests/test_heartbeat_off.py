@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _factories import write_claims_register
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK_ACTIVATION = ROOT / "scripts" / "hook_activation.py"
@@ -30,16 +31,13 @@ HOOK_ACTIVATION = ROOT / "scripts" / "hook_activation.py"
 GUIDANCE = "Not converged — teardown forbidden: the heartbeat is the dispatch gate credential"
 
 
-def _make_ws(ws: Path, claims: list[dict] | None = None, heartbeat: bool = True) -> Path:
-    """Minimal convergence-check-able workspace (claim-register.yaml + runs/)."""
+def _make_ws(ws: Path, claims: list[dict] | None = None,
+             heartbeat: bool = True) -> Path:
+    """Minimal workspace via the 863-h claims factory."""
     (ws / "runs").mkdir(parents=True, exist_ok=True)
-    if claims is None:
-        claims = []
-    body = "claims:\n" + "".join(
-        f"- id: {c['id']}\n  status: {c['status']}\n  boundary_type: positive_observation\n"
-        for c in claims
-    )
-    (ws / "claim-register.yaml").write_text(body, encoding="utf-8")
+    claims = [dict(c, boundary_type=c.get("boundary_type", "positive_observation"))
+              for c in (claims or [])]
+    write_claims_register(ws, claims)
     if heartbeat:
         (ws / "runs" / ".heartbeat.json").write_text(
             json.dumps({"started_ts": "2026-08-13T00:00:00Z", "interval_min": 5}),

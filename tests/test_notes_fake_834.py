@@ -39,8 +39,7 @@ def _load_shim():
 def _make_ws(tmp_path, claims):
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
-    (ws / "claim-register.yaml").write_text(
-        yaml.safe_dump({"claims": claims}, allow_unicode=True), encoding="utf-8")
+    write_claims_register(ws, claims)
     return ws
 
 
