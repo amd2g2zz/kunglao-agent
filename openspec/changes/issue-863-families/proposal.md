@@ -308,3 +308,100 @@ soft-fail reason 三态（not found / lacks frontmatter / parse error）若无�
 - `tests/test_icd203_alignment.py` 的 #770 teardown 守卫噪声（外部 skill sys.path 污染）
   值得单独一卡。
 
+
+## Recon（863-i，2026-09-02 实测）
+
+### 锚点表（issue/计划锚点 vs 实测）
+
+| 族 | issue 表述 | 实测 | 结论 |
+|---|---|---|---|
+| I | tools/static `_error` 6 份（4 identical + 2 drifted: return vs sys.exit），收敛 `common.py:63 error()` | **7 份 `def _error`**：tools/static 6（disasm_dump:63 / overlay_scan:76 / pe_analyze:98 / shellcode_scan:64 同形 `(code, message)→sys.exit`；yara-gen:33 / yara-scan:34 同形 `(msg)→return EXIT_ERROR`）+ **界外第 7 份** tools/crypto/crypto-tool.py:74（`(code, message)→sys.exit`，与 common.error 同形） | tools/static 6 与 issue 计数吻合；common.py `error()` 现存 :63（行号未漂）。crypto-tool 属 tools/crypto 类目（common.py docstring #340 R3 "one shared module per category"），不在本族表内 → 界外观察不收编 |
+| I 调用点 | 未列 | Shape A 22 处（disasm 6 / overlay 5 / pe 5 / shellcode 6）**全部 code=2**；Shape B 6 处（yara-gen 4 / yara-scan 2）**全部 `return _error(...)` 于 `main() -> int` 内，模块底 `sys.exit(main())`** | Shape A 可无损换 `error(msg)`（默认 code=2）；Shape B 见契约裁决 |
+| J | `_write_evidence` 4×7，dexdc 3-arg 为准，落点 tools/static/common.py | 4 份：apk_mem_gate.py:186（2-arg，apk_mem_gate.json）/ baksmali_index.py:102（2-arg，smali_index.json）/ dexdc_scanner.py:103（**3-arg** `(workspace, name, data)`）/ scripts/apkid_scanner.py:109（2-arg，apkid.json）。函数体逐字节同构（mkdir evidence → write_text(json.dumps(ensure_ascii=False, indent=2), utf-8) → return path）。调用点 11 处（apk_mem 1 / baksmali 3 / dexdc 2 / apkid 5） | dexdc 形状 = 单源签名；2-arg 三份的文件名常量上提到调用点 |
+| K | tolerant JSONL loop 8+×7 → 单 reader util ~64 LOC | **19 个循环点 / 18 个文件**，全部在 scripts/（tools/hooks 零命中）；统一核形 = 逐行 → strip/空行跳 → try json.loads → except (JSONDecodeError\|ValueError\|…) continue → 消费方自有后过滤 | 超额达标（issue 8+）；逐文件清单见下方转换集 |
+
+### I 契约分叉裁决（显式修法）
+
+**统一到 common.error 的 sys.exit（NoReturn）契约**，六份全收敛，yara 侧 return-value 契约被吸收：
+(a) 4/6 副本本就是 sys.exit 形；(b) common.error 是先存单源（#340），"收敛 common.py" 是 issue 明示方向；
+(c) yara 六个调用点全在 `main()->int` 内且返回值只喂模块底 `sys.exit(main())` —— 改为
+`error(msg)` 后 SystemExit(2) 从 main() 内直接穿透，进程级可观测行为逐字节等价
+（stderr JSON 同构 `{"error": …, "exit_code": 2}`、退出码 2）。**测试面语义变化 = 显式分叉修复的编码点**：
+进程级（subprocess）既有测试不受影响；进程内 `main()` 错误路径由"返回 2"变为"raise SystemExit(2)"
+——与 test_static_tools_1c 对 die_probe（common.error 消费方先例）的 `pytest.raises(SystemExit)` 断言完全一致。
+新增契约钉测试锁死 SystemExit(2) + stderr JSON。
+
+### 落点裁决（按消费方分布）
+
+- **I/J → tools/static/common.py**（issue 明示；4 份 J 消费方中 3 份在 tools/static，
+  既有 `from common import …` 同目录导入先例 disasm_dump:51 / overlay_scan:57 / pe_analyze:49 /
+  shellcode_scan:45 / die_probe:54；yara 两份与 apk_mem_gate/baksmali_index/dexdc_scanner 补
+  `_THIS_DIR` sys.path 块镜像 disasm_dump:46-50 先例）。
+- **J 的 scripts 侧消费方 apkid_scanner 经 `scripts/_hooks_path.load_module_by_path` 桥**
+  （#891 Family B 唯一 by-path 加载点权威）以唯一名 `tools_static_common` 装载 common ——
+  不往全局 sys.path 插 tools/static（"common" 是泛化名，插入即 shadow 风险）。代价：进程内
+  common 可能双实例（sys.path 导入 + by-path 桥），write_evidence 纯函数双执行无害，记录在案。
+- **K → `scripts/kunglao_log.py::iter_jsonl`**。_runner-up 与否决理由_：scripts/lib_kunglao
+  （scripts 共享库宪章 #43）被否——hooks 进程以裸名 `import kunglao_log` / `import priority_ratio` /
+  `import heartbeat` 引 scripts 模块（hooks/dispatch_gate.py:423/686、worker_budget_core.py:83/130、
+  worker_budget_sinks.py:272 等十处实证），此刻裸名 `from lib_kunglao import …` 会按 sys.path 序
+  解析到 **hooks/lib_kunglao 孪生**（#671 记录的 shadow 陷阱本体）→ iter_jsonl 缺失 → 崩溃。
+  kunglao_log 是**唯一已被证明在两个 sys.path 域都可安全导入**的模块（hooks 十处今日就在导它，
+  scripts 十余处亦然），stdlib-only、module-level 仅常量无副作用、JSONL 格式的属主模块
+  （emit 写 / iter_jsonl 读同门）——新 util 落它名下零新增导入风险；备选新建 scripts/jsonl_reader.py
+  被否（新增资产面 + 属主主题弱于格式属主模块）。
+
+### K 转换集（19 循环点 / 18 文件）与残留 pin
+
+iter_jsonl 核契约：`Iterable[str] → Iterator[Any]`，跳空行 + `except ValueError: continue`
+（JSONDecodeError 是其子类，覆盖全部七种历史 handler 形），**不过滤 dict**（yield Any 保逐份
+字节等价：convergence_health 收非 dict、kunglao_status trend 靠 AttributeError 跳非 dict、
+kunglao_record `_event_id_in_lines` 对非 dict 仍 AttributeError 崩——全部原样保留）；消费方自有
+后过滤逻辑一律原位保留。转换集：bench_tokens、convergence_health、event_taxonomy(_read_jsonl
+改委托)、external_kicker、heartbeat、infeasible_signal、kunglao_log(:209)、kunglao_record(:91+:133)、
+kunglao_resume(:288+:340 两处)、kunglao_status(:131+:173)、lib_kunglao(:87)、mechanism_scheduler
+(bytes 循环拆 non_blank 计数 + iter_jsonl，null 行 AttributeError 崩语义保真)、outcome_capture、
+priority_ratio、recall_metrics、rho_verifier、ask_for_direction_gate、cost_gate(parse_event 改
+next(iter_jsonl([line]), None))。
+
+**不转换（界内点名，非族内形状）**：kunglao_upgrade.py:545（tolerant **rewrite**——坏行 `kept.append`
+原样保留回写，读-改-写契约非 reader）；bench_analyze.py:292（**strict** list-comp——坏行崩，转了反而改行为）；
+三个 detail/state 解析点保持本地（rho_verifier:204、infeasible_signal:48、kunglao_record:470——
+非"逐行 jsonl"循环，是已解析行的字段解析 / CLI 参数解析）。
+
+执法 pin（新测试 `tests/test_delegation_863i.py`）：每文件 `"from kunglao_log import iter_jsonl"`
+在源（委托断言）+ `json.loads`/`json.JSONDecodeError` 残留计数逐文件钉死（bench_tokens/
+convergence_health/event_taxonomy/outcome_capture/recall_metrics/cost_gate/kunglao_status/
+priority_ratio/lib_kunglao/ask_for_direction → 0/0；rho_verifier 1/1、kunglao_log 1/1、
+kunglao_record 1/1、kunglao_resume 2/0、heartbeat 4/2、infeasible_signal 2/2、
+mechanism_scheduler 3/0、external_kicker 2/0）——残留回升即红，复审门。
+
+### 守护测试现状 + delegation assert 方案（四件套之三四）
+
+- I：**行为级**（test_static_tools_1b/1c + test_yara_tools 全 subprocess，错误路径断言 exit 2 +
+  stderr JSON）→ 保留不动（委托后仍绿）；新增：六文件 `def _error`/`_error(` 源清零 confinement +
+  六文件 `error is common.error` 身份级委托断言 + yara 两份进程内 `pytest.raises(SystemExit)`
+  契约钉（分叉修复编码点）。
+- J：**无守护**（issue "none" 属实；test_apkid_scanner 钉 evidence/apkid.json 行为、
+  test_apk_mem_gate/test_baksmali_index/test_dexdc_scanner 钉各自 evidence 文件行为）→ 全保留；
+  新增：common.write_evidence 契约钉（路径/内容/utf-8/indent/mkdir/返回 Path）+ 四文件
+  `_write_evidence` def 清零 + 身份级委托断言（apkid 经同名桥实例比对）。
+- K：**无守护**（issue "none" 属实）→ 新增：iter_jsonl 契约钉（空行/坏行/null 行 yield None/
+  顺序/生成器与 reversed 输入）+ 上述逐文件委托与残留 pin。
+
+### 基线（改动前）
+
+- 受影响直接测试 14 文件（yara/static_1b/1c/apkid/apk_mem/baksmali/dexdc/kunglao_log/resume/status/
+  bench_tokens/infeasible/outcome/priority_ratio）= **218 passed, 1 skipped**；
+  heartbeat_*+event_taxonomy+external_kicker+rho_verifier+ask_for_direction+mechanism_scheduler =
+  **148 passed**；`-k "lib_kunglao or convergence_health or recall_metrics or cost_gate or mechanism"`
+  = **68 passed, 2 skipped**。
+
+### 偏航记录（实现级，非 RECON-DEVIATION）
+
+- K 计数：issue "8+×7" vs 实测 19 循环点/18 文件（下限口径吻合，全量收编非削减）；
+  I 第 7 份 crypto-tool、2 个非 reader 形（upgrade rewrite / bench_analyze strict）界外点名。
+- 并行碰撞注记：863-g（utc_now→harness_common）与 863-h（conftest/test fixtures）会触碰
+  本卡 K 转换集内部分 scripts/tests 文件——不同 hunk 区，CONFLICTING 时按预案合并 origin/dev 解。
+- `tests/` 新增 1 文件（test_delegation_863i.py），无 scripts/hooks 资产增删
+  （lib_kunglao/kunglao_log 均既有文件）；deploy_manifest 预计无资产面变更，收尾跑 --check 确认。
