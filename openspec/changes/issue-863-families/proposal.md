@@ -145,3 +145,66 @@ hooks/ 侧**非 `_resolve_ws` 命名**的同类硬编码 sibling probe：`hooks/
 - 计数 8→9（#883 新增份纳入，见锚点表首行）——家族同一性由符号 grep 定义，方案与验收不变。
 - util 落点 scripts/ws_layout.py（WHY 见方案节）；convergence_check 的函数级 `import env_manifest`
   热路径注释随探测逻辑一并移入 util（import 图不变：消费方 → ws_layout → env_manifest）。
+
+
+## Recon（863-h，2026-09-02 实测）
+
+### 前置事实核对（Family G 与 #811 裁决）
+- #811 GBK 裁决（仲裁项 B6）已由 commit 34e1603（2026-09-01）落地：根 conftest.py 删除
+  5 个被遮蔽夹具（tmp / ws_factory / contract_validator / golden_master / isolated_home，
+  -128 行），方向 = GBK 修复版胜出——子 tests/conftest.py 的 golden_master 携带 #317 UTF-8
+  解码（encoding="utf-8" + errors="replace"），root 副本裸 text=True 是活体 GBK 陷阱。
+- 本卡 Family G 余量 = 验收证据（git grep）+ 防复活机械钉
+  （tests/test_conftest_single_source_863g.py，4 测试）。
+
+### 锚点表（计划/issue 锚点 vs 实测）
+| issue/计划表述 | 实测 | 结论 |
+|---|---|---|
+| conftest fork 2×113 | 修复前根 conftest 131 行含 5 夹具复本；34e1603 后根 conftest 仅 #369 flock + #770 syspath 守卫（4 个独有 fixture/helper），与 tests/conftest.py 零重叠 | fork 已清零（#811 预完成），本卡补机械钉 |
+| 删 5 个被遮蔽 root fixtures | 34e1603 diff 段：tmp / ws_factory / contract_validator / golden_master / isolated_home 五段全删 | 已完成；方向合规（GBK 版胜出，本卡 863g 钉回验） |
+| hook_state ×5 | 实测 34 内联写点 / 27 文件（27 = 12+15 峰值并集） | 大幅上修，除 5 处非种子形状外全收编 |
+| claim-seed ×4 | 机制形态（dict-list→register）7 文件 7 帮手 + conftest ws_factory 同型发射体 | 机制形态全收编；201 处剩余为一次性 fixture 文本内容（富 YAML 手写体），非机制复制，不属本族 |
+| sample.exe ×4 | 实测 34 写点 / 26 文件 | 大幅上修，34/34 全收编 |
+| ~19 families / factory ~90 LOC | 三命名族收编；tests/_factories.py 共 ~150 LOC | factory 规模略超 issue 估算，功能等价账本钉齐 |
+
+### Family L 形状分类与等价性依据
+- hook_state 4 形状：full 7 键（completion_gate 族）、minimal 3 键（dispatch_gate 族）、
+  6 键 null-expiry（dispatch_contract / scorer_authority）、2 键（backtrack / resume 族）；
+  另 upgrade 族 5 键 + `state` 额外键（extra 参数）。等价性：read_state=json.loads
+  （字节无关），is_active_strict 只读 expires_at/user_override/active_hooks/paused_hooks；
+  工厂 None-omit 语义逐字段保形，golden-dict 钉齐（test_fixture_factories_863l.py）。
+- claim-seed 2 方言：canonical 6-field f-string（ws_factory == decide_schema_routing 逐字节）
+  与 sparse（yaml.safe_dump ×4、3-field ×1、type-aware ×1）。等价性：消费方全部 yaml.safe_load
+  （think_seat.py:81、rollup.py:68、priority_ratio.py:143 实证）；解析等价钉在 863l 钉文件。
+- sample.exe：`(ws/"bins").mkdir(parents=True)` + `write_bytes(b"MZ "+b" "*64)`
+  2 行形状 ×25 邻接点 + 9 变体点（非邻接/bins-var/4 字节占位/PAYLOAD 常量）。等价性：
+  payload 字节级同型（seed_bins 默认 payload = 原 MZ+零尾字面量，863l 钉）。
+
+### 方案与落点
+- 工厂落点 tests/_factories.py（普通函数 + conftest 薄 fixture 再导出
+  hook_state_seed / claims_seed / bins_seed；**不可 `from conftest import`**：pytest.ini
+  pythonpath 首位是仓库根，`conftest` 名字歧义会解析到根 conftest）。
+- write_hook_state（None-omit 语义 + expires_minutes 便捷参 + extra 附加键）、
+  write_claims_register（defaults=True canonical 方言 / False sparse 方言）、
+  seed_bins(name/payload)。conftest ws_factory 发射体委托（逐字节不变）。
+- 守护：test_fixture_factories_863l.py（12 钉：4 形状 golden dict + extra + claims 双方言
+  字节/解析等价 + seed_bins 字节钉 + 再导出身份钉）；test_conftest_single_source_863g.py
+  （4 钉：root 禁 5 夹具名、tests/conftest.py 必持 5 夹具、golden_master #317 解码钉、
+  fixture 解析行为钉）。每步转换后受影响面全绿再提交。
+
+### 验收证据
+- git grep：根 conftest 4 个 fixture 定义全为 #369/#770 独有
+  （load_lock_factory / load_sensitive_registry / _serialize_load_sensitive /
+  _syspath_collision_order_guard），5 遮蔽名零命中；tests/conftest.py 5/5 持有。
+- hook_state 内联 dict 写点 0 残留（5 处留点均为轮转写/垃圾字面量非种子形状）；
+  claim 机制形态 0 残留；sample.exe 34/34 清零。
+- 基线（4caeb44，Windows 本地）：**9 failed / 5187 passed / 12 skipped**
+  （7 个已知环境失败 + ghidra_async 2 flaky 家族）；终局全量 = 基线同集合（见下）。
+- release_receipt.py --check RC=0（提取前）；终局复验见 PR 描述。
+
+### 偏航记录（实现级，非 RECON-DEVIATION）
+- G：删除工作 #811 已预完成 → 本卡交付 = 证据 + 防复活钉（方向与验收不变）。
+- L 计数上修（×5/×4/×4 → 实测 27-34/7+201/34）：按家族符号 grep 全量口径全收编，
+  201 处一次性 fixture 文本内容不属机制复制，显式排除并留痕。
+- 工厂落点 tests/_factories.py（WHY：conftest 名字歧义风险），conftest 薄再导出。
+- qtable_p3 encoding kwarg 小偏差归一（无行为差）。
