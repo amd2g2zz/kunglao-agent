@@ -76,6 +76,7 @@ def _worker_protocol():
 # scripts/liveness_policy.py (#597 — THE liveness-minutes single source;
 # restating a hard number here would rot silently when the value changes).
 from liveness_policy import STUCK_MINUTES  # noqa: E402
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 STUCK_SECONDS = STUCK_MINUTES * 60
 
 # ---------------------------------------------------------------------------
@@ -313,16 +314,8 @@ def classify_claim_status(status: str) -> str | None:
 def _read_jsonl(path: Path) -> list[dict]:
     if not path.exists():
         return []
-    out = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return out
+    return list(iter_jsonl(
+        path.read_text(encoding="utf-8", errors="replace").splitlines()))
 
 
 def _claim_statuses(ws: Path) -> list[str]:

@@ -20,6 +20,7 @@ from pathlib import Path
 import yaml
 
 import kunglao_log
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 ENV_BACKEND = "KUNGLAO_RHO_BACKEND"
 _LEDGER = "runs/logs"
@@ -189,13 +190,7 @@ def pairs_from_ledger(ws):
     ws = Path(ws)
     pairs = []
     for p in sorted((ws / _LEDGER).glob("kunglao-*.jsonl")):
-        for line in p.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            try:
-                r = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+        for r in iter_jsonl(p.read_text(encoding="utf-8").splitlines()):
             if r.get("action") != "rho_pair":
                 continue
             try:

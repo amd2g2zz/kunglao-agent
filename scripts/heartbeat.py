@@ -19,6 +19,7 @@ from _hooks_path import load_module_by_path  # #863 Family B: loader delegation 
 # stale (5-min interval + jitter margin) means monitoring is NOT running.
 # #597: value single-sourced in liveness_policy (THE liveness-minutes source).
 from liveness_policy import STALE_MINUTES, TICK_INTERVAL_DEFAULT_MIN  # noqa: E402
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 # #461: the cron-registration marker. --heartbeat-on alone proves only that
 # the FILE was written (init / manual chain both can do that); the marker
@@ -192,13 +193,9 @@ def evaluate_tick_continuity(state: dict, *,
     if log_path is not None:
         lp = Path(log_path)
         if lp.exists():
-            for line in lp.read_text(encoding="utf-8", errors="replace").splitlines():
-                if not line.strip():
-                    continue
-                try:
-                    obj = json.loads(line)
-                except ValueError:
-                    continue
+            for obj in iter_jsonl(
+                    lp.read_text(encoding="utf-8",
+                                 errors="replace").splitlines()):
                 if isinstance(obj, dict):
                     ts = _parse_hb_ts(obj.get("ts"))
                     if ts is not None:

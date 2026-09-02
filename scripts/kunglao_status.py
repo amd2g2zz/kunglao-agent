@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 CLAIM_RE = re.compile(r"claim\s*:?\s+([A-Za-z0-9][\w.-]*)")
 STEP_RE = re.compile(r"step\s*:?\s+(\S+)")
@@ -126,14 +127,12 @@ def _open_trend(ws: Path) -> list[int]:
     except OSError:
         return []
     opens: list[int] = []
-    for line in lines[-TREND_LIMIT:]:
-        try:
-            row = json.loads(line)
-            oc = row.get("open_count")
-            if isinstance(oc, int):
-                opens.append(oc)
-        except (ValueError, AttributeError, TypeError):
+    for row in iter_jsonl(lines[-TREND_LIMIT:]):
+        if not isinstance(row, dict):
             continue
+        oc = row.get("open_count")
+        if isinstance(oc, int):
+            opens.append(oc)
     return opens
 
 
@@ -165,14 +164,7 @@ def _recent_events(ws: Path, limit: int = EVENT_LIMIT) -> list[dict]:
             lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             continue
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                events.append(json.loads(line))
-            except (ValueError, AttributeError, TypeError):
-                continue
+        events.extend(iter_jsonl(lines))
     return events[-limit:]
 
 

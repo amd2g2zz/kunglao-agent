@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 import kunglao_log
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 STATE_FILE = "runs/infeasible-state.json"
 K_ROUNDS = 3
@@ -37,11 +38,7 @@ def _v_series_from_ledger(ws: Path) -> list[float]:
             text = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for line in text.splitlines():
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+        for row in iter_jsonl(text.splitlines()):
             if not isinstance(row, dict) or row.get("action") != "rho_checkpoint":
                 continue
             try:

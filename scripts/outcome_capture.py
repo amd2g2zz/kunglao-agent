@@ -37,6 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from status_defs import LedgerLineType, ledger_line_type
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 LEDGER_NAME = ".convergence_ledger.jsonl"
 
@@ -75,14 +76,8 @@ def read_outcome_rows(workspace: Path) -> list[dict]:
     if not p.exists():
         return []
     out: list[dict] = []
-    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for row in iter_jsonl(
+            p.read_text(encoding="utf-8", errors="replace").splitlines()):
         if ledger_line_type(row) == LedgerLineType.OUTCOME:
             out.append(row)
     return out

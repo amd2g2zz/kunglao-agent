@@ -90,6 +90,7 @@ from liveness_policy import (  # noqa: E402
     DEFAULT_STALE_MINUTES,
     FRESH_WORKER_MINUTES,
 )
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 DEFAULT_TICK_INTERVAL_MIN = 15
 # #45: fired-predicate resume prompt bounds — the open-claims list is truncated
 # by priority (priority_ratio order — the sanctioned scorer, #867 closeout)
@@ -462,14 +463,7 @@ def _ledger_last_snapshot(ws: Path) -> tuple[dict | None, int]:
     except OSError:
         return None, 0
     last, round_n = None, 0
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except (ValueError, TypeError):
-            continue
+    for row in iter_jsonl(lines):
         if not isinstance(row, dict) or not _is_snapshot(row):
             continue
         round_n += 1

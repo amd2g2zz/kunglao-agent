@@ -61,6 +61,7 @@ from pathlib import Path
 import yaml
 
 import kunglao_log
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 # #863 Family C: workspace resolution is single-sourced in ws_layout
 from ws_layout import resolve_strict as _resolve_ws
@@ -323,15 +324,13 @@ def read_new_events(ws: Path) -> dict:
     else:
         complete, consumed = chunk[:cut + 1], cut + 1
     new = 0
-    for raw in complete.split(b"\n"):
-        raw = raw.strip()
-        if not raw:
-            continue
-        new += 1
-        try:
-            row = json.loads(raw.decode("utf-8", errors="replace"))
-        except json.JSONDecodeError:
-            continue
+    # non-blank line count stays parse-independent (blank lines were never
+    # counted); null rows keep reaching row.get below, byte-equivalent with
+    # the pre-consolidation loop (#863 Family K)
+    decoded_lines = [raw.decode("utf-8", errors="replace")
+                     for raw in complete.split(b"\n") if raw.strip()]
+    new += len(decoded_lines)
+    for row in iter_jsonl(decoded_lines):
         cls = EVENT_CLASS_MAP.get(str(row.get("action") or ""))
         if cls:
             counts[cls] = counts.get(cls, 0) + 1

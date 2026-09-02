@@ -80,6 +80,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 SELF_REDIRECT_LOG = "self_redirects.jsonl"
 
@@ -401,15 +402,13 @@ def _read_events(workspace: Path) -> list:
     if not path.exists():
         return []
     out = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if not line.strip():
-            continue
+    for e in iter_jsonl(
+            path.read_text(encoding="utf-8", errors="replace").splitlines()):
         try:
-            e = json.loads(line)
             t = datetime.strptime(
                 e["ts"], "%Y-%m-%dT%H:%M:%SZ"
             ).replace(tzinfo=timezone.utc).timestamp()
-        except (json.JSONDecodeError, ValueError, KeyError):
+        except (ValueError, KeyError):
             continue
         out.append((t, e))
     return out

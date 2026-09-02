@@ -24,6 +24,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 
 def _parse_ts(raw) -> datetime | None:
@@ -69,14 +70,7 @@ def collect(transcript_path: Path) -> dict:
         out["error"] = str(exc)
         out["usage_incomplete"] = True
         return out
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for row in iter_jsonl(text.splitlines()):
         if not isinstance(row, dict):
             continue
         if _is_genuine_user_turn(row):

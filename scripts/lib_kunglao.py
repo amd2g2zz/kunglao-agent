@@ -39,6 +39,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 # ---- drift thresholds (issue #43, tunable) ----
 ROTATION_WINDOW = 3            # consecutive identical signatures = drift detected
@@ -84,12 +85,10 @@ def _tail_signatures(ws: Path, window: int) -> list[tuple]:
     except OSError:
         return []
     sigs: list[tuple] = []
-    for line in lines[-window:]:
-        try:
-            row = json.loads(line)
-            sig = tuple(row.get(k) for k in _SIGNATURE_FIELDS)
-        except (ValueError, AttributeError, TypeError):
+    for row in iter_jsonl(lines[-window:]):
+        if not isinstance(row, dict):
             continue
+        sig = tuple(row.get(k) for k in _SIGNATURE_FIELDS)
         if any(v is None for v in sig):
             continue
         sigs.append(sig)
