@@ -24,16 +24,16 @@ if str(_TOOLS_DIR) not in _sys_io.path:
     _sys_io.path.insert(0, str(_TOOLS_DIR))
 from _lib.stdio import ensure_utf8_stdout  # noqa: E402
 
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+from common import error  # noqa: E402  (#863 Family I: single error() source)
+
 BUNDLED_RULES_DIR = Path(__file__).resolve().parent / "yara-rules"
 
 EXIT_OK = 0
 EXIT_NEGATIVE = 1
 EXIT_ERROR = 2
-
-
-def _error(msg: str) -> int:
-    print(json.dumps({"error": msg, "exit_code": EXIT_ERROR}), file=sys.stderr)
-    return EXIT_ERROR
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -98,16 +98,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         data = binary.read_bytes()
     except OSError as exc:
-        return _error(f"cannot read --binary {args.binary}: {exc} — check the "
-                      f"path exists and is readable")
+        error(f"cannot read --binary {args.binary}: {exc} — check the "
+              f"path exists and is readable")
 
     yara = _load_engine()
     rule_files = _resolve_rules(args.rules)
     try:
         rules = yara.compile(filepaths={str(p): str(p) for p in rule_files})
     except yara.Error as exc:
-        return _error(f"rule compilation failed: {exc} — check rule syntax in "
-                      f"{[p.name for p in rule_files]}")
+        error(f"rule compilation failed: {exc} — check rule syntax in "
+              f"{[p.name for p in rule_files]}")
 
     hits: list[dict] = []
     for match in rules.match(data=data):
