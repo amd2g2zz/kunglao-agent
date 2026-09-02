@@ -117,6 +117,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `search_gate.py` | search-before-work gate | tests |
 | `troubleshooting_gate.py` | report completeness gate | tests |
 | `review_gate.py` | review evidence mint/check (key-init/mint/check) | tests, docs |
+| `adversarial_gate.py` | verdict-scorer 签名前对抗门 — open challenge/链断/summary 鉴权失败/轮数低于 register 高水位一律 BLOCKED，无 override | tests |
+| `adversarial_loop.py` | 对抗闭环 orchestrator CLI — begin/challenge/rebuttal/verifier-call/status/arbitrate/verify-run（相持后仲裁 + verifier 按需征召） | tests |
+| `challenge_ledger.py` | 对抗账本数据层 — challenge/rebuttal/arbitration 结构化落盘（grounding 门禁 + 断言冻结 + 5 轮硬闸 + append-only HMAC 链 + keyed summary） | tests |
 | `report_consistency_check.py` | report↔evidence consistency check | tests, docs |
 | `write_gate.py` | write-side gate auditor (#236) — maker-checker stamp re-verification + independent anchors + defer references re-checkable | lib(1), tests |
 

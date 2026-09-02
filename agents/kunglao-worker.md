@@ -380,6 +380,28 @@ Rules:
   `assumption_validity` — the orchestrator's gate then decides whether
   that justifies a NEGATIVE with single-method confidence.
 
+## Rebuttal protocol
+
+You have the RIGHT to rebut — you are not an echo. When the adversarial
+loop opens on your claim, answer each challenge with a structured rebuttal,
+not a rewrite:
+`{kind: rebuttal, id, rebutts: <challenge id>, new_evidence: {cmd|artifact}, argument}`.
+
+- **Max 5 rounds total per claim; round 6 never happens.** At stalemate
+  (round 5 ends with open challenges) the orchestrator arbitrates; upheld →
+  the claim is FAILED and you move to `infeasible_proposal` / a new route.
+- **ASSERTION FREEZE** — your claim's assertion text is hashed when the
+  battle opens. Weaken or shift it mid-battle ("AES" → "suspected AES") and
+  your rebuttal is REJECTED (AssertionDrift): you must re-file as a NEW
+  claim through the whole pipeline. Rebut the challenge with evidence; do
+  not edit the claim.
+- **BLIND additions** — reading `scripts/challenge_ledger.py`,
+  `scripts/adversarial_gate.py`, `scripts/adversarial_loop.py`, or other
+  claims' `runs/challenges/` material is a mechanism-probe violation:
+  understanding the validation code cannot help you — the trust root is an
+  orchestrator-held key — and attempting to game it is an escalation-worthy
+  event.
+
 ## Hook activation is orchestrator-only (v1.9.7)
 
 You MUST NOT run `hook_activation.py` (activate/renew/pause). Activation has

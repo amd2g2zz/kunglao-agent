@@ -99,11 +99,11 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: c6488f9e981216f818728784eb52322de6639dbbe1caeaf77e3d645c100e21aa
+    sha256: af88147cbc6b3637c28c275842dac55f56216dbd1aa469bbbd7b3742686dceb4
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 63c9e523581b49c0050c473e57b246298d7f1df85e9f139d255701f49e122fa2
+    sha256: 3790cffa5c66719d0162ec658d489e03be97b0fd661c082425aa313ed89bd1ba
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -111,7 +111,7 @@ files:
   - src: agents/verdict-scorer.md
     dest: .claude/agents/verdict-scorer.md
     kind: agent
-    sha256: 6f700788d75a05b2b1124e57143fb5ce65b25dead94bae5393eec932a6e47774
+    sha256: 468e62f9c514dfe7e53e1946d97d6d0b24e6de539a092837eccbefbf375ed6be
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
@@ -132,6 +132,14 @@ files:
     dest: .claude/scripts/active_intervention.py
     kind: scaffold
     sha256: 10a54e85cb1412dca3050e586c78c2098f056ffa6ca46b000cc81a0d57fef0b1
+  - src: scripts/adversarial_gate.py
+    dest: .claude/scripts/adversarial_gate.py
+    kind: scaffold
+    sha256: 68a41e6e90177cc7a384418a22e9cd27685a28eed87c0906a990ea4e32cb8acb
+  - src: scripts/adversarial_loop.py
+    dest: .claude/scripts/adversarial_loop.py
+    kind: scaffold
+    sha256: 51a48dacb3a903c3a3edafab378cd93234ab7545bf75d733c94132899087b383
   - src: scripts/anomaly_detector.py
     dest: .claude/scripts/anomaly_detector.py
     kind: scaffold
@@ -196,6 +204,10 @@ files:
     dest: .claude/scripts/carrier_consistency.py
     kind: scaffold
     sha256: 2aa15f9a6cd2fbd5656bf06c62107d23752a93af076a7dd2928724e6ca913015
+  - src: scripts/challenge_ledger.py
+    dest: .claude/scripts/challenge_ledger.py
+    kind: scaffold
+    sha256: 51b7447859ba70cce75e91f99f6f02a9a3bc9bbdd09d7e7ea6497dce4e123e54
   - src: scripts/check_global_rule_subset.py
     dest: .claude/scripts/check_global_rule_subset.py
     kind: scaffold
@@ -1219,7 +1231,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: a4ced8bc3f4bf57744cd917f5d0db74c52647753ffbe17ce7f38a87a7ae4cf85
+    sha256: f0b74f795f1338201b3c8ffb2218badaab4bbbe3c7451fb51b4246d14bc58e21
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

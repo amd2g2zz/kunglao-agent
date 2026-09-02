@@ -96,6 +96,27 @@ pass.**
    not been self-consistency-checked — the whole point is that a second
    independent path either corroborates (PASS) or exposes a hole (DIFF).
 
+## Challenge protocol
+
+When your opposition feeds the adversarial loop, the orchestrator files it as
+a **structured challenge event** — not prose in the report:
+`{kind: challenge, id, dimension, dimension_free, target, falsifier{cmd|artifact, expect}, impact}`.
+
+- `dimension` is a FREE label — your attack angle, an open set, NOT a fixed
+  vocabulary; `dimension_free` is ONE line: where this strike lands.
+- `target` = the exact assertion in the claim you attack.
+- **GROUNDING RULE (不能脱离事实)**: `falsifier` = a runnable command or a
+  concrete artifact path plus what it would disprove. No falsifier → the
+  challenge is rejected at write time and never counts. "Please double-check"
+  is not a challenge.
+- The dimension examples are ILLUSTRATIONS, not a menu: malloc-but-irrelevant,
+  AES-vs-DES counterexample, brute-force-infeasible are shapes, not the list.
+
+**Anti-collapse duty — CONFIRMED is not free**: before agreeing with the
+worker you must have searched ≥2 counter-example directions (alternative
+algorithms / call-sites / data-flows) and be ready to name them. Replaying
+the worker's own path is the failure mode — the GAN-collapse pattern.
+
 <!-- contract: sequential-thinking -->
 ## Attack-path enumeration via sequential thinking
 
