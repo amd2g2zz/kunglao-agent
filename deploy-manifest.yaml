@@ -59,7 +59,7 @@ files:
   - src: hooks/worker_budget.py
     dest: .claude/hooks/worker_budget.py
     kind: hook
-    sha256: 4338e3536e0cb3d4c867e1423b2df7ee978c1030dee3ea362283834a6d7eff2a
+    sha256: e9ddf417b2372132eb267d7791eb215f0cf4d0e0c24ba9fe814f163a82dd5b5e
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
@@ -267,7 +267,7 @@ files:
   - src: scripts/digest_build.py
     dest: .claude/scripts/digest_build.py
     kind: scaffold
-    sha256: 88a52026f57a7e1996b725b04bbf2bab6373e334a8cfbe2051c2edce2fec7c6c
+    sha256: 416aebefda8f4c32571ff3be76cf709853587ba5cbf16882965241c25155e6c1
   - src: scripts/dispatch_context.py
     dest: .claude/scripts/dispatch_context.py
     kind: scaffold
@@ -327,7 +327,7 @@ files:
   - src: scripts/failure_analysis_gate.py
     dest: .claude/scripts/failure_analysis_gate.py
     kind: scaffold
-    sha256: a92e7e6e94677f7e5cba03445ff9d9a51d9facb7fedb40d471b544ce81080129
+    sha256: 5676eee8acfe1bafce77e3e34be4c2dfd8707185469fb2597fa25b82aa569265
   - src: scripts/feedback.py
     dest: .claude/scripts/feedback.py
     kind: scaffold
@@ -359,7 +359,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: d5739df4ae1871bc0fb77a7fde752353e610e567b7a2a96c143da043e1aa8c16
+    sha256: 8240b9008ad381abab02cde41b711f05c4ccfdf9a41422c655d9797e628100a3
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -439,7 +439,7 @@ files:
   - src: scripts/kunglao.py
     dest: .claude/scripts/kunglao.py
     kind: scaffold
-    sha256: 739c5477f5801b132908609485d4a49dea6eb23a97a2773b10d8d41cd6ccb1c6
+    sha256: f5e85c559461fa4d75b807b665048ded9fdf5f7ee541c08e7f9ffada5c261acb
   - src: scripts/kunglao_eval.py
     dest: .claude/scripts/kunglao_eval.py
     kind: scaffold
@@ -471,7 +471,7 @@ files:
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
-    sha256: 10e1512c7a399bc86ea1df90f0add926210570b2c26cfbdead1bd42b9c45217c
+    sha256: 15c17d9dc0585f3897c8c96a489a2cdc3b71bea0f4c638af4cc7e17ba0d517eb
   - src: scripts/lessons_telemetry.py
     dest: .claude/scripts/lessons_telemetry.py
     kind: scaffold
@@ -483,7 +483,7 @@ files:
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
-    sha256: ef12a6384145f5443f78e83215bbac08bc3e4c9e890e39394c5e7f4ff46a8b08
+    sha256: ca6d22d31dbee0f300384381dec6bf23459031a21915e568af7fa3936e0e335d
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
@@ -515,7 +515,7 @@ files:
   - src: scripts/migrate_facts.py
     dest: .claude/scripts/migrate_facts.py
     kind: scaffold
-    sha256: 00037a083fe2f3ee3bb31eddd03984ac59ff379351d5ee0c9bf870989e91ca7e
+    sha256: c08cd86bed8d26d1f423bf27e5090e97aecc245c633cc4895b664426b84fb0f9
   - src: scripts/mission_ledger.py
     dest: .claude/scripts/mission_ledger.py
     kind: scaffold
@@ -799,7 +799,7 @@ files:
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
-    sha256: 3bc530203aec8521c9d84da93b5590b7864b6790659b96e9978a1d9776e05546
+    sha256: 08fe933e66bfc53524f28fc46c73153471b0c47e4bba3c0df2cb68593cc35b78
   - src: scripts/write_gate.py
     dest: .claude/scripts/write_gate.py
     kind: scaffold
@@ -867,7 +867,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 87d4220b8c077e05c267fe7153931fa79ee9196b878f010b5a3ee116b636a087
+    sha256: 7f1b3d7a18ddc481e30fd5738799f0a43f13edf4eaabb478ca1b0133b6b2e59e
   - src: references/agent-three-state-charter.md
     dest: .claude/references/agent-three-state-charter.md
     kind: asset
@@ -1123,7 +1123,7 @@ files:
   - src: references/schema.md
     dest: .claude/references/schema.md
     kind: asset
-    sha256: 4fd092588c2e0be19f1dc71b81e8c0ff5b4acb9a62bed99e9b85151b00e51d5a
+    sha256: 7dc8e2cffb88a819c8ae7196003763c34bfb8e3cfa5b08cb42b4559c5c28d31b
   - src: references/search-policy.md
     dest: .claude/references/search-policy.md
     kind: asset
@@ -1247,7 +1247,7 @@ files:
   - src: tools/_INDEX.yaml
     dest: .claude/tools/_INDEX.yaml
     kind: asset
-    sha256: 8f52bf336508ac5813b156546bf395a2d718303a13fce751eed99acbc119b996
+    sha256: a1a4f76855a0db0b1e5abc05d0c9436d34f00fcd9b2d420035c012d25c4eccd7
   - src: tools/_lib/index_schema.py
     dest: .claude/tools/_lib/index_schema.py
     kind: asset
@@ -1475,7 +1475,7 @@ files:
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
-    sha256: 337ee1bc3a6a645d6f0ea9cf84e6a8f5f6016d11f42361a464bef53cc4630c44
+    sha256: d47d8f9a2fb21960de0b7ab3b9a47db3469b87113631b0a6e5cfa8288355d7f1
   - src: tools/web/jsvmp_triage.py
     dest: .claude/tools/web/jsvmp_triage.py
     kind: asset

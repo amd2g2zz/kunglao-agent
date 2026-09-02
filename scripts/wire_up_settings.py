@@ -1,18 +1,14 @@
 # -*- coding: utf-8 -*-
-"""wire_up_settings.py - THE hook registry + a deprecated registration alias.
+"""wire_up_settings.py - THE hook registry.
 
 Issue #445 (2026-08-18): the WRITER that used to live here moved to
 hook_activation.register_hooks (THE canonical registration entry, with the
-post-write layer self-check). This module keeps two things:
-
+post-write layer self-check). This module keeps the REGISTRY
   1. the REGISTRY (WIRE_UP_HOOK_FILES, HOOK_DEPLOYMENT_TARGETS,
      hook_deployment_targets, derive_hook_subset) — the data source every
      checker/writer derives from (#372/#381/#410 contracts). It is not a
      registration entry; moving it would churn four importers for zero
      convergence.
-  2. wire_up_settings() — a DEPRECATED thin alias delegating to
-     hook_activation.register_hooks (kept for the conservative #445
-     migration; retirement is #446's job).
 
 Issue #258 (2026-08-12): hook deployment is PROJECT-scoped. The pre-#258
 hardcoded `Path.home()/.claude/settings.json` wrote hooks globally; in a
@@ -42,7 +38,6 @@ try:
 except NameError:
     pass
 
-import warnings
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -182,28 +177,3 @@ def derive_hook_subset(registry: Iterable[str], include: Iterable[str],
             f"{sorted(overlap)}. Update the subset tables deliberately "
             f"(issue #381).")
     return include
-
-
-
-
-def wire_up_settings(workspace: Path | None = None,
-                     global_opt_in: bool = False) -> int:
-    """#445 DEPRECATED thin alias — hook_activation.register_hooks is THE
-    canonical hook registration entry.
-
-    Signature preserved for the conservative #445 migration (callers:
-    tests + any external integrations); every call now warns and delegates.
-    Retirement (deleting the alias) is issue #446 — NOT this change.
-
-    See hook_activation.register_hooks for the actual behavior (the #258
-    project-level target, the #269 canonical command paths, and the #445
-    post-write self-check that FAILs a write landing on a layer that does
-    not fire).
-    """
-    warnings.warn(
-        "wire_up_settings.wire_up_settings is deprecated (#445): the hook "
-        "registration entry is hook_activation.register_hooks (CLI: "
-        "hook_activation.py <workspace> --wire-up). Retirement: #446.",
-        DeprecationWarning, stacklevel=2)
-    from hook_activation import register_hooks
-    return register_hooks(workspace=workspace, global_opt_in=global_opt_in)

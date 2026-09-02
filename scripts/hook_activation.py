@@ -477,14 +477,12 @@ def always_arm(workspace: Path,
 # #445: THE canonical hook registration entry
 # ===========================================================================
 # Machine-readable declarations — pinned by tests/test_hook_registration_entry.py.
-# Exactly one registration entry exists; legacy names survive as declared
-# aliases (deprecated, #446 retires them) and the kicker's bootstrap writer
-# as a declared subordinate. Anything else writing hook entries is an
+# Exactly one registration entry exists; the kicker's bootstrap writer is a
+# declared subordinate. (#863: the pre-#445 deprecated alias retired —
+# DEPRECATED_ALIASES is empty.) Anything else writing hook entries is an
 # unregistered fourth path and fails the single-entry scan.
 CANONICAL_REGISTRATION_ENTRY = "hook_activation.register_hooks"
-DEPRECATED_ALIASES = (
-    "wire_up_settings.wire_up_settings",  # pre-#445 full-registry writer
-)
+DEPRECATED_ALIASES: tuple = ()
 DECLARED_SUBORDINATE_WRITERS = (
     # dead-session bootstrap subset, workspace-parent target — see
     # external_kicker.REGISTRATION_RELATION for the full contract.

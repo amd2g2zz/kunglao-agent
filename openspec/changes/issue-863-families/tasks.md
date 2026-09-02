@@ -2,6 +2,13 @@
 - [x] Family B: loader util + 前导委托（实测 22 调用点/21 文件 → `hooks/_path_hygiene.load_module_by_path` 单体；scripts 侧经新增 `scripts/_hooks_path.py` 桥；#671 自举 2 处 named-allowlist 保留）
 - [x] Family C: _resolve_ws manifest-aware 单源（闭合 #865 主体）——实测 9 份（issue 8 + #883 新增 statusline_snapshot）/4 形状 → `scripts/ws_layout.py` resolve_quiet/resolve_strict 单源；B2 修复（8 份硬编码 sibling → 全部尊重 layout.workspace_dir/claim_register）；守护测试 4 形状全覆盖 + delegation/confinement 执法
 - [x] Family D: toolchain `_which_items()` helper（#877 已交付；863-f 复核 CONFIRMED 单源无残留，见 proposal.md Recon）
+- [x] 863-e #1: wire_up_settings deprecated alias 删除（注册表本体保留）+ DEPRECATED_ALIASES 清账 + 测试改调 register_hooks
+- [x] 863-e #2: worker_budget._ShimModule + _PROPAGATE_TO 删除 + 3 测试文件直 patch 源模块
+- [x] 863-e #3: validate_index._LEGACY_UNANNOTATED 白名单删除 + _INDEX.yaml 29 条目机械回填 + _CAPABILITY_TAGS 扩 27 标签
+- [x] 863-e #4: digest_build pre-contract `<ws>/_INDEX.md` fallback 删除
+- [x] 863-e #5: promote_lesson 死定义（:654，被 :949 遮蔽）删除 + helper `_read_lesson_frontmatter` 清理 + soft-fail 行为钉
+- [x] 863-e #6: kunglao_verify --grace/--grace-scan 一次性迁移旗标退役（含 kunglao.py 镜像 + schema.md 段 + 配对测试）
+- [x] 863-e #7: lint_facts/migrate_facts 裁决落地（YAMLError 硬错 + PARTIALLY-VERIFIED 出 status 集 + _parse_kv_block 保留 + migrate_facts 内联 _parse_frontmatter）
 - [x] Family E: kunglao_upgrade WARN-triple 单源（16 处 print → `_warn`/`_warn_line` 模块内单源 + delegation/confinement 执法测试）
 - [x] Family H: `_ensure_utf8_stderr` 3×9 → `scripts/utf8_boot.ensure_utf8_stderr` 纯别名委托；textual tripwire 改身份级 delegation 断言
 - [ ] 全量质量门 + CI

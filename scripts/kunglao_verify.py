@@ -198,13 +198,13 @@ def compare_value_assertions(
     return (not mismatches, mismatches)
 
 
-def check_assignment_expected(fact: dict, *, grace: bool = False) -> tuple[bool, str]:
+def check_assignment_expected(fact: dict) -> tuple[bool, str]:
     """Lint gate (D1/D3): assignment-class expected must bind concrete value assertions.
 
     A fact without byte-exact targets must not be promoted to
     PROVEN/VERIFIED. Returns (ok, reason): ok=False blocks promotion.
-    grace=True downgrades the rejection to a non-blocking WARN (for the
-    one-time migration window).
+    (#863: the one-cycle migration `grace` downgrade was retired — the
+    migration window it served is over; archive tasks all checked.)
     """
     expected = str(fact.get("expected", ""))
     if not is_assignment_class(expected):
@@ -212,11 +212,8 @@ def check_assignment_expected(fact: dict, *, grace: bool = False) -> tuple[bool,
     assertions = parse_value_assertions(expected)
     if assertions:
         return True, f"{len(assertions)} value assertion(s) bound"
-    reason = ("assignment-class expected lacks concrete value assertions "
-              "(detected assignment token(s) but no field=value bindings)")
-    if grace:
-        return True, "WARN (grace): " + reason
-    return False, reason
+    return False, ("assignment-class expected lacks concrete value assertions "
+                   "(detected assignment token(s) but no field=value bindings)")
 
 
 # ===========================================================================
@@ -827,13 +824,13 @@ def check_rewrite_after_fail(ws: Path, fact: dict, fact_id: str) -> tuple[bool, 
                    "rewrite-after-fail forgery pattern (#828)")
 
 
-def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
+def verify(ws: Path, fact_id: str, l2_dispatcher=None, *,
            binary_path: Path | None = None) -> dict:
     """M3.4 state machine (L282-293): lint → L1 → (L2 + anchor_check only when semantics needed).
 
     #49: the assignment-class lint gate runs first — missing value
     assertions → REJECTED (no promotion).
-    grace=True makes lint WARN only, non-blocking (one-time migration).
+    (#863: the one-cycle migration grace flag retired.)
     Output written to runs/verify-<fact_id>-<ts>.json.
     """
     fact = load_fact(ws, fact_id)
@@ -847,14 +844,14 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
     # anchor source + #828 rewrite-after-fail hash lock. Any rejection →
     # lint_ok=False (REJECTED, no promotion).
     ok0, r0 = check_rewrite_after_fail(ws, fact, fact_id)
-    ok1, r1 = check_assignment_expected(fact, grace=grace)
+    ok1, r1 = check_assignment_expected(fact)
     ok2, r2 = check_expected_anchor_source(fact)
     lint_ok = ok0 and ok1 and ok2
     if lint_ok:
         lint_reason = r0 or r1
     else:
         lint_reason = " | ".join(r for ok, r in ((ok0, r0), (ok1, r1), (ok2, r2)) if not ok)
-    lint = {"ok": lint_ok, "reason": lint_reason, "grace": grace}
+    lint = {"ok": lint_ok, "reason": lint_reason}
 
     # #238 F6: cross_workflow without a redteam record → WARN (into warnings, non-blocking)
     warnings: list[dict] = []
@@ -966,45 +963,20 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
     return out
 
 
-def _grace_scan(ws: Path) -> int:
-    """--grace-scan: list facts that are assignment-class but lack value assertions (migration targets)."""
-    facts_dir = ws / "facts"
-    affected: list[dict] = []
-    if facts_dir.exists():
-        for p in sorted(facts_dir.glob("*.md")):
-            if p.name == "_INDEX.md":
-                continue
-            fm = _parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
-            if not fm.get("id"):
-                continue
-            ok, reason = check_assignment_expected(fm)
-            if not ok:
-                affected.append({"fact_id": fm.get("id"), "status": fm.get("status", "?"),
-                                 "path": str(p), "reason": reason})
-    print(json.dumps(affected, indent=2, ensure_ascii=False))
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
-    """Standalone CLI: python kunglao-verify.py <ws> <fact_id> [--json] [--grace] | <ws> --grace-scan."""
+    """Standalone CLI: python kunglao-verify.py <ws> <fact_id> [--json]."""
     ap = argparse.ArgumentParser(
         description="kunglao-verify — M3 VERIFY (L1 mechanical + L2 redteam + assignment-class lint)")
     ap.add_argument("ws", type=Path, help="workspace root")
-    ap.add_argument("fact_id", nargs="?", help="fact id, e.g. F-001 (omit with --grace-scan)")
+    ap.add_argument("fact_id", nargs="?", help="fact id, e.g. F-001")
     ap.add_argument("--json", action="store_true", help="machine-readable JSON output")
-    ap.add_argument("--grace", action="store_true",
-                    help="warn-only for assignment-class lint (one-cycle migration)")
-    ap.add_argument("--grace-scan", action="store_true",
-                    help="list assignment-class facts lacking value assertions, then exit")
     args = ap.parse_args(argv)
 
-    if args.grace_scan:
-        return _grace_scan(args.ws)
     if not args.fact_id:
-        ap.error("fact_id is required (or use --grace-scan)")
+        ap.error("fact_id is required")
 
     try:
-        out = verify(args.ws, args.fact_id, grace=args.grace)
+        out = verify(args.ws, args.fact_id)
     except FileNotFoundError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

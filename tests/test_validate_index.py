@@ -283,14 +283,18 @@ class TestRuleA_AnnotationGate:
         assert errs, "brand-new-tool should fail: no provider block"
         assert any("provider" in e for e in errs), errs
 
-    def test_rule_a_legacy_entry_without_provider_warns(self) -> None:
-        """A LEGACY_UNANNOTATED entry without provider passes (WARN, not FAIL)."""
+    def test_rule_a_removed_whitelist_name_without_provider_fails(self) -> None:
+        """#863: the LEGACY_UNANNOTATED whitelist is gone — a formerly
+        legacy name (crypto-tool) without a provider block now FAILs."""
         entry = _valid_entry()
-        entry["name"] = "crypto-tool"      # in LEGACY_UNANNOTATED
+        entry["name"] = "crypto-tool"      # formerly in LEGACY_UNANNOTATED
         entry["capability"] = "crypto:decode"
-        del entry["when_not"]
+        for _field in ("when_not", "provider", "produces", "requires",
+                       "cost_hint", "quality"):
+            entry.pop(_field, None)   # strip the whole annotation block
         errs = _errors({"tools": [entry]})
-        assert not errs, f"LEGACY entry 'crypto-tool' should pass: {errs}"
+        assert any("provider" in e for e in errs), (
+            f"formerly-legacy name without provider must fail: {errs}")
 
     def test_rule_a_annotated_entry_passes(self) -> None:
         """An entry WITH a provider block (even if new) is always fine."""

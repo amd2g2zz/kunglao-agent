@@ -413,10 +413,12 @@ _INDEX_SEPARATOR_RE = re.compile(r"^\|[\s|:-]+\|$")
 
 def _index_status_values() -> frozenset[str]:
     """Canonical status set from the single parser (import-guarded — the
-    linter degrades to VALID_STATUS when tools/_lib is absent), extended
-    with the workflow-layer word migrate_facts writes into the _INDEX
-    status column (regenerate_index: INFERRED+partial → PARTIALLY-VERIFIED).
-    Memoized: called once per _INDEX row."""
+    linter degrades to VALID_STATUS when tools/_lib is absent).
+
+    #863 conflict ruling: the workflow-layer word PARTIALLY-VERIFIED is NOT
+    a legal facts/_INDEX.md status column value (workflow state belongs to
+    claim-register / references/state-mapping.md, same posture as the
+    frontmatter BAD_STATUS rule). Memoized: called once per _INDEX row."""
     cached = _INDEX_STATUS_CACHE.get("v")
     if cached is not None:
         return cached
@@ -424,9 +426,9 @@ def _index_status_values() -> frozenset[str]:
         sys.path.insert(0, str(_LIB_DIR))
     try:
         from index_schema import FACT_STATUSES
-        values = frozenset(FACT_STATUSES) | {"PARTIALLY-VERIFIED"}
+        values = frozenset(FACT_STATUSES)
     except ImportError:
-        values = frozenset(VALID_STATUS) | {"PARTIALLY-VERIFIED"}
+        values = frozenset(VALID_STATUS)
     _INDEX_STATUS_CACHE["v"] = values
     return values
 
@@ -723,6 +725,15 @@ def lint_workspace(ws: Path):
             # visibility) via a synthetic empty-frontmatter pass — a body
             # claiming PROVEN with no frontmatter has more than one defect.
             no_fm_files.append((p, body))
+            continue
+        if perr == "yaml-unparseable":
+            # #863 conflict ruling: yaml.YAMLError is a HARD lint error even
+            # when the tolerant kv fallback yielded a parse. The tolerant
+            # parse stays available to the runtime gate (bash_fact_guard's
+            # hand-edit read); the lint never silently passes broken YAML.
+            errors.append(("error", "UNPARSEABLE_FRONTMATTER",
+                           f"{p.name}: frontmatter unparseable (YAML error — "
+                           "fix the fence block by hand)"))
             continue
         if perr and not fm:
             errors.append(("error", "UNPARSEABLE_FRONTMATTER",

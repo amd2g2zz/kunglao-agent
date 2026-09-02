@@ -146,6 +146,56 @@ hooks/ 侧**非 `_resolve_ws` 命名**的同类硬编码 sibling probe：`hooks/
 - util 落点 scripts/ws_layout.py（WHY 见方案节）；convergence_check 的函数级 `import env_manifest`
   热路径注释随探测逻辑一并移入 util（import 图不变：消费方 → ws_layout → env_manifest）。
 
+## Recon（863-e，2026-09-02 实测）
+
+范围：Package 2 批 2 四项（no-backward-compat 删除/收敛）+ 附加三项（promote_lesson /
+grace 旗标 / lint_facts-migrate_facts 裁决落地）。审计报告 /tmp/kunglao-audit 已清失，
+issue 表格为权威 fallback；全部锚点按符号 grep 重定位。**无 RECON-DEVIATION，七项全放行。**
+
+另勘误：proposal.md 头部"Package 2 已先行交付（PR #875）"不实——#875 实为
+862-budget-channel；本卡四项在 dev 4caeb44 上全部仍活体存在（下表实测），按本卡执行。
+
+### 锚点表（issue 锚点 vs 实测）+ 七项四件套
+
+| # | 项 | issue 锚点 | 实测定义 | 活体引用 | 测试钉 | 清理面 |
+|---|---|---|---|---|---|---|
+| 1 | wire_up_settings deprecated alias | wire_up_settings.py:158-180 | :189-209（`def wire_up_settings`，DeprecationWarning→register_hooks 委托）；模块 docstring :2-15、`import warnings`:45 仅其使用 | hook_activation.py:484-487 `DEPRECATED_ALIASES` 声明（:49/:61/:64 为历史 prose）；无生产调用方 | test_hook_registration_entry.py:98-105（声明钉）、:108-125（委托钉，删）；test_completion_gate.py:493-516、test_wire_up_settings.py ×9、test_state_anchor.py:313-338（行为钉，改调 register_hooks） | 删 alias+warnings import+docstring 条目 2；`DEPRECATED_ALIASES = ()`；注册表本体（WIRE_UP_HOOK_FILES/HOOK_EVENTS/hook_deployment_targets/derive_hook_subset）全保——env_check/state_anchor/external_kicker/hook_activation 活体消费 |
+| 2 | worker_budget._ShimModule | worker_budget.py:44-64 | :54-61（类+`__class__` 赋值）+ 供数表 `_PROPAGATE_TO`:46-51（仅 shim 消费） | 模块外零引用（grep 全库） | test_stuck_gate.py:35-69（×5 `wb._run_py`）、test_heartbeat_bootstrap.py:200（`wb._run_py`）、test_failopen_emit.py:122（`wb.check_priority`）依赖转发；test_worker_budget.py:818-826 已直 patch 源模块（镜像样例） | 删 :40-61；三测试文件 patch 目标改源模块（worker_budget_sinks._run_py / worker_budget_core.check_priority），镜像 test_worker_budget.py 形状。issue 称"+2 测试文件"，实测 3 个依赖转发的文件（非削减，全改） |
+| 3 | validate_index._LEGACY_UNANNOTATED | validate_index.py:58-70,146,296-307 | 白名单 :59-74（29 名 frozen）、检查点 :297-307、:147-149 docstring "legacy untouched" | 非测试零引用 | test_validate_index.py:268-308（TestRuleA：legacy WARN 钉 :286-293 翻转）、test_index_capability_annotations.py:144-150（翻转）、:164-168（shipped index 绿——回填后仍须绿，保留） | 删白名单→所有无 provider 条目硬错；tools/_INDEX.yaml 29 条目机械回填（provider=自名、produces=[capability]、requires=[]、cost_hint={mem_gb: probe 0.1/cheap 0.5/deep 4.0, time=cost_tier}、quality={capability: high}——单能力 provider 先例 jadx/wakaru/jsvmp-triage）；`_CAPABILITY_TAGS` 扩 27 个 legacy capability 标签（29 中 2 个已在集）；测试翻转 2 处 |
+| 4 | digest_build pre-contract fallback | digest_build.py:81-84 | :78-80（`facts/_INDEX.md` 不存在→`<ws>/_INDEX.md`）+ docstring :77 | 消费方（kunglao_resume/kunglao-digest/acceptance_check）全部面向规范工作区 | 零测试钉 fallback（test_digest.py 等全部写 facts/_INDEX.md 规范位） | 删回退 2 行 + docstring 句 |
+| 5 | promote_lesson 双定义 | failure_analysis_gate.py:643/938 | 死定义 :654-702（49 LOC，被 :949 遮蔽）+ 私有 helper `_read_lesson_frontmatter`:639-651（仅死定义使用）；活定义 :949-1014 | 测试全走活定义（Python 后 def 胜） | test_lessons_nursery.py:168-251、test_lessons_trigger_precision.py:142-156 钉活定义行为（保留） | 删死定义 + helper；补活定义 soft-fail 行为钉（缺失文件/无 frontmatter/YAML 错 reason 返回） |
+| 6 | kunglao_verify --grace/--grace-scan | （~45 LOC） | kunglao_verify.py:201,206-207,217-218（grace 形参）、:830,836,850,857（verify grace）、:969-985（_grace_scan）、:989-1007（CLI）；kunglao.py:90-93,370-373（dispatcher 镜像）；references/schema.md:123-126（migration 段） | 无其他代码调用方传 grace=True | test_fact_expected_binding.py:104-107（grace warn，删）、:217-254（grace-scan ×2，删） | 全删（含 kunglao.py 双镜像 + schema.md 段）；ghidra 的 `--grace`（job 崩溃宽限）是另一旗标，不碰 |
+| 7 | lint_facts/migrate_facts 裁决 | migrate_facts.py:52 | lint_facts.py:160-185（parse_frontmatter）、:188-357（kv 家族）、:414-431（`_index_status_values` +PARTIALLY-VERIFIED）、:727-729（UNPARSEABLE 门）；migrate_facts.py:52-56 导入 + 3 调用点 :360,479,485 | bash_fact_guard.py:78（parse_frontmatter+lint_fact 运行时门）、write_guard.py（仅 lint_index/lint_workspace） | test_lint_facts_532.py:144（PARTIALLY-VERIFIED 行 True→翻 False）、:176-186（同翻转）；test_icd203_alignment.py:199（UNPARSEABLE-or-NO_FRONTMATTER，兼容）；test_icd203:293-300（migrate 输出保 PARTIALLY-VERIFIED——不动） | 裁决落地：(a) lint_workspace 对 `yaml-unparseable` 一律硬错（kv 回退结果不再静默过检）；(b) `_index_status_values` 双分支删 PARTIALLY-VERIFIED；(c) `_parse_kv_block` 家族原地保留、parse_frontmatter 容忍语义不变（bash_fact_guard 运行时容忍读零行为变化）；(d) migrate_facts 内联自有 `_parse_frontmatter`（fence+yaml-first+marker 包装 + `_coerce_yaml_scalars` 副本，kv 回退引 lint_facts._parse_kv_block——裁决钉留处），弃 parse_frontmatter 导入 |
+
+### promote_lesson 行为差异结论（合并前 review，幸存语义 = :949 活定义）
+
+死定义（:654）与活定义（:949）差异八处：① 签名默认值（死有 workspace=None/promoted_by/
+evidence 默认，活全必填）；② 缺文件：死 raise FileNotFoundError，活返回
+`{"promoted": False, "reason": "lesson not found: ..."}`；③ 无 frontmatter/非映射/YAML 错：
+死容忍改写（防御性 fallback 重排），活一律 soft-fail 带 reason；④ already_active 返回形状
+（死带 `lesson` 键，活带 `promoted_at`）；⑤ promoted_evidence：死条件写入，活恒写入；⑥
+审计行：活多 `tool=`/`artifact=` 且 detail 恒带 evidence=；⑦ claim 空：死 ""，活 None；⑧
+成功返回形状（死 lesson/promoted_by，活 from_stage/to_stage）。**幸存 = 活定义**：运行时
+从来只有 :949 生效，测试钉的全是它；死定义的默认值签名在运行时不可达（若有人按死签名
+调用，:949 的必填形参当场 TypeError）——删除即零行为变化（by construction）。补钉项：
+soft-fail reason 三态（not found / lacks frontmatter / parse error）若无既有覆盖则新增。
+
+### 基线
+
+- 受影响 20 测试文件：**379 passed, 1 error**（error = test_icd203_alignment teardown 的
+  #770 双生模块守卫——该测试显式插入 malware-veri-notes 外部 skill scripts 进 sys.path，
+  环境性、teardown-only、先于本卡存在；测试本体 passed）。
+- `python scripts/kunglao-verify.py --help` 现含 `--grace/--grace-scan`（退役后 grep 为空）。
+
+### 界外观察（不顺手做）
+
+- 主仓 `D:/codebase/kunglao-agent` 工作区有未提交的 `M scripts/migrate_facts.py`（用户
+  WIP/并行卡落点）；本卡只动 worktree `D:/codebase/kunglao-wt-863e`，合流时按 dev 侧+再生解。
+- tools/_INDEX.yaml 与在跑 866-b 卡的合流冲突预案：合并 origin/dev 冲突时取 dev 侧 +
+  机械回填再生（不手拼）。
+- `tests/test_icd203_alignment.py` 的 #770 teardown 守卫噪声（外部 skill sys.path 污染）
+  值得单独一卡。
+
 ## Recon（863-f，2026-09-02 实测）
 
 ### Family D 核验（orchestrator 初证 → 本卡复核 CONFIRMED，无需重做）
@@ -207,3 +257,54 @@ hooks/ 侧**非 `_resolve_ws` 命名**的同类硬编码 sibling probe：`hooks/
   + 3 print-only）——#739/#752/#753/#755/#758 增量所致；按 16 处全量收编，非削减方向。
 - Family H 落点 utf8_boot.py 而非新建模块——消费方全在 scripts/ 且主题同源（#811），镜像 ws_layout
   先例"按消费方分布定夺"。
+
+## Recon（863-e，2026-09-02 实测）
+
+范围：Package 2 批 2 四项（no-backward-compat 删除/收敛）+ 附加三项（promote_lesson /
+grace 旗标 / lint_facts-migrate_facts 裁决落地）。审计报告 /tmp/kunglao-audit 已清失，
+issue 表格为权威 fallback；全部锚点按符号 grep 重定位。**无 RECON-DEVIATION，七项全放行。**
+
+另勘误：proposal.md 头部"Package 2 已先行交付（PR #875）"不实——#875 实为
+862-budget-channel；本卡四项在 dev 4caeb44 上全部仍活体存在（下表实测），按本卡执行。
+
+### 锚点表（issue 锚点 vs 实测）+ 七项四件套
+
+| # | 项 | issue 锚点 | 实测定义 | 活体引用 | 测试钉 | 清理面 |
+|---|---|---|---|---|---|---|
+| 1 | wire_up_settings deprecated alias | wire_up_settings.py:158-180 | :189-209（`def wire_up_settings`，DeprecationWarning→register_hooks 委托）；模块 docstring :2-15、`import warnings`:45 仅其使用 | hook_activation.py:484-487 `DEPRECATED_ALIASES` 声明（:49/:61/:64 为历史 prose）；无生产调用方 | test_hook_registration_entry.py:98-105（声明钉）、:108-125（委托钉，删）；test_completion_gate.py:493-516、test_wire_up_settings.py ×9、test_state_anchor.py:313-338（行为钉，改调 register_hooks） | 删 alias+warnings import+docstring 条目 2；`DEPRECATED_ALIASES = ()`；注册表本体（WIRE_UP_HOOK_FILES/HOOK_EVENTS/hook_deployment_targets/derive_hook_subset）全保——env_check/state_anchor/external_kicker/hook_activation 活体消费 |
+| 2 | worker_budget._ShimModule | worker_budget.py:44-64 | :54-61（类+`__class__` 赋值）+ 供数表 `_PROPAGATE_TO`:46-51（仅 shim 消费） | 模块外零引用（grep 全库） | test_stuck_gate.py:35-69（×5 `wb._run_py`）、test_heartbeat_bootstrap.py:200（`wb._run_py`）、test_failopen_emit.py:122（`wb.check_priority`）依赖转发；test_worker_budget.py:818-826 已直 patch 源模块（镜像样例） | 删 :40-61；三测试文件 patch 目标改源模块（worker_budget_sinks._run_py / worker_budget_core.check_priority），镜像 test_worker_budget.py 形状。issue 称"+2 测试文件"，实测 3 个依赖转发的文件（非削减，全改） |
+| 3 | validate_index._LEGACY_UNANNOTATED | validate_index.py:58-70,146,296-307 | 白名单 :59-74（29 名 frozen）、检查点 :297-307、:147-149 docstring "legacy untouched" | 非测试零引用 | test_validate_index.py:268-308（TestRuleA：legacy WARN 钉 :286-293 翻转）、test_index_capability_annotations.py:144-150（翻转）、:164-168（shipped index 绿——回填后仍须绿，保留） | 删白名单→所有无 provider 条目硬错；tools/_INDEX.yaml 29 条目机械回填（provider=自名、produces=[capability]、requires=[]、cost_hint={mem_gb: probe 0.1/cheap 0.5/deep 4.0, time=cost_tier}、quality={capability: high}——单能力 provider 先例 jadx/wakaru/jsvmp-triage）；`_CAPABILITY_TAGS` 扩 27 个 legacy capability 标签（29 中 2 个已在集）；测试翻转 2 处 |
+| 4 | digest_build pre-contract fallback | digest_build.py:81-84 | :78-80（`facts/_INDEX.md` 不存在→`<ws>/_INDEX.md`）+ docstring :77 | 消费方（kunglao_resume/kunglao-digest/acceptance_check）全部面向规范工作区 | 零测试钉 fallback（test_digest.py 等全部写 facts/_INDEX.md 规范位） | 删回退 2 行 + docstring 句 |
+| 5 | promote_lesson 双定义 | failure_analysis_gate.py:643/938 | 死定义 :654-702（49 LOC，被 :949 遮蔽）+ 私有 helper `_read_lesson_frontmatter`:639-651（仅死定义使用）；活定义 :949-1014 | 测试全走活定义（Python 后 def 胜） | test_lessons_nursery.py:168-251、test_lessons_trigger_precision.py:142-156 钉活定义行为（保留） | 删死定义 + helper；补活定义 soft-fail 行为钉（缺失文件/无 frontmatter/YAML 错 reason 返回） |
+| 6 | kunglao_verify --grace/--grace-scan | （~45 LOC） | kunglao_verify.py:201,206-207,217-218（grace 形参）、:830,836,850,857（verify grace）、:969-985（_grace_scan）、:989-1007（CLI）；kunglao.py:90-93,370-373（dispatcher 镜像）；references/schema.md:123-126（migration 段） | 无其他代码调用方传 grace=True | test_fact_expected_binding.py:104-107（grace warn，删）、:217-254（grace-scan ×2，删） | 全删（含 kunglao.py 双镜像 + schema.md 段）；ghidra 的 `--grace`（job 崩溃宽限）是另一旗标，不碰 |
+| 7 | lint_facts/migrate_facts 裁决 | migrate_facts.py:52 | lint_facts.py:160-185（parse_frontmatter）、:188-357（kv 家族）、:414-431（`_index_status_values` +PARTIALLY-VERIFIED）、:727-729（UNPARSEABLE 门）；migrate_facts.py:52-56 导入 + 3 调用点 :360,479,485 | bash_fact_guard.py:78（parse_frontmatter+lint_fact 运行时门）、write_guard.py（仅 lint_index/lint_workspace） | test_lint_facts_532.py:144（PARTIALLY-VERIFIED 行 True→翻 False）、:176-186（同翻转）；test_icd203_alignment.py:199（UNPARSEABLE-or-NO_FRONTMATTER，兼容）；test_icd203:293-300（migrate 输出保 PARTIALLY-VERIFIED——不动） | 裁决落地：(a) lint_workspace 对 `yaml-unparseable` 一律硬错（kv 回退结果不再静默过检）；(b) `_index_status_values` 双分支删 PARTIALLY-VERIFIED；(c) `_parse_kv_block` 家族原地保留、parse_frontmatter 容忍语义不变（bash_fact_guard 运行时容忍读零行为变化）；(d) migrate_facts 内联自有 `_parse_frontmatter`（fence+yaml-first+marker 包装 + `_coerce_yaml_scalars` 副本，kv 回退引 lint_facts._parse_kv_block——裁决钉留处），弃 parse_frontmatter 导入 |
+
+### promote_lesson 行为差异结论（合并前 review，幸存语义 = :949 活定义）
+
+死定义（:654）与活定义（:949）差异八处：① 签名默认值（死有 workspace=None/promoted_by/
+evidence 默认，活全必填）；② 缺文件：死 raise FileNotFoundError，活返回
+`{"promoted": False, "reason": "lesson not found: ..."}`；③ 无 frontmatter/非映射/YAML 错：
+死容忍改写（防御性 fallback 重排），活一律 soft-fail 带 reason；④ already_active 返回形状
+（死带 `lesson` 键，活带 `promoted_at`）；⑤ promoted_evidence：死条件写入，活恒写入；⑥
+审计行：活多 `tool=`/`artifact=` 且 detail 恒带 evidence=；⑦ claim 空：死 ""，活 None；⑧
+成功返回形状（死 lesson/promoted_by，活 from_stage/to_stage）。**幸存 = 活定义**：运行时
+从来只有 :949 生效，测试钉的全是它；死定义的默认值签名在运行时不可达（若有人按死签名
+调用，:949 的必填形参当场 TypeError）——删除即零行为变化（by construction）。补钉项：
+soft-fail reason 三态（not found / lacks frontmatter / parse error）若无既有覆盖则新增。
+
+### 基线
+
+- 受影响 20 测试文件：**379 passed, 1 error**（error = test_icd203_alignment teardown 的
+  #770 双生模块守卫——该测试显式插入 malware-veri-notes 外部 skill scripts 进 sys.path，
+  环境性、teardown-only、先于本卡存在；测试本体 passed）。
+- `python scripts/kunglao-verify.py --help` 现含 `--grace/--grace-scan`（退役后 grep 为空）。
+
+### 界外观察（不顺手做）
+
+- 主仓 `D:/codebase/kunglao-agent` 工作区有未提交的 `M scripts/migrate_facts.py`（用户
+  WIP/并行卡落点）；本卡只动 worktree `D:/codebase/kunglao-wt-863e`，合流时按 dev 侧+再生解。
+- tools/_INDEX.yaml 与在跑 866-b 卡的合流冲突预案：合并 origin/dev 冲突时取 dev 侧 +
+  机械回填再生（不手拼）。
+- `tests/test_icd203_alignment.py` 的 #770 teardown 守卫噪声（外部 skill sys.path 污染）
+  值得单独一卡。
+

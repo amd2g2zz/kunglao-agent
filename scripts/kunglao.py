@@ -87,10 +87,6 @@ def cmd_verify(args) -> int:
         argv.append(args.fact_id)
     if args.json:
         argv.append("--json")
-    if args.grace:
-        argv.append("--grace")
-    if args.grace_scan:
-        argv.append("--grace-scan")
     return kv.main(argv)
 
 
@@ -367,10 +363,6 @@ def main() -> int:
     p_verify.add_argument("workspace", nargs="?", default=".")
     p_verify.add_argument("fact_id", nargs="?", default=None)
     p_verify.add_argument("--json", action="store_true")
-    p_verify.add_argument("--grace", action="store_true",
-                          help="warn-only for assignment-class lint")
-    p_verify.add_argument("--grace-scan", action="store_true",
-                          help="list assignment-class facts lacking value assertions")
     p_verify.set_defaults(func=cmd_verify)
 
     p_record = sub.add_parser("record", help="M4 RECORD (ledger idempotent append)")

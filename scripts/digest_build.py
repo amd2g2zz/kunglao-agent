@@ -74,10 +74,9 @@ def _facts_index(ws: Path) -> list[dict]:
     The optional 5th `unit=` field is digest-specific display metadata; it is
     derived here (split off the conclusion), NOT part of the shared schema.
     A malformed status raises IndexSchemaError — never silently re-typed.
-    Fixture fallback <ws>/_INDEX.md kept (pre-contract workspaces)."""
+    (#863: the pre-contract `<ws>/_INDEX.md` fixture fallback was removed —
+    every reader derives from the canonical facts/ location.)"""
     index = ws / "facts" / "_INDEX.md"
-    if not index.exists():
-        index = ws / "_INDEX.md"
     if not index.exists():
         return []
     out = []
