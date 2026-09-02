@@ -23,6 +23,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from _hooks_path import load_module_by_path  # noqa: E402
+
+# #863 Family J: the ONE evidence writer (tools/static/common.py), reached
+# through the #891 by-path loader authority under a unique module name — no
+# tools/static sys.path insert (generic "common" name = shadow risk).
+_COMMON = load_module_by_path(
+    "tools_static_common",
+    Path(__file__).resolve().parent.parent / "tools" / "static" / "common.py")
+write_evidence = _COMMON.write_evidence
+
 # Categories apkid emits — every category MUST appear in summary, default []
 _CATEGORIES = ("packer", "compiler", "obfuscator", "anti_vm", "anti_debug")
 
@@ -104,18 +114,6 @@ def _run_scan(apkid_path: str, apk_path: str, timeout: int = 120) -> tuple[int, 
     return cp.returncode, cp.stdout, cp.stderr
 
 
-def _write_evidence(workspace: Path, data: dict) -> Path:
-    """Always writes the evidence file (fail-open contract)."""
-    out_dir = workspace / "evidence"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "apkid.json"
-    out_path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    return out_path
-
-
 def run(workspace: Path | str, apk_path: str) -> int:
     """Top-level entry: scan + write evidence. 0 on ok|unavailable; 1 on error.
 
@@ -137,14 +135,14 @@ def run(workspace: Path | str, apk_path: str) -> int:
     if not _is_apk(apk_path):
         base["status"] = "error"
         base["reason"] = f"target is not an APK: {apk_path}"
-        _write_evidence(workspace, base)
+        write_evidence(workspace, "apkid.json", base)
         return 1
 
     apkid_path, why = _discover_apkid()
     if apkid_path is None:
         base["status"] = "unavailable"
         base["reason"] = why
-        _write_evidence(workspace, base)
+        write_evidence(workspace, "apkid.json", base)
         return 0
 
     try:
@@ -152,13 +150,13 @@ def run(workspace: Path | str, apk_path: str) -> int:
     except (OSError, subprocess.TimeoutExpired) as exc:
         base["status"] = "error"
         base["reason"] = f"apkid invocation failed: {exc}"
-        _write_evidence(workspace, base)
+        write_evidence(workspace, "apkid.json", base)
         return 1
 
     if rc != 0:
         base["status"] = "error"
         base["reason"] = f"apkid exit {rc}: {stderr.strip()[:500]}"
-        _write_evidence(workspace, base)
+        write_evidence(workspace, "apkid.json", base)
         return 1
 
     findings, version = _parse_apkid_output(stdout)
@@ -166,7 +164,7 @@ def run(workspace: Path | str, apk_path: str) -> int:
     base["findings"] = findings
     base["summary"] = _rollup(findings)
     base["status"] = "ok"
-    _write_evidence(workspace, base)
+    write_evidence(workspace, "apkid.json", base)
     return 0
 
 

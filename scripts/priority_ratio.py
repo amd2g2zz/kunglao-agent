@@ -59,6 +59,7 @@ import yaml
 
 import value_config
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES, SUSPENDED
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 WEIGHTS = {"L": 0.45, "D": 0.30, "N": 0.25}
 TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
@@ -373,14 +374,7 @@ def _load_strategy_view(ws: Path, covers: dict[str, int]) -> tuple[dict[str, str
         return {}, {}
     claim_strategy: dict[str, str] = {}
     failures: dict[str, int] = {}
-    for line in rows:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            e = json.loads(line)
-        except ValueError:
-            continue
+    for e in iter_jsonl(rows):
         if not isinstance(e, dict) or e.get("event") != "dispatch":
             continue
         strategy = str(e.get("strategy") or "").strip()

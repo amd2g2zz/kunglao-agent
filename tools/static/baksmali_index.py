@@ -34,6 +34,11 @@ from pathlib import Path
 
 from typing import Any
 
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+from common import write_evidence  # noqa: E402  (#863 Family J: single source)
+
 
 
 
@@ -103,17 +108,6 @@ def _xref_class(baksmali: str, cls: dict, timeout: int = 30) -> None:
         m["xrefs"] = {"calls": list(calls), "called_by": list(called_by)}
 
 
-def _write_evidence(workspace: Path, data: dict) -> Path:
-    out_dir = workspace / "evidence"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "smali_index.json"
-    out_path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    return out_path
-
-
 def _base_payload() -> dict[str, Any]:
     return {
         "tool": "baksmali",
@@ -137,7 +131,7 @@ def run(workspace: Path | str, apk: str) -> int:
         print("warning: baksmali binary not found; smali_index.json will have "
               "empty classes (downstream consumers skip on empty)",
               file=sys.stderr)
-        _write_evidence(workspace, payload)
+        write_evidence(workspace, "smali_index.json", payload)
         return 0
 
     try:
@@ -149,7 +143,7 @@ def run(workspace: Path | str, apk: str) -> int:
                 v = v[len("baksmali"):].lstrip()
             payload["version"] = v or None
     except (OSError, subprocess.TimeoutExpired):
-        _write_evidence(workspace, payload)
+        write_evidence(workspace, "smali_index.json", payload)
         return 0
 
     classes = _list_classes(baksmali, apk_path)
@@ -157,7 +151,7 @@ def run(workspace: Path | str, apk: str) -> int:
         _xref_class(baksmali, cls)
     payload["classes"] = classes
 
-    _write_evidence(workspace, payload)
+    write_evidence(workspace, "smali_index.json", payload)
     return 0
 
 

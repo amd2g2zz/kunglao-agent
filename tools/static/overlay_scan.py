@@ -57,6 +57,7 @@ if str(_LIB_DIR) not in sys.path:
 from common import (  # noqa: E402
     EXE_SIGNATURES,
     byte_entropy,
+    error,
     find_all,
     scan_valid_pclntab,
     signature_hits,
@@ -73,26 +74,21 @@ MAX_RELOC_BLOCK = 0x10000
 MAX_PCLNTAB_SEARCH = 10 * 1024 * 1024
 
 
-def _error(code: int, message: str) -> None:
-    print(json.dumps({"error": message, "exit_code": code}), file=sys.stderr)
-    sys.exit(code)
-
-
 def _load(args) -> tuple[bytes, pefile.PE]:
     path = Path(args.binary)
     try:
         data = path.read_bytes()
     except OSError as exc:
-        _error(2, f"cannot read --binary {path}: {exc}. "
-                  f"Check the path and re-run: python overlay_scan.py --binary {path}")
+        error(f"cannot read --binary {path}: {exc}. "
+              f"Check the path and re-run: python overlay_scan.py --binary {path}")
     if data[:2] != b"MZ":
-        _error(2, f"{path} is not a PE (no MZ magic at offset 0). "
-                  f"Pass a PE file with a possible overlay.")
+        error(f"{path} is not a PE (no MZ magic at offset 0). "
+              f"Pass a PE file with a possible overlay.")
     try:
         pe = load_pe(path)
     except Exception as exc:  # noqa: BLE001
-        _error(2, f"pefile could not parse {path}: {exc}. "
-                  f"The file may be truncated or not a PE; try another sample.")
+        error(f"pefile could not parse {path}: {exc}. "
+              f"The file may be truncated or not a PE; try another sample.")
     return data, pe
 
 
@@ -300,8 +296,8 @@ def _emit_json(payload: dict, args) -> None:
         try:
             Path(args.out).write_text(text, encoding="utf-8")
         except OSError as exc:
-            _error(2, f"cannot write --out {args.out}: {exc}. "
-                      f"Check the directory and re-run with a writable --out path.")
+            error(f"cannot write --out {args.out}: {exc}. "
+                  f"Check the directory and re-run with a writable --out path.")
     else:
         print(text)
 

@@ -41,6 +41,7 @@ import json
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 COST_EVENTS_FILE = "cost_events.jsonl"
 COST_ADVICE_FILE = "cost_advice.json"
@@ -51,10 +52,7 @@ from harness_common import utc_now  # #863 Family F: single source (was a local 
 
 def parse_event(line: str) -> dict | None:
     """Parse a cost_events.jsonl line. Format: {"ts": ISO, "amount": float, "source": str}"""
-    try:
-        return json.loads(line)
-    except json.JSONDecodeError:
-        return None
+    return next(iter_jsonl([line]), None)
 
 
 def load_events(workspace: Path) -> list:

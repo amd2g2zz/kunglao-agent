@@ -29,6 +29,7 @@ EVENT_TYPES = ("fact_written", "fact_verified", "claim_promoted", "claim_refuted
 # annotated "same set as worker_budget"; STALE now terminal — a stale claim needs
 # no further work, so claim_promoted on STALE is a real promotion)
 from status_defs import TERMINAL as TERMINAL_STATUSES
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 # Same exemption set as hooks/worker_budget.py check_claim_status_change (L289)
 ORCHESTRATOR_ACTORS = ("orchestrator", "main", "kunglao-orch")
 
@@ -81,14 +82,8 @@ def read_events(ws: Path, event_type: str | None = None) -> list[dict]:
     if not p.exists():
         return []
     out: list[dict] = []
-    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            ev = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for ev in iter_jsonl(
+            p.read_text(encoding="utf-8", errors="replace").splitlines()):
         if event_type is None or ev.get("event_type") == event_type:
             out.append(ev)
     return out
@@ -126,12 +121,11 @@ def _scan_ledger_tail(p: Path, n: int = 100) -> tuple[int, list[str]]:
 
 def _event_id_in_lines(eid: str, lines: list[str]) -> tuple[bool, int | None]:
     """Check if event_id exists in parsed lines. Returns (found, seq_if_found)."""
-    for line in lines:
+    for rec in iter_jsonl(lines):
         try:
-            rec = json.loads(line)
             if rec.get("event_id") == eid:
                 return True, int(rec["seq"])
-        except (json.JSONDecodeError, KeyError, ValueError):
+        except (KeyError, ValueError):
             continue
     return False, None
 

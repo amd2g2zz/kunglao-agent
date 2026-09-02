@@ -185,6 +185,28 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         print(f"[kunglao_log] warning: cannot write {p}: {exc}", file=sys.stderr)
 
 
+def iter_jsonl(lines):
+    """Tolerant JSONL line reader (#863 Family K single source).
+
+    Yields parsed values from `lines`, skipping blank lines and lines that
+    fail json.loads (JSONDecodeError is a ValueError — one handler covers
+    every historical handler shape in the family). Yields ANY parsed value
+    (including ``None`` for a literal ``null`` line): filtering to dicts or
+    to specific shapes stays with the consumer, byte-equivalent with the
+    pre-consolidation loops. Accepts any iterable of str (lists, generators,
+    ``reversed(...)``).
+    """
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            row = json.loads(stripped)
+        except ValueError:
+            continue
+        yield row
+
+
 def _all_rows(ws: Path) -> list[dict]:
     """Every parseable row across ALL day files, chronological order.
 
@@ -199,14 +221,7 @@ def _all_rows(ws: Path) -> list[dict]:
             text = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rows.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
+        rows.extend(iter_jsonl(text.splitlines()))
     return rows
 
 

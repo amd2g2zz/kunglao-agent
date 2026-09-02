@@ -14,5 +14,8 @@
 - [x] 863-e #7: lint_facts/migrate_facts 裁决落地（YAMLError 硬错 + PARTIALLY-VERIFIED 出 status 集 + _parse_kv_block 保留 + migrate_facts 内联 _parse_frontmatter）
 - [x] Family E: kunglao_upgrade WARN-triple 单源（16 处 print → `_warn`/`_warn_line` 模块内单源 + delegation/confinement 执法测试）
 - [x] Family H: `_ensure_utf8_stderr` 3×9 → `scripts/utf8_boot.ensure_utf8_stderr` 纯别名委托；textual tripwire 改身份级 delegation 断言
+- [x] Family I: tools/static `_error` 6 份 → `common.error` sys.exit 契约统一（return-vs-exit 分叉显式修：yara `return _error(...)` → `error(...)` SystemExit 穿透；22+6 调用点；身份级 delegation + SystemExit(2) 契约钉）
+- [x] Family J: `_write_evidence` 4×7 → `common.write_evidence(workspace, name, data)`（dexdc 3-arg 为准；11 调用点文件名上提；apkid 经 `_hooks_path.load_module_by_path` 桥唯一名 `tools_static_common`；身份级 delegation + 契约钉）
+- [x] Family K: tolerant JSONL loop 19 循环点/18 文件 → `scripts/kunglao_log.iter_jsonl` 单 reader（hook 域导入安全裁决见 Recon；逐文件委托断言 + json.loads/JSONDecodeError 残留 pin；kunglao_upgrade rewrite 形与 bench_analyze strict 形界外点名不转）
 - [ ] Family F: utc_now 重数（四说 7/33/50/20 → 实数 53 份定义：datetime 8 / strftime-Z 23 / isoformat-Z 20 / +00:00 2）→ `scripts/harness_common.py` utc_now/utc_now_z/utc_now_iso 单源 + 53 份委托（B/C 字节等价收敛、D 真变体保留）；守护测试 confinement/wiring/identity/契约钉
 - [ ] 全量质量门 + CI

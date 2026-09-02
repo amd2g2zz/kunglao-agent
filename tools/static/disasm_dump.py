@@ -48,7 +48,7 @@ _LIB_DIR = _THIS_DIR.parent / "_lib"   # shared cross-category lib home (#340)
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
-from common import ascii_strings, x64_prolog_offsets  # noqa: E402
+from common import ascii_strings, error, x64_prolog_offsets  # noqa: E402
 from lib_disasm import capstone_for, load_pe, va_to_offset  # noqa: E402
 
 # UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
@@ -60,11 +60,6 @@ DEFAULT_MIN_STRING_LEN = 6
 DEFAULT_MAX_STRINGS = 100
 
 
-def _error(code: int, message: str) -> None:
-    print(json.dumps({"error": message, "exit_code": code}), file=sys.stderr)
-    sys.exit(code)
-
-
 def _parse_hex_list(text: str, flag: str) -> list[int]:
     out = []
     for part in text.split(","):
@@ -74,8 +69,8 @@ def _parse_hex_list(text: str, flag: str) -> list[int]:
         try:
             out.append(int(part, 16))
         except ValueError:
-            _error(2, f"invalid {flag} value {part!r}: expected hex like 0x1010. "
-                      f"Re-run with e.g. --rvas 0x1010,0x2000")
+            error(f"invalid {flag} value {part!r}: expected hex like 0x1010. "
+                  f"Re-run with e.g. --rvas 0x1010,0x2000")
     return out
 
 
@@ -132,23 +127,23 @@ def main(argv: list[str] | None = None) -> int:
     rvas = _parse_hex_list(args.rvas, "--rvas") if args.rvas else []
     vas = _parse_hex_list(args.vas, "--vas") if args.vas else []
     if not rvas and not vas and not args.prologs and not args.strings:
-        _error(2, "no operation requested: give --rvas/--vas, or --prologs/--strings. "
-                  "Example: python disasm_dump.py --binary sample.exe --rvas 0x1010")
+        error("no operation requested: give --rvas/--vas, or --prologs/--strings. "
+              "Example: python disasm_dump.py --binary sample.exe --rvas 0x1010")
 
     path = Path(args.binary)
     try:
         raw = path.read_bytes()
     except OSError as exc:
-        _error(2, f"cannot read --binary {path}: {exc}. "
-                  f"Check the path and re-run: python disasm_dump.py --binary {path}")
+        error(f"cannot read --binary {path}: {exc}. "
+              f"Check the path and re-run: python disasm_dump.py --binary {path}")
     if raw[:2] != b"MZ":
-        _error(2, f"{path} is not a PE (no MZ magic at offset 0). "
-                  f"Pass a PE file; for raw blobs use shellcode-scan.")
+        error(f"{path} is not a PE (no MZ magic at offset 0). "
+              f"Pass a PE file; for raw blobs use shellcode-scan.")
     try:
         pe = load_pe(path)
     except Exception as exc:  # noqa: BLE001
-        _error(2, f"pefile could not parse {path}: {exc}. "
-                  f"The file may be truncated or not a PE; try another sample.")
+        error(f"pefile could not parse {path}: {exc}. "
+              f"The file may be truncated or not a PE; try another sample.")
 
     base = pe.OPTIONAL_HEADER.ImageBase
     sites = [{"va": v, "source": "--vas"} for v in vas]

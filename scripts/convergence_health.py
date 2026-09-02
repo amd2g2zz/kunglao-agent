@@ -44,6 +44,7 @@ from pathlib import Path
 # consumer keeps its own sentinel (the convergence ledger, not the claim
 # register) via the sentinel parameter.
 from ws_layout import resolve_quiet
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 LEDGER_NAME = ".convergence_ledger.jsonl"
 
@@ -76,16 +77,8 @@ def _read_ledger(workspace: Path):
     p = workspace / LEDGER_NAME
     if not p.exists():
         return []
-    out = []
-    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return out
+    return list(iter_jsonl(
+        p.read_text(encoding="utf-8", errors="replace").splitlines()))
 
 
 def _parse_ts(s):

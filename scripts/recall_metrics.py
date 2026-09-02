@@ -13,6 +13,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 METRICS_FILE = ".recall-metrics.jsonl"
 KINDS = ("injected", "skipped", "no_match")
@@ -48,14 +49,7 @@ def summarize(ws: Path) -> dict:
     summary["total"] = 0
     if not p.is_file():
         return summary
-    for line in p.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for row in iter_jsonl(p.read_text(encoding="utf-8").splitlines()):
         kind = row.get("kind")
         if kind in summary and kind != "total":
             summary[kind] += 1

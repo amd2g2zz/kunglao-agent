@@ -55,6 +55,7 @@ import kunglao_log
 # #536: workspace template version cross-check (status + resume both print it)
 import template_version
 from status_defs import ACTIVE_STATUSES, PARTIAL_STATUSES
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 RC_RESUMABLE = 0
 RC_MANUAL = 1
@@ -279,14 +280,7 @@ def _last_structured_event(ws: Path) -> dict | None:
             lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             continue
-        for line in reversed(lines):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except ValueError:
-                continue
+        for row in iter_jsonl(reversed(lines)):
             if isinstance(row, dict):
                 return {"ts": row.get("ts"), "file": p.name,
                         "actor": row.get("actor"), "action": row.get("action")}
@@ -333,14 +327,7 @@ def _gate_rejections(ws: Path) -> dict | None:
         return None
     if not lines:
         return None  # empty ledger == no rejections == section omitted
-    rows: list[dict] = []
-    for ln in lines:
-        try:
-            row = json.loads(ln)
-        except ValueError:
-            continue  # skip a corrupt row, keep the rest
-        if isinstance(row, dict):
-            rows.append(row)
+    rows = [row for row in iter_jsonl(lines) if isinstance(row, dict)]
     if not rows:
         return None
     return {"total": len(rows), "last": rows[-GATE_REJECTIONS_LAST_N:]}
