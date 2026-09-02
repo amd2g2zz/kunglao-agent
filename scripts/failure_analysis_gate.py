@@ -101,7 +101,6 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -136,8 +135,7 @@ REFLECT_QUEUE_DEFAULT = Path.home() / ".claude" / "learnings-queue.json"
 REFLECT_ITEM_TYPE = "failure-lesson-candidate"
 
 
-def utc_now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+from harness_common import utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 def _emit_failure_blocked(workspace: Path, d: dict) -> None:

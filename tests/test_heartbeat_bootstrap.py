@@ -36,6 +36,7 @@ from pathlib import Path
 import pytest
 
 import wire_up_settings  # pytest.ini pythonpath = . hooks scripts tools
+from _factories import write_hook_state, seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -79,8 +80,7 @@ def _parse_ts(value: str) -> datetime:
 
 def _mk_init_ws(tmp_path: Path, name: str = "ws") -> Path:
     ws = tmp_path / name
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
     return ws
 
@@ -179,16 +179,16 @@ def _write_hook_state(ws: Path, *, phase: str = "IDLE",
                       paused: list[str] | None = None,
                       expires_minutes: float = 30,
                       overrides: dict[str, str] | None = None) -> None:
-    state = {
-        "ts": _ago(1),
-        "tier": "none",
-        "phase": phase,
-        "active_hooks": active if active is not None else ["cost_gate"],
-        "paused_hooks": paused or [],
-        "user_override": overrides or {},
-        "expires_at": (_ahead(expires_minutes) if expires_minutes >= 0 else _ago(-expires_minutes)),
-    }
-    (ws / ".hook_state.json").write_text(json.dumps(state), encoding="utf-8")
+    """Fabricate .hook_state.json via the shared 863-h factory."""
+    write_hook_state(
+        ws,
+        active_hooks=active if active is not None else ["cost_gate"],
+        paused_hooks=paused or [],
+        phase=phase, tier="none", ts=_ago(1),
+        user_override=overrides or {},
+        expires_at=(_ahead(expires_minutes) if expires_minutes >= 0
+                    else _ago(-expires_minutes)),
+    )
 
 
 @pytest.fixture

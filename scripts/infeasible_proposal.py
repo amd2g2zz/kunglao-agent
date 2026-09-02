@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -29,8 +28,7 @@ LADDER_LEVELS = ("L1", "L2", "L3")
 SIGNAL_STATE = "runs/infeasible-state.json"
 
 
-def utc_now_iso() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 def _load_reg(ws: Path):

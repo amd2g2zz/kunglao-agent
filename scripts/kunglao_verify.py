@@ -77,9 +77,7 @@ _ACTUAL_ASSERTION_RE = re.compile(r"^([A-Za-z_][\w.]*)\s*[:=]\s*(.+)$")
 _VALUE_PLACEHOLDERS = {"??", "?", "TBD", "TODO", "N/A", "NULL", "null", ""}
 
 
-def utc_now() -> str:
-    """UTC ISO-8601 seconds precision, Z suffix."""
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def _parse_frontmatter(text: str) -> dict:

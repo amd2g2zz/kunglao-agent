@@ -308,7 +308,6 @@ soft-fail reason 三态（not found / lacks frontmatter / parse error）若无�
 - `tests/test_icd203_alignment.py` 的 #770 teardown 守卫噪声（外部 skill sys.path 污染）
   值得单独一卡。
 
-
 ## Recon（863-i，2026-09-02 实测）
 
 ### 锚点表（issue/计划锚点 vs 实测）
@@ -405,3 +404,235 @@ mechanism_scheduler 3/0、external_kicker 2/0）——残留回升即红，复�
   本卡 K 转换集内部分 scripts/tests 文件——不同 hunk 区，CONFLICTING 时按预案合并 origin/dev 解。
 - `tests/` 新增 1 文件（test_delegation_863i.py），无 scripts/hooks 资产增删
   （lib_kunglao/kunglao_log 均既有文件）；deploy_manifest 预计无资产面变更，收尾跑 --check 确认。
+
+## Recon（863-h，2026-09-02 实测）
+
+### 前置事实核对（Family G 与 #811 裁决）
+- #811 GBK 裁决（仲裁项 B6）已由 commit 34e1603（2026-09-01）落地：根 conftest.py 删除
+  5 个被遮蔽夹具（tmp / ws_factory / contract_validator / golden_master / isolated_home，
+  -128 行），方向 = GBK 修复版胜出——子 tests/conftest.py 的 golden_master 携带 #317 UTF-8
+  解码（encoding="utf-8" + errors="replace"），root 副本裸 text=True 是活体 GBK 陷阱。
+- 本卡 Family G 余量 = 验收证据（git grep）+ 防复活机械钉
+  （tests/test_conftest_single_source_863g.py，4 测试）。
+
+### 锚点表（计划/issue 锚点 vs 实测）
+| issue/计划表述 | 实测 | 结论 |
+|---|---|---|
+| conftest fork 2×113 | 修复前根 conftest 131 行含 5 夹具复本；34e1603 后根 conftest 仅 #369 flock + #770 syspath 守卫（4 个独有 fixture/helper），与 tests/conftest.py 零重叠 | fork 已清零（#811 预完成），本卡补机械钉 |
+| 删 5 个被遮蔽 root fixtures | 34e1603 diff 段：tmp / ws_factory / contract_validator / golden_master / isolated_home 五段全删 | 已完成；方向合规（GBK 版胜出，本卡 863g 钉回验） |
+| hook_state ×5 | 实测 34 内联写点 / 27 文件（27 = 12+15 峰值并集） | 大幅上修，除 5 处非种子形状外全收编 |
+| claim-seed ×4 | 机制形态（dict-list→register）7 文件 7 帮手 + conftest ws_factory 同型发射体 | 机制形态全收编；201 处剩余为一次性 fixture 文本内容（富 YAML 手写体），非机制复制，不属本族 |
+| sample.exe ×4 | 实测 34 写点 / 26 文件 | 大幅上修，34/34 全收编 |
+| ~19 families / factory ~90 LOC | 三命名族收编；tests/_factories.py 共 ~150 LOC | factory 规模略超 issue 估算，功能等价账本钉齐 |
+
+### Family L 形状分类与等价性依据
+- hook_state 4 形状：full 7 键（completion_gate 族）、minimal 3 键（dispatch_gate 族）、
+  6 键 null-expiry（dispatch_contract / scorer_authority）、2 键（backtrack / resume 族）；
+  另 upgrade 族 5 键 + `state` 额外键（extra 参数）。等价性：read_state=json.loads
+  （字节无关），is_active_strict 只读 expires_at/user_override/active_hooks/paused_hooks；
+  工厂 None-omit 语义逐字段保形，golden-dict 钉齐（test_fixture_factories_863l.py）。
+- claim-seed 2 方言：canonical 6-field f-string（ws_factory == decide_schema_routing 逐字节）
+  与 sparse（yaml.safe_dump ×4、3-field ×1、type-aware ×1）。等价性：消费方全部 yaml.safe_load
+  （think_seat.py:81、rollup.py:68、priority_ratio.py:143 实证）；解析等价钉在 863l 钉文件。
+- sample.exe：`(ws/"bins").mkdir(parents=True)` + `write_bytes(b"MZ"+b""*64)`
+  2 行形状 ×25 邻接点 + 9 变体点（非邻接/bins-var/4 字节占位/PAYLOAD 常量）。等价性：
+  payload 字节级同型（seed_bins 默认 payload = 原 MZ+零尾字面量，863l 钉）。
+
+### 方案与落点
+- 工厂落点 tests/_factories.py（普通函数 + conftest 薄 fixture 再导出
+  hook_state_seed / claims_seed / bins_seed；**不可 `from conftest import`**：pytest.ini
+  pythonpath 首位是仓库根，`conftest` 名字歧义会解析到根 conftest）。
+- write_hook_state（None-omit 语义 + expires_minutes 便捷参 + extra 附加键）、
+  write_claims_register（defaults=True canonical 方言 / False sparse 方言）、
+  seed_bins(name/payload)。conftest ws_factory 发射体委托（逐字节不变）。
+- 守护：test_fixture_factories_863l.py（12 钉：4 形状 golden dict + extra + claims 双方言
+  字节/解析等价 + seed_bins 字节钉 + 再导出身份钉）；test_conftest_single_source_863g.py
+  （4 钉：root 禁 5 夹具名、tests/conftest.py 必持 5 夹具、golden_master #317 解码钉、
+  fixture 解析行为钉）。每步转换后受影响面全绿再提交。
+
+### 验收证据
+- git grep：根 conftest 4 个 fixture 定义全为 #369/#770 独有
+  （load_lock_factory / load_sensitive_registry / _serialize_load_sensitive /
+  _syspath_collision_order_guard），5 遮蔽名零命中；tests/conftest.py 5/5 持有。
+- hook_state 内联 dict 写点 0 残留（5 处留点均为轮转写/垃圾字面量非种子形状）；
+  claim 机制形态 0 残留；sample.exe 34/34 清零。
+- 基线（4caeb44，Windows 本地）：**9 failed / 5187 passed / 12 skipped**
+  （7 个已知环境失败 + ghidra_async 2 flaky 家族）；终局全量 = 基线同集合（见下）。
+- release_receipt.py --check RC=0（提取前）；终局复验见 PR 描述。
+
+### 偏航记录（实现级，非 RECON-DEVIATION）
+- G：删除工作 #811 已预完成 → 本卡交付 = 证据 + 防复活钉（方向与验收不变）。
+- L 计数上修（×5/×4/×4 → 实测 27-34/7+201/34）：按家族符号 grep 全量口径全收编，
+  201 处一次性 fixture 文本内容不属机制复制，显式排除并留痕。
+- 工厂落点 tests/_factories.py（WHY：conftest 名字歧义风险），conftest 薄再导出。
+- qtable_p3 encoding kwarg 小偏差归一（无行为差）。
+### Family D 核验（orchestrator 初证 → 本卡复核 CONFIRMED，无需重做）
+
+- `git grep _which_items`：仅 `scripts/toolchain.py` 5 处（def :512-538 + 调用 :1521/:1538/:1551/:1655），
+  带 `#863 Family D` docstring——由 #877（commit e3d640c）交付。
+- 覆盖形态核对：2 个 hard-loop（windows/linux 的 file/readelf/objdump，:1521/:1551）+ 2 个 docker-block
+  （windows/linux，:1538/:1655）+ jadx/apktool（Android）全部经 `_which_items`；issue 计数口径
+  "intra ~90" = toolchain.py 文件内复制，与现状吻合。
+- 残留扫描：`shutil.which` 在 scripts/hooks/tools 的其余命中（apkid_scanner:44、deploy_shim:154、
+  env_check:400-404、env_manifest:553、env_repair_l1、env_state_probe、intake_promise:194、
+  kunglao_upgrade:1060、pkg_detect、toolchain_install:453/458、tools/static 若干）全部是**单命令
+  专用探针**（各自二进制、各自用途），非 which→CheckResult 列表循环族；Family D 符号族清零成立。
+- 守护：无 `_which_items` 符号级测试（与 issue 表"behavior tests only"执法口径一致）——行为由
+  test_probe_tiers_474 / toolchain 面测试钉住。结论：**D 已完成，本卡零代码改动，仅记录**。
+
+### 锚点表（计划/issue 锚点 vs 实测）
+
+| issue/计划表述 | 实测 | 结论 |
+|---|---|---|
+| Family E "WARN-triple 11 exact +4"（`warn()` ~50 LOC） | `kunglao_upgrade.py` 内 WARN print 共 **16 处**（grep `WARN.*file=sys.stderr` 族）：**8 处全 triple**（print + `_emit_event(..., "warn", why)` + `_emit(ws, ev, f"warn:{why}")`）：agents_refresh :268-272、uv_sync ×4 :1062-1093、staleness ×3 :1133-1165；**2 处 near-triple**（第三信号 detail 非默认）：claudemd `skipped:` 前缀 :422-427、toolchain_manifest 明文 detail :1008-1012；**1 处双信号**（print+event 无 ledger）：backfill channel :981-986；**2 处双信号**（print+ledger 无 event）：mcp :900-904、env_ledger unparseable :943-947；**3 处 print-only**：frame-stale :144-146、`_warn_git_skip` :699-700（已是具名单源，7 调用点）、sweep :1381-1383（注意该处连字符 `-` 非 em-dash，字节保真保留） | 行号/计数全漂移（issue 基于旧版；#739/#752/#753/#755/#758 增量）；按 16 处全量处理，triple 形状确认 |
+| Family E 守护测试 `test_deploy_surface_755.py:349-361` | `test_failure_is_warn_not_fatal` :348-359（行为断言：warn label + stderr 含 WARN+uv_sync）+ `test_timeout_is_warn` :361-372 等——**行为测试，非 textual**；按 863-b 先例：行为测试保留 + 新增 delegation/confinement 执法测试 | 行号漂移按符号定位 |
+| Family H `_ensure_utf8_stderr` 3×9 | 3 份函数体逐字节等价（9 行）：`toolchain.py:49-63`（调用 :66 module-level）、`toolchain_install.py:56-70`（调用 :73 module-level）、`kunglao-init.py:566-580`（调用 :2654 main() 首语句）；docstring 微漂移（toolchain_install 缺 `REFUSE —` 例） | 确认 3×9 |
+| Family H 守护测试 `test_toolchain_stdio.py:160-163` | `test_utf8_stderr_call_sites_pinned_in_source` :150-164（`source.count("_ensure_utf8_stderr(sys.stderr)")==1` textual tripwire，fault-inject M8 语义）+ 3 个行为测试 :109-137（recorder 断言 encoding=utf-8/errors=replace/fail-open False） | 行号漂移；textual 改 delegation，行为测试保留 |
+
+### 方案（落点 + delegation 形态）
+
+- **Family E 落点：`kunglao_upgrade.py` 模块内 `_warn()` / `_warn_line()`**（issue 明示"one warn()
+  helper ~50 LOC"；16 处副本全部在同一文件内，无跨文件消费方 → 模块内单源即清零，无需新 util 模块）。
+  形态：`_warn(msg, why, event, ws=None, *, ledger_detail=None)` = stderr 行 + `[event]` 轨 + ledger
+  三信号（`ws=None` 保持 ledger 面静默；`ledger_detail` 覆盖默认 `warn:{why}`——claudemd 的
+  `skipped:` 前缀与 toolchain_manifest 的明文 detail 由此保真）；`_warn_line(msg)` = 纯 stderr 面
+  （print-only 三处 + 双信号两处的 print 腿），`_warn` 组合 `_warn_line`。
+  **双信号两处（mcp/env-unparseable）不升格为 triple**——加 `[event]` 行即输出变化，违反行为等价。
+- **Family H 落点：`scripts/utf8_boot.py::ensure_utf8_stderr(stream=None) -> bool`**。WHY：#811
+  stdio 保险层模块，docstring 自declares"本模块管 stdio 与子进程树"——主题同源；3/3 消费方全在
+  scripts/（裸导入，无 Family B 式桥）。delegation 形态 = **纯别名**（863-c 最强委托形态）：
+  三处 `def` 原位替换为 `from utf8_boot import ensure_utf8_stderr as _ensure_utf8_stderr`（原位 =
+  module-level 调用时序不变，toolchain.py stdout 先于 stderr reconfigure 的既有顺序保持）；
+  `_ensure_utf8_stderr(sys.stderr)` 调用点一律不动（M8 tripwire 的钉就是调用本身）。
+- **执法测试**：Family H——`test_toolchain_stdio.py` 的 textual tripwire 改写为**身份级 delegation
+  断言**（`mod._ensure_utf8_stderr is utf8_boot.ensure_utf8_stderr` ×3）+ 保留调用点 count==1 pin
+  （M8 语义：乱码 fix 是 CALL 不是 helper）；3 个行为测试保留（经别名仍绿）。Family E——新增
+  `tests/test_warn_delegation_863f.py`：(1) confinement：`kunglao_upgrade.py` 内直连
+  `print("kunglao-upgrade: WARN` 计数 == 0（全部 WARN 行经 `_warn`/`_warn_line`）；
+  (2) triple 唯一性：`_emit_event(event, "warn", why)` 在源内恰 1 次（即 `_warn` 体内）；
+  (3) util 契约钉：monkeypatch 双 emit 面断言三信号/`ws=None`/`ledger_detail` 覆盖三态。
+  行为等价由既有 test_deploy_surface_755 行为组（不改）兜底。
+
+### 基线
+
+- `tests/test_toolchain_stdio.py + test_deploy_surface_755.py`：**40 passed, 1 failed**——failed 为
+  `TestT6Registry::test_already_at_target_still_plans_deploy_items`（KeyError 'notes/keep.md'），
+  改动前即失败，属计划已列 7 个 Windows 环境性基线失败中的 test_deploy_surface_755（CI Linux 权威）。
+
+### 偏航记录（实现级，非 RECON-DEVIATION）
+
+- Family E 计数：issue "11 exact +4" vs 实测 16 print 处（8 triple + 2 near + 1 backfill + 2 双信号
+  + 3 print-only）——#739/#752/#753/#755/#758 增量所致；按 16 处全量收编，非削减方向。
+- Family H 落点 utf8_boot.py 而非新建模块——消费方全在 scripts/ 且主题同源（#811），镜像 ws_layout
+  先例"按消费方分布定夺"。
+
+## Recon（863-g，2026-09-02 实测）
+
+### 重数对照表（四说 7/33/50/20 归因 + 实数）
+
+口径：`git grep -E "def utc_now|def _utc_now|def now_utc" -- '*.py'`（`now_utc` 零命中）。
+**实数：53 份定义复制**（基点 4caeb44，2026-09-02）。
+
+| 四说数字 | 最可能口径归因 | 置信 |
+|---|---|---|
+| 7 | 部分目录子集计数（hooks+tools/static+个别 = 5；或某单形状子集）——审计报告 /tmp/kunglao-audit/ 已被清，原始 grep 不可回验；不采纳为任何工作对象 | 低（不可回验） |
+| 33 | 审计时点计数或"公开名"子集（`def utc_now(` 精确 31 + 公开 iso 2 ≈ 33）；53-33=20 与 isoformat-Z 形状数巧合 | 低（不可回验） |
+| 50 | 53 − 3（tools/static 3 份）= 只数 scripts/+hooks/ 的口径；或审计时点（后续 #878/#882/#883/#897 新增若干份） | 中 |
+| 20 | = isoformat(timespec="seconds")+replace→Z 形状**恰好 20 份**（同形状算一族的口径）；issue 表 "~20 defs, drifted" | 高（形状重合是实测巧合级吻合） |
+
+不可回验声明：审计报告已清（`/tmp/kunglao-audit/` 不存在），7/33 归因无法回验原始口径；
+合并工作的真实对象 = 53 份定义（"函数定义复制"口径），以本表实测为准。
+
+### 形状分类（53 份 → 3 个 util 函数 + 0 个弃子）
+
+| 形状 | 份数 | 定义样本 | 语义 | 收敛到 |
+|---|---|---|---|---|
+| A: 返回 tz-aware datetime | 8 | `datetime.now(tz=timezone.utc)` | datetime 对象 | `utc_now()` |
+| B: strftime Z 形 | 23 | `strftime("%Y-%m-%dT%H:%M:%SZ")` | "YYYY-MM-DDTHH:MM:SSZ" | `utc_now_z()` |
+| C: isoformat+replace Z 形 | 20 | `isoformat(timespec="seconds").replace("+00:00","Z")` | 同 B **字节等价**（机械可测） | `utc_now_z()` |
+| D: +00:00 偏移后缀 | 2 | `isoformat(timespec="seconds")`（无 replace） | "…T…+00:00" 真变体 | `utc_now_iso()` |
+
+B/C 字节等价证明：两者对同一 datetime 都产出 `YYYY-MM-DDTHH:MM:SSZ`（秒精度、Z 后缀），
+守护测试以同一 datetime 双路径比对钉死。合计 8+23+20+2 = 53。✓
+
+### 复制定义清单（每份 file:line）
+
+**形状 A → `utc_now`（8）**：scripts/active_intervention.py:47、scripts/backtrack_gate.py:40、
+scripts/claim_expiry.py:41、scripts/convergence_check.py:74、scripts/cost_gate.py:49、
+scripts/kunglao_resume.py:140（`_utc_now`）、scripts/kunglao-monitor.py:106（`_utc_now_dt`）、
+scripts/progress_report.py:51。
+
+**形状 B+C → `utc_now_z`（43；其中 42 批量 + hooks/heartbeat_touch 手工桥接）**：
+scripts/apkid_scanner.py:31、scripts/ask_for_direction_gate.py:245、scripts/backtrack_loop.py:80、
+scripts/complete_teardown.py:96、scripts/dead_letter.py:55（`utc_now_iso`）、
+scripts/dispatch_context.py:83、scripts/env_check.py:168、scripts/env_repair_l1.py:62、
+scripts/env_state_probe.py:69、scripts/external_kicker.py:174、scripts/feedback.py:51、
+scripts/heartbeat.py:253、scripts/heartbeat_tick.py:87、scripts/heartbeat_touch.py:28、
+scripts/hook_activation.py:129、scripts/hooks_selfcheck.py:82、scripts/infeasible_proposal.py:32
+（`utc_now_iso`）、scripts/init_state.py:31、scripts/kunglao-init.py:561、
+scripts/kunglao-monitor.py:101、scripts/kunglao_log.py:129、scripts/kunglao_record.py:60、
+scripts/kunglao_verify.py:80、scripts/lessons_telemetry.py:50（`_utc_now_iso`）、
+scripts/loop_scheduler.py:57、scripts/loop_state.py:54、scripts/mechanism_scheduler.py:113、
+scripts/mission_ledger.py:26、scripts/plan_drift_detector.py:82、scripts/plan_reviser.py:69、
+scripts/plan_stages.py:34、scripts/provider_health.py:36、scripts/run_test_matrix.py:41、
+scripts/stale_blocker_prune.py:45、scripts/statusline_snapshot.py:162、
+scripts/troubleshooting_gate.py:39、scripts/verify_status_watch.py:48、
+tools/static/apk_mem_gate.py:54、tools/static/baksmali_index.py:32、tools/static/dexdc_scanner.py:60。
+
+**形状 D → `utc_now_iso`（2）**：scripts/failure_analysis_gate.py:139、scripts/outcome_capture.py:61。
+
+命名变体统计（口径留档）：`def utc_now(` 31、`def _utc_now(` 14、`def utc_now_iso(` 6、
+`def _utc_now_iso(` 1、`def _utc_now_dt(` 1（= 53）。调用面 ~91 行（参考值，非合并对象）。
+
+### 落点与导入桥（镜像先例）
+
+- 单源落 `scripts/harness_common.py`（issue 命名；镜像 Family C `scripts/ws_layout.py`：
+  scripts 同目录裸 import，消费方 `from harness_common import utc_now_z as <原名>` 保持
+  调用面零改动）。
+- hooks/heartbeat_touch.py：`from _path_hygiene import ensure_scripts_path`（#671 现成桥，
+  env_check_gate.py:51/57 同款）+ `import harness_common` + `utc_now = harness_common.utc_now_z`。
+- tools/static 3 份：文件头 `_sys_io` 档案惯例（apk_mem_gate.py:21-26）+ scripts-on-path +
+  `from harness_common import utc_now_z as _utc_now  # noqa: E402`。common.py 不动
+  （其契约"no imports of the sibling tools / importable alone"——单向依赖 scripts 单源，
+  不建第二共享层）。
+- 真变体保留：形状 D 2 份（+00:00 后缀）映射 `utc_now_iso`；failure_analysis_gate.py 为
+  863-e 碰撞文件（本卡仅动 def→import 2 行，冲突面极小，FULL MIRROR 可解）。
+
+### 守护测试清单 + delegation assert 方案
+
+新增 `tests/test_harness_common_863g.py`（镜像 863-c 三段式）：
+1. **confinement**：全库 rglob 扫描，`def utc_now|def _utc_now|def now_utc` 仅允许出现在
+   `scripts/harness_common.py`；消费方禁再定义（时间探测逻辑禁再现）。
+2. **wiring**：53 文件映射表逐文件断言含 `from harness_common import`（或 hooks 桥 marker
+   `ensure_scripts_path`）；旧 def 名残留 = 红。
+3. **身份级 delegation**：抽样 import 消费模块，`mod.utc_now is harness_common.utc_now_z`。
+4. **util 契约钉**：datetime tz-aware；Z 形 regex `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`；
+   +00:00 形以 `+00:00` 结尾；B/C 字节等价断言（同一 datetime strftime vs isoformat+replace）。
+5. 行为等价（提取前后同输入同输出）：B/C 等价断言 + 消费方调用面零改动（别名 import），
+   输出字节不随提取漂移。
+
+### 基线
+
+- 守护测试现状：tests/ 对 utc_now 定义**零引用**（`git grep "def utc_now" tests/` 空）——
+  与 issue 表 "enforcement today: none" 一致；无既有测试需改写 delegation。
+- 批量委托后全量 `python -m pytest tests/ -q` 兜底（Windows 本地 7 个环境性基线失败已知，
+  stash 对照甄别；CI Linux 绿为权威）。
+- deploy_manifest：新增 scripts/harness_common.py 为资产面变更 → ext-scan → `--write` → `--verify`。
+
+### 偏航记录（实现级，非 RECON-DEVIATION）
+
+- 实数 53 vs issue 表 "~20"：口径差（定义复制 vs 同形状族），见对照表；工作对象不变。
+- `def now_utc` 口径零命中（四说未含此名；grep 口径并入契约照跑）。
+- kunglao-monitor.py 同文件双 def（utc_now + _utc_now_dt）分别映射 utc_now_z / utc_now。
+
+### 全量测试甄别（5191 passed / 13 failed → 0 归因本卡）
+
+全量 `pytest tests/ -q`：13 failed。甄别：
+- 7 个 = 已知 Windows 环境性基线失败（stash 对照确认基线同红）。
+- test_declaration_scan（harness_common.py 未登记）→ scripts/README.md 加行后绿。
+- test_heartbeat_tick selfcheck_failure → scratch fixture 拷贝清单缺 harness_common.py
+  （镜像 Family C 同 fixture 的 ws_layout/env_manifest 扩展先例）→ 扩清单后绿。
+- deploy_lifecycle_783 ×3 + deploy_manifest_783 ×1 → 全量先于 deploy-manifest --write 跑的
+  时序（新资产未收编态）→ --write 后单跑 14/16 全绿。
+- 终态：本卡引入失败 0；守护测试 8/8 绿；`git grep` utc_now 定义复制定义面清零（唯一 util 除外）。
+(refactor(863-g): 53 份 utc_now 定义复制全部委托单源)

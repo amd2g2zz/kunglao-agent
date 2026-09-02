@@ -39,7 +39,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -138,8 +138,7 @@ from functools import partial
 _decide = partial(cc.decide, emit_snapshot=False)  # #466 read-only contract: resume must not write
 
 
-def _utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+from harness_common import utc_now as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def _parse_ts(value) -> datetime | None:

@@ -208,6 +208,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
 | `_hooks_path.py` | scripts-side bridge to hooks/_path_hygiene — the canonical by-path loader delegation (#863 Family B, #671 authority; guarded append, never reorders) | hooks, lib(13), tests |
 | `ws_layout.py` | manifest-aware workspace resolution single source — resolve_quiet/resolve_strict (#863 Family C; B2 fix: all 9 former _resolve_ws copies honor layout.workspace_dir/claim_register) | lib(9), tests |
+| `harness_common.py` | harness-wide time-stamp single source (#863 Family F) — utc_now (tz-aware datetime) / utc_now_z ("YYYY-MM-DDTHH:MM:SSZ", byte-equivalent collapse of the 43 strftime/isoformat copies) / utc_now_iso (+00:00 variant); 53 former def copies delegate | lib(52: scripts+hooks/heartbeat_touch+tools/static trio), tests |
 | `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
 | `toolchain.py` | type-aware toolchain probe matrix (#304) with probe tiers presence/liveness/capability + jdwp handshake (#474) | lib(1), tests, docs |
 | `tool_tiers.py` | 工具族档位表加载/选择/契约注入 (#812) — 场景×工具→四档降级链（#670 估算 + C-006 实录），dispatch_context 可选键 | dispatch_context, tests |

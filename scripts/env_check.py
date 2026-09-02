@@ -75,7 +75,6 @@ import shutil
 import socket
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import init_state  # noqa: E402  # F6 (#304 review): shared init-completeness predicate
@@ -165,8 +164,7 @@ def load_dotenv(ws: Path) -> dict:
 HOOK_FILES = wire_up_settings.WIRE_UP_HOOK_FILES
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def _load_json(p: Path) -> dict:

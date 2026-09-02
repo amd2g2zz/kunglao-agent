@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import yaml
@@ -48,8 +48,7 @@ def _worker_protocol():
     return load_hooks_lib()
 
 
-def utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+from harness_common import utc_now  # #863 Family F: single source (was a local def)
 
 
 def _load_yaml(p):

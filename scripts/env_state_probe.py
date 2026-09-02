@@ -66,9 +66,7 @@ VM_CAPS = ("vm_reachable", "mcp_bridge")
 ANDROID_CAPS = ("adb", "frida_server", "jdwp_debug")
 
 
-def _utc_now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(
-        timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def _entry(status: str, detail: str) -> dict:

@@ -37,6 +37,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -909,8 +910,7 @@ _PAYLOAD = b"MZ\x90\x00" + b"\x00" * 64
 def _render_claudemd(mod, tmp_path: Path) -> str:
     import hashlib
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(_PAYLOAD)
+    seed_bins(ws, payload=_PAYLOAD)
     target = mod.write_claudemd(ws, "sample.exe",
                                 hashlib.sha256(_PAYLOAD).hexdigest(),
                                 project_type="windows")

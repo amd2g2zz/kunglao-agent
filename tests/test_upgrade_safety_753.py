@@ -31,6 +31,7 @@ if str(SCRIPTS) not in sys.path:
 
 import template_version  # noqa: E402
 from event_taxonomy import EMIT_ACTIONS  # noqa: E402
+from _factories import write_hook_state
 
 UPGRADE_PATH = SCRIPTS / "kunglao_upgrade.py"
 INIT_PATH = SCRIPTS / "kunglao-init.py"
@@ -89,11 +90,9 @@ def synth_v012_ws(tmp: Path) -> Path:
     (ws / ".claude").mkdir()
     (ws / ".claude" / "settings.json").write_text(
         json.dumps(settings), encoding="utf-8")
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "phase": "IDLE", "state": "active",
-        "active_hooks": ["active_intervention"],
-        "paused_hooks": [], "user_override": {},
-    }), encoding="utf-8")
+    write_hook_state(ws, active_hooks=["active_intervention"],
+                     phase="IDLE", user_override={},
+                     extra={"state": "active"})
     return ws
 
 

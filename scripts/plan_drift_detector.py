@@ -58,7 +58,6 @@ import argparse
 import hashlib
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -79,8 +78,7 @@ LOW_CONFIDENCE = frozenset({
 UNVERIFIED_CHECK_STATUSES = frozenset({"PROVEN"})
 
 
-def utc_now() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def _load_yaml(p):

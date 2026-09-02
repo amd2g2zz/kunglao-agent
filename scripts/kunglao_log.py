@@ -126,9 +126,7 @@ def log_path(ws: Path) -> Path:
     return Path(ws) / "runs" / "logs" / f"kunglao-{day}.jsonl"
 
 
-def _utc_now() -> str:
-    """ISO8601 UTC with Z suffix — same convention as kunglao_record.utc_now."""
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def emit(ws, actor: str, action: str, *, claim: str | None = None,

@@ -16,13 +16,19 @@ if str(_TOOLS_DIR) not in _sys_io.path:
     _sys_io.path.insert(0, str(_TOOLS_DIR))
 from _lib.stdio import ensure_utf8_stdout  # noqa: E402
 
+# #863 Family F: the harness-wide time-stamp util lives in scripts/;
+# add scripts/ beside the tools/ bridge above (no second def).
+_SCRIPTS_DIR = _TOOLS_DIR.parent / "scripts"
+if str(_SCRIPTS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_SCRIPTS_DIR))
+from harness_common import utc_now_z as _utc_now  # noqa: E402
+
 
 import argparse
 import json
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -34,8 +40,6 @@ if str(_THIS_DIR) not in sys.path:
 from common import write_evidence  # noqa: E402  (#863 Family J: single source)
 
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _discover_baksmali() -> str | None:

@@ -13,7 +13,6 @@ canonical/legacy/string/mapping 四形状），文本取自原始条目。
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -23,8 +22,7 @@ _LEDGER_REL = "runs/mission_ledger.yaml"
 _TERMINAL_STAMPED = {"PROVEN"}
 
 
-def _utc_now() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def _parse_pqs(task_spec: dict) -> list[dict]:

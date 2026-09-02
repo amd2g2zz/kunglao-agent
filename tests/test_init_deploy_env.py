@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -50,8 +51,7 @@ def _load_init():
 
 def _mk_ws(tmp_path: Path, name: str = "ws") -> Path:
     ws = tmp_path / name
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
     return ws
 

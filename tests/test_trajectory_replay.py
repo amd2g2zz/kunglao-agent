@@ -51,6 +51,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
+from _factories import seed_bins, write_hook_state
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "scripts"
@@ -251,9 +252,7 @@ class TestTrajectory2PlanStall:
             "validated_capability":
                 "frida injection reaches the anti-debug check and bypasses it",
             "identified_obstacle": "spawn timeout kills the spawn path only"})
-        (ws / ".hook_state.json").write_text(json.dumps({
-            "active_hooks": ["dispatch_gate"], "paused_hooks": [],
-            "expires_at": "2099-12-31T23:59:59Z"}), encoding="utf-8")
+        write_hook_state(ws, active_hooks=["dispatch_gate"])
 
         payload = json.dumps({"cwd": str(root), "workspace": str(ws),
                               "tool_input": {"prompt":
@@ -282,8 +281,7 @@ class TestTrajectory2PlanStall:
 
 def _mk_init_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
     return ws
 
@@ -380,9 +378,7 @@ def _capability_root(tmp_path: Path) -> tuple[Path, Path]:
         "validated_capability":
             "frida injection reaches the anti-debug check and bypasses it",
         "identified_obstacle": "spawn timeout kills the spawn path only"})
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "active_hooks": ["dispatch_gate"], "paused_hooks": [],
-        "expires_at": "2099-12-31T23:59:59Z"}), encoding="utf-8")
+    write_hook_state(ws, active_hooks=["dispatch_gate"])
     return root, ws
 
 

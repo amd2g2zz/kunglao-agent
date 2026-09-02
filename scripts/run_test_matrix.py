@@ -38,8 +38,7 @@ MUTATION_BUDGET = int(os.environ.get("KUNGLAO_MUTATION_BUDGET", "50"))
 CATEGORIES = ("smoke", "complexity", "regression", "integration", "fault", "mutation")
 
 
-def utc_now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def _run(cmd: list[str], cwd: Path, timeout: int, env: dict | None = None) -> tuple[int, str, str, float]:

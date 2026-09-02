@@ -31,6 +31,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -120,8 +121,7 @@ def ws(tmp_path: Path) -> Path:
 def init_ws(tmp_path: Path) -> Path:
     """Synthetic init target: bins/ + sample + runs/ (mirrors test_kunglao_init)."""
     w = tmp_path / "ws"
-    (w / "bins").mkdir(parents=True)
-    (w / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(w, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (w / "runs").mkdir()
     return w
 

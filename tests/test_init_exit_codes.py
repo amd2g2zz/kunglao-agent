@@ -32,6 +32,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -70,7 +71,7 @@ def _mk_ws(tmp_path: Path, name: str, sample: bool) -> Path:
     (ws / "bins").mkdir(parents=True)
     (ws / "runs").mkdir()
     if sample:
-        (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+        seed_bins(ws)
     empty = tmp_path / "empty-bin"
     empty.mkdir()
     return ws

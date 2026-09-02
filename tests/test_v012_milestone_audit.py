@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -220,9 +221,7 @@ def test_replay_init_minimal_workspace_contract(tmp_path: Path):
     claim-register.yaml + .workspace-manifest.json 最小契约,且 exit 0。
     """
     # 模拟 user 准备: 至少一个 bins/ 样本 + --type
-    bins_dir = tmp_path / "bins"
-    bins_dir.mkdir()
-    (bins_dir / "sample.exe").write_bytes(b"\x00\x01\x02")
+    seed_bins(tmp_path, payload=b"\x00\x01\x02")
     proc = _run_cli(
         [
             str(ROOT / "scripts" / "kunglao-init.py"),

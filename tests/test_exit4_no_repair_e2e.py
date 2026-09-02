@@ -45,6 +45,7 @@ from error_response import (  # noqa: E402
     classify_init_exit,
 )
 import env_repair_l1  # noqa: E402
+from _factories import seed_bins
 
 
 PY311 = sys.executable  # venv python (>= floor); #457 hard pin broke the 3.10 job
@@ -210,9 +211,8 @@ def test_replay_init_exit4_no_repair_in_tmp_workspace(tmp_path: Path) -> None:
     ws.mkdir()
     # bins/ sample (a real placeholder; init refuses empty bins/ with exit 5
     # before reaching the toolchain check, so we need at least one sample).
-    bins = ws / "bins"
-    bins.mkdir()
-    (bins / "sample.exe").write_bytes(b"\x00\x01\x02")
+    # init refuses empty bins/ with exit 5, so seed one sample.
+    seed_bins(ws, payload=b"\x00\x01\x02")
 
     wrapper = _build_fake_toolchain_wrapper(tmp_path, ws)
     proc = _run(str(wrapper), cwd=tmp_path, timeout=60)

@@ -243,8 +243,7 @@ TYPE_S_PATTERNS = [
 ]
 
 
-def utc_now() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def _emit_interception(workspace: Path, action: str, detail: str, rc: int) -> None:
