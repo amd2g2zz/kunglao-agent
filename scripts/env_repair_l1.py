@@ -59,9 +59,7 @@ import mcp_probe  # noqa: E402
 ENV_STATE_REL = Path("runs") / "env-state.json"
 
 
-def _utc_now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(
-        timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def _load_env_state(ws: Path) -> dict:

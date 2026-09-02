@@ -558,9 +558,7 @@ SCAFFOLD_FILES = {
 }
 
 
-def utc_now() -> str:
-    """UTC ISO-8601 seconds precision, Z suffix (same shape as hooks_selfcheck)."""
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 # #863 Family H: single source in utf8_boot (#811 stdio-insurance module);

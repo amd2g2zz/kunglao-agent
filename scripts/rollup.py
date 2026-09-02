@@ -39,7 +39,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from importlib import import_module
 from pathlib import Path
 
@@ -57,8 +56,7 @@ import kunglao_log  # noqa: E402
 LEDGER_NAME = ".convergence_ledger.jsonl"
 
 
-def utc_now_iso() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 def _load_register(workspace: Path) -> tuple[list, dict, Path]:

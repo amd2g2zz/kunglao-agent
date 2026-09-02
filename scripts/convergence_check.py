@@ -43,7 +43,6 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
@@ -71,8 +70,7 @@ EXIT_BLOCKED = 4
 EXIT_PARK = 5  # #634: suspended on external gates — legal idle with wake_condition
 
 
-def utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+from harness_common import utc_now  # #863 Family F: single source (was a local def)
 
 
 def _load_yaml(p: Path):

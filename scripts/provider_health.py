@@ -33,8 +33,7 @@ except (AttributeError, ValueError):
 DEFAULT_WINDOW_HOURS = 24
 
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def _parse_ts(ts: str) -> datetime | None:

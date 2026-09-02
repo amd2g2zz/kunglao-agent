@@ -29,7 +29,12 @@ from pathlib import Path
 # #618: durable-sidecar access via the #671 path-hygiene authority (same
 # pattern as completion_gate) — the hook lands its pulse in the #830
 # append-only substrate, not just the cache file.
-from _path_hygiene import scripts_on_path  # noqa: E402
+from _path_hygiene import ensure_scripts_path, scripts_on_path  # noqa: E402
+
+# #863 Family F: the harness-wide time-stamp util lives in scripts/;
+# reach it through the #671 path-hygiene authority (no second def).
+ensure_scripts_path()
+import harness_common
 
 # #618: minimum seconds between durable sidecar appends from THIS hook —
 # PreToolUse/Bash + Stop fire often; the sidecar is a liveness substrate,
@@ -37,8 +42,7 @@ from _path_hygiene import scripts_on_path  # noqa: E402
 PULSE_DEDUP_SECONDS = 60
 
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+utc_now = harness_common.utc_now_z  # #863 Family F: single source
 
 
 def main() -> int:

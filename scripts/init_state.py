@@ -13,7 +13,6 @@ this module.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 # #728: "web" is the labs browser-JS type (WARN-only toolchain face,
@@ -28,8 +27,7 @@ MARKER = "[initialized]"
 STATE_FILE = ".kunglao-init.json"
 
 
-def _utc_now() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def write_init_marker(ws: Path, *, state_hash: str, project_type: str,

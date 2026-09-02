@@ -37,8 +37,7 @@ STATUS_RE = re.compile(r"^## Status\s*$", re.MULTILINE)
 ALLOWED_DECISIONS = {"continue", "retry_different", "escalate", "redispatch"}
 
 
-def utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+from harness_common import utc_now  # #863 Family F: single source (was a local def)
 
 
 def parse_status(text: str) -> str | None:

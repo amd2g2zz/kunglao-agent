@@ -44,8 +44,7 @@ RESPONSE_MARKER = "## orchestrator_response"
 HEARTBEAT_LOG = "heartbeat_actions.md"
 
 
-def utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+from harness_common import utc_now  # #863 Family F: single source (was a local def)
 
 
 def parse_iso(s: str) -> datetime:

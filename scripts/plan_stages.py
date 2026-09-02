@@ -18,7 +18,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -31,8 +30,7 @@ _STATUSES = ("pending", "active", "done", "dropped")
 _VERDICTS = ("maintain", "adjust", "replan")
 
 
-def _utc_now() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def load(ws) -> dict:
