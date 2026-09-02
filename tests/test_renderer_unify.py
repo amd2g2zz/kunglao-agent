@@ -32,6 +32,7 @@ import types
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -74,8 +75,7 @@ def init_mod():
 def _render(mod, project_type: str, tmp_path: Path) -> str:
     """write_claudemd with pinned sentinel inputs; returns rendered text."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(PAYLOAD)
+    seed_bins(ws, payload=PAYLOAD)
     target = mod.write_claudemd(ws, "sample.exe", SAMPLE_SHA,
                                 project_type=project_type)
     assert target is not None, "write_claudemd skipped (target existed?)"
@@ -214,8 +214,7 @@ def test_init_cli_exits_nonzero_on_template_defect(init_mod, tmp_path,
         good + "\nBOGUS = {{cli_level_defect}}\n", encoding="utf-8")
 
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(PAYLOAD)
+    seed_bins(ws, payload=PAYLOAD)
 
     monkeypatch.setattr(init_mod, "CLAUDEMD_TMPL",
                         bad_dir / "CLAUDE.md.base.tmpl")

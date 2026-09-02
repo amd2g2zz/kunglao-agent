@@ -36,7 +36,7 @@ from pathlib import Path
 import pytest
 
 import wire_up_settings  # pytest.ini pythonpath = . hooks scripts tools
-from _factories import write_hook_state
+from _factories import write_hook_state, seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -80,8 +80,7 @@ def _parse_ts(value: str) -> datetime:
 
 def _mk_init_ws(tmp_path: Path, name: str = "ws") -> Path:
     ws = tmp_path / name
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
     return ws
 

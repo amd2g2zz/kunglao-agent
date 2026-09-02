@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 import platform_paths  # pytest.ini pythonpath = . hooks scripts tools
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -50,9 +51,8 @@ def gate_ws(tmp_path: Path) -> Path:
     """Workspace with a PE sample; NO toolchain on PATH (hostile env for the
     toolchain gate: PATH -> empty dir, GHIDRA_HOME/KUNGLAO_VM_HOST stripped)."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
+    seed_bins(ws)
     (ws / "runs").mkdir()
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
     empty = tmp_path / "empty-bin"
     empty.mkdir()
     return ws
@@ -384,8 +384,7 @@ def test_run_hard_fail_with_assume_yes_calls_installer(tmp_path, monkeypatch):
     """HARD FAIL + --assume-yes -> toolchain_install.ask_then_install is called
     with assume_yes=True; a resolved-PASS report lets init proceed to scaffold."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     monkeypatch.setenv(FLAG_NAME, "0")
     mod = _load_init_module()
     import toolchain as tc
@@ -427,8 +426,7 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     import toolchain as tc
 
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     monkeypatch.setenv(FLAG_NAME, "0")
 
     ghidra_home = tmp_path / "ghidra"
@@ -504,8 +502,7 @@ def test_run_hard_fail_non_tty_without_assume_yes_pends_menu(tmp_path, monkeypat
     exit 4: the refusal stays reserved for non-negotiable HARD human
     events — see test_run_hard_fail_non_tty_mixed_still_refuses.)"""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     monkeypatch.setenv(FLAG_NAME, "0")
     mod = _load_init_module()
     import toolchain as tc
@@ -541,8 +538,7 @@ def test_run_hard_fail_non_tty_mixed_still_refuses(tmp_path, monkeypatch):
     (vm_reachable) under non-interactive stdin keeps the #304 human-event
     refusal exit 4 (the menu defers to the round after the human acts)."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     monkeypatch.setenv(FLAG_NAME, "0")
     mod = _load_init_module()
     import toolchain as tc
@@ -569,8 +565,7 @@ def test_run_ask_result_still_hard_refuses(tmp_path, monkeypatch):
     """ask_then_install returns a report still FAIL (decompiler declined stays
     HARD) -> refuse exit 4, no scaffold."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     monkeypatch.setenv(FLAG_NAME, "0")
     mod = _load_init_module()
     import toolchain as tc
@@ -600,8 +595,7 @@ def test_init_decline_degrades_warn_and_proceeds(tmp_path, monkeypatch):
     (#455: the old stdin-decline branch is gone — without --assume-yes the
     gate is the #304 headless refusal, exit 4.)"""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     monkeypatch.setenv(FLAG_NAME, "0")
     mod = _load_init_module()
     import toolchain as tc

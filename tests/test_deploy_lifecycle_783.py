@@ -33,6 +33,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import template_version as tv  # noqa: E402
+from _factories import seed_bins
 
 # #794 lesson: behavioral env vars must never leak into CLI children.
 _BEHAVIORAL_ENV_VARS = ("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",)
@@ -347,8 +348,7 @@ def test_upgrade_early_exit_no_drift_stays_true_noop(tmp_path: Path):
 def _init_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "e2e"
     ws.mkdir()
-    (ws / "bins").mkdir()
-    (ws / "bins" / "sample.exe").write_bytes(b"\x00\x01\x02")
+    seed_bins(ws, payload=b"\x00\x01\x02")
     proc = _run_cli([
         str(SCRIPTS / "kunglao-init.py"), str(ws),
         "--type", "linux", "--skip-toolchain", "--assume-yes",

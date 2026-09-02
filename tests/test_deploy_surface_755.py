@@ -31,6 +31,7 @@ if str(SCRIPTS) not in sys.path:
 
 import template_version as tv  # noqa: E402
 from event_taxonomy import EMIT_ACTIONS  # noqa: E402
+from _factories import seed_bins
 
 
 def _load_upgrade():
@@ -542,8 +543,7 @@ def _render_legacy_body(tmp_path: Path, project_type: str = "windows"):
     mod.SKILL_DIR = Path("/kunglao/install-under-test")
     sys.version_info_backup = None
     ws = tmp_path / f"legacy-render-{project_type}"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     target = mod.write_claudemd(ws, "sample.exe",
                                 hashlib.sha256(b"MZ\x90\x00"
                                                + b"\x00" * 64).hexdigest(),

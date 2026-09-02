@@ -21,6 +21,7 @@ import pytest
 
 import hook_activation
 from hook_activation import canonical_install_root
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -32,8 +33,7 @@ FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 def init_ws(tmp_path) -> Path:
     """Synthetic workspace: bins/ + sample + empty claim-register + no [initialized] marker."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
     return ws
 
@@ -398,8 +398,7 @@ def test_init_refuses_sample_file(tmp_path: Path) -> None:
 def test_init_accepts_workspace_with_bins(tmp_path: Path) -> None:
     """#411: init on a valid workspace (bins/ present) proceeds normally."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     r = _run_init(ws)
     assert r.returncode == 0, f"init on a valid workspace must proceed: {r.stderr}"
     assert (ws / "claim-register.yaml").exists(), "valid workspace must initialize"
