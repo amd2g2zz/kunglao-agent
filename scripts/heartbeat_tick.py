@@ -76,7 +76,8 @@ SCRIPTS = SKILL_DIR / "scripts"
 # silent-gate case no other anomaly surfaces. 10 min = a third of the TTL:
 # enough lead time to act before the NEXT tick misses the renewal entirely.
 # #597: the 10-min value is single-sourced in liveness_policy (rationale there).
-from liveness_policy import RENEW_MARGIN_LOW_MINUTES  # noqa: E402
+from liveness_policy import (  # noqa: E402
+    HEARTBEAT_STALE_MINUTES, RENEW_MARGIN_LOW_MINUTES)
 RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
 
 # #863 Family C: workspace resolution is single-sourced in ws_layout
@@ -146,6 +147,43 @@ ORACLE_MISSING_LINE = (
 )
 
 
+def _all_workers_waiting(ws: Path, *, now: 'datetime.datetime | None' = None) -> bool:
+    """True when zero workers are active and at least one is WAITING with
+    a FRESH heartbeat (wait-flag mtime within HEARTBEAT_STALE_MINUTES).
+
+    A stable state fingerprint with every worker parked in the wait loop is
+    idle spin-down (delivered workers heartbeat-polling for the next
+    dispatch), not a stuck loop — the breaker must not trip on it. But the
+    wait flag itself is a heartbeat: a fleet whose flags have all gone
+    stale is a DEAD fleet mid-wait, not an idle one — without the
+    freshness guard such a fleet would latch the exemption forever and
+    the breaker would never rc=2 on it. The worker-liveness protocol is
+    loaded by explicit path: the lib_kunglao name has hooks/scripts twins
+    and ambient sys.path order must not decide which one answers. Any
+    failure -> False (the breaker keeps its teeth)."""
+    try:
+        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+        # #863 Family B: by-path loads delegate to the _path_hygiene
+        # authority (get-or-create under the unique name — same instance
+        # across repeat calls, no ambient sys.path order dependence).
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+        from _path_hygiene import load_module_by_path
+        mod = load_module_by_path("lib_kunglao_hooks_noop_breaker", path)
+        states = mod.iter_worker_states(ws)
+        active, _stuck = mod.scan_active_workers(ws, states=states)
+        waiting = mod.scan_waiting_workers(ws, states=states)
+        if active != 0 or not waiting:
+            return False
+        now = now or datetime.datetime.now(datetime.timezone.utc)
+        cutoff = datetime.timedelta(minutes=HEARTBEAT_STALE_MINUTES)
+        fresh = [s for s in states
+                 if s["file"].stem in set(waiting)
+                 and (now - s["mtime"]) <= cutoff]
+        return len(fresh) > 0
+    except Exception:  # noqa: BLE001 — breaker failure must not fail the tick
+        return False
+
+
 def noop_breaker(ws: Path, current_hash: str,
                  threshold: int | None = None) -> dict:
     """#634 Part B: no-progress circuit breaker state machine.
@@ -153,7 +191,10 @@ def noop_breaker(ws: Path, current_hash: str,
     Same content hash as the previous tick → consecutive_noop += 1; any
     change resets. At >= threshold (env KUNGLAO_NOOP_BREAKER_N, default 6)
     the breaker trips: the loop prompt treats rc=2 as a mandatory stop,
-    not a warning. Pure state helper — main() owns persistence+rc.
+    not a warning. One healthy-freeze exemption: when the freeze is
+    explained by workers WAITING (zero active, >=1 waiting) the breaker
+    stays quiet with reason "all-workers-waiting" — idle spin-down, not a
+    stall. Pure state helper — main() owns persistence+rc.
     """
     import json as _json
     import os
@@ -176,6 +217,9 @@ def noop_breaker(ws: Path, current_hash: str,
             {"hash": current_hash, "count": count}), encoding="utf-8")
     except Exception:  # noqa: BLE001 — telemetry must not break the tick
         pass
+    if count >= n and _all_workers_waiting(ws):
+        return {"tripped": False, "reason": "all-workers-waiting",
+                "consecutive_noop": count, "threshold": n}
     return {"tripped": count >= n, "consecutive_noop": count, "threshold": n}
 
 

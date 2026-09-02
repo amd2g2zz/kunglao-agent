@@ -1049,6 +1049,57 @@ def _redo_leak_check(ws: Path, prompt_text: str,
                 f"overlaps={len(overlaps)}; sample={sample}")
 
 
+def _waiting_target_id(ws: Path, agent_name: str | None) -> str | None:
+    """The waiting worker (if any) THIS dispatch re-arms, else None.
+
+    Matches the target agent id against the waiting pool from the canonical
+    worker-liveness protocol; the pool keys are worker-status file stems, so
+    both the bare agent id and the ``worker-status-<agent>`` stem shape
+    match. A plugin-qualified dispatch id (``plugin:agent``) matches on its
+    bare segment — the wait ledger keys on the agent name. Unreadable
+    workspace / protocol outage -> None (no signal)."""
+    if not agent_name:
+        return None
+    name = agent_name.strip()
+    if not name:
+        return None
+    bare = name.rsplit(":", 1)[-1]
+    try:
+        waiting = load_hooks_lib().scan_waiting_workers(ws)
+    except Exception:  # noqa: BLE001 — a scan failure must not block dispatch
+        return None
+    for stem in waiting:
+        worker_id = stem.removeprefix("worker-status-")
+        if worker_id in (name, bare) or stem in (name, bare):
+            return worker_id
+    return None
+
+
+def _write_wait_signal(ws: Path, agent_name: str | None,
+                       claim_id: str | None) -> None:
+    """UNWAIT: wake a waiting worker a dispatch is about to re-arm.
+
+    One JSON signal file ({"claim", "ts"}); the worker's wait loop consumes
+    it (parse -> delete -> flip its status to in-progress) and keeps
+    working. FIRE-AND-FORGET: any failure prints a stderr note and returns
+    — a signal write must never block or fail the dispatch (hook fail-open
+    discipline)."""
+    try:
+        worker_id = _waiting_target_id(ws, agent_name)
+        if worker_id is None:
+            return
+        path = ws / "runs" / f"wait-signal-{worker_id}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({
+            "claim": claim_id,
+            "ts": datetime.now(tz=timezone.utc)
+                .isoformat(timespec="seconds").replace("+00:00", "Z"),
+        }, ensure_ascii=False), encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 — a signal must never block dispatch
+        print(f"dispatch_gate: wait-signal write failed ({exc!r})",
+              file=sys.stderr, flush=True)
+
+
 def main() -> int:
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -1185,6 +1236,10 @@ def main() -> int:
                     "mission-stable allocation (envelope trace_id absent "
                     "or format-invalid)", trace_id=trace_id)
     _log_strategy_dispatch(ws, claim_id, prompt_text)
+    # UNWAIT: this dispatch targets a worker parked in the wait loop — write
+    # the wake signal so its poll loop re-arms it (fire-and-forget, above).
+    _write_wait_signal(ws, _resolve_dispatch_agent(payload, prompt_text),
+                       claim_id)
     return 0
 
 

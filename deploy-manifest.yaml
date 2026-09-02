@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: ce015dedce7f5395a5477254a1aeb389bb497bd7b801155c779cd30588725d9c
+    sha256: f89e83cfb1cc2085d48664206d36a235a047619786422f70fe426d9f18b576ce
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -31,7 +31,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: aa0e9eb3ac014efe90b4ef8cb56d32fc44657daaa71253b50d03d3975e72fc7c
+    sha256: fd979d450ac9fb229cfac89c6c38595317bb4dc77fffcea060b70bee1a019336
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -75,7 +75,7 @@ files:
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
-    sha256: bdb7fa9d57232c13f8f29c5c0d16981b666de6ec829793cb6b898361604f8397
+    sha256: 5345722e2d7898040c5830648035010081c37bca543dfb736e1c0d7d308bb0e7
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
@@ -83,39 +83,39 @@ files:
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
-    sha256: b89b9df5c7ed901ad7469627c986ccdd6963acf49314bf8968c4d01e5da45ef6
+    sha256: afede035009233e2343fc9a563971d0805260cab58bb462bb53597485d9fddc9
   - src: agents/ghidra-light.md
     dest: .claude/agents/ghidra-light.md
     kind: agent
-    sha256: bd8bd3f447cccc6af9274559ce0025a82446f0ec512d3f2b2e8b88aabc7ccb19
+    sha256: e590b338aa69381d81717cc6026b1f638cc35cc92cdfbeeb5b9813b0db19742b
   - src: agents/go-symbols.md
     dest: .claude/agents/go-symbols.md
     kind: agent
-    sha256: d8fa6a66e8836408b1fc070aee5617601566df25a83147e5ee32c431855ef4b2
+    sha256: 398d5edfc1522c5b6148c35df738b452bfeda1f22e6e21aa96d9198f6a58f98c
   - src: agents/kunglao-init-worker.md
     dest: .claude/agents/kunglao-init-worker.md
     kind: agent
-    sha256: e7aea76a9e5df6f1a4debf77d64756b875324d94bef01ba774a97d7c83199946
+    sha256: f31bdc85dcb2988a5b978140de149daf7611f21d267a1e92d0fbd8d9f748bb92
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: af88147cbc6b3637c28c275842dac55f56216dbd1aa469bbbd7b3742686dceb4
+    sha256: 64cf2600bdffe2324ebdc065246636b46545ca4d8c11778c4a37985984b8f924
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 3790cffa5c66719d0162ec658d489e03be97b0fd661c082425aa313ed89bd1ba
+    sha256: 06315184aee29139a3c9d930d6ef196e19a1ab43bcffd8f425ba89270c95f871
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
-    sha256: e3f9677c2792b99a6d88c6504af28fee80fb13484f0ee65683e8589e77621721
+    sha256: 9592e4e1042131c8cae738a1aab099d84385a4074d226b23a4c71ce401339832
   - src: agents/verdict-scorer.md
     dest: .claude/agents/verdict-scorer.md
     kind: agent
-    sha256: 468e62f9c514dfe7e53e1946d97d6d0b24e6de539a092837eccbefbf375ed6be
+    sha256: 30c6be0bbb56aa22c8e11bad9da6ef98136874114d1f068761e8d7dafdc345bc
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
-    sha256: fb83d7ffc5631c0869315d342ddad77f107593bda956091919a9c0c13314be96
+    sha256: 2e241d6adf810b655fab62ba70af801e35ec3cb5c1cc9e3ae854b1e320e28834
   - src: scripts/_entry.py
     dest: .claude/scripts/_entry.py
     kind: scaffold
@@ -367,7 +367,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: 445650fc46877e5f81b46450e775f9b0064325db576ab97467e9b58a314b7792
+    sha256: 8266adde8d5b70979f59565703dd64af3bd4b5000ee84970d7c40b07cc574995
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -488,6 +488,10 @@ files:
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
     sha256: 3e7112309fd72497739e74678f95b0cac7f39a6f98634b9f7eb1b45255f3a2e4
+  - src: scripts/kunglao_wait.py
+    dest: .claude/scripts/kunglao_wait.py
+    kind: scaffold
+    sha256: 530962eca5bbaf7fc7dcf3c0d7e590b3bb86d7b96cced5e2a4a3b37609b45265
   - src: scripts/lessons_telemetry.py
     dest: .claude/scripts/lessons_telemetry.py
     kind: scaffold

@@ -21,6 +21,7 @@ allowedTools:
 - Glob
 - Grep
 - mcp__sequential-thinking__sequentialthinking
+- Bash(python scripts/kunglao_wait.py:*)
 disallowedTools:
 - NotebookEdit
 - Bash
@@ -257,3 +258,27 @@ upstream it into `tools/`. You write no shims at all (no Bash, no script
 surface): a one-off shim is structurally impossible for you — keep it
 that way.
 
+
+<!-- contract: wait-unwait -->
+## WAIT after delivery — do not end at the final status line
+
+After appending your final `status: done` line, do NOT stop. Enter the wait
+loop (the tool owns the whole poll/heartbeat/signal mechanism; you just
+invoke it):
+
+    python scripts/kunglao_wait.py --worker <your-id>
+
+`<your-id>` is your agent id (the `name:` in your frontmatter). The tool
+appends one `status: waiting` heartbeat line per poll (~20 s) to
+`runs/worker-status-<your-id>.md` — the file mtime IS your liveness.
+
+- **rc=0 (UNWAIT)** — a new dispatch targeted you: the orchestrator's
+  dispatch gate wrote `runs/wait-signal-<your-id>.json`, the tool consumed
+  it, flipped your ledger's last status to `status: in-progress`, and
+  printed the signal JSON on stdout (read it for context). Continue with
+  the new dispatch as a fresh task — same file contract.
+- **rc=3 / rc=4 (self-kill)** — your wait window closed with no dispatch:
+  your ledger's last line reads `status: failed | note: self-killed after N
+  wait rounds`. You are unscheduled — TaskStop yourself NOW so your slot
+  frees. Normal work and post-UNWAIT paths have NO timeout; only the wait
+  loop counts rounds.

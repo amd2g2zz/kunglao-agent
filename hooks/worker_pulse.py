@@ -191,6 +191,11 @@ def _delivery_reminder(ws: Path) -> str:
                 last = parse_status(p.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
+            if last == "waiting":
+                # delivered-but-alive: the wait loop re-arms this worker on
+                # the next dispatch — it is not a zombie, so the TaskStop
+                # reminder must skip it
+                continue
             if last is not None and last.replace("-", "_") in ("done", "blocked"):
                 delivered.append(p.name.removeprefix("worker-status-").removesuffix(".md"))
     except OSError:

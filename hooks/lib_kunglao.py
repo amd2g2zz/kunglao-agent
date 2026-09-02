@@ -309,6 +309,14 @@ from liveness_policy import STUCK_MINUTES  # noqa: E402
 # invisible worker is worse than an extra slot (claim black-hole, #607).
 TERMINAL_WORKER_STATUSES = frozenset({"done", "failed", "blocked", "error"})
 
+# A worker that delivered its claim and is ALIVE awaiting the next dispatch:
+# a real sleep-poll wait state whose status file is re-appended every poll,
+# so the file mtime IS the heartbeat. NOT terminal (the worker can be
+# re-armed by a fresh dispatch signal) and NOT active (it holds no claim and
+# must not jam the capacity gate) — scan_active_workers exempts it and
+# scan_waiting_workers lists it.
+WAITING_WORKER_STATUS = "waiting"
+
 WORKER_STATUS_RE = re.compile(r"status:\s*(\S+)")
 
 # W-15 artifact declarations (#444): workers list deliverable paths on
@@ -487,6 +495,13 @@ def scan_active_workers(workspace: Path, states: list | None = None) -> tuple[in
     active files older than STUCK_MINUTES (mtime). ``states`` lets a caller
     that already ran iter_worker_states reuse the single read.
 
+    A LAST status of ``waiting`` (delivered, alive, awaiting the next
+    dispatch signal) is exempt from BOTH counts: the wait loop renews the
+    file mtime itself, so a waiting file can neither inflate the capacity
+    gate nor age into the stuck list. Terminal and waiting files are the
+    only exemptions — unknown tokens still count active (invisible worker
+    is worse than an extra slot).
+
     Output shape is FROZEN (#37 consumers): ``(active, stuck)`` where each
     stuck entry is ``{"worker": <file stem>, "age_min": int}`` —
     worker_budget.check_workers_lt_3, worker_pulse flags and kunglao-decide's
@@ -504,11 +519,37 @@ def scan_active_workers(workspace: Path, states: list | None = None) -> tuple[in
         # stuck list (#595 event) instead of vanishing with their claim.
         if s["status"] in TERMINAL_WORKER_STATUSES:
             continue
+        if s["status"] == WAITING_WORKER_STATUS:
+            continue
         active += 1
         if (now - s["mtime"]) > cutoff:
             stuck.append({"worker": s["file"].stem,
                           "age_min": int((now - s["mtime"]).total_seconds() // 60)})
     return active, stuck
+
+
+def scan_waiting_workers(workspace: Path, states: list | None = None) -> list[str]:
+    """Worker ids whose LAST ``status:`` token is ``waiting`` — the delivered-
+    but-alive pool.
+
+    Ids are the worker-status file stems (deduped, file order), scanned
+    across the same targets as iter_worker_states (main ``runs/`` plus every
+    worker-worktree ``runs/``). Consumers: the dispatch gate (does THIS
+    dispatch target a waiting worker? -> write the wake signal) and the
+    idle breaker (fingerprint stable + zero active + waiting > 0 = idle
+    spin-down, not a stuck loop). ``states`` reuse follows
+    scan_active_workers.
+    """
+    if states is None:
+        states = iter_worker_states(workspace)
+    out: list[str] = []
+    for s in states:
+        if s["status"] != WAITING_WORKER_STATUS:
+            continue
+        stem = s["file"].stem
+        if stem not in out:
+            out.append(stem)
+    return out
 
 
 def scan_done_artifact_violations(workspace: Path, states: list | None = None) -> list:

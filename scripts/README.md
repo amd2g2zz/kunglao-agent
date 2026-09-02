@@ -43,6 +43,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | Script | Role | Referenced from |
 | --- | --- | --- |
 | `kunglao.py` | unified entry point — subcommands compose script functions (JSON + exit codes frozen) | CLI, tests, release_receipt |
+| `kunglao_wait.py` | worker 自旋锁 CLI — 交付后 sleep 轮询 + WAIT flag 续写（mtime 心跳），signal 到达 UNWAIT 回工作（rc 0），K 轮无 signal self-kill 释放槽位（rc 3/4）；9 agents 统一接入 | agents, hooks/dispatch_gate (signal), tests |
 | `init_channel_default.py` | default local-channel resolution + KUNGLAO_CHANNEL env contract (#727); static-only probe for local + explicit-channel-never-auto-switch; consumed by kunglao-init.write_init_report(channel=) | kunglao-init, tests |
 | `kunglao-init.py` | workspace init + re-init guard + deploy_env (#478: hooks/agents/mcp-record/skills + env-manifest ledger) | CLI, tests |
 | `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + explore_gate + priority_ratio | CLI, tests |
