@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from _factories import write_hook_state
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -75,11 +76,7 @@ def _make_ws(root: Path) -> Path:
     _write_yaml(ws / "task_spec.yaml", {"primary_questions": [],
                                         "mission": "demo-mission"})
     # kunglao-agent ACTIVE (30-min TTL discipline, mirrors #496 fixtures)
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "active_hooks": ["dispatch_gate"],
-        "paused_hooks": [],
-        "expires_at": "2099-12-31T23:59:59Z",
-    }), encoding="utf-8")
+    write_hook_state(ws, active_hooks=["dispatch_gate"])
     return ws
 
 

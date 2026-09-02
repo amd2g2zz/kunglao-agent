@@ -153,3 +153,19 @@ def test_conftest_reexports_are_the_factory_functions(hook_state_seed,
     assert hook_state_seed is whs
     assert claims_seed is wcr
     assert bins_seed is sb
+
+
+def test_hook_state_extra_keys(tmp_path):
+    """upgrade_safety/upgrade_726 active-state shape rides the extra param."""
+    write_hook_state(tmp_path, active_hooks=["active_intervention"],
+                     phase="IDLE", user_override={},
+                     extra={"state": "active"})
+    got = json.loads((tmp_path / ".hook_state.json").read_text(encoding="utf-8"))
+    assert got == {
+        "active_hooks": ["active_intervention"],
+        "paused_hooks": [],
+        "expires_at": FAR_FUTURE,
+        "phase": "IDLE",
+        "user_override": {},
+        "state": "active",
+    }

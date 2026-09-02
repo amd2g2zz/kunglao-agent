@@ -38,7 +38,8 @@ def write_hook_state(ws: Path, *, active_hooks: list[str],
                      phase: str | None = None,
                      tier: str | None = None,
                      ts: str | None = None,
-                     user_override: dict | None = None) -> Path:
+                     user_override: dict | None = None,
+                     extra: dict | None = None) -> Path:
     """Write the workspace hook-state file.
 
     Field-presence semantics mirror the inline shapes this factory
@@ -64,6 +65,8 @@ def write_hook_state(ws: Path, *, active_hooks: list[str],
         state["phase"] = phase
     if user_override is not None:
         state["user_override"] = user_override
+    if extra:
+        state.update(extra)
     path = ws / HOOK_STATE_FILE
     path.write_text(json.dumps(state), encoding="utf-8")
     return path

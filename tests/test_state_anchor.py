@@ -20,6 +20,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from _factories import write_hook_state
 
 _HERE = Path(__file__).parent
 SCRIPTS = _HERE.parent / "scripts"
@@ -104,10 +105,9 @@ def write_worker(ws: Path, minutes_ago: int, name="w1", status="in-progress") ->
 
 def activate(ws: Path, hook="state_anchor") -> Path:
     """Write .hook_state.json that is_active_strict accepts for `hook`."""
-    st = {"ts": ts(), "tier": "none", "phase": "IDLE",
-          "active_hooks": [hook], "paused_hooks": [],
-          "user_override": {}, "expires_at": future_iso(30)}
-    (ws / ".hook_state.json").write_text(json.dumps(st, indent=2), encoding="utf-8")
+    write_hook_state(ws, active_hooks=[hook], ts=ts(), tier="none",
+                     phase="IDLE", user_override={},
+                     expires_at=future_iso(30))
     return ws
 
 

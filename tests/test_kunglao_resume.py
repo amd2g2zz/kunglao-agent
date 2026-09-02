@@ -336,8 +336,8 @@ def test_expired_activation_flagged(tmp_path) -> None:
     import kunglao_resume as kr
     ws = _armed_ws(tmp_path)
     expired = _iso(datetime.now(timezone.utc) - timedelta(minutes=5))
-    (ws / ".hook_state.json").write_text(
-        json.dumps({"expires_at": expired, "active_hooks": []}), encoding="utf-8")
+    write_hook_state(ws, active_hooks=[], paused_hooks=None,
+                     expires_at=expired)
     brief = kr.build_brief(ws)
     assert brief["health"]["activation"]["status"] == "EXPIRED"
 
