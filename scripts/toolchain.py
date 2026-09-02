@@ -504,16 +504,46 @@ def _which_items(tools, tier: "Tier", missing_status: "Status | None" = None,
 
     tools = 命令名序列；每个命令 which 命中 → PASS(found at path)，
     未命中 → missing_status（默认 tier==WARN→WARN 否则 FAIL）+ missing_detail。
+
+    #697: which 命中且 FIXES[name].verify_cmd 存在时真执行该命令（经
+    fail-open 的 _run_cmd，10s 超时）——rc==0 升级为 ProbeTier.LIVENESS
+    （detail 附首个 stdout 行）；rc!=0/崩溃 → WARN（#449 needs-first，
+    坏工具降级不阻塞静态任务）+ 首个 stderr 行作为真因。无 verify_cmd
+    的工具保持 PRESENCE 行为不变（缺 shared library / 0 字节残留 / 死
+    链不再漏放 —— issue #697 三种坏法全部过检的根因是只验存在）。
     """
     out = []
     for name in tools:
         path = _shutil_which(name)
         if path:
-            out.append(CheckResult(
-                name=name, status=Status.PASS, tier=tier,
-                detail=found_detail.format(tool=name, path=path),
-                probe=ProbeTier.PRESENCE,
-            ))
+            meta = FIXES.get(name)
+            verify = meta.verify_cmd if meta is not None else None
+            if not verify:
+                out.append(CheckResult(
+                    name=name, status=Status.PASS, tier=tier,
+                    detail=found_detail.format(tool=name, path=path),
+                    probe=ProbeTier.PRESENCE,
+                ))
+                continue
+            rc, v_out, v_err = _run_cmd(verify.split(), timeout=10)
+            if rc == 0:
+                first_line = v_out.splitlines()[0] if v_out else ""
+                out.append(CheckResult(
+                    name=name, status=Status.PASS, tier=tier,
+                    detail=(found_detail.format(tool=name, path=path)
+                            + (f" — {first_line}" if first_line else "")),
+                    probe=ProbeTier.LIVENESS,
+                ))
+            else:
+                first_err = (v_err.splitlines()[0] if v_err else
+                             (v_out.splitlines()[0] if v_out else
+                              f"verify rc={rc}"))
+                out.append(CheckResult(
+                    name=name, status=Status.WARN, tier=tier,
+                    detail=(found_detail.format(tool=name, path=path)
+                            + f" but verify failed: {first_err}"),
+                    probe=ProbeTier.LIVENESS,
+                ))
         else:
             out.append(CheckResult(
                 name=name, status=(missing_status or
