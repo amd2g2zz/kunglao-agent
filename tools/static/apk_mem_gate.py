@@ -37,6 +37,11 @@ from pathlib import Path
 
 from typing import Any
 
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+from common import write_evidence  # noqa: E402  (#863 Family J: single source)
+
 GB = 1024 ** 3
 
 DEFAULTS = {
@@ -183,17 +188,6 @@ def _evaluate(target_path: Path, params: dict[str, Any],
     }
 
 
-def _write_evidence(workspace: Path, data: dict) -> Path:
-    out_dir = workspace / "evidence"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "apk_mem_gate.json"
-    out_path.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    return out_path
-
-
 def run(workspace: Path | str, target: str) -> int:
     """Top-level entry: estimate + write evidence. Always exits 0
     (REFUSE is an expected outcome, not an error)."""
@@ -211,7 +205,7 @@ def run(workspace: Path | str, target: str) -> int:
     avail_gb = _avail_gb()
 
     data = _evaluate(target_path, params, override, avail_gb)
-    _write_evidence(workspace, data)
+    write_evidence(workspace, "apk_mem_gate.json", data)
     return 0
 
 

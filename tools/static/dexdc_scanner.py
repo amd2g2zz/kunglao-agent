@@ -48,6 +48,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+from common import write_evidence  # noqa: E402  (#863 Family J: single source)
+
 # UTF-8 stdout contract (#317): non-ASCII output must not crash a GBK console.
 
 PYO3_MODULE = "dex_decompiler"
@@ -98,15 +103,6 @@ def _base_payload(face: dict[str, Any], target: str) -> dict[str, Any]:
     return {"tool": "dexdc", "version": face.get("version"),
             "face": face.get("face"), "status": "ok", "target": target,
             "scanned_at": _utc_now()}
-
-
-def _write_evidence(workspace: Path, name: str, data: dict) -> Path:
-    out_dir = workspace / "evidence"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / name
-    out_path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
-                        encoding="utf-8")
-    return out_path
 
 
 def _run_index(workspace: Path, target: str, face: dict[str, Any],
@@ -223,12 +219,12 @@ def run(workspace: Path | str, target: str, mode: str = "both",
     face = detect()
     methods = methods or []
     if mode in ("index", "both"):
-        _write_evidence(workspace, "dexdc_index.json",
+        write_evidence(workspace, "dexdc_index.json",
                         _run_index(workspace, str(target), face, methods,
                                    only_package))
     if mode in ("taint", "both"):
         resolved = _load_seeds(seeds, seeds_file)
-        _write_evidence(workspace, "dexdc_taint.json",
+        write_evidence(workspace, "dexdc_taint.json",
                         _run_taint(workspace, str(target), face, resolved,
                                    only_package))
     return 0

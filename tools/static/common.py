@@ -151,6 +151,26 @@ def negative(args, tool: str, **rows) -> int:
     return EXIT_NEGATIVE
 
 
+def write_evidence(workspace: Path, name: str, data: dict) -> Path:
+    """Write one tool-evidence JSON file under ``<workspace>/evidence/``.
+
+    Single source for the Family J copies (#863): apk_mem_gate /
+    baksmali_index / dexdc_scanner / scripts/apkid_scanner all used to carry
+    this 7-line writer; dexdc's 3-arg signature (workspace, name, data) is
+    the canonical shape — the fixed-filename copies pass their name at the
+    call site. Contract: mkdir parents, utf-8 text,
+    json.dumps(ensure_ascii=False, indent=2), returns the out path.
+    """
+    out_dir = workspace / "evidence"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / name
+    out_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return out_path
+
+
 # ---- byte-scan helpers (ex-_common.py) -------------------------------------
 
 # Common overlay / blob signatures (name -> needle) used by overlay tools.
