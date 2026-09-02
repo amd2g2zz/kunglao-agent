@@ -102,29 +102,21 @@ DORMANT_SENTINEL = Path("runs/.capability-dormant-warned")
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
-    """cwd → <layout.workspace_dir> — the layout names come from the env
-    manifest (#450 single source; hooks/dispatch_gate.py +
-    scripts/convergence_check.py + hooks/lib_kunglao.py used to hardcode
-    them). Absent manifest → DEFAULT_LAYOUT = the pre-#450 literals,
-    discovery behavior byte-identical."""
-    cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
-    try:
-        # #671: scoped membership (no leaked sys.path entry even when
-        # _resolve_workspace is called repeatedly in-process — tests,
-        # embedders); the in-process existence check is now the hygiene
-        # module's concern.
-        with scripts_on_path():
-            import env_manifest
-    except ImportError as exc:  # broken install, not a degraded mode (#444 posture)
-        raise RuntimeError(
-            f"env manifest module missing: {SKILL_DIR / 'scripts' / 'env_manifest.py'} — "
-            "hooks/ and scripts/ ship together; reinstall the kunglao-agent "
-            "skill") from exc
-    layout = env_manifest.layout_conventions(cwd)
-    for base in [cwd / layout.workspace_dir, cwd]:
-        if (base / layout.claim_register).exists():
-            return base
-    return None
+    """Delegate to hooks.lib_kunglao.resolve_workspace_canonical (#865).
+
+    The pre-#865 inline body used `cwd / malware-analysis-workspace` and
+    `cwd` as fixed sibling literals — that worked under DEFAULT_LAYOUT
+    but silently bypassed env-manifest overrides (B2 substance). The
+    canonical helper reads `layout.workspace_dir` from the manifest via
+    `_env_layout`, so a workspace declared `layout.workspace_dir =
+    "research"` is now resolved correctly here as well as in
+    env_check_gate and recall_inject. Probe order and sentinel are
+    identical to the inline body so this delegation is fixture-equivalent
+    for callers — it is the identity, not the implementation, that the
+    B3 audit ruling pinned.
+    """
+    from _path_hygiene import load_hooks_lib
+    return load_hooks_lib().resolve_workspace_canonical(payload)
 
 
 def _kunglao_active(ws: Path) -> bool:

@@ -86,12 +86,16 @@ def _check_init_complete(ws: Path) -> tuple[bool, str]:
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
-    """Same resolution as dispatch_gate.py: cwd -> malware-analysis-workspace."""
-    cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
-    for base in [cwd / "malware-analysis-workspace", cwd]:
-        if (base / "claim-register.yaml").exists():
-            return base
-    return None
+    """Delegate to hooks.lib_kunglao.resolve_workspace_canonical (#865).
+
+    Pre-#865: hardcoded `cwd / malware-analysis-workspace` — silently
+    bypassed env-manifest overrides (B2 substance CONFIRMED). The
+    canonical helper reads `layout.workspace_dir` via `_env_layout` so
+    the same resolution now applies here, in dispatch_gate, and in
+    recall_inject — three hooks previously drifted apart.
+    """
+    from _path_hygiene import load_hooks_lib
+    return load_hooks_lib().resolve_workspace_canonical(payload)
 
 
 def _guidance(ws: Path, flag_val: str) -> str:

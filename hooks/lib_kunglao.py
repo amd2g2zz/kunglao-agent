@@ -209,6 +209,44 @@ def resolve_workspace(payload: dict) -> Path | None:
     return None
 
 
+def resolve_workspace_canonical(payload: dict) -> Path | None:
+    """#865 single source for hooks-side workspace resolution.
+
+    Replaces the three inline copies (dispatch_gate._resolve_workspace /
+    env_check_gate._resolve_workspace / recall_inject._resolve_workspace)
+    that drifted apart — 2/3 of them hardcoded the sibling directory name
+    and stopped honoring the env manifest layout. Probe order matches
+    the post-#450 dispatch_gate implementation byte-for-byte (so the
+    delegation is fixture-equivalent, not merely name-equivalent):
+
+      1. `<cwd>/<layout.workspace_dir>` if it carries layout.claim_register
+      2. `cwd` if it carries layout.claim_register
+      3. None
+
+    The two pre-existing private copies diverged in two ways:
+      * env_check_gate + recall_inject bypassed `_env_layout` entirely,
+        so a manifest-declared `layout.workspace_dir = "research"` was
+        silently ignored (B2 substance CONFIRMED in audit).
+      * docstrings claimed 'same resolution as dispatch_gate.py' but
+        the inline bodies were byte-for-byte identical to each other
+        (and to a stale dispatch_gate pre-#450 snapshot) — drift was
+        invisible until the manifest fix landed (B3 drift CONFIRMED).
+
+    Returns None (matches the inline behavior) when no candidate carries
+    the claim-register sentinel — callers fall through to their own
+    guidance path. `_env_layout` already does scoped membership (#671):
+    the env_manifest import happens under `on_path(scripts_dir)` even
+    when called repeatedly in the same process; tests and embedders do
+    not leak sys.path entries.
+    """
+    cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
+    layout = _env_layout(cwd)
+    for base in [cwd / layout.workspace_dir, cwd]:
+        if (base / layout.claim_register).exists():
+            return base
+    return None
+
+
 # ---- activation check (single source) ----
 def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
     """Check kunglao-agent activation with ONE semantic (strict).

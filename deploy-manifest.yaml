@@ -19,11 +19,11 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: e58c673309f27ad623cd71b5044111fd17bd1b67437d2f9ef703aa8fb899c1af
+    sha256: ce015dedce7f5395a5477254a1aeb389bb497bd7b801155c779cd30588725d9c
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
-    sha256: 9f8e2c34a0a006a9eca9e88184130c408371e43456970ea382fbe3dc239a69be
+    sha256: 6d39265529b6a14349087aba6ff3e2b5801d56b54a727fdda19c81123baa7c7e
   - src: hooks/heartbeat_touch.py
     dest: .claude/hooks/heartbeat_touch.py
     kind: hook
@@ -31,7 +31,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: bf28d76a16ccd533fc4badab0e9401c3234b92e2739b96ae2fb5a5ff883a33d4
+    sha256: aa0e9eb3ac014efe90b4ef8cb56d32fc44657daaa71253b50d03d3975e72fc7c
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -39,7 +39,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: 44a21ead9a273c84eabfb9183057704a0e3e79a6bf65f72c069a9d8e31ffc856
+    sha256: 6d640e64e3d56950f7b12ba2199b52b38b7903185c13e3aa9c85c52d0bf51a3f
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
