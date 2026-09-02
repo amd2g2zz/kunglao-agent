@@ -84,6 +84,7 @@ SCHEMA_FIELDS = {
     "arm", "epoch", "version", "hypothesis_ref",
     "matched_rule",  # #601 additive field
     "trace_id",  # #879 additive field
+    "channel",  # #699 additive field (execution surface)
 }
 
 

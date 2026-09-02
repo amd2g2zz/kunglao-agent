@@ -137,7 +137,8 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
          hypothesis_ref: str | None = None,
          matched_rule: str | None = None,
          trace_id: str | None = None,
-         version: str | None = None) -> None:
+         version: str | None = None,
+         channel: str | None = None) -> None:
     """Append one structured event line. Never raises — write failure degrades
     to a stderr warning so logging can never break analysis.
 
@@ -153,7 +154,14 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
 
     #879: trace_id joins the row into its mission chain
     (`tr-<mission>-<seq>`, mission-stable per #879 identity layer); null on
-    legacy rows — the gap IS the un-attributed rate signal."""
+    legacy rows — the gap IS the un-attributed rate signal.
+
+    #699: channel — where the event executed (#698 FINALIZED vocabulary:
+    ssh|docker|vmr|adb|local, + mcp). Defaults from the KUNGLAO_CHANNEL
+    env var, falling back to ``local``; an explicit kwarg wins (a worker
+    relaying through a specific endpoint stamps ``ssh:9876``, not the
+    session default). Legacy rows lack the key; the .get() gap IS the
+    un-tagged rate signal."""
     event = {
         "ts": _utc_now(),
         "actor": actor,
@@ -170,6 +178,8 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         "matched_rule": str(matched_rule) if matched_rule is not None else None,
         "trace_id": str(trace_id) if trace_id is not None else None,
         "version": str(version) if version else _repo_sha(),
+        "channel": (str(channel).lower() if channel
+                    else os.environ.get("KUNGLAO_CHANNEL", "local").lower()),
     }
     line = json.dumps(event, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=False) + "\n"

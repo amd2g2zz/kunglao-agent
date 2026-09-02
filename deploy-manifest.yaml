@@ -267,7 +267,7 @@ files:
   - src: scripts/digest_build.py
     dest: .claude/scripts/digest_build.py
     kind: scaffold
-    sha256: 416aebefda8f4c32571ff3be76cf709853587ba5cbf16882965241c25155e6c1
+    sha256: 1e7f668c79908c6d1c4f8171b28df8f5d870df306a238d310d055841b4230ebd
   - src: scripts/dispatch_context.py
     dest: .claude/scripts/dispatch_context.py
     kind: scaffold
@@ -455,7 +455,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: f930d6b450917a614279e91931f1d46b27176ab2d53a7b8a16f8216b6455e27f
+    sha256: 0ca2c90d7a35eca44393009f4c4dd3630cbf7ddd8d13b34196a1c028768af3e5
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold

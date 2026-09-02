@@ -26,6 +26,7 @@ except NameError:
     pass
 
 import argparse
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -142,6 +143,47 @@ def build_sec_g(ws: Path) -> str:
     return "\n".join(lines)
 
 
+def build_sec_h(ws: Path) -> str:
+    """Digest sec_h: execution surfaces (#699), per-channel event counts.
+
+    Reads ONLY runs/logs/kunglao-*.jsonl (the kunglao_log emit trail).
+    Rows without a channel key (pre-#699 legacy) count under ``local`` —
+    the .get() gap aggregates as the un-tagged bucket rather than
+    vanishing. Returns "" when there are no log rows at all so
+    build_digest emits no section (build_sec_g precedent: pre-existing
+    workspaces keep their exact digest shape).
+    """
+    logs_dir = Path(ws) / "runs" / "logs"
+    if not logs_dir.is_dir():
+        return ""
+    counts: dict = {}
+    total = 0
+    for p in sorted(logs_dir.glob("kunglao-*.jsonl")):
+        try:
+            for line in p.read_text(encoding="utf-8",
+                                    errors="replace").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                counts[row.get("channel", "local") or "local"] = \
+                    counts.get(row.get("channel", "local") or "local", 0) + 1
+                total += 1
+        except OSError:
+            continue
+    if not total:
+        return ""
+    lines = ["## sec_h — execution surfaces (#699, per-channel event counts)",
+             ""]
+    for ch in sorted(counts):
+        lines.append(f"- {ch}: {counts[ch]}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def build_digest(ws: Path) -> str:
     """Six-section mechanical digest. No LLM; recomputing on the same ws changes only the head timestamp (pure function apart from the timestamp)."""
     task_spec = _load_yaml(ws / "task_spec.yaml")
@@ -254,6 +296,18 @@ def build_digest(ws: Path) -> str:
     if sec_g:
         L.append("")
         L.extend(sec_g.splitlines())
+
+    # ---- sec_h: execution surfaces (#699) — FAIL-OPEN ----
+    # Per-channel event counts from runs/logs/kunglao-*.jsonl. A logging
+    # layer failure must never block cold start (same discipline as sec_g):
+    # degrade to the pre-#699 digest shape instead of raising.
+    try:
+        sec_h = build_sec_h(ws)
+    except Exception:  # noqa: BLE001 — degrade, never block cold start
+        sec_h = ""
+    if sec_h:
+        L.append("")
+        L.extend(sec_h.splitlines())
 
     return "\n".join(L) + "\n"
 
