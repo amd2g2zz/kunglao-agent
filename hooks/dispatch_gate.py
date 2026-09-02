@@ -99,13 +99,6 @@ GATE_REJECTIONS_LOG = Path("runs/gate-rejections.jsonl")
 # a failed write only degrades to a repeated WARN later — never a
 # blocked dispatch and never a silent gate.
 DORMANT_SENTINEL = Path("runs/.capability-dormant-warned")
-# Backward-compat re-export: imports of `DISPATCH_RE` from this module keep
-# working. The real parser is hooks/lib_kunglao.py:parse_dispatch which
-# handles v0 (regex) + v1 (JSON).
-DISPATCH_RE = re.compile(
-    r"\[T\s*([123])\s+tools\s*=\s*([^\]]*)\]\s*claim\s+([A-Z]+-\d+)",
-    re.IGNORECASE,
-)
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
@@ -205,11 +198,11 @@ def _parse_dispatch(text: str) -> tuple[str | None, str | None]:
     try:
         _shared_parse = load_hooks_lib().parse_dispatch
     except Exception as exc:  # pragma: no cover — defensive
-        # Fallback to local regex if lib_kunglao is somehow unimportable
-        m = DISPATCH_RE.search(text)
-        if not m:
-            return (None, f"lib_kunglao import failed ({exc!r})")
-        return (m.group(3), "v0-local-fallback")
+        # No local v0 regex fallback (#863 Package 2, no-backward-compat):
+        # a lib_kunglao outage must surface as an explicit failure — a
+        # silent degrade would resurrect the double-representation the
+        # protocol owners exist to prevent (#444 precedent).
+        return (None, f"lib_kunglao import failed ({exc!r})")
     tier, tools, claim_id = _shared_parse(text)
     if claim_id is None:
         return (None, "v0/v1 both unmatched")

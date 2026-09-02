@@ -665,12 +665,6 @@ def build_index(index_path: Path) -> Index:
                  domains=domains, symptom_map=dict(sym_by_path))
 
 
-def parse_index(index_path: Path) -> tuple[list[Entry], list[Scene]]:
-    """Back-compat shim: (entries, scenes) from the layered index."""
-    idx = build_index(index_path)
-    return list(idx.entries), list(idx.scenes)
-
-
 # ---------- scoring ----------
 
 def _score_entry(entry: Entry, qset: set[str], q_norm: str,

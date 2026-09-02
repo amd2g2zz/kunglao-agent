@@ -41,7 +41,6 @@ def test_gate_allows_owner_and_twin():
     _seed(root, {
         "hooks/lib_kunglao.py": "DISPATCH_RE = re.compile(r'x')\n",
         "scripts/lib_kunglao.py": "DISPATCH_RE = re.compile(r'x')\n",
-        "hooks/dispatch_gate.py": "DISPATCH_RE = re.compile(r'x')  # compat\n",
         "scripts/clean.py": "print('no token here')\n",
     })
     r = rg.scan(root, [])

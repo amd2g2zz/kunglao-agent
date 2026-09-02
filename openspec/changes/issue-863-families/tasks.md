@@ -17,5 +17,31 @@
 - [x] Family I: tools/static `_error` 6 份 → `common.error` sys.exit 契约统一（return-vs-exit 分叉显式修：yara `return _error(...)` → `error(...)` SystemExit 穿透；22+6 调用点；身份级 delegation + SystemExit(2) 契约钉）
 - [x] Family J: `_write_evidence` 4×7 → `common.write_evidence(workspace, name, data)`（dexdc 3-arg 为准；11 调用点文件名上提；apkid 经 `_hooks_path.load_module_by_path` 桥唯一名 `tools_static_common`；身份级 delegation + 契约钉）
 - [x] Family K: tolerant JSONL loop 19 循环点/18 文件 → `scripts/kunglao_log.iter_jsonl` 单 reader（hook 域导入安全裁决见 Recon；逐文件委托断言 + json.loads/JSONDecodeError 残留 pin；kunglao_upgrade rewrite 形与 bench_analyze strict 形界外点名不转）
-- [ ] Family F: utc_now 重数（四说 7/33/50/20 → 实数 53 份定义：datetime 8 / strftime-Z 23 / isoformat-Z 20 / +00:00 2）→ `scripts/harness_common.py` utc_now/utc_now_z/utc_now_iso 单源 + 53 份委托（B/C 字节等价收敛、D 真变体保留）；守护测试 confinement/wiring/identity/契约钉
+- [x] Family F: utc_now 重数（四说 7/33/50/20 → 实数 53 份定义：datetime 8 / strftime-Z 23 / isoformat-Z 20 / +00:00 2）→ `scripts/harness_common.py` utc_now/utc_now_z/utc_now_iso 单源 + 53 份委托（B/C 字节等价收敛、D 真变体保留）；守护测试 confinement/wiring/identity/契约钉
+- [x] Family G: conftest fork 清零 —— #811 裁决(34e1603)已删 5 个被遮蔽 root fixtures；本卡补防复活机械钉 test_conftest_single_source_863g(4 钉：root 禁 5 名/必持 5 夹具/golden_master #317 UTF-8 解码/fixture 行为解析钉)
+
+## Package 2（no-backward-compat 九项 + lint 裁决）— 863-d/e 重执行
+
+> 勘误：proposal 头部原称 Package 2 已先行交付（PR #875）——不实：54eef78（#875 血统内）实际 diff 仅 --help/ 垃圾文件（+126，零代码删除）；真实删除 commit 371712d 悬空在 feat/863-enforcement-mechanism，未进 dev。f8022ad 上九项全存活。
+
+### 批 1（863-d，本 PR）— done
+- [x] priority_ratio.next_tier_cost（零活体消费者：_cheapness_order 实调 cheapness）
+- [x] blind_gate _ZERO_HITS_PATTERNS/_has_zero_hits（诊断已走 #56 广义基）
+- [x] references_recall.parse_index shim
+- [x] convergence_check._scan_active_workers 壳 + test_worktree_marker 两测试改走 _scan_workers
+- [x] dispatch_gate DISPATCH_RE re-export + v0-local-fallback 收敛为显式失败；retirement_gate 白名单配对清理
+- [x] 机械守卫 tests/test_compat_removal_863d.py（五 tripwire + import-failure 行为钉）
+
+### 批 2（863-e，已合于 #899）
+
+- [x] wire_up_settings deprecated alias（保模块本体））
+- [x] worker_budget._ShimModule + _PROPAGATE_TO + 3 测试文件
+- [x] validate_index._LEGACY_UNANNOTATED（+29 entries 机械回填 + _CAPABILITY_TAGS 扩 27 标签）
+- [x] digest_build pre-contract fallback
+- [x] lint_facts/migrate_facts 冲突裁决
+- [x] promote_lesson shadowed def + _read_lesson_frontmatter helper（额外）
+- [x] kunglao_verify --grace/--grace-scan + kunglao.py 镜像 + schema.md 段（额外）
+- [x] references_recall.parse_index + dispatch_gate.DISPATCH_RE + convergence_check._scan_active_workers + blind_gate._ZERO_HITS 实际由 #899 补做（卡侧错列入批 2）
+
+
 - [ ] 全量质量门 + CI

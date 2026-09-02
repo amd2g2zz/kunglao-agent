@@ -699,13 +699,6 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
     return actions
 
 
-# ---------- legacy caller compatibility (used by kunglao-decide._cheapness_order) ----------
-
-def next_tier_cost(claim: dict) -> float:
-    """[Deprecated, kept for compatibility] the old NEXT_TIER_CHEAP semantics. New code uses action_cost / cheapness."""
-    return cheapness(claim)
-
-
 def _load_yaml(path: Path) -> dict:
     return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}) if path.exists() else {}
 

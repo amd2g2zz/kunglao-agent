@@ -78,7 +78,7 @@ def _write_status(ws: Path, name: str, last_status: str, prior=None):
     """Write runs/worker-status-<name>.md whose LAST status: line is last_status.
 
     Issue #37: the gate counts workers from these files (single source of truth),
-    mirroring convergence_check._scan_active_workers. `prior` is a list of earlier
+    mirroring convergence_check._scan_workers. `prior` is a list of earlier
     status strings to exercise the last-line-decides rule (worktree snapshots carry
     historical files). Creates ws/runs/ if needed.
     """

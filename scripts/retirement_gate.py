@@ -8,7 +8,7 @@ DEPRECATED=True 但 external_kicker 仍在活体调用——"关单未删码"复
 检查（对 hooks/ + scripts/ 扫描；tests/ 豁免）：
   1. RETIRED 正则散副本：`DISPATCH_RE` 标识符出现在 owner/白名单之外
      （owner = hooks/lib_kunglao.py + scripts/lib_kunglao.py 孪生；
-     hooks/dispatch_gate.py = 注释清楚的 compat re-export，一并豁免）
+     #863-d 起 dispatch_gate 的 compat re-export 已退役，白名单不再含它）
   2. DEPRECATED = True 模块的活体 caller：import/from-import 出现在
      其他 scripts/hooks 模块 → 记 finding（已知债务入基线文件）
 
@@ -27,7 +27,6 @@ RETIRE_TOKEN = "DISPATCH_RE"
 OWNER_ALLOWLIST = {
     "hooks/lib_kunglao.py",    # canonical owner
     "scripts/lib_kunglao.py",  # #770 twin
-    "hooks/dispatch_gate.py",  # documented compat re-export
 }
 SELF = "scripts/retirement_gate.py"
 DEPRECATED_RE = re.compile(r"^DEPRECATED\s*=\s*True\b", re.MULTILINE)

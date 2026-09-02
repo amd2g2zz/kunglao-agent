@@ -67,9 +67,6 @@ _ENV_NEGATIVE_BASIS_PATTERNS = (
     r"no call captured", r"no calls observed", r"\bnever called\b",
     r"无调用捕获", r"未触发",
 )
-# Backward-compat narrow subset (#48 contract); the diagnostic now uses the
-# broader _has_env_negative_basis. Kept so external readers/tests still resolve.
-_ZERO_HITS_PATTERNS = (r"\b0 hits\b", r"\b0 occurrences\b")
 _ENV_FAULT_PATTERNS = (r"stalled", r"never reconnected", r"\breconnect",
                        r"未触发", r"timeout")
 _STATIC_MARKERS = (r"\bxref", r"disasm", r"decompile", r"capstone", r"ghidra",
@@ -289,12 +286,6 @@ def is_inferential_claim(statement: str, fact_text: str) -> bool:
     if any(re.search(p, hay) for p in INFERENTIAL_PATTERNS):
         return True
     return any(re.search(p, hay) for p in _NEGATIVE_EXISTENCE_PATTERNS)
-
-
-def _has_zero_hits(text: str) -> bool:
-    """Narrow #48 subset (0 hits / 0 occurrences). Kept for backward compat;
-    the env-fault diagnostic uses the broader _has_env_negative_basis (#56)."""
-    return any(re.search(p, text.lower()) for p in _ZERO_HITS_PATTERNS)
 
 
 def _has_env_negative_basis(text: str) -> bool:

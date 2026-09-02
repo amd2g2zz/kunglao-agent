@@ -123,16 +123,6 @@ def _scan_workers(workspace: Path):
     return active, stuck, lib.scan_done_artifact_violations(workspace, states)
 
 
-def _scan_active_workers(workspace: Path):
-    """(active, stuck) — thin delegator to the protocol owner.
-
-    Kept as a named function because tests/test_worktree_marker.py imports it
-    directly. Pre-#444 this was the inline parse (representation A of the
-    #444 double-representation); now hooks/lib_kunglao.py owns the parse.
-    """
-    return _scan_workers(workspace)[:2]
-
-
 def _open_claims(reg: dict):
     """Return claims that are non-terminal (need work).
 
