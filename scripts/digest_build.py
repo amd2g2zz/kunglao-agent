@@ -26,7 +26,6 @@ except NameError:
     pass
 
 import argparse
-import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -146,12 +145,16 @@ def build_sec_g(ws: Path) -> str:
 def build_sec_h(ws: Path) -> str:
     """Digest sec_h: execution surfaces (#699), per-channel event counts.
 
-    Reads ONLY runs/logs/kunglao-*.jsonl (the kunglao_log emit trail).
-    Rows without a channel key (pre-#699 legacy) count under ``local`` —
-    the .get() gap aggregates as the un-tagged bucket rather than
-    vanishing. Returns "" when there are no log rows at all so
-    build_digest emits no section (build_sec_g precedent: pre-existing
-    workspaces keep their exact digest shape).
+    Reads ONLY runs/logs/kunglao-*.jsonl (the kunglao_log emit trail),
+    streamed line-by-line (no whole-file buffering) and parsed via
+    kunglao_log.iter_jsonl (the #863 Family K tolerance single source;
+    non-dict rows like a literal ``null`` are filtered here so a stray
+    line can't vanish the whole section). Rows without a channel key
+    (pre-#699 legacy) count under ``local`` — the .get() gap aggregates
+    as the un-tagged bucket rather than vanishing. Returns "" when there
+    are no log rows at all so build_digest emits no section
+    (build_sec_g precedent: pre-existing workspaces keep their exact
+    digest shape).
     """
     logs_dir = Path(ws) / "runs" / "logs"
     if not logs_dir.is_dir():
@@ -160,18 +163,13 @@ def build_sec_h(ws: Path) -> str:
     total = 0
     for p in sorted(logs_dir.glob("kunglao-*.jsonl")):
         try:
-            for line in p.read_text(encoding="utf-8",
-                                    errors="replace").splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                counts[row.get("channel", "local") or "local"] = \
-                    counts.get(row.get("channel", "local") or "local", 0) + 1
-                total += 1
+            with p.open(encoding="utf-8", errors="replace") as f:
+                for row in kunglao_log.iter_jsonl(f):
+                    if not isinstance(row, dict):
+                        continue
+                    ch = row.get("channel") or "local"
+                    counts[ch] = counts.get(ch, 0) + 1
+                    total += 1
         except OSError:
             continue
     if not total:

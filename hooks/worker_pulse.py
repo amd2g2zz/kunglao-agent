@@ -181,7 +181,9 @@ def _delivery_reminder(ws: Path) -> str:
     if not runs.is_dir():
         return ''
     try:
-        parse_status = _worker_lib().parse_worker_status
+        lib = _worker_lib()
+        parse_status = lib.parse_worker_status
+        waiting_status = lib.WAITING_WORKER_STATUS
     except Exception:
         return ''
     delivered = []
@@ -191,7 +193,7 @@ def _delivery_reminder(ws: Path) -> str:
                 last = parse_status(p.read_text(encoding="utf-8", errors="replace"))
             except OSError:
                 continue
-            if last == "waiting":
+            if last == waiting_status:
                 # delivered-but-alive: the wait loop re-arms this worker on
                 # the next dispatch — it is not a zombie, so the TaskStop
                 # reminder must skip it

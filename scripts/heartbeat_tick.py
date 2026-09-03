@@ -162,23 +162,19 @@ def _all_workers_waiting(ws: Path, *, now: 'datetime.datetime | None' = None) ->
     and ambient sys.path order must not decide which one answers. Any
     failure -> False (the breaker keeps its teeth)."""
     try:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        # #863 Family B: by-path loads delegate to the _path_hygiene
-        # authority (get-or-create under the unique name — same instance
-        # across repeat calls, no ambient sys.path order dependence).
-        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
-        from _path_hygiene import load_module_by_path
-        mod = load_module_by_path("lib_kunglao_hooks_noop_breaker", path)
+        # #863 Family B + #671: scripts→hooks loads go through the
+        # append-only bridge (_hooks_path), never a raw insert(0) — the
+        # canonical loader caches the hooks twin under its own name.
+        from _hooks_path import load_hooks_lib
+        mod = load_hooks_lib()
         states = mod.iter_worker_states(ws)
         active, _stuck = mod.scan_active_workers(ws, states=states)
-        waiting = mod.scan_waiting_workers(ws, states=states)
+        waiting = [s for s in states if s["status"] == mod.WAITING_WORKER_STATUS]
         if active != 0 or not waiting:
             return False
         now = now or datetime.datetime.now(datetime.timezone.utc)
         cutoff = datetime.timedelta(minutes=HEARTBEAT_STALE_MINUTES)
-        fresh = [s for s in states
-                 if s["file"].stem in set(waiting)
-                 and (now - s["mtime"]) <= cutoff]
+        fresh = [s for s in waiting if (now - s["mtime"]) <= cutoff]
         return len(fresh) > 0
     except Exception:  # noqa: BLE001 — breaker failure must not fail the tick
         return False

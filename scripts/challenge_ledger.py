@@ -215,9 +215,11 @@ def append_event(ws: Path, claim: str, event: dict, *, key: bytes,
                 "claim assertion text changed mid-battle — re-file as a "
                 "new claim (moving the goalposts is not a rebuttal)")
 
-    # known challenge/rebuttal ids across ALL rounds so far (cross-round
-    # references are legal: a round-3 rebuttal answers a round-1 challenge)
+    # One pass over prior rounds: collect known event ids (cross-round
+    # references are legal — a round-3 rebuttal answers a round-1
+    # challenge) and detect any prior final arbitration.
     known: set = set()
+    has_final = False
     for i in range(1, n + 1):
         p = _round_path(ws, claim, i)
         if not p.exists():
@@ -229,23 +231,15 @@ def append_event(ws: Path, claim: str, event: dict, *, key: bytes,
         for e in doc.get("events", []):
             if e.get("id"):
                 known.add(e["id"])
+            if e.get("kind") == "arbitration" and e.get("round_final"):
+                has_final = True
 
     _validate_event(event, known)
 
-    if is_terminal_arbitration:
-        for i in range(1, n + 1):
-            p = _round_path(ws, claim, i)
-            if not p.exists():
-                continue
-            try:
-                prior = json.loads(p.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            if any(e.get("kind") == "arbitration" and e.get("round_final")
-                   for e in prior.get("events", [])):
-                raise InvalidEvent(
-                    "ledger already carries a final arbitration — the "
-                    "stalemate was decided; no second arbitration")
+    if is_terminal_arbitration and has_final:
+        raise InvalidEvent(
+            "ledger already carries a final arbitration — the "
+            "stalemate was decided; no second arbitration")
 
     rp = _round_path(ws, claim, n + 1)
     if n > 0:

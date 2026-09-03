@@ -147,18 +147,6 @@ def run_falsifier(cmd: str, *, timeout_sec: float) -> dict:
     }
 
 
-def _has_arbitration(ws: Path, claim: str) -> bool:
-    for rp in cl.rounds(ws, claim):
-        try:
-            doc = json.loads(rp.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        for e in doc.get("events", []):
-            if e.get("kind") == "arbitration":
-                return True
-    return False
-
-
 def _split_basis(basis: str) -> list[str]:
     return [b.strip() for b in basis.split(",") if b.strip()]
 
@@ -213,10 +201,8 @@ def cmd_arbitrate(args: argparse.Namespace, key: bytes) -> int:
                      "active_round": active,
                      "required_rounds": cl.MAX_ADVERSARIAL_ROUNDS})
         return EXIT_EARLY_ARBITRATION
-    if _has_arbitration(ws, claim):
-        print("arbitration already recorded (round_final) — ledger closed "
-              "for this claim", file=sys.stderr)
-        return EXIT_ERROR
+    # double-arbitration is guarded by the data layer (append_event raises
+    # InvalidEvent on a second round_final) — no CLI-side pre-check
     basis = _split_basis(args.basis)
     if not basis:
         print("arbitration basis must cite evidence ids (--basis CH-1,RB-1)",

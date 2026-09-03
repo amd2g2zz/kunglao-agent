@@ -102,6 +102,25 @@ def _append_status_line(worker: str, line: str) -> None:
         f.write(line + "\n")
 
 
+def _compact_status_file(worker: str, final_line: str) -> None:
+    """Collapse the accumulated wait-heartbeat lines into the final line.
+
+    The WAIT loop appends one heartbeat per round; across many wait
+    sessions the append-only file would grow without bound and every
+    consumer re-reads it (4 regex passes per scan). On session end
+    (UNWAIT / self-kill / crash) the history has served its purpose —
+    the LAST status token is the only thing any reader consumes — so
+    the file is rewritten to just the terminal line (atomic tmp+replace).
+    Failure degrades to the plain append, never raises."""
+    path = RUNS_DIR / f"worker-status-{worker}.md"
+    try:
+        tmp = path.with_suffix(".md.compact")
+        tmp.write_text(final_line + "\n", encoding="utf-8")
+        tmp.replace(path)
+    except OSError:
+        _append_status_line(worker, final_line)
+
+
 def _consume_signal(worker: str) -> dict | None:
     """Read-and-delete the wake signal. None = no signal this round.
 
@@ -124,15 +143,6 @@ def _consume_signal(worker: str) -> dict | None:
     return payload if isinstance(payload, dict) else {}
 
 
-def _best_effort_terminal(worker: str, line: str) -> None:
-    """Last-ditch status write — used on the crash path. Swallows everything:
-    a failing status file must not turn a controlled exit into a traceback."""
-    try:
-        _append_status_line(worker, line)
-    except Exception:  # noqa: BLE001 — by definition, this must not raise
-        pass
-
-
 def run_wait(worker: str, claim: str | None) -> int:
     """The loop. Returns the process exit code; never raises."""
     interval = _poll_interval_s()
@@ -144,19 +154,22 @@ def run_wait(worker: str, claim: str | None) -> int:
             signal = _consume_signal(worker)
             if signal is not None:
                 cid = signal.get("claim") or claim or "(no claim)"
-                _append_status_line(
+                _compact_status_file(
                     worker, _UNWAIT_LINE.format(ts=_utc_now(), cid=cid))
                 print(json.dumps(signal, ensure_ascii=False))
                 return EXIT_UNWAITED
         except Exception as exc:  # noqa: BLE001 — never raises, terminal write
-            _best_effort_terminal(
-                worker,
-                _CRASH_LINE.format(ts=_utc_now(),
-                                   kind=type(exc).__name__, exc=exc))
+            try:
+                _compact_status_file(
+                    worker,
+                    _CRASH_LINE.format(ts=_utc_now(),
+                                       kind=type(exc).__name__, exc=exc))
+            except Exception:  # noqa: BLE001 — never raises, terminal write
+                pass
             return EXIT_SELF_KILL_CLAIM
         rounds += 1
         if rounds >= _max_rounds():
-            _best_effort_terminal(
+            _compact_status_file(
                 worker, _SELFKILL_LINE.format(ts=_utc_now(), n=rounds))
             return EXIT_SELF_KILL_CLAIM if claim else EXIT_SELF_KILL_NO_CLAIM
 

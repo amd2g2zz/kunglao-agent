@@ -1090,10 +1090,13 @@ def _write_wait_signal(ws: Path, agent_name: str | None,
             return
         path = ws / "runs" / f"wait-signal-{worker_id}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
+        # #863 Family F: utc_now_z is the timestamp single source (the
+        # isoformat/replace spelling elsewhere in this file predates the
+        # collapse; new code wires the util).
+        from harness_common import utc_now_z
         path.write_text(json.dumps({
             "claim": claim_id,
-            "ts": datetime.now(tz=timezone.utc)
-                .isoformat(timespec="seconds").replace("+00:00", "Z"),
+            "ts": utc_now_z(),
         }, ensure_ascii=False), encoding="utf-8")
     except Exception as exc:  # noqa: BLE001 — a signal must never block dispatch
         print(f"dispatch_gate: wait-signal write failed ({exc!r})",

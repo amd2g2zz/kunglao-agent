@@ -230,7 +230,10 @@ def test_double_arbitration_refused(tmp_path, kf, capsys):
     rc, _, _ = _call(kf, capsys, "arbitrate", str(ws), "C-12",
                      "--outcome", "rebutted", "--basis", "CH-3")
     assert rc == 0
+    # double arbitration is now guarded by the DATA layer: append_event
+    # raises InvalidEvent (exit 2) on a second round_final — one guard,
+    # one owner (the CLI pre-check was a drifted duplicate)
     rc, _, err = _call(kf, capsys, "arbitrate", str(ws), "C-12",
                        "--outcome", "upheld", "--basis", "CH-3")
-    assert rc == al.EXIT_ERROR
-    assert "already recorded" in err
+    assert rc == al.EXIT_INVALID_EVENT
+    assert "final arbitration" in err
