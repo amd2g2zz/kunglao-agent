@@ -138,6 +138,11 @@ def _run_init(ws: Path | None, extra: list[str] | None = None,
     env["PYTHONIOENCODING"] = "utf-8"
     if flag is not None:
         env[FLAG_NAME] = flag
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive default for tests that don't exercise the
+        # ask; --resolve callers carry their own explicit answer.
+        argv += ["--host-exec-protection", "enabled"]
     return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=env, errors="replace")
 
@@ -181,7 +186,8 @@ def test_no_type_noninteractive_pending_fail_closed(init_ws: Path):
 def test_resolve_type_completes_init(init_ws: Path, tmp_path: Path):
     """--resolve answers re-entry: {"type": "windows"} unblocks init."""
     _make_pe(init_ws, "sample.exe")
-    answers = _write_answers(tmp_path, "a-type.json", {"type": "windows"})
+    answers = _write_answers(tmp_path, "a-type.json", {
+        "type": "windows", "host_exec_protection": "enabled"})
     r = _run_init(init_ws, ["--skip-toolchain", "--resolve", str(answers)])
     assert r.returncode == RC_OK, f"{r.stdout}{r.stderr}"
     assert "project_type=windows" in (init_ws / "analysis_state.txt").read_text(
@@ -210,7 +216,8 @@ def test_multi_file_resolve_beats_sort_order(init_ws: Path, tmp_path: Path):
     _make_pe(init_ws, "a_first.exe")
     _make_pe(init_ws, "z_target.exe")
     answers = _write_answers(tmp_path, "a-target.json",
-                             {"target": "z_target.exe"})
+                             {"target": "z_target.exe",
+                              "host_exec_protection": "enabled"})
     r = _run_init(init_ws, ["--skip-toolchain", "--type", "windows",
                             "--resolve", str(answers)])
     assert r.returncode == RC_OK, f"{r.stdout}{r.stderr}"
@@ -614,3 +621,59 @@ def test_intake_chain_zero_arg_to_android_report(tmp_path: Path, monkeypatch):
     names = {i.name for i in report.items}
     assert "vm_reachable" not in names and "remote_debugger" not in names
     assert calls["tcp_connect"] == 0
+
+
+# ---------- checkbox (#919 C): host-exec protection ask ----------
+
+def test_host_exec_protection_pends_when_type_resolved(init_ws: Path,
+                                                        tmp_path: Path):
+    """#919 C: whether host exec protection (block_malware_exec) applies is
+    a USER decision at intake — never a silent default. Intake order puts
+    type first: round 1 pends type; round 2 (type answered) pends the
+    protection ask. A windows sample without any answer can NEVER reach
+    scaffold."""
+    _make_pe(init_ws, "sample.exe")
+    r = _run_init(init_ws, ["--skip-toolchain"])
+    assert r.returncode == RC_PENDING_DECISIONS
+    ids_r1 = [d["decision_id"] for d in _pending(r)["decisions"]]
+    assert "type" in ids_r1
+    # round 2: type answered, protection still unanswered -> the ask fires
+    answers = _write_answers(tmp_path, "a-type-only.json", {"type": "windows"})
+    r2 = _run_init(init_ws, ["--skip-toolchain", "--resolve", str(answers)])
+    assert r2.returncode == RC_PENDING_DECISIONS, r2.stdout
+    pending = _pending(r2)
+    ids = [d["decision_id"] for d in pending["decisions"]]
+    assert "host_exec_protection" in ids, \
+        f"pending list lacks the host_exec_protection ask: {pending}"
+    dec = next(d for d in pending["decisions"]
+               if d["decision_id"] == "host_exec_protection")
+    assert dec["options"] == ["enabled", "disabled"], dec
+    assert dec["default"] is None, "protection must not silently default"
+
+
+def test_host_exec_protection_resolved_lands_in_manifest(init_ws: Path,
+                                                          tmp_path: Path):
+    """--resolve {"host_exec_protection": "enabled"} completes init and the
+    answer lands in env-manifest.yaml so upgrade/env surfaces respect it."""
+    _make_pe(init_ws, "sample.exe")
+    answers = _write_answers(tmp_path, "a-hep.json", {
+        "type": "windows", "host_exec_protection": "enabled"})
+    r = _run_init(init_ws, ["--skip-toolchain", "--resolve", str(answers)])
+    assert r.returncode == RC_OK, f"{r.stdout}{r.stderr}"
+    import yaml
+    m = yaml.safe_load((init_ws / "env-manifest.yaml").read_text(encoding="utf-8"))
+    assert m["host_exec_protection"] == "enabled"
+
+
+def test_host_exec_protection_disabled_recorded(init_ws: Path,
+                                                 tmp_path: Path):
+    """The disabled answer is RECORDED, not dropped — the operator's explicit
+    choice must be legible to later surfaces (audit face, not a hidden flag)."""
+    _make_pe(init_ws, "sample.exe")
+    answers = _write_answers(tmp_path, "a-hep-off.json", {
+        "type": "windows", "host_exec_protection": "disabled"})
+    r = _run_init(init_ws, ["--skip-toolchain", "--resolve", str(answers)])
+    assert r.returncode == RC_OK, f"{r.stdout}{r.stderr}"
+    import yaml
+    m = yaml.safe_load((init_ws / "env-manifest.yaml").read_text(encoding="utf-8"))
+    assert m["host_exec_protection"] == "disabled"

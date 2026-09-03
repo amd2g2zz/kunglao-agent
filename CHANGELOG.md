@@ -44,6 +44,7 @@ release (see the mapping table at the end).
   kwarg wins for endpoint-specific stamping.
 - **Execution-surface digest summary (#699)**: digest sec_h reports
   per-channel event counts; legacy rows aggregate under `local`.
+- feat(#919): 定位表述对齐 — malware-only 门面改写为逆向工程专家身份（README/plugin.json/SKILL 触发词）+ block_malware_exec ask 式开关（host_exec_protection 决策落账 env-manifest）
 
 ### Fixed
 - **Toolchain probes execute for real (#697)**: `_which_items` runs the

@@ -220,7 +220,7 @@ def test_replay_init_minimal_workspace_contract(tmp_path: Path):
             str(ROOT / "scripts" / "kunglao-init.py"),
             str(tmp_path),
             "--type", "linux",
-            "--skip-toolchain",  # 测试环境无 toolchain,走 ops escape hatch
+            "--skip-toolchain", "--host-exec-protection", "enabled",  # 测试环境无 toolchain,走 ops escape hatch
             "--no-hooks",  # 不污染外部 workspace 的 .claude/settings.json
             "--assume-yes",
         ],
@@ -253,7 +253,7 @@ def test_replay_init_refuses_empty_bins(tmp_path: Path):
         [
             str(ROOT / "scripts" / "kunglao-init.py"),
             str(tmp_path),
-            "--skip-toolchain",
+            "--skip-toolchain", "--host-exec-protection", "enabled",
             "--no-hooks",
             "--assume-yes",
         ],

@@ -190,6 +190,7 @@ def init_ws(tmp_path: Path) -> Path:
 def _run_init(ws: Path, project_type: str) -> subprocess.CompletedProcess:
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws),
             "--type", project_type, "--skip-toolchain",
+            "--host-exec-protection", "enabled",
             "--profile-root", str(ws.parent / "profile-root")]
     env = {k: v for k, v in os.environ.items() if k != FLAG_NAME}
     env[FLAG_NAME] = "0"

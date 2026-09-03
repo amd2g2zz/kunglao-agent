@@ -1,6 +1,6 @@
 {
   "name": "kunglao-agent",
-  "description": "A Claude Code skill that runs a convergence-driven reverse-engineering loop: it takes a malware sample to a byte-proven, independently-verified fact base, enforced by mechanical gates.",
+  "description": "A Claude Code skill that runs a convergence-driven reverse-engineering loop: it works an analysis target the way a human RE expert would — autonomous planning, raw-evidence derivation, adversarial verification — down to a byte-proven fact base, enforced by mechanical gates.",
   "version": "0.1.4",
   "author": {
     "name": "amd2g2zz"

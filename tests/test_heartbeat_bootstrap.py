@@ -101,6 +101,10 @@ def _run_init(ws: Path, extra: list[str] | None = None) -> subprocess.CompletedP
     fake = ws.parent / "fake-claude.json"
     if not fake.exists():
         fake.write_text("{}", encoding="utf-8")
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive tests answer the host-exec ask explicitly.
+        argv += ["--host-exec-protection", "enabled"]
     return subprocess.run(argv, capture_output=True, text=True, timeout=180,
                           env=env, errors="replace")
 

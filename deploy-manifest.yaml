@@ -431,7 +431,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 78a270cb3fa5e70ce9af6134659b8b864ad74e955beffe929079f853cf94c381
+    sha256: 2afeb5b2def8a5f23b2161f99367977532cf5ccb824ec1e4e1acd54e72223483
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold

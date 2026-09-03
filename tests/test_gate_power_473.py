@@ -162,6 +162,7 @@ def _mk_ws(tmp_path: Path, name: str = "ws") -> Path:
 def _run_init(ws: Path, extra: list[str] | None = None) -> subprocess.CompletedProcess:
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     argv += ["--type", "windows", "--skip-toolchain",
+             "--host-exec-protection", "enabled",
              "--profile-root", str(ws.parent / "profile-root")]
     env = {k: v for k, v in os.environ.items()
            if k not in (FLAG_NAME, "GHIDRA_HOME", "KUNGLAO_VM_HOST")}

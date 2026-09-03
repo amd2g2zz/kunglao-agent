@@ -588,6 +588,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--target", metavar="NAME", default=None,
                         help="explicit analysis target — a file name under bins/ "
                              "(containers get a target_object round)")
+    parser.add_argument("--host-exec-protection", choices=("enabled", "disabled"),
+                        default=None,
+                        help="#919: declare whether host exec protection "
+                             "(block_malware_exec) applies to this workspace; "
+                             "asked via pending decisions when absent")
     parser.add_argument("--force", action="store_true",
                         help="rebuild: back up claim-register first, then re-initialize")
     parser.add_argument("--skip-toolchain", action="store_true",
@@ -1158,6 +1163,45 @@ def _aligned_type(ws: Path, kind: str | None, explicit_type: str | None,
     return None, decision, None
 
 
+HOST_EXEC_PROTECTION_HOST_TYPES = frozenset({"windows", "linux", "macos"})
+
+
+def _aligned_host_exec_protection(
+        answers: dict[str, str], project_type: str | None,
+        ) -> tuple[str | None, "decision_pending.PendingDecision | None", int | None]:
+    """#919 C: host exec protection (block_malware_exec) applies-or-not is a
+    USER decision, never a written-in default — the sample-exec guard is
+    host-safety posture, and only the operator knows their host setup.
+
+    Scope: the ask fires only for host-executable sample types
+    (windows/linux/macos). web/android targets never execute on the host,
+    so the question is noise there — recorded as not-applicable.
+    CLI flag > --resolve answer (validated against {enabled, disabled,
+    not-applicable}) > pending ask."""
+    val = answers.get("host_exec_protection") or None
+    if val is not None:
+        if val not in ("enabled", "disabled", "not-applicable"):
+            print(f"kunglao-init: ERROR resolved host_exec_protection "
+                  f"{val!r} is not one of enabled, disabled, not-applicable",
+                  file=sys.stderr)
+            return None, None, RC_ERROR
+        return val, None, None
+    if project_type is not None and project_type not in HOST_EXEC_PROTECTION_HOST_TYPES:
+        return "not-applicable", None, None
+    decision = decision_pending.PendingDecision(
+        decision_id="host_exec_protection",
+        question="Enable host exec protection (block_malware_exec guard: "
+                 "samples never execute on the host — VM-only)?",
+        kind=decision_pending.KIND_CHOICE,
+        options=("enabled", "disabled"),
+        default=None,  # a safety posture is never silently defaulted (#919)
+        context={"mechanism": "block_malware_exec",
+                 "note": "mechanism ships with your host; this records "
+                         "whether THIS workspace declares it enforced"},
+    )
+    return None, decision, None
+
+
 def align_target(ws: Path, files: list[dict],
                  explicit_target: str | None, explicit_type: str | None,
                  answers: dict[str, str] | None,
@@ -1205,9 +1249,16 @@ def align_target(ws: Path, files: list[dict],
     if decision is not None:
         pending.append(decision)
 
+    host_exec_protection, decision, err = _aligned_host_exec_protection(
+        answers, project_type)
+    if err is not None:
+        return None, None, None, err
+    if decision is not None:
+        pending.append(decision)
+
     if pending:
         return target, target_object, project_type, emit_pending(ws, pending)
-    return target, target_object, project_type, None
+    return target, target_object, host_exec_protection, None
 
 
 def write_project_type(ws: Path, project_type: str) -> bool:
@@ -2075,7 +2126,8 @@ def _record_mcp(ws: Path, project_type: str) -> list[dict]:
 
 def deploy_env(ws: Path, project_type: str, hooks_json: Path | None = None,
                no_hooks: bool = False, skills: list[str] | None = None,
-               plugin_mode: bool = False) -> dict:
+               plugin_mode: bool = False,
+               host_exec_protection: str | None = None) -> dict:
     """#478: the workspace engineering-environment layer — L1 hooks /
     L2 subagents / L3 MCP record / L4 skills + the env-manifest ledger.
 
@@ -2140,6 +2192,11 @@ def deploy_env(ws: Path, project_type: str, hooks_json: Path | None = None,
         "project_type": project_type,
         "components": components,
     }
+    if host_exec_protection is not None:
+        # #919: the operator's ask answer lands in the ledger so upgrade /
+        # env surfaces respect the declared posture instead of re-asking or
+        # assuming.
+        manifest["host_exec_protection"] = host_exec_protection
     atomic_write(ws / ENV_MANIFEST,
                  yaml.safe_dump(manifest, sort_keys=False, allow_unicode=True))
     return {"hook_report": hook_report, "manifest": manifest,
@@ -2389,7 +2446,8 @@ def initialize(ws: Path, hooks_json: Path | None,
                 target_object: str | None = None,
                 no_hooks: bool = False,
                 skills: "list[str] | None" = None,
-                plugin_mode: bool = False) -> int:
+                plugin_mode: bool = False,
+                host_exec_protection: str | None = None) -> int:
     """Phase 2 fresh initialization + Phase 3 idempotency verify.
 
     Returns the exit code (0 success / RC_FATAL_VERIFY verify-failure).
@@ -2448,7 +2506,8 @@ def initialize(ws: Path, hooks_json: Path | None,
     # channel (RC_HOOK_WIRING); agents/skills copy failures are RC_ERROR.
     env_report = deploy_env(ws, project_type, hooks_json=hooks_json,
                             no_hooks=no_hooks, skills=skills,
-                            plugin_mode=plugin_mode)
+                            plugin_mode=plugin_mode,
+                            host_exec_protection=host_exec_protection)
     if env_report.get("skills_error"):
         print(f"kunglao-init: ERROR {env_report['skills_error']}", file=sys.stderr)
         return RC_ERROR
@@ -2512,6 +2571,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         assume_yes: bool = False,
         target: str | None = None,
         answers: dict[str, str] | None = None,
+        host_exec_protection_flag: str | None = None,
         no_hooks: bool = False,
         skills: list[str] | None = None,
         plugin_mode: bool = False) -> int:
@@ -2664,12 +2724,22 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     # target_object (containers list contents, type never guessed) ->
     # type (sniff hint is context only). Any undecided item -> pending
     # list (exit RC_PENDING_DECISIONS), zero scaffold.
-    target_name, target_object, project_type, pending_rc = align_target(
+    if host_exec_protection_flag is not None:
+        # explicit CLI flag wins over a --resolve answer (same precedence
+        # as --type > answer > persisted)
+        answers = dict(answers or {})
+        answers["host_exec_protection"] = host_exec_protection_flag
+    target_name, target_object, host_exec_protection, pending_rc = align_target(
         ws, files, target, project_type, answers)
     if pending_rc is not None:
         return pending_rc
     assert target_name is not None  # aligned
+    if project_type is None:
+        # align_target resolved the type from answers/persisted state —
+        # mirror its precedence so the local matches what was aligned.
+        project_type = answers.get("type") or read_project_type(ws)
     assert project_type is not None  # aligned
+    assert host_exec_protection is not None  # #919: asked, never defaulted
 
     # #304: toolchain.check BEFORE scaffold — HARD FAIL => #408
     # ask-then-install, then refuse + cleanup only for items still HARD.
@@ -2797,7 +2867,8 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                               no_mcp=no_mcp, created=created,
                               target=target_name, target_object=target_object,
                               no_hooks=no_hooks, skills=skills,
-                              plugin_mode=plugin_mode)
+                              plugin_mode=plugin_mode,
+                              host_exec_protection=host_exec_protection)
     except template_render.TemplateRenderError as exc:
         # #534: failure path — log FIRST, then write the report, then return.
         # A pre-exit exception must not skip the report write.
@@ -2971,6 +3042,7 @@ def main(argv: list[str] | None = None) -> int:
                install_git_hooks_flag=args.install_git_hooks,
                assume_yes=args.assume_yes,
                target=args.target, answers=answers,
+               host_exec_protection_flag=args.host_exec_protection,
                no_hooks=args.no_hooks, skills=skills)
 
 

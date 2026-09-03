@@ -167,7 +167,7 @@ def _build_fake_toolchain_wrapper(tmp_path: Path, ws: Path) -> Path:
         "kunglao_init = importlib.util.module_from_spec(_spec)\n"
         "_spec.loader.exec_module(kunglao_init)\n"
         f"sys.exit(kunglao_init.main([{str(ws)!r}, '--type', 'linux', "
-        "'--no-hooks', '--assume-yes']))\n",
+        "'--host-exec-protection', 'enabled', '--no-hooks', '--assume-yes']))\n",
         encoding="utf-8",
     )
     return wrapper

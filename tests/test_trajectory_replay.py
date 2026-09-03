@@ -304,6 +304,10 @@ def _run_init(ws: Path) -> subprocess.CompletedProcess:
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws),
             "--type", "windows", "--skip-toolchain",
             "--profile-root", str(ws.parent / "profile-root")]
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive tests answer the host-exec ask explicitly.
+        argv += ["--host-exec-protection", "enabled"]
     _INVOKED.append(argv)
     return subprocess.run(argv, capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=180,

@@ -96,6 +96,10 @@ def _run_init_cli(ws: Path, extra: list[str] | None = None,
     env["PYTHONIOENCODING"] = "utf-8"
     if flag is not None:
         env[FLAG_NAME] = flag
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive tests answer the host-exec ask explicitly.
+        argv += ["--host-exec-protection", "enabled"]
     return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=env, errors="replace")
 
@@ -212,7 +216,7 @@ def test_rc_matrix_fatal_verify_2(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "claim_register_text", broken_register_text)
     rc = mod.run(ws, project_type="windows",
                  profile_root=tmp_path / "profile-root",
-                 skip_toolchain=True)
+                 skip_toolchain=True, answers={"host_exec_protection": "enabled"})
     assert rc == RC_FATAL_VERIFY, \
         f"fatal-verify must return {RC_FATAL_VERIFY}, got {rc}"
 
@@ -236,7 +240,7 @@ def test_rc_matrix_template_defect_1(tmp_path, monkeypatch):
     monkeypatch.setattr(mod.template_render, "render_strict", broken_render)
     rc = mod.run(ws, project_type="windows",
                  profile_root=tmp_path / "profile-root",
-                 skip_toolchain=True)
+                 skip_toolchain=True, answers={"host_exec_protection": "enabled"})
     assert rc == RC_ERROR, \
         f"template defect must return {RC_ERROR}, got {rc}"
     # This run's scaffold entries are removed (verify-first symmetry).

@@ -155,7 +155,7 @@ def test_init_stamps_all_three_carriers(tmp_path: Path) -> None:
     env["PYTHONIOENCODING"] = "utf-8"
     r = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "kunglao-init.py"), str(ws),
-         "--skip-toolchain", "--type", "windows", "--no-mcp", "--no-hooks",
+         "--skip-toolchain", "--host-exec-protection", "enabled", "--type", "windows", "--no-mcp", "--no-hooks",
          "--profile-root", str(tmp_path / "profile-root")],
         capture_output=True, text=True, timeout=120, env=env,
         errors="replace")

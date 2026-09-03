@@ -2,7 +2,7 @@
 name: kunglao-agent
 description: >-
   Use when the user runs, starts, dispatches, or continues kunglao-agent
-  (/kunglao-agent), or when a malware / RE sample needs deep analysis with
+  (/kunglao-agent), or when a reverse-engineering target needs deep analysis with
   unresolved claims. Also auto-triggers on the user's problem phrases — Chinese
   OR English: "kunglao-agent 笨了", "傻等", "空转", "不收敛", "方法错了", "分析办法有问题",
   "失败归因", "实际进度和计划不匹配", "kunglao-agent stuck / not moving", "plan doesn't
@@ -19,7 +19,7 @@ triggers:
   - deep RE
   - fact base convergence
   - deep analysis
-  - run malware analysis
+  - run reverse-engineering analysis
   - orchestrator loop
   - 实际进度和计划不匹配
   - worker reports problem

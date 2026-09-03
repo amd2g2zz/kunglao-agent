@@ -78,6 +78,10 @@ def _run_init(ws: Path, extra: list[str] | None = None,
         env["KUNGLAO_CLAUDE_JSON"] = str(claude_json)
     if flag is not None:
         env[FLAG_NAME] = flag
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive tests answer the host-exec ask explicitly.
+        argv += ["--host-exec-protection", "enabled"]
     return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=env, errors="replace")
 
@@ -302,7 +306,7 @@ def test_toolchain_check_runs_before_scaffold(tmp_path, monkeypatch):
         return tc.ToolchainReport(project_type=project_type or "windows", items=[])
 
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
-    rc = mod.run(ws, project_type="windows", profile_root=profile_root)
+    rc = mod.run(ws, project_type="windows", profile_root=profile_root, answers={"host_exec_protection": "enabled"})
     assert rc == 0, "PASS toolchain must proceed to scaffold"
     assert len(calls) == 1, f"toolchain.check must be called once, got {len(calls)}"
     assert calls[0]["type"] == "windows"
@@ -333,7 +337,7 @@ def test_library_refuse_returns_4_no_scaffold(tmp_path, monkeypatch):
 
     monkeypatch.setattr(mod.toolchain, "check", fake_fail)
     rc = mod.run(ws, project_type="windows",
-                 profile_root=tmp_path / "profile-root")
+                 profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     assert rc == RC_TOOLCHAIN_REFUSE
     assert not (ws / "claim-register.yaml").exists()
     assert not (ws / "analysis_state.txt").exists()
@@ -408,7 +412,7 @@ def test_run_hard_fail_with_assume_yes_calls_installer(tmp_path, monkeypatch):
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
     monkeypatch.setattr(mod.toolchain_install, "ask_then_install", fake_ask)
     rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root",
-                 assume_yes=True)
+                 assume_yes=True, answers={"host_exec_protection": "enabled"})
     assert rc == 0, "resolved-PASS must proceed to scaffold"
     assert calls == ["check", "ask:True"], calls
     assert (ws / "claim-register.yaml").exists()
@@ -524,7 +528,7 @@ def test_run_hard_fail_non_tty_without_assume_yes_pends_menu(tmp_path, monkeypat
     monkeypatch.setattr(mod.toolchain_install, "ask_then_install", fake_ask)
     monkeypatch.setattr(mod.sys, "stdin",
                        type("SI", (), {"isatty": lambda self: False})())
-    rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root")
+    rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     out = capsys.readouterr().out
     assert rc == 8, \
         f"die-only miss must pend the #451 menu (exit 8), got {rc}: {out}"
@@ -556,7 +560,7 @@ def test_run_hard_fail_non_tty_mixed_still_refuses(tmp_path, monkeypatch):
                             ]))
     monkeypatch.setattr(mod.sys, "stdin",
                        type("SI", (), {"isatty": lambda self: False})())
-    rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root")
+    rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     assert rc == RC_TOOLCHAIN_REFUSE
     assert not (ws / "claim-register.yaml").exists()
 
@@ -582,7 +586,7 @@ def test_run_ask_result_still_hard_refuses(tmp_path, monkeypatch):
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
     monkeypatch.setattr(mod.toolchain_install, "ask_then_install", fake_ask)
     rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root",
-                 assume_yes=True)
+                 assume_yes=True, answers={"host_exec_protection": "enabled"})
     assert rc == RC_TOOLCHAIN_REFUSE
     assert not (ws / "claim-register.yaml").exists()
 
@@ -610,7 +614,7 @@ def test_init_decline_degrades_warn_and_proceeds(tmp_path, monkeypatch):
     monkeypatch.setattr(mod.toolchain_install, "_run_install_plan",
                         lambda name, plan, assume_yes, ws: (1, "", "no choco"))
     rc = mod.run(ws, project_type="windows",
-                 profile_root=tmp_path / "profile-root", assume_yes=True)
+                 profile_root=tmp_path / "profile-root", assume_yes=True, answers={"host_exec_protection": "enabled"})
     assert rc == 0, "declined static item (die) must degrade WARN and proceed"
     assert (ws / "claim-register.yaml").exists()
 

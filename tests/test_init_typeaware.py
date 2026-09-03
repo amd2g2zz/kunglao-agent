@@ -53,6 +53,10 @@ def _run_init(ws: Path, extra: list[str] | None = None,
     env["PYTHONIOENCODING"] = "utf-8"  # kunglao-init emits UTF-8 (toolchain import reconfigures stdout)
     if flag is not None:
         env[FLAG_NAME] = flag
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive tests answer the host-exec ask explicitly.
+        argv += ["--host-exec-protection", "enabled"]
     return subprocess.run(
         argv, capture_output=True, text=True, timeout=120, env=env,
         errors="replace",
@@ -61,6 +65,7 @@ def _run_init(ws: Path, extra: list[str] | None = None,
 
 def _write_answers(init_ws: Path, payload: dict) -> str:
     """Answers file for --resolve (lives beside the workspace's tmp root)."""
+    payload.setdefault("host_exec_protection", "enabled")  # #919 non-interactive
     f = init_ws.parent / "answers.json"
     import json as _json
     f.write_text(_json.dumps(payload), encoding="utf-8")

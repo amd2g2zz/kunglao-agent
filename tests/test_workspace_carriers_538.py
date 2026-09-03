@@ -115,7 +115,7 @@ def _run_init_cli(ws: Path, tmp_path: Path) -> subprocess.CompletedProcess:
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "0"
     env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run(
-        [sys.executable, str(INIT), str(ws), "--skip-toolchain",
+        [sys.executable, str(INIT), str(ws), "--skip-toolchain", "--host-exec-protection", "enabled",
          "--type", "windows", "--no-mcp", "--no-hooks",
          "--profile-root", str(tmp_path / "profile-root")],
         capture_output=True, text=True, timeout=120, env=env, errors="replace")

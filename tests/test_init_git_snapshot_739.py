@@ -65,7 +65,7 @@ def _make_ws(tmp_path: Path) -> Path:
 def _run_init(mod, ws: Path, monkeypatch, project_type: str = "windows") -> int:
     monkeypatch.setenv(FLAG_NAME, "0")
     return mod.run(ws, skip_toolchain=True, project_type=project_type,
-                   profile_root=ws.parent / "profile-root")
+                   profile_root=ws.parent / "profile-root", answers={"host_exec_protection": "enabled"})
 
 
 # ---------- 1. unit: fresh workspace -> repo + gitignore + banner ----------
@@ -185,7 +185,7 @@ def test_e2e_git_missing_still_exits_zero(tmp_path: Path, monkeypatch,
     monkeypatch.setenv(FLAG_NAME, "0")
     monkeypatch.setattr(init_mod.subprocess, "run", _no_git)
     rc = init_mod.run(ws, skip_toolchain=True, project_type="windows",
-                      profile_root=ws.parent / "profile-root")
+                      profile_root=ws.parent / "profile-root", answers={"host_exec_protection": "enabled"})
 
     assert rc == 0, "git-missing must degrade to WARN, not fail init"
     assert not (ws / ".git").exists()

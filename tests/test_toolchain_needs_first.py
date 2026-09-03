@@ -246,7 +246,7 @@ def test_load_task_spec_non_utf8_fails_closed(tmp_path, monkeypatch, capsys):
     _hermetic_env(monkeypatch, claude_json=_fake_registry(tmp_path, []))
     mod = _load_init_module()
     rc = mod.run(ws, project_type="windows",
-                 profile_root=tmp_path / "profile-root")
+                 profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     err = capsys.readouterr().err
     assert rc == RC_TOOLCHAIN_REFUSE, \
         f"non-UTF-8 task_spec must not relax the gate: {rc}: {err}"
@@ -399,7 +399,7 @@ def test_init_guidance_line_when_task_spec_absent(tmp_path, monkeypatch,
 
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
     rc = mod.run(ws, project_type="windows",
-                 profile_root=tmp_path / "profile-root")
+                 profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     err = capsys.readouterr().err
     assert rc == 0, f"init failed: {err}"
     assert "task_spec.yaml absent" in err, err
@@ -424,7 +424,7 @@ def test_init_passes_task_spec_to_check_when_present(tmp_path, monkeypatch,
 
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
     rc = mod.run(ws, project_type="windows",
-                 profile_root=tmp_path / "profile-root")
+                 profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     err = capsys.readouterr().err
     assert rc == 0, f"init failed: {err}"
     assert "task_spec.yaml absent" not in err, err
@@ -440,7 +440,7 @@ def test_init_unparseable_task_spec_stays_hard(tmp_path, monkeypatch, capsys):
     _hermetic_env(monkeypatch, claude_json=_fake_registry(tmp_path, []))
     mod = _load_init_module()
     rc = mod.run(ws, project_type="windows",
-                 profile_root=tmp_path / "profile-root")
+                 profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     err = capsys.readouterr().err
     assert rc == RC_TOOLCHAIN_REFUSE, \
         f"garbage task_spec must not relax the gate: {rc}: {err}"
@@ -477,7 +477,7 @@ def test_init_static_only_does_not_refuse_on_vm(tmp_path, monkeypatch):
     _write_task_spec(ws, STATIC_ONLY_SPEC)
     mod = _load_init_module()
     rc = mod.run(ws, project_type="windows",
-                 profile_root=tmp_path / "profile-root")
+                 profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     assert rc == 0, \
         f"static-only task must not HARD-refuse on the VM: {rc}"
     assert (ws / "claim-register.yaml").exists(), \
@@ -493,7 +493,7 @@ def test_init_static_only_control_without_task_spec_refuses(
     ws = _complete_static_env(tmp_path, monkeypatch)
     mod = _load_init_module()
     rc = mod.run(ws, project_type="windows",
-                 profile_root=tmp_path / "profile-root")
+                 profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     err = capsys.readouterr().err
     assert rc == RC_TOOLCHAIN_REFUSE, \
         f"no task_spec must keep the VM refusal: {rc}: {err}"
@@ -532,7 +532,7 @@ def test_init_assume_yes_reprobe_keeps_task_spec(tmp_path, monkeypatch,
     monkeypatch.setattr(mod.toolchain_install, "_run_install_plan",
                         fake_install)
     rc = mod.run(ws, project_type="windows",
-                 profile_root=tmp_path / "profile-root", assume_yes=True)
+                 profile_root=tmp_path / "profile-root", assume_yes=True, answers={"host_exec_protection": "enabled"})
     captured = capsys.readouterr()
     log = captured.out + captured.err
     assert "re-probing toolchain" in log, \

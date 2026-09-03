@@ -59,7 +59,7 @@ def _run_init(ws: Path, extra: list[str] | None = None) -> subprocess.CompletedP
     """Hermetic CLI run: KUNGLAO_CLAUDE_JSON pinned to a fake (empty-ish)
     file so user-level MCP registrations never leak in."""
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
-    argv += ["--type", "windows", "--skip-toolchain",
+    argv += ["--type", "windows", "--skip-toolchain", "--host-exec-protection", "enabled",
              "--profile-root", str(ws.parent / "profile-root")]
     env = {k: v for k, v in os.environ.items()
            if k not in (FLAG_NAME, "GHIDRA_HOME", "KUNGLAO_VM_HOST")}
@@ -70,6 +70,10 @@ def _run_init(ws: Path, extra: list[str] | None = None) -> subprocess.CompletedP
     env["KUNGLAO_CLAUDE_JSON"] = str(ws.parent / "fake-claude.json")
     if not (ws.parent / "fake-claude.json").exists():
         (ws.parent / "fake-claude.json").write_text("{}", encoding="utf-8")
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive tests answer the host-exec ask explicitly.
+        argv += ["--host-exec-protection", "enabled"]
     return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=env, errors="replace")
 
@@ -129,7 +133,8 @@ def test_l1_wiring_failure_is_rc_hook_wiring(tmp_path, monkeypatch):
         lambda *a, **k: {"ok": False, "mismatches": ["layer: injected"]})
     rc = mod.run(ws, project_type="windows",
                  profile_root=tmp_path / "profile-root",
-                 skip_toolchain=True)
+                 skip_toolchain=True,
+                 answers={"host_exec_protection": "enabled"})
     assert rc == mod.RC_HOOK_WIRING, (
         f"default hook deploy failure must FAIL (7), got {rc}")
 

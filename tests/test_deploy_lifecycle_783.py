@@ -347,7 +347,7 @@ def _init_ws(tmp_path: Path) -> Path:
     seed_bins(ws, payload=b"\x00\x01\x02")
     proc = _run_cli([
         str(SCRIPTS / "kunglao-init.py"), str(ws),
-        "--type", "linux", "--skip-toolchain", "--assume-yes",
+        "--type", "linux", "--skip-toolchain", "--host-exec-protection", "enabled", "--assume-yes",
     ])
     assert proc.returncode == 0, (
         f"init failed:\nstdout={proc.stdout[-2000:]!r}\n"
@@ -406,7 +406,7 @@ def test_lifecycle_init_drift_upgrade_current(tmp_path: Path):
     before = _hook_shas(ws)
     proc2 = _run_cli([
         str(SCRIPTS / "kunglao-init.py"), str(ws),
-        "--type", "linux", "--skip-toolchain", "--assume-yes",
+        "--type", "linux", "--skip-toolchain", "--host-exec-protection", "enabled", "--assume-yes",
     ])
     assert proc2.returncode == 0, proc2.stderr[-2000:]
     assert _hook_shas(ws) == before, "init re-run must not mutate copies"

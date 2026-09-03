@@ -1,6 +1,6 @@
 # kunglao-agent
 
-A Claude Code skill that runs a convergence-driven reverse-engineering loop: it takes a malware sample to a byte-proven, independently-verified fact base, enforced by mechanical gates.
+A Claude Code skill that runs a convergence-driven reverse-engineering loop: it works an analysis target the way a human RE expert would — autonomous planning, raw-evidence derivation, adversarial verification — down to a byte-proven fact base, enforced by mechanical gates.
 
 [![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](.)
 
@@ -8,7 +8,7 @@ A Claude Code skill that runs a convergence-driven reverse-engineering loop: it 
 
 ## What this is
 
-kunglao-agent is a Claude Code skill for malware reverse engineering. You drop a sample into a workspace, say what you need to know, and the skill runs a convergence loop: specialist workers analyze (static first), an independent verifier re-derives every fact blind from raw evidence, and mechanical gates decide when the analysis is done. The deliverable is a fact base where every claim is byte-anchored, independently verified, and evidence-indexed — trust is enforced by machinery, not convention.
+kunglao-agent is a Claude Code skill that behaves like a reverse-engineering expert across the full task spectrum — firmware emulation, risk-control countermeasures, web/JS reversing, protocol analysis, native-binary triage — not a single-domain tool. You drop a target into a workspace, say what you need to know, and the skill runs a convergence loop: specialist workers analyze (static first), an independent verifier re-derives every fact blind from raw evidence, and mechanical gates decide when the analysis is done. The deliverable is a fact base where every claim is byte-anchored, independently verified, and evidence-indexed — trust is enforced by machinery, not convention.
 
 The only interface is Claude Code: you talk to it and read its reports. The Python modules in this repo are the skill's internal organs, called by hooks, agents, and CI — documented under [Internals](#internals) for developers who extend the system, not as a user interface.
 

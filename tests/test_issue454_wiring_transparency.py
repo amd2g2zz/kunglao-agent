@@ -73,7 +73,7 @@ def test_init_hooks_output_says_wired_but_dormant(tmp_path):
     hooks_json = ws / "seeded-settings.json"
     hooks_json.write_text(json.dumps({"hooks": {}}), encoding="utf-8")
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws),
-            "--skip-toolchain", "--type", "windows",
+            "--skip-toolchain", "--host-exec-protection", "enabled", "--type", "windows",
             "--hooks-json", str(hooks_json),
             "--profile-root", str(ws.parent / "profile-root")]
     env = {k: v for k, v in os.environ.items() if k != FLAG_NAME}

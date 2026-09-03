@@ -236,7 +236,7 @@ def test_cold_start_pointers_resolve_after_real_init(tmp_path):
     env["PYTHONIOENCODING"] = "utf-8"
     r = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "kunglao-init.py"), str(ws),
-         "--type", "windows", "--skip-toolchain",
+         "--type", "windows", "--skip-toolchain", "--host-exec-protection", "enabled",
          "--profile-root", str(tmp_path / "profile-root")],
         capture_output=True, text=True, timeout=180, env=env)
     assert r.returncode == 0, f"init failed: {r.stderr}"

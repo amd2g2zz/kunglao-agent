@@ -86,6 +86,10 @@ def run_init(ws: Path, *extra: str) -> subprocess.CompletedProcess:
     if "--type" not in argv and "--resolve" not in argv:
         argv += ["--type", "windows"]
     argv += ["--profile-root", str(ws.parent / "profile-root")]
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive tests answer the host-exec ask explicitly.
+        argv += ["--host-exec-protection", "enabled"]
     return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=env, encoding="utf-8", errors="replace")
 

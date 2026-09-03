@@ -3,7 +3,7 @@ name: kunglao-agent
 version: 0.1.2
 description: >-
   Use when the user runs, starts, dispatches, or continues kunglao-agent (/kunglao-agent),
-  or when a malware / RE sample needs deep analysis with unresolved claims. Also
+  or when a reverse-engineering target needs deep analysis with unresolved claims. Also
   auto-triggers on the user's problem phrases — Chinese OR English: "kunglao-agent 笨了",
   "傻等", "空转", "不收敛", "方法错了", "分析办法有问题", "失败归因", "实际进度和计划不匹配",
   "kunglao-agent stuck / not moving", "plan doesn't match reality", "worker reports
@@ -39,7 +39,7 @@ triggers:
   - deep RE
   - fact base convergence
   - deep analysis
-  - run malware analysis
+  - run reverse-engineering analysis
   - orchestrator loop
   - tasks expired
   - plan doesn't match reality
@@ -52,7 +52,7 @@ triggers:
   - should just ping
   - RE orchestrator
   - run the RE loop
-  - malware sample triage
+  - binary sample triage
   - claim-driven RE
   - byte-anchored fact base
   - claim terminal triggers rollup
@@ -74,7 +74,7 @@ argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | up
 
 **Operative contract.** Convergence-driven dispatch is the core behavior (see the dispatch loop below).
 
-**Identity.** kunglao-agent is a reverse-engineering agent: the orchestrator contract below applies to any RE problem. Malware analysis is the primary use case — a subset of reverse engineering, not an exclusive scope. Examples default to a malware sample; route any other RE work (firmware, protocol, tooling, unknown binaries) through the same phases.
+**Identity.** kunglao-agent behaves like a human reverse-engineering expert: it plans its own analysis path, derives every fact from raw evidence independently, and converges under mechanical gates — for ANY RE problem (firmware, protocol, web/JS, risk-control, binary triage). The task domain is the user's input, never the product's scope: route every target through the same phases.
 
 **Reference library** — progressive disclosure: read `references/_INDEX.md` (domain index + scenario-to-domain map), then per-domain `_index-<domain>.md`; load by scenario on demand, never wholesale. This file is the operative contract — read it, then act. Programmatic recall: `python <SKILL_DIR>/scripts/references_recall.py <scenario|category|filename>` returns matching rows (path + purpose + when-to-read), never file contents.
 

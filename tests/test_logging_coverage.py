@@ -177,7 +177,7 @@ def init_ws(tmp_path) -> Path:
 
 def _run_kunglao_init(ws: Path) -> subprocess.CompletedProcess:
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"),
-            str(ws), "--type", "windows", "--skip-toolchain",
+            str(ws), "--type", "windows", "--skip-toolchain", "--host-exec-protection", "enabled",
             "--profile-root", str(ws.parent / "profile-root")]
     env = {k: v for k, v in os.environ.items()
            if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}

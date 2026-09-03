@@ -130,6 +130,8 @@ def _run_init_flag(ws: Path, home: Path, extra: list[str]) -> subprocess.Complet
     # file owns hook installation behavior, not type semantics.
     if "--type" not in argv and "--resolve" not in argv:
         argv += ["--type", "windows"]
+    if "--host-exec-protection" not in argv and "--resolve" not in argv:
+        argv += ["--host-exec-protection", "enabled"]  # #919 non-interactive
     return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=env, errors="replace")
 

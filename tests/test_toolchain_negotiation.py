@@ -391,7 +391,7 @@ def test_init_die_only_missing_pends_menu_exit_8(tmp_path, monkeypatch,
         mod.toolchain_install, "ask_then_install",
         lambda *a, **k: calls.append("ask") or a[0])
 
-    rc = mod.run(ws, project_type="windows", profile_root=profile_root)
+    rc = mod.run(ws, project_type="windows", profile_root=profile_root, answers={"host_exec_protection": "enabled"})
     out = capsys.readouterr().out
     assert rc == RC_PENDING_DECISIONS, f"die-only miss must pend: {rc}: {out}"
     assert calls == [], "ask_then_install must not run without --assume-yes"
@@ -412,7 +412,8 @@ def test_init_resolve_degrade_answer_proceeds_to_scaffold(
     mod = _load_init_module()
     monkeypatch.setattr(mod.toolchain, "check", _fake_check_factory(["die"]))
     rc = mod.run(ws, project_type="windows", profile_root=profile_root,
-                 answers={"install:die": "degrade"})
+                 answers={"install:die": "degrade",
+                 "host_exec_protection": "enabled"})
     assert rc == 0, f"degraded report must proceed: {rc}: {capsys}"
     assert (ws / "claim-register.yaml").exists(), "scaffold after degrade"
     assert "[initialized]" in (ws / "claim-register.yaml").read_text(
@@ -443,7 +444,7 @@ def test_init_resolve_install_answer_installs_and_proceeds(
     monkeypatch.setattr("toolchain_install._run_install_plan",
                         lambda name, plan, assume_yes, ws_arg: (0, "ok", ""))
     rc = mod.run(ws, project_type="windows", profile_root=profile_root,
-                 answers={"install:die": "install"})
+                 answers={"install:die": "install", "host_exec_protection": "enabled"})
     assert rc == 0, "install-then-pass must proceed to scaffold"
     assert (ws / "claim-register.yaml").exists()
 
@@ -457,7 +458,7 @@ def test_init_mixed_missing_keeps_exit_4(tmp_path, monkeypatch, capsys):
     mod = _load_init_module()
     monkeypatch.setattr(mod.toolchain, "check",
                         _fake_check_factory(["die", "vm_reachable"]))
-    rc = mod.run(ws, project_type="windows", profile_root=profile_root)
+    rc = mod.run(ws, project_type="windows", profile_root=profile_root, answers={"host_exec_protection": "enabled"})
     err = capsys.readouterr().err
     assert rc == RC_TOOLCHAIN_REFUSE, f"mixed miss must refuse: {rc}: {err}"
     assert "[FAIL] vm_reachable" in err
@@ -472,7 +473,7 @@ def test_init_resolve_skip_routes_to_human_event(tmp_path, monkeypatch):
     mod = _load_init_module()
     monkeypatch.setattr(mod.toolchain, "check", _fake_check_factory(["die"]))
     rc = mod.run(ws, project_type="windows", profile_root=profile_root,
-                 answers={"install:die": "skip"})
+                 answers={"install:die": "skip", "host_exec_protection": "enabled"})
     assert rc == RC_TOOLCHAIN_REFUSE, "skip must route to the exit-4 refusal"
     assert not (ws / "claim-register.yaml").exists()
 
@@ -486,7 +487,7 @@ def test_init_bogus_resolve_answer_rc_error(tmp_path, monkeypatch, capsys):
     mod = _load_init_module()
     monkeypatch.setattr(mod.toolchain, "check", _fake_check_factory(["die"]))
     rc = mod.run(ws, project_type="windows", profile_root=profile_root,
-                 answers={"install:die": "maybe"})
+                 answers={"install:die": "maybe", "host_exec_protection": "enabled"})
     assert rc == RC_ERROR
     assert "install:die" in capsys.readouterr().err
     assert not (ws / "claim-register.yaml").exists(), "zero scaffold on RC_ERROR"
@@ -514,7 +515,7 @@ def test_init_vm_multi_candidate_stops_for_operator_choice(
                             running=False, snapshots=["hr-6.0"]),
     ]
     monkeypatch.setattr(tc, "_vm_inventory", lambda: (entries, True, False))
-    rc = mod.run(ws, project_type="windows", profile_root=profile_root)
+    rc = mod.run(ws, project_type="windows", profile_root=profile_root, answers={"host_exec_protection": "enabled"})
     err = capsys.readouterr().err
     assert rc == RC_TOOLCHAIN_REFUSE, f"multi-candidate VM must refuse: {err}"
     assert "[FAIL] vm_reachable" in err
