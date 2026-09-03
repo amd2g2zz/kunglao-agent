@@ -258,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="pkg-detect",
-        description="package-manager detection (#477)",
+        description="package-manager detection",
     )
     parser.add_argument("--json", action="store_true",
                         help="emit detected managers as JSON")
@@ -285,4 +285,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

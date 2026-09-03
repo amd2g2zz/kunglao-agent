@@ -1,0 +1,38 @@
+!function () {
+  var cache = {};
+  var modules = [
+    function (module, exports, require) {
+      function digest(x) {
+        for (var h = "", i = 0; i < x.length; i++) h = (h << 5) - h + x.charCodeAt(i) | 0;
+        return ("00000000" + (h >>> 0).toString(16)).slice(-8);
+      }
+      function buildParams(params) {
+        return Object.keys(params).sort().map(function (k) { return k + "=" + params[k]; }).join("&");
+      }
+      function assembleBase(base, secret) { return base + "#" + secret + "#v1"; }
+      function buildSignature(payload, secret) { return digest(assembleBase(buildParams(payload), secret)); }
+      module.exports.buildParams = buildParams;
+      module.exports.buildSignature = buildSignature;
+      module.exports.digest = digest;
+    },
+    function (module, exports, require) {
+      function sendRequest(path, payload) {
+        var sigModule = require(0);
+        var sign = sigModule.buildSignature(payload, "s3cr3t");
+        var url = "https://api.example.com" + path + "?sign=" + encodeURIComponent(sign);
+        return fetch(url);
+      }
+      module.exports.sendRequest = sendRequest;
+    }
+  ];
+  function wpRequire(id) {
+    var m = cache[id];
+    if (void 0 !== m) return m.exports;
+    var mod = cache[id] = { exports: {} };
+    return modules[id].call(mod.exports, mod, mod.exports, wpRequire), mod.exports;
+  }
+  window.__api = {
+    buildSignature: wpRequire(0).buildSignature,
+    sendRequest: function (p, q) { return wpRequire(1).sendRequest(p, q); }
+  };
+}();

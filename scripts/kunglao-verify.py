@@ -8,9 +8,10 @@ Implementation in scripts/kunglao_verify.py — module name without hyphens,
 so `from kunglao_verify import ...` works (frozen test
 tests/test_verify_record_monitor.py imports it directly).
 """
-import sys
 
-from kunglao_verify import main
+
+from kunglao_verify import main  # noqa: F401 — _entry.run(globals()) resolves main from here
+from _entry import run
 
 if __name__ == "__main__":
-    sys.exit(main())
+    run(globals())

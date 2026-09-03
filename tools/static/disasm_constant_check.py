@@ -33,6 +33,12 @@ live in tools/_lib/lib_disasm.py (issue #284 extraction, #340 shared-lib home); 
 so existing imports keep working.
 """
 from __future__ import annotations
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+
 
 import argparse
 import json
@@ -47,19 +53,13 @@ if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
 from lib_disasm import (  # noqa: E402  (shared PE/capstone helpers, #284)
-    capstone_for as _capstone_for,
     disasm_at as _disasm_at,
     load_pe as _load_pe,
-    va_to_offset,
 )
 
 # UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
 # decode(errors="replace")) must not crash a GBK console — stdout unified on
 # UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 
 _FIELD_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*")
 _VA_PREFIX = re.compile(r"^\s*(?:@0x(?P<a>[0-9a-fA-F]+)\s+|0x(?P<b>[0-9a-fA-F]+)\s*:\s*)")
@@ -299,4 +299,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    ensure_utf8_stdout()
     sys.exit(main())

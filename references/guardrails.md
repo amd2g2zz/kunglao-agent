@@ -512,3 +512,5 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   counting basis; no collapsed multi-basis figures, no category renames
   like "70 BPF_CALL" → "70 helper calls" per the global rule
   `~/.claude/rules/common/numeric-fidelity.md`).
+
+recall_useful: pending

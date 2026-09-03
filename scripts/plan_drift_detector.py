@@ -33,19 +33,32 @@ progressed while the files never caught up")
 
 Usage:
   python plan_drift_detector.py <workspace> [--apply]
+  python plan_drift_detector.py <workspace> [--auto]
 Exit codes:
   0 = no drift (WARN-only output still exits 0 — observation, not a gate)
   1 = drift detected (B1o blocker)
   2 = HARD_PAUSE: 3+ drift warnings in same session
+Auto-integration mode (issue #602, --auto flag):
+  Used by hooks/dispatch_gate.py L621 as a PreToolUse wire-up. Maps drift
+  severity to a gate exit code so the dispatch path can BLOCK / SATURATE
+  on plan-evidence disagreement WITHOUT changing the operator-facing CLI
+  semantics (--auto is purely an integration face, NOT a new behavior
+  layer; operator --apply / no-flag still returns 1 / 2 for the script's
+  exit-table consumers).
+  --auto exit codes:
+    0  = no drift                                  -> dispatch proceeds
+    3  = WARN-only (STALE_PLAN_ON_NEW_EVIDENCE, observe-first) -> SATURATED
+    2  = 1+ non-WARN drift                         -> BLOCKED (hard REJECT)
 """
 from __future__ import annotations
 import gate_telemetry as _gt
 from status_defs import TERMINAL
+from harness_common import utc_now_z as utc_now  # noqa: F401 — #863 Family F contract (863g mechanical check)
 
 import argparse
+import hashlib
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -53,7 +66,7 @@ import yaml
 TERMINAL_STATUSES = TERMINAL  # #34: single source of truth (was a 6-value literal here)
 
 # #241: a PROVEN claim is only as good as its reality check. Confidence tiers
-# below even odds (ICD-203 7-tier ladder, scripts/confidence_schema.py) mean
+# below even odds (ICD-203 7-tier ladder) mean
 # the fact is not reality-verified evidence; "suspected" is the legacy name
 # mapping to roughly_even. literal "low" accepted for 3-tier legacy facts.
 LOW_CONFIDENCE = frozenset({
@@ -66,8 +79,6 @@ LOW_CONFIDENCE = frozenset({
 UNVERIFIED_CHECK_STATUSES = frozenset({"PROVEN"})
 
 
-def utc_now() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _load_yaml(p):
@@ -144,18 +155,83 @@ def extract_verified_claim_ids(runs_dir: Path) -> set:
     """Claim ids covered by runs/verify-redteam-*.md files (canonical form).
 
     A redteam verify run is the independent reality check behind a PROVEN
-    claim (maker-checker: worker=maker, verifier=checker). Presence of the
-    file is the mechanical proxy for "the check happened" — its verdict
-    content is outcome_capture.py's business.
+    claim (maker-checker: worker=maker, verifier=checker). #827: existence
+    + claim-id-in-filename was the entire check, and a 265ms burst of 8
+    byte-identical substitution templates defeated it — existence is NOT
+    verification. Files must survive the #827 content-level screening
+    (:func:`credible_redteam_files`); the verdict CONTENT remains
+    outcome_capture.py's business.
     """
     out = set()
     if not runs_dir.exists():
         return out
-    for p in runs_dir.glob("verify-redteam-*.md"):
+    for p in credible_redteam_files(runs_dir):
         m = re.search(r"C-?\d+", p.name)
         if m:
             out.add(_normalize_cid(m.group(0)))
     return out
+
+
+# --- #827: redteam-file credibility screening (anti batch-template) -------
+
+_VERDICT_MARKER_RE = re.compile(r"red[-_ ]?team", re.IGNORECASE)
+_VERDICT_WORD_RE = re.compile(
+    r"\b(CONFIRMED|REFUTED|UNVERIFIED|GAP|verdict)\b", re.IGNORECASE)
+_BURST_MIN_FILES = 3
+_BURST_WINDOW_S = 5.0
+
+
+def _template_hash(text: str) -> str:
+    """id-打码归一化体 hash：claim/fact id → §，空白折叠，大小写归一。"""
+    collapsed = re.sub(
+        r"\s+", " ", _REDACT_IDS_RE.sub("§", text)).strip().lower()
+    return hashlib.sha256(collapsed.encode("utf-8")).hexdigest()
+
+
+_REDACT_IDS_RE = re.compile(r"C-?\d+|F-?\d+")
+
+
+def credible_redteam_files(runs_dir: Path) -> list:
+    """#827 反模板筛选层：verify-redteam-*.md → 可信文件列表。
+
+    两条内容级规则（cheap hardening 层；#825 dispatch ledger 落地后由其
+    接管为身份级修复）：
+      (b) 授权标记：body 须含 redteam 词 + verdict 词——canonical 生产者
+          词表（"RED-TEAM VERDICT:" / "## redteam <fid>\nverdict:"），事故
+          模板（"KEEP status: PROVEN"）不命中
+      (a) 爆发簇：≥3 个 marker 通过的文件归一化体全同（id 打码后 sha256
+          相等）且 mtime 跨度 ≤5s → 整簇排除（模板 fan-out 特征；独立于
+          (b)，marker 齐全的同构簇同样死）
+    结构门语义（fail-closed on 判定）；不可读文件跳过。既有语义保留：
+    1-2 个同构文件（<3）与 mtime 分散的同构文件不触发簇排除。
+    """
+    if not runs_dir.exists():
+        return []
+    passing: list = []
+    for p in sorted(runs_dir.glob("verify-redteam-*.md")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if (_VERDICT_MARKER_RE.search(text)
+                and _VERDICT_WORD_RE.search(text)):
+            passing.append(p)
+    groups: dict = {}
+    for p in passing:
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+            mtime = p.stat().st_mtime
+        except OSError:
+            continue
+        groups.setdefault(_template_hash(text), []).append((p, mtime))
+    out: list = []
+    for group in groups.values():
+        if len(group) >= _BURST_MIN_FILES:
+            times = sorted(t for _, t in group)
+            if times[-1] - times[0] <= _BURST_WINDOW_S:
+                continue
+        out.extend(p for p, _ in group)
+    return sorted(out)
 
 
 def extract_low_confidence_claim_ids(facts_dir: Path) -> set:
@@ -236,9 +312,9 @@ def _print_stale_plan_warns(warns: list) -> None:
     """WARN block for stale-plan-on-new-evidence (observation, not a gate)."""
     if not warns:
         return
-    print(f"WARN (observe-only, #497): {len(warns)} STALE_PLAN_ON_NEW_EVIDENCE item(s) —")
+    print(f"WARN (observe-only): {len(warns)} STALE_PLAN_ON_NEW_EVIDENCE item(s) —")
     print("  new evidence landed after the last plan update; the plan is a derived")
-    print("  view (#498) and should be re-derived (model changed -> re-plan is the")
+    print("  view and should be re-derived (model changed -> re-plan is the")
     print("  norm; only an information-free pivot is not):")
     for w in warns[:5]:
         print(f"    - {w['claim_id']}: {w['fix']}")
@@ -290,7 +366,7 @@ def check(workspace: Path, active_only: bool = False) -> int:
     plan_refers_to_register = bool(plan_ids & claim_ids)
 
     deps_path = workspace / "claim_deps.yaml"
-    deps_ids = extract_claim_ids_from_deps(deps_path)
+    extract_claim_ids_from_deps(deps_path)
 
     tspec = _load_yaml(workspace / "task_spec.yaml")
     primary_questions = tspec.get("primary_questions", []) or []
@@ -414,14 +490,88 @@ def check(workspace: Path, active_only: bool = False) -> int:
     return 2 if len(drifts) >= 3 else 1
 
 
+def check_auto(workspace: Path, active_only: bool = False) -> int:
+    """#602: integration face for hooks/dispatch_gate.py L621 wire-up.
+
+    Re-runs check() and remaps its exit code to the dispatch-gate contract:
+      - no drift                          -> 0 (proceed, no BLOCKED/SATURATED)
+      - WARN-only (STALE_PLAN_ON_NEW_EVIDENCE observe-first) -> 3 (SATURATED)
+      - 1+ non-WARN drift (ORPHAN_CLAIM / STALE_PLAN_ENTRY / MISSING_DEP_LINK /
+        UNANSWERED_QUESTION / STALE_NEXT_STEP / UNVERIFIED_EVIDENCE) -> 2 (BLOCKED)
+
+    The remapping is informational ONLY — it does not change what `check()`
+    reports (the drift types and counts) and does not change the
+    operator-facing CLI exit codes (those stay 0/1/2). Auto mode is the
+    integration face for the dispatch gate; the operator-facing contract
+    stays byte-identical.
+
+    Output ordering with the underlying check():
+      - The underlying check() prints its full report (REJECT/WARN/OK).
+      - check_auto() prints ONE summary line classifying the severity
+        ("DRIFT_AUTO: ok / warn-only / blocked") so the operator tail
+        can grep for it; it does NOT suppress the underlying report.
+    """
+    drifts_rc = check(workspace, active_only=active_only)
+    # check() prints to stdout; we add one classification line below.
+    if drifts_rc == 0:
+        # no drift at all — distinguish "no drift at all" from "WARN-only
+        # exit 0". check() collapses both to rc=0; the STALE_PLAN_ON_NEW_
+        # EVIDENCE warns are surfaced only as WARN lines in stdout.
+        # If we already saw WARN output above we are in the WARN-only path.
+        # Cheap heuristic: a WARN-only run prints "WARN" to stdout.
+        # check() already consumed stdout; we cannot read what it wrote.
+        # Instead, peek at the workspace ourselves for evidence-newer-than-plan
+        # signals and surface the WARN-only classification here. This is the
+        # SAME mtime comparison check() runs — duplicated here only to
+        # decide the auto exit code, not to print anything new.
+        try:
+            warns = find_stale_plan_on_new_evidence(
+                workspace,
+                _first_existing_plan(workspace),
+                _load_yaml(workspace / "claim-register.yaml").get("claims", []) or [],
+            )
+        except Exception:
+            warns = []
+        if warns:
+            print("DRIFT_AUTO: warn-only (STALE_PLAN_ON_NEW_EVIDENCE) -> SATURATED")
+            return 3
+        print("DRIFT_AUTO: ok -> proceed")
+        return 0
+    # 1 or 2 from underlying check() — both mean "non-WARN drift detected"
+    # (1 = drift detected, 2 = HARD_PAUSE / 3+ warnings which IS a non-WARN
+    # drift event from the gate's perspective).
+    print(f"DRIFT_AUTO: drift-severe (check rc={drifts_rc}) -> BLOCKED")
+    return 2
+
+
+def _first_existing_plan(workspace: Path):
+    """Return the first existing plan-path candidate, or None. Mirrors
+    check()'s plan-path resolution so check_auto() can ask the same
+    question when classifying WARN-only output. Internal helper, not
+    part of the public surface."""
+    for name in ("global_plan.txt", "global_plan.yaml", "plan.md"):
+        p = workspace / name
+        if p.exists():
+            return p
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Detect plan files drifting behind reality")
     parser.add_argument("workspace", help="workspace root")
     parser.add_argument("--active-only", action="store_true",
                         help="check only the current plan file (global_plan.txt), not all candidates")
+    parser.add_argument("--auto", action="store_true",
+                        help="integration face: remap exit codes to "
+                             "0=no-drift / 3=WARN-only(SATURATED) / 2=blocked "
+                             "for hooks/dispatch_gate.py L621 wire-up")
     args = parser.parse_args()
+    if args.auto:
+        return check_auto(Path(args.workspace), active_only=args.active_only)
     return check(Path(args.workspace), active_only=args.active_only)
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

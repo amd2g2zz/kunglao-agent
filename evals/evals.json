@@ -3,12 +3,12 @@
   "evals": [
     {
       "id": 1,
-      "prompt": "Run the convergence check on a workspace with one OPEN claim C-001 (evidence_tier_attempted=0, boundary_type=positive_observation, no blockers, no depends_on). The claim-register.yaml lists C-001 with status OPEN. The convergence_check.py script must return DISPATCH (exit 1). The orchestrator reads the priority.py output and dispatches a worker agent for the top-ranked action before the round ends.",
-      "expected_output": "The orchestrator dispatches a worker agent for C-001 following priority.py ordering. convergence_check.py returns exit code 1 (DISPATCH). The round transcript includes a dispatch event targeting C-001. No claims remain OPEN without an attempt to dispatch within the same round.",
+      "prompt": "Run the convergence check on a workspace with one OPEN claim C-001 (evidence_tier_attempted=0, boundary_type=positive_observation, no blockers, no depends_on). The claim-register.yaml lists C-001 with status OPEN. The convergence_check.py script must return DISPATCH (exit 1). The orchestrator reads the priority_ratio.py output and dispatches a worker agent for the top-ranked action before the round ends.",
+      "expected_output": "The orchestrator dispatches a worker agent for C-001 following priority_ratio.py ordering. convergence_check.py returns exit code 1 (DISPATCH). The round transcript includes a dispatch event targeting C-001. No claims remain OPEN without an attempt to dispatch within the same round.",
       "files": [],
       "expectations": [
         "convergence_check.py reads claim-register.yaml and identifies C-001 as OPEN",
-        "The orchestrator dispatches a worker for C-001 as the first action (priority.py top result)",
+        "The orchestrator dispatches a worker for C-001 as the first action (priority_ratio.py top result)",
         "The round transcript contains a dispatch event for claim C-001",
         "No idle loop occurs: the orchestrator does not proceed to monitoring or verification without first dispatching"
       ]

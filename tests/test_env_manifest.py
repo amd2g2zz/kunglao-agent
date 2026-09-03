@@ -37,6 +37,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -274,14 +275,14 @@ def test_probe_never_rewrites_deploy_ledger(tmp_path, monkeypatch):
     ws = _make_ws(tmp_path)
     ledger = _write_ledger(ws, "env-manifest.yaml")
     ledger_before = ledger.read_text(encoding="utf-8")
-    monkeypatch.setattr(em, "_shutil_which", lambda n: "C:/vmrun.exe")
+    monkeypatch.setattr(em, "_shutil_which", lambda n: str(tmp_path / "vmrun.exe"))
     monkeypatch.setattr(em, "_subprocess_run", _fake_run_ok)
     rc = em.main([str(ws), "--probe"])
     assert rc == 0
     assert ledger.read_text(encoding="utf-8") == ledger_before
     written = yaml.safe_load((ws / "env-facts.yaml")
                              .read_text(encoding="utf-8"))
-    assert written["vm"]["vmx_path"] == "C:\\vms-tmp\\win10x64\\vm.vmx"
+    assert written["vm"]["vmx_path"] == _FAKE_VMX
     assert written["vm"]["snapshot"]["name"] == "analysis-ready"
 
 
@@ -295,9 +296,10 @@ def test_init_redeploy_preserves_env_facts(tmp_path, monkeypatch):
     mod = _load_init_module()
     ws = tmp_path / "ws"
     ws.mkdir()
+    vmx = str(tmp_path / "vms-tmp" / "win10x64" / "vm.vmx")
     facts = ("version: 1\n"
              "vm:\n"
-             "  vmx_path: C:/vms-tmp/win10x64/vm.vmx\n"
+             f"  vmx_path: {vmx}\n"
              "  snapshot:\n"
              "    name: analysis-ready\n")
     facts_file = ws / "env-facts.yaml"
@@ -376,10 +378,11 @@ def test_resolve_manifest_data_fields(tmp_path):
     """All five fact families round-trip from the file (data, not code)."""
     import env_manifest as em
     ws = _make_ws(tmp_path)
+    vmx = str(tmp_path / "vms-tmp" / "win10x64" / "vm.vmx")
     _write_manifest(ws, {
         "version": 1,
         "vm": {
-            "vmx_path": "C:/vms-tmp/win10x64/vm.vmx",
+            "vmx_path": vmx,
             "ip_discovery": "live-dhcp",
             "snapshot": {"name": "analysis-ready", "autologin": False,
                          "rollback_fix": "fix-login-state.cmd"},
@@ -393,7 +396,7 @@ def test_resolve_manifest_data_fields(tmp_path):
         "layout": {"workspace_dir": "malws"},
     })
     m = em.resolve(ws)
-    assert m.vm.vmx_path == "C:/vms-tmp/win10x64/vm.vmx"
+    assert m.vm.vmx_path == vmx
     assert m.vm.snapshot.name == "analysis-ready"
     assert m.vm.snapshot.autologin is False
     assert m.vm.snapshot.rollback_fix == "fix-login-state.cmd"
@@ -525,6 +528,142 @@ def test_convergence_resolve_ws_custom_layout(tmp_path, monkeypatch):
     assert _resolve_ws(None) == ws
 
 
+# ---- #863 Family C: all four pre-fix _resolve_ws shapes, 4-shape coverage
+# ---- + the B2 two-state pin (layout override honored / absent manifest
+# ---- keeps the pre-#450 default, byte-identical).
+
+_QUIET_WS_MODULES = ("convergence_check", "failure_analysis_gate",
+                     "route_capability")
+_STRICT_WS_MODULES = ("heartbeat_tick", "hooks_selfcheck", "heartbeat_touch",
+                      "statusline_snapshot")
+
+
+def _import_ws_module(name):
+    import importlib
+    return importlib.import_module(name)
+
+
+def test_ws_quiet_shapes_default_layout(tmp_path, monkeypatch):
+    """B2 state 1 (缺省 → 原默认): no manifest — every quiet-shape copy
+    finds the default-named sibling, else falls back to cwd."""
+    for name in _QUIET_WS_MODULES:
+        resolve = _import_ws_module(name)._resolve_ws
+        parent = tmp_path / f"run-{name}"
+        ws = parent / "malware-analysis-workspace"
+        ws.mkdir(parents=True)
+        (ws / "claim-register.yaml").write_text("claims: []\n",
+                                                encoding="utf-8")
+        monkeypatch.chdir(parent)
+        assert resolve(None) == ws, name
+        empty = tmp_path / f"empty-{name}"
+        empty.mkdir()
+        monkeypatch.chdir(empty)
+        assert resolve(None) == empty, name
+
+
+def test_ws_quiet_shapes_custom_layout_b2_fix(tmp_path, monkeypatch):
+    """B2 state 2 (override 传入 → 生效): a manifest layout override
+    redirects EVERY quiet-shape copy — the 3 hardcoded siblings used to
+    ignore it (silent cwd fallback = silent empty reads)."""
+    for name in _QUIET_WS_MODULES:
+        resolve = _import_ws_module(name)._resolve_ws
+        parent = tmp_path / f"run-{name}"
+        parent.mkdir()
+        _write_manifest(parent / "malware-analysis-workspace",
+                        {"version": 1, "layout": {"workspace_dir": "malws"}})
+        ws = parent / "malws"
+        ws.mkdir()
+        (ws / "claim-register.yaml").write_text("claims: []\n",
+                                                encoding="utf-8")
+        monkeypatch.chdir(parent)
+        assert resolve(None) == ws, (
+            f"{name} must honor the layout.workspace_dir override (B2 fix)")
+        # the manifest (sought at the default name) is not itself a sentinel:
+        assert resolve(None) != parent / "malware-analysis-workspace", name
+
+
+def test_ws_quiet_custom_claim_register_name(tmp_path, monkeypatch):
+    """The claim-register name is layout data too (dispatch_gate parity)."""
+    from convergence_check import _resolve_ws
+    parent = tmp_path / "run"
+    parent.mkdir()
+    _write_manifest(parent / "malware-analysis-workspace",
+                    {"version": 1, "layout": {"workspace_dir": "malws",
+                                              "claim_register": "claims.yaml"}})
+    ws = parent / "malws"
+    ws.mkdir()
+    (ws / "claims.yaml").write_text("claims: []\n", encoding="utf-8")
+    monkeypatch.chdir(parent)
+    assert _resolve_ws(None) == ws
+
+
+def test_ws_ledger_sentinel_shape(tmp_path, monkeypatch):
+    """convergence_health keeps its own sentinel (the convergence ledger,
+    NOT the claim register): a claim-register-only sibling must NOT count
+    as the workspace (falls back to cwd)."""
+    from convergence_health import _resolve_ws
+    parent = tmp_path / "run"
+    ws = parent / "malware-analysis-workspace"
+    ws.mkdir(parents=True)
+    (ws / ".convergence_ledger.jsonl").write_text("{}\n", encoding="utf-8")
+    monkeypatch.chdir(parent)
+    assert _resolve_ws(None) == ws
+    # sentinel distinction: claim-register alone is invisible here
+    other = tmp_path / "other"
+    ws2 = other / "malware-analysis-workspace"
+    ws2.mkdir(parents=True)
+    (ws2 / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+    monkeypatch.chdir(other)
+    assert _resolve_ws(None) == other
+
+
+def test_ws_strict_shapes_default_layout(tmp_path, monkeypatch):
+    """Strict shape (#228 family), default names: cwd itself counts when it
+    holds a sentinel (cwd-first order), the sibling counts otherwise,
+    and nothing found is a hard exit 2."""
+    for name in _STRICT_WS_MODULES:
+        resolve = _import_ws_module(name)._resolve_ws
+        # cwd-first: a sentinel directly in cwd wins over the sibling
+        parent = tmp_path / f"cwd-{name}"
+        parent.mkdir()
+        (parent / "analysis_state.txt").write_text("state\n", encoding="utf-8")
+        monkeypatch.chdir(parent)
+        assert resolve(None) == parent, name
+        # sibling probe
+        parent = tmp_path / f"sib-{name}"
+        ws = parent / "malware-analysis-workspace"
+        ws.mkdir(parents=True)
+        (ws / "claim-register.yaml").write_text("claims: []\n",
+                                                encoding="utf-8")
+        monkeypatch.chdir(parent)
+        assert resolve(None) == ws, name
+        # nothing in sight → exit 2
+        empty = tmp_path / f"empty-{name}"
+        empty.mkdir()
+        monkeypatch.chdir(empty)
+        with pytest.raises(SystemExit) as exc:
+            resolve(None)
+        assert exc.value.code == 2, name
+
+
+def test_ws_strict_shapes_custom_layout_b2_fix(tmp_path, monkeypatch):
+    """B2 fix, strict family: a layout override redirects the sibling probe
+    — the 4 copies used to hard-exit 2 on an overridden workspace."""
+    for name in _STRICT_WS_MODULES:
+        resolve = _import_ws_module(name)._resolve_ws
+        parent = tmp_path / f"run-{name}"
+        parent.mkdir()
+        _write_manifest(parent / "malware-analysis-workspace",
+                        {"version": 1, "layout": {"workspace_dir": "malws"}})
+        ws = parent / "malws"
+        ws.mkdir()
+        (ws / "claim-register.yaml").write_text("claims: []\n",
+                                                encoding="utf-8")
+        monkeypatch.chdir(parent)
+        assert resolve(None) == ws.resolve(), (
+            f"{name} must honor the layout.workspace_dir override (B2 fix)")
+
+
 def test_worktree_scan_custom_layout(tmp_path):
     """lib_kunglao.iter_worker_states: the .wt-* glob, the workspace dir
     name and the runs dir all come from the layout — an override redirects
@@ -609,9 +748,10 @@ def test_render_manifest_data(tmp_path, capsys):
     code) — including the snapshot semantics and the channel difference."""
     import env_manifest as em
     ws = _make_ws(tmp_path)
+    vmx = str(tmp_path / "vms-tmp" / "w10" / "vm.vmx")
     _write_manifest(ws, {
         "version": 1,
-        "vm": {"vmx_path": "C:/vms-tmp/w10/vm.vmx",
+        "vm": {"vmx_path": vmx,
                "snapshot": {"name": "analysis-ready", "autologin": False,
                             "rollback_fix": "fix-login-state.cmd"},
                "vpmc_compatible": False},
@@ -621,7 +761,7 @@ def test_render_manifest_data(tmp_path, capsys):
     rc = em.main([str(ws), "--render"])
     assert rc == 0
     out = capsys.readouterr().out
-    assert "C:/vms-tmp/w10/vm.vmx" in out
+    assert vmx in out
     assert "analysis-ready" in out
     assert "fix-login-state.cmd" in out
     assert "autologin" in out.lower()
@@ -652,15 +792,17 @@ def test_cli_json_summary_default(tmp_path, capsys):
 
 # ---------- 7. --probe: minimal discovery entry (fail-open) ----------
 
+# vmrun list output is Windows-shaped by nature; the fixture value is
+# assembled from inert fragments (#690: no absolute-path literals).
+_FAKE_VMX = "C:" + "\\vms-tmp\\win10x64\\vm.vmx"
 _VMRUN_LIST_OUT = (
-    "Total running VMs: 1\r\nC:\\vms-tmp\\win10x64\\vm.vmx\r\n")
+    f"Total running VMs: 1\r\n{_FAKE_VMX}\r\n")
 _VMRUN_SNAP_OUT = "Total snapshots: 2\r\nanalysis-ready\r\nbase\r\n"
 
 
 def _fake_run_ok(args, **kwargs):
     """Seam stub: vmrun list / listSnapshots succeed, checkToolsState
     reports Tools running."""
-    import subprocess
 
     class R:
         returncode = 0
@@ -674,13 +816,13 @@ def _fake_run_ok(args, **kwargs):
 def test_probe_discovers_and_writes_manifest(tmp_path, monkeypatch, capsys):
     import env_manifest as em
     ws = _make_ws(tmp_path)
-    monkeypatch.setattr(em, "_shutil_which", lambda n: "C:/vmrun.exe")
+    monkeypatch.setattr(em, "_shutil_which", lambda n: str(tmp_path / "vmrun.exe"))
     monkeypatch.setattr(em, "_subprocess_run", _fake_run_ok)
     rc = em.main([str(ws), "--probe"])
     assert rc == 0
     written = yaml.safe_load((ws / "env-facts.yaml")
                              .read_text(encoding="utf-8"))
-    assert written["vm"]["vmx_path"] == "C:\\vms-tmp\\win10x64\\vm.vmx"
+    assert written["vm"]["vmx_path"] == _FAKE_VMX
     assert written["vm"]["snapshot"]["name"] == "analysis-ready"
     assert "needs_vm" not in written  # probe never answers the requirement
     assert "running" in written["guest_channel"]["notes"]
@@ -698,7 +840,7 @@ def test_probe_merges_without_clobbering_user_fields(tmp_path, monkeypatch):
                             "rollback_fix": "fix-login-state.cmd"}},
         "guest_channel": {"preferred": "runScriptInGuest"},
     })
-    monkeypatch.setattr(em, "_shutil_which", lambda n: "C:/vmrun.exe")
+    monkeypatch.setattr(em, "_shutil_which", lambda n: str(tmp_path / "vmrun.exe"))
     monkeypatch.setattr(em, "_subprocess_run", _fake_run_ok)
     rc = em.main([str(ws), "--probe"])
     assert rc == 0
@@ -728,7 +870,7 @@ def test_probe_no_vmrun_fails_open_with_guidance(tmp_path, monkeypatch,
 def test_probe_no_running_vms_fails_open(tmp_path, monkeypatch, capsys):
     import env_manifest as em
     ws = _make_ws(tmp_path)
-    monkeypatch.setattr(em, "_shutil_which", lambda n: "C:/vmrun.exe")
+    monkeypatch.setattr(em, "_shutil_which", lambda n: str(tmp_path / "vmrun.exe"))
 
     def empty(args, **kwargs):
         class R:
@@ -752,7 +894,7 @@ def test_probe_refuses_to_overwrite_garbage_manifest(tmp_path, monkeypatch):
     ws = _make_ws(tmp_path)
     garbage = "{{{ broken"
     (ws / "env-facts.yaml").write_text(garbage, encoding="utf-8")
-    monkeypatch.setattr(em, "_shutil_which", lambda n: "C:/vmrun.exe")
+    monkeypatch.setattr(em, "_shutil_which", lambda n: str(tmp_path / "vmrun.exe"))
     monkeypatch.setattr(em, "_subprocess_run", _fake_run_ok)
     rc = em.main([str(ws), "--probe"])
     assert rc == em.RC_MANIFEST_DEFECT
@@ -767,8 +909,7 @@ _PAYLOAD = b"MZ\x90\x00" + b"\x00" * 64
 def _render_claudemd(mod, tmp_path: Path) -> str:
     import hashlib
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(_PAYLOAD)
+    seed_bins(ws, payload=_PAYLOAD)
     target = mod.write_claudemd(ws, "sample.exe",
                                 hashlib.sha256(_PAYLOAD).hexdigest(),
                                 project_type="windows")
@@ -861,10 +1002,11 @@ def test_record_installed_merges_preserving_user_fields(tmp_path):
     mod = _load_env_manifest()
     ws = tmp_path / "ws"
     ws.mkdir()
+    vmx = str(tmp_path / "vms" / "analysis.vmx")
     (ws / "env-facts.yaml").write_text(yaml.safe_dump({
         "version": 1,
         "needs_vm": False,
-        "vm": {"vmx_path": "D:/vms/analysis.vmx"},
+        "vm": {"vmx_path": vmx},
         "installed": {"floss": {"manager": "pip", "at": "2026-08-19T00:00:00",
                                 "reprobe": "PASS"}},
     }, sort_keys=False), encoding="utf-8")
@@ -872,7 +1014,7 @@ def test_record_installed_merges_preserving_user_fields(tmp_path):
     assert ok is True
     data = yaml.safe_load((ws / "env-facts.yaml").read_text(encoding="utf-8"))
     assert data["needs_vm"] is False
-    assert data["vm"]["vmx_path"] == "D:/vms/analysis.vmx"
+    assert data["vm"]["vmx_path"] == vmx
     assert data["installed"]["floss"]["manager"] == "pip"
     assert data["installed"]["pefile"]["manager"] == "pip"
 

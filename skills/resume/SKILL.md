@@ -6,12 +6,28 @@ description: >-
   partial facts, in-flight workers, breakpoint timeline) plus the next
   action taken from convergence_check. Use after a system reboot, a
   crashed session, or any "where was this analysis?" moment. Never writes
-  — re-arming a dead heartbeat is advised, not performed (#461 chain).
+  — re-arming a dead heartbeat is advised, not performed (chain).
 arguments: [workspace]
 argument-hint: <workspace> — no args → guided workspace prompt
 ---
 
 # kunglao-agent:resume — crash/reboot breakpoint recovery (issue #466)
+
+## Stale-workspace gate (#748, machine-checkable)
+
+Before producing the brief, the CLI runs the stale-workspace gate
+automatically (it is part of `scripts/kunglao.py resume`, not a separate
+call). If the gate refuses:
+
+- `status="stale"` + `rc=5` → workspace template stamp trails the active
+  skill version. **Direct the operator to**
+  `/kunglao-agent:upgrade <workspace>` and stop. The user must explicitly
+  act — there is no auto-fix per user ruling.
+- `status="no-stamp"` + `rc=5` → workspace has no version stamp at all;
+  direct to `/kunglao-agent:init <workspace>` first.
+
+Only when the gate passes does the resume brief render. The gate is
+machine-checkable and cannot be skipped by the slash command.
 
 Run after a crash, reboot, or dead session to rebuild the breakpoint from
 mechanical state — never from the dying session's narrative. The brief is
@@ -22,7 +38,7 @@ resume <workspace> [--json]`) and covers:
   (`runs/.heartbeat.json`), activation TTL (`.hook_state.json`), blockers
 - **state summary** — open claims / PARTIAL facts / in-flight workers /
   last ledger snapshot; the decision comes VERBATIM from
-  `convergence_check.decide()` (the #443 state machine — resume never
+  `convergence_check.decide` (the state machine — resume never
   recomputes it)
 - **data age** — every state source with a per-class STALE rule
   (heartbeat 35-min gate line, worker 20 min, claim 24 h via
@@ -43,7 +59,7 @@ resume <workspace> [--json]`) and covers:
 ## Read-only contract
 
 resume starts no heartbeat, renews no TTL, dispatches nothing, and writes
-no file. When the heartbeat is dead the brief advises the #461 re-arm
+no file. When the heartbeat is dead the brief advises the re-arm
 chain (`hook_activation --wire-up` + `--heartbeat-on` + CronCreate of the
 heartbeat loop, accepted via `heartbeat_loop_prompt.py --verify`);
 executing it is the operator's/init's job — resume never duplicates the
@@ -74,7 +90,7 @@ silently run against it. Never guess.
 
 - resume does not repair: missing/corrupt sources are flagged
   (degradation matrix, design D3), never silently defaulted.
-- The global_plan active-pointer fix belongs to #446; resume only warns
+- The global_plan active-pointer fix belongs to ; resume only warns
   when plan variants coexist.
 - `analysis_state.txt` / `progress.txt` are data-age rows only — LLM
   self-descriptions are never events (research F4).

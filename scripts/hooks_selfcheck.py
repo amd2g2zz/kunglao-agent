@@ -25,10 +25,8 @@ them from global; they must live in the project settings) but never rewrites it.
 Wires in via heartbeat_loop_prompt.py (step 0 of every tick). Idempotent + fast (<50ms).
 """
 import json
-import os
 import subprocess
 import sys
-import datetime
 from pathlib import Path
 
 import wire_up_settings
@@ -36,6 +34,10 @@ import wire_up_settings
 # #536: template version stamp verify (init writes, selfcheck verifies —
 # same shape as the state_hash contract).
 import template_version  # noqa: E402
+
+# #863 Family C: workspace resolution is single-sourced in ws_layout
+# (the #228 strict family: arg wins, probe, exit 2 — never guess).
+from ws_layout import resolve_strict as _resolve_ws  # noqa: E402
 
 # #381: KONG_HOOK_FILES is a DELIBERATE narrow subset of the hook registry
 # (wire_up_settings.WIRE_UP_HOOK_FILES) — the mechanical liveness chain this
@@ -57,6 +59,9 @@ _KONG_SKIP_FILES = frozenset({
     "state_anchor.py",      # state re-anchor — env_check scans it
     "completion_gate.py",   # Stop completion gate — env_check scans it
     "write_guard.py",       # carrier write gate — env_check scans it (#532)
+    "orchestrator_tool_guard.py",  # Bash maker-checker WARN — env_check scans it (#608)
+    "violation_capture.py", # Bash violation recorder — env_check scans it (#718)
+    "bash_fact_guard.py",   # Bash facts-write lint recorder — env_check scans it (#809)
 })
 
 # #381: validate the subset tables against the registry (raises on drift) —
@@ -72,27 +77,7 @@ KONG_HOOK_FILES = list(_KONG_CHAIN_FILES)
 USER_SETTINGS = Path.home() / ".claude" / "settings.json"
 
 
-def utc_now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def _resolve_ws(arg: str | None) -> Path:
-    """Workspace root: explicit arg wins; else probe cwd; else hard error.
-
-    Issue #228: the old fallback defaulted to one operator's absolute Windows
-    workspace path — silently wrong on any other machine. Never guess
-    a workspace: a wrong one means state written to the wrong tree.
-    """
-    if arg:
-        return Path(arg).resolve()
-    cwd = Path(os.getcwd())
-    for cand in (cwd, cwd / "malware-analysis-workspace"):
-        if (cand / "claim-register.yaml").exists() or (cand / "analysis_state.txt").exists():
-            return cand.resolve()
-    print(f"ERROR: no workspace found under cwd ({cwd}); pass the workspace "
-          f"explicitly: python {Path(sys.argv[0]).name} <workspace>",
-          file=sys.stderr)
-    sys.exit(2)
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def check_settings(settings_path: Path) -> dict:
@@ -105,15 +90,26 @@ def check_settings(settings_path: Path) -> dict:
     hooks = s.get("hooks")
     if not hooks:
         return {"exists": True, "hooks_segment": False, "present": [], "missing": list(KONG_HOOK_FILES)}
+    # #810: canonical shape — non-event keys ("Agent"/"Bash" promoted into
+    # the key slot) are the bug shape; their entries never fire and must not
+    # count toward `present`.
+    try:
+        import wire_up_settings as _wus
+        shape_issues = _wus.registration_shape_issues(s)
+    except Exception:
+        shape_issues = []
     cmds = []
     for ev, entries in hooks.items():
+        if ev not in getattr(_wus, "HOOK_EVENTS", frozenset()):
+            continue
         for e in entries:
             for h in e.get("hooks", []):
                 cmds.append(h.get("command", ""))
     present, missing = [], []
     for hf in KONG_HOOK_FILES:
         (present if any(hf in c for c in cmds) else missing).append(hf)
-    return {"exists": True, "hooks_segment": True, "present": present, "missing": missing}
+    return {"exists": True, "hooks_segment": True, "present": present,
+            "missing": missing, "shape_issues": shape_issues}
 
 
 def rebuild_project_level(workspace: Path) -> dict:
@@ -124,7 +120,7 @@ def rebuild_project_level(workspace: Path) -> dict:
     try:
         r = subprocess.run(
             [sys.executable, str(script), str(workspace), "--wire-up"],
-            capture_output=True, text=True, timeout=30,
+            capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace",
         )
         return {"rebuilt": True, "rc": r.returncode, "stdout_tail": r.stdout.strip()[-200:]}
     except Exception as exc:
@@ -204,4 +200,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

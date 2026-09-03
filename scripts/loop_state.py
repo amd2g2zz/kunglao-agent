@@ -51,8 +51,7 @@ STALE_MIN = 20          # mtime frozen > 20 min = STALE
 ACTIVE_WINDOW_MIN = 30  # only report agents with activity in the last 30 min
 
 
-def utc_now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def scan_temp_agents() -> dict[str, dict]:
@@ -126,4 +125,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

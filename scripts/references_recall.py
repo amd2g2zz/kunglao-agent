@@ -35,11 +35,16 @@ Exit codes: 0 = matches found; 1 = no match (closest categories listed);
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
+
+from _hooks_path import load_module_by_path  # #863 Family B: loader delegation (#671 authority)
 
 try:  # PyYAML is a repo dependency; degrade gracefully when absent.
     import yaml as _yaml
@@ -58,10 +63,17 @@ USAGE = (
     "Usage: references_recall.py <query>\n"
     "       references_recall.py --list-categories\n"
     "       references_recall.py --scene-map\n"
+    "       references_recall.py --joint <workspace> [--joint-limit N]\n"
+    "       references_recall.py --record-feedback <ws> term=verdict[,term=verdict...]\n"
+    "       references_recall.py --harvest-feedback <ws>\n"
+    "       references_recall.py --feedback-stats <ws>\n"
     "Scored recall over the layered references index (references/_INDEX.md +\n"
     "per-domain _index-<domain>.md): scenario label -> primary/supplementary\n"
     "files; otherwise top-K entries ranked by relevance score. Output rows\n"
-    "carry path + purpose + when-to-read + score (never file contents)."
+    "carry path + purpose + when-to-read + score (never file contents).\n"
+    "#761 J4: verdict feedback statistics (runs/.recall-stats.json, demotion\n"
+    "SUGGESTIONS only) and the joint claim+facts-index query construction for\n"
+    "the #759 THINK seat."
 )
 
 # ---- scoring weights (filename > category/domain > symptom > purpose > when) ----
@@ -71,6 +83,15 @@ W_CAT_DOMAIN = 2.0
 W_SYMPTOM = 1.5
 W_PURPOSE = 1.0
 W_WHEN = 0.5
+
+# #814 打分去污染：purpose/when 单字段碰撞（泛文档单词蹭分）阻尼乘子；
+# name/category/domain/symptom 任一强字段命中则不受阻尼。
+W_SINGLE_FIELD = 0.3
+# #814 demotion 闭环：.recall-stats.json streak≥3 的词按此乘子压分
+#（demotion_map(ws) 生成；乘子连乘，命中即衰减）。
+DEMOTION_W = 0.25
+# #814 注入门槛：阻尼/demotion 乘子后低于此分的条目不进 top-K
+MIN_SCORE = 0.1
 
 
 @dataclass(frozen=True)
@@ -338,6 +359,209 @@ def _load_symptom_map(index_path: Path) -> dict[str, str]:
         return {}
 
 
+# ---------- J4 recall feedback statistics (#761) ----------
+
+STATS_FILE = ".recall-stats.json"
+DEMOTION_STREAK = 3          # consecutive misleading -> demotion SUGGESTION
+FEEDBACK_VERDICTS = ("yes", "no", "misleading")
+
+
+def _feedback_parser():
+    """The single parse point lives in hooks/lib_kunglao.py (#444 AC-1).
+
+    NOTE: a different ``scripts/lib_kunglao.py`` (scripts-side drift lib)
+    shares the module NAME, and a caller may have already imported that one
+    into sys.modules. Import by explicit FILE path so the hooks-side grammar
+    owner is loaded regardless of sys.path order or module-cache pollution.
+
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_module_by_path, via scripts/_hooks_path); the
+    drifted sys.path.insert(0, hooks) is gone — hooks/lib_kunglao
+    self-bootstraps _path_hygiene by path, so that membership was dead
+    weight (and a #671 reorder hazard)."""
+    mod = sys.modules.get("lib_kunglao")
+    if mod is not None and hasattr(mod, "parse_recall_feedback"):
+        return mod.parse_recall_feedback
+    hooks_dir = Path(__file__).resolve().parents[1] / "hooks"
+    return load_module_by_path(
+        "kunglao_hooks_lib", hooks_dir / "lib_kunglao.py").parse_recall_feedback
+
+
+def _stats_path(ws: Path) -> Path:
+    return Path(ws) / "runs" / STATS_FILE
+
+
+def load_stats(ws: Path) -> dict:
+    p = _stats_path(ws)
+    if not p.is_file():
+        return {"version": 1, "terms": {}}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8") or "{}")
+    except (OSError, json.JSONDecodeError):
+        return {"version": 1, "terms": {}}
+    data.setdefault("version", 1)
+    data.setdefault("terms", {})
+    return data
+
+
+def save_stats(ws: Path, stats: dict) -> None:
+    """Atomic write (tmp+replace) — a crash mid-update must never corrupt."""
+    stats["updated"] = datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    runs = Path(ws) / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    p = runs / STATS_FILE
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(stats, ensure_ascii=False, indent=2,
+                              sort_keys=True), encoding="utf-8")
+    os.replace(tmp, p)
+
+
+def record_feedback(ws: Path, pairs) -> int:
+    """Accumulate (term, verdict) pairs into runs/.recall-stats.json.
+    Streak counts CONSECUTIVE misleading verdicts per term; any other verdict
+    resets it. Pure runtime telemetry inside the workspace's own runs/ — the
+    recall DICTIONARY itself is never touched here (#761: demotion is a human
+    adjudication face, lessons-nursery style #525)."""
+    ws = Path(ws)
+    stats = load_stats(ws)
+    terms = stats["terms"]
+    recorded = 0
+    for raw_term, verdict in pairs:
+        term = (raw_term or "").strip().lower()
+        verdict = (verdict or "").strip().lower()
+        if not term or verdict not in FEEDBACK_VERDICTS:
+            continue
+        e = terms.setdefault(term, {"yes": 0, "no": 0, "misleading": 0})
+        e[verdict] += 1
+        e["streak"] = e.get("streak", 0) + 1 if verdict == "misleading" else 0
+        e["last_verdict"] = verdict
+        recorded += 1
+    if recorded:
+        save_stats(ws, stats)
+    return recorded
+
+
+def harvest_feedback(ws: Path) -> tuple[int, int]:
+    """Scan runs/worker-status-*.md; attribute each file's LAST declared
+    verdict to its scoped dictionary terms (parse point = lib_kunglao).
+    Returns (records_written, files_scanned)."""
+    parser = _feedback_parser()
+    ws = Path(ws)
+    runs = ws / "runs"
+    if not runs.is_dir():
+        return 0, 0
+    pairs: list[tuple[str, str]] = []
+    scanned = 0
+    for status_file in sorted(runs.glob("worker-status-*.md")):
+        try:
+            text = status_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        scanned += 1
+        verdict, scoped = parser(text)
+        if verdict is None or not scoped:
+            continue
+        for t in scoped:
+            pairs.append((t, verdict))
+    return (record_feedback(ws, pairs), scanned) if pairs else (0, scanned)
+
+
+def demotion_suggestions(ws: Path) -> list[tuple[str, int]]:
+    """Terms whose trailing consecutive-misleading streak reached
+    DEMOTION_STREAK. SUGGESTIONS ONLY — applying a dictionary demotion is a
+    human edit, never an automated one."""
+    terms = load_stats(Path(ws))["terms"]
+    return [(t, int(e.get("streak", 0)))
+            for t, e in sorted(terms.items())
+            if int(e.get("streak", 0)) >= DEMOTION_STREAK]
+
+
+def demotion_map(ws: Path) -> dict[str, float]:
+    """#814 闭环：workspace 反馈统计 → 打分乘子表（suggestion → multiplier）。
+    打分侧自动生效（与字典本体的人工裁决面分离——这里只压检索分，不改词库）。"""
+    return {t: DEMOTION_W for t, _ in demotion_suggestions(ws)}
+
+
+def print_feedback_stats(ws: Path) -> None:
+    stats = load_stats(Path(ws))
+    terms = stats["terms"]
+    print(f"# recall feedback stats ({len(terms)} term(s)) — {STATS_FILE}")
+    print("# term | yes | no | misleading | streak")
+    for t in sorted(terms):
+        e = terms[t]
+        print(f"{t} | {e.get('yes', 0)} | {e.get('no', 0)} | "
+              f"{e.get('misleading', 0)} | {e.get('streak', 0)}")
+    sugg = demotion_suggestions(ws)
+    if sugg:
+        print("# DEMOTION SUGGESTIONS (manual adjudication required — the "
+              "dictionary is NOT auto-edited)")
+        for t, streak in sugg:
+            print(f"{t} = consecutive_misleading:{streak}")
+    else:
+        print("# DEMOTION SUGGESTIONS: none")
+
+
+# ---------- J4 joint query construction (for the #759 THINK seat) ----------
+
+def build_joint_query(claim_text: str, facts_title_lines: list[str],
+                      max_titles: int = 12, max_len: int = 240) -> str:
+    """Claim-text tokens UNION facts/_INDEX title tokens (first max_titles
+    non-empty lines), deduped order-preserved, hard-capped so the recall
+    query stays a query and never becomes a dump."""
+    toks: list[str] = []
+    seen: set[str] = set()
+
+    def add_text(s: str) -> None:
+        for tok in _tokenize(s):
+            if tok not in seen:
+                seen.add(tok)
+                toks.append(tok)
+
+    add_text(claim_text or "")
+    used = 0
+    for line in facts_title_lines:
+        s = line.strip()
+        if not s:
+            continue
+        add_text(s)
+        used += 1
+        if used >= max_titles:
+            break
+    out: list[str] = []
+    n = 0
+    for tok in toks:
+        if n + len(tok) + 1 > max_len:
+            break
+        out.append(tok)
+        n += len(tok) + 1
+    return " ".join(out)
+
+
+def gather_joint_inputs(ws: Path, max_titles: int) -> tuple[str, list[str]]:
+    """Workspace joint-query inputs: claim-register statements + the head of
+    facts/_INDEX.md. Both sources degrade to empty on any read problem."""
+    ws = Path(ws)
+    claims_text = ""
+    reg = ws / "claim-register.yaml"
+    if reg.is_file() and _yaml is not None:
+        try:
+            data = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
+            stmts = [str(c.get("statement", "")).strip()
+                     for c in (data.get("claims") or [])]
+            claims_text = "\n".join(s for s in stmts if s)
+        except Exception:  # noqa: BLE001 — degraded mode: no claim text
+            claims_text = ""
+    lines: list[str] = []
+    facts_idx = ws / "facts" / "_INDEX.md"
+    if facts_idx.is_file():
+        try:
+            lines = facts_idx.read_text(
+                encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            lines = []
+    return claims_text, lines[:max(max_titles * 4, 20)]
+
+
 # ---------- top-level index assembly ----------
 
 def build_index(index_path: Path) -> Index:
@@ -441,16 +665,16 @@ def build_index(index_path: Path) -> Index:
                  domains=domains, symptom_map=dict(sym_by_path))
 
 
-def parse_index(index_path: Path) -> tuple[list[Entry], list[Scene]]:
-    """Back-compat shim: (entries, scenes) from the layered index."""
-    idx = build_index(index_path)
-    return list(idx.entries), list(idx.scenes)
-
-
 # ---------- scoring ----------
 
-def _score_entry(entry: Entry, qset: set[str], q_norm: str) -> tuple[float, tuple[str, ...]]:
-    """Relevance score for one entry against the query token set."""
+def _score_entry(entry: Entry, qset: set[str], q_norm: str,
+                 demotions: dict[str, float] | None = None
+                 ) -> tuple[float, tuple[str, ...]]:
+    """Relevance score for one entry against the query token set.
+
+    #814: purpose/when-only 单字段碰撞乘 W_SINGLE_FIELD 阻尼；命中词命中
+    demotion 乘子表时逐词连乘压分（闭环 references_recall 的反馈统计）。
+    """
     stem = Path(entry.path).stem
     name_toks = set(_tokenize(stem))
     cat_toks = set(_tokenize(entry.category))
@@ -461,28 +685,34 @@ def _score_entry(entry: Entry, qset: set[str], q_norm: str) -> tuple[float, tupl
 
     score = 0.0
     reasons: list[str] = []
+    strong = False
 
     name_hits = qset & name_toks
     if name_hits:
         score += W_NAME * len(name_hits)
+        strong = True
         reasons.append("name:" + ",".join(sorted(name_hits)))
     if _norm(stem) == q_norm:
         score += W_NAME_EXACT
+        strong = True
         reasons.append("name-exact")
 
     cat_hits = qset & cat_toks
     if cat_hits:
         score += W_CAT_DOMAIN * len(cat_hits)
+        strong = True
         reasons.append("category:" + ",".join(sorted(cat_hits)))
 
     dom_hits = qset & dom_toks
     if dom_hits:
         score += W_CAT_DOMAIN * len(dom_hits)
+        strong = True
         reasons.append("domain:" + ",".join(sorted(dom_hits)))
 
     sym_hits = qset & sym_toks
     if sym_hits:
         score += W_SYMPTOM * len(sym_hits)
+        strong = True
         reasons.append("symptom:" + ",".join(sorted(sym_hits)))
 
     purp_hits = qset & purpose_toks
@@ -495,6 +725,19 @@ def _score_entry(entry: Entry, qset: set[str], q_norm: str) -> tuple[float, tupl
         score += W_WHEN * len(when_hits)
         reasons.append("when:" + ",".join(sorted(when_hits)))
 
+    # #814 单字段碰撞阻尼：仅 purpose/when 蹭分的泛文档压分
+    if score > 0 and not strong and (purp_hits or when_hits):
+        score *= W_SINGLE_FIELD
+        reasons.append("single-field-collision")
+
+    # #814 demotion 闭环：命中 demoted 词逐个连乘压分
+    if demotions:
+        hit_demoted = sorted(t for t in qset if t in demotions)
+        for t in hit_demoted:
+            score *= demotions[t]
+        if hit_demoted:
+            reasons.append("demotion:" + ",".join(hit_demoted))
+
     return round(score, 3), tuple(reasons)
 
 
@@ -505,9 +748,11 @@ def _scene_score(scene: Scene, qset: set[str]) -> tuple[float, set[str]]:
 
 
 def recall(entries: list[Entry], scenes: list[Scene], query: str,
-           top_k: int = 10) -> RecallResult:
+           top_k: int = 10,
+           demotions: dict[str, float] | None = None) -> RecallResult:
     """Scored recall: scene label match (primary/supplementary) wins on tie or
-    better; otherwise top-K entries ranked by relevance score descending."""
+    better; otherwise top-K entries ranked by relevance score descending.
+    #814: demotions（term→乘子）透传打分，闭环反馈统计。"""
     q_tokens = _tokenize(query)
     qset = set(q_tokens)
     q_norm = _norm(query)
@@ -521,8 +766,8 @@ def recall(entries: list[Entry], scenes: list[Scene], query: str,
 
     scored: list[ScoredEntry] = []
     for e in entries:
-        sc, reasons = _score_entry(e, qset, q_norm)
-        if sc > 0:
+        sc, reasons = _score_entry(e, qset, q_norm, demotions=demotions)
+        if sc >= MIN_SCORE:
             scored.append(ScoredEntry(entry=e, score=sc, reasons=reasons))
     scored.sort(key=lambda se: (-se.score, entries.index(se.entry)))
 
@@ -610,6 +855,42 @@ def main(argv: list[str]) -> int:
         print(USAGE)
         return 0 if len(argv) >= 2 else 2
 
+    # ---- #761 J4 feedback faces (no index needed) ----
+    if argv[1] == "--record-feedback":
+        if len(argv) < 4:
+            print(USAGE, file=sys.stderr)
+            return 2
+        pairs = []
+        for chunk in " ".join(argv[3:]).split(","):
+            spec = chunk.strip()
+            if not spec:
+                continue
+            term, _, verdict = spec.partition("=")
+            pairs.append((term, verdict))
+        written = record_feedback(Path(argv[2]), pairs)
+        print(f"# recorded {written} feedback item(s) into "
+              f"{STATS_FILE}")
+        for term, streak in demotion_suggestions(Path(argv[2])):
+            print(f"# suggestion: '{term}' consecutive_misleading:{streak}")
+        return 0
+    if argv[1] == "--harvest-feedback":
+        if len(argv) < 3:
+            print(USAGE, file=sys.stderr)
+            return 2
+        ws_path = Path(argv[2])
+        written, scanned = harvest_feedback(ws_path)
+        print(f"# harvested {written} verdict item(s) from {scanned} "
+              f"worker-status file(s)")
+        for term, streak in demotion_suggestions(ws_path):
+            print(f"# suggestion: '{term}' consecutive_misleading:{streak}")
+        return 0
+    if argv[1] == "--feedback-stats":
+        if len(argv) < 3:
+            print(USAGE, file=sys.stderr)
+            return 2
+        print_feedback_stats(Path(argv[2]))
+        return 0
+
     index_path = default_index_path()
     if not index_path.is_file():
         print(f"error: _INDEX.md not found at {index_path}", file=sys.stderr)
@@ -625,8 +906,37 @@ def main(argv: list[str]) -> int:
     if arg == "--scene-map":
         print_scene_map(scenes)
         return 0
+    if arg == "--joint":  # THINK-seat joint query (#761 J4 -> #759)
+        args = argv[2:]
+        if not args or not Path(args[0]).is_dir():
+            print(USAGE, file=sys.stderr)
+            return 2
+        limit = int(args[args.index("--joint-limit") + 1]) \
+            if "--joint-limit" in args else 12
+        claims_text, title_lines = gather_joint_inputs(Path(args[0]), limit)
+        joint_query = build_joint_query(claims_text, title_lines,
+                                        max_titles=limit)
+        if not joint_query.strip():
+            print("# joint query: (empty inputs)", )
+            print_no_match("(joint: empty workspace inputs)", entries)
+            return 1
+        print(f"# joint query: {joint_query}")
+        result = recall(entries, scenes, joint_query)
+        if result.kind == "none":
+            print_no_match(joint_query, entries)
+            return 1
+        print_result(result, entries)
+        return 0
 
-    result = recall(entries, scenes, arg)
+    # #814: optional --ws <path> → demotion 乘子闭环进打分
+    ws_arg = None
+    if "--ws" in argv:
+        i = argv.index("--ws")
+        if i + 1 < len(argv):
+            ws_arg = Path(argv[i + 1])
+    demotions = demotion_map(ws_arg) if ws_arg else None
+
+    result = recall(entries, scenes, arg, demotions=demotions)
     if result.kind == "none":
         print_no_match(arg, entries)
         return 1

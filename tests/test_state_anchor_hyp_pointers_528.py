@@ -13,12 +13,10 @@ payload helper build_anchor_payload() exposes the same pointers as
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 HOOKS = REPO / "hooks"
-sys.path.insert(0, str(HOOKS))
 
 import state_anchor  # noqa: E402
 

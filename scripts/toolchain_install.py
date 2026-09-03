@@ -53,21 +53,10 @@ import env_manifest  # noqa: E402  (#450 facts file — installed ledger, #477 �
 import pkg_detect  # noqa: E402  (#477 ① manager detection + half-state)
 
 
-def _ensure_utf8_stderr(stream=None) -> bool:
-    """#451 乱码 fix: stderr unified to utf-8/replace (stdout already is).
-
-    A GBK-default stderr next to a utf-8 stdout garbles the mixed terminal
-    stream (2026-08-17 transcript). Fail-open on streams without
-    reconfigure (returns False, never raises)."""
-    target = sys.stderr if stream is None else stream
-    reconfigure = getattr(target, "reconfigure", None)
-    if reconfigure is None:
-        return False
-    try:
-        reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        return False
-    return True
+# #863 Family H: single source in utf8_boot (#811 stdio-insurance module);
+# alias binds the SHARED function so the module-level call below keeps its
+# exact position in module-init order.
+from utf8_boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
 
 
 _ensure_utf8_stderr(sys.stderr)
@@ -118,8 +107,9 @@ class InstallPlan:
 #   Python items     -> pip / uv
 #   RE system tools  -> winget / choco / brew
 #   Linux families   -> apt / dnf / apk / pacman (needs_sudo — #304)
-#   decompiler       -> the Ghidra path (auto) — pkg installs + MCP
-#                       bridge registration; IDA is the mcp_url path
+#   decompiler       -> either supply satisfies it (#756: Ghidra is the
+#                       AUTO path — pkg installs + MCP bridge registration;
+#                       an existing IDA covers it via the mcp_url path)
 #   ida              -> NEVER auto-installed; operator supplies the
 #                       existing MCP URL (claude mcp add --transport http)
 INSTALL_PLANS: dict[str, InstallPlan] = {
@@ -284,6 +274,15 @@ INSTALL_PLANS: dict[str, InstallPlan] = {
 # dynamic (mcp_probe.MANIFEST) and register-mcp, never install. Pinned
 # by tests: union == the full check surface, no overlap, no invention.
 NOT_AUTO_INSTALLABLE: dict[str, str] = {
+    # #760 macos labs face — macOS RE toolset classification
+    "otool": "ships with Xcode Command Line Tools (`xcode-select --install`) "
+             "- a human event, never auto-installed",
+    "class-dump": "manual build (upstream class-dump has no package channel); "
+                  "a miss surfaces as the WARN-tier presence item",
+    "swift-demangle": "ships with Xcode Command Line Tools / swift toolchain "
+                      "(`xcode-select --install`)",
+    "darwin_runtime": "the analysis host OS itself - not installable; dynamic "
+                      "Mach-O work moves to a Darwin host (labs WARN note)",
     "ghidra": "the already-present env face (set GHIDRA_HOME); a missing "
               "binary surfaces as the decompiler item",
     "aapt2": "the aapt item's found-face alias (surfaced when aapt2 is "
@@ -559,8 +558,24 @@ def degrade_report(report: "toolchain.ToolchainReport", name: str,
 
 
 def _official_guidance(name: str) -> str:
-    """Official install guidance (the toolchain.FIXES text) for a failed item."""
-    return toolchain.FIXES.get(name, "see the toolchain check detail above")
+    """Official install guidance (the toolchain.FIXES fix text) for a failed item."""
+    return toolchain.fix_text(name) or "see the toolchain check detail above"
+
+
+def _meta_guidance_lines(name: str) -> list[str]:
+    """#680: structured ToolMeta lines that supplement the guidance text —
+    the upstream url on its own line plus the post-install verify command.
+    Install plans read the structured fields here (issue acceptance);
+    empty for unknown names or entries without the fields (fallback)."""
+    meta = toolchain.FIXES.get(name)
+    if meta is None:
+        return []
+    lines = []
+    if meta.url:
+        lines.append(f"toolchain-install:   url: {meta.url}")
+    if meta.verify_cmd:
+        lines.append(f"toolchain-install:   verify: {meta.verify_cmd}")
+    return lines
 
 
 def _run_install_plan(name: str, plan: "InstallPlan", assume_yes: bool,
@@ -609,6 +624,11 @@ def _run_install_plan(name: str, plan: "InstallPlan", assume_yes: bool,
     rc, out, err = run_install(res.argv)
     if rc != 0:
         return rc, out, err
+    # #680: the verify command from the structured ToolMeta lets the
+    # operator confirm the install beyond the re-probe that follows.
+    meta = toolchain.FIXES.get(name)
+    if meta is not None and meta.verify_cmd:
+        print(f"toolchain-install:   verify: {meta.verify_cmd}", file=sys.stderr)
     if plan.mcp_register == "ghidra":
         rc = register_ghidra_mcp()
         if rc != 0:
@@ -638,6 +658,19 @@ def _record_installed(ws: Path, name: str,
               f"({exc})", file=sys.stderr)
 
 
+def _emit_install_event(ws: Path, *, action: str, tool: str,
+                        detail: str | None = None) -> None:
+    """#700 D4: observability is fail-open at the call site — defense in
+    depth even though kunglao_log.emit is contractually non-raising (it
+    just warns on stderr). Mirrors hypothesis_seeder._emit (#669) — the
+    install loop must never abort because observability broke."""
+    try:
+        kunglao_log.emit(ws, "toolchain_install", action,
+                         tool=tool, detail=detail)
+    except Exception:
+        pass
+
+
 def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
                      project_type: str, assume_yes: bool = False,
                      task_spec: dict | None = None,
@@ -645,6 +678,13 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
     """#408 orchestrator: for each HARD-FAIL item with an install plan, ask
     for consent; on consent install + register MCP + re-probe via
     toolchain.check; on decline/install-failure degrade the item.
+
+    #700 D3: every per-item transition (attempt/declined/failed) emits to
+    the kunglao_log channel under actor="toolchain_install" so the day's
+    runs/logs/kunglao-<date>.jsonl answers "which tool was attempted
+    when". The four call sites below all route through the fail-open
+    _emit_install_event helper (D4). Success is the absence of a terminal
+    event (D5).
 
     #449 needs-first (review M1): task_spec is the SAME parsed mapping the
     calling gate derived its layers from — the post-install re-probe must
@@ -674,12 +714,17 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
             # degrade; the agent layer surfaces the exact command to the
             # user (the interactive menu is #451's negotiation interface).
             print(
-                "toolchain-install: IDA is not auto-installable (#408) — "
+                "toolchain-install: IDA is not auto-installable — "
                 "register your existing IDA MCP URL manually: "
                 "`claude mcp add --transport http ida-pro-vm <ida-mcp-url>`, "
                 "then re-run kunglao-init",
                 file=sys.stderr,
             )
+            # #700: install_declined on the IDA mcp_url branch (D3) —
+            # same word as the no-consent path: both are "no real user
+            # choice" declines; the detail states which.
+            _emit_install_event(ws, action="install_declined",
+                                tool=item.name, detail="ida-mcp-url")
             result = degrade_report(result, item.name)
             continue
 
@@ -689,20 +734,37 @@ def ask_then_install(report: "toolchain.ToolchainReport", ws: Path,
             # refusal — "declined" is reserved for a real choice (a
             # --resolve answer in the negotiation menu). The prompt line is
             # flushed closed so the next stderr block cannot splice into it.
-            print(f"  no consent channel (non-interactive, #455) — "
+            print(f"  no consent channel (non-interactive) — "
                   f"{item.name} degrades automatically ({plan.degrade}); "
                   f"decide via kunglao-init's negotiation menu "
-                  f"(--resolve, #451) or re-run with --assume-yes",
+                  f"(--resolve) or re-run with --assume-yes",
                   flush=True)
+            # #700: install_declined on the no-consent headless path (D3).
+            _emit_install_event(ws, action="install_declined",
+                                tool=item.name, detail="no-consent")
             result = degrade_report(result, item.name)
             continue
 
+        _emit_install_event(ws, action="install_attempt", tool=item.name,
+                            detail=f"via {plan.kind}")
         rc, out, err = _run_install_plan(item.name, plan, assume_yes, ws)
+        # #700: install_attempt fired before the plan runs (D3) — detail
+        # `via <plan.kind>` reuses the structured plan without a second
+        # resolve_install call (D3 parenthetical).
         if rc != 0:
             print(f"toolchain-install: {item.name} install FAILED "
                   f"({err or out or 'unknown error'})", file=sys.stderr)
             print(f"toolchain-install: official guidance — "
                   f"{_official_guidance(item.name)}", file=sys.stderr)
+            # #680: structured guidance — url + verify lines from ToolMeta
+            for line in _meta_guidance_lines(item.name):
+                print(line, file=sys.stderr)
+            # #700: install_failed (D3) — detail = head of error
+            # (err-or-out, first line, 120-char cap).
+            _head = (err or out or "").splitlines()
+            _emit_install_event(
+                ws, action="install_failed", tool=item.name,
+                detail=_head[0][:120] if _head else "unknown error")
             result = degrade_report(result, item.name,
                                     reason=DEGRADE_INSTALL_FAILED)
             continue
@@ -737,7 +799,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="toolchain-install",
-        description="ask-then-install for the kunglao toolchain (#408)",
+        description="ask-then-install for the kunglao toolchain",
     )
     parser.add_argument("workspace", help="workspace root path")
     parser.add_argument("--type", choices=toolchain.VALID_TYPES, default=None,
@@ -756,7 +818,7 @@ def main(argv: list[str] | None = None) -> int:
         task_spec = toolchain.load_task_spec(ws)
     except ValueError as exc:
         print(f"WARNING: {exc} — toolchain layers stay conservative HARD "
-              f"(#449; fix task_spec.yaml at needs-first intake)",
+              f"(fix task_spec.yaml at needs-first intake)",
               file=sys.stderr)
         task_spec = None
     try:
@@ -793,4 +855,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

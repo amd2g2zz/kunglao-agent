@@ -12,7 +12,7 @@ Before re-dispatching OR concluding NEGATIVE, answer three questions
   3. next_method         - what DIFFERENT method tests a different assumption?
                            (literal retry is forbidden; 'method was adequate' only if Q2=justified)
 
-And transduce the failure into typed artifacts (#495 - the analysis does
+And transduce the failure into typed artifacts (the analysis does
 not unblock without them):
 
   4. validated_capability - what this failure PROVED works (capability ok)
@@ -28,7 +28,7 @@ Record with:
   python scripts/failure_analysis_gate.py <ws> C-1 --record \
       --assumption "..." --validity not-justified|justified-adequate --next-method "..." \
       --validated-capability "..." --identified-obstacle "..." \
-      --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance, #495)
+      --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance)
 
-See failure-modes reference (recall #268): failure-modes.md, failure-modes-lifecycle.md, failure-modes-monitoring.md, failure-modes-state.md, case-book.md, lessons/README.md, convergence-loop.md
+See failure-modes reference (recall): failure-modes.md, failure-modes-lifecycle.md, failure-modes-monitoring.md, failure-modes-state.md, case-book.md, lessons/README.md, convergence-loop.md
 

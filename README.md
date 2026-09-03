@@ -1,14 +1,14 @@
 # kunglao-agent
 
-A Claude Code skill that runs a convergence-driven reverse-engineering loop: it takes a malware sample to a byte-proven, independently-verified fact base, enforced by mechanical gates.
+A Claude Code skill that runs a convergence-driven reverse-engineering loop: it works an analysis target the way a human RE expert would — autonomous planning, raw-evidence derivation, adversarial verification — down to a byte-proven fact base, enforced by mechanical gates.
 
-[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-MIT-lightgrey)](.)
+[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](.)
 
 ---
 
 ## What this is
 
-kunglao-agent is a Claude Code skill for malware reverse engineering. You drop a sample into a workspace, say what you need to know, and the skill runs a convergence loop: specialist workers analyze (static first), an independent verifier re-derives every fact blind from raw evidence, and mechanical gates decide when the analysis is done. The deliverable is a fact base where every claim is byte-anchored, independently verified, and evidence-indexed — trust is enforced by machinery, not convention.
+kunglao-agent is a Claude Code skill that behaves like a reverse-engineering expert across the full task spectrum — firmware emulation, risk-control countermeasures, web/JS reversing, protocol analysis, native-binary triage — not a single-domain tool. You drop a target into a workspace, say what you need to know, and the skill runs a convergence loop: specialist workers analyze (static first), an independent verifier re-derives every fact blind from raw evidence, and mechanical gates decide when the analysis is done. The deliverable is a fact base where every claim is byte-anchored, independently verified, and evidence-indexed — trust is enforced by machinery, not convention.
 
 The only interface is Claude Code: you talk to it and read its reports. The Python modules in this repo are the skill's internal organs, called by hooks, agents, and CI — documented under [Internals](#internals) for developers who extend the system, not as a user interface.
 
@@ -23,9 +23,9 @@ The only interface is Claude Code: you talk to it and read its reports. The Pyth
 
 ### 1. Install
 
-kunglao-agent is a **single-skill plugin**: the skill's `SKILL.md` lives at the repository root (the single-skill plugin layout), so installing the plugin IS installing the skill — invoked as `/kunglao-agent`. The repo carries `.claude-plugin/plugin.json` (identity manifest: name, description, version `0.1`). The per-workspace machinery (hooks, gates, router CLIs) is wired by `kunglao-init` into each analysis workspace during initialization, not by plugin component wiring (that migration is tracked in #364).
+kunglao-agent is a **single-skill plugin**: the skill's `SKILL.md` lives at the repository root (the single-skill plugin layout), so installing the plugin IS installing the skill — invoked as `/kunglao-agent`. The repo carries `.claude-plugin/plugin.json` (identity manifest: name, description, version `0.1.4`). The per-workspace machinery (hooks, gates, router CLIs) is wired by `kunglao-init` into each analysis workspace during initialization, not by plugin component wiring (migration tracked separately).
 
-**Recommended — marketplace install** (v0.1 ships `.claude-plugin/marketplace.json`; the marketplace resolves the repo's default branch, so the release tag must exist there). From any directory, in Claude Code:
+**Recommended — marketplace install** (v0.1.4 ships `.claude-plugin/marketplace.json`; the marketplace resolves the repo's default branch, so the release tag must exist there). From any directory, in Claude Code:
 
 ```
 /plugin marketplace add amd2g2zz/kunglao-agent
@@ -38,7 +38,7 @@ kunglao-agent is a **single-skill plugin**: the skill's `SKILL.md` lives at the 
 claude --plugin-dir /path/to/kunglao-agent
 ```
 
-The plugin manager lists `kunglao-agent` at version `0.1`.
+The plugin manager lists `kunglao-agent` at version `0.1.4`.
 
 **Alternative B — skills-directory clone** (legacy path; plain-skill identity, no plugin manager). In Claude Code:
 
@@ -52,8 +52,7 @@ or, manually (the clone carries its pinned environment; first use in Claude Code
 git clone https://github.com/amd2g2zz/kunglao-agent.git ~/.claude/skills/kunglao-agent
 ```
 
-`kunglao-init` deploys the workspace-level engineering environment itself
-(#478): hooks (`<ws>/.claude/settings.json`, created when absent — the old
+`kunglao-init` deploys the workspace-level engineering environment itself: hooks (`<ws>/.claude/settings.json`, created when absent — the old
 deadlock where a missing file silently skipped deployment is gone), the core
 subagents (`<ws>/.claude/agents/`: kunglao-worker / kunglao-redteam /
 kunglao-init-worker), and an `env-manifest.yaml` deployment ledger. The
@@ -64,12 +63,12 @@ legacy manual `cp agents/*.md ~/.claude/agents/` step is no longer needed.
 One fresh workspace per sample engagement — in Claude Code:
 
 ```
-/kunglao-agent:init <workspace> --type windows     # or linux | android
+/kunglao-agent:init <workspace> --type windows     # or linux | android | web | macos
 ```
 
 Options: `--skip-toolchain` (skip the toolchain preflight — test/ops escape hatch), `--no-mcp` (skip the workspace `.mcp.json` scaffold), `--install-git-hooks` (install the review-gate pre-commit hook), `--force` (re-init after backing up the claim register).
 
-Init exit codes (documented RC contract, #414): `0` success/resume, `1` generic error (usage error / template defect), `2` post-init idempotency verify failed, `3` agent-teams flag reject (unset `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and restart the session), `4` toolchain HARD FAIL — human must install the missing tools, `5` no sample in `bins/`. Branch on the exit code, never on stderr text.
+Init exit codes (documented RC contract): `0` success/resume, `1` generic error (usage error / template defect), `2` post-init idempotency verify failed, `3` agent-teams flag reject (unset `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` and restart the session), `4` toolchain HARD FAIL — human must install the missing tools, `5` no sample in `bins/`. Branch on the exit code, never on stderr text.
 
 Init confirms the project type, scaffolds the workspace, writes the type-appropriate `CLAUDE.md`, and runs per-type toolchain probes (Android: ADB + rooted device + renamed frida-server on a custom port; Linux: Ghidra-or-IDA + remote debugger; Windows: Ghidra-or-IDA + VM). Hard failures are reported with root-cause guidance; a workspace that is not initialized is refused work.
 
@@ -94,21 +93,22 @@ Every `/kunglao-agent` command, its arguments, and an example:
 
 | Command | Arguments | Purpose | Example |
 |---|---|---|---|
-| `/kunglao-agent` | `init <ws>` / `analysis <ws>` / `resume <ws>` / `help` | command menu — with no args prints the menu and waits; unknown subcommands print the menu + `unknown: <x>` | `/kunglao-agent` |
-| `/kunglao-agent:init` | `<workspace> [--type windows\|linux\|android]` | initialize a workspace (scaffold + CLAUDE.md + sample mount + task_spec intake + hooks) | `/kunglao-agent:init ~/cases/synth-dropper --type windows` |
+| `/kunglao-agent` | `init <ws>` / `analysis <ws>` / `resume <ws>` / `upgrade <ws>` / `help` | command menu — with no args prints the menu and waits; unknown subcommands print the menu + `unknown: <x>` | `/kunglao-agent` |
+| `/kunglao-agent:init` | `<workspace> [--type windows\|linux\|android\|web\|macos]` | initialize a workspace (scaffold + CLAUDE.md + sample mount + task_spec intake + hooks) | `/kunglao-agent:init ~/cases/synth-dropper --type windows` |
 | `/kunglao-agent:analysis` | `<workspace>` | enter the convergence loop on an initialized workspace | `/kunglao-agent:analysis ~/cases/synth-dropper` |
 | `/kunglao-agent:resume` | `<workspace>` | crash/reboot recovery: read-only breakpoint brief (health, state summary, timeline, next step) + re-arm advice | `/kunglao-agent:resume ~/cases/synth-dropper` |
+| `/kunglao-agent:upgrade` | `<workspace> [--dry-run]` | forward-only workspace framework-scaffold migration (hooks rewire, template refresh, ALWAYS_ARMED hook state, event vocab .agent/ metadata). User data is read-only (iron rule; RC=4 on byte drift). | `/kunglao-agent:upgrade ~/cases/synth-dropper` |
 | `/kunglao-agent:help` | none | print the subcommand usage list | `/kunglao-agent:help` |
 
 The namespaced form (`/kunglao-agent:init`) is the plugin-manager surface;
 the main skill also accepts the subcommand form (`/kunglao-agent init <ws>`).
 
-Called with no arguments, `init`, `analysis` and `resume` print a guided prompt —
+Called with no arguments, `init`, `analysis`, `resume` and `upgrade` print a guided prompt —
 never guess, never a bare argparse-style error (see each skill's "No
 arguments" section); the menu's next-steps block maps operator state to a
 command (uninitialized → init, initialized → analysis, crashed/rebooted → resume,
 unsure → help). The
-menu and hints render `skills/subcommands.yaml`, the single source. (#456)
+menu and hints render `skills/subcommands.yaml`, the single source. 
 
 ## A worked analysis case
 
@@ -193,7 +193,37 @@ Five layers, in order of preference — static first, escalate only when the lay
 |---|---|---|
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `0` | MUST stay `0`/unset — truthy values route dispatches through the teammate channel (rejected by `env_check_gate`) |
 | `KUNGLAO_VM_HOST` | unset | VM lease host for dynamic analysis (vmr-shell :9876 / Frida :1337) |
+| `KUNGLAO_CHANNEL` | `vmr` | dynamic-analysis execution control plane: `vmr` \| `ssh` \| `docker` \| `adb` \| `local` (see [Bring your own analysis environment](#bring-your-own-analysis-environment)) |
+| `KUNGLAO_DOCKER_CONTAINER` | unset | optional docker execution target for the `ssh`/`docker` channels (probe runs a real `docker exec <c> true`) |
 | `GHIDRA_HOME` | unset | Ghidra install root (`support/analyzeHeadless.bat` under it) |
+
+## Bring your own analysis environment
+
+Dynamic debugging needs **an execution control plane the agent can drive**.
+`KUNGLAO_CHANNEL` selects one of five equivalent first-class channels —
+pick what your environment already has; nothing here is a degraded mode:
+
+| Channel | What it drives | Prerequisites |
+|---|---|---|
+| `vmr` (default) | VMware-driven VM, **any guest OS**. Snapshot/revert workflows are its irreplaceable value — a Linux VM may be driven by `vmr` (snapshots) or `ssh` (lighter), your choice | vmr-shell skill; `KUNGLAO_VM_HOST` + ports 9876/1337 |
+| `ssh` | Any ssh-reachable box: remote bare metal, cloud VM, mac, iOS host, or a remote docker host | `KUNGLAO_VM_HOST` + key auth (probe runs a real `ssh -o BatchMode=yes -p $KUNGLAO_VM_SHELL_PORT <host> true`; BatchMode) |
+| `docker` | Local or remote docker daemon — `docker exec` is equivalent to any other control path | `docker version` green (`DOCKER_HOST` for remote); optional `KUNGLAO_DOCKER_CONTAINER` as the execution target |
+| `adb` | Android emulator or real device | `adb devices` shows a device; `adb forward tcp:1337 tcp:1337` for frida |
+| `local` | **Static-only analysis on the host.** The right choice when static tooling answers the primary questions, or when no dynamic infrastructure exists | none — red line below |
+
+> **`local` red line:** local is a first-class channel for **static** work
+> only — never execute, debug, or inject the sample on the host. Any
+> dynamic requirement must switch `KUNGLAO_CHANNEL` to `vmr`/`ssh`/
+> `docker`/`adb`; init HARD-rejects a dynamic task on `local`.
+
+The channel probe runs only for dynamic tasks (static-only tasks skip all
+probes and report a WARN note). Execution on the `ssh` channel flows
+through the **ssh-mcp** control plane (`npm i -g ssh-mcp`, TOML profiles —
+tools `run-command`, `sftp-upload`, `sftp-download`, session suite);
+plain CLI ssh is the fallback. For remote docker over ssh, set
+`KUNGLAO_DOCKER_CONTAINER` and the ssh probe additionally verifies
+`docker exec` through the host.
+
 
 ## Internals
 
@@ -209,7 +239,7 @@ The tool shelf: reusable analysis logic is absorbed as **registered tools** (mac
 
 Host emulation (T2) is deliberately NOT a shelf tool: qiling-based emulation is provided by the external `/malware-framework` skill, which kunglao workers invoke per the analysis principle instead of re-wrapping qiling.
 
-MCP supply: the single manifest source is `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `python scripts/mcp_probe.py <ws> --type <windows|linux|android>` (exit 1 = HARD missing, 2 = WARN missing only; run inside the plugin env, e.g. via `uv run --project <skill_root>`, or in the workspace's Claude Code session).
+MCP supply: the single manifest source is `scripts/mcp_probe.py`; `kunglao-init` scaffolds a workspace `.mcp.json` when missing (`--no-mcp` skips; an existing file is never overwritten). Probe: `python scripts/mcp_probe.py <ws> --type <windows|linux|android|web|macos>` (exit 1 = HARD missing, 2 = WARN missing only; run inside the plugin env, e.g. via `uv run --project <skill_root>`, or in the workspace's Claude Code session).
 
 | MCP server | Tier | Scope | Purpose | Registration |
 |------------|------|-------|---------|--------------|
@@ -220,6 +250,8 @@ MCP supply: the single manifest source is `scripts/mcp_probe.py`; `kunglao-init`
 | `ida-pro-vm` | WARN | when IDA chosen | remote IDA analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
 | `gitnexus` | HARD | Android graph building | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
 | `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
+| `ssh-mcp` | WARN | channel | ssh execution control plane (KUNGLAO_CHANNEL=ssh dynamics; CLI ssh fallback) | `claude mcp add ssh-mcp -- ssh-mcp` |
+| `camoufox-reverse` | WARN | web (labs) | browser JS reverse engineering (anti-detection Firefox: hooks/trace/network capture) | `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp` |
 
 Trust gates (the components behind "verified"):
 
@@ -260,6 +292,10 @@ uv run python scripts/release_receipt.py --check
 gh pr create --base dev
 ```
 
+The `pytest` line above is the authoritative full-suite entry; matrix-style
+scoped runs go through `scripts/run_test_matrix.py` (same environment, no
+extra flags needed).
+
 The release contract is revision-owned: `pyproject.toml` + `uv.lock` (pinned deps), `release-manifest.yaml` (declared asset inventory), `release_receipt.py` (observed inventory: per-asset sha256, CLI `--help` exit codes, test results). CI runs it on every PR. Depth lives in `docs/` (design, loop engineering), `specs/`, and `AGENTS.md`.
 
 ## Limitations
@@ -267,7 +303,7 @@ The release contract is revision-owned: `pyproject.toml` + `uv.lock` (pinned dep
 - 46 legacy `PROVEN` claims audited (10 have-raw / 18 derivation-only / 19 unverifiable) — re-verification is follow-up work
 - ICD-203 conformance is partial (tradecraft #1/#2/#5/#8/#9; full certification out of scope)
 - Dynamic analysis requires per-session authorization; sample execution is VM-only, host execution is blocked by a hook
-- Type-aware init (Windows/Linux/Android toolchain matrix) and the remaining script-absorption batch are in development (issues #304, #278)
+- Type-aware init (Windows/Linux/Android toolchain matrix) and the remaining script-absorption batch are in development (issues)
 
 ## Safety
 
@@ -278,4 +314,17 @@ The release contract is revision-owned: `pyproject.toml` + `uv.lock` (pinned dep
 
 ## License
 
-MIT
+Dual-licensed: **AGPL-3.0** for personal, academic, and internal use (free — see [LICENSE](LICENSE)); **commercial license** required for closed-source or SaaS commercial use — see [LICENSE-commercial.md](LICENSE-commercial.md).
+
+## Internals: Two settings levels
+
+kunglao hooks live at TWO levels (registry: `scripts/wire_up_settings.py`
+`HOOK_DEPLOYMENT_TARGETS` — derive, don't copy):
+
+| Level | File | Written by | Carries |
+|---|---|---|---|
+| workspace | `<ws>/.claude/settings.json` | `--wire-up` | the kunglao hook registrations |
+| workspace-parent | `<ws>/../.claude/settings.json` | external_kicker (D2 recovery) | env secrets + mcpServers + block_malware_exec |
+
+The user HOME (`~/.claude/settings.json`) is deliberately NEVER written
+(kunglao-init.py:106-111) — production settings are untouchable.

@@ -167,3 +167,5 @@ Why questions, not a taxonomy: the user explicitly rejected a fixed failure-type
 checklist ("以上我只是举例并不是只有这些问题"). A menu of 5 failure modes
 becomes a checklist the agent picks from without thinking. The 3 questions
 force reasoning; the gate enforces that the reasoning happens before the next action.
+
+recall_useful: pending

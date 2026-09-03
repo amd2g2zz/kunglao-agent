@@ -117,3 +117,5 @@ exception disabled (fail closed).
 
 (Consistent with `machine_check_map.yaml::boundary_type_map`; covers all 9
 schema classes plus the workspace-legacy `positive_observation`.)
+
+recall_useful: pending

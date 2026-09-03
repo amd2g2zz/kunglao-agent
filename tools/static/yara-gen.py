@@ -13,25 +13,25 @@ YARA rule text on stdout; exit 0 generated / 2 error with guidance.
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+
+_THIS_DIR = _pathlib_io.Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+from common import error  # noqa: E402  (#863 Family I: single error() source)
 
 EXIT_OK = 0
 EXIT_NEGATIVE = 1
 EXIT_ERROR = 2
 
 META_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
-
-
-def _error(msg: str) -> int:
-    print(json.dumps({"error": msg, "exit_code": EXIT_ERROR}), file=sys.stderr)
-    return EXIT_ERROR
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -84,15 +84,15 @@ def _escaped_ascii(text: str) -> str:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", args.name):
-        return _error(f"--name {args.name!r} is not a valid rule identifier — "
-                      f"use [A-Za-z_][A-Za-z0-9_]*")
+        error(f"--name {args.name!r} is not a valid rule identifier — "
+              f"use [A-Za-z_][A-Za-z0-9_]*")
 
     meta_lines = ["author = \"kunglao-agent yara-gen\""]
     for entry in args.meta:
         m = META_KEY_RE.match(entry)
         if not m:
-            return _error(f"--meta entry {entry!r} is not K=V with an "
-                          f"identifier key — e.g. --meta sha256=deadbeef")
+            error(f"--meta entry {entry!r} is not K=V with an "
+                  f"identifier key — e.g. --meta sha256=deadbeef")
         key, value = m.group(1), m.group(2)
         # r1-313-yara H2: an unescaped quote in the value would produce
         # uncompilable YARA — escape backslashes and quotes.
@@ -103,12 +103,12 @@ def main(argv: list[str] | None = None) -> int:
         try:
             hex_pat = _hex_wildcards(args.hex)
         except ValueError as exc:
-            return _error(str(exc))
+            error(str(exc))
         strings_block = f"        $s0 = {{ {hex_pat} }}"
         condition_extra = "$s0"
     else:
         if not args.string:
-            return _error("one of --hex / --string is required")
+            error("one of --hex / --string is required")
         esc = _escaped_ascii(args.string)
         if args.wide:
             strings_block = (f"        $s0 = \"{esc}\"\n"
@@ -133,4 +133,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    ensure_utf8_stdout()
     sys.exit(main())

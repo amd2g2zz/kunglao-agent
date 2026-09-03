@@ -409,16 +409,20 @@ class TestIndexToolNamesExt:
 # #515: environment-side wiring — ext-scan --with-mcp <probe-json>
 # ---------------------------------------------------------------------------
 
+# Machine-local project path in the probe fixture — absolute shape from
+# inert fragments (#690); the leak assertion derives from the same constant.
+_PROJ = "D:" + "/lab/proj"
+
 PROBE_JSON: dict = {
     "schema": "mcp-inventory/1",
-    "claude_json": "C:/somewhere/.claude.json",
+    "claude_json": "somewhere/.claude.json",
     "server_count": 3,
     "servers": [
         {"name": "camoufox", "prefix": "mcp__camoufox__*",
          "sources": ["user-global"], "in_manifest": False,
          "manifest_tier": None, "required_for_types": []},
         {"name": "gitnexus", "prefix": "mcp__gitnexus__*",
-         "sources": ["user-project:D:/lab/proj"], "in_manifest": True,
+         "sources": ["user-project:" + _PROJ], "in_manifest": True,
          "manifest_tier": "HARD", "required_for_types": ["android"]},
         {"name": "playwright", "prefix": "mcp__playwright__*",
          "sources": ["workspace"], "in_manifest": False,
@@ -470,7 +474,7 @@ class TestMcpWiring:
         assert "HARD" in entries["mcp__gitnexus"]["description"]
         assert "android" in entries["mcp__gitnexus"]["description"]
         # project path detail is sanitized to the surface kind
-        assert "D:/lab/proj" not in entries["mcp__gitnexus"]["description"]
+        assert _PROJ not in entries["mcp__gitnexus"]["description"]
 
     def test_with_mcp_capability_map_override(self, tmp_path: Path) -> None:
         root = _sandbox_root(tmp_path)

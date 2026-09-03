@@ -19,13 +19,20 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 HOOKS_DIR = SKILL_DIR / "hooks"
-sys.path.insert(0, str(HOOKS_DIR))
 
-import lib_kunglao  # noqa: E402  (after sys.path mutation)
+# #770: no permanent sys.path insert — the ini already orders scripts before
+# hooks, and this suite wants the hooks TWIN specifically, so load it by
+# path under an isolated module name (#762 convention).
+import importlib.util
+
+_lk_spec = importlib.util.spec_from_file_location(
+    "hooks_lib_kunglao", HOOKS_DIR / "lib_kunglao.py")
+lib_kunglao = importlib.util.module_from_spec(_lk_spec)
+sys.modules["hooks_lib_kunglao"] = lib_kunglao
+_lk_spec.loader.exec_module(lib_kunglao)
 
 
 # ---------- unit tests on the helper itself ----------

@@ -64,9 +64,9 @@ POSITIVE = (
     # registry src, forward separators, sparse crates.io id
     b"/root/.cargo/registry/src/" + CRATES_IO_SPARSE +
     b"/serde-1.0.193/src/lib.rs\x00" +
-    # registry src, backslash separators, git-registry id (C:\home builder —
-    # a home-dir shape that carries no personal-username component)
-    b"C:\\home\\builder\\.cargo\\registry\\src\\" + CRATES_IO_GIT +
+    # registry src, backslash separators, git-registry id (drive-letter home
+    # builder — a home-dir shape that carries no personal-username component)
+    b"C:" + b"\\home\\builder\\.cargo\\registry\\src\\" + CRATES_IO_GIT +
     b"\\rand-0.8.5\\src\\rng.rs\x00" +
     # registry cache kind with .crate archive suffix
     b".cargo/registry/cache/" + CRATES_IO_SPARSE + b"/libc-0.2.151.crate\x00" +

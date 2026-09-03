@@ -39,7 +39,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -55,6 +55,7 @@ import kunglao_log
 # #536: workspace template version cross-check (status + resume both print it)
 import template_version
 from status_defs import ACTIVE_STATUSES, PARTIAL_STATUSES
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 RC_RESUMABLE = 0
 RC_MANUAL = 1
@@ -73,16 +74,21 @@ RC_ERROR = 1
 # definition). The issue comment's "2x heartbeat period" (10 min) is kept
 # as data-age DISPLAY only: a 10-min rc line would false-STALE every
 # legitimate quick restart (design D3).
-HEARTBEAT_STALE_MINUTES = 35
+# legitimate quick restart (design D3). #597: minutes constants
+# single-sourced in liveness_policy (values unchanged).
+from liveness_policy import HEARTBEAT_STALE_MINUTES  # noqa: E402
 # Worker-status freshness: kicker D3 constant — an in-progress file older
 # than this is a dead session's stale worker, surfaced for reconcile.
-WORKER_FRESH_MINUTES = kicker.FRESH_WORKER_MINUTES
+from liveness_policy import FRESH_WORKER_MINUTES as WORKER_FRESH_MINUTES  # noqa: E402,F401
 # Claim-class staleness: claim_expiry's own line (24 h without activity).
 CLAIM_STALE_HOURS = 24
 # Plan freshness: issue #466 comment — a plan mtime ≥ 2 days old is drift
 # the plan_drift_detector cannot see (it checks claim↔plan mapping, not
 # plan freshness).
 PLAN_STALE_DAYS = 2
+# #603: how many gate-rejection rows the brief renders (bounded summary —
+# the full ledger stays in runs/gate-rejections.jsonl).
+GATE_REJECTIONS_LAST_N = 5
 # Decisions that require a manual step before the loop may continue (both
 # map to EXIT_BLOCKED in convergence_check.VERDICTS).
 MANUAL_DECISIONS = frozenset({"BLOCKED", "INVALID"})
@@ -98,7 +104,7 @@ NEXT_STEP_BY_DECISION = {
     "CONVERGED": ("loop is done — run the handoff checklist (blind_gate "
                   "spot-check + kunglao-verify L1 + --heartbeat-check) "
                   "before delivering; do not dispatch"),
-    "DISPATCH": ("dispatch the scripts/priority.py top claim (<=3 workers "
+    "DISPATCH": ("dispatch the priority_ratio top claim (<=3 workers "
                  "cap + tier gate); worker done -> verify facts -> update "
                  "claim-register + _INDEX"),
     "DISPATCH_VERIFIER": ("dispatch an independent verifier for the partial "
@@ -128,11 +134,11 @@ REARM_ADVICE = (
 # SEAM (issue #370 family): decide is injected under a private name so
 # tests can pin the decision without building exotic fixtures; production
 # always runs the real #443 machine.
-_decide = cc.decide
+from functools import partial
+_decide = partial(cc.decide, emit_snapshot=False)  # #466 read-only contract: resume must not write
 
 
-def _utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+from harness_common import utc_now as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def _parse_ts(value) -> datetime | None:
@@ -274,14 +280,7 @@ def _last_structured_event(ws: Path) -> dict | None:
             lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             continue
-        for line in reversed(lines):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except ValueError:
-                continue
+        for row in iter_jsonl(reversed(lines)):
             if isinstance(row, dict):
                 return {"ts": row.get("ts"), "file": p.name,
                         "actor": row.get("actor"), "action": row.get("action")}
@@ -303,6 +302,35 @@ def _open_hypotheses(ws: Path) -> dict:
                              for h in hyps]}
     except Exception:  # noqa: BLE001 — degrade, never block the brief
         return {"open_count": 0, "pointers": []}
+
+
+def _gate_rejections(ws: Path) -> dict | None:
+    """#603: gate-rejections summary from runs/gate-rejections.jsonl — the
+    durable ledger hooks/dispatch_gate.py appends one row to per REJECT.
+
+    FAIL_OPEN: absent file -> None (the brief section is simply omitted —
+    a workspace with no rejections, or pre-#603, renders unchanged); an
+    unreadable/corrupt file also degrades to None (a broken ledger must
+    never break the recovery brief). Read-only: this function never
+    writes, matching resume's READ-ONLY CONTRACT.
+
+    Returns {"total": int, "last": [rows]} capped at
+    GATE_REJECTIONS_LAST_N most recent rows — the ledger is the replay
+    source, the brief is a summary, never the whole file.
+    """
+    p = ws / "runs" / "gate-rejections.jsonl"
+    try:
+        lines = [ln for ln in
+                 p.read_text(encoding="utf-8", errors="replace").splitlines()
+                 if ln.strip()]
+    except OSError:
+        return None
+    if not lines:
+        return None  # empty ledger == no rejections == section omitted
+    rows = [row for row in iter_jsonl(lines) if isinstance(row, dict)]
+    if not rows:
+        return None
+    return {"total": len(rows), "last": rows[-GATE_REJECTIONS_LAST_N:]}
 
 
 def _data_age_rows(ws: Path, now: datetime) -> list[dict]:
@@ -493,7 +521,7 @@ def build_brief(ws) -> dict:
     }
     if not has_state:
         next_step = (f"no resumable state under {ws} — initialize with "
-                     f"/kunglao-agent:init <workspace> [--type windows|linux|android]")
+                     f"/kunglao-agent:init <workspace> [--type windows|linux|android|web|macos]")
     elif decision is None:
         next_step = NO_REGISTER_STEP
     else:
@@ -518,6 +546,7 @@ def build_brief(ws) -> dict:
         "plan": plan,
         "timeline": _timeline(ws, now),
         "hypotheses": _open_hypotheses(ws),
+        "gate_rejections": _gate_rejections(ws),
         "next_step": next_step,
         "advice": advice,
         "sources": _sources_flags(data_age),
@@ -598,6 +627,17 @@ def render_text(brief: dict) -> str:
         L.append("## open hypotheses (re-hydrate at cold start)")
         L.append(f"open_count: {hyps['open_count']} | {ptrs}")
 
+    # #603: gate-rejections summary (fail-open — section absent when the
+    # ledger does not exist; read-only consumer of the REJECT ledger).
+    rej = b.get("gate_rejections")
+    if rej:
+        L.append("")
+        L.append(f"## gate-rejections (last {len(rej['last'])} of "
+                 f"total: {rej['total']})")
+        for r in rej["last"]:
+            L.append(f"{r.get('ts', '?')}  {r.get('gate', '?')} rejected "
+                     f"{r.get('claim', '?')}: {r.get('msg', '')}")
+
     L.append("")
     L.append("## next step")
     L.append(b["next_step"])
@@ -611,7 +651,7 @@ def render_text(brief: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="kunglao_resume.py",
-        description="kunglao-agent crash/reboot recovery brief (#466) — "
+        description="kunglao-agent crash/reboot recovery brief — "
                     "read-only: health, state summary, data age, breakpoint "
                     "timeline, next step (from convergence_check)")
     parser.add_argument("workspace", help="crashed workspace root")
@@ -639,4 +679,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

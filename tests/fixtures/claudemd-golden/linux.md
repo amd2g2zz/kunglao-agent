@@ -1,10 +1,11 @@
+<!-- kunglao:frame:v0.1.4 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Workspace type
 
-Kunglao-agent malware RE workspace — not a software project. The "code" is state files, facts, and worker runs analyzing a malware sample.
+Kunglao-agent reverse-engineering workspace — not a software project. The "code" is state files, facts, and worker runs. Work like a human reverse-engineering expert: plan the analysis path before executing it, derive every conclusion from raw evidence independently, and let the mechanical gates keep every step verifiable. The task domain is whatever the user's input names (malware, firmware, app, web service, protocol, memory image) — per-task input, not the product's scope.
 
 ## Workspace at a glance
 
@@ -51,6 +52,58 @@ Analysis is driven by `/kunglao-agent` (skill at `/kunglao/skill-sentinel`). Key
 
 **Facts** go in `facts/F<NNN>.md` with byte-anchored, reproducible evidence.
 
+## Roles & responsibilities
+
+The orchestrator dispatches, arbitrates, verifies, monitors. It does not
+analyze: decompile, strings, emulation, and debugging are worker actions.
+Boundary signal: catching yourself writing a fact or running an analysis
+tool means you have left the orchestrator role — hand the work to an agent.
+
+| Agent | Responsibility | When to dispatch |
+|-------|----------------|------------------|
+| `kunglao-worker` | Generic claim-executing WORKER | default executor for any claim without a stage-specific agent |
+| `kunglao-init-worker` | INIT-WORKER | workspace init, env repair, handbook cultivation |
+| `kunglao-redteam` | RED-TEAM CHECKER — adversarial verification of completed analysis | attack-test a claim before it is promoted to PROVEN |
+| `verdict-scorer` | Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and… | score verdict.json against task_spec primary_questions |
+| `web-re-worker` | Web/browser JS reverse-engineering SPECIALIST WORKER (mirrors the specialist shape of… | web/browser JS claims (unpack, deobfuscate, signed parameters) |
+| `ghidra-light` | Stage 4 light static reconnaissance via Ghidra | light static recon for Go/Rust/OLLVM/C/C++/.NET local samples |
+| `go-symbols` | Stage 3.9 Go symbol recovery via unstrip (Go samples only, die.json language=Go) | Go symbol recovery when die.json reports language=Go |
+| `pefile-signature` | Read evidence/die.json + the local sample file | authenticode + packer family identification on PE samples |
+| `floss-filter` | Read `evidence/floss-raw.txt` (raw flare-floss output, up to 100k lines for Go binaries)… | de-noise flare-floss output into per-category string evidence |
+
+## Project layout
+
+| Directory | Meaning | Caveat |
+|-----------|---------|--------|
+| `bins/` | Samples + mounted inputs (sha-anchored) | read-only: never edit or rename a mounted sample; the hash is identity |
+| `facts/` | Claim fact base (F<NNN>.md + _INDEX.md) | workers only; byte-anchored, reproducible, frontmatter contract |
+| `evidence/` | Raw evidence artifacts (JSON, dumps, captures) | never reshape an artifact to fit a claim |
+| `notes/` | Results layer (verify_status notes) | corrections supersede via the supersedes chain, never silent edits |
+| `analyses/` | Long-form analysis + failure records | cross-fact synthesis lives here, not in facts/ |
+| `hypotheses/` | Assumption layer (H-*.md, competing candidates) | terminal states (refuted/superseded) never reopen |
+| `blockers/` | Unresolvable env/tooling gaps | closes only when the root cause is resolved and recorded |
+| `runs/` | Machine channel: status, heartbeat, logs (runs/logs), ledger | machines write here; human notes belong in notes/ |
+| `scratch/` | Free zone for non-contract artifacts | nothing here may carry gate or convergence weight |
+| `tools/ + scripts/` | Registered tools (tools/_INDEX.yaml) + reusable CLIs | check the registry before writing anything new |
+
+## Quick start: how to work THIS analysis
+
+<!-- CULTIVATION SLOT — kunglao-init-worker owns this section: replace the
+type scaffold below with THIS task's concrete opening moves, distilled from
+the init Q&A, the sample, and the agent definitions' methodology (never
+invented). An untouched scaffold means cultivation has not happened yet. -->
+
+**Target**: `bins/sample.exe` — ELF RE, static-first loop.
+1. Identify: DIE + `file` + sha256 anchor.
+2. Static sweep: strings/floss -> ghidra-light (functions +
+   imports + suspicious-API xrefs).
+3. Each unresolved static observation becomes ONE claim; one
+   worker per claim, facts back per the frontmatter contract.
+4. Dynamic only for static survivors: gdbserver on VM as the
+   primary remote debugger.
+5. Close: verdict-scorer answers primary_questions; red-team
+   before PROVEN.
+
 ## Sample under analysis
 
 | Field | Value |
@@ -61,6 +114,25 @@ Analysis is driven by `/kunglao-agent` (skill at `/kunglao/skill-sentinel`). Key
 | Path | `bins/sample.exe` |
 
 ## Memory carriers (write/recall contract)
+
+**Memory tiers** — every persistable signal has exactly one tier; routing by signal type, not convenience:
+
+| Tier | Host | What belongs | Write trigger | Lifecycle |
+|------|------|--------------|---------------|-----------|
+| T0 transient | `runs/`, `scratch/` | Per-turn scratch, status lines, heartbeat, verify records | Every state change | Ephemeral; never cited as memory |
+| T1 workspace carriers | The six-carrier table below | Single-sample facts, claims, blockers, plans, oracle | Evidence emerges / claim transitions | Lives and dies with the workspace |
+| T2 distilled lessons | `/kunglao/skill-sentinel/references/lessons/` (two-stage nursery, rollup at claim terminal) | A pitfall or method outcome that would help ANY future SAMPLE | Claim terminal + outcome capture | Draft -> active gate -> tombstone |
+| T3 reference library | `/kunglao/skill-sentinel/references/re-library/` | Curated domain knowledge (family playbooks, tool lore) — proposals only, never auto-written from one hit | Curation decision | Curated |
+| T4 project memory (Claude Code native) | `<auto>` Claude Code per-project memory dir (`MEMORY.md` index + typed files: user / feedback / project / reference) | How-we-work knowledge for THIS repo across sessions: user rulings and their WHY, governance policies, collaboration corrections, validated judgment calls, pointers to external trackers | User correction ("don't X"), explicit ruling, non-obvious approach validated in-session | Persists across sessions; update/remove stale entries rather than re-writing |
+| T5 operator global | Host-global harness config outside this repo | Machine-level conventions shared by every project | Setup-time only | Cross-everything |
+
+Routing discipline:
+
+- Sample evidence NEVER leaves T1; collaboration/process learnings NEVER enter T1. A repeated mistake that is sample-specific -> T1 blocker/note; one that is process-specific -> T4 feedback entry.
+- Distillation upward requires repetition or a terminal-state rollup: one hit does not justify T2/T3 writes.
+- User rulings about value/priority enter ONLY the structured channels (`task_spec.yaml` constraints / `runs/value-weights.yaml`); T4 records the ruling's EXISTENCE and rationale pointer, prose retellings drift (numeric-fidelity).
+- Library-worthy technique observed once: record the fact in T1, note the candidate in the claim's outcome; do not edit shared libraries mid-analysis.
+- T4 is indexed (MEMORY.md stays a short pointer list); stale entries get updated or removed, never silently contradicted.
 
 Notes travel in six carriers; each row is the contract for what lands there, who writes it, when it is recalled, and how corrections work. Blanket note-write directives do not exist — the per-carrier rule below is the authority. Recall is gated by `convergence_check.py` every round (see Loop enforcement): disk is truth.
 
@@ -129,11 +201,9 @@ Analysis correctness depends on registered MCP servers — a fresh machine deplo
 |------------|------|-------|---------|--------------|
 | `ghidra` | HARD | all types | Ghidra decompile/static analysis | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
 | `sequential-thinking` | HARD | all types | structured reasoning | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
-| `x64dbg` | HARD | Windows T3 | dynamic debugging (VM remote) | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
-| `volatility` | WARN | Windows T3 | memory forensics | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
 | `ida-pro-vm` | WARN | when IDA chosen | IDA remote analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
-| `gitnexus` | HARD | Android graph flow | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
 | `virustotal` | WARN | CTI | intelligence (family attribution) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
+| `ssh-mcp` | WARN | channel | ssh execution control plane (KUNGLAO_CHANNEL=ssh dynamics; CLI ssh fallback) | `claude mcp add ssh-mcp -- ssh-mcp` |
 
 Workspace `.mcp.json` scaffold is generated by `kunglao-init` when missing (`--no-mcp` skips; an existing file is never overwritten). Keep this table in sync with the single manifest source `scripts/mcp_probe.py` (pinned by `tests/test_mcp_supply.py`).
 
@@ -151,6 +221,21 @@ Workspace `.mcp.json` scaffold is generated by `kunglao-init` when missing (`--n
 
 Deployment variables live in the workspace `.env` (see `.env.example` for the annotated list; `scripts/env_check.py` reads it — real environment wins, `.env` is the fallback).
 
+## Workspace git snapshots
+
+This workspace is a git repo (kunglao-init created the initial commit).
+Git is the SNAPSHOT layer — the disk is the state authority; never treat
+git status/diff as ground truth for convergence decisions.
+
+- Review history: `git -C <workspace> log --oneline` / `git -C <workspace> show <sha>`
+- Undo a mistake (bad rewrite / migration): `git -C <workspace> revert <sha>`
+- Risky experiments (deobfuscation trial, bulk fact rewrite):
+  `git -C <workspace> checkout -b exp/<name>` — merge back on success, abandon on failure.
+- ALWAYS pass `-C <workspace>`: the workspace may live inside a host repo —
+  bare `git` commands can walk up and hit the WRONG repository.
+- `bins/` (sample binary) and `runs/` telemetry are gitignored — immutable
+  input + runtime noise never belong in snapshots.
+
 ## Tool script discipline
 
 Any reusable analysis logic must land as a parameterized CLI script under `/kunglao/skill-sentinel/scripts/` (no hardcoded paths, reusable across workspaces). ad-hoc inline execution (`python -c` / heredoc) is forbidden; prefer reusing an existing CLI (e.g. `scripts/shell_defaults.py` for shell environment default lines, `scripts/env_check.py` for environment readiness). One-off commands may run via Bash, but any logic you might reuse must first become a script.
@@ -158,3 +243,26 @@ Any reusable analysis logic must land as a parameterized CLI script under `/kung
 ## Python venv
 
 Path: `.venv/`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts. Python 3.11.0.
+
+## Keeping this handbook alive
+
+This file is a living handbook. The north star is agent informativeness:
+accumulating more is wrong, and too much is harmful. The render is the
+starting state, never a frozen artifact.
+
+Update triggers: an explicit user ruling; a new pitfall (record the why);
+an environment change; a new insight that changes how work starts. Update
+discipline: one hook per entry (index style, max one line), details live in
+sub-documents; organize semantically, never as a chronological log. Before
+writing, pass BOTH gates: "If this line were deleted, would the agent get
+dumber?" and "If this line were added, would the agent get stronger?" — a
+no on either means the line stays out.
+
+Red lines: no process records, no chronological transcripts, nothing already
+derivable from code or state files. A section over its line budget must be
+distilled, not extended (Roles max 30 lines, Project layout max 20, Quick
+start max 40, this section max 25).
+
+Authority: kunglao-init-worker maintains this file by update and rewrite to
+the optimal form (delete stale, merge redundant) — it is NOT append-only.
+<!-- /kunglao:frame -->

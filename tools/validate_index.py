@@ -4,7 +4,7 @@
 Validates the machine-readable tool index against the contract:
 
   name:         unique, non-empty (lowercase kebab-case tool id)
-  category:     one of crypto|static|ghidra|dynamic|auxiliary|pipelines
+  category:     one of crypto|static|ghidra|dynamic|auxiliary|pipelines|web
                 (#340: category id == tools/<category>/ directory name; the
                 only dir-less exception is dynamic — external MCP capability)
   capability:   "<domain>:<operation>" tag (e.g. crypto:decode), non-empty
@@ -14,6 +14,19 @@ Validates the machine-readable tool index against the contract:
   description:  required non-empty English one-liner, 15-40 chars
                 (what it does + when to choose it) — issue #356 W1
   when_not:     optional — when NOT to use the tool (non-empty if present)
+
+#692 WP1 capability-provider annotation block (design D1/D2; OPT-IN — an
+# entry without `provider` never raises annotation errors):
+  provider:    unique provider identity (matches a toolchain FIXES key or
+               an mcp_probe.MANIFEST name); one entry per provider
+  produces:    non-empty list of "<domain>:<operation>" tags; MUST include
+               the entry's primary `capability`
+  requires:    list of precondition tokens from the closed vocabulary
+               PROVIDER_TOKENS (design D2); may be empty
+  cost_hint:   {mem_gb: number >= 0, time: probe|cheap|deep}
+  quality:     non-empty map {capability-tag: high|mid|floor} whose keys are
+               exactly the `produces` set (per-capability quality: baksmali
+               is floor for java-source but high for bytecode-truth)
 
 CLI contract (gate-callable):
   python validate_index.py [path_to_index.yaml]
@@ -28,6 +41,12 @@ Usage:
   python tools/validate_index.py my-index.yaml
 """
 from __future__ import annotations
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+
 
 import argparse
 import sys
@@ -36,14 +55,122 @@ from pathlib import Path
 # UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
 # decode(errors="replace")) must not crash a GBK console — stdout unified on
 # UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 
-CATEGORIES = ("crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines")
+# ---- #729 annotation gate constants ------------------------------------
+# Rule A — annotation gate (#863): EVERY entry must carry a provider block.
+# The LEGACY_UNANNOTATED whitelist (29 frozen names tolerated without
+# annotation) is retired — the mechanical catalog backfill landed the
+# annotation blocks in tools/_INDEX.yaml, so the tolerated set is empty.
+# Rule B — CAPABILITY_TAGS closed vocabulary (#729).
+# Every <domain>:<operation> tag that appears in any `produces` field must
+# be listed here. Expanding this constant is an intentional, review-visible
+# design decision (one tool ≠ one tag; one tag = distinct routing
+# capability that changes tool-selection behaviour).
+#
+# Seeded from existing produces tags (9 android: tags from #692 WP1).
+# #728 (web labs) landed js:unbundle / js:deobfuscate; #751 adds the
+# js-domain semantic pair mirroring android (#751 design D1).
+_CAPABILITY_TAGS = frozenset({
+    # android: — seeded from #692 WP1 provider entries
+    "android:algorithm-verify",
+    "android:bytecode-truth",
+    "android:call-graph",
+    "android:data-flow",
+    "android:dex-rewrite",
+    "android:java-source",
+    "android:packer-fingerprint",
+    "android:semantic-query",
+    "android:string-decrypt",
+    # aux: — seeded from the #340 category contract test (auxiliary must be
+    # a legal category with at least one routable capability tag)
+    "aux:sanitize",
+    # web: — #728 (js recovery pipelines) + #884 (JSVMP/VMP triage CLI)
+    "js:deobfuscate",
+    "js:call-graph",      # #751: gitnexus over wakaru/webcrack output
+    "js:semantic-query",  # #751: graph RAG queries over a js source tree
+    "js:unbundle",
+    "web:triage",         # #884: three-feature JSVMP/VMP triage verdict
+    # crypto: — legitimate routing tag for the crypto-tool family
+    "crypto:decode",
+    # aux: — #863 mechanical catalog backfill: the legacy CLIs' own primary
+    # capabilities joined the closed vocabulary (1:1 from the entries'
+    # capability fields — no invented semantics).
+    "aux:blind-coverage",
+    "aux:cold-start-metrics",
+    "aux:golden-capture",
+    "aux:proven-audit",
+    # ghidra: — #863 mechanical backfill (legacy ghidra family primaries)
+    "ghidra:annotate",
+    "ghidra:decompile",
+    "ghidra:recon",
+    "ghidra:vtable",
+    "ghidra:xref-scan",
+    # pipeline: — #863 mechanical backfill
+    "pipeline:evidence-index",
+    # static: — #863 mechanical backfill (legacy static family primaries)
+    "static:buildinfo-carve",
+    "static:byte-sweep",
+    "static:callsite-args",
+    "static:decompile-normalize",
+    "static:disasm",
+    "static:disasm-check",
+    "static:identify",
+    "static:opaque-predicate",
+    "static:overlay-scan",
+    "static:pe-parse",
+    "static:rust-dep-strings",
+    "static:shellcode-scan",
+    "static:stack-strings",
+    "static:strings-classify",
+    "static:syscall-extract",
+    "static:yara-gen",
+    "static:yara-scan",
+    # ghidra: — #866-b registration of the Ghidra Version Tracking binary diff
+    "ghidra:diff",
+    # aux: — #863 mechanical catalog backfill: the legacy CLIs' own primary
+    # capabilities joined the closed vocabulary (1:1 from the entries'
+    # capability fields — no invented semantics).
+    "aux:blind-coverage",
+    "aux:cold-start-metrics",
+    "aux:golden-capture",
+    "aux:proven-audit",
+    # ghidra: — #863 mechanical backfill (legacy ghidra family primaries)
+    "ghidra:annotate",
+    "ghidra:decompile",
+    "ghidra:recon",
+    "ghidra:vtable",
+    "ghidra:xref-scan",
+    # pipeline: — #863 mechanical backfill
+    "pipeline:evidence-index",
+    # static: — #863 mechanical backfill (legacy static family primaries)
+    "static:buildinfo-carve",
+    "static:byte-sweep",
+    "static:callsite-args",
+    "static:decompile-normalize",
+    "static:disasm",
+    "static:disasm-check",
+    "static:identify",
+    "static:opaque-predicate",
+    "static:overlay-scan",
+    "static:pe-parse",
+    "static:rust-dep-strings",
+    "static:shellcode-scan",
+    "static:stack-strings",
+    "static:strings-classify",
+    "static:syscall-extract",
+    "static:yara-gen",
+    "static:yara-scan",
+})
+# ---- end annotation gate constants -------------------------------------
+
+CATEGORIES = ("crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines",
+              "web")
 TIERS = ("T1", "T2", "T3")
 COST_TIERS = ("probe", "cheap", "deep")
+# #692 WP1: closed precondition vocabulary (design D2) + quality tiers.
+PROVIDER_TOKENS = ("dex", "mem_budget_ok", "dexdc_wheel", "jadx_bin",
+                   "smali_toolchain", "source_tree", "gitnexus_index")
+QUALITY_TIERS = ("high", "mid", "floor")
 REQUIRED_FIELDS = ("name", "category", "capability", "tier", "cost_tier",
                    "input_output", "description")
 
@@ -69,6 +196,98 @@ def _is_nonempty_io(value) -> bool:
     return False
 
 
+def _check_provider_annotations(entry: dict, loc: str, i: int,
+                                seen_providers: dict[str, int],
+                                errors: list[str]) -> None:
+    """#692 WP1: the opt-in capability-provider annotation block (D1).
+
+    Only runs when `provider` is present (#863: present on every entry —
+    the legacy tolerance is retired).
+    """
+    provider = entry.get("provider")
+    if not _is_nonempty_str(provider):
+        errors.append(f"{loc}: 'provider' must be a non-empty string")
+        provider = None
+    elif provider in seen_providers:
+        errors.append(f"{loc}: duplicate 'provider' '{provider}' "
+                      f"(first at tools[{seen_providers[provider]}])")
+    else:
+        seen_providers[provider] = i
+
+    produces = entry.get("produces")
+    produced: set[str] = set()
+    if not isinstance(produces, list) or not produces:
+        errors.append(f"{loc}: 'produces' must be a non-empty list of "
+                      "'<domain>:<operation>' tags")
+    else:
+        for tag in produces:
+            if not _is_domain_operation(tag):
+                errors.append(f"{loc}: 'produces' tag {tag!r} must be "
+                              "'<domain>:<operation>'")
+            else:
+                produced.add(tag)
+        if not produced:
+            errors.append(f"{loc}: 'produces' holds no valid tags")
+
+    # #729 Rule B: every produces tag must be in the closed CAPABILITY_TAGS
+    # vocabulary. Expanding this vocabulary is an intentional design decision
+    # (one tool ≠ one tag; one tag = distinct routing capability).
+    if produced:
+        unknown_tags = produced - _CAPABILITY_TAGS
+        if unknown_tags:
+            errors.append(
+                f"{loc}: produces tag(s) {sorted(unknown_tags)} not in the "
+                "closed CAPABILITY_TAGS vocabulary — add to _CAPABILITY_TAGS "
+                f"only after deliberate review (current vocabulary: "
+                f"{sorted(_CAPABILITY_TAGS)})"
+            )
+
+    requires = entry.get("requires")
+    if not isinstance(requires, list):
+        errors.append(f"{loc}: 'requires' must be a list of precondition "
+                      "tokens (may be empty)")
+    else:
+        for token in requires:
+            if token not in PROVIDER_TOKENS:
+                errors.append(f"{loc}: 'requires' token {token!r} outside "
+                              f"the closed vocabulary {PROVIDER_TOKENS}")
+
+    cost_hint = entry.get("cost_hint")
+    if not isinstance(cost_hint, dict):
+        errors.append(f"{loc}: 'cost_hint' must be a mapping "
+                      "{{mem_gb, time}}")
+    else:
+        mem = cost_hint.get("mem_gb")
+        if not isinstance(mem, (int, float)) or isinstance(mem, bool)                 or mem < 0:
+            errors.append(f"{loc}: 'cost_hint.mem_gb' must be a number >= 0, "
+                          f"got {mem!r}")
+        if cost_hint.get("time") not in COST_TIERS:
+            errors.append(f"{loc}: 'cost_hint.time' must be one of "
+                          f"{COST_TIERS}, got {cost_hint.get('time')!r}")
+
+    quality = entry.get("quality")
+    if not isinstance(quality, dict) or not quality:
+        errors.append(f"{loc}: 'quality' must be a non-empty map "
+                      "{capability-tag: high|mid|floor}")
+    else:
+        for tag, tier in quality.items():
+            if tag not in produced:
+                errors.append(f"{loc}: 'quality' key {tag!r} is not in "
+                              "'produces' (every produced capability needs "
+                              "a quality tier)")
+            if tier not in QUALITY_TIERS:
+                errors.append(f"{loc}: 'quality[{tag!r}]' must be one of "
+                              f"{QUALITY_TIERS}, got {tier!r}")
+        missing_q = produced - set(quality)
+        if missing_q:
+            errors.append(f"{loc}: 'quality' missing tiers for produced "
+                          f"capabilities {sorted(missing_q)}")
+
+    if produced and entry.get("capability") not in produced:
+        errors.append(f"{loc}: 'capability' {entry.get('capability')!r} must "
+                      "be a member of 'produces'")
+
+
 def validate_index(data) -> list[str]:
     """Validate a parsed _INDEX.yaml payload. Returns a list of error strings.
 
@@ -86,6 +305,7 @@ def validate_index(data) -> list[str]:
         return ["'tools' must be a list"]
 
     seen_names: dict[str, int] = {}
+    seen_providers: dict[str, int] = {}
     for i, entry in enumerate(tools):
         loc = f"tools[{i}]"
         if not isinstance(entry, dict):
@@ -131,6 +351,20 @@ def validate_index(data) -> list[str]:
         if when_not is not None and not _is_nonempty_str(when_not):
             errors.append(f"{loc}: optional 'when_not' must be a non-empty string")
 
+        # #729 Rule A / #863: EVERY entry must carry a provider block — the
+        # LEGACY_UNANNOTATED whitelist is retired (mechanical catalog
+        # backfill landed annotations for all formerly-legacy entries).
+        if "provider" not in entry:
+            errors.append(
+                f"{loc}: entry '{name}' has no 'provider' block — every "
+                "entry must carry an annotation block (#863 retired the "
+                "legacy unannotated tolerance)"
+            )
+
+        # #692 WP1: opt-in annotation block (skipped for legacy entries)
+        if "provider" in entry:
+            _check_provider_annotations(entry, loc, i, seen_providers, errors)
+
     return errors
 
 
@@ -172,4 +406,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    ensure_utf8_stdout()
     sys.exit(main())

@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
+from _factories import write_hook_state
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -73,6 +74,14 @@ def _armed_ws(tmp_path: Path, *, name: str = "ws",
         (ws / "task_spec.yaml").write_text(
             "primary_questions:\n  - q1: sample family\n", encoding="utf-8")
 
+    # #748: stamp the workspace template version so the stale-workspace
+    # gate (RC=5) passes — these tests are about resume's delegation
+    # behavior, not about the gate itself.
+    from template_version import read_skill_version
+    ws_version = read_skill_version()
+    (ws / "CLAUDE.md").write_text(
+        f"# kunglao_template_version: {ws_version}\n", encoding="utf-8")
+
     facts = ws / "facts"
     facts.mkdir(exist_ok=True)
     (facts / "_INDEX.md").write_text("# _INDEX\n", encoding="utf-8")
@@ -90,11 +99,8 @@ def _armed_ws(tmp_path: Path, *, name: str = "ws",
             json.dumps(snap) + "\n", encoding="utf-8")
 
     if with_hook_state:
-        (ws / ".hook_state.json").write_text(json.dumps({
-            "expires_at": _iso(now + timedelta(minutes=10)),
-            "active_hooks": ["worker_budget.py", "dispatch_gate.py"],
-            "paused_hooks": [],
-        }), encoding="utf-8")
+        write_hook_state(ws, active_hooks=["worker_budget.py", "dispatch_gate.py"],
+                         expires_at=_iso(now + timedelta(minutes=10)))
 
     if with_event_log:
         logs = ws / "runs" / "logs"
@@ -331,8 +337,8 @@ def test_expired_activation_flagged(tmp_path) -> None:
     import kunglao_resume as kr
     ws = _armed_ws(tmp_path)
     expired = _iso(datetime.now(timezone.utc) - timedelta(minutes=5))
-    (ws / ".hook_state.json").write_text(
-        json.dumps({"expires_at": expired, "active_hooks": []}), encoding="utf-8")
+    write_hook_state(ws, active_hooks=[], paused_hooks=None,
+                     expires_at=expired)
     brief = kr.build_brief(ws)
     assert brief["health"]["activation"]["status"] == "EXPIRED"
 
@@ -516,8 +522,12 @@ def _registry() -> dict:
 
 def test_registry_covers_four_commands() -> None:
     reg = _registry()
-    assert set(reg) == {"init", "analysis", "help", "resume"}, (
-        f"#466 acceptance: registry must be the four-command set, got {sorted(reg)}")
+    # #466 acceptance: registry must be the four-command set; #746 added
+    # upgrade to the user-facing slash-command UX surface (the CLI was
+    # workspace-internal via #726, now promoted per user 2026-08-26).
+    assert set(reg) == {"init", "analysis", "help", "resume", "upgrade"}, (
+        f"#466 acceptance: registry must be the four-command set (now five "
+        f"after #746): got {sorted(reg)}")
 
 
 def test_registry_resume_record_complete() -> None:

@@ -36,7 +36,18 @@
   status: OPEN                    # one of VALID_STATUS
   source: cti                     # cti | static_re | dynamic_re | user_feedback | synthesis
   competitor_group: null          # q_id for model_selection (v1.7), else null
+  supersedes: [C-001]             # #879 lineage (optional): claims this one replaces
+  superseded_by: C-002            # #879 lineage (optional): the replacing claim
+  derived_from: []                # #879 lineage (optional): derivation (non-replacement) edges
 ```
+
+**Lineage (#879)**: supersedes / superseded_by / derived_from are additive
+optional fields; every target must be an existing claim id, self-reference
+and supersedes/superseded_by cycles are violations — enforced as
+carrier_consistency violation class `(g)`. The mechanical writer for the
+replacement edge is `retract_claim.py --reason superseded --superseded-by
+C-NN` (writes BOTH sides); a SUPERSEDED-status claim without an edge is
+the "谁替代谁" gap #879 closes.
 
 ## claim_deps.yaml
 ```yaml
@@ -109,11 +120,10 @@ fail-open on missing binary/capstone/pefile); the report pipeline invokes
 pre-handoff to cross-check the listing against the fact's expected map AND the
 disassembly (the a2b5e25c problem-1 cross-layer defense).
 
-### migration (`--grace` / `--grace-scan`)
-Existing PROVEN facts whose `expected` is assignment-class-but-no-assertions need
-backfilling. Run `kunglao-verify.py <ws> --grace-scan` to enumerate them, then
-either backfill value assertions or run a single verify pass with `--grace`
-(warn-only, non-blocking) for one migration cycle.
+The one-cycle migration flags `--grace` / `--grace-scan` (#49, warn-only
+lint + enumeration of affected facts) were retired in #863 — the migration
+window they served is closed; assignment-class `expected` must bind value
+assertions unconditionally.
 
 ### BREAKING (a2b5e25c)
 This is a breaking change for any existing assignment-class fact whose `expected`
@@ -135,3 +145,5 @@ list of `references/machine_check_map.yaml` AND matches the fact's `boundary_typ
 enforcement: `kunglao_verify.check_machine_check_contract` /
 `machine_check_gate` / `verify()` L2-CONFIRMED gate (failure → overall=PARTIAL +
 warning `MACHINE_CHECK_FAILED`).
+
+recall_useful: pending

@@ -28,7 +28,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import sys
 from pathlib import Path
 
 HEARTBEAT_FILE = "runs/.heartbeat.json"
@@ -37,16 +36,71 @@ STUCK_MIN = 20                  # same as backtrack_gate --stuck-min default
 VALID_BACKTRACK_DECISIONS = ("continue", "retry_different", "escalate", "redispatch")
 # #475: env-state drift threshold — mirrors hooks/worker_budget
 # ENV_STATE_TTL_MINUTES (advisory threshold here, reject line there is 2x).
-ENV_STATE_TTL_MINUTES = 30
+# #597: the TTL value is single-sourced in liveness_policy (THE
+# liveness-minutes source; rationale + the 2x-reject relationship live there).
+from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402
+
+DRIFT_LEDGER = "runs/.drift-events.jsonl"  # #612: append-only advisory record
 
 
-def utc_now() -> str:
-    """UTC ISO-8601, second precision, Z suffix (schema ts pattern)."""
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+def detect_drift(ws: Path) -> list[dict]:
+    """#612: the drift countermeasure that production lacked (3 incidents, ~4h,
+    0% mechanical detection — every catch was a manual smart-ping).
+
+    Flavor A (#607 made them visible) and Flavor B alike reduce to: a worker
+    file aged past STUCK_MIN (terminal statuses excluded) whose claim has NO
+    evidence on disk (no facts/F*.md, no evidence/ artifacts). Each such
+    worker appends one advisory event to runs/.drift-events.jsonl (#88:
+    advisory-only — never blocks, never changes a verdict). Fail-open on any
+    IO error (returns what was gathered)."""
+    events: list[dict] = []
+    try:
+        import backtrack_gate as bg
+    except Exception:
+        return events
+    runs = ws / "runs"
+    if not runs.exists():
+        return events
+    now = _utc_now_dt()
+    facts = ws / "facts"
+    evidence = ws / "evidence"
+    for p in sorted(runs.glob("worker-status-*.md")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        token = bg.parse_status(text)
+        if token in ("done", "failed", "blocked", "error", None):
+            continue
+        age = now - datetime.datetime.fromtimestamp(p.stat().st_mtime,
+                                                    tz=datetime.timezone.utc)
+        if age < datetime.timedelta(minutes=STUCK_MIN):
+            continue
+        has_evidence = False
+        if facts.exists() and any(facts.glob("F*.md")):
+            has_evidence = True  # conservative: any fact = evidence flowing
+        elif evidence.exists() and any(evidence.iterdir()):
+            has_evidence = True
+        if has_evidence:
+            continue
+        ev = {"ts": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "worker": p.name,
+              "flavor": "stuck-no-evidence",
+              "age_min": int(age.total_seconds() // 60)}
+        events.append(ev)
+        try:
+            ledger = runs / ".drift-events.jsonl"
+            with ledger.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(ev, ensure_ascii=False) + "\n")
+        except OSError:
+            pass  # advisory: ledger failure never blocks the signal list
+    return events
 
 
-def _utc_now_dt() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
+
+
+from harness_common import utc_now as _utc_now_dt  # #863 Family F: single source (was a local def)
 
 
 def heartbeat_check(ws: Path) -> tuple[str, str]:
@@ -260,5 +314,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+from _entry import run
+
 if __name__ == "__main__":
-    sys.exit(main())
+    run(globals())

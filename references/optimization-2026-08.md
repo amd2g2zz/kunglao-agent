@@ -100,3 +100,5 @@ Five real failure modes, one line each. Full stories + v1.9 fix mapping →
 - **Case 3** — re-issuing the same failed dispatch. First failure → backtrack decision.
 - **Case 4** — asking the user "should I dispatch?". Default: dispatch the next open claim.
 - **Case 5** — stale plan vs reality. Re-plan/decompose/abandon → run `plan_drift_detector.py`.
+
+recall_useful: pending

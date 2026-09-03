@@ -1,8 +1,11 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from worker_budget_core import (
-    MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, ENV_STATE_FILE, ENV_STATE_TTL_MINUTES,
-    PREFIX_RE, CLAIM_RE, VM_TOOLS, KNOWN_TOOLS, HOST_FORBIDDEN_TOOLS,
+from worker_budget_core import (  # noqa: F401 — broad re-export surface:
+    # tests + sinks consume these via module attributes (gates.MAX_WORKERS etc.)
+    MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, MAX_RETRIES, RETRY_COUNTER_FILE,
+    ENV_STATE_FILE, ENV_STATE_TTL_MINUTES,
+    VM_TOOLS, KNOWN_TOOLS, HOST_FORBIDDEN_TOOLS,
     TOOL_ERRORS_FILE, GENERIC_WORK_AGENT, _SKILL_ROOT,
     _ratio_rank, _EvidenceView, _PRIORITY_AVAILABLE,
     _load_specialist_table, _recommend_agent_type, _AGENTTYPE_AVAILABLE,
@@ -20,6 +23,8 @@ import time
 from pathlib import Path
 
 import yaml  # noqa: E402
+
+from _path_hygiene import load_hooks_lib, on_path  # noqa: E402  # #671 sys.path hygiene authority
 
 from status_defs import TERMINAL  # noqa: E402,F401  # single source (#34, #95)
 
@@ -91,8 +96,8 @@ def compare_register_change_proven_gate(
         return True, 'no PROVEN promotions'
     # check BLIND gate for each — required, fail closed (#78)
     try:
-        sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
-        from blind_gate import check_proven_gate
+        with on_path(_SKILL_ROOT / 'scripts'):  # #671 scoped membership
+            from blind_gate import check_proven_gate
     except Exception as exc:
         return False, (f'PROMOTION GATE: blind_gate unavailable (fail closed) '
                        f'- {type(exc).__name__}: {exc}')
@@ -216,9 +221,7 @@ def check_workers_lt_3(paths: dict) -> tuple[bool, str]:
     if not ws:
         return True, ''
     try:
-        sys.path.insert(0, str(_SKILL_ROOT / 'hooks'))
-        from lib_kunglao import scan_active_workers
-        n, _stuck = scan_active_workers(Path(ws))
+        n, _stuck = load_hooks_lib().scan_active_workers(Path(ws))
     except Exception:
         return True, ''  # FAIL_OPEN — never block dispatch on scan failure
     if n >= MAX_WORKERS:
@@ -236,6 +239,163 @@ def check_promotion_attempts(reg_path: Path, claim_id: str | None) -> tuple[bool
     if pa >= MAX_PROMOTION_ATTEMPTS:
         return (False, f'claim {claim_id} promotion_attempts={pa} >= {MAX_PROMOTION_ATTEMPTS}')
     return (True, f'promotion_attempts={pa}')
+
+
+# ---------- #604: MAX_RETRIES circuit breaker for silent worker failures ----------
+# Distinct from MAX_PROMOTION_ATTEMPTS (#520): #520 only counts PROVEN
+# promotion attempts on a claim. #604 counts WORKER-level silent-failure
+# re-dispatches on the same (worker_id, claim_id). When a worker silently
+# dies / hangs and the orchestrator re-dispatches it 3 times on the same
+# claim, this gate escalates to BLOCKED and requires a failure-analysis
+# artifact before any further re-dispatch.
+#
+# The counter lives in <workspace>/runs/.retry-counter.yaml with shape:
+#   counters:
+#     "<worker_id>:<claim_id>": <int>
+# `record_retry` is called by the orchestrator after detecting a silent
+# failure (worker hung / no progress / heartbeat STALE on a dispatched
+# worker). `reset_retry_counter` is called ONLY on PROVEN completion
+# (claim finishes successfully — partial completion does NOT reset).
+# The counter file is fail-open (unreadable / missing → allow).
+
+def _retry_key(worker_id: str, claim_id: str) -> str:
+    return f'{worker_id}:{claim_id}'
+
+
+def read_retry_counter(workspace: str | Path) -> dict[str, int]:
+    """Read the {key: count} map from runs/.retry-counter.yaml.
+
+    Returns {} when the file is absent, unreadable, or malformed. Missing
+    `runs/` directory also returns {} (the counter file is created lazily
+    by `record_retry`).
+    """
+    if not workspace:
+        return {}
+    p = Path(workspace) / 'runs' / '.retry-counter.yaml'
+    if not p.exists():
+        return {}
+    try:
+        import yaml as _y
+        data = _y.safe_load(p.read_text(encoding='utf-8')) or {}
+    except Exception:
+        return {}
+    raw = data.get('counters') or {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, int] = {}
+    for k, v in raw.items():
+        try:
+            out[str(k)] = int(v)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _write_retry_counter(workspace: Path, counters: dict[str, int]) -> None:
+    """Atomically write the counter file. Creates runs/ if missing.
+
+    The atomic-write primitive is borrowed from worker_budget_core
+    (_atomic_write via tempfile + replace) so a crash mid-write cannot leave
+    a half-written YAML that the gate would then mis-read.
+    """
+    import yaml as _y
+    runs = workspace / 'runs'
+    runs.mkdir(parents=True, exist_ok=True)
+    p = runs / '.retry-counter.yaml'
+    text = _y.safe_dump({'counters': counters}, allow_unicode=True, sort_keys=True)
+    tmp = p.with_suffix(p.suffix + '.tmp')
+    tmp.write_text(text, encoding='utf-8')
+    tmp.replace(p)
+
+
+def record_retry(workspace: str | Path, worker_id: str, claim_id: str) -> int:
+    """Increment the silent-failure retry counter for (worker_id, claim_id).
+
+    Returns the new count. Creates the counter file if absent. NOOP on a
+    missing workspace (fail-open — a broken orchestrator path must not be
+    able to corrupt the gate's counter; if we cannot write, the counter
+    stays at the previous value, and the next check_max_retries call will
+    pass since no counter file means count=0).
+
+    The increment is intentionally atomic (read-modify-write under
+    _atomic_write): two concurrent silent-failure detections on the same
+    worker must each count (the worst case is one lost increment on a
+    race, which is acceptable — the gate fires at threshold, not exact).
+    """
+    if not workspace or not worker_id or not claim_id:
+        return 0
+    counters = read_retry_counter(workspace)
+    key = _retry_key(worker_id, claim_id)
+    counters[key] = int(counters.get(key, 0)) + 1
+    try:
+        _write_retry_counter(Path(workspace), counters)
+    except Exception:
+        # Fail-open: do not propagate — the gate will still pass since
+        # the on-disk counter is the source of truth (just possibly stale).
+        pass
+    return counters[key]
+
+
+def reset_retry_counter(workspace: str | Path, worker_id: str, claim_id: str) -> bool:
+    """Clear the retry counter for (worker_id, claim_id).
+
+    Intended for PROVEN-completion callers ONLY (claim finishes
+    successfully — the worker did its job, future dispatches are fresh).
+    Partial completion (status: in_progress / done-only-output) MUST NOT
+    call this — partial success does not prove the worker's failure mode
+    is resolved; the next dispatch on the same worker_id could hit the
+    same silent failure again.
+
+    Returns True if a counter was removed, False otherwise.
+    """
+    if not workspace or not worker_id or not claim_id:
+        return False
+    counters = read_retry_counter(workspace)
+    key = _retry_key(worker_id, claim_id)
+    if key not in counters:
+        return False
+    del counters[key]
+    try:
+        _write_retry_counter(Path(workspace), counters)
+    except Exception:
+        return False
+    return True
+
+
+def check_max_retries(workspace: str | Path, worker_id: str,
+                      claim_id: str) -> tuple[bool, str]:
+    """Issue #604: cap silent-failure retry loops at MAX_RETRIES.
+
+    When the same worker_id has been silently-failed and re-dispatched
+    MAX_RETRIES (3) times on the same claim_id, REJECT the dispatch and
+    escalate to BLOCKED. The REJECT message requests a failure-analysis
+    artifact — the orchestrator must record WHY the worker keeps silently
+    failing (env broken? wrong tool? capability gap?) before another
+    re-dispatch is allowed.
+
+    FAIL_OPEN semantics: a missing counter file, an unreadable workspace,
+    or a missing worker_id/claim_id lets the gate pass (returns True).
+    This matches the gate's FAIL_OPEN stance on scan failures — a broken
+    gate must not block dispatch, that would deadlock the loop.
+
+    Returns (ok, reason). ok=False means REJECT the dispatch.
+    """
+    if not workspace or not worker_id or not claim_id:
+        return (True, 'no workspace/worker_id/claim_id - max-retries skipped')
+    counters = read_retry_counter(workspace)
+    key = _retry_key(worker_id, claim_id)
+    count = int(counters.get(key, 0))
+    if count >= MAX_RETRIES:
+        return (False, (
+            f'BLOCKED: worker {worker_id} retry_count={count} >= {MAX_RETRIES} '
+            f'on claim {claim_id} (silent-failure circuit breaker, #604). '
+            f'A failure-analysis artifact (runs/failure-analysis-{claim_id}.md) '
+            f'is REQUIRED before further re-dispatch — record WHY the worker '
+            f'keeps silently failing (env / tool / capability gap) and reset '
+            f'the counter via reset_retry_counter(worker_id, claim_id) once the '
+            f'root cause is addressed or claim is PROVEN.'
+        ))
+    return (True, f'retry={count}')
 
 
 def check_tools_allowed(tools: list[str], task_spec_path: Path) -> tuple[bool, str]:
@@ -577,6 +737,107 @@ def _is_diagnostic_exempt(text: str) -> bool:
     return False
 
 
+def _toolfirst_evaluate(text_lower: str, cited: str | None) -> dict:
+    """#880: the tool-first attribution computation, extracted PURE from
+    check_tool_first so the pass face can emit the (keyword->tool) payload the
+    reason string used to discard (issue #880 RC2) and the claim face can
+    persist it as the operation label.
+
+    Returns {mode, keywords, tool, reason}: mode is one of
+      matched        pass — cited tool is the keyword match (keywords = the
+                     text keywords that map to the cited tool)
+      optout         pass — explicit `none (reasoning: ...)` opt-out
+      exempt         pass — one-off diagnostic declaration
+      no_index       pass — no tools/_INDEX.yaml keywords to match
+      no_match       pass — no keyword hit (gate stays silent by design)
+      reject         REJECT — either a keyword hit without a marker
+                     (missing_marker) or a marker naming an unmatched tool
+                     (self_attestation); `detail_mode` carries which.
+    Determinism: keyword hits iterate sorted (the pre-#880 matched_tools set
+    had arbitrary iteration order).
+    """
+    import re as _re630
+    keywords = _load_tool_index_keywords(_SKILL_ROOT)
+    kw_re = {kw: _re630.compile(_ASCII_BOUNDARY.format(kw=_re630.escape(kw)))
+             for kw in keywords}
+    stopworded = {kw: tn for kw, tn in keywords.items()
+                  if kw not in _TOOLFIRST_STOPWORDS}
+    hits = sorted(kw for kw in stopworded
+                  if kw_re[kw].search(text_lower))
+    tool_of = lambda kw: stopworded[kw]  # noqa: E731
+
+    if cited is not None:
+        if cited.startswith('none'):
+            return {'mode': 'optout', 'keywords': [], 'tool': None,
+                    'detail_mode': 'optout',
+                    'reason': 'tool-catalog: none (explicit opt-out)'}
+        if not keywords:
+            return {'mode': 'no_index', 'keywords': [], 'tool': None,
+                    'detail_mode': 'no_index',
+                    'reason': ('no tools/_INDEX.yaml keywords to match - '
+                               'tool-first skipped')}
+        for tool in sorted({tool_of(kw) for kw in hits}):
+            if tool and tool.lower() in cited:
+                return {'mode': 'matched', 'tool': tool,
+                        'keywords': [kw for kw in hits if tool_of(kw) == tool],
+                        'detail_mode': 'matched',
+                        'reason': f'tool-catalog: {tool} (matched)'}
+        return {'mode': 'reject', 'keywords': hits, 'tool': None,
+                'detail_mode': 'self_attestation',
+                'reason': (
+                    "`tool-catalog:` marker names a tool the dispatch text "
+                    "does not actually match (self-attestation, #630). Cite "
+                    "the tool your text references, or `tool-catalog: none "
+                    "(reasoning: <why not>)`.")}
+    if _is_diagnostic_exempt(text_lower):
+        return {'mode': 'exempt', 'keywords': [], 'tool': None,
+                'detail_mode': 'exempt',
+                'reason': 'one-off diagnostic - tool-first exempt'}
+    if not keywords:
+        return {'mode': 'no_index', 'keywords': [], 'tool': None,
+                'detail_mode': 'no_index',
+                'reason': ('no tools/_INDEX.yaml keywords to match - '
+                           'tool-first skipped')}
+    if hits:
+        kw = hits[0]
+        return {'mode': 'reject', 'keywords': [kw], 'tool': tool_of(kw),
+                'detail_mode': 'missing_marker',
+                'reason': (
+                    f"dispatch text matches registered tool '{tool_of(kw)}' "
+                    f"(keyword '{kw}') but carries no `tool-catalog:` marker. "
+                    f"Add `tool-catalog: {tool_of(kw)}` if you will try it, "
+                    f"or `tool-catalog: none (reasoning: <why not>)` if it "
+                    f"genuinely does not apply, then re-dispatch.")}
+    return {'mode': 'no_match', 'keywords': [], 'tool': None,
+            'detail_mode': 'no_match',
+            'reason': 'no tool-catalog keyword match'}
+
+
+def _toolfirst_emit(ws, ev: dict) -> None:
+    """#880: the tool-first gate's REJECT face reaches the unified ledger
+    (dual_gate._emit mirror shape: detail = JSON payload). Fail-open —
+    observability never gates a decision (#459 contract).
+
+    The PASS face deliberately does NOT emit here: check_tool_first runs
+    mid-battery, BEFORE gates that may still reject the dispatch
+    (heartbeat #754 pins "a rejected dispatch emits no lifecycle noise" —
+    test_heartbeat_bootstrap). The pass row fires at the APPROVAL point via
+    toolfirst_pass_record instead, so ledger rows describe real dispatches.
+    """
+    if not ws or ev['mode'] != 'reject':
+        return
+    try:
+        import kunglao_log
+        kunglao_log.emit(
+            Path(ws), 'hook:worker_budget', 'toolfirst_reject',
+            detail=json.dumps({'mode': ev['detail_mode'],
+                               'keywords': ev['keywords'],
+                               'tool': ev['tool']},
+                              ensure_ascii=False))
+    except Exception:  # noqa: BLE001 — logging never breaks the gate
+        pass
+
+
 def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
     """Issue #294: a dispatch touching a registered tool's domain must cite it.
 
@@ -587,29 +848,161 @@ def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
     MUST contain `tool-catalog:` (either naming the matched tool or an
     explicit `none (reasoning: ...)` opt-out) or the dispatch is REJECTED.
 
+    #880: the REJECT face emits (toolfirst_reject) with the structured
+    (keyword->tool) payload; the PASS face emits at the approval point
+    (toolfirst_pass_record) so rejected dispatches stay lifecycle-silent
+    (#754). Decisions are byte-identical with the pre-#880 gate (the emit is
+    strictly additive, fail-open).
+
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
-    text = f'{desc}\n{prompt}'
-    text_lower = text.lower()
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    text_lower = f'{desc}\n{prompt}'.lower()
+    cited = None
     if 'tool-catalog:' in text_lower:
-        return (True, 'tool-catalog marker present')
-    if _is_diagnostic_exempt(text):
-        return (True, 'one-off diagnostic - tool-first exempt')
+        m = re.search(r'tool-catalog:\s*(.+)', text_lower)
+        cited = (m.group(1).strip() if m else '')
+    ev = _toolfirst_evaluate(text_lower, cited)
+    _toolfirst_emit(ws, ev)
+    return (ev['mode'] != 'reject', ev['reason'])
+
+
+# ---------- #880: operation label (toolfirst attribution -> claim attr) ------
+
+# string TEMPLATE (not pre-compiled — the claim id is interpolated per call)
+_CLAIM_BLOCK_TPL = (
+    r'(?ms)^[ \t]*-[ \t]+id:[ \t]*{cid}\b.*?(?=^[ \t]*-[ \t]+id:|\Z)')
+
+
+def _claim_block_span(text: str, claim_id: str) -> tuple[int, int] | None:
+    """[start, end) of the claim's YAML block (`- id: C-NN` up to the next
+    `- id:` or EOF). None when the claim is absent."""
+    m = re.search(_CLAIM_BLOCK_TPL.format(
+        cid=re.escape(claim_id.lstrip('-').strip().upper())), text)
+    return (m.start(), m.end()) if m else None
+
+
+def set_claim_operation(ws, claim_id: str, keywords: list[str],
+                        tool: str | None) -> bool:
+    """#880: persist the toolfirst attribution as a claim attribute — the
+    "operation label 白捡" of issue #880 (attribution granularity rises from
+    scene to scene x operation with zero new vocabulary: the keywords ARE the
+    tools/_INDEX.yaml categories/capabilities).
+
+    Text-surgical (never a whole-file yaml round-trip — an LLM-authored
+    register may carry comments/shape that safe_dump would flatten):
+    `operation: <kw,kw>` + `operation_tool: <tool>` lines are inserted at the
+    END of the claim's block, reusing the block's attribute indentation. An
+    existing label is replaced (re-dispatch re-attribution is the UPDATE
+    face). Fail-open: False on any IO/shape problem, never raises.
+    """
+    try:
+        reg = Path(ws) / 'claim-register.yaml'
+        if not reg.is_file() or not claim_id:
+            return False
+        text = reg.read_text(encoding='utf-8')
+        span = _claim_block_span(text, claim_id)
+        if span is None:
+            return False
+        start, end = span
+        block = text[start:end]
+        # attribute indent = the indent of the claim's OWN attribute lines
+        # (the line after the `- id:` opener), NOT the opener's dash indent
+        lines = block.split('\n')
+        ind = re.match(r'([ \t]+)(?=\S)', lines[1]) if len(lines) > 1 else None
+        if ind is not None:
+            indent = ind.group(1)
+        else:
+            first = re.match(r'([ \t]*)', lines[0])
+            indent = (first.group(1) if first else '') + '  '
+        label = f'{indent}operation: {",".join(keywords)}\n'
+        label += f'{indent}operation_tool: {tool or "none"}\n'
+        block = re.sub(
+            r'(?m)^[ \t]+operation(?:_tool)?:[^\n]*\n', '', block)
+        if not block.endswith('\n'):
+            block += '\n'
+        new_text = text[:start] + block + label + text[end:]
+        _atomic_write(reg, new_text)
+        return True
+    except Exception:  # noqa: BLE001 — label is observability, fail-open
+        return False
+
+
+def toolfirst_pass_record(paths: dict, claim_id: str | None,
+                          desc: str, prompt: str) -> bool:
+    """#880: the APPROVAL-point face — the pre_check caller invokes this only
+    AFTER the whole gate battery passed, so the emitted toolfirst_pass rows
+    (and the operation-label claim attributes) describe real dispatches. A
+    dispatch rejected by any earlier gate stays silent here (heartbeat #754
+    zero-noise contract; the tool-first gate's own REJECT face already emits
+    from check_tool_first).
+
+    Returns True iff a pass row was emitted. Fail-open, never raises.
+    """
+    if not claim_id:
+        return False
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return False
+    text_lower = f'{desc}\n{prompt}'.lower()
+    cited = None
+    if 'tool-catalog:' in text_lower:
+        m = re.search(r'tool-catalog:\s*(.+)', text_lower)
+        cited = (m.group(1).strip() if m else '')
+    ev = _toolfirst_evaluate(text_lower, cited)
+    if ev['mode'] == 'reject':
+        return False  # a reject at this point would double-emit the face
+    emitted = False
+    try:
+        import kunglao_log
+        kunglao_log.emit(
+            Path(ws), 'hook:worker_budget', 'toolfirst_pass',
+            claim=str(claim_id),
+            detail=json.dumps({'mode': ev['detail_mode'],
+                               'keywords': ev['keywords'],
+                               'tool': ev['tool']},
+                              ensure_ascii=False))
+        emitted = True
+    except Exception:  # noqa: BLE001 — logging never breaks the dispatch
+        pass
+    if ev['mode'] == 'matched' and ev['keywords']:
+        set_claim_operation(ws, claim_id, ev['keywords'], ev['tool'])
+    return emitted
+
+
+def verify_tool_catalog(ws) -> list:
+    """#630 post-side companion: a done worker's cited tool must EXIST.
+
+    A PreToolUse gate structurally cannot observe execution — the proof tier
+    here is #474's LIVENESS proxy: every `tool-catalog: <name>` cited in a
+    done worker's status file must resolve to a name the tools/_INDEX.yaml
+    keyword table knows. Fail-open when the index is absent (fixture/legacy
+    workspaces). Returns a list of {worker, cited} violations."""
+    import re as _re
+    from pathlib import Path as _P
+    ws = _P(ws)
+    runs = ws / "runs"
+    if not runs.is_dir():
+        return []
     keywords = _load_tool_index_keywords(_SKILL_ROOT)
     if not keywords:
-        return (True, 'no tools/_INDEX.yaml keywords to match - tool-first skipped')
-    for kw, tool_name in keywords.items():
-        if kw in _TOOLFIRST_STOPWORDS:
+        return []  # no index → nothing to resolve against (fail-open)
+    known = {t.lower() for t in keywords.values()}
+    violations = []
+    for p in sorted(runs.glob("worker-status-*.md")):
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
             continue
-        if re.search(_ASCII_BOUNDARY.format(kw=re.escape(kw)), text_lower):
-            return (False, (
-                f"dispatch text matches registered tool '{tool_name}' "
-                f"(keyword '{kw}') but carries no `tool-catalog:` marker. Add "
-                f"`tool-catalog: {tool_name}` if you will try it, or "
-                f"`tool-catalog: none (reasoning: <why not>)` if it genuinely "
-                f"does not apply, then re-dispatch."
-            ))
-    return (True, 'no tool-catalog keyword match')
+        if "status: done" not in text:
+            continue
+        for m in _re.finditer(r"tool-catalog:\s*([^\n]+)", text, _re.IGNORECASE):
+            cited = m.group(1).strip()
+            if not cited or cited.lower().startswith("none"):
+                continue
+            if not any(k in cited.lower() for k in known):
+                violations.append({"worker": p.stem, "cited": cited})
+    return violations
 
 
 # ---------- issue #310: agenttype gate (specialist-first as a MECHANICAL check) ----------
@@ -683,7 +1076,7 @@ def _load_workspace_features(ws) -> dict:
     return {'language': lang} if lang else {}
 
 
-def check_agent_type(paths: dict, desc: str, prompt: str,
+def check_agent_type(paths: dict, cid: str, prompt: str,
                      agent_name: str) -> tuple[bool, str]:
     """Issue #310: dispatch agent type vs route_capability recommendation.
 
@@ -692,7 +1085,6 @@ def check_agent_type(paths: dict, desc: str, prompt: str,
     that the dispatched agent is not, and the prompt records no
     `agent-reasoning:` deviation.
     """
-    _, _, cid = parse_dispatch(desc)
     if not cid or not agent_name:
         return (True, 'no claim id or no agent name - agenttype skipped')
     if not _AGENTTYPE_AVAILABLE:
@@ -731,3 +1123,45 @@ def check_agent_type(paths: dict, desc: str, prompt: str,
 
 
 # ---------- issue #270: REJECT guidance via hookSpecificOutput.additionalContext ----------
+
+
+def check_zero_output_circuit(workspace: str | Path) -> tuple[bool, str]:
+    """#823 A4 canary graduation: same-type zero-output thrash breaker.
+
+    Shadow posture (count + emit only) graduates here: with
+    KUNGLAO_VALUE_ALGO enabled, a tripped circuit (ZERO_OUTPUT_N=3
+    consecutive same-type actions with no belief change) REJECTS the
+    dispatch until a failure_analysis step lands (#634 design).
+    Flag OFF or any read failure -> pass (byte-identical / fail-open,
+    matching this gate family's stance: a broken gate must not
+    deadlock the loop).
+
+    Returns (ok, reason). ok=False means REJECT the dispatch.
+    """
+    if not workspace:
+        return (True, 'no workspace - zero-output circuit skipped')
+    try:
+        import value_config
+        import zero_output_fingerprint
+        if not value_config.is_enabled():
+            return (True, 'flag off - zero-output circuit bypassed')
+        state_path = Path(workspace) / zero_output_fingerprint.STATE_FILE
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return (True, 'no circuit state - zero-output circuit passed')
+        streaks = state.get("streaks") or {}
+        tripped = {fp: n for fp, n in streaks.items()
+                   if int(n) >= zero_output_fingerprint.ZERO_OUTPUT_N}
+        if not tripped:
+            return (True, 'no tripped fingerprint - zero-output circuit passed')
+        return (False, (
+            'BLOCKED: zero-output circuit tripped (#823 A4 canary) - '
+            f'{len(tripped)} same-type action fingerprint(s) at >= '
+            f'{zero_output_fingerprint.ZERO_OUTPUT_N} consecutive checkpoints '
+            'with no belief change. Interrupt and run failure_analysis '
+            '(runs/failure-analysis.md) before retrying this action family; '
+            'the streak resets automatically once the workspace belief moves.'
+        ))
+    except Exception:
+        return (True, 'zero-output circuit error - fail-open')

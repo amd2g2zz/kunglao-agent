@@ -51,7 +51,27 @@ def test_registry_exists_in_wire_up_settings() -> None:
         "env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
         "recall_inject.py", "heartbeat_touch.py", "worker_pulse.py",
         "state_anchor.py", "completion_gate.py", "write_guard.py",
+        "orchestrator_tool_guard.py",  # #608 Bash maker-checker WARN
+        "violation_capture.py",        # #718 Bash violation recorder
+        "bash_fact_guard.py",          # #809 Bash facts-write lint recorder
     }), f"registry drifted from the actual registrations: {sorted(files)}"
+
+
+def test_double_registered_hooks_sentinel() -> None:
+    """#675: the double-registration set is pinned HERE (the sentinel
+    file — deriving it from the registry would be tautological). Every
+    tests/-side count anchor derives its extra registration from this
+    export, so membership drift must be loud and deliberate."""
+    doubled = wire_up_settings.DOUBLE_REGISTERED_HOOKS
+    assert isinstance(doubled, frozenset), (
+        "DOUBLE_REGISTERED_HOOKS must be a frozenset (immutable)")
+    assert doubled == frozenset({"worker_budget.py",
+                                 # #601: second PreToolUse matcher row — MCP
+                                 # host-channel face beside the Bash face
+                                 "orchestrator_tool_guard.py"}), (
+        f"DOUBLE_REGISTERED_HOOKS drifted: {sorted(doubled)} — a membership "
+        "change means register_hooks double-registers differently; update "
+        "this sentinel deliberately and verify the count anchors follow")
 
 
 def test_env_check_hook_files_is_the_registry() -> None:
@@ -158,7 +178,10 @@ def test_check_hooks_scans_stop_section(tmp_path: Path) -> None:
 KONG_CHAIN = ["heartbeat_touch.py", "worker_budget.py",
               "dispatch_gate.py", "worker_pulse.py"]
 KONG_SKIP = {"env_check_gate.py", "recall_inject.py",
-             "state_anchor.py", "completion_gate.py", "write_guard.py"}
+             "state_anchor.py", "completion_gate.py", "write_guard.py",
+             "orchestrator_tool_guard.py",
+             "violation_capture.py",
+             "bash_fact_guard.py"}  # #809
 KICKER_FILES = {"worker_budget.py", "dispatch_gate.py",
                 "heartbeat_touch.py", "worker_pulse.py"}
 

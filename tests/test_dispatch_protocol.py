@@ -16,7 +16,7 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
+from _factories import write_hook_state
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -147,11 +147,7 @@ class TestDispatchGateWarning:
         ws = tmp_path / "malware-analysis-workspace"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("", encoding="utf-8")
-        (ws / ".hook_state.json").write_text(json.dumps({
-            "active_hooks": ["dispatch_gate"],
-            "paused_hooks": [],
-            "expires_at": "2099-12-31T23:59:59Z",
-        }), encoding="utf-8")
+        write_hook_state(ws, active_hooks=["dispatch_gate"])
 
         import subprocess
 
@@ -176,11 +172,7 @@ class TestDispatchGateWarning:
         ws = tmp_path / "malware-analysis-workspace"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("", encoding="utf-8")
-        (ws / ".hook_state.json").write_text(json.dumps({
-            "active_hooks": ["dispatch_gate"],
-            "paused_hooks": [],
-            "expires_at": "2099-12-31T23:59:59Z",
-        }), encoding="utf-8")
+        write_hook_state(ws, active_hooks=["dispatch_gate"])
 
         import subprocess
 
@@ -216,11 +208,7 @@ class TestDispatchMustStop:
         ws = tmp_path / "malware-analysis-workspace"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text("", encoding="utf-8")
-        (ws / ".hook_state.json").write_text(json.dumps({
-            "active_hooks": ["dispatch_gate"],
-            "paused_hooks": [],
-            "expires_at": "2099-12-31T23:59:59Z",
-        }), encoding="utf-8")
+        write_hook_state(ws, active_hooks=["dispatch_gate"])
         return tmp_path
 
     def _run_hook(self, tmp_path: Path, prompt: str):
@@ -237,7 +225,6 @@ class TestDispatchMustStop:
         )
 
     def test_must_stop_unit_match(self) -> None:
-        sys.path.insert(0, str(REPO_ROOT / "hooks"))
         import importlib
         import dispatch_gate as dg
         importlib.reload(dg)

@@ -12,6 +12,8 @@ from pathlib import Path
 
 import yaml
 
+from _hooks_path import load_module_by_path  # #863 Family B: loader delegation (#671 authority)
+
 WORKFLOWS = Path(__file__).resolve().parents[1] / ".github" / "workflows"
 
 
@@ -30,4 +32,25 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())
+
+
+def check_quality_gate_ids() -> bool:
+    """#563: every gate id the release workflow names must exist in the
+    quality_gates GATES registry — stale numbering fails loudly."""
+    import re
+    wf = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "release-check.yml"
+    qg = load_module_by_path(
+        "qg", Path(__file__).resolve().parent.parent / "devkit" / "quality_gates.py")
+    registry = set(qg.GATES)
+    text = wf.read_text(encoding="utf-8") if wf.exists() else ""
+    cited = {int(n) for n in re.findall(r"quality_gates\.py\s+((?:\d+\s*)+)", text)
+             for n in n.split()} if text else set()
+    missing = cited - registry
+    if missing:
+        print(f"SELF-FAIL: workflow cites gate ids {sorted(missing)} not in GATES "
+              f"{sorted(registry)} (stale numbering)")
+        return False
+    return True

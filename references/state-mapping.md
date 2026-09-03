@@ -85,3 +85,5 @@ required on every kunglao fact, validated for key presence by
   slugged filename from the start.
 - `claim-register.yaml` `fact:` fields keep the old ids for now (kunglao_verify
   resolves `facts/<id>.md`); update together with the file rename.
+
+recall_useful: pending

@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "workspace-manifest.md"
@@ -114,7 +115,7 @@ def _run_init_cli(ws: Path, tmp_path: Path) -> subprocess.CompletedProcess:
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "0"
     env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run(
-        [sys.executable, str(INIT), str(ws), "--skip-toolchain",
+        [sys.executable, str(INIT), str(ws), "--skip-toolchain", "--host-exec-protection", "enabled",
          "--type", "windows", "--no-mcp", "--no-hooks",
          "--profile-root", str(tmp_path / "profile-root")],
         capture_output=True, text=True, timeout=120, env=env, errors="replace")
@@ -124,7 +125,7 @@ def test_init_creates_every_contract_dir(tmp_path):
     """End-to-end: a real init run materializes every contract directory."""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws)
     r = _run_init_cli(ws, tmp_path)
     assert r.returncode == 0, f"init failed: {r.stderr}"
     missing = [d for d in CONTRACT_DIRS if not (ws / d).is_dir()]

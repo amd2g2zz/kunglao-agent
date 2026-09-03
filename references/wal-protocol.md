@@ -31,3 +31,5 @@ Re-dispatch same work → same fact_id → same file (idempotent, no collision).
 - `in_flight` intent → re-dispatch (idempotent — safe whether worker wrote the fact or not)
 - fact file with len-17 id (content-hash) + NO intent at all → orphan → `blockers/orphan-<id>.md`
 - pre-existing ordinal facts (F001, len 4) are exempt (predate kunglao-agent)
+
+recall_useful: pending

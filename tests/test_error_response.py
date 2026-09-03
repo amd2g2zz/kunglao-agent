@@ -17,14 +17,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import error_response as er  # noqa: E402
 from error_response import (  # noqa: E402
-    Classification,
     ErrorClass,
     Response,
     classify_init_exit,

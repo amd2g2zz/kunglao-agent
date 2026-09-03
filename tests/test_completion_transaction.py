@@ -6,13 +6,21 @@ oracle, is the authority.
 Replay #2 mechanism: two same-topic PROVEN facts with opposite
 conclusions; decide() returns CONVERGED and judge() trusts the oracle.
 """
-import sys
 from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import completion_gate as cg_scripts
+# #770: bind the scripts TWIN by explicit path (#762 convention) — the ini
+# orders hooks before scripts, so a bare import of this shared name resolves
+# to the hooks side and is NOT what this suite exercises.
+import importlib.util
+
+_cg_scripts_spec = importlib.util.spec_from_file_location("completion_gate_scripts", Path(__file__).resolve().parents[1] / "scripts" / "completion_gate.py")
+cg_scripts = importlib.util.module_from_spec(_cg_scripts_spec)
+import sys as _sys
+_sys.modules["completion_gate_scripts"] = cg_scripts
+_cg_scripts_spec.loader.exec_module(cg_scripts)
+
 import convergence_check
 
 

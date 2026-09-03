@@ -22,7 +22,6 @@ from pathlib import Path
 import yaml
 
 # Make worker_budget importable
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 
 import worker_budget as wb
 

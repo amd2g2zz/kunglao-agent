@@ -41,6 +41,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "devkit"))
 
 import subagent_review as sr  # noqa: E402
+from _factories import write_hook_state
 
 
 # The incident's artifacts (#462 evidence 1), restaged as the behavior
@@ -192,11 +193,7 @@ def _write_yaml(path: Path, data: dict) -> None:
 
 def _activate_hooks(ws: Path) -> None:
     """Make dispatch_gate ACTIVE on this workspace (v1.9.7 TTL)."""
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "active_hooks": ["dispatch_gate"],
-        "paused_hooks": [],
-        "expires_at": "2099-12-31T23:59:59Z",
-    }), encoding="utf-8")
+    write_hook_state(ws, active_hooks=["dispatch_gate"])
 
 
 def _dispatch_ws(root: Path, validated_capability: str) -> Path:

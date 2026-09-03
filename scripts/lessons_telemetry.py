@@ -39,7 +39,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -47,9 +46,7 @@ import yaml
 
 # ---------- UTC stamp (matches retract_claim / failure_analysis_gate) ----
 
-def _utc_now_iso() -> str:
-    """ISO-8601 UTC with a trailing Z — same convention as the rest of the kunglao code."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as _utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 # ---------- emit helper (fail-open — observation must never break counting)
@@ -141,9 +138,13 @@ def compute_utility(citation_count: int, burn_count: int) -> float:
 
 
 def _resolve_library(library: Path | str | None) -> Path:
-    return Path(library) if library is not None else Path(
-        "~/.claude/skills/kunglao-agent/references/lessons"
-    ).expanduser()
+    """#752: the default derives from the EXECUTING install (any durable
+    ~/.claude/skills/<name>/ package resolves to itself; ephemeral
+    checkouts fall back to the production install) — no second hardcoded
+    'kunglao-agent' path may exist outside hook_activation."""
+    from hook_activation import canonical_install_root  # lazy sibling import
+    return (Path(library) if library is not None
+            else canonical_install_root() / "references" / "lessons")
 
 
 def _resolve_workspace(workspace: Path | str | None) -> Path | None:
@@ -321,7 +322,7 @@ def active_lessons(library: Path | str) -> list[Path]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="lessons_telemetry.py",
-        description="CBM quartet + utility_score + tombstone (#526)")
+        description="CBM quartet + utility_score + tombstone")
     ap.add_argument("library", help="lessons library directory")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -363,4 +364,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

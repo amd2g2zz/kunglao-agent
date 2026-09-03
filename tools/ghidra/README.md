@@ -31,7 +31,7 @@ The base class for all tools is `GhidraJsonScript.java` (abstract; never run as 
 
 ## Relation to the index docs
 
-A worker reads `tools/_index-ghidra.md` first (the 6-segment contract entries for the 5 tools: Purpose/Usage/Inputs/Outputs/exit code/when_not, with directly copyable `run_ghidra_postscript.py` usage); this README only explains the in-home file division and the runtime environment. The machine contract is `tools/_INDEX.yaml`.
+A worker reads `tools/_index-ghidra.md` first (the 6-segment contract entries for the 5 postscript tools + `ghidra_diff`: Purpose/Usage/Inputs/Outputs/exit code/when_not, with directly copyable usage); this README only explains the in-home file division and the runtime environment. The machine contract is `tools/_INDEX.yaml`.
 
 ## exit codes (unified by run_ghidra_postscript.py)
 

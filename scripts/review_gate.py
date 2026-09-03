@@ -75,10 +75,10 @@ def main():
     cmd = sys.argv[1]
     if cmd == "key-init":
         keyfile = sys.argv[2]
-        with open(keyfile, "w") as f:
+        with open(keyfile, "w", encoding='utf-8') as f:
             f.write(secrets.token_bytes(32).hex())
         os.chmod(keyfile, 0o600)
-        print(f"key written: {keyfile} (mode 0600)")
+        print("key written: " + keyfile + " (mode 0600)")
         return 0
 
     repo = sys.argv[2]
@@ -135,7 +135,7 @@ def main():
         }
         out = os.path.join(repo, ".review-gate", branch.replace("/", "-") + ".json")
         os.makedirs(os.path.dirname(out), exist_ok=True)
-        with open(out, "w") as f:
+        with open(out, "w", encoding='utf-8') as f:
             json.dump(evidence, f, indent=2)
         print(f"mint OK: {out} ({len(reviewers)} reviewers)")
         return 0
@@ -146,7 +146,7 @@ def main():
         if not os.path.exists(outfile):
             print("REVIEW GATE BLOCKED: no evidence file")
             return 1
-        ev = json.load(open(outfile))
+        ev = json.load(open(outfile, encoding='utf-8'))
         if ev.get("branch") != branch:
             print("REVIEW GATE BLOCKED: branch mismatch")
             return 1
@@ -179,4 +179,6 @@ def main():
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

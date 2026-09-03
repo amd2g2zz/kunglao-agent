@@ -54,15 +54,20 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
 0. python {tk} {ws}              # v1.9.38 one-command tick: selfcheck + reconcile + renew + heartbeat-check + oracle-check
                                  # (all mechanical steps folded into 1 command; manual handling only when exit=1)
                                  # oracle_registered=false in the report → run the Phase 0 task-oracle.yaml backfill now
+                                 # mechanisms face: the tick schedules every registered mechanism (mechanisms.yaml, #878);
+                                 # `python scripts/mechanism_scheduler.py {ws} --plan` answers "what runs when"
 1. Read the runs/.heartbeat-tick.json report: exit=0 → only cognitive steps remain (ping active workers / handle finished workers)
 2. Smart-ping every active worker (§6.1a): SendMessage "[ping HH:MM] step? stuck? eta?"
    → append structured replies to runs/.ping-log.jsonl
    (isolation boundary #88: no agent teams; the orchestrator→worker SendMessage ping is the sanctioned channel,
     workers never message each other)
-3. python {cc} {ws} decision → imperative execution (every decision MUST produce a convergence-advancing action; no action = idle fault):
+3. python {cc} {ws} --json → read the decision field, imperative execution (every decision MUST produce a convergence-advancing action; no action = idle fault):
    DISPATCH   → MUST dispatch priority_ratio.py #1, no idling allowed
    BLOCKED    → MUST self-recover (resolve / stale_blocker_prune) or reactivate the failed claim
    DEFERRED   → MUST check whether reactivation is possible (e.g. VM reachable again → restore the claim and dispatch)
+   PARK       → legal idle on external gates (#634): record the wake_condition, then python {h} {ws} --heartbeat-off
+                (revive via mission_stall.py when the wake condition is met); tick rc=2 with idle_circuit_breaker
+                is a MANDATORY stop — do not re-tick through it
    SATURATED  → MUST poll all active workers (no idle waiting)
    CONVERGED  → run the §6.3 checklist (5 items) + independent verification (blind_gate sign-off spot-check
               + kunglao-verify.py L1 re-run) + handoff-check PASS first
@@ -84,7 +89,7 @@ def verify_loop(ws: str) -> int:
     """
     hb = Path(ws) / "runs" / ".heartbeat.json"
     if not hb.exists():
-        print("HEARTBEAT UNREGISTERED (HARD, #461): no "
+        print("HEARTBEAT UNREGISTERED (HARD): no "
               f"{hb} — monitoring was never started. Fix: run "
               "hook_activation.py <ws> --heartbeat-on, then register the "
               "cron below.", file=sys.stderr)
@@ -92,24 +97,44 @@ def verify_loop(ws: str) -> int:
     try:
         data = json.loads(hb.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
-        print(f"HEARTBEAT UNREADABLE (HARD, #461): {hb}: {exc} — "
+        print(f"HEARTBEAT UNREADABLE (HARD): {hb}: {exc} — "
               "re-register with --heartbeat-on.", file=sys.stderr)
         return 1
     if not data.get("loop_registered"):
         print(
-            "CRON NOT REGISTERED (HARD, #461): runs/.heartbeat.json exists "
+            "CRON NOT REGISTERED (HARD): runs/.heartbeat.json exists "
             "but loop_registered is not true — the /loop heartbeat cron was "
             "never created (or never fired). Monitoring is NOT running and "
             "proceeding silently is forbidden. Fix NOW: re-run "
             "heartbeat_loop_prompt.py <ws> and pass its output to "
             "CronCreate */5 * * * * (or /loop 5m <prompt>); the loop's "
             "first action marks loop_registered=true. Re-run this --verify "
-            "after the first tick (<= one interval); still failing then "
-            "means the CronCreate itself failed — re-create the cron.",
+            "after TWO consecutive ticks (<= 2x interval); still "
+            "failing then means the CronCreate itself failed — re-create it.",
             file=sys.stderr)
         return 1
-    print(f"OK: cron loop registered (loop_registered=true, started "
-          f"{data.get('started_ts')})")
+    # #609 + #754 E2: the marker is a self-written claim — cross-check liveness.
+    # A cron deleted after one successful fire must not keep verify vouching OK,
+    # and (the live-run sample blind spot) a LONE registration tick must neither. Same
+    # continuous-tick standard as the dispatch gate / --heartbeat-check: >=2
+    # ticks with cadence <= 2x interval_min, newest <= STALE_MINUTES. Corrupt /
+    # absent history counts as not ticking (fail-closed).
+    from heartbeat import evaluate_tick_continuity  # noqa: E402 (shared source)
+    alive, detail = evaluate_tick_continuity(
+        data, log_path=Path(ws) / "runs" / ".heartbeat.log")
+    if not alive:
+        print(
+            f"LOOP NOT TICKING (HARD): loop_registered=true but {detail} — "
+            "the cron is registered yet not firing continuously (deleted after "
+            "first fire, session ended, or never created). The marker is "
+            "history, not liveness. Fix: re-register the /loop cron DURABLE "
+            "(heartbeat_loop_prompt.py <ws> -> <ws>/.claude/"
+            "scheduled_tasks.json via loop_scheduler upsert or re-run init), "
+            "then re-run this --verify after TWO consecutive ticks.",
+            file=sys.stderr)
+        return 1
+    print(f"OK: cron loop registered AND ticking continuously "
+          f"(loop_registered=true, started {data.get('started_ts')}; {detail})")
     return 0
 
 
@@ -130,4 +155,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

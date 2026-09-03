@@ -46,6 +46,18 @@ Gate semantics:
      the devkit/workflows face, un-re-pinned references/ edits,
      unregistered new scripts, and ext-index inconsistency (devkit/
      doc_sync.py, #446 + #476).
+  8. Governance Binding — machine-binds governance WORDING to code
+     (#867): (a) deprecated live callers via scripts/retirement_gate.py
+     (baseline ratchet); (b) SKILL.md-taught kunglao_dispatch envelope
+     samples must parse through hooks/lib_kunglao.py:parse_dispatch_json;
+     (c) evals/*.json must not pin DEPRECATED-module behavior (devkit/
+     governance_binding.py).
+  9. Discovery Face — machine-binds tool DECLARATION (#866): every
+     tools/ __main__ CLI must be discoverable in the same change that
+     adds it — a tools/_INDEX.yaml registry row AND a SKILL teaching
+     mention or references/ entry — with a baseline ratchet for
+     pre-gate debt (devkit/discovery_gate.py,
+     devkit/.discovery-gate-baseline.txt; disposition via PR 866-b).
 """
 from __future__ import annotations
 
@@ -248,6 +260,60 @@ def _observation_pass_rate(verbose: bool = True) -> None:
           f"failed={failures + errors} skipped={skipped})")
 
 
+def _gate8_governance_binding(verbose: bool = True) -> bool:
+    """Governance Binding — Gate 8 (issue #867).
+
+    Machine-binds the repo's governance wording to its code (the #819
+    closeout-audit generalization). Three sub-checks in
+    devkit/governance_binding.py:
+      (a) deprecated live callers — scripts/retirement_gate.py scan with
+          its baseline ratchet (the #867 closeout emptied the baseline,
+          so any finding is a violation);
+      (b) SKILL teaching shape — SKILL.md's kunglao_dispatch envelope
+          samples must parse through the real detector
+          (hooks/lib_kunglao.parse_dispatch_json), and any legacy v0
+          prefix mention must carry a replay-only marker;
+      (c) evals reconciliation — evals/*.json must not pin DEPRECATED
+          modules as expected behavior (registry derived mechanically;
+          exceptions in devkit/governance-exceptions.json).
+
+    Fail-closed: missing SKILL/evals surfaces or zero envelope samples
+    are violations.
+    """
+    try:
+        sys.path.insert(0, str(REPO_ROOT / "devkit"))
+        from governance_binding import check as _gov_check
+    except Exception as exc:
+        print(f"  [fail] governance_binding import error: {exc!r}")
+        return False
+    rc = _gov_check()
+    # governance_binding.check() returns 0 (pass) or 1 (violations).
+    # bool(rc==0) — same truthiness trap guard as Gates 5-7.
+    return bool(rc == 0)
+
+
+def _gate9_discovery_face(verbose: bool = True) -> bool:
+    """Discovery Face — Gate 9 (issue #866).
+
+    Machine-binds the three-layer split's DECLARATION layer: a tools/
+    ``__main__`` CLI that is not discoverable (tools/_INDEX.yaml registry
+    row + SKILL teaching or references entry) never enters the candidate
+    set — "built then sealed away" is now a red build, not a doc request.
+    Existing debt rides the baseline ratchet
+    (devkit/.discovery-gate-baseline.txt) and shrinks via PR 866-b.
+    """
+    try:
+        sys.path.insert(0, str(REPO_ROOT / "devkit"))
+        from discovery_gate import check as _discovery_check
+    except Exception as exc:
+        print(f"  [fail] discovery_gate import error: {exc!r}")
+        return False
+    rc = _discovery_check()
+    # discovery_gate.check() returns 0 (pass) or 1 (violations).
+    # bool(rc==0) — same truthiness trap guard as Gates 5-8.
+    return bool(rc == 0)
+
+
 GATES = {
     1: ("Requirement Correctness", _gate1_requirement_correctness),
     2: ("Regression Safety",      _gate2_regression_safety),
@@ -256,19 +322,115 @@ GATES = {
     5: ("Subagent Review",        _gate5_subagent_review),
     6: ("Agents Contract",        _gate6_agents_contract),
     7: ("Doc Sync",               _gate7_doc_sync),
+    8: ("Governance Binding",     _gate8_governance_binding),
+    9: ("Discovery Face",         _gate9_discovery_face),
 }
 
 
-def main(argv: list[str] | None = None) -> int:
+# #563: named selector for the CI quick path — positional ids renumber on
+# registry growth; --quick is stable.
+QUICK_GATES = [1, 3, 4]
+
+
+def _observation_artifact_budget(verbose: bool = True,
+                                 repo_root: Path | None = None,
+                                 sink=None) -> None:
+    """Artifact-budget observation (#720): net NEW specs/tests/files added by
+    the current task vs gc-harness/config.yaml budgets.
+
+    NOT a gate — WARN-level observation per #720 P1 (HARD-ification is a
+    data-driven decision for a later release). Counts ADDED paths against a
+    diff base of origin/dev (fallback: HEAD — i.e. uncommitted work).
+    Over-budget without .agent/budget_justification.md content -> [warn]
+    with the required justification template; with justification -> [observe].
+    """
+    root = repo_root or REPO_ROOT
+    out = sink if sink is not None else print
+
+    def _git(*args: str) -> str:
+        r = subprocess.run(["git", "-C", str(root), *args],
+                           capture_output=True, text=True)
+        return r.stdout if r.returncode == 0 else ""
+
+    base = "origin/dev" if _git("rev-parse", "-q", "--verify",
+                                "origin/dev").strip() else "HEAD"
+    names = _git("diff", "--name-status", "-r", base)
+    added = [ln.split("\t", 1)[1].strip()
+             for ln in names.splitlines()
+             if ln.startswith("A") and "\t" in ln]
+    # untracked files are the most common mid-task state for NEW artifacts —
+    # `git diff` never sees them. Union both surfaces (exclude-standard keeps
+    # gitignored noise like .agent/ out).
+    untracked = _git("ls-files", "--others", "--exclude-standard").splitlines()
+    added = list(dict.fromkeys(added + [u.strip() for u in untracked if u.strip()]))
+    new_specs = {p.split("/", 2)[1] for p in added
+                 if p.startswith("openspec/changes/") and p.count("/") >= 3}
+    new_tests = [p for p in added
+                 if p.startswith("tests/") and Path(p).name.startswith("test_")]
+    cfg_path = root / "gc-harness" / "config.yaml"
+    budgets = {"max_new_spec": 1, "max_new_test": 5, "max_new_files": 20}
+    if cfg_path.is_file():
+        try:
+            import yaml  # local import: repo-wide use-site convention
+            loaded = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+            budgets.update((loaded or {}).get("budget", {}))
+        except Exception:  # noqa: BLE001 — observation must never raise
+            pass
+    counts = {
+        "max_new_spec": len(new_specs),
+        "max_new_test": len(new_tests),
+        "max_new_files": len(added),
+    }
+    over = {k: (counts[k], int(budgets[k]))
+            for k in counts if counts[k] > int(budgets[k])}
+    just = root / ".agent" / "budget_justification.md"
+    has_just = just.is_file() and bool(just.read_text(
+        encoding="utf-8", errors="replace").strip())
+    summary = (f"artifact budget: new_specs={counts['max_new_spec']}/"
+               f"{budgets['max_new_spec']} new_tests={counts['max_new_test']}/"
+               f"{budgets['max_new_test']} new_files={counts['max_new_files']}/"
+               f"{budgets['max_new_files']} (base={base})")
+    if not over:
+        if verbose:
+            out(f"  [observe] {summary}")
+        return
+    detail = "; ".join(f"{k}: {v[0]}/{v[1]}" for k, v in over.items())
+    if has_just:
+        out(f"  [observe] {summary} — over budget WITH justification "
+            f"(.agent/budget_justification.md): {detail}")
+    else:
+        out(f"  [warn] {summary} — OVER BUDGET without justification: {detail}")
+        out("  [warn] required in .agent/budget_justification.md:\n"
+            "        Existing artifact cannot satisfy because: <reason>\n"
+            "        New artifact justification: <reason>")
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    """Parser factory (test seam). NOTE (#758 G1a fallout): argparse on the
+    PINNED py3.11 validates an empty `nargs="*"` against `choices` and dies
+    on a bare `quality_gates.py` invocation, so gate-range validation moved
+    out of choices into main() — behavior-neutral elsewhere."""
     p = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    p.add_argument("gates", nargs="*", type=int, choices=sorted(GATES),
+    p.add_argument("gates", nargs="*", type=int,
                    help="which gates to run (default: all)")
+    p.add_argument("--quick", action="store_true",
+                   help=f"run the CI quick set {QUICK_GATES} (stable name)")
     p.add_argument("--quiet", action="store_true",
                    help="suppress per-gate verbose output")
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = _build_parser()
     args = p.parse_args(argv)
+    bad = [g for g in args.gates if g not in GATES]
+    if bad:
+        p.error(f"invalid gate(s): {bad} (choose from {sorted(GATES)})")
 
     verbose = not args.quiet
-    selected = args.gates or sorted(GATES)
+    if getattr(args, "quick", False) and args.gates:
+        p.error("--quick and positional gates are mutually exclusive")
+    selected = QUICK_GATES if getattr(args, "quick", False) else (args.gates or sorted(GATES))
     print(f"quality_gates: repo={REPO_ROOT} gates={selected}")
 
     failed: list[int] = []
@@ -288,6 +450,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print("\n--- observation only (not a gate) ---")
     _observation_pass_rate(verbose=verbose)
+    _observation_artifact_budget(verbose=verbose)
 
     if failed:
         print(f"\n=== result: FAIL (gates {failed} failed) ===",

@@ -20,6 +20,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+from _factories import write_hook_state
 
 _HERE = Path(__file__).parent
 SCRIPTS = _HERE.parent / "scripts"
@@ -104,10 +105,9 @@ def write_worker(ws: Path, minutes_ago: int, name="w1", status="in-progress") ->
 
 def activate(ws: Path, hook="state_anchor") -> Path:
     """Write .hook_state.json that is_active_strict accepts for `hook`."""
-    st = {"ts": ts(), "tier": "none", "phase": "IDLE",
-          "active_hooks": [hook], "paused_hooks": [],
-          "user_override": {}, "expires_at": future_iso(30)}
-    (ws / ".hook_state.json").write_text(json.dumps(st, indent=2), encoding="utf-8")
+    write_hook_state(ws, active_hooks=[hook], ts=ts(), tier="none",
+                     phase="IDLE", user_override={},
+                     expires_at=future_iso(30))
     return ws
 
 
@@ -225,9 +225,10 @@ def test_hook_skips_when_not_activated(ws, capsys):
     assert capsys.readouterr().out == ""
 
 
-def test_hook_skips_when_workspace_unresolvable(capsys):
+def test_hook_skips_when_workspace_unresolvable(capsys, tmp_path):
     mod = _hook()
-    rc = mod.process_event({"tool_name": "Agent", "cwd": "C:/nonexistent/path-xyz"})
+    rc = mod.process_event({"tool_name": "Agent",
+                            "cwd": str(tmp_path / "nonexistent" / "path-xyz")})
     assert rc == 0
     assert capsys.readouterr().out == ""
 
@@ -282,7 +283,7 @@ def test_rotation_below_window_does_not_warn(ws):
 
 # ===== wire-up: PostToolUse(Agent) registration + ALL_HOOKS membership =====
 #
-# Since #258 the wire-up target is PROJECT-level: wire_up_settings(workspace=ws)
+# Since #258 the wire-up target is PROJECT-level: register_hooks(workspace=ws)
 # writes <ws>/.claude/settings.json. Path.home() is still monkeypatched to a temp
 # dir (env-var redirect is unreliable for Path.home() on Windows) as the regression
 # probe that the user-global settings.json is NEVER written — the #258 hard
@@ -308,8 +309,8 @@ def test_wire_up_registers_state_anchor_postuse_agent(tmp_path, monkeypatch):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings_path = ws / ".claude" / "settings.json"
     assert settings_path.exists(), "wire_up_settings must write the PROJECT settings.json"
     assert not (fake_home / ".claude" / "settings.json").exists(), \
@@ -332,9 +333,9 @@ def test_wire_up_state_anchor_idempotent(tmp_path, monkeypatch):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
-    wire_up_settings(workspace=ws)  # re-run — must be a fixed point
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
+    register_hooks(workspace=ws)  # re-run — must be a fixed point
     settings_path = ws / ".claude" / "settings.json"
     assert not (fake_home / ".claude" / "settings.json").exists()
     settings = json.loads(settings_path.read_text(encoding="utf-8"))

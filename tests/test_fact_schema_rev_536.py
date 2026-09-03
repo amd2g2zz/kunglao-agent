@@ -24,13 +24,13 @@ LINT = ROOT / "scripts" / "lint_facts.py"
 def test_fact_template_has_schema_rev() -> None:
     assert TEMPLATE.exists(), "templates/fact-frontmatter.md missing"
     text = TEMPLATE.read_text(encoding="utf-8")
-    assert re.search(r"`schema_rev:\s*1`", text), (
+    assert re.search(r"`schema_rev:\s*2`", text), (
         "fact template missing the schema_rev pin row — facts will silently "
         "drift when the schema evolves"
     )
     # the example frontmatter carries the pin too
-    assert re.search(r"^schema_rev:\s*1$", text, re.MULTILINE), (
-        "complete-example frontmatter lacks schema_rev: 1"
+    assert re.search(r"^schema_rev:\s*2$", text, re.MULTILINE), (
+        "complete-example frontmatter lacks schema_rev: 2"
     )
 
 
@@ -46,7 +46,7 @@ def test_lint_facts_json_output_carries_schema_rev(tmp_path: Path) -> None:
     facts_dir.mkdir()
     result = subprocess.run(
         [sys.executable, str(LINT), "--json", str(tmp_path)],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, check=False, encoding="utf-8", errors="replace",
     )
     data = json.loads(result.stdout)
     assert data["active_schema_rev"] >= 1, data
@@ -57,7 +57,7 @@ def test_lint_facts_text_output_carries_schema_rev(tmp_path: Path) -> None:
     facts_dir.mkdir()
     result = subprocess.run(
         [sys.executable, str(LINT), str(tmp_path)],
-        capture_output=True, text=True, check=False,
+        capture_output=True, text=True, check=False, encoding="utf-8", errors="replace",
     )
     combined = result.stdout + result.stderr
     assert "active_schema_rev" in combined, (

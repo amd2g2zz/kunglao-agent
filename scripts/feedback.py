@@ -48,8 +48,7 @@ TICK_INTERVAL_MIN = 35
 DEFAULT_MAX_TICKS = 3
 
 
-def utc_now() -> str:
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def read_inbox(inbox: Path) -> list:
@@ -140,7 +139,7 @@ def check_stale(inbox: Path, max_ticks: int = DEFAULT_MAX_TICKS,
 
 
 def main(argv: list | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Feedback inbox + triage (#241)")
+    parser = argparse.ArgumentParser(description="Feedback inbox + triage")
     parser.add_argument("workspace", help="workspace root")
     parser.add_argument("command", choices=("enqueue", "list", "dispose", "stale"))
     parser.add_argument("payload", nargs="?", default=None,
@@ -186,4 +185,6 @@ def main(argv: list | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

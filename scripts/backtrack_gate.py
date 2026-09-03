@@ -31,24 +31,31 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
+
 STATUS_RE = re.compile(r"^## Status\s*$", re.MULTILINE)
 ALLOWED_DECISIONS = {"continue", "retry_different", "escalate", "redispatch"}
 
 
-def utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+from harness_common import utc_now  # #863 Family F: single source (was a local def)
 
 
 def parse_status(text: str) -> str | None:
+    """#607/#444: delegate to lib_kunglao.parse_worker_status (THE single
+    parse point). Legacy `## Status` section files keep working: the section
+    body is normalized to a ``status:`` token so the canonical parser reads
+    it — no more mirror regex drifting blind on inline-token files."""
+    lib = load_hooks_lib()
     m = STATUS_RE.search(text)
-    if not m:
-        return None
-    rest = text[m.end():]
-    for line in rest.splitlines():
-        s = line.strip().lower().replace("-", "_")  # normalize in-progress -> in_progress
-        if s:
-            return s if s in {"in_progress", "done", "blocked", "error"} else None
-    return None
+    if m:
+        rest = text[m.end():]
+        for line in rest.splitlines():
+            s = line.strip().lower()
+            if s:
+                text = text + f"\nstatus: {s}"
+                break
+    token = lib.parse_worker_status(text)
+    return token.replace("-", "_") if token else None
 
 
 def parse_backtrack(text: str) -> dict | None:
@@ -147,4 +154,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

@@ -28,6 +28,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import premature_termination_detect as pt  # noqa: E402
+from _factories import seed_bins
 
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
@@ -154,14 +155,14 @@ def test_no_needs_human_assertion_no_evidence_duty():
 
 def _mk_ws(tmp_path: Path, name: str = "ws") -> Path:
     ws = tmp_path / name
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     return ws
 
 
 def _run_init(ws: Path, extra: list[str] | None = None) -> subprocess.CompletedProcess:
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     argv += ["--type", "windows", "--skip-toolchain",
+             "--host-exec-protection", "enabled",
              "--profile-root", str(ws.parent / "profile-root")]
     env = {k: v for k, v in os.environ.items()
            if k not in (FLAG_NAME, "GHIDRA_HOME", "KUNGLAO_VM_HOST")}

@@ -32,6 +32,7 @@ import types
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -44,6 +45,19 @@ sys.path.insert(0, str(SCRIPTS))
 # Sentinels — MUST match the ones used to generate the golden fixtures at
 # e4e70e0 (tests/fixtures/claudemd-golden/). Deterministic across machines,
 # checkouts and python builds so the byte-equivalence proof is portable.
+# 2026-08-26 regen (#728 web labs): fixtures re-rendered through the same
+# sentinel path after the camoufox-reverse row joined the base-template MCP
+# table (required by tests/test_mcp_supply.py test_docs_tables_match_manifest);
+# the diff is exactly that one table row per fixture.
+# 2026-09-03 regen (#49/#919 type-conditional template): identity line became
+# the RE-expert framing and the MCP table rows are manifest-filtered per type
+# (windows drops gitnexus+camoufox, linux drops x64dbg/volatility/gitnexus/
+# camoufox, android drops the VM-only bullet + x64dbg/volatility/ssh-mcp/
+# camoufox + the three VM env rows); every retained byte is unchanged.
+# 2026-09-03 regen (#920 living handbook): four new sections (Roles &
+# responsibilities derived from agents/*.md, Project layout from the
+# scaffold contract, the per-type Quick start scaffold, Keeping this
+# handbook alive); budgets pinned by tests/test_claudemd_handbook_920.py.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 
@@ -70,8 +84,7 @@ def init_mod():
 def _render(mod, project_type: str, tmp_path: Path) -> str:
     """write_claudemd with pinned sentinel inputs; returns rendered text."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(PAYLOAD)
+    seed_bins(ws, payload=PAYLOAD)
     target = mod.write_claudemd(ws, "sample.exe", SAMPLE_SHA,
                                 project_type=project_type)
     assert target is not None, "write_claudemd skipped (target existed?)"
@@ -210,8 +223,7 @@ def test_init_cli_exits_nonzero_on_template_defect(init_mod, tmp_path,
         good + "\nBOGUS = {{cli_level_defect}}\n", encoding="utf-8")
 
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(PAYLOAD)
+    seed_bins(ws, payload=PAYLOAD)
 
     monkeypatch.setattr(init_mod, "CLAUDEMD_TMPL",
                         bad_dir / "CLAUDE.md.base.tmpl")

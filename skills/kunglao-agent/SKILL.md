@@ -1,8 +1,9 @@
 ---
 name: kunglao-agent
+version: 0.1.2
 description: >-
   Use when the user runs, starts, dispatches, or continues kunglao-agent (/kunglao-agent),
-  or when a malware / RE sample needs deep analysis with unresolved claims. Also
+  or when a reverse-engineering target needs deep analysis with unresolved claims. Also
   auto-triggers on the user's problem phrases — Chinese OR English: "kunglao-agent 笨了",
   "傻等", "空转", "不收敛", "方法错了", "分析办法有问题", "失败归因", "实际进度和计划不匹配",
   "kunglao-agent stuck / not moving", "plan doesn't match reality", "worker reports
@@ -12,6 +13,23 @@ description: >-
   report writing, single quick questions, re-running CTI that already produced
   artifacts. Convergence loop, failure gate, and reference protocols are loaded on
   demand from references/.
+
+v0.1.2 additions (this version):
+- SessionStart enforcement persistence — always_arm + renew on session start
+- Observability lifeline — init full-path log + 19 silent modules wired
+- Rollup write-loop automation — claim terminal state triggers lessons/outcome
+- Lessons nursery two-stage lifecycle — draft → active + trigger_precision gate
+- Lessons utility telemetry + deprecate — CBM quartet + tombstone
+- Dispatch context block mechanization — worker channel + verifier BLIND
+- Hypothesis persistence + restart rehydration 
+- Strategy convergence four metrics — regret / cost-to-slope / P(faster|hit) / competence
+- Workspace export tool — zone-based routing (carrier/evidence/scratch)
+- v0.1.2 milestone audit — 4-piece set: white-box + black-box + log + regression
+- MCP prefix enforcement (security) — rejects mcp__unknown__/mcp__external__
+- Worker budget refactor — split into core/gates/sinks modules
+- Coverage OBSERVATION-only policy — drift guard tests
+- E2E DoD 9 regression — init exit-4 → no subsequent repair
+
 triggers:
   - run kunglao-agent
   - continue kunglao-agent
@@ -21,7 +39,7 @@ triggers:
   - deep RE
   - fact base convergence
   - deep analysis
-  - run malware analysis
+  - run reverse-engineering analysis
   - orchestrator loop
   - tasks expired
   - plan doesn't match reality
@@ -34,18 +52,29 @@ triggers:
   - should just ping
   - RE orchestrator
   - run the RE loop
-  - malware sample triage
+  - binary sample triage
   - claim-driven RE
   - byte-anchored fact base
+  - claim terminal triggers rollup
+  - lessons nursery stage transition
+  - lessons tombstone deprecate
+  - hypothesis persistence restart
+  - dispatch context block inject
+  - MCP prefix enforcement
+  - worker budget refactor
+  - session start arm hooks
+  - observability log scan
+  - strategy metric compute
+  - workspace export import
 arguments: [request]
-argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | help
+argument-hint: init <workspace> | analysis <workspace> | resume <workspace> | upgrade <workspace> | help
 ---
 
 # kunglao-agent — RE orchestrator looper (contract)
 
 **Operative contract.** Convergence-driven dispatch is the core behavior (see the dispatch loop below).
 
-**Identity.** kunglao-agent is a reverse-engineering agent: the orchestrator contract below applies to any RE problem. Malware analysis is the primary use case — a subset of reverse engineering, not an exclusive scope. Examples default to a malware sample; route any other RE work (firmware, protocol, tooling, unknown binaries) through the same phases.
+**Identity.** kunglao-agent behaves like a human reverse-engineering expert: it plans its own analysis path, derives every fact from raw evidence independently, and converges under mechanical gates — for ANY RE problem (firmware, protocol, web/JS, risk-control, binary triage). The task domain is the user's input, never the product's scope: route every target through the same phases.
 
 **Reference library** — progressive disclosure: read `references/_INDEX.md` (domain index + scenario-to-domain map), then per-domain `_index-<domain>.md`; load by scenario on demand, never wholesale. This file is the operative contract — read it, then act. Programmatic recall: `python <SKILL_DIR>/scripts/references_recall.py <scenario|category|filename>` returns matching rows (path + purpose + when-to-read), never file contents.
 
@@ -63,6 +92,7 @@ Run the steps in order; any FAIL blocks the next step.
    `python <SKILL_DIR>/scripts/env_check.py <WORKSPACE>`.
    Five checks: ① AGENT_TEAMS flag (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, process/User/Machine scopes) ② VM reachability (TCP 9876 + 1337) ③ Ghidra analyzeHeadless ④ hook deployment (8 hooks registered in `settings.json` via hook_activation --wire-up, the canonical entry) ⑤ venv + sample sha256. Each item prints `[PASS]`/`[FAIL]`; write the snapshot to `runs/.env-check.json`; exit 0 only when `OVERALL=PASS`.
    Gate semantics (same as `hooks/env_check_gate.py`; see `references/cold-start-contract.md`): ① HARD — flag on = dispatch forbidden (subagents would route through the teammate channel; the flag bans agent-teams to preserve subagent isolation) ②③④ FAIL recoverable — static analysis may proceed, T3 dynamic/decompile restricted.
+   Dynamic channel (full matrix in `references/cold-start-contract.md`): `KUNGLAO_CHANNEL=vmr|ssh|docker|adb|local` — five equivalent control planes; dynamic tasks probe HARD (vmr liveness / ssh/docker/adb capability), static-only tasks WARN without probing; `local` is static-only — a dynamic task on `local` is REJECTED.
    Enter analysis only with `OVERALL=PASS`; fix each FAIL (steps 1-4 below are the repair manual) and re-run until PASS.
 
 1. **Probe the Python venv**: check activation (`$env:VIRTUAL_ENV` / `sys.prefix != sys.base_prefix` / `.venv` exists). Activated → record `venv=<path>` in `analysis_state.txt`. Not activated and `.venv/` missing → create it (`python -m venv .venv`), install dependencies (cryptography, pyyaml) into that venv only, verify with `python -c "import cryptography, yaml"`.
@@ -79,7 +109,7 @@ Run the steps in order; any FAIL blocks the next step.
 
 ## Arguments
 
-Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand (`init` / `analysis` / `resume` / `help` / legacy passthrough) or a natural-language need. The workspace is an explicit positional argument; when absent the subcommand runs its guided no-args prompt (never a silent default, never a guess).
+Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand (`init` / `analysis` / `resume` / `upgrade` / `help` / legacy passthrough) or a natural-language need. The workspace is an explicit positional argument; when absent the subcommand runs its guided no-args prompt (never a silent default, never a guess).
 
 **No arguments → menu, WAIT.** An empty `$ARGUMENTS` prints the subcommand menu below and STOPS — never silently run the loop. Operators must pick a subcommand. (`help` also prints the menu.)
 
@@ -91,6 +121,7 @@ Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand 
    | `help` | print the subcommand usage list |
    | `verify [fact_id]` | run only the M3 verify chain (L1 mechanical + L2 redteam) |
    | `resume <workspace>` | crash/reboot recovery: read-only breakpoint brief (health, state summary, timeline, next step) + re-arm advice — full flow in `skills/resume/SKILL.md` |
+   | `upgrade <workspace> [--dry-run]` | migrate a stale workspace's framework scaffold to the current skill version (`scripts/kunglao_upgrade.py`; user data read-only, RC=4 on byte drift) — full flow in `skills/upgrade/SKILL.md` |
    | `decide` `tick` `verify` `record` `health` | mechanical CLI passthrough — `scripts/kunglao.py` subcommands |
    | `monitor` `digest` `eval` | mechanical CLI passthrough — standalone CLIs (`scripts/kunglao-monitor.py` / `kunglao-digest.py` / `kunglao-eval.py`), not kunglao.py subcommands |
 
@@ -134,7 +165,7 @@ MUSTs: `--wire-up` before the first dispatch (hooks silently drop from settings 
 
 **Oracle backfill (gate power-on)**: before the first dispatch, write the user's task VERBATIM into `<WORKSPACE>/task-oracle.yaml` `task_text:` (init registered the skeleton with a `pending-user-input-backfill` marker). Without the backfill the completion gate judges nothing — an unpowered gate chain is the documented closing-escape hole. The heartbeat tick reports `oracle_registered` each tick; a false value with the marker still in `task_text` means the backfill was skipped — do it now.
 
-**Tick binding**: run `python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — one-shot selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention required. Every convergence decision is a COMMAND with a required action (see the dispatch loop table); no action in a tick = idle fault. Stop the loop at closeout: after the §6.3 checklist + handoff-check PASS, run `python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
+**Tick binding**: run `python <SKILL_DIR>/scripts/heartbeat_tick.py <WORKSPACE>` once per tick — one-shot selfcheck + reconcile + renew + heartbeat-check; exit 1 = manual attention required. Every convergence decision is a COMMAND with a required action (see the dispatch loop table); no action in a tick = idle fault. **THINK seat product**: while the tick waits (no dispatchable/verifiable action), heartbeat_tick writes `runs/.think-<ts>.md` - filling its three sections IS that tick's convergence action, and its `suggested_searches` MUST execute as the NEXT action when present (not searching is a deterministic loss - the field-evidence countermeasure). Stop the loop at closeout: after the §6.3 checklist + handoff-check PASS, run `python <SKILL_DIR>/scripts/hook_activation.py <WORKSPACE> --heartbeat-off` — unconverged teardown is rejected.
 
 ## Phase 2 Dispatch Loop
 
@@ -148,27 +179,32 @@ Act on the decision + exit code — it is a command, not a suggestion:
 
 | Decision | Exit | Meaning | Action |
 | --- | --- | --- | --- |
-| `DISPATCH` | 1 | open claims + free slots | Run `priority_ratio.py`; dispatch the top claim — this turn, no exceptions |
+| `DISPATCH` | 1 | open claims + free slots | Run `priority_ratio.py`; dispatch the top claim — this turn, no exceptions. Dispatch = fire-and-continue: launch the worker as a BACKGROUND task, do NOT block on its return — the next turn is the tick that monitors it |
 | `DISPATCH_VERIFIER` | 2 | partial facts + free slots | Dispatch a verifier; do NOT declare PROVEN without sign-off |
 | `SATURATED` | 3 | open claims but 0 free slots | Poll stuck workers; do not idle |
 | `BLOCKED` | 4 | open claims all blocked | Resolve blockers (self-recovery), then re-check |
+| `THINK` | - | tick waiting period - heartbeat_tick fired the THINK seat | Read the seat's `runs/.think-<ts>.md` and fill its three sections (patterns / hypotheses / value) IN PLACE - that artifact IS this tick's action_taken (EMPTY forbidden); execute any `suggested_searches` as the NEXT action; structured branching goes through the sequentialthinking chain (contract detail owned by the parallel worker-contract wave) |
 | `CONVERGED` | 0 | no open claims, no partials, all PQs have passes-notes, completion transaction clean | claim loop done — CONVERGED now requires zero global contradictions, zero unconsumed discoveries, and PROVEN provenance (recomputed in `convergence_check.py` + `completion_gate.py`). STOP dispatch; deliver |
 
-Manual fallback (script unavailable): scan `claim-register.yaml` for OPEN/PARTIALLY-VERIFIED, confirm `active_workers < 3`, scan `facts/_INDEX.md` for PARTIAL facts. DISPATCH and DISPATCH_VERIFIER must be acted on before this turn ends. A worker notification is a signal, not a trigger: process the result, then re-run the convergence check.
+Manual fallback (script unavailable): scan `claim-register.yaml` for OPEN/PARTIALLY-VERIFIED, confirm `active_workers < 3`, scan `facts/_INDEX.md` for PARTIAL facts. DISPATCH and DISPATCH_VERIFIER must be acted on before this turn ends — dispatched as background launches, never awaited inline. A worker notification is a signal, not a trigger: process the result, then re-run the convergence check.
 
 ## The dispatch contract
 
-The shape is fixed: `[T<N> tools=<comma-separated>] claim <C-NN> <task>`, parsed by `hooks/worker_budget.py` (enforces ≤3 workers, per-claim cap, constraints, time, tier gate). T1 = cheap (grep/strings/DIE/decompile), T2 = medium (emulation), T3 = expensive (VM/Frida). The worker fills `runs/worker-status-<id>.md` and, when done, `facts/F<NNN>.md`. After a worker returns: read both files, classify, update `claim-register.yaml`, re-run `priority_ratio.py`, dispatch the new top. Example: `[T1 tools=grep,xxd] claim C-007 grep chemistry strings in main.main`.
+The shape is fixed: a **v1 canonical JSON envelope** opening the dispatch prompt — `{"kunglao_dispatch": {"version": 1, "claim": "C-NN", "tier": <N>, "tools": [...], "agent": "<agent>"}}` — parsed by `hooks/lib_kunglao.py:parse_dispatch` (single source, v1-first; the legacy `[T<N> tools=...] claim C-NN` text prefix is replay-only, never for new dispatches). T1 = cheap (grep/strings/DIE/decompile), T2 = medium (emulation), T3 = expensive (VM/Frida). The worker fills `runs/worker-status-<id>.md` and, when done, `facts/F<NNN>.md`. Example: `{"kunglao_dispatch": {"version": 1, "claim": "C-007", "tier": 1, "tools": ["grep", "xxd"], "agent": "kunglao-worker"}}` followed by the task text. Trace identity: the envelope MAY carry `"trace_id": "tr-<mission>-<seq>"` — the mission chain id all event rows join on; when omitted, dispatch_gate allocates a mission-stable one (a `trace_allocated` row marks the mint) and the worker echoes it back into worker-status lines (`| trace: <id>`) and fact frontmatter (`trace_id:`, the claim id channel).
 
-**Plan-to-execute**: write `runs/plan-C<NN>.md` BEFORE dispatching claim C-NN — the worker_budget plan gate REJECTS any dispatch without a plan on disk (or with an empty-shell plan carrying no content) or a plan path in the dispatch prompt (the plan phase exposes inferences before execution). The plan declares `agent_type: <agent executing this plan>` (route_capability recommendation). The dispatch prompt must also carry `facts-snapshot:` (e.g. `facts-snapshot: 9 facts at <ts>`) or the dispatch is REJECTED; rank-#1 deviation requires `reasoning:` in the prompt (check_priority audit REJECTS without).
+**Dispatch is fire-and-continue**: launch the worker as a BACKGROUND task and return to the tick loop immediately — NEVER wait inline on a worker's completion. A foreground Task call blocks the whole orchestrator: parallelism collapses to 1, the tick loop never fires, smart pings are never sent, and stuck workers sit undetected (worker monitoring effectively dead). The per-turn flow is: convergence check → dispatch top claims (background launches, ≤3) → immediately re-enter MONITOR (enumerate all workers, TaskOutput non-blocking, ping silent ones, TaskStop delivered ones). Worker completion is discovered ON A LATER TICK via the worker-status file flip + TaskOutput status — then read status + facts, classify, update `claim-register.yaml`, re-run `priority_ratio.py`, dispatch the new top. `hooks/worker_budget_gates.py` counts active workers from `runs/worker-status-*.md` (`scan_active_workers`), so a dispatched-but-unwritten worker is invisible to the ≤3 gate — which is why the worker-side rule (status file FIRST, before any tool use) is mandatory, and why the orchestrator must not fire 4 launches in one turn assuming the gate will catch it.
+
+**Plan-to-execute**: write `runs/plan-C<NN>.md` BEFORE dispatching claim C-NN — the worker_budget plan gate REJECTS any dispatch without a plan on disk (or with an empty-shell plan carrying no content) or a plan path in the dispatch prompt (the plan phase exposes inferences before execution). The plan declares `agent_type: <agent executing this plan>` (route_capability recommendation). Plans carry the state machine (`status: pending|in-flight|blocked|superseded` + `revision: N`); re-planning is incremental — append a `## revision-N` segment, never rewrite. When `python <SKILL_DIR>/scripts/plan_reviser.py --check <WORKSPACE>` exits 3 (`suggest_revision`: fresh blockers/<C-NN>.md / newer PROVEN fact overlapping a plan assumption / cost_advice advisory), you MUST produce a revision segment per suggestion via `--apply` — deciding "no change" still records a no-change revision with its reason. The dispatch prompt must also carry `facts-snapshot:` (e.g. `facts-snapshot: 9 facts at <ts>`) or the dispatch is REJECTED; rank-#1 deviation requires `reasoning:` in the prompt (check_priority audit REJECTS without).
 
 **Tool-first**: before dispatching a claim whose task matches a registered `tools/_INDEX.yaml` category/capability keyword (e.g. crypto decode -> `crypto-tool`), the dispatch prompt must carry `tool-catalog: <tool-name>` (or an explicit `tool-catalog: none (reasoning: ...)` opt-out) — the worker_budget toolfirst gate REJECTS a matching dispatch without it, closing the gap where a passing plan gate still let a worker hand-roll a script instead of trying the registered CLI.
+
+**Ghidra jobs**: single recon/decompile/vtable sweeps go through `ghidra-recon` / `ghidra-decompile-functions` (the `run_ghidra_postscript.py` wrapper); when a Ghidra run is too long to block on, submit it async via `ghidra_job` (submit/poll/fetch/cancel over the same wrapper; `job_store.py` is the shared dir-backed job lib) and keep ticking; two-sample function-level diffing goes to `ghidra_diff` (`create` then query the bindiff.v1 artifact). Shelf overview: `references/re-library/kunglao-toolshelf.md`.
 
 **Specialist-first (mechanical)**: before dispatching, run `python <SKILL_DIR>/scripts/route_capability.py --features-file <probe.json> --claim <C-NN> --workspace <WORKSPACE> --json` and inject the route output into the dispatch prompt — `agent_type: <recommended specialist>` plus the recommended tool chain. The recommendation is deterministic: claim task domain x sample features against the mechanical trigger table (the `triggers:` frontmatter of each `agents/*.md`, pipeline-ordered). Dispatch the recommended specialist (`go-symbols` -> `ghidra-light` -> `pefile-signature`/`floss-filter` -> `verdict-scorer`); if you deviate (e.g. `kunglao-worker` for a specialist-type claim), the prompt MUST carry `agent-reasoning: <why>` — the worker_budget agenttype gate REJECTS a mismatch without it (deviation recorded, not silent). No specialist fits -> `kunglao-worker` silently allowed. Role agents (kunglao-redteam / kunglao-init-worker) are protocol-position dispatches and skip the gate.
 
 **Isolation-first**: never enable agent teams (`CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never set; no teammates spawned — teammates are separate Claude instances sharing a task list and mailbox, which breaks subagent isolation). Workers are isolated subagents: they report only to the orchestrator and never message each other. SendMessage orchestrator↔worker pings remain the sanctioned channel: `[ping HH:MM] step? stuck? eta?` and worker replies — not a team feature. Delivery = TaskStop: TaskStop a delivered worker (`status: done`/`blocked` + artifacts verified) before any further dispatch/verify action. Checklist → `references/operational-mechanics.md` "Delivery = TaskStop".
 
-**Init-worker path (type-aware init)**: workspace initialization is itself a dispatch — if `env_check` / `env_check_gate` reports the workspace lacks init completion (`[initialized]` marker + `project_type=` in `analysis_state.txt`), dispatch `kunglao-init-worker` to run type-aware init (`kunglao-init.py <ws> [--type windows|linux|android] [--target NAME]`, target alignment as intake step 0: undecided target/type items exit 8 with a structured pending list on stdout; the worker collects answers via AskUserQuestion and re-enters with `--resolve <answers.json>` — a sniff hint is context only, containers list contents and never get a guessed type, stdin is not a user channel). kunglao-init itself runs `toolchain.py` BEFORE scaffold and REFUSES on HARD FAIL (exit 4, per-item install commands, partial scaffold cleaned, retry idempotent; ask-then-install only under `--assume-yes`) — a missing HARD toolchain component is a human-install event: the worker relays the guidance as blockers and does NOT silently repair; after the human installs, re-run init until exit 0. No analysis-worker dispatch may proceed on an incomplete workspace; dynamic (T2/T3) dispatch additionally requires a static-gap list in the prompt (five-layer principle ③).
+**Init-worker path (type-aware init)**: workspace initialization is itself a dispatch — if `env_check` / `env_check_gate` reports the workspace lacks init completion (`[initialized]` marker + `project_type=` in `analysis_state.txt`), dispatch `kunglao-init-worker` to run type-aware init (`kunglao-init.py <ws> [--type windows|linux|android|macos] [--target NAME]`, target alignment as intake step 0: undecided target/type items exit 8 with a structured pending list on stdout; the worker collects answers via AskUserQuestion and re-enters with `--resolve <answers.json>` — a sniff hint is context only, containers list contents and never get a guessed type, stdin is not a user channel). kunglao-init itself runs `toolchain.py` BEFORE scaffold and REFUSES on HARD FAIL (exit 4, per-item install commands, partial scaffold cleaned, retry idempotent; ask-then-install only under `--assume-yes`) — a missing HARD toolchain component is a human-install event: the worker relays the guidance as blockers and does NOT silently repair; after the human installs, re-run init until exit 0. No analysis-worker dispatch may proceed on an incomplete workspace; dynamic (T2/T3) dispatch additionally requires a static-gap list in the prompt (five-layer principle ③).
 
 **Script discipline**: any reusable tool logic a worker needs must reference an existing CLI in `scripts/` or be written as a parameterized CLI script there — never inlined as `python -c "..."` or a heredoc `<<'EOF'` in a dispatch prompt or a one-off Bash command. One-off diagnostic commands may run inline; any reusable logic gets a script first, then is invoked. Reuse existing CLIs (`scripts/kunglao.py`, `scripts/env_check.py`, `scripts/toolchain.py`, `scripts/shell_defaults.py`) before writing new ones. Before writing a NEW script, check `tools/_INDEX.yaml` for a registered tool covering the same capability — reuse it via its CLI first. CLI spec checklist → `references/cli-script-checklist.md`.
 
@@ -194,11 +230,15 @@ Run `python <SKILL_DIR>/scripts/convergence_health.py <WORKSPACE>` every 3rd tur
 
 **Dispatch policy**: claim-driven — `claim_deps.yaml` is the core; claims are nodes, dispatch/verify/propagate all key off claims, refutation propagates along deps. Tier-gated — broad cheap evidence (T1) on all claims before expensive (T3) on one (`worker_budget.check_tier_gate()`, iterative deepening by evidence cost). Greedy best-first — `scripts/priority_ratio.py` (VoI proxy [0.45·L+0.30·D+0.25·N]/cost, priority queue by rank). Pick the next open claim within the dep+tier constraints, ranked by that script. Search cadence (iteration 1 cheap → 5 medium → 8 cross-validate → 10+ stop) — see `references/_INDEX.md`. Tool inventory + CLI family — see `references/_INDEX.md`.
 
+**Value ordering - sanctioned channel**: the ranking honors the workspace's structured worth ruling in `runs/value-weights.yaml` (`claim_classes:` impact-to-weight map + `overrides:` per-claim multipliers; loaded fail-open - no/absent file = every weight 1.0). A user ruling (e.g. "RCE is the goal, DoS earns no bounty") is STRUCTURED BY THE ORCHESTRATOR into that file and takes effect on the next `priority_ratio.py` run. Hand-editing ranking inputs or relaying verdicts via SendMessage mid-loop is NOT the channel - it bypasses the audit trail and evaporates on restart.
+
 **Drift reality check**: run `python <SKILL_DIR>/scripts/plan_drift_detector.py <WORKSPACE>` each round — verify the plan's claim IDs against `claim_deps.yaml` and the next-step claims; unverified plan items are hypotheses — never execute on a stale plan.
 
 **Refutation propagation**: when a claim is refuted, run `python <SKILL_DIR>/scripts/refutation_propagate.py <WORKSPACE>` — mark dependents from `claim_deps.yaml` and propagate; do not re-plan wholesale.
 
 **Feedback inbox**: read the feedback inbox each tick — `python <SKILL_DIR>/scripts/feedback.py <WORKSPACE> read`; classify entries and dispose stale ones. User feedback enters as a `source: user_feedback` claim (hypothesis) — it does not jump the queue.
+
+**Assumption rewrite lane (note-supersedes-hypothesis)**: when verified evidence retires an OPEN hypothesis, write the correcting note under `notes/` (`verify_status: pending`, frontmatter `supersedes_hypothesis: H-NNN`) and run `python <SKILL_DIR>/scripts/notes_writer.py <WORKSPACE> --supersede-hyp <NOTE_ID>` - the state machine flips H-NNN open→superseded pointing at the note, emits `hypothesis_superseded`, and returns affected_claims (claim + same competitor_group peers) scoping the next priority recalc. Hand-editing `hypotheses/*.md` is not the channel; decided hypotheses never reopen - write a NEW hypothesis.
 
 **Tier rules**: run `python <SKILL_DIR>/scripts/tier_rules.py <WORKSPACE>` — assign a tier per claim; dispatch only within tier constraints.
 
@@ -223,7 +263,7 @@ Static vs dynamic: static = reproduce + byte-exact compare; dynamic = re-run the
 
 ### 1. Tool-use boundary
 
-Never call an analysis tool directly — analysis tools produce evidence; workers gather it, you verify it. Violation: stop analysis immediately, write a fact if evidence was produced, route the remaining work through `Agent` dispatches. Skill-mediated tool use = direct violation (§1a) — copy the skill's workflow guidance into the dispatch description instead. §1b verifiers must be BLIND. §1c checkpoint state immediately — snapshot is HARD; state loss = HARD STOP; dispatch prompts carry `facts-snapshot:`. §1d project must be git; workers in isolated worktrees (state-loss recovery = git, not memory). §1d.1 skill/repo changes: confirm → commit → modify → merge. §1d.2 gitignored source dirs are absent in worker worktrees. §1d.3 superseded-path declaration — re-dispatches ban the dead path explicitly. See `references/_INDEX.md` for the full guardrails reference.
+Never call an analysis tool directly — analysis tools produce evidence; workers gather it, you verify it. Violation: stop analysis immediately, write a fact if evidence was produced, route the remaining work through `Agent` dispatches. Skill-mediated tool use = direct violation (§1a) — copy the skill's workflow guidance into the dispatch description instead. §1b verifiers must be BLIND; re-dispatches must be GAP-ONLY — the redo prompt carries WHERE it diverged, never the verifier's derived answer (build the redo input via `dispatch_context.py --redo-diff`, never by pasting DIFF conclusion lines). §1c checkpoint state immediately — snapshot is HARD; state loss = HARD STOP; dispatch prompts carry `facts-snapshot:`. §1d project must be git; workers in isolated worktrees (state-loss recovery = git, not memory). §1d.1 skill/repo changes: confirm → commit → modify → merge. §1d.2 gitignored source dirs are absent in worker worktrees. §1d.3 superseded-path declaration — re-dispatches ban the dead path explicitly. See `references/_INDEX.md` for the full guardrails reference.
 
 Isolation-first: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` is never enabled — no agent teams, no teammates, no team setup; workers never message each other; SendMessage orchestrator↔worker pings stay allowed (sanctioned channel); TaskStop on delivery. Full contract → the dispatch loop section.
 
@@ -283,7 +323,7 @@ Read `references/failure-modes.md` (index) for all 18 F-rows and their enforceme
 
 **The orchestrator is NOT an analyst**: never decompile, emulate, scan strings, or gather novel evidence — that is delegated to workers (maker-checker: worker = maker, you = checker, different agents). Never ask the user "should I do X?" — act per this contract; ask only when the next action is genuinely unrecoverable without user input (contradicting CTI, blocked on access, zero OPEN claims + empty fact base). Do not re-read what hasn't changed — mid-iteration re-read heuristic — see `references/_INDEX.md`. Do not query CTI/OSINT sources, extract IOCs, or attribute to a threat actor — the job ends at a byte-anchored, verified RE fact base.
 
-**Three jobs, nothing else**: MONITOR — read the cold-start files, track claims, spot cross-fact patterns (synthesis). DISPATCH — run `scripts/priority_ratio.py` to rank dispatchable open claims, dispatch the top within ≤3 workers + tier gate; deviate from rank #1 only with recorded `reasoning`; do NOT prescribe how a worker works. VERIFY — the verify chain above.
+**Three jobs, nothing else**: MONITOR — read the cold-start files, track claims, spot cross-fact patterns (synthesis). DISPATCH — run `scripts/priority_ratio.py` to rank dispatchable open claims, dispatch the top within ≤3 workers + tier gate (background launch, fire-and-continue); deviate from rank #1 only with recorded `reasoning`; do NOT prescribe how a worker works. VERIFY — the verify chain above.
 
 **Read/write boundary (F2)**: read state (`claim-register.yaml` / `task_spec.yaml` / plan / worker status) — always allowed; it is decision, not analysis. Read evidence (`evidence/*`, decompile, `runs/`) — allowed, for VERIFY reproduction and cross-fact pattern recognition. Read evidence AND write facts from it — FORBIDDEN unless through a worker, or marked `synthesis: true` + source and passed through `<malware-veri-notes>/scripts/verify-note.py`.
 

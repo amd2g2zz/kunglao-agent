@@ -19,7 +19,8 @@ IDS = ["r1-gate", "r2-gate", "r3-gate"]
 
 
 def run(*args):
-    return subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True)
+    return subprocess.run([sys.executable, SCRIPT, *args], capture_output=True,
+                          text=True, encoding="utf-8", errors="replace")
 
 
 @pytest.fixture()
@@ -46,9 +47,11 @@ def key(tmp_path):
 
 def staged_sha(repo):
     out = subprocess.run(
-        ["git", "-C", str(repo), "diff", "--cached", "--binary"], capture_output=True, check=True,
+        ["git", "-C", str(repo), "diff", "--cached", "--binary"],
+        capture_output=True, check=True,
+        encoding="utf-8", errors="replace",
     ).stdout
-    return hashlib.sha256(out).hexdigest()
+    return hashlib.sha256(out.encode("utf-8")).hexdigest()
 
 
 def write_evidence(repo, name, rid, verdict, sha):

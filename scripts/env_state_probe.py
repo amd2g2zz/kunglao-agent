@@ -37,7 +37,6 @@ CLI: env_state_probe.py <workspace> [--json]
 """
 from __future__ import annotations
 
-import datetime
 import json
 import os
 import shutil
@@ -66,9 +65,7 @@ VM_CAPS = ("vm_reachable", "mcp_bridge")
 ANDROID_CAPS = ("adb", "frida_server", "jdwp_debug")
 
 
-def _utc_now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(
-        timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def _entry(status: str, detail: str) -> dict:
@@ -185,4 +182,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

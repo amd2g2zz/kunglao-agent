@@ -1,0 +1,4 @@
+# retirement-gate baseline ratchet (#861).
+# Empty since #867: the last entry (deprecated_live_caller:priority<-scripts/external_kicker.py)
+# was cleared by the priority_ratio closeout. Never re-baseline debt without
+# a new audit entry naming the follow-up issue.

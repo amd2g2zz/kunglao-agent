@@ -104,3 +104,27 @@ Compare `task_spec.yaml` to `task_spec_snapshot.yaml` (written after each re-pla
   having to remember convergence_check. It's a heuristic nudge, not a gate:
   you still decide. If the pulse disagrees with your read, re-run
   `convergence_check.py` manually — the scripts are the source of truth.
+
+
+## Dynamic channel matrix (#698)
+
+`KUNGLAO_CHANNEL` picks the agent's execution control plane for dynamic
+debugging — five equivalent first-class choices, environment self-selects:
+
+| Channel | Drives | Probe (dynamic tasks only) |
+|---|---|---|
+| `vmr` (default) | VMware VM, any guest OS; snapshot/revert is its irreplaceable value | dual-port liveness (9876 + frida) |
+| `ssh` | any ssh-reachable box (bare metal / cloud VM / mac / iOS / docker host) | capability: real `ssh -o BatchMode=yes ... true`; optional docker-over-ssh |
+| `docker` | local or remote daemon (`DOCKER_HOST`); `KUNGLAO_DOCKER_CONTAINER` execution target | capability: `docker version` + optional `docker exec <c> true` |
+| `adb` | Android emulator / real device | capability: `adb devices` + frida liveness |
+| `local` | host static analysis ONLY | none — policy channel |
+
+Gate contract: **dynamic tasks → HARD** (tri-state failure details, backend
+named); **static-only tasks → WARN, zero probes** ("dynamic channel
+unchecked"); **`local` + dynamic task → REJECT** ("local channel forbids
+dynamic analysis — switch KUNGLAO_CHANNEL to vmr/ssh/docker/adb").
+Execution layer: vmr-shell skill (snapshots), ssh-mcp (`npm i -g ssh-mcp`;
+run-command / sftp-upload / sftp-download) with CLI ssh fallback; docker
+and adb flow through the existing skill layer.
+
+recall_useful: pending

@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """toolchain.py — type-aware toolchain probe matrix (#304, #474 probe tiers).
 
-Per-type manifests (windows/linux/android), tiers 0-3 (HARD/HARD/HARD/WARN).
+Per-type manifests (windows/linux/android/web), tiers 0-3
+(HARD/HARD/HARD/WARN). #728: web is labs — WARN-only face, no HARD items.
 Real probes (subprocess with timeouts, fail-open on probe crash but honest
 reporting). Dependency-cascade error messages that name the ROOT CAUSE.
 #474: every check carries a probe tier — PRESENCE (exists), LIVENESS
@@ -33,6 +34,7 @@ import socket
 import shutil
 import subprocess
 import sys
+import zipfile
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -43,22 +45,10 @@ try:
 except (AttributeError, ValueError):
     pass
 
-
-def _ensure_utf8_stderr(stream=None) -> bool:
-    """#451 乱码 fix: stderr unified to utf-8/replace (stdout already is).
-
-    A GBK-default stderr next to a utf-8 stdout garbles the mixed terminal
-    stream (`REFUSE —` -> `REFUSE ??`, 2026-08-17 transcript). Fail-open on
-    streams without reconfigure (returns False, never raises)."""
-    target = sys.stderr if stream is None else stream
-    reconfigure = getattr(target, "reconfigure", None)
-    if reconfigure is None:
-        return False
-    try:
-        reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        return False
-    return True
+# #863 Family H: single source in utf8_boot (#811 stdio-insurance module);
+# alias binds the SHARED function so the module-level call below keeps its
+# exact position in module-init order (stdout first, then stderr).
+from utf8_boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
 
 
 _ensure_utf8_stderr(sys.stderr)
@@ -82,7 +72,11 @@ import mcp_probe  # noqa: E402  (same dir, sys.path injected above)
 # dependency kunglao-init already uses for the CLAUDE.md constraint block.
 import yaml  # noqa: E402
 
-VALID_TYPES = ("windows", "linux", "android")
+# #728: web mirrors init_state.VALID_TYPES (deliberate layer copy —
+# comment block at the original definition site).
+# #760: "macos" joins the labs pair (WARN-only face, no VM channel —
+# openspec/changes/issue-760-dispatch-tools D4).
+VALID_TYPES = ("windows", "linux", "android", "web", "macos")
 
 # F6 (#304 review): single source of truth for the init predicate component.
 from init_state import read_project_type  # noqa: E402
@@ -104,44 +98,212 @@ FRIDA_PORT = _parse_port(os.environ.get("KUNGLAO_FRIDA_PORT"), 1337)
 # #356 W3: VM shell port env-configurable (was bare 9876 constant), same
 # defensive parse as FRIDA_PORT — default unchanged.
 VM_SHELL_PORT = _parse_port(os.environ.get("KUNGLAO_VM_SHELL_PORT"), 9876)
+
+# #698 dynamic channel: KUNGLAO_CHANNEL picks the agent's execution control
+# plane for dynamic debugging (five first-class, environment-equivalent
+# backends; default vmr keeps the pre-#698 behavior byte-identical).
+SSH_CONNECT_TIMEOUT = 5    # seconds, BatchMode connect timeout
+CHANNEL_CMD_TIMEOUT = 15   # seconds, channel capability probes (ssh/docker/adb)
 ANDROID_SERVER_PORT = 23946  # IDA android_server default listener port
 
 # #304 amendment (comment 304-5289955958): per-item friendly install commands.
 # kunglao-init prints these on HARD refusal so the HUMAN knows exactly what to
 # install — init does NOT silently repair. Keyed by check item name.
-FIXES: dict[str, str] = {
-    "pefile": "pip install pefile",
-    "die": "install DIE (Detect It Easy) and add it to PATH",
-    "floss": "pip install flare-floss (or add floss to PATH)",
-    "file": "install binutils (file) and add to PATH",
-    "readelf": "install binutils (readelf) and add to PATH",
-    "objdump": "install binutils (objdump) and add to PATH",
-    "decompiler": "install a decompiler — follow the #408 installer (set GHIDRA_HOME=<Ghidra install root> with support/analyzeHeadless(.bat), or install IDA with idat64 on PATH, or register the ghidra/ida-pro-vm MCP via `claude mcp add`)",
-    "ghidra": "set GHIDRA_HOME=<Ghidra install root> (support/analyzeHeadless must exist, platform-correct name #409)",
-    "ida": "install IDA and add idat64 to PATH",
-    "vm_reachable": "set KUNGLAO_VM_HOST=<live VM lease IP> (vmr-shell discovery) and ensure ports are open",
-    "remote_debugger": "fix the root cause first: make the VM reachable (set KUNGLAO_VM_HOST), then deploy the remote debugger on the VM",
-    "aapt": "install Android SDK build-tools (aapt/aapt2) and add to PATH (or install unzip as a substitute)",
-    "jadx": "install jadx and add it to PATH",
-    "apktool": "install apktool and add it to PATH",
-    "gitnexus": "npm i -g gitnexus (or install per GitNexus docs); verify `gitnexus --version`",
-    "adb": "install Android SDK platform-tools and add adb to PATH; attach a device (`adb devices` must be non-empty)",
-    "device_root": "root the device: `adb root` (emulator) or su via Magisk; verify `adb shell su -c id` returns uid=0",
-    "debug_flag": "set the debug flag: `adb shell am set-debug-app -w <pkg>` or `adb shell setprop ro.debuggable 1`; verified at init via `adb shell getprop ro.debuggable` (must read back 1)",
-    "frida_server": "fix the root cause first (ADB); then deploy a RENAMED frida-server binary on custom port "
-                    f"{FRIDA_PORT} and verify at init via `adb forward tcp:{FRIDA_PORT} tcp:{FRIDA_PORT}` + TCP connect "
-                    "(default name/port 27042 is detected by samples)",
-    "android_server": "fix the root cause first (ADB); then adb push android_server to the device and run it; "
-                      f"verified at init via `adb forward tcp:{ANDROID_SERVER_PORT} tcp:{ANDROID_SERVER_PORT}` + TCP connect",
-    "jdwp_debug": "optional capability (WARN): only needed when the task actually drives jdb. "
-                  "To enable: ADB ok + ro.debuggable=1 + the target app running (`adb jdwp` lists "
-                  "a pid); the probe forwards tcp:8700 -> jdwp:<pid> and exchanges the raw 14-byte "
-                  "JDWP-Handshake (jdb stays the interactive driver; never jdb -attach — side effects)",
+#
+# #680: FIXES values are structured ToolMeta, not bare strings. The legacy
+# guidance text survives verbatim as ToolMeta.fix (still what init prints);
+# the new fields end the "agent hunts for the install page / picks the wrong
+# package" waste — url/description always, repo/package/verify_cmd where
+# applicable. Old string callers keep a working string face: ToolMeta.__str__
+# renders the fix text, and fix_text(name) is the typed accessor.
+@dataclass(frozen=True)
+class ToolMeta:
+    """#680: metadata for one FIXES entry.
+
+    fix:         remediation guidance (the legacy FIXES string, verbatim)
+    description: one-line purpose (what the tool is FOR)
+    url:         official homepage / docs (None = unknown -> rendering omits
+                 the line; never fabricated)
+    repo:        source repository (None when none applies separately from url)
+    package:     PyPI / npm / apt package name (None when not a package)
+    verify_cmd:  post-install verification command (e.g. `jadx --version`)
+    """
+
+    fix: str
+    description: str
+    url: str | None
+    repo: str | None = None
+    package: str | None = None
+    verify_cmd: str | None = None
+
+    def __str__(self) -> str:
+        """Backward compat (#680 test 5): a FIXES value interpolated into a
+        string renders the legacy guidance text, never a dataclass repr."""
+        return self.fix
+
+
+FIXES: dict[str, ToolMeta] = {
+    # #728 web (labs): direct-npx JS recovery tools (agent-invoked, never
+    # init-gated). url/package/verify_cmd verified against upstream
+    # READMEs + execution on 2026-08-26.
+    "wakaru": ToolMeta(
+        fix="npx -y wakaru --version (first use installs via npx)",
+        description="bundler-aware JS module recovery (unpack webpack/"
+                    "esbuild/Browserify/Metro + transpiler/minifier undo)",
+        url="https://github.com/pionxzh/wakaru",
+        package="wakaru", verify_cmd="npx wakaru --version"),
+    "webcrack": ToolMeta(
+        fix="npx -y webcrack --version (first use installs via npx)",
+        description="obfuscator.io-class JS deobfuscation + unminification",
+        url="https://github.com/j4k0xb/webcrack",
+        package="webcrack", verify_cmd="npx webcrack --version"),
+    "pefile": ToolMeta(
+        fix="pip install pefile",
+        description="PE/COFF parsing and Authenticode signature extraction",
+        url="https://github.com/erocarrera/pefile",
+        package="pefile", verify_cmd="pip show pefile"),
+    "die": ToolMeta(
+        fix="install DIE (Detect It Easy) and add it to PATH",
+        description="packer/compiler detector for PE/ELF/Mach-O",
+        url="https://github.com/horsicq/Detect-It-Easy",
+        package="die", verify_cmd="diec --version"),
+    "floss": ToolMeta(
+        fix="pip install flare-floss (or add floss to PATH)",
+        description="FLARE string deobfuscation (stack/tight strings)",
+        url="https://github.com/mandiant/flare-floss",
+        package="flare-floss", verify_cmd="floss --version"),
+    "file": ToolMeta(
+        fix="install binutils (file) and add to PATH",
+        description="file-type identification",
+        url="https://www.darwinsys.com/file/",
+        repo="https://github.com/file/file",
+        package="file", verify_cmd="file --version"),
+    "readelf": ToolMeta(
+        fix="install binutils (readelf) and add to PATH",
+        description="ELF header/section/segment inspection",
+        url="https://www.gnu.org/software/binutils/",
+        repo="https://sourceware.org/git/binutils-gdb.git",
+        package="binutils", verify_cmd="readelf --version"),
+    "objdump": ToolMeta(
+        fix="install binutils (objdump) and add to PATH",
+        description="disassembly and object-file inspection",
+        url="https://www.gnu.org/software/binutils/",
+        repo="https://sourceware.org/git/binutils-gdb.git",
+        package="binutils", verify_cmd="objdump --version"),
+    "decompiler": ToolMeta(
+        fix="install Ghidra OR IDA — either satisfies this check (#408 installer: set GHIDRA_HOME=<Ghidra install root> with support/analyzeHeadless(.bat), OR put idat64 on PATH); or register the ghidra/ida-pro-vm MCP via `claude mcp add`)",
+        description="headless decompiler supply (Ghidra or IDA)",
+        url="https://ghidra-sre.org/",
+        repo="https://github.com/NationalSecurityAgency/ghidra",
+        package="ghidra", verify_cmd="analyzeHeadless"),
+    "ghidra": ToolMeta(
+        fix="set GHIDRA_HOME=<Ghidra install root> (support/analyzeHeadless must exist, platform-correct name #409)",
+        description="Ghidra reverse-engineering suite (headless analyzeHeadless)",
+        url="https://ghidra-sre.org/",
+        repo="https://github.com/NationalSecurityAgency/ghidra",
+        verify_cmd="analyzeHeadless"),
+    "ida": ToolMeta(
+        fix="install IDA and add idat64 to PATH",
+        description="IDA Pro disassembler (commercial)",
+        url="https://hex-rays.com/ida-pro/"),
+    "vm_reachable": ToolMeta(
+        fix="set KUNGLAO_VM_HOST=<live VM lease IP> (vmr-shell discovery) and ensure ports are open",
+        description="analysis VM channel liveness (vmrun/VBoxManage lease IP + open ports)",
+        url="https://github.com/amd2g2zz/kunglao-agent"),
+    "remote_debugger": ToolMeta(
+        fix="fix the root cause first: make the VM reachable (set KUNGLAO_VM_HOST), then deploy the remote debugger on the VM",
+        description="remote debugger deployed on the analysis VM",
+        url="https://github.com/amd2g2zz/kunglao-agent"),
+    "aapt": ToolMeta(
+        fix="install Android SDK build-tools (aapt/aapt2) and add to PATH (or install unzip as a substitute)",
+        description="Android asset packaging tool (APK manifest inspection)",
+        url="https://developer.android.com/tools/aapt",
+        package="aapt", verify_cmd="aapt version"),
+    "jadx": ToolMeta(
+        fix="install jadx and add it to PATH",
+        description="DEX-to-Java decompiler",
+        url="https://github.com/skylot/jadx",
+        package="jadx", verify_cmd="jadx --version"),
+    "apktool": ToolMeta(
+        fix="install apktool and add it to PATH",
+        description="APK resource decoding and rebuilding",
+        url="https://github.com/iBotPeaches/Apktool",
+        package="apktool", verify_cmd="apktool --version"),
+    "gitnexus": ToolMeta(
+        fix="npm i -g gitnexus (or install per GitNexus docs); verify `gitnexus --version`",
+        description="post-decompile code graph builder (npm)",
+        url="https://www.npmjs.com/package/gitnexus",
+        package="gitnexus", verify_cmd="gitnexus --version"),
+    "dexdc": ToolMeta(
+        fix="install dex-decompiler: build the PyO3 wheel (cd dex-decompiler-py && maturin build --release && pip install target/wheels/dex_decompiler-*.whl) or cargo build --release; verify `pip show dex_decompiler`",
+        description="Rust DEX decompiler + per-method CFG + value-flow taint + offline emulator (no JVM)",
+        url="https://github.com/androguard/dex-decompiler",
+        repo="https://github.com/androguard/dex-decompiler",
+        verify_cmd="pip show dex_decompiler"),
+    "apkid": ToolMeta(
+        fix="install apkid: `pip install apkid` (https://github.com/rednaga/APKiD); verify `apkid --version` returns 2.x",
+        description="APK packer/compiler/obfuscator fingerprinting (YARA)",
+        url="https://github.com/rednaga/APKiD",
+        package="apkid", verify_cmd="apkid --version"),
+    "baksmali": ToolMeta(
+        fix="install baksmali (https://github.com/baksmali/smali/releases - download jar or `apt install baksmali`); verify `baksmali --version` returns 2.x",
+        description="DEX disassembler to smali",
+        url="https://github.com/baksmali/smali/releases",
+        repo="https://github.com/baksmali/smali",
+        package="baksmali", verify_cmd="baksmali --version"),
+    "adb": ToolMeta(
+        fix="install Android SDK platform-tools and add adb to PATH; attach a device (`adb devices` must be non-empty)",
+        description="Android Debug Bridge host client",
+        url="https://developer.android.com/tools/adb",
+        package="adb", verify_cmd="adb --version"),
+    "device_root": ToolMeta(
+        fix="root the device: `adb root` (emulator) or su via Magisk; verify `adb shell su -c id` returns uid=0",
+        description="rooted device (su/Magisk) for dynamic instrumentation",
+        url="https://github.com/topjohnwu/Magisk"),
+    "debug_flag": ToolMeta(
+        fix="set the debug flag: `adb shell am set-debug-app -w <pkg>` or `adb shell setprop ro.debuggable 1`; verified at init via `adb shell getprop ro.debuggable` (must read back 1)",
+        description="device ro.debuggable / debug-app state for JDWP",
+        url="https://developer.android.com/tools/adb"),
+    "frida_server": ToolMeta(
+        fix="fix the root cause first (ADB); then deploy a RENAMED frida-server binary on custom port "
+            f"{FRIDA_PORT} and verify at init via `adb forward tcp:{FRIDA_PORT} tcp:{FRIDA_PORT}` + TCP connect "
+            "(default name/port 27042 is detected by samples)",
+        description="renamed frida-server on a custom port (anti-detection)",
+        url="https://frida.re/",
+        repo="https://github.com/frida/frida"),
+    "android_server": ToolMeta(
+        fix="fix the root cause first (ADB); then adb push android_server to the device and run it; "
+            f"verified at init via `adb forward tcp:{ANDROID_SERVER_PORT} tcp:{ANDROID_SERVER_PORT}` + TCP connect",
+        description="IDA remote debug server pushed to the device",
+        url="https://hex-rays.com/ida-pro/"),
+    "jdwp_debug": ToolMeta(
+        fix="optional capability (WARN): only needed when the task actually drives jdb. "
+            "To enable: ADB ok + ro.debuggable=1 + the target app running (`adb jdwp` lists "
+            "a pid); the probe forwards tcp:8700 -> jdwp:<pid> and exchanges the raw 14-byte "
+            "JDWP-Handshake (jdb stays the interactive driver; never jdb -attach — side effects)",
+        description="JDWP capability probe (jdb handoff, WARN tier)",
+        url="https://docs.oracle.com/javase/8/docs/technotes/guides/jpda/jdwp-spec.html"),
 }
 
 # #316: registration guidance for MCP supply checks — fix text rendered by the
 # formatters like every other FIXES entry (keyed by report item name mcp:<name>).
-FIXES.update({f"mcp:{i.name}": i.register for i in mcp_probe.MANIFEST})
+# #680: MCP server metadata is OUT OF SCOPE (separate manifest, mcp_probe.py)
+# — the derived entries carry the register command as fix + the manifest
+# purpose as description, url=None (the fallback rendering path).
+FIXES.update({
+    f"mcp:{i.name}": ToolMeta(fix=i.register, description=i.purpose, url=None)
+    for i in mcp_probe.MANIFEST
+})
+
+
+def fix_text(name: str) -> str | None:
+    """#680: typed string face of FIXES — the remediation guidance text for
+    `name`, None when unknown. The canonical accessor for string callers
+    (kunglao-init / negotiation / deploy_shim / toolchain_install);
+    `fix_text(name) or default` preserves the old `.get(name, default)`
+    semantics. Unknown names MUST return None (never raise, never invent)."""
+    meta = FIXES.get(name)
+    return None if meta is None else meta.fix
 
 
 # ---------- #451: machine-parseable next-action on every FAIL ----------
@@ -214,6 +376,11 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "jadx": NextAction("install"),
     "apktool": NextAction("install"),
     "gitnexus": NextAction("install", "npm i -g gitnexus"),
+    "dexdc": NextAction("install",
+                        "cd dex-decompiler-py && maturin build --release && pip install target/wheels/dex_decompiler-*.whl"),
+    "apkid": NextAction("install", "pip install apkid"),
+    "baksmali": NextAction("install",
+                           "download from https://github.com/baksmali/smali/releases (or apt install baksmali)"),
     "adb": NextAction("install",
                       "install Android SDK platform-tools and add adb to PATH"),
     "device_root": NextAction(
@@ -228,6 +395,10 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "android_server": NextAction(
         "human-deploy", "adb push android_server to the device and run it"),
     "jdwp_debug": NextAction("human-configure"),
+    # #728 web (labs): direct-npx JS recovery tools — agent-invoked, so the
+    # command mirrors the FIXES text (first npx run installs).
+    "wakaru": NextAction("install", "npx -y wakaru --version"),
+    "webcrack": NextAction("install", "npx -y webcrack --version"),
 }
 
 
@@ -240,8 +411,9 @@ def next_action_for(item: "CheckResult") -> NextAction | None:
     if item.next_action is not None:
         return item.next_action
     if item.name.startswith("mcp:"):
-        register = FIXES.get(item.name)
-        return NextAction("register-mcp", register) if register else None
+        meta = FIXES.get(item.name)  # ToolMeta (#680); command = the fix face
+        return (NextAction("register-mcp", meta.fix)
+                if meta is not None and meta.fix else None)
     static = _STATIC_NEXT_ACTIONS.get(item.name)
     if static is not None:
         return static
@@ -323,6 +495,65 @@ class ToolchainReport:
 def _shutil_which(name: str) -> str | None:
     """PATH lookup for a command."""
     return shutil.which(name)
+
+
+def _which_items(tools, tier: "Tier", missing_status: "Status | None" = None,
+                 missing_detail: str = "{tool} not found in PATH",
+                 found_detail: str = "found at {path}") -> list["CheckResult"]:
+    """#863 Family D: which→CheckResult 单源。
+
+    tools = 命令名序列；每个命令 which 命中 → PASS(found at path)，
+    未命中 → missing_status（默认 tier==WARN→WARN 否则 FAIL）+ missing_detail。
+
+    #697: which 命中且 FIXES[name].verify_cmd 存在时真执行该命令（经
+    fail-open 的 _run_cmd，10s 超时）——rc==0 升级为 ProbeTier.LIVENESS
+    （detail 附首个 stdout 行）；rc!=0/崩溃 → WARN（#449 needs-first，
+    坏工具降级不阻塞静态任务）+ 首个 stderr 行作为真因。无 verify_cmd
+    的工具保持 PRESENCE 行为不变（缺 shared library / 0 字节残留 / 死
+    链不再漏放 —— issue #697 三种坏法全部过检的根因是只验存在）。
+    """
+    out = []
+    for name in tools:
+        path = _shutil_which(name)
+        if path:
+            meta = FIXES.get(name)
+            verify = meta.verify_cmd if meta is not None else None
+            if not verify:
+                out.append(CheckResult(
+                    name=name, status=Status.PASS, tier=tier,
+                    detail=found_detail.format(tool=name, path=path),
+                    probe=ProbeTier.PRESENCE,
+                ))
+                continue
+            rc, v_out, v_err = _run_cmd(verify.split(), timeout=10)
+            if rc == 0:
+                first_line = v_out.splitlines()[0] if v_out else ""
+                out.append(CheckResult(
+                    name=name, status=Status.PASS, tier=tier,
+                    detail=(found_detail.format(tool=name, path=path)
+                            + (f" — {first_line}" if first_line else "")),
+                    probe=ProbeTier.LIVENESS,
+                ))
+            else:
+                first_err = (v_err.splitlines()[0] if v_err else
+                             (v_out.splitlines()[0] if v_out else
+                              f"verify rc={rc}"))
+                out.append(CheckResult(
+                    name=name, status=Status.WARN, tier=tier,
+                    detail=(found_detail.format(tool=name, path=path)
+                            + f" but verify failed: {first_err}"),
+                    probe=ProbeTier.LIVENESS,
+                ))
+        else:
+            out.append(CheckResult(
+                name=name, status=(missing_status or
+                                   (Status.WARN if tier == Status.WARN
+                                    else Status.FAIL)),
+                tier=tier,
+                detail=missing_detail.format(tool=name),
+                probe=ProbeTier.PRESENCE,
+            ))
+    return out
 
 
 def _run_cmd(args: list[str], timeout: int = 10) -> tuple[int, str, str]:
@@ -555,8 +786,16 @@ def _vm_fail_fixes(vm_host: str | None,
 
 
 def _probe_native_so(ws: Path) -> bool:
-    """True if the sample under bins/ contains native .so code:
-    a .so file, or a zip (APK) whose first 4KB references lib/ (native dir)."""
+    """True if the sample under bins/ contains native .so code: a .so file,
+    or a zip (APK/JAR) whose central directory lists lib/*.so entries.
+
+    #756: an APK's central directory sits at the TAIL of the file while its
+    lib/ local file headers sit at arbitrary offsets — the previous head-4KB
+    byte scan missed real samples (live-run sample: 206 lib/**/*.so entries, zero
+    head-4KB hits -> has_native_so=False degraded the HARD decompiler gate).
+    namelist() reads only central-directory metadata, so it stays cheap even
+    on multi-hundred-MB APKs. Non-zip files keep the .so suffix rule; a
+    corrupt zip fails OPEN to the legacy head-4KB scan (never raises)."""
     bins = ws / "bins"
     if not bins.is_dir():
         return False
@@ -565,6 +804,18 @@ def _probe_native_so(ws: Path) -> bool:
             continue
         if p.name.endswith(".so"):
             return True
+        # #756: read the central directory once instead of guessing from the
+        # head bytes — entry layout is unbounded, the directory is not.
+        try:
+            with zipfile.ZipFile(p) as zf:
+                names = zf.namelist()
+        except (zipfile.BadZipFile, OSError):
+            names = None  # fail open: fall through to the legacy head scan
+        if names is not None:
+            if any(n.startswith("lib/") and n.endswith(".so")
+                   for n in names):
+                return True
+            continue
         try:
             head = p.read_bytes()[:4096]
         except OSError:
@@ -820,11 +1071,13 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
     else:
         report.items.append(CheckResult(
             name="decompiler", status=Status.FAIL, tier=Tier.HARD,
-            detail=("Sample has native .so — decompiler REQUIRED for native code"
+            detail=("Sample has native .so — decompiler REQUIRED for native "
+                    "code (install Ghidra OR IDA — either satisfies this "
+                    "check)"
                     if has_native_so
-                    else "No decompiler found (need Ghidra, IDA, or a "
-                         "ghidra/ida-pro-vm MCP registration — see the #408 "
-                         "installer)"),
+                    else "No decompiler found (install Ghidra OR IDA — either "
+                         "satisfies this check; or register a "
+                         "ghidra/ida-pro-vm MCP — see the #408 installer)"),
             root_cause="decompiler" if has_native_so else None,
             probe=ProbeTier.PRESENCE,
         ))
@@ -920,88 +1173,322 @@ def load_task_spec(ws: Path) -> dict | None:
     return data
 
 
-def _check_vm_channel(report: ToolchainReport,
-                      reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
-    """VM reachability + remote-debugger cascade (windows/linux manifests).
+def _channel_backend() -> tuple[str, str | None]:
+    """(#698) Parse KUNGLAO_CHANNEL -> (backend, warn_note).
 
-    #449 env = f(task_spec): a static-only task (constraints.dynamic_re=
-    forbidden) downgrades both items to WARN with the task_spec basis in
-    the detail — capability absence is REPORTED to the orchestrator, never
-    silently skipped, it just stops blocking init (same informational
-    posture as jdwp_debug). Any absent/unreadable task_spec keeps the HARD
-    status quo byte-identical (regression-pinned by tests). The two copies
-    this helper replaces (windows/linux) were byte-identical; #407's
-    _check_decompiler is the dedup pattern.
+    unset/"vmr" -> vmr (default; pre-#698 behavior byte-identical). Known
+    backends: ssh | docker | adb | local | mcp (#757: mcp = web normal-state
+    channel — dynamic face is MCP/browser, no command control plane).
+    Unknown value -> vmr fallback
+    with a note naming the offending value (never crash on config noise).
+    """
+    raw = (_env_get("KUNGLAO_CHANNEL") or "").strip().lower()
+    if raw in ("", "vmr"):
+        return "vmr", None
+    if raw in ("ssh", "docker", "adb", "local", "mcp"):
+        return raw, None
+    return "vmr", f"(unknown KUNGLAO_CHANNEL={raw!r} - falling back to vmr backend)"
+
+
+def _ssh_base_args(vm_host: str) -> list[str]:
+    """BatchMode ssh argv prefix shared by the ssh channel probes."""
+    return ["ssh", "-p", str(VM_SHELL_PORT),
+            "-o", "BatchMode=yes",
+            "-o", f"ConnectTimeout={SSH_CONNECT_TIMEOUT}",
+            vm_host]
+
+
+def _docker_over_ssh_check(vm_host: str, container: str) -> tuple[bool, str]:
+    """(#698) Optional docker execution target reached THROUGH the ssh
+    channel: daemon reachable, then a real `docker exec <c> true`.
+    Docker tri-state detail: daemon unreachable / container missing /
+    exec rejected."""
+    rc, out, err = _run_cmd([*_ssh_base_args(vm_host), "docker", "version"],
+                            timeout=CHANNEL_CMD_TIMEOUT)
+    if rc != 0:
+        return False, (f"docker daemon unreachable (ssh docker version "
+                       f"rc={rc}: {(err or out).strip()[:80] or 'no output'})")
+    rc, out, err = _run_cmd([*_ssh_base_args(vm_host),
+                             "docker", "exec", container, "true"],
+                            timeout=CHANNEL_CMD_TIMEOUT)
+    if rc != 0:
+        blob = (err or out).lower()
+        if "no such container" in blob or "no such object" in blob:
+            return False, f"container missing ({container})"
+        return False, (f"docker exec rejected (rc={rc}: "
+                       f"{(err or out).strip()[:80] or 'no output'})")
+    return True, ""
+
+
+def _vm_probe_vmr(vm_host: str) -> tuple[bool, str, str, "ProbeTier"]:
+    """vmr backend: dual-port TCP liveness - the pre-#698 logic verbatim
+    (v6 'vmr unchanged'; PASS detail stays byte-identical, no backend tag)."""
+    ok_shell, err_shell = _tcp_connect(vm_host, VM_SHELL_PORT)
+    ok_frida, err_frida = _tcp_connect(vm_host, FRIDA_PORT)
+    ok = ok_shell and ok_frida
+    err = "; ".join(e for e in (err_shell, err_frida) if e)
+    detail = f"VM {vm_host} reachable on {VM_SHELL_PORT}+{FRIDA_PORT}"
+    return ok, detail, err, ProbeTier.LIVENESS
+
+
+def _vm_probe_ssh(vm_host: str) -> tuple[bool, str, str, "ProbeTier"]:
+    """ssh backend: CAPABILITY probe - TCP pre-check, then a real BatchMode
+    `ssh ... true`. Tri-state detail: port unreachable / auth failed /
+    channel dialect mismatch; frida port stays liveness; optional
+    KUNGLAO_DOCKER_CONTAINER adds the docker-over-ssh check."""
+    ok_shell, err_shell = _tcp_connect(vm_host, VM_SHELL_PORT)
+    if not ok_shell:
+        return False, "", f"port unreachable ({err_shell})", ProbeTier.CAPABILITY
+    rc, out, err = _run_cmd([*_ssh_base_args(vm_host), "true"],
+                            timeout=CHANNEL_CMD_TIMEOUT)
+    if rc != 0:
+        blob = (err or out or "").lower()
+        if rc == 255 and "permission denied" in blob:
+            return False, "", "auth failed (ssh rc=255, permission denied)", ProbeTier.CAPABILITY
+        return False, "", (f"channel dialect mismatch (ssh rc={rc}: "
+                           f"{(err or out).strip()[:100] or 'no output'})"), ProbeTier.CAPABILITY
+    ok_frida, err_frida = _tcp_connect(vm_host, FRIDA_PORT)
+    if not ok_frida:
+        return False, "", f"ssh ok but frida port closed ({err_frida})", ProbeTier.CAPABILITY
+    detail = (f"VM {vm_host} via ssh backend: shell exec ok "
+              f"(port {VM_SHELL_PORT}, BatchMode) + frida liveness on {FRIDA_PORT}")
+    container = _env_get("KUNGLAO_DOCKER_CONTAINER")
+    if container:
+        dok, derr = _docker_over_ssh_check(vm_host, container)
+        if not dok:
+            return False, "", f"docker: {derr}", ProbeTier.CAPABILITY
+        detail += f"; docker exec {container} ok"
+    return True, detail, "", ProbeTier.CAPABILITY
+
+
+def _vm_probe_docker() -> tuple[bool, str, str, "ProbeTier"]:
+    """docker backend: DIRECT channel - no ssh, no KUNGLAO_VM_HOST needed.
+    `docker version` honors DOCKER_HOST (local socket or remote daemon);
+    optional KUNGLAO_DOCKER_CONTAINER adds a real `docker exec <c> true`."""
+    rc, out, err = _run_cmd(["docker", "version"], timeout=CHANNEL_CMD_TIMEOUT)
+    if rc != 0:
+        return False, "", (f"docker daemon unreachable (docker version "
+                           f"rc={rc}: {(err or out).strip()[:80] or 'no output'})"), ProbeTier.CAPABILITY
+    detail = "docker daemon reachable via docker backend (DOCKER_HOST honored)"
+    container = _env_get("KUNGLAO_DOCKER_CONTAINER")
+    if container:
+        rc, out, err = _run_cmd(["docker", "exec", container, "true"],
+                                timeout=CHANNEL_CMD_TIMEOUT)
+        if rc != 0:
+            blob = (err or out).lower()
+            if "no such container" in blob or "no such object" in blob:
+                return False, "", f"container missing ({container})", ProbeTier.CAPABILITY
+            return False, "", (f"docker exec rejected (rc={rc}: "
+                               f"{(err or out).strip()[:80] or 'no output'})"), ProbeTier.CAPABILITY
+        detail += f"; docker exec {container} ok"
+    return True, detail, "", ProbeTier.CAPABILITY
+
+
+def _vm_probe_adb(vm_host: str | None = None) -> tuple[bool, str, str, "ProbeTier"]:
+    """adb backend: real `adb devices` (device/emulator online) + frida
+    liveness (KUNGLAO_VM_HOST or 127.0.0.1 - adb forward topology)."""
+    rc, out, err = _run_cmd(["adb", "devices"], timeout=CHANNEL_CMD_TIMEOUT)
+    if rc != 0:
+        return False, "", (f"no device (adb devices rc={rc}: "
+                           f"{(err or out).strip()[:80] or 'no output'})"), ProbeTier.CAPABILITY
+    lines = [ln.strip() for ln in out.splitlines()[1:] if ln.strip()
+             and not ln.strip().startswith("*")]
+    online = [ln for ln in lines if ln.endswith("device")]
+    unauthorized = [ln for ln in lines if "unauthorized" in ln]
+    if not online and unauthorized:
+        return False, "", ("unauthorized (adb devices shows unauthorized - "
+                           "accept the debugging prompt on the device)"), ProbeTier.CAPABILITY
+    if not online:
+        return False, "", ("no device (adb devices empty - start the "
+                           "emulator or plug the device in)"), ProbeTier.CAPABILITY
+    fhost = vm_host or "127.0.0.1"
+    ok_frida, err_frida = _tcp_connect(fhost, FRIDA_PORT)
+    if not ok_frida:
+        return False, "", (f"frida port closed ({err_frida}) - run "
+                           f"`adb forward tcp:{FRIDA_PORT} tcp:{FRIDA_PORT}`"), ProbeTier.CAPABILITY
+    serial = online[0].split()[0]
+    return True, (f"VM via adb backend: {len(online)} device(s) online "
+                  f"({serial}); frida liveness on {fhost}:{FRIDA_PORT}"), "", ProbeTier.CAPABILITY
+
+
+# Per-backend fix guidance for a FAILED dynamic check (vmr keeps the #451
+# inventory-driven fixes; remote backends get env-var-specific pointers).
+_CHANNEL_FIXES: dict[str, str] = {
+    "ssh": ("set KUNGLAO_VM_HOST=<remote host> and KUNGLAO_VM_SHELL_PORT; "
+            "verify key auth (ssh -o BatchMode=yes <host> true); the "
+            "execution layer is the ssh-mcp control plane (see README "
+            "'Bring your own analysis environment')"),
+    "docker": ("verify the docker daemon (docker version; set DOCKER_HOST "
+               "for a remote daemon) and KUNGLAO_DOCKER_CONTAINER for the "
+               "execution target"),
+    "adb": ("start the emulator or plug the device (adb devices), accept "
+            f"the debugging prompt, then `adb forward tcp:{FRIDA_PORT} "
+            f"tcp:{FRIDA_PORT}` for frida"),
+}
+
+
+def _check_dynamic_channel(report: ToolchainReport,
+                           reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """Dynamic-analysis control plane + remote-debugger cascade.
+
+    #698 (arbitration v6): KUNGLAO_CHANNEL picks one of five first-class
+    backends (vmr default | ssh | docker | adb | local) - the goal is to
+    give the agent an EXECUTION CONTROL PLANE for dynamic debugging.
+    needs-aware x channel matrix (design D3):
+      * static-only task, ANY channel -> whole block WARN, zero probe
+        subprocesses ("dynamic channel unchecked (static-only task)";
+        local says "local static-only channel").
+      * dynamic task + local -> HARD policy reject, no probes.
+      * dynamic task + vmr/ssh/docker/adb -> HARD probe (vmr liveness
+        byte-identical to pre-#698; ssh/docker/adb capability level).
+
+    #449 downgrade semantics preserved: capability absence is REPORTED
+    (WARN with the task_spec basis), never silently skipped. Absent/
+    unreadable task_spec keeps the HARD status quo byte-identical.
 
     Android has NO VM channel by design (#455: dynamics go through ADB +
-    device services; NEVER_CHECKS pins it) — windows/linux only.
+    device services; NEVER_CHECKS pins it) - windows/linux only.
     """
-    # T2: VM reachability (vmr-shell 9876 + frida custom port, default 1337)
-    # #451: the HARD FAIL surface embeds the read-only discovered-VM
-    # inventory + a dynamic fix/next_action derived from the candidate
-    # count (enumerate/start/reip) — the OPERATOR picks, never init.
-    vm_next: NextAction | None = None
+    backend, chan_warn = _channel_backend()
     vm_host = _env_get("KUNGLAO_VM_HOST")
-    if not vm_host:
-        vm_ok, vm_err = False, "KUNGLAO_VM_HOST unset"
-    else:
-        vm_ok_9876, err_9876 = _tcp_connect(vm_host, VM_SHELL_PORT)
-        vm_ok_frida, err_frida = _tcp_connect(vm_host, FRIDA_PORT)
-        vm_ok = vm_ok_9876 and vm_ok_frida
-        vm_err = "; ".join(e for e in (err_9876, err_frida) if e)
-    if vm_ok:
-        detail = f"VM {vm_host} reachable on {VM_SHELL_PORT}+{FRIDA_PORT}"
-        if not reqs.needs_vm:
-            detail += f" — not required by task_spec ({reqs.basis})"
+
+    # ---- mcp (#757): browser/MCP dynamic face, no command control plane
+    # Desktop dynamic RE cannot execute through an MCP channel yet (#698 D5
+    # execution layer is declarative); zero probes, fail-closed (D9).
+    # Static-only tasks fall through to the generic zero-probe WARN row.
+    if backend == "mcp" and reqs.needs_vm:
+        _mcp_detail = ("mcp channel provides no command control plane for "
+                       "desktop dynamic analysis — switch KUNGLAO_CHANNEL "
+                       "to vmr/ssh/docker/adb")
         report.items.append(CheckResult(
-            name="vm_reachable", status=Status.PASS,
-            tier=Tier.HARD if reqs.needs_vm else Tier.WARN,
+            name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
+            detail=_mcp_detail,
+            root_cause="VM", probe=ProbeTier.PRESENCE,
+        ))
+        report.items.append(CheckResult(
+            name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
+            detail=_mcp_detail,
+            root_cause="VM", probe=ProbeTier.PRESENCE,
+        ))
+        return
+
+    # ---- local: policy channel, never probes -------------------------
+    if backend == "local":
+        if reqs.needs_vm:
+            report.items.append(CheckResult(
+                name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
+                detail=("local channel forbids dynamic analysis — switch "
+                        "KUNGLAO_CHANNEL to vmr/ssh/docker/adb"),
+                root_cause="VM", probe=ProbeTier.PRESENCE,
+            ))
+            report.items.append(CheckResult(
+                name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
+                detail=("Remote debugger unavailable (local channel "
+                        "forbids dynamic analysis)"),
+                root_cause="VM", probe=ProbeTier.PRESENCE,
+            ))
+        else:
+            report.items.append(CheckResult(
+                name="vm_reachable", status=Status.WARN, tier=Tier.WARN,
+                detail=(f"local static-only channel - not required by "
+                        f"task_spec ({reqs.basis})"),
+                probe=ProbeTier.PRESENCE,
+            ))
+            report.items.append(CheckResult(
+                name="remote_debugger", status=Status.WARN, tier=Tier.WARN,
+                detail=(f"local static-only channel - not required by "
+                        f"task_spec ({reqs.basis})"),
+                probe=ProbeTier.PRESENCE,
+            ))
+        return
+
+    # ---- static-only: WARN contract, zero probes ----------------------
+    if not reqs.needs_vm:
+        detail = (f"VM unreachable: dynamic channel unchecked (static-only "
+                  f"task) - not required by task_spec ({reqs.basis})")
+        if chan_warn:
+            detail += f" {chan_warn}"
+        report.items.append(CheckResult(
+            name="vm_reachable", status=Status.WARN, tier=Tier.WARN,
             detail=detail, probe=ProbeTier.LIVENESS,
         ))
-    elif reqs.needs_vm:
+        report.items.append(CheckResult(
+            name="remote_debugger", status=Status.WARN, tier=Tier.WARN,
+            detail=("VM unreachable - remote debugger unprobed; not required "
+                    f"by task_spec ({reqs.basis})"),
+            probe=ProbeTier.LIVENESS,
+        ))
+        return
+
+    # ---- dynamic task, remote backend: HARD probe ---------------------
+    vm_next: NextAction | None = None
+    if backend == "vmr":
+        if not vm_host:
+            vm_ok, vm_err = False, "KUNGLAO_VM_HOST unset"
+            probe_tier = ProbeTier.LIVENESS
+            pass_detail = ""
+        else:
+            vm_ok, pass_detail, vm_err, probe_tier = _vm_probe_vmr(vm_host)
+    elif backend == "ssh":
+        if not vm_host:
+            vm_ok, vm_err = False, ("KUNGLAO_VM_HOST unset (ssh backend "
+                                    "needs the remote host)")
+            probe_tier = ProbeTier.CAPABILITY
+            pass_detail = ""
+        else:
+            vm_ok, pass_detail, vm_err, probe_tier = _vm_probe_ssh(vm_host)
+    elif backend == "docker":
+        vm_ok, pass_detail, vm_err, probe_tier = _vm_probe_docker()
+    else:  # adb
+        vm_ok, pass_detail, vm_err, probe_tier = _vm_probe_adb(vm_host)
+
+    if vm_ok:
+        detail = pass_detail
+        if chan_warn:
+            detail += f" {chan_warn}"
+        report.items.append(CheckResult(
+            name="vm_reachable", status=Status.PASS,
+            tier=Tier.HARD, detail=detail, probe=probe_tier,
+        ))
+    elif backend == "vmr":
+        # #451 inventory-driven FAIL surface - vmr only, byte-identical.
         detail, fix, vm_next = _vm_fail_fixes(vm_host, vm_err)
+        if chan_warn:
+            detail += "\n" + chan_warn
         report.items.append(CheckResult(
             name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
             detail=detail,
-            root_cause="VM", probe=ProbeTier.LIVENESS,
+            root_cause="VM", probe=probe_tier,
             fix=fix, next_action=vm_next,
         ))
     else:
+        detail = (f"dynamic channel failed via {backend} backend: {vm_err}")
+        if chan_warn:
+            detail += f" {chan_warn}"
         report.items.append(CheckResult(
-            name="vm_reachable", status=Status.WARN, tier=Tier.WARN,
-            detail=f"VM unreachable: {vm_err} — not required by task_spec "
-                   f"({reqs.basis})",
-            probe=ProbeTier.LIVENESS,
+            name="vm_reachable", status=Status.FAIL, tier=Tier.HARD,
+            detail=detail, root_cause="VM", probe=probe_tier,
+            fix=_CHANNEL_FIXES[backend],
         ))
 
     # T2: remote debugger (x64dbg/ida_server/frida-server | gdbserver/
-    # linux_server64/frida-server) — cascade from VM
-    if reqs.needs_vm:
-        if not vm_ok:
-            report.items.append(CheckResult(
-                name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
-                detail="Remote debugger unreachable (VM not reachable)",
-                root_cause="VM", probe=ProbeTier.LIVENESS,
-                # #451: the cascade shares the VM's next_action — its root
-                # cause is the VM channel (fix the root cause first)
-                next_action=vm_next,
-            ))
-        else:
-            # Would need actual VM-side probing — mark as WARN if can't verify
-            report.items.append(CheckResult(
-                name="remote_debugger", status=Status.WARN, tier=Tier.HARD,
-                detail="VM reachable; remote debugger presence not verified",
-                probe=ProbeTier.LIVENESS,
-            ))
-    else:
-        state = ("VM unreachable — remote debugger unprobed" if not vm_ok
-                 else "VM reachable")
+    # linux_server64/frida-server) - cascade from the channel
+    if not vm_ok:
         report.items.append(CheckResult(
-            name="remote_debugger", status=Status.WARN, tier=Tier.WARN,
-            detail=f"{state}; not required by task_spec ({reqs.basis})",
-            probe=ProbeTier.LIVENESS,
+            name="remote_debugger", status=Status.FAIL, tier=Tier.HARD,
+            detail="Remote debugger unreachable (VM not reachable)",
+            root_cause="VM", probe=probe_tier,
+            # #451: the cascade shares the channel's next_action - its
+            # root cause is the channel (fix the root cause first)
+            next_action=vm_next,
         ))
-
+    else:
+        # Would need actual VM-side probing - mark as WARN if can't verify
+        report.items.append(CheckResult(
+            name="remote_debugger", status=Status.WARN, tier=Tier.HARD,
+            detail="VM reachable; remote debugger presence not verified",
+            probe=probe_tier,
+        ))
 
 # ---------- Windows manifest ----------
 
@@ -1046,20 +1533,14 @@ def _check_windows(report: ToolchainReport, ws: Path,
     # T2: VM channel (vmr-shell 9876 + frida 1337 + remote-debugger
     # cascade) — shared helper; #449 env = f(task_spec): static-only
     # task_spec downgrades the pair to WARN (basis in the detail).
-    _check_vm_channel(report, reqs)
+    _check_dynamic_channel(report, reqs)
 
     # T2: Docker (WARN)
-    docker = _shutil_which("docker")
-    if docker:
-        report.items.append(CheckResult(
-            name="docker", status=Status.PASS, tier=Tier.WARN,
-            detail=f"docker at {docker}", probe=ProbeTier.PRESENCE,
-        ))
-    else:
-        report.items.append(CheckResult(
-            name="docker", status=Status.WARN, tier=Tier.WARN,
-            detail="docker not found (optional)", probe=ProbeTier.PRESENCE,
-        ))
+    report.items.extend(_which_items(
+        ("docker",), Tier.WARN,
+        missing_status=Status.WARN,
+        missing_detail="docker not found (optional)",
+        found_detail="docker at {path}"))
 
     # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
     _check_mcp(report, ws, "windows")
@@ -1072,19 +1553,8 @@ def _check_linux(report: ToolchainReport, ws: Path,
                  reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
     """Linux toolchain checks (ELF)."""
     # T0: venv + binutils (file/readelf/objdump)
-    for tool in ("file", "readelf", "objdump"):
-        path = _shutil_which(tool)
-        if path:
-            report.items.append(CheckResult(
-                name=tool, status=Status.PASS, tier=Tier.HARD,
-                detail=f"found at {path}", probe=ProbeTier.PRESENCE,
-            ))
-        else:
-            report.items.append(CheckResult(
-                name=tool, status=Status.FAIL, tier=Tier.HARD,
-                detail=f"{tool} not found in PATH",
-                probe=ProbeTier.PRESENCE,
-            ))
+    report.items.extend(_which_items(
+        ("file", "readelf", "objdump"), Tier.HARD))
 
     # T1: Ghidra or IDA (#407: MCP-first, CLI fallback — one shared helper;
     # #474: three-state honest, caps plumbs the capability trial)
@@ -1093,20 +1563,14 @@ def _check_linux(report: ToolchainReport, ws: Path,
     # T2: VM channel (vmr-shell 9876 + frida 1337 + remote-debugger
     # cascade) — shared helper; #449 env = f(task_spec): static-only
     # task_spec downgrades the pair to WARN (basis in the detail).
-    _check_vm_channel(report, reqs)
+    _check_dynamic_channel(report, reqs)
 
     # T2: Docker (WARN)
-    docker = _shutil_which("docker")
-    if docker:
-        report.items.append(CheckResult(
-            name="docker", status=Status.PASS, tier=Tier.WARN,
-            detail=f"docker at {docker}", probe=ProbeTier.PRESENCE,
-        ))
-    else:
-        report.items.append(CheckResult(
-            name="docker", status=Status.WARN, tier=Tier.WARN,
-            detail="docker not found (optional)", probe=ProbeTier.PRESENCE,
-        ))
+    report.items.extend(_which_items(
+        ("docker",), Tier.WARN,
+        missing_status=Status.WARN,
+        missing_detail="docker not found (optional)",
+        found_detail="docker at {path}"))
 
     # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
     _check_mcp(report, ws, "linux")
@@ -1206,19 +1670,8 @@ def _check_android(report: ToolchainReport, ws: Path,
             ))
 
     # T1: jadx + apktool
-    for tool in ("jadx", "apktool"):
-        path = _shutil_which(tool)
-        if path:
-            report.items.append(CheckResult(
-                name=tool, status=Status.PASS, tier=Tier.HARD,
-                detail=f"found at {path}", probe=ProbeTier.PRESENCE,
-            ))
-        else:
-            report.items.append(CheckResult(
-                name=tool, status=Status.FAIL, tier=Tier.HARD,
-                detail=f"{tool} not found in PATH",
-                probe=ProbeTier.PRESENCE,
-            ))
+    report.items.extend(_which_items(
+        ("jadx", "apktool"), Tier.HARD))
 
     # T1: GitNexus (real probe: gitnexus --version)
     gn_path = _shutil_which("gitnexus")
@@ -1457,6 +1910,78 @@ def _check_android(report: ToolchainReport, ws: Path,
     _check_mcp(report, ws, "android")
 
 
+# ---------- Web manifest (#728, labs: WARN-only) ----------
+
+def _check_web(report: ToolchainReport, ws: Path,
+               caps: bool = False,
+               reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """#728 web (labs) checks — minimal face, ZERO HARD items by contract
+    (labs: no robust toolchain validation; real-usage follow-up).
+
+    - camoufox-reverse MCP supply (WARN — mcp_probe manifest entry)
+    - docker channel presence (WARN; the web channel default is docker,
+      #698 owns the channel matrix itself)
+    No VM channel, no decompiler, no caps path — the web dynamic surface is
+    the browser, not a VM."""
+    _check_mcp(report, ws, "web")
+
+    docker = _shutil_which("docker")
+    if docker:
+        rc, out, err = _run_cmd(["docker", "--version"], timeout=10)
+        detail = (f"docker present ({out.strip()[:60] or err.strip()[:60]})"
+                  if rc == 0 else f"docker binary found but --version rc={rc}")
+        status = Status.PASS if rc == 0 else Status.WARN
+    else:
+        status = Status.WARN
+        detail = ("docker not on PATH — web channel default is docker; "
+                  "install Docker Desktop or set KUNGLAO_CHANNEL explicitly")
+    report.items.append(CheckResult(
+        name="channel:docker", status=status, tier=Tier.WARN,
+        detail=detail, probe=ProbeTier.PRESENCE,
+    ))
+
+
+# ---------- macOS manifest (#760, labs: WARN-only) ----------
+
+def _check_macos(report: ToolchainReport, ws: Path,
+                 caps: bool = False,
+                 reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """#760 macos (labs) checks — minimal Mach-O face, ZERO HARD items by
+    contract (labs semantics, same shape as #728 web).
+
+    - otool / class-dump / swift-demangle presence probes (WARN — the static
+      Mach-O toolset; class-dump is a manual build, never auto-installed)
+    - Darwin runtime note (WARN): dynamic analysis needs a Darwin host;
+      non-Darwin analysis hosts keep the STATIC face without blocking
+    No VM channel (NEVER_CHECKS pins vm_reachable/remote_debugger absence —
+    the #698 channel matrix belongs to windows/linux), no caps path."""
+    for tool in ("otool", "class-dump", "swift-demangle"):
+        path = _shutil_which(tool)
+        if path:
+            report.items.append(CheckResult(
+                name=tool, status=Status.PASS, tier=Tier.WARN,
+                detail=f"found at {path}", probe=ProbeTier.PRESENCE,
+            ))
+        else:
+            report.items.append(CheckResult(
+                name=tool, status=Status.WARN, tier=Tier.WARN,
+                detail=(f"{tool} not on PATH (Xcode CLT via `xcode-select "
+                        f"--install`; class-dump is a manual build)"),
+                probe=ProbeTier.PRESENCE,
+            ))
+
+    darwin = sys.platform == "darwin"
+    report.items.append(CheckResult(
+        name="darwin_runtime", status=Status.PASS if darwin else Status.WARN,
+        tier=Tier.WARN,
+        detail=("Darwin host — Mach-O dynamic surface available" if darwin
+                else f"host is {sys.platform} — Mach-O DYNAMIC analysis needs "
+                     "a Darwin environment; the static face still works "
+                     "(not blocking, labs WARN tier)"),
+        probe=ProbeTier.PRESENCE,
+    ))
+
+
 # ---------- type resolution ----------
 # F6 (#304 review): read_project_type imported from init_state.py above —
 # single source of truth; no local duplicate.
@@ -1490,12 +2015,19 @@ CHECK_SETS: dict[str, frozenset[str]] = {
         "adb", "device_root", "debug_flag", "frida_server",
         "android_server", "jdwp_debug", "ebpf_android", "unidbg",
     }),
+    # #760: labs Mach-O face (WARN-only; mirrors the web labs posture)
+    "macos": frozenset({
+        "otool", "class-dump", "swift-demangle", "darwin_runtime",
+    }),
 }
 
 # The explicit negative declaration: items a type must NEVER produce.
 # Regression-pinned by tests/test_target_alignment.py (#455 checkbox 4).
 NEVER_CHECKS: dict[str, frozenset[str]] = {
     "android": frozenset({"vm_reachable", "remote_debugger"}),
+    # #760: the VM channel is the windows/linux contract; a macOS workspace
+    # runs dynamics natively on a Darwin host, never through vmr-shell.
+    "macos": frozenset({"vm_reachable", "remote_debugger"}),
 }
 
 # ---------- report formatting ----------
@@ -1523,6 +2055,15 @@ def format_human(report: ToolchainReport) -> str:
         lines.append(line)
         if item.status != Status.PASS and (item.fix or item.name in FIXES):
             lines.append(f"      fix: {item.fix or FIXES[item.name]}")
+            # #680: structured metadata supplements the fix prose — the
+            # upstream URL on its OWN line (never inline, never fabricated:
+            # url=None -> line omitted) + the verify command when present.
+            meta = FIXES.get(item.name)
+            if meta is not None:
+                if meta.url:
+                    lines.append(f"      url: {meta.url}")
+                if meta.verify_cmd:
+                    lines.append(f"      verify: {meta.verify_cmd}")
         # #451: machine-parseable key-value lines — anchored prefixes the
         # negotiation consumers grep for (never part of detail/fix prose).
         if item.status == Status.FAIL:
@@ -1550,8 +2091,13 @@ def format_json(report: ToolchainReport) -> str:
                 "probe": i.probe.value,  # #474: presence|liveness|capability
                 "detail": i.detail,
                 "root_cause": i.root_cause,
-                "fix": (i.fix or FIXES.get(i.name))
+                "fix": (i.fix or fix_text(i.name))
                        if i.status != Status.PASS else None,
+                # #680: fix stays the TEXT (schema stability); fix_url is
+                # additive — null when unknown (mcp:*, PASS items).
+                "fix_url": (FIXES[i.name].url
+                            if i.status != Status.PASS and i.name in FIXES
+                            else None),
                 "next_action": _next_action_json(i),  # #451
             }
             for i in report.items
@@ -1599,6 +2145,8 @@ def check(ws: Path, project_type: str | None = None,
         "windows": _check_windows,
         "linux": _check_linux,
         "android": _check_android,
+        "web": _check_web,
+        "macos": _check_macos,
     }
     checkers[project_type](report, ws, caps=caps, reqs=reqs)
     return report
@@ -1607,7 +2155,7 @@ def check(ws: Path, project_type: str | None = None,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="toolchain",
-        description="Type-aware toolchain probe matrix (#304)",
+        description="Type-aware toolchain probe matrix",
     )
     parser.add_argument("workspace", help="workspace root path")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
@@ -1619,7 +2167,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--capability", action="store_true",
                         help="run CAPABILITY-tier trial probes (decompiler "
                              "import trial; minutes-long — init/on-demand "
-                             "only, #474)")
+                             "only)")
     args = parser.parse_args(argv)
 
     ws = Path(args.workspace).resolve()
@@ -1629,7 +2177,7 @@ def main(argv: list[str] | None = None) -> int:
         task_spec = load_task_spec(ws)
     except ValueError as exc:
         print(f"WARNING: {exc} — toolchain layers stay conservative HARD "
-              f"(#449; fix task_spec.yaml at needs-first intake)",
+              f"(fix task_spec.yaml at needs-first intake)",
               file=sys.stderr)
         task_spec = None
     try:
@@ -1650,4 +2198,57 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())
+
+
+# ---------- #588/#590: Phase "-1" quick presence + preconditions group ----------
+
+# PRESENCE-tier binaries only (shutil.which, ~0ms each — no subprocess, no
+# network): the banner answers "is this host even shaped like an RE host?"
+# seconds into init, BEFORE the step-0 intake conversation (#588's O(hours)
+# → O(seconds) fix). It NEVER adopts values or downgrades anything — #449
+# needs-first precedence is untouched; step-5's full-tier check stands.
+_PRESENCE_PROBES = ("uv", "python3", "git", "ghidra", "jadx", "adb", "frida")
+
+
+def quick_presence(ws: Path) -> str:
+    """#588: O(seconds) host-health banner for the pre-intake phase.
+
+    Pure PRESENCE tier: which() lookups only. Never raises — a broken host
+    gets an honest all-missing banner, not a crash."""
+    import shutil
+    try:
+        found, missing = [], []
+        for binname in _PRESENCE_PROBES:
+            (found if shutil.which(binname) else missing).append(binname)
+        parts = [f"host presence: {len(found)}/{len(_PRESENCE_PROBES)}"]
+        if found:
+            parts.append("found: " + ", ".join(found))
+        if missing:
+            parts.append("MISSING: " + ", ".join(missing))
+        return " | ".join(parts) + "  (PRESENCE only — full tiers run at step 5)"
+    except Exception:
+        return "host presence: probe unavailable (PRESENCE only — step 5 decides)"
+
+
+def preconditions_questions(ws: Path | None = None) -> list[dict]:
+    """#590: the hidden-assumption question group, riding the SAME native
+    decision round as workspace/type (#455 shape). Probe findings attach as
+    decision CONTEXT only — `pending` is the floor; the probe never
+    auto-fills an answer (precedence: explicit > resolve > persisted >
+    pending, decision_pending.py contract)."""
+    context: dict = {"note": "probe findings are CONTEXT, not answers"}
+    if ws is not None:
+        try:
+            context["presence_banner"] = quick_presence(ws)
+        except Exception:
+            context["presence_banner"] = None
+    return [{
+        "id": "preconditions",
+        "question": ("Host/device preconditions: analysis device availability, "
+                     "VM host (KUNGLAO_VM_HOST), GHIDRA_HOME, VM guest OS "
+                     "matching the sample's project type, MCP supply state"),
+        "context": context,
+    }]

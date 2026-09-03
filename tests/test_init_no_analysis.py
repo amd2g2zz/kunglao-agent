@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -53,7 +54,7 @@ def init_ws(tmp_path: Path) -> Path:
     """Fresh workspace: bins/ with a PE sample + runs/."""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws)
     (ws / "runs").mkdir()
     return ws
 
@@ -72,6 +73,10 @@ def _run_init(ws: Path, extra: list[str] | None = None,
     env["PYTHONIOENCODING"] = "utf-8"
     if flag is not None:
         env[FLAG_NAME] = flag
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive tests answer the host-exec ask explicitly.
+        argv += ["--host-exec-protection", "enabled"]
     return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=env, errors="replace")
 

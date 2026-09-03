@@ -44,6 +44,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _path_hygiene import (  # #671 sys.path hygiene authority
+    ensure_scripts_path,
+    load_hooks_lib,
+    load_module_by_path,
+)
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 RECALL_SCRIPT = SKILL_DIR / "scripts" / "references_recall.py"
 RECALL_TIMEOUT = 5.0          # recall must never hold dispatch hostage
@@ -55,12 +61,15 @@ FILES_PER_QUERY = 3           # top hits only — guidance stays compact
 # (the recall-ranking pin); move data source and pin in the same commit.
 MAX_FILES = 8                 # global cap across all queries
 
-# dispatch_gate's exact claim-dispatch shape — mirror it so the hook fires on
-# the same dispatches the other gates police.
-DISPATCH_RE = re.compile(
-    r"\[T\s*([123])\s+tools\s*=\s*([^\]]*)\]\s*claim\s+([A-Z]+-\d+)",
-    re.IGNORECASE,
-)
+def _is_claim_dispatch(text: str) -> bool:
+    """v1-first claim-dispatch detection — single source (#861).
+
+    Routes through lib_kunglao.parse_dispatch (v1 canonical envelope takes
+    precedence, v0 prefix retained for legacy-replay only). Replaces the
+    local v0-only regex copy that silently missed v1 dispatches (B1)."""
+    lib = load_hooks_lib()
+    return lib.parse_dispatch(text)[2] is not None
+
 
 # Go-binary signals (tier_rules has no go signals — those live here). Substring
 # matches; "go" alone is too noisy ("goal", "google", "cargo") so signals are
@@ -70,18 +79,58 @@ GO_SIGNALS = (
     "go runtime", "go symbol", "go function", "go 1.",
 )
 
+# Web-domain signals (#761 J1, ruling: 风控/爬虫知识 web 域专用): a claim that
+# mentions the anti-bot / crawler surface gets the two web-dictionary queries
+# prepended (web-risk-control.md / web-crawler-engineering.md top hits), before
+# the tier-based default. All anchors are compound/CJK — deliberately noise-
+# safe so legacy dispatch prompts never gain the extra queries (the pinned
+# test_recall_inject.py fixtures hit none of these).
+WEB_SIGNALS = (
+    "风控", "反爬", "风险控制", "爬虫", "验证码", "滑块", "点选",
+    "risk control", "risk-control", "anti-bot", "antibot",
+    "crawler", "captcha", "web target", "--type web", "camoufox",
+)
+
+# Recalled queries for a web-signal claim (#761 J1). "risk control" ranks
+# re-library/web-risk-control.md first (name+domain+purpose CJK tokens);
+# "crawler" surfaces web-crawler-engineering.md via its bilingual purpose row.
+WEB_QUERIES = ("risk control", "crawler")
+
+# Red-team dispatch detection (#761 J4 second trigger face): adversarial
+# knowledge injected BEFORE the checker plans its attacks — same FAIL_OPEN,
+# rc-always-0 semantics as the claim face. Claim-shaped prompts keep the
+# original flow; a red-team prompt without a `[T<N>] claim` shape takes this
+# branch.
+REDTEAM_RE = re.compile(r"(?:red[\s_-]*team|redteam|verify-redteam)", re.IGNORECASE)
+
+
+def queries_for_redteam(prompt_text: str) -> list[str]:
+    """Red-team recall queries (#761 J4): failure-modes domain by default
+    (how past checks failed -> attack angles); web signals add the anti-bot
+    doctrine so an adversarial pass on a web claim carries the decision tree."""
+    text = (prompt_text or "").lower()
+    queries = ["failure analysis"]
+    if any(s in text for s in WEB_SIGNALS):
+        queries.extend(WEB_QUERIES)
+    return queries
+
 # tier_rules is the single source for T3/T2 feature detection (#241).
-sys.path.insert(0, str(SKILL_DIR / "scripts"))
+# #671: module-level membership via the hygiene authority (was bare insert).
+ensure_scripts_path()
 from tier_rules import tier_for_claim  # noqa: E402
 
 
 def _resolve_workspace(payload: dict) -> Path | None:
-    """Same resolution as dispatch_gate.py: cwd -> malware-analysis-workspace."""
-    cwd = Path(payload.get("cwd") or payload.get("workspace") or ".")
-    for base in [cwd / "malware-analysis-workspace", cwd]:
-        if (base / "claim-register.yaml").exists():
-            return base
-    return None
+    """Delegate to hooks.lib_kunglao.resolve_workspace_canonical (#865).
+
+    Pre-#865: hardcoded `cwd / malware-analysis-workspace` — silently
+    bypassed env-manifest overrides (B2 substance CONFIRMED). The
+    canonical helper reads `layout.workspace_dir` via `_env_layout` so
+    the same resolution now applies here, in dispatch_gate, and in
+    env_check_gate — three hooks previously drifted apart.
+    """
+    from _path_hygiene import load_hooks_lib
+    return load_hooks_lib().resolve_workspace_canonical(payload)
 
 
 def _dispatch_text(payload: dict) -> str | None:
@@ -108,9 +157,14 @@ def queries_for_features(prompt_text: str, tier: int) -> list[str]:
     verify-static-vs-dynamic.md); tier 2 (static-depth/disasm) and the tier 1
     default -> "static analysis" (disasm/static-analysis scene — "disasm" itself
     matches nothing in the layered index).
+    #761 J1: web-domain signals prepend "risk control" + "crawler" (the two new
+    web reference docs) — append-only semantics: every pre-existing mapping is
+    unchanged for prompts without web signals.
     """
     text = prompt_text.lower()
     queries: list[str] = []
+    if any(s in text for s in WEB_SIGNALS):
+        queries.extend(WEB_QUERIES)
     if any(s in text for s in GO_SIGNALS):
         queries.append("go")
     if tier == 3:
@@ -138,10 +192,14 @@ def _parse_files(stdout: str) -> tuple[str, ...]:
 
 def _run_recall(query: str, cwd: Path | None = None) -> tuple[int, str]:
     """One recall query as a subprocess. Returns (rc, stdout). Any failure
-    (missing script, timeout, unreadable index) -> (rc != 0, '')."""
+    (missing script, timeout, unreadable index) -> (rc != 0, '').
+    #814: passes --ws so workspace demotion multipliers close the loop."""
+    cmd = [sys.executable, str(RECALL_SCRIPT), query]
+    if cwd is not None:
+        cmd += ["--ws", str(cwd)]
     try:
         r = subprocess.run(
-            [sys.executable, str(RECALL_SCRIPT), query],
+            cmd,
             capture_output=True, text=True, encoding="utf-8", errors="replace",
             cwd=str(cwd) if cwd else None, timeout=RECALL_TIMEOUT,
         )
@@ -150,10 +208,44 @@ def _run_recall(query: str, cwd: Path | None = None) -> tuple[int, str]:
         return 1, ""
 
 
+def _utility_rerank(files: tuple[str, ...], ws: Path) -> tuple[str, ...]:
+    """#881 wiring 2: post-recall utility rerank — recall was pure query-match
+    with no value signal; reference docs whose filename names a tool with a
+    high pooled runtime utility rise, low-utility ones sink. Files naming no
+    tool keep a neutral score and their original relative order (stable sort).
+    FAIL_OPEN at every layer: missing/corrupt table or any error -> the
+    original order — rerank must never break recall (it is guidance only)."""
+    try:
+        from tool_value import line_tool_hits, load_table, pooled_utilities
+        table = load_table(ws)
+        if not table:
+            return files
+        pooled = pooled_utilities(table)
+        if not pooled:
+            return files
+    except Exception:  # noqa: BLE001 — recall must NEVER block dispatch
+        return files
+
+    def score(path: str) -> float:
+        best = 0.5  # neutral: no tool named in the filename
+        for name in line_tool_hits(Path(path).name, pooled):
+            if pooled[name]["utility"] > best:
+                best = pooled[name]["utility"]
+        return best
+
+    return tuple(sorted(files, key=lambda f: -score(f)))
+
+
 def recall_files(query: str, cwd: Path | None = None,
                  recall_runner=None) -> tuple[str, ...]:
     """Matched reference files for one query (empty on any failure). Public so
-    siblings (failure_analysis_gate #268 item 3) reuse the same recall path."""
+    siblings (failure_analysis_gate #268 item 3) reuse the same recall path.
+
+    #881 wiring 2: when a workspace is supplied (cwd != None — the claim-dispatch
+    face) and a tool-value table exists, the result is reranked by pooled tool
+    utility. Callers without a workspace (failure_analysis_gate._failure_modes_recall)
+    are structurally unaffected. Fail-open: no table / corrupt table / any
+    error -> the original query-match order."""
     runner = recall_runner if recall_runner is not None else _run_recall
     try:
         rc, stdout = runner(query)
@@ -161,7 +253,10 @@ def recall_files(query: str, cwd: Path | None = None,
         return ()
     if rc != 0 or not stdout:
         return ()
-    return _parse_files(stdout)
+    files = _parse_files(stdout)
+    if cwd is not None:
+        files = _utility_rerank(files, Path(cwd))
+    return tuple(files)
 
 
 def _guidance(queries: list[str], files: list[str]) -> str:
@@ -172,24 +267,62 @@ def _guidance(queries: list[str], files: list[str]) -> str:
     )
 
 
+def _trace(ws: Path, kind: str, action: str, detail: str, files: int = 0
+           ) -> None:
+    """#814: fail-open ≠ fail-silent — every recall path leaves a trace
+    (kunglao_log emit + recall_metrics record). Telemetry must never block
+    dispatch: any error is swallowed. Modules load by explicit file path
+    (this hook has no scripts/ sys.path injection of its own) — #863
+    Family B: via the canonical loader, fail-open wrappers unchanged."""
+    try:
+        mod = load_module_by_path(
+            "kunglao_log_recall814", SKILL_DIR / "scripts" / "kunglao_log.py")
+        mod.emit(ws, "recall_inject", action, tool="Agent", detail=detail)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        mod = load_module_by_path(
+            "recall_metrics_recall814",
+            SKILL_DIR / "scripts" / "recall_metrics.py")
+        mod.record(ws, kind=kind, query=detail[:80], files=files,
+                   reason=action)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
-    """Hook decision for a PreToolUse(Agent) claim-dispatch payload (#268).
+    """Hook decision for a PreToolUse(Agent) dispatch payload (#268/#761 J4).
 
     Returns (exit_code, stderr_text, additional_context_or_None):
-      - (0, "", None) — not a kunglao workspace / not a claim dispatch /
-        recall failed or matched nothing (FAIL_OPEN: dispatch proceeds)
+      - (0, "", None) — not a kunglao workspace / not a claim or red-team
+        dispatch / recall failed or matched nothing (FAIL_OPEN: dispatch
+        proceeds)
       - (0, "", ctx)  — recall matched: guidance naming the reference files
     rc is ALWAYS 0 — this hook injects knowledge, never rejects.
+    Trigger faces: claim dispatch (`[T<N> tools=...] claim C-NN`, #268) and
+    red-team verification dispatch (#761 J4 — adversarial knowledge BEFORE
+    the checker plans its attacks).
     """
     ws = _resolve_workspace(payload)
     if ws is None:
         return 0, "", None
     prompt_text = _dispatch_text(payload)
-    if not prompt_text or not DISPATCH_RE.search(prompt_text):
-        return 0, "", None  # not a claim dispatch — silent
+    if not prompt_text:
+        return 0, "", None
 
-    tier = tier_for_claim({"statement": prompt_text})
-    queries = queries_for_features(prompt_text, tier)
+    is_claim = _is_claim_dispatch(prompt_text)
+    if not is_claim and not REDTEAM_RE.search(prompt_text):
+        # #814: fail-open ≠ fail-silent — 留痕后放行
+        _trace(ws, "skipped", "recall_skip",
+               "not_a_claim_or_redteam_dispatch")
+        return 0, "", None  # neither a claim nor a red-team dispatch
+
+    if is_claim:
+        tier = tier_for_claim({"statement": prompt_text})
+        queries = queries_for_features(prompt_text, tier)
+    else:
+        queries = queries_for_redteam(prompt_text)
+
     files: list[str] = []
     seen: set[str] = set()
     for query in queries:
@@ -198,7 +331,11 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
                 seen.add(f)
                 files.append(f)
     if not files:
+        _trace(ws, "no_match", "recall_skip", "no_recall_results: "
+               + ",".join(queries[:3]))
         return 0, "", None  # no knowledge to inject
+    _trace(ws, "injected", "recall_injected",
+           "files:" + ",".join(files[:MAX_FILES]), files=len(files))
     return 0, "", _guidance(queries, files[:MAX_FILES])
 
 

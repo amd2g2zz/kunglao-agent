@@ -15,7 +15,6 @@ process is spawned (the kick test uses dry_run=True).
 import json
 from pathlib import Path
 
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"

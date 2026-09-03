@@ -35,10 +35,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
+
+# #863 Family C: workspace resolution is single-sourced in ws_layout; this
+# consumer keeps its own sentinel (the convergence ledger, not the claim
+# register) via the sentinel parameter.
+from ws_layout import resolve_quiet
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 LEDGER_NAME = ".convergence_ledger.jsonl"
 
@@ -60,28 +65,19 @@ EXIT_SPINNING = 2
 EXIT_NO_DATA = 3
 
 
-def _resolve_ws(arg) -> Path:
-    if arg:
-        return Path(arg)
-    cwd = Path(os.getcwd())
-    sub = cwd / "malware-analysis-workspace"
-    return sub if (sub / LEDGER_NAME).exists() else cwd
+def _resolve_ws(arg):
+    """#863 Family C: delegate to the ws_layout single source; this
+    consumer's sentinel is the convergence ledger (LEDGER_NAME), not the
+    claim register."""
+    return resolve_quiet(arg, sentinel=LEDGER_NAME)
 
 
 def _read_ledger(workspace: Path):
     p = workspace / LEDGER_NAME
     if not p.exists():
         return []
-    out = []
-    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return out
+    return list(iter_jsonl(
+        p.read_text(encoding="utf-8", errors="replace").splitlines()))
 
 
 def _parse_ts(s):
@@ -304,4 +300,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

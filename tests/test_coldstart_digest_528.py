@@ -120,7 +120,6 @@ def test_new_modules_have_importers() -> None:
     code — hypothesis_store by digest_build + state_anchor, notes_writer
     documented as the write-side contract."""
     import digest_build  # noqa: F401
-    sys.path.insert(0, str(REPO / "hooks"))
     import state_anchor  # noqa: F401
     src = (REPO / "scripts" / "digest_build.py").read_text(encoding="utf-8")
     assert "hypothesis_store" in src

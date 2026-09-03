@@ -249,10 +249,13 @@ class TestRecall:
     def test_cjk_keyword_scored_with_score(self, index_dir: Path) -> None:
         idx = _index(index_dir)
         r = rr.recall(list(idx.entries), list(idx.scenes), "编解码")
-        assert r.kind == "scored"
-        assert r.scored[0].entry.path == "re-library/tools-crypto.md"
-        assert r.scored[0].score > 0
-        assert r.scored[0].reasons                       # matched fields reported
+        # #814 去污染合同演进：purpose-only CJK 单词碰撞被阻尼，curated
+        # scene 可以胜出——但文档必须仍然可达（两种 kind 都暴露 files）。
+        assert r.kind in ("scored", "scene")
+        assert "re-library/tools-crypto.md" in r.files
+        if r.kind == "scored":
+            assert r.scored[0].score > 0
+            assert r.scored[0].reasons
 
     def test_scored_results_are_sorted_descending(self, index_dir: Path) -> None:
         idx = _index(index_dir)
@@ -304,8 +307,8 @@ class TestCli:
     def test_cli_list_categories(self) -> None:
         r = _cli("--list-categories")
         assert r.returncode == 0
-        assert "tools (5)" in r.stdout
-        assert "governance (3)" in r.stdout
+        assert "tools (6)" in r.stdout  # 6 since #866-b (kunglao-toolshelf.md joined the tools domain)
+        assert "governance (4)" in r.stdout  # +1: mechanisms.md cataloged 2026-08-25
 
     def test_cli_scene_map(self) -> None:
         r = _cli("--scene-map")

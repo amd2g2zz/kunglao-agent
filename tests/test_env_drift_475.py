@@ -29,7 +29,6 @@ MONITOR = SCRIPTS / "kunglao-monitor.py"
 ENV_STATE = Path("runs") / "env-state.json"
 
 sys.path.insert(0, str(SCRIPTS))
-sys.path.insert(0, str(ROOT / "hooks"))
 
 
 def _iso(dt: datetime) -> str:
@@ -132,9 +131,10 @@ class TestCheckEnvFresh:
             'task_spec': ws / 'task_spec.yaml',
         }
 
-    def _payload(self, desc: str = '[T2 tools=vmr-shell] claim C-001 detonate') -> dict:
+    def _payload(self, desc: str = 'w-t bootstrap dispatch') -> dict:
+        # #862 通道归一：形状走 prompt（canonical），description 纯描述
         return {'tool_input': {'name': 'w-t', 'description': desc,
-                               'prompt': 'facts-snapshot: 1 facts'}}
+                               'prompt': '[T2 tools=vmr-shell] claim C-001 detonate'}}
 
     def test_missing_file_fail_open(self, tmp_path, capsys):
         """Missing env-state.json → allow (FAIL_OPEN) + one-time stderr hint."""

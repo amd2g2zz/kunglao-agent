@@ -1,44 +1,58 @@
 ---
 name: go-symbols
-description: "Stage 3.9 Go symbol recovery via unstrip (Go samples only, die.json language=Go). Runs unstrip --info / default / --format ghidra / --xref / --data-at, parses output, and WRITES evidence/unstrip-info.json + unstrip-symbols.json + unstrip-ghidra-apply.py + unstrip-ghidra-hints.json. The hints file carries prioritized_targets + itab_dispatch + struct_types + xref_map + garble_assist + annotations[] (the persistent mark-up plan ghidra-light applies to the Ghidra project). Heuristic not hardcoded - you classify functions, pick --data-at targets, and craft actionable annotations. Pure local. You DO have the Write tool - write the files yourself, do not return YAML to the caller."
-# issue #310 mechanical trigger table — parsed by scripts/route_capability.py.
-# Go symbol recovery precedes decompile: pipeline_order 1 wins over
-# ghidra-light (4) for Go samples.
+description: Stage 3.9 Go symbol recovery via unstrip (Go samples only, die.json language=Go). Runs unstrip
+  --info / default / --format ghidra / --xref / --data-at, parses output, and WRITES evidence/unstrip-info.json
+  + unstrip-symbols.json + unstrip-ghidra-apply.py + unstrip-ghidra-hints.json. The hints file carries
+  prioritized_targets + itab_dispatch + struct_types + xref_map + garble_assist + annotations[] (the persistent
+  mark-up plan ghidra-light applies to the Ghidra project). Heuristic not hardcoded - you classify functions,
+  pick --data-at targets, and craft actionable annotations. Pure local. You DO have the Write tool - write
+  the files yourself, do not return YAML to the caller.
 triggers:
   pipeline_order: 1
   intent:
     must_any:
-      - 'go symbol'
-      - 'go-symbol'
-      - 'golang'
-      - 'go binary'
-      - 'go-binary'
-      - 'go sample'
-      - 'pclntab'
-      - 'unstrip'
-      - '符号恢复'
+    - go symbol
+    - go-symbol
+    - golang
+    - go binary
+    - go-binary
+    - go sample
+    - pclntab
+    - unstrip
     exclude:
-      - 'rust'
-      - '\.net'
-      - 'c#'
+    - rust
+    - \.net
+    - c#
   features:
     language:
       any_of:
-        - 'Go'
+      - Go
     import_hints:
       any_contains:
-        - 'go.buildinfo'
+      - go.buildinfo
 allowedTools:
-  - Read
-  - Grep
-  - Bash
-  - Write
-  - mcp__sequential-thinking__sequentialthinking
+- Read
+- Glob
+- Grep
+- Write
+- Edit
+- Bash
+- mcp__sequential-thinking__sequentialthinking
 disallowedTools:
-  - WebFetch
-  - WebSearch
-  - Edit
-  - NotebookEdit
+- NotebookEdit
+- WebFetch
+- WebSearch
+- mcp__camoufox-reverse__*
+- mcp__gitnexus__*
+- mcp__x64dbg__*
+- mcp__frida__spawn
+- mcp__frida__attach
+- mcp__frida__*
+- mcp__x64dbg__start_session
+- mcp__x64dbg__connect_to_session
+- mcp__x64dbg__connect_to_instance
+- mcp__x64dbg__terminate_session
+- mcp__volatility__*
 isolation: none
 ---
 
@@ -71,14 +85,30 @@ Recover Go symbols/types/itabs from pclntab via unstrip (no decompile) -> emit a
 ## Output
 4 files in `evidence_dir`. Return a one-line summary: function count, garble verdict, #annotations.
 
-## Subagent contract (#492 — structural declaration)
+## Plan-to-execute
+
+1. Inventory inputs: `die.json` language=Go confirmation, `binary_path` present, unstrip resolvable (PATH / analysis_state.txt / caller), prior evidence for `--data-at` targets.
+2. Enumerate hypothesis paths: symbols intact vs garble-hashed names (`garble_assist` route); suspicious-subset classification decrypt/c2/loader/persistence/exfil/recon.
+3. Per path, expected evidence: `unstrip-info.json` pclntab addr+size + garble verdict; `unstrip-symbols.json` Layer A counts + Layer B suspects; hints `annotations[]` markup plan.
+4. Execution order: `--info` -> default listing -> `--format ghidra` VERBATIM export -> `--xref` / `--data-at` deep dives; per-step fallback = widen suspicious-name patterns or move data targets to floss-flagged config/IOC addresses.
+5. On drift (non-Go `die.json`), update the plan, stop degraded (`status: blocked`) — never fabricate semantic names for hashed symbols.
+
+## Status reporting
+
+Status line format: `[HH:MM] step: <x> | status: in-progress|done|blocked`, appended to `runs/worker-status-go-symbols-<id>.md`; canonical vocabulary only.
+- `[11:20] step: --info parsed, 6800 funcs, garble=likely | status: in-progress`
+- `[11:26] step: annotations[] distilled, 42 targets across 6 categories | status: in-progress`
+
+Completion rule: the final done line MUST declare all four deliverables — `status: done | artifacts: evidence/unstrip-info.json, evidence/unstrip-symbols.json, evidence/unstrip-ghidra-apply.py, evidence/unstrip-ghidra-hints.json | notes: <durable note path>`.
+
+## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->
 Pipeline step 1: sequentialthinking preamble BEFORE running unstrip — confirm
 Go, pick suspicious-name patterns, choose `--data-at` targets from prior evidence.
 Update the plan when the data argues otherwise, then continue.
 
-**#494 expansion — plan FIRST, in writing**: your first action is to create
+**Plan FIRST, in writing**: your first action is to create
 `runs/worker-status-go-symbols-<id>.md` and write its plan section BEFORE
 running `unstrip` (the sequentialthinking preamble lands THERE, in
 writing). The plan section states, in this domain's language: (a) what you
@@ -99,7 +129,7 @@ WRITE the four evidence files yourself (`unstrip-info.json` /
 return the one-line summary (function count, garble verdict, #annotations)
 only after the files exist — a run without files has FAILED.
 
-**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+**Liveness + artifacts (canonical log / W-15 lesson)**: append to
 `runs/worker-status-go-symbols-<id>.md` as an append-only log parsed by the
 single canonical parse point (`hooks/lib_kunglao.py` — LAST `status:`
 token wins). Canonical vocabulary ONLY — `status: in-progress` /
@@ -116,7 +146,7 @@ Reuse `unstrip` (PATH or the `analysis_state.txt` toolchain path) — do not
 hand-roll pclntab parsing; garble assist names candidates, never fabricates
 semantic names.
 
-**#494 expansion — discovery before ANY new code**. Before writing any
+**Discovery before ANY new code**. Before writing any
 parser or wrapper, run the three-point check: (1) `ls scripts/re` — the
 workspace RE tools deployed for this engagement; (2) grep
 `tools/_INDEX.yaml` by category/capability (`static:*`, `ghidra:*`); (3)
@@ -128,3 +158,27 @@ hand-roll symbol recovery; a missing capability = file an issue to
 upstream it into `tools/`; a one-off shim must be labeled disposable and
 dropped after the run.
 
+
+<!-- contract: wait-unwait -->
+## WAIT after delivery — do not end at the final status line
+
+After appending your final `status: done` line, do NOT stop. Enter the wait
+loop (the tool owns the whole poll/heartbeat/signal mechanism; you just
+invoke it):
+
+    python scripts/kunglao_wait.py --worker <your-id>
+
+`<your-id>` is your agent id (the `name:` in your frontmatter). The tool
+appends one `status: waiting` heartbeat line per poll (~20 s) to
+`runs/worker-status-<your-id>.md` — the file mtime IS your liveness.
+
+- **rc=0 (UNWAIT)** — a new dispatch targeted you: the orchestrator's
+  dispatch gate wrote `runs/wait-signal-<your-id>.json`, the tool consumed
+  it, flipped your ledger's last status to `status: in-progress`, and
+  printed the signal JSON on stdout (read it for context). Continue with
+  the new dispatch as a fresh task — same file contract.
+- **rc=3 / rc=4 (self-kill)** — your wait window closed with no dispatch:
+  your ledger's last line reads `status: failed | note: self-killed after N
+  wait rounds`. You are unscheduled — TaskStop yourself NOW so your slot
+  frees. Normal work and post-UNWAIT paths have NO timeout; only the wait
+  loop counts rounds.

@@ -24,6 +24,15 @@ discriminator groups) and results (writing facts); ranking is zero-LLM.
   capability_switch_violation() is the pure judgment behind the
   dispatch-gate capability card; strategy_failures feeds novelty.
 
+#759 H2 value function: runs/value-weights.yaml carries the user's
+  structured worth ruling (claim_classes impact→weight, per-claim
+  overrides); the resolved multiplier applies to the final ratio
+  (score = VoI/cost × weight). Loading is fail-open per entry and whole
+  file — absent/corrupt/illegal → weight 1.0, byte-identical to the
+  pre-#759 formula. This is the SANCTIONED worth channel (#711 E2:
+  replaces hand-edited ranking inputs / SendMessage verdict hacks);
+  see SKILL.md "Value ordering".
+
 Usage:
   python priority_ratio.py <workspace> [--json]
 """
@@ -48,11 +57,14 @@ from pathlib import Path
 
 import yaml
 
-from status_defs import TERMINAL, IN_PROGRESS_STATUSES
+import value_config
+from status_defs import TERMINAL, IN_PROGRESS_STATUSES, SUSPENDED
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 WEIGHTS = {"L": 0.45, "D": 0.30, "N": 0.25}
 TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
 NOVELTY_BASE = 3  # 3 terminal facts in a category → N=0 (saturated)
+CAPABILITY_BONUS = 1.5  # #823 A3: multiplier for claims holding a validated capability card
 
 # #496: the strategy dispatch log (single writer: hooks/dispatch_gate.py on
 # its PASS path; the interface is deliberately optional — no marker, no row).
@@ -75,6 +87,16 @@ class EvidenceView:
     identified_obstacles: tuple[tuple[str, str], ...] = ()  # (claim_id, text)
     strategy_failures: dict[str, int] = field(default_factory=dict)
     claim_strategy: dict[str, str] = field(default_factory=dict)
+    # #759 H2: structured user worth ruling (fail-open loaded)
+    value_class_weights: dict[str, float] = field(default_factory=dict)
+    value_claim_overrides: dict[str, float] = field(default_factory=dict)
+    # #823 A3 (N-arm): replay prior P(complete) for this workspace's bucket;
+    # 1.0 = neutral → pre-#823 cost math. Resolved only when the flag is on.
+    prior_p_complete: float = 1.0
+    # #823-P3: remaining gap weight per PQ (answered→0, blocked→(1−β)·w,
+    # unattempted→w); mission_active only when flag ON + positive gaps.
+    mission_gap: dict[str, float] = field(default_factory=dict)
+    mission_active: bool = False
 
     @classmethod
     def from_workspace(cls, ws: Path) -> "EvidenceView":
@@ -112,10 +134,45 @@ class EvidenceView:
                     terminal_claims.add(claim_id)
                 if "PROVEN" in status or "VERIFIED" in status:
                     verified += 1
+        # #594: a fresh workspace's _INDEX.md carries only the version stamp —
+        # zero terminal rows emptying the dispatchability gate. Fall back to
+        # the register's PROVEN claims (index rows still win when present).
+        if not terminal_claims:
+            reg = ws / "claim-register.yaml"
+            if reg.exists():
+                try:
+                    for c in (yaml.safe_load(reg.read_text(encoding="utf-8"))
+                              or {}).get("claims") or []:
+                        if str(c.get("status", "")).upper() in TERMINAL:
+                            terminal_claims.add(c.get("id"))
+                except (yaml.YAMLError, OSError):
+                    pass  # fail-open: broken register must not break ranking
         caps, obstacles, covers = _scan_failure_artifacts(ws)
         claim_strategy, strategy_failures = _load_strategy_view(ws, covers)
+        classes, overrides = load_value_weights(ws)
+        prior_p = _resolve_prior_p(ws) if value_config.is_enabled() else 1.0
+        mission_gap: dict[str, float] = {}
+        mission_active = False
+        if value_config.is_enabled():
+            # #823-P3: mission gap weights from the欠账表 (fail-open).
+            try:
+                led_path = ws / "runs" / "mission_ledger.yaml"
+                if led_path.exists():
+                    led = yaml.safe_load(
+                        led_path.read_text(encoding="utf-8")) or {}
+                    beta = float(led.get("mission", {}).get("beta", 0.3))
+                    for p in led.get("mission", {}).get("pqs", []):
+                        w = float(p.get("weight", 1.0))
+                        st = p.get("state")
+                        mission_gap[str(p.get("id"))] = (
+                            0.0 if st == "answered" else
+                            (1.0 - beta) * w if st == "blocked" else w)
+                    mission_active = any(v > 0 for v in mission_gap.values())
+            except Exception:  # noqa: BLE001 — fail-open
+                mission_gap, mission_active = {}, False
         return cls(frozenset(terminal_claims), verified, {}, lines,
-                   caps, obstacles, strategy_failures, claim_strategy)
+                   caps, obstacles, strategy_failures, claim_strategy,
+                   classes, overrides, prior_p, mission_gap, mission_active)
 
 
 @dataclass(frozen=True)
@@ -132,15 +189,21 @@ class Action:
     discriminator: float
     novelty: float
     cost: float
+    weight: float = 1.0  # #759 H2 value multiplier (appended field — the pre-#759 construction shape is positionally compatible)
+    gap_bucket: int = 0  # #823-P3: 1 = answers an open-PQ gap (leads the sort when flag ON)
 
     def to_dict(self) -> dict:
         return {"claim_id": self.claim_id, "action": self.action,
-                "score": round(self.score, 3), "skill": self.skill}
+                "score": round(self.score, 3), "skill": self.skill,
+                "weight": round(self.weight, 3)}
 
 
 def is_open(claim: dict) -> bool:
-    """Not terminal and not IN_PROGRESS (same rule as priority.py L60-64)."""
-    return claim.get("status") not in TERMINAL and claim.get("status") not in IN_PROGRESS_STATUSES
+    """Not terminal, not IN_PROGRESS, not PARK (#634: suspended claims exit
+    the dispatch frontier; revival is explicit via mission_stall.revive)."""
+    st = claim.get("status")
+    return (st not in TERMINAL and st not in IN_PROGRESS_STATUSES
+            and st not in SUSPENDED)
 
 
 # ---------- action classification (unchanged, feeds the novelty region + worker hints) ----------
@@ -311,14 +374,7 @@ def _load_strategy_view(ws: Path, covers: dict[str, int]) -> tuple[dict[str, str
         return {}, {}
     claim_strategy: dict[str, str] = {}
     failures: dict[str, int] = {}
-    for line in rows:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            e = json.loads(line)
-        except ValueError:
-            continue
+    for e in iter_jsonl(rows):
         if not isinstance(e, dict) or e.get("event") != "dispatch":
             continue
         strategy = str(e.get("strategy") or "").strip()
@@ -435,6 +491,116 @@ def capability_switch_violation(claim_ids, dispatch_tools: list[str],
             "dispatch_families": sorted(disp_fams), "capability": capability}
 
 
+# ===================== #759 H2 value function =====================
+
+VALUE_WEIGHTS_FILE = "runs/value-weights.yaml"
+
+# Mechanical claim→impact-class vocabulary (word-bounded ASCII tokens +
+# literal CJK phrases — no natural-language inference, mirroring
+# tool_families_from_text's posture). Map order is tie-break priority.
+_VALUE_CLASS_TOKENS: list[tuple[str, tuple[str, ...]]] = [
+    ("rce", ("rce", "remote code execution", "代码执行", "deserialization")),
+    ("dos", ("dos", "denial of service", "拒绝服务")),
+    ("sandbox_escape", ("sandbox escape", "逃逸", "escape")),
+    ("c2_extract", ("c2", "回连")),
+    ("credential_theft", ("credential theft", "凭据窃取", "credential")),
+    ("info_disclosure", ("information disclosure", "信息泄露")),
+]
+
+
+def _positive_weights(raw) -> dict[str, float]:
+    """Keep only strictly-positive numeric entries; anything else is
+    ignored per-entry (fail-open: a bad row must not neutralize the file)."""
+    out: dict[str, float] = {}
+    for k, v in (raw or {}).items():
+        if isinstance(v, bool):
+            continue
+        try:
+            w = float(v)
+        except (TypeError, ValueError):
+            continue
+        if w > 0:
+            out[str(k)] = w
+    return out
+
+
+def load_value_weights(ws: Path) -> tuple[dict[str, float], dict[str, float]]:
+    """(claim_class_weights, per_claim_overrides) from runs/value-weights.yaml.
+
+    Fail-open at every level: missing file → ({}, {}); unparsable YAML or a
+    non-mapping root → ({}, {}); illegal entries dropped individually."""
+    path = ws / VALUE_WEIGHTS_FILE
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}, {}
+    except Exception:  # noqa: BLE001 — corrupt weights never break ranking
+        return {}, {}
+    if not isinstance(data, dict):
+        return {}, {}
+    classes = data.get("claim_classes")
+    overrides = data.get("overrides")
+    return (_positive_weights(classes if isinstance(classes, dict) else None),
+            _positive_weights(overrides if isinstance(overrides, dict) else None))
+
+
+def classify_value_class(claim: dict) -> str | None:
+    """Statement + answers_question keyword match against the mechanical
+    vocabulary; no hit → None (weight stays 1.0)."""
+    text = " ".join([str(claim.get("statement", "")),
+                     str(claim.get("answers_question", ""))]).lower()
+    for cls_, tokens in _VALUE_CLASS_TOKENS:
+        for tok in tokens:
+            if re.search(r"(?<![A-Za-z0-9])" + re.escape(tok.lower())
+                         + r"(?![A-Za-z0-9])", text, re.IGNORECASE):
+                return cls_
+    return None
+
+
+def claim_value_weight(claim: dict,
+                       classes: dict[str, float],
+                       overrides: dict[str, float]) -> float:
+    """Resolution order: per-claim override > explicit value_class field >
+    keyword classification > 1.0."""
+    cid = str(claim.get("id") or "")
+    if cid and cid in overrides:
+        return overrides[cid]
+    cls_ = str(claim.get("value_class") or "").strip().lower() \
+        or classify_value_class(claim)
+    if cls_ and cls_ in classes:
+        return classes[cls_]
+    return 1.0
+
+
+def _resolve_prior_p(ws: Path) -> float:
+    """#823 A3: this workspace's bucket P(complete) from the A1 replay
+    priors (same bucket derivation as build_priors). Deferred imports —
+    value_replay imports this module at top level (cycle breaker).
+    Any read failure → 1.0 (neutral: a missing prior must not reshape
+    the ranking, mirroring the #759 fail-open posture)."""
+    try:
+        import rho_checkpoint
+        import value_replay
+        priors = {}
+        p = ws / "runs" / "value-priors.yaml"
+        if p.exists():
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                priors = data
+        spec = {}
+        sp = ws / "task_spec.yaml"
+        if sp.exists():
+            data = yaml.safe_load(sp.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                spec = data
+        depth = str(spec.get("depth") or "unknown").strip().lower()
+        v, _source, _band = rho_checkpoint.v_from_priors(
+            priors, depth, value_replay.dominant_family(ws))
+        return float(v)
+    except (OSError, yaml.YAMLError, ImportError):
+        return 1.0
+
+
 def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> list[Action]:
     """VoI proxy / cost ranking (purely mechanical, zero LLM).
 
@@ -442,7 +608,15 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
           evidence (EvidenceView, with terminal_fact_claims)
     Output: the sorted Action list (score descending, ties broken by lower cost, then by claim_id)
     """
+    # #594/#596: claim_deps.yaml is the authoritative graph, but a fresh
+    # workspace ships it empty ("depends_on: {}") — fall back to the
+    # operator-natural per-claim depends_on field so the ranking has input
+    # (and the per-claim field stops being cosmetic) until claim_deps is
+    # hand-populated.
     depends_on = (deps or {}).get("depends_on", {}) or {}
+    if not depends_on:
+        depends_on = {c["id"]: list(c.get("depends_on") or [])
+                      for c in claims if c.get("id") and c.get("depends_on")}
     competitor_groups = (deps or {}).get("competitor_groups", {}) or {}
     rev_deps = _reverse_deps(depends_on)
     open_ids = {c.get("id") for c in claims if c.get("id") and is_open(c)}
@@ -486,22 +660,43 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
         N = _novelty(action_cat, fact_counts, s_fails)
         cost = action_cost(c)
         numerator = WEIGHTS["L"] * L + WEIGHTS["D"] * D + WEIGHTS["N"] * N
-        score = round(numerator / cost, 3)
+        # #759 H2: the user's structured worth ruling multiplies the final
+        # ratio (absent weights → 1.0 → the pre-#759 formula byte-identical).
+        weight = claim_value_weight(c, evidence.value_class_weights,
+                                    evidence.value_claim_overrides)
+        # #823 A3 (N-arm only): feed-side terms — cost inflated by the
+        # bucket's inverse P(complete) (rework expectation, floored at 0.05
+        # to bound the inflation) and the capability bonus. Flag off → both
+        # neutral, byte-identical to the pre-#823 formula.
+        cost_eff, bonus = cost, 1.0
+        if value_config.is_enabled():
+            cost_eff = cost / max(evidence.prior_p_complete, 0.05)
+            if any(cid == cap_cid
+                   for cap_cid, _ in evidence.validated_capabilities):
+                bonus = CAPABILITY_BONUS
+        # #823-P3: gap-hit bucket — claims answering an OPEN PQ gap lead the
+        # ranking (缺口命中 > tier > VoI). Flag off → bucket stays 0 for all.
+        gap_bucket = 0
+        if value_config.is_enabled() and evidence.mission_active:
+            pq = str(c.get("answers_question") or "").strip()
+            if pq and evidence.mission_gap.get(pq, 0.0) > 0.0:
+                gap_bucket = 1
+        score = round(numerator / cost_eff * weight * bonus, 3)
         actions.append(Action(
             claim_id=cid, action=action_cat, score=score, skill=None,
             tier=action_tier(c), attempts=int(c.get("promotion_attempts", 0)),
             leverage=round(L, 3), discriminator=D, novelty=round(N, 3), cost=cost,
+            weight=weight, gap_bucket=gap_bucket,
         ))
-    # score tie within ε → lower cost wins (mechanical ruling, no LLM); then stable by claim_id
-    actions.sort(key=lambda a: (-a.score, a.cost, a.claim_id))
+    # score tie within ε → lower cost wins (mechanical ruling, no LLM); then stable by claim_id.
+    # #823-P3: flag ON → gap-bucket leads; uniform buckets (or flag off) reduce
+    # to the legacy key, so the result order is byte-identical there.
+    if value_config.is_enabled():
+        actions.sort(key=lambda a: (0 if a.gap_bucket else 1,
+                                    -a.score, a.cost, a.claim_id))
+    else:
+        actions.sort(key=lambda a: (-a.score, a.cost, a.claim_id))
     return actions
-
-
-# ---------- legacy caller compatibility (used by kunglao-decide._cheapness_order) ----------
-
-def next_tier_cost(claim: dict) -> float:
-    """[Deprecated, kept for compatibility] the old NEXT_TIER_CHEAP semantics. New code uses action_cost / cheapness."""
-    return cheapness(claim)
 
 
 def _load_yaml(path: Path) -> dict:
@@ -519,12 +714,15 @@ def main(argv: list[str] | None = None) -> int:
     evidence = EvidenceView.from_workspace(ws)
     claims = reg.get("claims") or []
     actions = priority_ratio(claims, deps, evidence)
+    # #610: plain-text reads the typed actions; out stays the --json payload only
     out = [a.to_dict() for a in actions]
     print(json.dumps(out, ensure_ascii=False, indent=2) if args.json else "\n".join(
         f"{a.claim_id:<6} {a.action:<22} score={a.score:<7} L={a.leverage} D={a.discriminator} N={a.novelty} cost={a.cost}"
-        for a in out) or "(no dispatchable claims)")
+        for a in actions) or "(no dispatchable claims)")
     return 0
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

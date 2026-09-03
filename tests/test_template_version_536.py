@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import template_version as tv  # noqa: E402
+from _factories import seed_bins
 
 
 def test_skill_version_is_semver_and_matches_pyproject() -> None:
@@ -147,15 +148,14 @@ def test_init_stamps_all_three_carriers(tmp_path: Path) -> None:
     import os
     import subprocess
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     env = {k: v for k, v in os.environ.items()
            if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "0"
     env["PYTHONIOENCODING"] = "utf-8"
     r = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "kunglao-init.py"), str(ws),
-         "--skip-toolchain", "--type", "windows", "--no-mcp", "--no-hooks",
+         "--skip-toolchain", "--host-exec-protection", "enabled", "--type", "windows", "--no-mcp", "--no-hooks",
          "--profile-root", str(tmp_path / "profile-root")],
         capture_output=True, text=True, timeout=120, env=env,
         errors="replace")

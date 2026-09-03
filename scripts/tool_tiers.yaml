@@ -1,0 +1,81 @@
+# tool_tiers.yaml — #812 工具族档位表（契约层数据，dispatch 契约一等输入）
+#
+# 来源（不凭空发明）：
+#   - #670 apk_mem_gate 估算参数与 verdict 阈值（calibration: 395MB APK /
+#     12GB heap / ~10h GC-thrashed——单点标定，更多样本后再精化）
+#   - #812 现场实录：500MB APK jadx 卡死→grep 退化的双输；C-006 plan 的
+#     targeted-jadx 好实践（--classes-to-decompile 候选前缀 / 单 dex /
+#     baksmali xref → per-class jadx）
+#
+# 档位词汇表：full（全量重端）→ targeted（定向中端）→ structured（结构化
+# 扫描）→ text（裸文本）。worker 规划必须从本表选择档位与降级链；选择
+# 审计（偏离=信号）与执行包装器（timeout 硬杀）为后续 PR。
+
+schema: kunglao.tool-tiers/1
+
+tiers: [full, targeted, structured, text]
+
+scenes:
+  android-dex-static:
+    size_est:                  # #670 估算参数（原样继承）
+      dex_factor: 50.0
+      floor_gb: 4.0
+      budget_ratio: 0.65
+      calibration: "395MB APK / 12GB heap / ~10h GC-thrashed (single point)"
+    tier_defs:
+      full:
+        tools: ["jadx"]
+        preconditions: ["mem_budget_ok"]   # #670 verdict ∈ {jadx-ok}
+        caps: {timeout_s: 3600, xmx_gb: 12}
+      targeted:
+        tools: ["jadx --classes-to-decompile <prefixes>", "jadx --single-dex <n>"]
+        preconditions: ["mem_budget_ok"]
+        caps: {timeout_s: 1800, xmx_gb: 6}
+        how: >-
+          C-006 实录：baksmali xref 定位候选类前缀 → --classes-to-decompile
+          定向反编译 → 必要时单 dex 提取；不跑全量。
+      structured:
+        tools: ["baksmali", "dexdump class-list"]
+        caps: {timeout_s: 1200}
+        how: >-
+          结构化扫描建类清单/字符串表/方法签名，不产 Java 源码——
+          供 targeted 定候选与全文 grep 定位用。
+      text:
+        tools: ["grep on baksmali output", "strings"]
+        caps: {timeout_s: 600}
+    downgrade_chain: [full, targeted, structured, text]
+    obfuscation_prior:
+      renamed_symbols: >-
+        重命名混淆使 full/targeted 的可读性收益骤降：先 structured 建清单
+        （类名/字符串/签名不受符号名影响），再 targeted 点验。档位选择须
+        读取 #813 intake 预扫描的混淆先验。
+      resource_obfuscation: >-
+        资源混淆只影响资源树，代码档位选择不变；strings 面照常可用。
+    sources:
+      - "#670 apk_mem_gate（估算与 verdict 阈值）"
+      - "#812 C-006 targeted plan 实录（live-run sample 工作区）"
+
+  generic-binary:
+    tier_defs:
+      full:
+        tools: ["ghidra headless full-analyze"]
+        preconditions: ["ghidra_available"]
+        caps: {timeout_s: 7200}
+      targeted:
+        tools: ["ghidra decompile via imports/xrefs"]
+        caps: {timeout_s: 1800}
+      structured:
+        tools: ["DIE", "pefile", "floss"]
+        caps: {timeout_s: 900}
+      text:
+        tools: ["strings", "grep"]
+        caps: {timeout_s: 600}
+    downgrade_chain: [full, targeted, structured, text]
+    obfuscation_prior:
+      packed: "先 structured（DIE/pefile 识别壳）再定 full/targeted；壳未识别前不进 full"
+    sources:
+      - "kunglao ghidra 泳道既有实践"
+
+# 未知场景 fallback：只有档位词汇与链，不发明工具名（加载器合成）
+fallback:
+  downgrade_chain: [full, targeted, structured, text]

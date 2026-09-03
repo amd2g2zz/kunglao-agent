@@ -78,20 +78,23 @@ import wire_up_settings
 # import time (lazy imports only), so no cycle exists in either direction.
 import hook_activation
 
+from _hooks_path import (  # #863 Family B: loader delegation (#671 authority)
+    load_hooks_lib, load_module_by_path)
+
 # D6: activation TTL from hook_activation.py DEFAULT_TTL_MINUTES — the tick
 # interval MUST stay below it or the TTL-expiry→next-tick gap silently closes
-# the gates (issue requirement).
-ACTIVATION_TTL_MINUTES = 30
+# the gates (issue requirement). #597: the three minutes constants below are
+# single-sourced in liveness_policy (values unchanged; rationale there).
+from liveness_policy import (  # noqa: E402
+    ACTIVATION_TTL_MINUTES,
+    DEFAULT_STALE_MINUTES,
+    FRESH_WORKER_MINUTES,
+)
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 DEFAULT_TICK_INTERVAL_MIN = 15
-# D1: both heartbeat signals stale beyond this → dead. 15+10 = worst-case
-# detection ≤ 25 min < 30-min TTL → the kick always lands before the old
-# activation expires (no silent window, with margin).
-DEFAULT_STALE_MINUTES = 10
-# D3: worker status files fresher than this block the kick (session mid-dispatch).
-# Mirrors lib_kunglao STUCK_MINUTES (20).
-FRESH_WORKER_MINUTES = 20
 # #45: fired-predicate resume prompt bounds — the open-claims list is truncated
-# by priority (priority.rank_claims order) when over either bound.
+# by priority (priority_ratio order — the sanctioned scorer, #867 closeout)
+# when over either bound.
 DEFAULT_MAX_PROMPT_CHARS = 4000
 DEFAULT_MAX_OPEN_CLAIMS = 15
 
@@ -126,6 +129,9 @@ _KICKER_SKIP_FILES = frozenset({
     "state_anchor.py",      # state re-anchor — full --wire-up restores it
     "completion_gate.py",   # Stop completion gate — full --wire-up restores it
     "write_guard.py",       # carrier write gate (#532) — full --wire-up restores it
+    "orchestrator_tool_guard.py",  # Bash maker-checker WARN (#608) — full --wire-up restores it
+    "violation_capture.py", # Bash violation recorder (#718) — full --wire-up restores it
+    "bash_fact_guard.py",   # Bash facts-write lint recorder (#809) — full --wire-up restores it
 })
 _KICKER_ENTRY_FILES = frozenset(f for _, _, f in KUNGLAO_HOOK_ENTRIES)
 
@@ -159,24 +165,14 @@ wire_up_settings.derive_hook_subset(
     owner="external_kicker KUNGLAO_HOOK_ENTRIES")
 
 def _worker_protocol():
-    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
-    path under the unique name lib_kunglao_hooks (same pattern as the
-    lib_kunglao_scripts loader in should_kick below: bare `import
-    lib_kunglao` is ambiguous under pytest)."""
-    import importlib.util
-    name = "lib_kunglao_hooks"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
-    return lib
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444).
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_hooks_lib, via scripts/_hooks_path) — the
+    unique-name + by-path semantics are unchanged."""
+    return load_hooks_lib()
 
 
-def utc_now() -> str:
-    return datetime.now(tz=timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 # ---------- D1: dead-session detection ----------
@@ -375,16 +371,13 @@ def should_kick(workspace: Path) -> bool:
     hooks/lib_kunglao.py). Production is unambiguous (this script runs with
     scripts/ at sys.path[0]); the test harness loads the same module by
     explicit path under the same unique name, so both share one instance.
+
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_module_by_path, via scripts/_hooks_path) —
+    unique name + registration semantics unchanged.
     """
-    import importlib.util
-    name = "lib_kunglao_scripts"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent / "lib_kunglao.py"
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
+    lib = load_module_by_path(
+        "lib_kunglao_scripts", Path(__file__).resolve().parent / "lib_kunglao.py")
     return (lib.drift_detected(workspace)
             and lib.signature_rotation(workspace) >= lib.DRIFT_ESCALATE_ROWS)
 
@@ -469,14 +462,7 @@ def _ledger_last_snapshot(ws: Path) -> tuple[dict | None, int]:
     except OSError:
         return None, 0
     last, round_n = None, 0
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except (ValueError, TypeError):
-            continue
+    for row in iter_jsonl(lines):
         if not isinstance(row, dict) or not _is_snapshot(row):
             continue
         round_n += 1
@@ -618,15 +604,19 @@ def _facts_total(ws: Path, snapshot: dict | None) -> int:
 
 
 def _priority_ordered_ids(open_ids: list[str], ws: Path) -> list[str]:
-    """Order open ids by priority.rank_claims score desc; unranked keep register order.
+    """Order open ids by priority_ratio score desc; unranked keep register order.
 
     The loop dispatches by THIS ranker (the single sanctioned one), so
-    truncation keeps exactly the claims the loop would dispatch next. The
-    module is optional — any failure falls back to register order (recovery
-    must not depend on optional modules).
+    truncation keeps exactly the claims the loop would dispatch next.
+    #867 closeout: ranks via priority_ratio (specs/phase-4/contract.md §1 —
+    the #499 authority) instead of the DEPRECATED priority shim, so the
+    shim's eventual #446 removal can no longer silently degrade this
+    ordering to register order. The module is optional — any failure falls
+    back to register order (recovery must not depend on optional modules),
+    but the fallback is now SIGNALLED on stderr (never silent).
     """
     try:
-        import priority
+        import priority_ratio
         import yaml
         reg = {}
         p = ws / "claim-register.yaml"
@@ -636,10 +626,14 @@ def _priority_ordered_ids(open_ids: list[str], ws: Path) -> list[str]:
         dp = ws / "claim_deps.yaml"
         if dp.exists():
             deps = yaml.safe_load(dp.read_text(encoding="utf-8")) or {}
-        rows = priority.rank_claims(reg, deps, priority.DEFAULT_WEIGHTS)
-        ranked = [r["id"] for r in rows]
+        evidence = priority_ratio.EvidenceView.from_workspace(ws)
+        actions = priority_ratio.priority_ratio(
+            reg.get("claims") or [], deps, evidence)
+        ranked = [a.claim_id for a in actions]
         return ranked + [i for i in open_ids if i not in ranked]
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — recovery path, but never silent
+        print(f"kicker: priority_ratio ranking unavailable, falling back to "
+              f"register order: {exc!r}", file=sys.stderr)
         return open_ids
 
 
@@ -655,9 +649,9 @@ def build_resume_prompt(ws, *,
     in-progress runs/worker-status-*.md. NEVER reads progress.txt /
     analysis_state.txt (LLM self-descriptions, not events — research F4:
     "an LLM saying done is not an event"). The open-claims list is truncated
-    by priority (priority.rank_claims order) when over max_open_claims or
-    when the assembled prompt exceeds max_chars, with an explicit
-    "(+N more truncated by priority)" marker.
+    by priority (priority_ratio order — the sanctioned scorer) when over
+    max_open_claims or when the assembled prompt exceeds max_chars, with an
+    explicit "(+N more truncated by priority)" marker.
     """
     ws = Path(ws)
     snapshot, round_n = _ledger_last_snapshot(ws)
@@ -683,7 +677,7 @@ def build_resume_prompt(ws, *,
     facts_total = _facts_total(ws, snapshot)
 
     if open_ids:
-        next_step = ("dispatch top claim via scripts/priority.py rank_claims "
+        next_step = ("dispatch top claim via scripts/priority_ratio.py --json "
                      "(<=3 workers cap + tier gate); worker done → verify facts → "
                      "update claim-register + _INDEX")
     else:
@@ -857,7 +851,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--settings", default=None,
                         help="project-level settings.json path (default: the "
                              "workspace-parent target from the wire_up_settings "
-                             "deployment registry — hook_deployment_targets[1], #410)")
+                             "deployment registry — hook_deployment_targets[1])")
     parser.add_argument("--claude-bin", default="claude", help="claude CLI binary")
     parser.add_argument("--stale-minutes", type=int, default=DEFAULT_STALE_MINUTES,
                         help="both heartbeat signals stale beyond this = session dead")
@@ -879,4 +873,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

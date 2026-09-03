@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """wire_up_settings — issue #258 project-level hook deployment.
 
-#258 (2026-08-12): wire_up_settings() must deploy kunglao-agent hooks to the
+#258 (2026-08-12): hook registration must deploy kunglao-agent hooks to the
 PROJECT-level settings.json (<workspace>/.claude/settings.json) and NEVER the
 user-global ~/.claude/settings.json (the pre-#258 default bound hooks to a
 worktree path that died with the worktree — 8 hooks went silent at once).
@@ -9,7 +9,6 @@ worktree path that died with the worktree — 8 hooks went silent at once).
 from __future__ import annotations
 
 import json
-import os
 import pathlib
 import shutil
 import sys
@@ -21,16 +20,18 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SKILL_HOOKS = ROOT / "hooks"
 
-# The full entry set wire_up_settings registers: 10 entries / 9 distinct hook
-# files (worker_budget registered under BOTH PreToolUse(Agent) and
-# PostToolUse(Agent); #532 adds write_guard on Edit|Write|MultiEdit).
-WIRE_UP_ENTRIES = 10
-WIRE_UP_HOOK_FILES = {
-    "env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
-    "recall_inject.py",
-    "heartbeat_touch.py", "worker_pulse.py", "state_anchor.py",
-    "completion_gate.py", "write_guard.py",
-}
+# #675: anchors DERIVED from the registry (scripts/wire_up_settings.py) —
+# a registration change moves these expectations automatically. The
+# hand-pinned literals this replaces were the #608 anchor-drift class
+# (three test files broke on one registry addition). Sentinel literals
+# live only in tests/test_hook_registry_singlesource.py.
+import wire_up_settings  # pytest.ini pythonpath = . hooks scripts tools
+
+WIRE_UP_HOOK_FILES = wire_up_settings.WIRE_UP_HOOK_FILES
+# worker_budget (and anything else in DOUBLE_REGISTERED_HOOKS) rides two
+# event slots, so commands = files + extra registrations.
+WIRE_UP_ENTRIES = len(WIRE_UP_HOOK_FILES) + len(
+    wire_up_settings.DOUBLE_REGISTERED_HOOKS & WIRE_UP_HOOK_FILES)
 
 
 @pytest.fixture
@@ -56,12 +57,23 @@ def _basenames(settings: dict) -> set[str]:
     return {c.replace("\\", "/").rsplit("/", 1)[-1] for c in _collect_commands(settings)}
 
 
+def test_count_anchors_are_registry_derived():
+    """#675 anti-repinning guard: WIRE_UP_ENTRIES / WIRE_UP_HOOK_FILES
+    must stay DERIVED from scripts/wire_up_settings.py. Re-hardcoding an
+    integer literal here is exactly how #608 drifted (three test files
+    broke on one registry addition)."""
+    reg = wire_up_settings.WIRE_UP_HOOK_FILES
+    assert WIRE_UP_HOOK_FILES == reg
+    assert WIRE_UP_ENTRIES == len(reg) + len(
+        wire_up_settings.DOUBLE_REGISTERED_HOOKS & reg)
+
+
 def test_wire_up_writes_project_settings_with_all_hooks(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings_path = ws / ".claude" / "settings.json"
     assert settings_path.exists(), "project settings.json must be created"
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -75,8 +87,8 @@ def test_wire_up_never_writes_global(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     assert not (fake_home / ".claude" / "settings.json").exists(), \
         "user-global ~/.claude/settings.json must NOT be created"
 
@@ -86,8 +98,8 @@ def test_wire_up_global_opt_in_writes_home(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws, global_opt_in=True)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws, global_opt_in=True)
     assert (fake_home / ".claude" / "settings.json").exists(), \
         "global_opt_in=True must write the user-global settings"
 
@@ -96,9 +108,9 @@ def test_wire_up_idempotent(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
-    wire_up_settings(workspace=ws)  # re-run — fixed point
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
+    register_hooks(workspace=ws)  # re-run — fixed point
     settings_path = ws / ".claude" / "settings.json"
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     cmds = _collect_commands(settings)
@@ -116,8 +128,8 @@ def test_wire_up_hook_paths_point_to_canonical_skill(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings = json.loads((ws / ".claude" / "settings.json").read_text(encoding="utf-8"))
     canonical = (fake_home / ".claude" / "skills" / "kunglao-agent" / "hooks").as_posix()
     skill_root = (fake_home / ".claude" / "skills" / "kunglao-agent").as_posix()
@@ -126,7 +138,7 @@ def test_wire_up_hook_paths_point_to_canonical_skill(tmp_path, fake_home):
         # #389: commands are `uv run --project <skill_root> <script path>` —
         # uv replaces bare python (2.x risk); the script path stays absolute
         # inside the canonical skill hooks dir (#269).
-        assert cmd.startswith(f"uv run --project {skill_root} "), \
+        assert cmd.startswith(f"PYTHONUTF8=1 uv run --project {skill_root} "), \
             f"hook command must invoke uv with the canonical skill root: {cmd}"
         script_path = cmd.replace("\\", "/").split()[-1]
         assert script_path.startswith(canonical), \
@@ -143,12 +155,12 @@ def test_wire_up_commands_use_uv_on_this_machine(tmp_path, fake_home):
     ws = tmp_path / "ws"
     ws.mkdir()
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings = json.loads((ws / ".claude" / "settings.json").read_text(encoding="utf-8"))
     cmds = _collect_commands(settings)
     assert cmds, "wire_up must emit hook commands"
-    assert all(c.startswith("uv run --project ") for c in cmds), cmds
+    assert all(c.startswith("PYTHONUTF8=1 uv run --project ") for c in cmds), cmds
     assert not any(c.split()[0] in ("python", "python3") for c in cmds), cmds
 
 
@@ -158,8 +170,8 @@ def test_wire_up_cwd_probe(tmp_path, fake_home, monkeypatch):
     ws.mkdir()
     monkeypatch.chdir(ws)
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings()
+    from hook_activation import register_hooks
+    register_hooks()
     settings_path = ws / ".claude" / "settings.json"
     assert settings_path.exists(), "cwd probe must create <cwd>/.claude/settings.json"
     assert not (fake_home / ".claude" / "settings.json").exists()
@@ -178,12 +190,12 @@ def test_wire_up_preserves_existing_keys(tmp_path, fake_home):
         "statusLine": {"type": "command", "command": "echo hi"},
         "hooks": {
             "PreToolUse": [{"matcher": "Bash",
-                            "hooks": [{"type": "command", "command": "python C:/other/hook.py"}]}],
+                            "hooks": [{"type": "command", "command": "python other/hook.py"}]}],
         },
     }), encoding="utf-8")
     sys.path.insert(0, str(SCRIPTS))
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     assert settings["env"]["KUNGLAO_VM_HOST"] == "192.168.20.128", "env keys preserved"
     assert settings["statusLine"]["command"] == "echo hi", "statusLine preserved"
@@ -203,11 +215,11 @@ def _write_project_settings(ws: Path, hook_files: list[str] | None = None) -> Pa
     p.parent.mkdir(parents=True, exist_ok=True)
     pre = [{"matcher": "Agent", "hooks": [
         {"type": "command",
-         "command": f"uv run --project {ROOT.as_posix()} {SKILL_HOOKS / hf}"}
+         "command": f"PYTHONUTF8=1 uv run --project {ROOT.as_posix()} {SKILL_HOOKS / hf}"}
         for hf in hook_files]},
         {"matcher": "Bash", "hooks": [
             {"type": "command",
-             "command": f"uv run --project {ROOT.as_posix()} {SKILL_HOOKS / 'heartbeat_touch.py'}"}]}]
+             "command": f"PYTHONUTF8=1 uv run --project {ROOT.as_posix()} {SKILL_HOOKS / 'heartbeat_touch.py'}"}]}]
     p.write_text(json.dumps({"hooks": {"PreToolUse": pre, "PostToolUse": []}}),
                  encoding="utf-8")
     return p
@@ -271,10 +283,9 @@ def test_selfcheck_rebuilds_project_level(tmp_path, fake_home, monkeypatch, caps
     assert not (fake_home / ".claude" / "settings.json").exists(), \
         "selfcheck rebuild must never write the user-global settings (#258)"
     assert rc == 0, "after project-level rebuild the selfcheck must pass"
-    assert {"env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
-            "recall_inject.py",
-            "heartbeat_touch.py", "worker_pulse.py", "state_anchor.py",
-            "completion_gate.py"} <= {
+    # #675: the full DERIVED registry (stronger than the hand-listed
+    # 8-file subset this replaces — registry growth now covered too).
+    assert WIRE_UP_HOOK_FILES <= {
                 c.replace("\\", "/").rsplit("/", 1)[-1]
                 for c in _collect_commands(proj)}, \
         "rebuilt project settings must carry the full kunglao hook set"

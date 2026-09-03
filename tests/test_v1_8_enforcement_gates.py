@@ -6,7 +6,6 @@ Validates (24 tests across 10 gates):
     - troubleshooting_gate.py: complete report = OK; missing sections = REJECT
     - search_gate.py: search_before_work present = OK; offline_first tag = OK; absent = REJECT
     - active_intervention.py: no help_request = NOOP; help_request unresponded = REJECT
-    - priority.py v2 leverage vs v1
   v1.8.4:
     - cost_gate.py: tier transitions (advisory / pause_non_essential / HARD_PAUSE)
     - backtrack_gate.py: stuck worker no backtrack = REJECT; with backtrack = OK
@@ -20,10 +19,7 @@ Exit 0 if all pass, 1 if any fail.
 """
 from __future__ import annotations
 
-import json
 import os
-import shutil
-import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone, timedelta
@@ -37,7 +33,6 @@ sys.path.insert(0, str(SCRIPT_DIR))
 import troubleshooting_gate as tg
 import search_gate as sg
 import active_intervention as ai
-import priority as pr
 
 import cost_gate as cg
 import backtrack_gate as bg
@@ -150,30 +145,6 @@ def test_active_intervention_rejects_unresponded():
         rc = ai.check(ws, max_age_min=5)
         assert rc == 1
     print("  [OK ] active_intervention rejects unresponded help_request")
-
-
-def test_priority_v2_leverage_sigmoid():
-    with tempfile.TemporaryDirectory() as tmp:
-        ws = Path(tmp)
-        claims = [{"id": f"C-{i:03d}", "status": "OPEN", "promotion_attempts": 0} for i in range(1, 11)]
-        deps = {
-            "depends_on": {
-                "C-002": ["C-001"], "C-003": ["C-001"], "C-004": ["C-001"],
-                "C-005": ["C-001"], "C-006": ["C-001"],
-                "C-007": ["C-002"], "C-008": ["C-002"], "C-009": ["C-002"], "C-010": ["C-002"],
-            }
-        }
-        _write_yaml(ws / "claim-register.yaml", {"claims": claims})
-        _write_yaml(ws / "claim_deps.yaml", deps)
-        rows = pr.rank_claims(
-            {"claims": claims}, deps, {"value": 0.4, "leverage": 0.3, "cheapness": 0.2, "novelty": 0.1},
-            leverage_v2=True
-        )
-        top = rows[0]
-        assert top["id"] == "C-001", f"expected C-001 top, got {top['id']}"
-        assert top["leverage"] >= 0.9, f"expected very high leverage, got {top['leverage']}"
-        assert top["leverage_transitive"] >= 5, f"expected transitive >= 5, got {top['leverage_transitive']}"
-    print("  [OK ] priority v2 leverage rewards transitive unlocks (>= 5 downstream)")
 
 
 # ===== v1.8.4 gates =====
@@ -365,7 +336,6 @@ def main() -> int:
         "test_search_gate_accepts_offline_tag",
         "test_active_intervention_noop_when_no_help",
         "test_active_intervention_rejects_unresponded",
-        "test_priority_v2_leverage_sigmoid",
         "test_cost_gate_tier_progression",
         "test_cost_gate_hard_cap_immediate",
         "test_backtrack_gate_stuck_no_backtrack",

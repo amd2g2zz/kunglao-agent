@@ -29,7 +29,7 @@ def test_collection_no_error() -> None:
     """pytest collection of the full test-file set has no ERROR (incl. test_claim_status_guard.py's hooks import)."""
     r = subprocess.run(
         [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
-        cwd=ROOT, capture_output=True, text=True, timeout=120,
+        cwd=ROOT, capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace",
     )
     assert r.returncode == 0, f"collection had errors:\n{r.stdout}\n{r.stderr}"
 
@@ -38,7 +38,7 @@ def test_claim_status_guard_importable() -> None:
     """hooks/worker_budget.py importable from any CWD (pythonpath fix)."""
     r = subprocess.run(
         [sys.executable, "-c", "import sys; sys.path.insert(0,'.'); import worker_budget; print('ok')"],
-        cwd=ROOT / "hooks", capture_output=True, text=True, timeout=60,
+        cwd=ROOT / "hooks", capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace",
     )
     assert r.returncode == 0 and r.stdout.strip() == "ok", r.stderr
 
@@ -52,29 +52,25 @@ def _load_manifest() -> list[dict]:
     contain absolute paths (python.exe, absolute venv/home dirs).
     The captured paths were rewritten to {{PYTHON}}/{{ROOT}} placeholders in
     the repo; on any other machine those become sys.executable and the paths
-    under ROOT.  A legacy direct-prefix branch is kept for robustness.
-    The ws/ dirs and expected/stdout.txt stay byte-for-byte comparable.
+    under ROOT.  The ws/ dirs and expected/stdout.txt stay byte-for-byte
+    comparable.
     """
     if not MANIFEST.exists():
         return []
     import yaml
     data = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     cases = data["cases"]
-    OLD_PY = r"C:\Users\hr\AppData\Local\Programs\Python\Python311\python.exe"
-    OLD_PREFIX = r"C:\Users\hr\.claude\kong-refactor\kong-agent"
     for c in cases:
         argv = list(c["cmd"]["argv"])
         # argv[0] is the Windows python.exe (or its {{PYTHON}} placeholder)
         # — run with THIS interpreter
-        if argv[0] in ("{{PYTHON}}", OLD_PY):
+        if argv[0] == "{{PYTHON}}":
             argv[0] = sys.executable
         rebased = []
         for a in argv[1:]:
             if isinstance(a, str):
                 if "{{ROOT}}" in a:
                     a = str(ROOT) + a.split("{{ROOT}}", 1)[1]
-                elif OLD_PREFIX in a:
-                    a = str(ROOT) + a.split(OLD_PREFIX, 1)[1]
                 # captured paths use backslash separators, which only Windows
                 # resolves — normalize for the machine actually running them
                 a = a.replace("\\", "/")
@@ -84,8 +80,6 @@ def _load_manifest() -> list[dict]:
         if isinstance(cwd, str):
             if "{{ROOT}}" in cwd:
                 cwd = str(ROOT) + cwd.split("{{ROOT}}", 1)[1]
-            elif OLD_PREFIX in cwd:
-                cwd = str(ROOT) + cwd.split(OLD_PREFIX, 1)[1]
             c["cmd"]["cwd"] = cwd.replace("\\", "/")
     return cases
 
@@ -128,6 +122,14 @@ def test_golden_replay(case: dict) -> None:
             shutil.copytree(case_dir / "ws", tmp_ws)
         else:
             tmp_ws.mkdir()
+        # Determinism (#595 stuck-scan is mtime-based): copytree preserves
+        # source mtimes, so a fixture checked out >20m ago would flip the
+        # F-03 SATURATED golden into BLOCKED (stuck workers). The anchor
+        # suite's doctrine ("worker-status files freshly written →
+        # stuck_workers always []") applies here too: refresh mtimes,
+        # content bytes untouched (tree digest unaffected).
+        for st in (tmp_ws / "runs").glob("worker-status-*.md"):
+            st.touch()
         # point every fixture ws argument at the temp copy (keep any file
         # tail: F-13 passes ws/claim.txt etc.)
         argv = []
@@ -138,7 +140,7 @@ def test_golden_replay(case: dict) -> None:
             argv.append(a)
         r = subprocess.run(
             argv, cwd=cmd.get("cwd", str(ROOT)),
-            env=env, capture_output=True, text=True, timeout=120,
+            env=env, capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace",
         )
     assert _tree_digest(case_dir / "ws") == digest_before, \
         f"golden replay mutated fixture ws dir: {case_dir / 'ws'}"
@@ -154,10 +156,10 @@ def test_golden_replay(case: dict) -> None:
 
 
 def test_golden_cmd_json_has_no_absolute_paths() -> None:
-    """Golden fixtures must be machine-portable: no absolute paths (C:\\, D:\\,
-    /Users/, /home/) anywhere in cmd.json argv/cwd or manifest.yaml."""
-    import json
-    abs_markers = ("C:\\", "c:\\", "D:\\", "d:\\", "/Users/", "/home/")
+    """Golden fixtures must be machine-portable: no absolute paths (Windows
+    drive roots, /Users/, /home/) anywhere in cmd.json argv/cwd or
+    manifest.yaml."""
+    abs_markers = ("C:" + "\\", "c:\\", "D:" + "\\", "d:\\", "/Users/", "/home/")
     hits: list[str] = []
     for case_dir in sorted(GOLDEN.glob("F-*")):
         if not case_dir.is_dir():

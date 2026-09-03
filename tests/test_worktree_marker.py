@@ -14,11 +14,12 @@ def test_wt_dir_without_marker_not_scanned():
         fake_wt.mkdir(parents=True)
         (fake_wt / "worker-status-X.md").write_text("status: in-progress\n")
 
-        # convergence_check._scan_active_workers should NOT count it
+        # The protocol scan must NOT count an unmarked .wt-* dir (863-d:
+        # _scan_active_workers shell retired; drive _scan_workers directly)
         import sys
         sys.path.insert(0, str(Path("scripts").resolve()))
-        from convergence_check import _scan_active_workers
-        active, stuck = _scan_active_workers(ws_parent / "ws")
+        from convergence_check import _scan_workers
+        active, stuck = _scan_workers(ws_parent / "ws")[:2]
         assert active == 0, f"Expected 0 active (no marker), got {active}"
 
 
@@ -37,6 +38,6 @@ def test_wt_dir_with_marker_scanned():
 
         import sys
         sys.path.insert(0, str(Path("scripts").resolve()))
-        from convergence_check import _scan_active_workers
-        active, stuck = _scan_active_workers(ws)
+        from convergence_check import _scan_workers
+        active, stuck = _scan_workers(ws)[:2]
         assert active == 1, f"Expected 1 active (with marker), got {active}"

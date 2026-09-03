@@ -1,0 +1,9 @@
+# devkit/.discovery-gate-baseline.txt — #866 discovery-face debt ledger
+# One repo-relative tools/ CLI source key per line (retirement-gate ratchet
+# shape). The ratchet only shrinks: a NEW unregistered CLI can never be added
+# here — the gate turns red on it instead.
+#
+# Cleared to zero by PR 866-b (2026-09): all 27 pre-gate tools/ CLIs were
+# dispositioned — every tools/ __main__ CLI now carries both discovery faces
+# (tools/_INDEX.yaml registry + skills/references teaching). The file is kept
+# as the empty ledger; the gate fails closed if it is deleted.

@@ -2,22 +2,23 @@
 """Issue #356 W3 — hardcode purge contract.
 
 The pre-#356 tree shipped the original author's machine paths in production
-code (C:/Users/hr/...) and a bare VM shell port constant. #356 W3 removes
+code (C:/Users/hr/...) and a bare VM shell port constant. #356 W3 removes  # HISTORICAL-PATH-EXAMPLE
 them: real code paths derive from Path(__file__) or are parameterized,
 docstring examples use <HOME>/ placeholders, and VM_SHELL_PORT reads
 KUNGLAO_VM_SHELL_PORT (default 9876 — covered in tests/test_toolchain.py).
 
+The docstring and comment lines below cite the purged pre-#356 shapes
+verbatim; each carries the HISTORICAL-PATH-EXAMPLE line sentinel (#690)
+so the no-absolute-paths guard skips documented historical references.
+
 Issue #367 MEDIUM: the scan covered only scripts/+tools/(+templates/hooks/
 agents) — the .claude/git-hooks/pre-commit key-path hardcode slipped through.
 The scan is now WHOLE-TREE over git-tracked paths (git grep), matching the
-issue acceptance `git grep -E "C:/Users/[a-z]" -- .claude/` -> zero hits.
+issue acceptance `git grep -E "C:/Users/[a-z]" -- .claude/` -> zero hits.  # HISTORICAL-PATH-EXAMPLE
 
 ALLOWLIST = tracked files that legitimately reference a Windows user path:
   - CHANGELOG.md                 — historical prose RECORDING the #356 purge
   - tests/test_hardcode_purge.py — this scan (states the ban)
-  - tests/test_suite_health.py   — legacy fixture-manifest rebase constants
-                                   (functional: maps pre-#356 captured paths
-                                   onto the current machine)
 """
 from __future__ import annotations
 
@@ -27,16 +28,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Windows user paths: C:/Users/<name> or C:\Users\<name>, lowercase username
-# start (the issue acceptance pattern C:/Users/[a-z]; the standard
-# C:\Users\Public dir is not a personal username and does not match).
+# Windows user paths: C:/Users/<name> or C:\Users\<name>, lowercase username  # HISTORICAL-PATH-EXAMPLE
+# start (the issue acceptance pattern C:/Users/[a-z]; the standard  # HISTORICAL-PATH-EXAMPLE
+# C:\Users\Public dir is not a personal username and does not match).  # HISTORICAL-PATH-EXAMPLE
 _HARDCODED_USER = re.compile(r"C:[/\\]+Users[/\\]+[a-z]")
 
 # Tracked files exempt from the ban, each with a functional reason (above).
 ALLOWLIST = {
     "CHANGELOG.md",
     "tests/test_hardcode_purge.py",
-    "tests/test_suite_health.py",
     "tests/test_review_hook_install.py",  # states the pre-#367 ban itself
 }
 
@@ -68,7 +68,7 @@ def _tracked_hits() -> list[str]:
 def test_no_hardcoded_windows_user_paths_in_tracked_tree() -> None:
     hits = _tracked_hits()
     assert not hits, (
-        f"Windows user path (C:/Users/<name>) remains in tracked files: "
+        f"Windows user path (C:/Users/<name>) remains in tracked files: "  # HISTORICAL-PATH-EXAMPLE
         f"{hits} — derive from Path(__file__), use <HOME> placeholders in "
         "prose, or install-time stamping for hook templates (#356 W3, #367)")
 

@@ -25,6 +25,12 @@ Usage:
   python pe_analyze.py --binary sample.exe --out report.json
 """
 from __future__ import annotations
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+
 
 import argparse
 import hashlib
@@ -40,15 +46,11 @@ _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
-from common import byte_entropy  # noqa: E402
+from common import byte_entropy, error  # noqa: E402
 
 # UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
 # decode(errors="replace")) must not crash a GBK console — stdout unified on
 # UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 
 SUBSYSTEM_NAMES = {
     0: "UNKNOWN", 1: "NATIVE", 2: "WINDOWS_GUI", 3: "WINDOWS_CUI",
@@ -93,12 +95,6 @@ DEBUG_TYPE_NAMES = {
 CERT_TYPE_NAMES = {0x0001: "X509", 0x0002: "PKCS_SIGNED_DATA", 0x0003: "PKCS1_SIGN"}
 
 
-def _error(code: int, message: str) -> None:
-    """Structured error on stderr (guidance included) and exit."""
-    print(json.dumps({"error": message, "exit_code": code}), file=sys.stderr)
-    sys.exit(code)
-
-
 def _flags(value: int, table) -> list[str]:
     return [name for bit, name in table if value & bit]
 
@@ -115,16 +111,16 @@ def _load(binary: Path) -> tuple[bytes, pefile.PE]:
     try:
         data = binary.read_bytes()
     except OSError as exc:
-        _error(2, f"cannot read --binary {binary}: {exc}. "
-                  f"Check the path and re-run: python pe_analyze.py --binary {binary}")
+        error(f"cannot read --binary {binary}: {exc}. "
+              f"Check the path and re-run: python pe_analyze.py --binary {binary}")
     if data[:2] != b"MZ":
-        _error(2, f"{binary} is not a PE (no MZ magic at offset 0). "
-                  f"Pass a PE file: python pe_analyze.py --binary <path-to-pe>")
+        error(f"{binary} is not a PE (no MZ magic at offset 0). "
+              f"Pass a PE file: python pe_analyze.py --binary <path-to-pe>")
     try:
         pe = pefile.PE(str(binary))
     except Exception as exc:  # noqa: BLE001 - report any parse failure with guidance
-        _error(2, f"pefile could not parse {binary}: {exc}. "
-                  f"The file may be truncated, packed, or not a PE; try another sample.")
+        error(f"pefile could not parse {binary}: {exc}. "
+              f"The file may be truncated, packed, or not a PE; try another sample.")
     return data, pe
 
 
@@ -467,8 +463,8 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 Path(args.out).write_text(text, encoding="utf-8")
             except OSError as exc:
-                _error(2, f"cannot write --out {args.out}: {exc}. "
-                          f"Check the directory and re-run with a writable --out path.")
+                error(f"cannot write --out {args.out}: {exc}. "
+                      f"Check the directory and re-run with a writable --out path.")
         else:
             print(text)
 
@@ -478,4 +474,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    ensure_utf8_stdout()
     sys.exit(main())

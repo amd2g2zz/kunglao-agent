@@ -39,7 +39,7 @@ Taxonomy (25 classes):
                          (last line in-progress, fresh), worker_completed
                          (last done), worker_failed (last blocked),
                          worker_stuck (last in-progress, heartbeat stale
-                         > 20 min — convergence_check.STUCK_MINUTES)
+                         > STUCK_MINUTES — liveness_policy, #597)
     claim states       : claim_partial, claim_deferred, claim_superseded,
                          claim_dead
     blockers/gates     : blocker_opened (active blocker file),
@@ -57,29 +57,27 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
+from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
+
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, ValueError):
     pass
 
 def _worker_protocol():
-    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
-    path under the unique name lib_kunglao_hooks (bare `import lib_kunglao`
-    is ambiguous under pytest — scripts/lib_kunglao.py shares the name)."""
-    import importlib.util
-    name = "lib_kunglao_hooks"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
-    return lib
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444).
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_hooks_lib, via scripts/_hooks_path) — the
+    unique-name + by-path semantics are unchanged."""
+    return load_hooks_lib()
 
 
-# real worker heartbeat convention: lib_kunglao.STUCK_MINUTES = 20 (#444)
-STUCK_SECONDS = 20 * 60
+# real worker heartbeat convention: the stuck threshold is owned by
+# scripts/liveness_policy.py (#597 — THE liveness-minutes single source;
+# restating a hard number here would rot silently when the value changes).
+from liveness_policy import STUCK_MINUTES  # noqa: E402
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
+STUCK_SECONDS = STUCK_MINUTES * 60
 
 # ---------------------------------------------------------------------------
 # taxonomy (25 classes)
@@ -151,33 +149,101 @@ ALL_EVENT_TYPES = [
 #   lesson_citation / lesson_burn / lesson_match / lesson_deprecated
 #                                 lessons_telemetry #526 CBM + tombstone face
 #   lesson_stage_transition failure_analysis_gate nursery draft→active (#525)
+#   install_attempt / install_declined / install_failed
+#                                toolchain_install #700 per-item install events
+#   git_snapshot_skipped  kunglao_upgrade.py / kunglao-init.py  #739 git snapshot WARN faces
 EMIT_ACTIONS = [
+    "agents_refresh",     # #755 A2 upgrade L2 subagents re-copy face
     "analysis_blocked",
     "analysis_recorded",
+    "apkid_candidates",   # #669 hypothesis_seeder apkid→competitor_group extension
     "ask_back",
+    "bet_filed",          # #711 falsifiable-bet filing face (think seat)
+    "bet_settled",        # #711 bet settlement (confirmed/refuted) face
+    "capability_dormant",  # #600 one-time dormant WARN face: the capability tooth is a no-op while no claim carries obstacle_for
     "capability_reject",
     "capability_switch",
+    "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face
+    "channel_default",    # #727 init channel degradation/guidance WARN
     "claim_migrate",
+    "claim_revive",       # #634 PARK → OPEN revival (mission_stall.revive)
+    "claim_settled",      # #880 claim terminal-transition settlement row (write_guard register-carrier ALLOW face)
+    "claudemd_merge",     # #755 G3 collect-and-merge rebuild face
+    "cockpit_sample",   # #873 per-checkpoint cockpit persistence: V/D/ETA + burn cost face
     "converge",
     "death_verdict_rejected",
     "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face
+    "decision_snapshot",  # #818 batch-1: decide() per-verdict input snapshot
     "dispatch",
+    "env_incident",       # #718 violation_capture traceback/env-crash face
+    "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
     "failure_blocked",
+    "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
+    "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
+    "heartbeat_gap",      # #618 dead-window alarm: durable sidecar newest tick over threshold
+    "hypothesis_seed",    # #662 PQ scaffold seeding
+    "hypothesis_superseded",  # #759 note-supersedes-hypothesis wiring (K3)
+    "infeasible_candidate",  # #823 A4 doomed-trajectory early-stop signal
+    "infeasible_filed",     # #815 gated INFEASIBLE proposal filed (DEFERRED)
+    "infeasible_woken",     # #815 wake face: infeasible-DEFERRED revived
+    "install_attempt",    # #700 toolchain_install per-item install events
+    "install_declined",   # #700 toolchain_install per-item install events
+    "install_failed",     # #700 toolchain_install per-item install events
+    "install_reference_scan",  # #752 upgrade end-step sweep — stale cross-install refs reported+rewired (WARN-only face)
     "ladder_required",
     "lesson_burn",
     "lesson_citation",
     "lesson_deprecated",
     "lesson_match",
     "lesson_stage_transition",  # #525 lessons nursery draft → active
+    "mcp_scaffold_refresh",  # #755 A4 .mcp.json init-parity backfill face
+    "mech_reject",        # #878 scheduler registry schema-gate REJECT face (fail-closed, nothing ran)
+    "mech_run",           # #878 one scheduler pass: ran/skipped/dropped mechanisms + event classes
+    "mission_snapshot",   # #823-P1 mission ledger coverage/value checkpoint
+    "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",
     "must_stop",
+    "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
+    "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
+    "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
     "priority_deviation",
+    "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
+    "recall_injected",    # #814 recall hook injected knowledge files
+    "recall_skip",        # #814 recall hook pass-through with attribution
+    "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
+    "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
+    "renew",              # #619 hook_activation TTL renewal face
+    "retro_policy",       # #882 policy retro window face (heartbeat_tick advisory step)
+    "retro_report",       # #882 settlement retro report face (runs/<ts>-retro-<claim>.md)
+    "rho_checkpoint",     # #823 P2 N-arm V/D/ETA shadow signal face
+    "rho_pair",          # #823-P2 (rho,z) checkpoint pairing face
+    "rollup_sweep",       # #762 tick-side mechanical rollup of terminal claims
+    "signal_gate_escalate",  # #868 dual-gate: Goodhart/replan-limit escalation
+    "signal_gate_pass",      # #868 dual-gate unanimous pass w/ search boundary
+    "signal_gate_reject",    # #868 dual-gate rejection w/ disclosure mode
+    "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "stale_plan_on_new_evidence",
+    "statusline_snapshot",  # #883 per-tick statusline health-snapshot write face
+    "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
+    "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
+    "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
+    "toolfirst_pass",     # #880 tool-first gate pass face w/ (keyword→tool) attribution payload
+    "toolfirst_reject",   # #880 tool-first gate reject face w/ attribution payload
     "top1_fail_open",     # #569 dispatch_gate._top1_enforcement FAIL_OPEN face
     "top1_reject",
+    "trace_allocated",    # #879 dispatch_gate mission-stable trace allocation face
+    "upgrade",            # #726 kunglao_upgrade summary (N->M migration)
+    "upgrade_item",       # #726 per-item migration telemetry
+    "user_signal",           # #868 UserPromptSubmit capture face
+    "user_signal_processed", # #868 four-route processing result
+    "uv_sync",            # #755 A7 install-venv sync face (WARN-only)
     "verify",
+    "verify_status_change",  # #718 verify_status_watch disk-vs-stream reconciliation
+    "violation_sed_tamper",  # #718 violation_capture out-of-band carrier rewrite
     "write_blocked",
+    "write_guard_waiver_used",  # #820 waiver consumption audit face
+    "zero_output_break",  # #823 A4 same-type action thrash circuit face
 ]
 
 LEDGER_EVENT_MAP = {
@@ -248,16 +314,8 @@ def classify_claim_status(status: str) -> str | None:
 def _read_jsonl(path: Path) -> list[dict]:
     if not path.exists():
         return []
-    out = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return out
+    return list(iter_jsonl(
+        path.read_text(encoding="utf-8", errors="replace").splitlines()))
 
 
 def _claim_statuses(ws: Path) -> list[str]:
@@ -432,7 +490,7 @@ def round_digest_text(ws: Path) -> str:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="event_taxonomy.py",
-        description="25-class event taxonomy over kunglao sources (#309/#287)")
+        description="25-class event taxonomy over kunglao sources")
     ap.add_argument("workspace", help="workspace root")
     ap.add_argument("--json", action="store_true",
                     help="print statusline JSON instead of the round digest")
@@ -451,4 +509,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

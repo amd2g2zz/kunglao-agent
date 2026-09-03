@@ -3,8 +3,11 @@
 
 Contract (mirrors tests/test_terminal_superseded.py style):
   - DEAD is a member of status_defs.TERMINAL and not partial / in-progress.
-  - priority.rank_claims excludes DEAD claims (dispatch never spins on poison).
   - convergence_check._open_claims excludes DEAD claims (loop can CONVERGE).
+
+Dispatch-queue exclusion of DEAD claims (the former priority.rank_claims
+tests, removed with the #916 compat zombie) now lives in
+scripts/priority_ratio.py (is_open filtering).
 
 Integration:
   - worker_pulse._build_pulse surfaces a `quarantined=N` flag on a workspace
@@ -20,7 +23,6 @@ from pathlib import Path
 import yaml
 
 from status_defs import PARTIAL_STATUSES, IN_PROGRESS_STATUSES
-from priority import rank_claims, DEFAULT_WEIGHTS
 from convergence_check import _open_claims
 
 
@@ -34,20 +36,7 @@ def test_dead_not_partial_not_in_progress():
     assert "DEAD" not in IN_PROGRESS_STATUSES
 
 
-# --- REQ-002: priority.rank_claims excludes DEAD ---
-
-def test_priority_skips_dead():
-    reg = {"claims": [{"id": "C-036", "status": "DEAD",
-                       "promotion_attempts": 5,
-                       "evidence_tier_attempted": 0}]}
-    deps = {"depends_on": {}}
-    rows = rank_claims(reg, deps, DEFAULT_WEIGHTS, leverage_v2=False)
-    assert rows == [], (
-        f"DEAD claim ranked as dispatchable (#36 regression): {rows}"
-    )
-
-
-# --- REQ-003: convergence_check._open_claims excludes DEAD ---
+# --- REQ-002: convergence_check._open_claims excludes DEAD ---
 
 def test_convergence_excludes_dead():
     reg = {"claims": [{"id": "C-036", "status": "DEAD"}]}
@@ -56,7 +45,7 @@ def test_convergence_excludes_dead():
     )
 
 
-# --- REQ-004: worker_pulse quarantined flag ---
+# --- REQ-003: worker_pulse quarantined flag ---
 
 def _write_reg(ws: Path, claims: list) -> None:
     (ws / "claim-register.yaml").write_text(
@@ -67,8 +56,6 @@ def _write_reg(ws: Path, claims: list) -> None:
 
 def test_worker_pulse_shows_quarantined_flag(tmp_path):
     """A workspace with a DEAD claim surfaces quarantined=1 in the pulse."""
-    import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "hooks"))
     import worker_pulse as wp
 
     ws = tmp_path / "ws-dead"
@@ -83,8 +70,6 @@ def test_worker_pulse_shows_quarantined_flag(tmp_path):
 
 def test_worker_pulse_omits_quarantined_when_clean(tmp_path):
     """A workspace with no DEAD claim omits the quarantined flag."""
-    import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "hooks"))
     import worker_pulse as wp
 
     ws = tmp_path / "ws-clean"

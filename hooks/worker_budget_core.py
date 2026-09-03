@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 """worker_budget_core — constants, IO, parsing, claim-register primitives.
 
@@ -6,27 +7,47 @@ holds the cross-cutting primitives the gates / sinks modules import from."""
 
 
 
-import json
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import yaml
+
+from _path_hygiene import (  # #671 sys.path hygiene authority
+    ensure_scripts_path,
+    load_hooks_lib,
+)
 
 # ---------- constants ----------
 
 MAX_WORKERS = 3
 MAX_PROMOTION_ATTEMPTS = 3
 
+# v0.1.3 (#604): worker-level silent-failure retry counter. Distinct from
+# MAX_PROMOTION_ATTEMPTS (#520) which tracks claim-level PROVEN attempts.
+# MAX_RETRIES tracks WORKER-level silent-failure retries on the same
+# (worker_id, claim_id): when a worker silently dies/hangs and gets
+# re-dispatched 3 times on the same claim, the gate escalates to BLOCKED +
+# failure-analysis artifact. The two counters are independent — a claim can
+# have promotion_attempts=2 while a worker simultaneously has retries=2 on it.
+MAX_RETRIES = 3
+
+RETRY_COUNTER_FILE = 'runs/.retry-counter.yaml'
+
 # v1.9.39 (#475): env-state freshness gate constants. TTL aligns with the
 # scripts/kunglao-monitor.py advisory (drift detection uses the same value).
+# #597: the TTL VALUE is single-sourced in scripts/liveness_policy.py (THE
+# liveness-minutes source; hooks/ and scripts/ ship together, #444 posture).
+# #671: module-level membership via the hygiene authority (was a literal
+# existence check + insert — equivalent spellings could still stack).
 ENV_STATE_FILE = 'runs/env-state.json'
-ENV_STATE_TTL_MINUTES = 30
+ensure_scripts_path()
+from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402,F401 — re-exported to gates
+# #861 单源化保留：无 claim 的 v0 裸前缀（非 claim 派发）是 budget 本地边缘
+# 合同——claim 派发的识别已单源到 lib_kunglao.parse_dispatch。
+_V0_PREFIX_FALLBACK = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\]')
 
-PREFIX_RE = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\]')
-CLAIM_RE = re.compile(r'\bclaim\s+(C-\d+)')
 
 VM_TOOLS = {'vmr-shell', 'rev-frida'}
 KNOWN_TOOLS = ('vmr-shell', 'rev-frida', 'malware-framework')
@@ -55,18 +76,18 @@ HOST_FORBIDDEN_TOOLS = (
 # contract.md §1 — the DECIDE ranker, issue #2 VoI proxy). The legacy
 # weighted ranker is deprecated (retirement: #446).
 _SKILL_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
+ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     from priority_ratio import priority_ratio as _ratio_rank, EvidenceView as _EvidenceView
     from retract_claim import RETRACTED  # retracted = terminal (#331)
-    from status_defs import TERMINAL  # single source of truth (#34, #95)
+    from status_defs import TERMINAL  # noqa: F401 — re-exported via gates surface
     _PRIORITY_AVAILABLE = True
 except Exception:  # pragma: no cover - hook stays usable if the scorer moves
     _PRIORITY_AVAILABLE = False
 
 # ---------- issue #310: specialist trigger table (imports route_capability) ----------
 try:
-    from route_capability import (
+    from route_capability import (  # noqa: F401 — re-exported via gates surface
         load_specialist_table as _load_specialist_table,
         recommend_agent_type as _recommend_agent_type,
     )
@@ -80,7 +101,7 @@ GENERIC_WORK_AGENT = 'kunglao-worker'
 # tool_error_policy.py (WARN=3 / DISABLE=5 hysteresis) had zero consumers —
 # this import + post_check application is the mechanical wiring; the policy
 # module stays the single sanctioned source (thresholds are never copied).
-sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
+ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     import tool_error_policy as _tep
     TOOL_ERROR_POLICY_LOADED = True
@@ -98,7 +119,7 @@ TOOL_ERRORS_FILE = 'runs/tool-errors.json'
 # the #459 target) — no new activation mechanism, no fourth liveness
 # representation (#446 F-class red line). Import-guarded fail-open: a hook
 # must stay usable even if the scripts/ modules move.
-sys.path.insert(0, str(_SKILL_ROOT / 'scripts'))
+ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     import hook_activation as _ha_link
 except Exception:  # pragma: no cover - hook stays usable if the module moves
@@ -121,7 +142,7 @@ def _run_py(args, cwd=None):
         return subprocess.run(
             [sys.executable] + args,
             capture_output=True, text=True, timeout=20,
-            cwd=cwd,
+            cwd=cwd, encoding="utf-8", errors="replace",
         )
     except (subprocess.SubprocessError, OSError):
         return None
@@ -257,17 +278,23 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
 # ---------- parsing ----------
 
 def parse_dispatch(description: str) -> tuple[int, list[str], str | None]:
-    """Parse '[TN tools=a,b] claim C-NN ...' → (tier, tools, claim_id).
+    """Parse the dispatch shape -> (tier, tools, claim_id). #861 单源化。
 
-    Returns (0, [], None) if the prefix is absent.
-    """
-    m = PREFIX_RE.match(description)
-    if not m:
-        return (0, [], None)
-    tier = int(m.group(1))
-    tools = [t.strip() for t in m.group(2).split(',') if t.strip()]
-    cm = CLAIM_RE.search(description)
-    cid = cm.group(1) if cm else None
+    Delegates to hooks/lib_kunglao.py:parse_dispatch — v1 canonical JSON
+    envelope takes precedence, v0 claim prefix retained as legacy-replay
+    fallback. Previously parsed the v0 prefix only, silently disarming the
+    budget cid gates on v1 dispatches (issue #861, B1).
+
+    边缘合同保留：无 claim 的 v0 裸前缀（非 claim 派发，如 init-worker 类）
+    是 budget 本地合同——lib 单源只建模 claim 派发，故此回退留在本地。"""
+    lib = load_hooks_lib()
+    tier, tools, cid = lib.parse_dispatch(description)
+    if tier == 0:
+        m = _V0_PREFIX_FALLBACK.match(description)
+        if m:
+            return (int(m.group(1)),
+                    [t.strip() for t in m.group(2).split(',') if t.strip()],
+                    None)
     return (tier, tools, cid)
 
 

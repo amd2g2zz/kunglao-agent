@@ -9,6 +9,7 @@ progress report:
   - Status breakdown (OPEN / IN_PROGRESS / STALE / terminal)
   - Open workers (in-progress count from the canonical liveness protocol)
   - Active blockers (after stale-blocker prune)
+  - Anomaly observation count (#663 — `boundary_type: anomaly` in notes/)
   - C0-C7 status (read from converge-checklist.md if exists)
   - Last activity timestamp
 
@@ -20,45 +21,77 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import yaml
 
 from status_defs import TERMINAL as TERMINAL_STATUSES
+from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
 
 
 def _worker_protocol():
-    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), by
-    path under the unique name lib_kunglao_hooks (bare `import lib_kunglao`
-    is ambiguous under pytest — scripts/lib_kunglao.py shares the name).
+    """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444).
     Review F-1: this module previously counted active workers by SUBSTRING
     presence ("in-progress" in text), which counts every normally-completed
     worker (its append-only file keeps historical in-progress lines) as
-    active — the exact double representation #444 removes."""
-    name = "lib_kunglao_hooks"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        if not path.exists():
-            raise RuntimeError(
-                f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
-                "ship together; reinstall the kunglao-agent skill")
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
-    return lib
+    active — the exact double representation #444 removes.
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_hooks_lib, via scripts/_hooks_path) — the
+    loud-missing guard stays HERE (its message is part of the contract)."""
+    path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+    if not path.exists():
+        raise RuntimeError(
+            f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
+            "ship together; reinstall the kunglao-agent skill")
+    return load_hooks_lib()
 
 
-def utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+from harness_common import utc_now  # #863 Family F: single source (was a local def)
 
 
 def _load_yaml(p):
     return (yaml.safe_load(p.read_text(encoding="utf-8")) or {}) if p.exists() else {}
+
+
+def _count_anomaly_notes(workspace: Path) -> int:
+    """Count `boundary_type: anomaly` notes under <workspace>/notes/.
+
+    Per issue #663 acceptance criterion #3: progress_report output must
+    surface the anomaly observation count so operators do not have to
+    count notes/*.md by hand. Data source is the post-scan ground truth
+    (anomaly_detector._write_anomaly_note writes these notes after
+    scan_anomalies flags a fact — see scripts/anomaly_detector.py:332-374).
+
+    Tolerant frontmatter parsing: extracts the YAML block (between the
+    first two `---` markers when both exist) and falls back to scanning
+    the whole file when the note uses line-level frontmatter (no closing
+    `---`). Substring search for `boundary_type: anomaly` catches both
+    canonical and hand-written forms.
+
+    Fail-open: any error (missing dir, glob error, read error) returns 0
+    — a broken notes/ directory must not break the rest of the report.
+    """
+    try:
+        notes_dir = workspace / "notes"
+        if not notes_dir.is_dir():
+            return 0
+        n = 0
+        for p in notes_dir.glob("*.md"):
+            try:
+                text = p.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue  # skip unreadable file (fail-open)
+            # Restrict search to the frontmatter section when both `---`
+            # markers are present; otherwise search the whole file.
+            parts = text.split("\n---\n", 2)
+            head = parts[1] if len(parts) >= 3 else text
+            if "boundary_type: anomaly" in head:
+                n += 1
+        return n
+    except Exception:
+        return 0
 
 
 def report(workspace: Path) -> int:
@@ -99,8 +132,8 @@ def report(workspace: Path) -> int:
                 break
 
     terminal = sum(v for k, v in by_status.items() if k in TERMINAL_STATUSES)
-    open_n = by_status.get("OPEN", 0)
-    stale_n = by_status.get("STALE", 0)
+    by_status.get("OPEN", 0)
+    by_status.get("STALE", 0)
     pct = (terminal / len(claims) * 100) if claims else 0
 
     lines = []
@@ -111,6 +144,8 @@ def report(workspace: Path) -> int:
         lines.append(f"  - {s}: {by_status[s]}")
     lines.append(f"## Workers: {active_workers} in-flight; {stuck_workers} potentially stuck (>20m no update)")
     lines.append(f"## Blockers: {active_blockers} active (run stale_blocker_prune.py to resolve)")
+    anomaly_n = _count_anomaly_notes(Path(workspace))
+    lines.append(f"## Anomalies: {anomaly_n} observation notes (notes/*.md with boundary_type: anomaly)")
     if last_activity:
         lines.append(f"## Last activity: {last_activity}")
     if c07_text:
@@ -130,4 +165,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

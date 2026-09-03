@@ -37,6 +37,16 @@ JSON 前缀嵌入 Agent tool prompt:
   pattern)时,由 orchestrator 的语义判断兜底 — 识别到不可逆即声明
   `reversible: false`,把语义判断落回结构字段。**判断用语义,执行用机械。**
 
+- **`trace_id`: 可选,#879 trace 身份层** — mission 链路 id,格式
+  `tr-<mission>-<seq>`(`scripts/kunglao_log.TRACE_ID_RE` 单源)。同一
+  mission 全链行(dispatch→worker→结算)靠它 join;mission 内不变
+  ("mission(trace_id 不变)"),seq 仅在 mission 重启时递增。orchestrator
+  声明了合法值 → 门复用;缺失 → dispatch_gate 按 mission 稳定分配
+  (`runs/.trace-state.json`,发 `trace_allocated` 行);声明非法值 → stderr
+  WARN + 重新分配。worker 回带通道:worker-status 行 `| trace: <id>` +
+  fact frontmatter `trace_id:`(claim id 同通道)。未归因率 = 账本行缺
+  trace_id 占比(`kunglao_log.unattributed_rate`)。
+
 ## 协议 v0 (兼容)
 
 `[T<N> tools=a,b] claim C-NN ...` — 现有正则形式,**继续支持**。
@@ -86,3 +96,5 @@ gate 解析失败时:
 - `scripts/priority_ratio.py` — 能力卡纯判据 + strategy novelty 消费(#496)
 - `openspec/changes/issue-452-dispatch-protocol/` — 完整 spec/design
 - `openspec/changes/issue-496-decision-teeth/` — 决策上牙 spec/design
+
+recall_useful: pending

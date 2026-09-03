@@ -31,8 +31,15 @@ judge(oracle, declaration_text=None) -> (exit_code, reason). Exit codes:
       the #54 self-defer; decided by a MECHANICAL deny-list, not LLM judgment)
   3 = task_text missing (oracle is None / task_text empty — refuse self-anchor,
       the #54 F1 self-anchoring structural fix)
+  4 = INTENT_UNMATCHED (#664: at the would-be-PASS point, ≥1 task_text anchor
+      is absent from task_spec.yaml's primary_questions — the gate refuses
+      PASS until the user's concern is owned by a PQ)
 
-Precedence: exit 3 > exit 2 > exit 1 > exit 0 (first hit wins).
+Precedence: exit 3 > exit 2 > exit 1 > exit 4 > exit 0 (intent check fires at
+the would-be-PASS point; item-level defects and unsigned defers strictly
+outrank it). #762 K1b adds a shim-face-only exit 5 (NOTES_DUE): the Stop hook
+consults notes_due() AFTER judge() returns 0 — item-level verdicts are never
+displaced by owed notes.
 
 The gate reads ONLY the oracle dict (+ optional declaration text for #54
 folding). No workspace state, no network. Heuristic + mechanical, never LLM.
@@ -94,6 +101,45 @@ _TIER_RE = re.compile(
 
 
 # ---------------------------------------------------------------------------
+# #628: durable-note obligation (pending-queue face)
+# ---------------------------------------------------------------------------
+
+def notes_due(workspace: Path) -> list[str]:
+    """#628: claim ids whose durable result note is still owed.
+
+    Reads runs/notes-due.yaml (written by rollup Step 2.5, now mechanically
+    swept every tick by heartbeat_tick --sweep-terminal, #762 K1a) and drops
+    entries whose notes/<id>.md now exists. THE CONSUMER is real since #762
+    K1b: hooks/completion_gate.py::process_event consults this at the
+    would-be-PASS point and refuses closure (exit 5 NOTES_DUE) while
+    obligations remain. Fail-open twice over: absent/corrupt queue → [], and
+    malformed SHAPES degrade to no obligation (non-mapping root, non-list
+    due, non-mapping entries carry no claim_id) — a legacy workspace must
+    never be blocked on a file it does not have. judge() stays
+    workspace-pure (judge-then-revise doctrine: nothing auto-writes the
+    note; the queue only makes the obligation impossible to forget)."""
+    due_path = Path(workspace) / "runs" / "notes-due.yaml"
+    if not due_path.exists():
+        return []
+    try:
+        data = yaml.safe_load(due_path.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, OSError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    entries = data.get("due") or []
+    if not isinstance(entries, list):
+        return []
+    notes_dir = Path(workspace) / "notes"
+    owed = []
+    for e in entries:
+        cid = e.get("claim_id") if isinstance(e, dict) else None
+        if cid and not (notes_dir / f"{cid}.md").exists():
+            owed.append(cid)
+    return owed
+
+
+# ---------------------------------------------------------------------------
 # User-vs-agent discrimination (D3)
 # ---------------------------------------------------------------------------
 
@@ -110,6 +156,90 @@ def is_user_authorized(defer: dict) -> bool:
     if source is not None and str(source).strip().lower() != "user":
         return False  # source: agent (or anything other than user) ⇒ reject
     return True
+
+
+# ---------------------------------------------------------------------------
+# #664 intent-aware strategic stopping (D2-D4)
+# ---------------------------------------------------------------------------
+
+def _pq_coverage_text(task_spec: dict) -> str:
+    """Build the search corpus from task_spec.primary_questions: every string
+    field of every item (id, q/need/legacy one-key value, candidate text) gets
+    joined into a lowercased newline string the anchor matcher greps.
+
+    Schema-tolerant by design: the canonical {id, q} form, the legacy
+    one-key {Q1: text} form, plain-string items, top-level mapping, and any
+    nested dict of string candidates all contribute. An empty/None primary_
+    questions yields "" (the intent check is skipped — D4).
+    """
+    raw = task_spec.get("primary_questions") if isinstance(task_spec, dict) else None
+    if not raw:
+        return ""
+    parts: list[str] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                for k, v in item.items():
+                    parts.append(str(k))
+                    if isinstance(v, str):
+                        parts.append(v)
+                    elif isinstance(v, dict):
+                        for vv in v.values():
+                            if isinstance(vv, str):
+                                parts.append(vv)
+    elif isinstance(raw, dict):
+        for k, v in raw.items():
+            parts.append(str(k))
+            if isinstance(v, str):
+                parts.append(v)
+    return "\n".join(parts)
+
+
+def _intent_unmatched(oracle: dict, task_text: str) -> list[str]:
+    """#664: when the oracle would otherwise PASS, extract content anchors
+    from task_text (reusing #54 F1's _extract_anchors) and verify each is
+    covered by some primary_question id/text. Returns the sorted list of
+    unmatched anchor strings (empty list = all matched or check skipped).
+
+    All paths fail open (D4): no workspace_path, no task_spec.yaml,
+    malformed YAML, non-mapping task_spec, parser error, empty PQs, zero
+    anchors, anchor-module import failure → [] (the check is skipped; the
+    judge continues to its items-driven verdict).
+    """
+    if not isinstance(oracle, dict):
+        return []
+    ws_path = oracle.get("workspace_path")
+    if not ws_path:
+        return []  # D4: no workspace → skip
+    ts_path = Path(ws_path) / "task_spec.yaml"
+    if not ts_path.exists():
+        return []  # D4: no task_spec → skip
+    try:
+        task_spec = yaml.safe_load(ts_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — D4 malformed → skip
+        return []
+    if not isinstance(task_spec, dict):
+        return []  # D4: not a mapping → skip
+    try:
+        import convergence_check as cc
+        questions, pq_err = cc._parse_primary_questions(task_spec)
+    except Exception:  # noqa: BLE001 — D4 import failure → skip
+        return []
+    if pq_err or not questions:
+        return []  # D4: malformed or empty PQs → skip
+    try:
+        import premature_termination_detect as ptd
+        anchors = ptd._extract_anchors(task_text)
+    except Exception:  # noqa: BLE001 — D4 anchor module failure → skip
+        return []
+    if not anchors:
+        return []  # D4: zero anchors → skip
+    coverage = _pq_coverage_text(task_spec).lower()
+    if not coverage:
+        return []  # D4: coverage was empty after extraction → skip
+    return sorted(a for a in anchors if a.lower() not in coverage)
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +300,12 @@ def judge(oracle, declaration_text=None) -> tuple[int, str]:
     unsigned_defers: list[dict] = []
     for defer in deferrals:
         if not isinstance(defer, dict):
+            # #717: a bare string defer carries NO authorized_by — silently
+            # skipping it (pre-#717 `continue`) let sample-incident-01 defer five
+            # dynamic-leg items as plain strings and still PASS. A defer
+            # without a signature is by definition an unsigned defer.
+            unsigned_defers.append(
+                {"item": str(defer), "authorized_by": "", "reason": str(defer)})
             continue
         item_id = str(defer.get("item", "") or "").strip()
         if not is_user_authorized(defer):
@@ -201,6 +337,13 @@ def judge(oracle, declaration_text=None) -> tuple[int, str]:
     unresolved: list[dict] = []
     for item in open_items:
         if not isinstance(item, dict):
+            # #717: a bare string item has no id/closed_by — pre-#717
+            # `continue` made it INVISIBLE to the ledger, so sample-incident-01
+            # listed five open OC items as plain strings and the gate
+            # counted zero unresolved. An item that cannot be inspected
+            # cannot be resolved: it stays open, blocking exit 0.
+            unresolved.append(
+                {"id": str(item)[:60], "closed_by": "", "detail": str(item)})
             continue
         item_id = str(item.get("id", "") or "").strip()
         closed_by = str(item.get("closed_by", "") or "").strip()
@@ -230,6 +373,15 @@ def judge(oracle, declaration_text=None) -> tuple[int, str]:
             except Exception:  # noqa: BLE001 — detector optional; reason stays oracle-only
                 pass
         return (1, reason)
+
+    # --- exit 4: INTENT_UNMATCHED (#664 — after exit 1, before exit 0) ---
+    # At the would-be-PASS point: every item closed, every defer user-signed.
+    # Re-extract anchors from task_text and verify each is covered by some
+    # primary_question id/text in task_spec.yaml (fail-open per D4).
+    unmatched = _intent_unmatched(oracle, task_text)
+    if unmatched:
+        return (4, "INTENT_UNMATCHED: task_text anchors absent from "
+                   "primary_questions: " + ", ".join(unmatched))
 
     # --- exit 0: PASS ---
     n_closed = sum(
@@ -287,11 +439,13 @@ def main(argv=None) -> int:
         "exit_code": code,
         "reason": reason,
         "verdict": {0: "PASS", 1: "INCOMPLETE", 2: "UNSIGNED_DEFER",
-                    3: "NO_ANCHOR"}.get(code, "UNKNOWN"),
+                    3: "NO_ANCHOR", 4: "INTENT_UNMATCHED"}.get(code, "UNKNOWN"),
     }
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return code
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

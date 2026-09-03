@@ -17,10 +17,8 @@ post-fix code (regression anchors).
 from __future__ import annotations
 
 import sys
-import types
 from pathlib import Path
 
-import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]

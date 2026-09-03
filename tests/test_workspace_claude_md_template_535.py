@@ -21,6 +21,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "templates" / "CLAUDE.md.base.tmpl"
@@ -228,14 +229,14 @@ def test_cold_start_pointers_resolve_after_real_init(tmp_path):
     cold-start worker can act instead of trusting an absent file."""
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws)
     env = {k: v for k, v in os.environ.items()
            if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "0"
     env["PYTHONIOENCODING"] = "utf-8"
     r = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "kunglao-init.py"), str(ws),
-         "--type", "windows", "--skip-toolchain",
+         "--type", "windows", "--skip-toolchain", "--host-exec-protection", "enabled",
          "--profile-root", str(tmp_path / "profile-root")],
         capture_output=True, text=True, timeout=180, env=env)
     assert r.returncode == 0, f"init failed: {r.stderr}"

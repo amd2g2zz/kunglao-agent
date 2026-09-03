@@ -4,6 +4,8 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from digest_build import main
+from digest_build import main  # noqa: F401 — _entry.run(globals()) resolves main from here
+from _entry import run
+
 if __name__ == "__main__":
-    sys.exit(main())
+    run(globals())

@@ -33,7 +33,6 @@ R7 zero stale references to old paths: live docs/code/manifests must not
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys
@@ -144,12 +143,18 @@ def test_validator_categories_pin_new_enum() -> None:
     sys.path.insert(0, str(TOOLS))
     import validate_index as vi  # noqa: E402
     assert vi.CATEGORIES == (
-        "crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines"), (
+        "crypto", "static", "ghidra", "dynamic", "auxiliary", "pipelines",
+        "web"), (
         f"validate_index.CATEGORIES must be the id==dirname enum, got: {vi.CATEGORIES}")
     data = {"tools": [{"name": "t-a", "category": "auxiliary",
                        "capability": "aux:sanitize", "tier": "T1",
                        "cost_tier": "probe", "input_output": "x",
-                       "description": "minimal fixture entry"}]}  # #356 W1: description required
+                       "description": "minimal fixture entry",
+                       "provider": "t-a-fixture",
+                       "produces": ["aux:sanitize"],
+                       "requires": [],
+                       "cost_hint": {"mem_gb": 0, "time": "probe"},
+                       "quality": {"aux:sanitize": "floor"}}]}  # #356 W1: description; #729 Rule A: annotation block for new entries
     assert vi.validate_index(data) == [], "auxiliary should be a legal category"
     data["tools"][0]["category"] = "pipelines"
     assert vi.validate_index(data) == [], "pipelines should be a legal category"

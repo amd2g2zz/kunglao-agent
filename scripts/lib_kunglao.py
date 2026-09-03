@@ -33,15 +33,17 @@ Pure stdlib. Pure functions, no state.
 """
 from __future__ import annotations
 
-import json
-import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671 authority)
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 # ---- drift thresholds (issue #43, tunable) ----
 ROTATION_WINDOW = 3            # consecutive identical signatures = drift detected
 DRIFT_ESCALATE_ROWS = 6        # persistent drift = escalate to a kick
-WORKER_PROGRESS_MINUTES = 20   # in-progress status file younger than this = moving
+# #597: minutes thresholds single-sourced in liveness_policy (values unchanged).
+from liveness_policy import WORKER_PROGRESS_MINUTES  # noqa: E402  # in-progress status file younger than this = moving
 
 LEDGER_FILE = ".convergence_ledger.jsonl"
 
@@ -54,21 +56,16 @@ def _worker_protocol():
     """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444), loaded
     by path under the unique name lib_kunglao_hooks. Raises on a missing file
     (broken install — loud, never a silent local-copy fallback that would
-    resurrect the double representation this consolidates)."""
-    import importlib.util
-    name = "lib_kunglao_hooks"
-    lib = sys.modules.get(name)
-    if lib is None:
-        path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
-        if not path.exists():
-            raise RuntimeError(
-                f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
-                "ship together; reinstall the kunglao-agent skill")
-        spec = importlib.util.spec_from_file_location(name, path)
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[name] = lib
-        spec.loader.exec_module(lib)
-    return lib
+    resurrect the double representation this consolidates).
+    #863 Family B: the by-path prologue collapsed into the canonical loader
+    (hooks/_path_hygiene.load_hooks_lib, via scripts/_hooks_path) — the
+    loud-missing guard stays HERE (its message is part of the contract)."""
+    path = Path(__file__).resolve().parent.parent / "hooks" / "lib_kunglao.py"
+    if not path.exists():
+        raise RuntimeError(
+            f"worker-liveness protocol missing: {path} — hooks/ and scripts/ "
+            "ship together; reinstall the kunglao-agent skill")
+    return load_hooks_lib()
 
 
 def _tail_signatures(ws: Path, window: int) -> list[tuple]:
@@ -86,12 +83,10 @@ def _tail_signatures(ws: Path, window: int) -> list[tuple]:
     except OSError:
         return []
     sigs: list[tuple] = []
-    for line in lines[-window:]:
-        try:
-            row = json.loads(line)
-            sig = tuple(row.get(k) for k in _SIGNATURE_FIELDS)
-        except (ValueError, AttributeError, TypeError):
+    for row in iter_jsonl(lines[-window:]):
+        if not isinstance(row, dict):
             continue
+        sig = tuple(row.get(k) for k in _SIGNATURE_FIELDS)
         if any(v is None for v in sig):
             continue
         sigs.append(sig)

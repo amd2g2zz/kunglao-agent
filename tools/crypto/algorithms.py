@@ -544,7 +544,7 @@ def rsa_unpad_pkcs1v15(raw):
 
 def mgf1(seed, length, hash_name="sha256"):
     """MGF1 mask generation function (RFC 8017). hash_name: sha1|sha256."""
-    hlen = hashlib.new(hash_name).digest_size
+    hashlib.new(hash_name).digest_size
     out = b""
     counter = 0
     while len(out) < length:

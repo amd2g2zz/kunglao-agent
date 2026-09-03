@@ -30,7 +30,7 @@ values (an MCP config may carry API keys in `env`; the inventory must be
 pasteable/committable). Consumed by `tools/ext-scan.py --with-mcp` to
 derive describe-only ext catalog entries.
 
-CLI: mcp_probe.py <workspace> [--type windows|linux|android] [--json]
+CLI: mcp_probe.py <workspace> [--type windows|linux|android|web|macos] [--json]
                      [--reproduce] [--claude-json PATH]
                      [--mcp-inventory]
 Exit codes (same contract as toolchain.py #304): 0 = all present,
@@ -51,8 +51,13 @@ from pathlib import Path
 # module-level sys.stdout.reconfigure would silently flip the IMPORTER's
 # stdout encoding (observed: test_kunglao_init subprocess decode breaks).
 
-VALID_TYPES = ("windows", "linux", "android")
+# #760: macos joins the labs pair — zero manifest members by design
+VALID_TYPES = ("windows", "linux", "android", "web", "macos")
 ALL_TYPES = VALID_TYPES
+# #728: the desktop triple, explicit. "web" (labs) deliberately carries NO
+# desktop RE entry — web's sole manifest member is camoufox-reverse (WARN),
+# so a browser workspace can never FAIL-HARD on binary-RE supply.
+DESKTOP_TYPES = ("windows", "linux", "android")
 
 
 @dataclass(frozen=True)
@@ -74,17 +79,25 @@ MANIFEST_GROUPS: dict[str, list[str]] = {
     "optional_ida": ["ida-pro-vm"],
     "android_graph": ["gitnexus"],
     "cti": ["virustotal"],
+    # #698: supply-scaffold declaration (install guidance). WARN tier keeps
+    # a missing ssh-mcp informational — the channel probe (toolchain.py)
+    # never requires MCP liveness; CLI ssh is the fallback control plane.
+    "channel_ssh": ["ssh-mcp"],
+    # #728: web (labs) project type — sole manifest member camoufox-reverse
+    # (WARN). No desktop RE entry: a browser workspace can never FAIL-HARD
+    # on binary-RE supply.
+    "web_labs": ["camoufox-reverse"],
 }
 
 MANIFEST: tuple[MCPItem, ...] = (
     MCPItem(
-        name="ghidra", tier="HARD", types=ALL_TYPES,
+        name="ghidra", tier="HARD", types=DESKTOP_TYPES,
         purpose="Ghidra decompilation / static analysis",
         source="bridge-mcp-ghidra (stdio bridge)",
         register="claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe",
     ),
     MCPItem(
-        name="sequential-thinking", tier="HARD", types=ALL_TYPES,
+        name="sequential-thinking", tier="HARD", types=DESKTOP_TYPES,
         purpose="structured reasoning",
         source="@modelcontextprotocol/server-sequential-thinking",
         register="claude mcp add sequential-thinking -- "
@@ -103,7 +116,7 @@ MANIFEST: tuple[MCPItem, ...] = (
         register="claude mcp add volatility -- python <path>/volatility_mcp_server.py",
     ),
     MCPItem(
-        name="ida-pro-vm", tier="WARN", types=ALL_TYPES,
+        name="ida-pro-vm", tier="WARN", types=DESKTOP_TYPES,
         purpose="IDA remote analysis (when IDA is chosen)",
         source="IDA MCP (http transport)",
         register="claude mcp add --transport http ida-pro-vm <ida-mcp-url>",
@@ -114,11 +127,35 @@ MANIFEST: tuple[MCPItem, ...] = (
         source="gitnexus mcp (npm i -g gitnexus first)",
         register="claude mcp add gitnexus -- gitnexus mcp",
     ),
+    # #698 ssh channel execution control plane. STATIC declaration:
+    # demanded by no MANIFEST_GROUPS entry (CLI ssh is the fallback
+    # probe path); liveness is mcp_probe's own domain, not the channel
+    # probe's. Upstream verified 2026-08-26: npm ssh-mcp, TOML
+    # profiles, tools run-command/sftp-upload/sftp-download/sessions.
     MCPItem(
-        name="virustotal", tier="WARN", types=ALL_TYPES,
+        name="ssh-mcp", tier="WARN", types=("windows", "linux"),
+        purpose="SSH execution control plane (KUNGLAO_CHANNEL=ssh dynamics)",
+        source="ssh-mcp (npm i -g ssh-mcp; TOML profiles under ~/.config/ssh-mcp)",
+        register="claude mcp add ssh-mcp -- ssh-mcp",
+    ),
+    MCPItem(
+        name="virustotal", tier="WARN", types=DESKTOP_TYPES,
         purpose="CTI intelligence (family-attribution hypothesis)",
         source="@burtthecoder/mcp-virustotal (needs VT_API_KEY)",
         register="claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal",
+    ),
+    # #728 web (labs): browser JS reverse engineering supply. Upstream-
+    # verified registration (README 2026-08-26): python module entrypoint,
+    # optional flags --proxy/--geoip/--humanize stay out of the register
+    # template (placeholder-free rule). WARN — labs never FAIL-HARD.
+    MCPItem(
+        name="camoufox-reverse", tier="WARN", types=("web",),
+        purpose="browser JS reverse engineering (anti-detection Firefox: "
+                "hooks/trace/network capture; optional --proxy/--geoip/"
+                "--humanize flags)",
+        source="camoufox-reverse-mcp (git clone + pip install -e .)",
+        register="claude mcp add camoufox-reverse -- "
+                 "python -m camoufox_reverse_mcp",
     ),
 )
 
@@ -383,7 +420,7 @@ def main(argv: list[str] | None = None) -> int:
         pass
     parser = argparse.ArgumentParser(
         prog="mcp_probe",
-        description="MCP supply probe — per-type required/optional MCP servers (#316)",
+        description="MCP supply probe — per-type required/optional MCP servers",
     )
     parser.add_argument("workspace", help="workspace root path")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
@@ -395,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="user-level claude.json path (default: ~/.claude.json)")
     parser.add_argument(
         "--mcp-inventory", action="store_true",
-        help="enumeration face (#515): list every registered MCP server "
+        help="enumeration face: list every registered MCP server "
              "(name, mcp__<server>__* prefix, surfaces, manifest tier) as "
              "JSON; always exits 0; mutually exclusive with --json/--reproduce")
     args = parser.parse_args(argv)
@@ -433,4 +470,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

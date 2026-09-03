@@ -35,10 +35,10 @@ import sys
 from pathlib import Path
 
 import yaml
+from _factories import write_hook_state
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
-sys.path.insert(0, str(REPO_ROOT / "hooks"))
 
 
 # ---------- shared fixtures ----------
@@ -50,12 +50,8 @@ def _write(path: Path, data: dict) -> None:
 
 
 def _activate(ws: Path) -> None:
-    """Make dispatch_gate ACTIVE on this workspace (v1.9.7 TTL discipline)."""
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "active_hooks": ["dispatch_gate"],
-        "paused_hooks": [],
-        "expires_at": "2099-12-31T23:59:59Z",
-    }), encoding="utf-8")
+    """Make dispatch_gate ACTIVE on this workspace (v1.9.7 TTL)."""
+    write_hook_state(ws, active_hooks=["dispatch_gate"])
 
 
 def _top1_ws(root: Path) -> Path:
@@ -640,3 +636,67 @@ class TestStrategyNovelty:
         assert [e["claim"] for e in rows2[:3]] == ["C-0", "C-1", "C-2"], (
             "an under-cap file must not lose or reorder rows")
         assert rows2[-1]["strategy"] == "small"
+
+
+# ---------- ②(a) capability dormant observability (#600) ------------------
+
+class TestCapabilityDormantObservability:
+    """#600: the capability-card tooth (②(a)) is conditional on the OPTIONAL
+    `obstacle_for` field — with none anywhere in the register,
+    capability_switch_violation() returns None for every dispatch and the
+    whole #496 capability-switch enforcement silently no-ops (same class as
+    #594/#596: an operator-absent field makes a gate mute). The fix is
+    observability, NOT a required field (that would break every greenfield
+    workspace): a ONE-TIME `capability_dormant` WARN at the guard entrance.
+
+    One-time is enforced by a sentinel file (runs/.capability-dormant-warned):
+    the gate runs as a fresh process per dispatch, so a module-level flag
+    cannot persist across dispatches.
+    """
+
+    def test_no_obstacle_for_warns_exactly_once(self, tmp_path) -> None:
+        """Register without any `obstacle_for` -> the first dispatch through
+        the capability guard leaves ONE dormant WARN (stderr names
+        capability-dormant, unified log carries action=capability_dormant,
+        guidance names obstacle_for / #496); the second dispatch does NOT
+        repeat it (sentinel). Enforcement stays unchanged: staying on the
+        validated family passes (rc=0) in both dispatches."""
+        root = tmp_path / "d1"
+        ws = _capability_ws(root)
+        prompt = "[T2 tools=rev-frida] claim C-1 stay on the validated family"
+        r = _run_gate(root, ws, prompt)
+        assert r.returncode == 0, (
+            f"dormant WARN must not change the pass rc; stderr={r.stderr!r}")
+        assert "capability-dormant" in r.stderr, (
+            f"first dispatch must WARN on stderr; stderr={r.stderr!r}")
+        rows = [e for e in _event_rows(ws)
+                if e.get("action") == "capability_dormant"]
+        assert len(rows) == 1, (
+            f"exactly one dormant trace expected; got {len(rows)}: {rows}")
+        assert rows[0].get("claim") == "C-1", f"rows={rows}"
+        assert "obstacle_for" in (r.stdout + r.stderr), (
+            "guidance must name the obstacle_for field (the #496 arming "
+            f"condition); stdout={r.stdout!r}")
+        # sentinel is in place -> the second dispatch does not repeat
+        assert (ws / "runs" / ".capability-dormant-warned").exists()
+        r2 = _run_gate(root, ws, "[T2 tools=rev-frida] claim C-1 second dispatch")
+        assert r2.returncode == 0, f"stderr={r2.stderr!r}"
+        rows2 = [e for e in _event_rows(ws)
+                 if e.get("action") == "capability_dormant"]
+        assert len(rows2) == 1, (
+            f"dormant WARN is one-time per workspace; got {len(rows2)}")
+
+    def test_obstacle_for_present_no_dormant_warn(self, tmp_path) -> None:
+        """With an obstacle_for claim in the register the guard is armed —
+        no dormant WARN, and enforcement is untouched (the trajectory-1
+        obstacle claim still REJECTs the family switch, pinned by
+        TestCapabilityGate.test_obstacle_claim_inherits_parent_capability_context)."""
+        root = tmp_path / "d2"
+        ws = _capability_ws(root, with_obstacle_claim=True)
+        r = _run_gate(root, ws,
+                      "[T2 tools=rev-frida] claim C-1 background work")
+        assert r.returncode == 0, f"stderr={r.stderr!r}"
+        rows = [e for e in _event_rows(ws)
+                if e.get("action") == "capability_dormant"]
+        assert rows == [], (
+            f"armed register must not WARN dormant; rows={rows}")

@@ -13,14 +13,14 @@ This test file encodes the governance contract:
 1. The retirement ledger `references/mechanisms.md` exists, is a single
    source for mechanism lifecycle (lifecycle column = ACTIVE | DEPRECATED
    | RETIRED), and lists v0 dispatch as RETIRED.
-2. The mechanism is reported as RETIRED by `hooks/lib_kunglao.py`
-   (status attribute on the module — pure metadata, no behavior change).
-3. The regex `DISPATCH_RE` is still defined and parseable (back-compat
-   for any straggler call sites; the retirement is a governance act, not
-   a runtime removal — that follow-up is a separate PR).
-4. The mechanism ledger is wired into the spec-impl gap table
+2. The mechanism ledger is wired into the spec-impl gap table
    (`openspec/changes/issue-446-governance-fg/mechanisms-status.md`):
    the row "合并/退役样板 PR (验收第三条)" is DONE, not PENDING.
+
+The hooks-side `MECHANISMS` metadata dict and its test class were removed
+(#861/#863 no-backcompat cleanup): zero production readers. The v0 regex
+STAYS live (single source DISPATCH_RE); its parse behavior is pinned by
+tests/test_v0_retirement_861.py (three-parser consistency on V0_PREFIX).
 
 The contract is "audit trail, not runtime removal" — retiring a mechanism
 in the ledger means future authors can find one canonical record, not that
@@ -28,34 +28,20 @@ the regex disappears from the codebase tonight.
 """
 from __future__ import annotations
 
-import importlib.util
 import re
-import sys
 from pathlib import Path
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCES_DIR = REPO_ROOT / "references"
 MECHANISMS_LEDGER = REFERENCES_DIR / "mechanisms.md"
 MECHANISMS_STATUS = (
-    REPO_ROOT / "openspec" / "changes" / "issue-446-governance-fg"
+    REPO_ROOT / "openspec" / "archive" / "issue-446-governance-fg"
     / "mechanisms-status.md"
 )
 
 
 # ---------- helpers ----------
-
-def _load_hooks_lib_kunglao():
-    """Load hooks/lib_kunglao.py explicitly (mirrors test_dispatch_protocol)."""
-    spec = importlib.util.spec_from_file_location(
-        "_hooks_lib_kunglao_for_retirement_test",
-        REPO_ROOT / "hooks" / "lib_kunglao.py",
-    )
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
 
 def _load_references_mechanisms() -> str:
     """Return the raw text of references/mechanisms.md (raises if missing)."""
@@ -123,59 +109,7 @@ class TestMechanismsLedgerExists:
         )
 
 
-# ---------- (B) hooks/lib_kunglao.py metadata ----------
-
-class TestDispatchRetirementMetadata:
-    """The hooks module must declare the v0 regex's retirement as runtime
-    metadata (purely informational; the regex stays callable for back-compat).
-    This lets future readers learn the governance status without grepping
-    documentation."""
-
-    def test_module_exposes_lifecycle_attribute(self) -> None:
-        lk = _load_hooks_lib_kunglao()
-        # Module-level metadata (a plain dict or attribute); not behaviour.
-        attr = getattr(lk, "MECHANISMS", None)
-        assert attr is not None, (
-            "hooks/lib_kunglao.py must declare MECHANISMS metadata"
-        )
-        # Must include the v0 dispatch entry.
-        v0_keys = [k for k in attr if "DISPATCH_RE" in k or "v0" in str(k).lower()]
-        assert v0_keys, (
-            f"MECHANISMS must contain a DISPATCH_RE/v0 entry; got keys={list(attr)[:5]}…"
-        )
-
-    def test_v0_dispatch_lifecycle_is_retired(self) -> None:
-        lk = _load_hooks_lib_kunglao()
-        attr = getattr(lk, "MECHANISMS", {})
-        v0_entry = None
-        for k, v in attr.items():
-            if "DISPATCH_RE" in k or ("v0" in str(k).lower() and "dispatch" in str(k).lower()):
-                v0_entry = v
-                break
-        assert v0_entry is not None
-        lifecycle = str(v0_entry.get("lifecycle", "")).upper()
-        assert lifecycle == "RETIRED", (
-            f"v0 dispatch lifecycle must be RETIRED; got {lifecycle!r}"
-        )
-        # Must reference the replacement for audit-trail completeness.
-        replacement = str(v0_entry.get("replacement", ""))
-        assert "v1" in replacement.lower(), (
-            "v0 retirement record must name v1 as replacement"
-        )
-
-    def test_regex_remains_callable_for_backcompat(self) -> None:
-        """Retirement is governance-only; the regex stays defined so any
-        straggler caller keeps working. Behavioural removal is a separate PR
-        once all call-sites are confirmed migrated."""
-        lk = _load_hooks_lib_kunglao()
-        assert lk.DISPATCH_RE is not None
-        # Quick sanity: the regex still matches the canonical v0 form.
-        m = lk.DISPATCH_RE.search("[T2 tools=pe_analyze] claim C-007")
-        assert m is not None
-        assert m.group(3) == "C-007"
-
-
-# ---------- (C) spec-impl gap table update ----------
+# ---------- (B) spec-impl gap table update ----------
 
 class TestMechanismsStatusUpdated:
     """#446 acceptance criterion #3 row in mechanisms-status.md must flip
@@ -218,7 +152,7 @@ class TestMechanismsStatusUpdated:
         )
 
 
-# ---------- (D) lifecycle sanity ----------
+# ---------- (C) lifecycle sanity ----------
 
 class TestLifecycleSemantics:
     """Governance lifecycle: a retired mechanism MUST have been DEPRECATED

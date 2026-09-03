@@ -25,8 +25,13 @@ def _mins_ago(m: int) -> str:
 
 
 def _make_hb(ws: Path, last_tick_ts: str, activity_ts: str | None = None) -> Path:
+    # #754: healthy fixtures carry a two-tick continuous history anchored on
+    # last_tick_ts (5min cadence) — single-tick states are REJECTED now.
     (ws / "runs").mkdir(parents=True, exist_ok=True)
-    data = {"last_tick_ts": last_tick_ts, "started_ts": last_tick_ts}
+    dt = datetime.fromisoformat(last_tick_ts.replace("Z", "+00:00"))
+    prev = (dt - timedelta(minutes=5)).isoformat(timespec="seconds").replace("+00:00", "Z")
+    data = {"last_tick_ts": last_tick_ts, "started_ts": prev,
+            "tick_history": [prev, last_tick_ts]}
     if activity_ts is not None:
         data["activity_ts"] = activity_ts
     (ws / "runs" / ".heartbeat.json").write_text(json.dumps(data), encoding="utf-8")

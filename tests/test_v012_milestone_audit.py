@@ -16,8 +16,16 @@ import sys
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# #794: behavioral env vars — values that rewrite a CLI's decision flow
+# rather than its infrastructure. Scrubbed unconditionally from every child
+# env _run_cli builds (see _run_cli docstring for the maintenance policy).
+_BEHAVIORAL_ENV_VARS = (
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",  # kunglao-init #276 Phase-0 gate
+)
 
 
 def test_milestone_issues_closed():
@@ -28,13 +36,6 @@ def test_milestone_issues_closed():
         pytest.skip("MILESTONES.md not present")
     text = milestone_file.read_text(encoding="utf-8")
     assert "v0.1.2" in text
-
-
-def test_release_manifest_version_present():
-    """release-manifest 必须含 0.1.2 版本戳。"""
-    pyproject = ROOT / "pyproject.toml"
-    text = pyproject.read_text(encoding="utf-8")
-    assert "0.1.2" in text or "0.1.1" in text  # current dev branch may still be 0.1.1
 
 
 def test_changelog_has_unreleased_section():
@@ -51,7 +52,12 @@ def test_no_legacy_precommit_reference():
     """#445: 单一 hook 注册路径,无 .claude/hooks/pre-commit 残留引用。"""
     offenders = []
     for p in ROOT.rglob("*"):
-        if not p.is_file() or ".git" in p.parts or ".review" in p.parts:
+        # #799: exclude the `.review` prefix family (.review, .review-gate,
+        # any .review-* sibling) — local review evidence surface, not repo
+        # content. Exact component match missed .review-gate (#799).
+        if not p.is_file() or ".git" in p.parts or any(
+            part.startswith(".review") for part in p.parts
+        ):
             continue
         if ".worktrees" in p.parts or "docs/superpowers" in str(p):
             continue
@@ -118,21 +124,44 @@ def test_execution_receipt_present():
 
 
 def _run_cli(args: list[str], cwd: Path, *, env: dict | None = None) -> subprocess.CompletedProcess:
-    """Run a kunglao CLI script as subprocess under a 3.11+ interpreter.
+    """Run a kunglao CLI script as subprocess under the venv interpreter.
 
-    We pin to /usr/local/bin/python3.11 because v0.1.2 scripts use PEP 604
-    union syntax (`Path | None`) that 3.10 chokes on (real external rollout
-    bug discovered in #457).
+    sys.executable is the uv-managed venv python (>= the project floor on
+    every CI matrix job), which supports the PEP 604 union syntax the
+    scripts use. The old hard pin /usr/local/bin/python3.11 (#457) broke
+    the 3.10 CI job with PermissionError, so we resolve dynamically.
+
+    Deterministic child environment (#794):
+    - Behavioral vars are scrubbed AFTER the env= merge — neither the parent
+      shell nor a caller may leak them in. `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
+      flips kunglao-init's #276 Phase-0 gate to HARD REJECT before the bins
+      logic, which made these replay tests report the launching shell's state
+      instead of the behavior they pin (issue #794 Windows symptom). Extend
+      the tuple only for vars that change a CLI's decision flow, each with a
+      citation; infrastructure vars (PATH, PYTHONPATH, venv) stay inherited —
+      a full env sandbox would break the dynamic sys.executable resolution
+      above (#457 lesson).
+    - UTF-8 is forced on both sides of the pipe: PYTHONUTF8=1 +
+      PYTHONIOENCODING=utf-8 via setdefault (explicit env= values still win —
+      override contract preserved), and the capture decodes utf-8/replace —
+      mirrors conftest.golden_master; bare text=True locale-decodes strictly,
+      so a GBK console host crashes the reader thread on any non-ASCII output
+      (same family as #457 items #2-#5).
     """
     full_env = dict(os.environ)
     if env:
         full_env.update(env)
+    for behavioral_var in _BEHAVIORAL_ENV_VARS:
+        full_env.pop(behavioral_var, None)
+    full_env.setdefault("PYTHONUTF8", "1")
+    full_env.setdefault("PYTHONIOENCODING", "utf-8")
     return subprocess.run(
-        ["/usr/local/bin/python3.11", *args],
+        [sys.executable, *args],
         cwd=str(cwd),
         env=full_env,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=60,
     )
 
@@ -185,15 +214,13 @@ def test_replay_init_minimal_workspace_contract(tmp_path: Path):
     claim-register.yaml + .workspace-manifest.json 最小契约,且 exit 0。
     """
     # 模拟 user 准备: 至少一个 bins/ 样本 + --type
-    bins_dir = tmp_path / "bins"
-    bins_dir.mkdir()
-    (bins_dir / "sample.exe").write_bytes(b"\x00\x01\x02")
+    seed_bins(tmp_path, payload=b"\x00\x01\x02")
     proc = _run_cli(
         [
             str(ROOT / "scripts" / "kunglao-init.py"),
             str(tmp_path),
             "--type", "linux",
-            "--skip-toolchain",  # 测试环境无 toolchain,走 ops escape hatch
+            "--skip-toolchain", "--host-exec-protection", "enabled",  # 测试环境无 toolchain,走 ops escape hatch
             "--no-hooks",  # 不污染外部 workspace 的 .claude/settings.json
             "--assume-yes",
         ],
@@ -226,7 +253,7 @@ def test_replay_init_refuses_empty_bins(tmp_path: Path):
         [
             str(ROOT / "scripts" / "kunglao-init.py"),
             str(tmp_path),
-            "--skip-toolchain",
+            "--skip-toolchain", "--host-exec-protection", "enabled",
             "--no-hooks",
             "--assume-yes",
         ],

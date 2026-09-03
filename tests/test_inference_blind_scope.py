@@ -18,10 +18,8 @@ Covers:
 from __future__ import annotations
 
 import sys
-import textwrap
 from pathlib import Path
 
-import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,8 +27,6 @@ SCRIPTS = ROOT / "scripts"
 HOOKS = ROOT / "hooks"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
-if str(HOOKS) not in sys.path:
-    sys.path.insert(0, str(HOOKS))
 
 
 # ---------- helpers ----------

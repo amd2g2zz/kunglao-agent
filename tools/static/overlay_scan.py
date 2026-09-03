@@ -31,6 +31,12 @@ Usage:
   python overlay_scan.py --binary sample.exe --mode reloc --reproduce
 """
 from __future__ import annotations
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+
 
 import argparse
 import hashlib
@@ -49,8 +55,8 @@ if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
 from common import (  # noqa: E402
-    EXE_SIGNATURES,
     byte_entropy,
+    error,
     find_all,
     scan_valid_pclntab,
     signature_hits,
@@ -61,19 +67,10 @@ from lib_disasm import load_pe  # noqa: E402  (VA/offset core reuse, issue #284)
 # UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
 # decode(errors="replace")) must not crash a GBK console — stdout unified on
 # UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 
 RELOC_TYPE_NAMES = {0: "ABSOLUTE", 3: "HIGHLOW", 10: "DIR64"}
 MAX_RELOC_BLOCK = 0x10000
 MAX_PCLNTAB_SEARCH = 10 * 1024 * 1024
-
-
-def _error(code: int, message: str) -> None:
-    print(json.dumps({"error": message, "exit_code": code}), file=sys.stderr)
-    sys.exit(code)
 
 
 def _load(args) -> tuple[bytes, pefile.PE]:
@@ -81,16 +78,16 @@ def _load(args) -> tuple[bytes, pefile.PE]:
     try:
         data = path.read_bytes()
     except OSError as exc:
-        _error(2, f"cannot read --binary {path}: {exc}. "
-                  f"Check the path and re-run: python overlay_scan.py --binary {path}")
+        error(f"cannot read --binary {path}: {exc}. "
+              f"Check the path and re-run: python overlay_scan.py --binary {path}")
     if data[:2] != b"MZ":
-        _error(2, f"{path} is not a PE (no MZ magic at offset 0). "
-                  f"Pass a PE file with a possible overlay.")
+        error(f"{path} is not a PE (no MZ magic at offset 0). "
+              f"Pass a PE file with a possible overlay.")
     try:
         pe = load_pe(path)
     except Exception as exc:  # noqa: BLE001
-        _error(2, f"pefile could not parse {path}: {exc}. "
-                  f"The file may be truncated or not a PE; try another sample.")
+        error(f"pefile could not parse {path}: {exc}. "
+              f"The file may be truncated or not a PE; try another sample.")
     return data, pe
 
 
@@ -298,11 +295,12 @@ def _emit_json(payload: dict, args) -> None:
         try:
             Path(args.out).write_text(text, encoding="utf-8")
         except OSError as exc:
-            _error(2, f"cannot write --out {args.out}: {exc}. "
-                      f"Check the directory and re-run with a writable --out path.")
+            error(f"cannot write --out {args.out}: {exc}. "
+                  f"Check the directory and re-run with a writable --out path.")
     else:
         print(text)
 
 
 if __name__ == "__main__":
+    ensure_utf8_stdout()
     sys.exit(main())

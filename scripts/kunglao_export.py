@@ -53,12 +53,20 @@ def sha256_file(p: Path) -> str:
 
 
 def classify(path: Path) -> str:
-    """Classify path into zone: carrier|evidence|scratch|other."""
-    rel = str(path)
-    # Scratch check first (excluded zones)
-    for pat in SCRATCH_PATTERNS:
-        if rel.startswith(pat) or f"/{pat}" in rel:
-            return "scratch"
+    """Classify path into zone: carrier|evidence|scratch|other.
+
+    Platform-stable (#540 CI regression): rel is normalized via .as_posix()
+    so Windows separators still match the POSIX-shaped zone patterns, and
+    the scratch-zone check applies to RELATIVE paths only — an absolute
+    path that merely lives under a system /tmp is not workspace scratch
+    (the golden CI failure mode).
+    """
+    rel = path.as_posix()
+    # Scratch check first (excluded zones) — relative workspace paths only
+    if not path.is_absolute():
+        for pat in SCRATCH_PATTERNS:
+            if rel.startswith(pat) or f"/{pat}" in f"/{rel}/":
+                return "scratch"
     # Carriers
     for pat in CARRIER_PATTERNS:
         if rel.endswith(pat) or f"/{pat}" in rel or path.name == pat:
@@ -98,7 +106,7 @@ def build_manifest(ws: Path, include_scratch: bool) -> dict:
     for p in sorted(ws.rglob("*")):
         if ".git" in p.parts:
             continue
-        rel = str(p.relative_to(ws)) if p != ws else "."
+        rel = p.relative_to(ws).as_posix() if p != ws else "."
         if p.is_dir():
             # Empty-dir fidelity: a directory with no children tracked. We
             # only record dirs we are about to archive (i.e. inside the
@@ -111,7 +119,7 @@ def build_manifest(ws: Path, include_scratch: bool) -> dict:
             # Empty-dir markers — represented in `empty_dirs` instead,
             # never in zone file lists (avoids manifest/archive drift).
             continue
-        zone = classify(p)
+        zone = classify(Path(rel))
         if zone == "scratch" and not include_scratch:
             continue
         manifest["zones"][zone].append({
@@ -135,7 +143,7 @@ def build_manifest(ws: Path, include_scratch: bool) -> dict:
         non_marker_children = [c for c in d.iterdir() if c.name != ".gitkeep"]
         if non_marker_children:
             continue
-        manifest["empty_dirs"].append(str(d.relative_to(ws)))
+        manifest["empty_dirs"].append(d.relative_to(ws).as_posix())
     return manifest
 
 
@@ -187,6 +195,10 @@ def verify_manifest(archive: Path) -> int:
     for zone, entries in manifest["zones"].items():
         if zone == "scratch" and not manifest.get("include_scratch"):
             continue
+        if zone not in ("carrier", "evidence", "scratch"):
+            # "other" is never archived by export_workspace (only the three
+            # zones above are written) — checking it would always NOT FOUND.
+            continue
         for entry in entries:
             member_name = f"export/{entry['path']}"
             try:
@@ -213,18 +225,18 @@ def verify_manifest(archive: Path) -> int:
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="workspace export tool (#540)")
+    ap = argparse.ArgumentParser(description="workspace export tool")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    
+
     p_exp = sub.add_parser("export", help="Export workspace")
     p_exp.add_argument("workspace", type=Path)
     p_exp.add_argument("-o", "--output", type=Path, required=True,
                        help="output archive (.tar.gz)")
     p_exp.add_argument("--include-scratch", action="store_true")
-    
+
     p_ver = sub.add_parser("verify", help="Verify archive")
     p_ver.add_argument("archive", type=Path)
-    
+
     args = ap.parse_args()
     if args.cmd == "export":
         sys.exit(export_workspace(args.workspace, args.output, args.include_scratch))

@@ -37,6 +37,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -164,7 +165,7 @@ def probe_help(cmd: list[str], timeout: int = 60) -> int:
         r = subprocess.run(cmd, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=timeout)
         return r.returncode
-    except (subprocess.TimeoutExpired, OSError) as exc:
+    except (subprocess.TimeoutExpired, OSError):
         return -1
 
 
@@ -292,9 +293,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.revision:
         revision = args.revision
     else:
-        r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
-                           text=True, encoding="utf-8", errors="replace")
-        revision = r.stdout.strip() if r.returncode == 0 else "unknown"
+        try:
+            r = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True,
+                               text=True, encoding="utf-8", errors="replace")
+            revision = r.stdout.strip() if r.returncode == 0 else \
+                os.environ.get("GITHUB_SHA", "unknown")
+        except FileNotFoundError:
+            # Self-hosted runners without git: actions/checkout falls back to
+            # the REST tarball (no .git on disk) — GITHUB_SHA carries the
+            # exact commit the workflow is validating.
+            revision = os.environ.get("GITHUB_SHA", "unknown")
 
     test_result = None
     if args.check:
@@ -332,4 +340,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

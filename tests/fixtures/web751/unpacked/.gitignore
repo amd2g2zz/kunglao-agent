@@ -1,0 +1,6 @@
+# gitnexus analyze artifacts must stay OUT of this fixture (the demo copies
+# it into a temp workdir before analyzing — belt and suspenders)
+.gitnexus/
+.claude/
+AGENTS.md
+CLAUDE.md

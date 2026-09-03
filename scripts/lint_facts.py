@@ -47,7 +47,7 @@ except ImportError:  # pragma: no cover
 # the schema authority in the live skill dir. Bump ONLY on a
 # backward-incompatible frontmatter schema change (a new optional field is
 # not a revision bump).
-ACTIVE_SCHEMA_REV = 1
+ACTIVE_SCHEMA_REV = 2  # #663 anomaly detection schema bump
 
 VALID_STATUS = {"PROVEN", "INFERRED", "NEGATIVE", "REFUTED", "OPEN", "DEFERRED", "VERIFIED"}
 VALID_SOURCE = {
@@ -58,10 +58,11 @@ VALID_CONFIDENCE = {"high", "medium", "low"}
 VALID_BOUNDARY_TYPE = {
     "confirmed", "capability_not_executed", "link_not_closed", "source_derived",
     "observation", "coordinate", "pure_negative", "contradiction", "numeric",
+    "anomaly",
 }
 OPEN_BOUNDARY_TYPES = {"capability_not_executed", "link_not_closed",
                        "source_derived", "observation", "numeric"}
-EMPTY_GATE_TYPES = {"confirmed", "pure_negative", "contradiction", "coordinate"}
+EMPTY_GATE_TYPES = {"confirmed", "pure_negative", "contradiction", "coordinate", "anomaly"}
 VALID_VERIFY_STATUS = {"pending", "passes", "partial", "fails", "stale"}
 VALID_CONFIDENCE_ZH = {"可确认", "表明", "倾向于", "可关联", "不支持"}
 VALID_PROVENANCE_ROLES = {"sample_raw", "decompiled_c", "disassembled_s",
@@ -122,7 +123,10 @@ CLAIM_REF_FIELDS = ("claim_id", "claim_ids", "claims")
 
 # L-3 (#532): the closed set of legal frontmatter keys. Anything else warns
 # (never errors — schema growth must not hard-block a write). Drawn from
-# lint_fact() + the template + migrate_facts output (grep 2026-08-21).
+# lint_fact() + the template are the golden basis; a per-workspace curated
+# migrate output is NOT part of it (#809: migration is opt-in --map +
+# fingerprint-gated — un-gated migrate output is exactly how the live-run sample
+# workspace got poisoned).
 KNOWN_FRONTMATTER_KEYS = frozenset({
     "id", "type", "title", "status", "claim_id", "claim_ids", "claims", "claim",
     "created", "last_reviewed", "boundary_type", "promotion_gate", "source",
@@ -131,6 +135,7 @@ KNOWN_FRONTMATTER_KEYS = frozenset({
     "expected_sha256", "output", "output_sha256", "verified", "facts_used",
     "depends_on", "alternatives", "supersedes", "superseded_by", "iocs",
     "hypothesis",
+    "trace_id",  # #879 trace identity: mission chain id (worker echo channel)
 })
 
 # L-4 (#532): the body '## Status' line must reconcile with frontmatter status.
@@ -408,10 +413,12 @@ _INDEX_SEPARATOR_RE = re.compile(r"^\|[\s|:-]+\|$")
 
 def _index_status_values() -> frozenset[str]:
     """Canonical status set from the single parser (import-guarded — the
-    linter degrades to VALID_STATUS when tools/_lib is absent), extended
-    with the workflow-layer word migrate_facts writes into the _INDEX
-    status column (regenerate_index: INFERRED+partial → PARTIALLY-VERIFIED).
-    Memoized: called once per _INDEX row."""
+    linter degrades to VALID_STATUS when tools/_lib is absent).
+
+    #863 conflict ruling: the workflow-layer word PARTIALLY-VERIFIED is NOT
+    a legal facts/_INDEX.md status column value (workflow state belongs to
+    claim-register / references/state-mapping.md, same posture as the
+    frontmatter BAD_STATUS rule). Memoized: called once per _INDEX row."""
     cached = _INDEX_STATUS_CACHE.get("v")
     if cached is not None:
         return cached
@@ -419,9 +426,9 @@ def _index_status_values() -> frozenset[str]:
         sys.path.insert(0, str(_LIB_DIR))
     try:
         from index_schema import FACT_STATUSES
-        values = frozenset(FACT_STATUSES) | {"PARTIALLY-VERIFIED"}
+        values = frozenset(FACT_STATUSES)
     except ImportError:
-        values = frozenset(VALID_STATUS) | {"PARTIALLY-VERIFIED"}
+        values = frozenset(VALID_STATUS)
     _INDEX_STATUS_CACHE["v"] = values
     return values
 
@@ -719,6 +726,15 @@ def lint_workspace(ws: Path):
             # claiming PROVEN with no frontmatter has more than one defect.
             no_fm_files.append((p, body))
             continue
+        if perr == "yaml-unparseable":
+            # #863 conflict ruling: yaml.YAMLError is a HARD lint error even
+            # when the tolerant kv fallback yielded a parse. The tolerant
+            # parse stays available to the runtime gate (bash_fact_guard's
+            # hand-edit read); the lint never silently passes broken YAML.
+            errors.append(("error", "UNPARSEABLE_FRONTMATTER",
+                           f"{p.name}: frontmatter unparseable (YAML error — "
+                           "fix the fence block by hand)"))
+            continue
         if perr and not fm:
             errors.append(("error", "UNPARSEABLE_FRONTMATTER",
                            f"{p.name}: frontmatter unparseable"))
@@ -799,7 +815,7 @@ def lint_workspace(ws: Path):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="lint kunglao facts against the aligned schema (#336)")
+    ap = argparse.ArgumentParser(description="lint kunglao facts against the aligned schema")
     ap.add_argument("ws", type=Path, help="workspace root (contains facts/)")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args(argv)
@@ -822,4 +838,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

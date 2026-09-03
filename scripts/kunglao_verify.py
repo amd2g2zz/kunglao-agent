@@ -32,7 +32,6 @@ Output contract: schemas/verify-output.json (M3.3 frozen, module-design
 from __future__ import annotations
 
 import argparse
-import datetime
 import hashlib
 import json
 import re
@@ -77,9 +76,7 @@ _ACTUAL_ASSERTION_RE = re.compile(r"^([A-Za-z_][\w.]*)\s*[:=]\s*(.+)$")
 _VALUE_PLACEHOLDERS = {"??", "?", "TBD", "TODO", "N/A", "NULL", "null", ""}
 
 
-def utc_now() -> str:
-    """UTC ISO-8601 seconds precision, Z suffix."""
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def _parse_frontmatter(text: str) -> dict:
@@ -198,13 +195,13 @@ def compare_value_assertions(
     return (not mismatches, mismatches)
 
 
-def check_assignment_expected(fact: dict, *, grace: bool = False) -> tuple[bool, str]:
+def check_assignment_expected(fact: dict) -> tuple[bool, str]:
     """Lint gate (D1/D3): assignment-class expected must bind concrete value assertions.
 
     A fact without byte-exact targets must not be promoted to
     PROVEN/VERIFIED. Returns (ok, reason): ok=False blocks promotion.
-    grace=True downgrades the rejection to a non-blocking WARN (for the
-    one-time migration window).
+    (#863: the one-cycle migration `grace` downgrade was retired — the
+    migration window it served is over; archive tasks all checked.)
     """
     expected = str(fact.get("expected", ""))
     if not is_assignment_class(expected):
@@ -212,11 +209,8 @@ def check_assignment_expected(fact: dict, *, grace: bool = False) -> tuple[bool,
     assertions = parse_value_assertions(expected)
     if assertions:
         return True, f"{len(assertions)} value assertion(s) bound"
-    reason = ("assignment-class expected lacks concrete value assertions "
-              "(detected assignment token(s) but no field=value bindings)")
-    if grace:
-        return True, "WARN (grace): " + reason
-    return False, reason
+    return False, ("assignment-class expected lacks concrete value assertions "
+                   "(detected assignment token(s) but no field=value bindings)")
 
 
 # ===========================================================================
@@ -777,13 +771,63 @@ def l2_redteam(claim_id: str, ws: Path, dispatcher=None) -> tuple[str, list[str]
     return (verdict, list(gaps or []))
 
 
-def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
+# ---- #828: rewrite-after-fail gate (expected hash lock) ----
+# Incident: maker runs verify -> L1 FAIL -> rewrites fact frontmatter
+# `expected:` to the observed output -> re-runs -> PASS (F008: 8s after FAIL;
+# F017: 7 REJECTED iterations then hand-aligned). F3 covers tautology only;
+# this gate covers the SEQUENTIAL rewrite. Anchor source = the verify JSON
+# history itself (runs/verify-<fid>-*.json are append-only, timestamp-named);
+# no second truth source (.lock) to drift.
+
+def prior_expected_history(ws: Path, fact_id: str) -> list[dict]:
+    """#828: prior runs/verify-<fact_id>-*.json (mtime order) ->
+    [{"l1","overall","expected_hash","file"}]; unreadable entries skipped."""
+    recs = []
+    for p in sorted((ws / "runs").glob(f"verify-{fact_id}-*.json"),
+                    key=lambda p: p.stat().st_mtime):
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ValueError):
+            continue
+        eh = d.get("expected_hash")
+        if not eh:
+            continue
+        recs.append({"l1": str((d.get("l1") or {}).get("verdict", "")),
+                     "overall": str(d.get("overall", "")),
+                     "expected_hash": str(eh),
+                     "file": p.name})
+    return recs
+
+
+def check_rewrite_after_fail(ws: Path, fact: dict, fact_id: str) -> tuple[bool, str]:
+    """#828 fail-closed: expected != last-recorded expected while the last
+    run's L1 was FAIL -> EXPECTED_TAMPERED (rewrite-after-fail forgery),
+    unless frontmatter carries a non-empty `expected_correction:` note
+    (supersedes semantics; the correction lands in lint reason + ledger).
+    First run (no history) anchors; same-expected reruns are no-ops."""
+    current = _expected_hash(str(fact.get("expected", "")))
+    recs = prior_expected_history(ws, fact_id)
+    if not recs:
+        return True, ""
+    last = recs[-1]
+    if last["l1"] != "FAIL" or last["expected_hash"] == current:
+        return True, ""
+    correction = str(fact.get("expected_correction", "")).strip()
+    if correction:
+        return True, f"expected_correction honored: {correction}"
+    return False, ("EXPECTED_TAMPERED: expected changed since last FAIL "
+                   f"({last['file']}) without expected_correction note - "
+                   "aligning expected to observed output after a FAIL is the "
+                   "rewrite-after-fail forgery pattern (#828)")
+
+
+def verify(ws: Path, fact_id: str, l2_dispatcher=None, *,
            binary_path: Path | None = None) -> dict:
     """M3.4 state machine (L282-293): lint → L1 → (L2 + anchor_check only when semantics needed).
 
     #49: the assignment-class lint gate runs first — missing value
     assertions → REJECTED (no promotion).
-    grace=True makes lint WARN only, non-blocking (one-time migration).
+    (#863: the one-cycle migration grace flag retired.)
     Output written to runs/verify-<fact_id>-<ts>.json.
     """
     fact = load_fact(ws, fact_id)
@@ -794,12 +838,17 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
     anchors = fact.get("anchors", [])
 
     # Combined lint gate: #49 assignment-class binding + #238 F3 expected
-    # anchor source. Any rejection → lint_ok=False (REJECTED, no promotion).
-    ok1, r1 = check_assignment_expected(fact, grace=grace)
+    # anchor source + #828 rewrite-after-fail hash lock. Any rejection →
+    # lint_ok=False (REJECTED, no promotion).
+    ok0, r0 = check_rewrite_after_fail(ws, fact, fact_id)
+    ok1, r1 = check_assignment_expected(fact)
     ok2, r2 = check_expected_anchor_source(fact)
-    lint_ok = ok1 and ok2
-    lint_reason = r1 if lint_ok else " | ".join(r for ok, r in ((ok1, r1), (ok2, r2)) if not ok)
-    lint = {"ok": lint_ok, "reason": lint_reason, "grace": grace}
+    lint_ok = ok0 and ok1 and ok2
+    if lint_ok:
+        lint_reason = r0 or r1
+    else:
+        lint_reason = " | ".join(r for ok, r in ((ok0, r0), (ok1, r1), (ok2, r2)) if not ok)
+    lint = {"ok": lint_ok, "reason": lint_reason}
 
     # #238 F6: cross_workflow without a redteam record → WARN (into warnings, non-blocking)
     warnings: list[dict] = []
@@ -880,14 +929,22 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
                 overall = "UNVERIFIED-WITH-GAP"
 
     out = {"fact_id": fact_id, "claim_id": claim_id, "l1": l1, "l2": l2,
-           "anchors": anchors, "overall": overall, "lint": lint, "warnings": warnings}
+           "anchors": anchors, "overall": overall, "lint": lint, "warnings": warnings,
+           "expected_hash": _expected_hash(str(fact.get("expected", "")))}
     if disasm is not None:
         out["disasm"] = disasm
     if machine_check is not None:
         out["machine_check"] = machine_check
     runs = ws / "runs"
     runs.mkdir(parents=True, exist_ok=True)
-    (runs / f"verify-{fact_id}-{utc_now().replace(':', '')}.json").write_text(
+    ts = utc_now().replace(":", "")
+    vp = runs / f"verify-{fact_id}-{ts}.json"
+    _k = 1
+    while vp.exists():
+        # #828: same-second collisions overwrite → erase the hash-lock history
+        vp = runs / f"verify-{fact_id}-{ts}-{_k}.json"
+        _k += 1
+    vp.write_text(
         json.dumps(out, indent=2, ensure_ascii=False), encoding="utf-8")
     # #287 observability: mirror the verdict to the structured event log.
     # Guarded — logging must never break verification.
@@ -896,51 +953,27 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *, grace: bool = False,
         emit(ws, actor="orchestrator", action="verify", claim=claim_id,
              artifact=fact_id, duration_ms=None,
              exit=0 if overall == "VERIFIED" else 1,
-             detail=f"L1={l1['verdict']} L2={l2['verdict']} overall={overall}")
+             detail=(f"L1={l1['verdict']} L2={l2['verdict']} overall={overall}"
+                     + (f" | {r0}" if (ok0 and r0) else "")))
     except Exception:
         pass
     return out
 
 
-def _grace_scan(ws: Path) -> int:
-    """--grace-scan: list facts that are assignment-class but lack value assertions (migration targets)."""
-    facts_dir = ws / "facts"
-    affected: list[dict] = []
-    if facts_dir.exists():
-        for p in sorted(facts_dir.glob("*.md")):
-            if p.name == "_INDEX.md":
-                continue
-            fm = _parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
-            if not fm.get("id"):
-                continue
-            ok, reason = check_assignment_expected(fm)
-            if not ok:
-                affected.append({"fact_id": fm.get("id"), "status": fm.get("status", "?"),
-                                 "path": str(p), "reason": reason})
-    print(json.dumps(affected, indent=2, ensure_ascii=False))
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
-    """Standalone CLI: python kunglao-verify.py <ws> <fact_id> [--json] [--grace] | <ws> --grace-scan."""
+    """Standalone CLI: python kunglao-verify.py <ws> <fact_id> [--json]."""
     ap = argparse.ArgumentParser(
         description="kunglao-verify — M3 VERIFY (L1 mechanical + L2 redteam + assignment-class lint)")
     ap.add_argument("ws", type=Path, help="workspace root")
-    ap.add_argument("fact_id", nargs="?", help="fact id, e.g. F-001 (omit with --grace-scan)")
+    ap.add_argument("fact_id", nargs="?", help="fact id, e.g. F-001")
     ap.add_argument("--json", action="store_true", help="machine-readable JSON output")
-    ap.add_argument("--grace", action="store_true",
-                    help="warn-only for assignment-class lint (one-cycle migration)")
-    ap.add_argument("--grace-scan", action="store_true",
-                    help="list assignment-class facts lacking value assertions, then exit")
     args = ap.parse_args(argv)
 
-    if args.grace_scan:
-        return _grace_scan(args.ws)
     if not args.fact_id:
-        ap.error("fact_id is required (or use --grace-scan)")
+        ap.error("fact_id is required")
 
     try:
-        out = verify(args.ws, args.fact_id, grace=args.grace)
+        out = verify(args.ws, args.fact_id)
     except FileNotFoundError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
@@ -960,4 +993,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

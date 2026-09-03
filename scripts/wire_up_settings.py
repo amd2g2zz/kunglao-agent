@@ -1,18 +1,14 @@
 # -*- coding: utf-8 -*-
-"""wire_up_settings.py - THE hook registry + a deprecated registration alias.
+"""wire_up_settings.py - THE hook registry.
 
 Issue #445 (2026-08-18): the WRITER that used to live here moved to
 hook_activation.register_hooks (THE canonical registration entry, with the
-post-write layer self-check). This module keeps two things:
-
+post-write layer self-check). This module keeps the REGISTRY
   1. the REGISTRY (WIRE_UP_HOOK_FILES, HOOK_DEPLOYMENT_TARGETS,
      hook_deployment_targets, derive_hook_subset) — the data source every
      checker/writer derives from (#372/#381/#410 contracts). It is not a
      registration entry; moving it would churn four importers for zero
      convergence.
-  2. wire_up_settings() — a DEPRECATED thin alias delegating to
-     hook_activation.register_hooks (kept for the conservative #445
-     migration; retirement is #446's job).
 
 Issue #258 (2026-08-12): hook deployment is PROJECT-scoped. The pre-#258
 hardcoded `Path.home()/.claude/settings.json` wrote hooks globally; in a
@@ -22,11 +18,13 @@ hooks and blocked every session's tool calls. Project-level deployment makes
 hooks live and die WITH the workspace: no global pollution, no stale
 worktree-bound commands.
 
-Issue #269 (2026-08-13): hook COMMAND paths are absolute and point at the
-CANONICAL deployed skill install (~/.claude/skills/kunglao-agent/hooks) — a
---wire-up run from a dev worktree must not bind the commands to the
-worktree path, which dies with the worktree (#228 lesson). The canonical
-resolution now lives in hook_activation._canonical_hooks_dir / build_hook_entry.
+Issue #269/#752 (2026-08-13/27): hook COMMAND paths are absolute and point
+at the EXECUTING INSTALL's hooks dir — any durable ~/.claude/skills/<name>/
+package resolves to itself (production OR a long-lived dev co-install);
+ephemeral checkouts/.wt-* worktrees fall back to the production install so
+a worktree-bound command never outlives its checkout (#228 lesson). The
+single resolution authority is hook_activation.canonical_install_root /
+_canonical_hooks_dir — no second hardcoded kunglao-agent path exists.
 """
 from __future__ import annotations
 
@@ -40,7 +38,6 @@ try:
 except NameError:
     pass
 
-import warnings
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -62,7 +59,50 @@ WIRE_UP_HOOK_FILES = frozenset({
     "state_anchor.py",         # PostToolUse/Agent — per-turn state re-anchor (#44)
     "completion_gate.py",      # Stop — code-owned completion gate (#55)
     "write_guard.py",          # PreToolUse/Edit|Write — contract-carrier write gate (#532)
+    "orchestrator_tool_guard.py",  # PreToolUse/Bash — maker-checker WARN (#608, target-based #532-style)
+    "violation_capture.py",    # PostToolUse/Bash — mechanical violation recorder (#718)
+    "bash_fact_guard.py",      # PostToolUse/Bash — facts-write lint recorder (#809)
 })
+
+# #675: hooks registered on MORE THAN ONE event slot by
+# hook_activation.register_hooks (worker_budget rides both
+# PreToolUse/Agent and PostToolUse/Agent). A fresh full wire-up writes
+# exactly len(WIRE_UP_HOOK_FILES) + len(DOUBLE_REGISTERED_HOOKS &
+# WIRE_UP_HOOK_FILES) command entries — tests derive their count anchors
+# from this pair instead of hand-pinned integers (the #608 anchor-drift
+# class: one registry addition broke three test files at once). The
+# scripts-side subset consumers already loud-fail via derive_hook_subset
+# (#381); this export gives the tests-side the same single source.
+# #601: orchestrator_tool_guard joins — same FILE, second PreToolUse
+# matcher row (MCP host-channel face beside the Bash face).
+DOUBLE_REGISTERED_HOOKS = frozenset({"worker_budget.py",
+                                     "orchestrator_tool_guard.py"})
+
+
+# #810 (audit B5 CONFIRMED): canonical Claude Code hook EVENT keys. The
+# deployed writer historically promoted matchers ("Agent"/"Bash") into the
+# key slot; env_check scanned only real events (blind) while both selfchecks
+# scanned agnostically (PASS) — three checkers, three answers. The shape
+# contract single-source lives here: the writer emits it, all three checkers
+# assert it.
+HOOK_EVENTS = frozenset({
+    "PreToolUse", "PostToolUse", "Stop", "UserPromptSubmit",
+    "Notification", "PreCompact", "SessionStart", "SessionEnd",
+    "SubagentStop",
+})
+
+
+def registration_shape_issues(settings: dict) -> list:
+    """#810 shape contract: every hooks-map key must be a canonical event
+    name. Returns human-readable issue lines (empty = the written shape is
+    readable by every standard event-keyed checker)."""
+    issues: list = []
+    for key in ((settings or {}).get("hooks") or {}):
+        if key not in HOOK_EVENTS:
+            issues.append(
+                f"non-event key {key!r} in hooks map (matcher promoted "
+                f"into the event-key slot is the #810 bug shape)")
+    return issues
 
 
 # #410: THE deployment-target registry — where kunglao hooks are written and
@@ -137,28 +177,3 @@ def derive_hook_subset(registry: Iterable[str], include: Iterable[str],
             f"{sorted(overlap)}. Update the subset tables deliberately "
             f"(issue #381).")
     return include
-
-
-
-
-def wire_up_settings(workspace: Path | None = None,
-                     global_opt_in: bool = False) -> int:
-    """#445 DEPRECATED thin alias — hook_activation.register_hooks is THE
-    canonical hook registration entry.
-
-    Signature preserved for the conservative #445 migration (callers:
-    tests + any external integrations); every call now warns and delegates.
-    Retirement (deleting the alias) is issue #446 — NOT this change.
-
-    See hook_activation.register_hooks for the actual behavior (the #258
-    project-level target, the #269 canonical command paths, and the #445
-    post-write self-check that FAILs a write landing on a layer that does
-    not fire).
-    """
-    warnings.warn(
-        "wire_up_settings.wire_up_settings is deprecated (#445): the hook "
-        "registration entry is hook_activation.register_hooks (CLI: "
-        "hook_activation.py <workspace> --wire-up). Retirement: #446.",
-        DeprecationWarning, stacklevel=2)
-    from hook_activation import register_hooks
-    return register_hooks(workspace=workspace, global_opt_in=global_opt_in)

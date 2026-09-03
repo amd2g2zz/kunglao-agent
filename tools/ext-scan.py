@@ -48,6 +48,12 @@ The generator itself is NOT registered in any index (the querier does
 not enter the queried registry — same discipline as tool-search.py).
 """
 from __future__ import annotations
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+
 
 import argparse
 import ast
@@ -497,8 +503,5 @@ def main(argv: list[str] | None = None) -> int:
 if __name__ == "__main__":
     # Canonical #317 UTF-8 stdout guard, CLI entry ONLY — moving it out
     # of module top level is the import-purity fix (#476 review L2).
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        pass  # non-TTY / captured stream without reconfigure
+    ensure_utf8_stdout()
     sys.exit(main())

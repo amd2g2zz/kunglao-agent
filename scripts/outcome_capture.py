@@ -33,10 +33,10 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 from status_defs import LedgerLineType, ledger_line_type
+from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 LEDGER_NAME = ".convergence_ledger.jsonl"
 
@@ -58,9 +58,7 @@ RESULT_SCORE = {
 }
 
 
-def utc_now_iso() -> str:
-    """UTC ISO-8601, second precision (Z-suffix form for ledger consistency)."""
-    return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+from harness_common import utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 def read_outcome_rows(workspace: Path) -> list[dict]:
@@ -75,14 +73,8 @@ def read_outcome_rows(workspace: Path) -> list[dict]:
     if not p.exists():
         return []
     out: list[dict] = []
-    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    for row in iter_jsonl(
+            p.read_text(encoding="utf-8", errors="replace").splitlines()):
         if ledger_line_type(row) == LedgerLineType.OUTCOME:
             out.append(row)
     return out
@@ -208,4 +200,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

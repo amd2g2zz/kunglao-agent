@@ -154,7 +154,7 @@ def deploy(tool: str, local: Path, port: int | None = None,
     adb = adb or _shutil_which("adb")
     if not adb:
         print(f"deploy-shim: adb not found in PATH — fix first: "
-              f"{toolchain.FIXES.get('adb', 'install platform-tools')}",
+              f"{toolchain.fix_text('adb') or 'install platform-tools'}",
               file=sys.stderr)
         return RC_DEPLOY_FAILED
 
@@ -194,7 +194,7 @@ def deploy(tool: str, local: Path, port: int | None = None,
     if not ok:
         print(f"deploy-shim: {tool} deployed but port {use_port} NOT "
               f"verified ({detail}) — fix: "
-              f"{toolchain.FIXES.get(item, '')}", file=sys.stderr)
+              f"{toolchain.fix_text(item) or ''}", file=sys.stderr)
         return RC_DEPLOY_FAILED
     print(f"deploy-shim: {tool} deployed and verified on port {use_port}")
     _record(ws, item, "PASS")
@@ -231,7 +231,7 @@ def make_shim(name: str, purpose: str, expiry: str,
     for label, value in (("purpose", purpose), ("expiry", expiry)):
         if not (isinstance(value, str) and value.strip()):
             print(f"deploy-shim: --{label} is required (one-off shims "
-                  f"are annotated, #462)", file=sys.stderr)
+                  f"are annotated)", file=sys.stderr)
             return RC_VALIDATION
     shim_root = root if root is not None else _SCRIPT_DIR / _SHIMS_DIRNAME
     shim_root.mkdir(parents=True, exist_ok=True)
@@ -241,7 +241,7 @@ def make_shim(name: str, purpose: str, expiry: str,
     note = shim_root / f"{name}.md"
     if note.exists():
         print(f"deploy-shim: refusing to overwrite existing shim record "
-              f"{note} (#462: annotate a NEW engagement with a new name)",
+              f"{note} (annotate a NEW engagement with a new name)",
               file=sys.stderr)
         return RC_VALIDATION
     from datetime import datetime, timezone
@@ -266,7 +266,7 @@ def make_shim(name: str, purpose: str, expiry: str,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="deploy-shim",
-        description="device-side deployment + one-off shim records (#477)",
+        description="device-side deployment + one-off shim records",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -284,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
     p_dep.add_argument("--workspace", default=None,
                        help="workspace root for the env-facts ledger")
 
-    p_new = sub.add_parser("new", help="annotate a one-off shim (#462)")
+    p_new = sub.add_parser("new", help="annotate a one-off shim")
     p_new.add_argument("--name", required=True)
     p_new.add_argument("--purpose", required=True)
     p_new.add_argument("--expiry", required=True)
@@ -303,4 +303,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

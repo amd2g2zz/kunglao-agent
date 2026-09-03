@@ -39,6 +39,12 @@ ARM_CONFIGS = {
           "desc": "all-off baseline (legacy additive weights + no gate) — the control"},
     "C": {"mechanisms_enabled": False, "single_agent": True,
           "desc": "single agent, no orchestration (direct LLM run) — lower-bound control"},
+    # #823 A5: AB-VALUE N-arm — the synthetic-shadow face of the value algo.
+    # Real-session runs set env KUNGLAO_VALUE_ALGO=1 (bench_runner B4); the
+    # in-process harness honors mechanisms_enabled only.
+    "N": {"mechanisms_enabled": True, "single_agent": False,
+          "env": {"KUNGLAO_VALUE_ALGO": "1"},
+          "desc": "#823 N-arm: value algo P1-P3 (AB-VALUE experiment)"},
 }
 
 FAULT_TYPES = {
@@ -50,7 +56,7 @@ FAULT_TYPES = {
 }
 
 # #81: arm → deterministic candidate policy
-POLICY_NAMES = {"A": "voi", "B": "legacy", "C": "naive"}
+POLICY_NAMES = {"A": "voi", "B": "legacy", "C": "naive", "N": "voi"}
 # fault injection blocks completion → non-completion is not a candidate-correctness error (INCONCLUSIVE, not FAIL)
 FAULT_BLOCKING = ("throttle", "implicit_fail", "explicit_fail", "impossible")
 
@@ -990,4 +996,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

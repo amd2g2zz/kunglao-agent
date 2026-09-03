@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -52,9 +51,7 @@ _LEGAL_STATUSES = (
 )
 
 
-def utc_now_iso() -> str:
-    """ISO-8601 UTC with a trailing Z (matches claim_expiry's STALE timestamp)."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 def _load_reg(workspace: Path) -> tuple[list, dict, Path]:
@@ -189,4 +186,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

@@ -23,6 +23,12 @@ Usage:
   python shellcode_scan.py --binary blob.bin --entry 0x448 --peb --reproduce
 """
 from __future__ import annotations
+import sys as _sys_io, pathlib as _pathlib_io
+_TOOLS_DIR = next(_p for _p in _pathlib_io.Path(__file__).resolve().parents if _p.name == 'tools')
+if str(_TOOLS_DIR) not in _sys_io.path:
+    _sys_io.path.insert(0, str(_TOOLS_DIR))
+from _lib.stdio import ensure_utf8_stdout  # noqa: E402
+
 
 import argparse
 import hashlib
@@ -39,6 +45,7 @@ if str(_THIS_DIR) not in sys.path:
 from common import (  # noqa: E402
     PEB_ACCESS_PATTERNS,
     ascii_strings,
+    error,
     find_all,
     x64_prolog_offsets,
 )
@@ -46,10 +53,6 @@ from common import (  # noqa: E402
 # UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from
 # decode(errors="replace")) must not crash a GBK console — stdout unified on
 # UTF-8 with errors="replace" as belt-and-braces for lone surrogates.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass  # non-TTY / captured stream without reconfigure (e.g. pytest capsys)
 
 DEFAULT_LENGTH = 512
 DEFAULT_STEP = 16
@@ -57,11 +60,6 @@ DEFAULT_MIN_RATIO = 0.6
 DEFAULT_MIN_INSNS = 5
 DEFAULT_MIN_STRING_LEN = 6
 DEFAULT_MAX_STRINGS = 100
-
-
-def _error(code: int, message: str) -> None:
-    print(json.dumps({"error": message, "exit_code": code}), file=sys.stderr)
-    sys.exit(code)
 
 
 def _disasm_entry(data: bytes, entry: int, base: int, length: int, bits: int) -> dict:
@@ -154,19 +152,19 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     if args.step < 1:
-        _error(2, f"--step must be >= 1 (got {args.step}); a zero step would "
-                  f"never advance the scan window.")
+        error(f"--step must be >= 1 (got {args.step}); a zero step would "
+              f"never advance the scan window.")
 
     if not (args.entry or args.scan or args.prologs or args.peb or args.strings):
-        _error(2, "no operation requested: give --entry/--scan/--prologs/--peb/--strings. "
-                  "Example: python shellcode_scan.py --binary blob.bin --scan --strings")
+        error("no operation requested: give --entry/--scan/--prologs/--peb/--strings. "
+              "Example: python shellcode_scan.py --binary blob.bin --scan --strings")
 
     path = Path(args.binary)
     try:
         data = path.read_bytes()
     except OSError as exc:
-        _error(2, f"cannot read --binary {path}: {exc}. "
-                  f"Check the path and re-run: python shellcode_scan.py --binary {path}")
+        error(f"cannot read --binary {path}: {exc}. "
+              f"Check the path and re-run: python shellcode_scan.py --binary {path}")
 
     payload = {
         "tool": "shellcode-scan",
@@ -181,11 +179,11 @@ def main(argv: list[str] | None = None) -> int:
         try:
             entry = int(args.entry, 16)
         except ValueError:
-            _error(2, f"invalid --entry {args.entry!r}: expected hex like 0x448. "
-                      f"Re-run with --entry 0x448")
+            error(f"invalid --entry {args.entry!r}: expected hex like 0x448. "
+                  f"Re-run with --entry 0x448")
         if entry < 0 or entry >= len(data):
-            _error(2, f"--entry 0x{entry:x} is outside the file (size {len(data)}). "
-                      f"Pass an offset within the blob.")
+            error(f"--entry 0x{entry:x} is outside the file (size {len(data)}). "
+                  f"Pass an offset within the blob.")
         result = _disasm_entry(data, entry, args.base, args.length, args.bits)
         payload["entry"] = result
         found["entry"] = result["count"]
@@ -224,4 +222,5 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    ensure_utf8_stdout()
     sys.exit(main())

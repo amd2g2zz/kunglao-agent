@@ -14,9 +14,7 @@ test data (a quoted issue excerpt), not live user data; the detector reads no
 workspace state, only the text passed to it.
 """
 import json
-import sys
 
-import pytest
 
 import premature_termination_detect as pt
 

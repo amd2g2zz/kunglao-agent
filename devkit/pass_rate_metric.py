@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", type=Path, default=None,
                    help="write metric line to this file too")
     p.add_argument("--threshold", type=float, default=THRESHOLD,
-                   help=f"pass rate threshold (default {THRESHOLD}%)")
+                   help=f"pass rate threshold (default {THRESHOLD}%%)")
     args = p.parse_args(argv)
 
     if not args.junit.exists():

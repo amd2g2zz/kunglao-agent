@@ -13,12 +13,12 @@ name does not exist at HEAD — the real snapshot helper is
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "hooks"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import worker_budget  # noqa: E402
@@ -51,15 +51,23 @@ def _ws(tmp_path: Path, status: str) -> Path:
 
 
 def test_gate_has_a_production_caller():
-    """grep-level proof the function stopped being an orphan."""
-    src = (ROOT / "hooks" / "worker_budget.py").read_text(encoding="utf-8")
-    calls = [ln for ln in src.splitlines()
-             if "compare_register_change_proven_gate(" in ln
-             and not ln.lstrip().startswith("def ")
-             and "def compare_register_change_proven_gate" not in ln]
+    """grep-level proof the function stopped being an orphan.
+
+    #568: worker_budget.py is now a shim over core/gates/sinks; the real
+    call site lives in the module family (sinks), so the scan covers all
+    four files instead of the pre-split monolith."""
+    family = ["worker_budget.py", "worker_budget_core.py",
+              "worker_budget_gates.py", "worker_budget_sinks.py"]
+    calls = []
+    for fname in family:
+        src = (ROOT / "hooks" / fname).read_text(encoding="utf-8")
+        calls += [f"{fname}:{ln}" for ln in src.splitlines()
+                  if "compare_register_change_proven_gate(" in ln
+                  and not ln.lstrip().startswith("def ")
+                  and "def compare_register_change_proven_gate" not in ln]
     assert calls, (
         "F-B3: compare_register_change_proven_gate still has zero call sites "
-        "inside worker_budget.py — the backstop is dead code")
+        "inside the worker_budget module family — the backstop is dead code")
 
 
 def test_gate_blocks_unverified_proven_promotion(tmp_path):
@@ -166,6 +174,6 @@ def test_module_still_importable_as_a_hook(tmp_path):
     r = subprocess.run(
         [sys.executable, "-c", "import sys, worker_budget; sys.exit(0)"],
         capture_output=True, text=True, timeout=60,
-        env={"PYTHONPATH": str(ROOT / "hooks") + ":" + str(ROOT / "scripts"),
-             "PATH": "/usr/bin:/bin"})
+        env={**os.environ, "PYTHONPATH": os.pathsep.join(
+                 [str(ROOT / "hooks"), str(ROOT / "scripts")])})
     assert r.returncode == 0, r.stderr

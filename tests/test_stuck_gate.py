@@ -7,16 +7,15 @@ Covers two pieces:
 These tests FAIL until the GREEN step adds the two functions.
 """
 import os
-import sys
 import tempfile
 import time
 from pathlib import Path
 
 # scripts/ -> kunglao-agent/ ; hooks/ sits beside scripts/
 _SKILL = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_SKILL / "hooks"))
 
 import worker_budget as wb  # noqa: E402
+import worker_budget_core as wbc  # noqa: E402
 import worker_pulse as wp   # noqa: E402
 
 
@@ -33,28 +32,28 @@ class _FakeProc:
 # ============================================================
 
 def test_backtrack_gate_clean_rc0(monkeypatch):
-    monkeypatch.setattr(wb, "_run_py", lambda args, cwd=None: _FakeProc(0, "OK: no stuck workers"))
+    monkeypatch.setattr(wbc, "_run_py", lambda args, cwd=None: _FakeProc(0, "OK: no stuck workers"))
     ok, msg = wb.check_backtrack_gate({"workspace": Path("/tmp/ws")})
     assert ok is True
     assert msg == ''
 
 
 def test_backtrack_gate_stuck_rc1(monkeypatch):
-    monkeypatch.setattr(wb, "_run_py", lambda args, cwd=None: _FakeProc(1, "REJECT: 1 stuck"))
+    monkeypatch.setattr(wbc, "_run_py", lambda args, cwd=None: _FakeProc(1, "REJECT: 1 stuck"))
     ok, msg = wb.check_backtrack_gate({"workspace": Path("/tmp/ws")})
     assert ok is False
     assert "backtrack" in msg.lower()
 
 
 def test_backtrack_gate_stuck_rc2(monkeypatch):
-    monkeypatch.setattr(wb, "_run_py", lambda args, cwd=None: _FakeProc(2, "HARD_PAUSE"))
+    monkeypatch.setattr(wbc, "_run_py", lambda args, cwd=None: _FakeProc(2, "HARD_PAUSE"))
     ok, msg = wb.check_backtrack_gate({"workspace": Path("/tmp/ws")})
     assert ok is False
     assert ("escalate" in msg.lower()) or ("redispatch" in msg.lower())
 
 
 def test_backtrack_gate_failopen_none(monkeypatch):
-    monkeypatch.setattr(wb, "_run_py", lambda args, cwd=None: None)
+    monkeypatch.setattr(wbc, "_run_py", lambda args, cwd=None: None)
     ok, msg = wb.check_backtrack_gate({"workspace": Path("/tmp/ws")})
     assert ok is True
     assert msg == ''
@@ -67,7 +66,7 @@ def test_backtrack_gate_failopen_no_workspace():
 
 
 def test_backtrack_gate_failopen_unknown_rc(monkeypatch):
-    monkeypatch.setattr(wb, "_run_py", lambda args, cwd=None: _FakeProc(99, "weird"))
+    monkeypatch.setattr(wbc, "_run_py", lambda args, cwd=None: _FakeProc(99, "weird"))
     ok, msg = wb.check_backtrack_gate({"workspace": Path("/tmp/ws")})
     assert ok is True
     assert msg == ''

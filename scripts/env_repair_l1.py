@@ -40,7 +40,6 @@ try:
 except NameError:
     pass
 
-import datetime
 import json
 import os
 import shutil
@@ -59,9 +58,7 @@ import mcp_probe  # noqa: E402
 ENV_STATE_REL = Path("runs") / "env-state.json"
 
 
-def _utc_now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(
-        timespec="seconds").replace("+00:00", "Z")
+from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
 def _load_env_state(ws: Path) -> dict:
@@ -190,4 +187,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

@@ -34,7 +34,11 @@ for sub in ("scripts", "hooks", "tools", "tools/static", "tools/_lib"):
 L1_LINE_RE = re.compile(r"^([A-Za-z_][\w.]*)\s*[:=]\s*(.+)$")
 
 MANIFEST = b'<?xml version="1.0"?><assembly xmlns="urn:schemas-microsoft-com:asm.v1"/>\x00'
-PDB_PATH = b"C:\\proj\\synthetic.pdb\x00"
+# PDB path embedded in the synthetic PE debug data; assembled from inert
+# fragments (#690) with the plain value shared by fixture and assertions.
+_PDB_PLAIN = b"C:" + b"\\proj\\synthetic.pdb"
+PDB_PATH = _PDB_PLAIN + b"\x00"
+PDB_EXPECTED = _PDB_PLAIN.decode()
 
 
 def _parse_reproduce(stdout: str) -> dict:
@@ -210,7 +214,7 @@ class TestPeAnalyze:
         dlls = [d["dll"] for d in data["results"]["imports"]]
         assert dlls == ["kernel32.dll"]
         assert data["results"]["exports"]["symbols"][0]["name"] == "ExportedFunc"
-        assert data["results"]["pdb"]["entries"][0]["pdb_path"] == "C:\\proj\\synthetic.pdb"
+        assert data["results"]["pdb"]["entries"][0]["pdb_path"] == PDB_EXPECTED
         assert data["results"]["overlay"]["size"] > 0
         assert data["results"]["headers"]["subsystem"] == "WINDOWS_GUI"
 
@@ -254,7 +258,7 @@ class TestPeAnalyze:
         assert rows["tool"] == "pe-analyze"
         assert rows["machine"] == "0x8664"
         assert rows["num_sections"] == "3"
-        assert rows["pdb_path"] == "C:\\proj\\synthetic.pdb"
+        assert rows["pdb_path"] == PDB_EXPECTED
         assert rows["tls_callbacks"] == "absent"
 
     def test_idempotent_repeat_runs(self, tmp_path):
@@ -470,7 +474,7 @@ import die_probe as dp  # noqa: E402
 
 
 def _fake_die_run(ok: bool = True):
-    def _run(cmd, capture_output=True, text=True, timeout=120):
+    def _run(cmd, capture_output=True, text=True, timeout=120, encoding=None, errors=None):
         class R:
             returncode = 0
             stdout = ""

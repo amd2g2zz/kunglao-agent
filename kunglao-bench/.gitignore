@@ -1,0 +1,9 @@
+# kunglao-bench — sample bytes NEVER enter git (B9 §1)
+samples/
+runs/
+grading/sealed-map.yaml
+*.bin
+*.apk
+*.exe
+*.dll
+*.so

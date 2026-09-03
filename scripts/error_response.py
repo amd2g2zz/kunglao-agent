@@ -38,10 +38,10 @@ Output schema (JSON when --json):
 from __future__ import annotations
 
 import argparse
+from typing import NamedTuple
 import json
 import re
 import sys
-from dataclasses import dataclass
 from enum import Enum
 
 
@@ -114,13 +114,8 @@ _REVIEW_GATE_BLOCKED_RE = re.compile(
 )
 
 
-@dataclass(frozen=True)
-class Classification:
-    """One classifier result. Properties are table-driven (single source:
-    _RESPONSE_MAP / _CHARTER_STATE / _RATIONALE / _ALLOWED / _FORBIDDEN).
-    Adding a new ErrorClass requires updating all five tables AND adding
-    a regression test that the response/charter_state/rationale are
-    non-empty (test_response_table_covers_all_classes)."""
+class Classification(NamedTuple):
+    """#581: collapsed from dataclass to NamedTuple view — same surface."""
     kind: str
     input: str
     klass: ErrorClass
@@ -330,4 +325,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

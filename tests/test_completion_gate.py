@@ -22,9 +22,18 @@ import pytest
 _HERE = Path(__file__).parent
 SCRIPTS = _HERE.parent / "scripts"
 HOOKS = _HERE.parent / "hooks"
-sys.path.insert(0, str(SCRIPTS))
+# #770: bind the scripts TWIN by explicit path (#762 convention) — the ini
+# orders hooks before scripts, so a bare import of this shared name resolves
+# to the hooks side and is NOT what this suite exercises.
+import importlib.util
 
-import completion_gate as cg  # noqa: E402  (scripts/ on sys.path)
+_cg_spec = importlib.util.spec_from_file_location("completion_gate_scripts", SCRIPTS / "completion_gate.py")
+cg = importlib.util.module_from_spec(_cg_spec)
+import sys as _sys
+from _factories import write_hook_state
+_sys.modules["completion_gate_scripts"] = cg
+_cg_spec.loader.exec_module(cg)
+
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +258,7 @@ def test_cli_all_closed_exits_0(tmp_path):
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "completion_gate.py"), str(p)],
         capture_output=True, text=True,
+        encoding="utf-8", errors="replace",  # #672/#317: GBK default breaks on em-dash in reason strings
     )
     assert r.returncode == 0, r.stderr
     out = json.loads(r.stdout)
@@ -260,6 +270,7 @@ def test_cli_regression_exits_1(tmp_path):
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "completion_gate.py"), str(p)],
         capture_output=True, text=True,
+        encoding="utf-8", errors="replace",  # #672/#317: GBK default breaks on em-dash in reason strings
     )
     assert r.returncode == 1, r.stderr
     out = json.loads(r.stdout)
@@ -273,6 +284,7 @@ def test_cli_missing_file_exits_3(tmp_path):
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "completion_gate.py"), str(missing)],
         capture_output=True, text=True,
+        encoding="utf-8", errors="replace",  # #672/#317: GBK default breaks on em-dash in reason strings
     )
     assert r.returncode == 3, r.stderr
     # missing oracle → exit 3 (refuse self-anchor); clear message on stderr or stdout
@@ -328,18 +340,9 @@ def _load_hook_module():
 
 def _activated_state(ws: Path):
     """Write a .hook_state.json that strict-activates completion_gate."""
-    import datetime as dt
-    expires = (dt.datetime.now(tz=dt.timezone.utc) + dt.timedelta(minutes=30)
-               ).isoformat(timespec="seconds").replace("+00:00", "Z")
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "ts": "2026-08-11T12:00:00Z",
-        "tier": "none",
-        "phase": "IDLE",
-        "active_hooks": ["completion_gate"],
-        "paused_hooks": [],
-        "user_override": {},
-        "expires_at": expires,
-    }), encoding="utf-8")
+    write_hook_state(ws, active_hooks=["completion_gate"],
+                     ts="2026-08-11T12:00:00Z", tier="none", phase="IDLE",
+                     user_override={}, expires_minutes=30)
 
 
 def _run_hook(ws: Path, stop_hook_active=False):
@@ -453,7 +456,7 @@ def test_stop_activated_no_oracle_blocks(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# (9) wire_up_settings Stop section + ALL_HOOKS membership
+# (9) hook registration Stop section + ALL_HOOKS membership
 # ---------------------------------------------------------------------------
 
 def _patch_home(tmp_path, monkeypatch):
@@ -479,8 +482,8 @@ def test_wire_up_registers_stop_completion_gate(tmp_path, monkeypatch):
     fake_home = _patch_home(tmp_path, monkeypatch)
     ws = tmp_path / "ws"
     ws.mkdir()
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
     settings_path = ws / ".claude" / "settings.json"
     assert settings_path.exists(), "wire_up_settings must write the PROJECT settings.json"
     assert not (fake_home / ".claude" / "settings.json").exists(), \
@@ -500,9 +503,9 @@ def test_wire_up_stop_idempotent(tmp_path, monkeypatch):
     fake_home = _patch_home(tmp_path, monkeypatch)
     ws = tmp_path / "ws"
     ws.mkdir()
-    from wire_up_settings import wire_up_settings
-    wire_up_settings(workspace=ws)
-    wire_up_settings(workspace=ws)  # re-run — must be a fixed point
+    from hook_activation import register_hooks
+    register_hooks(workspace=ws)
+    register_hooks(workspace=ws)  # re-run — must be a fixed point
     settings_path = ws / ".claude" / "settings.json"
     assert not (fake_home / ".claude" / "settings.json").exists()
     settings = json.loads(settings_path.read_text(encoding="utf-8"))

@@ -1,0 +1,46 @@
+# android-fingerprint-seeds.yaml — dexdc taint seed table (#692 WP5).
+#
+# Extensible fingerprint-API seed table, same lifecycle as yara rules:
+# versioned DATA consumed by a tool (tools/static/dexdc_scanner.py --seeds,
+# default path), extensible WITHOUT code change — add an entry, the next
+# dexdc taint run seeds it (--taint-api <api>).
+#
+# Schema (one entry per API):
+#   api:      the dexdc --taint-api argument shape (upstream README:
+#             `--taint-api getLastLocation` — bare method name)
+#   category: fingerprint family (feeds hypothesis candidate labels
+#             `taint:<category>:<api>` and anomaly concentration scoring)
+#   risk:     high = directly identifying (IMEI/SIM/serial-class),
+#             mid = behavioral/correlating (SSID, sensors, advertising id)
+#
+# Companion capability doc: android-fingerprint-apis.md (same directory).
+
+schema: taint-seeds/1
+
+seeds:
+  # -- device identity --
+  - {api: getDeviceId, category: device_id, risk: high}
+  - {api: getImei, category: device_id, risk: high}
+  - {api: getMeid, category: device_id, risk: high}
+  - {api: getAndroidId, category: device_id, risk: high}
+  - {api: getSerial, category: device_id, risk: high}
+  - {api: getAdvertisingId, category: device_id, risk: mid}
+  # -- SIM / telephony --
+  - {api: getSubscriberId, category: sim, risk: high}
+  - {api: getSimSerialNumber, category: sim, risk: high}
+  - {api: getLine1Number, category: sim, risk: high}
+  - {api: getSimOperator, category: sim, risk: mid}
+  # -- location --
+  - {api: getLastLocation, category: location, risk: high}
+  - {api: requestLocationUpdates, category: location, risk: mid}
+  - {api: getBestProvider, category: location, risk: mid}
+  # -- network --
+  - {api: getMacAddress, category: network, risk: high}
+  - {api: getHardwareAddress, category: network, risk: high}
+  - {api: getBssid, category: network, risk: mid}
+  - {api: getSsid, category: network, risk: mid}
+  # -- sensors / clipboard --
+  - {api: getDefaultSensor, category: sensors, risk: mid}
+  - {api: getSensorList, category: sensors, risk: mid}
+  - {api: getPrimaryClip, category: clipboard, risk: high}
+  - {api: addPrimaryClipChangedListener, category: clipboard, risk: mid}

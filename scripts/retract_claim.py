@@ -69,7 +69,6 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -106,9 +105,7 @@ _FACT_INDEX_LINE = re.compile(r"^\s*F0*(\d+)\s*\|")
 _FACT_REF = re.compile(r"\bF(\d+)\b", re.IGNORECASE)
 
 
-def utc_now_iso() -> str:
-    """ISO-8601 UTC with a trailing Z (matches dead_letter/claim_expiry stamps)."""
-    return datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from harness_common import utc_now_z as utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 def _load_yaml(p: Path) -> dict:
@@ -165,10 +162,15 @@ def find_dependents_transitive(deps: dict, retracted_id: str) -> set:
 
 
 def retract_claim(workspace: Path, claim_id: str, reason: str = "refuted",
-                  by: str = "", dry_run: bool = False) -> dict:
+                  by: str = "", dry_run: bool = False,
+                  superseded_by: str = "") -> dict:
     """The retraction transaction (issue #331 item 2). See module docstring.
 
-    Returns:
+    #879 lineage: with --reason superseded and a successor claim id
+    (--superseded-by C-NN) the withdrawal records the edge on BOTH sides —
+    the retracted claim carries `superseded_by: <successor>` and the
+    successor's `supersedes:` list gains the retracted id ("SUPERSEDED claim
+    有边可循"). Returns:
       - {"ok": False, "reason": ...}          unknown claim / invalid reason
       - {"ok": True, "retracted": False, "already_retracted": True, "reopened": []}
                                               idempotent no-op (no writes)
@@ -219,6 +221,19 @@ def retract_claim(workspace: Path, claim_id: str, reason: str = "refuted",
         claim["retract_reason"] = reason
         claim["retract_by"] = by
         claim["retracted_ts"] = utc_now_iso()
+        # #879: record WHO replaces the withdrawn claim — a superseded
+        # claim without an edge is exactly the "谁替代谁" gap this issue
+        # closes. The edge is written even when the successor entry does
+        # not exist yet (the register is sparse-tolerant; the successor
+        # face is validated by carrier_consistency (g) once it lands).
+        if reason == "superseded" and superseded_by:
+            claim["superseded_by"] = superseded_by
+            successor = next((c for c in claims
+                              if c.get("id") == superseded_by), None)
+            if successor is not None:
+                prior = successor.get("supersedes") or []
+                if claim_id not in prior:
+                    successor["supersedes"] = list(prior) + [claim_id]
         _write_reg(reg_path, reg)
         _append_ledger(workspace, {
             "type": LedgerLineType.OPERATOR_ACTION,
@@ -302,13 +317,18 @@ def check_retracted_references(workspace: Path, anchors_file: Path | None = None
 def main(argv: list | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="retract_claim.py",
-        description="Retract a claim (RETRACTED + blast-radius reopening) or gate report anchors (#331)",
+        description="Retract a claim (RETRACTED + blast-radius reopening) or gate report anchors",
     )
     parser.add_argument("workspace", help="workspace root (contains claim-register.yaml)")
     parser.add_argument("claim_id", nargs="?", help="claim id to retract (e.g. C-001)")
     parser.add_argument("--reason", choices=RETRACT_REASONS, default="refuted",
                         help="why the claim is withdrawn (default: refuted)")
     parser.add_argument("--by", default="", help="evidence pointer (facts/F0NN.md#L.., verify-run, ...)")
+    parser.add_argument("--superseded-by", default="", dest="superseded_by",
+                        metavar="C-NN",
+                        help="#879 lineage: the replacement claim id (with "
+                             "--reason superseded); writes superseded_by on "
+                             "the retracted claim + supersedes on the successor")
     parser.add_argument("--dry-run", action="store_true",
                         help="report the blast radius without writing anything")
     parser.add_argument("--check-anchors", nargs="?", const="", metavar="FILE",
@@ -337,7 +357,16 @@ def main(argv: list | None = None) -> int:
         print(f"FAIL: no claim-register.yaml under {ws}", file=sys.stderr)
         return EXIT_ERROR
 
-    r = retract_claim(ws, args.claim_id, reason=args.reason, by=args.by, dry_run=args.dry_run)
+    if args.reason == "superseded" and not args.superseded_by:
+        # #879: a superseded withdrawal without a successor edge leaves the
+        # "谁替代谁" question open — visible WARN, not a hard block (the
+        # edge can land later via the register).
+        print("WARN: --reason superseded without --superseded-by — no "
+              "lineage edge will be recorded (#879)", file=sys.stderr)
+
+    r = retract_claim(ws, args.claim_id, reason=args.reason, by=args.by,
+                      dry_run=args.dry_run,
+                      superseded_by=args.superseded_by)
     if not r["ok"]:
         print(f"REJECTED: {r['reason']}", file=sys.stderr)
         return EXIT_ERROR
@@ -347,6 +376,9 @@ def main(argv: list | None = None) -> int:
     mode = "dry-run" if args.dry_run else "applied"
     print(f"retract {args.claim_id} ({mode}): {r['before']} -> RETRACTED "
           f"[reason={args.reason}, by={args.by or '-'}]")
+    if args.superseded_by:
+        print(f"  lineage: {args.claim_id} superseded_by {args.superseded_by} "
+              f"(#879 edge)")
     if r["reopened"]:
         print(f"  blast radius: reopened {r['reopened']} (reopened_by={args.claim_id})")
         if r.get("skipped_in_progress"):
@@ -360,4 +392,6 @@ def main(argv: list | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

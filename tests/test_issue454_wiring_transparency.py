@@ -22,6 +22,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -68,12 +69,11 @@ def test_init_hooks_output_says_wired_but_dormant(tmp_path):
     (deploy_hooks path exercised via --hooks-json). #455 target-alignment:
     --type windows is required (sniff is never a default by design)."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     hooks_json = ws / "seeded-settings.json"
     hooks_json.write_text(json.dumps({"hooks": {}}), encoding="utf-8")
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws),
-            "--skip-toolchain", "--type", "windows",
+            "--skip-toolchain", "--host-exec-protection", "enabled", "--type", "windows",
             "--hooks-json", str(hooks_json),
             "--profile-root", str(ws.parent / "profile-root")]
     env = {k: v for k, v in os.environ.items() if k != FLAG_NAME}

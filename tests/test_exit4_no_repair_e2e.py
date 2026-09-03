@@ -30,9 +30,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "scripts"
@@ -45,9 +43,16 @@ from error_response import (  # noqa: E402
     classify_init_exit,
 )
 import env_repair_l1  # noqa: E402
+from _factories import seed_bins
 
 
-PY311 = "/usr/local/bin/python3.11"
+PY311 = sys.executable  # venv python (>= floor); #457 hard pin broke the 3.10 job
+
+# #794: behavioral env vars scrubbed from every child env _run builds
+# (same list/policy as test_v012_milestone_audit.py::_BEHAVIORAL_ENV_VARS).
+_BEHAVIORAL_ENV_VARS = (
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",  # kunglao-init #276 Phase-0 gate
+)
 
 
 # ---------- #565 DoD 9: contract (library-level, deterministic) ----------
@@ -162,7 +167,7 @@ def _build_fake_toolchain_wrapper(tmp_path: Path, ws: Path) -> Path:
         "kunglao_init = importlib.util.module_from_spec(_spec)\n"
         "_spec.loader.exec_module(kunglao_init)\n"
         f"sys.exit(kunglao_init.main([{str(ws)!r}, '--type', 'linux', "
-        "'--no-hooks', '--assume-yes']))\n",
+        "'--host-exec-protection', 'enabled', '--no-hooks', '--assume-yes']))\n",
         encoding="utf-8",
     )
     return wrapper
@@ -171,17 +176,27 @@ def _build_fake_toolchain_wrapper(tmp_path: Path, ws: Path) -> Path:
 def _run(*args: str, cwd: Path | None = None,
          env: dict | None = None,
          timeout: int = 60) -> subprocess.CompletedProcess:
+    """Deterministic child env, same contract as
+    tests/test_v012_milestone_audit.py::_run_cli (#794): behavioral vars
+    (#276 AGENT_TEAMS gate — with it truthy the gate exits 3 before the
+    forced RC_TOOLCHAIN_REFUSE=4 this file pins) are scrubbed AFTER the env=
+    merge; UTF-8 forced on both pipe sides (encoding= explicit — bare
+    text=True locale-decodes strictly, the #457 GBK family)."""
     full_env = dict(os.environ)
     if env:
         full_env.update(env)
+    for behavioral_var in _BEHAVIORAL_ENV_VARS:
+        full_env.pop(behavioral_var, None)
+    full_env.setdefault("PYTHONUTF8", "1")
+    full_env.setdefault("PYTHONIOENCODING", "utf-8")
     return subprocess.run(
         [PY311, *args],
         cwd=str(cwd or REPO_ROOT),
         env=full_env,
         capture_output=True,
-        text=True,
-        timeout=timeout,
+        encoding="utf-8",
         errors="replace",
+        timeout=timeout,
     )
 
 
@@ -194,9 +209,8 @@ def test_replay_init_exit4_no_repair_in_tmp_workspace(tmp_path: Path) -> None:
     ws.mkdir()
     # bins/ sample (a real placeholder; init refuses empty bins/ with exit 5
     # before reaching the toolchain check, so we need at least one sample).
-    bins = ws / "bins"
-    bins.mkdir()
-    (bins / "sample.exe").write_bytes(b"\x00\x01\x02")
+    # init refuses empty bins/ with exit 5, so seed one sample.
+    seed_bins(ws, payload=b"\x00\x01\x02")
 
     wrapper = _build_fake_toolchain_wrapper(tmp_path, ws)
     proc = _run(str(wrapper), cwd=tmp_path, timeout=60)

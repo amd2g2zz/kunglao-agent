@@ -35,20 +35,19 @@ from pathlib import Path
 
 import pytest
 
+import wire_up_settings  # pytest.ini pythonpath = . hooks scripts tools
+from _factories import write_hook_state, seed_bins
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 HOOKS = ROOT / "hooks"
 
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
-# The #445 registry file set (wire_up_settings.WIRE_UP_HOOK_FILES) — the
-# full wire-up must land every one of these; worker_budget additionally
-# rides PostToolUse, so its command count is 2 (Pre + Post).
-REGISTRY_HOOK_FILES = (
-    "env_check_gate.py", "worker_budget.py", "dispatch_gate.py",
-    "recall_inject.py", "heartbeat_touch.py", "worker_pulse.py",
-    "state_anchor.py", "completion_gate.py", "write_guard.py",  # #532
-)
+# #675: the registry file set IMPORTED from its single source (not a
+# hand-mirrored tuple — the #608 anchor-drift class). sorted() keeps
+# failure messages deterministic.
+REGISTRY_HOOK_FILES = tuple(sorted(wire_up_settings.WIRE_UP_HOOK_FILES))
 
 
 # ---------- shared helpers ----------
@@ -81,8 +80,7 @@ def _parse_ts(value: str) -> datetime:
 
 def _mk_init_ws(tmp_path: Path, name: str = "ws") -> Path:
     ws = tmp_path / name
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
     return ws
 
@@ -103,6 +101,10 @@ def _run_init(ws: Path, extra: list[str] | None = None) -> subprocess.CompletedP
     fake = ws.parent / "fake-claude.json"
     if not fake.exists():
         fake.write_text("{}", encoding="utf-8")
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive tests answer the host-exec ask explicitly.
+        argv += ["--host-exec-protection", "enabled"]
     return subprocess.run(argv, capture_output=True, text=True, timeout=180,
                           env=env, errors="replace")
 
@@ -140,8 +142,11 @@ def _healthy_ws(path: Path) -> Path:
     ws = path
     (ws / "runs").mkdir(parents=True, exist_ok=True)
     now = _iso(datetime.now(timezone.utc))
+    prev = _ago(5)
     (ws / "runs" / ".heartbeat.json").write_text(
-        json.dumps({"last_tick_ts": now, "activity_ts": now}), encoding="utf-8")
+        json.dumps({"last_tick_ts": now, "activity_ts": now,
+                    "started_ts": prev,
+                    "tick_history": [prev, now]}), encoding="utf-8")
     (ws / "runs" / "plan-C001-strings.md").write_text(
         "goal: strings\nsteps:\nfallback:\n", encoding="utf-8")
     (ws / "analysis_state.txt").write_text(
@@ -165,8 +170,11 @@ def _paths_for(ws: Path) -> dict:
     }
 
 
-def _dispatch_payload(prompt: str = "facts-snapshot: 1 facts",
-                      desc: str = "[T1 tools=grep] claim C-001 strings") -> dict:
+def _dispatch_payload(prompt: str = ("[T1 tools=grep] claim C-001 strings" + chr(10) +
+                      "facts-snapshot: 1 facts"),
+                      desc: str = "w-test bootstrap dispatch") -> dict:
+    # #862: dispatch 形状走合同通道（prompt 前缀）——description 通道在
+    # budget 归一后不再武装 cid 门（fixture 同步到 canonical 通道）。
     return {"tool_input": {"name": "w-test", "description": desc, "prompt": prompt}}
 
 
@@ -175,25 +183,25 @@ def _write_hook_state(ws: Path, *, phase: str = "IDLE",
                       paused: list[str] | None = None,
                       expires_minutes: float = 30,
                       overrides: dict[str, str] | None = None) -> None:
-    state = {
-        "ts": _ago(1),
-        "tier": "none",
-        "phase": phase,
-        "active_hooks": active if active is not None else ["cost_gate"],
-        "paused_hooks": paused or [],
-        "user_override": overrides or {},
-        "expires_at": (_ahead(expires_minutes) if expires_minutes >= 0 else _ago(-expires_minutes)),
-    }
-    (ws / ".hook_state.json").write_text(json.dumps(state), encoding="utf-8")
+    """Fabricate .hook_state.json via the shared 863-h factory."""
+    write_hook_state(
+        ws,
+        active_hooks=active if active is not None else ["cost_gate"],
+        paused_hooks=paused or [],
+        phase=phase, tier="none", ts=_ago(1),
+        user_override=overrides or {},
+        expires_at=(_ahead(expires_minutes) if expires_minutes >= 0
+                    else _ago(-expires_minutes)),
+    )
 
 
 @pytest.fixture
 def quiet_subprocess_gates(monkeypatch):
     """Deterministic drift/health/backtrack gates (rc 0) — mirrors the
     monkeypatch in test_worker_budget.test_e2e_every_reject_emits_guidance."""
-    import worker_budget as wb
+    import worker_budget_core as wbc
     from types import SimpleNamespace
-    monkeypatch.setattr(wb, "_run_py",
+    monkeypatch.setattr(wbc, "_run_py",
                         lambda args, cwd=None: SimpleNamespace(
                             returncode=0, stderr="", stdout=""))
 
@@ -253,7 +261,10 @@ def test_init_bootstrap_idempotent_no_hook_stacking(tmp_path):
     assert r2.returncode == 0, f"second init failed: {r2.stderr}"
     counts = _command_counts(settings)
     expected = dict.fromkeys(REGISTRY_HOOK_FILES, 1)
-    expected["worker_budget.py"] = 2  # Pre + Post on Agent
+    # #675: double-registered files command-count 2 (one per event slot) —
+    # derived, not hand-named.
+    for f in wire_up_settings.DOUBLE_REGISTERED_HOOKS & set(REGISTRY_HOOK_FILES):
+        expected[f] = 2
     assert counts == expected, (
         f"bootstrap not idempotent (stacked/dropped entries): {counts}")
     assert (ws / "runs" / ".heartbeat.json").exists()
@@ -382,7 +393,11 @@ def test_dispatch_refreshes_heartbeat_last_tick(tmp_path, quiet_subprocess_gates
     (renew's existing side effect — a dispatching orchestrator IS alive)."""
     import worker_budget as wb
     ws = _healthy_ws(tmp_path / "tick")
-    before = json.dumps({"last_tick_ts": _ago(20), "activity_ts": _ago(20)})
+    # 20-min-old two-tick seed (#754): enough to pass the continuity GATE
+    # at pre_check time; the renewed tick that this test observes lands after.
+    before = json.dumps({"last_tick_ts": _ago(20), "activity_ts": _ago(20),
+                         "interval_min": 5,
+                         "tick_history": [_ago(21), _ago(20)]})
     (ws / "runs" / ".heartbeat.json").write_text(before, encoding="utf-8")
     rc = wb.pre_check(_dispatch_payload(), _paths_for(ws))
     assert rc == 0
@@ -486,8 +501,9 @@ def test_verify_passes_when_loop_registered(tmp_path):
     """loop_registered=true -> exit 0 with the OK line."""
     ws = tmp_path / "ws"
     ws.mkdir()
-    _write_hb(ws, {"started_ts": _ago(1), "interval_min": 5,
-                   "last_tick_ts": _ago(1), "loop_registered": True})
+    _write_hb(ws, {"started_ts": _ago(6), "interval_min": 5,
+                   "last_tick_ts": _ago(1), "loop_registered": True,
+                   "tick_history": [_ago(6), _ago(1)]})
     r = _run_verify(ws)
     assert r.returncode == 0, f"registered loop must verify PASS: {r.stderr}"
     assert "cron loop registered" in r.stdout, (

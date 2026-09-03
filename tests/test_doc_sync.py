@@ -24,13 +24,11 @@ template gate list derived from the registry — never hardcoded here).
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEVKIT_DIR = REPO_ROOT / "devkit"

@@ -19,6 +19,9 @@ from pathlib import Path
 
 import pytest
 
+from hook_activation import canonical_install_root
+from _factories import seed_bins
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
@@ -29,8 +32,7 @@ FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 def init_ws(tmp_path) -> Path:
     """Synthetic workspace: bins/ + sample + empty claim-register + no [initialized] marker."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
     return ws
 
@@ -62,6 +64,8 @@ def _run_init(ws: Path, extra: list[str] | None = None,
     env["PYTHONIOENCODING"] = "utf-8"  # kunglao-init emits UTF-8 (toolchain import reconfigures stdout)
     if flag is not None:
         env[FLAG_NAME] = flag
+    if not any(a.startswith("--host-exec-protection") for a in argv):
+        argv += ["--host-exec-protection", "enabled"]  # #919: tests are non-interactive; explicit answer
     return subprocess.run(argv, capture_output=True, text=True, timeout=120, env=env,
                            errors="replace")
 
@@ -114,9 +118,17 @@ def _seed_hooks_json(init_ws: Path, pre_command: str, post_command: str) -> Path
 def test_init_rerun_upgrades_legacy_bare_python_hook(init_ws: Path, isolated_home) -> None:
     """#389 F2: init hook deployment REPLACES a legacy bare-python
     worker_budget entry with the uv form — the same-name skip must not leave
-    the stale entry (bare python is 2.x on this machine)."""
-    hook_file = ROOT / "hooks" / "worker_budget.py"
-    uv_form = f"uv run --project {ROOT.as_posix()} {hook_file.as_posix()}"
+    the stale entry (bare python is 2.x on this machine).
+
+    #752: the entry target is the EXECUTING INSTALL's root (derived by
+    hook_activation.canonical_install_root — durable skills/<name>
+    co-installs resolve to themselves, ephemeral checkouts fall back to the
+    production install), no longer the repo checkout's own location."""
+    root = canonical_install_root().resolve()
+    hook_file = root / "hooks" / "worker_budget.py"
+    # #811 起新 canonical 形态带可选 PYTHONUTF8=1 env 前缀（PEP 540 注入）
+    uv_form = (f"PYTHONUTF8=1 "
+               f"uv run --project {root.as_posix()} {hook_file.as_posix()}")
     legacy = f"python {hook_file.as_posix()}"
     hooks_json = _seed_hooks_json(init_ws, legacy, legacy)
     r = _run_init(init_ws, ["--hooks-json", str(hooks_json)])
@@ -387,8 +399,7 @@ def test_init_refuses_sample_file(tmp_path: Path) -> None:
 def test_init_accepts_workspace_with_bins(tmp_path: Path) -> None:
     """#411: init on a valid workspace (bins/ present) proceeds normally."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     r = _run_init(ws)
     assert r.returncode == 0, f"init on a valid workspace must proceed: {r.stderr}"
     assert (ws / "claim-register.yaml").exists(), "valid workspace must initialize"

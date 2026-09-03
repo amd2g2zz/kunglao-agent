@@ -12,32 +12,17 @@ Usage: python heartbeat_touch.py <workspace>
 """
 from __future__ import annotations
 
-import datetime
 import json
-import os
 import sys
-from pathlib import Path
 
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
+# #863 Family C: workspace resolution is single-sourced in ws_layout
+# (the #228 strict family: arg wins, probe, exit 2 — never guess).
+from ws_layout import resolve_strict as _resolve_ws  # noqa: E402
 
 
-def utc_now() -> str:
-    return datetime.datetime.now(datetime.timezone.utc).isoformat(
-        timespec="seconds").replace("+00:00", "Z")
-
-
-def _resolve_ws(arg: str | None) -> Path:
-    if arg:
-        return Path(arg).resolve()
-    cwd = Path(os.getcwd())
-    for cand in (cwd, cwd / "malware-analysis-workspace"):
-        if (cand / "claim-register.yaml").exists() or (cand / "analysis_state.txt").exists():
-            return cand.resolve()
-    print(f"ERROR: no workspace found under cwd ({cwd}); pass the workspace "
-          f"explicitly: python {Path(sys.argv[0]).name} <workspace>",
-          file=sys.stderr)
-    sys.exit(2)
+from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -45,17 +30,37 @@ def main(argv: list[str] | None = None) -> int:
     ws = _resolve_ws(args[0] if args else None)
     heartbeat_file = ws / "runs" / ".heartbeat.json"
     heartbeat_file.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"ts": utc_now(), "touch": True}
-    heartbeat_file.write_text(
+    # #754 E2: a touch IS a tick. The old implementation OVERWROTE the whole
+    # state file (losing last_tick_ts / interval_min / loop_registered /
+    # tick_history) — a touch could silently unregister monitoring while
+    # claiming to refresh it. Merge into the existing state instead and
+    # append the shared continuous-tick history.
+    from heartbeat import append_tick, append_tick_log  # noqa: E402 (#754 single writer)
+    now_str = utc_now()
+    try:
+        state = json.loads(heartbeat_file.read_text(encoding="utf-8"))
+        if not isinstance(state, dict):
+            state = {}
+    except (json.JSONDecodeError, OSError):
+        state = {}
+    state["last_tick_ts"] = now_str
+    payload = append_tick({**state, "ts": now_str, "touch": True})
+    tmp = heartbeat_file.with_suffix(".json.tmp")
+    tmp.write_text(
         json.dumps(payload, sort_keys=True, separators=(",", ":"),
                    ensure_ascii=False) + "\n",
         encoding="utf-8")
+    tmp.replace(heartbeat_file)  # F2 atomicity discipline, same as the hook
+    # #830: a touch IS a tick - land it in the durable sidecar too.
+    append_tick_log(ws, "touch")
     # #534: emit the structured event (workspace is now in scope)
     kunglao_log.emit(ws, actor="heartbeat_touch", action="dispatch",
                      detail="heartbeat touched")
-    print(f"heartbeat_touch: {heartbeat_file} updated -> {payload['ts']}")
+    print(f"heartbeat_touch: {heartbeat_file} merged+tick -> {now_str}")
     return 0
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

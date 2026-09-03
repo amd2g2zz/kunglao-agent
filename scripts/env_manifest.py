@@ -316,7 +316,7 @@ def _derive_from_task_spec(ws: Path) -> EnvManifest:
         spec = tc.load_task_spec(Path(ws))
     except ValueError as exc:
         print(f"WARNING: {exc} — env manifest stays conservative "
-              f"(VM required, #450)", file=sys.stderr)
+              f"(VM required)", file=sys.stderr)
         return DEFAULT_MANIFEST
     if spec is None:
         return DEFAULT_MANIFEST
@@ -399,13 +399,13 @@ def layout_conventions(base: Path) -> LayoutConventions:
         raw = load_manifest(path.parent)
     except ValueError as exc:
         print(f"WARNING: {exc} — layout falls back to default conventions "
-              f"(#450)", file=sys.stderr)
+              f"", file=sys.stderr)
         return DEFAULT_LAYOUT
     try:
         return _parse_layout(raw.get("layout"))
     except ValueError as exc:
         print(f"WARNING: {exc} — layout falls back to default conventions "
-              f"(#450)", file=sys.stderr)
+              f"", file=sys.stderr)
         return DEFAULT_LAYOUT
 
 
@@ -421,7 +421,7 @@ def vm_requirement_for(ws: Path) -> tuple[bool, str] | None:
         m = resolve(ws)
     except ValueError as exc:
         print(f"WARNING: {exc} — 'VM required' line stays unconditional "
-              f"(#450)", file=sys.stderr)
+              f"", file=sys.stderr)
         return None
     if m.source == "default":
         return None
@@ -619,12 +619,12 @@ def _cmd_probe(ws: Path) -> int:
             existing = _load_manifest_file(path)
         except ValueError as exc:
             print(f"ERROR: {exc} — refusing to overwrite (fix "
-                  f"{path} by hand, #450)", file=sys.stderr)
+                  f"{path} by hand)", file=sys.stderr)
             return RC_MANIFEST_DEFECT
     legacy = Path(ws) / LEGACY_MANIFEST_FILENAME
     if legacy.exists():
         print(f"probe: {LEGACY_MANIFEST_FILENAME} present — that name "
-              "belongs to the #478 deployment ledger (or a pre-rename "
+              "belongs to the deployment ledger (or a pre-rename "
               f"facts file); probe never reads or writes it. Facts go in "
               f"{MANIFEST_FILENAME}; merge any pre-rename facts by hand.")
     updates, notes = _probe_facts()
@@ -674,7 +674,7 @@ def record_installed(ws: Path, name: str, manager: str, reprobe: str,
             existing = _load_manifest_file(path)
         except ValueError as exc:
             print(f"ERROR: {exc} — installed ledger refusing to overwrite "
-                  f"(fix {path} by hand, #450/#477)", file=sys.stderr)
+                  f"(fix {path} by hand)", file=sys.stderr)
             return False
     from datetime import datetime, timezone
     entry = {
@@ -697,7 +697,7 @@ def record_installed(ws: Path, name: str, manager: str, reprobe: str,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="env_manifest",
-        description="Environment facts single source (#450)",
+        description="Environment facts single source",
     )
     parser.add_argument("workspace", help="workspace root path")
     parser.add_argument("--render", action="store_true",
@@ -715,7 +715,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         m = resolve(ws)
     except ValueError as exc:
-        print(f"ERROR: {exc} — fail-closed (#450; fix "
+        print(f"ERROR: {exc} — fail-closed (fix "
               f"{ws / MANIFEST_FILENAME})", file=sys.stderr)
         return RC_MANIFEST_DEFECT
     if args.render:
@@ -748,4 +748,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

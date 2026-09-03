@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Issue #367 — review-key path: template placeholder + install-time stamping.
 
-The pre-#367 template hardcoded key="C:/Users/hr/.claude/kunglao-review.key"
+The pre-#367 template hardcoded key="C:/Users/hr/.claude/kunglao-review.key"  # HISTORICAL-PATH-EXAMPLE
 (author username ships publicly; the gate is dead on every non-hr machine —
 missing key = blocked commit). The #147 anti-forgery constraint forbids
 env-resolving the path at commit time (a subagent must not redirect it via
@@ -21,7 +21,6 @@ stamping:
 from __future__ import annotations
 
 import os
-import re
 import shutil
 import stat
 import subprocess
@@ -44,13 +43,14 @@ SKILL_ROOT_PLACEHOLDER = "__KUNGLAO_SKILL_ROOT__"
 
 def test_template_carries_placeholder_not_real_key_path() -> None:
     """The tracked template must reference the placeholder, never a real
-    Windows/user path (#367 finding: the template shipped C:/Users/hr/...)."""
+    Windows/user path (#367 finding: the template shipped C:/Users/hr/...)."""  # HISTORICAL-PATH-EXAMPLE
     text = TEMPLATE.read_text(encoding="utf-8")
     assert PLACEHOLDER in text, (
         f"template must carry the {PLACEHOLDER} placeholder for install-time "
         "stamping (#367)")
     # a stamped absolute path of the installing user must NOT be pre-baked
-    assert "C:/Users/" not in text, "template must not ship any real user path"
+    # (needle assembled from inert fragments per #690)
+    assert "C:" "/Users/" not in text, "template must not ship any real user path"
 
 
 def test_template_runs_gate_via_uv_with_skill_root_placeholder() -> None:
@@ -130,6 +130,8 @@ def _run_init_flag(ws: Path, home: Path, extra: list[str]) -> subprocess.Complet
     # file owns hook installation behavior, not type semantics.
     if "--type" not in argv and "--resolve" not in argv:
         argv += ["--type", "windows"]
+    if "--host-exec-protection" not in argv and "--resolve" not in argv:
+        argv += ["--host-exec-protection", "enabled"]  # #919 non-interactive
     return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=env, errors="replace")
 

@@ -38,8 +38,7 @@ import yaml
 from status_defs import ACTIVE_STATUSES
 
 
-def utc_now() -> datetime:
-    return datetime.now(tz=timezone.utc)
+from harness_common import utc_now  # #863 Family F: single source (was a local def)
 
 
 def parse_iso(s: str) -> datetime:
@@ -128,4 +127,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

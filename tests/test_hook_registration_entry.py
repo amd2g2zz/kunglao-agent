@@ -96,33 +96,16 @@ def test_canonical_entry_is_declared_and_callable() -> None:
 
 
 def test_legacy_names_are_declared_aliases_and_subordinates() -> None:
-    """The legacy names survive ONLY as declared aliases / subordinates."""
-    assert "wire_up_settings.wire_up_settings" in (
-        hook_activation.DEPRECATED_ALIASES), (
-        "the legacy writer must be a declared deprecated alias")
+    """The kicker's bootstrap writer survives ONLY as a declared subordinate.
+    (#863: the wire_up_settings deprecated alias is retired — the alias list
+    is empty and the alias function no longer exists.)"""
+    assert hook_activation.DEPRECATED_ALIASES == (), (
+        "no deprecated aliases may remain (#863 retirement)")
+    assert not hasattr(wire_up_settings, "wire_up_settings"), (
+        "the deprecated alias function must be gone from the registry module")
     assert "external_kicker.ensure_project_hooks" in (
         hook_activation.DECLARED_SUBORDINATE_WRITERS), (
         "the kicker bootstrap writer must be a declared subordinate")
-
-
-def test_wire_up_settings_function_is_deprecated_delegating_alias(
-        tmp_path, monkeypatch) -> None:
-    """wire_up_settings() must DELEGATE to register_hooks under a
-    DeprecationWarning — no second writer, a pure pass-through (#445 D2)."""
-    calls: list[dict] = []
-
-    def _recorder(workspace=None, global_opt_in=False):
-        calls.append({"workspace": workspace, "global_opt_in": global_opt_in})
-        return 9
-
-    monkeypatch.setattr(hook_activation, "register_hooks", _recorder)
-    ws = tmp_path / "ws"
-    ws.mkdir()
-    with pytest.warns(DeprecationWarning, match="hook_activation.register_hooks"):
-        n = wire_up_settings.wire_up_settings(workspace=ws, global_opt_in=True)
-    assert n == 9, "alias must return the canonical writer's count"
-    assert calls == [{"workspace": ws, "global_opt_in": True}], (
-        "alias must forward its arguments verbatim")
 
 
 def test_only_canonical_module_constructs_hook_entries() -> None:

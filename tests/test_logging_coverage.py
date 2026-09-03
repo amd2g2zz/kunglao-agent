@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -47,7 +48,6 @@ TOP_20_MODULES = (
     ("update_index", "scripts/update_index.py"),
     ("heartbeat_tick", "scripts/heartbeat_tick.py"),
     ("external_kicker", "scripts/external_kicker.py"),
-    ("priority", "scripts/priority.py"),
     ("priority_ratio", "scripts/priority_ratio.py"),
     ("retract_claim", "scripts/retract_claim.py"),
     ("refutation_propagate", "scripts/refutation_propagate.py"),
@@ -69,7 +69,8 @@ TOP_20_MODULES = (
 # file self-contained (no cross-test dependency).
 ALLOWED_ACTIONS = frozenset({
     "analysis_blocked", "analysis_recorded", "ask_back",
-    "capability_reject", "capability_switch", "claim_migrate",
+    "capability_reject", "capability_switch", "channel_default",
+    "claim_migrate",
     "converge", "death_verdict_rejected", "dispatch",
     "failure_blocked", "ladder_required", "must_ask", "must_stop",
     "plan_stall", "priority_deviation", "stale_plan_on_new_evidence",
@@ -79,6 +80,10 @@ ALLOWED_ACTIONS = frozenset({
 SCHEMA_FIELDS = {
     "ts", "actor", "action", "claim", "tool", "artifact",
     "duration_ms", "exit", "detail",
+    "arm", "epoch", "version", "hypothesis_ref",
+    "matched_rule",  # #601 additive field
+    "trace_id",  # #879 additive field
+    "channel",  # #699 additive field (execution surface)
 }
 
 
@@ -165,15 +170,14 @@ def test_telemetry_schema_holds_for_all_emits(tmp_path):
 def init_ws(tmp_path) -> Path:
     """Synthetic workspace: bins/ + sample + empty claim-register + no marker."""
     ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
     return ws
 
 
 def _run_kunglao_init(ws: Path) -> subprocess.CompletedProcess:
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"),
-            str(ws), "--type", "windows", "--skip-toolchain",
+            str(ws), "--type", "windows", "--skip-toolchain", "--host-exec-protection", "enabled",
             "--profile-root", str(ws.parent / "profile-root")]
     env = {k: v for k, v in os.environ.items()
            if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}

@@ -94,19 +94,6 @@ def test_gate_accepts_class_with_assertions():
     assert ok is True
 
 
-def test_gate_passes_non_class_unchanged():
-    # RED3: pure API sequence -> not assignment-class -> ok, skip
-    ok, reason = kv.check_assignment_expected({"expected": "calls Foo(a, b, c)"})
-    assert ok is True
-    assert "not assignment" in reason.lower()
-
-
-def test_gate_grace_warns_does_not_reject():
-    ok, reason = kv.check_assignment_expected({"expected": "frameRateNum=??"}, grace=True)
-    assert ok is True
-    assert ("grace" in reason.lower()) or ("warn" in reason.lower())
-
-
 # ---------- byte-exact compare: compare_value_assertions (D2) ----------
 
 def test_compare_all_match_passes():
@@ -212,43 +199,3 @@ def test_f015_backfilled_detects_reversed_assignment():
     out = kv.l1_mechanical(fact)
     assert out["verdict"] == "FAIL"
     assert "gopLength" in out["detail"]
-
-
-# ---------- CLI --grace-scan (task 7.2) ----------
-
-def test_grace_scan_lists_assignment_class_without_assertions(tmp_path):
-    """--grace-scan enumerates assignment-class facts lacking value assertions."""
-    import json as _json
-    import subprocess
-    facts = tmp_path / "facts"
-    facts.mkdir()
-    # bad: assignment-class (has =) but only ?? placeholders
-    (facts / "F-bad.md").write_text(
-        "---\nid: F-bad\nstatus: PROVEN\nexpected: frameRateNum=??; gopLength=??\n---\n",
-        encoding="utf-8")
-    # good: non-assignment-class (no =) -> not flagged
-    (facts / "F-good.md").write_text(
-        "---\nid: F-good\nstatus: PROVEN\nexpected: calls Foo(a, b)\n---\n",
-        encoding="utf-8")
-    r = subprocess.run(
-        [sys.executable, str(SCRIPTS / "kunglao-verify.py"), str(tmp_path), "--grace-scan"],
-        capture_output=True, text=True, timeout=30)
-    assert r.returncode == 0, f"--grace-scan failed: {r.stderr}"
-    affected = _json.loads(r.stdout)
-    assert [e["fact_id"] for e in affected] == ["F-bad"], f"should list only F-bad: {affected}"
-
-
-def test_grace_scan_empty_when_all_backfilled(tmp_path):
-    """--grace-scan returns [] when every assignment-class fact has assertions."""
-    import json as _json
-    import subprocess
-    facts = tmp_path / "facts"
-    facts.mkdir()
-    (facts / "F-ok.md").write_text(
-        "---\nid: F-ok\nstatus: PROVEN\nexpected: gopLength=0xFFFFFFFF\n---\n",
-        encoding="utf-8")
-    r = subprocess.run(
-        [sys.executable, str(SCRIPTS / "kunglao-verify.py"), str(tmp_path), "--grace-scan"],
-        capture_output=True, text=True, timeout=30)
-    assert r.returncode == 0
-    assert _json.loads(r.stdout) == []

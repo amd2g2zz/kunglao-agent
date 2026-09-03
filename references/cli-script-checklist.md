@@ -79,3 +79,5 @@ Matching tool found → **prefer solving it with that tool's CLI** (see each too
 - Sample-specific one-shots go in `scripts/sample_specific/`, never `scripts/`.
 - Naming: `<verb>_<object>.py` — no fact-ID / claim-ID prefixes
   (`f046_*.py` is forbidden).
+
+recall_useful: pending

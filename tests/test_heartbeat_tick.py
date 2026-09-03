@@ -19,6 +19,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from _factories import write_hook_state
 
 ROOT = Path(__file__).resolve().parents[1]
 TICK = ROOT / "scripts" / "heartbeat_tick.py"
@@ -42,15 +43,9 @@ def _make_ws(tmp_path: Path) -> Path:
 
 def _set_hook_state(ws: Path, expires_at: str) -> None:
     """Fabricate .hook_state.json with a controlled expires_at."""
-    (ws / ".hook_state.json").write_text(json.dumps({
-        "ts": _iso(datetime.now(timezone.utc)),
-        "tier": "none",
-        "phase": "IDLE",
-        "active_hooks": ["cost_gate"],
-        "paused_hooks": [],
-        "user_override": {},
-        "expires_at": expires_at,
-    }), encoding="utf-8")
+    write_hook_state(ws, active_hooks=["cost_gate"], ts=_iso(datetime.now(timezone.utc)),
+                     tier="none", phase="IDLE", user_override={},
+                     expires_at=expires_at)
 
 
 def _tick(ws: Path) -> tuple[dict, str]:
@@ -130,9 +125,25 @@ def _drifted_scratch_skill(tmp_path: Path) -> Path:
     # kunglao_log.py rides the copy set (#534: heartbeat_tick module-level
     # emits on load — without it the tick ModuleNotFoundErrors before even
     # reaching the registry drift).
+    # liveness_policy.py rides the copy set (#597: heartbeat_tick/
+    # hook_activation/heartbeat import their minutes constants from it —
+    # a scratch copy without it dies on ModuleNotFoundError at import).
+    # utf8_boot.py rides the copy set (#811: heartbeat_tick entry imports
+    # force_utf8 — a scratch copy without it dies on ModuleNotFoundError
+    # instead of the intended registry-drift ValueError).
+    # ws_layout.py + env_manifest.py ride the copy set (#863 Family C:
+    # heartbeat_tick delegates _resolve_ws to ws_layout, which resolves
+    # layout names from env_manifest — a scratch copy without either dies
+    # on ModuleNotFoundError instead of the intended registry-drift
+    # ValueError).
+    # harness_common.py rides the copy set (#863 Family F: heartbeat_tick
+    # delegates utc_now to it — a scratch copy without it dies on
+    # ModuleNotFoundError instead of the intended registry-drift ValueError).
     for f in ("heartbeat_tick.py", "hook_activation.py", "hooks_selfcheck.py",
               "wire_up_settings.py", "reconcile_workers.py", "heartbeat.py",
-              "template_version.py", "kunglao_log.py"):
+              "template_version.py", "kunglao_log.py", "liveness_policy.py",
+              "utf8_boot.py", "ws_layout.py", "env_manifest.py",
+              "harness_common.py"):
         shutil.copy2(SCRIPTS / f, skill / "scripts" / f)
     wu = skill / "scripts" / "wire_up_settings.py"
     wu.write_text(

@@ -1,0 +1,64 @@
+{
+  "schema": "gitnexus-web-demo/1",
+  "issue": "#751",
+  "bundles": {
+    "sample": "tests/fixtures/web751/bundle.min.js",
+    "stand_in_tree": "tests/fixtures/web751/unpacked"
+  },
+  "workdir": "/var/folders/9q/44vl46_92db9m58fgyskdwt40000gn/T/web751-demo-s4rma9uk",
+  "legs": [
+    {
+      "tool": "node",
+      "status": "ran",
+      "detail": "bundle executes; buildSignature emits 8-hex digest"
+    },
+    {
+      "tool": "wakaru@1.10.0",
+      "status": "skipped",
+      "detail": "skipped by --stand-in"
+    },
+    {
+      "tool": "webcrack@2.16.0",
+      "status": "skipped",
+      "detail": "skipped by --stand-in"
+    },
+    {
+      "tool": "source-tree",
+      "status": "degraded",
+      "detail": "wakaru: skipped by --stand-in"
+    },
+    {
+      "tool": "gitnexus analyze",
+      "status": "ran",
+      "detail": "13 nodes | 26 edges | 1 clusters | 3 flows   <repo>/tests/fixtures/web751/unpacked"
+    },
+    {
+      "tool": "gitnexus analyze",
+      "status": "ran",
+      "detail": "13 nodes | 26 edges | 1 clusters | 3 flows   <repo>/tests/fixtures/web751/unpacked"
+    },
+    {
+      "tool": "gitnexus context buildSignature",
+      "status": "ran",
+      "detail": "Function:src/sign.js:buildSignature"
+    },
+    {
+      "tool": "gitnexus context buildSignature",
+      "status": "ran",
+      "detail": "Function:src/sign.js:buildSignature"
+    }
+  ],
+  "status": "ok",
+  "answer": {
+    "symbol_uid": "Function:src/sign.js:buildSignature",
+    "incoming_callers": [
+      "sendRequest"
+    ],
+    "outgoing_callees": [
+      "digest",
+      "buildParams",
+      "assembleBase"
+    ],
+    "chain_exact": true
+  }
+}

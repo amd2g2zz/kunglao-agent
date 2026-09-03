@@ -48,9 +48,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import verifier_identity
 import re
 import sys
 from pathlib import Path
+
+from plan_drift_detector import credible_redteam_files  # #827 反模板筛选层
 
 # fact statuses counting as "stamped" (terminal subset of references/schema.md fact.status)
 FACT_VERIFIED_STATUSES = ("PROVEN", "VERIFIED")
@@ -220,34 +223,50 @@ def _note_verify_record(ws: Path, note_id: str) -> tuple[bool, str]:
 
 
 def _fact_runs_records(fid: str, ws: Path) -> tuple[bool, str]:
-    """The fact's runs/ verification record (content-aware): redteam md needs CONFIRMED + a fact citation;
-    verify-<fid>-*.json needs overall=VERIFIED or l2 CONFIRMED
-    (kunglao_verify.py L603-610 output shape)."""
+    """The fact's runs/ verification record (#825 semantics).
+
+    redteam md: needs CONFIRMED citing the fact AND a verifier-identity
+    header - an unattributed verdict is not independent (#825).
+    verify-<fid>-*.json: ONLY l2.verdict == CONFIRMED with
+    l2.verifier_identity counts. overall=VERIFIED (L1) is the maker's own
+    mechanical re-run and is NO LONGER accepted - that was the incident
+    backdoor (89 L1 jsons passed R1 in the live-run sample workspace).
+    """
     runs = ws / "runs"
     if not runs.is_dir():
         return False, "no runs/ directory"
-    for f in sorted(runs.glob("verify-redteam-*.md")):
+    last_reason = ("no independent verifier record under runs/ (verify-"
+                   "redteam-*.md CONFIRMED + verifier-identity citing the "
+                   "fact, or verify-<fid>-*.json l2 CONFIRMED + "
+                   "l2.verifier_identity)")
+    # #827: redteam md 走 credible 筛选（存在性≠验证发生；模板簇/无 marker
+    # 文件不作验证记录）；#825: 循环体内仍要求 verifier-identity——两层正交。
+    for f in credible_redteam_files(runs):
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         if fid in text and POSITIVE_VERDICT_RE.search(text):
-            return True, f"redteam record {f.name} (CONFIRMED) cites {fid}"
+            ident = verifier_identity.extract_from_md(text)
+            if ident:
+                return True, (f"redteam record {f.name} (CONFIRMED, "
+                              f"identity {ident}) cites {fid}")
+            last_reason = (f"redteam record {f.name} cites {fid} with a "
+                           f"positive verdict but lacks verifier-identity "
+                           f"(#825)")
     for f in sorted(runs.glob(f"verify-{fid}-*.json")):
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue
         if (data.get("l2") or {}).get("verdict") == "CONFIRMED":
-            return True, f"L2 redteam CONFIRMED in {f.name}"
-        if data.get("overall") == "VERIFIED":
-            return True, (f"L1 verify record {f.name} with independent "
-                          f"anchor (overall=VERIFIED)")
-    return False, ("no independent verifier record under runs/ "
-                   "(verify-redteam-*.md with CONFIRMED citing the fact, or "
-                   "verify-<fid>-*.json overall=VERIFIED / l2 CONFIRMED)")
-
-
+            ident = verifier_identity.extract_from_json(data)
+            if ident:
+                return True, (f"L2 CONFIRMED with identity {ident} "
+                              f"in {f.name}")
+            last_reason = (f"L2 CONFIRMED in {f.name} but "
+                           f"l2.verifier_identity missing (#825)")
+    return False, last_reason
 def _verified_by_run_evidence(vbr: str, fid: str, ws: Path) -> tuple[bool, str]:
     """verified_by_run must point to a record that actually exists (MEDIUM#2: a bare string does not count).
 
@@ -478,7 +497,7 @@ def audit_workspace(ws: Path) -> list[dict]:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI: write_gate.py <ws> [--json]. 0 clean / 1 violations / 2 usage error."""
-    ap = argparse.ArgumentParser(description="write_gate — write-side gate auditor (#236)")
+    ap = argparse.ArgumentParser(description="write_gate — write-side gate auditor")
     ap.add_argument("ws", nargs="?", type=Path, help="workspace root")
     ap.add_argument("--json", action="store_true",
                     help="machine-readable JSON output")
@@ -502,4 +521,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

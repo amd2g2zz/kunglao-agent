@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
 
 REFERENCES_DIR = Path(__file__).resolve().parent.parent / "references"
 INDEX_FILE = REFERENCES_DIR / "_INDEX.md"

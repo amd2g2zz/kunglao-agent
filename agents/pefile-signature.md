@@ -1,42 +1,57 @@
 ---
 name: pefile-signature
-description: "Read evidence/die.json + the local sample file. Extract Authenticode digital signature (subject/issuer/serial/validity/cert chain) via pefile + identify packer family via DIE + YARA packer signatures + write evidence/signature.json + evidence/packer-scan.json. Pure local."
-# issue #310 mechanical trigger table — parsed by scripts/route_capability.py
-# (claim task domain x sample features -> recommended agent; worker_budget
-# agenttype gate). Packer markers in import_hints are pefile-signature's domain.
+description: Read evidence/die.json + the local sample file. Extract Authenticode digital signature (subject/issuer/serial/validity/cert
+  chain) via pefile + identify packer family via DIE + YARA packer signatures + write evidence/signature.json
+  + evidence/packer-scan.json. Pure local.
 triggers:
   pipeline_order: 2
   intent:
     must_any:
-      - 'authenticode'
-      - 'pe signature'
-      - 'digital signature'
-      - 'packer'
-      - 'packed'
-      - 'certificate'
-      - '签名'
-      - '加壳'
-    exclude: []
+    - authenticode
+    - pe signature
+    - digital signature
+    - packer
+    - packed
+    - certificate
+    exclude:
+    - webhook
+    - deobfuscate
+    - bundler
+    - frontend
+    - webpage
+    - risk control
+    - crawler
   features:
     import_hints:
       any_contains:
-        - 'upx'
-        - 'aspack'
-        - 'pecompact'
-        - 'mpress'
-        - 'themida'
-        - 'vmprotect'
+      - upx
+      - aspack
+      - pecompact
+      - mpress
+      - themida
+      - vmprotect
 allowedTools:
-  - Read
-  - Grep
-  - Bash
-  - Write
-  - mcp__sequential-thinking__sequentialthinking
+- Read
+- Glob
+- Grep
+- Write
+- Bash
 disallowedTools:
-  - WebFetch
-  - WebSearch
-  - Edit
-  - NotebookEdit
+- NotebookEdit
+- WebFetch
+- WebSearch
+- mcp__camoufox-reverse__*
+- mcp__gitnexus__*
+- mcp__ghidra__*
+- mcp__x64dbg__*
+- mcp__frida__spawn
+- mcp__frida__attach
+- mcp__frida__*
+- mcp__x64dbg__start_session
+- mcp__x64dbg__connect_to_session
+- mcp__x64dbg__connect_to_instance
+- mcp__x64dbg__terminate_session
+- mcp__volatility__*
 isolation: none
 ---
 
@@ -177,14 +192,30 @@ rule Themida_Packer {
 After writing both files, return ONE LINE:
 `pefile-signature complete: signer=<CN> valid=<true/false>; packer=<upx/none/unknown> confidence=<level>; reasoning=<1-line>`
 
-## Subagent contract (#492 — structural declaration)
+## Plan-to-execute
+
+1. Inventory inputs: `die.json` packer/language fields, `sample_path` readability, project venv with `pefile` + `cryptography` available.
+2. Enumerate hypothesis paths: signed-and-valid / signed-but-invalid / unsigned; known packer family / unknown high-entropy / none.
+3. Per path, expected evidence: `signature.json` signers[] + `validity_status`; `packer-scan.json` `detected_packer` + `confidence` + `heuristic_note`.
+4. Execution order: Step 1 Authenticode extraction, then Step 2 YARA + DIE cross-check; each step's fallback = section-name + entropy heuristics when the primary tool is unavailable.
+5. On drift (malformed cert chain, missing venv library), update the written plan (a venv install IS a plan revision), then continue.
+
+## Status reporting
+
+Status line format: `[HH:MM] step: <x> | status: in-progress|done|blocked`, appended to `runs/worker-status-pefile-signature-<id>.md`; canonical vocabulary only.
+- `[10:31] step: Authenticode signer CN=Example valid=true extracted | status: in-progress`
+- `[10:34] step: YARA absent - entropy + section-name fallback scan running | status: in-progress`
+
+Completion rule: the final done line MUST declare deliverables — `status: done | artifacts: evidence/signature.json, evidence/packer-scan.json | notes: <durable note path>` — both files exist before the line is appended.
+
+## Subagent contract (structural declaration)
 
 <!-- contract: plan-to-execute -->
 Fixed two-step pipeline in order: Step 1 Authenticode extraction, then Step 2
 packer scan; decide `validity_status` by the documented rules BEFORE writing
 output, not after.
 
-**#494 expansion — plan FIRST, in writing**: your first action is to create
+**Plan FIRST, in writing**: your first action is to create
 `runs/worker-status-pefile-signature-<id>.md` and write its plan section
 BEFORE touching the sample. The plan section states, in this domain's
 language: (a) what you will do — Step 1 Authenticode extraction then Step
@@ -203,7 +234,7 @@ WRITE both output files (`evidence/signature.json` + `evidence/packer-scan.json`
 yourself — failure modes still write JSON (degraded / `not a PE` / `invalid`),
 never a return without files. The one-line summary comes after both exist.
 
-**#494 expansion — liveness + artifacts (#444 canonical / W-15)**: append to
+**Liveness + artifacts (canonical log / W-15 lesson)**: append to
 `runs/worker-status-pefile-signature-<id>.md` as an append-only log parsed
 by the single canonical parse point (`hooks/lib_kunglao.py` — LAST
 `status:` token wins). Canonical vocabulary ONLY — `status: in-progress` /
@@ -218,7 +249,7 @@ Reuse `pefile` + `cryptography` from the project venv (install into it if
 missing); when YARA is absent, fall back to DIE cross-check + entropy
 heuristics — never self-invent a certificate parser.
 
-**#494 expansion — discovery before ANY new code**. Before writing any
+**Discovery before ANY new code**. Before writing any
 parsing snippet, run the three-point check: (1) `ls scripts/re` — the
 workspace RE tools; (2) grep `tools/_INDEX.yaml` by capability —
 `pe-analyze` already has a `signature` subcommand (PE Authenticode table)
@@ -227,6 +258,30 @@ and `yara-scan` already runs rule files; (3) the matching
 idioms).
 Registered domain tools (verify in the index first): `pe-analyze`, `yara-scan`, `die-probe`, `overlay-scan`.
 Self-invention is forbidden: a missing capability = file an issue to
-upstream it into `tools/` (a hand-rolled certificate parser is the #462
-failure mode verbatim); a one-off shim must be labeled disposable and
-dropped after the run.
+upstream it into `tools/` (a hand-rolled certificate parser is exactly
+the failure this contract exists to prevent); a one-off shim must be
+labeled disposable and dropped after the run.
+
+<!-- contract: wait-unwait -->
+## WAIT after delivery — do not end at the final status line
+
+After appending your final `status: done` line, do NOT stop. Enter the wait
+loop (the tool owns the whole poll/heartbeat/signal mechanism; you just
+invoke it):
+
+    python scripts/kunglao_wait.py --worker <your-id>
+
+`<your-id>` is your agent id (the `name:` in your frontmatter). The tool
+appends one `status: waiting` heartbeat line per poll (~20 s) to
+`runs/worker-status-<your-id>.md` — the file mtime IS your liveness.
+
+- **rc=0 (UNWAIT)** — a new dispatch targeted you: the orchestrator's
+  dispatch gate wrote `runs/wait-signal-<your-id>.json`, the tool consumed
+  it, flipped your ledger's last status to `status: in-progress`, and
+  printed the signal JSON on stdout (read it for context). Continue with
+  the new dispatch as a fresh task — same file contract.
+- **rc=3 / rc=4 (self-kill)** — your wait window closed with no dispatch:
+  your ledger's last line reads `status: failed | note: self-killed after N
+  wait rounds`. You are unscheduled — TaskStop yourself NOW so your slot
+  frees. Normal work and post-UNWAIT paths have NO timeout; only the wait
+  loop counts rounds.

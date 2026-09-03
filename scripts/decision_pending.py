@@ -66,34 +66,33 @@ class PendingDecision:
     context: dict = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class PendingDecisionList:
-    """The full pending document: what is undecided and how to re-enter."""
-    flow: str                      # e.g. "kunglao-init"
-    workspace: str | None          # resolved workspace, when one exists
-    guidance: str                  # how the agent re-enters (--resolve)
-    decisions: list[PendingDecision]  # in interaction order
-    resume: dict = field(default_factory=dict)  # re-entry command template
+def build_pending_doc(flow: str, workspace: str | None, guidance: str,
+                      decisions: list, resume: dict | None = None) -> dict:
+    """#582: the pending document as a plain dict (was the 1-caller
+    PendingDecisionList dataclass — same fields, same JSON contract)."""
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "flow": flow,
+        "workspace": workspace,
+        "guidance": guidance,
+        "decisions": [
+            {
+                "decision_id": d.decision_id,
+                "question": d.question,
+                "kind": d.kind,
+                "options": list(d.options),
+                "default": d.default,
+                "context": d.context,
+            }
+            for d in decisions
+        ],
+        "resume": resume or {},
+    }
 
-    def to_json(self) -> str:
-        return json.dumps({
-            "schema_version": SCHEMA_VERSION,
-            "flow": self.flow,
-            "workspace": self.workspace,
-            "guidance": self.guidance,
-            "decisions": [
-                {
-                    "decision_id": d.decision_id,
-                    "question": d.question,
-                    "kind": d.kind,
-                    "options": list(d.options),
-                    "default": d.default,
-                    "context": d.context,
-                }
-                for d in self.decisions
-            ],
-            "resume": self.resume,
-        }, indent=2, ensure_ascii=False)
+
+def pending_doc_json(doc: dict) -> str:
+    """The machine-channel serialization (indent=2, ensure_ascii=False)."""
+    return json.dumps(doc, indent=2, ensure_ascii=False)
 
 
 def answers_from_json(text: str) -> dict[str, str]:

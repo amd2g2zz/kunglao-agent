@@ -53,6 +53,10 @@ def _run_init(ws: Path, extra: list[str] | None = None,
     env["PYTHONIOENCODING"] = "utf-8"  # kunglao-init emits UTF-8 (toolchain import reconfigures stdout)
     if flag is not None:
         env[FLAG_NAME] = flag
+    if not any(a.startswith("--host-exec-protection") for a in argv) \
+            and "--resolve" not in argv:
+        # #919: non-interactive tests answer the host-exec ask explicitly.
+        argv += ["--host-exec-protection", "enabled"]
     return subprocess.run(
         argv, capture_output=True, text=True, timeout=120, env=env,
         errors="replace",
@@ -61,6 +65,7 @@ def _run_init(ws: Path, extra: list[str] | None = None,
 
 def _write_answers(init_ws: Path, payload: dict) -> str:
     """Answers file for --resolve (lives beside the workspace's tmp root)."""
+    payload.setdefault("host_exec_protection", "enabled")  # #919 non-interactive
     f = init_ws.parent / "answers.json"
     import json as _json
     f.write_text(_json.dumps(payload), encoding="utf-8")
@@ -384,11 +389,22 @@ def test_template_contains_five_layer_principle():
 # ---------- env var table in the single-source template ----------
 
 def test_base_template_env_vars():
-    """Base template documents KUNGLAO_VM_HOST, GHIDRA_HOME (#356 W2)."""
+    """Base template documents GHIDRA_HOME literally (#356 W2); the VM-channel
+    rows are #919 type-conditional data on the init side (VM_ENV_ROWS) — a
+    desktop-VM-only surface must not render into adb/browser workspaces."""
     tmpl = TEMPLATES / "CLAUDE.md.base.tmpl"
     text = tmpl.read_text(encoding="utf-8")
-    assert "KUNGLAO_VM_HOST" in text
     assert "GHIDRA_HOME" in text
+    assert "KUNGLAO_VM_HOST" not in text
+
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "kunglao_init_envvars", SCRIPTS / "kunglao-init.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert "KUNGLAO_VM_HOST" in mod.VM_ENV_ROWS
+    assert "KUNGLAO_VM_HOST" in mod.vm_env_rows("windows")
+    assert mod.vm_env_rows("android") == ""
 
 
 def test_android_os_section_env_vars():

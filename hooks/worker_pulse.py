@@ -46,17 +46,14 @@ worker_budget):
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+from _path_hygiene import load_hooks_lib, scripts_on_path  # #671 authority
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
-DISPATCH_RE = re.compile(
-    r"\[T\s*([123])\s+tools\s*=\s*([^\]]*)\]\s*claim\s+([A-Z]+-\d+)",
-    re.IGNORECASE,
-)
 
 # v1.9.29 (#38): soft stale-worker detection for the non-dispatch PostToolUse
 # path. Worker-status parsing lives in lib_kunglao (THE single parse point,
@@ -67,10 +64,12 @@ STUCK_MIN = 20  # minutes — mirrors backtrack_gate default --stuck-min 20
 
 
 def _worker_lib():
-    """hooks/lib_kunglao — the worker-status protocol single parse point (#444)."""
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    import lib_kunglao
-    return lib_kunglao
+    """hooks/lib_kunglao — the worker-status protocol single parse point (#444).
+
+    #770: by-path canonical loader — a bare import resolves by ambient
+    sys.path order and re-binds to the scripts twin whenever any earlier
+    module inserted scripts/ ahead of hooks/."""
+    return load_hooks_lib()
 
 
 def _check_stale_workers(ws: Path) -> str:
@@ -132,8 +131,8 @@ def _kunglao_active(ws: Path) -> bool:
     if not state_path.exists():
         return False
     try:
-        sys.path.insert(0, str(SKILL_DIR / "scripts"))
-        import hook_activation as ha
+        with scripts_on_path():  # #671 scoped membership
+            import hook_activation as ha
         return ha.is_active_strict(ws, "worker_pulse")
     except Exception:
         return False
@@ -151,7 +150,8 @@ def _was_dispatch(payload: dict) -> bool:
                 prompt_parts.append(str(v))
     else:
         prompt_parts = [str(tool_input)]
-    return bool(DISPATCH_RE.search(" ".join(prompt_parts)))
+    lib = load_hooks_lib()
+    return bool(lib.parse_dispatch(" ".join(prompt_parts))[2] is not None)
 
 
 def _run_py(args: list, ws: Path):
@@ -162,7 +162,7 @@ def _run_py(args: list, ws: Path):
         return subprocess.run(
             [sys.executable] + args,
             capture_output=True, text=True, timeout=20,
-            cwd=str(ws),
+            cwd=str(ws), encoding="utf-8", errors="replace",
         )
     except (subprocess.SubprocessError, OSError):
         return None
@@ -180,7 +180,9 @@ def _delivery_reminder(ws: Path) -> str:
     if not runs.is_dir():
         return ''
     try:
-        parse_status = _worker_lib().parse_worker_status
+        lib = _worker_lib()
+        parse_status = lib.parse_worker_status
+        waiting_status = lib.WAITING_WORKER_STATUS
     except Exception:
         return ''
     delivered = []
@@ -189,6 +191,11 @@ def _delivery_reminder(ws: Path) -> str:
             try:
                 last = parse_status(p.read_text(encoding="utf-8", errors="replace"))
             except OSError:
+                continue
+            if last == waiting_status:
+                # delivered-but-alive: the wait loop re-arms this worker on
+                # the next dispatch — it is not a zombie, so the TaskStop
+                # reminder must skip it
                 continue
             if last is not None and last.replace("-", "_") in ("done", "blocked"):
                 delivered.append(p.name.removeprefix("worker-status-").removesuffix(".md"))
@@ -230,11 +237,11 @@ def _build_pulse(ws: Path) -> tuple[str, str | None]:
         # DLQ (#36): surface quarantined (DEAD) claim count. Fail-open — a
         # missing module or register must never break the convergence pulse.
         try:
-            sys.path.insert(0, str(SKILL_DIR / "scripts"))
-            import dead_letter as _dl  # sibling in scripts/
-            _quarantined = _dl.count_dead(ws)
-            if _quarantined:
-                flags.append(f"quarantined={_quarantined}")
+            with scripts_on_path():  # #671 scoped membership
+                import dead_letter as _dl  # sibling in scripts/
+                _quarantined = _dl.count_dead(ws)
+                if _quarantined:
+                    flags.append(f"quarantined={_quarantined}")
         except Exception:
             pass
         if flags:

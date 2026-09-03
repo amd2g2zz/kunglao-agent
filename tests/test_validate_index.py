@@ -41,7 +41,7 @@ import validate_index as vi  # noqa: E402
 # ---------- helpers ----------
 
 def _valid_entry() -> dict:
-    """A fully-valid tool entry."""
+    """A fully-valid tool entry with full annotation block."""
     return {
         "name": "chacha-string-layer",
         "category": "crypto",
@@ -51,6 +51,12 @@ def _valid_entry() -> dict:
         "input_output": {"input": "密文字节串", "output": "明文层"},
         "description": "Decodes ChaCha layers; pick for byte-exact verify",
         "when_not": "非 ChaCha 流加密时不用",
+        # #729: all annotated entries need provider block
+        "provider": "chacha-tool",
+        "produces": ["crypto:decode"],
+        "requires": [],
+        "cost_hint": {"mem_gb": 0.1, "time": "cheap"},
+        "quality": {"crypto:decode": "high"},
     }
 
 
@@ -91,7 +97,10 @@ class TestPass:
         data = {"tools": [
             _valid_entry(),
             {**_valid_entry(), "name": "floss", "category": "static",
-             "capability": "static:strings"},
+             "capability": "android:java-source",
+             "provider": "floss-provider",
+             "produces": ["android:java-source"],
+             "quality": {"android:java-source": "high"}},
         ]}
         assert _errors(data) == []
 
@@ -254,4 +263,101 @@ class TestShippedIndex:
             elif not 15 <= len(d.strip()) <= 40:
                 bad.append(f"{t.get('name')}: length {len(d.strip())} outside [15,40]: {d!r}")
         assert not bad, "\n".join(bad)
+
+
+# ---------- #729 Rule A: annotation gate (LEGACY_UNANNOTATED whitelist) ----------
+
+class TestRuleA_AnnotationGate:
+    """Rule A (#729): new entries without a provider block are rejected.
+    LEGACY_UNANNOTATED (29 frozen names) get a WARN pass."""
+
+    def test_rule_a_new_entry_without_provider_fails(self) -> None:
+        """A brand-new tool entry with no provider block must FAIL."""
+        entry = _valid_entry()
+        entry["name"] = "brand-new-tool"   # not in LEGACY_UNANNOTATED
+        # remove the annotation block that _valid_entry() now carries
+        for _field in ("when_not", "provider", "produces", "requires",
+                       "cost_hint", "quality"):
+            entry.pop(_field, None)
+        errs = _errors({"tools": [entry]})
+        assert errs, "brand-new-tool should fail: no provider block"
+        assert any("provider" in e for e in errs), errs
+
+    def test_rule_a_removed_whitelist_name_without_provider_fails(self) -> None:
+        """#863: the LEGACY_UNANNOTATED whitelist is gone — a formerly
+        legacy name (crypto-tool) without a provider block now FAILs."""
+        entry = _valid_entry()
+        entry["name"] = "crypto-tool"      # formerly in LEGACY_UNANNOTATED
+        entry["capability"] = "crypto:decode"
+        for _field in ("when_not", "provider", "produces", "requires",
+                       "cost_hint", "quality"):
+            entry.pop(_field, None)   # strip the whole annotation block
+        errs = _errors({"tools": [entry]})
+        assert any("provider" in e for e in errs), (
+            f"formerly-legacy name without provider must fail: {errs}")
+
+    def test_rule_a_annotated_entry_passes(self) -> None:
+        """An entry WITH a provider block (even if new) is always fine."""
+        entry = _valid_entry()
+        entry["name"] = "new-annotated-tool"
+        entry["capability"] = "static:strings"
+        entry["provider"] = "test-provider"
+        entry["produces"] = ["static:strings"]
+        entry["requires"] = []
+        entry["cost_hint"] = {"mem_gb": 0.5, "time": "cheap"}
+        entry["quality"] = {"static:strings": "high"}
+        del entry["when_not"]
+        errs = _errors({"tools": [entry]})
+        # Must NOT have the "no provider block" error
+        assert not any("no 'provider' block" in e for e in errs), errs
+
+
+# ---------- #729 Rule B: CAPABILITY_TAGS closed vocabulary ----------
+
+class TestRuleB_CapabilityTags:
+    """Rule B (#729): every produces tag must be in _CAPABILITY_TAGS."""
+
+    def test_rule_b_unknown_produces_tag_fails(self) -> None:
+        """A produces tag not in CAPABILITY_TAGS must FAIL."""
+        entry = _valid_entry()
+        entry["name"] = "unknown-tag-tool"
+        entry["capability"] = "unknown:tag"
+        entry["provider"] = "test-provider"
+        entry["produces"] = ["unknown:tag"]        # not in _CAPABILITY_TAGS
+        entry["requires"] = []
+        entry["cost_hint"] = {"mem_gb": 0.5, "time": "cheap"}
+        entry["quality"] = {"unknown:tag": "high"}
+        del entry["when_not"]
+        errs = _errors({"tools": [entry]})
+        assert errs, "'unknown:tag' should fail: not in CAPABILITY_TAGS"
+        assert any("CAPABILITY_TAGS" in e for e in errs), errs
+
+    def test_rule_b_known_produces_tag_passes(self) -> None:
+        """A produces tag already in CAPABILITY_TAGS passes."""
+        entry = _valid_entry()
+        entry["name"] = "android-java-tool"
+        entry["capability"] = "android:java-source"
+        entry["provider"] = "test-provider"
+        entry["produces"] = ["android:java-source"]  # in CAPABILITY_TAGS
+        entry["requires"] = []
+        entry["cost_hint"] = {"mem_gb": 4.0, "time": "deep"}
+        entry["quality"] = {"android:java-source": "high"}
+        del entry["when_not"]
+        errs = _errors({"tools": [entry]})
+        assert not errs, f"'android:java-source' should pass: {errs}"
+
+    def test_shipped_index_all_produces_tags_in_vocabulary(self) -> None:
+        """Every produces tag in the shipped index must be in _CAPABILITY_TAGS."""
+        import yaml
+        data = yaml.safe_load(INDEX_YAML.read_text(encoding="utf-8"))
+        from validate_index import _CAPABILITY_TAGS
+        unknown: list[str] = []
+        for t in data.get("tools", []):
+            for tag in t.get("produces", []):
+                if tag not in _CAPABILITY_TAGS:
+                    unknown.append(f"{t['name']}: {tag}")
+        assert not unknown, (
+            f"Produces tags not in CAPABILITY_TAGS (add to "
+            f"_CAPABILITY_TAGS after deliberate review): {unknown}"
+        )
 

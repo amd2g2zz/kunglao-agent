@@ -98,15 +98,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
 from status_defs import TERMINAL
+# #863 Family C: workspace resolution is single-sourced in ws_layout
+# (manifest-aware — the former inline copy hardcoded the sibling name).
+from ws_layout import resolve_quiet as _resolve_ws
 
 ANALYSES_DIR = "analyses"
 
@@ -133,8 +134,7 @@ REFLECT_QUEUE_DEFAULT = Path.home() / ".claude" / "learnings-queue.json"
 REFLECT_ITEM_TYPE = "failure-lesson-candidate"
 
 
-def utc_now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+from harness_common import utc_now_iso  # #863 Family F: single source (was a local def)
 
 
 def _emit_failure_blocked(workspace: Path, d: dict) -> None:
@@ -178,14 +178,6 @@ def _emit_analysis_recorded(workspace: Path, claim_id: str, entry: dict) -> None
                     f"candidates={len(entry.get('candidates') or [])}")
     except Exception:
         pass
-
-
-def _resolve_ws(arg) -> Path:
-    if arg:
-        return Path(arg)
-    cwd = Path(os.getcwd())
-    sub = cwd / "malware-analysis-workspace"
-    return sub if (sub / "claim-register.yaml").exists() else cwd
 
 
 def _load_claims(workspace: Path):
@@ -438,6 +430,22 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
     # #459: the landing event fires after the entry + promotion are on disk
     # (a tail reader never sees a recorded event for a half-written state).
     _emit_analysis_recorded(workspace, claim_id, entry)
+    # #880 (pre-ruling): the CITATION face of the lessons quartet lives here —
+    # a record that DECLARES its next_method came from a lesson hit
+    # (next_method_source == "lesson-hit", candidates from the ladder) is the
+    # mechanical point where "recall 注入被 worker 实际引用" becomes true.
+    # Cite the top candidate of the EXACT library the ladder searched.
+    if (source_norm == "lesson-hit" and entry.get("candidates")
+            and candidates):
+        try:
+            from lessons_telemetry import record_citation
+            record_citation(
+                Path(library) if library else LESSONS_DIR_DEFAULT,
+                str(candidates[0].get("file") or "").removeprefix("lesson-")
+                .removesuffix(".md"),
+                workspace=workspace)
+        except Exception:  # noqa: BLE001 — lessons counting never blocks a record
+            pass
     return {"recorded": True, "entry": entry, "obstacle_claim": promotion}
 
 
@@ -623,72 +631,6 @@ def _reflect_reason(outcome: str | None, redteam_ok: bool) -> str:
     if outcome == "NEGATIVE" and not redteam_ok:
         return "negative-unverified"
     return ""
-
-
-def _read_lesson_frontmatter(path: Path) -> tuple[str, str, dict]:
-    """Return (raw_text, fm_yaml, parsed_dict). Tolerant to malformed."""
-    text = path.read_text(encoding="utf-8")
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return text, "", {}
-    try:
-        fm = yaml.safe_load(parts[1]) or {}
-        if not isinstance(fm, dict):
-            fm = {}
-    except Exception:
-        fm = {}
-    return text, parts[1], fm
-
-
-def promote_lesson(lesson_path: Path, workspace: Path | None = None,
-                   promoted_by: str = "kunglao-verify",
-                   evidence: str = "",
-                   demote_to: str | None = None) -> dict:
-    """#525: flip a lesson's frontmatter stage draft → active, stamp
-    promoted_at / promoted_by / promoted_evidence, and emit a
-    lesson_stage_transition row to the kunglao_log. Idempotent on
-    already-active (no rewrite, no audit row). Demotion is forbidden —
-    lessons only retire (separate signal); attempts raise ValueError."""
-    if demote_to is not None:
-        raise ValueError(
-            f"demotion to {demote_to!r} is not supported by promote_lesson; "
-            "retire the lesson instead (separate signal, #525).")
-    lesson_path = Path(lesson_path)
-    text, fm_yaml, fm = _read_lesson_frontmatter(lesson_path)
-    current = str(fm.get("stage", "draft")).strip().lower() or "draft"
-    if current == "active":
-        return {"promoted": False, "already_active": True,
-                "lesson": str(lesson_path)}
-    fm["stage"] = "active"
-    fm["promoted_at"] = utc_now_iso()
-    fm["promoted_by"] = promoted_by
-    if evidence:
-        fm["promoted_evidence"] = evidence
-    new_yaml = yaml.safe_dump(fm, allow_unicode=True, sort_keys=False).strip()
-    new_text = text.replace(fm_yaml, new_yaml, 1)
-    if new_text == text:
-        # frontmatter never matched — defensive rewrite
-        new_text = "---\n" + new_yaml + "\n---\n" + text.split("---", 2)[-1]
-    lesson_path.write_text(new_text, encoding="utf-8")
-
-    # Audit row: lesson_stage_transition, actor=nursery, claim=<first source>.
-    sources = fm.get("sources") or []
-    claim_id = str(sources[0]) if sources else ""
-    detail = (f"draft→active promoted_by={promoted_by}")
-    if evidence:
-        detail += f" evidence={evidence}"
-    try:
-        if workspace is not None:
-            from kunglao_log import emit
-            emit(Path(workspace), actor="nursery",
-                 action="lesson_stage_transition", claim=claim_id,
-                 detail=detail)
-    except Exception:
-        pass  # logging never blocks promotion
-    return {"promoted": True, "already_active": False,
-            "lesson": str(lesson_path),
-            "promoted_at": fm["promoted_at"],
-            "promoted_by": promoted_by}
 
 
 def _append_reflect_queue(queue_path: Path, entries: list[dict]) -> int:
@@ -903,7 +845,7 @@ def _print_blocked(d: dict) -> None:
     print("  3. next_method         - what DIFFERENT method tests a different assumption?")
     print("                           (literal retry is forbidden; 'method was adequate' only if Q2=justified)")
     print()
-    print("And transduce the failure into typed artifacts (#495 - the analysis does")
+    print("And transduce the failure into typed artifacts (the analysis does")
     print("not unblock without them):")
     print()
     print("  4. validated_capability - what this failure PROVED works (capability ok)")
@@ -920,7 +862,7 @@ def _print_blocked(d: dict) -> None:
     print(f"  python scripts/failure_analysis_gate.py <ws> {cid} --record \\")
     print(f"      --assumption \"...\" --validity not-justified|justified-adequate --next-method \"...\" \\")
     print(f"      --validated-capability \"...\" --identified-obstacle \"...\" \\")
-    print(f"      --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance, #495)")
+    print(f"      --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance)")
     sim = d.get("similar_lessons") or []
     if sim:
         print()
@@ -932,7 +874,7 @@ def _print_blocked(d: dict) -> None:
     fm = _failure_modes_recall()
     if fm:
         print()
-        print("See failure-modes reference (recall #268): " + ", ".join(fm))
+        print("See failure-modes reference (recall): " + ", ".join(fm))
 
 
 def promote_lesson(lesson_path: Path, workspace: Path,
@@ -948,6 +890,12 @@ def promote_lesson(lesson_path: Path, workspace: Path,
     Re-promoting an active lesson is an idempotent no-op (already_active).
     Demotion (active → draft) is rejected with ValueError — lessons do not
     regress; retirement is a separate signal.
+
+    #863: single definition — an earlier same-name def in this file
+    (tolerant parse + FileNotFoundError raising + conditional evidence
+    stamp) was DEAD CODE shadowed by this later def and has been deleted;
+    the consolidation is behavior-preserving by construction (every caller
+    already resolved here).
     """
     if demote_to is not None:
         raise ValueError(
@@ -1016,18 +964,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--what-happened", default=None,
                         help="free text: what actually happened (#41, required with --outcome)")
     parser.add_argument("--validated-capability", default=None,
-                        help="what this failure PROVED works — capability ok (#495 artifact)")
+                        help="what this failure PROVED works — capability ok (artifact)")
     parser.add_argument("--identified-obstacle", default=None,
-                        help="what specifically blocked you (#495 artifact; auto-promoted to a claim)")
+                        help="what specifically blocked you (artifact; auto-promoted to a claim)")
     parser.add_argument("--source", default=None,
-                        help="provenance of next_method (#495): "
+                        help="provenance of next_method: "
                              "lesson-hit | reference-hit | web-hit | novel-hypothesis")
     parser.add_argument("--lessons", action="store_true",
                         help="aggregate analyses into the global lessons library (#41)")
     parser.add_argument("--search", metavar="KEYWORDS", default=None,
                         help="search the lessons library by keywords/claim-tag (#41)")
     parser.add_argument("--library", default=None,
-                        help="lessons library dir (default: ~/.claude/skills/kunglao-agent/references/lessons)")
+                        help="lessons library dir "
+             "(default: executing install's references/lessons)")
     parser.add_argument("--reflect-queue", default=None,
                         help="/reflect human queue file (default: ~/.claude/learnings-queue.json)")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
@@ -1121,4 +1070,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    force_utf8()
     sys.exit(main())

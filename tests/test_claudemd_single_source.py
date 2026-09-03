@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -76,6 +77,25 @@ def test_base_carries_required_sections():
         "## Python venv",
     ):
         assert section in text, f"base template missing section: {section}"
+
+
+def test_base_carries_memory_tiering_contract():
+    """#785 ruling 2026-08-27: the template must DECLARE how memory is
+    layered — including the host-harness native project memory as its own
+    tier (not lumped into generic 'preferences')."""
+    text = BASE_TMPL.read_text(encoding="utf-8")
+    for needle in (
+        "**Memory tiers**",
+        "T1 workspace carriers",
+        "T2 distilled lessons",
+        "T3 reference library",
+        "T4 project memory (Claude Code native)",
+        "index + typed files",
+        "Routing discipline",
+    ):
+        assert needle in text, f"memory-tier contract missing: {needle}"
+    # write triggers are part of the table, not prose afterthoughts
+    assert "Write trigger" in text
 
 
 def test_base_sample_and_venv_placeholders():
@@ -163,13 +183,14 @@ def init_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
     (ws / "runs").mkdir(parents=True)
-    (ws / "bins" / "sample.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    seed_bins(ws)
     return ws
 
 
 def _run_init(ws: Path, project_type: str) -> subprocess.CompletedProcess:
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws),
             "--type", project_type, "--skip-toolchain",
+            "--host-exec-protection", "enabled",
             "--profile-root", str(ws.parent / "profile-root")]
     env = {k: v for k, v in os.environ.items() if k != FLAG_NAME}
     env[FLAG_NAME] = "0"

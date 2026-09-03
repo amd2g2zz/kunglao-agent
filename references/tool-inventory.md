@@ -44,3 +44,5 @@ composing script pure functions; the rest are focused entry points / thin wrappe
 | `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch → TickOutput |
 | `kunglao-digest.py` | digest mechanical generation (thin wrapper → digest_build.py) |
 | `kunglao-eval.py` | eval harness CLI (thin wrapper → kunglao_eval.py) |
+
+recall_useful: pending

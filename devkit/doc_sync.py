@@ -55,6 +55,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# #863 Family B: reach the canonical by-path loader in hooks/. devkit is its
+# own sys.path domain, so bridge once here — guarded APPEND (never insert(0):
+# reordering hooks/ ahead of scripts/ is the #671 shared-name-twin shadow).
+_HOOKS_DIR = str(Path(__file__).resolve().parent.parent / "hooks")
+if _HOOKS_DIR not in sys.path:
+    sys.path.append(_HOOKS_DIR)
+from _path_hygiene import load_module_by_path  # noqa: E402  (#671 authority)
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Scan face: the quality-gate family's documentation carriers only.
@@ -317,17 +325,16 @@ def _internal_registered_names() -> set[str]:
 def _load_ext_scan():
     """Import tools/ext-scan.py (hyphenated meta-tool filename →
     importlib file-location load). Cached; None when unavailable — the
-    WARN side degrades to silence, the FAIL side never depends on it."""
+    WARN side degrades to silence, the FAIL side never depends on it.
+    #863 Family B: the load itself delegates to the canonical loader
+    (hooks/_path_hygiene.load_module_by_path); the local dict keeps the
+    None-caching semantics (util caches successes via sys.modules)."""
     if "mod" in _EXT_SCAN_CACHE:
         return _EXT_SCAN_CACHE["mod"]
     path = Path(__file__).resolve().parent.parent / "tools" / "ext-scan.py"
     mod = None
     try:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("kunglao_ext_scan", path)
-        if spec and spec.loader:
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
+        mod = load_module_by_path("kunglao_ext_scan", path)
     except Exception:  # noqa: BLE001 - generator import is best-effort
         mod = None
     _EXT_SCAN_CACHE["mod"] = mod
