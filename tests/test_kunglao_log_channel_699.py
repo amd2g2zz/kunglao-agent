@@ -89,7 +89,10 @@ def test_resume_brief_summarizes_execution_surfaces(tmp, monkeypatch):
     assert "sec_h" in digest, "execution-surface section missing from digest"
     # per-channel counts appear in the section
     assert "local" in digest and "ssh:9876" in digest
-    assert "2" in digest  # the ssh:9876 count row
+    sec_h = digest[digest.index("## sec_h"):]
+    assert "- ssh:9876: 2" in sec_h, (
+        f"ssh:9876 channel must count exactly 2 events in sec_h rows: "
+        f"{sec_h!r}")
 
 
 def test_resume_brief_empty_ledger_no_sec_h(tmp, monkeypatch):

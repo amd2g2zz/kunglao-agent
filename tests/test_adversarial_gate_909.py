@@ -96,13 +96,9 @@ def test_forged_summary_rejected(tmp_path):
     cl.append_event(ws, "C-12", _challenge(), key=KEY)
     worker_forge = cl.summary(ws, "C-12", key=b"worker-knows" + b"x" * 19)
     allowed, verdict, reason = check_adversarial_gate(
-        "C-12", ws, key=KEY, summary=summary_none_guard(worker_forge))
+        "C-12", ws, key=KEY, summary=worker_forge)
     assert allowed is False and verdict == BLOCKED
     assert "auth" in reason.lower()
-
-
-def summary_none_guard(doc):
-    return doc
 
 
 def test_tampered_chain_blocks(tmp_path):

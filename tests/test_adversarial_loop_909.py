@@ -102,7 +102,7 @@ def test_contest_phase_arbitration_refused_before_round_5(tmp_path, kf, capsys):
     rc, out, err = _call(kf, capsys, "arbitrate", str(ws), "C-12",
                          "--outcome", "rebutted", "--basis", "CH-1")
     assert rc == al.EXIT_EARLY_ARBITRATION == 5
-    assert "stalemate arbitration requires 5 rounds" in json.dumps(out) + err
+    assert out["reason"] == al.PREMATURE_REASON
 
 
 # ---- 2. stalemate: arbitration at round 5+, rebutted clears ----
@@ -170,23 +170,35 @@ def test_verify_run_packages_finding_and_files_it(tmp_path, kf, capsys):
     elapsed = time.monotonic() - t0
     assert rc == 0, err
     assert evt["finding"]["timed_out"] is True
+    assert evt["finding"]["duration_sec"] < 2, (
+        "timeout=1 must surface a <2s duration_sec, not wall-clock drift")
     assert elapsed < 4
 
 
 # ---- 5. the key never reaches stdout/stderr ----
 
 def test_key_never_printed(tmp_path, kf, capsys):
+    """Leak check accumulates EVERY invocation's output — each _call drains
+    capsys, so a trailing readouterr() would always see an empty buffer
+    (vacuous pass). The key material must appear nowhere across the whole
+    begin/challenge/status/verify-run/arbitrate surface."""
     ws = tmp_path / "ws"
-    _call(kf, capsys, "begin", str(ws), "C-12", "--assertion", "A")
+    leaked = []
+
+    def drain(rc, out, err):
+        leaked.append(out if isinstance(out, str) else json.dumps(out or ""))
+        leaked.append(err)
+        return rc
+
+    drain(*_call(kf, capsys, "begin", str(ws), "C-12", "--assertion", "A"))
     f = _ev_file(tmp_path, "ch.json", _challenge())
-    _call(kf, capsys, "challenge", str(ws), "C-12", "--file", str(f))
-    _call(kf, capsys, "status", str(ws), "C-12")
-    _call(kf, capsys, "verify-run", str(ws), "C-12", "echo hits")
-    rc, _, _ = _call(kf, capsys, "arbitrate", str(ws), "C-12",
-                     "--outcome", "rebutted", "--basis", "CH-1")
-    assert rc == al.EXIT_EARLY_ARBITRATION
-    cap = capsys.readouterr()
-    assert KEY.decode() not in cap.out + cap.err
+    drain(*_call(kf, capsys, "challenge", str(ws), "C-12", "--file", str(f)))
+    drain(*_call(kf, capsys, "status", str(ws), "C-12"))
+    drain(*_call(kf, capsys, "verify-run", str(ws), "C-12", "echo hits"))
+    drain(*_call(kf, capsys, "arbitrate", str(ws), "C-12",
+                 "--outcome", "rebutted", "--basis", "CH-1"))
+    all_output = "\n".join(leaked)
+    assert KEY.decode() not in all_output
 
 
 # ---- 6. ledger rejections map to exit codes ----

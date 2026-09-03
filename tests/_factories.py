@@ -127,3 +127,24 @@ def seed_bins(ws: Path, *, name: str = "sample.exe",
     target = bins / name
     target.write_bytes(payload)
     return target
+
+
+def write_worker_status(ws: Path, name: str, status: str,
+                        age_min: float | None = None) -> Path:
+    """#915 item 8: the ONE runs/worker-status-<name>.md seeding shape.
+
+    Two-line body (in-progress history + last line carrying `status`), the
+    dominant fixture shape across scan_waiting/wait_signal/liveness tests.
+    age_min backdates the mtime (stale-worker scenarios)."""
+    p = ws / "runs" / f"worker-status-{name}.md"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(
+        f"[12:00] step: started task | status: in-progress\n"
+        f"[12:30] wait: awaiting signal | status: {status}\n",
+        encoding="utf-8")
+    if age_min is not None:
+        import os
+        import time
+        old = time.time() - age_min * 60
+        os.utime(p, (old, old))
+    return p

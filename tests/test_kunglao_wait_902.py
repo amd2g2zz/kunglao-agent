@@ -40,7 +40,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = ROOT / "scripts" / "kunglao_wait.py"
 
-POLL_S = "0.2"
+POLL_S = "0.12"  # 10 * 0.12 s ≈ 1.2 s per self-kill run (#915 wall-clock budget)
 MAX_ROUNDS = "10"  # 10 * 0.2 s = 2 s hard ceiling per runaway run
 
 STATUS_TOKEN = re.compile(r"status:\s*(\S+)")
@@ -89,6 +89,21 @@ def _run_foreground(ws: Path, claim: str | None = None,
         timeout=timeout)
 
 
+def _spawn_until_waiting(ws: Path) -> subprocess.Popen:
+    """Popen the wait tool and block until the first `waiting` heartbeat
+    lands (the shared spawn/track/kill scaffold for polling tests)."""
+    proc = _popen(ws)
+    try:
+        assert _wait_for(
+            lambda: _status_file(ws).exists()
+            and _last_status(_status_file(ws)) == "waiting")
+    except Exception:
+        proc.kill()
+        proc.wait(timeout=5)
+        raise
+    return proc
+
+
 def _wait_for(predicate, timeout: float = 6.0) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -110,12 +125,8 @@ def _popen(ws: Path, claim: str | None = None) -> subprocess.Popen:
 class TestUnwait:
     def test_signal_consumed_rc0_last_in_progress(self, tmp_path):
         ws = _mk_ws(tmp_path)
-        proc = _popen(ws)
+        proc = _spawn_until_waiting(ws)
         try:
-            assert _wait_for(
-                lambda: _status_file(ws).exists()
-                and _last_status(_status_file(ws)) == "waiting"), (
-                "wait tool must append its first waiting heartbeat promptly")
             _signal_file(ws).write_text(
                 json.dumps({"claim": "C-7", "ts": "2026-09-03T00:00:00Z"}),
                 encoding="utf-8")
@@ -131,11 +142,8 @@ class TestUnwait:
 
     def test_unwait_stdout_carries_signal_context(self, tmp_path):
         ws = _mk_ws(tmp_path)
-        proc = _popen(ws)
+        proc = _spawn_until_waiting(ws)
         try:
-            assert _wait_for(
-                lambda: _status_file(ws).exists()
-                and _last_status(_status_file(ws)) == "waiting")
             _signal_file(ws).write_text(
                 json.dumps({"claim": "C-9", "ts": "2026-09-03T00:00:00Z"}),
                 encoding="utf-8")
@@ -169,6 +177,9 @@ class TestSelfKill:
         assert _last_status(_status_file(ws)) == "failed"
 
     def test_slot_freed_after_self_kill(self, tmp_path):
+        """Same 2.4s self-kill scenario as rc3, one spawn — merged here
+        so the slot check rides the rc3 run instead of paying a second
+        MAX_ROUNDS burn (#915 item 6)."""
         ws = _mk_ws(tmp_path)
         r = _run_foreground(ws, claim="C-9")
         assert r.returncode == 3
@@ -186,11 +197,8 @@ class TestSelfKill:
 class TestHeartbeat:
     def test_waiting_tokens_grow_while_polling(self, tmp_path):
         ws = _mk_ws(tmp_path)
-        proc = _popen(ws)
+        proc = _spawn_until_waiting(ws)
         try:
-            assert _wait_for(
-                lambda: _status_file(ws).exists()
-                and _last_status(_status_file(ws)) == "waiting")
             first = _status_file(ws).read_text(encoding="utf-8").count(
                 "status: waiting")
             time.sleep(float(POLL_S) * 3)  # >= 2 more poll rounds

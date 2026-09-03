@@ -85,6 +85,10 @@ def test_zero_byte_tool_warns(tmp_path, monkeypatch):
     items = _which_items(("file",), Tier.HARD)
     it = items[0]
     assert it.status == Status.WARN
+    # verify 分支确实执行过：探针升到 LIVENESS（exec 失败才可能产生 WARN+cause），
+    # 而不是 PRESENCE 面的 WARN-by-accident（issue #915 item 3）
+    assert it.probe == ProbeTier.LIVENESS
+    assert it.detail, "WARN must carry the verify-failure cause"
 
 
 def test_tool_without_verify_cmd_keeps_presence(tmp_path, monkeypatch):

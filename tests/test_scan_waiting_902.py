@@ -24,9 +24,7 @@ twin shares the name).
 from __future__ import annotations
 
 import importlib.util
-import os
 import sys
-import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -51,17 +49,7 @@ def _mk_ws(tmp_path: Path) -> Path:
     return ws
 
 
-def _write_status(ws: Path, name: str, last_status: str,
-                  age_min: float | None = None) -> Path:
-    p = ws / "runs" / f"worker-status-{name}.md"
-    p.write_text(
-        f"[12:00] step: started task | status: in-progress\n"
-        f"[12:30] wait: awaiting signal | status: {last_status}\n",
-        encoding="utf-8")
-    if age_min is not None:
-        old = time.time() - age_min * 60
-        os.utime(p, (old, old))
-    return p
+from _factories import write_worker_status as _write_status  # noqa: F401 — #915 item 8
 
 
 # ---------- vocabulary ----------

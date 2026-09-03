@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 
 import yaml
-from _factories import write_hook_state
+from _factories import write_hook_state, write_worker_status
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -197,10 +197,7 @@ class TestNoopBreakerWaitingExemption:
     def test_fingerprint_stable_all_waiting_no_trip(self, tmp_path):
         ws = tmp_path / "ws"
         (ws / "runs").mkdir(parents=True)
-        (ws / "runs" / "worker-status-kunglao-worker.md").write_text(
-            "[12:00] step: delivered | status: done\n"
-            "[12:31] wait: awaiting signal | status: waiting\n",
-            encoding="utf-8")
+        write_worker_status(ws, "kunglao-worker", "waiting")
         h = "a" * 64
         r1 = noop_breaker(ws, h, threshold=2)
         assert r1["tripped"] is False
