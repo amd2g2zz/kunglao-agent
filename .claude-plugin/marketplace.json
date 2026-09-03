@@ -18,7 +18,7 @@
         "name": "amd2g2zz"
       },
       "homepage": "https://github.com/amd2g2zz/kunglao-agent",
-      "license": "MIT",
+      "license": "AGPL-3.0-only",
       "skills": [
         "init",
         "analysis",

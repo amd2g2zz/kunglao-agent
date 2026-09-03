@@ -2,7 +2,7 @@
 
 A Claude Code skill that runs a convergence-driven reverse-engineering loop: it takes a malware sample to a byte-proven, independently-verified fact base, enforced by mechanical gates.
 
-[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-MIT-lightgrey)](.)
+[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](.)
 
 ---
 
@@ -314,7 +314,7 @@ The release contract is revision-owned: `pyproject.toml` + `uv.lock` (pinned dep
 
 ## License
 
-MIT
+Dual-licensed: **AGPL-3.0** for personal, academic, and internal use (free — see [LICENSE](LICENSE)); **commercial license** required for closed-source or SaaS commercial use — see [LICENSE-commercial.md](LICENSE-commercial.md).
 
 ## Internals: Two settings levels
 

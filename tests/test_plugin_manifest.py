@@ -62,7 +62,7 @@ def test_manifest_exists_and_minimal():
     assert isinstance(m["description"], str) and m["description"].strip()
     assert m["author"].get("name"), "author.name missing"
     assert m["homepage"].startswith("https://"), "homepage must be an https URL"
-    assert m["license"] == "MIT"
+    assert m["license"] == "AGPL-3.0-only"
 
 
 def test_manifest_declares_only_the_366_field_set():

@@ -4,7 +4,7 @@ version = "0.1.4"
 description = "Convergence-driven reverse-engineering orchestrator — Claude Code skill (issue #80 release contract)"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = { text = "AGPL-3.0-only" }  # dual-licensed: AGPL-3.0 OR commercial (see LICENSE-commercial.md)
 # Declared set = modules actually imported by scripts/ hooks/ tools/ tests/
 # (verified by tests/test_release_receipt.py::test_pyproject_declares_imported_dependencies).
 # cryptography/requests are NOT imported anywhere — do not add them back without an import.
