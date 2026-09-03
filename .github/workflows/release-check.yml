@@ -48,10 +48,14 @@ jobs:
       run: python3.11 --version
 
     - name: Install uv (documented dependency manager)
-      # pip --user lands in ~/.local/bin which is NOT on runner PATH by
-      # default — export via $GITHUB_PATH so every later step finds `uv`.
+      # Official installer (astral.sh). The former `pip install --user uv`
+      # broke when the runner image began enforcing PEP 668
+      # (externally-managed-environment) on its managed CPython — image
+      # rollout hit the queue mid-flight on 2026-09-03 and every PR run
+      # failed at this step with identical runner-side errors. The installer
+      # lands in ~/.local/bin (already exported to $GITHUB_PATH below).
       run: |
-        python3.11 -m pip install --user uv
+        curl -LsSf https://astral.sh/uv/install.sh | sh
         echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
     - name: CI YAML selfcheck (issue #147)
