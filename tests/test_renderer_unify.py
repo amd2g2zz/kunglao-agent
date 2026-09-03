@@ -49,6 +49,15 @@ sys.path.insert(0, str(SCRIPTS))
 # sentinel path after the camoufox-reverse row joined the base-template MCP
 # table (required by tests/test_mcp_supply.py test_docs_tables_match_manifest);
 # the diff is exactly that one table row per fixture.
+# 2026-09-03 regen (#49/#919 type-conditional template): identity line became
+# the RE-expert framing and the MCP table rows are manifest-filtered per type
+# (windows drops gitnexus+camoufox, linux drops x64dbg/volatility/gitnexus/
+# camoufox, android drops the VM-only bullet + x64dbg/volatility/ssh-mcp/
+# camoufox + the three VM env rows); every retained byte is unchanged.
+# 2026-09-03 regen (#920 living handbook): four new sections (Roles &
+# responsibilities derived from agents/*.md, Project layout from the
+# scaffold contract, the per-type Quick start scaffold, Keeping this
+# handbook alive); budgets pinned by tests/test_claudemd_handbook_920.py.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 

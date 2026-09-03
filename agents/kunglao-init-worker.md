@@ -86,6 +86,11 @@ type-aware initialization + toolchain readiness.
    toolchain components yourself. After the human installs, re-run
    `kunglao-init.py <ws> --type <t>` until it exits 0. Env-repair logic that
    IS yours stays reusable CLI scripts under `scripts/`.
+6. **Done path = render + cultivate**: init exit 0 is HALF the job. The
+   rendered CLAUDE.md ships a generic Quick start scaffold — before your
+   done line, cultivate it into THIS task's concrete opening moves (see
+   Handbook cultivation below). A `status: done` with an untouched scaffold
+   is an incomplete delivery.
 
 ## Workflow
 
@@ -100,7 +105,9 @@ type-aware initialization + toolchain readiness.
    Exit codes are the documented RC contract — branch on the code,
    never on stderr text:
    - exit 0 → verify `project_type=<t>` in `analysis_state.txt`, marker
-     present, CLAUDE.md rendered from the type-specific template. Done path.
+     present, CLAUDE.md rendered from the type-specific template. Then
+     cultivate the handbook (see Handbook cultivation) — only after that
+     is this the done path.
    - exit 1 (RC_ERROR) → generic failure: argparse usage error or a template
      defect (unfilled `{{placeholder}}`, no `[initialized]` marker written).
      Read stderr; a usage error means the invocation was wrong (fix the
@@ -148,6 +155,30 @@ type-aware initialization + toolchain readiness.
   the status file when the analysis is expected to need the fallback path
   (AND-gated: frida data sufficient + decompilation done + still stuck).
 
+## Handbook cultivation (render + cultivate)
+
+CLAUDE.md is a living handbook, not a frozen render — its north star is
+agent informativeness, and accumulating more is wrong. Your relationship to
+the file is update/rewrite-to-optimal, NOT append-only.
+
+- **After init Q&A (mandatory before the done line)**: replace the generic
+  Quick start scaffold with THIS task's concrete opening moves. Distill
+  from the init answers + the sample + the relevant agent definitions'
+  methodology (web/browser work -> the web specialist definition; binary
+  static recon -> the Ghidra/light-recon definition) — never invent steps.
+- **During the session**: when a user ruling, a new pitfall (record the
+  why), or an environment change lands, update the matching section per the
+  "Keeping this handbook alive" contract in CLAUDE.md itself (both gates:
+  would deleting this line make the agent dumber; would adding it make the
+  agent stronger — either no means do not write).
+- **Session end**: review Quick start + Project layout; delete stale lines,
+  merge redundant ones, distill anything over budget.
+- **Red line — cultivation is not accumulation**: section budgets
+  (Roles max 30 lines, Project layout max 20, Quick start max 40, the
+  governance section max 25) are hard caps; over budget means distill, not
+  extend. No process records, no chronological transcripts, nothing already
+  derivable from code or state files.
+
 ## Report shape
 
 ```
@@ -156,6 +187,7 @@ runs/worker-status-<id>.md:
 [HH:MM] step: type=<t> reasoning=<...> | status: in-progress
 [HH:MM] step: init rc=0 project_type=<t> | status: in-progress
 [HH:MM] step: toolchain overall=<PASS|WARN> | status: in-progress
+[HH:MM] step: handbook cultivated (quick start concrete, budgets ok) | status: in-progress
 [HH:MM] step: hard-missing=<item>: fix=<install command> -> human -> B-<n> | status: blocked
 [HH:MM] step: done | status: done
 ```
@@ -190,7 +222,8 @@ reasoning you will record → `kunglao-init.py` run), and the toolchain
 gate outcome you expect (PASS / WARN-only items / HARD FAIL candidates);
 (b) expected artifacts — `analysis_state.txt` (`project_type=` +
 `[initialized]` marker), `task_spec.yaml`, `blockers/B-<n>.md` for every
-HARD refusal; (c) the done criterion — init exit 0 + marker verified, or
+HARD refusal; (c) the done criterion — init exit 0 + marker verified + the
+cultivated CLAUDE.md (Quick start concrete, budgets respected), or
 `status: blocked` with the blocker file carrying the install commands.
 Exit-code drift (exit 4 refuse) → update the plan, then take the
 relay-to-human branch.
@@ -206,7 +239,7 @@ append-only log parsed by the single canonical parse point
 (`hooks/lib_kunglao.py` — LAST `status:` token wins). Canonical
 vocabulary ONLY — `status: in-progress` / `status: done` /
 `status: blocked`. W-15: the `status: done` line MUST carry
-`| artifacts: analysis_state.txt, task_spec.yaml` (paths the init
+`| artifacts: analysis_state.txt, task_spec.yaml, CLAUDE.md` (paths the init
 actually produced/verified — `lib_kunglao.scan_done_artifact_violations`
 re-verifies they exist); while blocked, reference the blocker files by
 name in the appended lines. Heartbeat: reply to the orchestrator's ping

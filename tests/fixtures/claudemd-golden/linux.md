@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Workspace type
 
-Kunglao-agent malware RE workspace — not a software project. The "code" is state files, facts, and worker runs analyzing a malware sample.
+Kunglao-agent reverse-engineering workspace — not a software project. The "code" is state files, facts, and worker runs. Work like a human reverse-engineering expert: plan the analysis path before executing it, derive every conclusion from raw evidence independently, and let the mechanical gates keep every step verifiable. The task domain is whatever the user's input names (malware, firmware, app, web service, protocol, memory image) — per-task input, not the product's scope.
 
 ## Workspace at a glance
 
@@ -51,6 +51,58 @@ Analysis is driven by `/kunglao-agent` (skill at `/kunglao/skill-sentinel`). Key
 | `runs/` | Worker status files + `.heartbeat.json` |
 
 **Facts** go in `facts/F<NNN>.md` with byte-anchored, reproducible evidence.
+
+## Roles & responsibilities
+
+The orchestrator dispatches, arbitrates, verifies, monitors. It does not
+analyze: decompile, strings, emulation, and debugging are worker actions.
+Boundary signal: catching yourself writing a fact or running an analysis
+tool means you have left the orchestrator role — hand the work to an agent.
+
+| Agent | Responsibility | When to dispatch |
+|-------|----------------|------------------|
+| `kunglao-worker` | Generic claim-executing WORKER | default executor for any claim without a stage-specific agent |
+| `kunglao-init-worker` | INIT-WORKER | workspace init, env repair, handbook cultivation |
+| `kunglao-redteam` | RED-TEAM CHECKER — adversarial verification of completed analysis | attack-test a claim before it is promoted to PROVEN |
+| `verdict-scorer` | Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and… | score verdict.json against task_spec primary_questions |
+| `web-re-worker` | Web/browser JS reverse-engineering SPECIALIST WORKER (mirrors the specialist shape of… | web/browser JS claims (unpack, deobfuscate, signed parameters) |
+| `ghidra-light` | Stage 4 light static reconnaissance via Ghidra | light static recon for Go/Rust/OLLVM/C/C++/.NET local samples |
+| `go-symbols` | Stage 3.9 Go symbol recovery via unstrip (Go samples only, die.json language=Go) | Go symbol recovery when die.json reports language=Go |
+| `pefile-signature` | Read evidence/die.json + the local sample file | authenticode + packer family identification on PE samples |
+| `floss-filter` | Read `evidence/floss-raw.txt` (raw flare-floss output, up to 100k lines for Go binaries)… | de-noise flare-floss output into per-category string evidence |
+
+## Project layout
+
+| Directory | Meaning | Caveat |
+|-----------|---------|--------|
+| `bins/` | Samples + mounted inputs (sha-anchored) | read-only: never edit or rename a mounted sample; the hash is identity |
+| `facts/` | Claim fact base (F<NNN>.md + _INDEX.md) | workers only; byte-anchored, reproducible, frontmatter contract |
+| `evidence/` | Raw evidence artifacts (JSON, dumps, captures) | never reshape an artifact to fit a claim |
+| `notes/` | Results layer (verify_status notes) | corrections supersede via the supersedes chain, never silent edits |
+| `analyses/` | Long-form analysis + failure records | cross-fact synthesis lives here, not in facts/ |
+| `hypotheses/` | Assumption layer (H-*.md, competing candidates) | terminal states (refuted/superseded) never reopen |
+| `blockers/` | Unresolvable env/tooling gaps | closes only when the root cause is resolved and recorded |
+| `runs/` | Machine channel: status, heartbeat, logs (runs/logs), ledger | machines write here; human notes belong in notes/ |
+| `scratch/` | Free zone for non-contract artifacts | nothing here may carry gate or convergence weight |
+| `tools/ + scripts/` | Registered tools (tools/_INDEX.yaml) + reusable CLIs | check the registry before writing anything new |
+
+## Quick start: how to work THIS analysis
+
+<!-- CULTIVATION SLOT — kunglao-init-worker owns this section: replace the
+type scaffold below with THIS task's concrete opening moves, distilled from
+the init Q&A, the sample, and the agent definitions' methodology (never
+invented). An untouched scaffold means cultivation has not happened yet. -->
+
+**Target**: `bins/sample.exe` — ELF RE, static-first loop.
+1. Identify: DIE + `file` + sha256 anchor.
+2. Static sweep: strings/floss -> ghidra-light (functions +
+   imports + suspicious-API xrefs).
+3. Each unresolved static observation becomes ONE claim; one
+   worker per claim, facts back per the frontmatter contract.
+4. Dynamic only for static survivors: gdbserver on VM as the
+   primary remote debugger.
+5. Close: verdict-scorer answers primary_questions; red-team
+   before PROVEN.
 
 ## Sample under analysis
 
@@ -149,13 +201,9 @@ Analysis correctness depends on registered MCP servers — a fresh machine deplo
 |------------|------|-------|---------|--------------|
 | `ghidra` | HARD | all types | Ghidra decompile/static analysis | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
 | `sequential-thinking` | HARD | all types | structured reasoning | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
-| `x64dbg` | HARD | Windows T3 | dynamic debugging (VM remote) | `claude mcp add x64dbg -- x64dbg-automate-mcp` |
-| `volatility` | WARN | Windows T3 | memory forensics | `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |
 | `ida-pro-vm` | WARN | when IDA chosen | IDA remote analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
-| `gitnexus` | HARD | Android graph flow | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
 | `virustotal` | WARN | CTI | intelligence (family attribution) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
 | `ssh-mcp` | WARN | channel | ssh execution control plane (KUNGLAO_CHANNEL=ssh dynamics; CLI ssh fallback) | `claude mcp add ssh-mcp -- ssh-mcp` |
-| `camoufox-reverse` | WARN | web (labs) | browser JS reverse engineering (anti-detection Firefox) | `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp` |
 
 Workspace `.mcp.json` scaffold is generated by `kunglao-init` when missing (`--no-mcp` skips; an existing file is never overwritten). Keep this table in sync with the single manifest source `scripts/mcp_probe.py` (pinned by `tests/test_mcp_supply.py`).
 
@@ -195,4 +243,26 @@ Any reusable analysis logic must land as a parameterized CLI script under `/kung
 ## Python venv
 
 Path: `.venv/`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts. Python 3.11.0.
+
+## Keeping this handbook alive
+
+This file is a living handbook. The north star is agent informativeness:
+accumulating more is wrong, and too much is harmful. The render is the
+starting state, never a frozen artifact.
+
+Update triggers: an explicit user ruling; a new pitfall (record the why);
+an environment change; a new insight that changes how work starts. Update
+discipline: one hook per entry (index style, max one line), details live in
+sub-documents; organize semantically, never as a chronological log. Before
+writing, pass BOTH gates: "If this line were deleted, would the agent get
+dumber?" and "If this line were added, would the agent get stronger?" — a
+no on either means the line stays out.
+
+Red lines: no process records, no chronological transcripts, nothing already
+derivable from code or state files. A section over its line budget must be
+distilled, not extended (Roles max 30 lines, Project layout max 20, Quick
+start max 40, this section max 25).
+
+Authority: kunglao-init-worker maintains this file by update and rewrite to
+the optimal form (delete stale, merge redundant) — it is NOT append-only.
 <!-- /kunglao:frame -->

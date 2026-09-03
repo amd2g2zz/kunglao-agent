@@ -353,10 +353,20 @@ def _build_current_frame(ws: Path, old_text: str,
         sample_name = files[0].name
         sample_sha = hashlib.sha256(files[0].read_bytes()).hexdigest()
     carried = _parse_sample_rows(old_text)
+    # #919: type-conditional slot parity with init's write_claudemd.
+    etype = ptype if ptype in init.VALID_TYPES else "windows"
     params = {
         "type_section": type_section,
         "task_spec_section": req_block or "",
-        "type": ptype,
+        "type": etype,
+        "vm_constraint_line": init.vm_constraint_line(etype),
+        "mcp_rows": init.mcp_rows(etype),
+        "vm_env_rows": init.vm_env_rows(etype),
+        # #920: living-handbook slots — parity with init's write_claudemd
+        # (the upgrade re-render would otherwise leave {{placeholders}}).
+        "roles_rows": init.roles_rows(),
+        "layout_rows": init.layout_rows(),
+        "quick_start_section": init.quick_start_scaffold(etype, sample_name),
         "sample_sha1": carried.get("sample_sha1", sample_name),
         "sample_sha256": carried.get("sample_sha256", sample_sha),
         "sample_type": carried.get("sample_type",

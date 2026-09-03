@@ -95,7 +95,7 @@ files:
   - src: agents/kunglao-init-worker.md
     dest: .claude/agents/kunglao-init-worker.md
     kind: agent
-    sha256: f31bdc85dcb2988a5b978140de149daf7611f21d267a1e92d0fbd8d9f748bb92
+    sha256: 0dc914340dc10ea3084b643e70da4b2349f78d85e262992921f6a818f0457d1c
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
@@ -431,7 +431,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: fd8de0d7baa6ea055398d87b177912decf12d50c33cb72fe9a401e6b55a01ed3
+    sha256: 78a270cb3fa5e70ce9af6134659b8b864ad74e955beffe929079f853cf94c381
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -479,7 +479,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 7c2ee822f8b018deadb3673b68ab6d358dd4551dd660cba36d86fc84507f391b
+    sha256: 5bdb5d8eb5823cbaa422714de5838cd4c6147b80e73f1b92cd9e2d5667fca57a
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -1159,7 +1159,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: c7ac61775841450a6cdb38598fd7485e44ba02bcf163c35bdc53f09dd5527aa7
+    sha256: f126bf03e7dd079ca69cad429a958f6ff2f5d79c454964a612ce31dfb0600ee6
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset

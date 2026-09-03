@@ -384,11 +384,22 @@ def test_template_contains_five_layer_principle():
 # ---------- env var table in the single-source template ----------
 
 def test_base_template_env_vars():
-    """Base template documents KUNGLAO_VM_HOST, GHIDRA_HOME (#356 W2)."""
+    """Base template documents GHIDRA_HOME literally (#356 W2); the VM-channel
+    rows are #919 type-conditional data on the init side (VM_ENV_ROWS) — a
+    desktop-VM-only surface must not render into adb/browser workspaces."""
     tmpl = TEMPLATES / "CLAUDE.md.base.tmpl"
     text = tmpl.read_text(encoding="utf-8")
-    assert "KUNGLAO_VM_HOST" in text
     assert "GHIDRA_HOME" in text
+    assert "KUNGLAO_VM_HOST" not in text
+
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "kunglao_init_envvars", SCRIPTS / "kunglao-init.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert "KUNGLAO_VM_HOST" in mod.VM_ENV_ROWS
+    assert "KUNGLAO_VM_HOST" in mod.vm_env_rows("windows")
+    assert mod.vm_env_rows("android") == ""
 
 
 def test_android_os_section_env_vars():

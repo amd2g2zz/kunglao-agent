@@ -517,24 +517,33 @@ def test_per_os_templates_exist_with_mcp_table():
 
 
 def test_docs_tables_match_manifest():
-    """The base template + README MCP tables match MANIFEST
+    """The README MCP table + the #919 row-data single source match MANIFEST
     (row-prefix pin: `| `name` | tier |`).
 
-    #356 W2: the base template is the single table (superset — per-type
-    rows are filtered nowhere; the mcp_probe --type flag does the
-    per-type gating at check time)."""
-    generic = (TEMPLATES / "CLAUDE.md.base.tmpl").read_text(encoding="utf-8")
+    #356 W2: the README table is the superset (all types). #919: the base
+    template no longer carries the rows inline — kunglao-init renders the
+    per-type table from MCP_ROW_TEXT filtered by MANIFEST `types` (noise +
+    cold-start misdirection fix), so the row-data dict is the pinned
+    surface here."""
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "kunglao_init_supply", SCRIPTS / "kunglao-init.py")
+    init = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(init)
     for item in mcp_probe.MANIFEST:
         row_prefix = f"| `{item.name}` | {item.tier} |"
         assert row_prefix in readme, f"README MCP table missing {item.name}"
-        assert row_prefix in generic, f"CLAUDE.md.base.tmpl MCP table missing {item.name}"
-    # Reverse direction: the template table must not carry rows beyond the manifest (avoid calibration drift)
-    import re
-    rows = re.findall(r"^\| `([a-z0-9-]+)` \| (HARD|WARN) \|", generic, re.M)
-    manifest_names = {i.name: i.tier for i in mcp_probe.MANIFEST}
-    assert set(rows) == set(manifest_names.items()), \
-        f"base template table drift: {rows}"
+        assert item.name in init.MCP_ROW_TEXT, \
+            f"MCP_ROW_TEXT missing manifest member {item.name}"
+        assert row_prefix in init.MCP_ROW_TEXT[item.name], \
+            f"MCP_ROW_TEXT[{item.name!r}] tier/prefix drift vs MANIFEST"
+    # Reverse direction: the row data must not carry names beyond the
+    # manifest (avoid calibration drift), and order must be stable.
+    assert set(init.MCP_ROW_TEXT) == {i.name for i in mcp_probe.MANIFEST}, \
+        "MCP_ROW_TEXT/MANIFEST name-set drift"
+    assert tuple(init.MCP_ROW_TEXT) == tuple(init.MCP_ROW_ORDER), \
+        "MCP_ROW_TEXT key order must match MCP_ROW_ORDER"
 
 
 def test_readme_mentions_probe_and_scaffold():

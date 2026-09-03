@@ -1234,6 +1234,11 @@ def write_project_type(ws: Path, project_type: str) -> bool:
 
 CLAUDEMD_TMPL = Path(__file__).resolve().parent.parent / "templates" / "CLAUDE.md.base.tmpl"
 
+# #920: the Roles quick-reference table is derived from the agent
+# definitions themselves (frontmatter name/description) — this directory is
+# the single source; the table never hand-copies a description.
+AGENTS_DIR = Path(__file__).resolve().parent.parent / "agents"
+
 # #728: quickref single-source for web workspace CLAUDE.md injection.
 # If missing, write_claudemd fails closed (never silently partial).
 WEB_RE_QUICKREF = Path(__file__).resolve().parent.parent / "references" / "re-library" / "web-re-quickref.md"
@@ -1336,6 +1341,306 @@ the browser — it replaces the binary-RE playbook for web targets.
 - **Labs posture**: toolchain checks are WARN-only; a missing tool degrades capability reporting but never blocks scaffold.
 """,
 }
+
+
+# ---- #919: type-conditional CLAUDE.md section builders ----
+# The base template stays type-agnostic; per-type deltas are DATA (the
+# tuples/dicts below + the mcp_probe.MANIFEST types filter) injected
+# through template slots — the same pattern as {{type_section}}, never
+# if-elif chains in the template.
+#
+# VM channel contract: windows/linux only. #760: macos has NO VM channel
+# (vm_reachable/remote_debugger are NEVER_CHECKS there); android dynamics
+# run on the adb device; web dynamics run in the browser.
+VM_CHANNEL_TYPES: tuple[str, ...] = ("windows", "linux")
+
+VM_CONSTRAINT_LINE = (
+    "- **Dynamic tools VM-only**: x64dbg, Frida, sample execution must run "
+    "on VM. Never launch/debug/inject on host.\n")
+
+VM_ENV_ROWS = (
+    "| `KUNGLAO_VM_HOST` | unset | VM lease host for dynamic analysis "
+    "(vmr-shell / Frida ports). Unset = dynamic analysis (T3) blocked; "
+    "static analysis may proceed. |\n"
+    "| `KUNGLAO_VM_SHELL_PORT` | `9876` | vmr-shell TCP port on the VM. |\n"
+    "| `KUNGLAO_FRIDA_PORT` | `1337` | Custom Frida port (renamed "
+    "frida-server convention). |\n")
+
+# CLAUDE.md MCP-table display rows (pre-#919 template rows, byte-pinned by
+# the claudemd-golden fixtures). Tier/supply membership lives in
+# mcp_probe.MANIFEST (single source); this dict carries presentation text.
+MCP_ROW_TEXT: dict[str, str] = {
+    "ghidra":
+        "| `ghidra` | HARD | all types | Ghidra decompile/static analysis "
+        "| `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |\n",
+    "sequential-thinking":
+        "| `sequential-thinking` | HARD | all types | structured reasoning "
+        "| `claude mcp add sequential-thinking -- npx -y "
+        "@modelcontextprotocol/server-sequential-thinking` |\n",
+    "x64dbg":
+        "| `x64dbg` | HARD | Windows T3 | dynamic debugging (VM remote) "
+        "| `claude mcp add x64dbg -- x64dbg-automate-mcp` |\n",
+    "volatility":
+        "| `volatility` | WARN | Windows T3 | memory forensics "
+        "| `claude mcp add volatility -- python <path>/volatility_mcp_server.py` |\n",
+    "ida-pro-vm":
+        "| `ida-pro-vm` | WARN | when IDA chosen | IDA remote analysis "
+        "| `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |\n",
+    "gitnexus":
+        "| `gitnexus` | HARD | Android graph flow | post-decompile knowledge "
+        "graph | `claude mcp add gitnexus -- gitnexus mcp` |\n",
+    "virustotal":
+        "| `virustotal` | WARN | CTI | intelligence (family attribution) "
+        "| `claude mcp add virustotal -- npx -y "
+        "@burtthecoder/mcp-virustotal` |\n",
+    "ssh-mcp":
+        "| `ssh-mcp` | WARN | channel | ssh execution control plane "
+        "(KUNGLAO_CHANNEL=ssh dynamics; CLI ssh fallback) "
+        "| `claude mcp add ssh-mcp -- ssh-mcp` |\n",
+    "camoufox-reverse":
+        "| `camoufox-reverse` | WARN | web (labs) | browser JS reverse "
+        "engineering (anti-detection Firefox) "
+        "| `claude mcp add camoufox-reverse -- python -m "
+        "camoufox_reverse_mcp` |\n",
+}
+
+# Presentation order (pre-#919 template row order — golden-anchored).
+MCP_ROW_ORDER: tuple[str, ...] = (
+    "ghidra", "sequential-thinking", "x64dbg", "volatility", "ida-pro-vm",
+    "gitnexus", "virustotal", "ssh-mcp", "camoufox-reverse")
+
+
+def vm_constraint_line(project_type: str | None) -> str:
+    """#919: the VM-only hard constraint is a VM-channel statement —
+    desktop VM types only (empty string = line absent from the render)."""
+    return VM_CONSTRAINT_LINE if project_type in VM_CHANNEL_TYPES else ""
+
+
+def vm_env_rows(project_type: str | None) -> str:
+    """#919: VM env-var table rows for VM-channel types only."""
+    return VM_ENV_ROWS if project_type in VM_CHANNEL_TYPES else ""
+
+
+def mcp_rows(project_type: str | None) -> str:
+    """#919: per-type MCP manifest rows — mcp_probe.MANIFEST `types` is the
+    filter (mapping-driven, no if-elif chain). A type with zero manifest
+    members (labs posture, #760) renders an explicit note row instead of an
+    empty table body."""
+    pt = project_type if project_type in VALID_TYPES else "windows"
+    applicable = {i.name for i in mcp_probe.MANIFEST if pt in i.types}
+    rows = [MCP_ROW_TEXT[n].rstrip("\n")
+            for n in MCP_ROW_ORDER if n in applicable]
+    if not rows:
+        return (f"_(no MCP manifest members for this type — labs posture; "
+                f"`mcp_probe.py . --type {pt}` has nothing to require)_")
+    # The template slot line carries its own newline (same contract as the
+    # task_spec slot): rows must NOT end with one, or the render grows a
+    # stray blank line inside the table.
+    return "\n".join(rows)
+
+
+# ---- #920: living-handbook builders (roles / layout / quick start) ----
+# The base template carries the section shells + governance text; the
+# per-workspace DATA (agent roster, directory semantics, opening moves) is
+# derived here from single sources (agents/*.md frontmatter, the scaffold
+# contract, per-type methodology) — never hand-copied, so the handbook
+# cannot drift from what it describes. The north star is agent
+# informativeness: these sections stay index-short, budgets enforced by
+# tests/test_claudemd_handbook_920.py.
+
+# The dispatch-trigger column — the one field no frontmatter carries. Keyed
+# by agent name; roles_rows() fails closed on roster drift (a new agent
+# definition must land with its dispatch entry, never a table hole).
+ROLE_DISPATCH: dict[str, str] = {
+    "kunglao-worker":
+        "default executor for any claim without a stage-specific agent",
+    "kunglao-init-worker":
+        "workspace init, env repair, handbook cultivation",
+    "kunglao-redteam":
+        "attack-test a claim before it is promoted to PROVEN",
+    "verdict-scorer":
+        "score verdict.json against task_spec primary_questions",
+    "web-re-worker":
+        "web/browser JS claims (unpack, deobfuscate, signed parameters)",
+    "ghidra-light":
+        "light static recon for Go/Rust/OLLVM/C/C++/.NET local samples",
+    "go-symbols":
+        "Go symbol recovery when die.json reports language=Go",
+    "pefile-signature":
+        "authenticode + packer family identification on PE samples",
+    "floss-filter":
+        "de-noise flare-floss output into per-category string evidence",
+}
+
+# Table-cell budget for the derived responsibility text.
+ROLE_BRIEF_CAP = 90
+
+
+def _agent_brief(description: str) -> str:
+    """Derive the Roles responsibility cell from the agent's own
+    frontmatter description (first sentence, orchestrator boilerplate
+    stripped, cell-capped). Derived — never hand-copied — so the cell
+    follows the definition."""
+    head = re.split(r"\.\s", description.strip(), maxsplit=1)[0]
+    head = head.replace("for the kunglao-agent orchestrator", "")
+    head = " ".join(head.split()).strip(" ,-—:")
+    if len(head) > ROLE_BRIEF_CAP:
+        head = head[:ROLE_BRIEF_CAP - 1].rsplit(" ", 1)[0] + "…"
+    return head.replace("|", "\\|")
+
+
+def _agent_roster() -> dict[str, str]:
+    """Parse agents/*.md frontmatter into {name: description}. Fail-closed:
+    a missing/unreadable agents dir is a deployment defect, never a
+    silently-thin Roles table."""
+    files = sorted(AGENTS_DIR.glob("*.md"))
+    if not files:
+        raise template_render.TemplateRenderError(
+            f"no agent definitions found: {AGENTS_DIR}")
+    roster: dict[str, str] = {}
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        if not text.startswith("---"):
+            raise template_render.TemplateRenderError(
+                f"agent file without frontmatter: {path.name}")
+        meta = yaml.safe_load(text.split("---", 2)[1]) or {}
+        name, desc = meta.get("name"), meta.get("description")
+        if not name or not desc:
+            raise template_render.TemplateRenderError(
+                f"agent file missing name/description: {path.name}")
+        roster[str(name)] = str(desc)
+    return roster
+
+
+def roles_rows() -> str:
+    """Roles quick-reference rows: roster + responsibility cells derived
+    from agents/*.md; the when-to-dispatch column from ROLE_DISPATCH.
+    Presentation order is ROLE_DISPATCH order; roster drift fails the
+    render (fail-closed, never a hole in the handbook)."""
+    roster = {name: _agent_brief(desc) for name, desc in _agent_roster().items()}
+    missing = sorted(set(roster) - set(ROLE_DISPATCH))
+    if missing:
+        raise template_render.TemplateRenderError(
+            f"agent definitions without a ROLE_DISPATCH entry: {missing}")
+    extra = sorted(set(ROLE_DISPATCH) - set(roster))
+    if extra:
+        raise template_render.TemplateRenderError(
+            f"ROLE_DISPATCH entries without an agent definition: {extra}")
+    return "\n".join(
+        f"| `{name}` | {roster[name]} | {ROLE_DISPATCH[name]} |"
+        for name in ROLE_DISPATCH)
+
+
+# Directory semantics: (dir, meaning, caveat). Semantics distilled from the
+# scaffold contract (SCAFFOLD_DIRS + CARRIER_READMES) and the skill's F2
+# read/write boundary — one caveat per dir, the pitfall an agent actually
+# trips on. Keys must mirror SCAFFOLD_DIRS (+ bins/); the anchor test
+# pins the set so a scaffold change drags the handbook along.
+LAYOUT_ROWS: tuple[tuple[str, str, str], ...] = (
+    ("bins/", "Samples + mounted inputs (sha-anchored)",
+     "read-only: never edit or rename a mounted sample; the hash is identity"),
+    ("facts/", "Claim fact base (F<NNN>.md + _INDEX.md)",
+     "workers only; byte-anchored, reproducible, frontmatter contract"),
+    ("evidence/", "Raw evidence artifacts (JSON, dumps, captures)",
+     "never reshape an artifact to fit a claim"),
+    ("notes/", "Results layer (verify_status notes)",
+     "corrections supersede via the supersedes chain, never silent edits"),
+    ("analyses/", "Long-form analysis + failure records",
+     "cross-fact synthesis lives here, not in facts/"),
+    ("hypotheses/", "Assumption layer (H-*.md, competing candidates)",
+     "terminal states (refuted/superseded) never reopen"),
+    ("blockers/", "Unresolvable env/tooling gaps",
+     "closes only when the root cause is resolved and recorded"),
+    ("runs/", "Machine channel: status, heartbeat, logs (runs/logs), ledger",
+     "machines write here; human notes belong in notes/"),
+    ("scratch/", "Free zone for non-contract artifacts",
+     "nothing here may carry gate or convergence weight"),
+)
+
+# Skill-side row (not a workspace scaffold dir; rendered after LAYOUT_ROWS).
+SKILL_LAYOUT_ROW = (
+    "tools/ + scripts/",
+    "Registered tools (tools/_INDEX.yaml) + reusable CLIs",
+    "check the registry before writing anything new")
+
+
+def layout_rows() -> str:
+    """Project-layout table rows: one line per directory, semantics +
+    pitfall, from the scaffold contract (never invented rules)."""
+    rows = [f"| `{d}` | {m} | {c} |" for d, m, c in LAYOUT_ROWS]
+    rows.append("| `{}` | {} | {} |".format(*SKILL_LAYOUT_ROW))
+    return "\n".join(rows)
+
+
+# Opening-move scaffolds per project type, distilled from the existing
+# methodology sources (five-layer analysis principle, the android flow in
+# OS_SECTIONS, the web quickref five-section loop, the macos labs posture).
+# First init renders ONLY this scaffold (init stays purely mechanical);
+# kunglao-init-worker then cultivates it into THIS task's concrete quick
+# start — render + cultivate, never render-and-freeze.
+QUICK_START_SCAFFOLDS: dict[str, str] = {
+    "windows": (
+        "**Target**: `bins/{target}` — binary RE, static-first loop.\n"
+        "1. Identify: DIE (language/packer) + `file` + sha256 anchor.\n"
+        "2. Static sweep: strings/floss -> pefile-signature -> ghidra-light\n"
+        "   (function list + imports + suspicious-API xrefs).\n"
+        "3. Each unresolved static observation becomes ONE claim in\n"
+        "   claim-register.yaml; dispatch one worker per claim.\n"
+        "4. Dynamic only for static survivors: VM debugger/Frida channel,\n"
+        "   dispatch carries the static gap list.\n"
+        "5. Close: verdict-scorer answers primary_questions; red-team\n"
+        "   before PROVEN."),
+    "linux": (
+        "**Target**: `bins/{target}` — ELF RE, static-first loop.\n"
+        "1. Identify: DIE + `file` + sha256 anchor.\n"
+        "2. Static sweep: strings/floss -> ghidra-light (functions +\n"
+        "   imports + suspicious-API xrefs).\n"
+        "3. Each unresolved static observation becomes ONE claim; one\n"
+        "   worker per claim, facts back per the frontmatter contract.\n"
+        "4. Dynamic only for static survivors: gdbserver on VM as the\n"
+        "   primary remote debugger.\n"
+        "5. Close: verdict-scorer answers primary_questions; red-team\n"
+        "   before PROVEN."),
+    "android": (
+        "**Target**: `bins/{target}` — APK flow, graph-assisted.\n"
+        "1. Unpack: aapt/apktool -> jadx (DEX to Java).\n"
+        "2. gitnexus analyze on the decompiled tree; drive class/\n"
+        "   call-chain static analysis off the graph.\n"
+        "3. Static conclusions first; then the dynamic chain only as\n"
+        "   needed: ADB -> root -> debug flag -> renamed frida-server\n"
+        "   (custom port) or android_server.\n"
+        "4. Stuck fallback: frida hook + unidbg hybrid (AND gate: frida\n"
+        "   data sufficient + decompile done + still stuck)."),
+    "web": (
+        "**Target**: web/JS — the quickref five-section loop (read the\n"
+        "quick-reference sections below before opening a browser).\n"
+        "1. Unpack: wakaru/webcrack split by bundler traits.\n"
+        "2. Deobfuscate + index the module tree.\n"
+        "3. Trace the signed parameter: hook request/algorithm/state\n"
+        "   boundaries (preset xhr/fetch/crypto), capture the stack at\n"
+        "   the boundary.\n"
+        "4. Verify by replay: extract the algorithm, replay offline\n"
+        "   (verify_signer_offline) — a match closes the claim."),
+    "macos": (
+        "**Target**: `bins/{target}` — Mach-O, labs posture (WARN-only\n"
+        "toolchain, no VM channel).\n"
+        "1. Static: otool/class-dump family + Ghidra headless recon.\n"
+        "2. Claims from static observations; one worker per claim.\n"
+        "3. Dynamic needs a native Darwin host — debugger/Frida run\n"
+        "   locally, never in a VM."),
+}
+
+
+def quick_start_scaffold(project_type: str | None,
+                         target_name: str | None = None) -> str:
+    """Type-related opening-moves skeleton for the Quick start section.
+
+    Unknown/None type falls back to the windows scaffold (same default as
+    the {{type}} slot). Always non-empty: an empty slot would read as
+    "cultivated" when it is not — the scaffold is the UNcultivated state
+    and says so by being generic."""
+    key = project_type if project_type in QUICK_START_SCAFFOLDS else "windows"
+    return QUICK_START_SCAFFOLDS[key].format(target=target_name or "sample")
 
 
 def _setup_web_env(ws: Path) -> None:
@@ -1458,10 +1763,20 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
     venv_candidate = ws / ".venv"
     venv_path = str(venv_candidate) if venv_candidate.exists() else ".venv/"
 
+    etype = project_type or "windows"  # #919: resolved type for the slots
     params = {
         "type_section": type_section,
         "task_spec_section": task_spec_section(ws),  # #455: user contract
-        "type": project_type or "windows",
+        "type": etype,
+        # #919: type-conditional sections (VM channel + MCP manifest rows)
+        "vm_constraint_line": vm_constraint_line(etype),
+        "mcp_rows": mcp_rows(etype),
+        "vm_env_rows": vm_env_rows(etype),
+        # #920: living-handbook sections (data-driven; quick start renders
+        # the type scaffold only — kunglao-init-worker cultivates it after)
+        "roles_rows": roles_rows(),
+        "layout_rows": layout_rows(),
+        "quick_start_section": quick_start_scaffold(etype, sample_name),
         "sample_sha1": sample_name,
         "sample_sha256": sample_sha,
         "sample_type": "(detected at analysis time)",
