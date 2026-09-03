@@ -4,7 +4,6 @@
 Any red REFUSES the run (fail-closed); a red check is a human action,
 never auto-repaired.
 """
-import sys
 from pathlib import Path
 
 import bench_intake as bi

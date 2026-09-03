@@ -32,10 +32,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 KUNGLAO_PY = ROOT / "scripts" / "kunglao.py"
+
+
+from template_version import read_skill_version
 
 
 def _stamp(ws: Path, version: str | None) -> None:
@@ -99,7 +101,7 @@ def test_check_stale_v0_1_0_workspace(tmp_path: Path) -> None:
 def test_check_stale_current_workspace(tmp_path: Path) -> None:
     """Workspace stamp matches the active skill: gate returns rc=0 +
     status=current (loop may proceed)."""
-    _stamp(tmp_path, "0.1.3")
+    _stamp(tmp_path, read_skill_version())
     proc = _cli("check-stale", str(tmp_path))
     assert proc.returncode == 0, (
         f"current workspace must exit 0, got {proc.returncode}: "
@@ -107,7 +109,7 @@ def test_check_stale_current_workspace(tmp_path: Path) -> None:
     envelope = json.loads(proc.stdout.strip().splitlines()[-1])
     assert envelope["status"] == "current"
     assert envelope["rc"] == 0
-    assert envelope["workspace_stamp"] == "0.1.3"
+    assert envelope["workspace_stamp"] == read_skill_version()
     assert envelope["advice"] is None
 
 
@@ -137,7 +139,7 @@ def test_resume_passes_current_workspace(tmp_path: Path) -> None:
     """On a current workspace, the gate does not interfere — cmd_resume
     delegates to kunglao_resume.main and returns whatever that script's
     normal path returns (rc=0 on a fresh workspace)."""
-    _stamp(tmp_path, "0.1.3")
+    _stamp(tmp_path, read_skill_version())
     proc = _cli("resume", str(tmp_path))
     # Resume on a fresh workspace returns its normal exit code (0 or 1
     # depending on what kunglao_resume.main does with an empty workspace).

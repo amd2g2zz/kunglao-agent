@@ -32,7 +32,8 @@ from pathlib import Path
 _LIB_DIR = Path(__file__).resolve().parent.parent / "tools" / "_lib"
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
-from index_schema import (  # noqa: E402
+from index_schema import (  # noqa: E402,F401 — re-export face:
+    # tests + consumers read update_index.parse_index_text / .IndexSchemaError
     IndexSchemaError,
     format_row,
     parse_index_text,

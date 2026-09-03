@@ -391,7 +391,6 @@ def test_tilde_claude_md_refs_scanned_and_verifiable(fake_home, monkeypatch):
     """CLAUDE.md carries '~/.claude/skills/<name>/' references (the init
     template face): the scanner reads BOTH prefix classes and the verifier
     reports per-carrier."""
-    import install_reference  # noqa: E402
     prod, dev = _dual_installs(fake_home)
     ws = fake_home.parent / "ws-md"
     ws.mkdir(parents=True)

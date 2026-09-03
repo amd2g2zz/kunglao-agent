@@ -33,9 +33,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import kunglao_log  # noqa: E402
 from kunglao_log import (  # noqa: E402
-    allocate_trace_id,
     emit,
-    log_path,
     new_trace_id,
     validate_actor,
     validate_trace_id,

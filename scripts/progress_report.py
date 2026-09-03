@@ -132,8 +132,8 @@ def report(workspace: Path) -> int:
                 break
 
     terminal = sum(v for k, v in by_status.items() if k in TERMINAL_STATUSES)
-    open_n = by_status.get("OPEN", 0)
-    stale_n = by_status.get("STALE", 0)
+    by_status.get("OPEN", 0)
+    by_status.get("STALE", 0)
     pct = (terminal / len(claims) * 100) if claims else 0
 
     lines = []

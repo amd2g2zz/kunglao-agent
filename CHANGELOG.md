@@ -6,6 +6,56 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
+## [0.1.4] - 2026-09-03
+
+### Added
+- **WAIT/UNWAIT worker lifecycle (#902)**: subagents no longer occupy slots after
+  delivery — they run a real spin-poll (`scripts/kunglao_wait.py`) with a
+  wait-flag heartbeat; a dispatch signal re-arms them (rc 0, no timeout); a
+  worker unscheduled for 90 rounds self-kills and frees its slot (rc 3/4).
+  All 9 agents share the one CLI; `waiting` joins the status vocabulary and
+  never jams the 3-worker capacity gate.
+- **WAIT spin-lock CLI (#902)**: `kunglao_wait.py` owns the whole wait
+  mechanism (heartbeat / signal consumption / self-kill) so agents hold none
+  of it; env-tunable poll interval and round cap.
+- **Wait-signal dispatch wiring (#902)**: dispatching to a waiting worker
+  writes `runs/wait-signal-<id>.json` (single-shot, fail-open); worker_pulse
+  stops flagging waiting workers as zombies; the noop breaker exempts
+  fresh all-waiting fleets.
+- **Adversarial challenge ledger (#909)**: `challenge_ledger.py` — grounding
+  rule (no falsifier → no entry, no round cost), assertion freeze,
+  5-round hard cap, append-only HMAC-chained rounds, keyed summary
+  (forgery fails without the orchestrator key).
+- **Adversarial signature gate (#909)**: `adversarial_gate.py` blocks
+  verdict-scorer sign-off while open challenges exist / chain broken /
+  summary unauthenticated / ledger truncated (monotonic register anchor).
+- **Adversarial orchestrator CLI (#909)**: `adversarial_loop.py` —
+  begin/challenge/rebuttal/verifier-call/status/arbitrate/verify-run;
+  stalemate arbitration only after round 5; on-demand verifier summons.
+- **Agent contract layer (#909)**: redteam CONFIRMED requires ≥2 named
+  counter-example directions; verdict-scorer runs the adversarial gate with
+  no override; workers get the rebuttal right and mechanism files join the
+  BLIND list.
+- **On-demand verifier summons (#909)**: a disputed falsifier command is
+  re-run once by a fresh verifier (timeout-capped, finding archived) —
+  never a blanket re-run of every evidence command.
+- **Execution channel in the event log (#699)**: every `kunglao_log` row
+  carries `channel` (from `KUNGLAO_CHANNEL`, default `local`); explicit
+  kwarg wins for endpoint-specific stamping.
+- **Execution-surface digest summary (#699)**: digest sec_h reports
+  per-channel event counts; legacy rows aggregate under `local`.
+
+### Fixed
+- **Toolchain probes execute for real (#697)**: `_which_items` runs the
+  tool's `verify_cmd` (fail-open, 10 s) — dead symlinks, 0-byte binaries and
+  missing shared libraries now WARN at free-time init with the real cause,
+  instead of PASSing on `which` and failing at paid-time dispatch.
+- **Workspace resolution single source (#865)**: the three hooks-side
+  `_resolve_workspace` copies (dispatch_gate / env_check_gate /
+  recall_inject) delegate to one manifest-aware helper — the two copies that
+  hardcoded `malware-analysis-workspace` no longer bypass env-manifest
+  layout overrides.
+
 ## [0.1.3] - 2026-08-25
 
 ### Round 6 — Deployment Inversion, Agent Governance & Web-Lane Depth (2026-08-27)

@@ -51,7 +51,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from lint_facts import (  # type: ignore
     ID_RE,
-    VALID_CONFIDENCE_ZH,
     _parse_kv_block,
 )
 

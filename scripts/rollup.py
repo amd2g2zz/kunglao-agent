@@ -203,7 +203,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
     # auto-WRITES the note (judge-then-revise doctrine, 2026-08-20 ruling):
     # the queue only makes the obligation impossible to forget; the Stop-face
     # completion gate refuses closure while entries remain.
-    notes_queued = _queue_notes_due(workspace, claim_id, status_upper)
+    _queue_notes_due(workspace, claim_id, status_upper)
 
     # Step 3: workspace git checkpoint commit (shared mount with #534).
     ck = _checkpoint_commit(workspace, claim_id, status_upper)

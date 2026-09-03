@@ -13,7 +13,6 @@ YARA rule text on stdout; exit 0 generated / 2 error with guidance.
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 

@@ -33,8 +33,6 @@ Pure stdlib. Pure functions, no state.
 """
 from __future__ import annotations
 
-import json
-import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 

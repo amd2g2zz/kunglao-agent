@@ -74,8 +74,8 @@ if str(_TOOLS_DIR) not in _sys_io.path:
 from _lib.stdio import ensure_utf8_stdout  # noqa: E402
 from job_store import (  # noqa: E402 — shared substrate, re-exported for callers
     ACTIVE_STATES,
-    ALLOWED_TRANSITIONS,
-    JOB_SCHEMA,
+    ALLOWED_TRANSITIONS,  # noqa: F401 — re-export: tests read gj.ALLOWED_TRANSITIONS
+    JOB_SCHEMA,  # noqa: F401 — re-export: tests read gj.JOB_SCHEMA
     JobStateError,
     JobStore,
     TERMINAL_STATES,

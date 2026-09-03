@@ -20,7 +20,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 from _factories import seed_bins
 
 ROOT = Path(__file__).resolve().parents[1]

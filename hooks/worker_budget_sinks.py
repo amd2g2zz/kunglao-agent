@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from worker_budget_core import (
+from worker_budget_core import (  # noqa: F401 — broad re-export surface:
+    # worker_budget.py aggregator + tests consume these via module attrs
     MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, ENV_STATE_FILE, ENV_STATE_TTL_MINUTES,
     HOST_FORBIDDEN_TOOLS, TOOL_ERRORS_FILE, _SKILL_ROOT,
     VM_TOOLS, KNOWN_TOOLS,
@@ -17,7 +18,8 @@ from worker_budget_gates import (
     check_workers_lt_3, check_promotion_attempts, check_tools_allowed,
     check_host_forbidden_tools, check_deadline, check_tier_gate,
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
-    compare_register_change, compare_register_change_proven_gate,
+    compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
+    compare_register_change_proven_gate,
     register_worker, remove_worker,
     toolfirst_pass_record,  # #880 approval-point pass face + operation label
 )  # noqa: E402,F401

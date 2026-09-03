@@ -288,7 +288,6 @@ def _load_shim():
 
 def _activated_state(ws: Path) -> None:
     """Real-schema .hook_state.json that is_active_strict accepts."""
-    import datetime as dt
     write_hook_state(ws, active_hooks=["completion_gate"],
                      ts="2026-08-13T00:00:00Z", tier="none",
                      phase="IDLE", user_override={},

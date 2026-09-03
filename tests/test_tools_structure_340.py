@@ -33,7 +33,6 @@ R7 zero stale references to old paths: live docs/code/manifests must not
 from __future__ import annotations
 
 import json
-import os
 import re
 import subprocess
 import sys

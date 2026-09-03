@@ -13,7 +13,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
 
 _HERE = Path(__file__).parent
 sys.path.insert(0, str(_HERE.parent / "tools" / "static"))

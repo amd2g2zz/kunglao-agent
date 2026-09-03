@@ -24,13 +24,11 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-import json
 import subprocess
 import sys
 import types
 from pathlib import Path
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -38,7 +36,7 @@ sys.path.insert(0, str(REPO_ROOT / "tests"))  # _top1_ws
 
 import kunglao_log  # noqa: E402
 
-from test_decision_teeth import _activate, _event_rows, _run_gate, _top1_ws  # noqa: E402
+from test_decision_teeth import _event_rows, _top1_ws  # noqa: E402
 
 
 def _load_kunglao_decide():

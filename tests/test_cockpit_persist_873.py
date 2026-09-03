@@ -14,7 +14,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +21,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import tuition_curve as tc  # noqa: E402
 import rho_verifier as rv  # noqa: E402
-import kunglao_log  # noqa: E402
 
 
 # ---------- 缺口0：cost writer ----------

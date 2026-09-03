@@ -151,7 +151,6 @@ def test_act_stuck_reopens_inprogress_claim(tmp_path):
     # Unit-level: exercise the stuck action directly (the SCHEDULE probe
     # path is covered by test_stuck_event_595; DRAIN-state wiring is future
     # work — this test pins the reopen 闭环 itself).
-    import inspect
     import dataclasses
     fields = {f.name: None for f in dataclasses.fields(cc._DecideInputs)}
     fields.update(workspace=ws,

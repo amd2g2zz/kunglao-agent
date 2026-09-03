@@ -51,7 +51,6 @@ an empty field means the tick idled — a fault signal (tokens burned).
 Usage: python heartbeat_tick.py <workspace>
 """
 import json
-import os
 import subprocess
 import sys
 import datetime

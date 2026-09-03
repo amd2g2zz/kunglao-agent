@@ -13,7 +13,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import yaml  # noqa: E402
 
 import register_proven_gate as rpg  # noqa: E402
-import verifier_identity as vi  # noqa: E402
 import write_gate as wg  # noqa: E402
 
 

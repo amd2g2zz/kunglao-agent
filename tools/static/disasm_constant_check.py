@@ -53,10 +53,8 @@ if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
 from lib_disasm import (  # noqa: E402  (shared PE/capstone helpers, #284)
-    capstone_for as _capstone_for,
     disasm_at as _disasm_at,
     load_pe as _load_pe,
-    va_to_offset,
 )
 
 # UTF-8 stdout contract (#317): non-ASCII output (e.g. U+FFFD from

@@ -15,7 +15,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 _HERE = Path(__file__).parent
 SCRIPTS = _HERE.parent / "scripts"

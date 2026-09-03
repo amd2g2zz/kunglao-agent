@@ -622,11 +622,14 @@ class TestT6Registry:
 
     def test_already_at_target_still_plans_deploy_items(self, tmp_path,
                                                         pinned=False):
-        """The live-run problem: stamp == skill target but the deploy surface
-        is incomplete — entry 0.1.4 must make plan non-empty so the fast
+        """The live-run problem (real-world shape): a 0.1.3-stamped workspace
+        (stamped before this release) whose deploy surface is incomplete —
+        the 0.1.4 registry entry must make plan non-empty so the fast
         path cannot skip the repair."""
+        maj, mi, pa = (int(x) for x in tv.read_skill_version().split("."))
+        prev = ".".join(str(x) for x in (maj, mi, max(pa - 1, 0)))
         up = _load_upgrade()
-        ws = self._stamped_ws(tmp_path, tv.read_skill_version())
+        ws = self._stamped_ws(tmp_path, prev)
         pre_notes = self._snap(ws)["notes/keep.md"]
         rc = up.main([str(ws)])
         assert rc == 0

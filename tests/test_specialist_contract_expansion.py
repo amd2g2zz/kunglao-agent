@@ -264,7 +264,7 @@ class TestToolSpan:
             f"references/re-library/ domain file before acting"
         )
 
-    @pytest.mark.parametrize("agent", ("kunglao-init-worker", "verdict-scorer"))
+    @pytest.mark.parametrize("agent", ["kunglao-init-worker", "verdict-scorer"])
     def test_non_re_reference_channel(self, agent: str) -> None:
         span = _span_text(agent, "tool-discovery")
         assert "references/" in span, (
@@ -316,7 +316,7 @@ class TestCheckerBlindWritePathPins:
 
     @pytest.mark.parametrize("agent", CHECKER_SPECIALISTS)
     @pytest.mark.parametrize(
-        "element", ("plan-to-execute", "status-sync", "tool-discovery"))
+        "element", ["plan-to-execute", "status-sync", "tool-discovery"])
     def test_no_maker_write_target_on_write_line(
             self, agent: str, element: str) -> None:
         span = _span_text(agent, element)

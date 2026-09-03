@@ -3,8 +3,6 @@
 normal-approx Wilcoxon with tie correction, least-squares slopes).
 scipy/duckdb deliberately not added; numerics equivalent at n=30.
 """
-import sys
-from pathlib import Path
 
 import pytest
 

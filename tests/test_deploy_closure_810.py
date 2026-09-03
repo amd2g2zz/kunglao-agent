@@ -8,12 +8,10 @@
 """
 from __future__ import annotations
 
-import importlib.util
 import json
 import sys
 from pathlib import Path
 
-import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -95,7 +93,6 @@ def test_completeness_report(tmp_path):
 
 def test_activation_writes_env_incident_on_incomplete(tmp_path):
     """R3：激活写入面在部署面缺失时 env_incident 落账（全 ledger glob）。"""
-    import kunglao_log
     import hook_activation as ha
     ws = tmp_path / "ws"
     (ws / "runs" / "logs").mkdir(parents=True)

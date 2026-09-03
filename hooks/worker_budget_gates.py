@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from worker_budget_core import (
+from worker_budget_core import (  # noqa: F401 — broad re-export surface:
+    # tests + sinks consume these via module attributes (gates.MAX_WORKERS etc.)
     MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, MAX_RETRIES, RETRY_COUNTER_FILE,
     ENV_STATE_FILE, ENV_STATE_TTL_MINUTES,
     VM_TOOLS, KNOWN_TOOLS, HOST_FORBIDDEN_TOOLS,

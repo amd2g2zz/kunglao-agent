@@ -113,7 +113,6 @@ Hook deployment boundary (hard constraint): NEVER write the production
 from __future__ import annotations
 
 import argparse
-import datetime
 import hashlib
 import json
 import os
@@ -2243,7 +2242,6 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     # evidence on disk for the operator to diagnose.
     phase_log: list[dict] = []
     overall = "PASS"
-    wrapped_ws: Path | None = None
     final_rc: int = RC_ERROR  # default = generic error if we never set it
 
     # #455: stdout is the MACHINE channel (pending-decision JSON must be
@@ -2267,7 +2265,6 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
             )])
         ws = Path(ws_answer)
     ws = Path(ws).resolve()
-    wrapped_ws = ws  # #534: finally-block writes the report to this path
 
     # #411: workspace-path shape gate — BEFORE any write (including hook
     # install). A sample directory passed as the workspace would place
@@ -2356,7 +2353,8 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         ws, files, target, project_type, answers)
     if pending_rc is not None:
         return pending_rc
-    assert target_name is not None and project_type is not None  # aligned
+    assert target_name is not None  # aligned
+    assert project_type is not None  # aligned
 
     # #304: toolchain.check BEFORE scaffold — HARD FAIL => #408
     # ask-then-install, then refuse + cleanup only for items still HARD.

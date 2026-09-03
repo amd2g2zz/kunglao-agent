@@ -159,7 +159,6 @@ def _validated_capability(ws: Path, claim_id: str) -> dict:
     try:
         import sys as _sys
         _sys.path.insert(0, str(Path(__file__).parent))
-        import priority_ratio as pr  # type: ignore
         from priority_ratio import EvidenceView  # type: ignore
         evidence = EvidenceView.from_workspace(ws)
         claim_ids = {claim_id}

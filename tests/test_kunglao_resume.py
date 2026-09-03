@@ -77,7 +77,8 @@ def _armed_ws(tmp_path: Path, *, name: str = "ws",
     # #748: stamp the workspace template version so the stale-workspace
     # gate (RC=5) passes — these tests are about resume's delegation
     # behavior, not about the gate itself.
-    ws_version = "0.1.3"
+    from template_version import read_skill_version
+    ws_version = read_skill_version()
     (ws / "CLAUDE.md").write_text(
         f"# kunglao_template_version: {ws_version}\n", encoding="utf-8")
 

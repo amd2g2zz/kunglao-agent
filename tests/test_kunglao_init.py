@@ -19,7 +19,6 @@ from pathlib import Path
 
 import pytest
 
-import hook_activation
 from hook_activation import canonical_install_root
 from _factories import seed_bins
 

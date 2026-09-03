@@ -1,4 +1,4 @@
-<!-- kunglao:frame:v0.1.3 -->
+<!-- kunglao:frame:v0.1.4 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.

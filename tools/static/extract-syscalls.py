@@ -36,7 +36,6 @@ if str(_THIS_DIR) not in sys.path:
 
 from common import (  # noqa: E402
     add_common_flags,
-    error,
     negative,
     parse_line,
     read_bytes,

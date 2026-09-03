@@ -112,7 +112,7 @@ def _normalize_preview(key: dict) -> dict[str, str]:
         matcher = pq.get("matcher")
         if matcher != "normalized-ioc":
             continue
-        pid = str(pq.get("pq_id") or "")
+        str(pq.get("pq_id") or "")
         exp = pq.get("expected")
         items = exp if isinstance(exp, list) else [exp]
         for raw in items:

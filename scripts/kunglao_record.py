@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import datetime
 import hashlib
 import json
 import sys

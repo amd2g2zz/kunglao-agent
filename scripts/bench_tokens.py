@@ -20,7 +20,6 @@ the z_self label (channel 4) and the contamination rule (AB-DESIGN §7).
 """
 from __future__ import annotations
 
-import json
 import sys
 from datetime import datetime
 from pathlib import Path

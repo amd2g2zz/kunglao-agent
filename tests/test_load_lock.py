@@ -120,7 +120,6 @@ def test_autouse_fixture_holds_machine_lock_end_to_end(tmp_path):
     (baseline includes startup), then let the holder go.
     (Lock file name mirrors conftest.LOAD_SENSITIVE_LOCK_NAME deliberately —
     a rename here must fail loudly.)"""
-    import os
     import tempfile
 
     lock = Path(tempfile.gettempdir()) / "kunglao-pytest-load-sensitive.lock"

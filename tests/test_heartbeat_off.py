@@ -22,7 +22,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 from _factories import write_claims_register
 
 ROOT = Path(__file__).resolve().parents[1]

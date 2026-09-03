@@ -18,7 +18,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import hook_activation as ha  # noqa: E402
-import kunglao_log  # noqa: E402
 
 
 def _expired_state() -> dict:

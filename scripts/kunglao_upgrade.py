@@ -1024,7 +1024,7 @@ def _item_toolchain_manifest(ws: Path, dry: bool) -> str:
     report_path = ws / "runs" / ".init-report.json"
     marker = ws / ".kunglao-init.json"
     if not report_path.is_file():
-        which = [] if not marker.is_file() else ["report"]
+        [] if not marker.is_file() else ["report"]
         label = ("missing"
                  + ("-and-marker" if not marker.is_file() else ""))
         detail = (f"{label} — re-init restores full deploy surface "

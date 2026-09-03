@@ -19,7 +19,6 @@ SYNTHETIC test data (a public issue excerpt), not live user/malware data.
 """
 import json
 
-import pytest
 
 import fixture_excerpt_lint as fel
 

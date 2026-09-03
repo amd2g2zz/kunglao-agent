@@ -7,11 +7,9 @@ holds the cross-cutting primitives the gates / sinks modules import from."""
 
 
 
-import json
 import re
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import yaml
@@ -45,7 +43,7 @@ RETRY_COUNTER_FILE = 'runs/.retry-counter.yaml'
 # existence check + insert — equivalent spellings could still stack).
 ENV_STATE_FILE = 'runs/env-state.json'
 ensure_scripts_path()
-from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402
+from liveness_policy import ENV_STATE_TTL_MINUTES  # noqa: E402,F401 — re-exported to gates
 # #861 单源化保留：无 claim 的 v0 裸前缀（非 claim 派发）是 budget 本地边缘
 # 合同——claim 派发的识别已单源到 lib_kunglao.parse_dispatch。
 _V0_PREFIX_FALLBACK = re.compile(r'^\[T(\d)\s+tools=([^\]]+)\]')
@@ -82,14 +80,14 @@ ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     from priority_ratio import priority_ratio as _ratio_rank, EvidenceView as _EvidenceView
     from retract_claim import RETRACTED  # retracted = terminal (#331)
-    from status_defs import TERMINAL  # single source of truth (#34, #95)
+    from status_defs import TERMINAL  # noqa: F401 — re-exported via gates surface
     _PRIORITY_AVAILABLE = True
 except Exception:  # pragma: no cover - hook stays usable if the scorer moves
     _PRIORITY_AVAILABLE = False
 
 # ---------- issue #310: specialist trigger table (imports route_capability) ----------
 try:
-    from route_capability import (
+    from route_capability import (  # noqa: F401 — re-exported via gates surface
         load_specialist_table as _load_specialist_table,
         recommend_agent_type as _recommend_agent_type,
     )

@@ -9,7 +9,6 @@ worktree path that died with the worktree — 8 hooks went silent at once).
 from __future__ import annotations
 
 import json
-import os
 import pathlib
 import shutil
 import sys

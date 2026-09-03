@@ -53,6 +53,7 @@ Auto-integration mode (issue #602, --auto flag):
 from __future__ import annotations
 import gate_telemetry as _gt
 from status_defs import TERMINAL
+from harness_common import utc_now_z as utc_now  # noqa: F401 — #863 Family F contract (863g mechanical check)
 
 import argparse
 import hashlib
@@ -78,7 +79,6 @@ LOW_CONFIDENCE = frozenset({
 UNVERIFIED_CHECK_STATUSES = frozenset({"PROVEN"})
 
 
-from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
 def _load_yaml(p):
@@ -366,7 +366,7 @@ def check(workspace: Path, active_only: bool = False) -> int:
     plan_refers_to_register = bool(plan_ids & claim_ids)
 
     deps_path = workspace / "claim_deps.yaml"
-    deps_ids = extract_claim_ids_from_deps(deps_path)
+    extract_claim_ids_from_deps(deps_path)
 
     tspec = _load_yaml(workspace / "task_spec.yaml")
     primary_questions = tspec.get("primary_questions", []) or []
@@ -519,7 +519,6 @@ def check_auto(workspace: Path, active_only: bool = False) -> int:
         # EVIDENCE warns are surfaced only as WARN lines in stdout.
         # If we already saw WARN output above we are in the WARN-only path.
         # Cheap heuristic: a WARN-only run prints "WARN" to stdout.
-        import io as _io
         # check() already consumed stdout; we cannot read what it wrote.
         # Instead, peek at the workspace ourselves for evidence-newer-than-plan
         # signals and surface the WARN-only classification here. This is the

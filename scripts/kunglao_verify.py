@@ -32,7 +32,6 @@ Output contract: schemas/verify-output.json (M3.3 frozen, module-design
 from __future__ import annotations
 
 import argparse
-import datetime
 import hashlib
 import json
 import re

@@ -42,7 +42,7 @@ def classify(text: str) -> dict:
                 "factual",
                 "route": route, "classified_by": "prefix",
                 "payload": _PREFIX_RE.sub("", text.strip(), count=1)}
-    low = text.lower()
+    text.lower()
     if any(k in text for k in _KW_FACTUAL):
         return {"ontype": "factual", "route": "fix",
                 "classified_by": "keyword", "payload": text}

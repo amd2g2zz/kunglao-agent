@@ -20,14 +20,12 @@ deliberately independent of the live workspace, which may not exist on CI.
 """
 from __future__ import annotations
 
-import datetime as dt
 import importlib.util
 import io
 import json
 import sys
 from pathlib import Path
 
-import pytest
 
 _HERE = Path(__file__).parent
 SCRIPTS = _HERE.parent / "scripts"

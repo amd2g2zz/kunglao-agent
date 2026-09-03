@@ -6,7 +6,6 @@ oracle, is the authority.
 Replay #2 mechanism: two same-topic PROVEN facts with opposite
 conclusions; decide() returns CONVERGED and judge() trusts the oracle.
 """
-import sys
 from pathlib import Path
 
 import yaml

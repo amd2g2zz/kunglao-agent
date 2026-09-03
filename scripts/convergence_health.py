@@ -35,9 +35,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 # #863 Family C: workspace resolution is single-sourced in ws_layout; this

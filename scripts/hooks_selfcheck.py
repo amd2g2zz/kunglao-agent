@@ -25,10 +25,8 @@ them from global; they must live in the project settings) but never rewrites it.
 Wires in via heartbeat_loop_prompt.py (step 0 of every tick). Idempotent + fast (<50ms).
 """
 import json
-import os
 import subprocess
 import sys
-import datetime
 from pathlib import Path
 
 import wire_up_settings

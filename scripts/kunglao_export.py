@@ -227,16 +227,16 @@ def verify_manifest(archive: Path) -> int:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="workspace export tool")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    
+
     p_exp = sub.add_parser("export", help="Export workspace")
     p_exp.add_argument("workspace", type=Path)
     p_exp.add_argument("-o", "--output", type=Path, required=True,
                        help="output archive (.tar.gz)")
     p_exp.add_argument("--include-scratch", action="store_true")
-    
+
     p_ver = sub.add_parser("verify", help="Verify archive")
     p_ver.add_argument("archive", type=Path)
-    
+
     args = ap.parse_args()
     if args.cmd == "export":
         sys.exit(export_workspace(args.workspace, args.output, args.include_scratch))

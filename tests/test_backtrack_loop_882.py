@@ -28,14 +28,12 @@ retro only files proposals for the orchestrator).
 """
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"

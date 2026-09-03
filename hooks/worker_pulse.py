@@ -46,13 +46,12 @@ worker_budget):
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-from _path_hygiene import load_hooks_lib, on_path, scripts_on_path  # #671 authority
+from _path_hygiene import load_hooks_lib, scripts_on_path  # #671 authority
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 

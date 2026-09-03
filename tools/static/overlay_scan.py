@@ -55,7 +55,6 @@ if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
 from common import (  # noqa: E402
-    EXE_SIGNATURES,
     byte_entropy,
     error,
     find_all,

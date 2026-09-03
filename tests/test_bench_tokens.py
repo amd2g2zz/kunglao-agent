@@ -6,7 +6,6 @@ grand_total, wall_s, user_turn_count, usage_incomplete}.
 user_turn_count > 1 = human-intervention evidence (z_self channel 4).
 """
 import json
-import sys
 from pathlib import Path
 
 import bench_tokens as bt

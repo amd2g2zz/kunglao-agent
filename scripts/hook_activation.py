@@ -85,7 +85,6 @@ import hashlib
 import json
 import shutil
 import sys
-import warnings
 from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -749,7 +748,7 @@ def deploy_workspace_copy(ws: Path) -> dict:
     bytes, so a green-repo deploy and a refresh carrier always agree
     (design: deploy_manifest is the single digest authority)."""
     from deploy_manifest import (MANIFEST as _MF, build_entries as _build,
-                                 manifest_digest, write_carrier)
+                                 write_carrier)
 
     if not _MF.is_file():
         raise RuntimeError(f"deployment manifest missing: {_MF}")

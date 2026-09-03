@@ -8,9 +8,6 @@ TDD RED phase: tests for:
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -203,7 +200,6 @@ def test_env_check_uses_shared_predicate():
     """F6: env_check.check_init_complete delegates to the shared module."""
     import inspect
     import env_check
-    import init_state
     src = inspect.getsource(env_check.check_init_complete)
     assert "init_state" in src, "env_check must reference the shared predicate"
     assert env_check.check_init_complete.__doc__ and "init_state" in env_check.check_init_complete.__doc__

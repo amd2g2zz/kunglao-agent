@@ -272,7 +272,6 @@ def test_verify_detects_tampered_file(tmp_path):
     assert rc == 0
     # Tamper: rebuild the archive with a corrupted CLAUDE.md
     import io
-    import shutil
     tampered = tmp_path / "tampered.tar.gz"
     with tarfile.open(arc, "r:gz") as src, \
          tarfile.open(tampered, "w:gz") as dst:

@@ -9,7 +9,6 @@ posture: this module only counts, persists state, and emits; blocking
 wiring graduates at A5 canary.
 """
 import json
-import sys
 from pathlib import Path
 
 import zero_output_fingerprint as zf

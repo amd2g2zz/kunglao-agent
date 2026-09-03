@@ -35,7 +35,6 @@ def refresh(ws: Path, *, dry: bool = False,
     try:
         import deploy_manifest as dm
         entries = {e["dest"]: e for e in dm.build_entries()}
-        sha_of = dm._sha
     except Exception as exc:  # noqa: BLE001 — degraded detail only
         return f"deployed_refresh(skipped: manifest unavailable {exc!r})"
 

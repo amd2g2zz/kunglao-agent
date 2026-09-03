@@ -20,7 +20,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import heartbeat  # noqa: E402
-from liveness_policy import STALE_MINUTES  # noqa: E402
 
 NOW = datetime.now(timezone.utc)
 

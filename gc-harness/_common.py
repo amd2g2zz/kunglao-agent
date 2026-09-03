@@ -7,9 +7,7 @@ import datetime as _dt
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
-from typing import Any
 
 import yaml  # type: ignore
 

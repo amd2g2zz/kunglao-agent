@@ -494,7 +494,6 @@ class TestTickIntegration:
 
     def test_real_tick_carries_mechanisms_face_and_legacy_keys(self, tmp_path):
         """真 tick：report["mechanisms"] 新面 + legacy key 全保留 + mech_run 落账。"""
-        import yaml as _yaml
         ws = _ws(tmp_path)
         (ws / "task_spec.yaml").write_text("mission: mech-test\n",
                                            encoding="utf-8")

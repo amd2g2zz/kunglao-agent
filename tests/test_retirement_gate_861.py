@@ -6,7 +6,6 @@ findings ⊆ baseline（已知债务挂账 #867，新违规 CI 红）。
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 

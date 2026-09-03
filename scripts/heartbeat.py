@@ -329,7 +329,7 @@ def heartbeat_check(workspace: Path) -> int:
         return 1
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
-        last = datetime.fromisoformat(state.get("last_tick_ts", "").replace("Z", "+00:00"))
+        datetime.fromisoformat(state.get("last_tick_ts", "").replace("Z", "+00:00"))
     except Exception as exc:
         print(f"HEARTBEAT DOWN: .heartbeat.json unreadable ({exc})", file=sys.stderr)
         return 1

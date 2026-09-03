@@ -9,10 +9,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PASS_RATE = REPO_ROOT / "devkit" / "pass_rate_metric.py"

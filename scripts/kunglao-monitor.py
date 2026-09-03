@@ -28,7 +28,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import sys
 from pathlib import Path
 
 HEARTBEAT_FILE = "runs/.heartbeat.json"

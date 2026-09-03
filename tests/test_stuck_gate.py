@@ -7,7 +7,6 @@ Covers two pieces:
 These tests FAIL until the GREEN step adds the two functions.
 """
 import os
-import sys
 import tempfile
 import time
 from pathlib import Path

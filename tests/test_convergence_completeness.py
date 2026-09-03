@@ -18,15 +18,14 @@ import textwrap
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from convergence_check import decide, _open_claims
-from convergence_health import assess, _dedup_consecutive, _flatline_run
+from convergence_check import decide
+from convergence_health import assess, _dedup_consecutive
 from _factories import write_claims_register
 
 

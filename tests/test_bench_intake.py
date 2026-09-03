@@ -6,11 +6,9 @@ is the FIRST line of experiment hygiene: bad manifests must never reach
 the runner.
 """
 import hashlib
-import json
 import sys
 from pathlib import Path
 
-import pytest
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))

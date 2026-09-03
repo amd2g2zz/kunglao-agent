@@ -8,9 +8,7 @@ changing what the hooks and scripts under test observe.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-import pytest
 import yaml
 
 from _factories import (DEFAULT_SAMPLE, FAR_FUTURE, seed_bins,

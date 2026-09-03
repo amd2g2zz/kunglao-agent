@@ -622,7 +622,7 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         text=_format_flash_text(pq, elapsed, pq["eta_ticks"]))
 
     codes = sorted({d["short_code"] for d in probe_detail if not d["ok"]})
-    audit_detail = by_id.get("audit_age", {})
+    by_id.get("audit_age", {})
     audit_age_min = None
     try:
         audit_age_min = int((now_s - (ws / "runs" / ".hooks-selfcheck.json")

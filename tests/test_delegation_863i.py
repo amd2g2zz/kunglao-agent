@@ -121,18 +121,19 @@ def test_common_write_evidence_contract(tmp_path):
 
 @pytest.mark.parametrize(
     "path",
-    (
-        STATIC / "apk_mem_gate.py",
-        STATIC / "baksmali_index.py",
-        STATIC / "dexdc_scanner.py",
-        SCRIPTS / "apkid_scanner.py",
-    ),
-    ids=lambda p: p.name,
+    [
+        (STATIC / "apk_mem_gate.py",),
+        (STATIC / "baksmali_index.py",),
+        (STATIC / "dexdc_scanner.py",),
+        (SCRIPTS / "apkid_scanner.py",),
+    ],
+    ids=lambda t: t[0].name,
 )
-def test_family_j_copies_removed(path: Path):
-    src = path.read_text(encoding="utf-8")
-    assert "def _write_evidence" not in src, f"{path.name}: local def survives"
-    assert "_write_evidence" not in src, f"{path.name}: local call survives"
+def test_family_j_copies_removed(path: tuple[Path, ...]):
+    (target,) = path
+    src = target.read_text(encoding="utf-8")
+    assert "def _write_evidence" not in src, f"{target.name}: local def survives"
+    assert "_write_evidence" not in src, f"{target.name}: local call survives"
 
 
 def test_family_j_delegates_identity():

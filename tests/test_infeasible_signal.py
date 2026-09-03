@@ -10,7 +10,6 @@ the SKILL layer's job (obstacle +3 pruning semantics); this module only
 produces the mechanical signal.
 """
 import json
-import sys
 from pathlib import Path
 
 import infeasible_signal as isg

@@ -3,8 +3,6 @@
 PQs only). The module prepares blind briefs and merges verdicts; the
 actual dispatch (kunglao-redteam agent) happens at experiment time.
 """
-import sys
-from pathlib import Path
 
 import bench_redteam as br
 

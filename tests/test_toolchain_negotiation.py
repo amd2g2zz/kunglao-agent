@@ -99,7 +99,6 @@ def _fail_report(*names: str, project_type: str = "windows"):
 
 def _fake_check_factory(fails: list[str], calls: list | None = None):
     """toolchain.check fake returning a report FAILing exactly `fails`."""
-    import toolchain as tc
 
     def fake_check(ws_arg, project_type=None, caps=False, task_spec=None):
         if calls is not None:

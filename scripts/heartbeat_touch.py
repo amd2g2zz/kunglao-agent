@@ -12,11 +12,8 @@ Usage: python heartbeat_touch.py <workspace>
 """
 from __future__ import annotations
 
-import datetime
 import json
-import os
 import sys
-from pathlib import Path
 
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402

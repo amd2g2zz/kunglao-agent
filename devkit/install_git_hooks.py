@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import os
 import shutil
 import stat
 import subprocess

@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import json
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)

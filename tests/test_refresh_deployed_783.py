@@ -54,7 +54,6 @@ def test_chain_contains_refresh_item(tmp_path: Path) -> None:
     for out in ["deployed_refresh(dry)"]:
         pass
     ku2 = _mod("kunglao_upgrade_u2", "scripts/kunglao_upgrade.py")
-    import types as _t
     got = []
     real = fn
     # Re-run the chain body by calling each registered item indirectly is

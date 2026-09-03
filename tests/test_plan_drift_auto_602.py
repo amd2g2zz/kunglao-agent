@@ -28,7 +28,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -36,7 +35,6 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 HOOKS_DIR = REPO_ROOT / "hooks"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-import plan_drift_detector as pdd  # noqa: E402
 
 # ---------- helpers -----------------------------------------------------
 
@@ -90,7 +88,6 @@ class TestPlanDriftAutoFlag:
     def test_auto_flag_present(self) -> None:
         """`--auto` flag is registered on the parser."""
         # --help does not error and lists --auto
-        import argparse
         # build a fresh parser to inspect; use plan_drift_detector.main's parser
         # by invoking it with --help and capturing argparse's output.
         proc = subprocess.run(

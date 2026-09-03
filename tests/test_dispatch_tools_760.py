@@ -365,7 +365,6 @@ class TestI3MacosTemplateAndCli:
         CLAUDE.md render end to end through composed init steps (the CLI's
         interactive intake gates are out of scope; every artifact-side step
         runs exactly as production)."""
-        import importlib.util
         kunglao_init = _load_init()
         ws = tmp_path / "ws"
         ws.mkdir()

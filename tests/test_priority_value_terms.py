@@ -6,8 +6,6 @@ what is FED into cost (rework-inflated by the bucket's P(complete)) and
 adds a capability bonus multiplier for claims holding a validated
 capability card. Flag off → byte-identical ranking.
 """
-import sys
-from pathlib import Path
 
 import priority_ratio as pr
 import value_config

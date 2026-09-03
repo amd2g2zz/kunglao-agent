@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 
 REQUIREMENT_HEADING = "## Task constraints (task_spec)"
 _OPEN_RE = re.compile(r"^<!--\s*kunglao:frame:v(\S+)\s*-->\s*$", re.MULTILINE)

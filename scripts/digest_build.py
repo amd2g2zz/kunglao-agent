@@ -39,11 +39,11 @@ import yaml
 _LIB_DIR = Path(__file__).resolve().parent.parent / "tools" / "_lib"
 if str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
-from index_schema import (  # noqa: E402
+import index_schema as _INDEX_SCHEMA  # noqa: E402,F401  (identity anchor for tests)
+from index_schema import (  # noqa: E402,F401 — re-export face (digest_build.IndexSchemaError read via module attr)
     IndexSchemaError,
     parse_index_text,
 )
-import index_schema as _INDEX_SCHEMA  # noqa: E402  (identity anchor for tests)
 
 SCHEMA_VERSION = "digest-v1"
 DIGEST_PATH = Path("runs") / "digest.md"

@@ -21,7 +21,6 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import datetime
 import json
 import os
 import shutil
@@ -307,7 +306,6 @@ def category_complexity() -> dict:
 
     findings: dict[str, object] = {}
     all_stdout: list[str] = []
-    all_stderr: list[str] = []
     start = time.monotonic()
 
     # 1. vulture — orphan / dead code (min-confidence 80 = strict)
@@ -460,7 +458,7 @@ def main(argv: list[str] | None = None) -> int:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     modes = list(CATEGORIES) if args.mode == "full" else [args.mode]
-    n = len(modes)
+    len(modes)
     overall = {
         "mode": args.mode,
         "categories": [],

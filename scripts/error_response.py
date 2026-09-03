@@ -42,7 +42,6 @@ from typing import NamedTuple
 import json
 import re
 import sys
-from dataclasses import dataclass
 from enum import Enum
 
 

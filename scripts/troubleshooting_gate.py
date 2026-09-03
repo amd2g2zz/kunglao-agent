@@ -28,7 +28,6 @@ import hook_activation as ha
 
 
 import argparse
-import re
 import sys
 from pathlib import Path
 

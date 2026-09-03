@@ -33,7 +33,6 @@ import wire_up_settings  # pytest.ini pythonpath = . hooks scripts tools
 
 from env_check import (  # pytest.ini pythonpath = . hooks scripts tools
     FLAG_NAME,
-    HOOK_FILES,
     run,
 )
 

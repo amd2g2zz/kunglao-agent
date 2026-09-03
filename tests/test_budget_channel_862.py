@@ -9,7 +9,6 @@ pass-token 归一：devreason 只认 canonical `agent-reasoning:`。
 import contextlib
 import importlib.util
 import io
-import json
 import sys
 from pathlib import Path
 

@@ -20,7 +20,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEVKIT_QUALITY_GATES = REPO_ROOT / "devkit" / "quality_gates.py"

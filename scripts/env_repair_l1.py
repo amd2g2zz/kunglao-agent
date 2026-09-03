@@ -40,7 +40,6 @@ try:
 except NameError:
     pass
 
-import datetime
 import json
 import os
 import shutil

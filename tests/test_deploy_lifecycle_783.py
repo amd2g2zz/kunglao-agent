@@ -25,7 +25,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -158,7 +157,6 @@ def test_deploy_workspace_copy_writes_carrier(tmp_path: Path):
 
 def test_refresh_writes_and_rewrites_carrier(tmp_path: Path):
     """deployed_refresh (the upgrade face) stamps/refreshes the carrier."""
-    import hook_activation as ha
     from deployed_refresh import refresh
     dm = _dm()
     ws = _deployed_ws(tmp_path)
@@ -199,7 +197,6 @@ def test_check_stale_deploy_drift_on_tampered_copy(tmp_path: Path):
 def test_check_stale_deploy_drift_when_carrier_missing(tmp_path: Path):
     """Copies present but the carrier never written (pre-T5 deploy or hand
     deletion) -> deploy-drift; upgrade's refresh rewrites it."""
-    import hook_activation as ha
     ws = _deployed_ws(tmp_path)
     (ws / ".claude" / "deployed-manifest.json").unlink()
     envelope, proc = _check_stale(ws)
@@ -225,7 +222,6 @@ def test_check_stale_version_stale_beats_deploy_drift(tmp_path: Path):
     """Priority pin: no-stamp > stale(version) > deploy-drift > current.
     A version-stale workspace reports stale even with drifted copies —
     the upgrade that fixes the version overwrites the copies anyway."""
-    import hook_activation as ha
     ws = _deployed_ws(tmp_path, stamp="0.1.0")
     victim = ws / ".claude" / "hooks" / "write_guard.py"
     victim.write_bytes(victim.read_bytes() + b"\n# hand edit\n")

@@ -24,7 +24,6 @@ The emit-log face (kunglao_log.emit) carries utility_score in detail so
 """
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 

@@ -37,7 +37,6 @@ OLD_FACT = ("---\nid: F001\nclaim: crash in worker\n"
 
 
 def test_violation_recorded_and_surfaced(tmp_path, capsys):
-    import datetime as dt
     mod = _load()
     ws = _mk_ws(tmp_path)
     (ws / "facts" / "F001.md").write_text(OLD_FACT, encoding="utf-8")

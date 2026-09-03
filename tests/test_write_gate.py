@@ -35,7 +35,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 
 import write_gate  # noqa: E402
 import kunglao_record  # noqa: E402

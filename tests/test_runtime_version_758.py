@@ -182,18 +182,19 @@ class TestG4FrameGate:
         items: list = []
         assert up.upgrade(ws, False, items) == 0
         err = capsys.readouterr().err
-        assert "frame section stale" in err
-        assert "G3 merge" in err, (
-            "the WARN must point at the G3 merge-upgrade remediation")
-        assert err.count("frame section stale") == 1, (
-            "item path warns once; belt-and-braces tail must skip silently")
+        # Since 0.1.4 the legacy body is handled by migrate_to_0_1_4's
+        # _item_claudemd_merge (G3): the merge REFUSES ("current frame does
+        # not place in order") and warns — the old-stamp body stays honest.
+        assert "CLAUDE.md merge skipped" in err
+        assert "does not place in order" in err, (
+            "the WARN must point at the G3 merge refusal")
         fresh = tv.stamp_line(CUR_VERSION)
         for rel in ("CLAUDE.md", "facts/_INDEX.md", "claim-register.yaml"):
             text = (ws / rel).read_text(encoding="utf-8")
             assert tv.stamp_line(_prev_version()) in text, (
                 f"{rel} keeps its honest old stamp")
             assert fresh not in text, f"{rel} must not carry the new stamp"
-        assert SKIP_MARK in json.dumps(items)
+        assert "claudemd_merge(skipped" in json.dumps(items)
 
     def test_belt_and_braces_tail_also_gated(self, tmp_path, capsys):
         """The end-of-flow unconditional re-stamp is the bypass vector: even

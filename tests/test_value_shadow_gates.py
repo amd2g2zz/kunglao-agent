@@ -10,8 +10,6 @@ AUDIT_REPORT §14; plan Task A5).
 3. prior correction does not degrade the synthetic baseline ranking —
    neutral priors reproduce the flag-off order exactly.
 """
-import sys
-from pathlib import Path
 
 import priority_ratio as pr
 import rho_checkpoint as rc

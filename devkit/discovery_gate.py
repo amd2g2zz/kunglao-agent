@@ -106,7 +106,6 @@ def find_violations(root, baseline_keys=None, baseline_path=None) -> list:
     default ledger file; pass [] for a no-debt ratchet."""
     root = Path(root)
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
-    import relib_audit
 
     subjects = enumerate_subjects(root)
     if not subjects:

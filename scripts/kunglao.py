@@ -274,7 +274,7 @@ def _gate_heartbeat_rearm(ws: Path) -> int:
          idempotent loop entry (aging rebuild: a deleted/expired Claude Code
          durable schedule is re-created here BEFORE anyone enters the loop);
       2. continuous-tick verify — heartbeat_loop_prompt.verify_loop() with the
-         SAME evaluate_tick_continuity standard as the dispatch gate / 
+         SAME evaluate_tick_continuity standard as the dispatch gate /
          --heartbeat-check (#754 E2): >=2 consecutive ticks, gaps <= 2x
          interval_min, newest <= 35min.
 

@@ -28,7 +28,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
 from _factories import write_hook_state
 
 ROOT = Path(__file__).resolve().parents[1]

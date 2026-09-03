@@ -17,7 +17,6 @@ from pathlib import Path
 _HERE = Path(__file__).parent
 sys.path.insert(0, str(_HERE))
 
-import pytest  # noqa: E402
 
 from worker_budget import (  # noqa: E402
     MAX_RETRIES,

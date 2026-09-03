@@ -37,7 +37,6 @@ CLI: env_state_probe.py <workspace> [--json]
 """
 from __future__ import annotations
 
-import datetime
 import json
 import os
 import shutil

@@ -176,7 +176,7 @@ def sample_and_pair(ws, z=None):
         events = cost_gate.load_events(Path(ws))
         kunglao_log.emit(
             Path(ws), actor="rho_verifier", action="cockpit_sample",
-            detail=json.dumps({**cs, "cost_spent": cost_spent,
+            detail=json.dumps({**cs, "cost_spent": cost,
                                "n_cost_events": len(events)},
                               ensure_ascii=False, default=str))
     except Exception:  # noqa: BLE001 — 持久化永不破坏采样

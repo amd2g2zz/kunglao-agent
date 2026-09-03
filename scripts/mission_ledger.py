@@ -34,7 +34,7 @@ def _parse_pqs(task_spec: dict) -> list[dict]:
         raise ValueError(
             f"mission_ledger: primary_questions must be list/mapping, "
             f"got {type(raw).__name__}")
-    items = (list(raw.items()) if isinstance(raw, dict)
+    (list(raw.items()) if isinstance(raw, dict)
              else list(enumerate(raw)))
     pqs = []
     if isinstance(raw, dict):

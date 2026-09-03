@@ -23,9 +23,9 @@ The only interface is Claude Code: you talk to it and read its reports. The Pyth
 
 ### 1. Install
 
-kunglao-agent is a **single-skill plugin**: the skill's `SKILL.md` lives at the repository root (the single-skill plugin layout), so installing the plugin IS installing the skill — invoked as `/kunglao-agent`. The repo carries `.claude-plugin/plugin.json` (identity manifest: name, description, version `0.1.3`). The per-workspace machinery (hooks, gates, router CLIs) is wired by `kunglao-init` into each analysis workspace during initialization, not by plugin component wiring (migration tracked separately).
+kunglao-agent is a **single-skill plugin**: the skill's `SKILL.md` lives at the repository root (the single-skill plugin layout), so installing the plugin IS installing the skill — invoked as `/kunglao-agent`. The repo carries `.claude-plugin/plugin.json` (identity manifest: name, description, version `0.1.4`). The per-workspace machinery (hooks, gates, router CLIs) is wired by `kunglao-init` into each analysis workspace during initialization, not by plugin component wiring (migration tracked separately).
 
-**Recommended — marketplace install** (v0.1.3 ships `.claude-plugin/marketplace.json`; the marketplace resolves the repo's default branch, so the release tag must exist there). From any directory, in Claude Code:
+**Recommended — marketplace install** (v0.1.4 ships `.claude-plugin/marketplace.json`; the marketplace resolves the repo's default branch, so the release tag must exist there). From any directory, in Claude Code:
 
 ```
 /plugin marketplace add amd2g2zz/kunglao-agent
@@ -38,7 +38,7 @@ kunglao-agent is a **single-skill plugin**: the skill's `SKILL.md` lives at the 
 claude --plugin-dir /path/to/kunglao-agent
 ```
 
-The plugin manager lists `kunglao-agent` at version `0.1.3`.
+The plugin manager lists `kunglao-agent` at version `0.1.4`.
 
 **Alternative B — skills-directory clone** (legacy path; plain-skill identity, no plugin manager). In Claude Code:
 

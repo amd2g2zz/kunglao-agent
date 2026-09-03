@@ -165,7 +165,7 @@ def probe_help(cmd: list[str], timeout: int = 60) -> int:
         r = subprocess.run(cmd, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=timeout)
         return r.returncode
-    except (subprocess.TimeoutExpired, OSError) as exc:
+    except (subprocess.TimeoutExpired, OSError):
         return -1
 
 
