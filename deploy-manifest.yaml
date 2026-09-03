@@ -11,7 +11,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: 0895e0907b5489a0da591680a405c3b725dee0eaa31eafb5a4642712f551cebe
+    sha256: 3c17673b23209499168cc69377fccc06ec3d4f8d636b17ae7f6f4a6f0fe589da
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
@@ -55,7 +55,7 @@ files:
   - src: hooks/violation_capture.py
     dest: .claude/hooks/violation_capture.py
     kind: hook
-    sha256: 168392b3fa769edfd681d0e49497bb8f1f4c280f6b1f429b6f3bdcdd5c889e28
+    sha256: a5bf4f75131d906eb69b0aeb21d4ae2acb68c5339d5bbed896272b9c9ac9ea0f
   - src: hooks/worker_budget.py
     dest: .claude/hooks/worker_budget.py
     kind: hook
@@ -231,7 +231,7 @@ files:
   - src: scripts/completion_gate.py
     dest: .claude/scripts/completion_gate.py
     kind: scaffold
-    sha256: 822b6f684998276fb3020435973e13cf050773d03cfb8e7a6ccdba0295a6df7a
+    sha256: f99943a87ab6949f61cc900518199002c05bc3f1c9d06dd3da4ff2484eb146a5
   - src: scripts/content_hash.py
     dest: .claude/scripts/content_hash.py
     kind: scaffold
@@ -355,7 +355,7 @@ files:
   - src: scripts/heartbeat.py
     dest: .claude/scripts/heartbeat.py
     kind: scaffold
-    sha256: 70409a91a9c9a4fdf65e9fcba4680a636fc90e8e0b8c868ffec2097850117b4e
+    sha256: 9a9e66050845325b7278221d7e64f0c25b22cf6e36209fe05c65a197a882f200
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
@@ -371,7 +371,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: 0f1e589fe5c7cec970fc2036a56d178d703cf10bb42919191d4931431cf38acc
+    sha256: b8118f3baef15418e8128f45eff4606da2e512c6e854928943d2bfba8d982daf
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -807,7 +807,7 @@ files:
   - src: scripts/verify_status_watch.py
     dest: .claude/scripts/verify_status_watch.py
     kind: scaffold
-    sha256: f816eaf9e4924125b1f6e035b8811bd07444661b7f537bb512b483d54eb9c673
+    sha256: b1cea1f6921fb160d427d8358a102ecc15c579945fd7e66a8bbe4d9f288a89f1
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
@@ -835,7 +835,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 7f1b3d7a18ddc481e30fd5738799f0a43f13edf4eaabb478ca1b0133b6b2e59e
+    sha256: 9939fe784caa40b01538a4a49f05b26d40d4a19fb67aa450270b22743d86ecb3
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
