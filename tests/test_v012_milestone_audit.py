@@ -38,13 +38,6 @@ def test_milestone_issues_closed():
     assert "v0.1.2" in text
 
 
-def test_release_manifest_version_present():
-    """release-manifest 必须含 0.1.2 版本戳。"""
-    pyproject = ROOT / "pyproject.toml"
-    text = pyproject.read_text(encoding="utf-8")
-    assert "0.1.2" in text or "0.1.1" in text  # current dev branch may still be 0.1.1
-
-
 def test_changelog_has_unreleased_section():
     """CHANGELOG.md 包含未发布变更记录。"""
     cl = ROOT / "CHANGELOG.md"

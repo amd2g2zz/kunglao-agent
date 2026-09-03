@@ -19,9 +19,6 @@ issue acceptance `git grep -E "C:/Users/[a-z]" -- .claude/` -> zero hits.  # HIS
 ALLOWLIST = tracked files that legitimately reference a Windows user path:
   - CHANGELOG.md                 — historical prose RECORDING the #356 purge
   - tests/test_hardcode_purge.py — this scan (states the ban)
-  - tests/test_suite_health.py   — legacy fixture-manifest rebase constants
-                                   (functional: maps pre-#356 captured paths
-                                   onto the current machine)
 """
 from __future__ import annotations
 
@@ -40,7 +37,6 @@ _HARDCODED_USER = re.compile(r"C:[/\\]+Users[/\\]+[a-z]")
 ALLOWLIST = {
     "CHANGELOG.md",
     "tests/test_hardcode_purge.py",
-    "tests/test_suite_health.py",
     "tests/test_review_hook_install.py",  # states the pre-#367 ban itself
 }
 

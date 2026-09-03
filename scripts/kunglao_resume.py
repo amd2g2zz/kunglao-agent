@@ -104,7 +104,7 @@ NEXT_STEP_BY_DECISION = {
     "CONVERGED": ("loop is done — run the handoff checklist (blind_gate "
                   "spot-check + kunglao-verify L1 + --heartbeat-check) "
                   "before delivering; do not dispatch"),
-    "DISPATCH": ("dispatch the scripts/priority.py top claim (<=3 workers "
+    "DISPATCH": ("dispatch the priority_ratio top claim (<=3 workers "
                  "cap + tier gate); worker done -> verify facts -> update "
                  "claim-register + _INDEX"),
     "DISPATCH_VERIFIER": ("dispatch an independent verifier for the partial "

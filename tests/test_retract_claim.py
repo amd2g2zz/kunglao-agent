@@ -12,8 +12,6 @@ RED runs (expected fails until retract_claim.py exists):
   - test_retract_writes_ledger_operator_action
   - test_retract_does_not_touch_failure_registry (retraction != execution failure)
   - test_convergence_check_treats_retracted_as_terminal
-  - test_priority_excludes_retracted
-  - test_priority_reopened_dependents_dispatchable
   - test_anchors_gate_blocks_retracted_fact    (gate blocks)
   - test_anchors_gate_passes_clean_facts
   - test_dry_run_writes_nothing
@@ -33,7 +31,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import yaml  # noqa: E402
 import retract_claim as rc  # noqa: E402
 import convergence_check as cc  # noqa: E402
-import priority as pr  # noqa: E402
 
 
 # ---------- helpers ----------
@@ -223,10 +220,6 @@ def test_retract_skips_in_progress_dependent(tmp_path):
     assert b["status"] == "IN_PROGRESS", "in-flight claim must not be reset to OPEN"
     assert b["promotion_attempts"] == 1, "in-flight claim must keep its attempts"
     assert "reopened_by" not in b
-    # no double dispatch: IN_PROGRESS is not dispatchable
-    rows = pr.rank_claims(reg, yaml.safe_load(
-        (tmp_path / "claim_deps.yaml").read_text(encoding="utf-8")), pr.DEFAULT_WEIGHTS)
-    assert "B" not in [row["id"] for row in rows]
     # the skip is recorded in the ledger row (convergence-visible audit trail)
     led = [row for row in _ledger_rows(tmp_path) if row.get("action") == "retract"]
     assert led and led[0].get("skipped_in_progress") == ["B"]
@@ -291,34 +284,6 @@ def test_retracted_claim_not_flagged_orphan(tmp_path):
     orphans = cc._orphan_terminal_claims(reg, {"Q1"})
     assert [o["id"] for o in orphans] == ["C-2"], \
         "RETRACTED must be excluded from the orphan gate (it answers nothing by design)"
-
-
-def test_priority_excludes_retracted(tmp_path):
-    """RETRACTED claims never appear in the dispatch queue."""
-    _mk_reg(tmp_path, [
-        {"id": "A", "status": "RETRACTED", "promotion_attempts": 0},
-        {"id": "B", "status": "OPEN", "promotion_attempts": 0},
-    ])
-    _mk_deps(tmp_path, {})
-    reg = _load_reg(tmp_path)
-    rows = pr.rank_claims(reg, {}, pr.DEFAULT_WEIGHTS)
-    ids = [r["id"] for r in rows]
-    assert "A" not in ids
-    assert "B" in ids
-
-
-def test_priority_reopened_dependents_dispatchable(tmp_path):
-    """A dependent of a RETRACTED claim is dispatchable (its parent is terminal)."""
-    _mk_reg(tmp_path, [
-        {"id": "A", "status": "RETRACTED"},
-        {"id": "B", "status": "OPEN", "promotion_attempts": 0},
-    ])
-    _mk_deps(tmp_path, {"B": ["A"]})
-    reg = _load_reg(tmp_path)
-    deps = yaml.safe_load((tmp_path / "claim_deps.yaml").read_text(encoding="utf-8"))
-    rows = pr.rank_claims(reg, deps, pr.DEFAULT_WEIGHTS)
-    ids = [r["id"] for r in rows]
-    assert "B" in ids, "reopened dependent must be dispatchable"
 
 
 # ---------- RED: report citation gate (issue item 5) ----------
@@ -403,7 +368,7 @@ def test_retract_module_exports_single_retracted_source(tmp_path):
     """RETRACTED lives in retract_claim.py; consumers import, never redefine."""
     assert rc.RETRACTED == "RETRACTED"
     assert rc.TERMINAL_WITH_RETRACTED >= {"PROVEN", "RETRACTED", "DEAD"}
-    for mod_name, mod in (("convergence_check", cc), ("priority", pr)):
+    for mod_name, mod in (("convergence_check", cc),):
         src = sys.modules[mod_name].__file__
         text = Path(src).read_text(encoding="utf-8")
         assert "RETRACTED" in text, f"{mod_name} must be RETRACTED-aware"

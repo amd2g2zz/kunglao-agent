@@ -52,34 +52,25 @@ def _load_manifest() -> list[dict]:
     contain absolute paths (python.exe, absolute venv/home dirs).
     The captured paths were rewritten to {{PYTHON}}/{{ROOT}} placeholders in
     the repo; on any other machine those become sys.executable and the paths
-    under ROOT.  A legacy direct-prefix branch is kept for robustness.
-    The ws/ dirs and expected/stdout.txt stay byte-for-byte comparable.
+    under ROOT.  The ws/ dirs and expected/stdout.txt stay byte-for-byte
+    comparable.
     """
     if not MANIFEST.exists():
         return []
     import yaml
     data = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     cases = data["cases"]
-    # Legacy-machine rebase sentinels (functional: map pre-#356 captured
-    # fixture paths onto the current machine). Byte-exact values assembled
-    # from inert fragments per #690; the hardcode-purge ALLOWLIST entry for
-    # this file stays truthful — its scan still matches the documented
-    # shapes: C:\Users\hr\... python.exe / kong-refactor prefix  # HISTORICAL-PATH-EXAMPLE
-    OLD_PY = "C:" + r"\Users\hr\AppData\Local\Programs\Python\Python311\python.exe"
-    OLD_PREFIX = "C:" + r"\Users\hr\.claude\kong-refactor\kong-agent"
     for c in cases:
         argv = list(c["cmd"]["argv"])
         # argv[0] is the Windows python.exe (or its {{PYTHON}} placeholder)
         # — run with THIS interpreter
-        if argv[0] in ("{{PYTHON}}", OLD_PY):
+        if argv[0] == "{{PYTHON}}":
             argv[0] = sys.executable
         rebased = []
         for a in argv[1:]:
             if isinstance(a, str):
                 if "{{ROOT}}" in a:
                     a = str(ROOT) + a.split("{{ROOT}}", 1)[1]
-                elif OLD_PREFIX in a:
-                    a = str(ROOT) + a.split(OLD_PREFIX, 1)[1]
                 # captured paths use backslash separators, which only Windows
                 # resolves — normalize for the machine actually running them
                 a = a.replace("\\", "/")
@@ -89,8 +80,6 @@ def _load_manifest() -> list[dict]:
         if isinstance(cwd, str):
             if "{{ROOT}}" in cwd:
                 cwd = str(ROOT) + cwd.split("{{ROOT}}", 1)[1]
-            elif OLD_PREFIX in cwd:
-                cwd = str(ROOT) + cwd.split(OLD_PREFIX, 1)[1]
             c["cmd"]["cwd"] = cwd.replace("\\", "/")
     return cases
 
@@ -170,7 +159,6 @@ def test_golden_cmd_json_has_no_absolute_paths() -> None:
     """Golden fixtures must be machine-portable: no absolute paths (Windows
     drive roots, /Users/, /home/) anywhere in cmd.json argv/cwd or
     manifest.yaml."""
-    import json
     abs_markers = ("C:" + "\\", "c:\\", "D:" + "\\", "d:\\", "/Users/", "/home/")
     hits: list[str] = []
     for case_dir in sorted(GOLDEN.glob("F-*")):

@@ -33,7 +33,6 @@ WIRING = {
     # two hardcoded-quiet shapes that collapse into it post-B2-fix):
     "scripts/convergence_check.py": "resolve_quiet",
     "scripts/failure_analysis_gate.py": "resolve_quiet",
-    "scripts/priority.py": "resolve_quiet",
     "scripts/route_capability.py": "resolve_quiet",
     # quiet + ledger sentinel variant:
     "scripts/convergence_health.py": "resolve_quiet",
@@ -130,7 +129,7 @@ def _import(mod_name: str):
 
 def test_resolve_ws_alias_identity():
     import ws_layout
-    quiet = ["convergence_check", "failure_analysis_gate", "priority",
+    quiet = ["convergence_check", "failure_analysis_gate",
              "route_capability"]
     strict = ["heartbeat_tick", "hooks_selfcheck", "heartbeat_touch",
               "statusline_snapshot"]

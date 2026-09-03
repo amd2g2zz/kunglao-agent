@@ -65,7 +65,7 @@ import yaml
 TERMINAL_STATUSES = TERMINAL  # #34: single source of truth (was a 6-value literal here)
 
 # #241: a PROVEN claim is only as good as its reality check. Confidence tiers
-# below even odds (ICD-203 7-tier ladder, scripts/confidence_schema.py) mean
+# below even odds (ICD-203 7-tier ladder) mean
 # the fact is not reality-verified evidence; "suspected" is the legacy name
 # mapping to roughly_even. literal "low" accepted for 3-tier legacy facts.
 LOW_CONFIDENCE = frozenset({

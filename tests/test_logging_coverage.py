@@ -48,7 +48,6 @@ TOP_20_MODULES = (
     ("update_index", "scripts/update_index.py"),
     ("heartbeat_tick", "scripts/heartbeat_tick.py"),
     ("external_kicker", "scripts/external_kicker.py"),
-    ("priority", "scripts/priority.py"),
     ("priority_ratio", "scripts/priority_ratio.py"),
     ("retract_claim", "scripts/retract_claim.py"),
     ("refutation_propagate", "scripts/refutation_propagate.py"),

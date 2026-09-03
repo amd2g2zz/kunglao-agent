@@ -532,7 +532,7 @@ def test_convergence_resolve_ws_custom_layout(tmp_path, monkeypatch):
 # ---- + the B2 two-state pin (layout override honored / absent manifest
 # ---- keeps the pre-#450 default, byte-identical).
 
-_QUIET_WS_MODULES = ("convergence_check", "failure_analysis_gate", "priority",
+_QUIET_WS_MODULES = ("convergence_check", "failure_analysis_gate",
                      "route_capability")
 _STRICT_WS_MODULES = ("heartbeat_tick", "hooks_selfcheck", "heartbeat_touch",
                       "statusline_snapshot")
@@ -803,7 +803,6 @@ _VMRUN_SNAP_OUT = "Total snapshots: 2\r\nanalysis-ready\r\nbase\r\n"
 def _fake_run_ok(args, **kwargs):
     """Seam stub: vmrun list / listSnapshots succeed, checkToolsState
     reports Tools running."""
-    import subprocess
 
     class R:
         returncode = 0

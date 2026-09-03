@@ -194,7 +194,7 @@ class TestTrajectory1DeathChain:
         rr = _run_cli([str(SCRIPTS / "kunglao_resume.py"), str(ws), "--json"],
                       timeout=180)
         brief = json.loads(rr.stdout)
-        assert "dispatch the scripts/priority.py top claim" in brief["next_step"], (
+        assert "dispatch the priority_ratio top claim" in brief["next_step"], (
             f"resume must point at dispatch; got {brief['next_step']!r}")
 
 

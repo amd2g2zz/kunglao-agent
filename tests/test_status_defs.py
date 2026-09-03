@@ -67,7 +67,6 @@ def test_outcome_row_is_outcome():
 
 CONSUMERS = [
     "convergence_check.py",
-    "priority.py",
     "priority_ratio.py",
     "failure_analysis_gate.py",
     "stale_blocker_prune.py",

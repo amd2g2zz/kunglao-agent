@@ -31,7 +31,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: fd979d450ac9fb229cfac89c6c38595317bb4dc77fffcea060b70bee1a019336
+    sha256: e95f4910fc931e49dd553629c93c7e316ae2a9064663ff0d436e76aa521786fd
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -232,10 +232,6 @@ files:
     dest: .claude/scripts/completion_gate.py
     kind: scaffold
     sha256: 822b6f684998276fb3020435973e13cf050773d03cfb8e7a6ccdba0295a6df7a
-  - src: scripts/confidence_schema.py
-    dest: .claude/scripts/confidence_schema.py
-    kind: scaffold
-    sha256: 0d2b3f2804751b501a763fd53a81a3c5680e52a8244906149f32d1c83621a4c2
   - src: scripts/content_hash.py
     dest: .claude/scripts/content_hash.py
     kind: scaffold
@@ -475,7 +471,7 @@ files:
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
-    sha256: 36d874964ecfd608e14a22fb5af9742e074b86230eba68e84dac2db824a7dd83
+    sha256: 13a2eaead79edd3dd75070f35d708e7af614190a193d5d1804edcd0b3ba5d6c7
   - src: scripts/kunglao_status.py
     dest: .claude/scripts/kunglao_status.py
     kind: scaffold
@@ -579,7 +575,7 @@ files:
   - src: scripts/plan_drift_detector.py
     dest: .claude/scripts/plan_drift_detector.py
     kind: scaffold
-    sha256: 252b1bafc1eef1991419a342e710134d658d7ab152f9534eba45997224962a62
+    sha256: 2d78e245557331790dc925a253ad69b167f85b5a5e69cab3bc94f5575c168c87
   - src: scripts/plan_reviser.py
     dest: .claude/scripts/plan_reviser.py
     kind: scaffold
@@ -596,10 +592,6 @@ files:
     dest: .claude/scripts/premature_termination_detect.py
     kind: scaffold
     sha256: b436446072a40a52300bb265a8111eb6b9e1940ba3bffc980d5d78ae44fdd1f5
-  - src: scripts/priority.py
-    dest: .claude/scripts/priority.py
-    kind: scaffold
-    sha256: cf41fcdce0e58c66b7ca2c9c6d4d29df2bff693b6b93dc01bf6c780d39cf2014
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
@@ -1235,7 +1227,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 938751dd30863f7beb8c94edf8606772c1a554a02b2dfc6e5b46e923461b4c53
+    sha256: 64e0dfa7e512e9c7cccb5c876e07af16b32d7b4f56bd2f93a7948efaa2aa727c
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

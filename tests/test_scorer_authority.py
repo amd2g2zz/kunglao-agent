@@ -44,6 +44,7 @@ ROOT = _HERE.parent
 LIVE_PATH_SURFACES = (
     "hooks/worker_pulse.py",
     "hooks/worker_budget.py",
+    "scripts/kunglao_resume.py",
     "scripts/heartbeat_loop_prompt.py",
     "scripts/convergence_check.py",
     # #867 closeout: the kicker's resume prompt prescribes the scorer, and
@@ -267,41 +268,6 @@ def test_budget_filter_keeps_terminal_rows_for_novelty(tmp_path) -> None:
     assert deviated is True, (
         "C-A (novelty-suppressed by the retained terminal facts) is NOT rank #1")
     assert "C-B" in msg, f"the advisory must name the authority #1 (C-B). Got: {msg!r}"
-
-
-def test_priority_module_deprecated_surface() -> None:
-    """The deprecated module declares deprecation + authority pointer, keeping
-    its frozen API importable (the #446 retirement prerequisite)."""
-    import priority
-    assert priority.DEPRECATED is True, (
-        "the deprecated scorer must carry DEPRECATED = True (#499)")
-    assert priority.AUTHORITY.endswith("priority_ratio.py"), (
-        "the deprecated scorer must point at the authority (#499)")
-    doc = priority.__doc__ or ""
-    assert "DEPRECATED" in doc and "priority_ratio" in doc, (
-        "the deprecated docstring must declare deprecation and the authority")
-    # import compatibility — the shim keeps the frozen API surface
-    assert callable(priority.rank_claims)
-    assert callable(priority.gate_allows)
-    assert callable(priority._weights)
-    assert set(priority.DEFAULT_WEIGHTS) >= {"value", "leverage", "cheapness", "novelty"}
-
-
-def test_frozen_shim_default_weights_verbatim() -> None:
-    """Injection M6 guard: the deprecated shim's frozen formula weights are
-    pinned VERBATIM. The authority suite pins the shim's DECLARATION surface
-    (DEPRECATED/AUTHORITY/docstring/callables/keys) and test_rank_claims
-    checks outcome-term behavior — neither notices silent drift of the frozen
-    weight VALUES (replay: value 0.4→0.9, leverage 0.3→0.0 passed 16/16).
-    Until the #446 retirement removes the module, external_kicker consumes
-    this formula off-loop; drift would silently reorder it. Exact-equality
-    pin, stronger than the #446-retirement fallback."""
-    import priority
-    assert priority.DEFAULT_WEIGHTS == {
-        "value": 0.4, "leverage": 0.3, "cheapness": 0.2,
-        "novelty": 0.05, "outcome": 0.05}, (
-        "the frozen shim's DEFAULT_WEIGHTS must stay byte-for-byte identical "
-        "until the #446 retirement (#499)")
 
 
 @pytest.mark.parametrize("rel", LIVE_PATH_SURFACES)
