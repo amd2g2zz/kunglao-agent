@@ -35,7 +35,7 @@ LOOP_MARKER_KEY = "loop_registered"
 # ===========================================================================
 # #754 E2: continuous-tick liveness — THE shared judgment function
 # ===========================================================================
-# The live-run field incident (#754): last_tick_ts == started_ts for the whole
+# The live-run sample field incident (#754): last_tick_ts == started_ts for the whole
 # session life (the cron never fired even once after registration), yet
 # check_heartbeat_alive passed inside its 35-min window because a SINGLE
 # registration tick was enough to claim liveness. Blind spot. Liveness is now

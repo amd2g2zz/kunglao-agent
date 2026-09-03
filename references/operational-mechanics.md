@@ -12,7 +12,7 @@ consumers: the dispatch gate (`hooks/worker_budget_sinks.check_heartbeat_alive`)
 `heartbeat_check` (--heartbeat-check), and `heartbeat_loop_prompt --verify`.
 Alive requires >= 2 recorded ticks (runs/.heartbeat.json `tick_history`,
 35-min rolling window, cap 12), adjacent gaps <= 2x interval_min, newest
-<= 35 min. A LONE registration tick is dead — that was the live-run incident
+<= 35 min. A LONE registration tick is dead — that was the live-run sample incident
 (#754): last_tick_ts == started_ts with no cron behind it still passed the
 old 35-min window. Legacy files without tick_history REJECT by design; one
 real touch/tick rebuilds history.

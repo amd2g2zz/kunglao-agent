@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """tests/test_heartbeat_autonomy_754.py — issue #754 心跳自治.
 
-RED contracts (live-run field incident): last_tick_ts == started_ts for the
+RED contracts (live-run sample field incident): last_tick_ts == started_ts for the
 whole session life (the cron never existed), CronList empty, no
 scheduled_tasks.json — yet check_heartbeat_alive passed inside its 35-min
 window because ONE registration tick was enough to claim liveness. Three
@@ -110,7 +110,7 @@ class TestEvaluateTickContinuity:
         assert "stale" in detail.lower(), detail
 
     def test_legacy_file_without_history_rejected_strict(self):
-        """裁决：直接严格。The live-run incident file SHAPE (no tick_history)
+        """裁决：直接严格。The live-run sample incident file SHAPE (no tick_history)
         rejects even though last_tick_ts is brand fresh."""
         state = {"started_ts": _ago(0), "interval_min": 5,
                  "last_tick_ts": _ago(0), "loop_registered": True}

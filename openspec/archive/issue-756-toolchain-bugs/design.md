@@ -10,7 +10,7 @@ assumption:
 - the central directory lives at the file TAIL.
 
 Field sample (read-only):
-`/Users/dev/Downloads/live-run/analysis_workspace/bins/<sample-sha256>`
+`<workspace>/bins/<sample-sha256>`
 
 ```
 sha256        = <sample-sha256>

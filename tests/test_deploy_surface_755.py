@@ -579,7 +579,7 @@ class TestT6Registry:
 
     def _stamped_ws(self, tmp_path: Path, version: str) -> Path:
         """Renderer-real workspace at an ARBITRARY stamp carrying legacy
-        agents/config absences — the live-run-shaped closure case."""
+        agents/config absences — the live-run sample-shaped closure case."""
         import collections
         VI = collections.namedtuple("VI", "major minor micro release serial")
         real_vi = sys.version_info
@@ -589,7 +589,7 @@ class TestT6Registry:
         finally:
             sys.version_info = real_vi
 
-        ws = tmp_path / "live-run-ws"
+        ws = tmp_path / "live-run sample-ws"
         ws.mkdir()
         (ws / "CLAUDE.md").write_text(
             tv.stamp_line(version) + "\n\n" + body, encoding="utf-8")
@@ -622,7 +622,7 @@ class TestT6Registry:
 
     def test_already_at_target_still_plans_deploy_items(self, tmp_path,
                                                         pinned=False):
-        """The live-run problem (real-world shape): a 0.1.3-stamped workspace
+        """The live-run sample problem (real-world shape): a 0.1.3-stamped workspace
         (stamped before this release) whose deploy surface is incomplete —
         the 0.1.4 registry entry must make plan non-empty so the fast
         path cannot skip the repair."""

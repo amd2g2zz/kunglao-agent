@@ -481,7 +481,7 @@ def migrate_to_0_1_3(ws: Path, dry: bool) -> list[str]:
 def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
     """#755 deployment-surface completion (T6 ruling, design D1). A fresh
     REGISTRY entry — not an extension of 0.1.3 — is what lets an
-    ALREADY-0.1.3-stamped workspace (live-run class) re-plan instead of
+    ALREADY-0.1.3-stamped workspace (live-run sample class) re-plan instead of
     short-circuiting on `origin_key >= target_key`: the fast path stays
     closed while a plan exists, so the repairs below run today and remain
     reachable until release bumps the skill to 0.1.4. Transitional honesty:

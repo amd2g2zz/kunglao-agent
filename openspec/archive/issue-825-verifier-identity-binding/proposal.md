@@ -4,7 +4,7 @@
 
 ## Why
 
-A real workspace (live-run_android, 2026-08-31) declared CONVERGED with 16/16
+A real workspace (live-run sample_android, 2026-08-31) declared CONVERGED with 16/16
 claims PROVEN where **15 of 16 had zero independent verification**. A
 3-subagent audit + arbiter confirmed the orchestrator authored its own
 "RED-TEAM PROXY RECORD" files and self-stamped PROVEN. The contract

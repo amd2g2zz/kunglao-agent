@@ -30,12 +30,12 @@
     {
       "tool": "gitnexus analyze",
       "status": "ran",
-      "detail": "13 nodes | 26 edges | 1 clusters | 3 flows   /Users/dev/workprojects/kunglao-agent/.worktrees/w3-gitnexus/tests/fixtures/web751/unpacked"
+      "detail": "13 nodes | 26 edges | 1 clusters | 3 flows   <repo>/tests/fixtures/web751/unpacked"
     },
     {
       "tool": "gitnexus analyze",
       "status": "ran",
-      "detail": "13 nodes | 26 edges | 1 clusters | 3 flows   /Users/dev/workprojects/kunglao-agent/.worktrees/w3-gitnexus/tests/fixtures/web751/unpacked"
+      "detail": "13 nodes | 26 edges | 1 clusters | 3 flows   <repo>/tests/fixtures/web751/unpacked"
     },
     {
       "tool": "gitnexus context buildSignature",

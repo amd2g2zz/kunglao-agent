@@ -68,7 +68,7 @@ def test_strong_field_hits_not_damped():
     assert "single-field-collision" not in "".join(reasons)
 
 
-def test_pollution_regression_live-run():
+def test_pollution_regression_live_run_sample():
     entries = [
         _e("re-library/tools.md", purpose="static analysis gdb ghidra"),
         _e("re-library/six-phase-methodology.md",

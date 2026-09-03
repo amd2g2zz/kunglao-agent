@@ -230,7 +230,7 @@ def _fact_runs_records(fid: str, ws: Path) -> tuple[bool, str]:
     verify-<fid>-*.json: ONLY l2.verdict == CONFIRMED with
     l2.verifier_identity counts. overall=VERIFIED (L1) is the maker's own
     mechanical re-run and is NO LONGER accepted - that was the incident
-    backdoor (89 L1 jsons passed R1 in the live-run workspace).
+    backdoor (89 L1 jsons passed R1 in the live-run sample workspace).
     """
     runs = ws / "runs"
     if not runs.is_dir():

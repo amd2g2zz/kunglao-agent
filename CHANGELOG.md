@@ -78,7 +78,7 @@ release (see the mapping table at the end).
 
 - JSVMP three-feature triage (`scripts/jsvmp_triage.py`): mechanically flags bytecode-VM bundles (big consumed array + dispatch switch + semantic-free handlers) so AST recovery stops early; full trace/replay pipeline tracked for v0.2
 
-### Round 5 — Closeout Waves A–L (live-run/web live-run root causes, 2026-08-26/27)
+### Round 5 — Closeout Waves A–L (live-run root causes, 2026-08-26/27)
 
 **Fixed**
 - hook delivery chain (#752): `canonical_install_root()` — any install dir

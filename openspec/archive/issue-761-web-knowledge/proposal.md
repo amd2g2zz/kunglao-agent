@@ -7,7 +7,7 @@ J 组 5 项（web 域为主）+ 评论区两条追加裁决，2026-08-27 现场�
 1. **re-library 零覆盖风控对抗与爬虫工程** — `references/re-library/` 34 个文件里
    web 域只有 `web-re-quickref.md`（hook 手法/剥离流程），"请求为什么被拦、被拦了怎么办"
    （风控信号→定位→应对）与"访问打通之后怎么可持续采集"（会话/频率/IP/验证码）
-   完全没有承载文档。live-run 类任务的刚需知识散落在 worker-status 遥测里。
+   完全没有承载文档。live-run sample 类任务的刚需知识散落在 worker-status 遥测里。
 2. **sequentialthinking 列在 7 个 agent 的 allowedTools 但契约零处**（grep 全仓：
    只有 `scripts/mcp_probe.py` 注册行）——worker 遇到签名推导/风控决策树这类多步
    推理时不知道要走结构化思考链，思考轨迹也不落 fact derivation。

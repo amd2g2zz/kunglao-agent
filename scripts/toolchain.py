@@ -791,7 +791,7 @@ def _probe_native_so(ws: Path) -> bool:
 
     #756: an APK's central directory sits at the TAIL of the file while its
     lib/ local file headers sit at arbitrary offsets — the previous head-4KB
-    byte scan missed real samples (live-run: 206 lib/**/*.so entries, zero
+    byte scan missed real samples (live-run sample: 206 lib/**/*.so entries, zero
     head-4KB hits -> has_native_so=False degraded the HARD decompiler gate).
     namelist() reads only central-directory metadata, so it stays cheap even
     on multi-hundred-MB APKs. Non-zip files keep the .so suffix rule; a

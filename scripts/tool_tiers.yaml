@@ -53,7 +53,7 @@ scenes:
         资源混淆只影响资源树，代码档位选择不变；strings 面照常可用。
     sources:
       - "#670 apk_mem_gate（估算与 verdict 阈值）"
-      - "#812 C-006 targeted plan 实录（live-run 工作区）"
+      - "#812 C-006 targeted plan 实录（live-run sample 工作区）"
 
   generic-binary:
     tier_defs:

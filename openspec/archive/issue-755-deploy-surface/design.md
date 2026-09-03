@@ -24,7 +24,7 @@ Rationale:
   "0.1.3.1" would work mechanically but breaks the three-segment release
   lattice that pyproject/plugin.json/release-manifest share (target bump is
   owned by the release flow; a tri-segment entry needs zero special cases).
-- Doubao-style workspaces already stamped 0.1.3 currently short-circuit
+- Live-run-style workspaces already stamped 0.1.3 currently short-circuit
   (`origin_key >= target_key` + empty plan). With entry "0.1.4" present,
   `plan=[("0.1.4", …)]` even while the skill target string is still 0.1.3 —
   the items run today and remain reachable until the release flow bumps the

@@ -24,7 +24,7 @@ def _srcs(entries) -> set:
     return {str(e["src"]) for e in entries}
 
 
-def test_live-run_15_missing_scripts_now_deployed():
+def test_live_run_sample_15_missing_scripts_now_deployed():
     """豆包现场量化缺失的 15 个 scripts 名单全部进部署面。"""
     missing15 = [
         "backtrack_gate", "convergence_check", "convergence_health",

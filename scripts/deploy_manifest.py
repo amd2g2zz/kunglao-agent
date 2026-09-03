@@ -122,7 +122,7 @@ def build_entries() -> list[dict]:
     """#810 FULL MIRROR: hooks + agents + ALL scripts/*.py + data assets
     (references/ templates/ tools/). The import-AST closure is no longer
     the trimming basis (it was blind to dynamic path calls, scripts-to-
-    scripts chains and non-code assets — the live-run 15/30 REJECT root).
+    scripts chains and non-code assets — the live-run sample 15/30 REJECT root).
     Trimming is forbidden; `closure_validation` keeps the dynamic-reference
     scan as a gate-only validation face."""
     ents: list[dict] = []
@@ -294,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         if not p.is_file() or _sha(p) != e.get("sha256"):
             bad.append(e["src"])
     # #810: validation face — dynamic refs must be a subset of deployed.
-    # The live-run REJECT was exactly this class: run-by-path scripts invisible
+    # The live-run sample REJECT was exactly this class: run-by-path scripts invisible
     # to import-AST closure, silently undeployed.
     missing_dyn = closure_validation(data.get("files") or [])
     if bad:

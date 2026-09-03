@@ -9,7 +9,7 @@
    （skills/kunglao-agent/SKILL.md L58 "claim terminal triggers rollup"）；
    heartbeat_tick / reconcile_workers / kunglao_record 全都不调用
    （grep：`run_rollup(` 除 rollup.py 自身与测试外零命中）。
-   现场 live-run 工作区：notes/ 只有 README、notes-due.yaml 不存在（队列零积累）。
+   现场 live-run sample 工作区：notes/ 只有 README、notes-due.yaml 不存在（队列零积累）。
 2. **notes_due 零消费者** — `scripts/completion_gate.py:105 notes_due()` 已定义
    （读 notes-due.yaml、drop 已写的），docstring 说 "the Stop-face shim consumes"
    —— 但 `hooks/completion_gate.py` grep notes 零命中，实际没接。

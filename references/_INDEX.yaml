@@ -3,6 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
+  references/_INDEX.md: 329b3956179ebd4966253835c84d19808863c22c35410d11bb58fc05edc894b0
   references/_index-anti-analysis.md: 77ae0fe0834dde577e39d1124d4941962b1e4d7af1012434cac89c7d3f381431
   references/_index-languages.md: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
   references/_index-methodology.md: 4183b6f86c4ccd299452d41d2532fde6487301175804cb84729d41d3b4cf08aa
@@ -14,7 +15,6 @@ files:
   references/_index-web-crawler-engineering.md: 2df8708cfd912dcd0a2e808e08f445044fd59a6c4f22c8b2cfebb845d67f6482
   references/_index-web-labs.md: 12a33e5641f3f39738f46cd7bbe38c2d5d8b1d4c06fc89b4ec44a203669faf95
   references/_index-web-risk-control.md: b1dfc4eada8237536f95690986788735a136f75f940142d052a4e78c90841adf
-  references/_INDEX.md: 329b3956179ebd4966253835c84d19808863c22c35410d11bb58fc05edc894b0
   references/agent-three-state-charter.md: 0e1b73440f62dde966820172c1abf6382115d879dac414496804a5adf5ce1757
   references/anomaly-baseline.md: 5ee9c0b28421bb83060d4065166e53aad4353c3f541ccbc4f72ccf0b14d414f1
   references/archive/long-horizon-architecture-2026-07.md: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
@@ -38,7 +38,7 @@ files:
   references/malware-phase-routing.md: 000a9b97bd2939fe1ae112a94a84520556fde979cee87f53498ed07fce993de9
   references/mechanisms.md: 89be794e793393237fe7da2601b3987c4ff2e7e6a8a19409be21dba6e0afdad5
   references/method-constraints.md: c0a51c9970a549c08663eb7faac004c259cbffe48cd5370a571d700e3f0cf7d6
-  references/operational-mechanics.md: 773b47e8e469e2061ccd2658e30332bcf34a9a706331c4580d7c627ac726f8d0
+  references/operational-mechanics.md: 6ea8fcbb6cb001d9b032ebc32afc87f99dd96fd36c3d139be7e29673b5b1684c
   references/optimization-2026-08.md: 5629e400054d3e16cd24ec8bee6c60c862302acba836e15334fee522607f1e9d
   references/re-library/android-fingerprint-apis.md: 04b0abd2d9e29fe01e3d850658bc63ac6b08be57e2b6185d794d46e5c5fba2c8
   references/re-library/anti-analysis.md: 8534cc1640ba2707a9621d05521d317717b61778a3585e6b8c806de2897cf524

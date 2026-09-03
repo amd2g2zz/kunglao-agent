@@ -4,7 +4,7 @@
 
 > "有价值内容写 notes/——之前修过还是没用"
 
-现场取证（live-run workspace）：notes/ 只有 README；`runs/notes-due.yaml` 不存在
+现场取证（live-run sample workspace）：notes/ 只有 README；`runs/notes-due.yaml` 不存在
 （#628 交付的队列零积累）；用户引用的三段高价值内容全躺在
 `runs/worker-status-C-302.md` / `C-102.md` —— 遥测文件，claim 关闭后无任何消费者。
 结论：#628/#528 修了"怎么写 note"，没修"谁触发、谁检查、谁产出"——本波把

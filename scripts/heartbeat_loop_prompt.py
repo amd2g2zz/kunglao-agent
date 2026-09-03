@@ -115,7 +115,7 @@ def verify_loop(ws: str) -> int:
         return 1
     # #609 + #754 E2: the marker is a self-written claim — cross-check liveness.
     # A cron deleted after one successful fire must not keep verify vouching OK,
-    # and (the live-run blind spot) a LONE registration tick must neither. Same
+    # and (the live-run sample blind spot) a LONE registration tick must neither. Same
     # continuous-tick standard as the dispatch gate / --heartbeat-check: >=2
     # ticks with cadence <= 2x interval_min, newest <= STALE_MINUTES. Corrupt /
     # absent history counts as not ticking (fail-closed).

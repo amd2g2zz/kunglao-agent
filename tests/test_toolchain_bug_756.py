@@ -7,7 +7,7 @@ RED-first TDD acceptance suite:
       sits at the TAIL). Plain .so suffix stays True; BadZipFile fails OPEN
       to the legacy head scan; never raises.
   C2  has_native_so chain fixation: android workspace + APK containing
-      lib/**.so -> decompiler FAIL/HARD semantics (the live-run repro);
+      lib/**.so -> decompiler FAIL/HARD semantics (the live-run sample repro);
       pure-DEX APK -> WARN semantics.
   C3  decompiler FAIL copy treats Ghidra and IDA as equals ("Ghidra OR IDA —
       either satisfies this check"), MCP path listed unchanged, "#408"
@@ -146,7 +146,7 @@ def test_probe_native_so_bad_zip_without_signal_false_no_crash(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_android_apk_with_native_so_decompiler_hard(tmp_path):
-    """The live-run repro at mini scale: android workspace where bins/ holds an
+    """The live-run sample repro at mini scale: android workspace where bins/ holds an
     APK with lib/arm64-v8a/*.so (head-invisible) and no decompiler supply ->
     the decompiler check owes HARD semantics: status FAIL, tier HARD,
     root_cause 'decompiler'."""

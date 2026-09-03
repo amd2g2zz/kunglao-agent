@@ -2,7 +2,7 @@
 
 ## Why
 
-Issue #756. Field evidence (live-run APK,
+Issue #756. Field evidence (live-run sample APK,
 `<sample-sha256>`,
 414804023 bytes, 206 `lib/**/*.so` entries): `_probe_native_so` scans only
 the first 4KB of each `bins/` file for `lib/` / `.so`. An APK's local file

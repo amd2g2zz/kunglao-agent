@@ -3,7 +3,7 @@
 
 Synthetic good/bad workspaces: good = clean first-pass (z_self=1, high
 reward score); bad = verify thrash + gate interceptions + PROVEN-without-
-verify (z_self=0, low score — the Doubao regression shape, C-020 #819
+verify (z_self=0, low score — the Live-run sample regression shape, C-020 #819
 pattern). The replay-validation gate (good > bad) must hold or P1 is
 blocked from feeding A4.
 """
@@ -111,7 +111,7 @@ def test_ws_score_rewards_supported_proven_only(tmp_path):
     assert s_good["total"] == pytest.approx(10.0)  # +10 supported proven; PARTIAL 0
     assert s_good["unsupported_proven"] == 0
 
-    # Doubao shape: PROVEN swept with zero passing verify → no reward
+    # Live-run sample shape: PROVEN swept with zero passing verify → no reward
     bad = _mk_ws(tmp_path / "s_bad",
                  [_claim("C-001"), _claim("C-002")],
                  [_verify("F001", 1, "REJECTED")], [])

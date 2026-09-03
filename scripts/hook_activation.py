@@ -277,7 +277,7 @@ def completeness_report(ws: Path) -> list:
 def _emit_surface_incident(ws: Path) -> None:
     """#810: activation faces emit env_incident with the missing list when
     the deployed surface is incomplete — a crippled deployment must NEVER
-    fail silently (the live-run REJECT was exactly this)."""
+    fail silently (the live-run sample REJECT was exactly this)."""
     try:
         missing = completeness_report(ws)
         if not missing:
