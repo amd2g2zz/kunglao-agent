@@ -63,7 +63,7 @@ files:
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
-    sha256: ee7e79dba539bdc4e2bb335e4edb078cb2e3ca0afdbd3f68aafc40052ea2bebb
+    sha256: 269221d8ffdc239466dc3c9eb3d319f5475432633ed0ba9e4aa02a518fbd390e
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
@@ -239,11 +239,11 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 328d513aee085a8a6b210d26103fce4a335cb3e90bfa82a92b858d4ab39b4c68
+    sha256: 3431dead6e71a65ca60999053a3a131026d9354fb1e764411c00b1c2174cd1ef
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
-    sha256: 0bb41c1a35db7d13ac87f7009225a47556517acfcd9e1f7bb77a01ab427b0856
+    sha256: fc9e9bd89efd6778a4ed8eb61ca467849c7ddc913b3f3c86422762ccc05d49ce
   - src: scripts/cost_estimate.py
     dest: .claude/scripts/cost_estimate.py
     kind: scaffold

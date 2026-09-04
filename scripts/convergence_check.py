@@ -430,6 +430,32 @@ def _pq_ids(task_spec: dict) -> set:
     return {qid for qid, _ in _parse_primary_questions(task_spec)[0]}
 
 
+def _dispatched_ids(workspace: Path) -> list:
+    """Live claims with dispatch evidence (#2 stuck-vs-queued disambiguation).
+
+    Dispatched = in flight (status in IN_PROGRESS_STATUSES) or with a
+    recorded worker attempt (promotion_attempts >= 1). Terminal/PARK claims
+    are never live frontier work. Consumer: convergence_health._stuck_claims
+    — a claim sitting in open_ids is only "stuck" if it was ever dispatched;
+    open_ids minus this set is the never-dispatched queue. Best effort: any
+    read/parse failure returns [] (same side-channel posture as the ledger).
+    """
+    try:
+        reg = _load_yaml(workspace / "claim-register.yaml")
+        out = []
+        for c in (reg.get("claims") or []):
+            if not c.get("id"):
+                continue
+            status = (c.get("status") or "").upper()
+            if status in TERMINAL_WITH_RETRACTED or status in SUSPENDED:
+                continue
+            if status in IN_PROGRESS_STATUSES or int(c.get("promotion_attempts") or 0) >= 1:
+                out.append(c["id"])
+        return out
+    except Exception:  # noqa: BLE001 — side channel, never blocks the decision
+        return []
+
+
 def _append_ledger(workspace: Path, d: dict) -> None:
     """Append one state snapshot per call. convergence_health.py reads the trajectory.
 
@@ -447,6 +473,10 @@ def _append_ledger(workspace: Path, d: dict) -> None:
             "active_workers": d["active_workers"],
             "blockers": d["active_blockers"],
             "facts_total": _count_facts(workspace),
+            # #2: dispatch evidence per snapshot — lets convergence_health
+            # tell "dispatched but flat" (stuck) from "never dispatched"
+            # (frontier queue). Old-format readers ignore the extra field.
+            "dispatched_ids": _dispatched_ids(workspace),
         }
         with open(workspace / LEDGER_NAME, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
