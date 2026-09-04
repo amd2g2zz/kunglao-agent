@@ -169,7 +169,8 @@ session had to rerun; verifying the signature with javap first takes
      tools-dynamic.md; disassembly → anti-analysis.md; failure analysis →
      failure-modes-*.md). The recall list injected by recall_inject at
      dispatch time is authoritative — read the hit files before writing the
-     plan.
+     plan. (It arrives wrapped in `<kunglao-facts>` — producer-attributed
+     injection tags: references/xml-injection-standard.md, #55.)
    - `goal:` one-sentence goal
    - `preflight:` pre-execution verification checklist — for anything
      uncertain (method signatures/APIs/file paths/ports), **verify first,

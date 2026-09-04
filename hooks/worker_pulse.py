@@ -20,7 +20,8 @@ SMART = narrow + alive-only (same philosophy as dispatch_gate):
   - INJECTES guidance (additionalContext), never aborts. The orchestrator
     still owns the decision; the pulse is a heuristic nudge, not a gate.
 
-Output shape (one compact block):
+Output shape (one compact block, #55: wrapped in <worker-signal> when it
+enters the agent's additionalContext — stderr stays untagged):
   [worker_pulse] W-<n> finished
   DECISION: <DISPATCH|SATURATED|BLOCKED|DISPATCH_VERIFIER|CONVERGED> — <action>
   next up: <top dispatchable claim via priority_ratio.py — the sanctioned scorer (#499)>
@@ -61,6 +62,18 @@ SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 # result over both line shapes. Import is lazy (worker_budget precedent) and
 # fail-open ('' on any error — the hard REJECT is worker_budget's job).
 STUCK_MIN = 20  # minutes — mirrors backtrack_gate default --stuck-min 20
+
+# #55 XML injection standard: every worker_pulse additionalContext payload is
+# a worker lifecycle/status signal -> wrapped in <worker-signal>...</worker-signal>
+# (references/xml-injection-standard.md). Tags MARK information — never gate:
+# pulse content, rc and the JSON envelope are unchanged; STDERR (the operator
+# channel, e.g. the rc=3 BLOCKED face) stays untagged.
+WORKER_SIGNAL_TAG = "worker-signal"
+
+
+def _worker_signal(text: str) -> str:
+    """Wrap one pulse payload in the #55 producer tag."""
+    return f"<{WORKER_SIGNAL_TAG}>\n{text}\n</{WORKER_SIGNAL_TAG}>"
 
 
 def _worker_lib():
@@ -280,11 +293,14 @@ def _build_pulse(ws: Path) -> tuple[str, str | None]:
     return "\n".join(lines), (d or {}).get("decision")
 
 
-def main() -> int:
-    try:
-        payload = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError:
-        return 0
+def main(payload: dict | None = None) -> int:
+    """Hook entry. `payload=None` reads stdin (the wired subprocess shape);
+    an explicit payload dict is the in-process test seam."""
+    if payload is None:
+        try:
+            payload = json.loads(sys.stdin.read() or "{}")
+        except json.JSONDecodeError:
+            return 0
 
     ws = _resolve_workspace(payload)
     if ws is None:
@@ -300,7 +316,7 @@ def main() -> int:
             print(json.dumps({
                 "hookSpecificOutput": {
                     "hookEventName": "PostToolUse",
-                    "additionalContext": stale_msg,
+                    "additionalContext": _worker_signal(stale_msg),
                 }
             }, ensure_ascii=False))
         return 0  # not a kunglao-agent worker completion — soft pulse only
@@ -322,14 +338,15 @@ def main() -> int:
             print(json.dumps({
                 "hookSpecificOutput": {
                     "hookEventName": "PostToolUse",
-                    "additionalContext": "[worker_pulse] " + reminder,
+                    "additionalContext": _worker_signal(
+                        "[worker_pulse] " + reminder),
                 }
             }, ensure_ascii=False))
         return 0
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PostToolUse",
-            "additionalContext": pulse,
+            "additionalContext": _worker_signal(pulse),
         }
     }, ensure_ascii=False))
     return 0

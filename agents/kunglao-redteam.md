@@ -149,6 +149,8 @@ analysis) and READ the matched files — especially `verify-static-vs-dynamic.md
 — so your attack methods match the maker's verified method category (static vs
 dynamic). The recall list injected into your dispatch prompt by recall_inject
 is authoritative: read those files first, then write your plan-to-execute.
+(It arrives wrapped in `<kunglao-facts>` — producer-attributed injection
+tags: references/xml-injection-standard.md, #55.)
 
 ## Dynamic verification rules (when the heavyweight tools unlock)
 

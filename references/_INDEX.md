@@ -87,6 +87,7 @@
 | `tool-inventory.md` | tools | Full tool inventory table and kunglao CLI family. | When needing the complete list of available tools. |
 | `verify-static-vs-dynamic.md` | verification | Static vs dynamic verification strategies. | When verifying a worker's evidence to pick the correct verification method. |
 | `wal-protocol.md` | contracts | Write-ahead log for atomic multi-writer state updates. | When writing facts and updating claim-register concurrently. |
+| `xml-injection-standard.md` | contracts | XML tag injection standard (#55): producer-attributed, trust-tagged agent-context injection across eight fixed tags (kunglao-state / kunglao-facts / external-tools / tool-recommendations / case-hints / gate-verdict / oracle-sanction / worker-signal). | When writing or changing any hook/script that injects text into the agent's context, or auditing which producer owns which tag. |
 
 ## re-library/ (Reverse Engineering Knowledge Base)
 
