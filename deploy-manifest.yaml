@@ -239,11 +239,11 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 0873d2769ad1d3cd0ca795a2a44e8a141f3318c2edf7d71cb0e4f1472a71e8dc
+    sha256: c984477da64cd76021cb70614d2d4d8dfa12f05cc0d9be4d38e7f0377da533d1
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
-    sha256: 6fc018b01e71cb5e913c7dee5b282f53f1af08133b17f864da18171f6340823d
+    sha256: 5fd9090f6db39bdb954cc8a509acc05df4a99d64c7c7eb66a2709351f8ac3583
   - src: scripts/cost_estimate.py
     dest: .claude/scripts/cost_estimate.py
     kind: scaffold
