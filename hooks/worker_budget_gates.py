@@ -79,6 +79,9 @@ def compare_register_change_proven_gate(
     REQUIRED_FOR_TERMINAL_STATE). An unreadable register (with a
     before-snapshot), an unavailable gate module, or a raising checker blocks
     the write — no alternate direct-edit promotion route stays fail-open.
+    #57 gate 5: a newly-PROVEN claim additionally needs evidence a verifier
+    was EVER dispatched for it (blind_gate.check_verifier_dispatch_evidence,
+    same fail-closed policy).
     """
     if before is None:
         return True, 'no-before snapshot'
@@ -101,6 +104,16 @@ def compare_register_change_proven_gate(
     except Exception as exc:
         return False, (f'PROMOTION GATE: blind_gate unavailable (fail closed) '
                        f'- {type(exc).__name__}: {exc}')
+    # #57 gate 5: a newly-PROVEN claim additionally needs evidence that a
+    # verifier was EVER dispatched for it (red-team DIFF or a verifier-class
+    # dispatch row). Same REQUIRED/fail-closed policy (#78).
+    try:
+        with on_path(_SKILL_ROOT / 'scripts'):  # #671 scoped membership
+            from blind_gate import check_verifier_dispatch_evidence
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: '
+                       f'blind_gate.check_verifier_dispatch_evidence '
+                       f'unavailable (fail closed) - {type(exc).__name__}: {exc}')
     # contradiction gate (#47): PROVEN also requires no same-topic CONFLICT —
     # same-topic multi-PROVEN facts with differing conclusions need a
     # supersedes/superseded_by link, else the write is blocked.
@@ -141,6 +154,10 @@ def compare_register_change_proven_gate(
                 cid, facts_dir, register_text, worker_id=worker_id)
             if not i_ok:
                 violations.append(f'{cid}: {i_reason}')
+            v_ok, v_reason = check_verifier_dispatch_evidence(
+                facts_dir.parent, cid)
+            if not v_ok:
+                violations.append(f'{cid}: {v_reason}')
     except ImportError as exc:
         # Infrastructure failure (should not happen after import above, but
         # defensive) — fail closed: code must be complete.
@@ -576,19 +593,26 @@ def _plan_is_empty_shell(text: str) -> bool:
 
 
 def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[bool, str]:
-    """Issue #239/#294: a claim dispatch REQUIRES its worker plan, WITH CONTENT.
+    """Issue #239/#294 + #57 gate 3: a claim dispatch REQUIRES its worker
+    plan, WITH CONTENT, AUTHORED IN THE WORKER'S SESSION.
 
-    The dispatched claim C-NN must already have `runs/plan-C<NN>*.md` on disk
-    (orchestrator wrote it pre-dispatch — real-world naming is plan-c005.md,
-    claim only, no suffix), OR the dispatch prompt must reference a plan path
-    for THAT claim (timing relaxation: the plan may be written in the same
-    turn, e.g. "write runs/plan-C001-strings.md first, then execute"). A plan
-    path for a DIFFERENT claim in the prompt does NOT relax.
+    The dispatched claim C-NN must have `runs/plan-C<NN>*.md` on disk
+    (real-world naming is plan-c005.md, claim only, no suffix), OR the
+    dispatch prompt must reference a plan path for THAT claim (timing
+    relaxation: the plan may be written in the same turn, e.g. "write
+    runs/plan-C001-strings.md first, then execute"). A plan path for a
+    DIFFERENT claim in the prompt does NOT relax.
 
     #294: an on-disk plan that is an empty-shell template (every field label
     present but bare — `goal:\\npreflight:\\nsteps:\\nfallback:` with nothing
     filled in) does NOT satisfy the gate — it is existence without content.
     The prompt-relaxation path is unaffected (the file may not exist yet).
+
+    #57 gate 3 (plan-author): the on-disk leg additionally requires
+    worker-session evidence when a dispatch anchor has been issued for the
+    claim (see plan_author_violation) — a pre-written (orchestrator-authored)
+    plan does not satisfy 计划本人写. Not armed without an anchor: the
+    pre-#57 posture is unchanged for workspaces that never stamped one.
 
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
@@ -624,6 +648,13 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
                     f'steps/fallback all bare, no content) - fill in the plan '
                     f'FIRST (kunglao-worker.md golden rule #3), then re-dispatch'
                 ))
+            # #57 gate 3: plan-author — with a dispatch anchor issued for this
+            # claim, the on-disk plan must carry worker-session evidence
+            # (authored after dispatch). Not armed -> unchanged legacy posture.
+            violation = plan_author_violation(plan_path, plan_text,
+                                              Path(ws), key, prompt)
+            if violation:
+                return (False, violation)
             return (True, f'plan file exists: {plan_path.name}')
     if prompt:
         m = re.search(
@@ -637,6 +668,174 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
                     f'prompt does not reference a plan path for it - write the '
                     f'plan FIRST (kunglao-worker.md golden rule #3: PLAN FIRST, '
                     f'execute second)'))
+
+
+# ---------- #57 gate 3: plan-author (worker-session evidence) ----------
+# #239/#294 verified the plan FILE (exists + content), not the AUTHOR — the
+# comment above admitted "orchestrator wrote it pre-dispatch". The contract
+# upgrade: 计划本人写 — the plan must be authored in the WORKER's session
+# AFTER dispatch. Mechanism (simplest that a worker-authored plan satisfies
+# naturally and a pre-written plan fails): every passing dispatch stamps a
+# per-dispatch nonce ("dispatch anchor" = its dispatch_ts; the nonce already
+# exists in the #527 corridor's runs/dispatch-context-<claim>.json and in the
+# prompt's KUNGLAO_DISPATCH_CONTEXT block). When an anchor exists for the
+# claim, the on-disk plan must carry worker-session evidence:
+#   path A — the plan cites an issued anchor (the raw dispatch_ts appears in
+#            the plan text, e.g. a `dispatch-anchor: <ts>` frontmatter line
+#            or a quoted context block);
+#   path B — the plan carries an explicit `dispatch-anchor:` line AND its
+#            mtime is after the FIRST issued dispatch of this claim (in-room
+#            rewrite evidence; also keeps worker-authored plans valid across
+#            re-dispatches).
+# A pre-written orchestrator plan satisfies neither (it predates every
+# dispatch, and the nonce did not exist when it was written). No anchors for
+# the claim -> gate not armed -> legacy posture unchanged (FAIL_OPEN on
+# missing corridor, same arming discipline as the #527 machinery itself).
+DISPATCH_ANCHOR_LOG = 'runs/.dispatch-anchor-{key}.jsonl'
+_DISPATCH_ANCHOR_LINE_RE = re.compile(r'dispatch-anchor:\s*(\S+)',
+                                      re.IGNORECASE)
+_DISPATCH_CONTEXT_TS_RE = re.compile(r'"dispatch_ts"\s*:\s*"([^"]+)"')
+_DISPATCH_CONTEXT_MARKER = 'KUNGLAO_DISPATCH_CONTEXT'
+_DISPATCH_ANCHOR_LOG_MAX_ROWS = 32
+
+
+def _anchor_epoch(ts: str) -> float | None:
+    try:
+        from datetime import datetime as _dt
+        return _dt.fromisoformat(str(ts).replace('Z', '+00:00')).timestamp()
+    except (ValueError, TypeError):
+        return None
+
+
+def _prompt_context_ts(prompt: str) -> str | None:
+    """dispatch_ts from the prompt's KUNGLAO_DISPATCH_CONTEXT JSON block."""
+    if not prompt or _DISPATCH_CONTEXT_MARKER not in prompt:
+        return None
+    m = _DISPATCH_CONTEXT_TS_RE.search(prompt)
+    return m.group(1) if m else None
+
+
+def _dispatch_context_file_ts(ws: Path, key: str) -> str | None:
+    p = Path(ws) / 'runs' / f'dispatch-context-{key}.json'
+    if not p.is_file():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding='utf-8'))
+        ts = data.get('dispatch_ts') if isinstance(data, dict) else None
+        return str(ts) if ts else None
+    except (OSError, ValueError):
+        return None
+
+
+def _dispatch_anchor_issued(ws: Path, key: str, prompt: str = '') -> list[str]:
+    """Every dispatch anchor ever issued for this claim (most useful first):
+    the approval-point log, the #527 context file, and the prompt's own
+    context block. Unparseable rows are skipped (not evidence)."""
+    out: list[str] = []
+    log = Path(ws) / 'runs' / f'.dispatch-anchor-{key}.jsonl'
+    if log.is_file():
+        try:
+            for line in log.read_text(encoding='utf-8').splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ts = (json.loads(line) or {}).get('ts')
+                except ValueError:
+                    continue
+                if ts:
+                    out.append(str(ts))
+        except OSError:
+            pass
+    for ts in (_dispatch_context_file_ts(ws, key), _prompt_context_ts(prompt or '')):
+        if ts:
+            out.append(ts)
+    seen: set[str] = set()
+    return [ts for ts in out if not (ts in seen or seen.add(ts))]
+
+
+def record_dispatch_anchor(ws: Path, cid: str, prompt: str = '',
+                           agent: str = '') -> bool:
+    """Stamp the per-dispatch nonce at the dispatch APPROVAL point.
+
+    Called from worker_budget_sinks.pre_check after the whole gate battery
+    passed (a rejected dispatch must stay lifecycle-silent, #754). The stamp
+    reuses the prompt-corridor dispatch_ts when present (the nonce the worker
+    will actually see) and otherwise stamps the approval time. Append-only
+    JSONL, capped at the most recent _DISPATCH_ANCHOR_LOG_MAX_ROWS rows,
+    fail-open: bookkeeping must never block an approved dispatch."""
+    if not cid or not ws:
+        return False
+    key = cid.replace('-', '')
+    ts = _prompt_context_ts(prompt or '')
+    if not ts:
+        try:
+            from _path_hygiene import ensure_scripts_path
+            ensure_scripts_path()
+            from harness_common import utc_now_z
+            ts = utc_now_z()
+        except Exception:  # noqa: BLE001 — clock source outage: unix epoch
+            ts = f'{int(time.time())}'
+    row = json.dumps({'ts': ts, 'claim': cid, 'agent': agent or ''},
+                     ensure_ascii=False)
+    log = Path(ws) / 'runs' / f'.dispatch-anchor-{key}.jsonl'
+    try:
+        log.parent.mkdir(parents=True, exist_ok=True)
+        rows = []
+        if log.is_file():
+            rows = [ln for ln in
+                    log.read_text(encoding='utf-8').splitlines() if ln.strip()]
+        rows = rows[-(_DISPATCH_ANCHOR_LOG_MAX_ROWS - 1):] + [row]
+        tmp = log.with_suffix('.jsonl.tmp')
+        tmp.write_text('\n'.join(rows) + '\n', encoding='utf-8')
+        tmp.replace(log)
+        return True
+    except OSError:
+        return False
+
+
+def stamp_dispatch_anchor(paths: dict, cid: str | None, prompt: str = '',
+                          agent: str = '') -> bool:
+    """pre_check-side wrapper: stamp the anchor for a passing dispatch."""
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws or not cid:
+        return False
+    return record_dispatch_anchor(Path(ws), cid, prompt=prompt or '',
+                                  agent=agent or '')
+
+
+def plan_author_violation(plan_path: Path, plan_text: str, ws: Path,
+                          key: str, prompt: str = '') -> str | None:
+    """#57 gate 3 judgment: None = compliant / not armed; str = the REJECT
+    reason with its concrete repair path. See the block comment above for
+    the evidence contract (path A citation, path B line + fresh mtime)."""
+    anchors = _dispatch_anchor_issued(ws, key, prompt)
+    epochs = [e for e in (_anchor_epoch(a) for a in anchors) if e is not None]
+    if not epochs:
+        return None  # not armed — no per-dispatch nonce corridor for this claim
+    for ts in anchors:
+        if ts and ts in plan_text:
+            return None  # path A: the plan cites an issued dispatch anchor
+    line = _DISPATCH_ANCHOR_LINE_RE.search(plan_text)
+    if line:
+        try:
+            plan_epoch = plan_path.stat().st_mtime
+        except OSError:
+            plan_epoch = 0.0
+        if plan_epoch >= (min(epochs) - 1.0):
+            return None  # path B: anchor line + rewritten after first dispatch
+    cid = 'C-' + key[1:]
+    return (
+        f'{plan_path.name} carries no worker-session evidence for claim '
+        f'{cid} (plan-author gate, #57 gate 3: 计划本人写 — the plan must be '
+        f'written by the WORKER after dispatch, not pre-written by the '
+        f'orchestrator). Fix: re-dispatch and let the worker author its own '
+        f'plan — its dispatch prompt carries the per-dispatch anchor '
+        f'(dispatch_ts in the KUNGLAO_DISPATCH_CONTEXT block); the worker '
+        f'writes/updates {plan_path.name} in its session with a frontmatter '
+        f'line `dispatch-anchor: <that dispatch_ts>` (or quotes the context '
+        f'JSON), then executes. Stop pre-writing {plan_path.name} before '
+        f'dispatch.')
 
 
 # ---------- tool-first gate (issue #294) ----------
