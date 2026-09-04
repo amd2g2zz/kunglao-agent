@@ -291,7 +291,7 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
 # install, not a degraded mode — hooks/ and scripts/ ship together, #444
 # posture). #671: was a literal existence check + bare insert.
 ensure_scripts_path()
-from liveness_policy import STUCK_MINUTES  # noqa: E402
+from liveness_policy import DEAD_WORKER_MINUTES, STUCK_MINUTES  # noqa: E402
 
 # #607: statuses that END a worker's liveness. Anything else — including
 # unknown tokens (planning/preflight) and None — counts as active: an
@@ -494,13 +494,20 @@ def scan_active_workers(workspace: Path, states: list | None = None) -> tuple[in
     Output shape is FROZEN (#37 consumers): ``(active, stuck)`` where each
     stuck entry is ``{"worker": <file stem>, "age_min": int}`` —
     worker_budget.check_workers_lt_3, worker_pulse flags and kunglao-decide's
-    ``stale`` derivation all read exactly this.
+    ``stale`` derivation all read exactly this. #11 ADDITIVE key: each stuck
+    entry also carries ``dead: bool`` — True when the silence exceeds
+    DEAD_WORKER_MINUTES (2x STUCK_MINUTES, liveness_policy): the worker is
+    GONE (API disconnect / crash — no more writes, ever), not merely slow.
+    backtrack_gate (#38) owns the 20-40 stuck band; the dead band feeds the
+    #11 death-event + resume path (scripts/worker_death.py via
+    convergence_check._act_stuck_workers).
     """
     if states is None:
         states = iter_worker_states(workspace)
     active = 0
     stuck = []
     cutoff = timedelta(minutes=STUCK_MINUTES)
+    dead_cutoff = timedelta(minutes=DEAD_WORKER_MINUTES)
     now = datetime.now(timezone.utc)
     for s in states:
         # #607: only TERMINAL statuses end liveness — unknown statuses
@@ -513,7 +520,8 @@ def scan_active_workers(workspace: Path, states: list | None = None) -> tuple[in
         active += 1
         if (now - s["mtime"]) > cutoff:
             stuck.append({"worker": s["file"].stem,
-                          "age_min": int((now - s["mtime"]).total_seconds() // 60)})
+                          "age_min": int((now - s["mtime"]).total_seconds() // 60),
+                          "dead": (now - s["mtime"]) > dead_cutoff})  # #11
     return active, stuck
 
 

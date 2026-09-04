@@ -54,6 +54,12 @@ from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671
 # the dispatch-facing terminal set; RETRACTED is a withdrawn verdict, NOT an
 # open claim and NOT an orphan (a retracted claim answers no question by design).
 from retract_claim import RETRACTED, TERMINAL_WITH_RETRACTED
+# #11: worker-death records + artifact snapshot — the resume signal for
+# workers that are GONE (silent > DEAD_WORKER_MINUTES, liveness_policy).
+# Consumed inside _act_stuck_workers so the dead band rides the existing
+# STUCK_WORKERS_PRESENT path (no parallel detector, no second scan pass).
+import worker_death as _worker_death
+from liveness_policy import DEAD_WORKER_MINUTES as _DEAD_WORKER_MINUTES
 # #863 Family C: workspace resolution is single-sourced in ws_layout (this
 # module used to be the ONLY manifest-aware copy — now every consumer is).
 from ws_layout import resolve_quiet as _resolve_ws
@@ -1057,12 +1063,26 @@ def _act_stuck_workers(s: _DecideInputs) -> str:
     state machine must still return a verdict even on a read-only filesystem
     or a permission error. Order probe (SCHEDULE index 2) gates this: it
     fires BEFORE WORK_NO_FREE_SLOT/FAILURE/LADDER/UNEXPECTED, so a stuck
-    worker always wins over those flavors."""
+    worker always wins over those flavors.
+
+    #11 composition: stuck entries flagged ``dead`` (silent >
+    DEAD_WORKER_MINUTES — the worker is GONE, backtrack_gate territory ends)
+    additionally get a death record with the artifact snapshot
+    (runs/.worker-death-<stem>.json) BEFORE the reopen, so the report, the
+    summary, and the reopened claim's history line all reference it: the
+    resume contract is continue-from-the-snapshot, not redo-from-zero."""
     stems = ", ".join(f"{w['worker']} ({w['age_min']}m)" for w in s.stuck)
     summary = (f"Stuck worker(s) detected: {stems}. "
                f"Older than {_load_worker_lib().STUCK_MINUTES}m with status "
                f"in-progress. Orchestrator intervention required before any "
                f"further dispatch.")
+    dead = [w for w in s.stuck if w.get("dead")]
+    death_paths: list = []
+    if dead:
+        try:
+            death_paths = _worker_death.write_death_records(s.workspace, dead)
+        except OSError:
+            death_paths = []
     try:
         report = s.workspace / "runs" / ".stuck-report.md"
         report.parent.mkdir(parents=True, exist_ok=True)
@@ -1073,17 +1093,53 @@ def _act_stuck_workers(s: _DecideInputs) -> str:
         lines.append("")
         lines.append("## Workers")
         for w in s.stuck:
-            lines.append(f"- **{w['worker']}** — age {w['age_min']} min")
+            suffix = ""
+            if w.get("dead"):
+                suffix = (f" — **DEAD** (silent > {_DEAD_WORKER_MINUTES}m, "
+                          f"death record: runs/"
+                          f"{_worker_death.RECORD_NAME.format(stem=w['worker'])})")
+            lines.append(f"- **{w['worker']}** — age {w['age_min']} min{suffix}")
         lines.append("")
+        if dead:
+            lines.append("## Dead workers (#11)")
+            for w in dead:
+                rec = _worker_death.record_path(s.workspace, w["worker"])
+                lines.append(f"- **{w['worker']}** — gone (no writes > "
+                             f"{_DEAD_WORKER_MINUTES}m). Death record: "
+                             f"{rec.name} carries the artifact snapshot "
+                             f"(已完成产物清单).")
+            lines.append("")
         lines.append("## Action")
         lines.append("Investigate each worker above. Either: (a) restart the "
                      "worker if it is genuinely hung, or (b) close the worker "
                      "if the claim should be re-dispatched. Do NOT dispatch "
                      "more work while stuck workers remain.")
+        if dead:
+            lines.append("")
+            lines.append("### Death-resume contract (#11)")
+            lines.append("For each DEAD worker above: its claim was flipped "
+                         "back to OPEN with the death record referenced. "
+                         "Dispatch a RESUME claim that reads the death "
+                         "record's artifacts list first — verify and absorb "
+                         "the existing products, continue from where the "
+                         "worker died. Do NOT redo from zero.")
         report.write_text("\n".join(lines), encoding="utf-8")
     except OSError:
         # Non-fatal: the verdict and summary still surface to the caller.
         pass
+    if dead:
+        # #11: the guidance line matters as much as the mechanism — name the
+        # records and the continue-from contract right in the decide summary.
+        rec_names = ", ".join(
+            f"runs/{_worker_death.RECORD_NAME.format(stem=w['worker'])}"
+            for w in dead)
+        summary += (f" Dead worker(s) (no writes > {_DEAD_WORKER_MINUTES}m): "
+                    f"{len(dead)}. Death record(s) with artifact snapshot: "
+                    f"{rec_names}. Resume contract: dispatch a RESUME claim "
+                    f"referencing the artifacts list — continue from where "
+                    f"the worker died, do not redo from zero.")
+        if death_paths:
+            summary += f" ({len(death_paths)} record(s) written this scan.)"
     # #607 闭环: a stuck worker must FREE its claim — claim_expiry covers
     # IN_PROGRESS but has zero mechanical callers, so the loop had NO machine
     # path out of IN_PROGRESS. Reopen stuck workers' IN_PROGRESS claims →
@@ -1104,7 +1160,9 @@ def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
 
     Worker stem convention is ``worker-status-<claim-ish>-<suffix>``; match by
     prefix (``worker-status-C-400*`` → claim ``C-400``). Returns the reopened
-    claim ids; OSError family propagates to the caller's fail-open."""
+    claim ids; OSError family propagates to the caller's fail-open.
+    #11: claims reopened from DEAD workers get a death-record-referencing
+    history line — that reference IS the resume signal."""
     import yaml as _yaml
     reg = s.workspace / "claim-register.yaml"
     if not reg.exists():
@@ -1112,6 +1170,7 @@ def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
     data = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
     claims = data.get("claims") or []
     prefixes = []
+    dead_prefixes: dict[str, str] = {}
     for w in s.stuck:
         stem = w["worker"].removeprefix("worker-status-")
         # strip ONE trailing retry/version token (C-400v2 → C-400, C400v2 →
@@ -1119,7 +1178,10 @@ def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
         # trailing [vV]<digits> suffix or a separate hyphenated numeric tail
         # is removed).
         m = re.search(r"^(.*?)[vV]\d+$", stem) or re.search(r"^(.*)-\d+$", stem)
-        prefixes.append(m.group(1) if m and m.group(1) else stem)
+        pfx = m.group(1) if m and m.group(1) else stem
+        prefixes.append(pfx)
+        if w.get("dead"):
+            dead_prefixes[_worker_death.norm_key(pfx)] = w["worker"]
     reopened: list[str] = []
     now = utc_now()
     norm = lambda x: x.replace("-", "").replace("_", "").lower()
@@ -1128,11 +1190,22 @@ def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
         if not cid or c.get("status") != "IN_PROGRESS":
             continue
         # shape-insensitive compare: C400 ≡ C-400 (worker stems drop the id's hyphen)
+        matched_dead = next((stem for pfx_key, stem in dead_prefixes.items()
+                             if norm(cid) == pfx_key
+                             or norm(cid).startswith(pfx_key)
+                             or pfx_key.startswith(norm(cid))), None)
         if any(norm(cid) == norm(p) or norm(cid).startswith(norm(p))
                or norm(p).startswith(norm(cid)) for pfx in prefixes for p in [pfx]):
             c["status"] = "OPEN"
             hist = c.setdefault("history", [])
-            hist.append(f"#607 reopened from IN_PROGRESS (worker stuck) {now}")
+            if matched_dead:
+                hist.append(
+                    f"#11 death-resume reopened from IN_PROGRESS (worker dead; "
+                    f"record: runs/"
+                    f"{_worker_death.RECORD_NAME.format(stem=matched_dead)}) "
+                    f"{now}")
+            else:
+                hist.append(f"#607 reopened from IN_PROGRESS (worker stuck) {now}")
             reopened.append(cid)
     if reopened:
         data["_audit"] = (data.get("_audit") or []) + [
