@@ -529,8 +529,9 @@ def _failure_blocked(workspace: Path) -> list:
 #   - outcomes live in TRANSITIONS ((State, Event) -> (State, action builder))
 #   - a new gate is a table row, never a new elif rung
 # Gate SEMANTICS and every action string are byte-identical to the
-# pre-refactor chain — proven per-case against the c5cb1ae baseline by
-# tests/test_decide_regression_anchor.py (frozen snapshot + live baseline).
+# pre-refactor chain — proven per-case by tests/test_decide_regression_anchor.py
+# (frozen snapshot channel; the live-baseline channel retired 2026-09-05,
+# see the re-pin header there).
 
 
 class State(str, Enum):
@@ -1303,19 +1304,18 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
         ms = stall_mission(workspace)
         if ms.get("stalled"):
             decision["mission_stall"] = ms
-            # #823-P3: stall response face — THINK bet guidance, flag-gated.
-            # Conditional-key (anchored snapshots stay identical otherwise).
+            # #823-P3: stall response face — THINK bet guidance (always-on
+            # since #51). Conditional-key (anchored snapshots stay identical
+            # when no stall is present).
             try:
-                import value_config as _vc
-                if _vc.is_enabled():
-                    from think_seat import bets_owed as _bets_owed
-                    decision["stall_response"] = {
-                        "bets_owed": _bets_owed(Path(workspace)),
-                        "guidance": ("stall confirmed - file a falsifiable "
-                                     "bet via think_seat.file_bet "
-                                     "(predicted_observation required); the "
-                                     "bet leads the next dispatch"),
-                    }
+                from think_seat import bets_owed as _bets_owed
+                decision["stall_response"] = {
+                    "bets_owed": _bets_owed(Path(workspace)),
+                    "guidance": ("stall confirmed - file a falsifiable "
+                                 "bet via think_seat.file_bet "
+                                 "(predicted_observation required); the "
+                                 "bet leads the next dispatch"),
+                }
             except Exception:  # noqa: BLE001 — advisory face only
                 pass
             if emit_snapshot:
@@ -1325,9 +1325,8 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
                             detail=json.dumps(ms, ensure_ascii=False))
     except Exception:  # noqa: BLE001 — fingerprint unavailable → no annotation
         pass
-    # #823 A2: N-arm first-order value signals — shadow posture, flag-gated.
-    # Flag off → the dict comes back untouched (no key, no emit).
-    # Flag misread raises FlagError by design (experiment fail-loud contract).
+    # #823 A2: N-arm first-order value signals — shadow posture (always-on
+    # since #51: the dict gains the `value_signals` key and one shadow emit).
     import rho_checkpoint
     # #829: cross-carrier consistency — CONVERGED may not stand on drifting
     # carriers. Checker exception counts as drift (fail-closed for the
@@ -1367,7 +1366,12 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             _emit_gap(workspace, actor="convergence_check",
                       action="heartbeat_gap",
                       detail=json.dumps(gap, ensure_ascii=False))
-    result = rho_checkpoint.attach_signals(workspace, decision)
+    # emit_snapshot=False (resume's #466 read-only contract) must quiesce
+    # the #51 always-on recording too: signals are computed and attached
+    # identically, but the value/rho persistence stays off (#51 regression:
+    # resume appended rho rows + wrote runs/infeasible-state.json).
+    result = rho_checkpoint.attach_signals(workspace, decision,
+                                           emit=emit_snapshot)
     if emit_snapshot:
         _emit_decision_snapshot(workspace, result)
     return result

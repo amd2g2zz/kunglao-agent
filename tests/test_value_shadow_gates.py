@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 """A5 (#823): shadow promotion gates — the three written criteria that must
-pass before the N-arm graduates from shadow to canary (four-stage gate,
-AUDIT_REPORT §14; plan Task A5).
+pass before the value loop graduates from shadow to canary (four-stage gate,
+AUDIT_REPORT §14; plan Task A5). Always-on since #51 (#51 removed the
+experiment switch).
 
 1. ρ VOC > 0.7 — ρ sequence correlates with true progress on a synthetic
    trajectory (Pearson).
 2. fingerprint zero false-positives — a synthetic GOOD trajectory (belief
    moves between same-type actions) never trips the circuit.
 3. prior correction does not degrade the synthetic baseline ranking —
-   neutral priors reproduce the flag-off order exactly.
+   neutral priors reproduce the base order exactly.
 """
 
 import priority_ratio as pr
 import rho_checkpoint as rc
-import value_config
 import zero_output_fingerprint as zf
 
 
@@ -57,9 +57,8 @@ def test_gate_3_prior_correction_no_degradation(monkeypatch):
         {"id": "C-003", "status": "OPEN", "statement": "protocol restore",
          "evidence_tier_attempted": 1, "promotion_attempts": 0},
     ]
-    monkeypatch.delenv(value_config.ENV_NAME, raising=False)
+    monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
     base = [a.claim_id for a in pr.priority_ratio(claims, {}, pr.EvidenceView())]
-    monkeypatch.setenv(value_config.ENV_NAME, "1")
     neutral = [a.claim_id for a in pr.priority_ratio(
         claims, {}, pr.EvidenceView(prior_p_complete=1.0))]
     uniform = [a.claim_id for a in pr.priority_ratio(
