@@ -171,10 +171,17 @@ def eta_minutes(time_budget_min: float, enumeration_coeff: float) -> float:
 
 # ---------- decide() attach (always-on since #51) ----------
 
-def attach_signals(ws: Path, decision: dict) -> dict:
+def attach_signals(ws: Path, decision: dict, *, emit: bool = True) -> dict:
     """Mount point for convergence_check.decide(): compute the
     first-order signals from the workspace priors, attach as
-    decision["value_signals"], emit one shadow event."""
+    decision["value_signals"], emit one shadow event.
+
+    emit=False is the diagnostic/read-only face (resume's #466 contract,
+    plumbed from decide()'s emit_snapshot): the signals are computed
+    identically and attached, but NOTHING is persisted — no rho_checkpoint
+    ledger row, no rho_pair/cockpit_sample rows, no infeasible state
+    checkpoint. A diagnostic invocation must not write into the workspace
+    it diagnoses."""
     priors = {}
     p = Path(ws) / PRIORS_FILE
     try:
@@ -199,10 +206,10 @@ def attach_signals(ws: Path, decision: dict) -> dict:
     sig = {"v": round(v, 4), "source": source, "error_band": round(band, 4),
            "d": round(difficulty, 4), "eta_min": round(eta, 1)}
     # #823 A4 canary graduation: doomed-trajectory early-stop signal rides
-    # the same mount
+    # the same mount (persist=False in the diagnostic face — compute only)
     try:
         import infeasible_signal
-        infeasible = infeasible_signal.evaluate(Path(ws))
+        infeasible = infeasible_signal.evaluate(Path(ws), persist=emit)
         sig["infeasible_candidate"] = infeasible.get("infeasible_candidate", False)
         sig["v_flat_rounds"] = infeasible.get("v_flat_rounds", 0)
     except Exception:
@@ -212,18 +219,19 @@ def attach_signals(ws: Path, decision: dict) -> dict:
     # disturb decide()). Shadow: sample_and_pair records only.
     try:
         import rho_verifier
-        rho_verifier.sample_and_pair(ws)
+        rho_verifier.sample_and_pair(ws, emit=emit)
     except Exception:  # noqa: BLE001 - shadow cage: signals never disturb
         pass
     decision["value_signals"] = sig
     # Shadow emit, caged like every other emit in decide()'s call graph
     # (#51: the path is now unconditional, so it must honor the standing
     # fail-open emit contract — a broken log write never disturbs decide()).
-    try:
-        kunglao_log.emit(ws, actor="rho_checkpoint", action="rho_checkpoint",
-                         detail=json.dumps(sig, sort_keys=True))
-    except Exception:  # noqa: BLE001 — shadow cage: signals never disturb
-        pass
+    if emit:
+        try:
+            kunglao_log.emit(ws, actor="rho_checkpoint", action="rho_checkpoint",
+                             detail=json.dumps(sig, sort_keys=True))
+        except Exception:  # noqa: BLE001 — shadow cage: signals never disturb
+            pass
     return decision
 
 

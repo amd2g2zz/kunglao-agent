@@ -239,7 +239,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 6c6e45209ad983595f0c9261a2fa5c4d0bb2e48c2d92ec6d9665698c33baf89f
+    sha256: 0873d2769ad1d3cd0ca795a2a44e8a141f3318c2edf7d71cb0e4f1472a71e8dc
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -395,7 +395,7 @@ files:
   - src: scripts/infeasible_signal.py
     dest: .claude/scripts/infeasible_signal.py
     kind: scaffold
-    sha256: b90156a85c3a72552246bd6fc3b99f0734b2e0eea736349d24a87aae50334d1a
+    sha256: c96504121191a2e0001eccdf8ba95e4a3b5bd07758bb228c8aa34cd40fc72709
   - src: scripts/init_channel_default.py
     dest: .claude/scripts/init_channel_default.py
     kind: scaffold
@@ -675,11 +675,11 @@ files:
   - src: scripts/rho_checkpoint.py
     dest: .claude/scripts/rho_checkpoint.py
     kind: scaffold
-    sha256: 47950f267037cb87af5973d7c07f32167b6682d556fd5953e6c3ab296a333041
+    sha256: ce0269901af733f63edf75028585b92d3d0bbec983fcbfaa47c7b3adf41c2f60
   - src: scripts/rho_verifier.py
     dest: .claude/scripts/rho_verifier.py
     kind: scaffold
-    sha256: 27a2aa706dd705c603fa7764c25b41349bb747a4e609a7e3f58703aef4a60d7a
+    sha256: e94879fa7ba271d3d30d977ce4f84ef7fb117914f47d7eb44e52ea5d09e44248
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold

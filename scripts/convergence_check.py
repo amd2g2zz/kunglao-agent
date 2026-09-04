@@ -499,8 +499,9 @@ def _failure_blocked(workspace: Path) -> list:
 #   - outcomes live in TRANSITIONS ((State, Event) -> (State, action builder))
 #   - a new gate is a table row, never a new elif rung
 # Gate SEMANTICS and every action string are byte-identical to the
-# pre-refactor chain — proven per-case against the c5cb1ae baseline by
-# tests/test_decide_regression_anchor.py (frozen snapshot + live baseline).
+# pre-refactor chain — proven per-case by tests/test_decide_regression_anchor.py
+# (frozen snapshot channel; the live-baseline channel retired 2026-09-05,
+# see the re-pin header there).
 
 
 class State(str, Enum):
@@ -1335,7 +1336,12 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             _emit_gap(workspace, actor="convergence_check",
                       action="heartbeat_gap",
                       detail=json.dumps(gap, ensure_ascii=False))
-    result = rho_checkpoint.attach_signals(workspace, decision)
+    # emit_snapshot=False (resume's #466 read-only contract) must quiesce
+    # the #51 always-on recording too: signals are computed and attached
+    # identically, but the value/rho persistence stays off (#51 regression:
+    # resume appended rho rows + wrote runs/infeasible-state.json).
+    result = rho_checkpoint.attach_signals(workspace, decision,
+                                           emit=emit_snapshot)
     if emit_snapshot:
         _emit_decision_snapshot(workspace, result)
     return result
