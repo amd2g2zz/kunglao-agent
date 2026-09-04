@@ -363,7 +363,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: a987bd4952fc5123e5c46065882814f1e329957a8e4e124ead427c276b012626
+    sha256: d3dcd09d052c990d192f4f0216e6f7eee8d3999ee9376cb4937ba934fdeec596
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
