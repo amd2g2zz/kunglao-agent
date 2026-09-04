@@ -19,6 +19,14 @@ Three verdicts:
 Recovery protocol is printed alongside the verdict — this is NOT a "flag and
 walk away" tool. STALLED/SPINNING come with a concrete next action.
 
+Exit codes (machine-readable for hooks):
+  0 = HEALTHY   (keep dispatching)
+  1 = STALLED   (diagnose before dispatching)
+  2 = SPINNING  (stop dispatching)
+  3 = NO_DATA   (no ledger yet — run convergence_check.py per turn)
+  4 = CRASHED   (#3: unexpected error — the check itself is broken; hooks
+      must FAIL OPEN on 4, a crashed gate must never masquerade as STALLED)
+
 Why this exists: v1.9.0-1 made convergence-driven dispatch the default, but
 a busy loop can fake convergence (DISPATCH every turn, open_count never drops).
 Without a trajectory metric + detector, idle-waiting (the "just wait"
@@ -65,6 +73,7 @@ EXIT_HEALTHY = 0
 EXIT_STALLED = 1
 EXIT_SPINNING = 2
 EXIT_NO_DATA = 3
+EXIT_CRASHED = 4  # #3: unexpected error in the check itself — hooks fail open
 
 
 def _resolve_ws(arg):
@@ -341,11 +350,20 @@ def main() -> int:
         print(f"FAIL: no {LEDGER_NAME} under {workspace} (run convergence_check.py first)", file=sys.stderr)
         return EXIT_NO_DATA
 
-    r = assess(ledger)
-    if args.json:
-        print(json.dumps(r, indent=2, ensure_ascii=False))
-    else:
-        print(_human(r))
+    # #3: a crashed check must not exit 1 — the dispatch gate reads rc=1 as
+    # STALLED and blocks dispatch, so an unexpected exception (corrupt ledger
+    # row past what iter_jsonl skips, bad JSON shape, ...) would masquerade
+    # as a stalled mission. Exit 4 (distinct from the 0/1/2/3 protocol);
+    # consumer fails open on it. argparse + the no-ledger path stay outside.
+    try:
+        r = assess(ledger)
+        if args.json:
+            print(json.dumps(r, indent=2, ensure_ascii=False))
+        else:
+            print(_human(r))
+    except Exception as exc:  # noqa: BLE001 — the crash IS the signal (exit 4)
+        print(f"convergence_health crashed: {exc!r}", file=sys.stderr, flush=True)
+        return EXIT_CRASHED
     return r["exit_code"]
 
 
