@@ -39,6 +39,7 @@ allowedTools:
 - Bash
 - mcp__sequential-thinking__sequentialthinking
 - mcp__ghidra__*
+- mcp__ida-pro-vm__*
 disallowedTools:
 - NotebookEdit
 - mcp__frida__spawn

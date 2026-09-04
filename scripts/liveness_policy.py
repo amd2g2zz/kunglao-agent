@@ -88,6 +88,17 @@ HEARTBEAT_STALE_MINUTES = 35
 # this value is NEW in #754, not a surveyed pre-existing constant.
 TICK_INTERVAL_DEFAULT_MIN = 5
 
+# scripts/heartbeat.py (#4): the continuity verdict reads a SLIDING WINDOW,
+# not the whole durable tick sidecar - a tick participates when it is among
+# the last CONTINUITY_WINDOW_TICKS OR within the last CONTINUITY_WINDOW_HOURS;
+# older ticks stay on disk (append-only, nothing deleted) but stop voting.
+# Sized to the real cadence above (5m): 12 ticks ~= 1 hour of normal
+# operation, so ordinary jitter never trips it, while any historical stall
+# stops counting within ~a day (24h age bound) instead of re-rejecting the
+# workspace forever after one mid-life gap.
+CONTINUITY_WINDOW_TICKS = 12
+CONTINUITY_WINDOW_HOURS = 24
+
 # ---------------------------------------------------------------------------
 # Hook-activation TTL (the enforcement-liveness threshold, value 30)
 # ---------------------------------------------------------------------------

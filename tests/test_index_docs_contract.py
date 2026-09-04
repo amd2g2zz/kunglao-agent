@@ -97,7 +97,7 @@ def _all_tools_md() -> list[Path]:
 
 def test_yaml_registry_has_29_tools() -> None:
     tools = _yaml_tools()
-    assert len(tools) == 38, f"expected 38 registered tools, got {len(tools)}"  # 38 since #866-b (ghidra_diff registration); 37 since #884 (jsvmp-triage, web category; 36 since #728 wakaru-unbundle/webcrack-deobfuscate; 34 since #692)
+    assert len(tools) == 39, f"expected 39 registered tools, got {len(tools)}"  # 39 since #46 (ida-decompile registration); 38 since #866-b (ghidra_diff registration); 37 since #884 (jsvmp-triage, web category; 36 since #728 wakaru-unbundle/webcrack-deobfuscate; 34 since #692)
     names = [t["name"] for t in tools]
     assert len(names) == len(set(names)), "duplicate tool names in _INDEX.yaml"
 
