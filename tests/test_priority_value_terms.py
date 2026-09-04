@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""A3 (#823): priority_ratio feed-side value terms (N-arm only).
+"""A3 (#823): priority_ratio feed-side value terms (always-on since #51).
 
-The formula shape stays numerator/cost×weight; the N-arm only changes
+The formula shape stays numerator/cost×weight; the value terms change
 what is FED into cost (rework-inflated by the bucket's P(complete)) and
-adds a capability bonus multiplier for claims holding a validated
-capability card. Flag off → byte-identical ranking.
+add a capability bonus multiplier for claims holding a validated
+capability card. #51 removed the KUNGLAO_VALUE_ALGO switch: the unified
+path is pinned here on a default environment.
 """
 
 import priority_ratio as pr
-import value_config
 
 
 def _claim(cid, tier=1, **extra):
@@ -26,17 +26,15 @@ def _rank(claims, view, deps=None):
     return [a.claim_id for a in pr.priority_ratio(claims, deps or {}, view)]
 
 
-def test_flag_off_identical_scores(monkeypatch):
-    monkeypatch.delenv(value_config.ENV_NAME, raising=False)
+def test_neutral_prior_reproduces_base_formula(monkeypatch):
+    monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
     claims = [_claim("C-001"), _claim("C-002", tier=2)]
     base = pr.priority_ratio(claims, {}, _view())
-    # neutral defaults must not perturb the formula even when fields present
-    polluted = pr.priority_ratio(claims, {}, _view(prior_p_complete=0.25))
-    assert [a.score for a in base] == [a.score for a in polluted]
+    neutral = pr.priority_ratio(claims, {}, _view(prior_p_complete=1.0))
+    assert [a.score for a in base] == [a.score for a in neutral]
 
 
-def test_flag_on_low_prior_inflates_cost(monkeypatch):
-    monkeypatch.setenv(value_config.ENV_NAME, "1")
+def test_low_prior_inflates_cost():
     claims = [_claim("C-001")]
     scores = {}
     for tag, view in (("pessimistic", _view(prior_p_complete=0.25)),
@@ -45,25 +43,23 @@ def test_flag_on_low_prior_inflates_cost(monkeypatch):
     assert scores["pessimistic"] < scores["optimistic"]
 
 
-def test_flag_on_capability_claim_outranks_plain(monkeypatch):
-    monkeypatch.setenv(value_config.ENV_NAME, "1")
+def test_capability_claim_outranks_plain():
     claims = [_claim("C-001"), _claim("C-002")]
     view = _view(validated_capabilities=(("C-001", "frida hooking validated"),))
     ranked = _rank(claims, view)
     assert ranked.index("C-001") < ranked.index("C-002")
 
 
-def test_flag_off_capability_ignored(monkeypatch):
-    monkeypatch.delenv(value_config.ENV_NAME, raising=False)
-    claims = [_claim("C-001"), _claim("C-002")]
-    plain = _rank(claims, _view())
-    with_cap = _rank(claims, _view(
-        validated_capabilities=(("C-001", "frida hooking validated"),)))
-    assert plain == with_cap  # tie broken identically — no bonus applied
+def test_capability_bonus_visible_in_score():
+    claims = [_claim("C-001")]
+    plain = pr.priority_ratio(claims, {}, _view())[0].score
+    bonused = pr.priority_ratio(
+        claims, {}, _view(
+            validated_capabilities=(("C-001", "frida hooking validated"),)))[0].score
+    assert bonused > plain
 
 
-def test_prior_floor_bounds_cost_inflation(monkeypatch):
-    monkeypatch.setenv(value_config.ENV_NAME, "1")
+def test_prior_floor_bounds_cost_inflation():
     claims = [_claim("C-001", tier=3)]
     floor_view = _view(prior_p_complete=0.001)
     a = pr.priority_ratio(claims, {}, floor_view)[0]
