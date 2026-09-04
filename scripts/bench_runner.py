@@ -11,8 +11,9 @@ Schedules paired two-arm runs from the bench manifest:
                 only to catch hangs (S3 ceiling = the user-ruled 8h).
                 task_spec.time_budget = the stratum budget (the agent
                 must know its real budget — #823 ETA input).
-  arm switch    env KUNGLAO_VALUE_ALGO for N; O runs with the flag
-                absent (byte-identical dev behavior).
+  arms          A = N, B/C = O. Since #51 the AB-VALUE env switch is
+                gone — the value algorithm is the only path, so the
+                arms differ in scheduling only (N serial vs O parallel).
   terminal      done / timeout (LEGAL terminal, z=0, workspace FROZEN
                 for grading) / crashed (infrastructure — rerun, not a
                 sample failure, not contamination).
@@ -54,11 +55,6 @@ BUDGETS = {
 LANE_ARMS = {"A": "N", "B": "O", "C": "O"}
 
 
-def arm_env(arm: str) -> dict:
-    """The ONLY difference between arms (AB-DESIGN §3)."""
-    return {"KUNGLAO_VALUE_ALGO": "1"} if arm == "N" else {}
-
-
 def _load_manifest(path: Path) -> dict:
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict) or not isinstance(data.get("samples"), list):
@@ -87,7 +83,6 @@ def build_plan(manifest_path: Path, stratum: str, lane: str) -> list[dict]:
             "serial": lane == "A",
             "pair_order": pair_order[sid],
             "workspace": f"bench-{stratum.lower()}-{sid}-{arm.lower()}",
-            "env": arm_env(arm),
             "max_turns": budget["max_turns"],
             "wall_cap_s": budget["wall_h"] * 3600,
             "budget_min": budget["budget_min"],
@@ -100,7 +95,6 @@ def _default_executor(spec: dict) -> dict:
     with Stage C1/C2 (sample vault wiring); the contract — outcome ∈
     {done, timeout}, compaction_count, transcript path — is fixed here."""
     env = dict(os.environ)
-    env.update(spec["env"])
     started = datetime.now(timezone.utc)
     try:
         proc = subprocess.run(

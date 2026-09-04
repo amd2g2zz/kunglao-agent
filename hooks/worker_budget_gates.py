@@ -1327,23 +1327,19 @@ def check_agent_type(paths: dict, cid: str, prompt: str,
 def check_zero_output_circuit(workspace: str | Path) -> tuple[bool, str]:
     """#823 A4 canary graduation: same-type zero-output thrash breaker.
 
-    Shadow posture (count + emit only) graduates here: with
-    KUNGLAO_VALUE_ALGO enabled, a tripped circuit (ZERO_OUTPUT_N=3
-    consecutive same-type actions with no belief change) REJECTS the
-    dispatch until a failure_analysis step lands (#634 design).
-    Flag OFF or any read failure -> pass (byte-identical / fail-open,
-    matching this gate family's stance: a broken gate must not
-    deadlock the loop).
+    Shadow posture (count + emit only) graduates here: a tripped circuit
+    (ZERO_OUTPUT_N=3 consecutive same-type actions with no belief change)
+    REJECTS the dispatch until a failure_analysis step lands (#634
+    design). Always-on since #51 (the experiment flag is gone); any read
+    failure -> pass (fail-open, matching this gate family's stance: a
+    broken gate must not deadlock the loop).
 
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
     if not workspace:
         return (True, 'no workspace - zero-output circuit skipped')
     try:
-        import value_config
         import zero_output_fingerprint
-        if not value_config.is_enabled():
-            return (True, 'flag off - zero-output circuit bypassed')
         state_path = Path(workspace) / zero_output_fingerprint.STATE_FILE
         try:
             state = json.loads(state_path.read_text(encoding="utf-8"))
