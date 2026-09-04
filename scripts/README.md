@@ -169,7 +169,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `emit_gate.py` | EMIT_ACTIONS 双向门 (#880) — 正向: 词表孤儿扫描(每个 action 须有 ≥1 生产发射者, quoted-literal 宽网); 反向: emit-site literal 未注册扫描(#459 pattern 表); CI 挂 tests/test_emit_gate_880.py | tests, CI |
 | `utf8_boot.py` | CLI 入口 UTF-8 双保险 (#811) — PYTHONUTF8 setdefault + stdout/stderr reconfigure; 全入口 __main__ 接线 | hooks, tests |
 | `optimizer_core.py` | #833 θ 数值通道 — PARAM_SPEC(opt-theta-v1)+宪法隔离(CONSTITUTIONAL_KEYS 不可入 spec/提案)+SPSA(衰减步长)+replay_loss 规则近似+提案 JSON(只出提案不生效) | tests |
-| `optimizer_bandit.py` | #833 机制开关通道 — β-Bernoulli 后验(arm=机制×泳道)+ledger 归因+demotion_queue(四阶段门降级候选,不直接生效) | tests |
+| `optimizer_bandit.py` | #833 机制开关通道 — β-Bernoulli 后验(arm=机制×泳道)+ledger 归因+demotion_queue(四阶段门降级候选,不直接生效) | tests; 零运行时 consumer = v0.2 设计资产(#53 裁定: Thompson sampling 不进 v0.1.5, consumer=#50/#59; 价值接线 #881), 非死代码不删 |
 | `plan_stages.py` | plan 阶段模型 (#822) — runs/plan-stages.yaml 工件 + BIG_BANG_PLAN 检测(校验面 fail-closed) + 盘点裁决 maintain/adjust/replan(adjust/replan 必带 reason) + plan_review 落账 | CLI, tests |
 | `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |
 | `tuition_curve.py` | 学费曲线聚合器 + 座舱 V/D/ETA 数据面 (#823-P4) — settled rho_pair → mission 记录, stratum 聚合, got_cheaper 判定, cockpit_summary | tests |
@@ -241,7 +241,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `bench_analyze.py` | stdlib statistics — exact McNemar, Wilcoxon, tuition slopes, H1-H4 pre-registered verdicts, --demo | CLI, tests |
 | `answer_key_lint.py` | answer-key quality gate: schema + PQ-to-top-level consistency + IOC normalizability | CLI |
 | `intake_one.py` | single manifest entry immediate validation (sha256/first_seen/sources/pq lists) | CLI |
-| `intake_promise.py` | Phase 0 预扫描 promise 块 (#813) — apkid/DIE 探测状态显式记录 + 混淆先验(apkid.json 同源提取) + java 可达性判定(#807 死胡同面)；task_spec `promise:` 键合并 / runs 降级 | kunglao-init, CLI, tests |
+| `intake_promise.py` | Phase 0 预扫描 promise 块 (#813) — apkid/DIE 探测状态显式记录 + 混淆先验(apkid.json 同源提取) + java 可达性判定(#807 死胡同面)；task_spec `promise:` 键合并 / runs 降级 | kunglao-init, CLI, tests; 下游 enforcement consumer 未接线(#53 裁定: 休眠保留, 消费面=#54 Android-lighting, 不在此 fake-wire) |
 
 ## Release & CI support
 
