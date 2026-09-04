@@ -11,7 +11,9 @@ convergence_health answers → "is the sequence of dispatches converging?" (traj
 
 Three verdicts:
   HEALTHY  → open_count trending down, or too few rounds to judge
-  STALLED  → open_count flat for 5+ rounds, OR a claim stuck 3+ rounds
+  STALLED  → open_count flat for 5+ rounds, OR a DISPATCHED claim stuck 3+
+             rounds (#2: a never-dispatched claim is frontier queue, not
+             stuck — stamping it stuck deadlocked the dispatch gate)
   SPINNING → flat 8+ rounds, OR facts grew 5+ while open_count held (churn)
 
 Recovery protocol is printed alongside the verdict — this is NOT a "flag and
@@ -153,7 +155,15 @@ def _flatline_run(ledger: list) -> int:
 
 
 def _stuck_claims(ledger: list) -> list:
-    """Claims present in open_ids for >= STALLED_STUCK_CLAIM consecutive trailing snapshots."""
+    """Claims present in open_ids for >= STALLED_STUCK_CLAIM consecutive trailing snapshots.
+
+    #2: presence alone is not stuck. open_ids is the dispatchable frontier —
+    a never-dispatched claim sits there forever, and stamping it stuck
+    deadlocks the loop (the STALLED gate blocks the dispatch that is the
+    only escape). When the trailing snapshot carries dispatched_ids (new-format
+    row), stuck requires dispatch evidence; old-format rows without the field
+    keep the pre-#2 behavior — conservative, never "everything is stuck".
+    """
     if len(ledger) < STALLED_STUCK_CLAIM:
         return []
     tail = ledger[-STALLED_STUCK_CLAIM:]
@@ -161,6 +171,9 @@ def _stuck_claims(ledger: list) -> list:
     if not all(sets):
         return []
     stuck = set.intersection(*sets)
+    evidence = ledger[-1].get("dispatched_ids")
+    if evidence is not None:
+        stuck &= set(evidence)
     result = []
     for cid in sorted(stuck):
         run = 0
@@ -184,6 +197,19 @@ def _churn(ledger: list) -> dict:
     return {"facts_delta": facts_delta, "open_delta": open_delta, "is_churning": is_churning}
 
 
+def _queued_count(ledger: list) -> int | None:
+    """#2: frontier claims with no dispatch evidence on the trailing snapshot.
+
+    None when the ledger is empty or the trailing row is old-format (no
+    dispatched_ids) — absence keeps the prior output shape, never a count."""
+    if not ledger:
+        return None
+    tail_dispatched = ledger[-1].get("dispatched_ids")
+    if tail_dispatched is None:
+        return None
+    return len(set(ledger[-1].get("open_ids") or []) - set(tail_dispatched))
+
+
 def assess(ledger: list) -> dict:
     # #1: rollup/operator-action rows share the ledger but are events, not
     # snapshots — no open_count, so they must not enter the trajectory.
@@ -191,6 +217,9 @@ def assess(ledger: list) -> dict:
     non_snapshot_rows = len(ledger) - len(snaps)
 
     ledger = _dedup_consecutive(snaps)
+    # #2: queued (never dispatched) count; None on old-format rows, which
+    # keeps their exact prior output shape
+    queued = _queued_count(ledger)
     if not ledger:
         r = {"verdict": "NO_DATA", "exit_code": EXIT_NO_DATA,
              "action": "No ledger yet. Run convergence_check.py at least once per turn to build history."}
@@ -234,9 +263,14 @@ def assess(ledger: list) -> dict:
             )
         elif verdict == "STALLED":
             stuck_ids = [s["claim"] for s in stuck]
+            queued_note = ""
+            if queued:
+                queued_note = (f" Queued claims (never dispatched): {queued} — "
+                               "dispatch is the sanctioned next step.")
             action = (
                 f"Diagnose before dispatching again. Flat {flatline} rounds; "
-                f"stuck claims: {stuck_ids or 'none named'}. Re-read each stuck claim's definition + "
+                f"stuck claims (dispatched but flat): {stuck_ids or 'none named'}."
+                f"{queued_note} Re-read each stuck claim's definition + "
                 f"gathered facts, then ask: 'what evidence would actually close this?' "
                 f"If the tier is exhausted, reformulate or decompose. Do NOT re-dispatch unchanged."
             )
@@ -260,6 +294,10 @@ def assess(ledger: list) -> dict:
             "last_snapshot": ledger[-1],
         }
 
+    # #2: surface the never-dispatched count whenever the trailing snapshot
+    # carries dispatch evidence; absent on old-format rows (prior shape kept)
+    if queued is not None:
+        r = {**r, "queued_claims": queued}
     # surface excluded event rows — observability over silence; absent when 0
     # so pure-snapshot ledgers keep their exact prior output shape (#1)
     if non_snapshot_rows:
@@ -281,6 +319,8 @@ def _human(r: dict) -> str:
         lines.append("stuck claims:")
         for s in r["stuck_claims"]:
             lines.append(f"  {s['claim']:>8}  open {s['open_for_rounds']} rounds")
+    if r.get("queued_claims") is not None:
+        lines.append(f"queued (never dispatched): {r['queued_claims']}")
     ch = r.get("churn") or {}
     if ch.get("facts_delta"):
         lines.append(f"facts grown:   +{ch['facts_delta']} (open D{ch.get('open_delta', 0):+d})")
