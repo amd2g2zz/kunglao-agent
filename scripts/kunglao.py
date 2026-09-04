@@ -119,6 +119,35 @@ def cmd_health(args) -> int:
     return r["exit_code"]
 
 
+def _load_upgrade_module():
+    """#863 Family B loader (same pattern cmd_upgrade uses): the #5
+    pending-merge marker contract (path constants + record reader/clearer)
+    is single-sourced in kunglao_upgrade; check-stale borrows it instead of
+    duplicating the relpaths."""
+    mod_path = Path(__file__).resolve().parent / "kunglao_upgrade.py"
+    return load_module_by_path("kunglao_upgrade", mod_path)
+
+
+def _resolve_pending_merge(ws: Path) -> int:
+    """#5 explicit escape hatch: clear the pending CLAUDE.md manual-merge
+    marker. Idempotent — no marker is a clean rc 0."""
+    up = _load_upgrade_module()
+    if up.pending_merge_record(ws) is None:
+        print(f"no pending CLAUDE.md merge marker under {ws} — nothing to "
+              f"resolve (check-stale semantics unchanged)")
+        return 0
+    try:
+        up.clear_pending_merge(ws)
+    except OSError as exc:
+        print(f"kunglao: FAILED to remove {up.PENDING_MERGE_REL} under "
+              f"{ws} ({exc}) — remove it by hand", file=sys.stderr)
+        return 1
+    print(f"cleared {up.PENDING_MERGE_REL} under {ws} — now finish the "
+          f"refresh: run /kunglao-agent:upgrade {ws}, then check-stale "
+          f"to confirm")
+    return 0
+
+
 def cmd_check_stale(args) -> int:
     """#748: stale-workspace gate — emit a JSON envelope and exit 5 when the
     workspace stamp is older than the active skill version (or missing
@@ -128,14 +157,25 @@ def cmd_check_stale(args) -> int:
     JSON envelope:
 
         {
-          "status":     "stale" | "current" | "no-stamp" | "deploy-drift",
+          "status":     "stale" | "current" | "no-stamp" | "deploy-drift"
+                      | "manual-merge-pending",
           "rc":         0 | 5,
           "workspace_stamp": "0.1.0" | null,
           "skill_version":   "0.1.3",
           "advice":     "run /kunglao-agent:upgrade <workspace> first" | null
         }
+
+    #5: a `manual-merge-pending` status replaces the endless stale loop when
+    a previous upgrade's CLAUDE.md collect-and-merge REFUSED a user-edited
+    body (upgrade leaves runs/claudemd-pending-merge.yaml + a diff report).
+    The rc stays 5 — the frame IS still stale — but the advice is now the
+    sanctioned recovery path: review the diff, merge manually, clear the
+    marker with `check-stale --resolve`, re-run the upgrade. `--resolve`
+    alone clears the marker (rc 0) and restores normal semantics.
     """
     ws = Path(args.workspace).resolve()
+    if getattr(args, "resolve", False):
+        return _resolve_pending_merge(ws)
     skill_v = template_version.read_skill_version()
     ws_v = template_version.read_workspace_version(ws)
     if ws_v is None:
@@ -163,6 +203,37 @@ def cmd_check_stale(args) -> int:
         print(json.dumps(envelope, ensure_ascii=False))
         return RC_STALE_WORKSPACE
     if ws_key < skill_key:
+        # #5: a pending manual-merge marker means a previous upgrade run
+        # already REFUSED here — repeating "run /upgrade first" would loop
+        # forever (the merge refusal is exactly what keeps the stamp stale).
+        # Surface the sanctioned recovery path instead.
+        up = _load_upgrade_module()
+        pending = up.pending_merge_record(ws)
+        if pending is not None:
+            diff_rel = str(pending.get("diff_report")
+                           or up.PENDING_MERGE_DIFF_REL)
+            diff_path = Path(diff_rel)
+            if not diff_path.is_absolute():
+                diff_path = ws / diff_path
+            reason = str(pending.get("reason") or "(unspecified)")
+            envelope = {
+                "status": "manual-merge-pending",
+                "rc": RC_STALE_WORKSPACE,
+                "workspace_stamp": ws_v,
+                "skill_version": skill_v,
+                "pending_since": pending.get("created"),
+                "pending_reason": reason,
+                "diff_report": str(diff_path),
+                "advice": (
+                    "CLAUDE.md auto-merge was refused during a previous "
+                    f"upgrade ({reason}); review the diff at {diff_path}, "
+                    "merge it into CLAUDE.md manually, then clear the "
+                    "marker: python scripts/kunglao.py check-stale "
+                    f"--resolve {ws} — and re-run /kunglao-agent:upgrade "
+                    f"{ws}"),
+            }
+            print(json.dumps(envelope, ensure_ascii=False))
+            return RC_STALE_WORKSPACE
         envelope = {
             "status": "stale",
             "rc": RC_STALE_WORKSPACE,
@@ -391,6 +462,10 @@ def main() -> int:
              "/kunglao-agent:analysis or /kunglao-agent:resume on a "
              "workspace whose template stamp may trail the skill")
     p_check_stale.add_argument("workspace", nargs="?", default=".")
+    p_check_stale.add_argument("--resolve", action="store_true",
+                               help="clear a pending CLAUDE.md manual-merge "
+                                    "marker (#5) instead of running the "
+                                    "staleness check")
     p_check_stale.set_defaults(func=cmd_check_stale)
 
     p_up = sub.add_parser("upgrade",
