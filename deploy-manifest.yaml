@@ -272,6 +272,10 @@ files:
     dest: .claude/scripts/deployed_refresh.py
     kind: scaffold
     sha256: e05ac07a2d92b07a298c9ea613b7cb4aa14c57d82d5326244caa2e168b7c7fd4
+  - src: scripts/difficulty_calibration.py
+    dest: .claude/scripts/difficulty_calibration.py
+    kind: scaffold
+    sha256: d5327b28690f23b2587fc7c1d59c5fc945d1f2a394f6cef4519d156a949425d1
   - src: scripts/digest_build.py
     dest: .claude/scripts/digest_build.py
     kind: scaffold
@@ -431,7 +435,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 2afeb5b2def8a5f23b2161f99367977532cf5ccb824ec1e4e1acd54e72223483
+    sha256: 5cef61c5eac56707f77531abc474471857145eaf2556d75c88c28683cae73c23
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -1227,7 +1231,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 64e0dfa7e512e9c7cccb5c876e07af16b32d7b4f56bd2f93a7948efaa2aa727c
+    sha256: fb34212174db061d16cfd87157d60f03a529aeb4e688fb54b5ee41a80ecb37f2
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

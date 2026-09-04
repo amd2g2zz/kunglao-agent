@@ -1,0 +1,103 @@
+{
+  "tool": "apkid",
+  "version": "2.1.7",
+  "target": "sample.apk",
+  "scanned_at": "2026-01-01T00:00:00Z",
+  "findings": [
+    {
+      "rule": "proguard",
+      "category": "obfuscator",
+      "description": "proguard obfuscation markers",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "dash_o",
+      "category": "obfuscator",
+      "description": "dash_o obfuscation markers",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "ipayvo",
+      "category": "obfuscator",
+      "description": "ipayvo obfuscation markers",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "debug_attach",
+      "category": "anti_debug",
+      "description": "debug_attach anti-debug technique",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "ptrace_attach",
+      "category": "anti_debug",
+      "description": "ptrace_attach anti-debug technique",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "emulator_detect",
+      "category": "anti_vm",
+      "description": "emulator_detect anti-VM technique",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "bangcle",
+      "category": "packer",
+      "description": "bangcle packer signature",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "dx",
+      "category": "compiler",
+      "description": "dx compiler artifacts",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "Compiler: NDK",
+      "category": "compiler",
+      "description": "native library",
+      "matched_files": [
+        "lib/arm64-v8a/libsec-main.so"
+      ]
+    }
+  ],
+  "summary": {
+    "packer": [
+      "bangcle"
+    ],
+    "compiler": [
+      "dx"
+    ],
+    "obfuscator": [
+      "proguard",
+      "dash_o",
+      "ipayvo"
+    ],
+    "anti_vm": [
+      "emulator_detect"
+    ],
+    "anti_debug": [
+      "debug_attach",
+      "ptrace_attach"
+    ],
+    "total": 9
+  },
+  "status": "ok",
+  "reason": ""
+}

@@ -242,6 +242,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `answer_key_lint.py` | answer-key quality gate: schema + PQ-to-top-level consistency + IOC normalizability | CLI |
 | `intake_one.py` | single manifest entry immediate validation (sha256/first_seen/sources/pq lists) | CLI |
 | `intake_promise.py` | Phase 0 预扫描 promise 块 (#813) — apkid/DIE 探测状态显式记录 + 混淆先验(apkid.json 同源提取) + java 可达性判定(#807 死胡同面)；task_spec `promise:` 键合并 / runs 降级 | kunglao-init, CLI, tests |
+| `difficulty_calibration.py` | #15 样本内在难度标定 (easy/medium/hard/max) — 纯函数组合既有扫描器证据(die.json/apkid.json)为 per-factor 评分 + 多正面 MAX 发现规则；缺证据 → easy+evidence_gap(缺失永不计为难度)；evidence/difficulty.json + task_spec `difficulty:` 键(#16 开环输入) | kunglao-init, CLI, tests |
 
 ## Release & CI support
 
