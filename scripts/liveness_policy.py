@@ -53,6 +53,16 @@ WORKER_PROGRESS_MINUTES = 20
 # scan would call stuck is exactly one the kicker may kick.
 FRESH_WORKER_MINUTES = 20
 
+# scripts/worker_death.py + hooks/lib_kunglao.scan_active_workers (#11): the
+# DEATH line — a non-terminal worker-status file silent for 2x STUCK_MINUTES
+# is GONE (API disconnect / crash: no more writes, ever), not merely stuck.
+# Adjudicated as 2x, not a free constant: the 20-40 band stays backtrack_gate
+# territory (#38 — the worker may still be poked back to life), while one
+# full stuck interval of extra silence past the stuck line is the evidence
+# that nothing will ever write again. Composes with #595/#607: the stuck scan
+# carries the dead flag; the stuck action (#11 resume contract) consumes it.
+DEAD_WORKER_MINUTES = 2 * STUCK_MINUTES
+
 # ---------------------------------------------------------------------------
 # Heartbeat staleness (the monitoring-liveness threshold, value 35)
 # ---------------------------------------------------------------------------
