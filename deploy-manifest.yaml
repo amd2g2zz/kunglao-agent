@@ -363,7 +363,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: d3dcd09d052c990d192f4f0216e6f7eee8d3999ee9376cb4937ba934fdeec596
+    sha256: 12804832b5e7bee29e07a7e8cecf71ede8df89f555e4e9a3c5bba9c3c57cc451
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -503,7 +503,7 @@ files:
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
-    sha256: 82f01d4a81f9685ac152d49b9c96cfd96cacc33092a2999c16a122ebb6114ebc
+    sha256: b77b01ab2f6b74ec2b9b9d6f565df2626a2ee578a62015bdcc35378e223d4d5a
   - src: scripts/local_gate.py
     dest: .claude/scripts/local_gate.py
     kind: scaffold
@@ -683,7 +683,7 @@ files:
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold
-    sha256: 6ff5b1d643f796120495964ca41e76fb4fa9e3b874c72d58e0c29d8e60a0b3aa
+    sha256: 8ea1d8c32f1fad657d55e9a86b224c2c5f39f5511c2691e18551c78205af3a67
   - src: scripts/route_capability.py
     dest: .claude/scripts/route_capability.py
     kind: scaffold

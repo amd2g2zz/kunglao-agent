@@ -80,7 +80,7 @@ SCRIPTS = SKILL_DIR / "scripts"
 # enough lead time to act before the NEXT tick misses the renewal entirely.
 # #597: the 10-min value is single-sourced in liveness_policy (rationale there).
 from liveness_policy import (  # noqa: E402
-    HEARTBEAT_STALE_MINUTES, RENEW_MARGIN_LOW_MINUTES)
+    HEARTBEAT_STALE_MINUTES, MISSION_SETTLE_MIN, RENEW_MARGIN_LOW_MINUTES)
 RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
 
 # #863 Family C: workspace resolution is single-sourced in ws_layout
@@ -235,6 +235,40 @@ def state_fingerprint(ws: Path) -> str:
             h.update(rel.encode("utf-8"))
             h.update(p.read_bytes())
     return h.hexdigest()
+
+
+def _mission_history_due(ws: Path) -> bool:
+    """#8: True when a new V_m history point is due (cadence gate for
+    mission_ledger.value_m in the cockpit block below).
+
+    value_m appends history on EVERY call — un-gated, the 5-min tick cadence
+    would spam runs/mission_ledger.yaml and flatten the d_slope that
+    statusline computes over the last-5 window. The gate samples at most
+    once per MISSION_SETTLE_MIN (liveness_policy, rationale there).
+
+    Gate rule (reads the history schema mission_ledger owns: entries are
+    {ts, v_m} for samples, {ts, action: repin, ...} for repins):
+      - no dated V_m entry yet          -> due (first sample after init)
+      - newest V_m entry older than the window -> due
+      - newest V_m entry undated        -> not due (hand-seeded/repin-era
+        ledger, cadence unknown — zero-noise: never spam an unknown ledger)
+      - any read/parse failure          -> not due (gate never fails the tick)
+    """
+    try:
+        import mission_ledger as _ml
+        led = _ml.load(ws) or {}
+        hist = [h for h in ((led.get("mission") or {}).get("history") or [])
+                if isinstance(h, dict) and "v_m" in h]
+        if not hist:
+            return True
+        ts = hist[-1].get("ts")
+        if not ts:
+            return False
+        last = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        age = datetime.datetime.now(datetime.timezone.utc) - last
+        return age >= datetime.timedelta(minutes=MISSION_SETTLE_MIN)
+    except Exception:  # noqa: BLE001 — the gate must never fail the tick
+        return False
 
 
 def _run_mechanisms(ws: Path, runner) -> dict:
@@ -399,8 +433,16 @@ def main(argv: list[str] | None = None) -> int:
 
     # #873: per-checkpoint 座舱采样——V/D/ETA + cost/burn 落账。
     # mission_ledger 缺失的旧 workspace 跳过（零噪声）；异常 fail-open。
+    # #8: the tick is also the SETTLEMENT host — update() stamps PROVEN
+    # claims' answers_question -> PQ answered (idempotent, every tick);
+    # value_m() appends the V_m history point that feeds V_m/d_slope, gated
+    # by _mission_history_due so the trajectory samples once per window.
     try:
         if (ws / "runs" / "mission_ledger.yaml").exists():
+            import mission_ledger as _ml
+            _ml.update(ws)
+            if _mission_history_due(ws):
+                _ml.value_m(ws)
             from tuition_curve import cockpit_summary
             kunglao_log.emit(
                 Path(ws), actor="heartbeat_tick",

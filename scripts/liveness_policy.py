@@ -139,3 +139,17 @@ DEFAULT_STALE_MINUTES = 10
 # 10 min = a third of the TTL: enough lead time to act before the NEXT tick
 # misses the renewal entirely.
 RENEW_MARGIN_LOW_MINUTES = 10
+
+# ---------------------------------------------------------------------------
+# Mission-ledger V_m sampling gate (#8)
+# ---------------------------------------------------------------------------
+
+# scripts/heartbeat_tick.py _mission_history_due: mission_ledger.value_m
+# appends a V_m history point on EVERY call, and the tick's cockpit block
+# runs every pass — un-gated, the 5-min cadence spams
+# runs/mission_ledger.yaml and flattens d_slope (statusline slopes over the
+# last-5 history window). 30 min = one V_m sample per heartbeat-TTL grid
+# cell: real progress lands within one TTL window, ticks in between only
+# re-settle PQ states (mission_ledger.update is un-gated and idempotent).
+# Named _MIN per the #754 precedent — NEW in #8, not a surveyed constant.
+MISSION_SETTLE_MIN = 30
