@@ -355,7 +355,7 @@ files:
   - src: scripts/heartbeat.py
     dest: .claude/scripts/heartbeat.py
     kind: scaffold
-    sha256: 9a9e66050845325b7278221d7e64f0c25b22cf6e36209fe05c65a197a882f200
+    sha256: d6dcf3a993fcfc2c81e56d000e034d518a70c81795b84118e56ba8414ca6532f
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
@@ -503,7 +503,7 @@ files:
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
-    sha256: 659fc114337ee68dcba999e15ea1d47a0d4be579e1a52790f4f1156a6e36532c
+    sha256: e15b465f2193dc5ed82ad2e318c5492326517541426a533a86164bc1d720b9be
   - src: scripts/local_gate.py
     dest: .claude/scripts/local_gate.py
     kind: scaffold
