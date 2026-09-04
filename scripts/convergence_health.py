@@ -185,76 +185,86 @@ def _churn(ledger: list) -> dict:
 
 
 def assess(ledger: list) -> dict:
+    # #1: rollup/operator-action rows share the ledger but are events, not
+    # snapshots — no open_count, so they must not enter the trajectory.
+    snaps = [e for e in ledger if "type" not in e and "open_count" in e]
+    non_snapshot_rows = len(ledger) - len(snaps)
+
+    ledger = _dedup_consecutive(snaps)
     if not ledger:
-        return {"verdict": "NO_DATA", "exit_code": EXIT_NO_DATA,
-                "action": "No ledger yet. Run convergence_check.py at least once per turn to build history."}
-
-    ledger = _dedup_consecutive(ledger)
-    if len(ledger) < 3:
-        return {"verdict": "HEALTHY", "exit_code": EXIT_HEALTHY,
-                "action": f"Warming up ({len(ledger)} snapshots). Need 3+ to judge a trend.",
-                "rounds": len(ledger)}
-
-    flatline = _flatline_run(ledger)
-    stuck = _stuck_claims(ledger)
-    churn = _churn(ledger)
-    first_open = ledger[0]["open_count"]
-    last_open = ledger[-1]["open_count"]
-    open_delta = last_open - first_open
-    rounds = len(ledger)
-
-    # v1.9.29: a converged loop is NOT spinning. SPINNING/STALLED mean open
-    # work is flat — the loop finished (open_count=0) and then sat idle across
-    # sessions is a completed state, not a stuck one. Without this guard, a
-    # finished loop's trailing CONVERGED snapshots trigger flatline >= 8 and
-    # block ALL dispatches (including unrelated research agents).
-    if last_open == 0:
-        verdict, exit_code = "HEALTHY", EXIT_HEALTHY
-    elif flatline >= SPINNING_FLATLINE or churn["is_churning"]:
-        verdict, exit_code = "SPINNING", EXIT_SPINNING
-    elif flatline >= STALLED_FLATLINE or stuck:
-        verdict, exit_code = "STALLED", EXIT_STALLED
+        r = {"verdict": "NO_DATA", "exit_code": EXIT_NO_DATA,
+             "action": "No ledger yet. Run convergence_check.py at least once per turn to build history."}
+    elif len(ledger) < 3:
+        r = {"verdict": "HEALTHY", "exit_code": EXIT_HEALTHY,
+             "action": f"Warming up ({len(ledger)} snapshots). Need 3+ to judge a trend.",
+             "rounds": len(ledger)}
     else:
-        verdict, exit_code = "HEALTHY", EXIT_HEALTHY
+        flatline = _flatline_run(ledger)
+        stuck = _stuck_claims(ledger)
+        churn = _churn(ledger)
+        first_open = ledger[0]["open_count"]
+        last_open = ledger[-1]["open_count"]
+        open_delta = last_open - first_open
+        rounds = len(ledger)
 
-    if verdict == "SPINNING":
-        stuck_ids = [s["claim"] for s in stuck] or (ledger[-1].get("open_ids") or [])[:3]
-        flat_desc = f"{last_open}→{first_open}" if first_open == last_open else f"{first_open}→{last_open}"
-        action = (
-            f"STOP dispatching. The loop has flatlined {flatline} rounds with "
-            f"{churn['facts_delta']} new facts but open_count {flat_desc}. "
-            f"For each stuck claim ({', '.join(stuck_ids) or 'none named'}), pick ONE: "
-            f"escalate tier (T1→T2→T3) / reformulate the claim / decompose into smaller / "
-            f"DEFER with rationale / escalate to user with a specific question. "
-            f"Re-dispatching the same claim >3x without a status change is FORBIDDEN."
-        )
-    elif verdict == "STALLED":
-        stuck_ids = [s["claim"] for s in stuck]
-        action = (
-            f"Diagnose before dispatching again. Flat {flatline} rounds; "
-            f"stuck claims: {stuck_ids or 'none named'}. Re-read each stuck claim's definition + "
-            f"gathered facts, then ask: 'what evidence would actually close this?' "
-            f"If the tier is exhausted, reformulate or decompose. Do NOT re-dispatch unchanged."
-        )
-    else:
-        action = (
-            f"Converging: open_count {first_open}→{last_open} over {rounds} rounds "
-            f"(D{open_delta:+d}). Keep dispatching via convergence_check.py."
-        )
+        # v1.9.29: a converged loop is NOT spinning. SPINNING/STALLED mean open
+        # work is flat — the loop finished (open_count=0) and then sat idle across
+        # sessions is a completed state, not a stuck one. Without this guard, a
+        # finished loop's trailing CONVERGED snapshots trigger flatline >= 8 and
+        # block ALL dispatches (including unrelated research agents).
+        if last_open == 0:
+            verdict, exit_code = "HEALTHY", EXIT_HEALTHY
+        elif flatline >= SPINNING_FLATLINE or churn["is_churning"]:
+            verdict, exit_code = "SPINNING", EXIT_SPINNING
+        elif flatline >= STALLED_FLATLINE or stuck:
+            verdict, exit_code = "STALLED", EXIT_STALLED
+        else:
+            verdict, exit_code = "HEALTHY", EXIT_HEALTHY
 
-    return {
-        "verdict": verdict,
-        "exit_code": exit_code,
-        "action": action,
-        "rounds": rounds,
-        "first_open_count": first_open,
-        "last_open_count": last_open,
-        "open_delta": open_delta,
-        "flatline_run": flatline,
-        "stuck_claims": stuck,
-        "churn": churn,
-        "last_snapshot": ledger[-1],
-    }
+        if verdict == "SPINNING":
+            stuck_ids = [s["claim"] for s in stuck] or (ledger[-1].get("open_ids") or [])[:3]
+            flat_desc = f"{last_open}→{first_open}" if first_open == last_open else f"{first_open}→{last_open}"
+            action = (
+                f"STOP dispatching. The loop has flatlined {flatline} rounds with "
+                f"{churn['facts_delta']} new facts but open_count {flat_desc}. "
+                f"For each stuck claim ({', '.join(stuck_ids) or 'none named'}), pick ONE: "
+                f"escalate tier (T1→T2→T3) / reformulate the claim / decompose into smaller / "
+                f"DEFER with rationale / escalate to user with a specific question. "
+                f"Re-dispatching the same claim >3x without a status change is FORBIDDEN."
+            )
+        elif verdict == "STALLED":
+            stuck_ids = [s["claim"] for s in stuck]
+            action = (
+                f"Diagnose before dispatching again. Flat {flatline} rounds; "
+                f"stuck claims: {stuck_ids or 'none named'}. Re-read each stuck claim's definition + "
+                f"gathered facts, then ask: 'what evidence would actually close this?' "
+                f"If the tier is exhausted, reformulate or decompose. Do NOT re-dispatch unchanged."
+            )
+        else:
+            action = (
+                f"Converging: open_count {first_open}→{last_open} over {rounds} rounds "
+                f"(D{open_delta:+d}). Keep dispatching via convergence_check.py."
+            )
+
+        r = {
+            "verdict": verdict,
+            "exit_code": exit_code,
+            "action": action,
+            "rounds": rounds,
+            "first_open_count": first_open,
+            "last_open_count": last_open,
+            "open_delta": open_delta,
+            "flatline_run": flatline,
+            "stuck_claims": stuck,
+            "churn": churn,
+            "last_snapshot": ledger[-1],
+        }
+
+    # surface excluded event rows — observability over silence; absent when 0
+    # so pure-snapshot ledgers keep their exact prior output shape (#1)
+    if non_snapshot_rows:
+        return {**r, "non_snapshot_rows": non_snapshot_rows}
+    return r
 
 
 def _human(r: dict) -> str:
