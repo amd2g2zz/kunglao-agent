@@ -43,7 +43,7 @@ files:
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
-    sha256: d7ac654d7538ab94b679580cd28f3ac3aacc8a86220acc430546614d42c04aae
+    sha256: 0db49a065d26e08690282324f1cb9c7ce00bf022da1d0d8608c6e730064384a9
   - src: hooks/state_anchor.py
     dest: .claude/hooks/state_anchor.py
     kind: hook
@@ -431,7 +431,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 2afeb5b2def8a5f23b2161f99367977532cf5ccb824ec1e4e1acd54e72223483
+    sha256: 9ddb68cc6ee11337d41819abac8d66bce180abce9fd5f06ea9594d306c9eedc9
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -759,7 +759,7 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: 27def01ce87060c7f5d8557ae708693443f0ef63f331cfe985e903c61fcb1f22
+    sha256: e84941a1eccc81c026944d8441206d024a8c8903d38f7698a8dba6cd36237380
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
