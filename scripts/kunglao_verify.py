@@ -949,12 +949,20 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *,
     # #287 observability: mirror the verdict to the structured event log.
     # Guarded — logging must never break verification.
     try:
-        from kunglao_log import emit
+        from kunglao_log import emit, emit_result_digest
         emit(ws, actor="orchestrator", action="verify", claim=claim_id,
              artifact=fact_id, duration_ms=None,
              exit=0 if overall == "VERIFIED" else 1,
              detail=(f"L1={l1['verdict']} L2={l2['verdict']} overall={overall}"
                      + (f" | {r0}" if (ok0 and r0) else "")))
+        # #58 S2b result-summary face: the verify record closes the loop —
+        # what the verifier wrote and what it decided (S4's notes gate reads
+        # this verify row as the note's verification evidence).
+        emit_result_digest(ws, actor="orchestrator", claim=claim_id,
+                           artifact=str(vp.name),
+                           files_written=[str(vp.relative_to(ws))],
+                           claims_touched=[claim_id], verdict=overall,
+                           exit=0 if overall == "VERIFIED" else 1)
     except Exception:
         pass
     return out

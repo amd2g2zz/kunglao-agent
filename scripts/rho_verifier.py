@@ -166,6 +166,15 @@ def sample_and_pair(ws, z=None):
                            "lexical": out.get("lexical"),
                            "cost": cost},
                           ensure_ascii=False))
+    # #58 S2b: the SETTLED checkpoint face (z is not None = the mechanical
+    # terminal anchor fired: mission complete/failed) is a transition, so it
+    # earns a result digest; plain per-checkpoint sampling rows stay lean
+    # (no per-heartbeat spam).
+    if z is not None:
+        kunglao_log.emit_result_digest(
+            Path(ws), actor="rho_verifier",
+            verdict="mission_complete" if float(z) >= 1.0 else "mission_failed",
+            exit=0)
     # #873: per-checkpoint 座舱持久化 — V/D/ETA + burn 面与 rho_pair 同节奏
     # 落账，座舱渲染/学费重放可仅凭 ledger 离线重建趋势。shadow 持久化
     # 失败不阻塞采样面（fail-open），与 rho_pair 的传播语义分层。
