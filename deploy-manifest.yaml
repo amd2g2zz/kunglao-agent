@@ -87,7 +87,7 @@ files:
   - src: agents/ghidra-light.md
     dest: .claude/agents/ghidra-light.md
     kind: agent
-    sha256: e590b338aa69381d81717cc6026b1f638cc35cc92cdfbeeb5b9813b0db19742b
+    sha256: 4361102de61789d15abf23178a1e11afb32f460e2c49a6f18de7f28da1dbd963
   - src: agents/go-symbols.md
     dest: .claude/agents/go-symbols.md
     kind: agent
@@ -99,11 +99,11 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: 64cf2600bdffe2324ebdc065246636b46545ca4d8c11778c4a37985984b8f924
+    sha256: bff8d63eba77eb031c4370e7bcd8c963f27712335c0a4057db84215732ed3b11
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 06315184aee29139a3c9d930d6ef196e19a1ab43bcffd8f425ba89270c95f871
+    sha256: 5baf4f6d897a12a2d90d62f6f5e472faa0019827d139cb13eff4bf9cee46ec25
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -1235,7 +1235,7 @@ files:
   - src: tools/_INDEX.yaml
     dest: .claude/tools/_INDEX.yaml
     kind: asset
-    sha256: a1a4f76855a0db0b1e5abc05d0c9436d34f00fcd9b2d420035c012d25c4eccd7
+    sha256: c2ec04fae36a9afadacb61e1a4e989fded7a5e437acbe9e852e3ac42de2d0b0d
   - src: tools/_index-auxiliary.md
     dest: .claude/tools/_index-auxiliary.md
     kind: asset
@@ -1259,7 +1259,7 @@ files:
   - src: tools/_index-static.md
     dest: .claude/tools/_index-static.md
     kind: asset
-    sha256: 44eb974201850d2db2e3556556b6a631230062741955bb891adc6c894aa7f2f9
+    sha256: 5ce840235a1de71e328dd06ddacca607276c951fbb27e56d740e609901b325ef
   - src: tools/_index-web.md
     dest: .claude/tools/_index-web.md
     kind: asset
@@ -1487,7 +1487,7 @@ files:
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
-    sha256: d47d8f9a2fb21960de0b7ab3b9a47db3469b87113631b0a6e5cfa8288355d7f1
+    sha256: 131585e75a1174d5f98e3018091bb82e824f95a690d82e5130a32f8303260e8a
   - src: tools/web/README.md
     dest: .claude/tools/web/README.md
     kind: asset
