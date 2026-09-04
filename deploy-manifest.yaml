@@ -11,7 +11,7 @@ files:
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
-    sha256: 3c17673b23209499168cc69377fccc06ec3d4f8d636b17ae7f6f4a6f0fe589da
+    sha256: 9b48b55b096099fd21a6f3025ede52fa76d1f5c3b323ba75d277cb67c456f297
   - src: hooks/cost_input_capture.py
     dest: .claude/hooks/cost_input_capture.py
     kind: hook
