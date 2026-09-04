@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: f2e6d8017605bacac63ee4fab429598621d7447d4724983f12d60fa803717275
+    sha256: 10124e876961a59b4d8ba6524df466994f64fd500087f5c44d25a617562417cb
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -195,7 +195,7 @@ files:
   - src: scripts/blind_gate.py
     dest: .claude/scripts/blind_gate.py
     kind: scaffold
-    sha256: a28d71a14fefebee88c95e3d2e2f7a27d1786ae9ebde3c5bf9a73d6550d73f4b
+    sha256: f04aae5acb62034785138732ce270633084d94f8b6231df4f17cafa8d01a98c6
   - src: scripts/calibration_gate.py
     dest: .claude/scripts/calibration_gate.py
     kind: scaffold
@@ -279,7 +279,7 @@ files:
   - src: scripts/dispatch_context.py
     dest: .claude/scripts/dispatch_context.py
     kind: scaffold
-    sha256: f9fbcf75f7223129e1e7023631cb6766ad0648baff13c59aa3ea3b9b9338b84d
+    sha256: a6332a4ec5f7c15a1b6fc5bd2628343c3f16874c45146f4f90719a62553767e0
   - src: scripts/dual_gate.py
     dest: .claude/scripts/dual_gate.py
     kind: scaffold
@@ -815,7 +815,7 @@ files:
   - src: scripts/write_gate.py
     dest: .claude/scripts/write_gate.py
     kind: scaffold
-    sha256: e18ea292b37808fece6e9874eb04c4e1d8ef9127e36f35e59311c9ffeb42686a
+    sha256: 6f623da15ce5f1cc555930f0054b514132f9fd3e8041af1221a57476946e979f
   - src: scripts/write_guard_unlock.py
     dest: .claude/scripts/write_guard_unlock.py
     kind: scaffold
@@ -1295,7 +1295,7 @@ files:
   - src: tools/auxiliary/measure_blind_coverage.py
     dest: .claude/tools/auxiliary/measure_blind_coverage.py
     kind: asset
-    sha256: 033c0e0214a29a6d05c0d7fd4e85d0af8e2a6ede9c95c5772660875ce0fa61c7
+    sha256: 1cecc77e5e84d1e4ff848143d0f6622587f2356c5180a0096979ad086309c634
   - src: tools/auxiliary/measure_cold_start.py
     dest: .claude/tools/auxiliary/measure_cold_start.py
     kind: asset

@@ -216,7 +216,7 @@ def _declared_irreversible(text: str) -> bool:
 
     Load-bearing enforcement order for must-stop:
       1. declared field (this function) — v1 only
-      2. command grammar (_DISPATCH_MUST_STOP_PATTERNS) — vmrun delete /
+      2. command grammar (_DISPATCH_MUST_STOP_RULES) — vmrun delete /
          git push --force are commands, a finite grammar, enumerable
     Prose sniffing lives in scripts/ask_for_direction_gate.py as a
     best-effort tripwire, never load-bearing."""
@@ -300,11 +300,6 @@ _DISPATCH_MUST_STOP_RULES: tuple[tuple[str, str], ...] = (
     ("must_stop_priv_exec",
      r"\b(?:sudo|doas|pkexec)\s+(?!-l\b|-V\b|-h\b|--list\b)(?:--?\S+\s+)*(?![\s-])\S"),
 )
-
-# Back-compat name (dispatch_context.py:437 cites it; no code imports it —
-# the tuple form above replaced the bare pattern list in #601).
-_DISPATCH_MUST_STOP_PATTERNS = [p for _r, p in _DISPATCH_MUST_STOP_RULES]
-
 
 def _must_stop_dispatch(prompt_text: str) -> str | None:
     """Return the FIRST matching rule id, or None (#601: rule identity, not
