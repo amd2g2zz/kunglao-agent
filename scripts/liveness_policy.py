@@ -53,6 +53,16 @@ WORKER_PROGRESS_MINUTES = 20
 # scan would call stuck is exactly one the kicker may kick.
 FRESH_WORKER_MINUTES = 20
 
+# scripts/worker_death.py + hooks/lib_kunglao.scan_active_workers (#11): the
+# DEATH line — a non-terminal worker-status file silent for 2x STUCK_MINUTES
+# is GONE (API disconnect / crash: no more writes, ever), not merely stuck.
+# Adjudicated as 2x, not a free constant: the 20-40 band stays backtrack_gate
+# territory (#38 — the worker may still be poked back to life), while one
+# full stuck interval of extra silence past the stuck line is the evidence
+# that nothing will ever write again. Composes with #595/#607: the stuck scan
+# carries the dead flag; the stuck action (#11 resume contract) consumes it.
+DEAD_WORKER_MINUTES = 2 * STUCK_MINUTES
+
 # ---------------------------------------------------------------------------
 # Heartbeat staleness (the monitoring-liveness threshold, value 35)
 # ---------------------------------------------------------------------------
@@ -77,6 +87,17 @@ HEARTBEAT_STALE_MINUTES = 35
 # not _MINUTES to stay outside the #597 bare-assignment drift-guard family —
 # this value is NEW in #754, not a surveyed pre-existing constant.
 TICK_INTERVAL_DEFAULT_MIN = 5
+
+# scripts/heartbeat.py (#4): the continuity verdict reads a SLIDING WINDOW,
+# not the whole durable tick sidecar - a tick participates when it is among
+# the last CONTINUITY_WINDOW_TICKS OR within the last CONTINUITY_WINDOW_HOURS;
+# older ticks stay on disk (append-only, nothing deleted) but stop voting.
+# Sized to the real cadence above (5m): 12 ticks ~= 1 hour of normal
+# operation, so ordinary jitter never trips it, while any historical stall
+# stops counting within ~a day (24h age bound) instead of re-rejecting the
+# workspace forever after one mid-life gap.
+CONTINUITY_WINDOW_TICKS = 12
+CONTINUITY_WINDOW_HOURS = 24
 
 # ---------------------------------------------------------------------------
 # Hook-activation TTL (the enforcement-liveness threshold, value 30)
@@ -118,3 +139,17 @@ DEFAULT_STALE_MINUTES = 10
 # 10 min = a third of the TTL: enough lead time to act before the NEXT tick
 # misses the renewal entirely.
 RENEW_MARGIN_LOW_MINUTES = 10
+
+# ---------------------------------------------------------------------------
+# Mission-ledger V_m sampling gate (#8)
+# ---------------------------------------------------------------------------
+
+# scripts/heartbeat_tick.py _mission_history_due: mission_ledger.value_m
+# appends a V_m history point on EVERY call, and the tick's cockpit block
+# runs every pass — un-gated, the 5-min cadence spams
+# runs/mission_ledger.yaml and flattens d_slope (statusline slopes over the
+# last-5 history window). 30 min = one V_m sample per heartbeat-TTL grid
+# cell: real progress lands within one TTL window, ticks in between only
+# re-settle PQ states (mission_ledger.update is un-gated and idempotent).
+# Named _MIN per the #754 precedent — NEW in #8, not a surveyed constant.
+MISSION_SETTLE_MIN = 30

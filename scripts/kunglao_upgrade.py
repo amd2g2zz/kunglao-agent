@@ -84,6 +84,14 @@ USER_DATA_DIRS: tuple[str, ...] = (
 # refresh never trips the iron rule (design D4).
 _STAMP_CARRIERS = ("facts/_INDEX.md", "claim-register.yaml")
 
+# #5 pending-manual-merge artifacts (upgrade telemetry, D4-exempt below):
+# written when the G3 collect-and-merge REFUSES a user-edited body, so
+# check-stale can point at a sanctioned recovery path instead of looping on
+# "run /kunglao-agent:upgrade first" forever. Presence of the marker IS the
+# whole state machine; the diff report is the operator's review artifact.
+PENDING_MERGE_REL = "runs/claudemd-pending-merge.yaml"
+PENDING_MERGE_DIFF_REL = "runs/claudemd-pending-merge.diff.patch"
+
 RC_OK = 0
 RC_UNKNOWN_ORIGIN = 3
 RC_IRON_RULE = 4
@@ -408,6 +416,109 @@ def _frame_label(before: str, after: str) -> str:
     return f"+{adds}/-{removed}"
 
 
+def _pending_merge_diff(ws: Path, current: str, reason: str,
+                        req_block: str | None) -> str:
+    """#5 review artifact: unified diff of the current workspace body
+    (left) vs the incoming frame the refused merge would have written
+    (right). A render failure must not take the marker down with it — the
+    marker, not the diff, IS the state machine."""
+    import difflib
+    head = (
+        "# CLAUDE.md pending manual merge (issue #5)\n"
+        f"# reason: {reason}\n"
+        "# left  = current workspace body\n"
+        "# right = incoming frame the refused upgrade merge would have\n"
+        "#        written. Merge the needful changes into CLAUDE.md by\n"
+        "#        hand, then clear the marker and finish the refresh:\n"
+        "#   python scripts/kunglao.py check-stale --resolve <workspace>\n"
+        "#   python scripts/kunglao.py upgrade <workspace>\n"
+    )
+    try:
+        incoming = claudemd_frame.wrap_frame(
+            _build_current_frame(ws, current, req_block))
+    except Exception as exc:  # noqa: BLE001 — report survives, marker rules
+        return head + f"(incoming frame render failed: {exc})\n"
+    version = template_version.read_skill_version()
+    lines = difflib.unified_diff(
+        current.splitlines(), incoming.splitlines(),
+        fromfile="CLAUDE.md (current workspace body)",
+        tofile=f"CLAUDE.md (incoming frame v{version})", lineterm="")
+    return head + "\n".join(lines) + "\n"
+
+
+def _write_pending_merge(ws: Path, current: str, reason: str,
+                         req_block: str | None = None) -> str:
+    """#5 upgrade face of the deadlock breaker: a refused G3 merge used to
+    leave NOTHING behind, so the G4 gate honestly kept the old stamp and
+    check-stale looped on "run /upgrade first" forever. Leave an explicit
+    pending-manual-merge state instead. Returns the diff-report relpath
+    (also recorded inside the marker)."""
+    ws = Path(ws)
+    ws.joinpath("runs").mkdir(parents=True, exist_ok=True)
+    _atomic_write_bytes(
+        ws / PENDING_MERGE_DIFF_REL,
+        _pending_merge_diff(ws, current, reason,
+                            req_block).encode("utf-8"))
+    record = {
+        "schema": "kunglao.claudemd-pending-merge/1",
+        "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "skill_version": template_version.read_skill_version(),
+        "workspace_stamp": template_version.read_workspace_version(ws),
+        "reason": reason,
+        "diff_report": PENDING_MERGE_DIFF_REL,
+        "resolve_command": ("python scripts/kunglao.py check-stale "
+                            "--resolve <workspace>"),
+    }
+    _atomic_write_bytes(
+        ws / PENDING_MERGE_REL,
+        yaml.safe_dump(record, sort_keys=False,
+                       allow_unicode=True).encode("utf-8"))
+    return PENDING_MERGE_DIFF_REL
+
+
+def pending_merge_record(ws: Path) -> dict | None:
+    """#5 check-stale face: read the pending-merge marker. None = no
+    pending state. Presence is the whole state machine — a marker that
+    fails to parse still counts as pending (a malformed record must never
+    masquerade as a clean workspace); only its fields degrade."""
+    p = Path(ws) / PENDING_MERGE_REL
+    if not p.is_file():
+        return None
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — presence beats parse failures
+        return {"reason": "(unreadable pending-merge marker)"}
+    if not isinstance(data, dict):
+        return {"reason": "(malformed pending-merge marker)"}
+    rec = {str(k): v for k, v in data.items()}
+    rec.setdefault("reason", "(unspecified)")
+    return rec
+
+
+def clear_pending_merge(ws: Path) -> bool:
+    """#5: remove the pending-merge marker (explicit `check-stale
+    --resolve`, or a subsequent successful merge). True when a marker was
+    removed, False when none existed; OSError propagates — callers own the
+    user-facing failure face (never silently swallowed)."""
+    try:
+        (Path(ws) / PENDING_MERGE_REL).unlink()
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _clear_pending_merge_quiet(ws: Path) -> None:
+    """Best-effort marker clear once a merge SUCCEEDS (applied or
+    fixed-point noop): the pending state is resolved. A removal failure is
+    a WARN, never a merge failure — a marker left behind only keeps
+    check-stale's recovery advice alive, which is the safe direction."""
+    try:
+        clear_pending_merge(ws)
+    except OSError as exc:
+        _warn_line(f"kunglao-upgrade: WARN — could not remove "
+                   f"{PENDING_MERGE_REL} ({exc}); remove it by hand")
+
+
 def _item_claudemd_merge(ws: Path, dry: bool) -> str:
     """#755 G3 (T2/A3): three-segment collect-and-merge. Rebuild ONLY the
     frame from the CURRENT template; 需求段 (task_spec constraint block) and
@@ -415,7 +526,12 @@ def _item_claudemd_merge(ws: Path, dry: bool) -> str:
     in place; stray prose relocated with new-frame dedup). When even the
     conservative heading-walk cannot place every current heading, the merge
     REFUSES: skip + WARN, body untouched — 宁可旧也不要错删 (#758 posture).
-    After an applied merge the G4 stamp gate's positive path is unlocked."""
+    After an applied merge the G4 stamp gate's positive path is unlocked.
+
+    #5: a refusal is no longer a silent skip — it leaves the explicit
+    pending-manual-merge state (runs/claudemd-pending-merge.yaml marker +
+    .diff.patch report) that check-stale turns into the sanctioned recovery
+    path; a subsequent successful merge clears the marker again."""
     current = _claudemd_read(ws)
     if current is None:
         return "claudemd_merge(noop: no CLAUDE.md)"
@@ -428,11 +544,21 @@ def _item_claudemd_merge(ws: Path, dry: bool) -> str:
         return ("claudemd_merge(dry)" if parts.status == "applied"
                 else f"claudemd_merge(dry-skipped: {parts.reason})")
     if parts.status != "applied":
+        # #5 deadlock breaker: leave the explicit pending state (marker +
+        # diff report) instead of a bare skip — the G4 gate still honestly
+        # keeps the old stamp, but check-stale can now hand the operator a
+        # sanctioned recovery path instead of an endless stale loop.
+        diff_rel = _write_pending_merge(ws, current, parts.reason,
+                                        parts.req_block)
         _warn(f"kunglao-upgrade: WARN — CLAUDE.md merge skipped "
-              f"({parts.reason}); legacy body left untouched (G3)",
+              f"({parts.reason}); legacy body left untouched (G3); "
+              f"manual merge pending — review {diff_rel}, merge it into "
+              f"CLAUDE.md, then run: python scripts/kunglao.py "
+              f"check-stale --resolve {ws}",
               parts.reason, "claudemd_merge", ws,
-              ledger_detail=f"skipped:{parts.reason}")
-        return f"claudemd_merge(skipped: {parts.reason})"
+              ledger_detail=f"pending-merge:{parts.reason}")
+        return (f"claudemd_merge(skipped: {parts.reason}; "
+                f"pending-merge={PENDING_MERGE_REL})")
     frame_inner = _build_current_frame(ws, current, parts.req_block)
     # Fixed-point hygiene: a rebuilt frame can legitimately CONTAIN blocks
     # the classifier flagged as user content (parametric headings such as
@@ -453,12 +579,14 @@ def _item_claudemd_merge(ws: Path, dry: bool) -> str:
     merged = claudemd_frame.assemble(parts,
                                      claudemd_frame.wrap_frame(frame_inner))
     if merged == current:
+        _clear_pending_merge_quiet(ws)
         return "claudemd_merge(noop)"
     target = ws / "CLAUDE.md"
     tmp = target.with_name(target.name + ".tmp755")
     tmp.write_text(merged, encoding="utf-8")
     import os as _os
     _os.replace(tmp, target)
+    _clear_pending_merge_quiet(ws)  # #5: a successful merge resolves pending
     detail = f"{_frame_label(current, merged)} sections={len(parts.user_sections)}"
     _emit_event("claudemd_merge", "ok", detail)
     _emit(ws, "claudemd_merge", detail)
@@ -528,7 +656,12 @@ def _vkey(version: str) -> tuple[int, ...]:
 #   runs/logs/kunglao-*.jsonl       #726 emits ONLY its own actor lines —
 #                                   line-filtered, analysis events stay
 #                                   byte-protected
-_EXEMPT_EXACT = ("runs/.init-report.json",)
+#   runs/claudemd-pending-merge.*   #5 refused-merge marker + diff report
+_EXEMPT_EXACT = (
+    "runs/.init-report.json",
+    PENDING_MERGE_REL,
+    PENDING_MERGE_DIFF_REL,
+)
 
 
 def _is_exempt(rel: str) -> bool:

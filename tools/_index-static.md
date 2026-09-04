@@ -21,6 +21,7 @@
 | `call-site-args` | Call-site argument extraction from disassembly text (x64/x86) | Read when extracting call-site arguments from disassembly text; for precise dataflow use ghidra-recon/emulated execution |
 | `c-normalize` | Decompiled-C normalization (modulo idioms/dead stores) | Read to normalize before a worker reads Ghidra decompiled C; for semantic deobfuscation use opaque-pred |
 | `opaque-pred` | Opaque predicate/MBA equivalence decision (z3) | Read when statically resolving opaque predicates/proving MBA equivalences; not when z3 is absent or the task is not expression-level |
+| `ida-decompile` | Native IDA decompilation over the ida-pro-vm MCP bridge (`ida:decompile` sole) | Read when a function-level decompile must come from IDA's analyzer and ghidra is unavailable/insufficient; not for bulk whole-binary disassembly (ghidra-decompile-functions) |
 | `yara-scan` | YARA rule scanning (built-in crypto-tables) | Read for rule-based byte scanning (family/IOC evidence); not when yara-python is missing |
 | `yara-gen` | YARA rule text generation from analysis findings | Read when generating detection rules from hex/string traits; not without a rule-generation need |
 | `jadx-decompile` | DEX-to-Java decompiler (jadx; android:java-source high) | Read when java-like source is needed AND the apk_mem_gate verdict is jadx-ok/targeted-jadx; not for 1:1 bytecode truth (baksmali-xref) |
@@ -212,6 +213,18 @@
 - **Outputs**: always_true/always_false/unknown + simplified constant or MBA rewrite suggestion.
 - **exit code**: 0 decided / 1 unknown / 2 error (missing z3 with install guidance).
 - **when_not**: Not for non-single-expression truth-value/MBA-equivalence decisions; not when z3-solver is not installed and installing is not allowed.
+
+### ida-decompile
+
+- **Purpose**: Native IDA Pro decompilation over the `ida-pro-vm` MCP bridge (http transport) — the ghidra-alternative path when IDA's analyzer is authoritative (OOL/ELF edge cases, FLIRT-signed libs, existing .idb analysis state).
+- **Usage**:
+  ```bash
+  mcp__ida-pro-vm__decompile_function   # bridge discovery first: mcp__ida-pro-vm__list_functions / mcp__ida-pro-vm__get_function_by_name
+  ```
+- **Inputs**: Function address(es)/name(s) in the .i64/.idb opened by the bridge (the workspace sample must be loaded in the remote IDA instance).
+- **Outputs**: Decompiled pseudocode + disassembly context per function — quote verbatim into `facts/Fxxx.md`.
+- **exit code**: 0 pseudocode returned / 2 error (bridge unreachable — verify `ida-pro-vm` MCP registration in `~/.claude.json` / `.mcp.json`; the toolshelf never auto-installs IDA).
+- **when_not**: Not when ghidra is available and sufficient — use ghidra-decompile-functions; not for bulk whole-binary disassembly (IDA licenses are seat-bound; keep the bridge for targeted function claims).
 
 ### yara-scan
 

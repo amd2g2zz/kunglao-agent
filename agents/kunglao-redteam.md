@@ -24,6 +24,7 @@ allowedTools:
 - mcp__context7__query-docs
 - mcp__sequential-thinking__sequentialthinking
 - mcp__ghidra__*
+- mcp__ida-pro-vm__*
 - mcp__x64dbg__*
 - mcp__frida__spawn
 - mcp__frida__attach

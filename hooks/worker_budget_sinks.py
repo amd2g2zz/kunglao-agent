@@ -21,6 +21,7 @@ from worker_budget_gates import (
     compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
     compare_register_change_proven_gate,
     register_worker, remove_worker,
+    stamp_dispatch_anchor,  # #57 gate 3: per-dispatch nonce at the approval point
     toolfirst_pass_record,  # #880 approval-point pass face + operation label
 )  # noqa: E402,F401
 
@@ -171,10 +172,14 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     'plan': {
         'additionalContext': (
             'plan-first gate (kunglao-worker.md golden rule #3: PLAN FIRST, '
-            'execute second). Fix: write runs/plan-C<NN>.md '
-            '(goal / preflight / steps / fallback) for claim C-<NN> BEFORE '
-            'dispatching, or reference the plan path in the dispatch prompt '
-            'when writing it in the same turn - then re-dispatch.'
+            'execute second). Fix: have the WORKER write runs/plan-C<NN>.md '
+            '(goal / preflight / steps / fallback) for claim C-<NN> in its '
+            'own session BEFORE executing, or reference the plan path in the '
+            'dispatch prompt when writing it in the same turn - the plan '
+            'must be worker-authored (#57 gate 3): the worker cites the '
+            'per-dispatch anchor with a `dispatch-anchor: <dispatch_ts from '
+            'the KUNGLAO_DISPATCH_CONTEXT block>` frontmatter line - then '
+            're-dispatch.'
         ),
     },
     'toolfirst': {
@@ -567,6 +572,11 @@ def pre_check(payload: dict, paths: dict) -> int:
     # the activation set / flip phase to DISPATCH / log the dispatch event
     # (fail-open inside; rejected dispatches above never reach this line).
     _dispatch_lifecycle(paths, tier, tools, cid, agent_name, prompt=prompt)
+    # #57 gate 3: stamp the per-dispatch nonce (dispatch anchor) at the
+    # approval point — it is what arms the plan-author gate on this claim's
+    # NEXT dispatch, so a pre-written plan can no longer pass as worker work.
+    # Fail-open; after the lifecycle line the dispatch is already approved.
+    stamp_dispatch_anchor(paths, cid, prompt, agent_name)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',

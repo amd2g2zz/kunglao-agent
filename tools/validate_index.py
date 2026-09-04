@@ -127,6 +127,10 @@ _CAPABILITY_TAGS = frozenset({
     "static:yara-scan",
     # ghidra: — #866-b registration of the Ghidra Version Tracking binary diff
     "ghidra:diff",
+    # ida: — issue #46 unlock: the ida-pro-vm MCP bridge (native IDA
+    # decompilation) joins the routing vocabulary, mirroring ghidra:decompile.
+    # One tool = one tag; the ida-decompile entry's primary capability.
+    "ida:decompile",
     # aux: — #863 mechanical catalog backfill: the legacy CLIs' own primary
     # capabilities joined the closed vocabulary (1:1 from the entries'
     # capability fields — no invented semantics).

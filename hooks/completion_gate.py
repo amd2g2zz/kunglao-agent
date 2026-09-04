@@ -49,7 +49,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from _path_hygiene import load_module_by_path, scripts_on_path  # #671 sys.path hygiene authority
@@ -69,9 +69,35 @@ EXIT_SUMMARY_FAKE = 7
 SECOND_STOP_EVENT = "second_stop_pass"
 
 
+def _json_safe(obj):
+    """#47: recursive normalization at the json serialization boundary.
+    yaml.safe_load turns an UNQUOTED timestamp (last_decision_at:
+    2026-09-04T10:00:00Z) into a datetime object, which json.dumps refuses.
+    datetime/date → isoformat() string: deterministic and stable, so the
+    canonical sha form is "json with datetimes as isoformat strings" and a
+    record read as a datetime anchors to the SAME sha as the same record
+    written as an isoformat string. No yaml representer is touched — this
+    changes only what json.dumps sees, never what safe_load returns."""
+    if obj is None or isinstance(obj, (str, bool, int, float)):
+        return obj
+    if isinstance(obj, dict):
+        return {(k if isinstance(k, str) else _json_safe(k)): _json_safe(v)
+                for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, date):
+        return obj.isoformat()
+    return str(obj)
+
+
 def _secondstop_record_sha(adj: dict) -> str:
-    """Canonical sha256 of the oracle's stop_hook_active adjudication map."""
-    canonical = json.dumps(adj, sort_keys=True, ensure_ascii=False)
+    """Canonical sha256 of the oracle's stop_hook_active adjudication map.
+    Canonical form: sort_keys json over the #47-normalized map — datetime/
+    date values become isoformat strings (#47), so json-native maps keep
+    their exact pre-#47 sha (existing ledger anchors stay valid)."""
+    canonical = json.dumps(_json_safe(adj), sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -196,7 +222,15 @@ def process_event(payload: dict) -> int:
                     "stop_hook_active") or {}
                 if (isinstance(adj, dict) and adj.get("second_stop")
                         and adj.get("last_decision") == "PASS"):
-                    allow, why = _secondstop_anchor(ws_early, adj)
+                    try:
+                        allow, why = _secondstop_anchor(ws_early, adj)
+                    except Exception as exc:  # noqa: BLE001 — #47: an anchor
+                        # failure is fail-closed WITH the real cause; letting
+                        # it escape would hit main()'s silent fail-open (rc 0)
+                        # and the sanction would neither pass nor be diagnosed.
+                        allow = False
+                        why = (f"second-stop sanction anchor failed - "
+                               f"{type(exc).__name__}: {exc} (#47)")
                     if allow:
                         return 0
                     reason = why

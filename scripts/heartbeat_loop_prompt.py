@@ -64,6 +64,9 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
 3. python {cc} {ws} --json → read the decision field, imperative execution (every decision MUST produce a convergence-advancing action; no action = idle fault):
    DISPATCH   → MUST dispatch priority_ratio.py #1, no idling allowed
    BLOCKED    → MUST self-recover (resolve / stale_blocker_prune) or reactivate the failed claim
+                → worker death (#11): any runs/.worker-death-*.json surfaced by the decision/stuck report →
+                  dispatch a RESUME claim for each: read the record's artifacts list (已完成产物清单) FIRST,
+                  verify + absorb the existing products, continue from where the worker died — do NOT redo from zero
    DEFERRED   → MUST check whether reactivation is possible (e.g. VM reachable again → restore the claim and dispatch)
    PARK       → legal idle on external gates (#634): record the wake_condition, then python {h} {ws} --heartbeat-off
                 (revive via mission_stall.py when the wake condition is met); tick rc=2 with idle_circuit_breaker
