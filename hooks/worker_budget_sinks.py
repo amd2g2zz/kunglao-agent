@@ -46,6 +46,19 @@ hookSpecificOutput.additionalContext (#270)."""
 # REJECT semantics are unchanged: exit 2 + stderr `REJECT <name>` summary.
 # additionalContext is per-check, concrete and executable — never boilerplate.
 
+# #55 XML injection standard: gate verdicts are producer-attributed — the
+# guidance text is wrapped in <gate-verdict>...</gate-verdict> at the
+# emission site (_reject) so the agent can tell a kunglao gate verdict from
+# third-party tool output (references/xml-injection-standard.md). Tags mark,
+# they never gate: rc and payload shape unchanged; stderr stays untagged.
+GATE_VERDICT_TAG = "gate-verdict"
+
+
+def _gate_verdict(text: str) -> str:
+    """Wrap one gate verdict face in the #55 producer tag."""
+    return f"<{GATE_VERDICT_TAG}>\n{text}\n</{GATE_VERDICT_TAG}>"
+
+
 REJECT_FIXES: dict[str, dict[str, str]] = {
     'workers': {
         'additionalContext': (
@@ -224,7 +237,14 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
 
 def _reject(name: str, msg: str, paths: dict) -> int:
     """REJECT with guidance (issue #270): stderr summary + stdout JSON
-    hookSpecificOutput.additionalContext. Exit 2 semantics unchanged."""
+    hookSpecificOutput.additionalContext. Exit 2 semantics unchanged.
+
+    #55: the guidance lands in agent context wrapped in
+    <gate-verdict>...</gate-verdict> — verdict + repair path read as one
+    producer-attributed unit (references/xml-injection-standard.md). The
+    tag is applied HERE, at the emission site, so the REJECT_FIXES table
+    and the stderr summary stay raw. Tags mark, never gate: rc=2 unchanged.
+    """
     print(f'REJECT {name}: {msg}', file=sys.stderr)
     entry = REJECT_FIXES.get(name)
     if not entry:
@@ -235,7 +255,7 @@ def _reject(name: str, msg: str, paths: dict) -> int:
     print(json.dumps({
         'hookSpecificOutput': {
             'hookEventName': 'PreToolUse',
-            'additionalContext': (
+            'additionalContext': _gate_verdict(
                 f'worker_budget REJECT {name}: {msg}\n\n'
                 f'How to fix:\n{fix}'
             ),

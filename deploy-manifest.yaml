@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: f2e6d8017605bacac63ee4fab429598621d7447d4724983f12d60fa803717275
+    sha256: 7933dab4f11ccf8cef982e02e47aca3f1ed9b62ad831724bd7134fd323ba27f9
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -39,7 +39,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: 6d640e64e3d56950f7b12ba2199b52b38b7903185c13e3aa9c85c52d0bf51a3f
+    sha256: a4943fb00c4c2794762b19dbf806978ef85e8df605e9278deccc4548aa0a62b2
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -71,11 +71,11 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 488a2a2add19918f0ce1082b372166bc8e2b9fbab1a114b0e7f299240808145f
+    sha256: 2247a640a9edbadb339758204f77511c1bee2706edbdc6d14ac5610f3e6b6255
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
-    sha256: c6da8c83afeb2d6efc0f9cd40f1fb969d708bf951186cbd0fb7b81aa7f3aa9a3
+    sha256: bf3a34275983192bc06f85a27f74ebbd1b95974db4149ca2c609f1c836fd798f
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
@@ -99,11 +99,11 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: 64cf2600bdffe2324ebdc065246636b46545ca4d8c11778c4a37985984b8f924
+    sha256: e6f516a459f07e34e7b43d1a7d1d98066430528ce426ad04f7140a0005eb8e6f
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 06315184aee29139a3c9d930d6ef196e19a1ab43bcffd8f425ba89270c95f871
+    sha256: b444bbff815dd02ac84e7aef7551ffde029f5bedc8a0da834e0861d174d2a65d
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -831,11 +831,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 329b3956179ebd4966253835c84d19808863c22c35410d11bb58fc05edc894b0
+    sha256: 9e5f460e035129c206d1c7bb7c3be924c2fedef63b9eea09d688e7f3fa03553f
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 9939fe784caa40b01538a4a49f05b26d40d4a19fb67aa450270b22743d86ecb3
+    sha256: 9d2c23376fc126f8cb245af86f6787e66b6a8fab98e5d544d6cfa3fb6820d181
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
@@ -915,7 +915,7 @@ files:
   - src: references/dispatch-protocol.md
     dest: .claude/references/dispatch-protocol.md
     kind: asset
-    sha256: 1ec38838a5b3781a4b6bcaffb124f3991458ea8eecb5b99f544461c2b6d1135c
+    sha256: 41cd3b28acc17143761ec99bcd8c656b91bbdaceabf6abb9f977a7d4286e65e5
   - src: references/downstream-contract.md
     dest: .claude/references/downstream-contract.md
     kind: asset
@@ -1156,6 +1156,10 @@ files:
     dest: .claude/references/wal-protocol.md
     kind: asset
     sha256: 1d2a7f8332a595d61daa4d34a7652783c6ea0c54876504ef8d30946e0fd25d66
+  - src: references/xml-injection-standard.md
+    dest: .claude/references/xml-injection-standard.md
+    kind: asset
+    sha256: 9da069fd98abd4597abde0b67f5bb93a7b2be6efef130733d579c31e45748a69
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
