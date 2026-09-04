@@ -535,7 +535,7 @@ files:
   - src: scripts/mission_ledger.py
     dest: .claude/scripts/mission_ledger.py
     kind: scaffold
-    sha256: a2cee4d85551010f0a4888e798742729ed21e4c3ab26f242cd1b0de67e57c0eb
+    sha256: 89fa24ee9f81bd628df9cbd6147cbcaf6191d25819f6adc51a35559475d073b8
   - src: scripts/mission_stall.py
     dest: .claude/scripts/mission_stall.py
     kind: scaffold
@@ -711,7 +711,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: ae92ac2efeaf2e0b3a98bbac64f9de432aec8a18def926f27fedd55e34d03345
+    sha256: 811bdcc221f2117e3ada35c71f9b3ca4b4428a444ea8525d8b888c74fba16b86
   - src: scripts/strategy_metrics.py
     dest: .claude/scripts/strategy_metrics.py
     kind: scaffold
@@ -775,7 +775,7 @@ files:
   - src: scripts/tuition_curve.py
     dest: .claude/scripts/tuition_curve.py
     kind: scaffold
-    sha256: 18e029aff07a6a360e1e543c5e289023ece7cb2ca82edea509b2dcc40bd4d4da
+    sha256: 55691fb07f5aab12d8e37e7577994f825dafe71cc3e4f8bed3b785f50b883a9a
   - src: scripts/tuition_refit.py
     dest: .claude/scripts/tuition_refit.py
     kind: scaffold

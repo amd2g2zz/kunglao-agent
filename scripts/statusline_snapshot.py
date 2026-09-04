@@ -417,10 +417,18 @@ def _claims_state(ws: Path) -> tuple[int, int]:
 
 
 def _mission_state(ws: Path) -> dict:
-    """mission_ledger.yaml -> PQ coverage + V_m/d_slope/eta + elapsed ticks."""
-    from tuition_curve import _slope
+    """mission_ledger.yaml -> PQ coverage + V_m/d_slope/eta + elapsed ticks.
+
+    #10: v_norm / d_slope_norm ride alongside the raw fields — normalized
+    value in [0,1] (v_m / total PQ weight) and the per-settlement-round
+    rate on the normalized history (one history point == one round; no
+    wall-clock in the density). eta_ticks extrapolates from the normalized
+    series (same numbers under stable weights; scale-free after repin).
+    """
+    from tuition_curve import _norm_series, _slope
     out = {"answered": 0, "blocked": 0, "unattempted": 0, "total": 0,
-           "coverage": 0.0, "v_m": 0.0, "d_slope": 0.0, "eta_ticks": None,
+           "coverage": 0.0, "v_m": 0.0, "v_norm": 0.0,
+           "d_slope": 0.0, "d_slope_norm": 0.0, "eta_ticks": None,
            "elapsed_ticks": 0, "started_ts": None}
     try:
         led = yaml.safe_load((ws / "runs" / "mission_ledger.yaml")
@@ -429,6 +437,8 @@ def _mission_state(ws: Path) -> dict:
         hist = led.get("mission", {}).get("history") or []
         vm_hist = [float(h.get("v_m", 0.0)) for h in hist
                    if isinstance(h, dict) and "v_m" in h]
+        total_w = sum(float(p.get("weight", 1.0)) for p in pqs)
+        norm = _norm_series(hist, total_w)
         out["answered"] = sum(1 for p in pqs if p.get("state") == "answered")
         out["blocked"] = sum(1 for p in pqs if p.get("state") == "blocked")
         out["unattempted"] = sum(1 for p in pqs
@@ -440,9 +450,12 @@ def _mission_state(ws: Path) -> dict:
             out["v_m"] = round(vm_hist[-1], 6)
             slope = _slope(vm_hist[-5:])
             out["d_slope"] = round(slope, 6)
-            total_w = sum(float(p.get("weight", 1.0)) for p in pqs)
-            out["eta_ticks"] = (round((total_w - vm_hist[-1]) / slope, 2)
-                                if slope > 0 else None)
+            if norm:
+                out["v_norm"] = round(norm[-1], 6)
+                norm_slope = _slope(norm[-5:])
+                out["d_slope_norm"] = round(norm_slope, 6)
+                out["eta_ticks"] = (round((1.0 - norm[-1]) / norm_slope, 2)
+                                    if norm_slope > 0 else None)
             out["elapsed_ticks"] = len(vm_hist)
             first_ts = hist[0].get("ts") if isinstance(hist[0], dict) else None
             out["started_ts"] = first_ts
@@ -644,7 +657,9 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         "probe_detail": probe_detail,
         "pq": pq,
         "v_m": pq["v_m"],
+        "v_norm": pq["v_norm"],
         "d_slope": pq["d_slope"],
+        "d_slope_norm": pq["d_slope_norm"],
         "eta_ticks": pq["eta_ticks"],
         "eta_fade_cells": _eta_fade_cells(pq["d_slope"]),
         "elapsed": elapsed,
