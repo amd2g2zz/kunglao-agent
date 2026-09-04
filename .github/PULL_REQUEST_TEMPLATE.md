@@ -2,6 +2,14 @@
 
 <!-- What this PR changes and why. One short paragraph. -->
 
+## Issue linkage (REQUIRED)
+<!-- Every PR closes exactly one issue (one-issue-one-branch-one-PR).
+     Use the closing keyword so GitHub auto-closes on merge: -->
+Closes #
+
+<!-- Milestone of the linked issue: -->
+Milestone:
+
 ## Anti-orphan gate (REQUIRED)
 
 Every PR that adds or moves code MUST answer both. A "TBD" or "see code"
@@ -23,8 +31,6 @@ answer blocks the PR.
 - [ ] `.venv/bin/python -m pytest <touched suites> -q`
 - [ ] `/usr/local/bin/ruff check <touched .py files>`
 - [ ] `python scripts/release_receipt.py --check` (if assets/manifest changed)
-## Release gating (maintainers only)
 
-- [ ] USER GATE: tag approved
-- [ ] USER GATE: dev -> master merge approved
-- [ ] USER GATE: GitHub Release published
+## Labels
+<!-- capability:<axis> + theme:<area> + type; difficulty:hard for heavy PRs -->
