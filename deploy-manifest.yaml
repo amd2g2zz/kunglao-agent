@@ -35,7 +35,7 @@ files:
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
-    sha256: edc5d7cb617638aef43a97b7e1649abd70030bd2383a80d2ade97fca71ddbecb
+    sha256: b84678f5285d1527681445a00503a66aec2d2a8ceeaa0ce35b441847e95416b7
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
@@ -67,11 +67,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 8458791033d315bf9408233ede0298ca9b7fd2b31614cbb71f1ca594bab7c88f
+    sha256: d79a139213dca5b9be0f9947fe16f29f1d2779e5ffdcbc29f2532d2659d57128
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 488a2a2add19918f0ce1082b372166bc8e2b9fbab1a114b0e7f299240808145f
+    sha256: 6772d32cdb32f68d742f826bba6570732018c0f52e0907d824e5d3d4880f3250
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -79,7 +79,7 @@ files:
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
-    sha256: 6cd4d33c260bff6e3fd9b1bfd225749414da05142e9255058604f02851efd469
+    sha256: 66e49e00e31edbc8295b415003b37b14bbc0c17b30fa46bc36bf66414e8ccc71
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
@@ -195,7 +195,7 @@ files:
   - src: scripts/blind_gate.py
     dest: .claude/scripts/blind_gate.py
     kind: scaffold
-    sha256: a28d71a14fefebee88c95e3d2e2f7a27d1786ae9ebde3c5bf9a73d6550d73f4b
+    sha256: bef78f8fd9a65583b398d7b6f72bb0692c4fa061d549bb44cfdc3befcc4eb0c8
   - src: scripts/calibration_gate.py
     dest: .claude/scripts/calibration_gate.py
     kind: scaffold
@@ -467,7 +467,7 @@ files:
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
-    sha256: bbde54c18b6a5d95f131cacc8bc996dfc6f72052f1785ce40ba805cd8c119626
+    sha256: cd3c18f8b8f4d1c1768c9f45ecb93cc21fc897d6ef6303f540ed9034b4a0db0a
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
