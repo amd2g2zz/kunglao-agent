@@ -22,6 +22,8 @@ from pathlib import Path
 
 import yaml
 
+from _factories import seed_verifier_dispatch  # #57 gate 5 evidence seeder
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 HOOKS = ROOT / "hooks"
@@ -308,6 +310,7 @@ def test_claim_migrator_promotes_non_inferential(ws_factory):
     ws = ws_factory(claims=[{"id": "C-11", "status": "OPEN"}])
     _write(ws / "facts" / "C-11.md",
            _signoff("13 ASCII strings byte-matched in .rdata"))
+    seed_verifier_dispatch(ws, "C-11")  # #57 gate 5: a verifier WAS dispatched
     from kunglao_record import claim_migrator
     ok, msg = claim_migrator(ws, "C-11", "PROVEN", actor="orchestrator")
     assert ok, msg
@@ -339,6 +342,7 @@ def test_backstop_allows_direct_proven_non_inferential(ws_factory):
     ws = ws_factory(claims=[{"id": "C-11", "status": "OPEN"}])
     _write(ws / "facts" / "C-11.md",
            _signoff("13 ASCII strings byte-matched in .rdata"))
+    seed_verifier_dispatch(ws, "C-11")  # #57 gate 5: a verifier WAS dispatched
     import worker_budget as wb
     reg_path = ws / "claim-register.yaml"
     reg_path.write_text(reg_path.read_text(encoding="utf-8")

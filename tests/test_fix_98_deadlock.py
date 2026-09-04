@@ -21,6 +21,8 @@ from pathlib import Path
 
 import yaml
 
+from _factories import seed_verifier_dispatch  # #57 gate 5 evidence seeder
+
 ROOT = Path(__file__).resolve().parents[1]
 
 import kunglao_record  # noqa: E402
@@ -327,6 +329,7 @@ def test_claim_migrator_all_gates_ok_still_promotes(ws_factory):
     """S9: all gates available + valid sign-off -> PROVEN (regression)."""
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     _signoff_fact(ws, "C-1")
+    seed_verifier_dispatch(ws, "C-1")  # #57 gate 5: a verifier WAS dispatched
     ok, msg = kunglao_record.claim_migrator(ws, "C-1", "PROVEN", "orchestrator")
     assert ok, msg
     assert _register_status(ws, "C-1") == "PROVEN"
@@ -347,6 +350,7 @@ def test_hook_all_gates_ok_allows_proven(ws_factory):
     """S9 regression: hook allows PROVEN when all gates pass."""
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     _signoff_fact(ws, "C-1")
+    seed_verifier_dispatch(ws, "C-1")  # #57 gate 5: a verifier WAS dispatched
     reg_path = ws / "claim-register.yaml"
     reg_text = reg_path.read_text(encoding="utf-8").replace(
         "status: OPEN", "status: PROVEN")
