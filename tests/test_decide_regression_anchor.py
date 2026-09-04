@@ -1,18 +1,23 @@
 # -*- coding: utf-8 -*-
-"""#443 regression anchor — pre/post-refactor decide() output equality.
+"""#443 regression anchor — decide() output equality against a frozen ref.
 
 Design (openspec/changes/issue-443-decide-state-machine/design.md §5):
-decide() is reorganized into an explicit state machine with ZERO gate
-semantics change. This module proves it with TWO channels:
+decide() is reorganized into an explicit state machine. The anchor proof
+ran TWO channels while a pre-refactor baseline existed:
 
-  1. LIVE BASELINE (maker-checker): extract the pre-refactor decide()
-     from git commit c5cb1ae at test time, run it and the current
-     decide() on the SAME fixture workspace, compare full outputs.
-     Expected values are derived from the OLD code — never hand-written.
-  2. FROZEN SNAPSHOT (permanent): tests/decide_anchor_c5cb1ae.json holds
-     the machine-generated c5cb1ae outputs (design §5 regen command);
-     the current decide() must reproduce them byte-for-byte per case.
-     Survives git history pruning; channel 1 skips without history.
+  1. LIVE BASELINE (maker-checker, RETIRED 2026-09-05): extract the
+     pre-refactor decide() from git at test time and diff it against the
+     current decide() on the SAME fixture workspace. Retired with the
+     8804dcd baseline object (see the 2026-09-05 re-pin entry below):
+     the commit is unrecoverable after the history rewrite, and #51 is an
+     INTENTIONAL decide() contract change — no pre-#51 baseline can ever
+     equal current again, so the equality premise is void until a future
+     pre-refactor refactor re-introduces a live baseline.
+  2. FROZEN SNAPSHOT (permanent, sole active proof): tests/decide_anchor_<ref>.json
+     holds the machine-generated outputs of decide() at BASELINE_COMMIT
+     (design §5 regen command, now capture_current()); the current
+     decide() must reproduce them byte-for-byte per case. Survives git
+     history pruning.
 
 Matrix: ~30 cases covering every branch of the old elif chain, gate
 interleavings where ORDER decides (schema>dispatch, orphan>unverified,
@@ -25,9 +30,7 @@ stuck_workers always []), removing age_min time drift from the anchor.
 """
 from __future__ import annotations
 
-import importlib.util
 import json
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -50,8 +53,30 @@ import convergence_check  # module under test (== baseline before #443 GREEN)
 # so 31 frozen cases failed from that point on. The c5cb1ae anchor remains
 # recoverable from git history (and documents the original #443
 # zero-semantics-change proof). Machine-generated via .tmp/regen_anchor.py.
-BASELINE_COMMIT = "8804dcd"  # dev HEAD at the 2026-08-26 re-pin (#707 contradiction annotation is an intentional decide() semantics change)
-ANCHOR_FILE = Path(__file__).parent / "decide_anchor_8804dcd.json"
+BASELINE_COMMIT = "cabc7d9"  # the #51 value-flag-removal commit — decide() outputs frozen at the 2026-09-05 re-pin (see below)
+ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
+
+# 2026-09-05 re-pin (#51 value loop unification): #51 removed the
+# KUNGLAO_VALUE_ALGO experiment flag (no-backcompat policy), making
+# rho_checkpoint.attach_signals an UNCONDITIONAL part of decide() — the
+# output dict gains the `value_signals` key on every verdict. That is an
+# INTENTIONAL decide() contract change, resolved per the established
+# re-pin precedent (2026-08-25/#662-#663-#670, 2026-08-26/#707,
+# 2026-08-27/#751, 07994e6/#866-b): re-freeze the corpus, document the
+# semantic change. Diffed old-vs-new BEFORE committing: every one of the
+# 31 cases shows exactly the `value_signals` addition and nothing else.
+# Unlike every prior re-pin, this one could NOT be captured via
+# capture_from_git_baseline(): the 8804dcd baseline object was destroyed
+# by the history rewrite (git cat-file -t 8804dcd -> fatal), so the frozen
+# snapshot was re-captured from the CURRENT tree at cabc7d9 via
+# capture_current(). With the baseline commit gone — and with #51 being a
+# deliberate decide() semantics change, which voids the "baseline ==
+# current" equality premise for any pre-#51 baseline — channel 1 (live
+# baseline extraction: _load_baseline_module /
+# test_live_baseline_output_equality) is RETIRED. The frozen-snapshot
+# channel is now the sole active proof; channel 1 returns only if a
+# future zero-semantics-change refactor re-introduces a recoverable
+# pre-refactor baseline.
 
 # 2026-08-27 corpus re-pin (#751): web-re-quickref.md grew the gitnexus
 # semantic-index step (~30 lines), shifting lexical rarity again. Same class:
@@ -515,61 +540,17 @@ def _canonical(d: dict) -> str:
     return json.dumps(_round(d), sort_keys=True, ensure_ascii=False, default=str)
 
 
-class BaselineUnavailable(RuntimeError):
-    """git history lacks BASELINE_COMMIT (shallow clone / pruned)."""
+def capture_current() -> dict:
+    """Regenerate the frozen anchor from the CURRENT tree's decide().
 
-
-def _load_baseline_module():
-    """Extract the PRE-refactor convergence_check from BASELINE_COMMIT and
-    import it under a unique name. Sibling imports (status_defs, yaml, ...)
-    resolve on sys.path to the current tree — identical to the baseline
-    tree for every module #443 does not touch (only convergence_check.py
-    changes). hooks/lib_kunglao.py is copied alongside to satisfy the
-    baseline module's __file__-relative loader.
-
-    Raises BaselineUnavailable (never skips) — usable inside AND outside
-    pytest (the frozen-snapshot regen path)."""
-    r = subprocess.run(
-        ["git", "-C", str(ROOT), "show", f"{BASELINE_COMMIT}:scripts/convergence_check.py"],
-        capture_output=True, text=True, timeout=60, errors="replace")
-    if r.returncode != 0:
-        raise BaselineUnavailable(
-            f"baseline {BASELINE_COMMIT} unavailable: {r.stderr.strip()[:200]}")
-    tmp = Path(tempfile.mkdtemp(prefix="decide-anchor-baseline-"))
-    (tmp / "scripts").mkdir(parents=True)
-    (tmp / "scripts" / "convergence_check.py").write_text(r.stdout, encoding="utf-8")
-    (tmp / "hooks").mkdir()
-    (tmp / "hooks" / "lib_kunglao.py").write_text(
-        (ROOT / "hooks" / "lib_kunglao.py").read_text(encoding="utf-8"), encoding="utf-8")
-    # #671 self-bootstrap: the copied lib resolves hooks/_path_hygiene.py by
-    # its own __file__ — ship the sibling so exec_module does not FileNotFoundError
-    _hyg = ROOT / "hooks" / "_path_hygiene.py"
-    if _hyg.is_file():
-        (tmp / "hooks" / "_path_hygiene.py").write_text(
-            _hyg.read_text(encoding="utf-8"), encoding="utf-8")
-    name = f"convergence_check_baseline_{BASELINE_COMMIT[:7]}"
-    if name in sys.modules:  # one process, one baseline instance
-        return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, tmp / "scripts" / "convergence_check.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def _load_baseline_or_skip():
-    try:
-        return _load_baseline_module()
-    except BaselineUnavailable as exc:
-        pytest.skip(str(exc))
-
-
-def capture_from_git_baseline() -> dict:
-    """Regenerate the frozen anchor from the c5cb1ae baseline (design §5).
-
-    The returned dict is what gets written to decide_anchor_c5cb1ae.json —
-    it MUST be produced by the baseline module, never by the refactored
-    code (maker-checker).
+    Provenance note (2026-09-05 re-pin, #51): before the history rewrite
+    this helper was capture_from_git_baseline() — the frozen dict was
+    produced by the BASELINE_COMMIT module (maker-checker: expected values
+    derived from the OLD code, never hand-written). That channel is gone
+    with the 8804dcd object; an anchor re-pin is now sanctioned ONLY as a
+    documented intentional-semantics re-pin (per the precedent chain in
+    the header comment), captured from the current code, with the diff
+    against the previous anchor verified case-by-case BEFORE committing.
 
     Regenerate (from the worktree root):
       uv run python - <<'EOF'
@@ -578,44 +559,31 @@ def capture_from_git_baseline() -> dict:
       spec = importlib.util.spec_from_file_location(
           "anchor_mod", "tests/test_decide_regression_anchor.py")
       m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-      Path("tests/decide_anchor_c5cb1ae.json").write_text(
-          json.dumps(m.capture_from_git_baseline(), indent=2, sort_keys=True,
+      Path("tests/decide_anchor_" + m.BASELINE_COMMIT + ".json").write_text(
+          json.dumps(m.capture_current(), indent=2, sort_keys=True,
                      ensure_ascii=False) + "\\n", encoding="utf-8")
       EOF
     """
-    baseline = _load_baseline_module()
     base = Path(tempfile.mkdtemp(prefix="decide-anchor-capture-"))
-    return {name: baseline.decide(build_case(name, base))
+    return {name: convergence_check.decide(build_case(name, base))
             for name in sorted(CASES)}
 
 
 def _load_frozen() -> dict:
     if not ANCHOR_FILE.exists():
-        pytest.fail(f"frozen anchor {ANCHOR_FILE} missing — regenerate it from the "
-                    f"{BASELINE_COMMIT} baseline via the design §5 command "
-                    "(never from the refactored code)")
+        pytest.fail(f"frozen anchor {ANCHOR_FILE} missing — regenerate it via "
+                    "capture_current() (the docstring's design §5 command) "
+                    "and document the re-pin in the header comment")
     return json.loads(ANCHOR_FILE.read_text(encoding="utf-8"))
 
 
 # ------------------------------------------------------------------ tests
 
 @pytest.mark.parametrize("case", sorted(CASES))
-def test_live_baseline_output_equality(case: str, tmp_path: Path) -> None:
-    """Channel 1: baseline decide() (c5cb1ae) == current decide(), per case,
-    full output dict. The hard #443 acceptance."""
-    baseline = _load_baseline_or_skip()
-    ws = build_case(case, tmp_path)
-    old = baseline.decide(ws)
-    new = convergence_check.decide(ws)  # same workspace: decide() is read-only
-    assert _canonical(new) == _canonical(old), (
-        f"case {case}: decide() output drifted from {BASELINE_COMMIT} baseline\n"
-        f"--- baseline ---\n{_canonical(old)}\n--- current ---\n{_canonical(new)}")
-
-
-@pytest.mark.parametrize("case", sorted(CASES))
 def test_frozen_snapshot_output_equality(case: str, tmp_path: Path) -> None:
-    """Channel 2: current decide() == frozen c5cb1ae snapshot (permanent,
-    survives history pruning)."""
+    """The frozen-snapshot channel (permanent, survives history pruning):
+    current decide() == frozen snapshot at BASELINE_COMMIT, per case,
+    full output dict."""
     frozen = _load_frozen()
     if case not in frozen:
         pytest.fail(f"frozen anchor lacks case {case!r}; regenerate per design §5")

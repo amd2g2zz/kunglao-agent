@@ -42,7 +42,10 @@ Steps executed (idempotent, all safe to re-run):
 
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
 1 = heartbeat stale, project hooks missing, or selfcheck failed (LLM must act;
-the report's per-step stderr tails carry the failure text).
+the report's per-step stderr tails carry the failure text), 2 = usage error
+(#6: unknown flag rejected by argparse, or a workspace path that does not
+exist — the tick runs on an INITIALIZED workspace and never creates one, so a
+typo'd/flag arg can no longer be materialized as a garbage directory tree).
 
 The report carries `action_taken` (issue #237): the orchestrator fills what
 convergence action this tick produced (dispatched/verified/solved/reactivated);
@@ -50,6 +53,7 @@ an empty field means the tick idled — a fault signal (tokens burned).
 
 Usage: python heartbeat_tick.py <workspace>
 """
+import argparse
 import json
 import subprocess
 import sys
@@ -307,7 +311,31 @@ def main(argv: list[str] | None = None) -> int:
     except (AttributeError, ValueError):
         pass  # captured stream without reconfigure (pytest capsys)
     args = sys.argv[1:] if argv is None else argv
-    ws = _resolve_ws(args[0] if args else None)
+    # #6: argparse owns the CLI boundary — flags (--help, --anything) can no
+    # longer be swallowed by _resolve_ws as a workspace path and mkdir'd into
+    # a garbage tree. --help prints usage + exits 0 with zero side effects;
+    # an unknown flag is a usage error (stderr + exit 2, argparse default).
+    parser = argparse.ArgumentParser(
+        prog="heartbeat_tick.py",
+        description="ONE-command heartbeat tick (mechanical part): "
+                    "selfcheck/reconcile/renew/heartbeat-check/oracle-check/"
+                    "mechanisms against an initialized kunglao workspace.")
+    parser.add_argument(
+        "workspace", nargs="?", default=None,
+        help="initialized workspace directory (default: probe cwd, then "
+             "cwd/<workspace_dir>; never created — init owns that)")
+    parsed = parser.parse_args(args)
+    ws_arg = parsed.workspace or None
+    # A path-shaped positional must EXIST: the tick writes telemetry into the
+    # ws (runs/ via the report write + noop_breaker), so a nonexistent path
+    # would otherwise be materialized as a garbage directory tree. Exit 2
+    # keeps the #228 strict family's "never guess a workspace" semantics.
+    if ws_arg is not None and not Path(ws_arg).is_dir():
+        print(f"ERROR: workspace {ws_arg!r} is not an existing directory — "
+              "heartbeat_tick runs on an initialized workspace and never "
+              "creates one (run kunglao init first)", file=sys.stderr)
+        return 2
+    ws = _resolve_ws(ws_arg)
     # action_taken (issue #237): the tick MUST produce a convergence action or a
     # mechanical convergence argument. The orchestrator fills this field after
     # reading the report — what it dispatched / verified / solved / reactivated.
