@@ -234,3 +234,171 @@ class TestS2SubagentLifecycle:
         assert len(_rows(tmp)) == 3
 
 
+# ---------------------------------------------------------------- S4 --------
+
+def _note_fm(**extra) -> str:
+    fm = {
+        "id": "N-01",
+        "title": "sample identity",
+        "type": "note",
+        "status": "INFERRED",
+        "confidence": "medium",
+        "claim_id": "C-001",
+        "verify_status": "pending",
+        "provenance": [
+            {"role": "capture_log", "path": "evidence/x.log",
+             "content_sha256": _SHA, "credibility": "B2"},
+        ],
+        "facts_used": ["F001-sample"],
+    }
+    fm.update(extra)
+    lines = []
+    for k, v in fm.items():
+        if k == "provenance":
+            lines.append("provenance:")
+            for entry in v:
+                cells = ", ".join(f"{ek}: {ev}" for ek, ev in entry.items())
+                lines.append(f"  - {{{cells}}}")
+        elif isinstance(v, list):
+            lines.append(f"{k}: [{', '.join(map(str, v))}]")
+        else:
+            lines.append(f"{k}: {v}")
+    return "---\n" + "\n".join(lines) + "\n---\n\nbody\n"
+
+
+def _ws_with_note(tmp: Path, name: str = "01-sample-identity",
+                  fm: str | None = None) -> Path:
+    (tmp / "notes").mkdir(parents=True, exist_ok=True)
+    (tmp / "notes" / f"{name}.md").write_text(
+        fm if fm is not None else _note_fm(), encoding="utf-8")
+    (tmp / "claim-register.yaml").write_text(
+        "claims:\n  - id: C-001\n    status: OPEN\n", encoding="utf-8")
+    return tmp
+
+
+class TestS4NotesGate:
+    def _lint(self, ws: Path) -> dict:
+        import notes_gate
+        return notes_gate.lint_notes(ws)
+
+    def _codes(self, report: dict, sev: str) -> list[str]:
+        return [code for _s, code, _m in report[sev]]
+
+    def test_nn_slug_name_passes(self, tmp):
+        report = self._lint(_ws_with_note(tmp))
+        assert "NONCONFORMING_NAME" not in self._codes(report, "errors")
+
+    def test_legacy_claim_id_filename_flagged(self, tmp):
+        report = self._lint(_ws_with_note(tmp, name="C-202"))
+        assert "NONCONFORMING_NAME" in self._codes(report, "errors")
+
+    def test_off_convention_filename_flagged(self, tmp):
+        report = self._lint(_ws_with_note(tmp, name="F300-progress-q4"))
+        assert "NONCONFORMING_NAME" in self._codes(report, "errors")
+
+    def test_missing_mandatory_icd203_fields_caught(self, tmp):
+        fm = _note_fm().replace("confidence: medium\n", "")
+        report = self._lint(_ws_with_note(tmp, fm=fm))
+        codes = self._codes(report, "errors")
+        assert "MISSING_CONFIDENCE" in codes
+        assert "MISSING_PROVENANCE" not in codes or \
+            "provenance" in fm  # only the dropped field errors
+
+    def test_missing_provenance_caught(self, tmp):
+        fm = _note_fm()
+        fm = fm.replace(
+            "provenance:\n  - {role: capture_log, path: evidence/x.log, "
+            "content_sha256: " + _SHA + ", credibility: B2}\n", "")
+        report = self._lint(_ws_with_note(tmp, fm=fm))
+        assert "MISSING_PROVENANCE" in self._codes(report, "errors")
+
+    def test_pending_verify_self_write_flagged(self, tmp):
+        """THE #58 S4 face: a pending note for a claim with no verify event
+        anywhere is an unverified self-write."""
+        report = self._lint(_ws_with_note(tmp))
+        codes = self._codes(report, "errors")
+        assert "SELF_WRITE_UNVERIFIED" in codes
+
+    def test_ledger_verify_event_clears_the_flag(self, tmp):
+        ws = _ws_with_note(tmp)
+        kunglao_log.emit(ws, actor="orchestrator", action="verify",
+                         claim="C-001", artifact="F001")
+        report = self._lint(ws)
+        assert "SELF_WRITE_UNVERIFIED" not in self._codes(report, "errors")
+
+    def test_terminal_register_claim_clears_the_flag(self, tmp):
+        ws = _ws_with_note(tmp, fm=_note_fm(verify_status="passes"))
+        (ws / "claim-register.yaml").write_text(
+            "claims:\n  - id: C-001\n    status: PROVEN\n", encoding="utf-8")
+        report = self._lint(ws)
+        assert "SELF_WRITE_UNVERIFIED" not in self._codes(report, "errors")
+
+    def test_unbacked_passes_stamp_flagged(self, tmp):
+        ws = _ws_with_note(tmp, fm=_note_fm(verify_status="passes"))
+        report = self._lint(ws)
+        assert "SELF_WRITE_UNVERIFIED" in self._codes(report, "errors")
+
+    def test_provenance_completeness_in_report(self, tmp):
+        ws = _ws_with_note(tmp)
+        (ws / "notes" / "02-no-prov.md").write_text(
+            _note_fm(id="N-02").replace(
+                "provenance:\n  - {role: capture_log, path: evidence/x.log, "
+                "content_sha256: " + _SHA + ", credibility: B2}\n", ""),
+            encoding="utf-8")
+        report = self._lint(ws)
+        pc = report["provenance_completeness"]
+        assert pc["notes_total"] == 2
+        assert pc["notes_with_provenance"] == 1
+        assert pc["ratio"] == 0.5
+
+    def test_no_evidence_linkage_warns(self, tmp):
+        # a note anchored to NEITHER facts nor provenance artifacts — it also
+        # trips MISSING_PROVENANCE (provenance is mandatory); the warning
+        # names the missing anchor on top
+        fm = _note_fm().replace("facts_used: [F001-sample]\n", "")
+        fm = fm.replace(
+            "provenance:\n  - {role: capture_log, path: evidence/x.log, "
+            "content_sha256: " + _SHA + ", credibility: B2}\n", "")
+        report = self._lint(_ws_with_note(tmp, fm=fm))
+        assert "NO_EVIDENCE_LINKAGE" in self._codes(report, "warnings")
+
+    def test_clean_verified_note_is_issue_free(self, tmp):
+        ws = _ws_with_note(tmp, fm=_note_fm(verify_status="passes"))
+        (ws / "claim-register.yaml").write_text(
+            "claims:\n  - id: C-001\n    status: PROVEN\n", encoding="utf-8")
+        report = self._lint(ws)
+        assert report["errors"] == [], report["errors"]
+        assert report["warnings"] == [], report["warnings"]
+
+    def test_check_note_single_note_face_for_write_guard_wiring(self, tmp):
+        """The #57 sibling wiring surface: one pending note text -> its
+        SELF_WRITE_UNVERIFIED issue without anything on disk."""
+        import notes_gate
+        ws = _ws_with_note(tmp)
+        issues = notes_gate.check_note(ws, "01-x.md", _note_fm())
+        codes = {code for _s, code, _m in issues}
+        assert "SELF_WRITE_UNVERIFIED" in codes
+
+    def test_cli_rc(self, tmp):
+        script = REPO_ROOT / "scripts" / "notes_gate.py"
+        ws_bad = tmp / "ws-bad"
+        ws_bad.mkdir()
+        _ws_with_note(ws_bad)  # pending self-write -> errors -> rc 1
+        r = subprocess.run([sys.executable, str(script), str(ws_bad)],
+                           capture_output=True, text=True, timeout=60,
+                           errors="replace")
+        assert r.returncode == 1, f"stderr={r.stderr!r}"
+        ws_clean = tmp / "ws-clean"
+        ws_clean.mkdir()
+        _ws_with_note(ws_clean, fm=_note_fm(verify_status="passes"))
+        (ws_clean / "claim-register.yaml").write_text(
+            "claims:\n  - id: C-001\n    status: PROVEN\n", encoding="utf-8")
+        r0 = subprocess.run([sys.executable, str(script), str(ws_clean)],
+                            capture_output=True, text=True, timeout=60,
+                            errors="replace")
+        assert r0.returncode == 0, f"stderr={r0.stderr!r}"
+        rj = subprocess.run([sys.executable, str(script), str(ws_clean),
+                             "--json"], capture_output=True, text=True,
+                            timeout=60, errors="replace")
+        payload = json.loads(rj.stdout)
+        assert payload["provenance_completeness"]["notes_total"] == 1
