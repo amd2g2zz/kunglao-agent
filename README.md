@@ -48,14 +48,15 @@ From any directory, in Claude Code:
 
 `kunglao-init` scaffolds the workspace, writes `CLAUDE.md`, probes the toolchain for your `--type`, and scaffolds `.mcp.json`. It **HARD-rejects** when a required tool for your type is missing — the fix guidance is in the error block.
 
-### 3. State the task
+### 3. State the task and start the analysis
 
 ```
-/kunglao-agent
-> Primary questions: (1) which capability classes do the imports map to,
-> (2) how does it persist, (3) which hosts does it contact?
-> Success criteria: each answer lands as a PROVEN fact with a reproduce command.
-> Constraints: static-only — no VM available this week.
+/kunglao-agent:analysis ~/cases/synth-dropper
+> Goal: confirm this dropper's persistence mechanism and network endpoints;
+>   every conclusion must be reproducible from raw evidence.
+> Verification: key findings count only if an independent verifier re-derives
+>   them blind and reaches the same answer.
+> Constraints: static-first; never execute the sample on the host.
 ```
 
 Write the brief so an independent reviewer could judge the result: **analysis goal** (what you need to know), **verification logic** (what makes an answer trustworthy — e.g. "the signature must be reproducible from the same inputs"), **constraints** (e.g. "no execution on the host"). Everything is recorded in `task_spec.yaml`; from there the loop drives itself.
@@ -73,11 +74,13 @@ runs/                 # session audit trail
 
 | Command | Use when | What it does |
 |---|---|---|
-| `/kunglao-agent:init <path> --type <windows\|linux\|android\|web\|macos>` | starting an engagement | scaffolds the workspace, probes the toolchain for the type, writes `CLAUDE.md` and `.mcp.json`; HARD-rejects with fix guidance when a required tool is missing |
-| `/kunglao-agent` | every working session | runs the convergence loop: one-shot intake → dispatch / verify cycles → report at convergence |
+| `/kunglao-agent:init <path> --type <windows\|linux\|android\|web\|macos>` | starting an engagement, first | scaffolds the workspace, probes the toolchain for the type, writes `CLAUDE.md` and `.mcp.json`; HARD-rejects with fix guidance when a required tool is missing |
+| `/kunglao-agent:analysis <path>` (alias `analyze`) | after init — state the task and start | collects your goal / verification logic / constraints once, then runs the convergence loop: dispatch / verify cycles until the report |
 | `/kunglao-agent:resume <path>` | after a crash, reboot, or any "where was I?" | read-only breakpoint brief (health, open claims, in-flight workers, crash timeline) plus the next action from the state machine |
-| `/kunglao-agent:upgrade <path>` | workspace stamp trails the plugin version | migrates the scaffold forward; user data (claims, facts, evidence) is never touched |
-| `/kunglao-agent:help` | anything else | routes to the per-command docs |
+| `/kunglao-agent:upgrade <path> [--dry-run]` | after a plugin update, on an older workspace (or when the upgrade prompt says the stamp is behind) | migrates the workspace scaffold (hooks, templates, event vocab) to the current plugin version; `--dry-run` previews; user data (claims, facts, evidence) is never touched — byte drift refuses with RC=4 |
+| `/kunglao-agent:help` | anything else | prints the usage list |
+
+Typical order: `init` creates the workspace → `analysis` states the task and starts → (`resume` if anything goes sideways) → read the report at convergence → `upgrade` old workspaces after plugin updates.
 
 ## What a run looks like
 
@@ -85,7 +88,7 @@ runs/                 # session audit trail
 
 ```bash
 /kunglao-agent:init ~/cases/synth-dropper --type windows   # probes Ghidra, VM reachability
-/kunglao-agent
+/kunglao-agent:analysis ~/cases/synth-dropper
 > "What does this binary do, and where does it phone home?"
 ```
 
@@ -100,7 +103,7 @@ Two more end-to-end paths — pick the one matching your target (for a plain Win
 
 ```bash
 /kunglao-agent:init ~/cases/sample.apk --type android
-/kunglao-agent
+/kunglao-agent:analysis ~/cases/sample.apk
 > "Does this APK load code dynamically or fight debugging? If so, where is
 >   the hidden logic and what does it do?"
 ```
@@ -116,7 +119,7 @@ Two more end-to-end paths — pick the one matching your target (for a plain Win
 
 ```bash
 /kunglao-agent:init ~/cases/example-site.com --type web
-/kunglao-agent
+/kunglao-agent:analysis ~/cases/example-site.com
 > "how is the XHR request signed, and where does the nonce come from?"
 ```
 
