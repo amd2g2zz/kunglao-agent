@@ -14,6 +14,9 @@ It currently ships as a Claude Code plugin — Claude Code is the interface you 
 - **Answers you can trust.** No fact is `PROVEN` until an independent verifier re-derives it blind from the raw artifact; every fact cites a sha256-indexed raw artifact through `evidence/_index.json`.
 - **The full reverse-engineering spectrum.** Windows/Linux native binaries, Android APKs, web/JS, protocol analysis, firmware emulation, risk-control countermeasures — one system, not a single-domain tool.
 - **Static-first economics.** A task that closes statically never touches dynamic tooling; every escalation is declared, gated, and audited.
+- **It reuses knowledge instead of re-deriving it.** A growing catalog of registered analysis tools (crypto decoders, disassembly pipelines, graph queries) means the system reaches for proven tooling before writing one-off scripts — and every run leaves behind reusable facts, not a chat transcript that evaporates.
+- **It recovers instead of dying.** Worker deaths, API disconnects, and crashes are first-class events: the loop detects them, snapshots what was already produced, and re-dispatches to continue from where things stopped — not from zero.
+- **Your environment, your rules.** VMware, ssh, docker, adb, or plain static-only — the system drives whichever execution channel you already have. Nothing is a degraded mode; a task that never needs execution never asks for a VM.
 
 ## Quick start
 
