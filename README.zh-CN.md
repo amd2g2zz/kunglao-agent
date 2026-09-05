@@ -50,17 +50,17 @@ kunglao-agent 跑在 Claude Code 里。从磁盘上的样本到 verdict：
 
 `kunglao-init` 搭好工作区、写好 `CLAUDE.md`、按你选的 `--type` 探测工具链、生成 `.mcp.json`。你选的类型有 HARD 工具缺失时，init 会 **HARD-reject** —— 修复指引就写在错误块里。
 
-### 3. 提出任务
+### 3. 提出任务，启动分析
 
 ```
-/kunglao-agent
-> 主问题：(1) imports 对应哪些能力类别，
-> (2) 它怎么持久化，(3) 回连哪些主机？
-> 成功标准：每个答案都落成带复现命令的 PROVEN fact。
-> 约束：只做静态 —— 本周没有 VM。
+/kunglao-agent:analysis ~/cases/synth-dropper
+> 分析目标：确认这个 dropper 的持久化手段和网络出口，
+>   每条结论都要能从原始证据复现。
+> 验证逻辑：关键结论必须由独立验证者盲重推一致才算成立。
+> 约束：静态优先，样本不许在宿主机执行。
 ```
 
-把需求写成第三方能据此评判结果的程度：**分析目标**（你要知道什么）、**验证逻辑**（凭什么信答案——比如"同一输入必须能重推出同样签名"）、**约束**（比如"宿主机上不许执行"）。全部记入 `task_spec.yaml`，之后循环自己推进。
+把需求说清楚 —— **分析目标**（你要知道什么）、**验证逻辑**（凭什么信答案）、**约束**（不许做什么）。写得越具体，结果越可控：只写目标不写验证逻辑，结论就只是模型的口头担保；两者都给，每条结论才有机械背书。约束可选——不写就由系统按静态优先原则自行决定路径。需求记入 `task_spec.yaml`，之后循环自动推进，不需要你再指挥。
 
 ### 4. 看交付物
 
@@ -75,11 +75,13 @@ runs/                 # 会话审计轨迹
 
 | 命令 | 什么时候用 | 做什么 |
 |---|---|---|
-| `/kunglao-agent:init <路径> --type <windows\|linux\|android\|web\|macos>` | 开始一次分析 | 搭建工作区，按类型探测工具链，写 `CLAUDE.md` 和 `.mcp.json`；HARD 工具缺失时 HARD-reject，错误块里带修复指引 |
-| `/kunglao-agent` | 每次干活 | 跑收敛循环：一次性 intake → 派工 / 验证往复 → 收敛出报告 |
+| `/kunglao-agent:init <路径> --type <windows\|linux\|android\|web\|macos>` | 开始一次分析，先建工作区 | 搭建工作区，按类型探测工具链，写 `CLAUDE.md` 和 `.mcp.json`；HARD 工具缺失时 HARD-reject，错误块里带修复指引 |
+| `/kunglao-agent:analysis <路径>`（别名 `analyze`） | init 之后，提出任务、开跑分析 | 一次性收集你的分析目标 / 验证逻辑 / 约束，进入收敛循环：派工 / 验证往复，收敛后出报告 |
 | `/kunglao-agent:resume <路径>` | 崩溃、重启之后，或任何"我刚才跑到哪了" | 只读的断点简报（健康状态、open claim、在跑 worker、崩溃时间线）加上状态机给出的下一步 |
-| `/kunglao-agent:upgrade <路径>` | 工作区版本戳落后于插件版本 | 把脚手架迁移到当前版；用户数据（claims、facts、evidence）绝不触碰 |
-| `/kunglao-agent:help` | 其他情况 | 路由到各子命令文档 |
+| `/kunglao-agent:upgrade <路径> [--dry-run]` | 插件升级后打开旧工作区，或升级时提示版本戳落后 | 把工作区脚手架（hooks、模板、事件词表）迁移到当前插件版，`--dry-run` 可预览；用户数据（claims、facts、evidence）绝不触碰，字节级漂移即拒绝（RC=4） |
+| `/kunglao-agent:help` | 忘了命令 | 打印用法列表 |
+
+典型顺序：`init` 建工作区 → `analysis` 提需求开跑 → （中途出岔子用 `resume`）→ 收敛读报告 → 插件升级后对旧工作区跑一次 `upgrade`。
 
 ## 一次分析长什么样
 
@@ -87,7 +89,7 @@ runs/                 # 会话审计轨迹
 
 ```bash
 /kunglao-agent:init ~/cases/synth-dropper --type windows   # 探测 Ghidra、VM 可达性
-/kunglao-agent
+/kunglao-agent:analysis ~/cases/synth-dropper
 > "这个二进制干了什么，回连到哪里？"
 ```
 
@@ -102,13 +104,13 @@ runs/                 # 会话审计轨迹
 
 ```bash
 /kunglao-agent:init ~/cases/sample.apk --type android
-/kunglao-agent
+/kunglao-agent:analysis ~/cases/sample.apk
 > "capability / persistence / network entry points"
 ```
 
 ```bash
 /kunglao-agent:init ~/cases/sample.apk --type android
-/kunglao-agent
+/kunglao-agent:analysis ~/cases/sample.apk
 > "这个 APK 有没有动态加载和反调试？如果有，代码藏在哪，做了什么？"
 ```
 
@@ -123,7 +125,7 @@ runs/                 # 会话审计轨迹
 
 ```bash
 /kunglao-agent:init ~/cases/example-site.com --type web
-/kunglao-agent
+/kunglao-agent:analysis ~/cases/example-site.com
 > "XHR 签名是怎么算的，nonce 从哪来？"
 ```
 
