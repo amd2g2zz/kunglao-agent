@@ -688,6 +688,10 @@ files:
     dest: .claude/scripts/rho_verifier.py
     kind: scaffold
     sha256: 8aab118ca2ba2c1eb2f8eaa7f43ec0cba62e87e8cc754467c70f41bc1052770a
+  - src: scripts/roi_settlement.py
+    dest: .claude/scripts/roi_settlement.py
+    kind: scaffold
+    sha256: 2aa5480a1e4673c7bc46b979cefbcb9469eb55cff8640a7ba60ae9fa1d4d2a87
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold
