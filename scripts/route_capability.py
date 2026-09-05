@@ -47,6 +47,8 @@ with no registered tool stay as capability queries. agent_type = recommended
 specialist agent (issue #310) from the mechanical trigger table parsed out of
 the `triggers:` frontmatter of agents/*.md — claim task domain x sample
 features; None when no specialist fits (kunglao-worker allowed).
+`capability_suggestions` (#692 WP6 deobf prior; #54 android toolchain
+lighting) is a NON-BINDING prior list — it never alters the route.
 
 Exit codes: 0 ok / 2 usage / 3 missing inputs.
 
@@ -94,6 +96,116 @@ CLAIM_KEYWORDS = {
     "go": ("languages:go", 0.8),
 }
 DYNAMIC_INTENT = ("vm", "run", "execute", "detonate")
+
+# ---- issue #54: android toolchain lighting (suggestion rows, non-binding) ----
+# Owner ruling (#54): 不能强制 — we cannot force tool choice. These aliases
+# NEVER fire a capability rule (CLAIM_KEYWORDS / feature rules above own the
+# route): they only attach prior-shaped {capability, rationale} entries (the
+# #692 WP6 deobf-prior shape) to the route output, naming the registered
+# android tool a dispatch likely means and WHY. The chain, confidence and
+# fired-rule rationale are never altered — the agent may ignore every
+# suggestion (ZERO new REJECT paths).
+#
+# Matching: ASCII aliases are word-bounded on the lowered text (same
+# discipline as the tool-first gate's ASCII boundary), CJK aliases substring-
+# match (no word-boundary concept). Rationale = one plain line: the concrete
+# tools/_INDEX.yaml tool + why it applies.
+#
+# Strong aliases light on their own. Weak aliases need a strong android
+# anchor in the same text — "tls"/"签名" alone are PE TLS-table/Authenticode
+# prose, but "tls" next to "apk" is android certificate pinning. Generic
+# single words ("app", "java", "加密") are deliberately absent.
+_ANDROID_SUGGESTION_ROWS: tuple[tuple[str, bool, str, str], ...] = (
+    # (alias, strong, capability, one-line WHY)
+    ("apk", True, "android:packer-fingerprint",
+     "APK 样本 → apkid-prescan 先识别加固器/编译器，可省去盲扫"),
+    ("apk安装包", True, "android:packer-fingerprint",
+     "APK 安装包样本 → apkid-prescan 先识别加固器/编译器，可省去盲扫"),
+    ("android app", True, "android:packer-fingerprint",
+     "APK 样本 → apkid-prescan 先识别加固器/编译器，可省去盲扫"),
+    ("加固", True, "android:packer-fingerprint",
+     "加固/壳特征 → apkid-prescan 指纹在先，先认壳再定反编译路线"),
+    ("加壳", True, "android:packer-fingerprint",
+     "加壳特征 → apkid-prescan 指纹在先，先认壳再定反编译路线"),
+    ("脱壳", True, "android:packer-fingerprint",
+     "脱壳前 → apkid-prescan 先认壳，避免盲脱"),
+    ("packer", True, "android:packer-fingerprint",
+     "packer marker → apkid-prescan 先识别加固器/编译器"),
+    ("so库", False, "android:packer-fingerprint",
+     "native/so 路线前 → apkid-prescan 先看整体加固/混淆指纹"),
+    ("native层", False, "android:packer-fingerprint",
+     "native/so 路线前 → apkid-prescan 先看整体加固/混淆指纹"),
+    (".so", False, "android:packer-fingerprint",
+     "native/so 路线前 → apkid-prescan 先看整体加固/混淆指纹"),
+    ("unpack", False, "android:packer-fingerprint",
+     "apk 解包目标 → apkid-prescan 先识别加固器，再定脱壳/反编译路线"),
+    ("jadx", True, "android:java-source",
+     "DEX 目标 → jadx-decompile 出 Java 源码树（apk_mem_gate 过闸）；"
+     "内存超限时 dexdc-decompile 兜底"),
+    ("反编译", True, "android:java-source",
+     "DEX 目标 → jadx-decompile 出 Java 源码树（apk_mem_gate 过闸）；"
+     "内存超限时 dexdc-decompile 兜底"),
+    ("dex", True, "android:java-source",
+     "DEX 目标 → jadx-decompile 出 Java 源码树（apk_mem_gate 过闸）；"
+     "内存超限时 dexdc-decompile 兜底"),
+    ("java-source", True, "android:java-source",
+     "DEX 目标 → jadx-decompile 出 Java 源码树（apk_mem_gate 过闸）；"
+     "内存超限时 dexdc-decompile 兜底"),
+    ("java源码", True, "android:java-source",
+     "java 源码恢复 → jadx-decompile 出源码树（apk_mem_gate 过闸）；"
+     "内存超限时 dexdc-decompile 兜底"),
+    ("java 源码", True, "android:java-source",
+     "java 源码恢复 → jadx-decompile 出源码树（apk_mem_gate 过闸）；"
+     "内存超限时 dexdc-decompile 兜底"),
+    ("smali", True, "android:bytecode-truth",
+     "字节码 1:1 truth → baksmali-xref 产 smali_index.json（类/方法/xref）"),
+    ("baksmali", True, "android:bytecode-truth",
+     "字节码 1:1 truth → baksmali-xref 产 smali_index.json（类/方法/xref）"),
+    ("字节码", True, "android:bytecode-truth",
+     "字节码 1:1 truth → baksmali-xref 产 smali_index.json（类/方法/xref）"),
+    ("登录加密", False, "android:java-source",
+     "APK + 加密目标 → apkid-prescan 先识别加固器（可省去盲扫），再 "
+     "jadx-decompile 源码 + gitnexus-query 溯加密调用链"),
+    ("加密逻辑", False, "android:java-source",
+     "APK + 加密目标 → apkid-prescan 先识别加固器（可省去盲扫），再 "
+     "jadx-decompile 源码 + gitnexus-query 溯加密调用链"),
+    ("java加密", False, "android:java-source",
+     "java 层加密目标 → jadx-decompile 源码 + gitnexus-query 溯加密调用链"),
+    ("通信加密", False, "android:java-source",
+     "通信加密目标 → jadx-decompile 源码 + gitnexus-query 溯请求封装/加密点"),
+    ("login encryption", False, "android:java-source",
+     "APK + login-encryption target → apkid-prescan first (skip blind "
+     "sweeps), then jadx-decompile + gitnexus-query for the crypto chain"),
+    ("okhttp", False, "android:java-source",
+     "网络库特征 → jadx-decompile 后 gitnexus-query 定位请求封装与证书校验"),
+    ("network library", False, "android:java-source",
+     "网络库特征 → jadx-decompile 后 gitnexus-query 定位请求封装与证书校验"),
+    ("抓包", False, "android:java-source",
+     "抓包目标 → jadx-decompile 后 gitnexus-query 定位请求封装与证书校验"),
+    ("签名", False, "android:java-source",
+     "签名校验逻辑 → jadx-decompile 源码树里直接搜签名判断，避免盲扫"),
+    ("签名校验", False, "android:java-source",
+     "签名校验逻辑 → jadx-decompile 源码树里直接搜签名判断，避免盲扫"),
+    ("certificate", False, "android:java-source",
+     "certificate/pinning target on an android sample → jadx-decompile "
+     "source + gitnexus-query for the check chain"),
+    ("tls", False, "android:java-source",
+     "TLS/证书校验目标 → jadx-decompile 源码树里搜 pinning/TrustManager"),
+    ("ssl pinning", False, "android:java-source",
+     "TLS/证书校验目标 → jadx-decompile 源码树里搜 pinning/TrustManager"),
+    ("证书校验", False, "android:java-source",
+     "TLS/证书校验目标 → jadx-decompile 源码树里搜 pinning/TrustManager"),
+    ("frida", False, "android:java-source",
+     "hook 点定位 → jadx-decompile 的类名/方法名是 frida/xposed 脚本的直接来源"),
+    ("xposed", False, "android:java-source",
+     "hook 点定位 → jadx-decompile 的类名/方法名是 frida/xposed 脚本的直接来源"),
+    ("调用链", False, "android:semantic-query",
+     "调用链/数据流问题 → 源码树 lazy-index 后用 gitnexus-query（Graph RAG）"),
+    ("call chain", False, "android:semantic-query",
+     "调用链/数据流问题 → 源码树 lazy-index 后用 gitnexus-query（Graph RAG）"),
+    ("数据流", False, "android:semantic-query",
+     "调用链/数据流问题 → 源码树 lazy-index 后用 gitnexus-query（Graph RAG）"),
+)
 
 DEFAULT_INDEX = Path(__file__).resolve().parent.parent / "tools" / "_INDEX.yaml"
 DEFAULT_TOOL_SEARCH = Path(__file__).resolve().parent.parent / "tools" / \
@@ -547,6 +659,47 @@ def claim_hits(text: str) -> list[tuple[str, float, str]]:
     return _dedupe(hits)
 
 
+def _alias_in_text(alias: str, lowered_text: str) -> bool:
+    """ASCII aliases word-bound on the lowered text; CJK aliases substring-
+    match (Python \\b treats CJK as word chars, so \\b is meaningless there —
+    same reason the tool-first gate uses an ASCII-only boundary)."""
+    if alias.isascii():
+        return re.search(
+            rf"(?<![a-z0-9_]){re.escape(alias)}(?![a-z0-9_])",
+            lowered_text) is not None
+    return alias in lowered_text
+
+
+def android_suggestions(claim_text: str, tools: list[dict]) -> list[dict]:
+    """issue #54: non-binding android toolchain lighting for the route output.
+
+    Owner ruling (#54): 不能强制 — suggestion ONLY, zero enforcement. The
+    returned entries are the #692 WP6 deobf-prior shape (exactly
+    {capability, rationale}; the rationale names the concrete registered
+    android tool + why). They never fire a capability rule and never touch
+    chain/confidence; [] for non-android dispatches (zero noise).
+    """
+    text = (claim_text or "").lower()
+    if not text:
+        return []
+    anchor = False
+    fired: list[tuple[str, str]] = []
+    for alias, strong, cap, why in _ANDROID_SUGGESTION_ROWS:
+        if _alias_in_text(alias, text):
+            anchor = anchor or strong
+            fired.append((cap, why))
+    if not anchor:
+        return []  # only weak/ambiguous aliases: not confidently android
+    out: list[dict] = []
+    seen: set[str] = set()
+    for cap, why in fired:
+        if cap in seen:  # first fired alias's rationale wins per capability
+            continue
+        seen.add(cap)
+        out.append({"capability": cap, "rationale": why})
+    return out
+
+
 def _fallback() -> dict:
     """No rule fired: deterministic tool-search subprocess, confidence 0.4."""
     rationale = ["no feature/claim rule fired",
@@ -596,6 +749,22 @@ def _deobf_prior(state: dict) -> list[dict]:
     ]
 
 
+def _attach_lighting(result: dict, claim_text: str, tools: list[dict],
+                     ws) -> None:
+    """Attach `capability_suggestions` — non-binding lighting only (#54
+    android aliases + #692 WP6 deobf prior, android first). Additive: never
+    touches chain/confidence/fired-rule rationale, and adds NO key when
+    nothing fires (pre-#54 output shape preserved)."""
+    suggestions = android_suggestions(claim_text, tools)
+    if ws is not None:
+        have = {s["capability"] for s in suggestions}
+        for s in _deobf_prior(load_workspace_state(ws)):
+            if s["capability"] not in have:
+                suggestions.append(s)
+    if suggestions:
+        result["capability_suggestions"] = suggestions
+
+
 def route(features: dict, claim_text: str, index_path: Path,
           agents_dir: Path | None = None,
           ws: Path | None = None) -> dict:
@@ -604,7 +773,9 @@ def route(features: dict, claim_text: str, index_path: Path,
 
     #692 WP6: `ws` (optional — all pre-#692 callers omit it) adds the
     deobf composition prior (capability_suggestions) from apkid evidence.
-    A prior only: chain/confidence are never altered by suggestions."""
+    #54: android toolchain lighting joins the same suggestion list for
+    android-flavored dispatches (no workspace needed). A prior only:
+    chain/confidence are never altered by suggestions."""
     tools = load_index(index_path)
     fhits = feature_hits(features or {})
     chits = claim_hits(claim_text)
@@ -615,10 +786,7 @@ def route(features: dict, claim_text: str, index_path: Path,
         result = _fallback()
         result["agent_type"] = agent_type
         result["agent_rationale"] = agent_rationale
-        if ws is not None:
-            suggestions = _deobf_prior(load_workspace_state(ws))
-            if suggestions:
-                result["capability_suggestions"] = suggestions
+        _attach_lighting(result, claim_text, tools, ws)
         return result
 
     corroborations = len({c for c, _, _ in fhits} & {c for c, _, _ in chits})
@@ -651,10 +819,7 @@ def route(features: dict, claim_text: str, index_path: Path,
               "rationale": rationale,
               "agent_type": agent_type,
               "agent_rationale": agent_rationale}
-    if ws is not None:
-        suggestions = _deobf_prior(load_workspace_state(ws))
-        if suggestions:
-            result["capability_suggestions"] = suggestions
+    _attach_lighting(result, claim_text, tools, ws)
     return result
 
 
@@ -671,6 +836,10 @@ def format_text(result: dict) -> str:
     if result.get("agent_rationale"):
         lines.append("agent_rationale:")
         lines.extend(f"  - {r}" for r in result["agent_rationale"])
+    if result.get("capability_suggestions"):
+        lines.append("capability_suggestions (non-binding lighting):")
+        lines.extend(f"  - [{s['capability']}] {s['rationale']}"
+                     for s in result["capability_suggestions"])
     return "\n".join(lines)
 
 

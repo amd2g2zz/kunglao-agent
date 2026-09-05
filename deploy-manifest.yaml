@@ -67,7 +67,7 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 9cde96f841b840bc45642a9ed9a2c8fb0efb5a637b7b41d55c802a85f58906b9
+    sha256: 391a30ee4896b81f877fda13dfd2379c3f5405ea50856f38158be83caf564c91
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
@@ -703,7 +703,7 @@ files:
   - src: scripts/route_capability.py
     dest: .claude/scripts/route_capability.py
     kind: scaffold
-    sha256: dc7c3e01b230766f75bf28b65ce78f697f1f82c3933f8f8a2bec9f072e960931
+    sha256: 01de8322607122e8a78428286e36c7556b72eb963b57f7776f2806da9aa74ac5
   - src: scripts/run_test_matrix.py
     dest: .claude/scripts/run_test_matrix.py
     kind: scaffold
