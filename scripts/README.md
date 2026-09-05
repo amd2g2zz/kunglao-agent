@@ -5,7 +5,7 @@ Every `.py` in this directory is classified by role and by where it is
 referenced. The reference map below is the definitive answer to "who uses
 this script?" — used to keep documentation, hooks, CI, and tests in sync.
 
-- **Total scripts**: 169 (`scripts/*.py` at #866 recon, 2026-09-02; the
+- **Total scripts**: 171 (`scripts/*.py` at #49 recon, 2026-09-05; the
   historical #318-era count lineage — 72 cataloged at #318 close; +15 by
   #236/#271/#287/#304/#309/#316; +4 by #310/#331/#336 merged after the
   #320 snapshot; +1 by #409; +2 by #477 — is superseded by the live
@@ -133,6 +133,8 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `feedback.py` | feedback inbox processing | tests |
 | `obligation_discovery.py` | obligation discovery from claims | lib(1), tests |
 | `outcome_capture.py` | outcome ledger capture (R6) | lib(2), tests |
+| `roi_settlement.py` | #49 dispatch intent contract + entropy-gain admission gate — record_intent (MISSING_UNCERTAINTY data-channel gate, ruling 3) + settle_intent outcome-vs-intent 归因 (POSITIVE/NEUTRAL/NEGATIVE/UNRESOLVED; fact count 永不作信号, ruling 2) → runs/roi-intents.jsonl + runs/roi-settlements.jsonl; dispatch_gate enforcement wiring 属后续 | outcome_capture (_settle_new wiring), tests |
+| `case_bank.py` | #49 案例库数据层 — 对称收录 (NEGATIVE 无 attribution 拒收 CaseBankError, 无声落库即违约, ruling 4) + failures-first 检索 (反例剪枝优先于正例复用, 类内 newest-first) + `<case-hints>` 生产面 (XML 注入标准保留名, 空匹配不产空标签); CLI: retrieve --tags --limit --json | tests, CLI |
 | `reconcile_intents.py` | plan↔claims intent reconciliation | tests |
 | `reconcile_workers.py` | worker status reconciliation | lib(1), tests |
 | `refutation_propagate.py` | refutation propagation across facts | tests |

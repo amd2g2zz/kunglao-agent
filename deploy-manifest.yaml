@@ -204,6 +204,10 @@ files:
     dest: .claude/scripts/carrier_consistency.py
     kind: scaffold
     sha256: 2aa15f9a6cd2fbd5656bf06c62107d23752a93af076a7dd2928724e6ca913015
+  - src: scripts/case_bank.py
+    dest: .claude/scripts/case_bank.py
+    kind: scaffold
+    sha256: bcb2fdcdacbc7b2f78e400808e2f05159341bc41f37ab2faf1894ead42a2c5c0
   - src: scripts/challenge_ledger.py
     dest: .claude/scripts/challenge_ledger.py
     kind: scaffold
@@ -575,7 +579,7 @@ files:
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
-    sha256: 44a7df70453fb682c38be0b706665e20dcf563dc9b05815d32a16d57957df17a
+    sha256: d6a973950ad47309e3a5e1aed10e8b715c388c47dba06f63709af6ce9ebea17f
   - src: scripts/pkg_detect.py
     dest: .claude/scripts/pkg_detect.py
     kind: scaffold
@@ -688,6 +692,10 @@ files:
     dest: .claude/scripts/rho_verifier.py
     kind: scaffold
     sha256: 8aab118ca2ba2c1eb2f8eaa7f43ec0cba62e87e8cc754467c70f41bc1052770a
+  - src: scripts/roi_settlement.py
+    dest: .claude/scripts/roi_settlement.py
+    kind: scaffold
+    sha256: 2aa5480a1e4673c7bc46b979cefbcb9469eb55cff8640a7ba60ae9fa1d4d2a87
   - src: scripts/rollup.py
     dest: .claude/scripts/rollup.py
     kind: scaffold
@@ -1239,7 +1247,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 85f2fc53f09bfefc4f44f4043d820091c61baafb9875f92e091b72817dc1aa3f
+    sha256: 4f934a194d331f4b5514d38df831e0ca67d3931cb9959fa003bcb3c1420919f1
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
