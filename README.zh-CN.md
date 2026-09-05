@@ -308,9 +308,9 @@ channel 探测只对动态任务跑（纯静态任务直接跳过）。`ssh` cha
 - Maker-checker：worker 永不自我验证；验证者永不读 maker 的结论。
 - bins、settings、hooks 永不入库；密钥与工作区、仓库隔离。
 
-## 开发与许可
+## 开发
 
-SDD（OpenSpec）+ TDD：一个 issue → 一个分支 → 一个 PR，先合 `dev` 再合 `master`；每次 commit 要求独立 reviewer 签核。从 worktree 开始贡献：
+欢迎贡献。流程：从 `dev` 切分支，一个改动一个分支，PR 回 `dev`。
 
 ```bash
 git worktree add .worktrees/<name> -b <name> dev
@@ -319,7 +319,7 @@ uv run python -m pytest -q
 gh pr create --base dev
 ```
 
-深度内容在 `docs/`、`specs/` 和 `AGENTS.md`。见[许可证](#许可证)。
+设计文档在 `docs/` 与 `specs/`。见[许可证](#许可证)。
 
 ## 内部
 

@@ -306,9 +306,9 @@ Rarely needed: `KUNGLAO_DOCKER_CONTAINER` (docker execution target for the `ssh`
 - Maker-checker: a worker never self-verifies; a verifier never reads the maker's conclusion.
 - Bins, settings, and hooks are never committed; secrets are excluded from workspaces and the repo.
 
-## Development and license
+## Development
 
-SDD (OpenSpec) + TDD: one issue → one branch → one PR, merged to `dev` then `master`; every commit requires an independent reviewer sign-off. Contribute from a worktree:
+Contributions are welcome. Workflow: branch from `dev`, one branch per change, PR back to `dev`.
 
 ```bash
 git worktree add .worktrees/<name> -b <name> dev
@@ -317,7 +317,7 @@ uv run python -m pytest -q
 gh pr create --base dev
 ```
 
-Design depth lives in `docs/`, `specs/`, and `AGENTS.md`. See [License](#license).
+Design documentation lives in `docs/` and `specs/`. See [License](#license).
 
 ## Internals
 
