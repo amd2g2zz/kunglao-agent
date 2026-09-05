@@ -150,6 +150,23 @@ def write_worker_status(ws: Path, name: str, status: str,
     return p
 
 
+def seed_difficulty(ws: Path, tier: str = "easy") -> Path:
+    """#16: seed evidence/difficulty.json with a fixed tier (#15 feed shape).
+
+    Promotion fixtures pinning LEGACY single-verification behavior seed
+    tier="easy" — post-#16 a feed-less workspace fails closed to hard
+    (two DISTINCT verifier records required for PROVEN)."""
+    doc = {"schema": "difficulty-calibration/1", "tier": tier, "score": 0.0,
+           "dominant_factor": "evidence_gap", "factors": {}, "families": {},
+           "coverage": {"die": False, "apkid": False},
+           "notes": ["test seed"], "generated_at": "2026-09-05T00:00:00Z"}
+    ev = ws / "evidence"
+    ev.mkdir(parents=True, exist_ok=True)
+    path = ev / "difficulty.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return path
+
+
 def seed_verifier_dispatch(ws: Path, claim_id: str = "C-001") -> Path:
     """#57 gate 5: seed the verifier-dispatch evidence for one claim.
 

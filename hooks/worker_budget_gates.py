@@ -122,6 +122,17 @@ def compare_register_change_proven_gate(
     except Exception as exc:
         return False, (f'PROMOTION GATE: fact_contradiction_gate unavailable '
                        f'(fail closed) - {type(exc).__name__}: {exc}')
+    # #16 difficulty depth gate: the sample's tier (#15 feed) raises the
+    # PROVEN bar — hard/max need required_independent_verifications DISTINCT
+    # verifier records; a missing/unknown feed fails CLOSED to hard (never
+    # down-grades to easy). Same REQUIRED policy as the gates above (#78).
+    try:
+        with on_path(_SKILL_ROOT / 'scripts'):  # #671 scoped membership
+            from difficulty_thresholds import thresholds_for_workspace
+            from blind_gate import check_verifier_depth_evidence
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: difficulty depth gate unavailable '
+                       f'(fail closed) - {type(exc).__name__}: {exc}')
     # inference-scope gate (#48): inferential/routing claims need independent
     # static sign-off coverage — byte anchors / orchestrator-captured evidence
     # do not cover the inference (a2b5e25c problem 2, F040).
@@ -134,6 +145,9 @@ def compare_register_change_proven_gate(
     import re as _re
     violations = []
     try:
+        thresholds = thresholds_for_workspace(facts_dir.parent)
+        depth_required = int(
+            thresholds.get('required_independent_verifications') or 1)
         for cid in newly_proven:
             worker_id = None
             m = _re.search(rf"- id:\s*{_re.escape(cid)}\b(.*?)(?=\n-\s*id:|\Z)",
@@ -158,6 +172,13 @@ def compare_register_change_proven_gate(
                 facts_dir.parent, cid)
             if not v_ok:
                 violations.append(f'{cid}: {v_reason}')
+            if depth_required > 1:
+                d_ok, d_reason = check_verifier_depth_evidence(
+                    facts_dir.parent, cid, depth_required)
+                if not d_ok:
+                    violations.append(
+                        f'{cid} [difficulty {thresholds.get("tier")}]: '
+                        f'VERIFIER DEPTH GATE: {d_reason}')
     except ImportError as exc:
         # Infrastructure failure (should not happen after import above, but
         # defensive) — fail closed: code must be complete.

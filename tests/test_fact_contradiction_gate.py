@@ -22,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from _factories import seed_verifier_dispatch  # #57 gate 5 evidence seeder
+from _factories import seed_difficulty, seed_verifier_dispatch  # #57 gate 5 evidence + #16 tier seeders
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -269,6 +269,7 @@ def test_claim_migrator_promotes_when_no_conflict(ws_factory):
     ws = ws_factory(claims=[{"id": "C-11", "status": "OPEN"}])
     _fact(ws, "F111", "PROVEN", "C-11", "alpha", extra=SIGNOFF)
     _fact(ws, "F222", "PROVEN", "C-22", "beta")
+    seed_difficulty(ws, "easy")  # #16: easy = legacy single-verification posture
     seed_verifier_dispatch(ws, "C-11")  # #57 gate 5: a verifier WAS dispatched
     from kunglao_record import claim_migrator
     ok, msg = claim_migrator(ws, "C-11", "PROVEN", actor="orchestrator")
@@ -300,6 +301,7 @@ def test_backstop_allows_direct_proven_when_no_conflict(ws_factory):
     ws = ws_factory(claims=[{"id": "C-11", "status": "OPEN"}])
     _fact(ws, "F111", "PROVEN", "C-11", "alpha", extra=SIGNOFF)
     _fact(ws, "F222", "PROVEN", "C-22", "beta")
+    seed_difficulty(ws, "easy")  # #16: easy = legacy single-verification posture
     seed_verifier_dispatch(ws, "C-11")  # #57 gate 5: a verifier WAS dispatched
     import worker_budget as wb
     reg_path = ws / "claim-register.yaml"
