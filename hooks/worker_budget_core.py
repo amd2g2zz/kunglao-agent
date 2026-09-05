@@ -177,6 +177,15 @@ def check_convergence_health(paths):
         return False, "convergence STALLED - diagnose before dispatching"
     if r.returncode == 2:
         return False, "convergence SPINNING - STOP dispatching"
+    if r.returncode == 4:
+        # #3: the check crashed — rc=4 is NOT a stall. FAIL OPEN (the same
+        # owner-sanctioned broken-gate posture as the _run_py/resolve
+        # fail-opens above) but never silently: the message is returned as
+        # the hook's reason text and echoed to stderr.
+        msg = ("convergence health check crashed (rc=4) — failing open; "
+               "investigate scripts/convergence_health.py")
+        print(f'[kunglao-agent] {msg}', file=sys.stderr)
+        return True, msg
     return True, ''
 
 

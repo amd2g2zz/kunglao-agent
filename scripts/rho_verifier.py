@@ -139,12 +139,16 @@ class LlmBackend:
             "or unset " + ENV_BACKEND)
 
 
-def sample_and_pair(ws, z=None):
+def sample_and_pair(ws, z=None, emit=True):
     """Checkpoint sampling: rho_t paired with the mechanical terminal
     anchor z (1.0 mission complete / 0.0 mission failed / None pending).
     Shadow: emits one ledger row (action=rho_pair, #818 schema), nothing
     else. Never-raises: any failure degrades to a silent no-signal row? No
-    -- silent = dishonest; failures propagate to the caller's shadow cage."""
+    -- silent = dishonest; failures propagate to the caller's shadow cage.
+
+    emit=False is the diagnostic/read-only face (resume's #466 contract):
+    the sample is computed identically and returned, but no ledger rows
+    are written — a diagnostic must not append to the event log it reads."""
     out = get_backend().sample(ws)
     mission = _mission_level(ws)
     if z is None and mission and mission.get("n_pqs") and \
@@ -158,38 +162,39 @@ def sample_and_pair(ws, z=None):
         cost = cost_state(ws)["latest"]
     except Exception:  # noqa: BLE001 — cost 缺源不阻断采样
         cost = None
-    kunglao_log.emit(
-        Path(ws), actor="rho_verifier", action="rho_pair",
-        detail=json.dumps({"rho": out["rho"], "z": z,
-                           "backend": out["backend"],
-                           "level": out.get("level"),
-                           "lexical": out.get("lexical"),
-                           "cost": cost},
-                          ensure_ascii=False))
-    # #58 S2b: the SETTLED checkpoint face (z is not None = the mechanical
-    # terminal anchor fired: mission complete/failed) is a transition, so it
-    # earns a result digest; plain per-checkpoint sampling rows stay lean
-    # (no per-heartbeat spam).
-    if z is not None:
-        kunglao_log.emit_result_digest(
-            Path(ws), actor="rho_verifier",
-            verdict="mission_complete" if float(z) >= 1.0 else "mission_failed",
-            exit=0)
-    # #873: per-checkpoint 座舱持久化 — V/D/ETA + burn 面与 rho_pair 同节奏
-    # 落账，座舱渲染/学费重放可仅凭 ledger 离线重建趋势。shadow 持久化
-    # 失败不阻塞采样面（fail-open），与 rho_pair 的传播语义分层。
-    try:
-        import cost_gate
-        import tuition_curve
-        cs = tuition_curve.cockpit_summary(Path(ws))
-        events = cost_gate.load_events(Path(ws))
+    if emit:
         kunglao_log.emit(
-            Path(ws), actor="rho_verifier", action="cockpit_sample",
-            detail=json.dumps({**cs, "cost_spent": cost,
-                               "n_cost_events": len(events)},
-                              ensure_ascii=False, default=str))
-    except Exception:  # noqa: BLE001 — 持久化永不破坏采样
-        pass
+            Path(ws), actor="rho_verifier", action="rho_pair",
+            detail=json.dumps({"rho": out["rho"], "z": z,
+                               "backend": out["backend"],
+                               "level": out.get("level"),
+                               "lexical": out.get("lexical"),
+                               "cost": cost},
+                              ensure_ascii=False))
+        # #58 S2b: the SETTLED checkpoint face (z is not None = the mechanical
+        # terminal anchor fired: mission complete/failed) is a transition, so it
+        # earns a result digest; plain per-checkpoint sampling rows stay lean
+        # (no per-heartbeat spam).
+        if z is not None:
+            kunglao_log.emit_result_digest(
+                Path(ws), actor="rho_verifier",
+                verdict="mission_complete" if float(z) >= 1.0 else "mission_failed",
+                exit=0)
+        # #873: per-checkpoint 座舱持久化 — V/D/ETA + burn 面与 rho_pair 同节奏
+        # 落账，座舱渲染/学费重放可仅凭 ledger 离线重建趋势。shadow 持久化
+        # 失败不阻塞采样面（fail-open），与 rho_pair 的传播语义分层。
+        try:
+            import cost_gate
+            import tuition_curve
+            cs = tuition_curve.cockpit_summary(Path(ws))
+            events = cost_gate.load_events(Path(ws))
+            kunglao_log.emit(
+                Path(ws), actor="rho_verifier", action="cockpit_sample",
+                detail=json.dumps({**cs, "cost_spent": cost,
+                                   "n_cost_events": len(events)},
+                                  ensure_ascii=False, default=str))
+        except Exception:  # noqa: BLE001 — 持久化永不破坏采样
+            pass
     out["z"] = z
     return out
 

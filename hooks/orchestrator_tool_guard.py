@@ -14,10 +14,22 @@ Two faces on ONE hook file (one registry file, two matcher rows):
   SUPPOSED to run these tools.
 
   MCP host-channel face (#601): REJECT posture. The main agent calling
-  mcp__ghidra__* / mcp__x64dbg__* / mcp__frida__* directly bypassed the
-  dispatch corridor (the prohibition existed only as prose, rules §7.5
-  VM-ONLY). Same target-based arming: workers in .wt-* pass; everyone else
-  gets rc=2 (block) + stderr REJECT + a durable trace row.
+  mcp__ghidra__* / mcp__x64dbg__* / mcp__frida__* / mcp__ida__* directly
+  bypassed the dispatch corridor (the prohibition existed only as prose,
+  rules §7.5 VM-ONLY). Same target-based arming: workers in .wt-* pass;
+  everyone else gets rc=2 (block) + stderr REJECT + a durable trace row.
+
+#57 gate 2 (orchestrator-overreach, framework-layer): per the owner ruling
+violations REJECT with no opt-out, so the Bash face posture upgrades from
+#608's WARN to REJECT — a worker-exclusive analysis binary at a command
+position outside a .wt-* worktree is the orchestrator doing a worker's job
+(the #601 precision fix removed the false-positive classes that motivated
+the WARN). The face also closes the wrapper bypasses: `sh -c 'jadx ...'`,
+`nohup floss ...`, `timeout 60 jadx ...`, `env V=x jadx ...`,
+`xargs apktool ...` previously matched the wrapper's own command word and
+slipped past; wrapper words are now unwrapped and the nested command word is
+matched instead (#601 argument-text precision is preserved — `grep floss`
+still does not fire because the FIRST real command word ends the walk).
 
 #601 precision fix on the Bash face: the #608 regex matched the WHOLE
 command text, so `grep floss`, `cat .../floss-raw.txt` and `cd .../jadx/bin`
@@ -52,9 +64,10 @@ ANALYSIS_BINARIES = frozenset({
 # directly (samples execute only in the VM; workers reach them through the
 # dispatch corridor, orchestrator_tool_guard passes .wt-* cwd). Mirrors the
 # worker-face HOST_FORBIDDEN_TOOLS posture (worker_budget_core.py) but on the
-# namespace level and for the host side.
+# namespace level and for the host side. #57 gate 2: mcp__ida__* joins — a
+# decompiler corridor exactly like mcp__ghidra__*.
 _MCP_HOST_CHANNEL_RES = tuple(re.compile(p) for p in (
-    r"^mcp__ghidra__", r"^mcp__x64dbg__", r"^mcp__frida__",
+    r"^mcp__ghidra__", r"^mcp__x64dbg__", r"^mcp__frida__", r"^mcp__ida__",
 ))
 
 # segment split: && || ; | newline (single & = background separator too)
@@ -65,11 +78,27 @@ _ENV_ASSIGN_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # executable suffix noise on the command word
 _EXE_SUFFIX_RE = re.compile(r"\.(bat|exe|cmd)$", re.IGNORECASE)
 
-CTX = ("[kunglao #608 maker-checker] The ORCHESTRATOR does not analyze — "
-       "decompile/strings/emulation belongs to a dispatched worker "
-       "(dispatch_gate guards the Agent face; this Bash call bypassed it). "
-       "Dispatch a worker for this claim instead. (WARN only — recorded in "
-       "runs/logs/.)")
+# #57 gate 2 wrapper words — a preceding token that is NOT the command word.
+# Plain wrappers: consume the word (plus its own leading flags) and keep
+# walking. Flagged wrappers (timeout / nice / ionice / stdbuf) additionally
+# consume their option operands (numeric or -flag tokens) before the real
+# command word. Shell words recurse into the -c payload (the nested command
+# string is one token; it is split and walked like a fresh segment).
+_WRAPPER_WORDS = frozenset({
+    "nohup", "command", "exec", "time", "env", "xargs",
+    "sudo", "doas", "pkexec",
+})
+_FLAGGED_WRAPPER_WORDS = frozenset({"timeout", "nice", "ionice", "stdbuf"})
+_SHELL_WORDS = frozenset({"sh", "bash", "dash", "ksh", "zsh"})
+# sudo/doas option tokens whose NEXT token is an operand value (-u user)
+_WRAPPER_VALUE_FLAGS = frozenset({"-u", "-g", "--user", "--group"})
+
+CTX = ("[kunglao #608 maker-checker / #57 gate 2] The ORCHESTRATOR does not "
+       "analyze — decompile/strings/emulation is WORKER-EXCLUSIVE. Repair: "
+       "dispatch a worker for this claim (kunglao-worker or a specialist) "
+       "and let it run this binary inside its .wt-* worktree — the "
+       "dispatch_gate guards the Agent face, so this shell call bypassed the "
+       "dispatch corridor. REJECTED — no opt-out (#57 ruling).")
 
 _MCP_REJECT_CTX = ("[kunglao #601 VM-ONLY] {tool} is a host-channel MCP tool: "
                    "the sample would execute on the HOST. Dynamic analysis "
@@ -84,28 +113,71 @@ def _in_worker_worktree(cwd: str) -> bool:
     return any(part.startswith(".wt-") for part in p.parts)
 
 
+def _normalize_command_word(token: str) -> str:
+    """One candidate token -> normalized command word (quote/paren strip,
+    basename, .bat/.exe/.cmd suffix strip, lowercase)."""
+    w = token.strip("()!\"'")
+    w = w.replace("\\", "/").rsplit("/", 1)[-1]
+    w = _EXE_SUFFIX_RE.sub("", w)
+    return w.lower()
+
+
+def _unwrap_segment(tokens: list[str]) -> list[str]:
+    """#57 gate 2: candidate command words of one segment with wrapper words
+    unwrapped. The walk STOPS at the first real command word (preserving the
+    #601 argument-text precision — `grep floss` still attributes `grep`).
+    `sh -c '<payload>'` recurses into the payload string, split like a fresh
+    segment."""
+    words: list[str] = []
+    i = 0
+    while i < len(tokens):
+        if _ENV_ASSIGN_RE.match(tokens[i]):
+            i += 1  # env assignments (leading or after `env`) are not words
+            continue
+        w = _normalize_command_word(tokens[i])
+        if w in _SHELL_WORDS and i + 1 < len(tokens) \
+                and tokens[i + 1].strip() == "-c":
+            payload = " ".join(tokens[i + 2:]).strip().strip("'\"")
+            for sub in _SEGMENT_SPLIT_RE.split(payload):
+                sub_tokens = sub.strip().split()
+                if sub_tokens:
+                    words.extend(_unwrap_segment(sub_tokens))
+            return words  # nothing after the -c payload within this segment
+        if w in _FLAGGED_WRAPPER_WORDS:
+            i += 1
+            while i < len(tokens) and (
+                    tokens[i].startswith("-")
+                    or tokens[i].replace(".", "", 1).isdigit()):
+                i += 1
+            continue
+        if w in _WRAPPER_WORDS:
+            i += 1
+            while i < len(tokens) and tokens[i].startswith("-"):
+                if tokens[i] in _WRAPPER_VALUE_FLAGS and i + 1 < len(tokens):
+                    i += 1  # consume the flag's operand value too
+                i += 1
+            continue
+        if w:
+            words.append(w)
+        return words  # first real command word ends the walk
+    return words
+
+
 def _segment_command_words(cmd: str) -> list[str]:
-    """#601 precision: return the COMMAND WORD of every segment (&&/||/;/|
-    /newline split, env-assignment prefixes skipped, basename + quote/paren
-    strip + .bat/.exe/.cmd suffix strip). Empty segments contribute nothing."""
+    """#601 precision + #57 wrapper unwrap: the COMMAND WORD of every segment
+    (&&/||/;/|/newline split), with wrapper words unwrapped so the nested
+    binary is attributed. Empty segments contribute nothing."""
     words: list[str] = []
     for seg in _SEGMENT_SPLIT_RE.split(cmd):
         tokens = seg.strip().split()
-        i = 0
-        while i < len(tokens) and _ENV_ASSIGN_RE.match(tokens[i]):
-            i += 1
-        if i >= len(tokens):
-            continue
-        w = tokens[i].strip("()!\"'")
-        w = w.replace("\\", "/").rsplit("/", 1)[-1]
-        w = _EXE_SUFFIX_RE.sub("", w)
-        if w:
-            words.append(w.lower())
+        if tokens:
+            words.extend(_unwrap_segment(tokens))
     return words
 
 
 def _match_analysis_binary(cmd: str) -> str | None:
-    """First analysis binary found at a COMMAND POSITION, else None."""
+    """First analysis binary found at a (unwrapped) COMMAND POSITION, else
+    None."""
     for w in _segment_command_words(cmd):
         if w in ANALYSIS_BINARIES:
             return w
@@ -136,8 +208,9 @@ def _emit(ws: str, action: str, rule: str, tool: str, detail: str,
 
 
 def evaluate(payload: dict) -> tuple[int, str, str | None]:
-    """(rc, stderr, additionalContext). Bash face: WARN posture, always rc 0.
-    MCP host-channel face (#601): REJECT posture, rc 2 outside .wt-*."""
+    """(rc, stderr, additionalContext). Both faces REJECT outside .wt-*
+    (#601 MCP host-channel face; #57 gate 2 upgraded the Bash face from the
+    #608 WARN posture — orchestrator overreach is framework-layer)."""
     cwd = payload.get("cwd") or ""
     tool = str(payload.get("tool_name") or "")
     cmd = (payload.get("tool_input") or {}).get("command") or ""
@@ -155,7 +228,8 @@ def evaluate(payload: dict) -> tuple[int, str, str | None]:
                    f"sample on the host.")
             return 2, err, _MCP_REJECT_CTX.format(tool=tool)
 
-    # ---- #608 Bash face (WARN) with #601 command-position precision -----
+    # ---- #57 gate 2 Bash face (REJECT) with #601 command-position
+    #      precision + wrapper unwrap --------------------------------------
     if not cmd:
         return 0, "", None
     matched = _match_analysis_binary(cmd)
@@ -163,11 +237,15 @@ def evaluate(payload: dict) -> tuple[int, str, str | None]:
         return 0, "", None
     if _in_worker_worktree(cwd):
         return 0, "", None  # workers dispatch analysis tools freely
-    # durable trail (fail-open — the WARN never depends on logging succeeding)
+    # durable trail (fail-open — the REJECT never depends on logging
+    # succeeding)
     _emit(cwd, "orchestrator_tool_violation", matched, None,
           f"bash analysis-binary outside worker worktree "
-          f"(command position: {matched})", 0)
-    return 0, "", CTX
+          f"(command position: {matched}; #57 gate 2 REJECT)", 2)
+    err = (f"REJECT orchestrator_tool_guard: {matched} is worker-exclusive "
+           f"(#57 gate 2 orchestrator-overreach). Dispatch a worker for "
+           f"this claim instead.")
+    return 2, err, CTX
 
 
 def main() -> int:

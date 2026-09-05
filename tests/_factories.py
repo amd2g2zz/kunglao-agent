@@ -148,3 +148,25 @@ def write_worker_status(ws: Path, name: str, status: str,
         old = time.time() - age_min * 60
         os.utime(p, (old, old))
     return p
+
+
+def seed_verifier_dispatch(ws: Path, claim_id: str = "C-001") -> Path:
+    """#57 gate 5: seed the verifier-dispatch evidence for one claim.
+
+    Writes the kunglao-redteam write contract — the DIFF at
+    runs/verify-redteam-<claim>.md whose text names the claim — i.e. the
+    on-disk proof that a verifier WAS dispatched. The PROVEN happy-path
+    fixtures (blind_gate / contradiction / inference / fail-closed suites)
+    call this before promoting, because the verifier-dispatch gate blocks a
+    claim that reaches PROVEN-candidate with no dispatched verifier.
+    """
+    runs = ws / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    diff = runs / f"verify-redteam-{claim_id}.md"
+    diff.write_text(
+        f"# Red-team verification: {claim_id}\n\n"
+        "## My independent derivation\n"
+        "recomputed from the raw artifact; static anchors hold.\n\n"
+        "RED-TEAM VERDICT: CONFIRMED\n",
+        encoding="utf-8")
+    return diff

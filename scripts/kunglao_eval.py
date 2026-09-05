@@ -40,11 +40,10 @@ ARM_CONFIGS = {
     "C": {"mechanisms_enabled": False, "single_agent": True,
           "desc": "single agent, no orchestration (direct LLM run) — lower-bound control"},
     # #823 A5: AB-VALUE N-arm — the synthetic-shadow face of the value algo.
-    # Real-session runs set env KUNGLAO_VALUE_ALGO=1 (bench_runner B4); the
-    # in-process harness honors mechanisms_enabled only.
+    # Since #51 the env switch is gone (the value algo is the only path);
+    # the in-process harness honors mechanisms_enabled only.
     "N": {"mechanisms_enabled": True, "single_agent": False,
-          "env": {"KUNGLAO_VALUE_ALGO": "1"},
-          "desc": "#823 N-arm: value algo P1-P3 (AB-VALUE experiment)"},
+          "desc": "#823 N-arm: value algo P1-P3 (always-on since #51)"},
 }
 
 FAULT_TYPES = {
