@@ -15,6 +15,12 @@ Posture — FAIL_OPEN, always exit 0: 纳管面是 recorder+signal，不是 gate
 lint 或 payload 异常永不打断 Bash（裁决权仍在 write_guard/lint 的结构门，
 本 face 只负责"盲区不再无声"）。
 
+#24 doc-pointer lighting: the additionalContext warning names the
+references/ doc that carries the fact-file contract (lighting, not gating
+— the R4 postmortem showed blind retries where one doc read would do).
+No fake pointers: a doc missing from disk keeps the text verbatim
+(tests/test_doc_pointer_lighting_24.py pins the map honest).
+
 Wiring (scripts/hook_activation.py, PostToolUse/Bash):
     matcher "Bash" -> this file, alongside violation_capture.py.
 """
@@ -33,6 +39,33 @@ SKILL_DIR = Path(__file__).resolve().parent.parent
 # 只认路径模式；是否真的写了文件由"文件已存在"判定收口）。
 FACTS_TARGET_RE = re.compile(r"facts/([A-Za-z0-9._-]+\.md)")
 _SAFE_REL_RE = re.compile(r"^[A-Za-z0-9._-]+\.md$")
+
+# #24 doc-pointer lighting — pattern → authoritative doc, verified to exist
+# and cover the pattern: a Bash-channel facts write that violates the
+# fact-file contract lint -> schema.md (fact.type/status/boundary_type/
+# extension fields — exactly what lint_facts enforces).
+DOC_POINTERS = {
+    "facts_write_contract_lint": "references/schema.md",
+}
+DOC_POINTER_SUFFIX = (" — this pattern is documented: {ptr}"
+                      " — read before retrying")
+
+
+def light_detail(pattern: str, detail: str) -> str:
+    """Append the verified doc pointer to a warning's text (#24 lighting).
+
+    An unmapped pattern or a doc missing from disk keeps the text verbatim
+    — no fake pointers. Never raises: the fail-open posture holds.
+    """
+    ptr = DOC_POINTERS.get(pattern)
+    if not ptr:
+        return detail
+    try:
+        if not (SKILL_DIR / ptr).is_file():
+            return detail
+    except OSError:
+        return detail
+    return detail + DOC_POINTER_SUFFIX.format(ptr=ptr)
 
 
 def resolve_ws(payload: dict) -> Path | None:
@@ -108,6 +141,7 @@ def main(stdin_stream=None) -> int:
         detail = ("Bash-channel facts write violated contract lint (#809): "
                   + "; ".join(f"{rel}: {'; '.join(str(x) for x in vs[:2])}"
                               for rel, vs in result["targets"]))
+        detail = light_detail("facts_write_contract_lint", detail)
         kunglao_log.emit(ws, actor="bash_fact_guard", action="write_blocked",
                          detail=detail)
         print(json.dumps({"additionalContext": detail}, ensure_ascii=False))
