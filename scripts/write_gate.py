@@ -346,7 +346,7 @@ def _check_fact(ws: Path, p: Path) -> list[dict]:
 
     if signoff:
         vid = signoff.get("verifier_id", "")
-        verdict = (signoff.get("verdict") or "CONFIRMED").upper()
+        verdict = str(signoff.get("verdict", "")).upper()  # #53: no CONFIRMED default — verdict-less sign-off fails R1 evidence
         if vid and verdict == "CONFIRMED":
             if worker_id and _same_actor(vid, worker_id, ws):
                 violations.append({"rule": "R1", "file": rel, "detail": (

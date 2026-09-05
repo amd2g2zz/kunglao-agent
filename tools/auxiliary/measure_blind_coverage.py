@@ -86,9 +86,11 @@ def measure(ws: Path) -> dict:
         if fact is not None:
             signoff = extract_verifier_signoff(
                 fact.read_text(encoding="utf-8", errors="replace"))
-        # only CONFIRMED (or legacy without verdict) counts as valid sign-off;
+        # only an explicit CONFIRMED counts as valid sign-off (#53: the
+        # "legacy without verdict" arm is gone — extract_verifier_signoff
+        # rejects verdict-less blocks, so no CONFIRMED default here);
         # REFUTE means the verifier found a problem — claim should not be PROVEN
-        verdict = (signoff.get("verdict") or "CONFIRMED").upper() if signoff else None
+        verdict = str(signoff["verdict"]).upper() if signoff else None
         signed = signoff is not None and verdict != "REFUTE"
         if signed:
             blind_signed += 1
