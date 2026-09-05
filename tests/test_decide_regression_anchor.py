@@ -119,6 +119,16 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # Re-captured via capture_from_git_baseline() (baseline module + current
 # corpus) per the design §5 command.
 #
+# 2026-09-06 corpus re-pin (#112 distillation): 7 new re-library cards
+# (native-sign-recovery, wire-format-recognition, stacked-protections,
+# falsifier-library, verification-safety, vm-deobfuscation-routing,
+# loop-stage-gates) joined the anomaly baseline corpus. Same class as
+# #884/#866-b/#728: DATA drift only, 4 score floats across the 2
+# contradiction cases (0.9054677206851119 -> 0.9030563514804202,
+# 0.9095849802371542 -> 0.9002507163323783); channel 1 stays green on all
+# cases. Case-by-case diff verified SCORE-ONLY before committing; re-pinned
+# via capture_current() per the docstring command.
+#
 # 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web-re-quickref.md
 # joined the anomaly baseline corpus (anomaly_detector._load_baseline ingests
 # re-library/*.md), shifting every lexical rarity score in the 4th decimal. This
