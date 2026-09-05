@@ -42,7 +42,10 @@ Steps executed (idempotent, all safe to re-run):
 
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
 1 = heartbeat stale, project hooks missing, or selfcheck failed (LLM must act;
-the report's per-step stderr tails carry the failure text).
+the report's per-step stderr tails carry the failure text), 2 = usage error
+(#6: unknown flag rejected by argparse, or a workspace path that does not
+exist — the tick runs on an INITIALIZED workspace and never creates one, so a
+typo'd/flag arg can no longer be materialized as a garbage directory tree).
 
 The report carries `action_taken` (issue #237): the orchestrator fills what
 convergence action this tick produced (dispatched/verified/solved/reactivated);
@@ -50,6 +53,7 @@ an empty field means the tick idled — a fault signal (tokens burned).
 
 Usage: python heartbeat_tick.py <workspace>
 """
+import argparse
 import json
 import subprocess
 import sys
@@ -76,7 +80,7 @@ SCRIPTS = SKILL_DIR / "scripts"
 # enough lead time to act before the NEXT tick misses the renewal entirely.
 # #597: the 10-min value is single-sourced in liveness_policy (rationale there).
 from liveness_policy import (  # noqa: E402
-    HEARTBEAT_STALE_MINUTES, RENEW_MARGIN_LOW_MINUTES)
+    HEARTBEAT_STALE_MINUTES, MISSION_SETTLE_MIN, RENEW_MARGIN_LOW_MINUTES)
 RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
 
 # #863 Family C: workspace resolution is single-sourced in ws_layout
@@ -233,6 +237,40 @@ def state_fingerprint(ws: Path) -> str:
     return h.hexdigest()
 
 
+def _mission_history_due(ws: Path) -> bool:
+    """#8: True when a new V_m history point is due (cadence gate for
+    mission_ledger.value_m in the cockpit block below).
+
+    value_m appends history on EVERY call — un-gated, the 5-min tick cadence
+    would spam runs/mission_ledger.yaml and flatten the d_slope that
+    statusline computes over the last-5 window. The gate samples at most
+    once per MISSION_SETTLE_MIN (liveness_policy, rationale there).
+
+    Gate rule (reads the history schema mission_ledger owns: entries are
+    {ts, v_m} for samples, {ts, action: repin, ...} for repins):
+      - no dated V_m entry yet          -> due (first sample after init)
+      - newest V_m entry older than the window -> due
+      - newest V_m entry undated        -> not due (hand-seeded/repin-era
+        ledger, cadence unknown — zero-noise: never spam an unknown ledger)
+      - any read/parse failure          -> not due (gate never fails the tick)
+    """
+    try:
+        import mission_ledger as _ml
+        led = _ml.load(ws) or {}
+        hist = [h for h in ((led.get("mission") or {}).get("history") or [])
+                if isinstance(h, dict) and "v_m" in h]
+        if not hist:
+            return True
+        ts = hist[-1].get("ts")
+        if not ts:
+            return False
+        last = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        age = datetime.datetime.now(datetime.timezone.utc) - last
+        return age >= datetime.timedelta(minutes=MISSION_SETTLE_MIN)
+    except Exception:  # noqa: BLE001 — the gate must never fail the tick
+        return False
+
+
 def _run_mechanisms(ws: Path, runner) -> dict:
     """#878 mechanism-scheduler face: one registry-driven scheduling pass
     (mechanisms.yaml, schema-gated + fail-closed on a broken registry),
@@ -273,7 +311,31 @@ def main(argv: list[str] | None = None) -> int:
     except (AttributeError, ValueError):
         pass  # captured stream without reconfigure (pytest capsys)
     args = sys.argv[1:] if argv is None else argv
-    ws = _resolve_ws(args[0] if args else None)
+    # #6: argparse owns the CLI boundary — flags (--help, --anything) can no
+    # longer be swallowed by _resolve_ws as a workspace path and mkdir'd into
+    # a garbage tree. --help prints usage + exits 0 with zero side effects;
+    # an unknown flag is a usage error (stderr + exit 2, argparse default).
+    parser = argparse.ArgumentParser(
+        prog="heartbeat_tick.py",
+        description="ONE-command heartbeat tick (mechanical part): "
+                    "selfcheck/reconcile/renew/heartbeat-check/oracle-check/"
+                    "mechanisms against an initialized kunglao workspace.")
+    parser.add_argument(
+        "workspace", nargs="?", default=None,
+        help="initialized workspace directory (default: probe cwd, then "
+             "cwd/<workspace_dir>; never created — init owns that)")
+    parsed = parser.parse_args(args)
+    ws_arg = parsed.workspace or None
+    # A path-shaped positional must EXIST: the tick writes telemetry into the
+    # ws (runs/ via the report write + noop_breaker), so a nonexistent path
+    # would otherwise be materialized as a garbage directory tree. Exit 2
+    # keeps the #228 strict family's "never guess a workspace" semantics.
+    if ws_arg is not None and not Path(ws_arg).is_dir():
+        print(f"ERROR: workspace {ws_arg!r} is not an existing directory — "
+              "heartbeat_tick runs on an initialized workspace and never "
+              "creates one (run kunglao init first)", file=sys.stderr)
+        return 2
+    ws = _resolve_ws(ws_arg)
     # action_taken (issue #237): the tick MUST produce a convergence action or a
     # mechanical convergence argument. The orchestrator fills this field after
     # reading the report — what it dispatched / verified / solved / reactivated.
@@ -371,8 +433,16 @@ def main(argv: list[str] | None = None) -> int:
 
     # #873: per-checkpoint 座舱采样——V/D/ETA + cost/burn 落账。
     # mission_ledger 缺失的旧 workspace 跳过（零噪声）；异常 fail-open。
+    # #8: the tick is also the SETTLEMENT host — update() stamps PROVEN
+    # claims' answers_question -> PQ answered (idempotent, every tick);
+    # value_m() appends the V_m history point that feeds V_m/d_slope, gated
+    # by _mission_history_due so the trajectory samples once per window.
     try:
         if (ws / "runs" / "mission_ledger.yaml").exists():
+            import mission_ledger as _ml
+            _ml.update(ws)
+            if _mission_history_due(ws):
+                _ml.value_m(ws)
             from tuition_curve import cockpit_summary
             kunglao_log.emit(
                 Path(ws), actor="heartbeat_tick",

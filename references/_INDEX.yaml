@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 329b3956179ebd4966253835c84d19808863c22c35410d11bb58fc05edc894b0
+  references/_INDEX.md: 9e5f460e035129c206d1c7bb7c3be924c2fedef63b9eea09d688e7f3fa03553f
   references/_index-anti-analysis.md: 77ae0fe0834dde577e39d1124d4941962b1e4d7af1012434cac89c7d3f381431
   references/_index-languages.md: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
   references/_index-methodology.md: 4183b6f86c4ccd299452d41d2532fde6487301175804cb84729d41d3b4cf08aa
@@ -23,7 +23,7 @@ files:
   references/cold-start-contract.md: 7b0e9375cc55475a6f5d9a8f67637af5cc6436175f06cbb835c03acd3187bfce
   references/convergence-loop.md: 96911db12b3a8cb8a0f736bade3617b916c27dc4d9f64d767acdcf99256ec495
   references/decision-rights.md: 61758c425b2b3f5c98ef4b188d95a73c0dcde686a84a44fe0b72e7f06742df8d
-  references/dispatch-protocol.md: 1ec38838a5b3781a4b6bcaffb124f3991458ea8eecb5b99f544461c2b6d1135c
+  references/dispatch-protocol.md: 41cd3b28acc17143761ec99bcd8c656b91bbdaceabf6abb9f977a7d4286e65e5
   references/downstream-contract.md: c3940d2264d11332cfcf246b1eee7497df20e29d44904c9dce7344865c7db0b5
   references/dynamic-re-tool-priority.md: e40a8b6492f0c79c63366007ba3660d590d595463842cf7ee82bda4bdf3b4b39
   references/error-response-taxonomy.md: bf34e24173b528cc1817724323c8f3c82679785f9f27444c158f15ddd6ba6531
@@ -81,6 +81,7 @@ files:
   references/tool-inventory.md: 5bddc786cc4723732c37f94b9af2d7e4fab6e699082fda0a599c569f90a692eb
   references/verify-static-vs-dynamic.md: d2f823da4d1890e9daeba6bbe25ff1f55b61679b43a72dc2f015b26b2165833a
   references/wal-protocol.md: 1d2a7f8332a595d61daa4d34a7652783c6ea0c54876504ef8d30946e0fd25d66
+  references/xml-injection-standard.md: 9da069fd98abd4597abde0b67f5bb93a7b2be6efef130733d579c31e45748a69
 symptom_map:
   F1: references/failure-modes-lifecycle.md
   F5: references/failure-modes-lifecycle.md
