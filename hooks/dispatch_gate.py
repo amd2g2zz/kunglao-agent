@@ -84,6 +84,24 @@ except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 HOOK_STATE = Path(".hook_state.json")
+
+# #55 XML injection standard: the gate's DECISION faces (REJECT guidance,
+# must-stop refusal, failure-blocked corrective injection) land in the
+# agent's context wrapped in <gate-verdict>...</gate-verdict> so the agent
+# can tell a kunglao gate verdict from third-party tool output
+# (references/xml-injection-standard.md). The verdict text — including the
+# repair path — sits INSIDE the tag; the Claude Code hook JSON contract
+# (hookSpecificOutput.additionalContext, rc/decision fields) is untouched,
+# and STDERR summaries (the operator channel) stay untagged. Tags mark,
+# they never gate: rc and payload shape are unchanged.
+GATE_VERDICT_TAG = "gate-verdict"
+
+
+def _gate_verdict(text: str) -> str:
+    """Wrap one gate verdict face in the #55 producer tag."""
+    return f"<{GATE_VERDICT_TAG}>\n{text}\n</{GATE_VERDICT_TAG}>"
+
+
 # #603: append-only top-1 REJECT ledger — one JSON row per REJECT, the
 # durable face of `_top1_enforcement`'s rc=2 path (pre-#603 the REJECT was
 # trace-only; an orchestrator looping on the same deviation accumulated
@@ -340,7 +358,7 @@ def _warn_must_stop(ws: Path, claim_id: str | None, prompt_text: str,
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "additionalContext": (
+            "additionalContext": _gate_verdict(
                 f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447, "
                 f"rule={rule_label}). Irreversible action detected in "
                 f"dispatch for {cid}. "
@@ -378,8 +396,9 @@ def _reject_with_guidance(name: str, msg: str, fix: str) -> int:
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "additionalContext": (
-                f"dispatch_gate: REJECT {name} (#496). {msg}\n\nHow to fix:\n{fix}"
+            "additionalContext": _gate_verdict(
+                f"dispatch_gate: REJECT {name} (#496). {msg}\n\n"
+                f"How to fix:\n{fix}"
             ),
         },
     }, ensure_ascii=False), flush=True)
@@ -1180,7 +1199,7 @@ def main() -> int:
         print(json.dumps({
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
-                "additionalContext": (
+                "additionalContext": _gate_verdict(
                     f"dispatch_gate: {claim_id} is failure-blocked - a prior attempt "
                     f"failed and no failure_analysis is recorded. Per SKILL.md "
                     f"'A failed attempt is not a negative result', run:\n"

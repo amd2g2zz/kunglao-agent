@@ -373,6 +373,25 @@ tools:
     cost_hint: {mem_gb: 0.1, time: probe}
     quality: {static:opaque-predicate: high}
 
+  # -- static: native IDA decompiler bridge over the ida-pro-vm MCP (issue #46 unlock) --
+  # Registers the MCP-bridge capability in the catalog so a dispatch citing
+  # IDA keywords has a compliant `tool-catalog:` target (tool-first gate).
+  # The MCP name follows the repo convention `ida-pro-vm`
+  # (scripts/toolchain.py _DECOMPILER_MCP_NAMES, scripts/mcp_probe.py).
+  - name: ida-decompile
+    category: static
+    capability: ida:decompile
+    description: Decompile functions via IDA MCP
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 'function address(es)/name(s) in the IDB opened by the ida-pro-vm MCP bridge (mcp__ida-pro-vm__* tools, http transport)', output: decompiled pseudocode + disassembly context per function, quoted verbatim into facts/Fxxx.md}
+    when_not: not when ghidra is available and sufficient — use ghidra-decompile-functions; not for bulk whole-binary disassembly
+    provider: ida-pro-vm
+    produces: [ida:decompile]
+    requires: []
+    cost_hint: {mem_gb: 0.5, time: cheap}
+    quality: {ida:decompile: high}
+
   # -- pipeline: evidence index building (issue #284 registration) --
   - name: build-evidence-index
     category: pipelines

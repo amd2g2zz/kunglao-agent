@@ -21,6 +21,7 @@ from worker_budget_gates import (
     compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
     compare_register_change_proven_gate,
     register_worker, remove_worker,
+    stamp_dispatch_anchor,  # #57 gate 3: per-dispatch nonce at the approval point
     toolfirst_pass_record,  # #880 approval-point pass face + operation label
 )  # noqa: E402,F401
 
@@ -45,6 +46,19 @@ hookSpecificOutput.additionalContext (#270)."""
 # (same dual channel as dispatch_gate.py:137-151 / env_check_gate.py:104-113).
 # REJECT semantics are unchanged: exit 2 + stderr `REJECT <name>` summary.
 # additionalContext is per-check, concrete and executable — never boilerplate.
+
+# #55 XML injection standard: gate verdicts are producer-attributed — the
+# guidance text is wrapped in <gate-verdict>...</gate-verdict> at the
+# emission site (_reject) so the agent can tell a kunglao gate verdict from
+# third-party tool output (references/xml-injection-standard.md). Tags mark,
+# they never gate: rc and payload shape unchanged; stderr stays untagged.
+GATE_VERDICT_TAG = "gate-verdict"
+
+
+def _gate_verdict(text: str) -> str:
+    """Wrap one gate verdict face in the #55 producer tag."""
+    return f"<{GATE_VERDICT_TAG}>\n{text}\n</{GATE_VERDICT_TAG}>"
+
 
 REJECT_FIXES: dict[str, dict[str, str]] = {
     'workers': {
@@ -158,10 +172,14 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     'plan': {
         'additionalContext': (
             'plan-first gate (kunglao-worker.md golden rule #3: PLAN FIRST, '
-            'execute second). Fix: write runs/plan-C<NN>.md '
-            '(goal / preflight / steps / fallback) for claim C-<NN> BEFORE '
-            'dispatching, or reference the plan path in the dispatch prompt '
-            'when writing it in the same turn - then re-dispatch.'
+            'execute second). Fix: have the WORKER write runs/plan-C<NN>.md '
+            '(goal / preflight / steps / fallback) for claim C-<NN> in its '
+            'own session BEFORE executing, or reference the plan path in the '
+            'dispatch prompt when writing it in the same turn - the plan '
+            'must be worker-authored (#57 gate 3): the worker cites the '
+            'per-dispatch anchor with a `dispatch-anchor: <dispatch_ts from '
+            'the KUNGLAO_DISPATCH_CONTEXT block>` frontmatter line - then '
+            're-dispatch.'
         ),
     },
     'toolfirst': {
@@ -224,7 +242,14 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
 
 def _reject(name: str, msg: str, paths: dict) -> int:
     """REJECT with guidance (issue #270): stderr summary + stdout JSON
-    hookSpecificOutput.additionalContext. Exit 2 semantics unchanged."""
+    hookSpecificOutput.additionalContext. Exit 2 semantics unchanged.
+
+    #55: the guidance lands in agent context wrapped in
+    <gate-verdict>...</gate-verdict> — verdict + repair path read as one
+    producer-attributed unit (references/xml-injection-standard.md). The
+    tag is applied HERE, at the emission site, so the REJECT_FIXES table
+    and the stderr summary stay raw. Tags mark, never gate: rc=2 unchanged.
+    """
     print(f'REJECT {name}: {msg}', file=sys.stderr)
     entry = REJECT_FIXES.get(name)
     if not entry:
@@ -235,7 +260,7 @@ def _reject(name: str, msg: str, paths: dict) -> int:
     print(json.dumps({
         'hookSpecificOutput': {
             'hookEventName': 'PreToolUse',
-            'additionalContext': (
+            'additionalContext': _gate_verdict(
                 f'worker_budget REJECT {name}: {msg}\n\n'
                 f'How to fix:\n{fix}'
             ),
@@ -547,6 +572,11 @@ def pre_check(payload: dict, paths: dict) -> int:
     # the activation set / flip phase to DISPATCH / log the dispatch event
     # (fail-open inside; rejected dispatches above never reach this line).
     _dispatch_lifecycle(paths, tier, tools, cid, agent_name, prompt=prompt)
+    # #57 gate 3: stamp the per-dispatch nonce (dispatch anchor) at the
+    # approval point — it is what arms the plan-author gate on this claim's
+    # NEXT dispatch, so a pre-written plan can no longer pass as worker work.
+    # Fail-open; after the lifecycle line the dispatch is already approved.
+    stamp_dispatch_anchor(paths, cid, prompt, agent_name)
     register_worker(paths['state'], {
         'worker_id': worker_id,
         'claim_id': cid or '',

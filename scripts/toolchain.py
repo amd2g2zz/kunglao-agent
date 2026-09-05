@@ -1101,12 +1101,21 @@ class Requirements:
     needs_vm: the windows/linux VM channel (vmr-shell + frida-to-VM) is
         required. True is the conservative default — the pre-#449 status
         quo — whenever task_spec does not explicitly say otherwise.
+    needs_debug_flag: the android JDWP device flag (ro.debuggable=1) is
+        required. True is the conservative default (#304 F3 enforcement).
+        #25 D1: ro.debuggable=1 is unreachable on Android 12+ user builds
+        (SELinux property_service lock) while frida/android_server run fine
+        via Magisk su without it — a task that does not need the flag must
+        be able to say so (constraints.dynamic_re=forbidden, or an explicit
+        constraints.debug_flag: false); the debug_flag check then downgrades
+        FAIL -> WARN instead of blocking an init that can never pass.
     basis: why (task_spec field citation, or the conservative default) —
         rides into the downgraded check details so a WARN is never mystery
         noise.
     """
 
     needs_vm: bool = True
+    needs_debug_flag: bool = True
     basis: str = "task_spec absent/unreadable — conservative default (VM HARD)"
 
 
@@ -1122,6 +1131,13 @@ def requirements_from_task_spec(task_spec: dict | None) -> Requirements:
     needed. Anything else (absent, empty, non-mapping, garbage, "allowed")
     stays conservative: needs_vm=True, pre-#449 behavior.
 
+    #25 D1 debug_flag: constraints.dynamic_re == "forbidden" implies no
+    JDWP dynamics (static-only), and constraints.debug_flag: false is the
+    explicit user-build opt-out (ro.debuggable=1 unreachable on Android 12+
+    user builds; the dynamic plan runs via Magisk su without it). Only the
+    exact YAML boolean false demotes — a string "false" or any other value
+    stays conservative, the same rule dynamic_re applies to its vocabulary.
+
     primary_questions carry no env-relevant explicit field today (their
     `need:` enum says how to answer, not which environment to bring up);
     when one lands (#450+), it extends HERE, never at the checkers.
@@ -1134,13 +1150,22 @@ def requirements_from_task_spec(task_spec: dict | None) -> Requirements:
     constraints = task_spec.get("constraints")
     if not isinstance(constraints, dict):
         return DEFAULT_REQUIREMENTS
+    needs_vm = True
+    needs_debug_flag = True
+    basis = DEFAULT_REQUIREMENTS.basis
     dynamic_re = str(constraints.get("dynamic_re", "")).strip().lower()
     if dynamic_re == "forbidden":
-        return Requirements(
-            needs_vm=False,
-            basis="task_spec constraints.dynamic_re=forbidden (static-only)",
-        )
-    return DEFAULT_REQUIREMENTS
+        needs_vm = False
+        needs_debug_flag = False  # static-only: no JDWP dynamics either (#25 D1)
+        basis = "task_spec constraints.dynamic_re=forbidden (static-only)"
+    if constraints.get("debug_flag") is False:
+        needs_debug_flag = False
+        basis = ("task_spec constraints.debug_flag=false "
+                 "(user build: JDWP flag not required)")
+    if needs_vm and needs_debug_flag:
+        return DEFAULT_REQUIREMENTS
+    return Requirements(needs_vm=needs_vm,
+                        needs_debug_flag=needs_debug_flag, basis=basis)
 
 
 def load_task_spec(ws: Path) -> dict | None:
@@ -1638,11 +1663,14 @@ def _check_android(report: ToolchainReport, ws: Path,
                    reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
     """Android toolchain checks (APK/DEX/SO).
 
-    #449: `reqs` is accepted for checker-signature uniformity but does not
-    relax anything — android's dynamic contract is the ADB channel
-    (device-side services), not the VMware/VBox VM channel (#455;
-    NEVER_CHECKS). Needs-first android relaxation is follow-up scope, not
-    #449 evidence."""
+    #449: `reqs` is accepted for checker-signature uniformity — android's
+    VM-face has nothing to relax (its dynamic contract is the ADB channel,
+    device-side services, not the VMware/VBox VM channel (#455;
+    NEVER_CHECKS)). #25 D1 wires the ONE android relaxation that exists:
+    the debug_flag gate downgrades FAIL -> WARN when the task does not
+    need the JDWP flag (reqs.needs_debug_flag False — static-only, or the
+    explicit constraints.debug_flag=false opt-out); the basis rides into
+    the detail. The default path is byte-identical to the pre-#25 gate."""
     # T0: venv + aapt/aapt2 (or unzip substitute)
     aapt_found = None
     for tool in ("aapt", "aapt2"):
@@ -1754,11 +1782,23 @@ def _check_android(report: ToolchainReport, ws: Path,
     # T2: debug flag (HARD, enforced — #304 F3): verified by reading back
     # ro.debuggable == 1. "Must be set" is a user design requirement, so an
     # unset flag FAILs init instead of silently warning.
+    # #25 D1: ro.debuggable=1 is unreachable on Android 12+ user builds
+    # (SELinux property_service lock) while frida/android_server run fine
+    # via Magisk su — when the task does not need the flag
+    # (reqs.needs_debug_flag False), a miss downgrades FAIL -> WARN with
+    # the task_spec basis in the detail (reported, never silently skipped;
+    # the #449 VM-downgrade contract). The default path stays byte-identical.
+    flag_optional = not reqs.needs_debug_flag
     if not adb_ok:
+        detail = "Cannot check debug flag — ADB unavailable"
+        if flag_optional:
+            detail += f" — not required by task_spec ({reqs.basis})"
         report.items.append(CheckResult(
-            name="debug_flag", status=Status.FAIL, tier=Tier.HARD,
-            detail="Cannot check debug flag — ADB unavailable",
-            root_cause="ADB",
+            name="debug_flag",
+            status=Status.WARN if flag_optional else Status.FAIL,
+            tier=Tier.WARN if flag_optional else Tier.HARD,
+            detail=detail,
+            root_cause=None if flag_optional else "ADB",
         ))
     else:
         assert adb  # noqa: S101 — adb is set when adb_ok is True
@@ -1772,11 +1812,19 @@ def _check_android(report: ToolchainReport, ws: Path,
                 probe=ProbeTier.CAPABILITY,
             ))
         else:
+            detail = (f"debug flag not set (ro.debuggable="
+                      f"{debuggable or 'unreadable'}; {err or out[:60]})")
+            if flag_optional:
+                detail += f" — not required by task_spec ({reqs.basis})"
+            else:
+                detail += " — required for Android dynamic analysis"
             report.items.append(CheckResult(
-                name="debug_flag", status=Status.FAIL, tier=Tier.HARD,
-                detail=f"debug flag not set (ro.debuggable={debuggable or 'unreadable'}; "
-                       f"{err or out[:60]}) — required for Android dynamic analysis",
-                root_cause="debug_flag", probe=ProbeTier.CAPABILITY,
+                name="debug_flag",
+                status=Status.WARN if flag_optional else Status.FAIL,
+                tier=Tier.WARN if flag_optional else Tier.HARD,
+                detail=detail,
+                root_cause=None if flag_optional else "debug_flag",
+                probe=ProbeTier.CAPABILITY,
             ))
 
     # T2: frida-server (renamed + custom port, convention 1337) — HARD, enforced

@@ -25,6 +25,7 @@ Self-stamp guard: verifier_id == claim's worker_id → NOT independent → STAMP
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -265,6 +266,109 @@ def check_proven_gate(
     return (True, "PROVEN",
             f"BLIND verified by {signoff.get('verifier_id', '?')} "
             f"at {signoff.get('sign_off_at', '?')}")
+
+
+# =====================================================================
+# Verifier-DISPATCH evidence gate (issue #57, gate 5)
+# =====================================================================
+# A claim may not reach PROVEN-candidate unless a verifier was EVER
+# dispatched for it. This composes with (does not replace) check_proven_gate:
+# the sign-off block says "a verifier approved"; this gate says "a verifier
+# was dispatched through the corridor at all" (maker-checker §1b/§6.3 — a
+# maker's self-declared result is STAMP-not-PROVEN until an independent
+# adversarial agent fails to refute it, and "dispatched" is observable).
+# NOT a verdict-quality judgment — verdicts stay with the existing BLIND /
+# contradiction / inference / provenance gates.
+
+# Verifier-class agents (agents/): the unified adversarial checker and the
+# verdict scorer. A dispatch row counts as verifier evidence when its actor
+# or detail names one of these (worker_budget's dispatch lifecycle writes
+# `agent=<name>` into the row detail, #461).
+VERIFIER_AGENT_MARKERS = ("kunglao-redteam", "verdict-scorer")
+
+# The kunglao-redteam write contract (its ONLY artifact): the DIFF at
+# runs/verify-redteam-<target>.md naming the claim.
+REDTEAM_DIFF_GLOB = "verify-redteam-*.md"
+
+
+def _dispatch_row_is_verifier(row: dict, claim_id: str) -> bool:
+    """One kunglao_log row: a dispatch-shaped row attributed to THIS claim
+    from a verifier-class actor/agent."""
+    if str(row.get("claim") or "") != claim_id:
+        return False
+    if "dispatch" not in str(row.get("action") or ""):
+        return False
+    actor = str(row.get("actor") or "")
+    detail = str(row.get("detail") or "")
+    return (actor.startswith("verifier:")
+            or any(m in actor or m in detail for m in VERIFIER_AGENT_MARKERS))
+
+
+def _log_has_verifier_dispatch_row(ws: Path, claim_id: str) -> bool:
+    """Scan runs/logs/kunglao-*.jsonl for a verifier-class dispatch row."""
+    logs = Path(ws) / "runs" / "logs"
+    if not logs.is_dir():
+        return False
+    for log in sorted(logs.glob("kunglao-*.jsonl")):
+        try:
+            lines = log.read_text(
+                encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            if not line.strip() or claim_id not in line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict) and _dispatch_row_is_verifier(
+                    row, claim_id):
+                return True
+    return False
+
+
+def check_verifier_dispatch_evidence(ws: Path, claim_id: str) -> tuple[bool, str]:
+    """Was a verifier EVER dispatched for this claim? (issue #57, gate 5)
+
+    Evidence (any one suffices, all read-only, claim-scoped):
+      1. the red-team write contract — a runs/verify-redteam-*.md DIFF whose
+         text names the claim;
+      2. a unified-log dispatch row — runs/logs/kunglao-*.jsonl with
+         action=dispatch, claim=<claim_id>, and a verifier-class agent named
+         in the actor or detail (or a `verifier:`-prefixed actor).
+
+    Returns (ok, reason). ok=False means the PROVEN promotion is BLOCKED and
+    `reason` carries the concrete repair path (dispatch the verifier first).
+    Missing records are NOT fail-open: a promotion without a dispatched
+    verifier is exactly the protocol failure this gate exists to stop.
+    """
+    ws = Path(ws)
+    runs = ws / "runs"
+    if runs.is_dir():
+        try:
+            for diff in sorted(runs.glob(REDTEAM_DIFF_GLOB)):
+                try:
+                    if claim_id in diff.read_text(
+                            encoding="utf-8", errors="replace"):
+                        return (True,
+                                f"verifier dispatched (red-team DIFF "
+                                f"{diff.name} names {claim_id})")
+                except OSError:
+                    continue
+        except OSError:
+            pass
+    if _log_has_verifier_dispatch_row(ws, claim_id):
+        return (True, f"verifier dispatched (dispatch row in "
+                      f"runs/logs/ for {claim_id})")
+    return (False,
+            f"no verifier dispatch evidence for {claim_id} (verifier-dispatch "
+            f"gate, #57 gate 5: a claim cannot reach PROVEN-candidate without "
+            f"a dispatched verifier). Fix: dispatch the verifier FIRST — e.g. "
+            f"`[T1 tools=Read,Grep,Write] claim {claim_id}` to agent "
+            f"kunglao-redteam (kunglao-redteam --target claim {claim_id}); "
+            f"its DIFF lands at runs/verify-redteam-{claim_id}.md and the "
+            f"dispatch row lands in runs/logs/ — then re-run the promotion.")
 
 
 # =====================================================================

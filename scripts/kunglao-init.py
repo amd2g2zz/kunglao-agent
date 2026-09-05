@@ -613,10 +613,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="skip hook deployment entirely (the ONLY "
                              "legal hooks skip; default deploys "
                              "<ws>/.claude/settings.json + self-check)")
-    parser.add_argument("--skills", metavar="A,B", default=None,
-                        help="deploy auxiliary skills (comma-separated "
-                             "names under skills/) to <ws>/.claude/skills/ — "
-                             "pure opt-in, nothing installed without the flag")
+    parser.add_argument("--builtin-skills", metavar="A,B", default=None,
+                        help="deploy kunglao's BUILT-IN auxiliary skills "
+                             "(comma-separated names under skills/) to "
+                             "<ws>/.claude/skills/ — pure opt-in, nothing "
+                             "installed without the flag; NOT for "
+                             "globally-installed skills (#25 D2)")
     parser.add_argument("--assume-yes", action="store_true",
                         help="consent to every ask-then-install prompt "
                              "(CI/headless; non-interactive stdin declines by default)")
@@ -2064,22 +2066,26 @@ def _deploy_agents(ws: Path) -> list[dict]:
 
 
 def _deploy_skills(ws: Path, skills: list[str] | None) -> dict:
-    """#478 L4: pure opt-in skill deployment (`--skills a,b`).
+    """#478 L4: pure opt-in skill deployment (`--builtin-skills a,b`).
 
     Copies <repo>/skills/<name>/ -> <ws>/.claude/skills/<name>/ recursively.
     No flag -> nothing installed. Unknown name -> ValueError (caller maps
     to RC_ERROR with the valid-names list — fail fast on typo'd flags).
+    #25 D2: renamed to the builtin spelling — the bare skills name read as
+    "deploy any skills" and collided with the global-skill semantic; this
+    flag accepts kunglao-BUILT-IN names only (no compat alias, owner
+    ruling 2026-09-01).
     Returns the manifest component entry.
     """
     dst_root = ws / ".claude" / "skills"
     if not skills:
         return {"name": "skills", "path": ".claude/skills/",
-                "status": "none", "detail": "opt-in (--skills a,b)"}
+                "status": "none", "detail": "opt-in (--builtin-skills a,b)"}
     valid = sorted(d.name for d in SKILLS_SRC.iterdir() if d.is_dir())
     unknown = [s for s in skills if s not in valid]
     if unknown:
         raise ValueError(
-            f"unknown --skills name(s): {', '.join(unknown)} "
+            f"unknown --builtin-skills name(s): {', '.join(unknown)} "
             f"(available: {', '.join(valid)})")
     for name in skills:
         src = SKILLS_SRC / name
@@ -3033,8 +3039,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"kunglao-init: ERROR --resolve {args.resolve}: {exc}",
                   file=sys.stderr)
             return RC_ERROR
-    skills = ([s.strip() for s in args.skills.split(",") if s.strip()]
-              if args.skills else None)
+    skills = ([s.strip() for s in args.builtin_skills.split(",") if s.strip()]
+              if args.builtin_skills else None)
     return run(Path(args.workspace) if args.workspace else None,
                force=args.force, hooks_json=args.hooks_json,
                profile_root=args.profile_root, project_type=args.type,
