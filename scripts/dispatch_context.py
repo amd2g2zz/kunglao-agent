@@ -430,7 +430,7 @@ _REDO_FENCE_RES = (
 )
 
 # Conclusion-led lines (English-only on principle, same posture as
-# dispatch_gate._DISPATCH_MUST_STOP_PATTERNS): value-carrying derivation
+# dispatch_gate._DISPATCH_MUST_STOP_RULES): value-carrying derivation
 # lines, not gap-shape lines.
 _REDO_DROP_LINE_RES = tuple(
     re.compile(p, re.IGNORECASE) for p in (

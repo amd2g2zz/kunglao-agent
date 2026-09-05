@@ -36,9 +36,11 @@ import yaml
 # later be promoted to PROVEN (after obtaining sign-off) or REFUTED.
 STAMP = "STAMP"
 
-# Required fields in a verifier_sign_off block. verdict defaults to CONFIRMED
-# for backward compat with blocks written before verdict was added.
-_REQUIRED_FIELDS = ("verifier_id", "refute_attempt", "sign_off_at")
+# Required fields in a verifier_sign_off block. #53: verdict is REQUIRED —
+# the "default to CONFIRMED" shim for pre-verdict blocks was removed
+# (no-backcompat ruling 2026-09-01, #863 Package 2 discipline): a
+# verdict-less block is an invalid sign-off, not an implicit CONFIRMED.
+_REQUIRED_FIELDS = ("verifier_id", "refute_attempt", "sign_off_at", "verdict")
 
 # ---- inference-scope gate (issue #48, a2b5e25c problem 2) ----
 # A claim is *inferential* when its statement or fact text carries
@@ -135,9 +137,6 @@ def _validate_fields(fields: dict) -> dict | None:
     soa = fields.get("sign_off_at")
     if isinstance(soa, datetime):
         fields = {**fields, "sign_off_at": soa.strftime("%Y-%m-%dT%H:%M:%SZ")}
-    # verdict defaults to CONFIRMED (backward compat)
-    if "verdict" not in fields:
-        fields = {**fields, "verdict": "CONFIRMED"}
     return fields
 
 
@@ -260,7 +259,7 @@ def check_proven_gate(
         return (False, STAMP,
                 f"self-stamp rejected: verifier_id={signoff['verifier_id']!r} "
                 f"== worker_id={worker_id!r} (maker-checker §1b: maker cannot self-certify)")
-    verdict = (signoff.get("verdict") or "CONFIRMED").upper()
+    verdict = str(signoff["verdict"]).upper()  # _REQUIRED_FIELDS guarantees presence
     if verdict == "REFUTE":
         return (False, STAMP,
                 f"BLIND verifier REFUTED claim {claim_id}: {signoff.get('refute_attempt', '')}")
@@ -560,7 +559,7 @@ def check_inference_blind_scope(
                 f"INFERENCE gate: self-stamp rejected: "
                 f"verifier_id={signoff['verifier_id']!r} == worker_id={worker_id!r} "
                 f"(maker-checker §1b: maker cannot self-certify)")
-    verdict = (signoff.get("verdict") or "CONFIRMED").upper()
+    verdict = str(signoff["verdict"]).upper()  # _REQUIRED_FIELDS guarantees presence
     if verdict == "REFUTE":
         return (False, STAMP,
                 f"INFERENCE gate: BLIND verifier REFUTED claim {claim_id}: "

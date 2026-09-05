@@ -197,4 +197,12 @@ def cockpit_summary(ws):
         out["backtrack"] = cockpit_backtrack(ws)
     except Exception:  # noqa: BLE001 — cockpit sampling never raises
         pass
+    # #14: sub-PQ progress face (per-PQ credit + difficulty damping).
+    # Additive + fail-open: ledger-less or malformed workspaces ship no key
+    # rather than breaking the V/D/ETA surface.
+    try:
+        import mission_ledger as _ml
+        out["progress"] = _ml.progress_face(ws)
+    except Exception:  # noqa: BLE001 — cockpit sampling never raises
+        pass
     return out

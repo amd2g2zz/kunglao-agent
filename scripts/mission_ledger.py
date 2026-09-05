@@ -23,6 +23,25 @@ _TERMINAL_STAMPED = {"PROVEN"}
 
 
 from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
+from harness_common import utc_now  # #14 IN_PROGRESS freshness clock (claim_expiry-aligned)
+from status_defs import PARTIAL_STATUSES as _PARTIAL_STATUSES  # #14 single source (#34)
+from status_defs import IN_PROGRESS_STATUSES as _IN_PROGRESS_STATUSES
+
+
+# ---- #14 sub-PQ progress granularity ---------------------------------------
+# Per-claim credit weights — POLICY constants (values are tunable, not law);
+# each carries its one-line rationale.
+CREDIT_TERMINAL = 1.0    # PROVEN/VERIFIED settled with stamped evidence — full credit.
+CREDIT_PARTIAL = 0.5     # PARTIALLY-VERIFIED: evidence, no independent verification — half.
+CREDIT_ACTIVE = 0.25     # IN_PROGRESS with recent activity: work in flight — quarter.
+CREDIT_OPEN = 0.0        # OPEN / untouched in-flight: no movement — credit nothing.
+ACTIVE_FRESH_HOURS = 24  # "recent" = claim_expiry stale window; past it, in-flight work is dead.
+DAMP_HARD = 0.75         # hard tier: damp 25% — an open PQ on hard hides real remaining work.
+DAMP_MAX = 0.5           # max tier: strongest damping — max open PQs overstate the most.
+DAMP_NONE = 1.0          # easy/medium/unknown/missing: no damping (absence ≠ difficulty, #15).
+# settlement-family terminals; others stay 0.0 (PROVEN-only settlement, #69).
+_CREDIT_FULL = frozenset({"PROVEN", "VERIFIED"})
+_BAR_WIDTH = 10          # progress_report --progress bar cells per PQ row.
 
 
 def _parse_pqs(task_spec: dict) -> list[dict]:
@@ -153,7 +172,128 @@ def mark_blocked(ws, pq_id: str, blocker: str, wake: str) -> dict:
     return led
 
 
-def value_m(ws) -> dict:
+def _claim_last_activity(claim: dict):
+    """Single source: claim_expiry.last_activity_for (same field order); lazy
+    import keeps mission_ledger importable without the telemetry chain."""
+    from claim_expiry import last_activity_for
+    return last_activity_for(claim or {})
+
+
+def claim_credit(claim: dict, now=None) -> float:
+    """#14 per-claim credit ladder (pure; constants above carry the rationale).
+
+    PROVEN/VERIFIED → 1.0; PARTIALLY-VERIFIED family → 0.5; IN_PROGRESS with
+    recent (or unknown-age) worker activity → 0.25; everything else → 0.0.
+    Unknown activity counts as fresh (claim_expiry precedent: unknown age is
+    never staleness); other terminal statuses credit 0.0 because settlement
+    authority is PROVEN-only (PR #69) — understates rather than overstates.
+    """
+    st = ((claim or {}).get("status") or "").upper()
+    if st in _CREDIT_FULL:
+        return CREDIT_TERMINAL
+    if st in _PARTIAL_STATUSES:
+        return CREDIT_PARTIAL
+    if st in _IN_PROGRESS_STATUSES:
+        last = _claim_last_activity(claim)
+        if last is None:
+            return CREDIT_ACTIVE
+        ref = now or utc_now()
+        age_h = (ref - last).total_seconds() / 3600.0
+        if age_h <= ACTIVE_FRESH_HOURS:
+            return CREDIT_ACTIVE
+    return CREDIT_OPEN
+
+
+def _damping_for(tier: str | None) -> float:
+    """#14 difficulty damping: only hard/max damp; missing/unknown → none."""
+    return {"hard": DAMP_HARD, "max": DAMP_MAX}.get(
+        (tier or "").lower(), DAMP_NONE)
+
+
+def pq_progress(pq: dict, claims: list, now=None,
+                tier: str | None = None) -> dict:
+    """#14 sub-PQ progress (pure, no IO).
+
+    progress = max(1.0 if answered else 0.0, credit / max(1, claim_count)
+    × damping). Settlement (state answered, PR #69) stays authoritative at
+    exactly 1.0 and is never damped; unresolved PQs earn fractional credit
+    from their linked claims (answers_question == pq id) — edge claims with
+    no link stay out (the #823 anti-stupid rule, extended). Damping applies
+    ONLY to the unresolved fraction on hard/max tiers so remaining work is
+    understated, not overstated; missing difficulty → undamped.
+    """
+    answered = pq.get("state") == "answered"
+    linked = [c for c in (claims or [])
+              if str(c.get("answers_question") or "") == str(pq.get("id"))]
+    credit = sum(claim_credit(c, now) for c in linked)
+    frac = credit / max(1, len(linked))
+    damping = DAMP_NONE if answered else _damping_for(tier)
+    progress = min(max(1.0 if answered else 0.0, frac * damping), 1.0)
+    return {"progress": round(progress, 6), "credit": round(credit, 6),
+            "claim_count": len(linked), "damping": damping,
+            "damped": damping != DAMP_NONE}
+
+
+def read_difficulty_tier(ws) -> str | None:
+    """Difficulty tier for #14 damping: evidence/difficulty.json first, then
+    the ``difficulty:`` key difficulty_calibration.mount() copies into
+    task_spec.yaml (#16 open-loop contract, both mounts canonical). Missing,
+    unreadable, or non-mapping → None (no damping; absence is never scored
+    as difficulty — #15 gap rule)."""
+    ws = Path(ws)
+    doc = None
+    p = ws / "evidence" / "difficulty.json"
+    if p.exists():
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            doc = None
+    if not isinstance(doc, dict):
+        try:
+            spec = (yaml.safe_load(
+                (ws / "task_spec.yaml").read_text(encoding="utf-8")) or {})
+        except (OSError, yaml.YAMLError):
+            return None
+        doc = spec.get("difficulty") if isinstance(spec, dict) else None
+    tier = doc.get("tier") if isinstance(doc, dict) else None
+    return str(tier) if tier else None
+
+
+def progress_face(ws, now=None) -> dict:
+    """#14 read-only progress face (no history append, no ledger write).
+
+    {"progress_fraction": Σw·progress/Σw ∈ [0,1] (Σw<=0 → 0.0),
+     "per_pq": [{id, state, progress, credit, claim_count, damping,
+                 damped, weight}]}. Never raises on a missing claim register
+    or difficulty evidence — those degrade to zero-credit / undamped.
+    """
+    led = load(ws)
+    pqs = led.get("mission", {}).get("pqs", [])
+    reg = Path(ws) / "claim-register.yaml"
+    claims = []
+    if reg.exists():
+        try:
+            claims = ((yaml.safe_load(reg.read_text(encoding="utf-8"))
+                       or {}).get("claims")) or []
+        except yaml.YAMLError:
+            claims = []
+    tier = read_difficulty_tier(ws)
+    rows = []
+    total_w = 0.0
+    weighted = 0.0
+    for p in pqs:
+        w = float(p.get("weight", 1.0))
+        row = pq_progress(p, claims, now=now, tier=tier)
+        rows.append(dict(id=p.get("id"), state=p.get("state"),
+                         weight=w, **row))
+        total_w += w
+        weighted += w * row["progress"]
+    return {"progress_fraction":
+            round(weighted / total_w, 6) if total_w > 0 else 0.0,
+            "per_pq": rows}
+
+
+def value_m(ws, now=None) -> dict:
     """V_m + A_t。history 只由此函数追加（增量结算即时入账）。
 
     #10 归一化（additive，raw 字段原样保留）：
@@ -164,12 +304,30 @@ def value_m(ws) -> dict:
     单位语义：密度按结算轮计——一次 value_m() 调用 = 一条 history 点 =
     一轮；全程无 wall-clock 参与（墙钟 ETA 由 rho_checkpoint.eta_min /
     statusline tick 面单独承载，不与 V_m 混用）。
+    #14 sub-PQ 进度（additive，raw 字段原样保留）：新增顶层
+    progress_fraction（Σw·progress/Σw）与 per_pq_progress 列表
+    （每行 id/state/weight/progress/credit/claim_count/damping/damped）。
+    per_pq 行保持 #10 原样投影（byte-identical 守卫在
+    test_vm_normalization_10）——进度绝不写进 raw 面；V_m/A_t 数学原样
+    不动——欠账结算仍是唯一权威；``now`` 仅参与 IN_PROGRESS 新鲜度
+    分类，不入 V_m 单位。
     """
     led = load(ws)
     beta = float(led.get("mission", {}).get("beta", BETA))
     pqs = led.get("mission", {}).get("pqs", [])
+    tier = read_difficulty_tier(ws)
+    reg = Path(ws) / "claim-register.yaml"
+    claims = []
+    if reg.exists():
+        try:
+            claims = ((yaml.safe_load(reg.read_text(encoding="utf-8"))
+                       or {}).get("claims")) or []
+        except yaml.YAMLError:
+            claims = []
     v_m = 0.0
     total_w = 0.0
+    weighted_progress = 0.0
+    pq_rows = []
     per_pq = {}
     for p in pqs:
         w = float(p.get("weight", 1.0))
@@ -179,8 +337,13 @@ def value_m(ws) -> dict:
         contrib = w * cov if st == "answered" else (
             beta * w if st == "blocked" else 0.0)
         v_m += contrib
+        row = pq_progress(p, claims, now=now, tier=tier)
+        weighted_progress += w * row["progress"]
+        pq_rows.append(dict(id=p.get("id"), state=st, weight=w, **row))
         per_pq[str(p.get("id"))] = {"state": st,
                                     "contrib": round(contrib, 6)}
+    progress_fraction = (round(weighted_progress / total_w, 6)
+                         if total_w > 0 else 0.0)
     v_norm = max(0.0, min(1.0, v_m / total_w)) if total_w > 0 else 0.0
     hist = led.get("mission", {}).get("history") or []
     prev = float(hist[-1].get("v_m", 0.0)) if hist else 0.0
@@ -201,6 +364,8 @@ def value_m(ws) -> dict:
     return {"v_m": round(v_m, 6), "prev_v_m": prev, "a_t": round(a_t, 6),
             "v_norm": round(v_norm, 6), "a_t_norm": round(a_t_norm, 6),
             "total_weight": round(total_w, 6),
+            "progress_fraction": progress_fraction,
+            "per_pq_progress": pq_rows,
             "per_pq": per_pq, "answered": n_answered,
             "blocked": n_blocked, "unattempted": n_unattempted}
 
@@ -219,6 +384,8 @@ def emit_snapshot(ws, epoch: int | None = None, arm: str | None = None,
             # #10 additive: normalized value + per-round normalized delta
             "v_norm": val["v_norm"], "a_t_norm": val["a_t_norm"],
             "total_weight": val["total_weight"],
+            # #14 additive: sub-PQ progress aggregate (see value_m)
+            "progress_fraction": val["progress_fraction"],
         }, ensure_ascii=False)
         kunglao_log.emit(ws, "mission_ledger", "mission_snapshot",
                          detail=detail, arm=arm, epoch=epoch,
