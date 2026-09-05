@@ -84,6 +84,7 @@ SCHEMA_FIELDS = {
     "matched_rule",  # #601 additive field
     "trace_id",  # #879 additive field
     "channel",  # #699 additive field (execution surface)
+    "null_reasons",  # #58 S2b additive field (documented nulls, {} when clean)
 }
 
 

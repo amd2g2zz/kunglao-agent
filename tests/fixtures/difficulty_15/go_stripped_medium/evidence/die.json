@@ -1,0 +1,93 @@
+{
+  "_meta": {
+    "source": "die",
+    "tool": "DIE diec.exe (5-call merge)",
+    "binary": "sample.bin",
+    "flag_calls": [
+      "diec -j <path>",
+      "diec -j -e <path>",
+      "diec -j -b <path>",
+      "diec -j -S Hash <path>",
+      "diec -j -S Resource <path>"
+    ]
+  },
+  "detects": [
+    {
+      "type": "language",
+      "name": "Go"
+    }
+  ],
+  "records": [
+    {
+      "name": ".text",
+      "entropy": 5.9,
+      "status": "ok"
+    },
+    {
+      "name": ".rdata",
+      "entropy": 6.9,
+      "status": "ok"
+    },
+    {
+      "name": ".data",
+      "entropy": 5.2,
+      "status": "ok"
+    },
+    {
+      "name": ".rodata",
+      "entropy": 5.5,
+      "status": "ok"
+    }
+  ],
+  "overall_status": "ok",
+  "total_entropy": 6.9,
+  "hashes": {
+    "MD5": "00000000000000000000000000000000",
+    "SHA256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "resources": {},
+  "version_info": {},
+  "manifest": "",
+  "derived": {
+    "language": "Go",
+    "compiler_version": null,
+    "compiler_string": null,
+    "sign_tool": null,
+    "operation_system": null,
+    "detected_packer": null,
+    "section_table": [
+      {
+        "name": ".text",
+        "offset": 0,
+        "size": 4096,
+        "entropy": 5.9,
+        "status": "ok"
+      },
+      {
+        "name": ".rdata",
+        "offset": 1024,
+        "size": 8192,
+        "entropy": 6.9,
+        "status": "ok"
+      },
+      {
+        "name": ".data",
+        "offset": 2048,
+        "size": 12288,
+        "entropy": 5.2,
+        "status": "ok"
+      },
+      {
+        "name": ".rodata",
+        "offset": 3072,
+        "size": 16384,
+        "entropy": 5.5,
+        "status": "ok"
+      }
+    ],
+    "high_entropy_sections": [
+      ".rdata"
+    ]
+  },
+  "call_errors": {}
+}

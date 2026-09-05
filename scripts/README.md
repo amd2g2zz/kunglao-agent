@@ -165,6 +165,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `mission_ledger.py` | 主线欠账表 + V_m (#823-P1, shadow) — PQ 三态 CRUD + 防傻断言(边角料全 PROVEN→增量=0) + mission_snapshot 落盘 | tests |
 | `mission_stall.py` | 主线停滞指纹 + PARK 合法化 (#634) — ΔV_m 平坦×K 检测 / PARK 必带 wake_condition / revive 通道(落账 claim_revive) | convergence_check, hooks(carrier rule f), tests |
 | `notes_discriminator.py` | notes 结构判别器 (#834) — 复制即拒/零引用/悬空引用三规则; completion_gate NOTES_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
+| `notes_gate.py` | notes 治理门 (#58 S4) — NN-slug 命名 + ICD-203 落地字段 + verified-entry 检查(pending 自写无 verify 事件即拒) + provenance 完整度; completion 路径/#57 write-guard 调用面(check_note) | tests |
 | `encoding_lint.py` | 裸 IO 编码扫描器 (#811) — AST 版 write_text/read_text/open/subprocess 无 encoding 检出; 残留清零后挂机械门防复发 | tests, CI |
 | `emit_gate.py` | EMIT_ACTIONS 双向门 (#880) — 正向: 词表孤儿扫描(每个 action 须有 ≥1 生产发射者, quoted-literal 宽网); 反向: emit-site literal 未注册扫描(#459 pattern 表); CI 挂 tests/test_emit_gate_880.py | tests, CI |
 | `utf8_boot.py` | CLI 入口 UTF-8 双保险 (#811) — PYTHONUTF8 setdefault + stdout/stderr reconfigure; 全入口 __main__ 接线 | hooks, tests |
@@ -242,6 +243,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `answer_key_lint.py` | answer-key quality gate: schema + PQ-to-top-level consistency + IOC normalizability | CLI |
 | `intake_one.py` | single manifest entry immediate validation (sha256/first_seen/sources/pq lists) | CLI |
 | `intake_promise.py` | Phase 0 预扫描 promise 块 (#813) — apkid/DIE 探测状态显式记录 + 混淆先验(apkid.json 同源提取) + java 可达性判定(#807 死胡同面)；task_spec `promise:` 键合并 / runs 降级 | kunglao-init, CLI, tests; 下游 enforcement consumer 未接线(#53 裁定: 休眠保留, 消费面=#54 Android-lighting, 不在此 fake-wire) |
+| `difficulty_calibration.py` | #15 样本内在难度标定 (easy/medium/hard/max) — 纯函数组合既有扫描器证据(die.json/apkid.json)为 per-factor 评分 + 多正面 MAX 发现规则；缺证据 → easy+evidence_gap(缺失永不计为难度)；evidence/difficulty.json + task_spec `difficulty:` 键(#16 开环输入) | kunglao-init, CLI, tests |
 
 ## Release & CI support
 

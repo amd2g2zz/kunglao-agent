@@ -21,6 +21,8 @@ under the workspace. Worker, orchestrator, and hook events share ONE schema:
   matched_rule gate rule id / glob a WARN/REJECT face matched (#601, or null)
   trace_id    mission chain id `tr-<mission>-<seq>` (#879, or null — the
               nulls ARE the un-attributed rate)
+  null_reasons {} or {field: why} (#58 S2b — a normally-required field that
+              landed null is DOCUMENTED, so the log cannot go silently hollow)
 
 Design contract:
   - stdlib only (json / os / sys / datetime / pathlib).
@@ -129,6 +131,58 @@ def log_path(ws: Path) -> Path:
 from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
 
 
+# ------------------- #58 S1: trace inheritance ------------------------------
+# A module-level "current trace" cannot work across processes (hooks run as
+# subprocesses), so the inheritance source IS the durable allocator state
+# (runs/.trace-state.json, written by allocate_trace_id at the dispatch face).
+# Reads are memoized per (workspace, mtime) so the hot emit path costs one
+# stat, and a freshly (re-)allocated trace is picked up immediately.
+_TRACE_MEMO: dict = {"key": None, "tid": None}
+
+
+def current_trace(ws) -> str | None:
+    """The workspace's current mission trace_id (#58 S1), or None.
+
+    Reads runs/.trace-state.json — the same state allocate_trace_id maintains
+    — and returns its trace_id when format-valid. Best-effort, never raises:
+    a missing/corrupt state file means "nothing to inherit" (the caller's row
+    then documents the gap via null_reasons, see emit)."""
+    ws = Path(ws)
+    state = ws / TRACE_STATE
+    try:
+        key = (str(state), state.stat().st_mtime_ns)
+    except OSError:
+        key = (str(state), None)
+    if _TRACE_MEMO["key"] == key:
+        return _TRACE_MEMO["tid"]
+    tid = None
+    try:
+        raw = json.loads(state.read_text(encoding="utf-8")).get("trace_id")
+        if validate_trace_id(raw):
+            tid = raw
+    except (OSError, ValueError, TypeError, AttributeError):
+        tid = None
+    _TRACE_MEMO["key"] = key
+    _TRACE_MEMO["tid"] = tid
+    return tid
+
+
+# _UNSET: "kwarg omitted" vs "explicitly None" (#58 S1). Omitted -> inherit
+# the mission trace; explicit None is the caller's documented out-of-band face.
+_UNSET = object()
+
+# #58 S2b: the measured starved set (issue evidence: arm/duration_ms/epoch/
+# hypothesis_ref/matched_rule were 100% null across the 382 live rows —
+# "exists but always null is not a stable schema, it is rot"). A field from
+# this set that lands null is documented in the row's null_reasons sibling
+# ("omitted", or the caller's stated reason). trace_id/version are handled
+# beside it (inheritance face / sha-unavailable face). Fields NOT in this set
+# (claim/tool/artifact/exit/detail) are legitimately optional per action and
+# are never auto-documented — that would make the sibling pure noise.
+AUTO_NULL_FIELDS = ("duration_ms", "arm", "epoch", "hypothesis_ref",
+                    "matched_rule")
+
+
 def emit(ws, actor: str, action: str, *, claim: str | None = None,
          tool: str | None = None, artifact: str | None = None,
          duration_ms: int | None = None, exit: int | None = None,
@@ -136,9 +190,10 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
          arm: str | None = None, epoch: int | None = None,
          hypothesis_ref: str | None = None,
          matched_rule: str | None = None,
-         trace_id: str | None = None,
+         trace_id=_UNSET,
          version: str | None = None,
-         channel: str | None = None) -> None:
+         channel: str | None = None,
+         null_reasons: dict | None = None) -> None:
     """Append one structured event line. Never raises — write failure degrades
     to a stderr warning so logging can never break analysis.
 
@@ -161,7 +216,35 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
     env var, falling back to ``local``; an explicit kwarg wins (a worker
     relaying through a specific endpoint stamps ``ssh:9876``, not the
     session default). Legacy rows lack the key; the .get() gap IS the
-    un-tagged rate signal."""
+    un-tagged rate signal.
+
+    #58 S1: an OMITTED trace_id inherits the workspace's current mission
+    trace (current_trace — the #879 allocator state dispatch maintains), so
+    attribution no longer depends on caller discipline. Explicit ``None``
+    stays the documented out-of-band face; when nothing is inheritable the
+    gap lands in null_reasons (``no_trace_allocated``) instead of starving.
+
+    #58 S2b: normally-required fields that land null are documented. The
+    measured starved set (AUTO_NULL_FIELDS — 100% null across 382 live rows)
+    gets an automatic ``omitted`` reason; a caller reason (``null_reasons=``
+    kwarg) always wins, and fields that actually carry a value are never
+    explained. ``null_reasons`` is an always-present explicit key ({}
+    when clean) — same stable-schema rule as the null fields themselves.
+
+    #58 S3: version already auto-fills from the cached _repo_sha(); an
+    unavailable sha is documented (``repo_sha_unavailable``), not silent."""
+    if trace_id is _UNSET:
+        trace_id = current_trace(ws)
+        trace_reason = None if trace_id else "no_trace_allocated"
+    elif trace_id:  # explicit non-empty id wins over inheritance
+        trace_reason = None
+    else:  # explicit None (or empty) is the documented out-of-band face
+        trace_reason = "explicit_out_of_band"
+    trace_id = str(trace_id) if trace_id else None
+
+    reasons: dict = {}
+    if null_reasons:
+        reasons.update({str(k): str(v) for k, v in null_reasons.items()})
     event = {
         "ts": _utc_now(),
         "actor": actor,
@@ -176,11 +259,23 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
         "epoch": int(epoch) if epoch is not None else None,
         "hypothesis_ref": str(hypothesis_ref) if hypothesis_ref is not None else None,
         "matched_rule": str(matched_rule) if matched_rule is not None else None,
-        "trace_id": str(trace_id) if trace_id is not None else None,
+        "trace_id": trace_id,
         "version": str(version) if version else _repo_sha(),
         "channel": (str(channel).lower() if channel
                     else os.environ.get("KUNGLAO_CHANNEL", "local").lower()),
     }
+    for f in AUTO_NULL_FIELDS:
+        if event[f] is None and f not in reasons:
+            reasons[f] = "omitted"
+    if trace_reason and "trace_id" not in reasons:
+        reasons["trace_id"] = trace_reason
+    if event["version"] is None and "version" not in reasons:
+        reasons["version"] = "repo_sha_unavailable"
+    # a reason for a field that actually carries a value is stale input —
+    # null_reasons documents NULLS, so prune it
+    for f in [k for k in reasons if event.get(k) is not None]:
+        del reasons[f]
+    event["null_reasons"] = reasons
     line = json.dumps(event, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=False) + "\n"
     p = log_path(ws)
@@ -193,6 +288,112 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
             os.close(fd)
     except OSError as exc:
         print(f"[kunglao_log] warning: cannot write {p}: {exc}", file=sys.stderr)
+
+
+# ------------------- #58 S2: subagent lifecycle events ----------------------
+# Live evidence (issue #58): worker/verifier/subagent actors had ZERO ledger
+# rows — the subagent session has no emit pipe, so dispatch → start → deliver
+# → verify was invisible. This is the ledger-side contract: six PER-TRANSITION
+# event types (never per-heartbeat) plus derived-event ingestion with dedupe.
+# The FILE-SYSTEM→event derivation (worker-status writes, write_guard surfaces)
+# is the #57 sibling wiring; these helpers are what it calls.
+#
+# The words are spelled out (not f-stringed) so the #880 emit-gate forward net
+# finds their production emitters in this file.
+LIFECYCLE_PHASES = ("spawned", "started", "completed", "failed", "stalled",
+                    "reaped")
+LIFECYCLE_ACTIONS = {
+    "spawned": "lifecycle_spawned",    # Task-spawn observed (orchestrator face)
+    "started": "lifecycle_started",    # first subagent output observed
+    "completed": "lifecycle_completed",  # delivered (digest may ride detail)
+    "failed": "lifecycle_failed",      # terminated with failure
+    "stalled": "lifecycle_stalled",    # stall detector fired
+    "reaped": "lifecycle_reaped",      # torn down without completion
+}
+
+
+def emit_lifecycle(ws, actor: str, phase: str, *, claim: str | None = None,
+                   digest: dict | None = None, detail: str | None = None,
+                   artifact: str | None = None, duration_ms: int | None = None,
+                   exit: int | None = None, trace_id=_UNSET) -> None:
+    """One subagent lifecycle transition row (action=`lifecycle_<phase>`).
+
+    Per-transition by contract — a heartbeat is NOT a lifecycle event. The
+    result digest (S2b) rides `detail` as JSON when `digest` is given.
+    Unknown phases warn on stderr and write nothing (logging must never
+    break analysis, and garbage phases must not pollute the ledger)."""
+    action = LIFECYCLE_ACTIONS.get(str(phase))
+    if action is None:
+        print(f"[kunglao_log] warning: unknown lifecycle phase {phase!r} "
+              f"(vocabulary: {', '.join(LIFECYCLE_PHASES)})", file=sys.stderr)
+        return
+    if digest is not None:
+        detail = json.dumps(digest, sort_keys=True, ensure_ascii=False)
+    emit(ws, actor, action, claim=claim, artifact=artifact, detail=detail,
+         duration_ms=duration_ms, exit=exit, trace_id=trace_id)
+
+
+def _lifecycle_key(row: dict) -> tuple:
+    """Dedupe identity of one lifecycle row: (actor, phase, claim)."""
+    action = row.get("action")
+    if not isinstance(action, str) or not action.startswith("lifecycle_"):
+        return ()
+    return (row.get("actor"), action[len("lifecycle_"):], row.get("claim"))
+
+
+def ingest_lifecycle(ws, candidates) -> list[dict]:
+    """Derived-event ingestion (#58 S2): emit lifecycle candidates that are
+    NEW, skip ones already on the ledger (same actor/phase/claim), and
+    collapse repeats inside the batch itself.
+
+    `candidates`: dicts with actor/phase/claim (+ optional digest/detail/
+    artifact/duration_ms/exit/trace_id) — e.g. derived from worker-status
+    file transitions. Returns the descriptors actually emitted, in order.
+    Never raises on bad candidate shapes: a candidate without actor/phase is
+    skipped silently (it has no identity to dedupe on)."""
+    ws = Path(ws)
+    seen = {_lifecycle_key(r) for r in _all_rows(ws)}
+    seen.discard(())
+    emitted: list[dict] = []
+    for c in candidates:
+        if not isinstance(c, dict):
+            continue
+        actor, phase = c.get("actor"), c.get("phase")
+        if not actor or not phase:
+            continue
+        key = (actor, str(phase), c.get("claim"))
+        if key in seen or key in {e["_key"] for e in emitted}:
+            continue
+        emit_lifecycle(ws, actor, phase, claim=c.get("claim"),
+                       digest=c.get("digest"), detail=c.get("detail"),
+                       artifact=c.get("artifact"),
+                       duration_ms=c.get("duration_ms"), exit=c.get("exit"),
+                       trace_id=c.get("trace_id", _UNSET))
+        emitted.append({"actor": actor, "phase": str(phase),
+                        "claim": c.get("claim"), "_key": key})
+    for e in emitted:
+        del e["_key"]
+    return emitted
+
+
+def emit_result_digest(ws, actor: str, *, claim: str | None = None,
+                       files_written=(), claims_touched=(), verdict=None,
+                       artifact: str | None = None,
+                       duration_ms: int | None = None, exit: int | None = None,
+                       trace_id=_UNSET) -> None:
+    """#58 S2b result-summary face: close the one-way log. `emit()` records
+    that a call happened; this records WHAT CAME BACK — files written,
+    claims touched, and the verdict — as the ``result_digest`` action with
+    the digest JSON in detail (artifact pointers + counts, not blob dumps)."""
+    payload = {
+        "files_written": [str(f) for f in files_written],
+        "claims_touched": [str(c) for c in claims_touched],
+        "verdict": str(verdict) if verdict is not None else None,
+    }
+    emit(ws, actor, "result_digest", claim=claim, artifact=artifact,
+         duration_ms=duration_ms, exit=exit,
+         detail=json.dumps(payload, sort_keys=True, ensure_ascii=False),
+         trace_id=trace_id)
 
 
 def iter_jsonl(lines):

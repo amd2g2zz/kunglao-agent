@@ -134,6 +134,7 @@ if str(_SCRIPT_DIR) not in sys.path:
 import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
 import intake_promise  # noqa: E402  # #813: Phase 0 prescan promise (apkid/DIE/混淆先验/java 可达性显式落盘)
+import difficulty_calibration  # noqa: E402  # #15: sample difficulty calibration (intrinsic factors -> evidence/difficulty.json + task_spec difficulty: 键)
 import init_channel_default  # noqa: E402  # #727 channel resolution (local fallback)
 # #408: ask-then-install — interactive install prompts + MCP registration +
 # re-probe (graceful degrade on decline; --assume-yes for CI/headless).
@@ -2843,6 +2844,27 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 pass
         else:
             print(f"kunglao-init: intake-promise written: {_promise_path}")
+
+    # #15: sample difficulty calibration — 证据面(扫描器输出) -> easy/medium/
+    # hard/max 内在难度，落 evidence/difficulty.json + task_spec `difficulty:`
+    # 键（#16 的开环输入）。init 时证据通常未产出 → 显式 easy+evidence_gap
+    # 记录（缺证据永不计为难度）；WARN-tier：写失败不卡 init，ERROR +
+    # env_incident 落账（与 #813 同一病理防线：静默跳过才是病）。
+    if not skip_toolchain:
+        try:
+            _diff = difficulty_calibration.calibrate_workspace(ws)
+            _diff_path = difficulty_calibration.mount(ws, _diff)
+        except Exception as exc:  # noqa: BLE001 — 不卡 init，但要显式可见
+            print(f"kunglao-init: ERROR difficulty-calibration failed: {exc}",
+                  file=sys.stderr)
+            try:
+                kunglao_log.emit(ws, actor="init", action="env_incident",
+                                 detail=f"difficulty-calibration: {exc}")
+            except Exception:  # noqa: BLE001 — telemetry never deadlocks
+                pass
+        else:
+            print(f"kunglao-init: difficulty-calibration written: {_diff_path} "
+                  f"tier={_diff['tier']}")
 
     # #362: template defect (unfilled {{placeholder}}) → hard error, not a
     # silent partial CLAUDE.md. Clean up THIS RUN's scaffold entries (the
