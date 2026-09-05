@@ -35,7 +35,15 @@ def test_d3_github_templates_present():
                 ".github/ISSUE_TEMPLATE/feature-request.md",
                 ".github/ISSUE_TEMPLATE/release-checklist.md"):
         assert (ROOT / rel).is_file(), rel
-    _has(".github/PULL_REQUEST_TEMPLATE.md", "dev -> master merge approved")
+    # 2026-09-05 re-pin (#60): the maintainer-only release-gating checkboxes
+    # moved out of the per-PR template (release gating is a release-process
+    # concern); the template's mechanical contract is now the mandatory
+    # issue linkage. The dev->master USER GATE itself still lives in the
+    # release process (scripts/release_receipt.py --check + tag flow).
+    _has(".github/PULL_REQUEST_TEMPLATE.md", "Closes #")
+    _has(".github/PULL_REQUEST_TEMPLATE.md", "Milestone:")
+    _has(".github/ISSUE_TEMPLATE/release-checklist.md",
+         "dev -> master merge approved")
 
 
 def test_d4_security_controls_mapping():
