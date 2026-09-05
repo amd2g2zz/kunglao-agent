@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 8937d7f0382eca07100f2123180fb7d6aa69c535ae5a0f1697bb399788c3f3d9
+  references/_INDEX.md: c8539222d62b6c39f263c91c258d0a5b0da2bc83552048df15fad4408fab7bab
   references/_index-anti-analysis.md: 77ae0fe0834dde577e39d1124d4941962b1e4d7af1012434cac89c7d3f381431
   references/_index-languages.md: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
   references/_index-methodology.md: 4183b6f86c4ccd299452d41d2532fde6487301175804cb84729d41d3b4cf08aa
@@ -44,7 +44,7 @@ files:
   references/re-library/anti-analysis.md: 8534cc1640ba2707a9621d05521d317717b61778a3585e6b8c806de2897cf524
   references/re-library/awesome-re-resources.md: 8252476aa2b40d76b01572e7df910fc9c6a83337fc2e48385dd15885a1ab96f0
   references/re-library/detection-engineer.md: fc06be71641d31a6e8da60f3b2084197da9bc1b2bffc7ecf3d07b076b0aa9072
-  references/re-library/falsifier-library.md: 3158b5a2067775e6b02c1d605bf44d9d734ebf568002faa9d4f883846546c699
+  references/re-library/falsifier-library.md: 4fa5d858e3f29fa137daac4092d354cfa443ad1a274049379516f6b717497ec2
   references/re-library/field-notes.md: 8afaff77a88e61173f7981aa421e775c7ca6447825fcdb41bebb722ef2a18436
   references/re-library/jsvmp-triage.md: 179a621ffb5e992ae7474bf48ee840f29a165f803d3828810b0a32f99a54a500
   references/re-library/kunglao-toolshelf.md: 6ffccd0d3008c086e9109779a09337914e36ea48a4199b9bb9fb87cfeae7bb41
@@ -81,7 +81,7 @@ files:
   references/re-library/web-crawler-engineering.md: 887b6ca7a08f2bb6cfaae81bf9d602f749d4a4c38373a13eb4d3a0a8a69545a2
   references/re-library/web-re-quickref.md: dd2d9a2634eb695bcda8fea30cb76a65b4a4b050d898d52688fa1dc67422a1ca
   references/re-library/web-risk-control.md: 1b98a6af1355410f8d2d1e1043c55333153dd3ba179d99890fe6c5c756c05cd4
-  references/re-library/wire-format-recognition.md: dfaa0b737a52812bb12dfead5a7f3073a640fab5d4ebcc77c1808942ca1fc8b9
+  references/re-library/wire-format-recognition.md: b03b9e97f4330451af7f087ec839986c84caaceb37e95ed27f8d3aec9f1711c1
   references/schema.md: 7dc8e2cffb88a819c8ae7196003763c34bfb8e3cfa5b08cb42b4559c5c28d31b
   references/search-policy.md: 46807e75ef0cf4381b747ffc9495618aad9c0eb320d5007f1c9bfc4bb7cf547f
   references/state-mapping.md: d2cb9b62780b2c35044bc5cf0d724dafb337238480306e29fa909ad2e6bfc08f

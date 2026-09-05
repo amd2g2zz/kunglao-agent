@@ -39,7 +39,7 @@ negative proves`. A fired kill experiment is a finding either way
 ### Few-shot — length-extension feasibility, family 2 (synthetic)
 
 ```python
-# captured: 32-hex signature over unknown key || payload (SHA-256 shape).
+# captured: 32-hex signature over unknown key || payload (MD5 shape).
 # H(secret || payload) with a native Merkle-Damgard hash is extendable
 # WITHOUT knowing the secret:
 orig   = b"sid=7f3a&ts=1717000000"            # captured payload
@@ -49,7 +49,7 @@ forged_sig = length_extension(                # glue padding + carry state
     secret_len=SECRET_LEN_GUESSES,            # brute the block padding offset
     suffix=suffix)
 # replay the forged pair (orig || suffix, forged_sig):
-#   accepted  -> secret-prefix structure + native SHA-256, BOTH confirmed
+#   accepted  -> secret-prefix structure + native MD5, BOTH confirmed
 #   rejected  -> secret does not prefix, digest non-native, or HMAC-wrapped
 #                -> family 2 dies; re-enter at family 1 row (b)
 ```

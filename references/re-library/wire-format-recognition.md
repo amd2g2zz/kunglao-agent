@@ -56,10 +56,10 @@ three bits select the payload shape:
 ### Parse loop
 
 1. Read the tag varint; split field number and wire type; read the value.
-3. Wire type 2: try the payload as an embedded message — if it consumes
+2. Wire type 2: try the payload as an embedded message — if it consumes
    exactly as a legal tag/value sequence, recurse; if it is mostly
    printable, record a string; otherwise record opaque bytes.
-4. Continue until the buffer is consumed exactly. Overrun or trailing
+3. Continue until the buffer is consumed exactly. Overrun or trailing
    garbage means a wrong split upstream — back up and retry, never
    hand-patch forward.
 
