@@ -130,18 +130,49 @@ def _parse_run(p: Path) -> dict | None:
             "result": m.group(1).strip().lower(), "checker": "verify-note"}
 
 
+def _settle_new(workspace: Path, new_rows: list[dict]) -> None:
+    """#49 settlement wiring: settle each newly captured OUTCOME row against
+    the claim's dispatch intent (roi_settlement.settle_intent).
+
+    Strictly fail-open and additive: only claims with a recorded intent in
+    runs/roi-intents.jsonl settle (zero intents -> no-op, legacy workspaces
+    are byte-unaffected); any settlement error is swallowed so capture NEVER
+    breaks. Outcome payload today is verdict + checker (the fields an OUTCOME
+    row carries); artifact-list enrichment from #77 result digests is a later
+    change.
+    """
+    try:
+        import roi_settlement
+    except Exception:  # noqa: BLE001  (fail-open: settlement is optional)
+        return
+    for entry in new_rows:
+        try:
+            claim_id = entry.get("claim_id")
+            if not claim_id or not roi_settlement.has_intent(workspace, claim_id):
+                continue
+            roi_settlement.settle_intent(workspace, claim_id, {
+                "verdict": entry.get("result"),
+                "checker": entry.get("checker"),
+            })
+        except Exception:  # noqa: BLE001  (fail-open by contract)
+            continue
+
+
 def capture(workspace: Path) -> int:
     """Scan runs/*.md and append OUTCOME rows (idempotent).
 
     Returns the number of newly appended rows. Files are filtered to the
     verify-note convention (name contains `-verify-`) or red-team convention
     (name contains `verify-redteam`); other runs/*.md are left alone.
+
+    #49: after the ledger append, each NEW row is settled against the
+    claim's dispatch intent (see _settle_new) — fail-open, no intents -> no-op.
     """
     runs = workspace / "runs"
     if not runs.exists():
         return 0
     seen = {_seen_key(r) for r in read_outcome_rows(workspace)}
-    new_lines: list[str] = []
+    new_entries: list[dict] = []
     for p in sorted(runs.glob("*.md")):
         if "-verify-" not in p.name and "verify-redteam" not in p.name:
             continue
@@ -152,11 +183,13 @@ def capture(workspace: Path) -> int:
         if key in seen:
             continue
         seen.add(key)
-        new_lines.append(json.dumps(entry, ensure_ascii=False))
-    if new_lines:
+        new_entries.append(entry)
+    if new_entries:
         with open(workspace / LEDGER_NAME, "a", encoding="utf-8") as f:
-            f.write("\n".join(new_lines) + "\n")
-    return len(new_lines)
+            f.write("\n".join(json.dumps(e, ensure_ascii=False)
+                              for e in new_entries) + "\n")
+        _settle_new(workspace, new_entries)
+    return len(new_entries)
 
 
 def aggregate_reward(rows: list[dict]) -> float | None:

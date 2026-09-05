@@ -575,7 +575,7 @@ files:
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
-    sha256: 44a7df70453fb682c38be0b706665e20dcf563dc9b05815d32a16d57957df17a
+    sha256: d6a973950ad47309e3a5e1aed10e8b715c388c47dba06f63709af6ce9ebea17f
   - src: scripts/pkg_detect.py
     dest: .claude/scripts/pkg_detect.py
     kind: scaffold

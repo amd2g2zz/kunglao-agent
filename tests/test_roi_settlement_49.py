@@ -252,3 +252,72 @@ class TestSettlementPersistence:
         assert roi.MISSING_UNCERTAINTY == "MISSING_UNCERTAINTY"
         with pytest.raises(AttributeError):
             roi.NOT_A_REAL_CONSTANT  # noqa: B018  (module surface guard)
+
+
+# ---------- outcome_capture integration (group 2: settlement wiring) ----------
+
+class TestOutcomeCaptureWiring:
+    """capture() settles claims whose intent exists; fail-open otherwise."""
+
+    def _seed_verify(self, ws, claim_id="C-1", verdict="passes"):
+        runs = ws / "runs"
+        runs.mkdir(exist_ok=True)
+        (runs / "2026-08-11T00-00-00-verify-01.md").write_text(
+            f"---\nclaim_id: {claim_id}\n---\n\n## Overall verdict\n{verdict}\n",
+            encoding="utf-8")
+
+    def test_capture_with_intent_settles(self, tmp_path):
+        """verify-note result + existing intent -> settled row appears."""
+        import outcome_capture as oc
+        _record(tmp_path, claim_id="C-1",
+                uncertainty="which config builder reconstructs the header")
+        self._seed_verify(tmp_path, "C-1", "passes")
+        added = oc.capture(tmp_path)
+        assert added == 1
+        rows = _read_jsonl(roi.settlements_path(tmp_path))
+        assert len(rows) == 1
+        assert rows[0]["claim_id"] == "C-1"
+        assert rows[0]["roi_class"] == "POSITIVE"
+        assert rows[0]["outcome"]["verdict"] == "passes"
+
+    def test_capture_without_intents_is_noop(self, tmp_path):
+        """Zero intents -> no settlements file, capture unchanged (old
+        workspaces unaffected)."""
+        import outcome_capture as oc
+        self._seed_verify(tmp_path, "C-1", "passes")
+        assert oc.capture(tmp_path) == 1
+        assert oc.read_outcome_rows(tmp_path)[0]["result"] == "passes"
+        assert not roi.settlements_path(tmp_path).exists()
+
+    def test_capture_fail_open_on_settlement_error(self, tmp_path, monkeypatch):
+        """A settlement crash must never break capture (fail-open)."""
+        import outcome_capture as oc
+        _record(tmp_path, claim_id="C-1")
+
+        def _boom(*a, **k):
+            raise RuntimeError("settlement exploded")
+        monkeypatch.setattr(roi, "settle_intent", _boom)
+        self._seed_verify(tmp_path, "C-1", "passes")
+        assert oc.capture(tmp_path) == 1
+        assert len(oc.read_outcome_rows(tmp_path)) == 1
+
+    def test_capture_redteam_result_settles(self, tmp_path):
+        """red-team CONFIRMED settles POSITIVE through the same path."""
+        import outcome_capture as oc
+        runs = tmp_path / "runs"
+        runs.mkdir()
+        (runs / "verify-redteam-C-7.md").write_text(
+            "RED-TEAM VERDICT: CONFIRMED\n\ntarget: C-7\n", encoding="utf-8")
+        _record(tmp_path, claim_id="C-7")
+        oc.capture(tmp_path)
+        rows = _read_jsonl(roi.settlements_path(tmp_path))
+        assert rows[0]["roi_class"] == "POSITIVE"
+
+    def test_capture_idempotent_no_duplicate_settlements(self, tmp_path):
+        """Re-running capture (already-seen outcome) does not re-settle."""
+        import outcome_capture as oc
+        _record(tmp_path, claim_id="C-1")
+        self._seed_verify(tmp_path, "C-1", "passes")
+        oc.capture(tmp_path)
+        oc.capture(tmp_path)
+        assert len(_read_jsonl(roi.settlements_path(tmp_path))) == 1
