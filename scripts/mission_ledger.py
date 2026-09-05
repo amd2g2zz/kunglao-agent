@@ -154,14 +154,26 @@ def mark_blocked(ws, pq_id: str, blocker: str, wake: str) -> dict:
 
 
 def value_m(ws) -> dict:
-    """V_m + A_t。history 只由此函数追加（增量结算即时入账）。"""
+    """V_m + A_t。history 只由此函数追加（增量结算即时入账）。
+
+    #10 归一化（additive，raw 字段原样保留）：
+      - v_norm = v_m / Σweight ∈ [0,1]（欠账表条目自带 weight，缺省 1.0；
+        未加权工作区 Σweight == len(pqs)；Σweight <= 0 → 0.0，不除零）。
+      - a_t_norm = v_norm 的每轮增量（上一 history 点的 v_norm 为基线；
+        legacy 点缺 v_norm 时按 prev_v_m/Σweight 推导）。
+    单位语义：密度按结算轮计——一次 value_m() 调用 = 一条 history 点 =
+    一轮；全程无 wall-clock 参与（墙钟 ETA 由 rho_checkpoint.eta_min /
+    statusline tick 面单独承载，不与 V_m 混用）。
+    """
     led = load(ws)
     beta = float(led.get("mission", {}).get("beta", BETA))
     pqs = led.get("mission", {}).get("pqs", [])
     v_m = 0.0
+    total_w = 0.0
     per_pq = {}
     for p in pqs:
         w = float(p.get("weight", 1.0))
+        total_w += w
         cov = float(p.get("coverage", 0.0))
         st = p.get("state")
         contrib = w * cov if st == "answered" else (
@@ -169,10 +181,17 @@ def value_m(ws) -> dict:
         v_m += contrib
         per_pq[str(p.get("id"))] = {"state": st,
                                     "contrib": round(contrib, 6)}
+    v_norm = max(0.0, min(1.0, v_m / total_w)) if total_w > 0 else 0.0
     hist = led.get("mission", {}).get("history") or []
     prev = float(hist[-1].get("v_m", 0.0)) if hist else 0.0
+    if hist and "v_norm" in hist[-1]:
+        prev_norm = float(hist[-1]["v_norm"])
+    else:
+        prev_norm = (prev / total_w) if total_w > 0 else 0.0
     a_t = v_m - prev
-    hist.append({"ts": _utc_now(), "v_m": round(v_m, 6)})
+    a_t_norm = v_norm - prev_norm
+    hist.append({"ts": _utc_now(), "v_m": round(v_m, 6),
+                 "v_norm": round(v_norm, 6)})
     led["mission"]["history"] = hist
     _save(ws, led)
     n_answered = sum(1 for p in pqs if p.get("state") == "answered")
@@ -180,6 +199,8 @@ def value_m(ws) -> dict:
     n_unattempted = sum(1 for p in pqs if p.get("state") == "unattempted"
                         )
     return {"v_m": round(v_m, 6), "prev_v_m": prev, "a_t": round(a_t, 6),
+            "v_norm": round(v_norm, 6), "a_t_norm": round(a_t_norm, 6),
+            "total_weight": round(total_w, 6),
             "per_pq": per_pq, "answered": n_answered,
             "blocked": n_blocked, "unattempted": n_unattempted}
 
@@ -195,6 +216,9 @@ def emit_snapshot(ws, epoch: int | None = None, arm: str | None = None,
             "v_m": val["v_m"], "prev_v_m": val["prev_v_m"],
             "a_t": val["a_t"], "answered": val["answered"],
             "blocked": val["blocked"], "unattempted": val["unattempted"],
+            # #10 additive: normalized value + per-round normalized delta
+            "v_norm": val["v_norm"], "a_t_norm": val["a_t_norm"],
+            "total_weight": val["total_weight"],
         }, ensure_ascii=False)
         kunglao_log.emit(ws, "mission_ledger", "mission_snapshot",
                          detail=detail, arm=arm, epoch=epoch,
