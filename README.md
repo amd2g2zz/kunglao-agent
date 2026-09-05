@@ -58,7 +58,7 @@ From any directory, in Claude Code:
 > Constraints: static-only — no VM available this week.
 ```
 
-The shape matters more than the wording: **primary questions** (what must be answered), **success criteria** (what counts as answered), **constraints** (what the loop may and may not do). The orchestrator records them in `task_spec.yaml` and enters the convergence loop — dispatching workers and blind verifiers until every primary question reaches PROVEN and the loop exits 0.
+Write the brief so an independent reviewer could judge the result: **analysis goal** (what you need to know), **verification logic** (what makes an answer trustworthy — e.g. "the signature must be reproducible from the same inputs"), **constraints** (e.g. "no execution on the host"). Everything is recorded in `task_spec.yaml`; from there the loop drives itself.
 
 ### 4. Read the deliverable
 
@@ -89,7 +89,7 @@ runs/                 # session audit trail
 > "What does this binary do, and where does it phone home?"
 ```
 
-From there the loop runs itself. Static workers take the binary apart first — structure, imports mapped to capability classes, embedded strings — and every fact they produce is re-derived blind by an independent verifier before it counts. Artifacts land in `evidence/` (`die.json`, `floss-filtered.json`, `static-ghidra.json`) with findings in `facts/`. Anything needing execution waits until static is genuinely exhausted, and each dynamic dispatch declares the static gap it closes. You can walk away — the loop keeps itself alive (see [Long-horizon autonomy](#long-horizon-autonomy)). When it converges, you read the verdict: every claim in `claim-register.yaml` terminal and verifier-signed, every fact reproducible from a raw artifact.
+From there the loop runs itself — the route adapts to what the sample turns out to be. You can walk away (see [Long-horizon autonomy](#long-horizon-autonomy)). When it converges, read the deliverable below.
 
 ## Scenarios
 
@@ -101,17 +101,13 @@ Two more end-to-end paths — pick the one matching your target (for a plain Win
 ```bash
 /kunglao-agent:init ~/cases/sample.apk --type android
 /kunglao-agent
-> "capability / persistence / network entry points"
+> "Does this APK load code dynamically or fight debugging? If so, where is
+>   the hidden logic and what does it do?"
 ```
 
-```
-APK → aapt/apktool unpack → jadx (DEX → Java) → gitnexus graph → graph-assisted static analysis
-  → dynamic only when static stalls: ADB → root → renamed frida-server (1337) or android_server (23946)
-  → last resort: frida hook + unidbg
-```
-
-- **Lands in:** `bins/<sha256>` (the APK), `facts/F001..` (class graph), `facts/F050..` (native `.so` inventory), `evidence/` (captures, dumps).
-- **Done looks like:** every primary question backed by a PROVEN fact; the loop exits 0.
+- **Lands in:** `bins/<sha256>` (the APK), `facts/` (class graph, native `.so` inventory), `evidence/` (captures, dumps).
+- **Done looks like:** every question backed by reproducible evidence.
+- **The route adapts.** Some APKs close with pure static DEX work; others need on-device debugging — the loop decides from what the sample actually is.
 
 </details>
 
@@ -124,13 +120,7 @@ APK → aapt/apktool unpack → jadx (DEX → Java) → gitnexus graph → graph
 > "how is the XHR request signed, and where does the nonce come from?"
 ```
 
-```
-site → camoufox-reverse (anti-detect Firefox: hooks / trace / capture)
-  → unpack (wakaru / webcrack routing) → deobfuscate → index functions and endpoints
-  → signed-parameter tracing → verify-by-replay: re-derive the signature from inputs only
-```
-
-- **Lands in:** `evidence/<capture>.har`, `evidence/<bundle>.js` (deobfuscated), `facts/` (signing key, nonce derivation). The verifier confirms the model by blind re-derivation.
+- **Lands in:** `evidence/` (captures, deobfuscated code), `facts/` (signing key, nonce derivation).
 - **Note:** `web` is a beta-stage target — the toolchain bar is deliberately light; missing capability surfaces when the loop actually needs it, not at init.
 
 </details>
@@ -166,26 +156,6 @@ provenance:
 reproduce: python -c "import struct; ..."               # runs against the cited artifact
 verifier_sign_off: {verifier: kunglao-redteam, verdict: CONFIRMED}
 ```
-
-## How it works
-
-Each round, the orchestrator picks the highest-value open question and dispatches one specialist worker — static first. Every partial fact goes to an independent blind verifier, which must re-derive it from the raw evidence before it counts as proven. Blocked work gets recovered instead of idled; when every primary question is answered with byte-proof, the loop converges and builds the report.
-
-```mermaid
-flowchart TD
-    spec[task_spec.yaml] --> orch{orchestrator each round}
-    orch --> w[specialist worker - static first]
-    w --> part[fact PARTIAL]
-    part --> ver[independent blind verifier]
-    ver -->|exact-match re-derivation| more{all primary questions answered?}
-    ver -->|refuted| orch
-    more -->|no| orch
-    more -->|yes| conv[converged - report built]
-```
-
-### Analysis principle
-
-Static first, always: a task that closes statically never touches dynamic tooling. When static genuinely stalls, emulation strips obfuscation and feeds the result back into static analysis; dynamic debugging is reserved for explicitly declared gaps, and building a runnable environment is the last resort. Every escalation is declared, audited, and revisited downward as soon as static can take over.
 
 ## Long-horizon autonomy
 

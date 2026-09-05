@@ -60,7 +60,7 @@ kunglao-agent 跑在 Claude Code 里。从磁盘上的样本到 verdict：
 > 约束：只做静态 —— 本周没有 VM。
 ```
 
-句式比措辞重要：**主问题**（必须回答什么）、**成功标准**（答到什么程度算答了）、**约束**（循环可以做什么、不可以做什么）。编排器把它们记进 `task_spec.yaml`，然后进入收敛循环 —— 派 worker 和盲验证者往复，直到每个主问题都达到 PROVEN，循环退出码 0。
+把需求写成第三方能据此评判结果的程度：**分析目标**（你要知道什么）、**验证逻辑**（凭什么信答案——比如"同一输入必须能重推出同样签名"）、**约束**（比如"宿主机上不许执行"）。全部记入 `task_spec.yaml`，之后循环自己推进。
 
 ### 4. 看交付物
 
@@ -91,7 +91,7 @@ runs/                 # 会话审计轨迹
 > "这个二进制干了什么，回连到哪里？"
 ```
 
-接下来循环自己跑：静态 worker 先把二进制拆开 —— 结构、按能力类别归类的 imports、内嵌字符串 —— 每条产出的 fact 都要经过独立验证者盲重推一致才算数。产物落在 `evidence/`（`die.json`、`floss-filtered.json`、`static-ghidra.json`），结论落在 `facts/`。需要执行的部分会等到静态确实山穷水尽才启动，而且每次动态派工都要声明它要补的静态 gap。你可以走开 —— 循环自己能活（见[长时程自主运行](#长时程自主运行)）。收敛之后读结论：`claim-register.yaml` 里每条 claim 都 terminal 且有验证者签核，`facts/` 里每条 fact 都能从原始证据复现。
+接下来循环自己跑 —— 路线随样本实际情况调整，不是固定剧本。你可以走开（见[长时程自主运行](#长时程自主运行)）。收敛之后读下面的交付物。
 
 ## 场景演练
 
@@ -106,14 +106,15 @@ runs/                 # 会话审计轨迹
 > "capability / persistence / network entry points"
 ```
 
-```
-APK → aapt/apktool 解包 → jadx（DEX → Java）→ gitnexus 图谱 → 图谱辅助的静态分析
-  → 静态卡住了才走动态：ADB → root → 改名 frida-server（1337）或 android_server（23946）
-  → 最后兜底：frida hook + unidbg
+```bash
+/kunglao-agent:init ~/cases/sample.apk --type android
+/kunglao-agent
+> "这个 APK 有没有动态加载和反调试？如果有，代码藏在哪，做了什么？"
 ```
 
-- **产物落在哪：** `bins/<sha256>`（APK 本身）、`facts/F001..`（class 图谱）、`facts/F050..`（native `.so` 清单）、`evidence/`（抓包、dump）。
-- **"完成"长什么样：** 每个主问题都有 PROVEN fact 支撑；循环退出码 0。
+- **产物落在哪：** `bins/<sha256>`（APK 本身）、`facts/`（类图谱、native `.so` 清单）、`evidence/`（抓包、dump）。
+- **"完成"长什么样：** 每个问题都有可复现的证据支撑。
+- **路线由系统定。** 有的 APK 纯静态 DEX 分析就能闭环，有的必须上真机调试 —— 取决于样本实际是什么。
 
 </details>
 
@@ -126,13 +127,7 @@ APK → aapt/apktool 解包 → jadx（DEX → Java）→ gitnexus 图谱 → �
 > "XHR 签名是怎么算的，nonce 从哪来？"
 ```
 
-```
-site → camoufox-reverse（反检测 Firefox：hook / trace / 抓包）
-  → 解包（wakaru / webcrack 分流）→ 去混淆 → 索引函数与接口
-  → 带签参数追踪 → verify-by-replay：只从输入重推签名
-```
-
-- **产物落在哪：** `evidence/<capture>.har`、`evidence/<bundle>.js`（已去混淆）、`facts/`（签名密钥、nonce 推导）。验证者通过盲重推确认模型正确。
+- **产物落在哪：** `evidence/`（抓包、去混淆后的代码）、`facts/`（签名密钥、nonce 推导）。
 - **注意：** `web` 是 beta 阶段目标 —— 工具链门槛刻意放得很低；能力缺失由循环在实际需要时浮出来，而不是 init 卡住。
 
 </details>
@@ -168,26 +163,6 @@ provenance:
 reproduce: python -c "import struct; ..."               # 对着引用的证据跑
 verifier_sign_off: {verifier: kunglao-redteam, verdict: CONFIRMED}
 ```
-
-## 循环怎么跑
-
-每一轮，编排器挑出价值最高的未解问题，派一个专家 worker —— 静态优先。每条半成品 fact 都交给一个独立的盲验证者，必须从原始证据重推一致才算成立。卡住的任务会被自愈而不是空转；当每个主问题都有字节级证据时，循环收敛并生成报告。
-
-```mermaid
-flowchart TD
-    spec[task_spec.yaml] --> orch{编排器 每一轮}
-    orch --> w[专家 worker - 静态优先]
-    w --> part[fact PARTIAL]
-    part --> ver[独立盲验证者]
-    ver -->|盲重推一致| more{所有主问题都答了？}
-    ver -->|被推翻| orch
-    more -->|否| orch
-    more -->|是| conv[收敛 - 生成报告]
-```
-
-### 分析原则
-
-静态优先，始终如此：能静态闭环的任务绝不碰动态工具。静态确实山穷水尽时，用仿真剥掉混淆层再喂回静态分析；动态调试只针对显式声明的 gap；搭一个能跑起来的环境是最后手段。每次升级都要显式声明、留有审计，静态一旦能接管就立刻降回来。
 
 ## 长时程自主运行
 
