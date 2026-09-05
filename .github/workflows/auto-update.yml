@@ -12,7 +12,7 @@ jobs:
   bump-version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -21,18 +21,20 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
       - name: Bump plugin.json version
-        uses: tj-actions/json-files-action@v1
-        with:
-          files: .claude-plugin/plugin.json
-          fields: '["version"]'
-          values: '${{ steps.version.outputs.VERSION }}'
+        # replaces the removed third-party tj-actions/json-files-action@v1
+        # (repo 404 since 2026-09-03, broke every tag push); jq ships on
+        # ubuntu-latest and needs no pinning surface.
+        run: |
+          jq --arg v "${{ steps.version.outputs.VERSION }}" \
+            '.version = $v' .claude-plugin/plugin.json > plugin.json.tmp
+          mv plugin.json.tmp .claude-plugin/plugin.json
 
       - name: Bump marketplace.json plugin entry version
-        uses: tj-actions/json-files-action@v1
-        with:
-          files: .claude-plugin/marketplace.json
-          jq-path: '.plugins[] | select(.name == "kunglao-agent") | .version = $v'
-          values: '${{ steps.version.outputs.VERSION }}'
+        run: |
+          jq --arg v "${{ steps.version.outputs.VERSION }}" \
+            '(.plugins[] | select(.name == "kunglao-agent") | .version) = $v' \
+            .claude-plugin/marketplace.json > marketplace.json.tmp
+          mv marketplace.json.tmp .claude-plugin/marketplace.json
 
       - name: Open auto-bump PR
         run: |

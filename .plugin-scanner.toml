@@ -1,0 +1,22 @@
+# HOL plugin-scanner configuration
+# Reference: https://github.com/hashgraph-online/hol-guard
+#
+# The four DANGEROUS_DYNAMIC_EXECUTION hits are false positives:
+#   - scripts/ask_for_direction_gate.py: the token "re-eval" appears only in
+#     comments/prose; there is no eval() call in the file.
+#   - tests/test_gitnexus_web_751.py + tools/static/web_gitnexus_demo.py:
+#     generate a Node.js driver script that eval()s a JS bundle to exercise
+#     the browser-side signing code — test scaffolding, not runtime exec.
+# HARDCODED_SECRET in scripts/retirement_gate.py is the string constant
+#   RETIRE_TOKEN = "DISPATCH_RE", an internal text marker, not a credential.
+# GITHUB_ACTION_UNPINNED is remediated in the same change that adds this
+#   file (all workflow actions pinned to commit SHAs).
+[scanner]
+ignore_paths = []
+
+[rules]
+disabled = []
+
+[rules.severity_overrides]
+DANGEROUS_DYNAMIC_EXECUTION = "medium"
+HARDCODED_SECRET = "medium"
