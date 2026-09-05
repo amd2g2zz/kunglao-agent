@@ -17,6 +17,7 @@ Output is a markdown block suitable for both human eyes AND CI log capture.
 
 Usage:
   python progress_report.py <workspace>
+  python progress_report.py <workspace> --progress   # issue #14 sub-PQ bars
 """
 from __future__ import annotations
 
@@ -94,6 +95,35 @@ def _count_anomaly_notes(workspace: Path) -> int:
         return 0
 
 
+def progress_face_text(workspace: Path) -> str:
+    """#14 sub-PQ progress face: one bar per PQ from mission_ledger's
+    weighted-credit + difficulty-damped model. Read-only; a workspace with
+    no mission ledger (init never run) prints a hint and renders nothing —
+    it must not crash (empty-workspace contract)."""
+    led_rel = workspace / "runs" / "mission_ledger.yaml"
+    if not led_rel.exists():
+        return ("## Mission progress: ledger not initialized "
+                "(runs/mission_ledger.yaml missing — run mission_ledger.init)")
+    import mission_ledger
+    face = mission_ledger.progress_face(workspace)
+    lines = [f"## Mission progress: {face['progress_fraction'] * 100:.0f}% "
+             f"(sub-PQ credit, difficulty-damped)"]
+    for row in face["per_pq"]:
+        filled = round(float(row["progress"]) * mission_ledger._BAR_WIDTH)
+        bar = "#" * filled + "-" * (mission_ledger._BAR_WIDTH - filled)
+        flags = []
+        if row.get("damped"):
+            flags.append(f"damp x{row['damping']:g}")
+        if row.get("state") == "answered":
+            flags.append("answered")
+        lines.append(
+            f"  [{bar}] {float(row['progress']) * 100:5.1f}%  "
+            f"{row['id']}  claims={row['claim_count']} "
+            f"credit={row['credit']:g}"
+            + (f"  ({', '.join(flags)})" if flags else ""))
+    return "\n".join(lines)
+
+
 def report(workspace: Path) -> int:
     reg = _load_yaml(workspace / "claim-register.yaml")
     claims = (reg or {}).get("claims", []) or []
@@ -160,7 +190,14 @@ def report(workspace: Path) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="kunglao-agent progress report")
     parser.add_argument("workspace", help="workspace root")
+    parser.add_argument("--progress", action="store_true",
+                        help="#14 sub-PQ mission progress: per-PQ bars with "
+                             "claim counts and damping flags (mission_ledger "
+                             "weighted credit + difficulty damping)")
     args = parser.parse_args()
+    if args.progress:
+        print(progress_face_text(Path(args.workspace)))
+        return 0
     return report(Path(args.workspace))
 
 
