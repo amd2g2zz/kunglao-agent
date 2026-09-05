@@ -204,6 +204,10 @@ files:
     dest: .claude/scripts/carrier_consistency.py
     kind: scaffold
     sha256: 2aa15f9a6cd2fbd5656bf06c62107d23752a93af076a7dd2928724e6ca913015
+  - src: scripts/case_bank.py
+    dest: .claude/scripts/case_bank.py
+    kind: scaffold
+    sha256: bcb2fdcdacbc7b2f78e400808e2f05159341bc41f37ab2faf1894ead42a2c5c0
   - src: scripts/challenge_ledger.py
     dest: .claude/scripts/challenge_ledger.py
     kind: scaffold
