@@ -33,6 +33,13 @@ a RECORDER, not a gate. A recorder that blocks is a gate with none of the
 adjudication write_guard does; a recorder that crashes must not take the
 Bash call down with it.
 
+#24 doc-pointer lighting: each captured event's detail names the
+references/ doc that documents the protected pattern (lighting, not
+gating — the R4 postmortem showed 4x blind retries where one doc read
+would do). No fake pointers: unmapped actions and pointers whose target
+is missing from disk keep the text verbatim (tests/
+test_doc_pointer_lighting_24.py pins the map honest).
+
 Vocabulary: emits ONLY registered event_taxonomy.EMIT_ACTIONS words
 (violation_sed_tamper, env_incident — registered by this same change).
 
@@ -79,6 +86,36 @@ TRACEBACK_RE = re.compile(
     r"Traceback \(most recent call last\):[\s\S]*?^(\w[\w.]*(?::\s*.*)?)$",
     re.MULTILINE,
 )
+
+# #24 doc-pointer lighting — pattern → authoritative doc, each verified to
+# exist and cover the pattern:
+#   violation_sed_tamper -> guardrails.md §1b ("Only an independent verifier
+#     subagent writes verify_status"; verdict lines are forbidden output)
+#   env_incident -> error-response-taxonomy.md (mandatory stop / retry-once /
+#     ask / escalate classification for action errors)
+DOC_POINTERS = {
+    "violation_sed_tamper": "references/guardrails.md",
+    "env_incident": "references/error-response-taxonomy.md",
+}
+DOC_POINTER_SUFFIX = (" — this pattern is documented: {ptr}"
+                      " — read before retrying")
+
+
+def light_detail(action: str, detail: str) -> str:
+    """Append the verified doc pointer to a warning's text (#24 lighting).
+
+    An unmapped action or a doc missing from disk keeps the text verbatim —
+    no fake pointers. Never raises: the recorder's fail-open posture holds.
+    """
+    ptr = DOC_POINTERS.get(action)
+    if not ptr:
+        return detail
+    try:
+        if not (SKILL_DIR / ptr).is_file():
+            return detail
+    except OSError:
+        return detail
+    return detail + DOC_POINTER_SUFFIX.format(ptr=ptr)
 
 
 def _output_text(payload: dict) -> str:
@@ -146,7 +183,9 @@ def main(stdin_stream=None) -> int:
         if ws is not None:
             for ev in events:
                 kunglao_log.emit(ws, actor="violation_capture",
-                                 action=ev["action"], detail=ev["detail"])
+                                 action=ev["action"],
+                                 detail=light_detail(ev["action"],
+                                                     ev["detail"]))
     except Exception:  # noqa: BLE001 — recording must never break Bash
         pass
     return 0

@@ -7,7 +7,7 @@ files:
   - src: hooks/bash_fact_guard.py
     dest: .claude/hooks/bash_fact_guard.py
     kind: hook
-    sha256: 23fcc71453ab5563217916a06ddd9e0fa4c26f72c34e0124bfe6e11b302535da
+    sha256: 24ab3d27f951ba34a96d89c83e7e471ff8ceec1065577c7370c29d8c7243cd1b
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
@@ -55,7 +55,7 @@ files:
   - src: hooks/violation_capture.py
     dest: .claude/hooks/violation_capture.py
     kind: hook
-    sha256: a5bf4f75131d906eb69b0aeb21d4ae2acb68c5339d5bbed896272b9c9ac9ea0f
+    sha256: 037feb618b195693be64c4078b5419def50bead6f0d1ba23c3adfb5f3fa3a650
   - src: hooks/worker_budget.py
     dest: .claude/hooks/worker_budget.py
     kind: hook
