@@ -67,7 +67,7 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 391a30ee4896b81f877fda13dfd2379c3f5405ea50856f38158be83caf564c91
+    sha256: 513542b746b13f9d0c55916dbceb7aa6f3fc9f1e9344828a54358938db1f10e1
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
@@ -195,7 +195,7 @@ files:
   - src: scripts/blind_gate.py
     dest: .claude/scripts/blind_gate.py
     kind: scaffold
-    sha256: d0a4aca7d16028b609b37af64340983bfbebe6ea158f16ffa7615958b48d0b96
+    sha256: 8d159b6f6bc8574efef2820a7232a4178f357cff20549600a26eff25b1fdc588
   - src: scripts/calibration_gate.py
     dest: .claude/scripts/calibration_gate.py
     kind: scaffold
@@ -280,6 +280,10 @@ files:
     dest: .claude/scripts/difficulty_calibration.py
     kind: scaffold
     sha256: d5327b28690f23b2587fc7c1d59c5fc945d1f2a394f6cef4519d156a949425d1
+  - src: scripts/difficulty_thresholds.py
+    dest: .claude/scripts/difficulty_thresholds.py
+    kind: scaffold
+    sha256: 6985d2564085bcc981a3aef034aef32cb8bd89e4a78e54f16ab2dfc5b92a6aff
   - src: scripts/digest_build.py
     dest: .claude/scripts/digest_build.py
     kind: scaffold
@@ -367,7 +371,7 @@ files:
   - src: scripts/heartbeat_loop_prompt.py
     dest: .claude/scripts/heartbeat_loop_prompt.py
     kind: scaffold
-    sha256: 1ebd0db1fffd67aa8f28f61cab568b4c7694de5a5302b8b0382b4d100dd22c51
+    sha256: 62c7f0caaa94d6014b41812220f328512c96484efdecb381080d5bf5d9a579e8
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
@@ -475,7 +479,7 @@ files:
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
-    sha256: cd3c18f8b8f4d1c1768c9f45ecb93cc21fc897d6ef6303f540ed9034b4a0db0a
+    sha256: c744d7f9a526b165fbd83f49a0354f418070200a1472494a149c2e0a94d086ef
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
@@ -1247,7 +1251,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 4f934a194d331f4b5514d38df831e0ca67d3931cb9959fa003bcb3c1420919f1
+    sha256: 9ce57fa7f112e816854109f404fcd42699e40b6e410ce755cf4815907d049835
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

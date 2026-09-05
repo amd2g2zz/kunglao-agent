@@ -22,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from _factories import seed_verifier_dispatch  # #57 gate 5 evidence seeder
+from _factories import seed_difficulty, seed_verifier_dispatch  # #57 gate 5 evidence + #16 tier seeders
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -183,6 +183,7 @@ def test_claim_migrator_proven_with_blind_stays_proven(ws_factory):
     """RED3 integration: orchestrator promotes to PROVEN with valid BLIND → PROVEN kept."""
     ws = ws_factory(claims=[{"id": "C-11", "status": "VERIFIED"}])
     _write_fact(ws, "C-11", VALID_SIGNOFF)
+    seed_difficulty(ws, "easy")  # #16: easy = legacy single-verification posture
     seed_verifier_dispatch(ws, "C-11")  # #57 gate 5: a verifier WAS dispatched
     from kunglao_record import claim_migrator
     ok, msg = claim_migrator(ws, "C-11", "PROVEN", actor="orchestrator")
@@ -203,6 +204,7 @@ def test_claim_migrator_stamp_is_non_terminal(ws_factory):
     assert {c["id"]: c["status"] for c in reg["claims"]}["C-12"] == "STAMP"
     # now: add sign-off and promote again
     (ws / "facts" / "C-12.md").write_text(VALID_SIGNOFF, encoding="utf-8")
+    seed_difficulty(ws, "easy")  # #16: easy = legacy single-verification posture
     seed_verifier_dispatch(ws, "C-12")  # #57 gate 5: a verifier WAS dispatched
     ok, msg = claim_migrator(ws, "C-12", "PROVEN", actor="orchestrator")
     assert ok
@@ -235,6 +237,7 @@ def test_compare_register_change_allows_orchestrator_proven_with_blind(ws_factor
     """Orchestrator directly edits register to PROVEN WITH BLIND → allowed."""
     ws = ws_factory(claims=[{"id": "C-21", "status": "VERIFIED"}])
     _write_fact(ws, "C-21", VALID_SIGNOFF)
+    seed_difficulty(ws, "easy")  # #16: easy = legacy single-verification posture
     seed_verifier_dispatch(ws, "C-21")  # #57 gate 5: a verifier WAS dispatched
     import worker_budget as wb
     before = {"C-21": "VERIFIED"}

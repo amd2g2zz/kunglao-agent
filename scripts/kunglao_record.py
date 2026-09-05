@@ -44,6 +44,10 @@ REQUIRED_FOR_TERMINAL_STATE = (
     "fact_contradiction_gate",
     "blind_gate:check_inference_blind_scope",
     "blind_gate:check_verifier_dispatch_evidence",
+    # #16: difficulty-gated depth — hard/max tiers need
+    # required_independent_verifications DISTINCT verifier records
+    # (difficulty_thresholds.THRESHOLDS); missing feed fails closed to hard.
+    "blind_gate:check_verifier_depth_evidence",
 )
 
 
@@ -421,6 +425,36 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             if not v_ok:
                 return (False, f"VERIFIER DISPATCH GATE: {v_reason} — "
                                f"register not modified (fail closed)")
+            # ---- difficulty depth gate (#16) ----
+            # The sample's tier (#15 feed via difficulty_thresholds) raises
+            # the PROVEN bar: hard/max need
+            # required_independent_verifications DISTINCT verifier records.
+            # easy/medium keep the legacy single-verification flow exactly
+            # (no complexification). A missing or unknown tier fails CLOSED
+            # to hard — never silently down-grades to easy. Same
+            # REQUIRED/fail-closed policy as the gates above (#78).
+            try:
+                from difficulty_thresholds import thresholds_for_workspace
+                thresholds = thresholds_for_workspace(ws)
+            except Exception as exc:
+                return (False, _required_gate_receipt(
+                    "difficulty_thresholds:thresholds_for_workspace", exc,
+                    claim_id))
+            required = int(thresholds.get(
+                "required_independent_verifications") or 1)
+            if required > 1:
+                try:
+                    from blind_gate import check_verifier_depth_evidence
+                except Exception as exc:
+                    return (False, _required_gate_receipt(
+                        "blind_gate:check_verifier_depth_evidence", exc,
+                        claim_id))
+                d_ok, d_reason = check_verifier_depth_evidence(
+                    ws, claim_id, required)
+                if not d_ok:
+                    return (False, f"VERIFIER DEPTH GATE "
+                                   f"[{thresholds.get('tier')}]: {d_reason} — "
+                                   f"register not modified (fail closed)")
 
     if not _set_claim_status(reg_path, claim_id, effective_status):
         return (False, f"could not rewrite status for {claim_id} in claim-register.yaml")

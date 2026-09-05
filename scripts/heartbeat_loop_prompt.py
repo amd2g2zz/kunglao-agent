@@ -40,11 +40,28 @@ import sys
 from pathlib import Path
 
 
+def _difficulty_guidance(ws: str) -> str:
+    """#16: the difficulty-aware red-team rigor line ("" below hard).
+
+    Guidance-only surface: the difficulty_thresholds policy decides whether
+    the tier carries associated_task_consistency; a below-hard tier (and any
+    resolution failure) keeps the prompt unchanged — guidance must never
+    complexify simple samples."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from difficulty_thresholds import guidance_line
+        line = guidance_line(ws)
+    except Exception:  # guidance must never break the prompt build
+        return ""
+    return f"\n   → {line}" if line else ""
+
+
 def build_prompt(ws: str, interval: str = "5m") -> str:
     skill_dir = Path(__file__).resolve().parent.parent  # kunglao-agent/ (scripts/ -> root)
     h = str(skill_dir / "scripts" / "hook_activation.py")
     tk = str(skill_dir / "scripts" / "heartbeat_tick.py")
     cc = str(skill_dir / "scripts" / "convergence_check.py")
+    diff_line = _difficulty_guidance(ws)
     return f"""/loop {interval} kunglao-agent heartbeat (self-registration + monitoring + verification in one):
 
 [Startup action — run once on the loop's first trigger]
@@ -77,7 +94,7 @@ python {h} {ws} --heartbeat-on --loop-registered   # register runs/.heartbeat.js
               → then python {h} {ws} --heartbeat-off stops the heartbeat (no cleanup before convergence — deletion breaks dispatch)
 4. Finished worker → verify facts → merge to master → update claim-register + _INDEX
 5. Record notes with malware-veri-notes per §6.2; at the end of every tick you MUST be able to state "what this round advanced" (fill it into
-   runs/.heartbeat-tick.json's action_taken; an empty field = idle fault)"""
+   runs/.heartbeat-tick.json's action_taken; an empty field = idle fault){diff_line}"""
 
 
 def verify_loop(ws: str) -> int:

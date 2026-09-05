@@ -29,7 +29,7 @@ from pathlib import Path
 
 import yaml
 
-from _factories import seed_verifier_dispatch  # #57 gate 5 evidence seeder
+from _factories import seed_difficulty, seed_verifier_dispatch  # #57 gate 5 evidence + #16 tier seeders
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -184,6 +184,7 @@ def test_hook_blocks_proven_when_blind_gate_unavailable(ws_factory, monkeypatch)
     """Direct register edit to PROVEN must not bypass an unavailable BLIND gate."""
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     _signoff_fact(ws, "C-1", "C-1")
+    seed_difficulty(ws, "easy")  # #16: easy = legacy single-verification posture
     seed_verifier_dispatch(ws, "C-1")  # #57 gate 5: a verifier WAS dispatched
     reg_path = _proven_via_direct_edit(ws)
     before = {"C-1": "OPEN"}
@@ -210,6 +211,7 @@ def test_hook_blocks_proven_when_gate_raises(ws_factory, monkeypatch):
     """A raising BLIND gate blocks the direct edit instead of crashing open."""
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     _signoff_fact(ws, "C-1", "C-1")
+    seed_difficulty(ws, "easy")  # #16: easy = legacy single-verification posture
     seed_verifier_dispatch(ws, "C-1")  # #57 gate 5: a verifier WAS dispatched
     reg_path = _proven_via_direct_edit(ws)
     before = {"C-1": "OPEN"}
@@ -327,6 +329,7 @@ def test_claim_migrator_proven_with_valid_signoff_still_promotes(ws_factory):
     """All gates available + valid sign-off -> PROVEN (regression)."""
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     _signoff_fact(ws, "C-1", "C-1")
+    seed_difficulty(ws, "easy")  # #16: easy = legacy single-verification posture
     seed_verifier_dispatch(ws, "C-1")  # #57 gate 5: a verifier WAS dispatched
     ok, msg = kunglao_record.claim_migrator(ws, "C-1", "PROVEN", "orchestrator")
     assert ok, msg
@@ -349,6 +352,7 @@ def test_hook_allows_proven_with_all_gates_available(ws_factory):
     """Direct edit to PROVEN with valid sign-off + all gates -> allowed."""
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     _signoff_fact(ws, "C-1", "C-1")
+    seed_difficulty(ws, "easy")  # #16: easy = legacy single-verification posture
     seed_verifier_dispatch(ws, "C-1")  # #57 gate 5: a verifier WAS dispatched
     reg_path = _proven_via_direct_edit(ws)
     before = {"C-1": "OPEN"}

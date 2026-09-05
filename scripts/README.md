@@ -246,6 +246,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `intake_one.py` | single manifest entry immediate validation (sha256/first_seen/sources/pq lists) | CLI |
 | `intake_promise.py` | Phase 0 预扫描 promise 块 (#813) — apkid/DIE 探测状态显式记录 + 混淆先验(apkid.json 同源提取) + java 可达性判定(#807 死胡同面)；task_spec `promise:` 键合并 / runs 降级 | kunglao-init, CLI, tests; 下游 enforcement consumer 未接线(#53 裁定: 休眠保留, 消费面=#54 Android-lighting, 不在此 fake-wire) |
 | `difficulty_calibration.py` | #15 样本内在难度标定 (easy/medium/hard/max) — 纯函数组合既有扫描器证据(die.json/apkid.json)为 per-factor 评分 + 多正面 MAX 发现规则；缺证据 → easy+evidence_gap(缺失永不计为难度)；evidence/difficulty.json + task_spec `difficulty:` 键(#16 开环输入) | kunglao-init, CLI, tests |
+| `difficulty_thresholds.py` | #16 难度分档成功阈值 — per-tier 策略表(独立验证数 1/1/2/2、red-team 轮数 1/1/1/2、关联任务一致性 F/F/T/T、heuristic-first F/F/T/T) + 查询 API(get_thresholds/thresholds_for_workspace/count_verifications)；缺 difficulty.json → fail-closed hard(绝不静默降 easy)；PROVEN 深度闸门(kunglao_record + hooks backstop) + 心跳红队 guidance 行 | kunglao_record, hooks/worker_budget_gates, heartbeat_loop_prompt, CLI, tests |
 
 ## Release & CI support
 

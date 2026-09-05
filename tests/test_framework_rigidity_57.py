@@ -576,10 +576,13 @@ def _proven_ws(tmp_path: Path, status_before: str = "OPEN") -> tuple[Path, Path]
     same dialect _set_claim_status's line rewrite preserves). The fact avoids
     inference-pattern words (e.g. `gate`) so the claim stays non-inferential
     and the promotion reaches PROVEN-candidate."""
-    from _factories import write_claims_register
+    from _factories import seed_difficulty, write_claims_register
     ws = tmp_path / "ws"
     (ws / "facts").mkdir(parents=True)
     (ws / "runs").mkdir()
+    # #16: these gates pin the LEGACY single-verification posture — tier easy
+    # (a feed-less workspace now fails closed to hard, two verifier records).
+    seed_difficulty(ws, "easy")
     (ws / "analysis_state.txt").write_text("[current_task]\n", encoding="utf-8")
     reg = write_claims_register(ws, [{
         "id": "C-001", "status": status_before,

@@ -304,18 +304,20 @@ def _dispatch_row_is_verifier(row: dict, claim_id: str) -> bool:
             or any(m in actor or m in detail for m in VERIFIER_AGENT_MARKERS))
 
 
-def _log_has_verifier_dispatch_row(ws: Path, claim_id: str) -> bool:
-    """Scan runs/logs/kunglao-*.jsonl for a verifier-class dispatch row."""
+def _verifier_dispatch_rows(ws: Path, claim_id: str) -> list[tuple[str, int]]:
+    """Distinct verifier-class dispatch rows for the claim, as (log, line)
+    identities — counted by the #16 depth gate, sensed by the #57 gate."""
+    rows: list[tuple[str, int]] = []
     logs = Path(ws) / "runs" / "logs"
     if not logs.is_dir():
-        return False
+        return rows
     for log in sorted(logs.glob("kunglao-*.jsonl")):
         try:
             lines = log.read_text(
                 encoding="utf-8", errors="replace").splitlines()
         except OSError:
             continue
-        for line in lines:
+        for idx, line in enumerate(lines):
             if not line.strip() or claim_id not in line:
                 continue
             try:
@@ -324,8 +326,13 @@ def _log_has_verifier_dispatch_row(ws: Path, claim_id: str) -> bool:
                 continue
             if isinstance(row, dict) and _dispatch_row_is_verifier(
                     row, claim_id):
-                return True
-    return False
+                rows.append((log.name, idx))
+    return rows
+
+
+def _log_has_verifier_dispatch_row(ws: Path, claim_id: str) -> bool:
+    """Scan runs/logs/kunglao-*.jsonl for a verifier-class dispatch row."""
+    return bool(_verifier_dispatch_rows(ws, claim_id))
 
 
 def check_verifier_dispatch_evidence(ws: Path, claim_id: str) -> tuple[bool, str]:
@@ -369,6 +376,70 @@ def check_verifier_dispatch_evidence(ws: Path, claim_id: str) -> tuple[bool, str
             f"kunglao-redteam (kunglao-redteam --target claim {claim_id}); "
             f"its DIFF lands at runs/verify-redteam-{claim_id}.md and the "
             f"dispatch row lands in runs/logs/ — then re-run the promotion.")
+
+
+# =====================================================================
+# Verifier-DEPTH evidence gate (issue #16) — difficulty-gated PROVEN bar
+# =====================================================================
+# Same record vocabulary as gate 5, COUNTED: a hard/max sample (its tier
+# resolved by difficulty_thresholds from the #15 feed) must show more than one
+# DISTINCT verifier engagement before PROVEN. The #57 gate asks "was a
+# verifier ever dispatched"; this gate asks "were there ENOUGH independent
+# engagements". Not a verdict-quality judgment — verdicts stay with the
+# existing BLIND / contradiction / inference / provenance gates.
+
+def count_claim_verifier_records(ws: Path, claim_id: str) -> dict:
+    """Count DISTINCT verifier engagement records for one claim (#16).
+
+    Two record kinds, both read-only and claim-scoped (the #57 shapes):
+      - red-team DIFFs: runs/verify-redteam-*.md whose text names the claim;
+      - verifier-class dispatch rows in runs/logs/kunglao-*.jsonl.
+    One engagement normally emits BOTH, but the DIFF path is fixed per claim
+    (re-rounds overwrite it) while dispatch rows accumulate — neither kind
+    alone upper-bounds the engagement count and their SUM double-counts one
+    round. The engagement count is therefore the MAX over kinds. worker_death
+    outcome records (PR #72) stay visible to the orchestrator but a death is
+    not a verification — they never count toward depth.
+    """
+    ws = Path(ws)
+    diff_names: set[str] = set()
+    runs = ws / "runs"
+    if runs.is_dir():
+        for diff in sorted(runs.glob(REDTEAM_DIFF_GLOB)):
+            try:
+                if claim_id in diff.read_text(
+                        encoding="utf-8", errors="replace"):
+                    diff_names.add(diff.name)
+            except OSError:
+                continue
+    rows = _verifier_dispatch_rows(ws, claim_id)
+    n_diffs, n_rows = len(diff_names), len(rows)
+    return {"diffs": n_diffs, "dispatch_rows": n_rows,
+            "verifications": max(n_diffs, n_rows)}
+
+
+def check_verifier_depth_evidence(ws: Path, claim_id: str,
+                                  required: int) -> tuple[bool, str]:
+    """Enough DISTINCT verifier records for the difficulty tier? (issue #16)
+
+    required <= 1 -> trivially satisfied whenever gate 5 would be (legacy
+    single-verification behavior — easy/medium never complexify). required > 1
+    fails closed: the reason names the count, the requirement, and the
+    concrete repair (dispatch another independent verifier round).
+    """
+    required = max(1, int(required))
+    counts = count_claim_verifier_records(ws, claim_id)
+    got = counts["verifications"]
+    if got >= required:
+        return (True, f"verifier depth ok for {claim_id} ({got} distinct "
+                      f"record(s) >= required {required})")
+    return (False, f"verifier depth insufficient for {claim_id}: {got} "
+                   f"distinct verifier record(s) < required {required} "
+                   f"(difficulty depth gate, #16). Fix: dispatch another "
+                   f"INDEPENDENT verifier round — each round must land its own "
+                   f"dispatch row in runs/logs/ and its own DIFF at "
+                   f"runs/verify-redteam-*.md naming {claim_id} — then re-run "
+                   f"the promotion.")
 
 
 # =====================================================================
