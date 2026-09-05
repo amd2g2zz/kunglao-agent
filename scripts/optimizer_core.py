@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """optimizer_core.py — #833 θ 数值通道（SPSA-on-replay）+ 宪法隔离。
 
-只出提案，永不自动生效：本模块无任何写 value_config / 终态门 /
+只出提案，永不自动生效：本模块无任何写终态门 /
 maker-checker 的路径（结构断言见 tests/test_optimizer_core_833.py）。
 
 宪法隔离（蓝图 §8 安全网第 5 层）：CONSTITUTIONAL_KEYS 中的参数不可进入

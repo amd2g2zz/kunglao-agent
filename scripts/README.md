@@ -72,8 +72,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669): seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` / `taint:<cat>:<api>` candidates | lib(1: digest_build), CLI, tests |
 | `apkid_scanner.py` | T1 apkid pre-scan wrapper (#669): fingerprints packer/compiler/obfuscator/anti-* into evidence/apkid.json (fail-open) | CLI, tests |
 | `provider_health.py` | runtime provider-failure memory (#692 WP4): record/query <ws>/provider_health.json, 24h window, fail-open; consumed by route_capability selection next round | CLI, lib(1: route_capability), tests |
-| `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4); #823 A3 feed-side terms behind KUNGLAO_VALUE_ALGO | lib(3), tests |
-| `value_config.py` | AB-VALUE experiment flag KUNGLAO_VALUE_ALGO (#823) — fail-loud arm switch; off = byte-identical dev behavior | lib(4), tests |
+| `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4); #823 A3 feed-side terms always-on (#51) | lib(3), tests |
 | `relib_audit.py` | re-library 审查器 (#817) — 孤儿/tracker 残留/声明行缺失三类检查 + quarantine 可逆移动 + 质量度量; _INDEX.yaml pin 契约(改库必 re-pin) | hooks, tests |
 | `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |
@@ -139,6 +138,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `refutation_propagate.py` | refutation propagation across facts | tests |
 | `register_proven_gate.py` | claim-register →PROVEN evidence gate (#819) — latest verify=passes + red-team ran (≠REFUTED) or justified waiver; wired as write_guard register leg | hooks/write_guard, tests |
 | `stale_blocker_prune.py` | stale blocker pruning | lib(1), tests |
+| `worker_death.py` | #11 worker-death event + artifact snapshot — dead-worker classification (silent > DEAD_WORKER_MINUTES) consumed by convergence_check._act_stuck_workers; writes runs/.worker-death-<stem>.json (claim/last-activity/已完成产物清单) as the resume signal; idempotent per worker | convergence_check, tests |
 | `status_defs.py` | claim status constants — single source of truth | hooks, lib(13), tests |
 | `statusline_snapshot.py` | #883 statusline health-snapshot writer: probe registry + semantic state machine + atomic pre-write of runs/.kunglao-statusline.json per tick (Node reads it, zero spawn); attached from heartbeat_tick, fail-open | heartbeat_tick step 11, tests |
 | `liveness_policy.py` | liveness/staleness minutes constants — single source (#597: stuck 20 / heartbeat 35 / activation+env 30 / kicker+margins 10, values adjudicated) | hooks, lib(9), tests |

@@ -62,9 +62,16 @@ analysis; a workspace that is not initialized is refused work.
    subagents to `<ws>/.claude/agents/`, records the MCP supply state in
    `env-manifest.yaml` (missing registrations become MANUAL entries with
    their register command — init never runs `claude mcp add` itself), and
-   writes the deployment ledger. `--skills a,b` opts into auxiliary skill
-   deployment. Activation (which hooks FIRE) stays a separate
-   orchestrator act:
+   writes the deployment ledger. Deployment is WORKSPACE-SCOPED (#25 D4):
+   the hooks live in `<ws>/.claude/settings.json` and fire only for
+   sessions opened inside `<ws>` — a Claude session started elsewhere
+   (another project, the repo checkout, home) loads none of them, so
+   kunglao's gates are silently absent there; `hooks/session_start.py`
+   prints an explicit NOT-active notice when it runs without a kunglao
+   workspace. `--builtin-skills a,b` opts into auxiliary skill
+   deployment (kunglao's BUILT-IN bundled skills only — globally-installed
+   skills are a different, future surface). Activation (which hooks FIRE)
+   stays a separate orchestrator act:
    `python <SKILL_DIR>/scripts/hook_activation.py <workspace> --wire-up`
    remains the canonical re-registration/repair entry .
 
@@ -76,7 +83,8 @@ The workspace path is a positional argument (omitted -> pending decision).
 default — an undecided type pends, exit 8). `--target NAME` names the
 analysis target under `bins/`; containers additionally resolve
 `target_object`. `--no-hooks` skips hook deployment (the only legal skip);
-`--skills a,b` deploys named auxiliary skills (opt-in, default none).
+`--builtin-skills a,b` deploys named built-in auxiliary skills (opt-in,
+default none; kunglao-bundled names only, #25 D2).
 
 ## No arguments
 

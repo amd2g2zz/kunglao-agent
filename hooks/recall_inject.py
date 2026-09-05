@@ -260,10 +260,17 @@ def recall_files(query: str, cwd: Path | None = None,
 
 
 def _guidance(queries: list[str], files: list[str]) -> str:
+    # #55 XML injection standard: the recall is INTERNAL kunglao knowledge
+    # (references/_INDEX.md + the re-library), so the producer tag is
+    # <kunglao-facts> — never <external-tools>. Marks, never gates:
+    # rc stays 0 and the payload shape is unchanged
+    # (references/xml-injection-standard.md).
     return (
+        f"<kunglao-facts>\n"
         f"recall_inject: claim dispatch knowledge recall (#268) - "
         f"queries: {', '.join(queries)}\n"
-        f"Before dispatching, read: {', '.join(files)}"
+        f"Before dispatching, read: {', '.join(files)}\n"
+        f"</kunglao-facts>"
     )
 
 

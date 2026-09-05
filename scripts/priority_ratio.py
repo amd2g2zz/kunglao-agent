@@ -57,7 +57,6 @@ from pathlib import Path
 
 import yaml
 
-import value_config
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES, SUSPENDED
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
@@ -90,11 +89,12 @@ class EvidenceView:
     # #759 H2: structured user worth ruling (fail-open loaded)
     value_class_weights: dict[str, float] = field(default_factory=dict)
     value_claim_overrides: dict[str, float] = field(default_factory=dict)
-    # #823 A3 (N-arm): replay prior P(complete) for this workspace's bucket;
-    # 1.0 = neutral → pre-#823 cost math. Resolved only when the flag is on.
+    # #823 A3 (always-on since #51): replay prior P(complete) for this
+    # workspace's bucket; 1.0 = neutral → pre-#823 cost math (fail-open on
+    # read failure, not flag-gated).
     prior_p_complete: float = 1.0
     # #823-P3: remaining gap weight per PQ (answered→0, blocked→(1−β)·w,
-    # unattempted→w); mission_active only when flag ON + positive gaps.
+    # unattempted→w); mission_active only with positive gaps.
     mission_gap: dict[str, float] = field(default_factory=dict)
     mission_active: bool = False
 
@@ -150,26 +150,26 @@ class EvidenceView:
         caps, obstacles, covers = _scan_failure_artifacts(ws)
         claim_strategy, strategy_failures = _load_strategy_view(ws, covers)
         classes, overrides = load_value_weights(ws)
-        prior_p = _resolve_prior_p(ws) if value_config.is_enabled() else 1.0
+        prior_p = _resolve_prior_p(ws)
         mission_gap: dict[str, float] = {}
         mission_active = False
-        if value_config.is_enabled():
-            # #823-P3: mission gap weights from the欠账表 (fail-open).
-            try:
-                led_path = ws / "runs" / "mission_ledger.yaml"
-                if led_path.exists():
-                    led = yaml.safe_load(
-                        led_path.read_text(encoding="utf-8")) or {}
-                    beta = float(led.get("mission", {}).get("beta", 0.3))
-                    for p in led.get("mission", {}).get("pqs", []):
-                        w = float(p.get("weight", 1.0))
-                        st = p.get("state")
-                        mission_gap[str(p.get("id"))] = (
-                            0.0 if st == "answered" else
-                            (1.0 - beta) * w if st == "blocked" else w)
-                    mission_active = any(v > 0 for v in mission_gap.values())
-            except Exception:  # noqa: BLE001 — fail-open
-                mission_gap, mission_active = {}, False
+        # #823-P3 (always-on since #51): mission gap weights from the欠账表
+        # (fail-open).
+        try:
+            led_path = ws / "runs" / "mission_ledger.yaml"
+            if led_path.exists():
+                led = yaml.safe_load(
+                    led_path.read_text(encoding="utf-8")) or {}
+                beta = float(led.get("mission", {}).get("beta", 0.3))
+                for p in led.get("mission", {}).get("pqs", []):
+                    w = float(p.get("weight", 1.0))
+                    st = p.get("state")
+                    mission_gap[str(p.get("id"))] = (
+                        0.0 if st == "answered" else
+                        (1.0 - beta) * w if st == "blocked" else w)
+                mission_active = any(v > 0 for v in mission_gap.values())
+        except Exception:  # noqa: BLE001 — fail-open
+            mission_gap, mission_active = {}, False
         return cls(frozenset(terminal_claims), verified, {}, lines,
                    caps, obstacles, strategy_failures, claim_strategy,
                    classes, overrides, prior_p, mission_gap, mission_active)
@@ -190,7 +190,7 @@ class Action:
     novelty: float
     cost: float
     weight: float = 1.0  # #759 H2 value multiplier (appended field — the pre-#759 construction shape is positionally compatible)
-    gap_bucket: int = 0  # #823-P3: 1 = answers an open-PQ gap (leads the sort when flag ON)
+    gap_bucket: int = 0  # #823-P3: 1 = answers an open-PQ gap (leads the sort)
 
     def to_dict(self) -> dict:
         return {"claim_id": self.claim_id, "action": self.action,
@@ -664,20 +664,19 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
         # ratio (absent weights → 1.0 → the pre-#759 formula byte-identical).
         weight = claim_value_weight(c, evidence.value_class_weights,
                                     evidence.value_claim_overrides)
-        # #823 A3 (N-arm only): feed-side terms — cost inflated by the
-        # bucket's inverse P(complete) (rework expectation, floored at 0.05
-        # to bound the inflation) and the capability bonus. Flag off → both
-        # neutral, byte-identical to the pre-#823 formula.
-        cost_eff, bonus = cost, 1.0
-        if value_config.is_enabled():
-            cost_eff = cost / max(evidence.prior_p_complete, 0.05)
-            if any(cid == cap_cid
-                   for cap_cid, _ in evidence.validated_capabilities):
-                bonus = CAPABILITY_BONUS
+        # #823 A3 (always-on since #51): feed-side terms — cost inflated by
+        # the bucket's inverse P(complete) (rework expectation, floored at
+        # 0.05 to bound the inflation) and the capability bonus. A neutral
+        # prior (1.0, fail-open) reproduces the pre-#823 cost math.
+        cost_eff = cost / max(evidence.prior_p_complete, 0.05)
+        bonus = 1.0
+        if any(cid == cap_cid
+               for cap_cid, _ in evidence.validated_capabilities):
+            bonus = CAPABILITY_BONUS
         # #823-P3: gap-hit bucket — claims answering an OPEN PQ gap lead the
-        # ranking (缺口命中 > tier > VoI). Flag off → bucket stays 0 for all.
+        # ranking (缺口命中 > tier > VoI). No ledger data → bucket stays 0.
         gap_bucket = 0
-        if value_config.is_enabled() and evidence.mission_active:
+        if evidence.mission_active:
             pq = str(c.get("answers_question") or "").strip()
             if pq and evidence.mission_gap.get(pq, 0.0) > 0.0:
                 gap_bucket = 1
@@ -689,13 +688,10 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
             weight=weight, gap_bucket=gap_bucket,
         ))
     # score tie within ε → lower cost wins (mechanical ruling, no LLM); then stable by claim_id.
-    # #823-P3: flag ON → gap-bucket leads; uniform buckets (or flag off) reduce
-    # to the legacy key, so the result order is byte-identical there.
-    if value_config.is_enabled():
-        actions.sort(key=lambda a: (0 if a.gap_bucket else 1,
-                                    -a.score, a.cost, a.claim_id))
-    else:
-        actions.sort(key=lambda a: (-a.score, a.cost, a.claim_id))
+    # #823-P3 (always-on since #51): gap-bucket leads; uniform buckets reduce
+    # to the legacy key, so the result order stays byte-identical there.
+    actions.sort(key=lambda a: (0 if a.gap_bucket else 1,
+                                -a.score, a.cost, a.claim_id))
     return actions
 
 

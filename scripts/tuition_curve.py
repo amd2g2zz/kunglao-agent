@@ -137,8 +137,32 @@ def _slope(ys):
     return (n * siy - si * sy) / den
 
 
+def _norm_series(hist, total_w):
+    """#10 history -> normalized V_m series (per settlement round).
+
+    每条带 v_m 的 history 点换算到 [0,1]：新点直接取 v_norm；legacy 点
+    （只有 v_m）按当前 Σweight 推导（best-effort：repin 改权重后旧点为
+    近似）。无 v_m 的行（repin 留痕）不入样。Σweight <= 0 → 全 0 序列。
+    """
+    out = []
+    for h in (hist or []):
+        if not isinstance(h, dict) or "v_m" not in h:
+            continue
+        if "v_norm" in h:
+            out.append(float(h["v_norm"]))
+        else:
+            out.append(float(h["v_m"]) / total_w if total_w > 0 else 0.0)
+    return out
+
+
 def cockpit_summary(ws):
-    """V/D/ETA 一阶信号（消费 mission_ledger + tuition），结构化 dict。"""
+    """V/D/ETA 一阶信号（消费 mission_ledger + tuition），结构化 dict。
+
+    #10 单位语义：d_slope / d_slope_norm 均为每结算轮速率（一条 history
+    点 = 一轮，无 wall-clock 参与）；d_slope_norm 在归一化序列上取斜率，
+    eta_checkpoints 由归一化序列外推（权重稳定时数值与旧口径一致，
+    repin 变权后 scale-free）。raw v / d_slope 原样保留（additive）。
+    """
     import mission_ledger
     led = mission_ledger.load(ws)
     mission = led.get("mission", {})
@@ -146,12 +170,16 @@ def cockpit_summary(ws):
     total_w = sum(float(p.get("weight", 1.0)) for p in pqs)
     hist = [float(h.get("v_m", 0.0))
             for h in (mission.get("history") or [])]
+    norm = _norm_series(mission.get("history"), total_w)
     v = hist[-1] if hist else 0.0
+    v_norm = norm[-1] if norm else 0.0
     slope = _slope(hist[-_WINDOW:])
-    eta = ((total_w - v) / slope) if slope > 0 else None
+    slope_norm = _slope(norm[-_WINDOW:])
+    eta = ((1.0 - v_norm) / slope_norm) if slope_norm > 0 else None
     recs = missions_from_ledger(ws)
     cs_cost = cost_state(ws)
-    out = {"v": v, "d_slope": round(slope, 6),
+    out = {"v": v, "v_norm": round(v_norm, 6),
+           "d_slope": round(slope, 6), "d_slope_norm": round(slope_norm, 6),
            "eta_checkpoints": eta, "total_weight": total_w,
            "answered": sum(1 for p in pqs if p.get("state") == "answered"),
            "blocked": sum(1 for p in pqs if p.get("state") == "blocked"),

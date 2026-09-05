@@ -17,6 +17,13 @@ land on durable storage and the workspace git checkpoint catches the transition:
   3. _checkpoint_commit(workspace, claim_id, terminal_status)
         shared #534 hook for workspace git checkpoint. Imported lazily so
         #524 ships even if #534 isn't merged yet (returns a no-op stub).
+  4. mission_ledger.update(workspace)  (#8)
+        settlement: the closed ledger's PROVEN claims' answers_question map
+        to PQ answered/coverage 1.0. Idempotent; only _TERMINAL_STAMPED
+        statuses stamp (non-PROVEN terminals are no-ops). Fail-open: an
+        error is recorded as mission_settlement on the result/ledger row,
+        it never breaks the terminal transition. Workspaces without
+        runs/mission_ledger.yaml skip (pre-#823 installs).
 
 The rollup is IDEMPOTENT on the (claim_id, terminal_status) pair:
   - First call: appends an operator_action row (action=rollup) to the ledger.
@@ -208,6 +215,22 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
     # Step 3: workspace git checkpoint commit (shared mount with #534).
     ck = _checkpoint_commit(workspace, claim_id, status_upper)
 
+    # Step 4 (#8): mission-ledger settlement. The design intent already
+    # existed in prose (backtrack_loop.fake_success_flags names
+    # mission_ledger.update as "the settlement point") but the call was
+    # never wired, so V_m/coverage stayed at init state forever. update()
+    # is idempotent and only stamps _TERMINAL_STAMPED claims, so firing it
+    # for every terminal status is safe. Fail-open: settlement errors are
+    # recorded, never propagated — the terminal transition must not break.
+    mission_settlement = "skipped:no-ledger"
+    if (workspace / "runs" / "mission_ledger.yaml").exists():
+        try:
+            import mission_ledger as _ml
+            _ml.update(workspace)
+            mission_settlement = "ok"
+        except Exception as exc:  # noqa: BLE001 — settlement never breaks rollup
+            mission_settlement = f"error: {exc!r}"
+
     _append_ledger(workspace, {
         "type": LedgerLineType.OPERATOR_ACTION,
         "action": "rollup",
@@ -219,6 +242,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         "lessons_skipped": agg_res.get("lessons_skipped", 0),
         "queue_added": agg_res.get("queue_added", 0),
         "checkpoint_commit": ck,
+        "mission_settlement": mission_settlement,
         "ts": utc_now_iso(),
     })
 
@@ -231,6 +255,7 @@ def run_rollup(workspace: Path, claim_id: str, terminal_status: str,
         "lessons_skipped": agg_res.get("lessons_skipped", 0),
         "queue_added": agg_res.get("queue_added", 0),
         "checkpoint_commit_called": True,
+        "mission_settlement": mission_settlement,
     }
 
 

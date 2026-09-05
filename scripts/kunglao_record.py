@@ -43,6 +43,7 @@ REQUIRED_FOR_TERMINAL_STATE = (
     "blind_gate",
     "fact_contradiction_gate",
     "blind_gate:check_inference_blind_scope",
+    "blind_gate:check_verifier_dispatch_evidence",
 )
 
 
@@ -403,6 +404,23 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             gate_msg += (f" [PROVENANCE GATE: verifier runtime error "
                          f"({type(exc).__name__}: {exc}); degraded to STAMP "
                          f"(guardrails SS1b self_caveat allowed)]")
+        # ---- verifier-dispatch gate (#57 gate 5) ----
+        # LAST PROVEN gate: only claims that would LAND PROVEN need it (the
+        # STAMP downgrades from the gates above skip this — #98 degrade
+        # posture unchanged). A promotion without a dispatched verifier is a
+        # protocol failure, not a verdict-quality issue: hard-refuse with the
+        # dispatch repair path (fail closed — register not modified).
+        if effective_status == "PROVEN":
+            try:
+                from blind_gate import check_verifier_dispatch_evidence
+            except Exception as exc:
+                return (False, _required_gate_receipt(
+                    "blind_gate:check_verifier_dispatch_evidence", exc,
+                    claim_id))
+            v_ok, v_reason = check_verifier_dispatch_evidence(ws, claim_id)
+            if not v_ok:
+                return (False, f"VERIFIER DISPATCH GATE: {v_reason} — "
+                               f"register not modified (fail closed)")
 
     if not _set_claim_status(reg_path, claim_id, effective_status):
         return (False, f"could not rewrite status for {claim_id} in claim-register.yaml")

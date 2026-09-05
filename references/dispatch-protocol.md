@@ -64,6 +64,10 @@ gate 解析失败时:
 - **hookSpecificOutput.additionalContext**:注入"dispatch gate 失活"信息,让
   orchestrator 看到 gate 没生效(原 silent 行为隐藏这个事实)
 
+> 注入消息格式(#55):gate 裁决(REJECT/HARD_PAUSE/纠正注入)以
+> `<gate-verdict>` 包裹,知识召回以 `<kunglao-facts>` 包裹 —
+> 八标签标准见 [xml-injection-standard.md](xml-injection-standard.md)。
+
 ## 兼容性
 
 - v0 prompt 继续工作
