@@ -2,7 +2,7 @@
 
 **A Claude Code skill that runs a convergence-driven reverse-engineering loop — plans its own path, derives every fact from raw evidence, and converges under mechanical verification gates.**
 
-[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](.) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](.) [English](README.md) · [简体中文](README.zh-CN.md)
+[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](.) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](.) [English](README.md) · [Simplified Chinese](README.zh-CN.md)
 
 Drop a target into a workspace, say what you need to know, and the skill drives the loop: specialist workers analyse (static first), an independent verifier re-derives every fact blind from raw evidence, and mechanical gates decide when the analysis is done. The deliverable is a fact base where every claim is byte-anchored, independently verified, and evidence-indexed — trust is enforced by machinery, not convention.
 
@@ -237,32 +237,18 @@ Every tick is one mechanical decision:
 
 Dispatch carries an explicit contract — `[T1 tools=grep,xxd] claim C-007 <task>` — enforced by the `worker_budget` hook: ≤3 concurrent workers, per-claim cap, tier gate (T1 static / T2 emulation / T3 VM), live heartbeat, plan-with-content, a declared static-gap list for T2/T3 work.
 
-### Convergence flow (text diagram)
+### Convergence flow
 
-```
-        task_spec.yaml
-              │
-              ▼
-   ┌── orchestrator (every round) ──┐
-   │                                │
-   ▼                                │
-DISPATCH ─────► worker ──────┐       │
-   ▲                          ▼       │
-   │                     fact (PARTIAL)
-   │                          │       │
-   │                          ▼       │
-   │                DISPATCH_VERIFIER  │
-   │                          │       │
-   │                          ▼       │
-   │                  verifier signs   │
-   │                  CONFIRMED / REFUTED
-   │                          │       │
-   │                  all PQs terminal?│
-   │                          │  no   │
-   └──────────────── SATURATED ◄──────┘
-              │ yes
-              ▼
-        CONVERGED (exit 0)
+```mermaid
+flowchart TD
+    spec[task_spec.yaml] --> orch{orchestrator every round}
+    orch -->|DISPATCH exit=1| w[worker]
+    w --> part[fact PARTIAL]
+    part --> ver[DISPATCH_VERIFIER exit=2]
+    ver --> sign{verifier signs CONFIRMED / REFUTED}
+    sign -->|all PQs terminal?| sat{SATURATED exit=3}
+    sat -->|no| orch
+    sat -->|yes| conv[CONVERGED exit=0]
 ```
 
 ---

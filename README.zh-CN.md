@@ -239,32 +239,18 @@ verifier_sign_off:
 
 派工合约必须显式 —— `[T1 tools=grep,xxd] claim C-007 <task>`，由 `worker_budget` hook 强制执行：≤3 个并发 worker、每个 claim 有上限、tier 门（T1 静态 / T2 仿真 / T3 VM）、实时心跳、plan-with-content、T2/T3 工单必带“静态 gap 清单”。
 
-### 收敛流程（文字图）
+### 收敛流程
 
-```
-        task_spec.yaml
-              │
-              ▼
-   ┌── 编排器（每一轮） ──┐
-   │                    │
-   ▼                    │
-DISPATCH ───► worker ─┐ │
-   ▲                  ▼ │
-   │          fact（PARTIAL）
-   │                  │ │
-   │                  ▼ │
-   │        DISPATCH_VERIFIER
-   │                  │ │
-   │                  ▼ │
-   │            验证者签
-   │            CONFIRMED / REFUTED
-   │                  │ │
-   │          所有 PQ 都 terminal？
-   │                  │ 否│
-   └────────── SATURATED ◄─────┘
-            │ 是
-            ▼
-      CONVERGED（退出 0）
+```mermaid
+flowchart TD
+    spec[task_spec.yaml] --> orch{编排器 每一轮}
+    orch -->|DISPATCH exit=1| w[worker]
+    w --> part[fact PARTIAL]
+    part --> ver[DISPATCH_VERIFIER exit=2]
+    ver --> sign{验证者签 CONFIRMED / REFUTED}
+    sign -->|所有 PQ 都 terminal？| sat{SATURATED exit=3}
+    sat -->|否| orch
+    sat -->|是| conv[CONVERGED exit=0]
 ```
 
 ---
