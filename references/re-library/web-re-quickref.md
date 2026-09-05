@@ -225,3 +225,11 @@ Index only — open on demand when the main workflow dead-ends:
   rather than algorithm-driven; compare real versus sandbox environments.
 - **Protocol reassembly** — assembling the standalone request generator
   from captured facts; the delivery step every case ends with.
+- **Opaque response bodies** — when the captured body is not readable
+  text; triage into three classes before picking a decoder
+  ([wire-format-recognition.md](wire-format-recognition.md)).
+- **TLS ClientHello fingerprint (JA3-class)** — when a byte-correct
+  replay is still rejected; compare transport shape, not parameters.
+- **Stacked protections** — pinning/RASP/obfuscation/encryption as
+  orthogonal layers over any route, plus the recon order
+  ([stacked-protections.md](stacked-protections.md)).
