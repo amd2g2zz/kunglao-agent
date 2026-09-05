@@ -866,6 +866,34 @@ _TOOLFIRST_STOPWORDS = frozenset(
     {'static', 'pipeline', 'pipelines', 'aux', 'auxiliary',
      'annotate', 'decode'})
 
+# ---------- issue #54: android toolchain lighting aliases (keyword DATA) ------
+# LIGHTING ONLY (#54 owner ruling: 不能强制 — we cannot force tool choice).
+# The android capability halves in tools/_INDEX.yaml ("android:java-source",
+# "android:packer-fingerprint", ...) are compound registry ids that literal
+# dispatch prose never matches, so an android dispatch CITING its tool could
+# never reach mode='matched' (the #46 self-attestation lock shape, android
+# edition) and verify_tool_catalog could not resolve the citation. Each alias
+# below maps to the registered android tool the dispatch means.
+#
+# The gate's REJECT semantics are UNTOUCHED: a keyword hit still behaves
+# exactly like 'crypto' does today (same missing_marker face, same opt-out) —
+# no new REJECT mode, no new required marker. An android-flavored dispatch
+# that names no alias (e.g. the #54 repro "分析这个APK的登录加密逻辑" itself)
+# still passes silently (no_match).
+#
+# Discipline (_TOOLFIRST_STOPWORDS spirit): DISTINCTIVE terms only — provider
+# names derived from the registry's own `provider:` field (jadx/baksmali/
+# apkid/gitnexus/dexdc) plus CJK android-RE compounds. Generic prose ("app",
+# "apk", "java", "加密", "tls", "okhttp", "frida") stays OUT of the trigger
+# set — those false-positive normal dispatches; the ambiguous-but-likely
+# terms are route-side lighting only (scripts/route_capability.py #54 table).
+_ANDROID_KEYWORD_ALIASES: dict[str, tuple[str, ...]] = {
+    # tools/_INDEX.yaml capability tag -> extra keywords for that tool family
+    'android:java-source': ('反编译', 'java源码', 'java 源码'),
+    'android:bytecode-truth': ('smali',),
+    'android:packer-fingerprint': ('加固', '脱壳', '加壳'),
+}
+
 # One-off diagnostic exemption: CJK phrases are substring-matched (no word
 # concept to bound), ASCII phrases are word-bounded so 'one-off' inside a
 # longer word cannot trigger, and BOTH are negation-aware — "not a one-off
@@ -892,6 +920,13 @@ def _load_tool_index_keywords(skill_root: Path) -> dict[str, str]:
     {'crypto': 'crypto-tool', 'decode': 'crypto-tool'}. Multiple tools sharing
     a keyword keep the first-registered tool (informational only; the gate
     only needs ONE candidate name to cite in its REJECT message).
+
+    #54 android lighting: entries whose capability is an android:* tag also
+    contribute their `provider` name plus the distinctive aliases in
+    _ANDROID_KEYWORD_ALIASES — same first-registered-wins rule, so registry
+    order decides e.g. 反编译 -> jadx-decompile (the high-quality
+    android:java-source provider) over dexdc-decompile. Coverage only: the
+    gate's REJECT semantics are unchanged.
     """
     index_path = skill_root / 'tools' / '_INDEX.yaml'
     if not index_path.exists():
@@ -915,6 +950,15 @@ def _load_tool_index_keywords(skill_root: Path) -> dict[str, str]:
         for kw in (domain.strip().lower(), op.strip().lower()):
             if kw and kw not in out:
                 out[kw] = name
+        # #54 android lighting aliases (data table above; coverage only)
+        cap_l = capability.strip().lower()
+        if cap_l.startswith('android:'):
+            provider = str(entry.get('provider') or '').strip().lower()
+            if provider and provider not in out:
+                out[provider] = name
+            for alias in _ANDROID_KEYWORD_ALIASES.get(cap_l, ()):
+                if alias and alias not in out:
+                    out[alias] = name
     return out
 
 
