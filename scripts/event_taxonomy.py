@@ -196,6 +196,12 @@ EMIT_ACTIONS = [
     "lesson_deprecated",
     "lesson_match",
     "lesson_stage_transition",  # #525 lessons nursery draft → active
+    "lifecycle_completed",  # #58 S2 subagent delivered (digest may ride detail)
+    "lifecycle_failed",   # #58 S2 subagent terminated with failure
+    "lifecycle_reaped",   # #58 S2 subagent torn down without completion
+    "lifecycle_spawned",  # #58 S2 subagent lifecycle: Task-spawn observed
+    "lifecycle_stalled",  # #58 S2 stall detector fired on the subagent
+    "lifecycle_started",  # #58 S2 first subagent output observed
     "mcp_scaffold_refresh",  # #755 A4 .mcp.json init-parity backfill face
     "mech_reject",        # #878 scheduler registry schema-gate REJECT face (fail-closed, nothing ran)
     "mech_run",           # #878 one scheduler pass: ran/skipped/dropped mechanisms + event classes
@@ -214,6 +220,7 @@ EMIT_ACTIONS = [
     "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face
+    "result_digest",      # #58 S2b result-summary face: files_written/claims_touched/verdict
     "retro_policy",       # #882 policy retro window face (heartbeat_tick advisory step)
     "retro_report",       # #882 settlement retro report face (runs/<ts>-retro-<claim>.md)
     "rho_checkpoint",     # #823 P2 N-arm V/D/ETA shadow signal face

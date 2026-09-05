@@ -196,10 +196,11 @@ K_ZERO_FILES = (
 # the loop sites are gone; the residuals are non-jsonl-loop parses
 # (state/heartbeat file reads, detail-field parses, CLI --event parsing).
 # kunglao_log counts include the iter_jsonl util body itself (json.loads in
-# the generator + one docstring mention) and its own state-file read.
+# the generator + one docstring mention), its own trace-state read, and the
+# #58 current_trace() inheritance read (same state file, same non-loop face).
 K_RESIDUAL_PINS = {
     "rho_verifier": (1, 1),
-    "kunglao_log": (3, 1),
+    "kunglao_log": (4, 1),
     "kunglao_record": (1, 1),
     "kunglao_resume": (2, 0),
     "heartbeat": (4, 3),
