@@ -842,6 +842,122 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
               file=sys.stderr, flush=True)
 
 
+# ===================== #105 dispatch intent record =====================
+
+# THE roi-intents producer (audit A8): #49 shipped record_intent with zero
+# production callers, so runs/roi-intents.jsonl stayed empty and the value
+# spine (outcome_capture -> settle_intent -> case_bank) never received data.
+# The dispatch ALLOW tail is the one face every real dispatch passes, so the
+# intent row is recorded THERE — after the #496 teeth, before the worker
+# starts.
+#
+# Declaration faces parsed from the dispatch prompt (#97 owns the prompt
+# FIELD contract; this issue only lands the writer):
+#   v1 structured — kunglao_dispatch meta keys uncertainty / preconditions /
+#                   expected_artifact
+#   prose         — `uncertainty:` / `preconditions:` / `expected_artifact:`
+#                   markers, case-insensitive, first match wins
+#
+# Schema mapping onto the frozen #49 record_intent contract:
+#   declared uncertainty -> uncertainty  (the ruling-3 "WHICH uncertainty")
+#   preconditions        -> context_tags (ruling 1's context dimension:
+#                           value = method x context x outcome; the
+#                           applicability preconditions ARE that context)
+#   dispatched agent     -> method       (the executed-method identity)
+#
+# Fail-open: a missing declaration, a declaration-parse failure or a
+# record-write failure NEVER blocks the dispatch — the face degrades to an
+# `intent_unparsed` event (kunglao_log, registered word) and rc stays 0.
+_INTENT_UNCERTAINTY_RE = re.compile(r"\buncertainty:\s*([^\n]+)",
+                                    re.IGNORECASE)
+_INTENT_PRECONDITIONS_RE = re.compile(r"\bpreconditions?:\s*([^\n]+)",
+                                      re.IGNORECASE)
+_INTENT_ARTIFACT_RE = re.compile(r"\bexpected[-_]artifact:\s*([^\n]+)",
+                                 re.IGNORECASE)
+
+
+def _intent_precondition_list(value) -> list[str]:
+    """Normalize a preconditions declaration to a clean tag list."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        parts = re.split(r"[,;]", value)
+    elif isinstance(value, (list, tuple)):
+        parts = [str(v) for v in value]
+    else:
+        parts = [str(value)]
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _parse_intent_declaration(prompt_text: str) -> dict:
+    """(uncertainty, preconditions, expected_artifact) from the dispatch
+    prompt — v1 JSON meta first, prose markers second. Absent fields
+    degrade to "" / []; a structurally broken meta raises (the caller
+    catches and emits intent_unparsed)."""
+    text = prompt_text or ""
+    meta: dict = {}
+    try:
+        parsed = load_hooks_lib().parse_dispatch_json(text)
+        if isinstance(parsed[3], dict):
+            meta = parsed[3]
+    except Exception:  # noqa: BLE001 — structured face best-effort
+        meta = {}
+
+    def _declared(key: str, pattern: re.Pattern) -> str:
+        v = meta.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+        m = pattern.search(text)
+        return m.group(1).strip() if m else ""
+
+    def _declared_tags(key: str, pattern: re.Pattern) -> list[str]:
+        v = meta.get(key)
+        if isinstance(v, (str, list, tuple)):
+            tags = _intent_precondition_list(v)
+            if tags:
+                return tags
+        return _intent_precondition_list(
+            m.group(1) if (m := pattern.search(text)) else None)
+
+    return {
+        "uncertainty": _declared("uncertainty", _INTENT_UNCERTAINTY_RE),
+        "preconditions": _declared_tags("preconditions",
+                                        _INTENT_PRECONDITIONS_RE),
+        "expected_artifact": _declared("expected_artifact",
+                                       _INTENT_ARTIFACT_RE),
+    }
+
+
+def _record_dispatch_intent(ws: Path, claim_id: str, prompt_text: str,
+                            payload: dict) -> None:
+    """#105: record the dispatch intent row (runs/roi-intents.jsonl) via
+    roi_settlement.record_intent — the producer #50's settlement and the
+    #97 case history both read. Called on the #496-teeth-pass tail only:
+    a REJECTed/blocked dispatch never declares an intent it did not start.
+    Fail-open by contract (see block comment above): every failure face
+    emits `intent_unparsed` and returns — never blocks the dispatch."""
+    try:
+        decl = _parse_intent_declaration(prompt_text)
+        with scripts_on_path():  # #671 scoped membership
+            import roi_settlement
+        res = roi_settlement.record_intent(
+            ws, claim_id,
+            method=_resolve_dispatch_agent(payload, prompt_text)
+            or "dispatch",
+            context_tags=decl["preconditions"],
+            uncertainty=decl["uncertainty"],
+            expected_artifact=decl["expected_artifact"])
+        if not res.get("ok"):
+            # Ruling-3 gate declined (MISSING_UNCERTAINTY): the dispatch
+            # proceeds unbanked — the event IS the durable signal.
+            _emit_trace(ws, "intent_unparsed", claim_id,
+                        f"reason={res.get('reason')} (no named uncertainty "
+                        f"in dispatch prompt)")
+    except Exception as exc:  # noqa: BLE001 — an intent must never block dispatch
+        _emit_trace(ws, "intent_unparsed", claim_id,
+                    f"intent parse/record failed ({exc!r})")
+
+
 # #567 SECURITY: MCP tool prefix enforcement.
 DISPATCH_MCP_DOC = "mcp__unknown__*, mcp__external__*"  # doc anchor only
 
@@ -1253,6 +1369,10 @@ def main() -> int:
                     "mission-stable allocation (envelope trace_id absent "
                     "or format-invalid)", trace_id=trace_id)
     _log_strategy_dispatch(ws, claim_id, prompt_text)
+    # #105: THE roi-intents producer — record the declared intent at the
+    # dispatch ALLOW tail (all teeth passed, worker not yet started).
+    # Fail-open: intent_unparsed event only, never a blocked dispatch.
+    _record_dispatch_intent(ws, claim_id, prompt_text, payload)
     # UNWAIT: this dispatch targets a worker parked in the wait loop — write
     # the wake signal so its poll loop re-arms it (fire-and-forget, above).
     _write_wait_signal(ws, _resolve_dispatch_agent(payload, prompt_text),
