@@ -307,9 +307,28 @@ def classify_action(claim: dict) -> str:
 
 # ---------- VoI components ----------
 
+def _int_flag(value) -> tuple[int, bool]:
+    """int conversion with a dirty flag (#103 per-claim tolerance).
+
+    A register field that fails to parse ("two", a mapping, None) degrades
+    to (0, True) — never a ValueError/TypeError escaping one claim's row
+    into the whole-workspace conservative BLOCKED. The dirty flag feeds the
+    Action.feeds diagnostic instead of a crash.
+    """
+    try:
+        return int(value), False
+    except (TypeError, ValueError):
+        return 0, True
+
+
+def attempts_of(claim: dict) -> int:
+    """promotion_attempts → int; unparseable → 0 (#103)."""
+    return _int_flag(claim.get("promotion_attempts", 0))[0]
+
+
 def action_tier(claim: dict) -> int:
-    """Action tier = min(evidence_tier_attempted + 1, 3)."""
-    return min(int(claim.get("evidence_tier_attempted", 0)) + 1, 3)
+    """Action tier = min(evidence_tier_attempted + 1, 3); dirty value → tier 1 (#103)."""
+    return min(_int_flag(claim.get("evidence_tier_attempted", 0))[0] + 1, 3)
 
 
 def action_cost(claim: dict) -> float:
@@ -796,7 +815,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
         cid = c.get("id")
         if not cid or not is_open(c):
             continue
-        if int(c.get("promotion_attempts", 0)) >= 3:
+        if attempts_of(c) >= 3:  # #103: dirty value → 0, never a row-crash
             continue
         parents = depends_on.get(cid, []) or []
         if any(p not in terminal for p in parents):
@@ -850,6 +869,13 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
                    else "no dispatch history (runs/strategy-log.jsonl) — "
                         "repetition proxy inert")
         feeds = {"L": l_state, "D": d_state, "N": n_state}
+        # #103: attempts conversion is per-claim guarded; a dirty raw value
+        # scores as 0 and surfaces here as a feed diagnostic instead of
+        # freezing the whole DECIDE run in conservative BLOCKED.
+        attempts, attempts_dirty = _int_flag(c.get("promotion_attempts", 0))
+        if attempts_dirty:
+            feeds["A"] = (f"promotion_attempts={c.get('promotion_attempts')!r} "
+                          "unparseable -> treated as 0 (#103)")
         cost = action_cost(c)
         numerator = WEIGHTS["L"] * L + WEIGHTS["D"] * D + WEIGHTS["N"] * N
         # #759 H2: the user's structured worth ruling multiplies the final
@@ -872,7 +898,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
         score = round(numerator / cost_eff * weight * bonus, 3)
         actions.append(Action(
             claim_id=cid, action=action_cat, score=score, skill=None,
-            tier=action_tier(c), attempts=int(c.get("promotion_attempts", 0)),
+            tier=action_tier(c), attempts=attempts,
             leverage=round(L, 3), discriminator=round(D, 6),
             novelty=round(N, 3), cost=cost,
             weight=weight, gap_bucket=gap_bucket, feeds=feeds,

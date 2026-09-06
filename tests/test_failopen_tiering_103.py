@@ -32,6 +32,7 @@ sys.path.insert(0, str(SCRIPTS))
 import notes_discriminator as nd  # noqa: E402
 import summary_discriminator as sd  # noqa: E402
 import convergence_check as cc  # noqa: E402
+import priority_ratio as pr  # noqa: E402
 import rollup  # noqa: E402
 from _factories import write_hook_state  # noqa: E402
 
@@ -205,6 +206,67 @@ def test_dispatched_ids_keeps_in_progress_despite_dirty_neighbor(tmp_path):
         {"id": "C-2", "status": "IN_PROGRESS", "promotion_attempts": 0},
     ]}, allow_unicode=True), encoding="utf-8")
     assert cc._dispatched_ids(tmp_path) == ["C-2"]
+
+
+# ---------------------------------------------------------------------------
+# 场景 3：DECIDE 整体冻结（int() 裸转换一路逃逸到 conservative BLOCKED）
+# ---------------------------------------------------------------------------
+
+def _decide_ws(tmp_path):
+    ws = tmp_path / "ws"
+    (ws / "runs").mkdir(parents=True)
+    (ws / "claim-register.yaml").write_text(yaml.safe_dump({"claims": [
+        {"id": "C-1", "status": "OPEN", "statement": "probe one",
+         "promotion_attempts": "two"},
+        {"id": "C-2", "status": "OPEN", "statement": "probe two",
+         "promotion_attempts": 1},
+    ]}, allow_unicode=True), encoding="utf-8")
+    return ws
+
+
+def _load_kd():
+    name = "kunglao_decide_103"
+    mod = sys.modules.get(name)
+    if mod is None:
+        spec = importlib.util.spec_from_file_location(
+            name, SCRIPTS / "kunglao-decide.py")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[name] = mod
+        spec.loader.exec_module(mod)
+    return mod
+
+
+def test_decide_not_frozen_by_dirty_attempts(tmp_path):
+    """场景 3：promotion_attempts: two → 决策照常产出，不整体 BLOCKED。"""
+    kd = _load_kd()
+    ws = _decide_ws(tmp_path)
+    out = kd.decide(ws)
+    assert out.get("error") is None, out
+    assert out["decision"] == "DISPATCH", out
+    assert out["top_actions"], "both claims must remain dispatchable"
+
+
+def test_priority_ratio_dirty_attempts_zero_with_feed_note():
+    """场景 3 单元面：脏行按 0 计分 + feeds 诊断；干净行 attempts 不受影响。"""
+    claims = [
+        {"id": "C-1", "status": "OPEN", "promotion_attempts": "two"},
+        {"id": "C-2", "status": "OPEN", "promotion_attempts": 1},
+    ]
+    rows = {a.claim_id: a for a in
+            pr.priority_ratio(claims, {}, pr.EvidenceView())}
+    assert set(rows) == {"C-1", "C-2"}
+    assert rows["C-1"].attempts == 0
+    assert rows["C-2"].attempts == 1
+    assert any("unparseable" in s or "treated as 0" in s
+               for s in rows["C-1"].feeds.values()), rows["C-1"].feeds
+    assert "A" not in rows["C-2"].feeds
+
+
+def test_action_tier_dirty_tier_degrades_not_raises():
+    """场景 3 相邻面（pr:312）：脏 evidence_tier_attempted → tier 1，不 raise。"""
+    assert pr.action_tier({"evidence_tier_attempted": "two"}) == 1
+    assert pr.action_tier({"evidence_tier_attempted": 2}) == 3
+    assert pr.action_tier({}) == 1
 
 
 if __name__ == "__main__":  # pragma: no cover
