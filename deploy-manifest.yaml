@@ -207,7 +207,7 @@ files:
   - src: scripts/case_bank.py
     dest: .claude/scripts/case_bank.py
     kind: scaffold
-    sha256: bcb2fdcdacbc7b2f78e400808e2f05159341bc41f37ab2faf1894ead42a2c5c0
+    sha256: ea836b3365ba235e62663b39cf55233e3cf12e3c9222a48476dd15ec54335cf5
   - src: scripts/challenge_ledger.py
     dest: .claude/scripts/challenge_ledger.py
     kind: scaffold
@@ -291,7 +291,7 @@ files:
   - src: scripts/digest_build.py
     dest: .claude/scripts/digest_build.py
     kind: scaffold
-    sha256: a20403338d912ecf76743f0237cd6ce12898b28a7ebf962a699f5daf914451bf
+    sha256: d65f1e79401152e112fb7335a2f2ef865af055b908e78fccd8663a5942c9ba29
   - src: scripts/dispatch_context.py
     dest: .claude/scripts/dispatch_context.py
     kind: scaffold
@@ -335,7 +335,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 5a83dddcee364d6cde0deaf304524bb4131aaf7792b4daddd41c7442d3bef8f4
+    sha256: 9bed1b1a5f9dc8abcae0e93bf901b5e8380c835db12ad19fb59eccd09f3488bc
   - src: scripts/explore_gate.py
     dest: .claude/scripts/explore_gate.py
     kind: scaffold
@@ -399,7 +399,7 @@ files:
   - src: scripts/hypothesis_seeder.py
     dest: .claude/scripts/hypothesis_seeder.py
     kind: scaffold
-    sha256: c8589ca9c2955f9b771bbbfaf942b2a87ba29085aeba3a9710de7162fe216456
+    sha256: 4867e369d6024a92504330a019ef2746d0820bf7de68090cd6ca667e84752e3e
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
@@ -579,7 +579,7 @@ files:
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
-    sha256: 139fb1b45a04e153dbde6d69c4bd8dd130bff475ca204a483faa1a12ebb88e4a
+    sha256: ec4ad9affe0d2d024e827268cf9fd271317b4432afa007a636779e22031567b7
   - src: scripts/pkg_detect.py
     dest: .claude/scripts/pkg_detect.py
     kind: scaffold

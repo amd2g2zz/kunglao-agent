@@ -131,6 +131,11 @@ def _settle_new(workspace: Path, new_rows: list[dict]) -> None:
     breaks. Outcome payload today is verdict + checker (the fields an OUTCOME
     row carries); artifact-list enrichment from #77 result digests is a later
     change.
+
+    #110: each NEW settlement lands one case-bank row (case_bank.append_once,
+    idempotent on claim x method x roi_class) via _bank_case — equally
+    fail-open (a banking refusal is a `case_bank_refused` warn event, never
+    a capture failure).
     """
     try:
         import roi_settlement
@@ -141,12 +146,76 @@ def _settle_new(workspace: Path, new_rows: list[dict]) -> None:
             claim_id = entry.get("claim_id")
             if not claim_id or not roi_settlement.has_intent(workspace, claim_id):
                 continue
-            roi_settlement.settle_intent(workspace, claim_id, {
+            res = roi_settlement.settle_intent(workspace, claim_id, {
                 "verdict": entry.get("result"),
                 "checker": entry.get("checker"),
             })
+            # #110: every NEWLY settled claim banks one case row. A replayed
+            # settlement (duplicate settle_id) banks nothing — append_once is
+            # idempotent on (claim_id, method, roi_class) anyway.
+            if res.get("ok") and not res.get("duplicate"):
+                _bank_case(workspace, res.get("settlement") or {})
         except Exception:  # noqa: BLE001  (fail-open by contract)
             continue
+
+
+def _case_entry_from_settlement(settlement: dict) -> dict:
+    """#110: map a settlement row onto the #49 case-bank schema.
+
+    The scene/method/roi_class/outcome triple rides verbatim from the
+    settlement (ruling 1: value = method x context x outcome). attribution
+    defaults to a MECHANICAL synthesis from the settlement's own
+    verdict/checker/signals when the producer supplied none — ruling 4
+    refuses unattributed NEGATIVE rows, and the settlement row IS the
+    mechanical why-it-classified-NEGATIVE record (never invented analysis).
+    """
+    s = dict(settlement or {})
+    intent = s.get("intent") or {}
+    outcome = s.get("outcome") if isinstance(s.get("outcome"), dict) else {}
+    roi_class = str(s.get("roi_class") or "").strip()
+    attribution = str((outcome or {}).get("attribution") or "").strip()
+    if roi_class == "NEGATIVE" and not attribution:
+        # both modules freeze the same token: roi_settlement.ROI_NEGATIVE ==
+        # case_bank.ROI_NEGATIVE == "NEGATIVE" (ruling-4 lint target).
+        signals = ",".join(str(x) for x in (s.get("signals") or ())) or "none"
+        attribution = (f"verdict={(outcome or {}).get('verdict') or 'none'} "
+                       f"checker={(outcome or {}).get('checker') or 'none'} "
+                       f"signals={signals}")
+    return {
+        "claim_id": s.get("claim_id"),
+        "method": intent.get("method") or "dispatch",
+        "context_tags": [str(t) for t in (intent.get("context_tags") or [])],
+        "intent_uncertainty": intent.get("uncertainty") or "",
+        "outcome_observed": outcome or {},
+        "roi_class": roi_class,
+        "attribution": attribution or None,
+        "premise_correction":
+            str((outcome or {}).get("premise_correction") or "").strip()
+            or None,
+    }
+
+
+def _bank_case(ws: Path, settlement: dict) -> bool:
+    """#110: bank one settled claim (case_bank.append_once).
+
+    Fail-open by the same contract as settlement itself: a refusal
+    (CaseBankError — e.g. an unattributable NEGATIVE), a missing module or
+    any write failure emits a `case_bank_refused` warn event and returns
+    False. The settlement row is NEVER touched by banking.
+    """
+    try:
+        import case_bank
+        res = case_bank.append_once(ws, _case_entry_from_settlement(settlement))
+        return bool(res.get("ok")) and not res.get("duplicate")
+    except Exception as exc:  # noqa: BLE001  (banking must never break capture)
+        try:
+            from kunglao_log import emit
+            emit(ws, actor="outcome_capture", action="case_bank_refused",
+                 claim=(settlement or {}).get("claim_id"),
+                 detail=f"case-bank append refused ({exc!r})")
+        except Exception:  # noqa: BLE001  (telemetry never disturbs capture)
+            pass
+        return False
 
 
 def capture(workspace: Path) -> int:

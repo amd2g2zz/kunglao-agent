@@ -283,6 +283,17 @@ def build_digest(ws: Path) -> str:
         seed_from_task_spec(ws)
     except Exception:  # noqa: BLE001 — seeding failure never blocks cold start
         pass
+    # ---- #110: case-bank priors -> hypothesis layer — FAIL-OPEN ----
+    # Same cold-start chain as PQ scaffolding: the per-workspace case bank
+    # (runs/case-bank.jsonl) is retrieved by (project_type + protection
+    # traits) and hits inject as provenance-carried prior candidates on one
+    # carrier hypothesis. Zero rows / zero hits -> silent (cold start
+    # unchanged — no fabricated priors); a failure never blocks the digest.
+    try:
+        from hypothesis_seeder import seed_case_candidates
+        seed_case_candidates(ws)
+    except Exception:  # noqa: BLE001 — priors never block cold start
+        pass
     # ---- sec_g: open hypotheses (#528) — FAIL-OPEN ----
     # A hypotheses-layer failure must never block cold start: the digest
     # degrades to the pre-#528 six-section shape instead of raising

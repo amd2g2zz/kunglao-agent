@@ -69,7 +69,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `infeasible_signal.py` | P3 doomed-trajectory signal (#823/#815): flat V × zero marginal discovery → infeasible_candidate event (shadow) | lib, tests |
 | `infeasible_proposal.py` | #815 早停接线 — gated INFEASIBLE 立案（阶梯 L1/L2/L3+清单+wake_condition 要件, REJECT 零变更）+ wake 复活面; DEFERRED 自动退出派发 | hooks, tests |
 | `zero_output_fingerprint.py` | P3 same-type action thrash circuit (#823/#634): (tool,target) hash streaks N=3 zero belief change → break + failure_analysis inject (shadow) | lib, tests |
-| `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669): seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` / `taint:<cat>:<api>` candidates | lib(1: digest_build), CLI, tests |
+| `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669) + #110 case-bank priors: seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` / `taint:<cat>:<api>` candidates; `seed_case_candidates` 按冷启动 (project_type+保护特征) 检索 runs/case-bank.jsonl 命中行注入 provenance 先验 (failure-first, 零行/零命中/零上下文静默跳过) | lib(1: digest_build), CLI, tests |
 | `apkid_scanner.py` | T1 apkid pre-scan wrapper (#669): fingerprints packer/compiler/obfuscator/anti-* into evidence/apkid.json (fail-open) | CLI, tests |
 | `provider_health.py` | runtime provider-failure memory (#692 WP4): record/query <ws>/provider_health.json, 24h window, fail-open; consumed by route_capability selection next round | CLI, lib(1: route_capability), tests |
 | `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4); #823 A3 feed-side terms always-on (#51) | lib(3), tests |
@@ -132,9 +132,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `dead_letter.py` | DEAD status + dead-letter quarantine | hooks, lib(1), tests |
 | `feedback.py` | feedback inbox processing | tests |
 | `obligation_discovery.py` | obligation discovery from claims | lib(1), tests |
-| `outcome_capture.py` | outcome ledger capture (R6) | lib(2), tests |
+| `outcome_capture.py` | outcome ledger capture (R6) + #110 结算落库: 每个 NEW settlement 经 `_bank_case`→case_bank.append_once 落一行案例 (NEGATIVE 无 attribution 机械合成 verdict/checker/signals, ruling 4); 落库失败 fail-open `case_bank_refused` 事件 | lib(2), tests |
 | `roi_settlement.py` | #49 dispatch intent contract + entropy-gain admission gate — record_intent (MISSING_UNCERTAINTY data-channel gate, ruling 3) + settle_intent outcome-vs-intent 归因 (POSITIVE/NEUTRAL/NEGATIVE/UNRESOLVED; fact count 永不作信号, ruling 2) → runs/roi-intents.jsonl + runs/roi-settlements.jsonl; dispatch_gate enforcement wiring 属后续 | outcome_capture (_settle_new wiring), tests |
-| `case_bank.py` | #49 案例库数据层 — 对称收录 (NEGATIVE 无 attribution 拒收 CaseBankError, 无声落库即违约, ruling 4) + failures-first 检索 (反例剪枝优先于正例复用, 类内 newest-first) + `<case-hints>` 生产面 (XML 注入标准保留名, 空匹配不产空标签); CLI: retrieve --tags --limit --json | tests, CLI |
+| `case_bank.py` | #49 案例库数据层 — 对称收录 (NEGATIVE 无 attribution 拒收 CaseBankError, 无声落库即违约, ruling 4) + failures-first 检索 (反例剪枝优先于正例复用, 类内 newest-first) + `<case-hints>` 生产面 (XML 注入标准保留名, 空匹配不产空标签); `append_once` (claim×method×roi_class 幂等去重, #110); CLI: retrieve --tags --limit --json | tests, CLI |
 | `reconcile_intents.py` | plan↔claims intent reconciliation | tests |
 | `reconcile_workers.py` | worker status reconciliation | lib(1), tests |
 | `refutation_propagate.py` | refutation propagation across facts | tests |
