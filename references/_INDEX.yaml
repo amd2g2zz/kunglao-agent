@@ -85,7 +85,7 @@ files:
   references/schema.md: 7dc8e2cffb88a819c8ae7196003763c34bfb8e3cfa5b08cb42b4559c5c28d31b
   references/search-policy.md: 46807e75ef0cf4381b747ffc9495618aad9c0eb320d5007f1c9bfc4bb7cf547f
   references/state-mapping.md: d2cb9b62780b2c35044bc5cf0d724dafb337238480306e29fa909ad2e6bfc08f
-  references/tool-inventory.md: 5bddc786cc4723732c37f94b9af2d7e4fab6e699082fda0a599c569f90a692eb
+  references/tool-inventory.md: 4c7001d5cf990c8b646410f2eba2cf06a7cec71e1839097947210f19bcf53445
   references/verify-static-vs-dynamic.md: d2f823da4d1890e9daeba6bbe25ff1f55b61679b43a72dc2f015b26b2165833a
   references/wal-protocol.md: 1d2a7f8332a595d61daa4d34a7652783c6ea0c54876504ef8d30946e0fd25d66
   references/xml-injection-standard.md: 9da069fd98abd4597abde0b67f5bb93a7b2be6efef130733d579c31e45748a69

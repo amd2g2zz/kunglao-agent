@@ -677,7 +677,7 @@ ext:
     capability: "dispatch:priority-ratio"
     source: "scripts/priority_ratio.py"
     usage: "python priority_ratio.py <workspace> [--json]"
-    description: "priority_ratio.py — M1 DECIDE Thompson action ranking (#107 rebuild: sampled case posterior + LAMBDA_DH*dH_PQ, one ranker)."
+    description: "priority_ratio.py — M1 DECIDE action ranking, REBUILT (#107)."
   - name: "progress_report"
     capability: "unknown"
     source: "scripts/progress_report.py"
