@@ -628,8 +628,7 @@ def run_policy_retro(ws: Path, now: datetime | None = None) -> dict:
         "## DECIDE (kunglao-decide --json)",
         "",
         f"decision={decide_json.get('decision')} "
-        f"exit_code={decide_json.get('exit_code')} "
-        f"explore_mode={decide_json.get('explore_mode')}",
+        f"exit_code={decide_json.get('exit_code')}",
         "```json",
         json.dumps(decide_json, ensure_ascii=False, indent=2)[:2000],
         "```",

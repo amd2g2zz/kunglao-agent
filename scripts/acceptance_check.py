@@ -55,17 +55,29 @@ def _check_cli_surface() -> dict:
 
 
 def _check_priority_voi() -> dict:
+    """#107: the ranker is the rebuilt Thompson composite — score =
+    (sampled case posterior + LAMBDA_DH*dH) * worth, deterministic under the
+    default seed, with the new feeds diagnostics and no weighted-era fields.
+    (The check token keeps its historical name; the formula it pins changed
+    by owner ruling — "之前的不要了".)"""
     try:
         import priority_ratio as pr
         claims = [{"id": "C1", "status": "OPEN", "evidence_tier_attempted": 0,
                    "promotion_attempts": 0, "statement": "c2 config"}]
         out = pr.priority_ratio(claims, {}, pr.EvidenceView())
         a = out[0]
-        numerator = 0.45 * a.leverage + 0.30 * a.discriminator + 0.25 * a.novelty
-        voi = abs(a.score - round(numerator / a.cost, 3)) < 1e-6
-        has_fields = hasattr(a, "leverage") and not hasattr(a, "delta_disc")
-        return {"name": "priority_voi_formula", "passed": voi and has_fields,
-                "detail": f"score={a.score} voi_ok={voi} fields_ok={has_fields}"}
+        again = pr.priority_ratio(claims, {}, pr.EvidenceView())[0]
+        det = (a.to_dict() == again.to_dict())
+        composite = (hasattr(a, "feeds")
+                     and {"thompson_sample", "case_flip_potential", "dh_pq"}
+                     <= set(a.feeds or {})
+                     and not hasattr(a, "leverage")
+                     and not hasattr(a, "delta_disc"))
+        bounded = 0.0 < a.score < 1.0 + pr.LAMBDA_DH + 1e-9  # Beta sample + dH=0
+        return {"name": "priority_voi_formula",
+                "passed": det and composite and bounded,
+                "detail": f"score={a.score} det={det} composite={composite} "
+                          f"bounded={bounded}"}
     except Exception as exc:
         return {"name": "priority_voi_formula", "passed": False, "detail": f"error: {exc}"}
 

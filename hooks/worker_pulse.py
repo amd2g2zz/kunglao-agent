@@ -262,7 +262,7 @@ def _build_pulse(ws: Path) -> tuple[str, str | None]:
 
     # next-up claim via priority_ratio.py — THE authoritative scorer (#499:
     # specs/phase-4/contract.md §1 lands DECIDE action ranking on
-    # priority_ratio; the legacy weighted module is deprecated, #446 retires it).
+    # priority_ratio; #107 rebuilt it as the single Thompson ranker).
     pr = _run_py([str(SKILL_DIR / "scripts" / "priority_ratio.py"), str(ws), "--json"], ws)
     if pr and pr.returncode == 0:
         try:

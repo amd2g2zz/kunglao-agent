@@ -6,6 +6,14 @@
 > sections. The priority_ratio section keeps the current implementation (the
 > old 0.35·Δdisc formula); the VoI-proxy rewrite lives in issue #2
 > (`phase4-voi-priority`).
+>
+> **Revised 2026-09-06 (issue #107 Thompson rebuild)**: the owner ruling
+> "探索和价值网络完全重构，之前的不要了" discarded the weighted VoI-proxy
+> formula AND the explore/exploit dual path. ONE ranker survives:
+> score = (sampled case posterior + LAMBDA_DH·ΔH_PQ) · worth, Thompson-ranked
+> per posterior state, stable tie-break claim_id. explore_gate /
+> EXPLORE_THRESHOLD / the cheapness face / `explore_mode` are deleted; the
+> sections below describe the REBUILT surfaces (pre-#107 text is history).
 
 Source documents (frozen sources, excerpts with line numbers):
 - `docs/design/archive/module-design.md` — all of §M1 (L112-207); M1.1 division L114-125; M1.2 signatures L126-159; M1.3 schema L160-172; M1.4 state machine L173-192; M1.5 error handling L193-199; M1.6 test points L200-205
@@ -28,17 +36,17 @@ Source documents (frozen sources, excerpts with line numbers):
 def convergence_matrix(open_count, partial_count, free_slots, blocked_count) -> Decision:
     """→ DISPATCH(1) | DISPATCH_VERIFIER(2) | SATURATED(3) | BLOCKED(4) | CONVERGED(0)"""
 
-def priority_ratio(claims: list[Claim], deps: DepGraph, evidence: EvidenceView) -> list[Action]:
-    """ratio-key ranking: score = [0.35·Δdisc + 0.35·E_unlock + 0.10·unc] / cost
-    Δdisc = marginal_discriminator (dedup against evidence already obtained)
-    E_unlock = expected_unlock(deps) × P(success)
-    unc = freshness = 1/(1+attempts)
-    cost = NEXT_TIER_CHEAP[tier]"""
-    # note: the above is the current implementation; the VoI-proxy rewrite
-    # [0.45L+0.30D+0.25N]/cost is issue #2
-
-def explore_gate(verified_fact_count: int, threshold: int) -> bool:
-    """count < threshold → exploration mode (spread T1 by cheapness)"""
+def priority_ratio(claims: list[Claim], deps: DepGraph, evidence: EvidenceView,
+                   rng: Random | None = None) -> list[Action]:
+    """#107 Thompson ranking: score = (case_face + LAMBDA_DH·ΔH_PQ) · worth
+    case_face = Σ linked oracle cases of ONE Beta posterior Thompson sample
+                (no linkage → one Beta(1,1) prior sample = cold-start exploration)
+    ΔH_PQ     = H of the claim's PQ categorical (posteriors.yaml), else 0
+    worth     = #759 value-weights multiplier (exogenous, not a DOF)
+    LAMBDA_DH = 0.25 — the only free parameter
+    rng=None → Random(0); live callers share posterior_rng(ws)"""
+    # deleted with the owner ruling: [0.45L+0.30D+0.25N]/cost, gap_bucket
+    # sort head, explore_gate, EXPLORE_THRESHOLD, the cheapness spread
 
 def selfcheck(text: str) -> list[str]:
     """scan orchestrator output for ask-back / self-cap violations"""
@@ -52,8 +60,8 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
 | Design signature | This-phase landing | Note |
 |---|---|---|
 | `convergence_matrix(...)` | **not rebuilt** — `convergence_check.decide(ws)` already implements the same matrix (5 branches in the same order, L241-259) and is golden-frozen | M1.6 L202 "behavior snapshot exists" |
-| `priority_ratio(claims, deps, evidence)` | `scripts/priority_ratio.py::priority_ratio` | pure function; failure-blocked filtering is the caller's job (kunglao-decide; the signature has no ws) |
-| `explore_gate(count, threshold)` | `scripts/explore_gate.py::explore_gate(count, threshold=EXPLORE_THRESHOLD)` | `EXPLORE_THRESHOLD = 5` |
+| `priority_ratio(claims, deps, evidence, rng=None)` | `scripts/priority_ratio.py::priority_ratio` | pure function; failure-blocked filtering is the caller's job; the workspace rides `EvidenceView.ws` (#107: posteriors + oracle cases load through it) |
+| `explore_gate(count, threshold)` | **deleted (#107)** — cold start is Thompson's Beta(1,1) prior sampling; no phase gate exists | |
 | `selfcheck(text)` | `scripts/kunglao-decide.py::selfcheck(text)` composes `ask_for_direction_gate.find_violations` (ask-back) + `worker_budget.detect_self_cap` (self-cap) | ask_for_direction_gate already implemented, tests only added |
 | `decide(ws)` | `scripts/kunglao-decide.py::decide(ws, scan_text=...)` | standalone CLI, not a kunglao.py subcommand |
 
@@ -71,19 +79,20 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
 - ordering: score descending; dispatchable filter: non-terminal, attempts<3, depends_on all terminal
 - `classify_action(claim)`: keyword classifier (statement+answers_question lowercased): C2/mpd/pegasus/dead-drop→`c2_config_extract`; command table→`command_table`; protocol/runtime/network→`protocol_restore`; persistence/autorun→`persistence`; injection/reflective→`injection`; anti-analysis/garble/decoy→`anti_analysis`; family/vidar/wingo/gsb→`family_attribution`; no hit→`evidence_collection`
 
-### Exploration mode (design-spec §3.2)
+### Exploration, redefined (#107)
 
-`explore_gate(verified_fact_count, threshold=5)`: `count < threshold` →
-exploration mode. In exploration mode kunglao-decide spreads by cheapness:
-same dispatchable filter, `score = NEXT_TIER_CHEAP[eta]` descending (T1
-first), `explore_mode=True`.
+There is no exploration MODE. Thompson sampling explores intrinsically: an
+uncertain arm (Beta(1,1) prior, few runner verdicts) samples wide and
+occasionally ranks first; a settled arm concentrates. The dispatch gate
+audits the SAME ranker with the SAME seed (`posterior_rng(ws)`) — the
+#100/#101 dual-authority conflict is structurally impossible.
 
 ---
 
 ## 2. Output schema reference
 
 - frozen structure: `schemas/decide-output.json` (M1.3 L163-170 field by field)
-- required 9 fields: `decision` (enum 6 values — #371 added INVALID: the legitimate convergence_check return when task_spec primary_questions is non-empty but malformed (#77 fail-closed), reusing exit 4) / `exit_code` (0-4) / `top_actions[]` (items: claim_id, action, score, skill) / `blocked[]` / `failure_blocked[]` / `stale[]` / `drifts[]` / `explore_mode` (bool) / `selfcheck[]`
+- required 8 fields (#107 dropped `explore_mode` with the dual path): `decision` (enum 6 values — #371 added INVALID: the legitimate convergence_check return when task_spec primary_questions is non-empty but malformed (#77 fail-closed), reusing exit 4) / `exit_code` (0-4) / `top_actions[]` (items: claim_id, action, score, skill) / `blocked[]` / `failure_blocked[]` / `stale[]` / `drifts[]` / `selfcheck[]`
 - additional fields (additionalProperties allowed, not frozen-required): `open_count`, `partial_count`, `free_slots`, `error`
 - field mapping (contract blanks):
   - `blocked` = ids among open_claims with `blocked=True`
@@ -100,10 +109,9 @@ decide(ws):
   evidence = load_evidence(ws)                    # facts/_INDEX + ledger + loopstate
   decision = convergence_matrix(...)              # ← convergence_check.decide (golden)
   if decision == DISPATCH:
-    if explore_gate(evidence.verified_count):     # early stage
-      top = sort_by(cheapness)[:k]                # explore_mode=True
-    else:
-      actions = priority_ratio(claims, deps, evidence)
+    actions = priority_ratio(claims, deps, evidence,   # ONE path (#107)
+                             rng=posterior_rng(ws))    # seed shared with the gate
+    top = actions[:k]
     dispatch(top)                                 # skill=None; worker picks its own tools
   elif decision == DISPATCH_VERIFIER:
     dispatch_verifier(partial_facts)
@@ -118,13 +126,13 @@ decide(ws):
 
 | Test point | Assertion | File |
 |---|---|---|
-| ratio-key formula | `score == (0.35·Δdisc + 0.35·E_unlock + 0.10·unc)/cost(NEXT_TIER_CHEAP)`; **≠ additive weights**; ordering score descending | tests/test_priority_ratio.py |
-| Δdisc dedup | claim already holding a terminal fact → Δdisc=0 → score necessarily below the same claim without evidence | same |
-| unc freshness | attempts increase → unc drops → score drops | same |
-| dispatchable filter | terminal / attempts≥3 / dep non-terminal excluded | same |
-| E_unlock transitive closure | a claim unlocking downstream has higher E_unlock than one without downstream | same |
-| explore_gate | count<5 → True; =5/≥5 → False; custom threshold | tests/test_explore_gate.py |
-| kunglao-decide composition | on DISPATCH top_actions populated and passing `schemas/decide-output.json`; on CONVERGED top_actions=[]; explore_mode correct; skill always None | same |
+| Thompson composite | `score == round((case_face + LAMBDA_DH·ΔH)·worth, 6)`; deterministic under the default seed; ordering = sample descending, tie-break claim_id | tests/test_priority_ratio.py |
+| cold-start exploration | no linked oracle case → one Beta(1,1) prior sample; feeds record the fallback flip potential 0.3 | same |
+| flip potential | 0.5 base decayed by promotion_attempts (diagnostic only) | same |
+| dispatchable filter | terminal / attempts≥3 / dep non-terminal excluded (unchanged) | same |
+| posterior hookup | linked case posteriors + PQ categoricals load through EvidenceView.ws (runs/posteriors.yaml, oracle/cases/*.yaml) | same |
+| deleted surfaces | explore_gate / EXPLORE_THRESHOLD / cheapness / explore_mode greppable nowhere in scripts/ + hooks/ | tests/test_value_rebuild_107.py |
+| kunglao-decide composition | on DISPATCH top_actions populated and passing `schemas/decide-output.json`; on CONVERGED top_actions=[]; skill always None | same |
 | selfcheck | ask-back text REJECT (rc=1); self-cap text REJECT (rc=1); composed scan returns the violation list | same |
 
 ## 5. Completion criteria
