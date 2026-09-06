@@ -387,17 +387,19 @@ STRATEGY_LOG = "runs/strategy-log.jsonl"
 STRATEGY_LOG_MAX = 200
 
 
-def _reject_with_guidance(name: str, msg: str, fix: str) -> int:
+def _reject_with_guidance(name: str, msg: str, fix: str,
+                          issue: str = "496") -> int:
     """#496: REJECT with guidance — the exact structure worker_budget._reject
     and _warn_must_stop already use: stderr `REJECT <name>` summary + stdout
     hookSpecificOutput.additionalContext carrying a concrete fix path +
-    exit 2 (block the Agent call)."""
+    exit 2 (block the Agent call). `issue` attributes the face to its own
+    issue (default keeps the four #496-era call sites byte-identical)."""
     print(f"REJECT {name}: {msg}", file=sys.stderr, flush=True)
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "additionalContext": _gate_verdict(
-                f"dispatch_gate: REJECT {name} (#496). {msg}\n\n"
+                f"dispatch_gate: REJECT {name} (#{issue}). {msg}\n\n"
                 f"How to fix:\n{fix}"
             ),
         },
@@ -1134,6 +1136,171 @@ def _tools_rack_gate(payload: dict, prompt_text: str) -> int | None:
         f"in-process interpreters; that output is untrusted by design.")
 
 
+# ===================== #109 hypothesis admission gate =====================
+
+# THE other roi-intents face (read side): #105 made the dispatch ALLOW tail
+# the producer of runs/roi-intents.jsonl; the first-dispatch face here reads
+# the SAME file back as one of the two production dispatch-history sources
+# (the other being the #496/#120 strategy-log read path below). Together
+# they answer "was this PQ neighborhood already dispatched once?" —
+# claim-keyed rows joined to claim-register answers_question.
+ROI_INTENTS_LOG = Path("runs/roi-intents.jsonl")
+# #109 admission bar: fewer competing candidates than this in the hypothesis
+# layer for a PQ means nothing can contradict the one story being chased.
+MIN_ADMITTED_CANDIDATES = 2
+
+
+def _claim_question_map(ws: Path) -> dict[str, str]:
+    """claim id -> answers_question, from claim-register.yaml. Empty map on
+    any read failure (an unreadable register cannot identify PQ claims —
+    the gate stays silent, same posture as _capability_guard)."""
+    try:
+        reg = yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — unreadable register -> no PQ map
+        return {}
+    out: dict[str, str] = {}
+    for c in (reg.get("claims") or []):
+        if isinstance(c, dict) and c.get("id") and c.get("answers_question"):
+            out[str(c["id"])] = str(c["answers_question"])
+    return out
+
+
+def _workspace_pq_ids(ws: Path) -> set[str]:
+    """Primary-question ids from task_spec.yaml via THE canonical parse
+    (#77 — the same parser hypothesis_seeder and mission_ledger consume;
+    a local twin would re-create the two-parsers drift #77 exists to
+    prevent). Empty set on absence/read failure: a workspace with no
+    readable task_spec has no PQ neighborhoods, so the admission gate has
+    nothing to guard (fail-open)."""
+    try:
+        spec = yaml.safe_load(
+            (ws / "task_spec.yaml").read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — no/unreadable task_spec -> no PQs
+        return set()
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            from convergence_check import _parse_primary_questions
+        pqs, _err = _parse_primary_questions(
+            spec if isinstance(spec, dict) else {})
+    except Exception:  # noqa: BLE001 — parser outage -> no PQs, gate silent
+        return set()
+    return {str(qid) for qid, _need in (pqs or [])}
+
+
+def _pq_dispatched_before(ws: Path, qid: str,
+                          claim_question: dict[str, str]) -> bool:
+    """#109 first-dispatch face: True when any dispatch-history row's claim
+    answers `qid`. Two production row sources, both claim-keyed:
+      - runs/strategy-log.jsonl  event=dispatch rows (#496 writer / #120
+        priority_ratio read path);
+      - runs/roi-intents.jsonl   claim_id rows (#105 producer).
+    Fail-open by direction: an unreadable/absent face reads as "no history",
+    which can only make the gate check MORE (the admission itself then
+    decides), never silently allow. A REJECTed dispatch writes no row
+    (both faces sit on the ALLOW tail), so the REJECT->file-candidates->
+    re-dispatch loop stays inside "first dispatch" until it passes."""
+    faces = (
+        (ws / STRATEGY_LOG, "event", "claim"),
+        (ws / ROI_INTENTS_LOG, None, "claim_id"),
+    )
+    for path, event_key, claim_key in faces:
+        try:
+            if not path.is_file():
+                continue
+            lines = path.read_text(
+                encoding="utf-8", errors="replace").splitlines()
+        except OSError:  # unreadable face -> no history from it
+            continue
+        for ln in lines:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                row = json.loads(ln)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            if event_key is not None and row.get(event_key) != "dispatch":
+                continue
+            cid = str(row.get(claim_key) or "").strip()
+            if cid and claim_question.get(cid) == qid:
+                return True
+    return False
+
+
+def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
+                          trace_id: str | None = None) -> int | None:
+    """#109: PQ-neighborhood first-dispatch admission (framework-rigidity
+    layer — protocol completeness, not strategy judgment; per the owner's
+    two-layer ruling the REJECT reason is "protocol not fulfilled", never
+    "method looks bad").
+
+    Trigger: the target claim's answers_question names a task_spec
+    primary_question AND that PQ is being dispatched for the FIRST time
+    (no claim-keyed dispatch-history row answers it yet). The check: the
+    hypothesis layer (#528 store) must hold >= 2 non-adjudicated candidates
+    for the PQ — the #412 seeding contract's "orchestrator fills candidates
+    BEFORE dispatching the first C-NN", now enforced on the one
+    un-bypassable face. Subsequent dispatches on the same PQ are
+    unrestricted: the first hypothesis round supplies the prior.
+    Parks/reinstatements are unaffected (answers_question null -> silent).
+
+    Same enforcement layer as must-stop/top1: activated main flow,
+    REJECT-capable (exit 2 + <gate-verdict> repair path via
+    _reject_with_guidance). Fail-open (#103 tiering): a hypothesis-store
+    read failure emits hypothesis_admission_fail_open (WARN + trace) and
+    proceeds — a broken store must not block dispatch.
+    """
+    claim_question = _claim_question_map(ws)
+    qid = claim_question.get(claim_id)
+    if not qid or qid not in _workspace_pq_ids(ws):
+        return None  # non-PQ claim (or PQ-less workspace) — never triggers
+    if _pq_dispatched_before(ws, qid, claim_question):
+        return None  # not the first dispatch — the prior exists, pass
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            import hypothesis_store as hs
+        candidates = hs.open_candidates_for_question(
+            hs.HypothesisStore(ws / "hypotheses").list_all(), qid,
+            claim_question)
+    except Exception as exc:  # noqa: BLE001 — #103 tiering: store outage
+        # must not block. WARN + trace, dispatch proceeds unadmitted.
+        print(
+            f"dispatch_gate: WARN hypothesis-admission fail-open (#109) — "
+            f"hypothesis store unreadable ({type(exc).__name__}), admission "
+            f"not enforced for {qid}",
+            file=sys.stderr, flush=True,
+        )
+        _emit_trace(ws, "hypothesis_admission_fail_open", claim_id,
+                    f"qid={qid}; reason=store_read_failed; "
+                    f"exc={type(exc).__name__}: {exc}", trace_id=trace_id)
+        return None
+    if len(candidates) >= MIN_ADMITTED_CANDIDATES:
+        return None
+    # #459: the REJECT face reaches the unified log like top1/capability.
+    _emit_trace(ws, "hypothesis_admission_reject", claim_id,
+                f"qid={qid}; candidates={len(candidates)}; "
+                f"need>={MIN_ADMITTED_CANDIDATES}", exit_code=2,
+                trace_id=trace_id)
+    return _reject_with_guidance(
+        "hypothesis_admission",
+        f"{claim_id} answers {qid}, but the hypothesis layer holds only "
+        f"{len(candidates)} non-adjudicated candidate(s) for {qid} — the "
+        f"first dispatch into a PQ neighborhood requires competing "
+        f"explanations (anchoring risk is highest exactly when the system "
+        f"knows least; a single-hypothesis entry is how edge findings get "
+        f"chased as major ones).",
+        f"file ≥2 competing candidates for {qid}, each naming its falsifier "
+        f"(what observation would eliminate it — the falsifier-library "
+        f"semantics: a candidate that cannot say what would kill it is an "
+        f"opinion, not a candidate): fill `candidates:` "
+        f"on the open `pq:{qid}` scaffold hypothesis in hypotheses/ (or "
+        f"file one hypothesis per competitor via hypothesis_store), then "
+        f"re-dispatch.", issue="109")
+
+
 # ===================== #772 redo-leak WARN (L4) =====================
 
 # A prompt wearing a redo marker is subject to the GAP-ONLY contract (#772):
@@ -1372,6 +1539,15 @@ def main() -> int:
     # observable degrade face (plan_drift_crashed trace row) — trace_id
     # rides so the row attributes to the mission chain.
     rc = _plan_drift_auto(ws, claim_id, prompt_text, trace_id=trace_id)
+    if rc is not None:
+        return rc
+
+    # #109 hypothesis admission — same enforcement layer as must-stop/top1
+    # (activated main flow, REJECT-capable). Protocol completeness precedes
+    # the value teeth: a dispatch into an empty PQ competitor field is a
+    # protocol violation (#412's unguarded back half) and must not burn a
+    # top1 deviation trace first. Fail-open on store outages (#103 tiering).
+    rc = _hypothesis_admission(ws, claim_id, payload, trace_id=trace_id)
     if rc is not None:
         return rc
 
