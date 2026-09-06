@@ -45,6 +45,22 @@ if str(SCRIPTS) not in sys.path:
 
 import convergence_check  # module under test (== baseline before #443 GREEN)
 
+# 2026-09-06 SEMANTIC re-pin verification (#107 Thompson rebuild): the
+# owner ruling "探索和价值网络完全重构，之前的不要了" replaced the
+# ranking layer — priority_ratio is now the Thompson composite
+# (sampled case posterior + LAMBDA_DH*dH_PQ) and the explore/exploit dual
+# path is deleted. The ranker swap is an INTENTIONAL SEMANTIC change, and
+# its visible face is kunglao-decide's `top_actions`: any ordering change
+# there is DESIGN INTENT, pinned by the rebuilt suites
+# (tests/test_kunglao_decide.py / test_scorer_authority.py /
+# test_priority_ratio.py), NOT anchor drift. This frozen corpus pins the
+# convergence_check.decide() MATRIX face, which does not consume the
+# ranker — verified empirically: capture_current() re-run over all 31
+# cases reproduced the frozen outputs byte-identically (per-case diff:
+# zero drift), so the file is re-frozen unchanged. A future case that
+# grows a top_actions-like field must land with its own semantic re-pin
+# entry per this precedent chain.
+#
 # 2026-08-25 re-pin: the anchor was re-frozen at 619ebd3 after the
 # INTENTIONAL decide() semantics additions of #662 (hypothesis seed:
 # open_hypotheses field + OPEN_HYPOTHESIS_AT_CLOSE event) and #663 (anomaly
