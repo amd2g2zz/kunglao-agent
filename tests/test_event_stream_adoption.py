@@ -539,7 +539,10 @@ class TestFailOpenEmit:
         be created) — the #496 teeth must still REJECT with rc=2."""
         root = tmp_path / "r1"
         ws = _top1_ws(root)
-        (ws / "runs").write_text("", encoding="utf-8")  # runs/ is now a file
+        # sabotage the LOG face: runs/logs is now a FILE, so the log dir
+        # cannot be created (the #107 re-pinned fixture keeps runs/posteriors
+        # readable — the rank state must not change with the log sabotage)
+        (ws / "runs" / "logs").write_text("", encoding="utf-8")
         r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep")
         assert r.returncode == 2, (
             f"REJECT must not depend on the log write; rc={r.returncode}, "

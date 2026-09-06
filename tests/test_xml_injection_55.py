@@ -354,6 +354,26 @@ def _top1_ws(root: Path) -> Path:
         allow_unicode=True, sort_keys=False), encoding="utf-8")
     (ws / "task_spec.yaml").write_text(
         yaml.safe_dump({"primary_questions": []}), encoding="utf-8")
+    # #107 re-pin: C-1 holds a strong GREEN oracle-case posterior — its
+    # Thompson case face pins it at rank #1, so the C-3 dispatch is a
+    # non-top-1 deviation (the thing this test REJECTs on).
+    (ws / "runs").mkdir(parents=True, exist_ok=True)
+    (ws / "oracle" / "cases").mkdir(parents=True)
+    (ws / "oracle" / "cases" / "case-c1.yaml").write_text(
+        yaml.safe_dump({"id": "case-c1", "target_pq": "PQ-C1"}),
+        encoding="utf-8")
+    (ws / "runs" / "posteriors.yaml").write_text(yaml.safe_dump({
+        "schema": "posteriors-schema/1",
+        "cases": {"case-c1": {"alpha": 30.0, "beta": 1.0,
+                              "pending_entries": 0}},
+        "pqs": {}}), encoding="utf-8")
+    # link C-1's row to the case's PQ
+    reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
+    for c in reg["claims"]:
+        if c["id"] == "C-1":
+            c["answers_question"] = "PQ-C1"
+    (ws / "claim-register.yaml").write_text(yaml.safe_dump(
+        reg, allow_unicode=True, sort_keys=False), encoding="utf-8")
     write_hook_state(ws, active_hooks=["dispatch_gate"])
     return ws
 
