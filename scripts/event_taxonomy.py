@@ -77,6 +77,7 @@ def _worker_protocol():
 # restating a hard number here would rot silently when the value changes).
 from liveness_policy import STUCK_MINUTES  # noqa: E402
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
+from contracts import EVENT_FIELD  # noqa: E402  (#102 event-field schema single source)
 STUCK_SECONDS = STUCK_MINUTES * 60
 
 # ---------------------------------------------------------------------------
@@ -212,6 +213,7 @@ EMIT_ACTIONS = [
     "must_stop",
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
     "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
+    "plan_drift_crashed",  # #102 dispatch_gate: plan_drift --auto crash face (fail-open, observed)
     "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
     "priority_deviation",
@@ -254,6 +256,16 @@ EMIT_ACTIONS = [
     "zero_output_break",  # #823 A4 same-type action thrash circuit face
 ]
 
+# #102: word -> taxonomy class for the ledger stream. The stream has TWO
+# producer faces sharing one scan (classify_workspace reads BOTH
+# ledger.jsonl and runs/logs/kunglao-*.jsonl with source="ledger"):
+#   - kunglao_record.record_event writes the word in `event_type`
+#   - kunglao_log.emit writes the SAME controlled word in `action`
+#     (contracts.EVENT_FIELD — #102 drift instance 1: this branch keyed on
+#     `event_type` only, so every kunglao_log-shaped row classified as None
+#     and the seven classes read as fabricated zeros in statusline/digest)
+# One map serves both fields — same seven words, same classes. A word under
+# either field that is not in the map classifies as None (never fabricated).
 LEDGER_EVENT_MAP = {
     "fact_written": FACT_WRITTEN,
     "fact_verified": FACT_VERIFIED,
@@ -292,9 +304,16 @@ CLAIM_STATUS_MAP = {
 
 
 def classify_event(event: dict, source: str) -> str | None:
-    """Classify one event row from a known source; None when unclassifiable."""
+    """Classify one event row from a known source; None when unclassifiable.
+
+    #102: the ledger branch reads both producer faces' word fields —
+    `event_type` (kunglao_record) and `action` (kunglao_log.emit,
+    contracts.EVENT_FIELD) — through the same LEDGER_EVENT_MAP. The
+    event_type face wins when both are present (the words are identical, so
+    the result is the same either way)."""
     if source == "ledger":
-        return LEDGER_EVENT_MAP.get(event.get("event_type", ""))
+        word = event.get("event_type") or event.get(EVENT_FIELD)
+        return LEDGER_EVENT_MAP.get(str(word) if word else "")
     if source == "convergence":
         row_type = event.get("type") or SNAPSHOT
         if row_type == SNAPSHOT:

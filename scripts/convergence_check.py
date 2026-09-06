@@ -70,24 +70,18 @@ from ws_layout import resolve_quiet as _resolve_ws
 
 WORKER_CAP = 3
 
-# Exit codes — CONSUMER CONTRACT (#99). Every rc-based consumer (hooks that
-# branch on 0-4, kunglao-decide, external tick loops) reads these bytes; a
-# collision makes one state masquerade as another. Before adding a value,
-# check the registry below AND skills/kunglao-agent/SKILL.md's decision
-# table (the human-facing copy of this contract).
-EXIT_CONVERGED = 0
-EXIT_DISPATCH = 1
-EXIT_VERIFY = 2
-EXIT_SATURATED = 3
-EXIT_BLOCKED = 4
-EXIT_PARK = 5  # #634: suspended on external gates — legal idle with wake_condition
-# #99: the check itself crashed (malformed YAML, unexpected error). 64 is
-# taken by MISSING_WORKSPACE (main()'s no-claim-register exit); 65 is the
-# next free byte. A crash must NEVER share EXIT_DISPATCH's byte — pre-#99 a
-# malformed register exited rc=1, which rc-based consumers read as
-# "dispatch now" while stdout was empty. On this exit: stdout carries
-# {"decision": "CRASHED"}, stderr keeps the traceback.
-EXIT_CRASHED = 65
+# Exit codes — CONSUMER CONTRACT (#99). The registry itself moved to
+# scripts/contracts.py (#102: producers and consumers kept re-stating the
+# same bytes in separate comments — the root cause of the #102 drift
+# family). This module imports its face; the names below ARE the registry
+# values (single definition in contracts.py; the human-facing copy stays
+# skills/kunglao-agent/SKILL.md's decision table). The #99 rationale for
+# EXIT_CRASHED=65 (64 taken by MISSING_WORKSPACE; a crash must never share
+# EXIT_DISPATCH's byte — stdout {"decision": "CRASHED"}, stderr traceback)
+# lives with the definition.
+from contracts import (EXIT_BLOCKED, EXIT_CONVERGED, EXIT_CRASHED,  # noqa: E402
+                       EXIT_DISPATCH, EXIT_MISSING_WORKSPACE, EXIT_PARK,
+                       EXIT_SATURATED, EXIT_VERIFY)
 
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
@@ -1602,7 +1596,7 @@ def main(argv: list[str] | None = None) -> int:
     workspace = _resolve_ws(args.workspace)
     if not (workspace / "claim-register.yaml").exists():
         print(f"FAIL: no claim-register.yaml under {workspace}", file=sys.stderr)
-        return 64
+        return EXIT_MISSING_WORKSPACE
 
     # #99: decide() is untrusted input territory (claim-register.yaml is
     # hand- and hook-edited YAML). An unguarded crash exits rc=1 — the SAME

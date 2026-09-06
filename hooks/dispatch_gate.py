@@ -745,7 +745,8 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
         "the validated family.")
 
 
-def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str) -> int | None:
+def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str,
+                     trace_id: str | None = None) -> int | None:
     """#602: plan-drift auto-integration wire-up for L621 dispatch path entry.
 
     Shells out to scripts/plan_drift_detector.py --auto and translates its
@@ -753,7 +754,13 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str) -> int | None:
       - exit 2 (drift-severe, 1+ non-WARN drift)     -> return 2 (BLOCKED)
       - exit 3 (WARN-only, STALE_PLAN_ON_NEW_EVIDENCE) -> return 3 (SATURATED)
       - exit 0 (no drift)                            -> return None (fall through)
-      - any other / missing / unparseable workspace  -> return None (fail-open)
+      - any OTHER rc (crash / unknown drift)         -> crash face (#102):
+          return None (fail-open) BUT observed — stderr note + a
+          plan_drift_crashed trace row carrying the rc and the detector's
+          last stderr line. Under --auto the only contracted bytes are the
+          contracts.PLAN_DRIFT_AUTO_RCS trio; pre-#102 anything else fell
+          through SILENTLY (dispatch proceeded, traceback discarded, zero
+          telemetry).
 
     NON-FATAL by design: a false-positive is acceptable — the operator
     can re-dispatch. This is a PreToolUse safety net, NOT a hard gate;
@@ -770,6 +777,13 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str) -> int | None:
     script = SKILL_DIR / "scripts" / "plan_drift_detector.py"
     if not script.exists():
         return None
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            from contracts import PLAN_DRIFT_AUTO_RCS
+    except Exception:  # noqa: BLE001 — registry unavailable: degraded copy
+        # of the documented trio (hook crash-safety, NOT a second authority;
+        # contracts.py owns the value — #102).
+        PLAN_DRIFT_AUTO_RCS = frozenset({0, 2, 3})
     try:
         proc = _sp.run(
             [sys.executable, str(script), str(ws), "--auto"],
@@ -796,7 +810,29 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str) -> int | None:
               "WARN-only, observe-first",
               file=sys.stderr, flush=True)
         return 3
-    # rc 0 (no drift) or any unexpected -> fall through
+    if rc == 0:
+        # no drift -> fall through
+        return None
+    # #102 crash face: rc outside contracts.PLAN_DRIFT_AUTO_RCS (rc=1 = an
+    # unhandled exception inside the detector, e.g. a malformed
+    # claim-register.yaml). Fail-open stays (NON-FATAL posture), but the
+    # degradation is OBSERVABLE on both channels — stderr for the operator
+    # tail, plan_drift_crashed trace row (exit=rc + stderr tail) for the
+    # post-mortem. Never a silent fall-through again.
+    try:
+        err_lines = [ln.strip() for ln in (proc.stderr or "").splitlines()
+                     if ln.strip()]
+        err_tail = err_lines[-1] if err_lines else ""
+    except Exception:  # noqa: BLE001 — the observation must not be the crash
+        err_tail = ""
+    print(f"dispatch_gate: plan-drift auto CRASHED (rc={rc}) ({claim_id}): "
+          f"detector degraded, dispatch proceeding (fail-open). "
+          f"last stderr: {err_tail[:200]}",
+          file=sys.stderr, flush=True)
+    _emit_trace(ws, "plan_drift_crashed", claim_id,
+                f"reason=plan_drift_crash; rc={rc}; "
+                f"stderr_tail={err_tail[:200]}",
+                exit_code=rc, trace_id=trace_id)
     return None
 
 
@@ -1332,8 +1368,10 @@ def main() -> int:
     # #602: plan-drift auto-integration — runs BEFORE the existing dispatch
     # block. Drift-severe -> BLOCKED (rc=2); drift-warning -> SATURATED
     # (rc=3); no drift -> None (fall through). NON-FATAL: false-positive is
-    # acceptable (operator can re-dispatch).
-    rc = _plan_drift_auto(ws, claim_id, prompt_text)
+    # acceptable (operator can re-dispatch). #102: a crash rc takes the
+    # observable degrade face (plan_drift_crashed trace row) — trace_id
+    # rides so the row attributes to the mission chain.
+    rc = _plan_drift_auto(ws, claim_id, prompt_text, trace_id=trace_id)
     if rc is not None:
         return rc
 
