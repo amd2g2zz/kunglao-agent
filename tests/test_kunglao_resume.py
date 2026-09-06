@@ -568,8 +568,14 @@ def test_root_menu_and_routing_render_resume() -> None:
 
 
 def test_readme_and_help_tables_carry_resume_row() -> None:
+    # 2026-09-06 re-pin (#96): the README's Subcommands row carries the args
+    # inside the same backtick span (`/kunglao-agent:resume <workspace>`), so
+    # the standalone backticked token is gone; pin the unbackticked token and
+    # the row's when-to-use cell (crash/reboot recovery) instead.
     readme = README.read_text(encoding="utf-8")
-    assert "`/kunglao-agent:resume`" in readme
+    assert "/kunglao-agent:resume" in readme
+    assert "after a crash, reboot" in readme, (
+        "the resume row must say what it is for (crash/reboot recovery)")
     help_text = HELP_SKILL.read_text(encoding="utf-8")
     assert "/kunglao-agent:resume" in help_text
 

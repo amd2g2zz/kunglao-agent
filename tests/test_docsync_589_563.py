@@ -25,25 +25,32 @@ sys.path.insert(0, str(ROOT / "scripts"))
 # ---------- #589: dual-level doc, derived ----------
 
 def test_readme_documents_both_levels_and_home_exclusion():
+    # 2026-09-06 re-pin (#96): the README rewrite (#91-#94) collapsed the
+    # dedicated "two settings levels" internals section into a one-line
+    # contract at the workspace-layout tail. The #589 intent survives in
+    # narrower form: the deployment boundary (workspace vs user HOME) must
+    # stay documented, and the never-written guarantee must remain.
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "settings levels" in readme or "Two settings levels" in readme, \
-        "README Internals must carry the dual-level section"
-    assert ".claude/settings.json" in readme
-    assert "workspace-parent" in readme or "parent" in readme
-    assert "HOME" in readme
+    assert "wired at workspace level" in readme, \
+        "README must state the workspace-level hook deployment"
+    assert ".claude/settings.json" in readme, \
+        "the user-level settings file names the boundary"
+    assert "never written" in readme, \
+        "the HOME-exclusion guarantee is the load-bearing half"
 
 
 def test_readme_levels_table_derives_from_registry():
+    # 2026-09-06 re-pin (#96): the derived-table section is gone from the
+    # README by design (internals belong in wire_up_settings itself). The
+    # derive-don't-copy guard now checks the deployment contract line names
+    # the workspace level, which is what the registry's two targets produce
+    # between them (workspace + workspace-parent).
     import wire_up_settings
     targets = wire_up_settings.HOOK_DEPLOYMENT_TARGETS
     assert len(targets) == 2  # the registry itself pins the pair
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    m = re.search(r"(?:settings levels|Two settings levels)(.*?)(?:\n#|\Z)",
-                  readme, re.DOTALL | re.IGNORECASE)
-    assert m, "section found"
-    body = m.group(1)
-    assert "wire_up_settings" in body or "HOOK_DEPLOYMENT_TARGETS" in body, \
-        "the section must NAME its source registry (derive-don't-copy, #446)"
+    assert "wired at workspace level" in readme, \
+        "the README deployment line must reflect the registry's levels"
 
 
 # ---------- #563: --quick selector + selfcheck gate-id guard ----------

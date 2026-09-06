@@ -118,17 +118,19 @@ def test_version_triple_equality():
 # ---------- README documents both install paths ----------
 
 def test_readme_documents_install():
+    # 2026-09-06 re-pin (#96): the rewrite trimmed the install section to the
+    # marketplace path + the --plugin-dir dev alternative; the legacy
+    # ~/.claude/skills clone path and the manifest-path pointer are gone by
+    # design (owner no-backcompat ruling). Pin both shipped install commands.
     text = README.read_text(encoding="utf-8")
     assert "## Quick start" in text and "### 1. Install" in text, \
         "README missing the Quick start install section anchor"
-    # (a) plugin path — via the shipped .claude-plugin/plugin.json
-    assert ".claude-plugin/plugin.json" in text, \
-        "README must document the plugin install path (via the manifest)"
-    assert "/plugin marketplace" in text or "--plugin-dir" in text, \
-        "README plugin path must show the install mechanism"
-    # (b) legacy skill-dir clone path (kept from the original docs)
-    assert "~/.claude/skills/kunglao-agent" in text, \
-        "README must keep the legacy skill-dir clone path"
+    assert "/plugin marketplace add amd2g2zz/kunglao-agent" in text, \
+        "README must document the marketplace add command"
+    assert "/plugin install kunglao-agent@kunglao-agent" in text, \
+        "README must document the plugin install command"
+    assert "--plugin-dir" in text, \
+        "README must keep the --plugin-dir development alternative"
 
 
 def test_readme_no_longer_forbids_claude_plugin():
@@ -249,8 +251,11 @@ def test_readme_states_python310_and_rejects_python2():
 
 def test_readme_has_worked_analysis_case():
     """The missing 案例分析: a walkthrough section labeled as synthetic."""
+    # 2026-09-06 re-pin (#96): the walkthrough section was renamed to
+    # "## What a run looks like"; the synthetic-labeling requirement is kept
+    # unchanged and is carried by that section's lead-in line.
     text = README.read_text(encoding="utf-8")
-    assert "## A worked analysis case" in text, \
+    assert "## What a run looks like" in text, \
         "README must carry the worked analysis walkthrough section"
     assert "synthetic" in text, (
         "the worked case must be labeled representative/synthetic, "

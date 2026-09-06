@@ -25,7 +25,7 @@ kunglao-agent runs inside Claude Code. From a sample on disk to a verdict:
 | Tool | Why | Install |
 |---|---|---|
 | **Claude Code** | where kunglao-agent runs | per Anthropic docs |
-| **Python 3.10+** | the plugin carries a pinned env via `uv`; you do not touch it | system or `uv`-managed |
+| **Python 3.10+** (Python 2 is not supported) | the plugin carries a pinned env via `uv`; you do not touch it | system or `uv`-managed |
 | **`uv`** | locked env resolver | `pip install uv` or [astral.sh/uv](https://astral.sh/uv) |
 | **Ghidra or IDA** | one static-analysis suite for decompilation | see [Toolchain by target](#toolchain-by-target) |
 
@@ -74,17 +74,17 @@ runs/                 # session audit trail
 
 | Command | Use when | What it does |
 |---|---|---|
-| `/kunglao-agent:init <path> --type <windows\|linux\|android\|web\|macos>` | starting an engagement, first | scaffolds the workspace, probes the toolchain for the type, writes `CLAUDE.md` and `.mcp.json`; HARD-rejects with fix guidance when a required tool is missing |
-| `/kunglao-agent:analysis <path>` (alias `analyze`) | after init — state the task and start | collects your goal / verification logic / constraints once, then runs the convergence loop: dispatch / verify cycles until the report |
-| `/kunglao-agent:resume <path>` | after a crash, reboot, or any "where was I?" | read-only breakpoint brief (health, open claims, in-flight workers, crash timeline) plus the next action from the state machine |
-| `/kunglao-agent:upgrade <path> [--dry-run]` | after a plugin update, on an older workspace (or when the upgrade prompt says the stamp is behind) | migrates the workspace scaffold (hooks, templates, event vocab) to the current plugin version; `--dry-run` previews; user data (claims, facts, evidence) is never touched — byte drift refuses with RC=4 |
+| `/kunglao-agent:init <workspace> [--type windows\|linux\|android\|web\|macos]` | starting an engagement, first | scaffolds the workspace, probes the toolchain for the type, writes `CLAUDE.md` and `.mcp.json`; HARD-rejects with fix guidance when a required tool is missing |
+| `/kunglao-agent:analysis <workspace>` (alias `analyze`) | after init — state the task and start | collects your goal / verification logic / constraints once, then runs the convergence loop: dispatch / verify cycles until the report |
+| `/kunglao-agent:resume <workspace>` | after a crash, reboot, or any "where was I?" | read-only breakpoint brief (health, open claims, in-flight workers, crash timeline) plus the next action from the state machine |
+| `/kunglao-agent:upgrade <workspace> [--dry-run]` | after a plugin update, on an older workspace (or when the upgrade prompt says the stamp is behind) | migrates the workspace scaffold (hooks, templates, event vocab) to the current plugin version; `--dry-run` previews; user data (claims, facts, evidence) is never touched — byte drift refuses with RC=4 |
 | `/kunglao-agent:help` | anything else | prints the usage list |
 
 Typical order: `init` creates the workspace → `analysis` states the task and starts → (`resume` if anything goes sideways) → read the report at convergence → `upgrade` old workspaces after plugin updates.
 
 ## What a run looks like
 
-*The shape of an engagement — what you type, what comes back, where to look.* A small Windows dropper lands in `~/cases/synth-dropper`:
+*The shape of an engagement — what you type, what comes back, where to look.* A synthetic example: a small Windows dropper lands in `~/cases/synth-dropper`:
 
 ```bash
 /kunglao-agent:init ~/cases/synth-dropper --type windows   # probes Ghidra, VM reachability
@@ -292,6 +292,8 @@ uv sync --locked
 uv run python -m pytest -q
 gh pr create --base dev
 ```
+
+The authoritative full-suite entry is `python -m pytest -q` (see .github/workflows/release-check.yml).
 
 Design documentation lives in `docs/` and `specs/`. See [License](#license).
 

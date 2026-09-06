@@ -180,14 +180,18 @@ def test_subcommand_hints_equal_registry_hints() -> None:
 
 
 def test_readme_command_table_matches_registry() -> None:
-    """Render surface C: the README Command Reference covers every registry
+    """Render surface C: the README Subcommands table covers every registry
     command with an args cell consistent with the registry invocation."""
+    # 2026-09-06 re-pin (#96): the README rewrite (#91-#94) renamed the
+    # "Command Reference" table to "## Subcommands" and folded the args into
+    # each command's own backtick span, so the standalone backticked command
+    # token no longer exists; match the bare command token and keep the
+    # registry-derived args-cell check unchanged.
     readme = README.read_text(encoding="utf-8")
-    assert "Command Reference" in readme, "README missing Command Reference heading"
+    assert "## Subcommands" in readme, "README missing Subcommands heading"
     for name, rec in _registry().items():
         command = rec["invocation"].split(None, 1)[0]
-        row = f"`{command}`"
-        assert row in readme, f"README command table missing row: {row}"
+        assert command in readme, f"README command table missing row: {command}"
         args = _invocation_args(str(rec["invocation"]))
         if args:
             # README table cells escape pipes
