@@ -13,6 +13,7 @@ determinism, #495 artifact predicate.
 from __future__ import annotations
 
 import inspect
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -84,6 +85,7 @@ def test_event_enum_declared_with_landed_vocabulary() -> None:
         "WORK_AND_FREE_SLOT", "PARTIALS_AND_FREE_SLOT", "WORK_NO_FREE_SLOT",
         "STUCK_WORKERS_PRESENT",     # #595 silent-detect consumes stuck_workers
         "ACTIVE_WORKERS_PRESENT",    # #98 DRAIN: live worker on a drained claim surface
+        "ORACLE_CASE_RED",           # #108 DRAIN: runner verdict joins the completion transaction
         "FAILURE_ARTIFACTS_DUE",     # #495 validated_capability/identified_obstacle
         "LADDER_REQUIRED_BLOCKER",   # #497 climb-the-ladder flavor
         "LADDER_EXHAUSTED_BLOCKER",  # #497 ladder-exhaustion marker
@@ -386,3 +388,210 @@ def test_active_workers_present_predicate_98(tmp_path: Path) -> None:
     anchor._reg(quiet, [])
     anchor._ts(quiet, anchor._pq("[]"))
     assert pred(_decide_inputs(quiet)) is False
+
+
+# ------------------------------------------------------- #108 oracle gates
+
+def _mk_converged_ws(base: Path, name: str) -> Path:
+    """Issue #108 probe shape: the FULLY drained claim face (claim terminal/
+    PROVEN, pq answered with a passes note, clean facts) — the workspace the
+    old machine read CONVERGED over regardless of what the oracle runner
+    thought about the analysis."""
+    ws = anchor._ws(base, name)
+    anchor._reg(ws, [{"id": "C-1", "status": "PROVEN",
+                      "answers_question": "q1"}])
+    anchor._ts(ws, anchor._pq_canonical())
+    anchor._notes(ws, {"n1.md": ("C-1", "passes")})
+    anchor._fact_dir(ws)
+    return ws
+
+
+def _set_oracle_status(ws: Path, cases: dict, low: list | None = None,
+                       raw: str | None = None) -> None:
+    """Synthetic convention (#108): `runs/oracle-status.json`, written by the
+    oracle runner — {"cases": {id: {"status", "pending_entries", ...}}}."""
+    runs = ws / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    if raw is not None:
+        (runs / "oracle-status.json").write_text(raw, encoding="utf-8")
+        return
+    doc = {"schema": "oracle-status/1", "cases": cases}
+    if low is not None:
+        doc["low_discriminativity"] = low
+    (runs / "oracle-status.json").write_text(
+        json.dumps(doc), encoding="utf-8")
+
+
+def test_drain_oracle_red_case_not_converged_108(tmp_path: Path) -> None:
+    """#108 (the spec): every claim PROVEN, PQ answered — but the runner
+    holds a RED case. Pre-fix this read CONVERGED / "STOP dispatch; deliver":
+    the oracle appeared 0 times in the DRAIN probe table, so the judgment
+    face and the acceptance face were disconnected systems. Post-fix:
+    BLOCKED, with the case NAMED."""
+    ws = _mk_converged_ws(tmp_path, "oracle_red_108")
+    _set_oracle_status(ws, {"case-204": {"status": "fail",
+                                         "pending_entries": 0,
+                                         "instrumented": True}})
+    d = cc.decide(ws)
+    assert d["decision"] != "CONVERGED", (
+        f"#108: decide() declared {d['decision']} over a red oracle case")
+    assert d["decision"] == "BLOCKED", \
+        f"#108: red case must escalate BLOCKED, got {d['decision']}"
+    assert d["exit_code"] == cc.EXIT_BLOCKED
+    assert "case-204" in d["action"], \
+        f"#108: action must name the red case, got: {d['action'][:200]}"
+    assert d["oracle"]["red"] == 1, "#108: decide output carries case counts"
+
+
+def test_drain_oracle_pending_instrumented_blocks_108(tmp_path: Path) -> None:
+    """#108: a pending case on live instrumentation is not satisfiable —
+    "unknown" is not "pass". Blocks like a red case."""
+    ws = _mk_converged_ws(tmp_path, "oracle_pend_instr_108")
+    _set_oracle_status(ws, {"case-207": {"status": "pending",
+                                         "pending_entries": 3,
+                                         "instrumented": True}})
+    d = cc.decide(ws)
+    assert d["decision"] == "BLOCKED", \
+        f"#108: pending-instrumented must block, got {d['decision']}"
+    assert "case-207" in d["action"]
+    assert d["oracle"]["pending"] == 1
+
+
+def test_drain_oracle_pending_uninstrumented_still_converges_108(
+        tmp_path: Path) -> None:
+    """#108: a scaffold oracle (pending, never instrumented — e.g. the runner
+    ran with no client) must NOT block: backward compatibility with
+    workspaces whose oracle face is not live yet."""
+    ws = _mk_converged_ws(tmp_path, "oracle_pend_plain_108")
+    _set_oracle_status(ws, {"case-001": {"status": "pending",
+                                         "pending_entries": 2,
+                                         "instrumented": False}})
+    d = cc.decide(ws)
+    assert d["decision"] == "CONVERGED", \
+        f"#108: un-instrumented scaffold must not block, got {d['decision']}"
+
+
+def test_drain_oracle_absent_stays_converged_108(tmp_path: Path) -> None:
+    """#108: no oracle-status.json at all -> not blocking (legacy
+    workspaces), and the oracle face reports all-zero counts + an explicit
+    absent marker (never fake counts — B.3's absent contract)."""
+    ws = _mk_converged_ws(tmp_path, "oracle_absent_108")
+    d = cc.decide(ws)
+    assert d["decision"] == "CONVERGED"
+    assert d["oracle"] == {"red": 0, "green": 0, "pending": 0,
+                           "low_discriminativity": [], "blocked": [],
+                           "absent": True}
+
+
+def test_drain_oracle_unreadable_status_blocks_108(tmp_path: Path) -> None:
+    """#108: a corrupt verdict file cannot silently re-enable CONVERGED —
+    fail-closed like the contradiction scan ("cannot verify -> cannot
+    converge"), with the cause named."""
+    ws = _mk_converged_ws(tmp_path, "oracle_unreadable_108")
+    _set_oracle_status(ws, {}, raw="{not json at all")
+    d = cc.decide(ws)
+    assert d["decision"] == "BLOCKED", \
+        f"#108: unreadable status must block, got {d['decision']}"
+    assert "unreadable" in d["action"]
+
+
+def test_decide_oracle_counts_108(tmp_path: Path) -> None:
+    """#108: the honest progress face — per-case red/green/pending counts
+    read from the same status file, attached only when it exists."""
+    ws = _mk_converged_ws(tmp_path, "oracle_counts_108")
+    _set_oracle_status(ws, {
+        "case-r": {"status": "fail", "pending_entries": 0,
+                   "instrumented": True},
+        "case-g1": {"status": "pass", "pending_entries": 0,
+                    "instrumented": True},
+        "case-g2": {"status": "pass", "pending_entries": 0,
+                    "instrumented": True},
+        "case-p": {"status": "pending", "pending_entries": 1,
+                   "instrumented": False},
+    }, low=["case-g2"])
+    d = cc.decide(ws)
+    assert d["decision"] == "BLOCKED"  # one red case wins the drain
+    assert d["oracle"] == {"red": 1, "green": 2, "pending": 1,
+                           "low_discriminativity": ["case-g2"],
+                           "blocked": ["case-r"]}
+
+
+def test_oracle_transition_row_108() -> None:
+    """#108: the new DRAIN row binds ORACLE_CASE_RED -> BLOCKED (an
+    acceptance-face fact about the analysis, escalate — never poll)."""
+    TRANSITIONS, State, Event = (
+        _surface("TRANSITIONS"), _surface("State"), _surface("Event"))
+    assert TRANSITIONS and State and Event
+    row = TRANSITIONS[(State.DRAIN, Event.ORACLE_CASE_RED)]
+    assert row[0] is State.BLOCKED, \
+        f"#108: red case must land BLOCKED, got {row[0]}"
+    assert callable(row[1]), "#108: red case needs an action builder"
+
+
+def test_drain_probe_order_oracle_108() -> None:
+    """#108: ORACLE_CASE_RED joins the DRAIN probe table AFTER the frozen
+    completion-transaction order (every completeness gate keeps its verdict
+    priority) and BEFORE the DRAIN_CLEAN catch-all — anything after the
+    always-true catch-all can never fire."""
+    STAGE_PROBES, State, Event = (
+        _surface("STAGE_PROBES"), _surface("State"), _surface("Event"))
+    assert STAGE_PROBES and State and Event
+    drain = STAGE_PROBES[State.DRAIN]
+    assert Event.ORACLE_CASE_RED in drain, \
+        "#108: DRAIN has no oracle predicate (the root cause)"
+    idx = drain.index(Event.ORACLE_CASE_RED)
+    anomaly_idx = drain.index(Event.ANOMALY_DETECTED)
+    clean_idx = drain.index(Event.DRAIN_CLEAN)
+    assert anomaly_idx < idx < clean_idx, (
+        f"#108: oracle gate must sit anomaly<oracle<DRAIN_CLEAN, "
+        f"got anomaly={anomaly_idx} oracle={idx} clean={clean_idx}")
+
+
+def test_oracle_predicate_reads_snapshot_108(tmp_path: Path) -> None:
+    """#108: the predicate reads the snapshot's oracle face — true on a red
+    or pending-instrumented case, false when absent/clean/scaffold."""
+    PRED, Event, _decide_inputs = (
+        _surface("_EVENT_PREDICATES"), _surface("Event"), _surface("_decide_inputs"))
+    assert PRED and Event and _decide_inputs
+    pred = PRED[Event.ORACLE_CASE_RED]
+    red = _mk_converged_ws(tmp_path, "pred_red_108")
+    _set_oracle_status(red, {"c": {"status": "fail", "pending_entries": 0,
+                                   "instrumented": True}})
+    assert pred(_decide_inputs(red)) is True
+    scaffold = _mk_converged_ws(tmp_path, "pred_scaffold_108")
+    _set_oracle_status(scaffold, {"c": {"status": "pending",
+                                        "pending_entries": 2,
+                                        "instrumented": False}})
+    assert pred(_decide_inputs(scaffold)) is False
+    clean = _mk_converged_ws(tmp_path, "pred_clean_108")
+    _set_oracle_status(clean, {"c": {"status": "pass", "pending_entries": 0,
+                                     "instrumented": True}})
+    assert pred(_decide_inputs(clean)) is False
+    absent = _mk_converged_ws(tmp_path, "pred_absent_108")
+    assert pred(_decide_inputs(absent)) is False
+
+
+# --------------------------------- #108 kunglao-decide composition boundary
+
+def test_kd_output_composes_base_verdict_108(tmp_path: Path) -> None:
+    """#108 boundary: kunglao-decide.py is #107's refactoring surface (its
+    output gains the oracle face THERE) — this card's face is
+    convergence_check.decide()'s dict, verified above; the composed layer
+    keeps deciding identically on an oracle-red workspace (its `blocked`
+    escalation rides the base verdict)."""
+    import importlib.util
+    name = "kunglao_decide_108"
+    mod = sys.modules.get(name)
+    if mod is None:
+        spec = importlib.util.spec_from_file_location(
+            name, ROOT / "scripts" / "kunglao-decide.py")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[name] = mod
+        spec.loader.exec_module(mod)
+    ws = _mk_converged_ws(tmp_path, "kd_boundary_108")
+    _set_oracle_status(ws, {"case-1": {"status": "fail",
+                                       "pending_entries": 0,
+                                       "instrumented": True}})
+    out = mod.decide(ws)
+    assert out["decision"] == "BLOCKED"
+    assert out["exit_code"] == cc.EXIT_BLOCKED
