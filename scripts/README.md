@@ -194,6 +194,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | --- | --- | --- |
 | `gate_telemetry.py` | gate telemetry wrapper (decorator + ledger) | lib(8) |
 | `content_hash.py` | fact/content hashing (golden capture too) | tools, tests |
+| `contracts.py` | cross-process contract registry (#102) — exit-code registry (convergence 0-5 + 64/65, plan_drift --auto trio `PLAN_DRIFT_AUTO_RCS`), event field schema (`EVENT_FIELD="action"`), gate-subprocess legal rc sets; single definition imported by every producer/consumer face (drift of this class can no longer pass CI) | hooks, lib(2: convergence_check, event_taxonomy), tests |
 | `normalize_trace.py` | dynamic trace normalization | tools, tests |
 | `fixture_excerpt_lint.py` | fixture excerpt lint (standalone CLI) | tests, docs |
 | `references_recall.py` | references scored-recall CLI over the layered index — scenario → primary/supplementary; keyword → top-K ranked rows with score (no file dumps); `--list-categories` / `--scene-map` / `--ws` | tests, docs |
