@@ -159,13 +159,19 @@ def test_root_skill_menu_renders_upgrade() -> None:
 # ---------------------------------------------------------------------------
 
 def test_readme_command_table_has_upgrade_row() -> None:
-    """The README Command Reference table must include upgrade with args cell
+    """The README Subcommands table must include upgrade with args cell
     mirroring the registry invocation."""
+    # 2026-09-06 re-pin (#96): the rewrite folds the args into the command's
+    # own backtick span, so the bare `/kunglao-agent:upgrade` backticked
+    # token is gone; pin the unbackticked token + registry args cell, and
+    # keep the row's when-to-use semantics (after a plugin update).
     text = README.read_text(encoding="utf-8")
     reg = yaml.safe_load(SUB_COMMANDS.read_text(encoding="utf-8"))["subcommands"]
     up = reg["upgrade"]
-    assert "`/kunglao-agent:upgrade`" in text, (
-        "README Command Reference missing /kunglao-agent:upgrade row")
+    assert "/kunglao-agent:upgrade" in text, (
+        "README Subcommands table missing /kunglao-agent:upgrade row")
     args = up["invocation"].split(None, 1)[1].replace("|", r"\|")
     assert args in text, (
         f"README upgrade row args cell does not match registry: {args}")
+    assert "after a plugin update" in text, (
+        "the upgrade row must state when to use it (after a plugin update)")
