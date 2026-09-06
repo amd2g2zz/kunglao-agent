@@ -63,7 +63,7 @@ files:
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
-    sha256: 269221d8ffdc239466dc3c9eb3d319f5475432633ed0ba9e4aa02a518fbd390e
+    sha256: dd2dbc13e92695109cc30ee824e912fdd16c918e9163fc04e88755d431cd49ac
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
@@ -431,7 +431,7 @@ files:
   - src: scripts/kunglao-decide.py
     dest: .claude/scripts/kunglao-decide.py
     kind: scaffold
-    sha256: 386d55662bb3338c670333f885bb7d21c54161fabefb74e5dda482abc0f1e220
+    sha256: cabd8724342d40f34ce3ef1042f807ac811971baa14125e1d97addacecb81730
   - src: scripts/kunglao-digest.py
     dest: .claude/scripts/kunglao-digest.py
     kind: scaffold

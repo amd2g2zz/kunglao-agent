@@ -59,11 +59,28 @@ def _load_yaml(path: Path) -> dict:
     return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}) if path.exists() else {}
 
 
-def _cheapness_order(claims: list[dict], deps: dict) -> list[pr.Action]:
-    """Explore mode (design-spec §3.2 L132-134): same dispatchable filter; score = cheapness descending (T1 spread)."""
-    by_id = {c.get("id"): c for c in claims if c.get("id")}
+def _cheapness_order(claims: list[dict], deps: dict,
+                     evidence: pr.EvidenceView) -> list[pr.Action]:
+    """Explore mode (design-spec §3.2 L132-134): same dispatchable filter; score = cheapness descending (T1 spread).
+
+    #100: the dependency gate is the EXPLOIT-path standard, not "parent not
+    OPEN" — an IN_PROGRESS/PARK parent is work in flight or suspended, never
+    a satisfied dependency (PARK revival is explicit via mission_stall.revive,
+    #634). Satisfaction = the parent holds a terminal fact, so explore reuses
+    the very ``evidence.terminal_fact_claims`` set the VoI path gates its
+    candidates on (priority_ratio candidate filter) — both ranking faces
+    agree on what "unblocked" means. #594/#596: the same per-claim
+    depends_on fallback — claim_deps.yaml is authoritative, the
+    operator-natural register field feeds the ranking until it is populated.
+    L-1 (#100): score ties break by claim_id, not register file order — a
+    same-content register reorder must not silently reshuffle dispatch order
+    (cheapness remains a sort key, never a qualification gate).
+    """
     depends_on = (deps or {}).get("depends_on", {}) or {}
-    terminal_ids = {cid for cid, c in by_id.items() if not pr.is_open(c)}
+    if not depends_on:
+        depends_on = {c["id"]: list(c.get("depends_on") or [])
+                      for c in claims if c.get("id") and c.get("depends_on")}
+    terminal = evidence.terminal_fact_claims
     rows: list[pr.Action] = []
     for c in claims:
         cid = c.get("id")
@@ -75,7 +92,7 @@ def _cheapness_order(claims: list[dict], deps: dict) -> list[pr.Action]:
         if pr.attempts_of(c) >= 3:
             continue
         parents = depends_on.get(cid, []) or []
-        if any(p not in terminal_ids for p in parents):
+        if any(p not in terminal for p in parents):
             continue
         ch = pr.cheapness(c)
         rows.append(pr.Action(
@@ -84,7 +101,7 @@ def _cheapness_order(claims: list[dict], deps: dict) -> list[pr.Action]:
             attempts=pr.attempts_of(c),
             leverage=0.0, discriminator=0.0, novelty=0.0, cost=pr.action_cost(c),
         ))
-    rows.sort(key=lambda a: a.score, reverse=True)
+    rows.sort(key=lambda a: (-a.score, a.claim_id))
     return rows
 
 
@@ -170,7 +187,7 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
         claims = [c for c in (reg.get("claims") or []) if c.get("id") not in failure_blocked_ids]
         if eg.explore_gate(evidence.verified_fact_count, EXPLORE_THRESHOLD):
             out["explore_mode"] = True
-            actions = _cheapness_order(claims, deps)
+            actions = _cheapness_order(claims, deps, evidence)
         else:
             actions = pr.priority_ratio(claims, deps, evidence)
         for a in actions[: max(base["free_slots"], 0)]:

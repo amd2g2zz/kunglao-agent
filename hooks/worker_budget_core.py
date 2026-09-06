@@ -78,9 +78,22 @@ HOST_FORBIDDEN_TOOLS = (
 _SKILL_ROOT = Path(__file__).resolve().parent.parent
 ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
-    from priority_ratio import priority_ratio as _ratio_rank, EvidenceView as _EvidenceView
+    from priority_ratio import (priority_ratio as _ratio_rank,
+                                EvidenceView as _EvidenceView,
+                                Action as _Action,
+                                is_open as _ratio_is_open,
+                                attempts_of as _ratio_attempts,
+                                cheapness as _ratio_cheapness,
+                                classify_action as _ratio_classify,
+                                action_tier as _ratio_tier,
+                                action_cost as _ratio_cost)
     from retract_claim import RETRACTED  # retracted = terminal (#331)
     from status_defs import TERMINAL  # noqa: F401 — re-exported via gates surface
+    # #101: the explore-period threshold stays single-sourced in explore_gate
+    # (EXPLORE_THRESHOLD=5) — the audit must switch faces on the SAME gate
+    # DECIDE switches on, never a copied constant.
+    from explore_gate import (explore_gate as _explore_gate,
+                              EXPLORE_THRESHOLD as _EXPLORE_THRESHOLD)
     _PRIORITY_AVAILABLE = True
 except Exception:  # pragma: no cover - hook stays usable if the scorer moves
     _PRIORITY_AVAILABLE = False
@@ -219,10 +232,80 @@ def check_backtrack_gate(paths):
     return True, ''  # unknown rc -> fail open
 
 
+def _explore_cheapness_rank(claims, deps, evidence) -> list:
+    """#101 explore-period ranking authority — the SAME candidate filter,
+    cheapness score and claim_id tie-break as the DECIDE explore face
+    (scripts/kunglao-decide.py::_cheapness_order, #100): OPEN + attempts<3
+    + every depends_on parent holding a terminal fact
+    (evidence.terminal_fact_claims, #594/#596 per-claim fallback included),
+    sorted by (-cheapness, claim_id).
+
+    Mirrored rather than imported by design: the DECIDE face is a hyphenated
+    CLI no hook can import safely, and duplicating pr primitives keeps the
+    fail-open import posture. The dual-face agreement this mirror exists for
+    is pinned by tests/test_kunglao_decide.py (one ranking, never two — the
+    #499 posture, now explore-aware)."""
+    depends_on = (deps or {}).get('depends_on', {}) or {}
+    if not depends_on:
+        depends_on = {c['id']: list(c.get('depends_on') or [])
+                      for c in claims if c.get('id') and c.get('depends_on')}
+    terminal = evidence.terminal_fact_claims
+    rows = []
+    for c in claims:
+        cid = c.get('id')
+        if not cid or not _ratio_is_open(c):
+            continue
+        if _ratio_attempts(c) >= 3:  # #103 per-claim tolerance, same as DECIDE
+            continue
+        if any(p not in terminal for p in (depends_on.get(cid, []) or [])):
+            continue
+        rows.append(_Action(
+            claim_id=cid, action=_ratio_classify(c),
+            # rounded at construction like the VoI face — same 3-decimal
+            # advisory format; TIER_COST reciprocals stay distinct at 3dp,
+            # so the (-score, claim_id) ordering is unaffected.
+            score=round(_ratio_cheapness(c), 3), skill=None,
+            tier=_ratio_tier(c), attempts=_ratio_attempts(c),
+            leverage=0.0, discriminator=0.0, novelty=0.0, cost=_ratio_cost(c),
+        ))
+    rows.sort(key=lambda a: (-a.score, a.claim_id))
+    return rows
+
+
+def _audit_rank(claims, deps, evidence) -> tuple[list, str]:
+    """#101: ONE ranking authority per phase. During explore (verified facts
+    < EXPLORE_THRESHOLD, explore_gate single source) DECIDE ranks by
+    cheapness — so this audit must too, or a protocol-compliant dispatch of
+    DECIDE's own #1 is REJECTed as a "deviation" (the authority_mismatch
+    conflict class: REJECT must signal protocol failure, never a method
+    choice). Exploit period keeps the #499 VoI authority byte-identical.
+
+    Returns (actions, authority_tag) — the tag rides the advisory msg so a
+    deviation trace names the authority that judged it (post-mortem class
+    marker). explore_gate unavailable -> exploit face (fail-open to the
+    pre-#101 authority, never a crash)."""
+    try:
+        explore = _explore_gate(evidence.verified_fact_count, _EXPLORE_THRESHOLD)
+    except Exception:  # pragma: no cover - gate crash -> pre-#101 authority
+        explore = False
+    if explore:
+        return _explore_cheapness_rank(claims, deps, evidence), 'explore-cheapness'
+    return _ratio_rank(claims, deps, evidence), 'voi'
+
+
 def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None):
     """Best-first priority audit — v1.9.24 returns (ok, msg, deviated). #499:
     ranks by the authoritative VoI scorer (priority_ratio.py — specs/phase-4/
     contract.md §1), NOT the deprecated weighted module.
+
+    #101: the authority is phase-aware. During explore (verified facts <
+    EXPLORE_THRESHOLD, explore_gate single source) DECIDE ranks by cheapness,
+    so the audit uses the SAME face (_explore_cheapness_rank: same candidate
+    filter, same claim_id tie-break) — dispatching DECIDE's own #1 can never
+    REJECT as a "deviation" (the authority_mismatch conflict class). Exploit
+    period keeps the VoI authority byte-identical. The advisory msg tags the
+    authority (explore-cheapness / voi) so a deviation trace records WHICH
+    ranking judged it.
 
     Silent for rank-#1 dispatches; ADVISORY when the dispatched claim is not
     the top-ranked dispatchable one. `deviated=True` means the dispatch
@@ -268,7 +351,7 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     # terminal-status row is kept: is_open already excludes it from candidacy,
     # and its row feeds the novelty fact counting (M4 guard).
     claims = [c for c in claims if (c.get('status') or '').upper() != RETRACTED]
-    actions = _ratio_rank(claims, deps, evidence)
+    actions, authority = _audit_rank(claims, deps, evidence)
     if not actions:
         return (True, '', False)
     top = actions[0]
@@ -277,9 +360,9 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     rank = next((i + 1 for i, a in enumerate(actions) if a.claim_id == dispatched_cid), None)
     if rank is None:
         return (True, f'ADVISORY: {dispatched_cid} not in dispatchable set '
-                      f'(rank #1 = {top.claim_id} score {top.score}); '
+                      f'({authority} rank #1 = {top.claim_id} score {top.score}); '
                       f'blocked by deps/promotion, or already terminal?', False)
-    return (True, f'ADVISORY: dispatched {dispatched_cid} rank #{rank} '
+    return (True, f'ADVISORY [{authority}]: dispatched {dispatched_cid} rank #{rank} '
                   f'(score {actions[rank - 1].score}); rank #1 is {top.claim_id} '
                   f'(score {top.score}) - record a reasoning for the deviation.', True)
 
