@@ -269,5 +269,61 @@ def test_action_tier_dirty_tier_degrades_not_raises():
     assert pr.action_tier({}) == 1
 
 
+# ---------------------------------------------------------------------------
+# 场景 4：CJK note 跳判（`if not words: continue` 连 R2/R3 一起跳）
+# ---------------------------------------------------------------------------
+
+def test_cjk_note_without_refs_gets_r2_violation(tmp_path):
+    """纯中文零引用 note 必须触发 R2（引用正则与语言无关）。"""
+    facts_dir = tmp_path / "facts"
+    facts_dir.mkdir()
+    (facts_dir / "F001.md").write_text(
+        "the payload registers its exception handler at 0x14002abcd.\n",
+        encoding="utf-8")
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    (notes_dir / "C-001.md").write_text(
+        "---\nid: C-001\nclaim_id: C-001\nverify_status: pending\n---\n"
+        "载荷在初始化阶段注册了异常处理钩子，并据此完成时序还原，结论成立。\n",
+        encoding="utf-8")
+    r = nd.check(notes_dir, facts_dir)
+    assert r["ok"] is False
+    assert any("no fact-id reference" in v for v in r["violations"]), r
+
+
+def test_cjk_note_with_ref_passes(tmp_path):
+    """带引用的中文 note 仍放行（R1 跳过空词集不误伤合法叙事）。"""
+    facts_dir = tmp_path / "facts"
+    facts_dir.mkdir()
+    (facts_dir / "F001.md").write_text(
+        "the payload registers its exception handler at 0x14002abcd.\n",
+        encoding="utf-8")
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    (notes_dir / "C-001.md").write_text(
+        "---\nid: C-001\nclaim_id: C-001\nverify_status: pending\n---\n"
+        "载荷在初始化阶段注册了异常处理钩子（F001），时序结论暂定，待动态复核。\n",
+        encoding="utf-8")
+    r = nd.check(notes_dir, facts_dir)
+    assert r["ok"] is True, r["violations"]
+
+
+def test_cjk_dangling_ref_gets_r3_violation(tmp_path):
+    """中文 note 引用了不存在的 fact id → R3 悬空照查。"""
+    facts_dir = tmp_path / "facts"
+    facts_dir.mkdir()
+    (facts_dir / "F001.md").write_text(
+        "the payload registers its exception handler at 0x14002abcd.\n",
+        encoding="utf-8")
+    notes_dir = tmp_path / "notes"
+    notes_dir.mkdir()
+    (notes_dir / "C-001.md").write_text(
+        "---\nid: C-001\nclaim_id: C-001\nverify_status: pending\n---\n"
+        "载荷钩子时序已还原（F009），结论成立。\n", encoding="utf-8")
+    r = nd.check(notes_dir, facts_dir)
+    assert r["ok"] is False
+    assert any("unknown fact id" in v for v in r["violations"]), r
+
+
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-q"]))

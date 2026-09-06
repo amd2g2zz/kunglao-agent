@@ -80,16 +80,17 @@ def check(notes_dir, facts_dir, max_overlap: float = DEFAULT_MAX_OVERLAP) -> dic
         body = _body(n.read_text(encoding="utf-8", errors="replace"))  # #103
         checked += 1
         words = _words(body)
-        if not words:
-            continue
-        # R1 复制即拒
-        overlap = len(words & corpus) / len(words)
-        if overlap > max_overlap:
-            violations.append(
-                f"{n.name}: copied fact body (word-set overlap "
-                f"{overlap:.2f} > max_overlap {max_overlap:.2f})")
-            continue
-        # R2/R3 引用检查
+        if words:
+            # R1 复制即拒——只有 R1 依赖词集。#103: _WORD_RE 只收 [a-z0-9]，
+            # 纯中文 note（本仓库工作语言！）词集为空；空词集仅跳过 R1，
+            # 决不能连 R2/R3 引用检查一起跳过——fact-id 正则与语言无关。
+            overlap = len(words & corpus) / len(words)
+            if overlap > max_overlap:
+                violations.append(
+                    f"{n.name}: copied fact body (word-set overlap "
+                    f"{overlap:.2f} > max_overlap {max_overlap:.2f})")
+                continue
+        # R2/R3 引用检查（语言无关，空词集照查）
         refs = {t.replace("-", "").upper() for t in _FACT_REF_RE.findall(body)}
         if not refs:
             violations.append(
