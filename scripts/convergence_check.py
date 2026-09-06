@@ -77,6 +77,15 @@ EXIT_PARK = 5  # #634: suspended on external gates — legal idle with wake_cond
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
 
+# #103 exception tiering: the exception family a JUDGMENT-INPUT reader
+# (gate / discriminator / settlement input) may degrade on — IO, parse,
+# and data-shape errors from operator-editable files. Anything outside
+# this tuple is a programming error and must SURFACE (upstream it becomes
+# a conservative BLOCKED with an `error` field), not be eaten by a blanket
+# `except Exception` that silently turns a broken input into a pass.
+_GATE_INPUT_EXC = (AttributeError, ImportError, KeyError, OSError,
+                   TypeError, ValueError, yaml.YAMLError)
+
 
 def _load_yaml(p: Path):
     return (yaml.safe_load(p.read_text(encoding="utf-8")) or {}) if p.exists() else {}
@@ -437,13 +446,23 @@ def _dispatched_ids(workspace: Path) -> list:
     recorded worker attempt (promotion_attempts >= 1). Terminal/PARK claims
     are never live frontier work. Consumer: convergence_health._stuck_claims
     — a claim sitting in open_ids is only "stuck" if it was ever dispatched;
-    open_ids minus this set is the never-dispatched queue. Best effort: any
-    read/parse failure returns [] (same side-channel posture as the ledger).
+    open_ids minus this set is the never-dispatched queue.
+
+    #103 per-claim tolerance: a dirty promotion_attempts on ONE claim must
+    not wipe the dispatch evidence of ALL claims — the pre-#103 blanket
+    except turned one bad row into [] for the whole register, killing stuck
+    detection downstream. Rows now degrade individually; only a whole-file
+    read/parse failure returns [] (absence of data, not silence about it).
     """
     try:
         reg = _load_yaml(workspace / "claim-register.yaml")
-        out = []
-        for c in (reg.get("claims") or []):
+    except (AttributeError, OSError, TypeError, ValueError, yaml.YAMLError):
+        # whole-register unread: settlement input keeps its absence shape,
+        # narrowed to the realistic IO/parse family (#103 tiering)
+        return []
+    out = []
+    for c in (reg.get("claims") or []):
+        try:
             if not c.get("id"):
                 continue
             status = (c.get("status") or "").upper()
@@ -451,9 +470,10 @@ def _dispatched_ids(workspace: Path) -> list:
                 continue
             if status in IN_PROGRESS_STATUSES or int(c.get("promotion_attempts") or 0) >= 1:
                 out.append(c["id"])
-        return out
-    except Exception:  # noqa: BLE001 — side channel, never blocks the decision
-        return []
+        except (AttributeError, TypeError, ValueError):
+            # dirty row (#103): skip it, keep the rest of the collection
+            continue
+    return out
 
 
 def _append_ledger(workspace: Path, d: dict) -> None:
@@ -522,7 +542,9 @@ def _failure_blocked(workspace: Path) -> list:
         return []
     try:
         return [b["claim_id"] for b in fag.scan_workspace(workspace) if b.get("state") == "BLOCKED"]
-    except Exception:
+    except _GATE_INPUT_EXC:
+        # #103 tiering: judgment input (failure-analysis gate) — IO/parse/
+        # shape errors degrade, programming errors surface, never blanket.
         return []
 
 
@@ -653,8 +675,8 @@ class _DecideInputs:
             try:
                 from hypothesis_store import HypothesisStore
                 hyps = HypothesisStore(self.workspace / "hypotheses").list_open()
-            except Exception:
-                hyps = []  # layer error — fail-open per design D7
+            except _GATE_INPUT_EXC:
+                hyps = []  # layer error — fail-open per design D7 (#103: narrowed to IO/parse/shape)
             self._open_hyps = hyps
         return self._open_hyps
 
@@ -675,7 +697,7 @@ class _DecideInputs:
                     self.workspace / "facts" / "_INDEX.md",
                     self.workspace / "facts",
                 )
-            except Exception:
+            except Exception:  # fail-open: telemetry side channel (informational observation, D5)
                 anomalies = []  # fail-open per design.md D5
             self._anomalies = anomalies
         return self._anomalies
@@ -697,7 +719,9 @@ class _DecideInputs:
                     reason = (
                         f"{len(discoveries)} unconsumed discovery(s) in {names} "
                         f"-> create child obligations or record materiality rejection")
-            except Exception as exc:
+            except _GATE_INPUT_EXC as exc:
+                # #103 tiering: obligation-gate input; degradation stays
+                # VISIBLE via the explicit "scan unavailable" reason.
                 reason = f"discovery scan unavailable ({type(exc).__name__})"
             self._discovery_reason = reason
         return self._discovery_reason
@@ -719,6 +743,9 @@ class _DecideInputs:
                             f"{c['fact_a']} <-> {c['fact_b']}" for c in conflicts)
                         reason = f"GLOBAL CONTRADICTION: {pairs}"
                 except Exception as exc:  # fail-closed: cannot verify → cannot converge
+                    # #103 classification: judgment input handled as an
+                    # explicit surfaced reason (any exception BLOCKS with
+                    # the cause) — intentional blanket, keep.
                     reason = f"contradiction scan unavailable ({type(exc).__name__})"
             self._contradiction_reason = reason
         return self._contradiction_reason
@@ -735,7 +762,7 @@ class _DecideInputs:
             try:
                 import ask_for_direction_gate as afdg
                 ids = list(afdg.find_ladder_exhaustion(self.workspace))
-            except Exception:
+            except Exception:  # fail-open: telemetry side channel (event-label flavor only)
                 ids = []
             open_ids = {c["id"] for c in self.opens}
             self._ladder_ids = [i for i in ids if i in open_ids]
@@ -941,7 +968,7 @@ def _scan_proven_facts(workspace: Path) -> dict[str, str]:
     proven: dict[str, str] = {}
     try:
         text = idx.read_text(encoding="utf-8", errors="replace")
-    except Exception:
+    except OSError:  # #103: only a read can fail here — narrowed, no blanket
         return {}
     for line in text.splitlines():
         if "|" not in line:
@@ -988,7 +1015,7 @@ def _detect_contradiction(hyp_body: str, candidates: list[str],
                         if cand.lower() == after:
                             snippet = conclusion[:80]
                             return f"Contradicted: {fid} ({kw.rstrip()} {cand}, conclusion: {snippet})"
-    except Exception:
+    except Exception:  # fail-open: telemetry side channel (annotation flavor on an already-blocking verdict)
         pass
     return None
 
@@ -1003,7 +1030,7 @@ def _act_open_hypothesis(s: _DecideInputs) -> str:
     # Scan PROVEN facts for contradiction annotations
     try:
         proven = _scan_proven_facts(s.workspace)
-    except Exception:
+    except OSError:  # #103: annotation input, read-only failure mode — narrowed
         proven = {}
     annotations: list[str] = []
     for h in hyps:
@@ -1365,7 +1392,7 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
                                       "blockers; no active workers; no "
                                       "pending partials")
                 decision["wake_condition"] = wake
-        except Exception:  # noqa: BLE001 — downgrade is advisory-safe
+        except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (advisory PARK downgrade; failure keeps the machine verdict)
             pass
     # #634: mission-level stall fingerprint — ΔV_m flat K checkpoints while
     # open work remains. Proposal semantics: annotate + emit, never mutate
@@ -1389,14 +1416,14 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
                                  "(predicted_observation required); the "
                                  "bet leads the next dispatch"),
                 }
-            except Exception:  # noqa: BLE001 — advisory face only
+            except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (advisory face only)
                 pass
             if emit_snapshot:
                 from kunglao_log import emit as _emit_stall
                 _emit_stall(workspace, actor="convergence_check",
                             action="mission_stall",
                             detail=json.dumps(ms, ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — fingerprint unavailable → no annotation
+    except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (fingerprint unavailable → no annotation)
         pass
     # #823 A2: N-arm first-order value signals — shadow posture (always-on
     # since #51: the dict gains the `value_signals` key and one shadow emit).
@@ -1408,7 +1435,7 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
         try:
             from carrier_consistency import check as _carrier_check
             cv = _carrier_check(workspace)
-        except Exception as exc:  # noqa: BLE001 — drift includes checker error
+        except Exception as exc:  # noqa: BLE001 — fail-closed via explicit violation: drift includes checker error (#103: intentional blanket, keep)
             cv = {"ok": False,
                   "violations": ["(x) carrier checker error: " + str(exc)]}
         if not cv.get("ok", True):
@@ -1430,7 +1457,7 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
     try:
         from heartbeat import gap_alarm as _gap_alarm
         gap = _gap_alarm(Path(workspace))
-    except Exception:  # noqa: BLE001 — advisory-safe, never deadlock decide
+    except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (advisory alarm, never deadlocks decide)
         gap = None
     if gap is not None and gap.get("alarm") is True:
         decision["heartbeat_gap"] = gap
@@ -1467,7 +1494,7 @@ def _emit_decision_snapshot(ws, d: dict) -> None:
             rows = pr.priority_ratio(claims, {}, pr.EvidenceView())
             top = [{"id": r.claim_id, "score": round(float(r.score), 4)}
                    for r in rows[:5]]
-        except Exception:
+        except Exception:  # fail-open: telemetry side channel (top-5 preview inside the snapshot)
             top = []
         from kunglao_log import emit
         emit(ws, actor="convergence_check", action="decision_snapshot",
@@ -1476,7 +1503,7 @@ def _emit_decision_snapshot(ws, d: dict) -> None:
                  "status_counts": counts,
                  "top_priorities": top,
              }, ensure_ascii=False))
-    except Exception:
+    except Exception:  # fail-open: telemetry side channel (snapshot emit, #287 contract)
         pass
 
 
@@ -1536,7 +1563,7 @@ def main(argv: list[str] | None = None) -> int:
                      f"partial={d['partial_count']} slots={d['free_slots']} "
                      f"workers={d['active_workers']}"),
              exit=d["exit_code"])
-    except Exception:
+    except Exception:  # fail-open: telemetry side channel (event-log mirror, #287)
         pass
     if args.json:
         print(json.dumps(d, indent=2, ensure_ascii=False))

@@ -69,7 +69,10 @@ def _cheapness_order(claims: list[dict], deps: dict) -> list[pr.Action]:
         cid = c.get("id")
         if not cid or not pr.is_open(c):
             continue
-        if int(c.get("promotion_attempts", 0)) >= 3:
+        # #103: same per-claim int guards as priority_ratio — a dirty
+        # register field must not freeze the whole DECIDE in conservative
+        # BLOCKED via _conservative_blocked.
+        if pr.attempts_of(c) >= 3:
             continue
         parents = depends_on.get(cid, []) or []
         if any(p not in terminal_ids for p in parents):
@@ -77,8 +80,8 @@ def _cheapness_order(claims: list[dict], deps: dict) -> list[pr.Action]:
         ch = pr.cheapness(c)
         rows.append(pr.Action(
             claim_id=cid, action=pr.classify_action(c), score=ch, skill=None,
-            tier=min(int(c.get("evidence_tier_attempted", 0)) + 1, 3),
-            attempts=int(c.get("promotion_attempts", 0)),
+            tier=pr.action_tier(c),
+            attempts=pr.attempts_of(c),
             leverage=0.0, discriminator=0.0, novelty=0.0, cost=pr.action_cost(c),
         ))
     rows.sort(key=lambda a: a.score, reverse=True)

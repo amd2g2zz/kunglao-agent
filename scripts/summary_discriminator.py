@@ -52,12 +52,16 @@ def check(summary_path, facts_dir, ledger_path=None) -> dict:
 
     summary 缺失 → ok（无可查对象）。不可读输入抛异常（fail-open 归调用方）。
     ledger_path 缺省时自动发现 summary 同工作区的 runs/mission_ledger.yaml。
+
+    #103: 所有文件读取统一 errors="replace"——一个非法 UTF-8 字节必须降级
+    为内容（U+FFFD）继续判定，绝不许升格成 UnicodeDecodeError 把整条判别
+    链推进调用方的 fail-open 笼子变成 PASS。
     """
     summary_path = Path(summary_path)
     facts_dir = Path(facts_dir)
     if not summary_path.exists():
         return {"ok": True, "violations": [], "checked": 0}
-    text = summary_path.read_text(encoding="utf-8")
+    text = summary_path.read_text(encoding="utf-8", errors="replace")
     if ledger_path is None:
         cand = summary_path.parent / LEDGER_REL
         ledger_path = cand if cand.exists() else None
@@ -69,7 +73,7 @@ def check(summary_path, facts_dir, ledger_path=None) -> dict:
         fid = _fid(f.name)
         if fid is None:
             continue
-        raw = f.read_text(encoding="utf-8")
+        raw = f.read_text(encoding="utf-8", errors="replace")  # #103
         fm = _frontmatter(raw)
         status = ""
         m = _FM_STATUS_RE.search(fm)
@@ -99,7 +103,8 @@ def check(summary_path, facts_dir, ledger_path=None) -> dict:
                 f"但 summary 未提及且未 WAIVED")
     # R3 未答主问题节
     if ledger_path is not None and Path(ledger_path).exists():
-        led = yaml.safe_load(Path(ledger_path).read_text(encoding="utf-8")) or {}
+        led = yaml.safe_load(Path(ledger_path).read_text(
+            encoding="utf-8", errors="replace")) or {}  # #103
         pqs = (led.get("mission") or {}).get("pqs") or []
         open_pqs = [str(p.get("id")) for p in pqs
                     if str(p.get("state")) in ("unattempted", "blocked")]
