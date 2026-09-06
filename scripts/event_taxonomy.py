@@ -165,6 +165,8 @@ EMIT_ACTIONS = [
     "capability_reject",
     "capability_switch",
     "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face
+    "case_bank_refused",  # #110 settlement->case-bank append refused (fail-open WARN face)
+    "case_priors_seeded",  # #110 cold-start case-bank prior injection face
     "channel_default",    # #727 init channel degradation/guidance WARN
     "claim_migrate",
     "claim_revive",       # #634 PARK → OPEN revival (mission_stall.revive)

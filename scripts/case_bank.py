@@ -117,6 +117,29 @@ def append(ws: Path, entry: dict) -> dict:
     return stored
 
 
+def append_once(ws: Path, entry: dict) -> dict:
+    """Idempotent append keyed on (claim_id, method, roi_class) — #110.
+
+    The settlement wiring fires per settled claim; a replayed settlement
+    (same claim, same method, same roi_class) must not grow the bank.
+    Validation is NOT bypassed: the ruling-4 lint (unattributed NEGATIVE)
+    and the required-field checks still raise CaseBankError — dedup only
+    short-circuits the WRITE, never the contract.
+
+    Returns {"ok": True, "duplicate": bool, "record": <stored or found>}.
+    """
+    e = entry or {}
+    key = (str(e.get("claim_id") or ""), str(e.get("method") or ""),
+           str(e.get("roi_class") or ""))
+    for existing in read_entries(ws):
+        if (str(existing.get("claim_id") or ""),
+                str(existing.get("method") or ""),
+                str(existing.get("roi_class") or "")) == key:
+            return {"ok": True, "duplicate": True, "record": existing}
+    record = append(ws, e)
+    return {"ok": True, "duplicate": False, "record": record}
+
+
 def retrieve(ws: Path, context_tags: list, limit: int = 5) -> list[dict]:
     """Matching entries, FAILURES FIRST then positives, newest first.
 

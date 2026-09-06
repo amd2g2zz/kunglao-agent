@@ -29,6 +29,7 @@ except ImportError:  # pragma: no cover
 # Canonical PQ parse — same schema rules as convergence_check (issue #77);
 # a malformed schema is convergence's INVALID problem, not ours (D7).
 from convergence_check import _parse_primary_questions
+from init_state import STATE_FILE, read_project_type  # #110 init context
 from hypothesis_store import Hypothesis, HypothesisStore
 
 MARKER_FMT = "pq:{qid}"
@@ -345,6 +346,162 @@ def seed_taint_candidates(ws: Path) -> int:
                 except Exception:  # noqa: BLE001 - logging never breaks seeding
                     pass
     return appended
+
+
+# ---------------------------------------------------------------------------
+# #110 — case-bank priors -> hypothesis layer (cold-start injection)
+# ---------------------------------------------------------------------------
+# Storage reality: the case bank is PER-WORKSPACE (runs/case-bank.jsonl), so
+# the read side rides the cold-start chain (digest_build already fires
+# seed_from_task_spec there) instead of a cross-workspace lookup — the
+# initialized workspace's recurring cold start IS the replay face. Retrieval
+# is scoped by (project_type + protection traits from recon evidence on
+# disk); hits land as prior candidates with provenance on ONE carrier
+# hypothesis. Zero rows / zero hits / zero derivable context -> nothing is
+# written (cold start unchanged — no fabricated priors).
+CASE_BODY_MARKER = "case-bank-priors"
+_CASE_GROUP = "case-bank-priors"
+CASE_HINT_LIMIT = 5
+
+
+def _read_json_file(path: Path) -> dict:
+    """Tolerant JSON read: missing/corrupt -> {} (never raises)."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _case_query_tags(ws: Path) -> list[str]:
+    """(project_type + protection traits) query context for #110 retrieval.
+
+    project_type: init_state (analysis_state.txt, then the #625 state file).
+    Protection traits: recon evidence already on disk — evidence/die.json
+    (derived.detected_packer / high_entropy_sections) and evidence/apkid.json
+    (summary packer/obfuscator/anti_debug/anti_vm). Dedup, order-stable.
+    No derivable context -> [] (the caller skips: a context-free prior is a
+    fabricated prior).
+    """
+    tags: list[str] = []
+    ptype = read_project_type(ws)
+    if not ptype:
+        ptype = str(_read_json_file(ws / STATE_FILE).get("project_type") or "")
+    if ptype:
+        tags.append(str(ptype))
+    die = _read_json_file(ws / "evidence" / "die.json")
+    derived = die.get("derived") if isinstance(die.get("derived"), dict) else {}
+    packer = str(derived.get("detected_packer")
+                 or die.get("detected_packer") or "").strip()
+    if packer:
+        tags.extend(["packed", packer.lower()])
+    if derived.get("high_entropy_sections") or die.get("high_entropy_sections"):
+        tags.append("high-entropy")
+    apkid = _read_json_file(ws / "evidence" / "apkid.json")
+    summary = apkid.get("summary")
+    if not isinstance(summary, dict):
+        summary = {}
+    if summary.get("packer"):
+        tags.append("packed")
+    if summary.get("obfuscator"):
+        tags.append("obfuscated")
+    if summary.get("anti_debug") or summary.get("anti_vm"):
+        tags.append("anti-analysis")
+    out: list[str] = []
+    for t in tags:
+        if t and t not in out:
+            out.append(t)
+    return out
+
+
+def _case_text(value) -> str:
+    """Single-line, comma-free text (frontmatter list round-trip: the store
+    parses `candidates: [a, b]` by splitting on commas)."""
+    return " ".join(str(value or "").split()).replace(",", ";")
+
+
+def _case_candidate_line(entry: dict) -> str:
+    """One prior-candidate line with provenance (#110): failures carry
+    attribution (+ premise_correction) like the <case-hints> face."""
+    head = (f"case-bank prior: {entry.get('claim_id')} "
+            f"({entry.get('roi_class')} method={entry.get('method')})")
+    parts = [head]
+    if entry.get("attribution"):
+        parts.append(f"attribution: {_case_text(entry['attribution'])}")
+    if entry.get("premise_correction"):
+        parts.append(f"correction: {_case_text(entry['premise_correction'])}")
+    return " | ".join(parts)
+
+
+def _case_body() -> str:
+    return (
+        f"{CASE_BODY_MARKER}\n\n"
+        "Prior candidates from the case bank (runs/case-bank.jsonl),\n"
+        "retrieved at cold start by (project_type + protection traits).\n"
+        "Failures lead (counterexample pruning > positive reuse). These are\n"
+        "PROVENANCE-CARRIED hints — what was tried in a similar context,\n"
+        "what the signals looked like, what the attribution was — never hard\n"
+        "rules. Judgment stays with the orchestrator/worker; adjudicate per\n"
+        "#528 (refute / supersede).\n"
+    )
+
+
+def _emit_case(ws: Path, hyp_id: str, n: int) -> None:
+    """kunglao_log observability (#110) — guarded, never raises."""
+    try:
+        from kunglao_log import emit
+        emit(ws, actor="hypothesis_seeder", action="case_priors_seeded",
+             detail=f"{hyp_id} +{n} case prior(s)")
+    except Exception:  # noqa: BLE001 — logging must never break seeding
+        pass
+
+
+def seed_case_candidates(ws: Path, limit: int = CASE_HINT_LIMIT) -> int:
+    """Inject case-bank hits as prior candidates (cold-start face, #110).
+
+    case_bank.retrieve over the (project_type + protection traits) context —
+    FAILURES FIRST (the retrieve contract), newest first within a class.
+    Hits append to ONE carrier hypothesis (identified by the
+    case-bank-priors body marker — the #662 marker pattern, because the
+    store drops unknown frontmatter keys on rewrite); idempotent per exact
+    candidate string. Returns the count of NEW candidates appended.
+
+    Zero rows / zero hits / zero derivable context -> 0, nothing written.
+    Fail-open (D7): every failure degrades to 0, never raises.
+    """
+    ws = Path(ws)
+    try:
+        import case_bank
+        tags = _case_query_tags(ws)
+        if not tags:
+            return 0
+        entries = case_bank.retrieve(ws, tags, limit)
+        if not entries:
+            return 0
+        cands = [_case_candidate_line(e) for e in entries]
+        store = HypothesisStore(ws / "hypotheses")
+        carrier = next((h for h in store.list_all()
+                        if CASE_BODY_MARKER in h.body), None)
+        if carrier is None:
+            carrier = Hypothesis(
+                id=_next_free_id(store),
+                claim_id=PLACEHOLDER_CLAIM,
+                competitor_group=_CASE_GROUP,
+                candidates=[],
+                status="open",
+                body=_case_body(),
+            )
+            carrier.path = ws / "hypotheses" / f"{carrier.id}.md"
+            store._write(carrier)  # store has no public create-with-body path
+        existing = set(carrier.candidates)
+        new_candidates = [c for c in cands if c not in existing]
+        if new_candidates:
+            carrier.candidates = list(carrier.candidates) + new_candidates
+            store._write(carrier)
+            _emit_case(ws, carrier.id, len(new_candidates))
+        return len(new_candidates)
+    except Exception:  # noqa: BLE001 — priors never break cold start (D7)
+        return 0
 
 
 def main(argv=None) -> int:
