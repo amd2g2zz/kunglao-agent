@@ -56,6 +56,64 @@ _TERMINAL_STATUSES = frozenset(("refuted", "superseded"))
 
 _FRONT_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
 
+# #109 PQ-neighborhood binding faces. A hypothesis is bound to primary
+# question `qid` through ANY of:
+#   - body carries the seeder scaffold marker `pq:<qid>` (#662);
+#   - competitor_group matches the seeder shape `pq-<qid>` (or the colon
+#     variant `pq:<qid>`);
+#   - its claim_id resolves via a claim_id -> answers_question map to qid.
+# Kept as literal formats (not imported from hypothesis_seeder — hooks and
+# store consumers must not pull the seeder's convergence_check dependency;
+# the shapes are pinned by tests/test_hypothesis_admission_109.py).
+PQ_BODY_MARKER_FMT = "pq:{qid}"
+PQ_GROUP_FMTS = ("pq-{qid}", "pq:{qid}")
+
+
+def open_candidates_for_question(
+    hypotheses: list[Hypothesis],
+    qid: str,
+    claim_question: dict[str, str] | None = None,
+) -> list[str]:
+    """#109 admission read: non-adjudicated candidate strings bound to PQ
+    `qid`, file order deduplicated.
+
+    Only `open` hypotheses count — refuted/superseded are terminal
+    adjudications and confirmed is decided; their candidates are history,
+    not a live competitor field (the anchor is what contradicts you, and a
+    decided hypothesis contradicts nothing anymore).
+
+    Falsifier declaration (TODO, #112 intent): every candidate must enter
+    naming what observation would eliminate it, but Hypothesis.candidates
+    is a plain string list (the #528 frontmatter round-trip drops
+    per-candidate structure), so existence is the only computable predicate
+    today. When candidates gain structure (mapping frontmatter or
+    per-candidate files), tighten this to require a non-empty falsifier per
+    candidate — the dispatch gate's repair text already promises it.
+
+    Pure function over the parsed list: read failures happen upstream in
+    HypothesisStore.list_all (fail-open, skips unparseable files), so this
+    never raises on store content.
+    """
+    cq = claim_question or {}
+    group_hits = tuple(g.format(qid=qid) for g in PQ_GROUP_FMTS)
+    marker = PQ_BODY_MARKER_FMT.format(qid=qid)
+    out: list[str] = []
+    for h in hypotheses:
+        if h.status != "open":
+            continue
+        bound = (
+            marker in (h.body or "")
+            or (h.competitor_group or "") in group_hits
+            or cq.get(h.claim_id) == qid
+        )
+        if not bound:
+            continue
+        for c in h.candidates or []:
+            c = str(c).strip()
+            if c and c not in out:
+                out.append(c)
+    return out
+
 
 class InvalidTransition(ValueError):
     """A hypothesis state change violated the state machine."""
@@ -72,8 +130,6 @@ class Hypothesis:
     superseded_by: str | None = None
     predicted_observation: str = ""   # #711: falsifiable bet — what a probe should show
     confirming_fact_id: str | None = None  # #711: evidence that confirmed the bet
-    body: str = ""
-    path: Path | None = None
     body: str = ""
     path: Path | None = None
 

@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: a86d60b82354b8a8ffb074852d9d52327c9c95a939f950ff598124dfbf358d34
+    sha256: afd3b977fe3d682827f690df14eb578145fe1ff1986dc0f0ac0b65d90f1ed687
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -335,7 +335,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 9bed1b1a5f9dc8abcae0e93bf901b5e8380c835db12ad19fb59eccd09f3488bc
+    sha256: fd58fceb5c2904d19f3a319c7e277f7e4bc52d71f15570108593609b491fd708
   - src: scripts/explore_gate.py
     dest: .claude/scripts/explore_gate.py
     kind: scaffold
@@ -403,7 +403,7 @@ files:
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
-    sha256: 2d36e392bf264cfb7ced294d675ceb82f3b10fb19d223d53aba7e28ab583e6d5
+    sha256: 88cd6758e87e0ec492f0d005678ba61a485f4bb0ab65bb2b6f1289996d3a9b5f
   - src: scripts/infeasible_proposal.py
     dest: .claude/scripts/infeasible_proposal.py
     kind: scaffold
