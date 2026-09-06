@@ -151,7 +151,8 @@ def oracle_selfcheck() -> list[dict]:
         value_class_weights={"rce": 4.0}))[0]
     plain = pr.priority_ratio([_C("RCE", statement="rce chain")], {}, pr.EvidenceView())[0]
     check("worth_weight_multiplier",
-          worth.weight == 4.0 and worth.score == round(plain.score * 4.0, 6),
+          worth.weight == 4.0
+          and abs(worth.score - plain.score * 4.0) <= 5e-6,
           f"worth={worth.score} plain={plain.score} weight={worth.weight}")
 
     return results
