@@ -84,57 +84,44 @@ def _mk_ws(tmp_path: Path) -> Path:
 
 # ---------- (b) priority_ratio unified path ----------
 
-def test_from_workspace_resolves_mission_gap(tmp_path):
-    """Mission-ledger gaps reach the view unconditionally — previously
-    short-circuited to the neutral mission_active=False without the flag."""
-    import mission_ledger as ml
+def test_from_workspace_carries_ws(tmp_path):
+    """from_workspace attaches the workspace root — the #107 hook the ranker
+    loads runs/posteriors.yaml and oracle/cases/*.yaml through."""
     import priority_ratio as pr
     ws = _mk_ws(tmp_path)
-    ml.init(ws)
     ev = pr.EvidenceView.from_workspace(ws)
-    assert ev.mission_active is True
-    assert ev.mission_gap.get("q1") == pytest.approx(1.0)
+    assert ev.ws == ws
 
 
-def test_gap_hit_claim_leads_ranking(tmp_path):
-    """A claim answering an open PQ leads the dispatch ranking —
-    previously every gap_bucket stayed 0 (flat neutral ordering)."""
-    import mission_ledger as ml
+def test_pq_categorical_reaches_the_unified_ranking(tmp_path):
+    """A PQ categorical in runs/posteriors.yaml reaches the ranking
+    unconditionally (no flag, no phase): the claim answering that PQ gains
+    the mechanical dH term in its feeds and its score."""
+    from posteriors import PQCategorical, PosteriorLedger
     import priority_ratio as pr
     ws = _mk_ws(tmp_path)
-    ml.init(ws)
+    led = PosteriorLedger()
+    led.pqs["q1"] = PQCategorical("q1", {"plain-md5": 1.0, "salted": 1.0})
+    led.save(ws)
     claims = yaml.safe_load(
         (ws / "claim-register.yaml").read_text(encoding="utf-8"))["claims"]
     ev = pr.EvidenceView.from_workspace(ws)
-    acts = pr.priority_ratio(claims, {}, ev)
-    assert acts[0].claim_id == "C-gap"
-    assert acts[0].gap_bucket == 1
+    gap = next(a for a in pr.priority_ratio(claims, {}, ev)
+               if a.claim_id == "C-gap")
+    assert "dH=0" not in gap.feeds["dh_pq"], (
+        "the open-PQ claim must carry the categorical entropy feed "
+        "(the #51 unified-path regression, re-pinned on the #107 face)")
 
 
-def test_from_workspace_resolves_prior_p(tmp_path):
-    """prior_p comes from the replay priors — previously pinned to the
-    neutral 1.0 without the flag."""
-    import priority_ratio as pr
-    ws = _mk_ws(tmp_path)
-    (ws / "runs" / "value-priors.yaml").write_text(yaml.safe_dump(
-        {"schema": "kunglao-value-priors/1",
-         "buckets": {"deep|*": {"n": 30, "p_complete": 0.75}}}),
-        encoding="utf-8")
-    ev = pr.EvidenceView.from_workspace(ws)
-    assert ev.prior_p_complete == pytest.approx(0.75)
-
-
-def test_low_prior_inflates_effective_cost():
-    """With the unified path the cost correction is live: a pessimistic
-    prior scores strictly below an optimistic one for the same claim."""
+def test_ranking_deterministic_on_default_env():
+    """With the unified path the ranking is byte-identical across runs on a
+    default environment (seeded Thompson, no hidden state)."""
     import priority_ratio as pr
     claim = {"id": "C-001", "status": "OPEN", "statement": "c2 config extract",
              "evidence_tier_attempted": 1, "promotion_attempts": 0}
-    pessimistic = pr.priority_ratio(
-        [claim], {}, pr.EvidenceView(prior_p_complete=0.25))[0].score
-    optimistic = pr.priority_ratio(
-        [claim], {}, pr.EvidenceView(prior_p_complete=0.9))[0].score
-    assert pessimistic < optimistic
+    a = [x.to_dict() for x in pr.priority_ratio([claim], {}, pr.EvidenceView())]
+    b = [x.to_dict() for x in pr.priority_ratio([claim], {}, pr.EvidenceView())]
+    assert a == b
 
 
 # ---------- (c) rho_checkpoint.attach_signals unified path ----------

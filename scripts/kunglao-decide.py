@@ -3,9 +3,18 @@
 """kunglao-decide.py — M1 DECIDE standalone CLI (design-spec §6.7.5 L568, module-design.md M1.3-M1.5).
 
 Combines: convergence_check.decide (5-branch matrix, golden F-01..F-16 frozen)
-    + explore_gate (exploration verdict) + priority_ratio (ratio key)
+    + priority_ratio (the #107 Thompson ranker — the ONLY ranking path)
     + selfcheck (counter-question / self-cap behavior-contract scan).
 Output: DecideOutput (M1.3 frozen schema, schemas/decide-output.json); exit_code 0-4 same as convergence_check.
+
+#107 owner ruling ("探索和价值网络完全重构，之前的不要了"): the
+explore/exploit dual path is deleted — the count-threshold gate module, its
+threshold constant and the cheapness-spread branch are gone. Cold start is
+redefined: every action
+Thompson-samples its case posterior (Beta(1,1) prior with no evidence =
+uniform random = intrinsic exploration), so there is no phase gate to
+switch on and no second ranking face to disagree with the dispatch audit
+(#100/#101 die at the root: one ranker, one seed — posterior_rng(ws)).
 
 Usage:
   python kunglao-decide.py <ws> [--json] [--scan-text <text>]
@@ -27,15 +36,12 @@ import yaml
 
 import convergence_check as cc
 import priority_ratio as pr
-import explore_gate as eg
 import ask_for_direction_gate as afdg
 
 try:
     import worker_budget as wb
 except ImportError:  # must not crash when hooks are unimportable: self-cap scan degrades to counter-question only
     wb = None
-
-EXPLORE_THRESHOLD = eg.EXPLORE_THRESHOLD
 
 
 def selfcheck(text: str) -> list[str]:
@@ -57,52 +63,6 @@ def selfcheck(text: str) -> list[str]:
 
 def _load_yaml(path: Path) -> dict:
     return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}) if path.exists() else {}
-
-
-def _cheapness_order(claims: list[dict], deps: dict,
-                     evidence: pr.EvidenceView) -> list[pr.Action]:
-    """Explore mode (design-spec §3.2 L132-134): same dispatchable filter; score = cheapness descending (T1 spread).
-
-    #100: the dependency gate is the EXPLOIT-path standard, not "parent not
-    OPEN" — an IN_PROGRESS/PARK parent is work in flight or suspended, never
-    a satisfied dependency (PARK revival is explicit via mission_stall.revive,
-    #634). Satisfaction = the parent holds a terminal fact, so explore reuses
-    the very ``evidence.terminal_fact_claims`` set the VoI path gates its
-    candidates on (priority_ratio candidate filter) — both ranking faces
-    agree on what "unblocked" means. #594/#596: the same per-claim
-    depends_on fallback — claim_deps.yaml is authoritative, the
-    operator-natural register field feeds the ranking until it is populated.
-    L-1 (#100): score ties break by claim_id, not register file order — a
-    same-content register reorder must not silently reshuffle dispatch order
-    (cheapness remains a sort key, never a qualification gate).
-    """
-    depends_on = (deps or {}).get("depends_on", {}) or {}
-    if not depends_on:
-        depends_on = {c["id"]: list(c.get("depends_on") or [])
-                      for c in claims if c.get("id") and c.get("depends_on")}
-    terminal = evidence.terminal_fact_claims
-    rows: list[pr.Action] = []
-    for c in claims:
-        cid = c.get("id")
-        if not cid or not pr.is_open(c):
-            continue
-        # #103: same per-claim int guards as priority_ratio — a dirty
-        # register field must not freeze the whole DECIDE in conservative
-        # BLOCKED via _conservative_blocked.
-        if pr.attempts_of(c) >= 3:
-            continue
-        parents = depends_on.get(cid, []) or []
-        if any(p not in terminal for p in parents):
-            continue
-        ch = pr.cheapness(c)
-        rows.append(pr.Action(
-            claim_id=cid, action=pr.classify_action(c), score=ch, skill=None,
-            tier=pr.action_tier(c),
-            attempts=pr.attempts_of(c),
-            leverage=0.0, discriminator=0.0, novelty=0.0, cost=pr.action_cost(c),
-        ))
-    rows.sort(key=lambda a: (-a.score, a.claim_id))
-    return rows
 
 
 def _conservative_blocked(ws: Path, exc: Exception) -> dict:
@@ -130,7 +90,7 @@ def _conservative_blocked(ws: Path, exc: Exception) -> dict:
     return {
         "decision": "BLOCKED", "exit_code": cc.EXIT_BLOCKED,
         "top_actions": [], "blocked": [], "failure_blocked": [], "stale": [],
-        "drifts": [], "explore_mode": False, "selfcheck": [],
+        "drifts": [], "selfcheck": [],
         "error": f"{type(exc).__name__}: {exc}",
     }
 
@@ -153,14 +113,21 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
          Validated against convergence-check-output.json.
       2. kunglao-decide.decide() (this function) — composed M1 DecideOutput.
          Schema: decision, exit_code, top_actions, blocked, failure_blocked,
-         stale, drifts, explore_mode, selfcheck, open_count, partial_count,
+         stale, drifts, selfcheck, open_count, partial_count,
          free_slots (+ optional error from _conservative_blocked).
          Validated against decide-output.json.
       3. _conservative_blocked() — error fallback, subset of (2) + error.
          Schema: decision, exit_code, top_actions, blocked, failure_blocked,
-         stale, drifts, explore_mode, selfcheck, error.
+         stale, drifts, selfcheck, error.
          Intentionally omits open_count/partial_count/free_slots because
          those values are unreliable on the exception path.
+
+    #107: top_actions come from ONE ranking path — the Thompson ranker
+    seeded by pr.posterior_rng(ws) (the same seed the dispatch gate audits
+    with). A PosteriorSchemaError (unknown runs/posteriors.yaml version,
+    the #106 version wall) is intentionally NOT swallowed here: it lands in
+    _conservative_blocked with the error text — loud, never a silent
+    wrong-schema read.
     """
     try:
         base = cc.decide(ws)
@@ -172,7 +139,6 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
             "failure_blocked": list(base["failure_blocked"]),
             "stale": [w["worker"] for w in base["stuck_workers"]],
             "drifts": [],  # not computed in phase 4 (plan_drift_detector is a separate gate)
-            "explore_mode": False,
             "selfcheck": selfcheck(scan_text) if scan_text else [],
             "open_count": base["open_count"],
             "partial_count": base["partial_count"],
@@ -185,11 +151,8 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
         evidence = pr.EvidenceView.from_workspace(ws)
         failure_blocked_ids = set(base["failure_blocked"])
         claims = [c for c in (reg.get("claims") or []) if c.get("id") not in failure_blocked_ids]
-        if eg.explore_gate(evidence.verified_fact_count, EXPLORE_THRESHOLD):
-            out["explore_mode"] = True
-            actions = _cheapness_order(claims, deps, evidence)
-        else:
-            actions = pr.priority_ratio(claims, deps, evidence)
+        actions = pr.priority_ratio(claims, deps, evidence,
+                                    rng=pr.posterior_rng(ws))
         for a in actions[: max(base["free_slots"], 0)]:
             out["top_actions"].append({
                 "claim_id": a.claim_id, "action": a.action,
@@ -203,8 +166,6 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
 
 def _human(out: dict) -> str:
     lines = [f"=== KUNGLAO-DECIDE: {out['decision']} (exit {out['exit_code']}) ==="]
-    if out.get("explore_mode"):
-        lines.append("explore_mode: EXPLORE (verified facts < 5) — cheap T1 spread")
     if out["top_actions"]:
         lines.append("top_actions:")
         for a in out["top_actions"]:

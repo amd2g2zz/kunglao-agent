@@ -38,7 +38,7 @@ composing script pure functions; the rest are focused entry points / thin wrappe
 | --- | --- |
 | `kunglao.py` | unified entry point — subcommands composing existing script functions (JSON + exit codes frozen) |
 | `kunglao-init.py` | workspace init + re-init guard |
-| `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + explore_gate + priority_ratio |
+| `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + priority_ratio (#107 Thompson, single ranking path) |
 | `kunglao-verify.py` | M3 VERIFY entry (impl in `kunglao_verify.py`) |
 | `kunglao-record.py` | M4 RECORD entry (impl in `kunglao_record.py`) |
 | `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch → TickOutput |

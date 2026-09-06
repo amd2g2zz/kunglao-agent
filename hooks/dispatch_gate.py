@@ -18,8 +18,9 @@ SMART = narrow + alive-only:
 
 #496 decision teeth (value selection gets enforcement on this face):
   - top-1: dispatching a non-top-1 claim (rank >= 2 under
-    worker_budget.check_priority — the single ranking source, #499
-    authority = priority_ratio) without an `agent-reasoning:` prefix
+    worker_budget.check_priority — the single ranking source, #499/#107
+    authority = priority_ratio Thompson ranker, one value) without an
+    `agent-reasoning:` prefix
     REJECTs; with the reason it passes and leaves a
     priority_deviation trace in the unified log (exact copy of the #310
     agenttype-deviation structure).
@@ -481,8 +482,9 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str,
                       trace_id: str | None = None) -> int | None:
     """① #496: top-1 enforcement — exact copy of the #310 agenttype-deviation
     pattern with the ranking source swapped for worker_budget.check_priority
-    (which ranks by priority_ratio, the #499 authority — reusing it keeps
-    this hook and worker_budget's devreason audit on ONE ranking, never two).
+    (which ranks by priority_ratio, the #499/#107 Thompson authority — reusing
+    it keeps this hook and worker_budget's devreason audit on ONE ranking,
+    never two).
 
     deviated (rank >= 2) + no `agent-reasoning:` prefix -> REJECT (exit 2);
     with the prefix -> pass + stderr `TOP1 (deviation recorded)` +

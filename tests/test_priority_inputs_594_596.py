@@ -99,14 +99,12 @@ def test_fresh_workspace_children_dispatchable(tmp_path):
     payload = json.loads(buf.getvalue())
     ids = [p["claim_id"] for p in payload]
     assert "C-100" in ids, "parent PROVEN-in-register + per-claim edge → dispatchable"
-    # gradient via typed path (to_dict only carries score; verify the objects)
-    buf2 = io.StringIO()
-    with contextlib.redirect_stdout(buf2):
-        pr.main([str(ws), "--json"])
-    # C-100 has leverage 0 (terminal parent) vs C-101 fresh — the typed check:
+    # typed path re-check (#107: the leverage term is deleted with the
+    # weighted formula — the per-claim fallback survives in the CANDIDATE
+    # filter, which is what this regression is about)
     reg = {"claims": claims}
     deps = {"depends_on": {"C-100": ["C-003"]}}
     out = pr.priority_ratio(claims, deps, pr.EvidenceView.from_workspace(ws))
-    lev = {a.claim_id: a.leverage for a in out}
-    assert "C-100" in lev and "C-101" in lev
-    assert lev["C-100"] != lev["C-101"] or out, "typed ranking distinguishes"
+    ranked = {a.claim_id for a in out}
+    assert {"C-100", "C-101"} <= ranked, (
+        "both children of the terminal parent stay dispatchable")

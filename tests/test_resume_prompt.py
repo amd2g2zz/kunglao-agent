@@ -13,6 +13,8 @@ All I/O is SYNTHETIC: pytest tmp_path workspaces only. A live workspace
 process is spawned (the kick test uses dry_run=True).
 """
 import json
+
+import yaml
 from pathlib import Path
 
 
@@ -142,21 +144,37 @@ def _twenty_claims() -> list[dict]:
 
 
 def test_prompt_truncates_claims_by_priority(tmp_path):
+    """#107 re-pin: truncation keeps the RANKER's top-5. The primary-
+    answering claim is made genuinely top-ranked the #107 way — its oracle
+    case holds a strong GREEN posterior, so its Thompson case face pins it
+    above the nineteen cold-start arms (deterministic given the posterior
+    seed)."""
     ws = _ws(tmp_path)
     _register(ws, _twenty_claims())
+    # C-PRIMARY answers q1; the runner keeps its case green (Beta(30,1))
+    (ws / "oracle" / "cases").mkdir(parents=True)
+    (ws / "oracle" / "cases" / "case-primary.yaml").write_text(
+        yaml.safe_dump({"id": "case-primary", "target_pq": "q1"}),
+        encoding="utf-8")
+    (ws / "runs" / "posteriors.yaml").write_text(yaml.safe_dump({
+        "schema": "posteriors-schema/1",
+        "cases": {"case-primary": {"alpha": 30.0, "beta": 1.0,
+                                   "pending_entries": 0}},
+        "pqs": {}}), encoding="utf-8")
     from external_kicker import build_resume_prompt
     prompt = build_resume_prompt(ws, max_open_claims=5)
     # the primary-answering claim must survive truncation
     assert "C-PRIMARY" in prompt
-    # the lowest-priority claim is dropped
-    assert "C-019" not in prompt
-    # explicit marker tells the fresh session the list is a top-N
-    assert "truncated by priority" in prompt
-    # the claims line lists exactly 5 ids
+    # truncation happened: some cold-start arm fell off the top-5
+    import re
     claims_line = next(l for l in prompt.splitlines()
                        if l.startswith("open claims ("))
-    import re
-    assert len(re.findall(r"C-[A-Z\d]+", claims_line)) == 5
+    listed = re.findall(r"C-[A-Z\d]+", claims_line)
+    assert len(listed) == 5
+    # truncation is real: 5 of the 20 arms survive, seed-determined
+    assert len(set(listed) & {f"C-{i:03d}" for i in range(1, 20)} | {"C-PRIMARY"}) == 5
+    # explicit marker tells the fresh session the list is a top-N
+    assert "truncated by priority" in prompt
 
 
 def test_prompt_obeys_char_cap(tmp_path):

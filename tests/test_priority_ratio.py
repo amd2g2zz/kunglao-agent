@@ -1,174 +1,254 @@
 # -*- coding: utf-8 -*-
-"""tests/test_priority_ratio.py — VoI proxy scoring (issue #2, design-spec §3.2).
+"""tests/test_priority_ratio.py — the #107 Thompson ranker (issue #97 formula).
 
-RED: new formula score = [0.45·L + 0.30·D + 0.25·N] / cost; old 0.35·Δdisc formula retired.
+RED: the weighted formula score = [0.45·L + 0.30·D + 0.25·N]/cost is
+DISCARDED (owner ruling, issue #107). The rebuilt value function:
+
+    score = (Thompson case face + LAMBDA_DH · ΔH_PQ) · worth
+    rank by Thompson sample; stable tie-break claim_id
+
+The candidate filter is UNCHANGED (OPEN + attempts<3 + terminal-fact
+parents) — the demolition only replaced the VALUE function, not the
+dispatch frontier.
 """
 from __future__ import annotations
 
-import priority_ratio as pr
+import random
+import sys
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import priority_ratio as pr  # noqa: E402
 
 
 # ---------- synthetic fixtures ----------
 
-def _claim(cid, status="OPEN", answers_question=None, competitor_group=None,
+def _claim(cid, status="OPEN", answers_question=None,
            eta=0, attempts=0, statement=""):
     c = {"id": cid, "status": status, "evidence_tier_attempted": eta,
          "promotion_attempts": attempts, "statement": statement or cid}
     if answers_question is not None:
         c["answers_question"] = answers_question
-    if competitor_group is not None:
-        c["competitor_group"] = competitor_group
     return c
 
 
-def _evidence(terminal_claims=(), verified=0, fact_categories=None):
-    return pr.EvidenceView(
+def _evidence(ws=None, terminal_claims=(), verified=0):
+    ev = pr.EvidenceView(
         terminal_fact_claims=frozenset(terminal_claims),
         verified_fact_count=verified,
-        fact_count_by_category=dict(fact_categories or {}),
+        ws=Path(ws) if ws else None,
     )
+    return ev
 
 
-def _deps(depends_on=None, competitor_groups=None):
-    return {"depends_on": depends_on or {}, "competitor_groups": competitor_groups or {}}
+def _deps(depends_on=None):
+    return {"depends_on": depends_on or {}, "competitor_groups": {}}
 
 
-# ---------- formula ----------
+def _replica_sample(cid, alpha=1.0, beta=1.0):
+    """Recompute the ranker's Thompson draw from outside (same fork scheme:
+    ONE base draw from Random(0), per-claim child keyed by claim_id)."""
+    base = random.Random(0).getrandbits(64)
+    child = random.Random(f"thompson/{base}/{cid}")
+    return child.betavariate(alpha, beta)
 
-def test_voi_formula_not_additive_not_old():
-    """score == [0.45·L + 0.30·D + 0.25·N] / cost — a ratio key, not additive, not the old 0.35·Δdisc."""
+
+def _posteriors_ws(base, name="ws", cases=(), pqs=None):
+    """Workspace with runs/posteriors.yaml (+ optional oracle case files)."""
+    ws = base / name
+    (ws / "runs").mkdir(parents=True)
+    (ws / "oracle" / "cases").mkdir(parents=True)
+    led = {"schema": "posteriors-schema/1", "cases": {}, "pqs": pqs or {}}
+    for case_id, target_pq, a, b in cases:
+        led["cases"][case_id] = {"alpha": a, "beta": b, "pending_entries": 0}
+        (ws / "oracle" / "cases" / f"{case_id}.yaml").write_text(
+            yaml.safe_dump({"id": case_id, "target_pq": target_pq}),
+            encoding="utf-8")
+    (ws / "runs" / "posteriors.yaml").write_text(
+        yaml.safe_dump(led, allow_unicode=True), encoding="utf-8")
+    return ws
+
+
+# ---------- the rebuilt formula ----------
+
+def test_thompson_composite_formula_not_weighted():
+    """score == (Thompson case face + LAMBDA_DH·ΔH)·worth exactly; the
+    weighted-era term fields are gone (owner ruling: 之前的不要了)."""
     claims = [_claim("C-1", statement="c2 config extract")]
-    deps = _deps()
-    ev = _evidence()
-    out = pr.priority_ratio(claims, deps, ev)
+    out = pr.priority_ratio(claims, _deps(), _evidence())
     assert len(out) == 1
     a = out[0]
-    numerator = 0.45 * a.leverage + 0.30 * a.discriminator + 0.25 * a.novelty
-    assert a.score == round(numerator / a.cost, 3)
-    for stale in ("delta_disc", "expected_unlock", "unc"):
-        assert not hasattr(a, stale), f"Action should no longer have the old field {stale}"
+    expected = round(_replica_sample("C-1") + pr.LAMBDA_DH * 0.0, 6)
+    assert a.score == expected
+    assert a.weight == 1.0
+    for stale in ("leverage", "discriminator", "novelty", "gap_bucket",
+                  "delta_disc", "expected_unlock", "unc"):
+        assert not hasattr(a, stale), f"Action must not carry {stale}"
 
 
-# ---------- leverage ----------
+def test_pq_categorical_entropy_enters_score():
+    """ΔH is mechanical on the categorical: a uniform 2-candidate PQ has
+    H=1 bit, so the score rises by exactly LAMBDA_DH over the ΔH=0 case
+    (the Thompson sample is invariant — the seed digest covers cases only)."""
+    claims = [_claim("C-1", answers_question="q1")]
+    ws = _posteriors_ws(_tmp_base(), pqs={"q1": {"candidates": {"a": 1, "b": 1}}})
+    a = pr.priority_ratio(claims, _deps(), _evidence(ws))[0]
+    bare = pr.priority_ratio(claims, _deps(), _evidence())[0]
+    assert "dh_pq" in a.feeds and "1.0 bit" in a.feeds["dh_pq"]
+    assert a.score == round(bare.score + pr.LAMBDA_DH * 1.0, 6)
 
-def test_leverage_terminal_claim_is_zero():
-    """claim already has a terminal fact → L=0 (no downstream unlock value)."""
-    claims = [_claim("C-1"), _claim("C-2", status="OPEN")]
-    deps = _deps(depends_on={"C-2": ["C-1"]})
-    ev = _evidence(terminal_claims=["C-1"])
-    out = pr.priority_ratio(claims, deps, ev)
-    by = {a.claim_id: a for a in out}
-    assert by["C-1"].leverage == 0.0
+
+def _tmp_base():
+    import tempfile
+    return Path(tempfile.mkdtemp(prefix="pr107-"))
 
 
-def test_leverage_higher_with_more_open_downstream():
-    """more downstream OPEN claims → L higher than one without downstream."""
-    claims = [_claim("HUB"), _claim("LEAF-A"), _claim("LEAF-B"), _claim("ORPHAN")]
-    deps = _deps(depends_on={"LEAF-A": ["HUB"], "LEAF-B": ["HUB"]})
+# ---------- candidate filter (UNCHANGED by #107) ----------
+
+def test_dependency_gate_blocks_child_of_unproven_parent():
+    """a parent without a terminal fact blocks its child (no phase gate
+    changes this — the dispatch frontier is the same on both ranks)."""
+    claims = [_claim("C-1"), _claim("C-2")]
+    out = pr.priority_ratio(claims, _deps({"C-2": ["C-1"]}), _evidence())
+    assert [a.claim_id for a in out] == ["C-1"]
+
+
+def test_dependency_gate_allows_child_of_terminal_fact_parent():
+    """a parent holding a terminal fact is a satisfied dependency."""
+    claims = [_claim("C-1"), _claim("C-2")]
+    out = pr.priority_ratio(
+        claims, _deps({"C-2": ["C-1"]}),
+        _evidence(terminal_claims=["C-1"]))
+    assert {a.claim_id for a in out} == {"C-1", "C-2"}
+
+
+def test_attempts_cap_third_retry_excluded():
+    claims = [_claim("C-1"), _claim("C-3", attempts=3)]
+    out = pr.priority_ratio(claims, _deps(), _evidence())
+    assert [a.claim_id for a in out] == ["C-1"]
+
+
+def test_terminal_status_claims_never_ranked():
+    """ratio's own is_open TERMINAL exclusion, pinned at the pure-function
+    layer (unchanged by #107). A terminal-status claim must never appear in
+    the action list."""
+    claims = [_claim("C-1"), _claim("C-2", status="PROVEN"),
+              _claim("C-3", status="DEFERRED")]
+    out = pr.priority_ratio(claims, _deps(), _evidence())
+    assert [a.claim_id for a in out] == ["C-1"]
+    assert not pr.is_open({"id": "C-9", "status": "PROVEN"})
+    assert not pr.is_open({"id": "C-9", "status": "DEFERRED"})
+
+
+# ---------- case posterior hookup (#106 objects) ----------
+
+def test_case_posterior_linked_via_target_pq():
+    """oracle/cases/*.yaml target_pq == claim answers_question links the
+    case; its Beta posterior is the Thompson sampling distribution."""
+    claims = [_claim("C-1", answers_question="q1")]
+    ws = _posteriors_ws(_tmp_base(), cases=[("case-1", "q1", 6.0, 1.0)])
+    a = pr.priority_ratio(claims, _deps(), _evidence(ws))[0]
+    assert a.score == round(_replica_sample("C-1", 6.0, 1.0), 6)
+    assert "case-1" in a.feeds["thompson_sample"]
+    assert "P(flip)=0.5" in a.feeds["case_flip_potential"]
+
+
+def test_case_posterior_without_ledger_entry_uses_prior():
+    """An oracle case file with no runner verdict yet samples Beta(1,1)."""
+    claims = [_claim("C-1", answers_question="q1")]
+    ws = _posteriors_ws(_tmp_base())
+    (ws / "oracle" / "cases" / "case-9.yaml").write_text(
+        yaml.safe_dump({"id": "case-9", "target_pq": "q1"}), encoding="utf-8")
+    a = pr.priority_ratio(claims, _deps(), _evidence(ws))[0]
+    assert a.score == round(_replica_sample("C-1"), 6)
+    assert "case-9" in a.feeds["thompson_sample"]
+
+
+def test_flip_potential_decays_and_falls_back():
+    """The conservative P(flip) diagnostic: 0.5 cold start, attempts-decayed
+    when a case is linked, floored to 0.3 with no linkage at all."""
+    fresh = pr.priority_ratio([_claim("C-1", answers_question="q1")], _deps(),
+                              _evidence(_posteriors_ws(
+                                  _tmp_base(), cases=[("c", "q1", 1, 1)])))[0]
+    decayed = pr.priority_ratio([_claim("C-1", answers_question="q1",
+                                        attempts=2)], _deps(),
+                                _evidence(_posteriors_ws(
+                                    _tmp_base(), cases=[("c", "q1", 1, 1)])))[0]
+    orphan = pr.priority_ratio([_claim("C-1")], _deps(), _evidence())[0]
+    assert "P(flip)=0.5" in fresh.feeds["case_flip_potential"]
+    assert "P(flip)=0.167" in decayed.feeds["case_flip_potential"]
+    assert f"{pr.FLIP_POTENTIAL_FALLBACK} fallback" in \
+        orphan.feeds["case_flip_potential"]
+
+
+def test_worth_weight_multiplies_the_composite():
+    """#759 worth channel survives as the exogenous multiplier."""
+    claims = [_claim("C-1", statement="rce chain")]
+    worth = pr.priority_ratio(
+        claims, _deps(), pr.EvidenceView(value_class_weights={"rce": 4.0}))[0]
+    assert worth.weight == 4.0
+    assert worth.score == round(_replica_sample("C-1") * 4.0, 6)
+
+
+# ---------- ordering properties ----------
+
+def test_sorted_by_sample_then_claim_id():
+    """Thompson sample descending; the sort key is stable (-score, claim_id)
+    even when rounding collides."""
+    claims = [_claim(f"C-{i}", statement="work") for i in range(1, 8)]
+    out = pr.priority_ratio(claims, _deps(), _evidence())
+    keys = [(-a.score, a.claim_id) for a in out]
+    assert keys == sorted(keys)
+
+
+def test_register_reorder_never_reshuffles():
+    """Same register content, different file order → identical ranking
+    (the per-claim rng fork is keyed by claim_id, not list position)."""
+    claims = [_claim("C-1", statement="work one"),
+              _claim("C-2", statement="work two"),
+              _claim("C-3", statement="work three", eta=1)]
+    a = [x.to_dict() for x in pr.priority_ratio(claims, _deps(), _evidence())]
+    b = [x.to_dict() for x in
+         pr.priority_ratio(list(reversed(claims)), _deps(), _evidence())]
+    assert a == b
+
+
+def test_seed_injection_varies_the_sample():
+    """A different tick seed may reorder arms (Thompson's intrinsic
+    exploration) while staying self-consistent for that seed."""
+    claims = [_claim(f"C-{i}", statement="work") for i in range(1, 7)]
     ev = _evidence()
-    out = pr.priority_ratio(claims, deps, ev)
-    by = {a.claim_id: a for a in out}
-    assert by["HUB"].leverage > by["ORPHAN"].leverage
-    assert by["ORPHAN"].leverage == 0.0
+    s0 = [x.to_dict() for x in pr.priority_ratio(
+        claims, _deps(), ev, rng=random.Random(0))]
+    s0b = [x.to_dict() for x in pr.priority_ratio(
+        claims, _deps(), ev, rng=random.Random(0))]
+    s7 = [x.to_dict() for x in pr.priority_ratio(
+        claims, _deps(), ev, rng=random.Random(7))]
+    assert s0 == s0b
+    assert {d["claim_id"] for d in s7} == {d["claim_id"] for d in s0}
 
 
-# ---------- discriminator ----------
-
-def test_discriminator_active_competitor_group_top():
-    """claim with a live competitor_group (>=2 OPEN) → D=1.0."""
-    claims = [_claim("C-a", competitor_group="q1"), _claim("C-b", competitor_group="q1")]
-    deps = _deps(competitor_groups={"q1": ["C-a", "C-b"]})
-    ev = _evidence()
-    out = pr.priority_ratio(claims, deps, ev)
-    by = {a.claim_id: a for a in out}
-    assert by["C-a"].discriminator == 1.0
-
-
-def test_discriminator_answers_question_middle():
-    """answers_question (primary) → D=0.5。"""
-    claims = [_claim("C-1", answers_question="q_primary")]
-    deps = _deps()
-    ev = _evidence()
-    out = pr.priority_ratio(claims, deps, ev)
-    assert out[0].discriminator == 0.5
-
-
-def test_discriminator_else_floor():
-    """no group, no answers → D=0.2."""
-    claims = [_claim("C-1")]
-    deps = _deps()
-    ev = _evidence()
-    out = pr.priority_ratio(claims, deps, ev)
-    assert out[0].discriminator == 0.2
-
-
-# ---------- novelty ----------
-
-def test_novelty_drops_with_prior_facts_in_category():
-    """same action category already produced many facts → N drops."""
-    claims = [_claim("C-1", statement="c2 mpd config"), _claim("C-2", statement="c2 pegasus")]
-    deps = _deps()
-    ev_saturated = _evidence(fact_categories={"c2_config_extract": 3})
-    ev_fresh = _evidence(fact_categories={"c2_config_extract": 0})
-    out_sat = pr.priority_ratio(claims, deps, ev_saturated)
-    out_fresh = pr.priority_ratio(claims, deps, ev_fresh)
-    assert out_sat[0].novelty < out_fresh[0].novelty
-
-
-# ---------- cost ----------
-
-def test_cost_tier_penalty():
-    """high tier (deep-inference/VM) → cost high → score low. At equal L/D/N the higher-eta one ranks later."""
-    base = dict(statement="c2 config")
-    claims = [_claim("C-cheap", eta=0, **base), _claim("C-deep", eta=2, **base)]
-    deps = _deps()
-    ev = _evidence()
-    out = pr.priority_ratio(claims, deps, ev)
-    by = {a.claim_id: a for a in out}
-    assert by["C-cheap"].cost < by["C-deep"].cost
-    assert by["C-cheap"].score >= by["C-deep"].score
-
-
-# ---------- pure function / zero LLM ----------
+# ---------- pure function / zero LLM (unchanged intent) ----------
 
 def test_scoring_is_deterministic_pure():
-    """same input → same output (proves scoring is purely mechanical, no hidden LLM/state)."""
+    """same input → same output (no hidden LLM/state; default seed pinned)."""
     claims = [_claim("C-1", statement="c2"), _claim("C-2", statement="家族 vidar")]
-    deps = _deps(depends_on={"C-2": ["C-1"]})
+    deps = _deps({"C-2": ["C-1"]})
     ev = _evidence()
     o1 = pr.priority_ratio(claims, deps, ev)
     o2 = pr.priority_ratio(claims, deps, ev)
     assert [a.to_dict() for a in o1] == [a.to_dict() for a in o2]
 
 
-def test_c401_c402_not_tied_when_signals_differ():
-    """Regression: C-401 (re-checking an already-strong fact, L low) vs C-402 (unlocks pipeline trust, L high) must not score the same."""
-    c401 = _claim("C-401", statement="EP RVA byte recheck", eta=0)
-    c402 = _claim("C-402", statement="reproduce re-runnability", eta=0)
-    claims = [c401, c402, _claim("D-1"), _claim("D-2"), _claim("D-3")]
-    deps = _deps(depends_on={"D-1": ["C-402"], "D-2": ["C-402"], "D-3": ["C-402"]})
-    ev = _evidence()
-    out = pr.priority_ratio(claims, deps, ev)
-    by = {a.claim_id: a for a in out}
-    assert by["C-402"].leverage > by["C-401"].leverage
-    assert by["C-402"].score > by["C-401"].score
-
-
-# ---------- status-level exclusion (injection M8 guard) ----------
-
-def test_terminal_status_claims_never_ranked():
-    """ratio's own is_open TERMINAL exclusion, pinned at the pure-function
-    layer. The two live faces carry caller-side insurance (pulse cc_open /
-    budget RETRACTED filter), so deleting this judgment changed no live
-    output in the injection replay — but any NEW direct consumer of the pure
-    function (contract §1: filtering is the caller's job for failure-blocked
-    and RETRACTED only) would silently rank PROVEN/DEFERRED claims. A
-    terminal-status claim must never appear in the action list."""
-    claims = [_claim("C-1"), _claim("C-2", status="PROVEN"),
-              _claim("C-3", status="DEFERRED")]
-    out = pr.priority_ratio(claims, _deps(), _evidence())
-    assert [a.claim_id for a in out] == ["C-1"], (
-        "PROVEN/DEFERRED claims must be excluded from the action list by "
-        f"is_open itself. Got: {[a.claim_id for a in out]}")
-    assert not pr.is_open({"id": "C-9", "status": "PROVEN"})
-    assert not pr.is_open({"id": "C-9", "status": "DEFERRED"})
+def test_cost_field_is_tier_diagnostic_only():
+    """cost still reports the tier price but no longer divides the score
+    (cold-start cheapness spread died with the phase gate)."""
+    claims = [_claim("C-cheap", eta=0), _claim("C-deep", eta=2)]
+    out = {a.claim_id: a for a in pr.priority_ratio(claims, _deps(), _evidence())}
+    assert out["C-cheap"].cost == 1.0 and out["C-deep"].cost == 10.0
+    for a in out.values():
+        assert a.score == round(_replica_sample(a.claim_id), 6)
