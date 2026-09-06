@@ -56,6 +56,22 @@ import convergence_check  # module under test (== baseline before #443 GREEN)
 BASELINE_COMMIT = "cabc7d9"  # the #51 value-flag-removal commit — decide() outputs frozen at the 2026-09-05 re-pin (see below)
 ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 
+# 2026-09-06 corpus re-pin (#108 oracle gate — INTENTIONAL decide() contract
+# change): decide()'s output dict gains the unconditional `oracle` key
+# (per-case red/green/pending counts — the issue's primary progress face).
+# Without runs/oracle-status.json the face is all-zero + an `absent` marker;
+# with one, it blocks the DRAIN face on red / pending-instrumented cases via
+# the new ORACLE_CASE_RED probe (inserted after the frozen
+# completion-transaction order, before the DRAIN_CLEAN catch-all). Diffed
+# old-vs-new BEFORE committing, per the re-pin precedent: every one of the
+# 31 frozen cases shows EXACTLY the `oracle` key addition (all-zero counts +
+# absent marker — no corpus case writes a verdict file) and nothing else
+# moved (no decision/action/exit-code/float drift anywhere). Re-captured
+# via capture_current() from the current tree (the only sanctioned channel
+# since the 8804dcd baseline object was destroyed — see the 2026-09-05
+# re-pin entry below). The oracle-blocking semantics themselves are
+# unanchored by construction (the matrix has no oracle-bearing DRAIN case);
+# covered by the #108 block in tests/test_decide_state_machine.py.
 # 2026-09-06 zero-drift verification (#98 DRAIN worker gates): the DRAIN
 # probe table gained STUCK_WORKERS_PRESENT + ACTIVE_WORKERS_PRESENT,
 # appended AFTER the frozen completion-transaction order (orphan >
