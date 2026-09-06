@@ -599,7 +599,7 @@ files:
   - src: scripts/posteriors.py
     dest: .claude/scripts/posteriors.py
     kind: scaffold
-    sha256: a0649e4f951b8741864a647376e7200f53e9955891725c30ad8d451bbad4159c
+    sha256: 33d593ae2bb0c59c449f9c427284474c9d923fe51a8883c4c9dd718414a982f2
   - src: scripts/premature_termination_detect.py
     dest: .claude/scripts/premature_termination_detect.py
     kind: scaffold
