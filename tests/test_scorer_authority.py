@@ -106,6 +106,17 @@ def _authority_ws(path: Path, *, failure_case: bool = False) -> Path:
     (path / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
     (path / "runs" / "worker-status-W-1.md").write_text(
         "[12:00] step: work done | status: done\n", encoding="utf-8")
+    # #101: these tests pin the VOI authority, which since #101 governs the
+    # EXPLOIT period only (explore period audits the cheapness face — see
+    # tests/test_kunglao_decide.py). Seed verified facts >= EXPLORE_THRESHOLD
+    # via rows citing C-0, a register-external claim id (facts outliving a
+    # pruned claim are a legal orphan state): novelty counts derive from
+    # in-register claims only, so NO scoring input moves — exactly one thing
+    # changes, the gate phase, and every pinned rank/score below stays true.
+    (path / "facts").mkdir()
+    (path / "facts" / "_INDEX.md").write_text(
+        "".join(f"F-90{i} | PROVEN | C-0 | terminal evidence\n"
+                for i in range(1, 6)), encoding="utf-8")
     write_hook_state(path, active_hooks=["worker_pulse"],
                      phase="test", tier="none", user_override={},
                      expires_at=None)
@@ -196,11 +207,17 @@ def _novelty_ws(path: Path) -> Path:
     (path / "claim_deps.yaml").write_text(
         json.dumps({"depends_on": {}, "competitor_groups": {}}), encoding="utf-8")
     (path / "task_spec.yaml").write_text("primary_questions: []\n", encoding="utf-8")
+    # #101: five PROVEN rows (not three) push the workspace past the explore
+    # gate — this test pins the EXPLOIT-period VoI authority. The extra rows
+    # cite the SAME terminal claims, so the per-claim category counts (the
+    # thing the novelty assertion is about) are untouched.
     (path / "facts").mkdir()
     (path / "facts" / "_INDEX.md").write_text(
         "F-101 | PROVEN | C-D1 | c2 config extracted\n"
         "F-102 | PROVEN | C-D2 | c2 config extracted\n"
-        "F-103 | PROVEN | C-D3 | c2 config extracted\n", encoding="utf-8")
+        "F-103 | PROVEN | C-D3 | c2 config extracted\n"
+        "F-104 | PROVEN | C-D1 | c2 config extracted\n"
+        "F-105 | PROVEN | C-D2 | c2 config extracted\n", encoding="utf-8")
     return path
 
 
