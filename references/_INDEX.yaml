@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 9e5f460e035129c206d1c7bb7c3be924c2fedef63b9eea09d688e7f3fa03553f
+  references/_INDEX.md: c8539222d62b6c39f263c91c258d0a5b0da2bc83552048df15fad4408fab7bab
   references/_index-anti-analysis.md: 77ae0fe0834dde577e39d1124d4941962b1e4d7af1012434cac89c7d3f381431
   references/_index-languages.md: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
   references/_index-methodology.md: 4183b6f86c4ccd299452d41d2532fde6487301175804cb84729d41d3b4cf08aa
@@ -44,13 +44,15 @@ files:
   references/re-library/anti-analysis.md: 8534cc1640ba2707a9621d05521d317717b61778a3585e6b8c806de2897cf524
   references/re-library/awesome-re-resources.md: 8252476aa2b40d76b01572e7df910fc9c6a83337fc2e48385dd15885a1ab96f0
   references/re-library/detection-engineer.md: fc06be71641d31a6e8da60f3b2084197da9bc1b2bffc7ecf3d07b076b0aa9072
+  references/re-library/falsifier-library.md: 4fa5d858e3f29fa137daac4092d354cfa443ad1a274049379516f6b717497ec2
   references/re-library/field-notes.md: 8afaff77a88e61173f7981aa421e775c7ca6447825fcdb41bebb722ef2a18436
   references/re-library/jsvmp-triage.md: 179a621ffb5e992ae7474bf48ee840f29a165f803d3828810b0a32f99a54a500
   references/re-library/kunglao-toolshelf.md: 6ffccd0d3008c086e9109779a09337914e36ea48a4199b9bb9fb87cfeae7bb41
   references/re-library/languages-compiled.md: 2b995c280ea34211a326545828b4bda2639a2a39e53539667ed395ea0ee55780
   references/re-library/languages-go.md: 75b7d09b4d57bd8655c5d26ea4209548916bca06b74b43aa269238ea9282a8c2
-  references/re-library/languages-platforms.md: a3b26cd35817f51394685b49b4e79f187547f7b5bcc8601de93c246ab514440a
+  references/re-library/languages-platforms.md: 9b4e74afda4147ebca474aca9ced2d70d04619bd2bb7fc6d0eb4edca83e64a30
   references/re-library/languages.md: 230012d76b1e22baa71fb49494b748f7081fb837fbfbc977e1acd03586b1a49c
+  references/re-library/loop-stage-gates.md: 6f9d1059861d728b91821c148d1dd658407d1c5c583796e178c80defa96487a3
   references/re-library/malware-analysis-quickstart.md: 35e771c448c1a6a78e78c06fa13e0a261b5f5022501dd3b6bb2162b45210e800
   references/re-library/malware-analysis-workflow.md: 8ae61d8297f5c3c8fa7b4f28b5c93561267aa8ceeed396ba88ba7d76b6d6d247
   references/re-library/malware-analysis.md: 7028864a94fcaf180ded11c494bf64eef79634dae2883382ec17e6d7da697597
@@ -59,6 +61,7 @@ files:
   references/re-library/malware-triage.md: f27cebdb69a73c34abded034270d8f8c7d6368544565ee7e3dcea44da1dc99a3
   references/re-library/multi-search-engine-refs.md: 108f33b777e1a09ecca46bb2fbfc87b0764c7b291a07730fc756ffb55fb0908c
   references/re-library/multi-search-engine.md: c50157bb103144211a0f9247a375fd45b981de12205feac15abc86e6334dee2c
+  references/re-library/native-sign-recovery.md: d0d8f6f090662d80319b8ba8dd22fe19998e91e982b9a911977e6f9e27582668
   references/re-library/patterns-debugging.md: 221abc785434918ceaedb8407884b1ab0976d0c179ac92b3f27c50c4ca2f9aff
   references/re-library/patterns-decode.md: d736870d4d637186bfd5f5d2e392793ccb7a384b9b0b459780305319f22c56b1
   references/re-library/patterns-simulation.md: 668e1c475227f24246aa8e0c04355dbdd99fdd9619cbc4ab3f51a294a7730e39
@@ -68,13 +71,17 @@ files:
   references/re-library/platforms-hardware.md: f1b9c9de747215018856fb64149687c9b2061c3ad331c8901a95666ef128d4bc
   references/re-library/platforms-kernel.md: 352e95fdac3bec430fc5c4ef6a0adabbbe926a5932661e4c6a573127bca26b54
   references/re-library/platforms.md: 98038fb241229936a12e58486f6adbf50fab104bf6c9a50efb45a8d362dff1e0
+  references/re-library/stacked-protections.md: 7090556f1d45a74f6d90ce1b54e469bde3bd01a708f7a2ae8ce983271c2374f0
   references/re-library/tools-advanced.md: c93d6dde0de4f70b6b13bab095e1c111e790cbe7618f2da6f6867dfda946614e
   references/re-library/tools-crypto.md: 4c49547085ef4a173591eae2533e5845f998ef07a0ed534958b62d320e2bdfa5
   references/re-library/tools-dynamic.md: af6d0539a253366cf76b3266922bc4551478ebe32576fc216b68d91d0ea5f7de
   references/re-library/tools.md: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
+  references/re-library/verification-safety.md: 74db768faee847585462bebe1ab5ffd2d2dbaccb89d695361d712097d8f3869b
+  references/re-library/vm-deobfuscation-routing.md: 97854404fd51099fc31589cfcefe894f4c81716b1326e503083b4acb9ad9dd29
   references/re-library/web-crawler-engineering.md: 887b6ca7a08f2bb6cfaae81bf9d602f749d4a4c38373a13eb4d3a0a8a69545a2
-  references/re-library/web-re-quickref.md: b31c0b18b93bb762a9450f007b43eb75ec9b0ecf61782b1217e532408b77ef3a
+  references/re-library/web-re-quickref.md: dd2d9a2634eb695bcda8fea30cb76a65b4a4b050d898d52688fa1dc67422a1ca
   references/re-library/web-risk-control.md: 1b98a6af1355410f8d2d1e1043c55333153dd3ba179d99890fe6c5c756c05cd4
+  references/re-library/wire-format-recognition.md: b03b9e97f4330451af7f087ec839986c84caaceb37e95ed27f8d3aec9f1711c1
   references/schema.md: 7dc8e2cffb88a819c8ae7196003763c34bfb8e3cfa5b08cb42b4559c5c28d31b
   references/search-policy.md: 46807e75ef0cf4381b747ffc9495618aad9c0eb320d5007f1c9bfc4bb7cf547f
   references/state-mapping.md: d2cb9b62780b2c35044bc5cf0d724dafb337238480306e29fa909ad2e6bfc08f

@@ -1,6 +1,7 @@
 # Platform & Framework-Specific Techniques
 
 ## Table of Contents
+- [Framework-first routing (Android)](#framework-first-routing-android)
 - [Rust serde_json Schema Recovery](#rust-serde_json-schema-recovery)
 - [Android JNI RegisterNatives Obfuscation (HTB WonderSMS)](#android-jni-registernatives-obfuscation-htb-wondersms)
 - [Android DEX Runtime Bytecode Patching via /proc/self/maps](#android-dex-runtime-bytecode-patching-via-procselfmaps)
@@ -20,6 +21,40 @@
 
 For core language reversing (Python, BF/esolangs, DOS, OPAL), see [languages.md](languages.md).
 For Go and Rust binary reversing, see [languages-compiled.md](languages-compiled.md).
+
+---
+
+## Framework-first routing (Android)
+
+Before asking "what language is this app", ask "where does the request-core
+logic actually live". The framework answer decides which static toolchain
+has any yield at all; picking the wrong lane burns hours in dex tooling on
+code that never touches the requests you care about.
+
+**Decision row (observable → route):**
+
+| Observable in the unpacked APK | Framework | dex tooling yield | Route |
+|---|---|---|---|
+| `libflutter.so` + `libapp.so` under `lib/<abi>/` | Flutter (Dart AOT) | None — business logic lives in the Dart snapshot, not the dex | Dart snapshot toolchain (class/symbol recovery + generated hook scaffolding); see [field-notes.md](field-notes.md#flutter-apk-dart-aot) |
+| `libhermes.so` under `lib/<abi>/` + a shipped JS bundle asset | React Native on Hermes | None — app logic is Hermes bytecode inside the bundle | Hermes bytecode disassembler/decompiler, then the web-RE path on the recovered JS |
+| `libil2cpp.so` under `lib/<abi>/` (+ its metadata asset) | Unity IL2CPP | None — C# compiled to native; the dex is only the engine host | IL2CPP bridge tooling (metadata → symbol mapping), then native analysis on the recovered symbols |
+| `classes*.dex` only — none of the above present | Java/Kotlin host app | High — primary logic is dex | Conventional dex path (jadx/baksmali) plus JNI boundary work where declared |
+
+**Vendor-SDK precedence rule.** Before committing to any framework lane,
+scan both dex and native libs for embedded third-party risk-control /
+anti-bot SDK fingerprints (foreign class/package namespaces, SDK-owned
+`.so` names, characteristic string tables). The reason this check precedes
+framework identification: such SDKs generate the request tokens in their
+own Java/native layer, independent of the app's framework — a Flutter app
+still bundles and calls a native-Java risk SDK, and the fields you are
+asked to reproduce may never pass through app-owned code at all. On a hit,
+the SDK's reversal route takes precedence over the framework route; the
+framework lane governs only the remaining app-owned fields.
+
+Observable triggers: package namespaces in dex that do not match the app's
+own application id; `.so` files unrelated to the framework identified above;
+network-layer classes (interceptors, socket factories) registered from SDK
+namespaces rather than app code.
 
 ---
 
