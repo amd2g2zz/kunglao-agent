@@ -31,6 +31,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import notes_discriminator as nd  # noqa: E402
 import summary_discriminator as sd  # noqa: E402
+import convergence_check as cc  # noqa: E402
 import rollup  # noqa: E402
 from _factories import write_hook_state  # noqa: E402
 
@@ -168,6 +169,42 @@ def test_completion_gate_bad_byte_blocks_not_passes(tmp_path, capsys):
     decision = json.loads(out)
     assert decision["decision"] == "block"
     assert "SUMMARY_FAKE" in decision["reason"], decision["reason"]
+
+
+# ---------------------------------------------------------------------------
+# 场景 2：一行脏值抹掉全部 dispatch 证据
+# ---------------------------------------------------------------------------
+
+def test_dispatched_ids_survives_dirty_dict_row(tmp_path):
+    """{a: b} 脏行只损失它自己；C-2 的 attempts=1 证据保留。"""
+    reg = tmp_path / "claim-register.yaml"
+    reg.write_text(yaml.safe_dump({"claims": [
+        {"id": "C-1", "status": "OPEN",
+         "promotion_attempts": {"a": "b"}},
+        {"id": "C-2", "status": "OPEN", "promotion_attempts": 1},
+    ]}, allow_unicode=True), encoding="utf-8")
+    assert cc._dispatched_ids(tmp_path) == ["C-2"]
+
+
+def test_dispatched_ids_survives_dirty_string_row(tmp_path):
+    """promotion_attempts: two（issue 原例）同样 per-claim 容错。"""
+    reg = tmp_path / "claim-register.yaml"
+    reg.write_text(yaml.safe_dump({"claims": [
+        {"id": "C-1", "status": "OPEN", "promotion_attempts": "two"},
+        {"id": "C-2", "status": "OPEN", "promotion_attempts": 1},
+    ]}, allow_unicode=True), encoding="utf-8")
+    assert cc._dispatched_ids(tmp_path) == ["C-2"]
+
+
+def test_dispatched_ids_keeps_in_progress_despite_dirty_neighbor(tmp_path):
+    """IN_PROGRESS 行与脏行共存：状态证据与 attempts 证据都不被连带抹掉。"""
+    reg = tmp_path / "claim-register.yaml"
+    reg.write_text(yaml.safe_dump({"claims": [
+        {"id": "C-1", "status": "OPEN",
+         "promotion_attempts": {"a": "b"}},
+        {"id": "C-2", "status": "IN_PROGRESS", "promotion_attempts": 0},
+    ]}, allow_unicode=True), encoding="utf-8")
+    assert cc._dispatched_ids(tmp_path) == ["C-2"]
 
 
 if __name__ == "__main__":  # pragma: no cover

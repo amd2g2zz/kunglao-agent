@@ -437,13 +437,23 @@ def _dispatched_ids(workspace: Path) -> list:
     recorded worker attempt (promotion_attempts >= 1). Terminal/PARK claims
     are never live frontier work. Consumer: convergence_health._stuck_claims
     — a claim sitting in open_ids is only "stuck" if it was ever dispatched;
-    open_ids minus this set is the never-dispatched queue. Best effort: any
-    read/parse failure returns [] (same side-channel posture as the ledger).
+    open_ids minus this set is the never-dispatched queue.
+
+    #103 per-claim tolerance: a dirty promotion_attempts on ONE claim must
+    not wipe the dispatch evidence of ALL claims — the pre-#103 blanket
+    except turned one bad row into [] for the whole register, killing stuck
+    detection downstream. Rows now degrade individually; only a whole-file
+    read/parse failure returns [] (absence of data, not silence about it).
     """
     try:
         reg = _load_yaml(workspace / "claim-register.yaml")
-        out = []
-        for c in (reg.get("claims") or []):
+    except (AttributeError, OSError, TypeError, ValueError, yaml.YAMLError):
+        # whole-register unread: settlement input keeps its absence shape,
+        # narrowed to the realistic IO/parse family (#103 tiering)
+        return []
+    out = []
+    for c in (reg.get("claims") or []):
+        try:
             if not c.get("id"):
                 continue
             status = (c.get("status") or "").upper()
@@ -451,9 +461,10 @@ def _dispatched_ids(workspace: Path) -> list:
                 continue
             if status in IN_PROGRESS_STATUSES or int(c.get("promotion_attempts") or 0) >= 1:
                 out.append(c["id"])
-        return out
-    except Exception:  # noqa: BLE001 — side channel, never blocks the decision
-        return []
+        except (AttributeError, TypeError, ValueError):
+            # dirty row (#103): skip it, keep the rest of the collection
+            continue
+    return out
 
 
 def _append_ledger(workspace: Path, d: dict) -> None:
