@@ -243,7 +243,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: eb4c622f3b509f834b8f61bb00ae3e92d701c8e602c94c0b41da4aa139c45f2c
+    sha256: e77915b6915d61f3a8d9dfaf3f9f8d2b82af20c9a94b61e0fe2f55ad0f71f99a
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold

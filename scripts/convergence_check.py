@@ -21,14 +21,18 @@ Decision matrix:
   open_claims>0 AND all open are blocked   → BLOCKED        (escalate with specifics)
   non-empty malformed primary_questions    → INVALID        (escalate, target undefined)
 
-Exit codes (machine-readable for hooks):
+Exit codes (machine-readable for hooks — consumer contract, see the
+registry constant block for #99):
   0 = CONVERGED (nothing to do)
   1 = DISPATCH (open work + free slots)
   2 = DISPATCH_VERIFIER (partial facts need checking)
   3 = SATURATED (busy, poll)
   4 = BLOCKED (open work but all blocked — escalate); INVALID (bad task_spec) reuses this
      so hooks that accept returncodes 0–4 keep parsing the JSON decision.
+  5 = PARK (#634: suspended on external gates — legal idle with wake_condition)
   64 = MISSING_WORKSPACE (no claim-register.yaml found — caller passed wrong path)
+  65 = CRASHED (#99: the check itself crashed — stdout {"decision": "CRASHED"},
+     traceback on stderr; never a decided state)
 
 Usage:
   python scripts/convergence_check.py [workspace]          # human-readable
@@ -66,13 +70,24 @@ from ws_layout import resolve_quiet as _resolve_ws
 
 WORKER_CAP = 3
 
-# Exit codes
+# Exit codes — CONSUMER CONTRACT (#99). Every rc-based consumer (hooks that
+# branch on 0-4, kunglao-decide, external tick loops) reads these bytes; a
+# collision makes one state masquerade as another. Before adding a value,
+# check the registry below AND skills/kunglao-agent/SKILL.md's decision
+# table (the human-facing copy of this contract).
 EXIT_CONVERGED = 0
 EXIT_DISPATCH = 1
 EXIT_VERIFY = 2
 EXIT_SATURATED = 3
 EXIT_BLOCKED = 4
 EXIT_PARK = 5  # #634: suspended on external gates — legal idle with wake_condition
+# #99: the check itself crashed (malformed YAML, unexpected error). 64 is
+# taken by MISSING_WORKSPACE (main()'s no-claim-register exit); 65 is the
+# next free byte. A crash must NEVER share EXIT_DISPATCH's byte — pre-#99 a
+# malformed register exited rc=1, which rc-based consumers read as
+# "dispatch now" while stdout was empty. On this exit: stdout carries
+# {"decision": "CRASHED"}, stderr keeps the traceback.
+EXIT_CRASHED = 65
 
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
@@ -602,11 +617,18 @@ class Event(str, Enum):
     DISCOVERY_UNCONSUMED = "DISCOVERY_UNCONSUMED"     # #147 discovery consumption
     GLOBAL_CONTRADICTION = "GLOBAL_CONTRADICTION"     # #147 completion transaction
     ANOMALY_DETECTED = "ANOMALY_DETECTED"           # #663 anomaly observation gate
+    # #98: DRAIN worker gates. The DRAIN probe table had ZERO worker
+    # predicates — worker data was collected into the snapshot but never
+    # consulted — so an all-IN_PROGRESS claim surface (excluded from opens
+    # by _open_claims, by design) drained straight to CONVERGED over live
+    # work. STUCK is shared with SCHEDULE (one #595 semantics, two stages);
+    # ACTIVE is DRAIN-only (SCHEDULE already routes work by claim face).
+    STUCK_WORKERS_PRESENT = "STUCK_WORKERS_PRESENT"   # #595 SCHEDULE / #98 DRAIN: stuck workers gate both stages
+    ACTIVE_WORKERS_PRESENT = "ACTIVE_WORKERS_PRESENT"  # #98 DRAIN: live worker on a drained claim surface
     DRAIN_CLEAN = "DRAIN_CLEAN"                        # DRAIN catch-all
     # SCHEDULE stage
     WORK_AND_FREE_SLOT = "WORK_AND_FREE_SLOT"
     PARTIALS_AND_FREE_SLOT = "PARTIALS_AND_FREE_SLOT"
-    STUCK_WORKERS_PRESENT = "STUCK_WORKERS_PRESENT"   # #595: silent-detect consumes stuck_workers
     WORK_NO_FREE_SLOT = "WORK_NO_FREE_SLOT"
     FAILURE_ARTIFACTS_DUE = "FAILURE_ARTIFACTS_DUE"    # #495: analysis lacks
     #      validated_capability / identified_obstacle (or is absent/stale)
@@ -877,7 +899,17 @@ def _stuck_workers_present(s: _DecideInputs) -> bool:
     # #595: silent-detect — collected stuck_workers were never consumed by the
     # machine. Firing here escalates to BLOCKED so orchestrator intervention
     # can resolve instead of looping against a frozen worker.
+    # #98: now probed in DRAIN too — the drained claim face must not read
+    # CONVERGED while a worker has gone silent.
     return bool(s.stuck)
+
+
+def _active_workers_present(s: _DecideInputs) -> bool:
+    # #98 DRAIN leg: work is in flight even when the claim face looks empty
+    # (IN_PROGRESS is excluded from opens by design). A drained claim face
+    # with a live worker means the loop is busy, not done — poll, never
+    # deliver.
+    return s.active > 0
 
 
 def _work_no_free_slot(s: _DecideInputs) -> bool:
@@ -924,6 +956,7 @@ _EVENT_PREDICATES = {
     Event.WORK_AND_FREE_SLOT: _work_and_free_slot,
     Event.PARTIALS_AND_FREE_SLOT: _partials_and_free_slot,
     Event.STUCK_WORKERS_PRESENT: _stuck_workers_present,
+    Event.ACTIVE_WORKERS_PRESENT: _active_workers_present,
     Event.WORK_NO_FREE_SLOT: _work_no_free_slot,
     Event.FAILURE_ARTIFACTS_DUE: _failure_artifacts_due,
     Event.LADDER_REQUIRED_BLOCKER: _ladder_required_blocker,
@@ -1080,6 +1113,15 @@ def _act_verify_partials(s: _DecideInputs) -> str:
 def _act_saturated_queue(s: _DecideInputs) -> str:
     return (f"All {WORKER_CAP} slots busy with {len(s.unblocked_open)} open claim(s) queued. "
             f"Poll workers - do not wait idly.")
+
+
+def _act_active_workers(s: _DecideInputs) -> str:
+    # #98 DRAIN leg: healthy in-flight work on a drained claim face. SATURATED
+    # (busy: poll) rather than BLOCKED (escalate) — nothing is wrong, the loop
+    # is simply not done. Delivery over live work is forbidden either way.
+    return (f"{s.active} worker(s) still in flight on an otherwise-drained "
+            f"claim surface ({s.free_slots} free slot(s) under cap {WORKER_CAP}). "
+            f"Poll workers - do not deliver; re-check convergence after they report.")
 
 
 def _act_stuck_workers(s: _DecideInputs) -> str:
@@ -1267,11 +1309,18 @@ STAGE_PROBES = {
     State.SCHEMA: [Event.SCHEMA_INVALID, Event.WORK_PENDING, Event.DRAINED],
     # DRAIN: the pre-#443 completion-transaction order, frozen by the
     # regression anchor (orphan > unverified > note-gap > discovery >
-    # contradiction > clean).
+    # contradiction > clean). #98: worker gates sit AFTER that frozen order
+    # (every completeness gate keeps its verdict priority) but BEFORE the
+    # DRAIN_CLEAN catch-all — a drained claim face with live/stuck workers
+    # is busy (SATURATED: poll) or escalated (BLOCKED: #595 action, which
+    # also frees the stuck claims per #607), never CONVERGED. STUCK precedes
+    # ACTIVE: a stuck worker is also counted active, and its escalation must
+    # win.
     State.DRAIN: [Event.ORPHAN_TERMINAL_CLAIM, Event.PRIMARY_Q_UNVERIFIED,
                   Event.NOTE_LAYER_GAP, Event.OPEN_HYPOTHESIS_AT_CLOSE,
                   Event.DISCOVERY_UNCONSUMED,
                   Event.GLOBAL_CONTRADICTION, Event.ANOMALY_DETECTED,
+                  Event.STUCK_WORKERS_PRESENT, Event.ACTIVE_WORKERS_PRESENT,
                   Event.DRAIN_CLEAN],
     # SCHEDULE: dispatchable work first, then saturation, then WHY nothing
     # is dispatchable (#495 failure artifacts, #497 ladder flavors), then
@@ -1297,6 +1346,11 @@ TRANSITIONS = {
     (State.DRAIN, Event.DISCOVERY_UNCONSUMED): (State.DISPATCH, _act_discovery),
     (State.DRAIN, Event.GLOBAL_CONTRADICTION): (State.BLOCKED, _act_contradiction),
     (State.DRAIN, Event.ANOMALY_DETECTED): (State.BLOCKED, _act_anomaly),
+    # #98: worker predicates on the drained claim face — one #595 stuck
+    # semantics shared with SCHEDULE (same builder: stuck report + #607
+    # reopen), plus the DRAIN-only busy-poll face for live workers.
+    (State.DRAIN, Event.STUCK_WORKERS_PRESENT): (State.BLOCKED, _act_stuck_workers),
+    (State.DRAIN, Event.ACTIVE_WORKERS_PRESENT): (State.SATURATED, _act_active_workers),
     (State.DRAIN, Event.DRAIN_CLEAN): (State.CONVERGED, _act_converged),
     (State.SCHEDULE, Event.WORK_AND_FREE_SLOT): (State.DISPATCH, _act_dispatch_top),
     (State.SCHEDULE, Event.PARTIALS_AND_FREE_SLOT): (State.DISPATCH_VERIFIER, _act_verify_partials),
@@ -1550,7 +1604,18 @@ def main(argv: list[str] | None = None) -> int:
         print(f"FAIL: no claim-register.yaml under {workspace}", file=sys.stderr)
         return 64
 
-    d = decide(workspace)
+    # #99: decide() is untrusted input territory (claim-register.yaml is
+    # hand- and hook-edited YAML). An unguarded crash exits rc=1 — the SAME
+    # byte as EXIT_DISPATCH — so rc-based consumers read the crash as
+    # "dispatch now". Contain it: distinct EXIT_CRASHED byte, machine-
+    # readable stdout, traceback preserved on stderr.
+    try:
+        d = decide(workspace)
+    except Exception:  # noqa: BLE001 — #99: any crash must leave the decided-state byte space
+        import traceback
+        traceback.print_exc()
+        print(json.dumps({"decision": "CRASHED"}, ensure_ascii=False))
+        return EXIT_CRASHED
     _append_ledger(workspace, d)  # silent side channel for convergence_health.py
     # #287 observability: mirror the convergence decision to the structured
     # event log. #459: detail now carries the decision plus the counts a
