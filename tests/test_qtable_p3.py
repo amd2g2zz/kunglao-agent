@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""tests/test_qtable_p3.py — #823-P3 缺口桶排序 + 早停面 + 停滞响应。
+"""tests/test_qtable_p3.py — 价值循环排序回归 + 早停面 + 停滞响应。
 
-蓝图 §7.4/§7.5：
-  1. 缺口命中 > tier > VoI（欠账表存在时，answers_question 命中
-     未闭合 PQ 的 claim 进领先桶）；无欠账表 → 单桶，结果序与
-     旧版 byte-identical。
+#107 重钉：缺口桶（bucket 领排）随加权公式一起被 owner 裁决废弃
+（"之前的不要了"）。排序改为 Thompson 复合量；本文件现在钉住：
+  1. PQ categorical（posteriors 账本）经 dH 项进入排序；mission_ledger
+     的欠账数据面不再泄漏进排序（旧 feed 删除的回归钉）。
   2. INFEASIBLE 立案产出的 DEFERRED claim 退出候选与 open 计数（早停面）。
   3. stall 时 decide 附 stall_response（think 引导；#51 起 always-on）。
 """
@@ -44,25 +44,33 @@ def _claim(cid, **kw):
     return c
 
 
-# ---------- 1. gap bucket ordering ----------
+# ---------- 1. PQ categorical -> dH term; mission ledger stays OUT ----------
 
-def test_gap_hit_ranks_first(tmp_path, monkeypatch):
+def test_pq_categorical_lands_dh_feed(tmp_path, monkeypatch):
+    """posteriors 账本里的 PQ categorical 经 dH 进入排序面（#106/#107
+    接线）：命中该 PQ 的 claim 带非零 dH feed 与加分。"""
     monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
+    from posteriors import PQCategorical, PosteriorLedger
     claims = [
         _claim("C-gap", answers_question="q1", tier=3),
         _claim("C-junk", tier=1),
     ]
     ws = _ws(tmp_path, claims)
+    led = PosteriorLedger()
+    led.pqs["q1"] = PQCategorical("q1", {"plain-md5": 1.0, "salted": 1.0})
+    led.save(ws)
     ev = pr.EvidenceView.from_workspace(ws)
-    assert ev.mission_active is True
-    assert ev.mission_gap.get("q1") == pytest.approx(1.0)
     acts = pr.priority_ratio(claims, {}, ev)
-    assert [a.claim_id for a in acts][:1] == ["C-gap"], acts
+    gap = next(a for a in acts if a.claim_id == "C-gap")
+    junk = next(a for a in acts if a.claim_id == "C-junk")
+    assert "dH=0" not in gap.feeds["dh_pq"]
+    assert "dH=0" in junk.feeds["dh_pq"]
+    assert gap.score > junk.score - pr.LAMBDA_DH  # the dH lift is bounded
 
 
-def test_no_ledger_uniform_buckets_legacy_order(tmp_path, monkeypatch):
-    """无欠账表 → 全 0 桶 → 排序还原 legacy key（与有表 workspace 的分数
-    一致——prior 同为 uninformative 0.5，cost 通胀同幅）。"""
+def test_with_and_without_empty_ledger_byte_identical(tmp_path, monkeypatch):
+    """空账本（或无账本）→ 同一冷启动分布：结果 byte-identical（账本文件
+    的存在本身不是信号）。"""
     monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
     claims = [
         _claim("C-b", tier=1),
@@ -72,12 +80,10 @@ def test_no_ledger_uniform_buckets_legacy_order(tmp_path, monkeypatch):
     ws_with = _ws(tmp_path / "with", claims)
     ws_without = _tmp_no_ledger(tmp_path, claims)
     ev1 = pr.EvidenceView.from_workspace(ws_with)
-    ev2 = pr.OthersView = pr.EvidenceView.from_workspace(ws_without)
+    ev2 = pr.EvidenceView.from_workspace(ws_without)
     a1 = [a.to_dict() for a in pr.priority_ratio(claims, {}, ev1)]
     a2 = [a.to_dict() for a in pr.priority_ratio(claims, {}, ev2)]
     assert a1 == a2
-    # 且与 legacy 期望序一致（tier1 并列时按 cost/claim_id）
-    assert [d["claim_id"] for d in a1] == ["C-a", "C-b", "C-c"]
 
 
 def _tmp_no_ledger(tmp_path, claims):
@@ -93,31 +99,24 @@ def _tmp_no_ledger(tmp_path, claims):
     return ws
 
 
-def test_answered_pq_no_bucket(tmp_path, monkeypatch):
-    """命中已答 PQ → gap=0 → 不进领先桶。"""
+def test_mission_ledger_no_longer_leaks_into_ranking(tmp_path, monkeypatch):
+    """#107 回归钉：mission_ledger（V_m / 欠账态）不再是任何排序输入——
+    有欠账表与无欠账表的同内容 workspace 排序 byte-identical（数据面
+    保留在 mission_ledger.py，消费面已死）。"""
     monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
     claims = [
         _claim("C-open", answers_question="q1", tier=1),
         _claim("C-done", status="PROVEN", answers_question="q1"),
         _claim("C-other", tier=1),
     ]
-    ws = _ws(tmp_path, claims)
-    ml.update(ws)  # C-done PROVEN q1 → q1 answered, gap=0
-    ev = pr.EvidenceView.from_workspace(ws)
-    assert ev.mission_active is False
-    reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
-    acts = pr.priority_ratio(
-        [c for c in reg["claims"] if c["status"] == "OPEN"], {}, ev)
-    assert [a.claim_id for a in acts] == ["C-open", "C-other"]
-
-
-def test_blocked_pq_partial_gap(tmp_path, monkeypatch):
-    monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
-    claims = [_claim("C-x", answers_question="q1", tier=1)]
-    ws = _ws(tmp_path, claims)
-    ml.mark_blocked(ws, "q1", blocker="vm down", wake="vm up")
-    ev = pr.EvidenceView.from_workspace(ws)
-    assert ev.mission_gap["q1"] == pytest.approx(0.7)  # (1-β)·w = 0.7·1.0
+    ws_ledger = _ws(tmp_path / "led", claims)
+    ml.update(ws_ledger)  # q1 answered, ledger history written
+    ws_none = _tmp_no_ledger(tmp_path, claims)
+    a1 = [a.to_dict() for a in pr.priority_ratio(claims, {},
+                                                 pr.EvidenceView.from_workspace(ws_ledger))]
+    a2 = [a.to_dict() for a in pr.priority_ratio(claims, {},
+                                                 pr.EvidenceView.from_workspace(ws_none))]
+    assert a1 == a2
 
 
 # ---------- 2. early-stop face: DEFERRED exits candidates ----------

@@ -202,14 +202,19 @@ def test_t2_weights_reflect_in_ranking(tmp_path):
 
 
 def test_t2_score_is_exact_multiplier_of_unweighted_formula():
+    """#107: the composite is (Thompson sample + LAMBDA_DH*dH) * worth — the
+    worth multiplier stays an exact identity over the raw sample (score is
+    stored at 6dp, the json face still rounds to 3)."""
+    import random
+
     import priority_ratio as pr
     claims = [{"id": "C-X", "status": "OPEN", "statement": "pure rce path"}]
-    ev_bare = pr.EvidenceView()
     ev_w = pr.EvidenceView(value_class_weights={"rce": 4})
-    s_bare = pr.priority_ratio(claims, {}, ev_bare)[0].score
     s_w = pr.priority_ratio(claims, {}, ev_w)[0]
+    base = random.Random(0).getrandbits(64)
+    raw = random.Random(f"thompson/{base}/C-X").betavariate(1.0, 1.0)
     assert s_w.weight == 4.0
-    assert s_w.score == round(s_bare * 4.0, 3)
+    assert s_w.score == round(raw * 4.0, 6)
 
 
 def test_t2_missing_weights_file_is_neutral(tmp_path):

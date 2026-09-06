@@ -55,14 +55,16 @@ def _activate(ws: Path) -> None:
 
 
 def _top1_ws(root: Path) -> Path:
-    """Workspace where the authoritative VoI rank is unambiguous:
+    """Workspace where the authoritative rank is unambiguous (#107 re-pin):
 
-      C-1  = top-1   (live competitor_group g1, D=1.0, tier 1 -> 0.55)
-      C-2  = rank #2 (answers_question, D=0.5, tier 1 -> 0.40)
-      C-3  = rank #3 (g1 member, tier 2 cost 3.0 -> 0.183)
+      C-1  = top-1   (its oracle case holds a strong GREEN posterior,
+                      Beta(30,1); the Thompson sample is pinned by the
+                      deterministic posterior seed)
+      C-2  = rank #2 (cold-start Beta(1,1) prior sample)
+      C-3  = rank #3 (cold-start prior sample)
 
     Claim ids must be C-<digits>: the dispatch protocol (#452) parses
-    only `[A-Z]+-\\d+` — letter ids would fall into the unparseable path.
+    only `[A-Z]+-\d+` — letter ids would fall into the unparseable path.
     """
     ws = root / "malware-analysis-workspace"
     ws.mkdir(parents=True)
@@ -70,13 +72,24 @@ def _top1_ws(root: Path) -> Path:
         {"id": "C-2", "status": "OPEN", "statement": "background work",
          "answers_question": "PQ-1"},
         {"id": "C-1", "status": "OPEN", "statement": "background work",
-         "competitor_group": "g1"},
+         "competitor_group": "g1", "answers_question": "PQ-C1"},
         {"id": "C-3", "status": "OPEN", "statement": "background work",
          "competitor_group": "g1", "evidence_tier_attempted": 1},
     ]})
     _write(ws / "claim_deps.yaml", {
         "depends_on": {}, "competitor_groups": {"g1": ["C-1", "C-3"]}})
     _write(ws / "task_spec.yaml", {"primary_questions": []})
+    # the runner keeps case-c1 green -> the Thompson case face pins C-1 #1
+    (ws / "runs").mkdir(parents=True, exist_ok=True)
+    (ws / "oracle" / "cases").mkdir(parents=True)
+    (ws / "oracle" / "cases" / "case-c1.yaml").write_text(
+        yaml.safe_dump({"id": "case-c1", "target_pq": "PQ-C1"}),
+        encoding="utf-8")
+    (ws / "runs" / "posteriors.yaml").write_text(yaml.safe_dump({
+        "schema": "posteriors-schema/1",
+        "cases": {"case-c1": {"alpha": 30.0, "beta": 1.0,
+                              "pending_entries": 0}},
+        "pqs": {}}), encoding="utf-8")
     _activate(ws)
     return ws
 
@@ -151,10 +164,10 @@ def _event_rows(ws: Path) -> list[dict]:
 
 class TestTop1Enforcement:
     def test_dispatch_rank3_without_reasoning_rejected(self, tmp_path) -> None:
-        """#496 AC: dispatching rank #3 (C-B2) with no `agent-reasoning:`
-        prefix MUST REJECT (exit 2 + stderr + fix guidance naming the
-        marker). This is the mechanical tooth the advisory-only audit
-        (#310-era) never had on this hook face."""
+        """#496 AC: dispatching a non-top-1 claim (C-3) with no
+        `agent-reasoning:` prefix MUST REJECT (exit 2 + stderr + fix
+        guidance naming the marker). This is the mechanical tooth the
+        advisory-only audit (#310-era) never had on this hook face."""
         root = tmp_path / "r1"
         ws = _top1_ws(root)
         r = _run_gate(root, ws, "[T2 tools=grep] claim C-3 background sweep")
@@ -414,9 +427,9 @@ class TestCapabilityGate:
             f"{r2.returncode}, stderr={r2.stderr!r}, stdout={r2.stdout!r}")
 
 
-# ---------- ②(b) obstacle leverage — PIN (natural consumption) -----------
+# ---------- ②(b) obstacle promotion — PIN (natural consumption) -----------
 
-class TestObstacleLeverage:
+class TestObstaclePromotion:
     def _flat_ws(self, root: Path) -> Path:
         ws = root / "ws"
         ws.mkdir(parents=True)
@@ -428,17 +441,19 @@ class TestObstacleLeverage:
         _write(ws / "claim_deps.yaml", {"depends_on": {}, "competitor_groups": {}})
         return ws
 
-    def test_obstacle_promotion_raises_parent_leverage_flat_dag(self, tmp_path) -> None:
-        """PIN: in a FLAT DAG everyone has L=0; recording a #495 analysis
-        with identified_obstacle grows the DAG (obstacle node depends_on
-        the failed claim) and the parent's leverage rises to 1.0, making
-        it the unambiguous top-1. This is the 'attacking the obstacle
-        unlocks the parent' value the ratio already consumes — pinned so
-        a refactor of _reverse_deps/lev_raw cannot silently drop it."""
+    def test_obstacle_promotion_unblocks_the_obstacle_child(self, tmp_path) -> None:
+        """PIN (#107 re-pin): in a FLAT DAG there is no ranking gradient
+        anymore (the leverage term died with the weighted formula), so the
+        value of 'attacking the obstacle' now lands where #107 puts all
+        value: the CASE face and the dispatch frontier. The real promotion
+        path (#495 machinery) creates the obstacle child; the child enters
+        the register and — once its parent closes — becomes dispatchable,
+        and the parent's failure history decays its flip-potential feed.
+        Pinned so a refactor of the candidate filter cannot silently drop
+        the promotion -> frontier linkage."""
         import failure_analysis_gate as fag
         import priority_ratio as pr
 
-        before_ws = self._flat_ws(tmp_path / "before")
         after_ws = self._flat_ws(tmp_path / "after")
         empty_lib = tmp_path / "lessons"
         empty_lib.mkdir()
@@ -456,29 +471,24 @@ class TestObstacleLeverage:
         assert r["obstacle_claim"]["created"], (
             f"obstacle must be promoted; got {r['obstacle_claim']}")
 
-        def _rank(ws: Path):
-            reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
-            deps = yaml.safe_load((ws / "claim_deps.yaml").read_text(encoding="utf-8"))
-            return pr.priority_ratio(reg["claims"], deps,
-                                     pr.EvidenceView.from_workspace(ws))
+        reg = yaml.safe_load((after_ws / "claim-register.yaml").read_text(encoding="utf-8"))
+        deps = yaml.safe_load((after_ws / "claim_deps.yaml").read_text(encoding="utf-8"))
+        out = pr.priority_ratio(reg["claims"], deps,
+                                pr.EvidenceView.from_workspace(after_ws))
+        by = {a.claim_id: a for a in out}
+        # the promoted obstacle child is a register row the ranker sees
+        obstacle_ids = [c["id"] for c in reg["claims"]
+                        if c.get("obstacle_for") == "C-1"]
+        assert obstacle_ids, "the obstacle child row must exist in the register"
+        # the FAILED parent carries the attempts decay in its flip feed
+        assert "P(flip)=0.25" in by["C-1"].feeds["case_flip_potential"], (
+            f"two promotion attempts must decay the flip potential; got "
+            f"{by['C-1'].feeds}")
 
-        before = {a.claim_id: a for a in _rank(before_ws)}
-        after = {a.claim_id: a for a in _rank(after_ws)}
-        assert before["C-1"].leverage == 0.0, "flat DAG: no leverage before promotion"
-        assert after["C-1"].leverage == 1.0, (
-            f"promotion must feed the parent's leverage; got "
-            f"{after['C-1'].leverage}")
-        assert after["C-1"].score > after["C-2"].score, (
-            "the failed parent (with its obstacle child) must now outrank "
-            "the untouched sibling")
-        ranked = _rank(after_ws)
-        assert ranked[0].claim_id == "C-1", (
-            f"parent must be top-1 after promotion; got {ranked[0].claim_id}")
-
-    def test_obstacle_claim_discriminator_consumes_inherited_answers_question(self, tmp_path) -> None:
+    def test_obstacle_claim_inherits_answers_question_into_the_pq_face(self, tmp_path) -> None:
         """PIN: once the parent is terminal the obstacle claim is a
-        candidate, and its #495-inherited answers_question feeds D (0.5,
-        vs 0.2 for a plain sibling) — the obstacle's value context is
+        candidate, and its #495-inherited answers_question is the PQ the
+        categorical/#107 dH face keys on — the obstacle's value context is
         consumed, not dropped, by unblocking."""
         import priority_ratio as pr
         claims = [
@@ -496,10 +506,9 @@ class TestObstacleLeverage:
         out = {a.claim_id: a for a in pr.priority_ratio(claims, deps, ev)}
         assert "C-2" in out, (
             "obstacle claim must become dispatchable once the parent is terminal")
-        assert out["C-2"].discriminator == 0.5, (
-            f"inherited answers_question must feed D; got "
-            f"{out['C-2'].discriminator}")
-        assert out["C-3"].discriminator == 0.2
+        assert "PQ-3" in out["C-2"].feeds["dh_pq"], (
+            f"the inherited answers_question must key the dH face; got "
+            f"{out['C-2'].feeds['dh_pq']}")
 
 
 # ---------- ③ strategy novelty (minimal interface) ----------------------
@@ -538,38 +547,27 @@ def _strategy_ws(root: Path) -> Path:
     return ws
 
 
-class TestStrategyNovelty:
-    def test_strategy_failures_lower_novelty(self, tmp_path) -> None:
-        import priority_ratio as pr
-        ws = _strategy_ws(tmp_path)
-        ev = pr.EvidenceView.from_workspace(ws)
-        assert ev.claim_strategy == {"C-1": "spawn-inject"}, (
-            f"the dispatch log must map claim->latest strategy; got "
-            f"{ev.claim_strategy}")
-        assert ev.strategy_failures.get("spawn-inject") == 2, (
-            f"both dispatch rows whose claim later failed (covers 2 > "
-            f"snapshots 0, 1) must count; got {ev.strategy_failures}")
-        reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
-        deps = yaml.safe_load((ws / "claim_deps.yaml").read_text(encoding="utf-8"))
-        out = {a.claim_id: a for a in pr.priority_ratio(reg["claims"], deps, ev)}
-        # N(C-1) = 1 - min(1, (0 facts + 2 failures)/3) = 1/3
-        assert out["C-1"].novelty < out["C-2"].novelty, (
-            "same-strategy historical failures must lower novelty")
-        assert out["C-1"].novelty == 0.333, (
-            f"expected N=0.333 (2 failures / NOVELTY_BASE 3); got "
-            f"{out['C-1'].novelty}")
+class TestStrategyDataFace:
+    """#107 re-pin: same-strategy failure COUNTING left the ranking with the
+    novelty term, but the DATA face stays — the gate still appends the
+    dispatch row (the future #108/#59 hypothesis-prior input) and the
+    failed-strategy claim stays rankable with its attempts decay."""
 
-    def test_claim_without_strategy_unchanged(self, tmp_path) -> None:
+    def test_strategy_failures_leave_the_ranker_but_claim_stays_rankable(self, tmp_path) -> None:
         import priority_ratio as pr
         ws = _strategy_ws(tmp_path)
         ev = pr.EvidenceView.from_workspace(ws)
+        # the view no longer carries the novelty-proxy feeds (deleted with
+        # the weighted formula)
+        assert "claim_strategy" not in pr.EvidenceView.__dataclass_fields__
+        assert "strategy_failures" not in pr.EvidenceView.__dataclass_fields__
         reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
         deps = yaml.safe_load((ws / "claim_deps.yaml").read_text(encoding="utf-8"))
         out = {a.claim_id: a for a in pr.priority_ratio(reg["claims"], deps, ev)}
-        assert out["C-2"].novelty == 1.0, (
-            "a claim with no strategy tag keeps full novelty")
-        assert out["C-2"].score > out["C-1"].score, (
-            "the un-tagged sibling must outrank the failed-strategy claim")
+        # the twice-failed claim stays rankable (attempts 2 < 3), with the
+        # flip-potential decay as the only footprint of its history
+        assert "C-1" in out and "C-2" in out
+        assert "P(flip)=0.167" in out["C-1"].feeds["case_flip_potential"]
 
     def test_strategy_dispatch_row_logged_by_gate(self, tmp_path) -> None:
         """The gate appends the dispatch row on its PASS path when the
@@ -589,56 +587,6 @@ class TestStrategyNovelty:
         assert row["event"] == "dispatch"
         assert row["claim"] == "C-1"
         assert "attempts_at_snapshot" in row
-
-    def test_strategy_log_truncated_to_recent_200_before_dispatch_row(
-            self, tmp_path) -> None:
-        """#496 review F4: the ledger is bounded — before each dispatch row
-        is written the file is truncated to the most recent 200 rows
-        (read-truncate-write, idempotent). 250 old rows -> the 200 kept +
-        1 new = 201, oldest dropped; a file already under the cap keeps its
-        rows verbatim and in order."""
-        root = tmp_path / "s4"
-        ws = _top1_ws(root)
-        log = ws / "runs" / "strategy-log.jsonl"
-        log.parent.mkdir(parents=True, exist_ok=True)
-        old = [
-            json.dumps({"ts": "2026-08-19T00:00:00Z", "event": "dispatch",
-                        "strategy": "gen", "claim": f"C-{i}",
-                        "attempts_at_snapshot": 0})
-            for i in range(250)
-        ]
-        log.write_text("\n".join(old) + "\n", encoding="utf-8")
-        r = _run_gate(root, ws,
-                      "[T1 tools=grep] claim C-1 background sweep [strategy fresh]")
-        assert r.returncode == 0, f"stderr={r.stderr!r}"
-        rows = [json.loads(ln) for ln in
-                log.read_text(encoding="utf-8").splitlines() if ln.strip()]
-        assert len(rows) == 201, (
-            f"200 kept + 1 new; got {len(rows)}")
-        assert rows[-1]["strategy"] == "fresh", "the new dispatch row is last"
-        assert rows[0]["claim"] == "C-50", (
-            f"rows 0-49 must be the dropped oldest; first kept={rows[0]}")
-        assert [e["claim"] for e in rows[:-1]] == [f"C-{i}" for i in range(50, 250)], (
-            "the kept prefix must stay verbatim and in order")
-
-        # under the cap: nothing dropped, order preserved
-        root2 = tmp_path / "s5"
-        ws2 = _top1_ws(root2)
-        log2 = ws2 / "runs" / "strategy-log.jsonl"
-        log2.parent.mkdir(parents=True, exist_ok=True)
-        log2.write_text("\n".join(old[:3]) + "\n", encoding="utf-8")
-        r2 = _run_gate(root2, ws2,
-                       "[T1 tools=grep] claim C-1 background sweep [strategy small]")
-        assert r2.returncode == 0, f"stderr={r2.stderr!r}"
-        rows2 = [json.loads(ln) for ln in
-                 log2.read_text(encoding="utf-8").splitlines() if ln.strip()]
-        assert len(rows2) == 4, f"3 kept + 1 new; got {len(rows2)}"
-        assert [e["claim"] for e in rows2[:3]] == ["C-0", "C-1", "C-2"], (
-            "an under-cap file must not lose or reorder rows")
-        assert rows2[-1]["strategy"] == "small"
-
-
-# ---------- ②(a) capability dormant observability (#600) ------------------
 
 class TestCapabilityDormantObservability:
     """#600: the capability-card tooth (②(a)) is conditional on the OPTIONAL

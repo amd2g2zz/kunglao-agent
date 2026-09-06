@@ -62,13 +62,25 @@ def _top1_ws(root: Path) -> Path:
         {"id": "C-2", "status": "OPEN", "statement": "background work",
          "answers_question": "PQ-1"},
         {"id": "C-1", "status": "OPEN", "statement": "background work",
-         "competitor_group": "g1"},
+         "competitor_group": "g1", "answers_question": "PQ-C1"},
         {"id": "C-3", "status": "OPEN", "statement": "background work",
          "competitor_group": "g1", "evidence_tier_attempted": 1},
     ]})
     _write(ws / "claim_deps.yaml", {
         "depends_on": {}, "competitor_groups": {"g1": ["C-1", "C-3"]}})
     _write(ws / "task_spec.yaml", {"primary_questions": []})
+    # #107 re-pin: C-1 holds a strong GREEN oracle-case posterior — its
+    # Thompson case face pins it at rank #1 deterministically.
+    (ws / "runs").mkdir(parents=True, exist_ok=True)
+    (ws / "oracle" / "cases").mkdir(parents=True)
+    (ws / "oracle" / "cases" / "case-c1.yaml").write_text(
+        yaml.safe_dump({"id": "case-c1", "target_pq": "PQ-C1"}),
+        encoding="utf-8")
+    (ws / "runs" / "posteriors.yaml").write_text(yaml.safe_dump({
+        "schema": "posteriors-schema/1",
+        "cases": {"case-c1": {"alpha": 30.0, "beta": 1.0,
+                              "pending_entries": 0}},
+        "pqs": {}}), encoding="utf-8")
     write_hook_state(ws, active_hooks=["dispatch_gate"])
     return ws
 

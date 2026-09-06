@@ -21,13 +21,17 @@ def test_oracle_selfcheck_10_10():
 
 
 def test_oracle_cases_cover_core_behaviors():
-    """oracle covers the core behaviors (leverage/discriminator/novelty/cost/dispatchable)."""
+    """oracle covers the core behaviors (#107: candidate filter, deterministic
+    Thompson sampling, flip-potential diagnostics, tier cost field, worth
+    channel — the L/D/N known-answer cases died with the weighted formula)."""
     names = {r["name"] for r in ke.oracle_selfcheck()}
     must = [
-        "terminal_leverage_zero", "downstream_leverage_high",
-        "competitor_group_disc_top", "answers_question_disc_mid", "else_disc_floor",
-        "tier_cost_penalty", "saturated_novelty_low", "fresh_novelty_high",
-        "impossible_claim_excluded", "deterministic_pure",
+        "terminal_claim_excluded", "dependency_gate_blocks_unproven_parent",
+        "dependency_gate_allows_terminal_fact_parent",
+        "attempts_cap_third_retry_excluded", "deterministic_pure",
+        "flip_potential_fallback_03", "flip_potential_decays_with_attempts",
+        "tier_cost_field_diagnostic", "impossible_claim_excluded",
+        "worth_weight_multiplier",
     ]
     missing = [m for m in must if m not in names]
     assert not missing, f"oracle missing case: {missing}"
