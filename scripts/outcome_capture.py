@@ -19,16 +19,6 @@ Usage:
 """
 from __future__ import annotations
 
-# #534: observability lifeline — module-level emit on load.
-import kunglao_log  # noqa: E402
-
-# #534: observability lifeline — module-level emit on load.
-try:
-    kunglao_log.emit(ws, actor="outcome_capture", action="converge",
-                              detail="module wired")
-except NameError:
-    pass
-
 import argparse
 import json
 import re
@@ -37,6 +27,7 @@ from pathlib import Path
 
 from status_defs import LedgerLineType, ledger_line_type
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
+import kunglao_log  # noqa: E402  (#104: #534 lifeline, moved off module scope)
 
 LEDGER_NAME = ".convergence_ledger.jsonl"
 
@@ -220,6 +211,13 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     ws = Path(args.workspace)
+    # #534 lifeline (#104): relocated from module scope — the old block read an
+    # undefined module-level `ws` and was NameError-swallowed, never emitted.
+    try:
+        kunglao_log.emit(ws, actor="outcome_capture", action="converge",
+                         detail="module wired")
+    except Exception:  # noqa: BLE001 — observability never disturbs the run
+        pass
     added = capture(ws)
     rows = read_outcome_rows(ws)
     reward = aggregate_reward(rows)

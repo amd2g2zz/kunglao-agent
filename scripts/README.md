@@ -63,7 +63,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `convergence_check.py` | convergence decision (DISPATCH/DISPATCH_VERIFIER/SATURATED/BLOCKED/CONVERGED) — the every-turn gate | hooks, CLI, lib(2), tests |
 | `convergence_health.py` | ledger-based HEALTHY/STALLED/SPINNING verdicts | hooks, CLI, lib(2), tests |
 | `anomaly_detector.py` | anomaly observation layer (#663): score_fact 3-dim + scan_anomalies + baseline corpus load (fail-open); feeds convergence ANOMALY_DETECTED; observe_taint taint-concentration observations (#692 WP5) | lib(1: convergence_check), CLI, tests |
-| `rho_checkpoint.py` | P2 ρ progress signal + V/D/ETA (#823): per-PQ grade expectation, σ(w·x+b) priors fallback chain, decide() value_signals attach (flag-gated shadow) | lib(1: convergence_check), tests |
+| `rho_checkpoint.py` | P2 ρ progress signal + V/D/ETA (#823): per-PQ grade expectation, σ(w·x+b) priors fallback chain, decide() value_signals attach (always-on since #51; raw rho stays shadow, prior V feeds the #9 ranking terms live) | lib(1: convergence_check), tests |
 | `rho_verifier.py` | #823-P2 ρ_t dense signal shadow — pluggable backend (deterministic default, green with no LLM), checkpoint (rho,z) pairing ledger face, Platt data path (single-source re-export) | lib(1: rho_checkpoint), tests |
 | `value_replay.py` | P1 offline replay settlement (#823): z_self four-channel relabel, evidence-gated reward score, bucket priors value-priors.yaml, replay-validation gate | CLI, lib(2: rho_checkpoint, priority_ratio), tests |
 | `infeasible_signal.py` | P3 doomed-trajectory signal (#823/#815): flat V × zero marginal discovery → infeasible_candidate event (shadow) | lib, tests |
@@ -171,12 +171,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `encoding_lint.py` | 裸 IO 编码扫描器 (#811) — AST 版 write_text/read_text/open/subprocess 无 encoding 检出; 残留清零后挂机械门防复发 | tests, CI |
 | `emit_gate.py` | EMIT_ACTIONS 双向门 (#880) — 正向: 词表孤儿扫描(每个 action 须有 ≥1 生产发射者, quoted-literal 宽网); 反向: emit-site literal 未注册扫描(#459 pattern 表); CI 挂 tests/test_emit_gate_880.py | tests, CI |
 | `utf8_boot.py` | CLI 入口 UTF-8 双保险 (#811) — PYTHONUTF8 setdefault + stdout/stderr reconfigure; 全入口 __main__ 接线 | hooks, tests |
-| `optimizer_core.py` | #833 θ 数值通道 — PARAM_SPEC(opt-theta-v1)+宪法隔离(CONSTITUTIONAL_KEYS 不可入 spec/提案)+SPSA(衰减步长)+replay_loss 规则近似+提案 JSON(只出提案不生效) | tests |
-| `optimizer_bandit.py` | #833 机制开关通道 — β-Bernoulli 后验(arm=机制×泳道)+ledger 归因+demotion_queue(四阶段门降级候选,不直接生效) | tests; 零运行时 consumer = v0.2 设计资产(#53 裁定: Thompson sampling 不进 v0.1.5, consumer=#50/#59; 价值接线 #881), 非死代码不删 |
 | `plan_stages.py` | plan 阶段模型 (#822) — runs/plan-stages.yaml 工件 + BIG_BANG_PLAN 检测(校验面 fail-closed) + 盘点裁决 maintain/adjust/replan(adjust/replan 必带 reason) + plan_review 落账 | CLI, tests |
 | `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |
 | `tuition_curve.py` | 学费曲线聚合器 + 座舱 V/D/ETA 数据面 (#823-P4) — settled rho_pair → mission 记录, stratum 聚合, got_cheaper 判定, cockpit_summary | tests |
-| `tuition_refit.py` | Platt 系数重拟合面 (#823-P4) — ledger (ρ,z_self) 对 → fit_platt → optimizer_core 提案（只提案不生效, 宪法隔离继承） | tests |
 
 ## Observability sidecar (issue #287)
 
@@ -281,8 +278,6 @@ by the now-registered `tools/auxiliary/capture_golden.py` golden cases
 | `bench_intake.py` / `bench_answer_key.py` / `bench_tokens.py` / `bench_runner.py` / `bench_grade.py` / `bench_redteam.py` / `bench_analyze.py` | #823 AB-VALUE (B1-B7), MERGED — kunglao-bench pipeline; `bench_runner` is the lane entry | REGISTERED as the kunglao-bench harness; consumer = bench runs, not repo runtime. Follow-up value channel: #881 aggregation |
 | `infeasible_proposal.py` | #815 early-stop wiring, MERGED — INFEASIBLE-as-claim proposal semantics (L1/L2/L3 + evidence gate) | REGISTERED (proposal generator); consumer = orchestrator loop on recovery-ladder exhaustion |
 | `plan_stages.py` | #822 plan stage model, MERGED — `runs/plan-stages.yaml` + BIG_BANG detection + inventory rulings | REGISTERED; consumer = plan-phase ritual |
-| `optimizer_core.py` / `optimizer_bandit.py` | #833, MERGED — theta (SPSA-on-replay) + beta-Bernoulli arm accounting; constitutional isolation (proposal-only, zero auto-apply paths) | REGISTERED; consumers = proposal/derad queue faces; value wiring in #881 |
-| `tuition_refit.py` | #823-P4, MERGED — Platt refit proposals from `rho_pair` ledger rows (proposal-only) | REGISTERED; consumer = #881 aggregation side |
 | `emit_gate.py` | #880, MERGED — EMIT vocabulary double-ended gate (write-side actions must have >=1 emitter; read-side consumers must exist) | REGISTERED (CI-runnable checker); consumer = release-check extension candidate |
 | `search_gate.py` | user-painpoint-driven (search-before-research gate; no issue ref) | REGISTERED as orchestrator-loop gate; consumer = post-worker fact promotion |
 | `reuse_gate.py` | user-painpoint-driven (reuse-before-recompute; no issue ref) | REGISTERED as dispatch-side gate; consumer = dispatch audit chain |
