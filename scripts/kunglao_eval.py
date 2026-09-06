@@ -100,50 +100,59 @@ def oracle_selfcheck() -> list[dict]:
     def check(name, cond, reason):
         results.append({"name": name, "passed": bool(cond), "reason": reason if not cond else "ok"})
 
-    out = pr.priority_ratio([_C("C-1"), _C("C-2")], {"depends_on": {"C-2": ["C-1"]}},
-                            pr.EvidenceView(terminal_fact_claims=frozenset({"C-1"})))
-    by = {a.claim_id: a for a in out}
-    check("terminal_leverage_zero", by["C-1"].leverage == 0.0, f"L={by['C-1'].leverage}")
+    # #107 Thompson rebuild: the known-answer cases now pin the candidate
+    # filter, the deterministic Thompson sampling, the flip-potential
+    # diagnostics and the #759 worth channel (the L/D/N terms are deleted
+    # with the weighted formula — owner ruling "之前的不要了").
+    out = pr.priority_ratio([_C("C-1", status="PROVEN"), _C("C-2")], {}, pr.EvidenceView())
+    check("terminal_claim_excluded", [a.claim_id for a in out] == ["C-2"],
+          f"got {[a.claim_id for a in out]}")
 
-    out = pr.priority_ratio([_C("HUB"), _C("LA"), _C("LB"), _C("ORPH")],
-                            {"depends_on": {"LA": ["HUB"], "LB": ["HUB"]}}, pr.EvidenceView())
-    by = {a.claim_id: a for a in out}
-    check("downstream_leverage_high", by["HUB"].leverage > by["ORPH"].leverage,
-          f"HUB={by['HUB'].leverage} ORPH={by['ORPH'].leverage}")
+    out = pr.priority_ratio([_C("P"), _C("CHILD")],
+                            {"depends_on": {"CHILD": ["P"]}}, pr.EvidenceView())
+    check("dependency_gate_blocks_unproven_parent",
+          [a.claim_id for a in out] == ["P"], f"got {[a.claim_id for a in out]}")
 
-    out = pr.priority_ratio([_C("CA", competitor_group="q1"), _C("CB", competitor_group="q1")],
-                            {"competitor_groups": {"q1": ["CA", "CB"]}}, pr.EvidenceView())
-    by = {a.claim_id: a for a in out}
-    check("competitor_group_disc_top", by["CA"].discriminator == 1.0, f"D={by['CA'].discriminator}")
+    out = pr.priority_ratio([_C("P"), _C("CHILD")],
+                            {"depends_on": {"CHILD": ["P"]}},
+                            pr.EvidenceView(terminal_fact_claims=frozenset({"P"})))
+    check("dependency_gate_allows_terminal_fact_parent",
+          {a.claim_id for a in out} == {"P", "CHILD"}, f"got {[a.claim_id for a in out]}")
 
-    out = pr.priority_ratio([_C("C", answers_question="q")], {}, pr.EvidenceView())
-    check("answers_question_disc_mid", out[0].discriminator == 0.5, f"D={out[0].discriminator}")
-
-    out = pr.priority_ratio([_C("C")], {}, pr.EvidenceView())
-    check("else_disc_floor", out[0].discriminator == 0.2, f"D={out[0].discriminator}")
-
-    out = pr.priority_ratio([_C("CHEAP", evidence_tier_attempted=0), _C("DEEP", evidence_tier_attempted=2)],
+    out = pr.priority_ratio([_C("OK"), _C("RETRY3", promotion_attempts=3)],
                             {}, pr.EvidenceView())
-    by = {a.claim_id: a for a in out}
-    check("tier_cost_penalty", by["CHEAP"].cost < by["DEEP"].cost,
-          f"CHEAP={by['CHEAP'].cost} DEEP={by['DEEP'].cost}")
+    check("attempts_cap_third_retry_excluded",
+          [a.claim_id for a in out] == ["OK"], f"got {[a.claim_id for a in out]}")
 
-    claims = [_C("C1", statement="c2 mpd"), _C("C2", statement="c2 pegasus")]
-    o_sat = pr.priority_ratio(claims, {}, pr.EvidenceView(fact_count_by_category={"c2_config_extract": 3}))
-    o_fr = pr.priority_ratio(claims, {}, pr.EvidenceView(fact_count_by_category={"c2_config_extract": 0}))
-    check("saturated_novelty_low", o_sat[0].novelty < o_fr[0].novelty,
-          f"sat={o_sat[0].novelty} fresh={o_fr[0].novelty}")
-    check("fresh_novelty_high", o_fr[0].novelty == 1.0, f"N={o_fr[0].novelty}")
+    o1 = pr.priority_ratio([_C("A"), _C("B")], {}, pr.EvidenceView())
+    o2 = pr.priority_ratio([_C("A"), _C("B")], {}, pr.EvidenceView())
+    check("deterministic_pure",
+          [a.to_dict() for a in o1] == [a.to_dict() for a in o2], "two runs differ")
+
+    fp = o1[0].feeds.get("case_flip_potential", "")
+    check("flip_potential_fallback_03", "0.3" in fp,
+          f"feeds={o1[0].feeds}")
+
+    dec = pr.priority_ratio([_C("DECAYED", promotion_attempts=2)], {}, pr.EvidenceView())[0]
+    check("flip_potential_decays_with_attempts",
+          "P(flip)=0.167" in dec.feeds.get("case_flip_potential", ""),
+          f"feeds={dec.feeds}")
+
+    cheap = pr.priority_ratio([_C("CHEAP", evidence_tier_attempted=0),
+                               _C("DEEP", evidence_tier_attempted=2)], {}, pr.EvidenceView())
+    by = {a.claim_id: a for a in cheap}
+    check("tier_cost_field_diagnostic", by["CHEAP"].cost < by["DEEP"].cost,
+          f"CHEAP={by['CHEAP'].cost} DEEP={by['DEEP'].cost}")
 
     out = pr.priority_ratio([_C("IMP")], {"depends_on": {"IMP": ["MISSING"]}}, pr.EvidenceView())
     check("impossible_claim_excluded", len(out) == 0, f"got {len(out)} actions")
 
-    claims = [_C("A", statement="c2"), _C("B", statement="家族 vidar")]
-    deps = {"depends_on": {"B": ["A"]}}
-    o1 = pr.priority_ratio(claims, deps, pr.EvidenceView())
-    o2 = pr.priority_ratio(claims, deps, pr.EvidenceView())
-    check("deterministic_pure",
-          [a.to_dict() for a in o1] == [a.to_dict() for a in o2], "two runs differ")
+    worth = pr.priority_ratio([_C("RCE", statement="rce chain")], {}, pr.EvidenceView(
+        value_class_weights={"rce": 4.0}))[0]
+    plain = pr.priority_ratio([_C("RCE", statement="rce chain")], {}, pr.EvidenceView())[0]
+    check("worth_weight_multiplier",
+          worth.weight == 4.0 and worth.score == round(plain.score * 4.0, 6),
+          f"worth={worth.score} plain={plain.score} weight={worth.weight}")
 
     return results
 
@@ -407,7 +416,7 @@ def _policy_legacy(state: EpisodeState, dispatched: set[str]) -> str | None:
             continue
         cid = c["id"]
         out_deg = len((state.deps.get("depends_on", {}) or {}).get(cid, []) or [])
-        score = (0.4 * out_deg + 0.3 * pr.cheapness(c)
+        score = (0.4 * out_deg + 0.3 * (1.0 / pr.action_cost(c))
                  + 0.3 * (1.0 - 0.1 * int(c.get("promotion_attempts", 0))))
         if best is None or score > best_score or (score == best_score and cid < best):
             best, best_score = cid, score
