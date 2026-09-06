@@ -68,12 +68,16 @@ def check(notes_dir, facts_dir, max_overlap: float = DEFAULT_MAX_OVERLAP) -> dic
 
     ids = fact_ids(fact_files)
     corpus: set = set()
+    # #103: 读文件统一 errors="replace"——一个非法 UTF-8 字节降级为内容
+    # 继续判定，不许升格成 UnicodeDecodeError（否则 completion_gate 的
+    # fail-open 笼子会把它吞成 PASS，R1/R2/R3 全部失效）。
     for f in fact_files:
-        corpus |= _words(_body(f.read_text(encoding="utf-8")))
+        corpus |= _words(_body(f.read_text(encoding="utf-8",
+                                          errors="replace")))
 
     checked = 0
     for n in note_files:
-        body = _body(n.read_text(encoding="utf-8"))
+        body = _body(n.read_text(encoding="utf-8", errors="replace"))  # #103
         checked += 1
         words = _words(body)
         if not words:
