@@ -243,7 +243,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 3431dead6e71a65ca60999053a3a131026d9354fb1e764411c00b1c2174cd1ef
+    sha256: eb4c622f3b509f834b8f61bb00ae3e92d701c8e602c94c0b41da4aa139c45f2c
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -431,7 +431,7 @@ files:
   - src: scripts/kunglao-decide.py
     dest: .claude/scripts/kunglao-decide.py
     kind: scaffold
-    sha256: 8434031bae08019f500934deb61ee4ce30fdae488b0350b43c44d52d08ecd92e
+    sha256: 386d55662bb3338c670333f885bb7d21c54161fabefb74e5dda482abc0f1e220
   - src: scripts/kunglao-digest.py
     dest: .claude/scripts/kunglao-digest.py
     kind: scaffold
@@ -559,7 +559,7 @@ files:
   - src: scripts/notes_discriminator.py
     dest: .claude/scripts/notes_discriminator.py
     kind: scaffold
-    sha256: 2553703d1ab0ff8bb58463d89d962dc583b5a116938f0157185971763a178154
+    sha256: 3feec4b348ca3a7c875ba35ef4b298f3c7c1eb608807f1decf5130eaa04298b3
   - src: scripts/notes_gate.py
     dest: .claude/scripts/notes_gate.py
     kind: scaffold
@@ -611,7 +611,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: d3c078bdde46d57fa43778c85a592381a57dc45c791135780100c6fd292e806a
+    sha256: 4b817584d03c8fba9d406ea35cd8c276e136e52c894915235173d1c9ff06b90c
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -743,7 +743,7 @@ files:
   - src: scripts/summary_discriminator.py
     dest: .claude/scripts/summary_discriminator.py
     kind: scaffold
-    sha256: 73537b5e7c1377d5463a27a34acc077e203312da9d8379acb528f9539d6d852d
+    sha256: 360201f58a8f210e531a1ff0e8a2deeb7eef478be4aadd3ce1b1a970d2436c38
   - src: scripts/template_gen.py
     dest: .claude/scripts/template_gen.py
     kind: scaffold
