@@ -164,7 +164,6 @@ max-complexity = 12
 "scripts/toolchain.py" = ["C901", "E501"]
 "scripts/toolchain_negotiation.py" = ["C901"]
 "scripts/troubleshooting_gate.py" = ["E501"]
-"scripts/tuition_refit.py" = ["E501"]
 "scripts/wire_up_settings.py" = ["E501"]
 "scripts/write_gate.py" = ["C901", "E501"]
 "scripts/write_guard_unlock.py" = ["E501"]

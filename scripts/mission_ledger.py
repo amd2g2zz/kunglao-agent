@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""mission_ledger.py — #823-P1 主线欠账表 + V_m（shadow 形态）。
+"""mission_ledger.py — #823-P1 主线欠账表 + V_m。
 
 欠账表 = primary_questions × 三态（answered/blocked/unattempted），V_m 锚定
 欠账表而非活动量——防傻性质：边角料 claims 全 PROVEN 而与 PQ 零关联时，
-V_m 增量严格为 0（测试锚定，蓝图 §7.2）。本模块 shadow：只计算+落盘，
-不改任何决策路径（decide/priority 行为改动属 P3）。
+V_m 增量严格为 0（测试锚定，蓝图 §7.2）。
+
+Shadow/live 边界（#104 修正，旧文"全程不改任何决策路径"已不准确）：
+raw 信号（value_signals/rho 落账）仍为 shadow——只计算+落盘；但派生量
+v_norm/d_slope_norm/gap_bucket 已是 priority_ratio 的 live 排序输入
+（#9/#823-P3 接线，gap_bucket 领排 sort key 首位）。
 
 PQ 解析复用 convergence_check._parse_primary_questions（单一解析合同，
 canonical/legacy/string/mapping 四形状），文本取自原始条目。

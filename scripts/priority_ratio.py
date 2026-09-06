@@ -60,16 +60,6 @@ Usage:
 """
 from __future__ import annotations
 
-# #534: observability lifeline — module-level emit on load.
-import kunglao_log  # noqa: E402
-
-# #534: observability lifeline — module-level emit on load.
-try:
-    kunglao_log.emit(ws, actor="priority_ratio", action="priority_deviation",
-                             detail="module wired")
-except NameError:
-    pass
-
 import argparse
 import json
 import re
@@ -81,6 +71,7 @@ import yaml
 
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES, SUSPENDED
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
+import kunglao_log  # noqa: E402  (#104: #534 lifeline, moved off module scope)
 import tuition_curve  # noqa: E402  (#9: v_norm/d_slope helpers, single source)
 
 WEIGHTS = {"L": 0.45, "D": 0.30, "N": 0.25}
@@ -921,6 +912,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
     ws = Path(args.workspace)
+    # #534 lifeline (#104): relocated from module scope — the old block read an
+    # undefined module-level `ws` and was NameError-swallowed, never emitted.
+    try:
+        kunglao_log.emit(ws, actor="priority_ratio",
+                         action="priority_deviation", detail="module wired")
+    except Exception:  # noqa: BLE001 — observability never disturbs the run
+        pass
     reg = _load_yaml(ws / "claim-register.yaml")
     deps = _load_yaml(ws / "claim_deps.yaml")
     evidence = EvidenceView.from_workspace(ws)

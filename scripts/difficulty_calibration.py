@@ -358,9 +358,14 @@ def calibrate_workspace(ws: Path | str) -> dict:
     return calibrate(features_from_evidence(evidence))
 
 
-def mount(ws: Path | str, result: dict) -> Path:
+def mount(ws: Path | str, result: dict, *, mount_spec: bool = True) -> Path:
     """Write evidence/difficulty.json (+ merge ``difficulty:`` into
-    task_spec.yaml when present, preserving user keys — intake_promise shape).
+    task_spec.yaml when present and ``mount_spec``, preserving user keys —
+    intake_promise shape).
+
+    #104: the CLI merge is opt-in (--mount); a bare invocation writes only
+    evidence/difficulty.json. Callers that own the mount decision (init)
+    keep the default mount_spec=True.
 
     task_spec absent -> evidence/difficulty.json is the only surface (rc ok);
     task_spec unparseable -> CalibrationMountError (fail-closed, no silent drop).
@@ -374,7 +379,7 @@ def mount(ws: Path | str, result: dict) -> Path:
                    encoding="utf-8")
 
     spec_path = ws / "task_spec.yaml"
-    if spec_path.exists():
+    if mount_spec and spec_path.exists():
         try:
             spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
         except yaml.YAMLError as exc:
@@ -404,7 +409,9 @@ def main(argv: list[str] | None = None) -> int:
     ws = args.path
     result = calibrate_workspace(ws)
     try:
-        out_path = mount(ws, result)
+        # #104: the task_spec merge is gated behind --mount — a bare run
+        # writes evidence/difficulty.json only and says so.
+        out_path = mount(ws, result, mount_spec=args.mount)
     except CalibrationMountError as exc:
         print(f"difficulty-calibration: ERROR {exc}", file=sys.stderr)
         return 2
@@ -415,7 +422,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"difficulty-calibration: tier={result['tier']} "
               f"score={result['score']} dominant={result['dominant_factor']} "
               f"wrote {out_path}"
-              + (" + task_spec.yaml difficulty key" if args.mount else ""))
+              + (" + task_spec.yaml difficulty key" if args.mount else
+                 " (task_spec.yaml NOT merged — pass --mount)"))
     return 0
 
 

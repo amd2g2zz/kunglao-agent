@@ -279,7 +279,7 @@ files:
   - src: scripts/difficulty_calibration.py
     dest: .claude/scripts/difficulty_calibration.py
     kind: scaffold
-    sha256: d5327b28690f23b2587fc7c1d59c5fc945d1f2a394f6cef4519d156a949425d1
+    sha256: 769e4928058eb618464dbfeba9386791fe72982552c7decee0ee980f27bfed87
   - src: scripts/difficulty_thresholds.py
     dest: .claude/scripts/difficulty_thresholds.py
     kind: scaffold
@@ -547,7 +547,7 @@ files:
   - src: scripts/mission_ledger.py
     dest: .claude/scripts/mission_ledger.py
     kind: scaffold
-    sha256: fb8e7ba15286f7e5f8b9156f7b622c8989d910776da61c4849b2b14304ec3374
+    sha256: 36a67745fff0dbf1f044f036b763c7c63c200f6af32c6bd6eb17862862b76016
   - src: scripts/mission_stall.py
     dest: .claude/scripts/mission_stall.py
     kind: scaffold
@@ -572,18 +572,10 @@ files:
     dest: .claude/scripts/obligation_discovery.py
     kind: scaffold
     sha256: dd94e5003639701888eaa908965ddab413a62e159cd1275e89cc5973fc3103e7
-  - src: scripts/optimizer_bandit.py
-    dest: .claude/scripts/optimizer_bandit.py
-    kind: scaffold
-    sha256: dbfb95cec3ddf9bc9a3e9ac203e488343d2fc43871ba448d25fb4b5f37c64705
-  - src: scripts/optimizer_core.py
-    dest: .claude/scripts/optimizer_core.py
-    kind: scaffold
-    sha256: 0afb46d3fd5195948588f429914d9ad9e7b77baa5d92c198fdcd8de7b4966e4f
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
-    sha256: d6a973950ad47309e3a5e1aed10e8b715c388c47dba06f63709af6ce9ebea17f
+    sha256: 139fb1b45a04e153dbde6d69c4bd8dd130bff475ca204a483faa1a12ebb88e4a
   - src: scripts/pkg_detect.py
     dest: .claude/scripts/pkg_detect.py
     kind: scaffold
@@ -611,7 +603,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 4b817584d03c8fba9d406ea35cd8c276e136e52c894915235173d1c9ff06b90c
+    sha256: 123042525ed1dafc052565fee78ef16a959ea6a2d30054a63b23884a9fe4e58c
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -796,10 +788,6 @@ files:
     dest: .claude/scripts/tuition_curve.py
     kind: scaffold
     sha256: e7074d625c829a9e202f3ce7e3100da403157672ae9eae2c17f3bd3c11d3af1d
-  - src: scripts/tuition_refit.py
-    dest: .claude/scripts/tuition_refit.py
-    kind: scaffold
-    sha256: 595ecd1d796a670e75644d5ce87afe48afc94ad6f8681618b382d01c09a88d04
   - src: scripts/update_index.py
     dest: .claude/scripts/update_index.py
     kind: scaffold
