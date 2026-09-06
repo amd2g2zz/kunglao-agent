@@ -56,6 +56,23 @@ import convergence_check  # module under test (== baseline before #443 GREEN)
 BASELINE_COMMIT = "cabc7d9"  # the #51 value-flag-removal commit — decide() outputs frozen at the 2026-09-05 re-pin (see below)
 ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 
+# 2026-09-06 zero-drift verification (#98 DRAIN worker gates): the DRAIN
+# probe table gained STUCK_WORKERS_PRESENT + ACTIVE_WORKERS_PRESENT,
+# appended AFTER the frozen completion-transaction order (orphan >
+# unverified > note-gap > hyp > discovery > contradiction > anomaly) and
+# BEFORE the DRAIN_CLEAN catch-all — every completeness gate keeps its
+# verdict priority, and the new gates can only fire on a drained claim
+# face with live workers. All 32 frozen cases re-verified byte-identical
+# after the change (the predicates read snapshot data the corpus's DRAIN
+# cases never populate: none of them writes a worker-status file), so NO
+# re-pin was needed. Live semantic change, documented but unanchored (the
+# matrix has no worker-bearing DRAIN case — covered by the #98 block in
+# tests/test_decide_state_machine.py instead): the issue #98 probe state
+# (single IN_PROGRESS claim + aged worker-status; pre-fix decision
+# CONVERGED / exit 0 / "STOP dispatch; deliver") now reads
+# BLOCKED / exit 4 via the shared #595 stuck action (CONVERGED -> BLOCKED);
+# the same face with a fresh worker now reads SATURATED / exit 3
+# (CONVERGED -> SATURATED, busy-poll).
 # 2026-09-05 re-pin (#51 value loop unification): #51 removed the
 # KUNGLAO_VALUE_ALGO experiment flag (no-backcompat policy), making
 # rho_checkpoint.attach_signals an UNCONDITIONAL part of decide() — the

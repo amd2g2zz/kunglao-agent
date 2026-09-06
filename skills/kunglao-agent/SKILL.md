@@ -181,10 +181,11 @@ Act on the decision + exit code — it is a command, not a suggestion:
 | --- | --- | --- | --- |
 | `DISPATCH` | 1 | open claims + free slots | Run `priority_ratio.py`; dispatch the top claim — this turn, no exceptions. Dispatch = fire-and-continue: launch the worker as a BACKGROUND task, do NOT block on its return — the next turn is the tick that monitors it |
 | `DISPATCH_VERIFIER` | 2 | partial facts + free slots | Dispatch a verifier; do NOT declare PROVEN without sign-off |
-| `SATURATED` | 3 | open claims but 0 free slots | Poll stuck workers; do not idle |
-| `BLOCKED` | 4 | open claims all blocked | Resolve blockers (self-recovery), then re-check |
+| `SATURATED` | 3 | open claims but 0 free slots — or live workers on an otherwise-drained claim face (busy is not done) | Poll stuck workers; do not idle |
+| `BLOCKED` | 4 | open claims all blocked (or a stuck worker on a drained claim face) | Resolve blockers (self-recovery), then re-check |
 | `THINK` | - | tick waiting period - heartbeat_tick fired the THINK seat | Read the seat's `runs/.think-<ts>.md` and fill its three sections (patterns / hypotheses / value) IN PLACE - that artifact IS this tick's action_taken (EMPTY forbidden); execute any `suggested_searches` as the NEXT action; structured branching goes through the sequentialthinking chain (contract detail owned by the parallel worker-contract wave) |
 | `CONVERGED` | 0 | no open claims, no partials, all PQs have passes-notes, completion transaction clean | claim loop done — CONVERGED now requires zero global contradictions, zero unconsumed discoveries, and PROVEN provenance (recomputed in `convergence_check.py` + `completion_gate.py`). STOP dispatch; deliver |
+| `CRASHED` | 65 | the check itself crashed (malformed YAML, unexpected error) — never a decided state | Read the stderr traceback and repair the workspace file it names; 1/2/3 always mean a decided state, 65 always means a broken check — never dispatch on 65 |
 
 Manual fallback (script unavailable): scan `claim-register.yaml` for OPEN/PARTIALLY-VERIFIED, confirm `active_workers < 3`, scan `facts/_INDEX.md` for PARTIAL facts. DISPATCH and DISPATCH_VERIFIER must be acted on before this turn ends — dispatched as background launches, never awaited inline. A worker notification is a signal, not a trigger: process the result, then re-run the convergence check.
 
