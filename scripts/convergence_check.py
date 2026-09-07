@@ -64,6 +64,10 @@ from retract_claim import RETRACTED, TERMINAL_WITH_RETRACTED
 # STUCK_WORKERS_PRESENT path (no parallel detector, no second scan pass).
 import worker_death as _worker_death
 from liveness_policy import DEAD_WORKER_MINUTES as _DEAD_WORKER_MINUTES
+# #147: the Phase-0 goal operationalization validator (#128). Its declared
+# `generalization` bit is the coverage contract the DRAIN oracle face
+# enforces — convergence requires DECLARED oracle coverage.
+import goal_operationalization as _goal_op
 # #863 Family C: workspace resolution is single-sourced in ws_layout (this
 # module used to be the ONLY manifest-aware copy — now every consumer is).
 from ws_layout import resolve_quiet as _resolve_ws
@@ -363,6 +367,13 @@ def _load_oracle_status(workspace: Path) -> dict:
         precedent — a corrupt verdict file cannot silently re-enable
         CONVERGED). Unknown status values normalize to "pending" (the
         conservative member of the triad).
+
+    #147 revocation: the absent-file fail-open above is REVOKED at the
+    gate for workspaces under the coverage contract — a declared
+    required/unknown generalization turns the absent/armed-empty face into
+    a BLOCK (see _load_goal_op + _DecideInputs.coverage_blocks). The
+    untouched behavior now applies ONLY to true-legacy workspaces (no
+    goal-operationalization.yaml AND no task-oracle.yaml).
     """
     path = workspace.joinpath(*ORACLE_STATUS_REL)
     if not path.exists():
@@ -391,6 +402,73 @@ def _load_oracle_status(workspace: Path) -> dict:
         return {"cases": [], "low_discriminativity": [],
                 "error": f"{type(exc).__name__}: {exc}"}
     return {"cases": cases, "low_discriminativity": low, "error": None}
+
+
+# #147 declared oracle coverage: the Phase-0 declaration files. The
+# goal-operationalization.yaml `generalization` bit (#128) is the coverage
+# contract; task-oracle.yaml (#473, the verbatim task heartbeat_tick marks
+# registered) is the marker that a workspace OWES that contract — a
+# workspace carrying neither predates it entirely (true legacy) and keeps
+# the pre-#147 untouched behavior.
+GOAL_OP_NAME = "goal-operationalization.yaml"
+TASK_ORACLE_NAME = "task-oracle.yaml"
+
+# The two named block reasons (issue text, quoted verbatim in the action).
+COVERAGE_UNDECLARED = (
+    "verification requirements undeclared — complete the Phase-0 "
+    "operationalization")
+COVERAGE_MISSING = (
+    "verification declared required but no oracle coverage delivered")
+
+
+def _load_goal_op(workspace: Path) -> dict:
+    """Classify the workspace's declared-coverage contract (#147).
+
+    Returns {"present", "valid", "legacy", "generalization", "declared_ts",
+    "post_dispatch", "errors", "error"}:
+      - legacy=True: neither contract file exists (pre-#473 workspace) —
+        the coverage gate stays silent, #108 behavior untouched;
+      - present=False (and task-oracle.yaml registered): the workspace owes
+        the Phase-0 operationalization and does not have it — undeclared;
+      - present + load/validate failure (unreadable, schema mismatch,
+        undeclared bit — GoalOpError walls) or validator errors (incl. the
+        R4 unstamped face): invalid — fail-closed with the cause;
+      - valid: carries the declared bit + the R4 timestamp.
+
+    Loud-rejection domain (#103 tiering): GoalOpError is a ValueError, so
+    the _GATE_INPUT_EXC net below catches IO/parse/shape degradation; the
+    classification treats every degradation as INVALID (fail-closed), the
+    same posture as the contradiction scan.
+    """
+    op_path = workspace / GOAL_OP_NAME
+    legacy = not op_path.exists() and not (workspace / TASK_ORACLE_NAME).exists()
+    if legacy:
+        return {"present": False, "valid": True, "legacy": True,
+                "generalization": None, "declared_ts": "",
+                "post_dispatch": False, "errors": [], "error": None}
+    if not op_path.exists():
+        return {"present": False, "valid": False, "legacy": False,
+                "generalization": None, "declared_ts": "",
+                "post_dispatch": False, "errors": [], "error": None}
+    try:
+        doc = _goal_op.load(op_path)
+        report = _goal_op.validate(doc)
+    except _goal_op.GoalOpError as exc:
+        return {"present": True, "valid": False, "legacy": False,
+                "generalization": None, "declared_ts": "",
+                "post_dispatch": False, "errors": [],
+                "error": f"{type(exc).__name__}: {exc}"}
+    except _GATE_INPUT_EXC as exc:  # defensive net — load/validate raise GoalOpError
+        return {"present": True, "valid": False, "legacy": False,
+                "generalization": None, "declared_ts": "",
+                "post_dispatch": False, "errors": [],
+                "error": f"{type(exc).__name__}: {exc}"}
+    errors = [str(e) for e in report["errors"]]
+    return {"present": True, "valid": not errors, "legacy": False,
+            "generalization": report["generalization"],
+            "declared_ts": str(doc.get("declared_ts") or ""),
+            "post_dispatch": bool(report["post_dispatch"]),
+            "errors": errors, "error": None}
 
 
 def _parse_pq_item(q: dict) -> tuple[str | None, str | None, str | None]:
@@ -671,7 +749,7 @@ class Event(str, Enum):
     # ACTIVE is DRAIN-only (SCHEDULE already routes work by claim face).
     STUCK_WORKERS_PRESENT = "STUCK_WORKERS_PRESENT"   # #595 SCHEDULE / #98 DRAIN: stuck workers gate both stages
     ACTIVE_WORKERS_PRESENT = "ACTIVE_WORKERS_PRESENT"  # #98 DRAIN: live worker on a drained claim surface
-    ORACLE_CASE_RED = "ORACLE_CASE_RED"               # #108 DRAIN: runner verdict joins the completion transaction
+    ORACLE_CASE_RED = "ORACLE_CASE_RED"               # #108 DRAIN: runner verdict joins the completion transaction; #147: the declared-coverage gate composes into the same acceptance face
     DRAIN_CLEAN = "DRAIN_CLEAN"                        # DRAIN catch-all
     # SCHEDULE stage
     WORK_AND_FREE_SLOT = "WORK_AND_FREE_SLOT"
@@ -731,6 +809,7 @@ class _DecideInputs:
     _anomalies: list | None = field(default=None, repr=False)
     _open_hyps: list | None = field(default=None, repr=False)
     _oracle: dict | None = field(default=None, repr=False)
+    _goal_op: dict | None = field(default=None, repr=False)
 
     def open_hypotheses(self) -> list:
         """#662 unadjudicated-hypothesis gate input (lazy + cached).
@@ -825,6 +904,52 @@ class _DecideInputs:
         if st["error"] is None and not st["cases"]:
             face["absent"] = True
         return face
+
+    def goal_op(self) -> dict:
+        """#147 declared-coverage classification (lazy + cached).
+
+        See _load_goal_op for the classification contract. Pure reads —
+        the resume path (emit_snapshot=False) stays side-effect free."""
+        if self._goal_op is None:
+            self._goal_op = _load_goal_op(self.workspace)
+        return self._goal_op
+
+    def armed_cases(self) -> list:
+        """#147: ARMED oracle cases — cases with live instrumentation (the
+        #108 `instrumented` flag). A scaffold case (never instrumented) is
+        not coverage: the runner never ran it against a live client, so it
+        cannot witness the deliverable."""
+        return [c for c in self.oracle_status()["cases"]
+                if c["instrumented"]]
+
+    def coverage_blocks(self) -> list[str]:
+        """#147: the DECLARED oracle-coverage gate — zero or one reason.
+
+        The final semantics (issue body + owner amendments):
+          - true legacy (no contract files) -> silent, #108 untouched;
+          - contract owed but the operationalization missing / invalid /
+            unstamped -> COVERAGE_UNDECLARED (fail-closed on the
+            undeclared, named reason + cause);
+          - generalization required|unknown AND zero armed cases ->
+            COVERAGE_MISSING (an absent verdict file is this block, never
+            untouched — the documented _load_oracle_status fail-open is
+            revoked at this gate for contracted workspaces);
+          - required|unknown + armed cases -> silent here (per-case
+            red/pending stays oracle_blocks()'s call);
+          - not-applicable -> silent (the DECLARED fast path — the
+            timestamped declaration is the audit record; a red verdict on
+            an existing case still blocks via oracle_blocks(): a
+            declaration covers absence of coverage, not failed cases)."""
+        op = self.goal_op()
+        if op["legacy"]:
+            return []
+        if not op["present"] or not op["valid"]:
+            cause = op["error"] or "; ".join(op["errors"]) or "undeclared"
+            return [f"{COVERAGE_UNDECLARED} ({GOAL_OP_NAME}: {cause})"]
+        if op["generalization"] in ("required", "unknown"):
+            if not self.armed_cases():
+                return [COVERAGE_MISSING]
+        return []
 
     def discovery_reason(self) -> str:
         """#147 discovery scan, cached. Computed only when DRAIN asks for it."""
@@ -1021,7 +1146,11 @@ def _oracle_case_red(s: _DecideInputs) -> bool:
     # instrumentation ("unknown" is not "pass"), and on an unreadable
     # verdict file (fail-closed); a missing file is legal (legacy
     # workspaces, no runner yet) — see oracle_blocks().
-    return bool(s.oracle_blocks())
+    # #147: the declared-coverage gate composes into the same acceptance
+    # event — an undeclared operationalization, or a declared
+    # required/unknown with zero armed cases, blocks exactly here (no
+    # second probe row; the issue scopes the gate INTO the oracle face).
+    return bool(s.oracle_blocks() or s.coverage_blocks())
 
 
 def _work_no_free_slot(s: _DecideInputs) -> bool:
@@ -1240,11 +1369,30 @@ def _act_active_workers(s: _DecideInputs) -> str:
 def _act_oracle_red(s: _DecideInputs) -> str:
     # #108: name the offending cases — the orchestrator fixes the
     # implementation (or the case) and re-runs oracle_runner.py.
-    blocks = "; ".join(s.oracle_blocks())
+    # #147: the declared-coverage reasons ride the same face. A pure
+    # coverage block (no case verdict exists to name) gets the coverage
+    # directive verbatim, plus the v0.1.5 SKELETON marker (explicitly
+    # interim): the segment boundary is a POLICY point over the designed
+    # action space and currently routes through failure-analysis routing;
+    # the policy-driven action space is the #12/#13/#59 v0.2 design
+    # landing — no operators/rollouts are implemented here.
+    cov = s.coverage_blocks()
+    case_blocks = s.oracle_blocks()
+    marker = (" [interim #147] the segment boundary routes through "
+              "failure-analysis routing; the policy-driven action space "
+              "is the #12/#13/#59 v0.2 design landing.")
+    if cov and not case_blocks:
+        return (f"Cannot CONVERGE: {cov[0]} -> deliver the declared "
+                f"verification: arm and pass oracle cases via "
+                f"oracle_runner.py (required/unknown generalization), or "
+                f"complete goal-operationalization.yaml first."
+                f"{marker}")
+    blocks = "; ".join(case_blocks + cov)
     return (f"Cannot CONVERGE: oracle runner verdict is not clean ({blocks}) "
             f"-> fix the implementation or strengthen the case, re-run "
             f"oracle_runner.py. A red or pending-instrumented case is not "
-            f"satisfiable: 'unknown' is not 'pass' (#108).")
+            f"satisfiable: 'unknown' is not 'pass' (#108)."
+            f"{marker if cov else ''}")
 
 
 def _act_stuck_workers(s: _DecideInputs) -> str:
@@ -1560,6 +1708,27 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
     # for open_count in heartbeat reports). Without a verdict file the face
     # carries all-zero counts + an explicit absent marker.
     decision["oracle"] = snap.oracle_face()
+    # #147: the declared-coverage face — the #128 generalization declaration
+    # exactly as the gate read it. Attached ONLY when the workspace carries
+    # a coverage contract (goal-operationalization.yaml or task-oracle.yaml);
+    # a true-legacy workspace predates the contract and keeps its
+    # byte-frozen decide() shape (the #829 conditional-key precedent — the
+    # frozen anchor matrix has no contract-bearing case and stays valid
+    # without a re-pin).
+    op = snap.goal_op()
+    if not op["legacy"]:
+        cov = snap.coverage_blocks()
+        decision["declared_coverage"] = {
+            "declared": bool(op["present"] and op["valid"]),
+            "generalization": op["generalization"],
+            "declared_ts": op["declared_ts"],
+            "stamped": bool(op["declared_ts"]),
+            "post_dispatch": op["post_dispatch"],
+            "armed_cases": len(snap.armed_cases()),
+            "status": ("declared" if op["present"] and op["valid"]
+                       else "invalid" if op["present"] else "undeclared"),
+            "blocks": cov,
+        }
     # #634 Part A: PARK — every open claim waits on an EXTERNAL gate
     # (blocker external:true), no active workers, no partials pending.
     # That is legal idle, not a coerced BLOCKED/DISPATCH that burns ticks
@@ -1724,6 +1893,11 @@ def _human(d: dict) -> str:
                 line += (f" (low-discriminativity: {o['low_discriminativity']}"
                          f" — strengthen those cases)")
             lines.append(line)
+    dc = d.get("declared_coverage")  # #147: the declared-coverage face
+    if dc is not None:
+        lines.append(f"declared coverage: {dc['status']} "
+                     f"(generalization: {dc['generalization']}, "
+                     f"armed cases: {dc['armed_cases']})")
     if d.get("failure_blocked"):
         lines.append(f"failure-blocked: {d['failure_blocked']} (run failure_analysis_gate.py <ws> before re-dispatch or NEGATIVE)")
     if d["open_claims"] and d["open_count"] <= 12:
