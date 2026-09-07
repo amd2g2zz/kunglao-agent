@@ -559,7 +559,7 @@ files:
   - src: scripts/mission_ledger.py
     dest: .claude/scripts/mission_ledger.py
     kind: scaffold
-    sha256: 8ba96b66b2ddc0f70db3ceb99f474c03dcb3677a54b5aeaf69173c905cfb488c
+    sha256: d49bb04b1506d7a9f76792b3ee27b226ba9177a87b602a29b7b2eb743082a643
   - src: scripts/mission_stall.py
     dest: .claude/scripts/mission_stall.py
     kind: scaffold
