@@ -60,6 +60,9 @@ CRASH_CLIENT = '''def compute(params):
 CASE_GOOD = {
     "id": "auth-fields",
     "description": "signed auth field ordering discriminator",
+    "channel": "device-trace",     # #126: declared observation channel
+    "hypothesis_ref": "H-001",     # #126: the live bet this case realizes
+    "update_map": {"green_up": ["H-001"], "red_up": ["H-002"]},
     "params": {"user": "alice", "nonce": 10},
     "expected": [
         {"field": "auth_algo", "value": "hmac-sha256",
@@ -74,6 +77,9 @@ CASE_GOOD = {
 CASE_BLIND = {
     "id": "blind-spot",
     "description": "declares a mutation on an unobserved field",
+    "channel": "static",           # distinct signature from CASE_GOOD (#126)
+    "hypothesis_ref": "H-002",
+    "update_map": {"green_up": ["H-002"], "red_up": ["H-001"]},
     "params": {"blob": "cafe"},
     "expected": [
         {"field": "magic", "value": "MZ", "evidence_refs": ["F002"]},
@@ -94,9 +100,35 @@ UNIVERSAL_CLIENT = '''def compute(params):
 '''
 
 
+def _write_hypothesis(ws: Path, hyp_id: str, group: str) -> None:
+    """#126 fixture support: one hypotheses/<id>.md in the #528 frontmatter
+    shape, so case fixtures can name a hypothesis_ref that resolves."""
+    p = ws / "hypotheses" / f"{hyp_id}.md"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(
+        "---\n"
+        f"id: {hyp_id}\n"
+        "claim_id: C-001\n"
+        f"competitor_group: {group}\n"
+        "candidates: [AES, ChaCha20]\n"
+        "status: open\n"
+        "schema_rev: 1\n"
+        "---\n\npq:q1\n",
+        encoding="utf-8")
+
+
 def _mk_ws(tmp_path: Path, cases: list[dict], client_src: str | None) -> Path:
     ws = tmp_path / "ws"
     (ws / "oracle" / "cases").mkdir(parents=True)
+    # #126: refs must RESOLVE now — the fixture fact pipeline + hypothesis
+    # store back the case fixtures' evidence_refs / hypothesis_ref.
+    (ws / "facts").mkdir()
+    (ws / "facts" / "F001.md").write_text(
+        "# F001\n\nauth fields pinned (byte-anchored).\n", encoding="utf-8")
+    (ws / "facts" / "F002.md").write_text(
+        "# F002\n\nmagic bytes pinned (byte-anchored).\n", encoding="utf-8")
+    _write_hypothesis(ws, "H-001", "grp-live")
+    _write_hypothesis(ws, "H-002", "grp-live")
     for i, case in enumerate(cases):
         (ws / "oracle" / "cases" / f"case-{i:02d}.yaml").write_text(
             yaml.safe_dump(case, allow_unicode=True, sort_keys=False),
@@ -164,12 +196,16 @@ def test_client_crash_is_pending_not_green(tmp_path: Path) -> None:
 def test_pending_observation_entries_count_not_compare(tmp_path: Path) -> None:
     case = {
         "id": "scaffold",
+        "channel": "device-trace",
+        "hypothesis_ref": "H-001",
+        "update_map": {"green_up": ["H-001", "H-002"], "red_up": []},
         "params": {},
         "expected": [
             {"field": "auth_algo", "value": "hmac-sha256",
              "pending-observation": True},
             {"field": "nonce_len", "value": 2, "evidence_refs": ["F001"]},
         ],
+        "mutations": [{"field": "nonce_len", "kind": "change"}],
     }
     ws = _mk_ws(tmp_path, [case], None)
     (ws / "oracle" / "client.py").write_text(GOOD_CLIENT, encoding="utf-8")
@@ -232,10 +268,14 @@ def test_mutation_all_green_case_flagged_low_discriminativity(tmp_path: Path) ->
 
 
 def test_mutation_without_declarations_never_flags(tmp_path: Path) -> None:
+    """#126: a mutation-less case is now REFUSED at load, so this face is
+    exercised on the raw dict (mutation_pass itself, not load_cases): no
+    declared mutations -> no flags, empty mutations map."""
     case = {k: v for k, v in CASE_GOOD.items() if k != "mutations"}
-    ws = _mk_ws(tmp_path, [case], None)
+    case["mutations"] = []
+    ws = _mk_ws(tmp_path, [], None)
     compute = _load_client(_write_client(ws, GOOD_CLIENT))
-    mp = orun.mutation_pass(orun.load_cases(ws / "oracle" / "cases"), compute)
+    mp = orun.mutation_pass([case], compute)
     assert mp["low_discriminativity"] == []
     assert mp["mutations"] == {}
 
