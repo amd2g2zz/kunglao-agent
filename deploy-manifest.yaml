@@ -363,7 +363,7 @@ files:
   - src: scripts/goal_operationalization.py
     dest: .claude/scripts/goal_operationalization.py
     kind: scaffold
-    sha256: c5ab6cfaf3c8fcc582e0a84e429885897cc6447e1c6c01e6fc3649c37e882501
+    sha256: c86cfa266c7d526479e73317f9d73c4e54231125a7e7378578c708a288ed81d5
   - src: scripts/harness_common.py
     dest: .claude/scripts/harness_common.py
     kind: scaffold
