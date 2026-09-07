@@ -7,13 +7,13 @@
       {
         "claim_id": "C-001",
         "fact_id": "F001",
-        "score": 0.9030563514804202,
+        "score": 0.9043910880380706,
         "top_dimension": "lexical"
       },
       {
         "claim_id": "C-002",
         "fact_id": "F002",
-        "score": 0.9002507163323783,
+        "score": 0.9002271252433485,
         "top_dimension": "lexical"
       }
     ],
@@ -430,13 +430,13 @@
       {
         "claim_id": "C-001",
         "fact_id": "F001",
-        "score": 0.9030563514804202,
+        "score": 0.9043910880380706,
         "top_dimension": "lexical"
       },
       {
         "claim_id": "C-002",
         "fact_id": "F002",
-        "score": 0.9002507163323783,
+        "score": 0.9002271252433485,
         "top_dimension": "lexical"
       }
     ],
