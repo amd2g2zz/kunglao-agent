@@ -804,6 +804,7 @@ class TestTokenZero142:
             "per-tool-use refresh must write the snapshot"
 
 
+@pytest.mark.skipif(shutil.which("node") is None, reason="node unavailable")
 class TestThreeValuedStaleness142:
     """Renderer staleness is three-valued, not binary: fresh -> snapshot's
     own state face; stale within liveness policy -> IDLE face (dim, not
