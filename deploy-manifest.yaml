@@ -363,7 +363,7 @@ files:
   - src: scripts/goal_operationalization.py
     dest: .claude/scripts/goal_operationalization.py
     kind: scaffold
-    sha256: a37c48c6e7ecef97395f7e120bef3e64cf0c1e4b3aa95a42506de55f22251535
+    sha256: c5ab6cfaf3c8fcc582e0a84e429885897cc6447e1c6c01e6fc3649c37e882501
   - src: scripts/harness_common.py
     dest: .claude/scripts/harness_common.py
     kind: scaffold
@@ -1263,7 +1263,7 @@ files:
   - src: templates/state/goal-operationalization.yaml
     dest: .claude/templates/state/goal-operationalization.yaml
     kind: asset
-    sha256: 46d3dd90d26cf02898d5be9dd510bf14b35865a36840dd8a1a5d87d627433e1d
+    sha256: 794ea0e6b2485235c26814da116951d218252b279780ba351ed22a9bea974d3f
   - src: templates/state/task-oracle.yaml
     dest: .claude/templates/state/task-oracle.yaml
     kind: asset
