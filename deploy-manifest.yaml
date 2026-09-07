@@ -207,7 +207,7 @@ files:
   - src: scripts/case_bank.py
     dest: .claude/scripts/case_bank.py
     kind: scaffold
-    sha256: 2da508665c50e92207762688f6842616f4223b4d3cfaa75e25eb92547c9519a8
+    sha256: 39221df879fa1e7ade6d9c6628ddde01dd1092e825f77bb87d646d2a003e6471
   - src: scripts/challenge_ledger.py
     dest: .claude/scripts/challenge_ledger.py
     kind: scaffold
@@ -579,7 +579,7 @@ files:
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: a63fb2d1319855294af3a7f4f4c1e70c1ed2265fdd9e2749b74862982a5ca6d1
+    sha256: 3f390170a677f731eaa4c39ec4e6bc0912ef4655a70e239749dc0ce7c326c27b
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
