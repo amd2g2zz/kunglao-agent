@@ -1,0 +1,22 @@
+# goal-operationalization.yaml — Phase-0 goal operationalization read-back (#128).
+# Skeleton registered at workspace creation; the orchestrator fills the five
+# lists FROM the verbatim task — task-oracle.yaml keeps the original, this
+# file is only the derivative — and reads the result back to the user in
+# ONE confirmation round (skills/kunglao-agent/SKILL.md, "Goal
+# operationalization read-back"). Consumed by
+# scripts/goal_operationalization.py (validate / --confirm).
+schema: goal-operationalization/1
+verbatim_ref: "task-oracle.yaml"  # where the verbatim task lives — pointer, not payload
+status: pending-confirmation      # pending-confirmation | confirmed; any content edit
+                                  # after confirmation re-validates as pending (re-scope
+                                  # => re-confirmation; the agent cannot silently rewrite)
+deliverables: []       # - what counts as delivered (concrete artifacts / capabilities)
+acceptance: []         # - how each deliverable is checked, mechanically where possible
+not_done: []           # - counterexamples, "X does not count as done" — the load-bearing half
+diff_vs_verbatim: []   # - declared delta vs the verbatim task; no silent equivalence
+probe_cases: []        # - fresh-input / no-dependency / materialized-artifact, when the
+                       #   deliverables imply a reproducible capability
+oracle_behavior_acknowledged: false  # optional: the Phase-0 oracle behavior statement
+                                     # (red is information; machine-judged acceptance) was read back too
+confirmed_sha256: ""   # content seal at confirmation time (--confirm writes it); a later
+                       # content edit makes the hash mismatch => pending-confirmation again
