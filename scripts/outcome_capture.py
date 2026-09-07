@@ -136,15 +136,42 @@ def _settle_new(workspace: Path, new_rows: list[dict]) -> None:
     idempotent on claim x method x roi_class) via _bank_case — equally
     fail-open (a banking refusal is a `case_bank_refused` warn event, never
     a capture failure).
+
+    #132: two additions, both fail-open on the same contract.
+      - LOUD missing-intent: a captured outcome for a claim with NO recorded
+        intent emits the #105 `intent_unparsed` word at the settlement face
+        (counted by oracle_cadence.missing_intent_face) — the predicted-vs-
+        actual comparison signal's absence becomes visible instead of hiding
+        as a silent non-settlement. NOT a hard reject; dispatch flow
+        unchanged.
+      - CADENCE HOOK: after the settle loop, any batch that produced >=1 NEW
+        settlement mechanically runs the armed oracle cases against the
+        registered client + records posteriors (oracle_cadence.run_cadence —
+        the reward channel's caller, replacing LLM-obedience triggering).
+        Once per BATCH, not per settled claim: a case-set run per claim
+        would double-count identical Bernoulli observations. The cadence
+        emits its own loud warn events, so this wrapper only guards the
+        never-happens cadence-module crash.
     """
     try:
         import roi_settlement
     except Exception:  # noqa: BLE001  (fail-open: settlement is optional)
         return
+    settled: list[str] = []
     for entry in new_rows:
         try:
             claim_id = entry.get("claim_id")
-            if not claim_id or not roi_settlement.has_intent(workspace, claim_id):
+            if not claim_id:
+                continue
+            if not roi_settlement.has_intent(workspace, claim_id):
+                # #132: the missing-intent face is LOUD + counted — absence
+                # of the declaration must be visible, never silently folded
+                # into an UNRESOLVED non-settlement. Fail-open: no reject.
+                kunglao_log.emit(workspace, actor="outcome_capture",
+                                 action="intent_unparsed", claim=str(claim_id),
+                                 detail="reason=NO_INTENT (captured outcome "
+                                        "for a claim with no recorded "
+                                        "dispatch intent)")
                 continue
             res = roi_settlement.settle_intent(workspace, claim_id, {
                 "verdict": entry.get("result"),
@@ -155,8 +182,29 @@ def _settle_new(workspace: Path, new_rows: list[dict]) -> None:
             # idempotent on (claim_id, method, roi_class) anyway.
             if res.get("ok") and not res.get("duplicate"):
                 _bank_case(workspace, res.get("settlement") or {})
+                settled.append(str(claim_id))
         except Exception:  # noqa: BLE001  (fail-open by contract)
             continue
+    if settled:
+        _run_oracle_cadence(workspace, claim=settled[0])
+
+
+def _run_oracle_cadence(ws: Path, *, claim: str | None = None) -> None:
+    """#132: the settlement cadence hook — mechanically run armed oracle
+    cases + record posteriors (see _settle_new for the batching contract).
+    run_cadence handles its own loud warn faces; this wrapper only covers
+    the never-happens module-level crash (fail-open, like banking — capture
+    must never break, and the crash still lands a warn, never silence)."""
+    try:
+        import oracle_cadence
+        oracle_cadence.run_cadence(ws, claim=claim)
+    except Exception as exc:  # noqa: BLE001  (the host flow is untouchable)
+        try:
+            kunglao_log.emit(ws, actor="outcome_capture",
+                             action="oracle_cadence_warn", claim=claim,
+                             detail=f"reason=cadence_crashed ({exc!r})")
+        except Exception:  # noqa: BLE001  (telemetry never disturbs capture)
+            pass
 
 
 def _case_entry_from_settlement(settlement: dict) -> dict:

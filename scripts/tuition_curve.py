@@ -205,4 +205,14 @@ def cockpit_summary(ws):
         out["progress"] = _ml.progress_face(ws)
     except Exception:  # noqa: BLE001 — cockpit sampling never raises
         pass
+    # #132: missing-intent face — the loud, COUNTED absence of the
+    # uncertainty declaration (dispatch-face intent_unparsed events +
+    # outcome claims that can never settle). Additive + fail-open, the same
+    # discipline as the #882 trio above: the dispatch flow is unchanged;
+    # the point is that the signal's absence is VISIBLE.
+    try:
+        import oracle_cadence
+        out["intent"] = oracle_cadence.missing_intent_face(ws)
+    except Exception:  # noqa: BLE001 — cockpit sampling never raises
+        pass
     return out
