@@ -42,7 +42,10 @@ analysis; a workspace that is not initialized is refused work.
 2. **Scaffold** — create the workspace directory skeleton and state files:
    `runs/`, `facts/_INDEX.md`, `claim-register.yaml`, `analysis_state.txt`,
    `task_spec.yaml` (from `templates/state/`; already filled by step 0 —
-   scaffold never clobbers it).
+   scaffold never clobbers it), `goal-operationalization.yaml` (from
+   `templates/state/`; the Phase-0 goal operationalization skeleton,
+   `status: pending-confirmation` until the one-round read-back confirms
+   it — the verbatim task itself stays in `task-oracle.yaml`, #128).
 3. **Write CLAUDE.md** — render the type-appropriate workspace contract from
    `templates/CLAUDE.md.base.tmpl`; the task_spec constraints (vm_detonation,
    scope exclusions, depth) are rendered INTO the contract.
