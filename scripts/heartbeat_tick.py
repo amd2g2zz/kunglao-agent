@@ -450,8 +450,10 @@ def main(argv: list[str] | None = None) -> int:
     # claims' answers_question -> PQ answered (idempotent, every tick);
     # value_m() appends the V_m history point that feeds V_m/d_slope, gated
     # by _mission_history_due so the trajectory samples once per window.
+    settlement_hosted = False
     try:
         if (ws / "runs" / "mission_ledger.yaml").exists():
+            settlement_hosted = True
             import mission_ledger as _ml
             _ml.update(ws)
             if _mission_history_due(ws):
@@ -465,14 +467,42 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:  # noqa: BLE001 — cockpit 采样永不打断 tick
         pass
 
-    # #883: pre-write the statusline health snapshot (O(1) atomic; the user's
-    # combined-statusline.mjs only reads this file — zero spawn). Fail-open
-    # like the cockpit sample above: a snapshot crash must never fail the tick.
+    # step 11b (#142 follow-up, dual-use display): the SAME entropy-honesty
+    # values the statusline renders ride the tick report. Computed AFTER the
+    # settlement/cockpit block, so the frontier reflects this tick's
+    # settlements, with the PREVIOUS STORED snapshot as the trend baseline
+    # (the snapshot below is not written yet — both faces trend against the
+    # same baseline). Decision-side consumers (policy/strategy arbiter)
+    # read the display's numbers from the single-source module, never a
+    # second computation. The report was serialized early (rc summary,
+    # :416) — re-serialize here so the face lands in
+    # runs/.heartbeat-tick.json, the same re-write pattern the #634
+    # breaker uses. Fail-open like every report field.
     try:
-        import statusline_snapshot as _sls
-        _sls.write_snapshot(ws)
-    except Exception:  # noqa: BLE001 — 快照永不打断 tick
+        import entropy_face
+        _h = entropy_face.face(ws)
+        report["h_bits"] = _h["h_bits"]
+        report["h_pq"] = _h["h_pq"]
+        report["h_trend"] = _h["h_trend"]
+        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — a report face never fails the tick
         pass
+
+    # step 11c (#142 refinement, event-driven): when this tick HOSTED a
+    # settlement/rollup (mission ledger present), that IS a semantic event
+    # — it moved the frontier, and the display would otherwise lag it
+    # indefinitely during LLM-idle. Write the snapshot here, AFTER the
+    # report face above (same computed values, same stored baseline) and
+    # with NO tool-use flow required. A ledger-less workspace hosts no
+    # settlement event and writes nothing; beyond this, writes stay
+    # event-only (tool use via heartbeat_touch) — stale is truthful.
+    # Fail-open like every display dependency.
+    if settlement_hosted:
+        try:
+            import statusline_snapshot as _sls
+            _sls.write_snapshot(ws)
+        except Exception:  # noqa: BLE001 — 快照永不打断 tick
+            pass
 
     action = report["action_taken"] or "(EMPTY — must be filled: what was dispatched/verified/resolved/reactivated)"
     print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | heartbeat_rc={rc_hb} | {hb}")

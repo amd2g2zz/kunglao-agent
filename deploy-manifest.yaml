@@ -312,6 +312,10 @@ files:
     dest: .claude/scripts/encoding_lint.py
     kind: scaffold
     sha256: ddd56a84030f29bbd00a661d2c06d7108510e8196fa96f7dcb4c5f2a92c76007
+  - src: scripts/entropy_face.py
+    dest: .claude/scripts/entropy_face.py
+    kind: scaffold
+    sha256: 5e71725ce19814511aad020482df863f1527e05ccc76bd023f3484f78425ed69
   - src: scripts/env_check.py
     dest: .claude/scripts/env_check.py
     kind: scaffold
@@ -339,7 +343,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: d09e0ef3a8b46a51197ac06bae40753e9c66b755630549ce8151f238111145e2
+    sha256: a5a7c2ecd9b0aa1c510c096f32ed982331f0dfb085678970816f04b6bf8be823
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -383,7 +387,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: e5d38a53d547b0b235c855f6b36aecea039d8272b7dafc9f5ca9cbd8cadf48d4
+    sha256: a4727f44d813f33d1af4db49088b5040beabe2978a7323cd9c6b4d54b7342a49
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -483,7 +487,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: 860ee9b60e35ca9f9fccc99f3dd1dcf09d5671fb7c9e53851e9da9459dba9045
+    sha256: 180f17bb70eb51d7d46459fa1ecec4d365da9ee865e685255087f14852727429
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -739,7 +743,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: e156d3f5a199755455ebdd3d595c1411cdf69c8b1aca9434d8cfbe6df27a5b09
+    sha256: 9a8e8b2bc9122dfb8c23b7f6fd38b8be43fdb4c9223f7e3fa8c5341ac624e400
   - src: scripts/strategy_metrics.py
     dest: .claude/scripts/strategy_metrics.py
     kind: scaffold
@@ -855,7 +859,7 @@ files:
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
-    sha256: eee1a7c81a78ef300aa161ea9e9880cc1b19e39f8fe8d7db07670292ab93a319
+    sha256: 285f75f6eae4f2c019a92d4071b451d5e19fd2c0059779356528a3a51dfbe626
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset

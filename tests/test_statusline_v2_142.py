@@ -346,6 +346,16 @@ def _write_snapshot(ws: Path, snap: dict, age_s: int = 0) -> None:
 # (fixture snapshots are built via _full_snap() — fresh flash ts per call).
 
 
+def _run_renderer(ws: Path) -> subprocess.CompletedProcess:
+    """Drive the renderer subprocess against a fixture workspace (stdin
+    JSON names the ws dir; HUD disabled via the KUNGLAO_STATUSLINE_HUD seam)."""
+    payload = json.dumps(
+        {"workspace": {"current_dir": str(ws)}, "model": {"display_name": "t"}})
+    return subprocess.run(
+        ["node", str(RENDERER)], input=payload, capture_output=True,
+        text=True, timeout=30, cwd=str(ws.parent))
+
+
 @pytest.mark.skipif(shutil.which("node") is None, reason="node unavailable")
 class TestRenderer142:
     @pytest.fixture(autouse=True)
@@ -354,11 +364,7 @@ class TestRenderer142:
         monkeypatch.setenv("KUNGLAO_STATUSLINE_HUD", "")
 
     def _run(self, ws: Path, stdin_payload: dict | None = None) -> subprocess.CompletedProcess:
-        payload = json.dumps(
-            {"workspace": {"current_dir": str(ws)}, "model": {"display_name": "t"}})
-        return subprocess.run(
-            ["node", str(RENDERER)], input=payload, capture_output=True,
-            text=True, timeout=30, cwd=str(ws.parent))
+        return _run_renderer(ws)
 
     def test_renders_all_chips_from_fixture_snapshot(self, tmp_path):
         ws = _make_ws(tmp_path)
@@ -452,7 +458,7 @@ class TestRenderer142:
 
     def test_down_freeze_watchdog(self, tmp_path):
         ws = _make_ws(tmp_path)
-        _write_snapshot(ws, _full_snap(), age_s=36 * 60)  # older than T_LIVE
+        _write_snapshot(ws, _full_snap(), age_s=36 * 60)  # beyond T_DEAD_MS
         r = self._run(ws)
         assert r.returncode == 0
         out = _strip_ansi(r.stdout)
@@ -615,3 +621,247 @@ class TestStatuslineRegistration142:
         committed = yaml.safe_load(
             (ROOT / "deploy-manifest.yaml").read_text(encoding="utf-8"))
         assert committed.get("files") == dm.build_entries()
+
+
+# ===========================================================================
+# 4. follow-up — entropy face single-sourcing + dual-use display
+# ===========================================================================
+
+class TestEntropyFace142:
+    """The entropy-trend computation lives in ONE shared module
+    (scripts/entropy_face.py): the snapshot renders it, the heartbeat tick
+    report carries the SAME computed values, decision-side consumers read
+    the display's numbers (dual-use display, owner principle)."""
+
+    def test_snapshot_delegates_to_the_shared_face(self):
+        """Single-source pin: the snapshot module must not carry a second
+        h_bits/trend computation — it delegates to entropy_face.face."""
+        import entropy_face
+        assert sls._entropy_face is entropy_face.face
+
+    def test_frontier_entropy_known_value(self, tmp_path):
+        from entropy_face import frontier_entropy
+        ws = _make_ws(tmp_path)
+        _mission(ws, [_pq("PQ-1")], [1.0])
+        _posteriors(ws, {"PQ-1": {"a": 1, "b": 1}})
+        h_bits, h_pq = frontier_entropy(ws)
+        assert h_pq == "PQ-1"
+        assert h_bits == pytest.approx(1.0, abs=1e-3)
+
+    def test_trend_transitions(self):
+        from entropy_face import trend
+        assert trend(0.8, 1.5) == "falling"
+        assert trend(1.0, 1.0) == "flat"
+        assert trend(1.5, 0.8) == "rising"
+        assert trend(None, 1.0) == "unknown"
+        assert trend(1.0, None) == "unknown"
+
+    def test_face_reads_prev_from_stored_snapshot(self, tmp_path):
+        from entropy_face import face, prev_h_bits
+        ws = _make_ws(tmp_path)
+        _mission(ws, [_pq("PQ-1")], [1.0])
+        _posteriors(ws, {"PQ-1": {"a": 1, "b": 1}})
+        assert prev_h_bits(ws) is None  # no snapshot yet
+        f = face(ws)
+        assert f["h_trend"] == "unknown"
+        # store a prev with higher entropy -> next face reads falling
+        (ws / "runs" / ".kunglao-statusline.json").write_text(
+            json.dumps({"h_bits": 2.0}), encoding="utf-8")
+        assert prev_h_bits(ws) == 2.0
+        f = face(ws)
+        assert f["h_bits"] == pytest.approx(1.0, abs=1e-3)
+        assert f["h_trend"] == "falling"
+
+    def test_face_prev_dict_bypasses_disk_read(self, tmp_path):
+        from entropy_face import face
+        ws = _make_ws(tmp_path)
+        _mission(ws, [_pq("PQ-1")], [1.0])
+        _posteriors(ws, {"PQ-1": {"a": 1, "b": 1}})
+        f = face(ws, prev={"h_bits": 0.5})
+        assert f["h_trend"] == "rising"
+
+    def test_face_fail_open_on_empty_ws(self, tmp_path):
+        from entropy_face import face
+        ws = _make_ws(tmp_path)
+        f = face(ws)
+        assert f == {"h_bits": None, "h_pq": None, "h_trend": "unknown"}
+
+    def test_snapshot_and_tick_report_read_the_same_values(self, tmp_path):
+        """The dual-use contract, end to end: producer and tick report must
+        carry byte-identical h fields for the same workspace state."""
+        ws = _make_ws(tmp_path)
+        _touch_heartbeat(ws)
+        _mission(ws, [_pq("PQ-1")], [1.0])
+        _posteriors(ws, {"PQ-1": {"a": 1, "b": 1}})
+        import entropy_face
+        snap = sls.build_snapshot(ws)
+        face = entropy_face.face(ws)  # tick-face call shape (no prev arg)
+        assert snap["h_bits"] == face["h_bits"]
+        assert snap["h_pq"] == face["h_pq"]
+        # first observation -> both faces say unknown, identically
+        assert snap["h_trend"] == face["h_trend"] == "unknown"
+
+    def test_tick_report_carries_entropy_face(self, tmp_path):
+        """heartbeat_tick's report face (runs/.heartbeat-tick.json) gains
+        h_bits/h_pq/h_trend — the gear-shift signal decision-side."""
+        ws = _make_ws(tmp_path)
+        _touch_heartbeat(ws)
+        _mission(ws, [_pq("PQ-1")], [1.0])
+        _posteriors(ws, {"PQ-1": {"a": 1, "test-tick-face": 1}})
+        r = subprocess.run(
+            [sys.executable, str(SCRIPTS / "heartbeat_tick.py"), str(ws)],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=180)
+        out = ws / "runs" / ".heartbeat-tick.json"
+        assert out.exists(), (
+            f"tick must write the report; rc={r.returncode} "
+            f"stderr={r.stderr[-300:]}")
+        report = json.loads(out.read_text(encoding="utf-8"))
+        assert report["h_pq"] == "PQ-1"
+        assert report["h_bits"] == pytest.approx(1.0, abs=1e-3)
+        assert report["h_trend"] == "unknown"
+
+    def test_renderer_documented_dual_use_map(self):
+        """Owner principle, mechanical pin: the renderer's header must carry
+        the dual-use map (every chip -> agent-side consumer)."""
+        source = RENDERER.read_text(encoding="utf-8")
+        assert "DUAL-USE MAP" in source
+        for consumer in ("noop-breaker", "budget pacing",
+                         "gear-shift", "backtrack gate",
+                         "worker-status protocol"):
+            assert consumer in source
+
+
+# ===========================================================================
+# 5. follow-up 2 — event-driven freshness contract (#142 refinement)
+# ===========================================================================
+
+class TestTokenZero142:
+    """Token-zero invariant: the per-tool-use snapshot refresh rides the
+    heartbeat_touch hook, whose output would enter the model context — so
+    the refresh must be SILENT on success AND on failure (fail-open both
+    ways, zero stdout / zero stderr / zero additionalContext)."""
+
+    def _run_touch(self, tmp_path, monkeypatch, capsys, *, boom):
+        """Load the HOOK file by explicit path: `heartbeat_touch` is a
+        pre-existing hooks/scripts shared-name twin (#671 class) and the
+        registered PreToolUse/Bash hook is hooks/heartbeat_touch.py — the
+        by-path load pins the tested artifact regardless of sys.modules
+        history from earlier test modules."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "kunglao_142_statusline_touch", ROOT / "hooks" / "heartbeat_touch.py")
+        hook = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(hook)
+        ws = _make_ws(tmp_path)
+        _touch_heartbeat(ws)
+        (ws / "runs" / ".kunglao-statusline.json").write_text(
+            json.dumps({"schema": 2, "state": "idle"}), encoding="utf-8")
+        calls = []
+        if boom:
+            def boom_fn(*a, **k):
+                calls.append("boom")
+                raise RuntimeError("boom")
+            monkeypatch.setattr(sls, "write_snapshot", boom_fn)
+        else:
+            def ok_fn(*a, **k):
+                calls.append("ok")
+                return ws / "runs" / ".kunglao-statusline.json"
+            monkeypatch.setattr(sls, "write_snapshot", ok_fn)
+        monkeypatch.chdir(ws)
+        rc = hook.main()
+        captured = capsys.readouterr()
+        return rc, captured, ws, calls
+
+    def test_refresh_success_is_silent(self, tmp_path, monkeypatch, capsys):
+        rc, captured, ws, calls = self._run_touch(tmp_path, monkeypatch,
+                                                  capsys, boom=False)
+        assert rc == 0
+        assert calls == ["ok"], "the touch path must refresh the snapshot"
+        assert captured.out == "" and captured.err == "", \
+            "hook output enters context = token cost; refresh must be silent"
+
+    def test_refresh_failure_is_silent(self, tmp_path, monkeypatch, capsys):
+        rc, captured, ws, calls = self._run_touch(tmp_path, monkeypatch,
+                                                  capsys, boom=True)
+        assert rc == 0  # fail-open: never blocks the tool call
+        assert calls == ["boom"], "the refresh ran and its failure was swallowed"
+        assert captured.out == "" and captured.err == "", \
+            "even a failed refresh must stay token-zero"
+
+    def test_touch_hook_subprocess_is_silent(self, tmp_path):
+        """End-to-end: the real hook subprocess emits nothing on either
+        stream (Claude Code captures hook stdout into the tool flow)."""
+        ws = _make_ws(tmp_path)
+        _touch_heartbeat(ws)
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "hooks" / "heartbeat_touch.py")],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=120, cwd=str(ws))
+        assert r.returncode == 0
+        assert r.stdout == "" and r.stderr == ""
+        assert (ws / "runs" / ".kunglao-statusline.json").exists(), \
+            "per-tool-use refresh must write the snapshot"
+
+
+class TestThreeValuedStaleness142:
+    """Renderer staleness is three-valued, not binary: fresh -> snapshot's
+    own state face; stale within liveness policy -> IDLE face (dim, not
+    red — alive with no events is truthful); beyond policy (or the
+    snapshot's own down verdict) -> DOWN red. The 5-min tick is not a
+    display dependency anymore."""
+
+    def _run_at_age(self, tmp_path, *, age_min, state="analyzing"):
+        ws = _make_ws(tmp_path)
+        snap = _full_snap()
+        snap["state"] = state
+        _write_snapshot(ws, snap, age_s=age_min * 60)
+        return _run_renderer(ws)
+
+    def test_stale_within_policy_renders_idle_face(self, tmp_path):
+        r = self._run_at_age(tmp_path, age_min=10)  # > tick, < policy
+        assert r.returncode == 0
+        out = _strip_ansi(r.stdout)
+        assert "idle" in out and "DOWN" not in out
+        assert "analyzing" not in out  # last-event state is not shown as live
+
+    def test_fresh_renders_snapshot_state(self, tmp_path):
+        r = self._run_at_age(tmp_path, age_min=0)
+        assert r.returncode == 0
+        assert "analyzing" in _strip_ansi(r.stdout)
+
+    def test_beyond_policy_renders_down(self, tmp_path):
+        r = self._run_at_age(tmp_path, age_min=36)
+        assert r.returncode == 0
+        assert "DOWN" in _strip_ansi(r.stdout)
+
+    def test_producer_down_verdict_is_trusted_when_fresh(self, tmp_path):
+        """The liveness face's own down verdict (probe-driven) shows DOWN
+        even on a fresh snapshot — mtime age never overrides it."""
+        r = self._run_at_age(tmp_path, age_min=0, state="down")
+        assert r.returncode == 0
+        assert "DOWN" in _strip_ansi(r.stdout)
+        assert "○○○" in _strip_ansi(r.stdout)
+
+    def test_staleness_boundaries_are_strict(self, tmp_path):
+        """Boundary pin for the three-valued horizons (strict >): just
+        under 5min = fresh (own state); just over 5min = idle; just under
+        35min = still idle (alive); just over 35min = DOWN."""
+        cases = [(4 * 60 + 59, "analyzing", False),
+                 (5 * 60 + 1, "idle", False),
+                 (34 * 60 + 59, "idle", False),
+                 (35 * 60 + 1, "DOWN", True)]
+        for age_s, label, is_down in cases:
+            # drive seconds directly (mtime strictness matters at the edges);
+            # one workspace per case (each renders independently)
+            ws = _make_ws(tmp_path / f"age-{age_s}")
+            snap = _full_snap()
+            _write_snapshot(ws, snap, age_s=age_s)
+            r = _run_renderer(ws)
+            out = _strip_ansi(r.stdout)
+            assert r.returncode == 0, r.stderr
+            if is_down:
+                assert "DOWN" in out, f"age {age_s}s must render DOWN"
+            else:
+                assert label in out, f"age {age_s}s must render {label}"
+                assert "DOWN" not in out, f"age {age_s}s must not render DOWN"

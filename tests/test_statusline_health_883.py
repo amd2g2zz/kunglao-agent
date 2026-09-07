@@ -12,7 +12,8 @@ Coverage map (issue #883 ten acceptance items, Python-side half):
   - flash triggers (milestone / every-N-ticks / state change) — 时间数字仅闪现的数据面
   - snapshot schema + atomic write
   - down auto-flip on stale heartbeat (kill kunglao -> down)
-  - heartbeat_tick integration (snapshot written per tick, fail-open)
+  - heartbeat_tick integration (#142 refinement: event-driven — writes are
+    semantic events only: tool use, plus tick-hosted settlement/rollup)
 """
 from __future__ import annotations
 
@@ -445,8 +446,12 @@ class TestSnapshotWriter:
                             .read_text(encoding="utf-8"))
         assert second["state"] == "down"
 
-    def test_tick_integration_writes_snapshot(self, tmp_path):
-        """挂点集成：真实 heartbeat_tick CLI 跑完 → 快照在盘上（fail-open 不失败 tick）。"""
+    def test_tick_does_not_write_snapshot_event_driven(self, tmp_path):
+        """>#142 refinement (event-driven): the fixed tick-cadence snapshot
+        pre-write is gone. A LEDGER-LESS workspace hosts no settlement
+        event, so this tick must leave the snapshot absent/untouched —
+        stale is truthful (see test_tick_settlement_writes_snapshot for
+        the settlement-hosting counterpart)."""
         ws = _make_ws(tmp_path)
         _touch_heartbeat(ws)
         r = subprocess.run(
@@ -454,22 +459,52 @@ class TestSnapshotWriter:
             capture_output=True, text=True, encoding="utf-8",
             errors="replace", timeout=180)
         out = ws / "runs" / ".kunglao-statusline.json"
-        assert out.exists(), (
-            f"tick must pre-write the statusline snapshot; rc={r.returncode} "
+        assert not out.exists(), (
+            "tick must not write the statusline snapshot (event-driven "
+            f"writes only, #142 refinement); rc={r.returncode} "
             f"stderr={r.stderr[-300:]}")
-        assert json.loads(out.read_text(encoding="utf-8"))["schema"] == 2  # #142
+        assert r.returncode in (0, 1)  # tick ran to its own verdict
 
-    def test_tick_survives_snapshot_failure(self, tmp_path, monkeypatch):
-        """writer 崩溃不得失败 tick：fail-open 同款（#873 cockpit 惯例）。"""
+    def test_tick_settlement_writes_snapshot(self, tmp_path):
+        """#142 refinement: a tick-hosted settlement IS a semantic event —
+        a workspace with a mission ledger gets a post-settlement snapshot
+        write (the display would otherwise lag the frontier indefinitely
+        during LLM-idle). No tool-use flow required."""
+        ws = _make_ws(tmp_path)
+        _touch_heartbeat(ws)
+        pqs = [{"id": "PQ-1", "question": "q", "state": "unattempted",
+                "coverage": 0.0, "answered_by": [], "blocker": None,
+                "wake": None, "weight": 1.0}]
+        hist = [{"ts": _iso(datetime.now(timezone.utc)), "v_m": 0.5}]
+        (ws / "runs" / "mission_ledger.yaml").write_text(
+            yaml.safe_dump({"mission": {"pqs": pqs, "beta": 0.5,
+                                        "history": hist,
+                                        "feature_used": True}},
+                           sort_keys=False), encoding="utf-8")
+        r = subprocess.run(
+            [sys.executable, str(SCRIPTS / "heartbeat_tick.py"), str(ws)],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=180)
+        out = ws / "runs" / ".kunglao-statusline.json"
+        assert out.exists(), (
+            f"settlement event must trigger the snapshot write; rc={r.returncode} "
+            f"stderr={r.stderr[-300:]}")
+        snap = json.loads(out.read_text(encoding="utf-8"))
+        assert snap["pq"]["total"] == 1  # the settled frontier is visible
+
+    def test_tick_never_calls_snapshot_writer(self, tmp_path, monkeypatch):
+        """Event-driven contract pin: with no mission ledger the tick
+        hosts no settlement and makes ZERO write_snapshot calls."""
         ws = _make_ws(tmp_path)
         _touch_heartbeat(ws)
         import heartbeat_tick as hbt
-        orig = sls.write_snapshot
+        calls = []
 
-        def boom(ws_, *a, **k):
-            raise RuntimeError("boom")
+        def spy(ws_, *a, **k):
+            calls.append(ws_)
+            return ws / "runs" / ".kunglao-statusline.json"
 
-        monkeypatch.setattr(sls, "write_snapshot", boom)
+        monkeypatch.setattr(sls, "write_snapshot", spy)
         rc = hbt.main([str(ws)])
-        monkeypatch.setattr(sls, "write_snapshot", orig)
         assert rc in (0, 1)  # tick ran to its own verdict, not a crash
+        assert calls == [], "tick must not write the statusline snapshot"

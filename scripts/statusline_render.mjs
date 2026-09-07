@@ -1,6 +1,38 @@
 #!/usr/bin/env node
 // statusline_render.mjs — kunglao statusline v2 renderer (issue #142).
 //
+// DUAL-USE MAP (owner principle: every displayed metric is consumed by agent
+// decisions AND informative to humans — display-only = decoration = cut).
+// Every chip names its agent-side consumer; the computation is single-sourced
+// in the producer / shared modules, never in this view layer:
+//
+//   chip                  human meaning                agent-side consumer
+//   --------------------  ---------------------------  --------------------------------------
+//   state glyph+label     loop phase at a glance       #634 noop-breaker stall fingerprint +
+//   (cyan/amber/red)                                   #597/#754 liveness gates (dispatch +
+//                                                      budget gates read the same inputs)
+//   sparkline + %         a_t momentum as shape        a_t momentum + budget pacing (v_norm
+//   (v_hist, v_norm)                                   series drives eta/budget extrapolation;
+//                                                       producer-owned, tick-sampled)
+//   H bits + trend        learning honesty (v rising   strategy-arbiter gear-shift signal —
+//   (entropy_face)        while H flat = luck/fake)    the SAME h_bits/h_trend ride the tick
+//                                                      report face (scripts/entropy_face.py);
+//                                                      also gates exploration budget
+//   health dots x3        oracle / retro / dormant     #473 completion-gate power (oracle),
+//                         one-glance liveness          #38 backtrack gate (retro lag < 8),
+//                                                      #127 detector liveness (no DORMANT)
+//   task chip             who is working on what NOW   lib_kunglao worker-status protocol —
+//   (now{claim,op})       (idle · last C-<id> parked)  the same scan feeds dispatch gate +
+//                                                      capacity checks (check_workers_lt_3)
+//   flash (⚡, 5s)        milestone/state-change ping  producer-detected triggers the tick's
+//                                                      action loop already acts on
+//   eta (snapshot-level;  time remaining via flash    budget pacing (eta_ticks extrapolation,
+//   not a v2 chip)        text "剩 ~Nt"                tuition_curve._slope)
+//
+// Designed, v0.2-gated — slots stay unimplemented until their decision
+// consumers land: policy-belief chip (favored operator composition,
+// #12/#13) and Class-2 event light (self-anchor/vacuous attempts, #130).
+//
 // The repo-side renderer: a PURE VIEW over the producer snapshot
 // (<ws>/runs/.kunglao-statusline.json, written by scripts/statusline_snapshot.py).
 // All kunglao data is producer-owned — this script reads the ONE snapshot
@@ -13,10 +45,13 @@
 //
 // Contract: read stdin JSON once, pass through to claude-hud verbatim (when
 // present), then append the kunglao line to the LAST line (Claude Code
-// renders only the last statusline line). Watchdog kept: snapshot mtime
-// older than T_LIVE -> render frozen "down" frame, never trust a stale
-// "healthy" frame. Freshness kept: heartbeat_touch refreshes the snapshot
-// per tool use (#142), idle refreshes per tick.
+// renders only the last statusline line). Watchdog (three-valued, see the
+// event-driven contract below the imports): fresh -> snapshot's own state
+// face; stale within liveness policy -> IDLE face (dim, truthful — alive,
+// no events); beyond policy or snapshot state "down" -> frozen red DOWN.
+// Writes are event-driven only: heartbeat_touch refreshes the snapshot per
+// tool use and the tick writes only after hosting a settlement; there is
+// no fixed tick-cadence refresh (idle staleness is truthful).
 //
 // Line shape (owner-approved, issue #142):
 //   ◈ analyzing ▂▄▆█ 42% H1.3b ●●● │ C-409 sign-algo probe ⚡CASE-GREEN
@@ -31,7 +66,24 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-const T_LIVE_MS = 35 * 60 * 1000; // align with liveness_policy.HEARTBEAT_STALE_MINUTES
+// Event-driven contract (#142 refinement): snapshot WRITES happen on
+// semantic events only — tool use via hooks/heartbeat_touch, plus
+// tick-hosted settlement/rollup (heartbeat_tick writes right after its
+// settlement block); RENDERS are free pulls. Beyond that the 5-min tick
+// keeps its monitoring/breaker duties but is NO display dependency. An
+// idle workspace writes nothing — stale is TRUTHFUL. Staleness is
+// therefore THREE-VALUED, not binary — raw mtime
+// age alone conflates "idle" (alive, no events — stale is TRUTHFUL) with
+// "dead" (broken):
+//   fresh                    -> render the snapshot's own state face
+//   stale <= policy (idle)   -> alive+no-events: render the state machine's
+//                               IDLE face (its own dim-blue-gray idle hue,
+//                               never red)
+//   stale > policy, or the   -> the liveness face says dead: DOWN, red,
+//   snapshot itself is down     frozen (empty dots)
+// Horizons mirror scripts/liveness_policy.py (renderer cannot import it):
+const T_IDLE_MS = 5 * 60 * 1000;   // TICK_INTERVAL_DEFAULT_MIN — a full tick with zero tool events = idle
+const T_DEAD_MS = 35 * 60 * 1000;  // HEARTBEAT_STALE_MINUTES — beyond liveness policy = dead
 // Test seam: KUNGLAO_STATUSLINE_HUD='' disables the HUD passthrough so
 // renderer tests are deterministic on machines that do have the plugin.
 const HUD = process.env.KUNGLAO_STATUSLINE_HUD !== undefined
@@ -163,12 +215,21 @@ function renderKunglao(snapPath, nowMs) {
   } catch {
     return '';
   }
-  const down = nowMs - mtime > T_LIVE_MS;
+  const ageMs = Math.max(0, nowMs - mtime);
 
-  const state = down ? 'down' : (typeof snap.state === 'string' ? snap.state : 'idle');
+  // Three-valued staleness (see the event-driven contract above): the
+  // snapshot's own state field is the liveness face's verdict (producer
+  // computes "down" from the heartbeat/ledger probes); mtime age only
+  // separates fresh from idle-stale from beyond-policy dead.
+  const snapState = typeof snap.state === 'string' ? snap.state : 'idle';
+  const down = snapState === 'down' || ageMs > T_DEAD_MS;
+  const idleStale = !down && ageMs > T_IDLE_MS;
+  const state = down ? 'down' : (idleStale ? 'idle' : snapState);
   const stateLabel = STATE_LABELS[state] || 'idle';
   const glyph = GLYPHS[state] || '○';
-  const hue = down ? 0 : (snap.color?.hue ?? STATE_HUE_FALLBACK[state] ?? 220);
+  const hue = down ? 0
+    : (idleStale ? STATE_HUE_FALLBACK.idle
+                 : (snap.color?.hue ?? STATE_HUE_FALLBACK[state] ?? 220));
   const stateColor = (s) =>
     `\x1b[38;5;${Math.max(1, Math.min(230, Math.round((hue / 360) * 230) + 16))}m${s}\x1b[0m`;
 

@@ -81,6 +81,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `env_manifest.py` | env-facts.yaml single source (issue #450): five fact families + LayoutConventions, priority chain yaml > task-spec > defaults; --render/--probe | CLI, lib(3), tests |
 | `env_state_probe.py` | env-state liveness snapshot writer → runs/env-state.json (tick step 9; #475) | lib(2), tests |
 | `env_repair_l1.py` | L1 deterministic env repair (adb-reconnect/vm-rediscover/mcp-rehandshake; idempotent, safe no-op; #475) | CLI, tests |
+| `entropy_face.py` | #142 follow-up entropy-honesty face, SINGLE SOURCE — frontier PQ categorical entropy (posteriors.PQCategorical; frontier = first non-answered PQ, deterministic max-entropy fallback) + trend vs the previous stored snapshot value (falling/flat/rising/unknown, TREND_EPS); dual-use display (owner principle): statusline_snapshot renders it AND heartbeat_tick report carries the same h_bits/h_pq/h_trend (decision-side gear-shift signal); fail-open (empty/unreadable ledger → h_bits=None / unknown) | heartbeat_tick, statusline_snapshot, tests |
 | `heartbeat.py` | convergence-gated heartbeat bookkeeping (lib for hook_activation) | lib(1), tests |
 | `heartbeat_tick.py` | heartbeat tick runner (hook-invoked + kunglao.py) | hooks, lib(1), tests |
 | `heartbeat_loop_prompt.py` | loop-prompt generator for the tick loop | hooks, tests |

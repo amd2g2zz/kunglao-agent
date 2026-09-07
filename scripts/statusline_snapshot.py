@@ -2,12 +2,20 @@
 # -*- coding: utf-8 -*-
 """statusline_snapshot.py — #883 statusline 健康段数据面（快照解耦）.
 
-THE architectural decision (issue #883, 定案): kunglao logic never enters
-Node. This module pre-writes ONE snapshot file per heartbeat tick
-(``runs/.kunglao-statusline.json``) and the user's combined-statusline.mjs
-only reads it (O(1), zero spawn) to interpolate animation frames on its own
-render clock. Watchdog semantics fall out for free: kunglao dies -> tick
-stops -> snapshot mtime stalls -> Node judges down (no self-report).
+THE architectural decision (issue #883, refined #142): kunglao logic never
+enters Node. This module pre-writes ONE snapshot file per SEMANTIC EVENT
+(``runs/.kunglao-statusline.json`` — tool use via hooks/heartbeat_touch,
+plus tick-hosted settlement/rollup: heartbeat_tick writes right after its
+settlement block) and the repo's
+statusline_render.mjs only reads it (O(1), zero spawn). EVENT-DRIVEN
+WRITES: if nothing happened, nothing changed — a stale snapshot during
+idle is TRUTHFUL, so there is no tick-cadence refresh (the 5-min tick
+keeps monitoring/breaker duties but is not a display dependency).
+Watchdog: the renderer judges idle-vs-dead from the liveness policy —
+mtime within HEARTBEAT_STALE_MINUTES with no events = the state machine's
+own dim-blue-gray idle face;
+beyond policy, or this module's own probe-driven "down" verdict = DOWN.
+Never self-reported; always disk-observed.
 
 Three planes, all pure disk observation (看门狗原则：磁盘观测，永不
 self-report):
@@ -37,8 +45,11 @@ file mtime (alive, #534/#754), ledger tail (activity rate + sparks,
 owner for the whole kunglao segment (producer-owned data): it gains
 ``v_hist`` (last ~8 v_norm points — the sparkline), ``h_bits``/``h_pq``/
 ``h_trend`` (frontier PQ categorical entropy from runs/posteriors.yaml
-via posteriors.PQCategorical.entropy; trend vs the previous stored
-value), ``health{oracle,retro,dormant}`` (#473 oracle marker check /
+via scripts/posteriors.py PQCategorical.entropy; trend vs the previous
+stored value — SINGLE-SOURCED in scripts/entropy_face.py so the heartbeat
+tick report face and the future policy/strategy arbiter read the SAME
+computed values this snapshot renders; dual-use display, no decoration),
+``health{oracle,retro,dormant}`` (#473 oracle marker check /
 retro lag < 8 / #127 no DORMANT detectors), ``now{claim,op}`` (active
 worker from the lib_kunglao worker-status scan; op is a <=24-char task
 phrase), ``pq_rows`` + ``difficulty`` (the fine-grained PQ collection
@@ -48,9 +59,9 @@ placeholder slots (``v_oracle_gap`` #133, ``baseline_inv_k`` #129) so
 the renderer never changes twice.
 
 Usage: python statusline_snapshot.py <workspace>
-(attached from heartbeat_tick after the #873 cockpit sample AND from the
-heartbeat_touch per-tool-use path since #142 — working-period freshness
-~= per tool call; fail-open everywhere).
+(attached from the heartbeat_touch per-tool-use path and from
+heartbeat_tick's post-settlement step — event-driven writes, #142
+refinement. Fail-open everywhere.)
 """
 from __future__ import annotations
 
@@ -70,8 +81,14 @@ from ws_layout import resolve_strict as _resolve_ws
 # #597: staleness constants are single-sourced in liveness_policy.
 from liveness_policy import HEARTBEAT_STALE_MINUTES, TICK_INTERVAL_DEFAULT_MIN
 
+# #142 follow-up: the entropy-honesty face is single-sourced in
+# entropy_face (display + decision faces share one computation).
+from entropy_face import face as _entropy_face
+
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/ root
-SNAPSHOT_REL = Path("runs") / ".kunglao-statusline.json"
+# #142 follow-up: the snapshot path is single-sourced in entropy_face (the
+# trend-baseline reader owns the constant; the writer reuses it — no twin).
+from entropy_face import SNAPSHOT_REL
 
 # #142: snapshot schema version — 2 adds the producer-owned v2 fields
 # (v_hist / h_bits / h_trend / health / now / pq_rows / difficulty and the
@@ -94,7 +111,6 @@ BACKTRACK_LAG_WARN = 8                             # settlements since retro
 UNATTRIBUTED_RATE_WARN = 0.30                      # unattributed fraction
 # #142 v2 fields
 V_HIST_POINTS = 8                                  # sparkline window (~8 points)
-H_TREND_EPS = 1e-6                                 # |ΔH| below this = flat
 NOW_OP_MAX_CHARS = 24                              # task-chip phrase budget
 # Display-only worker-status field extraction (kunglao_status precedent:
 # NOT liveness parsing — liveness stays in lib_kunglao's protocol owners).
@@ -544,56 +560,10 @@ def _ledger_activity(ws: Path, now_s: float) -> dict:
 # #142 v2 data plane (producer-owned: the renderer never reads raw logs)
 # ---------------------------------------------------------------------------
 
-def _frontier_pq_id(ws: Path) -> str | None:
-    """任务前沿 = mission_ledger PQ 序里第一个未 answered 的 PQ id。
-    读失败/全答 -> None（调用方回退 max-entropy 或缺省）。"""
-    try:
-        led = yaml.safe_load((ws / "runs" / "mission_ledger.yaml")
-                             .read_text(encoding="utf-8")) or {}
-        for p in (led.get("mission", {}) or {}).get("pqs") or []:
-            if not isinstance(p, dict):
-                continue
-            if str(p.get("state") or "") != "answered":
-                return str(p.get("id")) if p.get("id") is not None else None
-    except (OSError, yaml.YAMLError, TypeError):
-        pass
-    return None
-
-
-def _frontier_entropy(ws: Path) -> tuple[float | None, str | None]:
-    """#142 学习诚实度徽章的数据面：前沿 PQ categorical 熵（bit）。
-
-    runs/posteriors.yaml -> posteriors.PQCategorical.entropy()。前沿 id 取
-    _frontier_pq_id；前沿无后验时回退全库 max-entropy PQ（仍是一个确定性的
-    熵读数）；账本空/读失败 -> (None, None)（渲染端整体省略徽章，fail-open）。
-    """
-    try:
-        from posteriors import PosteriorLedger
-        led = PosteriorLedger.load(ws)
-        if not led.pqs:
-            return None, None
-        frontier_id = _frontier_pq_id(ws)
-        pq = led.pqs.get(frontier_id) if frontier_id is not None else None
-        if pq is None:
-            pq = max(led.pqs.values(), key=lambda p: p.entropy())
-        return round(pq.entropy(), 4), pq.pq_id
-    except Exception:  # noqa: BLE001 — 快照永不打断 tick
-        return None, None
-
-
-def _h_trend(h_bits: float | None, prev: dict | None) -> str:
-    """熵趋势 = 与上一快照存储值比较：falling / flat / rising / unknown。"""
-    if not isinstance(h_bits, (int, float)):
-        return "unknown"
-    prev_h = (prev or {}).get("h_bits")
-    if not isinstance(prev_h, (int, float)):
-        return "unknown"
-    delta = float(h_bits) - float(prev_h)
-    if delta < -H_TREND_EPS:
-        return "falling"
-    if delta > H_TREND_EPS:
-        return "rising"
-    return "flat"
+# The entropy-honesty badge is SINGLE-SOURCED in scripts/entropy_face.py
+# (#142 follow-up, dual-use display): the snapshot face and the heartbeat
+# tick report face read the SAME computed {h_bits, h_pq, h_trend} — no
+# second computation lives here anymore.
 
 
 def _health_oracle(ws: Path) -> bool:
@@ -850,8 +820,7 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
 
     # #142 v2 producer-owned fields — each traced to its disk observation,
     # each fail-open (the snapshot never breaks the tick / the touch).
-    h_bits, h_pq = _frontier_entropy(ws)
-    h_trend = _h_trend(h_bits, prev)
+    h = _entropy_face(ws, prev)
     health = _health(ws)
     now_chip = _now_chip(ws)
     pq_rows = _pq_detail(ws)
@@ -874,9 +843,9 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         "v_norm": pq["v_norm"],
         # ---- #142 v2: producer-owned data (the renderer is a dumb view) ----
         "v_hist": pq.get("v_hist") or [],
-        "h_bits": h_bits,
-        "h_pq": h_pq,
-        "h_trend": h_trend,
+        "h_bits": h["h_bits"],
+        "h_pq": h["h_pq"],
+        "h_trend": h["h_trend"],
         "health": health,
         "now": now_chip,
         "pq_rows": pq_rows,
