@@ -297,6 +297,52 @@ def progress_face(ws, now=None) -> dict:
             "per_pq": rows}
 
 
+def _oracle_case_links(ws) -> list[tuple[str, str]]:
+    """#133: (case_id, target_pq) pairs over the workspace's ARMED oracle
+    case set. Single source: priority_ratio._load_oracle_cases — the SAME
+    reader the #107 Thompson case face consumes, so the value gate and the
+    ranker can never disagree about which cases belong to a PQ. Fail-open
+    contract inherited (no dir -> []; a broken case doc is skipped, not
+    signal)."""
+    from priority_ratio import _load_oracle_cases
+    return _load_oracle_cases(Path(ws))
+
+
+def _oracle_status_map(ws) -> dict[str, str] | None:
+    """#133: case_id -> runner status (pass|fail|pending) off the
+    oracle-status/1 verdict file, via the convergence DRAIN probe's own
+    reader (one schema face — no drift with the acceptance gate). None =
+    the file is PRESENT but unreadable: fail-closed, a corrupt verdict
+    never grants green (the contradiction-gate posture — unreadable
+    acceptance evidence cannot silently re-enable the value it checks)."""
+    from convergence_check import _load_oracle_status
+    face = _load_oracle_status(Path(ws))
+    if face.get("error"):
+        return None
+    return {c["id"]: c["status"] for c in face["cases"]}
+
+
+def oracle_credit_gate(pq_id, case_links: list[tuple[str, str]],
+                       status_map: dict[str, str] | None) -> bool | None:
+    """#133 coverage-credit gate (pure): may an answered PQ take full credit?
+
+    True  = every armed case bound to this PQ is green (runner pass).
+    False = armed but at least one case is NOT green — fail, pending (any
+            instrumentation state; "unknown" is never "pass", #108 A), a
+            case added after the last runner run, or an unreadable verdict
+            file. The PQ is "claimed but unproven", priced at the
+            blocked-tier credit.
+    None  = no armed case bound to this PQ — nothing to reconcile against
+            (Phase 0/1 tasks): keep current behavior.
+    """
+    armed = [cid for cid, tpq in case_links if tpq == str(pq_id)]
+    if not armed:
+        return None
+    if status_map is None:
+        return False
+    return all(status_map.get(cid) == "pass" for cid in armed)
+
+
 def value_m(ws, now=None) -> dict:
     """V_m + A_t。history 只由此函数追加（增量结算即时入账）。
 
@@ -315,6 +361,19 @@ def value_m(ws, now=None) -> dict:
     test_vm_normalization_10）——进度绝不写进 raw 面；V_m/A_t 数学原样
     不动——欠账结算仍是唯一权威；``now`` 仅参与 IN_PROGRESS 新鲜度
     分类，不入 V_m 单位。
+    #133 value-currency reconciliation（additive，raw 字段原样保留）：
+    v_m 的 PLAN 货币与 oracle 红/绿的 ACCEPTANCE 事实对账——answered PQ
+    的全额 coverage credit 需其 armed oracle cases 全绿（runner status
+    face: runs/oracle-status.json, oracle-status/1）。全绿 → 全额
+    w*coverage（原样）；任一 armed case 非绿（fail / pending / 未判 /
+    verdict 文件不可读——fail-closed）→ 阻断档信贷 β*w（"claimed but
+    unproven"）。无 armed case 的 PQ 保持原行为（Phase 0/1：无从对账）。
+    PQ→case 归链复用 #107 Thompson case face 的同一 reader（cases/
+    target_pq），价值闸门与排序层永不各自为政。新增对齐投影
+    v_oracle/v_oracle_norm：只给 oracle-green PQ（answered 且全绿）计
+    credit——v_norm 高 + v_oracle 低 = 叙事通胀的常设暴露面（#129 消费）。
+    history 行 ADDITIVE 携带 v_oracle/v_oracle_norm；raw v_m 数学、raw
+    返回键、raw history 字段全部原样。
     """
     led = load(ws)
     beta = float(led.get("mission", {}).get("beta", BETA))
@@ -329,18 +388,35 @@ def value_m(ws, now=None) -> dict:
         except yaml.YAMLError:
             claims = []
     v_m = 0.0
+    v_oracle = 0.0
     total_w = 0.0
     weighted_progress = 0.0
     pq_rows = []
     per_pq = {}
+    answered_ids = [str(p.get("id")) for p in pqs
+                    if p.get("state") == "answered"]
+    # #133: the acceptance face is read only when there is something to
+    # reconcile — no answered PQ (or no armed case set) touches oracle IO.
+    case_links = _oracle_case_links(ws) if answered_ids else []
+    status_map = (_oracle_status_map(ws)
+                  if (case_links and answered_ids) else {})
     for p in pqs:
         w = float(p.get("weight", 1.0))
         total_w += w
         cov = float(p.get("coverage", 0.0))
         st = p.get("state")
-        contrib = w * cov if st == "answered" else (
-            beta * w if st == "blocked" else 0.0)
+        oracle_green = None
+        if st == "answered":
+            oracle_green = oracle_credit_gate(p.get("id"), case_links,
+                                              status_map)
+            # None (no armed case) keeps the full credit; False (armed,
+            # not all green) damps to the blocked-tier credit.
+            contrib = w * cov if oracle_green is not False else beta * w
+        else:
+            contrib = beta * w if st == "blocked" else 0.0
         v_m += contrib
+        if oracle_green:
+            v_oracle += w * cov
         row = pq_progress(p, claims, now=now, tier=tier)
         weighted_progress += w * row["progress"]
         pq_rows.append(dict(id=p.get("id"), state=st, weight=w, **row))
@@ -349,6 +425,9 @@ def value_m(ws, now=None) -> dict:
     progress_fraction = (round(weighted_progress / total_w, 6)
                          if total_w > 0 else 0.0)
     v_norm = max(0.0, min(1.0, v_m / total_w)) if total_w > 0 else 0.0
+    # #133 aligned projection: only oracle-green PQs carry acceptance value.
+    v_oracle_norm = (max(0.0, min(1.0, v_oracle / total_w))
+                     if total_w > 0 else 0.0)
     hist = led.get("mission", {}).get("history") or []
     prev = float(hist[-1].get("v_m", 0.0)) if hist else 0.0
     if hist and "v_norm" in hist[-1]:
@@ -358,7 +437,9 @@ def value_m(ws, now=None) -> dict:
     a_t = v_m - prev
     a_t_norm = v_norm - prev_norm
     hist.append({"ts": _utc_now(), "v_m": round(v_m, 6),
-                 "v_norm": round(v_norm, 6)})
+                 "v_norm": round(v_norm, 6),
+                 "v_oracle": round(v_oracle, 6),
+                 "v_oracle_norm": round(v_oracle_norm, 6)})
     led["mission"]["history"] = hist
     _save(ws, led)
     n_answered = sum(1 for p in pqs if p.get("state") == "answered")
@@ -368,6 +449,10 @@ def value_m(ws, now=None) -> dict:
     return {"v_m": round(v_m, 6), "prev_v_m": prev, "a_t": round(a_t, 6),
             "v_norm": round(v_norm, 6), "a_t_norm": round(a_t_norm, 6),
             "total_weight": round(total_w, 6),
+            # #133 additive: acceptance currency + its normalized face —
+            # v_norm - v_oracle_norm is the standing inflation gap.
+            "v_oracle": round(v_oracle, 6),
+            "v_oracle_norm": round(v_oracle_norm, 6),
             "progress_fraction": progress_fraction,
             "per_pq_progress": pq_rows,
             "per_pq": per_pq, "answered": n_answered,
@@ -388,6 +473,9 @@ def emit_snapshot(ws, epoch: int | None = None, arm: str | None = None,
             # #10 additive: normalized value + per-round normalized delta
             "v_norm": val["v_norm"], "a_t_norm": val["a_t_norm"],
             "total_weight": val["total_weight"],
+            # #133 additive: acceptance currency + the inflation gap face
+            "v_oracle": val["v_oracle"],
+            "v_oracle_norm": val["v_oracle_norm"],
             # #14 additive: sub-PQ progress aggregate (see value_m)
             "progress_fraction": val["progress_fraction"],
         }, ensure_ascii=False)
