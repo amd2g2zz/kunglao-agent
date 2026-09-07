@@ -22,6 +22,15 @@ admission-time contract that closes those four openings:
   6. case_bank.append_once keys on the action signature, not the free-text
      method: the same action under two tool names banks once and can no
      longer displace other failures-first lessons from the top-5 window.
+Plus the #126 amendment's cross-candidate separation teeth (the lost tooth
+from the v0.1.4 user bug specimen — "HTTP 200 + response body non-empty"
+predicates success on the ENVIRONMENT, not on the unknown being reversed):
+  7. ``update_map`` required and non-vacuous — green_up non-empty, at
+     least one direction populated, every id an OPEN hypothesis inside
+     hypothesis_ref's own competitor group (no candidate's probability
+     should move on an HTTP status -> the specimen cannot write one);
+  8. live-group: hypothesis_ref's competitor group must hold >=2 OPEN
+     members — a self-filed singleton vacuous hypothesis is refused.
 
 E3 pre-experiment verdict (scripts/priority_ratio.py reuse check): the
 tool-family vocabulary is per-TOOL (frida != ida) and carries no unidbg/
@@ -52,21 +61,30 @@ import oracle_runner as orun  # noqa: E402
 
 # ---------------------------------------------------------------- fixtures
 
-HYP_AUTH = "H-101"    # competitor_group: grp-auth
-HYP_MAGIC = "H-102"   # competitor_group: grp-magic
+HYP_AUTH = "H-101"      # competitor_group: grp-auth (open)
+HYP_MAGIC = "H-102"     # competitor_group: grp-magic (open)
+HYP_AUTH2 = "H-103"     # grp-auth's second OPEN member (live-group census)
+HYP_MAGIC2 = "H-104"    # grp-magic's second OPEN member
+HYP_DEAD = "H-105"      # grp-auth but REFUTED — not an update_map target
+HYP_LONELY = "H-106"    # grp-lonely's ONLY member — dead (singleton) group
 
 
-def _write_hypothesis(ws: Path, hyp_id: str, group: str) -> None:
+def _write_hypothesis(ws: Path, hyp_id: str, group: str,
+                      status: str = "open") -> None:
     p = ws / "hypotheses" / f"{hyp_id}.md"
     p.parent.mkdir(parents=True, exist_ok=True)
+    refuting = ""
+    if status == "refuted":
+        refuting = "\nrefuting_fact_id: F002\n"
     p.write_text(
         "---\n"
         f"id: {hyp_id}\n"
         "claim_id: C-1\n"
         f"competitor_group: {group}\n"
         "candidates: [AES, ChaCha20]\n"
-        "status: open\n"
+        f"status: {status}\n"
         "schema_rev: 1\n"
+        f"{refuting}"
         "---\n"
         "\npq:q1\n\nSeeded scaffold — the case realizes this bet's "
         "predicted_observation.\n",
@@ -75,7 +93,8 @@ def _write_hypothesis(ws: Path, hyp_id: str, group: str) -> None:
 
 def _mk_ws(tmp_path: Path) -> Path:
     """Workspace whose fact pipeline can answer resolvable refs: facts/F001,
-    facts/F002, evidence/die.json, and two live hypotheses."""
+    facts/F002, evidence/die.json, and live competitor groups (each group
+    that admission touches holds >=2 OPEN hypotheses)."""
     ws = tmp_path / "ws"
     (ws / "oracle" / "cases").mkdir(parents=True)
     (ws / "facts").mkdir()
@@ -88,6 +107,10 @@ def _mk_ws(tmp_path: Path) -> Path:
     (ws / "evidence" / "die.json").write_text("{}\n", encoding="utf-8")
     _write_hypothesis(ws, HYP_AUTH, "grp-auth")
     _write_hypothesis(ws, HYP_MAGIC, "grp-magic")
+    _write_hypothesis(ws, HYP_AUTH2, "grp-auth")
+    _write_hypothesis(ws, HYP_MAGIC2, "grp-magic")
+    _write_hypothesis(ws, HYP_DEAD, "grp-auth", status="refuted")
+    _write_hypothesis(ws, HYP_LONELY, "grp-lonely")
     return ws
 
 
@@ -95,12 +118,33 @@ BASE_CASE = {
     "id": "auth-fields",
     "channel": "device-trace",
     "hypothesis_ref": HYP_AUTH,
+    "update_map": {"green_up": [HYP_AUTH, HYP_AUTH2], "red_up": [HYP_AUTH2]},
     "params": {"user": "alice", "nonce": 10},
     "expected": [
         {"field": "auth_algo", "value": "hmac-sha256",
          "evidence_refs": ["F001"]},
     ],
     "mutations": [{"field": "auth_algo", "kind": "swap"}],
+}
+
+# The v0.1.4 user-bug specimen (issue #126 amendment): "HTTP 200 + response
+# body non-empty" predicates success on the ENVIRONMENT (server liveness) —
+# its truth is invariant across the hypothesis space. Every candidate client
+# greens it; mutation-can-redden does NOT catch it (a mutation perturbing
+# that client reddens it too). No valid update_map exists: no candidate's
+# probability should move on an HTTP status code. Refused at admission.
+HTTP_200_SPECIMEN = {
+    "id": "http-200-env-predicate",
+    "description": "success predicated on server liveness, not on the "
+                   "unknown being reversed (v0.1.4 specimen)",
+    "channel": "device-trace",
+    "hypothesis_ref": HYP_AUTH,
+    "update_map": {"green_up": [], "red_up": []},  # cannot be made valid
+    "params": {"host": "crypto.example"},
+    "expected": [
+        {"field": "http_status", "value": 200, "evidence_refs": ["F001"]},
+    ],
+    "mutations": [{"field": "http_status", "kind": "change"}],
 }
 
 
@@ -226,18 +270,27 @@ def test_duplicate_signature_second_case_refused(tmp_path: Path) -> None:
 def test_distinct_channel_or_group_admits_both(tmp_path: Path) -> None:
     """Different channel (emulator vs device) = NOT a duplicate —
     cross-channel divergence is itself an observation. Same channel with a
-    different competitor_group is equally distinct."""
+    different (live) competitor_group is equally distinct."""
     ws = _mk_ws(tmp_path)
     device = copy.deepcopy(BASE_CASE)
     emulator = copy.deepcopy(BASE_CASE)
     emulator["id"] = "emu-fields"
     emulator["channel"] = "emulator-trace"
-    other_group = copy.deepcopy(BASE_CASE)
-    other_group["id"] = "magic-fields"
-    other_group["hypothesis_ref"] = HYP_MAGIC
+    other_group = {
+        "id": "magic-fields",
+        "channel": "device-trace",
+        "hypothesis_ref": HYP_MAGIC,
+        # red_up empty is fine: green_up alone proves upward discrimination
+        "update_map": {"green_up": [HYP_MAGIC, HYP_MAGIC2], "red_up": []},
+        "params": {},
+        "expected": [
+            {"field": "magic", "value": "MZ", "evidence_refs": ["F002"]},
+        ],
+        "mutations": [{"field": "magic", "kind": "change"}],
+    }
     _write_case(ws, device, "case-00.yaml")
-    _write_case(ws, emulator, "case-01.yaml")
-    _write_case(ws, other_group, "case-02.yaml")
+    _write_case(ws, emulator, "case-one.yaml")
+    _write_case(ws, other_group, "case-two.yaml")
     cases = orun.load_cases(ws / "oracle" / "cases")
     assert [c["id"] for c in cases] == \
         ["auth-fields", "emu-fields", "magic-fields"]
@@ -262,6 +315,98 @@ def test_case_without_mutations_refused(tmp_path: Path,
         orun.load_cases(ws / "oracle" / "cases")
 
 
+# ------------------------- 5b. cross-candidate separation (#126 amendment)
+
+def test_missing_update_map_refused(tmp_path: Path) -> None:
+    """No update_map -> the case's outcome is not tied to any candidate's
+    posterior -> REFUSED (cross-candidate separation is admission-level)."""
+    ws = _mk_ws(tmp_path)
+    case = copy.deepcopy(BASE_CASE)
+    case.pop("update_map")
+    _write_case(ws, case)
+    with pytest.raises(orun.OracleCaseError, match="update_map"):
+        orun.load_cases(ws / "oracle" / "cases")
+
+
+def test_empty_update_map_refused(tmp_path: Path) -> None:
+    """green_up empty — nothing rises if green — is the vacuous map; the
+    both-directions-empty form refuses on the same green_up rule."""
+    ws = _mk_ws(tmp_path)
+    vacuous = copy.deepcopy(BASE_CASE)
+    vacuous["id"] = "vacuous-green"
+    vacuous["update_map"] = {"green_up": [], "red_up": []}
+    _write_case(ws, vacuous)
+    with pytest.raises(orun.OracleCaseError, match="green_up"):
+        orun.load_cases(ws / "oracle" / "cases")
+
+
+@pytest.mark.parametrize("bad_id", ["H-999"])  # nonexistent in the store
+def test_update_map_id_must_exist(tmp_path: Path, bad_id: str) -> None:
+    ws = _mk_ws(tmp_path)
+    case = copy.deepcopy(BASE_CASE)
+    case["update_map"] = {"green_up": [bad_id], "red_up": []}
+    _write_case(ws, case)
+    with pytest.raises(orun.OracleCaseError, match="not an OPEN hypothesis"):
+        orun.load_cases(ws / "oracle" / "cases")
+
+
+def test_update_map_id_must_be_open(tmp_path: Path) -> None:
+    """A REFUTED hypothesis is history, not a live candidate — it cannot
+    rise. update_map moves live candidates only."""
+    ws = _mk_ws(tmp_path)
+    case = copy.deepcopy(BASE_CASE)
+    case["update_map"] = {"green_up": [HYP_DEAD], "red_up": []}
+    _write_case(ws, case)
+    with pytest.raises(orun.OracleCaseError, match="not an OPEN hypothesis"):
+        orun.load_cases(ws / "oracle" / "cases")
+
+
+def test_update_map_cross_group_id_refused(tmp_path: Path) -> None:
+    """An id from ANOTHER competitor group moves nobody's posterior in the
+    discriminated competition -> REFUSED."""
+    ws = _mk_ws(tmp_path)
+    case = copy.deepcopy(BASE_CASE)
+    case["update_map"] = {"green_up": [HYP_MAGIC], "red_up": []}
+    _write_case(ws, case)
+    with pytest.raises(orun.OracleCaseError,
+                       match="own competitor group|competes in"):
+        orun.load_cases(ws / "oracle" / "cases")
+
+
+def test_dead_group_refused(tmp_path: Path) -> None:
+    """hypothesis_ref's group holds a single OPEN hypothesis — a self-filed
+    singleton is a vacuous competition (nothing to discriminate) -> the
+    case is REFUSED even though its update_map ids are technically valid."""
+    ws = _mk_ws(tmp_path)
+    case = {
+        "id": "lonely-fields",
+        "channel": "device-trace",
+        "hypothesis_ref": HYP_LONELY,
+        "update_map": {"green_up": [HYP_LONELY], "red_up": []},
+        "params": {},
+        "expected": [
+            {"field": "auth_algo", "value": "hmac-sha256",
+             "evidence_refs": ["F001"]},
+        ],
+        "mutations": [{"field": "auth_algo", "kind": "swap"}],
+    }
+    _write_case(ws, case)
+    with pytest.raises(orun.OracleCaseError, match="live competition"):
+        orun.load_cases(ws / "oracle" / "cases")
+
+
+def test_http_200_specimen_refused(tmp_path: Path) -> None:
+    """The named v0.1.4 specimen: "HTTP 200 + response body non-empty" is a
+    property of the ENVIRONMENT (server liveness), not of the unknown being
+    reversed — its truth is invariant across the hypothesis space, every
+    candidate client greens it, and mutation-can-redden does not catch it.
+    No valid update_map exists -> REFUSED at admission."""
+    ws = _mk_ws(tmp_path)
+    _write_case(ws, copy.deepcopy(HTTP_200_SPECIMEN))
+    with pytest.raises(orun.OracleCaseError, match="green_up"):
+        orun.load_cases(ws / "oracle" / "cases")
+
+
 # ------------------------------------------------------ 7. acceptance
 
 def test_fully_armed_case_loads_clean(tmp_path: Path) -> None:
@@ -276,6 +421,8 @@ def test_fully_armed_case_loads_clean(tmp_path: Path) -> None:
     assert [c["id"] for c in cases] == ["auth-fields"]
     assert cases[0]["expected"][1]["evidence_refs"] == ["die.json"]
     assert cases[0]["mutations"][0]["field"] == "auth_algo"
+    assert cases[0]["update_map"] == {"green_up": [HYP_AUTH, HYP_AUTH2],
+                                      "red_up": [HYP_AUTH2]}
 
 
 # ------------------------------------------ 8. bank-side signature dedup

@@ -44,15 +44,54 @@ is not an observation and never touches the posterior.
 Case YAML shape::
 
     id: auth-fields            # required (file stem as fallback)
+    channel: device-trace      # required (#126): declared observation channel
+    hypothesis_ref: H-001      # required (#126): the live bet this case realizes
+    update_map:                # required (#126): cross-candidate separation —
+      green_up: [H-001]        #   who RISES on green / on red; ids must be
+      red_up: [H-002]          #   OPEN hypotheses in hypothesis_ref's group
     params: {user: alice, nonce: 10}
     expected:                  # required, non-empty
       - field: auth_algo       # required per entry
         value: hmac-sha256     # required per entry
-        evidence_refs: [F001]  # byte anchor (fact id(s)) — OR the marker below
-        pending-observation: true   # scaffold entry: owed, not compared
-    mutations:                 # optional; what distinguishes this case from
-      - field: auth_algo       #   near-miss implementations (half B)
-        kind: swap             #   swap | omit | change (default change)
+        evidence_refs: [F001]  # byte anchor — must RESOLVE (#126) …
+        pending-observation: true   # …or this marker: scaffold entry, owed
+    mutations:                 # REQUIRED non-empty (#126; was optional):
+      - field: auth_algo       #   what distinguishes this case from
+        kind: swap             #   near-miss implementations (half B)
+
+#126 — admission-time integrity beyond the #108 half C presence lint (the
+case set is blessed as a whole or not at all, before any IO):
+  - every non-pending evidence_ref RESOLVES to an existing fact-pipeline
+    artifact under the workspace — facts/F*.md or an evidence/ file
+    (an invented fact id is refused: refs are declarations, not
+    resolutions);
+  - refs into the oracle's own output (runs/ | oracle/ — the status file,
+    the case file itself) are refused: self-anchoring is circular
+    verification, the machine channel for a 100% pass rate;
+  - hypothesis_ref must name an existing <ws>/hypotheses/H*.md — a case
+    that discriminates nothing in the live competitor field is
+    indistinguishable from a real experiment at load time (the
+    trivial-oracle class);
+  - the action signature (declared channel, competitor_group of the linked
+    hypothesis) is the dedup axis: a second case with an identical
+    signature in one load is refused — marginal discriminative power, not
+    text. A different channel (emulator vs device) is a different
+    signature: cross-channel divergence is itself an observation;
+  - mutations non-empty at load: the --mutation flag becomes an admission
+    requirement — a case that cannot go red under a deliberately wrong
+    implementation is a rubber stamp;
+  - update_map is required and non-vacuous (cross-candidate separation):
+    green_up non-empty, at least one direction populated, every id an OPEN
+    hypothesis in the linked hypothesis's competitor_group. A case whose
+    outcome is invariant across the hypothesis space cannot write a valid
+    update_map — the HTTP-200 specimen: "HTTP 200 + body non-empty" is a
+    property of the ENVIRONMENT (server liveness), not of the unknown
+    being reversed; every candidate client greens it and
+    mutation-can-redden does not catch it (a mutation perturbing that
+    client reddens it too). Refused at admission;
+  - the linked hypothesis's competitor_group must hold >=2 OPEN members —
+    a live competition to discriminate; a self-filed singleton vacuous
+    hypothesis fails admission.
 
 Exit codes: 0 = no red case; 1 = at least one red case; 2 = lint refusal.
 Usage:
@@ -64,6 +103,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -84,9 +124,102 @@ class OracleCaseError(ValueError):
     """Case-set lint refusal (#108 half C) — loud, never silently blessed."""
 
 
+# ------------------------------------------------- #126 admission lints
+
+# E3 (issue #126 pre-experiment): the observation channel is DECLARED, not
+# inferred from tool names — priority_ratio.py's tool-family vocabulary is
+# per-TOOL (frida != ida) and carries no emulator tokens, so it cannot
+# produce the canonical verdict table ("frida stalker trace" == "ida server
+# trace" -> SAME device-trace channel; "unidbg codehook trace" != "frida
+# hook trace"). The case doc therefore declares `channel:` outright. The
+# case bank's entries carry only a free-text `method`, so the bank face
+# reads the channel through this DECLARED token vocabulary (word-bounded,
+# mechanical — the tool_families_from_text posture, channel semantics).
+# An unrecognized method maps to `adhoc:<normalized text>`: unknown actions
+# keep per-method keys and can never falsely dedup.
+_ACTION_CHANNEL_BY_TOKEN: dict[str, str] = {
+    "frida": "device-trace", "ida": "device-trace",
+    "x64dbg": "device-trace", "gdb": "device-trace",
+    "unidbg": "emulator-trace", "qiling": "emulator-trace",
+    "ghidra": "static",
+}
+
+
+def action_channel(method: str) -> str:
+    """Declared observation channel of an action's method text (pure).
+
+    Word-bounded, case-insensitive token match ('ida-server' -> ida; a
+    token inside a longer word never matches). Unrecognized text maps to
+    an ``adhoc:`` per-method channel so unknown actions stay distinct."""
+    text = str(method or "").lower()
+    for token, channel in _ACTION_CHANNEL_BY_TOKEN.items():
+        if re.search(r"(?<![a-z0-9])" + re.escape(token) + r"(?![a-z0-9])",
+                     text):
+            return channel
+    return "adhoc:" + " ".join(text.split())
+
+
+def action_signature(channel: str, competitor_group: str) -> tuple[str, str]:
+    """The #126 dedup axis: (declared observation channel, competitor
+    group served). Pure — same inputs, same signature, no hidden state."""
+    return (str(channel or "").strip(), str(competitor_group or "").strip())
+
+
+_EVIDENCE_ROOTS = ("facts", "evidence")
+
+
+def _resolve_evidence_ref(ws: Path, case_path: Path, cid: str,
+                          field: str, ref: str) -> Path:
+    """#126: an evidence ref RESOLVES or the case is refused.
+
+    Valid targets are fact-pipeline artifacts under the workspace:
+    ``facts/F*.md`` or any file under ``evidence/``. Refs pointing into
+    the oracle's own output (``runs/`` | ``oracle/`` — the status file,
+    the case file itself) are refused outright: self-anchoring is
+    circular verification. Path escapes are neutralized by containment —
+    a ref that resolves outside facts/ | evidence/ is refused, never
+    followed."""
+    text = str(ref).strip()
+    if not text:
+        raise OracleCaseError(
+            f"{case_path.name}: case {cid!r}: expected entry {field!r} "
+            f"carries an empty evidence_ref")
+    norm = text.replace("\\", "/").lower()
+    if norm.startswith(("runs/", "oracle/")) or "oracle-status" in norm:
+        raise OracleCaseError(
+            f"{case_path.name}: case {cid!r}: expected entry {field!r}: "
+            f"evidence ref {text!r} points into the oracle's own output "
+            f"(runs/ | oracle/) — self-anchor refused (#126: circular "
+            f"verification is the machine channel for a 100% pass rate)")
+    if "/" in text:
+        candidates = [ws / Path(text)]
+    else:
+        candidates = [ws / "facts" / f"{text}.md", ws / "facts" / text,
+                      ws / "evidence" / text]
+    for cand in candidates:
+        if not cand.is_file():
+            continue
+        resolved = cand.resolve()
+        for root in _EVIDENCE_ROOTS:
+            try:
+                resolved.relative_to((ws / root).resolve())
+            except ValueError:
+                continue
+            if root == "evidence" or (resolved.suffix == ".md"
+                                      and resolved.stem.startswith("F")):
+                return resolved
+            break  # under facts/ but not an F*.md — refused below
+        break  # exists, but outside facts/ | evidence/ — refused below
+    raise OracleCaseError(
+        f"{case_path.name}: case {cid!r}: expected entry {field!r}: evidence "
+        f"ref {text!r} does not resolve to an existing fact-pipeline "
+        f"artifact (facts/F*.md or an evidence/ file) under the workspace — "
+        f"refs are declarations, not resolutions (#126)")
+
+
 # ------------------------------------------------------------ case loading
 
-def _parse_expected(case_path: Path, cid: str, raw) -> list[dict]:
+def _parse_expected(ws: Path, case_path: Path, cid: str, raw) -> list[dict]:
     if not isinstance(raw, list) or not raw:
         raise OracleCaseError(
             f"{case_path.name}: case {cid!r} needs a non-empty `expected` list")
@@ -119,8 +252,13 @@ def _parse_expected(case_path: Path, cid: str, raw) -> list[dict]:
                 f"to bless an invented value (#108 half C: every expected "
                 f"entry carries a byte-anchored fact reference or an "
                 f"explicit pending-observation marker)")
+        str_refs = [str(r) for r in refs]
+        # #126: presence is not resolution — every non-pending ref must
+        # name an existing fact-pipeline artifact, or the case is refused.
+        for r in str_refs:
+            _resolve_evidence_ref(ws, case_path, cid, field, r)
         out.append({"field": field, "value": e["value"],
-                    "evidence_refs": [str(r) for r in refs], "pending": False})
+                    "evidence_refs": str_refs, "pending": False})
     return out
 
 
@@ -148,22 +286,163 @@ def _parse_mutations(case_path: Path, cid: str, raw) -> list[dict]:
     return out
 
 
+def _parse_update_map(case_path: Path, cid: str, group: str, raw,
+                      open_groups: dict[str, str]) -> dict:
+    """#126 amendment: cross-candidate separation, mechanical, fail-closed.
+
+    A valid case's outcome must functionally depend on the referenced
+    hypothesis's model: ``green_up`` names the OPEN hypotheses (same
+    competitor group) whose probability RISES if the case greens, ``red_up``
+    the ones that rise on red. ``green_up`` empty — or both directions
+    empty — means nothing rises if green: the case discriminates nothing
+    upward (the HTTP-200 class, refused at admission). Ids must be OPEN
+    hypotheses inside ``hypothesis_ref``'s own competitor group — an update
+    outside the discriminated competition moves nobody's posterior."""
+    if not isinstance(raw, dict):
+        raise OracleCaseError(
+            f"{case_path.name}: case {cid!r}: `update_map` is required — a "
+            f"mapping {repr({'green_up': ['H-xxx'], 'red_up': ['H-yyy']})} "
+            f"of hypothesis ids (#126: cross-candidate separation — the "
+            f"case's outcome must functionally depend on the referenced "
+            f"hypothesis's model)")
+    green = raw.get("green_up")
+    red = raw.get("red_up") or []
+    if not isinstance(green, list) or not green:
+        raise OracleCaseError(
+            f"{case_path.name}: case {cid!r}: update_map.green_up must be a "
+            f"non-empty list of hypothesis ids — nothing rises if green "
+            f"(#126: an outcome invariant across the hypothesis space — "
+            f"the HTTP-200 'environment predicate' class — discriminates "
+            f"nothing upward)")
+    if not isinstance(red, list):
+        raise OracleCaseError(
+            f"{case_path.name}: case {cid!r}: update_map.red_up must be a "
+            f"list of hypothesis ids")
+    for direction, ids in (("green_up", green), ("red_up", red)):
+        for h in ids:
+            hid = str(h).strip()
+            if hid not in open_groups:
+                raise OracleCaseError(
+                    f"{case_path.name}: case {cid!r}: update_map."
+                    f"{direction}: {hid!r} is not an OPEN hypothesis in the "
+                    f"store (missing, terminal, or malformed) — update_map "
+                    f"moves live candidates only (#126)")
+            if open_groups[hid] != group:
+                raise OracleCaseError(
+                    f"{case_path.name}: case {cid!r}: update_map."
+                    f"{direction}: {hid!r} competes in "
+                    f"{open_groups[hid]!r}, not the linked competitor group "
+                    f"{group!r} — update_map ids must sit inside "
+                    f"hypothesis_ref's own competitor group (#126)")
+    return {"green_up": [str(h).strip() for h in green],
+            "red_up": [str(h).strip() for h in red]}
+
+
 def load_cases(cases_dir) -> list[dict]:
-    """Load + lint every ``*.yaml`` case. Raises OracleCaseError on the first
-    refusal (#108 half C) — the case set is blessed as a whole or not at all."""
+    """Load + lint every ``*.yaml`` case. Raises OracleCaseError on the
+    first refusal (#108 half C presence lint + #126 admission integrity:
+    refs resolve, hypothesis_ref linked and existing, action-signature
+    dedup, mutations required, cross-candidate separation — a non-vacuous
+    update_map over OPEN hypotheses inside a live >=2-OPEN competitor
+    group) — the case set is blessed as a whole or not at all."""
+    cases_dir = Path(cases_dir)
+    ws = cases_dir.parent.parent  # <ws>/oracle/cases -> ws root (#126)
+    from hypothesis_store import HypothesisStore
+    hypotheses = HypothesisStore(ws / "hypotheses")
+    # #126 amendment: OPEN-hypothesis faces for the update_map + live-group
+    # lints (id -> competitor_group, and the per-group OPEN census).
+    open_groups: dict[str, str] = {h.id: h.competitor_group
+                                   for h in hypotheses.list_open()}
+    open_in_group: dict[str, int] = {}
+    for g in open_groups.values():
+        open_in_group[g] = open_in_group.get(g, 0) + 1
     cases: list[dict] = []
-    for p in sorted(Path(cases_dir).glob("*.yaml")):
+    seen_signatures: dict[tuple[str, str], str] = {}
+    for p in sorted(cases_dir.glob("*.yaml")):
         doc = yaml.safe_load(p.read_text(encoding="utf-8"))
         if not isinstance(doc, dict):
             raise OracleCaseError(f"{p.name}: case file is not a mapping")
         cid = str(doc.get("id") or p.stem).strip()
         if not cid:
             raise OracleCaseError(f"{p.name}: case id is empty")
+        expected = _parse_expected(ws, p, cid, doc.get("expected"))
+        mutations = _parse_mutations(p, cid, doc.get("mutations"))
+        # #126: mutations are an admission requirement now — a case that
+        # cannot go red under a deliberately wrong implementation is a
+        # rubber stamp (the --mutation flag made mandatory at load).
+        if not mutations:
+            raise OracleCaseError(
+                f"{p.name}: case {cid!r}: `mutations` is required non-empty "
+                f"at admission (#126) — a case that cannot go red under a "
+                f"deliberately wrong implementation is a rubber stamp")
+        # #126: case -> hypothesis linkage. A case that discriminates
+        # nothing in the live competitor field is indistinguishable from a
+        # real experiment at load time (the trivial-oracle class).
+        hyp_ref = str(doc.get("hypothesis_ref") or "").strip()
+        if not hyp_ref or "/" in hyp_ref or "\\" in hyp_ref \
+                or hyp_ref in (".", ".."):
+            raise OracleCaseError(
+                f"{p.name}: case {cid!r}: `hypothesis_ref` is required and "
+                f"must name a hypothesis id in the store (#126: without the "
+                f"linkage a case that discriminates nothing in the live "
+                f"competitor field passes for a real experiment)")
+        try:
+            hyp = hypotheses.get(hyp_ref)
+        except (KeyError, OSError, ValueError) as exc:  # InvalidTransition
+            # is a ValueError; the store's fail-open parse never invents a
+            # hypothesis, so ANY read failure is a refused link.
+            raise OracleCaseError(
+                f"{p.name}: case {cid!r}: hypothesis_ref {hyp_ref!r} does "
+                f"not resolve to a readable hypothesis in "
+                f"{hypotheses.root} ({exc}) — a link to nothing links "
+                f"nothing (#126)") from None
+        # #126 amendment: cross-candidate separation. The HTTP-200 specimen
+        # ("success" = server liveness — a property of the ENVIRONMENT,
+        # invariant across the hypothesis space) cannot write a valid
+        # update_map and is refused here.
+        update_map = _parse_update_map(p, cid, hyp.competitor_group,
+                                       doc.get("update_map"), open_groups)
+        # #126 amendment: a live competition to discriminate. A group with
+        # <2 OPEN members is a self-filed singleton — vacuous by width.
+        n_live = open_in_group.get(hyp.competitor_group, 0)
+        if n_live < 2:
+            raise OracleCaseError(
+                f"{p.name}: case {cid!r}: competitor group "
+                f"{hyp.competitor_group!r} holds {n_live} OPEN "
+                f"hypotheses — a live competition needs >=2 candidates to "
+                f"discriminate; a self-filed singleton vacuous hypothesis "
+                f"is refused (#126)")
+        # #126 (E3): the observation channel is declared, never inferred
+        # from tool names — the tool-family vocabulary cannot classify
+        # "frida stalker trace" and "ida server trace" as one channel.
+        channel = str(doc.get("channel") or "").strip()
+        if not channel:
+            raise OracleCaseError(
+                f"{p.name}: case {cid!r}: `channel` is required (#126: the "
+                f"observation channel is declared, not inferred)")
+        # #126: action-signature dedup. Same signature = one case; a second
+        # case with an identical signature adds no marginal discriminative
+        # power and is refused. Different channel or different
+        # competitor_group = different signature (cross-channel divergence
+        # is itself an observation).
+        sig = action_signature(channel, hyp.competitor_group)
+        if sig in seen_signatures:
+            raise OracleCaseError(
+                f"{p.name}: case {cid!r}: duplicate action signature "
+                f"{sig} — already covered by case "
+                f"{seen_signatures[sig]!r} (same declared channel + same "
+                f"competitor_group); the dedup axis is marginal "
+                f"discriminative power, not text (#126)")
+        seen_signatures[sig] = cid
         cases.append({
             "id": cid,
+            "channel": channel,
+            "hypothesis_ref": hyp_ref,
+            "competitor_group": hyp.competitor_group,
+            "update_map": update_map,
             "params": doc.get("params") or {},
-            "expected": _parse_expected(p, cid, doc.get("expected")),
-            "mutations": _parse_mutations(p, cid, doc.get("mutations")),
+            "expected": expected,
+            "mutations": mutations,
         })
     return cases
 

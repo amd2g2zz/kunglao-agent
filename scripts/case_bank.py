@@ -123,10 +123,16 @@ def append(ws: Path, entry: dict) -> dict:
 
 
 def append_once(ws: Path, entry: dict) -> dict:
-    """Idempotent append keyed on (claim_id, method, roi_class) — #110.
+    """Idempotent append keyed on (claim_id, action signature, roi_class).
 
-    The settlement wiring fires per settled claim; a replayed settlement
-    (same claim, same method, same roi_class) must not grow the bank.
+    #110 keyed the middle axis on the free-text method; #126 upgrades it to
+    the action signature (oracle_runner.action_channel): the same action
+    under two tool names (device-trace via frida-stalker vs ida-server —
+    one observation channel) banks ONCE, so a tool-name variant can no
+    longer displace other failures-first lessons from the top-5 retrieval
+    window. A DIFFERENT observation channel (emulator vs device) still
+    banks separately: cross-channel divergence is itself an observation.
+
     Validation is NOT bypassed: the ruling-4 lint (unattributed NEGATIVE)
     and the required-field checks still raise CaseBankError — dedup only
     short-circuits the WRITE, never the contract.
@@ -134,11 +140,13 @@ def append_once(ws: Path, entry: dict) -> dict:
     Returns {"ok": True, "duplicate": bool, "record": <stored or found>}.
     """
     e = entry or {}
-    key = (str(e.get("claim_id") or ""), str(e.get("method") or ""),
+    from oracle_runner import action_channel  # #126 signature axis (lazy:
+    # keeps case_bank's import graph unchanged for its read/CLI faces)
+    key = (str(e.get("claim_id") or ""), action_channel(e.get("method")),
            str(e.get("roi_class") or ""))
     for existing in read_entries(ws):
         if (str(existing.get("claim_id") or ""),
-                str(existing.get("method") or ""),
+                action_channel(existing.get("method")),
                 str(existing.get("roi_class") or "")) == key:
             return {"ok": True, "duplicate": True, "record": existing}
     record = append(ws, e)
