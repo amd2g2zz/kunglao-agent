@@ -21,11 +21,20 @@ from pathlib import Path
 import yaml
 
 DEFAULT_K = 3
+# E2-derived (#127, /tmp/e2-127/e2_tolerance.py — data, not vibes): the two
+# fixture v_m histories bracket the constant. Cheap settlements wiggle the
+# ledger tail by |dv_m| <= ~3e-3 (must classify FLAT); a real PQ settlement
+# moves v_m by >= 1e-1 (weight-sized jumps; must classify NOT flat). The
+# band is [3e-3, 1e-1]; 1e-2 is its geometric midpoint sqrt(1e-3 * 1e-1) —
+# one order of magnitude above the wiggle ceiling AND below the smallest
+# real move. Exact equality (the pre-#127 rule, T=0) is blind to the whole
+# wiggle class: flat-run stayed 1 (< k=3) on the wiggle fixture.
+V_M_FLAT_TOLERANCE = 1e-2
 _PARK = "PARK"
 _OPEN = "OPEN"
 
 
-def stall_mission(ws, k: int = DEFAULT_K) -> dict:
+def stall_mission(ws, k: int = DEFAULT_K, emit: bool = True) -> dict:
     """ΔV_m 连续平坦 >=k 且仍有 open claims → stalled。
 
     open 计数用 ACTIVE_STATUSES（OPEN/IN_PROGRESS）——PARK 不算 open
@@ -46,7 +55,12 @@ def stall_mission(ws, k: int = DEFAULT_K) -> dict:
     if len(hist) >= 2:
         flat = 1
         for prev, cur in zip(reversed(hist[:-1]), reversed(hist[1:])):
-            if float(prev.get("v_m", 0.0)) == float(cur.get("v_m", 0.0)):
+            # #127: tolerance band, not exact equality — cheap settlements
+            # wiggle v_m by ~1e-3 and the exact-equality rule reset the
+            # flat counter on every one (a wired detector that cannot fire
+            # under realistic noise is false confidence).
+            if (abs(float(prev.get("v_m", 0.0)) - float(cur.get("v_m", 0.0)))
+                    <= V_M_FLAT_TOLERANCE):
                 flat += 1
             else:
                 break
@@ -61,9 +75,40 @@ def stall_mission(ws, k: int = DEFAULT_K) -> dict:
             if (str(c.get("status") or "").upper() in ACTIVE_STATUSES):
                 open_claims += 1
     stalled = flat >= k and open_claims > 0
-    return {"stalled": stalled, "consecutive_flat": flat, "k": k,
-            "open_claims": open_claims,
-            "v_m": float(hist[-1].get("v_m", 0.0)) if hist else 0.0}
+    result = {"stalled": stalled, "consecutive_flat": flat, "k": k,
+              "open_claims": open_claims,
+              "v_m": float(hist[-1].get("v_m", 0.0)) if hist else 0.0}
+    _emit_liveness_telemetry(ws, emit, stalled, flat, k, open_claims)
+    return result
+
+
+def _emit_liveness_telemetry(ws, emit: bool, stalled: bool, flat: int,
+                             k: int, open_claims: int) -> None:
+    """#127 liveness telemetry: every evaluation emits detector_eval; a
+    trip emits detector_fired. liveness_report (detector_liveness) reads
+    these counters and flags DORMANT (evaluated, never fired) — the #600
+    sentinel generalized. Telemetry never breaks the detector, and the
+    read-only callers (kunglao_resume's #466 decide pass) suppress it via
+    emit=False — resume must not write. (Owns the emit/fail-open branches
+    so stall_mission stays under the complexity budget.)"""
+    if not emit:
+        return
+    try:
+        import kunglao_log
+        kunglao_log.emit(ws, "mission_stall", "detector_eval",
+                         detail=json.dumps(
+                             {"detector": "mission_stall",
+                              "consecutive_flat": flat, "k": k,
+                              "open_claims": open_claims},
+                             ensure_ascii=False))
+        if stalled:
+            kunglao_log.emit(ws, "mission_stall", "detector_fired",
+                             detail=json.dumps(
+                                 {"detector": "mission_stall",
+                                  "consecutive_flat": flat, "k": k},
+                                 ensure_ascii=False))
+    except Exception:  # noqa: BLE001 — telemetry must not break the detector
+        pass
 
 
 def park_violations(ws) -> list[str]:
