@@ -740,6 +740,11 @@ def run(cases_dir, client_path, *, mutation: bool = False) -> dict:
     for row in rows.values():
         counts[{"fail": "red", "pass": "green",
                 "pending": "pending"}[row["status"]]] += 1
+    # #157: one observation event per case result row (post-verdict, silent
+    # fail-open) — <ws> is the load_cases root (<ws>/oracle/cases).
+    ws = cases_dir.parent.parent
+    for cid, row in rows.items():
+        _emit_observation(ws, cid, row)
     return {
         "schema": SCHEMA_ID,
         "cases_dir": str(cases_dir),
@@ -774,11 +779,81 @@ def write_status(ws, report: dict) -> Path:
     return path
 
 
+# -------------------------- #157 algorithm event log -----------------------
+
+def _report_fingerprint(report: dict) -> str:
+    """#157 posterior_update trigger fingerprint: the hash of the report
+    that produced the observation — WHICH run moved the belief.
+
+    Client ``meta``/``stages`` ride the report verbatim (review r1-157
+    HIGH), so sort_keys can hit mixed-type mapping keys — degrade to
+    insertion-order serialization (still deterministic for a given report
+    object) instead of raising into the caller."""
+    try:
+        payload = json.dumps(report, sort_keys=True, ensure_ascii=False,
+                             default=repr)
+    except (TypeError, ValueError):
+        payload = json.dumps(report, ensure_ascii=False, default=repr)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _emit_posterior_update(ws, case_id: str, before: tuple,
+                           after: tuple, report: dict) -> None:
+    """#157: one ``posterior_update`` event per REAL verdict — alpha/beta
+    BEFORE -> AFTER plus the trigger fingerprint (the report hash), so
+    belief evolution is replayable from the event tail. SILENT FAIL-OPEN:
+    the fingerprint build AND the emit both live inside the try — a crash
+    here never touches the state write (record_posteriors's contract is
+    unchanged — the emit is additive)."""
+    try:
+        from kunglao_log import emit
+        trigger = _report_fingerprint(report)
+        emit(ws, actor="oracle_runner", action="posterior_update",
+             detail=json.dumps(
+                 {"case_id": case_id,
+                  "alpha_before": before[0], "beta_before": before[1],
+                  "alpha_after": after[0], "beta_after": after[1],
+                  "trigger_fingerprint": trigger},
+                 sort_keys=True, ensure_ascii=False))
+    except Exception:  # noqa: BLE001 — observability never disturbs reward
+        pass
+
+
+def _emit_observation(ws, case_id: str, row: dict) -> None:
+    """#157: one ``observation`` event per case result row — case_id/status
+    + the #146 forensics summary class (mismatch field names for fail,
+    derivation presence for pass). The reward signal's event face: whether
+    the observation layer fired AT ALL is auditable. SILENT FAIL-OPEN."""
+    try:
+        from kunglao_log import emit
+        fore = row.get("forensics") or {}
+        mismatches = fore.get("mismatches") or []
+        payload = {
+            "case_id": case_id,
+            "status": row.get("status"),
+            "forensics": {
+                "mismatch_fields": [m.get("field") for m in mismatches
+                                    if isinstance(m, dict)],
+                "has_derivation": bool(fore.get("stages")),
+                "divergence_point": fore.get("divergence_point"),
+            },
+        }
+        emit(ws, actor="oracle_runner", action="observation",
+             detail=json.dumps(payload, sort_keys=True, ensure_ascii=False,
+                               default=repr))
+    except Exception:  # noqa: BLE001 — observability never disturbs the run
+        pass
+
+
 def record_posteriors(ws, report: dict) -> Path | None:
     """#106 reuse: a REAL verdict (pass/fail) is one Bernoulli observation on
     the case's CasePosterior (green -> alpha+1 / red -> beta+1). Pending is
     not an observation — no update, no ledger touch. Missing/unreadable
-    ledger degrades per posteriors.py's fail-open load contract."""
+    ledger degrades per posteriors.py's fail-open load contract.
+
+    #157: each update additionally emits one ``posterior_update`` event
+    (alpha/beta before -> after + the trigger fingerprint). ADDITIVE ONLY —
+    the ledger delta and the return value are exactly the pre-#157 ones."""
     import posteriors as po
     updates = {cid: row["status"] == "pass"
                for cid, row in report["cases"].items()
@@ -788,8 +863,10 @@ def record_posteriors(ws, report: dict) -> Path | None:
     led = po.PosteriorLedger.load(ws)
     for cid, passed in updates.items():
         cp = led.cases.get(cid) or po.CasePosterior(cid)
+        before = (cp.alpha, cp.beta)
         cp.update(passed)
         led.cases[cid] = cp
+        _emit_posterior_update(ws, cid, before, (cp.alpha, cp.beta), report)
     return led.save(ws)
 
 
