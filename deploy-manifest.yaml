@@ -343,7 +343,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: fdbb487ed6c40b4743386620d32b76f0a773cd60eb1086b9a3260b061d811f90
+    sha256: 5e462856bb61dc3ba915e921cdff1fa63ed13a48d723ef076c11ad9d33dac237
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -591,7 +591,7 @@ files:
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: 4c9bc8a3e7d2b024bcd0bd09991a99b83ceb44b8999587d7cdbfb7379aa9b1bb
+    sha256: 57055afc4ba6b6c535afed6cd560de6a0caa398be3ac8f21c61f255c5ad2455e
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
@@ -627,7 +627,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 547ce5740c537082bd0422b036d554ed13a6f5a247f2fa8461d0488e62f18326
+    sha256: 2f1d1890c9b0f0aac2a878871c7a088e1093bf4233a617d2c1504d6e05b7feca
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
