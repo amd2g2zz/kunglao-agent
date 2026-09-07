@@ -46,7 +46,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao_wait.py` | worker 自旋锁 CLI — 交付后 sleep 轮询 + WAIT flag 续写（mtime 心跳），signal 到达 UNWAIT 回工作（rc 0），K 轮无 signal self-kill 释放槽位（rc 3/4）；9 agents 统一接入 | agents, hooks/dispatch_gate (signal), tests |
 | `init_channel_default.py` | default local-channel resolution + KUNGLAO_CHANNEL env contract (#727); static-only probe for local + explicit-channel-never-auto-switch; consumed by kunglao-init.write_init_report(channel=) | kunglao-init, tests |
 | `kunglao-init.py` | workspace init + re-init guard + deploy_env (#478: hooks/agents/mcp-record/skills + env-manifest ledger) | CLI, tests |
-| `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + explore_gate + priority_ratio | CLI, tests |
+| `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + priority_ratio (#107 Thompson, single ranking path) | CLI, tests |
 | `kunglao-verify.py` | M3 VERIFY entry (thin wrapper → `kunglao_verify.py`) | CLI, tests |
 | `kunglao-record.py` | M4 RECORD entry (thin wrapper → `kunglao_record.py`) | CLI, tests |
 | `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch | CLI, tests |
@@ -106,7 +106,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `calibration_gate.py` | calibration/confidence gate | tests |
 | `completion_gate.py` | completion transaction gate | hooks, tests |
 | `cost_gate.py` | cost tier gate (advisory/pause/HARD_PAUSE) | tests |
-| `explore_gate.py` | explore-before-dispatch gate (lib for kunglao-decide) | lib(1), tests |
 | `fact_contradiction_gate.py` | cross-fact contradiction detection | hooks, lib(3), tests |
 | `plan_drift_detector.py` | plan↔reality drift detection | hooks, tests |
 | `plan_reviser.py` | plan state machine + suggest_revision triggers + incremental revision segments | tests, SKILL contract |

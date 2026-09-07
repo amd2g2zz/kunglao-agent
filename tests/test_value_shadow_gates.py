@@ -48,7 +48,12 @@ def test_gate_2_fingerprint_zero_false_positives(tmp_path):
         assert r["circuit_broken"] is False, f"false break at round {i}"
 
 
-def test_gate_3_prior_correction_no_degradation(monkeypatch):
+def test_gate_3_seeded_ranking_deterministic(monkeypatch):
+    """#107 re-pin: the prior-correction term is deleted with the weighted
+    formula; the gate now pins the equivalent no-degradation property of the
+    rebuilt ranker — the default-seed ranking is stable and the worth
+    channel (the one sanctioned exogenous input) does not reshuffle the arm
+    set, only reweights it."""
     claims = [
         {"id": "C-001", "status": "OPEN", "statement": "c2 config extract",
          "evidence_tier_attempted": 1, "promotion_attempts": 0},
@@ -59,8 +64,8 @@ def test_gate_3_prior_correction_no_degradation(monkeypatch):
     ]
     monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
     base = [a.claim_id for a in pr.priority_ratio(claims, {}, pr.EvidenceView())]
-    neutral = [a.claim_id for a in pr.priority_ratio(
-        claims, {}, pr.EvidenceView(prior_p_complete=1.0))]
-    uniform = [a.claim_id for a in pr.priority_ratio(
-        claims, {}, pr.EvidenceView(prior_p_complete=0.5))]
-    assert base == neutral == uniform  # top action preserved in all three
+    again = [a.claim_id for a in pr.priority_ratio(claims, {}, pr.EvidenceView())]
+    worthed = [a.claim_id for a in pr.priority_ratio(
+        claims, {}, pr.EvidenceView(value_class_weights={"rce": 3.0}))]
+    assert base == again
+    assert sorted(base) == sorted(worthed)  # reweighted, never reshuffled

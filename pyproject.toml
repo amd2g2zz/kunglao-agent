@@ -105,7 +105,6 @@ max-complexity = 12
 "scripts/env_check.py" = ["E501"]
 "scripts/env_state_probe.py" = ["E501"]
 "scripts/event_taxonomy.py" = ["C901", "E501"]
-"scripts/explore_gate.py" = ["E501"]
 "scripts/external_kicker.py" = ["C901"]
 "scripts/failure_analysis_gate.py" = ["C901", "E501"]
 "scripts/feedback.py" = ["E501"]

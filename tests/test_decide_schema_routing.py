@@ -116,11 +116,15 @@ class TestSchemaFieldIntegrity:
             assert required in out, f"cc.decide() must produce '{required}'"
 
     def test_kd_output_has_composite_fields(self, tmp_path):
-        """kd.decide() must produce top_actions/blocked/stale/drifts/explore_mode/selfcheck."""
+        """kd.decide() must produce top_actions/blocked/stale/drifts/selfcheck
+        (#107 dropped explore_mode with the dual path)."""
         ws = _make_ws(tmp_path, claims=[{"id": "C-1", "status": "OPEN"}])
         out = _run_kd(ws)
-        for required in ("top_actions", "blocked", "stale", "drifts", "explore_mode", "selfcheck"):
+        for required in ("top_actions", "blocked", "stale", "drifts", "selfcheck"):
             assert required in out, f"kd.decide() must produce '{required}'"
+        assert "explore_mode" not in out, (
+            "kd.decide() must not produce 'explore_mode' (#107 deleted the "
+            "dual path)")
 
 
 class TestKunglaoDecideInvalid:

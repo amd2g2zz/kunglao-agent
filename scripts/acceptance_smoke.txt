@@ -12,16 +12,16 @@
 #   - zero overlap with in-flight PR #681-#684 file sets
 #   - a renamed/deleted test makes pytest exit nonzero ("no tests ran") —
 #     the manifest cannot silently shrink; fix the pin deliberately
-tests/test_priority_ratio.py::test_voi_formula_not_additive_not_old
-tests/test_priority_ratio.py::test_leverage_terminal_claim_is_zero
-tests/test_priority_ratio.py::test_leverage_higher_with_more_open_downstream
-tests/test_priority_ratio.py::test_discriminator_active_competitor_group_top
-tests/test_priority_ratio.py::test_discriminator_answers_question_middle
-tests/test_priority_ratio.py::test_discriminator_else_floor
-tests/test_priority_ratio.py::test_novelty_drops_with_prior_facts_in_category
-tests/test_priority_ratio.py::test_cost_tier_penalty
+tests/test_priority_ratio.py::test_thompson_composite_formula_not_weighted
+tests/test_priority_ratio.py::test_dependency_gate_blocks_child_of_unproven_parent
+tests/test_priority_ratio.py::test_dependency_gate_allows_child_of_terminal_fact_parent
+tests/test_priority_ratio.py::test_case_posterior_linked_via_target_pq
+tests/test_priority_ratio.py::test_flip_potential_decays_and_falls_back
+tests/test_priority_ratio.py::test_pq_categorical_entropy_enters_score
+tests/test_priority_ratio.py::test_cost_field_is_tier_diagnostic_only
 tests/test_priority_ratio.py::test_scoring_is_deterministic_pure
-tests/test_priority_ratio.py::test_c401_c402_not_tied_when_signals_differ
+tests/test_priority_ratio.py::test_register_reorder_never_reshuffles
+tests/test_priority_ratio.py::test_seed_injection_varies_the_sample
 tests/test_priority_ratio.py::test_terminal_status_claims_never_ranked
 tests/test_digest.py::test_digest_has_six_sections
 tests/test_digest.py::test_digest_size_upper_bound

@@ -6,10 +6,10 @@
 欠账表而非活动量——防傻性质：边角料 claims 全 PROVEN 而与 PQ 零关联时，
 V_m 增量严格为 0（测试锚定，蓝图 §7.2）。
 
-Shadow/live 边界（#104 修正，旧文"全程不改任何决策路径"已不准确）：
-raw 信号（value_signals/rho 落账）仍为 shadow——只计算+落盘；但派生量
-v_norm/d_slope_norm/gap_bucket 已是 priority_ratio 的 live 排序输入
-（#9/#823-P3 接线，gap_bucket 领排 sort key 首位）。
+Shadow/live 边界（#104 修正，旧文"全程不改任何决策路径"已不准确）；
+#107 再修正：priority_ratio 重建为 Thompson 排序后，本账本的派生量
+（v_norm/d_slope_norm 及旧排序键首位）不再是任何排序输入——V_m 数据面
+（init/value_m/update + cockpit/tuition 消费）保留，独立于排序层。
 
 PQ 解析复用 convergence_check._parse_primary_questions（单一解析合同，
 canonical/legacy/string/mapping 四形状），文本取自原始条目。

@@ -1,59 +1,74 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""priority_ratio.py — M1 DECIDE VoI-proxy action ranking (issue #2, design-spec §3.2).
+"""priority_ratio.py — M1 DECIDE action ranking, REBUILT (#107).
 
-VoI proxy / cost (purely mechanical, zero LLM calls):
-  score(a) = [0.45·L(a) + 0.30·D(a) + 0.25·N(a)] / cost(a)
+Owner ruling (issue #107, "探索和价值网络需要完全重构，之前的不要了"):
+the weighted VoI-proxy formula score = [0.45·L + 0.30·D + 0.25·N]/cost and
+the (bucket, score, claim_id) lexicographic sort are DISCARDED — weights
+with no estimation basis, and a boolean bucket that dictated everything.
+The explore/exploit dual path (the count-threshold gate module, its
+constant, the cheapness spread) died with it: ONE ranker, no phase switch,
+no count cliff.
 
-Components (contract gaps, specs/phase-4/contract.md §1):
-  L(a) = leverage: |downstream OPEN claims| normalized (claim_deps depends_on reverse edges); claim with a terminal fact → 0
-  D(a) = discriminator: live competitor_group(≥2 OPEN)=1.0 / answers_question=0.5 / else=0.2
-  N(a) = novelty: 1 − min(1, (terminal facts in the same action category
-         + same-strategy historical failures, #496) / NOVELTY_BASE)
-  cost(a) = TIER_COST[action_tier] = {1:1.0, 2:3.0, 3:10.0}  (deeper higher tier → lower ratio)
+The rebuilt value function (design card #97, unchanged):
 
-The LLM never enters the score: scoring is a pure function (claims, deps,
-evidence) → same input, same output (test_scoring_is_deterministic_pure).
-The LLM only touches the two seams — claim seeding (writing hypotheses/
-discriminator groups) and results (writing facts); ranking is zero-LLM.
+    action value = Σ_cases P(flip | action) · case_weight + λ · ΔH_PQ(action)
+    rank by Thompson sample per action per tick; stable tie-break claim_id
 
-#496 typed-fact consumption (read-only over the #495 record face):
-  EvidenceView also derives validated_capability / identified_obstacle
-  from analyses/failure-*.yaml and the strategy dispatch log
-  (runs/strategy-log.jsonl, appended by hooks/dispatch_gate.py) —
-  capability_switch_violation() is the pure judgment behind the
-  dispatch-gate capability card; strategy_failures feeds novelty.
+Concretely, per dispatchable claim (the candidate filter is UNCHANGED:
+OPEN + promotion_attempts<3 + every depends_on parent holding a terminal
+fact, #594/#596 per-claim fallback, #103 dirty-value tolerance):
 
-#759 H2 value function: runs/value-weights.yaml carries the user's
-  structured worth ruling (claim_classes impact→weight, per-claim
-  overrides); the resolved multiplier applies to the final ratio
-  (score = VoI/cost × weight). Loading is fail-open per entry and whole
-  file — absent/corrupt/illegal → weight 1.0, byte-identical to the
-  pre-#759 formula. This is the SANCTIONED worth channel (#711 E2:
-  replaces hand-edited ranking inputs / SendMessage verdict hacks);
-  see SKILL.md "Value ordering".
+  case face — the claim's oracle cases (workspace `oracle/cases/*.yaml`,
+  each `target_pq` == the claim's `answers_question`) are Bernoulli
+  posteriors (#106 CasePosterior, runs/posteriors.yaml). ONE Thompson Beta
+  sample per linked case, summed; a claim with no linked case samples the
+  Beta(1,1) prior once — cold start is UNIFORM RANDOM, which is Thompson's
+  intrinsic exploration: an uncertain arm occasionally ranks first with no
+  threshold gate, and bad priors recover by evidence.
 
-#9 dynamic data hookup (feeds that already exist on dev; score assembly
-  structure UNCHANGED — this is wiring, not redesign):
-  L(a) additionally carries the mission-learning signal the #823-P3 ledger
-    read already touches: headroom (1 − v_norm) × live slope gate
-    (d_slope_norm > 0, per-settlement-round rate, #10) × open-PQ linkage
-    (positive mission_gap). No ledger / flat accrual / converged mission →
-    0 contribution (graph leverage unchanged); rising V_m on an open PQ →
-    positive L (the exploration loop demonstrably pays).
-  D(a) scales by sample difficulty from evidence/difficulty.json (or the
-    task_spec ``difficulty:`` key — #15's two mount faces): multiplier
-    1 + 0.5·score, or the tier enum when no numeric score; clamped to the
-    D ceiling 1.0. Absent/unusable/foreign-schema → legacy D (absence is
-    never scored as difficulty, mirroring #15's gap rule).
-  N(a) counts method repetition from rows the #496 strategy-log read path
-    ALREADY returns (dispatch rows per claim, minus the rows its own
-    failure channel already counts — one signal, one channel, no double
-    counting). No new data plumbing; no dispatch history → byte-identical
-    pre-#9 novelty.
-  Every term records its feed state (Action.feeds: neutral reason when a
-  feed is absent, feed values when live). Fail-open everywhere: a corrupt
-  feed degrades to neutral, never to a crash or a faked signal.
+  PQ face — the claim's primary_question categorical (#106
+  PQCategorical). ΔH is mechanical: H(categorical), the entropy the
+  categorical still carries — the updatable quantity an observation on
+  that PQ can remove (a peaked distribution has little left to flip).
+  No PQ categorical → ΔH = 0.
+
+  score = (case_face + LAMBDA_DH · ΔH) · worth        (#759 worth channel)
+
+  LAMBDA_DH = 0.25 is the ONLY free parameter of the rebuilt formula
+  (#111 integration tests will exercise it). `worth` is the pre-existing
+  #759 user worth ruling (runs/value-weights.yaml) — a sanctioned exogenous
+  multiplier, not a formula DOF; absent weights → 1.0.
+
+  rng — priority_ratio(claims, deps, evidence, rng=None). rng=None →
+  random.Random(0): same inputs → same ranking (anchor-deterministic).
+  Live callers (kunglao-decide, worker_budget.check_priority) share ONE
+  seed source, posterior_rng(ws) — a digest of the CASES posterior state,
+  so the sample moves when evidence moves (the issue's determinism clause:
+  "same rank given the same posterior state") and DECIDE + the dispatch
+  gate can never disagree about rank #1 (#100/#101 die at the root). The
+  per-claim rng is forked from ONE base draw keyed by claim_id, so a
+  register reorder never reshuffles dispatch order.
+
+  flip potential (diagnostic, feeds["case_flip_potential"]) — the
+  conservative P(cflip) reading: 0.5 at cold start, decayed by the claim's
+  promotion_attempts (historical settlements), floored to
+  FLIP_POTENTIAL_FALLBACK = 0.3 when the action has no oracle case / PQ
+  linkage. It rides Action.feeds; it does NOT enter the score.
+
+The LLM never enters the score; ranking is a pure function of (claims,
+deps, evidence, rng). The record faces this module still reads for OTHER
+consumers: analyses/failure-*.yaml → validated_capabilities /
+identified_obstacles (the dispatch-gate capability card,
+strategy_metrics), and runs/value-weights.yaml (#759).
+
+Deleted with the formula (owner ruling): the mission_ledger L-term feeds
+(the v_norm/d_slope_norm reads and the old lexicographic sort head —
+mission_ledger.py itself KEEPS its V_m data face), the difficulty
+D-multiplier, the novelty/strategy-log proxy feeds, the #823 prior_p cost
+inflation and the capability bonus.
+The routing tables (quickref peeling / jsvmp triage / route_capability)
+survive as prior INPUT to hypothesis generation, never as rankers.
 
 Usage:
   python priority_ratio.py <workspace> [--json]
@@ -61,7 +76,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import random
 import re
 import sys
 from dataclasses import dataclass, field
@@ -70,35 +87,30 @@ from pathlib import Path
 import yaml
 
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES, SUSPENDED
-from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
-import kunglao_log  # noqa: E402  (#104: #534 lifeline, moved off module scope)
-import tuition_curve  # noqa: E402  (#9: v_norm/d_slope helpers, single source)
+import kunglao_log  # noqa: E402  (#104: #534 lifeline, emit only)
+from posteriors import CasePosterior, PosteriorLedger  # noqa: E402  (#106)
 
-WEIGHTS = {"L": 0.45, "D": 0.30, "N": 0.25}
-TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
-NOVELTY_BASE = 3  # 3 terminal facts in a category → N=0 (saturated)
-CAPABILITY_BONUS = 1.5  # #823 A3: multiplier for claims holding a validated capability card
+# #107: the single free parameter of the rebuilt value function.
+LAMBDA_DH = 0.25
+# #107 conservative flip-potential reading (diagnostic only — see feeds).
+FLIP_POTENTIAL_BASE = 0.5       # P(cflip) at cold start
+FLIP_POTENTIAL_FALLBACK = 0.3   # no oracle case / no PQ linkage
 
-# #9 D-term difficulty hookup: the #15 calibrated score lifts the legacy
-# discriminator by up to +50% (a discriminating action is worth more on a
-# resistant sample); the tier enum is the fallback surface (score absent).
-DIFFICULTY_D_BOOST = 0.5
-DIFFICULTY_TIER_MULT = {"easy": 1.0, "medium": 1.15, "hard": 1.3, "max": 1.5}
-DIFFICULTY_SCHEMA = "difficulty-calibration/"
-DIFFICULTY_JSON = "evidence/difficulty.json"
+_TIER_COST = {1: 1.0, 2: 3.0, 3: 10.0}
 
-# #496: the strategy dispatch log (single writer: hooks/dispatch_gate.py on
-# its PASS path; the interface is deliberately optional — no marker, no row).
-STRATEGY_LOG = "runs/strategy-log.jsonl"
+ORACLE_CASES_REL = "oracle/cases"
 
 
 @dataclass(frozen=True)
 class EvidenceView:
     """Evidence view (derived from facts/_INDEX, immutable).
 
-    #496 additions (all default-empty — the pre-#496 call shape is
-    positionally compatible): the #495 failure artifacts and the strategy
-    dispatch log are consumed READ-ONLY from the workspace."""
+    #107 rebuild: the view carries the record faces OTHER consumers need
+    (capability cards, terminal facts, #759 worth weights) plus the
+    workspace root (`ws`) the ranker loads #106 posteriors + oracle cases
+    from. The weighted-era scoring feeds (mission dynamics, difficulty
+    multiplier, novelty proxies, prior_p) are deleted with their formula.
+    """
 
     terminal_fact_claims: frozenset[str] = frozenset()
     verified_fact_count: int = 0
@@ -106,31 +118,13 @@ class EvidenceView:
     raw_lines: tuple[str, ...] = ()
     validated_capabilities: tuple[tuple[str, str], ...] = ()  # (claim_id, text)
     identified_obstacles: tuple[tuple[str, str], ...] = ()  # (claim_id, text)
-    strategy_failures: dict[str, int] = field(default_factory=dict)
-    claim_strategy: dict[str, str] = field(default_factory=dict)
     # #759 H2: structured user worth ruling (fail-open loaded)
     value_class_weights: dict[str, float] = field(default_factory=dict)
     value_claim_overrides: dict[str, float] = field(default_factory=dict)
-    # #823 A3 (always-on since #51): replay prior P(complete) for this
-    # workspace's bucket; 1.0 = neutral → pre-#823 cost math (fail-open on
-    # read failure, not flag-gated).
-    prior_p_complete: float = 1.0
-    # #823-P3: remaining gap weight per PQ (answered→0, blocked→(1−β)·w,
-    # unattempted→w); mission_active only with positive gaps.
-    mission_gap: dict[str, float] = field(default_factory=dict)
-    mission_active: bool = False
-    # #9 (always-on, appended — all default-None/empty → pre-#9 neutral):
-    # dynamic mission-value signals for the L term, from the SAME ledger
-    # read as mission_gap (#8 settlement face, #10 normalization).
-    mission_v_norm: float | None = None
-    mission_d_slope_norm: float | None = None
-    # #9 D term: #15 difficulty verdict (score continuous, tier enum).
-    difficulty_score: float | None = None
-    difficulty_tier: str | None = None
-    # #9 N term: non-failed dispatch rows per claim — the redundancy proxy
-    # rides the #496 strategy-log read path (no separate novelty ledger on
-    # dev); failure rows stay exclusively in strategy_failures.
-    claim_dispatch_repeats: dict[str, int] = field(default_factory=dict)
+    # #107: workspace root — the ranker reads runs/posteriors.yaml and
+    # oracle/cases/*.yaml through it. None (bare construction, tests) → no
+    # posteriors: every action samples the Beta(1,1) prior and ΔH = 0.
+    ws: Path | None = None
 
     @classmethod
     def from_workspace(cls, ws: Path) -> "EvidenceView":
@@ -139,15 +133,13 @@ class EvidenceView:
         terminal_fact_claims: claims cited by facts whose status contains any
         TERMINAL token;
         verified_fact_count:  count of facts whose status contains
-        PROVEN/VERIFIED (explore_gate input);
-        fact_count_by_category: left empty — priority_ratio derives it from
-        (claims, terminal_fact_claims) (this view has no claim statements,
-        so it cannot self-classify).
+        PROVEN/VERIFIED;
+        fact_count_by_category: left empty — the view has no claim
+        statements, so it cannot self-classify.
 
-        #496: also scans the #495 record face (analyses/failure-*.yaml) and
-        the strategy dispatch log — each file individually fail-open, a
-        broken artifact never breaks the ranking.
-        """
+        Also scans the #495 record face (analyses/failure-*.yaml) — each
+        file individually fail-open, a broken artifact never breaks the
+        ranking."""
         index = ws / "facts" / "_INDEX.md"
         if not index.exists():  # fixture-layout fallback
             index = ws / "_INDEX.md"
@@ -181,56 +173,19 @@ class EvidenceView:
                             terminal_claims.add(c.get("id"))
                 except (yaml.YAMLError, OSError):
                     pass  # fail-open: broken register must not break ranking
-        caps, obstacles, covers = _scan_failure_artifacts(ws)
-        claim_strategy, strategy_failures, dispatch_repeats = \
-            _load_strategy_view(ws, covers)
+        caps, obstacles = _scan_failure_artifacts(ws)
         classes, overrides = load_value_weights(ws)
-        prior_p = _resolve_prior_p(ws)
-        mission_gap: dict[str, float] = {}
-        mission_active = False
-        mission_v_norm: float | None = None
-        mission_d_slope_norm: float | None = None
-        # #823-P3 (always-on since #51): mission gap weights from the欠账表
-        # (fail-open). #9: the same read now also yields the L-term value
-        # dynamics (v_norm / d_slope_norm, #10 single-source helpers).
-        try:
-            led_path = ws / "runs" / "mission_ledger.yaml"
-            if led_path.exists():
-                led = yaml.safe_load(
-                    led_path.read_text(encoding="utf-8")) or {}
-                mission = led.get("mission", {})
-                beta = float(mission.get("beta", 0.3))
-                pqs = mission.get("pqs", [])
-                for p in pqs:
-                    w = float(p.get("weight", 1.0))
-                    st = p.get("state")
-                    mission_gap[str(p.get("id"))] = (
-                        0.0 if st == "answered" else
-                        (1.0 - beta) * w if st == "blocked" else w)
-                mission_active = any(v > 0 for v in mission_gap.values())
-                # #9: ledger PRESENT → the signals are defined even with an
-                # empty history (0.0/0.0 = no demonstrated accrual, a flat
-                # state — NOT the absent-feed state).
-                total_w = sum(float(p.get("weight", 1.0)) for p in pqs)
-                norm = tuition_curve._norm_series(mission.get("history"),
-                                                  total_w)
-                mission_v_norm = norm[-1] if norm else 0.0
-                mission_d_slope_norm = tuition_curve._slope(
-                    norm[-tuition_curve._WINDOW:]) if norm else 0.0
-        except Exception:  # noqa: BLE001 — fail-open
-            mission_gap, mission_active = {}, False
-            mission_v_norm, mission_d_slope_norm = None, None
-        difficulty_score, difficulty_tier = _load_difficulty_verdict(ws)
         return cls(frozenset(terminal_claims), verified, {}, lines,
-                   caps, obstacles, strategy_failures, claim_strategy,
-                   classes, overrides, prior_p, mission_gap, mission_active,
-                   mission_v_norm, mission_d_slope_norm,
-                   difficulty_score, difficulty_tier, dispatch_repeats)
+                   caps, obstacles, classes, overrides, Path(ws))
 
 
 @dataclass(frozen=True)
 class Action:
-    """A dispatchable action (the scored shape of M1.3 top_actions; skill is the worker's own choice — routing CUT issue #1)."""
+    """A dispatchable action (the scored shape of M1.3 top_actions; skill is the worker's own choice — routing CUT issue #1).
+
+    #107: score = (Thompson case face + LAMBDA_DH·ΔH_PQ) · worth. The
+    weighted-era term fields (leverage/discriminator/novelty and the old
+    lexicographic sort head) are deleted; feeds carries the new diagnostics."""
 
     claim_id: str
     action: str
@@ -238,17 +193,13 @@ class Action:
     skill: str | None
     tier: int
     attempts: int
-    leverage: float
-    discriminator: float
-    novelty: float
     cost: float
-    weight: float = 1.0  # #759 H2 value multiplier (appended field — the pre-#759 construction shape is positionally compatible)
-    gap_bucket: int = 0  # #823-P3: 1 = answers an open-PQ gap (leads the sort)
-    # #9: term → feed state ("feed live: <values>" / "feed absent: <reason>")
+    weight: float = 1.0  # #759 H2 worth multiplier (exogenous, not a DOF)
+    # #107 diagnostics: thompson_sample / case_flip_potential / dh_pq
     feeds: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
-        # feeds (#9) stay object-level diagnostics, NOT a json face key:
+        # feeds stay object-level diagnostics, NOT a json face key:
         # consumers compare full to_dict() payloads across workspaces where
         # feed STATES legitimately differ while scores do not.
         return {"claim_id": self.claim_id, "action": self.action,
@@ -264,7 +215,7 @@ def is_open(claim: dict) -> bool:
             and st not in SUSPENDED)
 
 
-# ---------- action classification (unchanged, feeds the novelty region + worker hints) ----------
+# ---------- action classification (feeds the Action.category + worker hints) ----------
 
 _KEYWORD_MAP: list[tuple[tuple[str, ...], str]] = [
     (("c2", "mpd", "pegasus", "dead-drop", "dead drop", "c2 配置"), "c2_config_extract"),
@@ -296,7 +247,7 @@ def classify_action(claim: dict) -> str:
     return best
 
 
-# ---------- VoI components ----------
+# ---------- per-claim int guards (#103, unchanged) ----------
 
 def _int_flag(value) -> tuple[int, bool]:
     """int conversion with a dirty flag (#103 per-claim tolerance).
@@ -323,13 +274,9 @@ def action_tier(claim: dict) -> int:
 
 
 def action_cost(claim: dict) -> float:
-    """cost = TIER_COST[tier]; a higher tier (deep dive/VM) enlarges the ratio's denominator → lower score."""
-    return TIER_COST[action_tier(claim)]
-
-
-def cheapness(claim: dict) -> float:
-    """For explore-mode ranking: 1/cost (high T1 → breadth first). The reciprocal of action_cost."""
-    return 1.0 / action_cost(claim)
+    """cost = tier cost (diagnostic field since #107 — the score no longer
+    divides by it; the Thompson sample + ΔH carry the value)."""
+    return _TIER_COST[action_tier(claim)]
 
 
 def _reverse_deps(depends_on: dict) -> dict[str, list[str]]:
@@ -341,74 +288,22 @@ def _reverse_deps(depends_on: dict) -> dict[str, list[str]]:
     return rev
 
 
-def _active_competitor_groups(claims: list[dict], competitor_groups: dict) -> set:
-    """A live group = ≥2 OPEN members."""
-    open_ids = {c.get("id") for c in claims if c.get("id") and is_open(c)}
-    active: set = set()
-    for g, members in (competitor_groups or {}).items():
-        if sum(1 for m in (members or []) if m in open_ids) >= 2:
-            active.add(g)
-    return active
-
-
-def _discriminator(claim: dict, active_groups: set) -> float:
-    """D: live competitor_group=1.0 / answers_question=0.5 / else=0.2."""
-    cg = claim.get("competitor_group")
-    if cg and cg in active_groups:
-        return 1.0
-    if claim.get("answers_question"):
-        return 0.5
-    return 0.2
-
-
-def _fact_count_by_category(claims: list[dict], evidence: EvidenceView) -> dict[str, int]:
-    """action_cat → terminal fact count.
-
-    Uses evidence.fact_count_by_category directly when non-empty (test
-    injection); otherwise derives from (claims, evidence.terminal_fact_claims):
-    +1 for each terminal claim's action category.
-    """
-    if evidence.fact_count_by_category:
-        return dict(evidence.fact_count_by_category)
-    by_id = {c.get("id"): c for c in claims if c.get("id")}
-    counts: dict[str, int] = {}
-    for tcid in evidence.terminal_fact_claims:
-        c = by_id.get(tcid)
-        if c:
-            cat = classify_action(c)
-            counts[cat] = counts.get(cat, 0) + 1
-    return counts
-
-
-def _novelty(action_cat: str, fact_counts: dict[str, int],
-             strategy_failures: int = 0) -> float:
-    """N = 1 − min(1, (facts already produced in the category + same-strategy
-    historical failures) / NOVELTY_BASE). Unexplored → 1.0; saturated → 0.0.
-
-    #496: the strategy term is opt-in — a claim with no [strategy] dispatch
-    history keeps strategy_failures=0 and the formula is byte-identical to
-    the pre-#496 behavior."""
-    n = fact_counts.get(action_cat, 0) + strategy_failures
-    return 1.0 - min(1.0, n / NOVELTY_BASE)
-
-
-# ===================== #496 typed-fact consumption (read-only) =====================
+# ===================== #496 typed-fact consumption (capability cards) =====================
 
 def _scan_failure_artifacts(ws: Path) -> tuple[tuple[tuple[str, str], ...],
-                                               tuple[tuple[str, str], ...],
-                                               dict[str, int]]:
+                                               tuple[tuple[str, str], ...]]:
     """Read-only scan of the #495 record face: analyses/failure-*.yaml.
 
-    Returns (validated_capabilities, identified_obstacles, covers_by_claim).
-    One file per claim (record_analysis overwrites) — the file content IS
-    the latest analysis. Each file individually fail-open: an unreadable or
-    malformed analysis is not evidence, it is skipped without a crash."""
+    Returns (validated_capabilities, identified_obstacles) — the dispatch-
+    gate capability card + strategy_metrics inputs. One file per claim
+    (record_analysis overwrites) — the file content IS the latest analysis.
+    Each file individually fail-open: an unreadable or malformed analysis is
+    not evidence, it is skipped without a crash."""
     adir = ws / "analyses"
     caps: list[tuple[str, str]] = []
     obstacles: list[tuple[str, str]] = []
-    covers: dict[str, int] = {}
     if not adir.is_dir():
-        return tuple(caps), tuple(obstacles), covers
+        return tuple(caps), tuple(obstacles)
     for p in sorted(adir.glob("failure-*.yaml")):
         try:
             entry = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
@@ -419,63 +314,13 @@ def _scan_failure_artifacts(ws: Path) -> tuple[tuple[tuple[str, str], ...],
         cid = str(entry.get("claim") or "").strip()
         if not cid:
             continue
-        try:
-            covers[cid] = int(entry.get("covers_attempt") or 0)
-        except (TypeError, ValueError):
-            covers[cid] = 0
         cap = str(entry.get("validated_capability") or "").strip()
         obs = str(entry.get("identified_obstacle") or "").strip()
         if cap:
             caps.append((cid, cap))
         if obs:
             obstacles.append((cid, obs))
-    return tuple(caps), tuple(obstacles), covers
-
-
-def _load_strategy_view(ws: Path, covers: dict[str, int]) -> tuple[dict[str, str], dict[str, int], dict[str, int]]:
-    """Derive (claim_strategy, strategy_failures, dispatch_repeats) from
-    runs/strategy-log.jsonl.
-
-    claim_strategy: claim id -> strategy of its LATEST dispatch row.
-    strategy_failures: strategy -> count of dispatch rows whose claim later
-    failed — the #495 analysis covers_attempt exceeded the attempts snapshot
-    taken at dispatch time (attempts semantics make timestamps redundant: a
-    post-dispatch failure always re-records the analysis with a higher
-    covers). Rows without a snapshot cannot be judged and are ignored for
-    failure counting. Missing/corrupt log -> ({}, {}, {}) — opt-in interface.
-    #9: dispatch_repeats (claim -> row count) is the N-term method
-    repetition proxy — SAME rows, zero new plumbing, and rows already
-    counted as #496 failures are NOT re-counted (one signal, one channel:
-    failure repetition lives in strategy_failures; repeats owns redundancy
-    WITHOUT resolution).
-    """
-    log = ws / Path(STRATEGY_LOG)
-    if not log.is_file():
-        return {}, {}, {}
-    try:
-        rows = log.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
-        return {}, {}, {}
-    claim_strategy: dict[str, str] = {}
-    failures: dict[str, int] = {}
-    repeats: dict[str, int] = {}
-    for e in iter_jsonl(rows):
-        if not isinstance(e, dict) or e.get("event") != "dispatch":
-            continue
-        strategy = str(e.get("strategy") or "").strip()
-        claim = str(e.get("claim") or "").strip()
-        if not strategy or not claim:
-            continue
-        claim_strategy[claim] = strategy  # file order = latest row wins
-        try:
-            snapshot = int(e.get("attempts_at_snapshot"))
-        except (TypeError, ValueError):
-            snapshot = None
-        if snapshot is not None and covers.get(claim, 0) > snapshot:
-            failures[strategy] = failures.get(strategy, 0) + 1
-            continue  # failure repetition is the #496 channel's — not #9's
-        repeats[claim] = repeats.get(claim, 0) + 1  # #9: redundancy, no resolution
-    return claim_strategy, failures, repeats
+    return tuple(caps), tuple(obstacles)
 
 
 # #496: tool-family vocabulary for the capability card. A token maps a
@@ -578,7 +423,7 @@ def capability_switch_violation(claim_ids, dispatch_tools: list[str],
             "dispatch_families": sorted(disp_fams), "capability": capability}
 
 
-# ===================== #759 H2 value function =====================
+# ===================== #759 H2 value function (worth channel) =====================
 
 VALUE_WEIGHTS_FILE = "runs/value-weights.yaml"
 
@@ -659,131 +504,77 @@ def claim_value_weight(claim: dict,
     return 1.0
 
 
-def _resolve_prior_p(ws: Path) -> float:
-    """#823 A3: this workspace's bucket P(complete) from the A1 replay
-    priors (same bucket derivation as build_priors). Deferred imports —
-    value_replay imports this module at top level (cycle breaker).
-    Any read failure → 1.0 (neutral: a missing prior must not reshape
-    the ranking, mirroring the #759 fail-open posture)."""
-    try:
-        import rho_checkpoint
-        import value_replay
-        priors = {}
-        p = ws / "runs" / "value-priors.yaml"
-        if p.exists():
-            data = yaml.safe_load(p.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                priors = data
-        spec = {}
-        sp = ws / "task_spec.yaml"
-        if sp.exists():
-            data = yaml.safe_load(sp.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                spec = data
-        depth = str(spec.get("depth") or "unknown").strip().lower()
-        v, _source, _band = rho_checkpoint.v_from_priors(
-            priors, depth, value_replay.dominant_family(ws))
-        return float(v)
-    except (OSError, yaml.YAMLError, ImportError):
-        return 1.0
+# ===================== #107 Thompson rebuild =====================
+
+def _load_oracle_cases(ws: Path | None) -> list[tuple[str, str]]:
+    """(case_id, target_pq) pairs from `<ws>/oracle/cases/*.yaml`, sorted by
+    filename (deterministic). Fail-open per file: a broken case doc is not
+    signal, it is skipped. No workspace / no dir → [] (cold start)."""
+    if not ws:
+        return []
+    cdir = Path(ws) / ORACLE_CASES_REL
+    if not cdir.is_dir():
+        return []
+    out: list[tuple[str, str]] = []
+    for p in sorted(cdir.glob("*.yaml")):
+        try:
+            doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001 — unreadable case is not evidence
+            continue
+        if not isinstance(doc, dict):
+            continue
+        case_id = str(doc.get("id") or p.stem).strip()
+        target_pq = str(doc.get("target_pq") or "").strip()
+        if case_id:
+            out.append((case_id, target_pq))
+    return out
 
 
-def _difficulty_doc_from_spec(ws: Path) -> dict | None:
-    """#15's second mount face: the ``difficulty:`` key in task_spec.yaml."""
-    try:
-        sp = ws / "task_spec.yaml"
-        if not sp.exists():
-            return None
-        doc = (yaml.safe_load(sp.read_text(encoding="utf-8")) or {}).get(
-            "difficulty")
-    except (OSError, yaml.YAMLError):
-        return None
-    return doc if isinstance(doc, dict) else None
+def case_face_seed(ledger: PosteriorLedger) -> int:
+    """Deterministic seed digest of the CASES posterior state (#106).
+
+    Only the cases namespace enters the seed: a PQ-categorical update must
+    move the ΔH term, not reshuffle the Thompson case samples (one signal,
+    one channel). Same posterior state → same ranking (the #107 determinism
+    clause); a runner verdict (new alpha/beta) moves the seed — the tick
+    variation Thompson needs, with no clock and no counter file."""
+    doc = {"cases": {k: ledger.cases[k].to_dict()
+                     for k in sorted(ledger.cases)}}
+    payload = json.dumps(doc, sort_keys=True, ensure_ascii=False)
+    return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16], 16)
 
 
-def _load_difficulty_verdict(ws: Path) -> tuple[float | None, str | None]:
-    """#9 D feed: (score∈[0,1], tier) from evidence/difficulty.json, falling
-    back to the task_spec ``difficulty:`` key (#15's two mount faces).
+def posterior_rng(ws) -> random.Random:
+    """THE shared per-tick Thompson seed source — DECIDE (kunglao-decide)
+    and the dispatch gate (worker_budget.check_priority) both rank through
+    this, so they can never disagree about rank #1 (#100/#101 die at the
+    root: one ranker, one seed).
 
-    Fail-open: absent / unparsable / foreign-schema docs yield (None, None)
-    — a doc that is not the #15 verdict is NOT signal (absence is never
-    scored as difficulty, mirroring the #15 gap rule). The single-doc parse
-    delegates to kunglao_log.iter_jsonl (#863 Family K: this file carries
-    zero local json parse sites)."""
-    doc: object = None
-    try:
-        dp = ws / Path(DIFFICULTY_JSON)
-        if dp.exists():
-            text = dp.read_text(encoding="utf-8")
-            doc = next(iter_jsonl([text]), None)
-    except OSError:
-        doc = None
-    if not isinstance(doc, dict) or not str(
-            doc.get("schema", "")).startswith(DIFFICULTY_SCHEMA):
-        doc = _difficulty_doc_from_spec(ws)
-    if not isinstance(doc, dict) or not str(
-            doc.get("schema", "")).startswith(DIFFICULTY_SCHEMA):
-        return None, None
-    raw_score = doc.get("score")
-    score: float | None = None
-    if isinstance(raw_score, (int, float)) and not isinstance(raw_score, bool):
-        score = max(0.0, min(1.0, float(raw_score)))
-    tier = str(doc.get("tier") or "").strip().lower()
-    return score, (tier if tier in DIFFICULTY_TIER_MULT else None)
+    Seed = case_face_seed(runs/posteriors.yaml); empty/absent ledger →
+    Random(0) (cold start). A PosteriorSchemaError (unknown ledger version —
+    the #106 version wall) propagates LOUD: DECIDE lands in its
+    conservative-BLOCKED path, the gate fails open with a trace. Never a
+    silent wrong-schema read."""
+    ledger = PosteriorLedger.load(ws)
+    if not ledger.cases:
+        return random.Random(0)
+    return random.Random(case_face_seed(ledger))
 
 
-def _difficulty_multiplier(evidence: EvidenceView) -> tuple[float, str]:
-    """#9 D hookup: difficulty verdict → mechanical multiplier on the legacy
-    discriminator (1 + 0.5·score, or the tier enum when no numeric score);
-    callers clamp D to its 1.0 ceiling. Returns (multiplier, feed state)."""
-    if evidence.difficulty_score is not None:
-        mult = 1.0 + DIFFICULTY_D_BOOST * evidence.difficulty_score
-        return (mult,
-                f"difficulty feed live: score={evidence.difficulty_score} "
-                f"tier={evidence.difficulty_tier} mult=×{round(mult, 3)}")
-    if evidence.difficulty_tier is not None:
-        mult = DIFFICULTY_TIER_MULT[evidence.difficulty_tier]
-        return (mult,
-                f"difficulty feed live: tier={evidence.difficulty_tier} "
-                f"(no numeric score) mult=×{mult}")
-    return (1.0,
-            "difficulty feed absent or unusable (no evidence/difficulty.json, "
-            "no task_spec difficulty) — legacy D")
-
-
-def _mission_leverage_factor(evidence: EvidenceView) -> tuple[float, str]:
-    """#9 L hookup: the mission-learning factor in [0,1] from the ledger the
-    #823-P3 read already touches.
-
-      factor = headroom (1 − v_norm) × live gate (d_slope_norm > 0)
-
-    Headroom closes the loop: a converged mission (v_norm→1) has no mission
-    learning left to pay for. The live gate keeps the signal honest: without
-    demonstrated per-round accrual (#10 d_slope_norm, per settlement round)
-    the L term contributes nothing — flat ≠ paying. Returns (factor, feed
-    state); ledger absent/unusable → (0.0, absent reason)."""
-    v, s = evidence.mission_v_norm, evidence.mission_d_slope_norm
-    if v is None or s is None:
-        return (0.0,
-                "mission feed absent or unusable (no runs/mission_ledger.yaml)"
-                " — graph leverage only")
-    if s <= 0:
-        return (0.0,
-                f"mission feed present but flat: v_norm={v} "
-                f"d_slope_norm={s} — no demonstrated accrual, mission L=0")
-    headroom = max(0.0, min(1.0, 1.0 - v))
-    return (headroom,
-            f"mission feed live: v_norm={v} d_slope_norm={s} "
-            f"headroom={round(headroom, 3)}")
-
-
-def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> list[Action]:
-    """VoI proxy / cost ranking (purely mechanical, zero LLM).
+def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
+                   rng: random.Random | None = None) -> list[Action]:
+    """#107 Thompson ranking (purely mechanical, zero LLM).
 
     Input: claims (claim-register claims[]), deps (claim_deps.yaml {depends_on, competitor_groups}),
-          evidence (EvidenceView, with terminal_fact_claims)
-    Output: the sorted Action list (score descending, ties broken by lower cost, then by claim_id)
-    """
+          evidence (EvidenceView; `ws` present → #106 posteriors + oracle cases load),
+          rng (injected; None → random.Random(0) — deterministic)
+    Output: the sorted Action list (Thompson sample descending, stable
+          tie-break by claim_id — the #107 spec sort).
+
+    Candidate filter UNCHANGED from the pre-#107 ranker: OPEN + attempts<3
+    + all depends_on parents holding a terminal fact (#594/#596 per-claim
+    fallback; #103 dirty-value tolerance). RETRACTED/failure-blocked
+    filtering stays the CALLER's job (contract §1)."""
     # #594/#596: claim_deps.yaml is the authoritative graph, but a fresh
     # workspace ships it empty ("depends_on: {}") — fall back to the
     # operator-natural per-claim depends_on field so the ranking has input
@@ -793,11 +584,6 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
     if not depends_on:
         depends_on = {c["id"]: list(c.get("depends_on") or [])
                       for c in claims if c.get("id") and c.get("depends_on")}
-    competitor_groups = (deps or {}).get("competitor_groups", {}) or {}
-    rev_deps = _reverse_deps(depends_on)
-    open_ids = {c.get("id") for c in claims if c.get("id") and is_open(c)}
-    active_groups = _active_competitor_groups(claims, competitor_groups)
-    fact_counts = _fact_count_by_category(claims, evidence)
     terminal = evidence.terminal_fact_claims
 
     # dispatchable candidates: OPEN + attempts<3 + all depends_on terminal
@@ -813,53 +599,65 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
             continue
         candidates.append(c)
 
-    # leverage count (per candidate): downstream OPEN dependents; terminal claim → 0
-    lev_raw: dict[str, int] = {}
-    for c in candidates:
-        cid = c["id"]
-        if cid in terminal:
-            lev_raw[cid] = 0
-            continue
-        lev_raw[cid] = sum(1 for d in rev_deps.get(cid, []) if d in open_ids)
-    max_lev = max(lev_raw.values(), default=0)
+    # #106 posteriors + oracle case linkage (no ws → cold-start priors).
+    ledger = (PosteriorLedger.load(evidence.ws)
+              if evidence.ws is not None else PosteriorLedger())
+    oracle_cases = _load_oracle_cases(evidence.ws)
 
-    # #9 feed states (claim-independent): mission factor gates the L term,
-    # the difficulty multiplier scales the D term.
-    m_factor, m_state = _mission_leverage_factor(evidence)
-    d_mult, d_state = _difficulty_multiplier(evidence)
+    # ONE base draw; per-claim forks key on claim_id, so a register reorder
+    # never reshuffles the dispatch order (the reorder-stability property).
+    if rng is None:
+        rng = random.Random(0)  # #107 default: same inputs → same ranking
+    base = rng.getrandbits(64)
 
     actions: list[Action] = []
     for c in candidates:
         cid = c["id"]
-        action_cat = classify_action(c)
-        # #9: graph leverage (unchanged) + mission-learning factor on the
-        # open-PQ linkage; clamp keeps L in [0,1]. No mission linkage → the
-        # mission factor contributes nothing to THIS claim.
-        L_graph = (lev_raw[cid] / max_lev) if max_lev else 0.0
         pq = str(c.get("answers_question") or "").strip()
-        linkage = 1.0 if (pq and evidence.mission_gap.get(pq, 0.0) > 0.0) \
-            else 0.0
-        L = min(1.0, L_graph + m_factor * linkage)
-        l_state = m_state
-        if m_factor > 0.0 and linkage == 0.0:
-            l_state += "; claim not mission-linked (no open-PQ gap)"
-        # #9: difficulty lifts the legacy discriminator, clamped to the
-        # ceiling 1.0 (easy/no-feed mult is 1.0 → byte-identical legacy D).
-        D = min(1.0, _discriminator(c, active_groups) * d_mult)
-        # #496: same-strategy historical failures join the novelty count
-        # (opt-in — claims with no [strategy] dispatch history keep N intact)
-        strat = evidence.claim_strategy.get(cid)
-        s_fails = evidence.strategy_failures.get(strat, 0) if strat else 0
-        # #9: method repetition — dispatch rows per claim, riding the same
-        # #496 strategy-log read (no separate novelty ledger exists on dev;
-        # nothing new invented — empty rows → repeats 0 → pre-#9 N intact).
-        repeats = evidence.claim_dispatch_repeats.get(cid, 0)
-        N = _novelty(action_cat, fact_counts, s_fails + repeats)
-        n_state = (f"dispatch rows for claim={repeats} (strategy-log)"
-                   if repeats
-                   else "no dispatch history (runs/strategy-log.jsonl) — "
-                        "repetition proxy inert")
-        feeds = {"L": l_state, "D": d_state, "N": n_state}
+        linked = [case_id for case_id, tpq in oracle_cases
+                  if tpq and tpq == pq]
+        child = random.Random(f"thompson/{base}/{cid}")
+        # case face: ONE Thompson Beta sample per linked oracle case, summed;
+        # no linkage → a single Beta(1,1) prior sample (cold start = uniform
+        # random: Thompson's intrinsic exploration, no threshold gate).
+        if linked:
+            case_face = 0.0
+            for case_id in linked:
+                post = ledger.cases.get(case_id) or CasePosterior(case_id)
+                case_face += child.betavariate(post.alpha, post.beta)
+            fp = FLIP_POTENTIAL_BASE / (1.0 + attempts_of(c))
+            thompson_state = (f"Thompson Beta over {len(linked)} linked oracle "
+                              f"case(s) [{', '.join(linked)}] -> "
+                              f"sample={round(case_face, 6)}")
+        else:
+            case_face = child.betavariate(1.0, 1.0)
+            fp = min(FLIP_POTENTIAL_BASE / (1.0 + attempts_of(c)),
+                     FLIP_POTENTIAL_FALLBACK)
+            thompson_state = (f"no linked oracle case (oracle/cases/ target_pq "
+                              f"!= '{pq or '-'}') -> Beta(1,1) prior sample="
+                              f"{round(case_face, 6)} (cold-start exploration)")
+        # ΔH_PQ: H(categorical) — the updatable quantity on the claim's PQ.
+        pq_cat = ledger.pqs.get(pq) if pq else None
+        dh = pq_cat.entropy() if pq_cat is not None else 0.0
+        dh_state = (f"PQ '{pq}' categorical H={round(dh, 6)} bit"
+                    if pq_cat is not None else
+                    f"no PQ categorical for '{pq or '-'}' in "
+                    f"runs/posteriors.yaml -> dH=0")
+        # #759 worth channel (exogenous user ruling, not a formula DOF).
+        weight = claim_value_weight(c, evidence.value_class_weights,
+                                    evidence.value_claim_overrides)
+        # stored at 6dp (sort precision; the to_dict/json face still rounds
+        # to 3) so the #759 worth multiplier stays an exact identity.
+        score = round((case_face + LAMBDA_DH * dh) * weight, 6)
+        feeds = {
+            "thompson_sample": thompson_state,
+            "case_flip_potential": (
+                f"P(flip)={round(fp, 3)} (base {FLIP_POTENTIAL_BASE} decayed "
+                f"by promotion_attempts={attempts_of(c)})"
+                + ("" if linked else
+                   f"; no oracle/PQ linkage -> {FLIP_POTENTIAL_FALLBACK} fallback")),
+            "dh_pq": dh_state,
+        }
         # #103: attempts conversion is per-claim guarded; a dirty raw value
         # scores as 0 and surfaces here as a feed diagnostic instead of
         # freezing the whole DECIDE run in conservative BLOCKED.
@@ -867,38 +665,13 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView) -> li
         if attempts_dirty:
             feeds["A"] = (f"promotion_attempts={c.get('promotion_attempts')!r} "
                           "unparseable -> treated as 0 (#103)")
-        cost = action_cost(c)
-        numerator = WEIGHTS["L"] * L + WEIGHTS["D"] * D + WEIGHTS["N"] * N
-        # #759 H2: the user's structured worth ruling multiplies the final
-        # ratio (absent weights → 1.0 → the pre-#759 formula byte-identical).
-        weight = claim_value_weight(c, evidence.value_class_weights,
-                                    evidence.value_claim_overrides)
-        # #823 A3 (always-on since #51): feed-side terms — cost inflated by
-        # the bucket's inverse P(complete) (rework expectation, floored at
-        # 0.05 to bound the inflation) and the capability bonus. A neutral
-        # prior (1.0, fail-open) reproduces the pre-#823 cost math.
-        cost_eff = cost / max(evidence.prior_p_complete, 0.05)
-        bonus = 1.0
-        if any(cid == cap_cid
-               for cap_cid, _ in evidence.validated_capabilities):
-            bonus = CAPABILITY_BONUS
-        # #823-P3: gap-hit bucket — claims answering an OPEN PQ gap lead the
-        # ranking (缺口命中 > tier > VoI). No ledger data → bucket stays 0.
-        # (#9: the same pq/linkage pair computed above for the L term.)
-        gap_bucket = 1 if (evidence.mission_active and linkage == 1.0) else 0
-        score = round(numerator / cost_eff * weight * bonus, 3)
         actions.append(Action(
-            claim_id=cid, action=action_cat, score=score, skill=None,
-            tier=action_tier(c), attempts=attempts,
-            leverage=round(L, 3), discriminator=round(D, 6),
-            novelty=round(N, 3), cost=cost,
-            weight=weight, gap_bucket=gap_bucket, feeds=feeds,
+            claim_id=cid, action=classify_action(c), score=score, skill=None,
+            tier=action_tier(c), attempts=attempts, cost=action_cost(c),
+            weight=weight, feeds=feeds,
         ))
-    # score tie within ε → lower cost wins (mechanical ruling, no LLM); then stable by claim_id.
-    # #823-P3 (always-on since #51): gap-bucket leads; uniform buckets reduce
-    # to the legacy key, so the result order stays byte-identical there.
-    actions.sort(key=lambda a: (0 if a.gap_bucket else 1,
-                                -a.score, a.cost, a.claim_id))
+    # #107 spec sort: Thompson sample descending, stable tie-break claim_id.
+    actions.sort(key=lambda a: (-a.score, a.claim_id))
     return actions
 
 
@@ -907,7 +680,7 @@ def _load_yaml(path: Path) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="priority_ratio.py", description="VoI-proxy action ranking")
+    ap = argparse.ArgumentParser(prog="priority_ratio.py", description="Thompson action ranking (#107)")
     ap.add_argument("workspace", help="workspace root")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
@@ -927,7 +700,7 @@ def main(argv: list[str] | None = None) -> int:
     # #610: plain-text reads the typed actions; out stays the --json payload only
     out = [a.to_dict() for a in actions]
     print(json.dumps(out, ensure_ascii=False, indent=2) if args.json else "\n".join(
-        f"{a.claim_id:<6} {a.action:<22} score={a.score:<7} L={a.leverage} D={a.discriminator} N={a.novelty} cost={a.cost}"
+        f"{a.claim_id:<6} {a.action:<22} score={a.score:<7} tier={a.tier} cost={a.cost}"
         for a in actions) or "(no dispatchable claims)")
     return 0
 
