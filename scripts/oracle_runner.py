@@ -93,9 +93,44 @@ case set is blessed as a whole or not at all, before any IO):
     a live competition to discriminate; a self-filed singleton vacuous
     hypothesis fails admission.
 
-Exit codes: 0 = no red case; 1 = at least one red case; 2 = lint refusal.
+Exit codes: 0 = no red case; 1 = at least one red case; 2 = lint refusal
+(also the --retire refusal exit).
 Usage:
   python scripts/oracle_runner.py <ws> [--client <path>] [--mutation] [--json]
+
+#146 — outcome forensics (settlements record HOW they were won/lost):
+
+Every case row in the report gains an ADDITIVE ``forensics`` block (all
+pre-existing report/status fields keep their shape — the status file stays
+narrowed to the three convergence-convention fields):
+
+  forensics:
+    params_used       the params handed to compute() (derivation input
+                      record; {} before compute was invoked)
+    meta              the client's OPTIONAL ``meta`` return key, verbatim
+                      (optional client contract; absent/not-a-dict -> {})
+    mismatches        RED only: the per-field mismatch vector — every
+                      non-matching expected entry as
+                      {field, expected, actual}
+    stages            the client's OPTIONAL ``stages`` return dict
+                      (intermediate derivation steps), verbatim
+    divergence_point  first stage whose output differs from the case's
+                      expected-stage value (``stages:`` case key) — or an
+                      expected stage the client never produced; None when
+                      nothing differs or no expected stages are pinned
+
+#146 — case-abandonment protocol (retirement lives HERE, with the case
+files and OracleCaseError): a case transitions to ``status: retired`` ONLY
+with the structured justification {attribution_class in the closed taxonomy
+{implementation-wrong, case-wrong, client-wrong, channel-wrong,
+capture-obsolete}, disconfirmation, replacement} — anything less is a loud
+OracleCaseError refusal. The transition is append-only (the case file keeps
+its expected entries; status + retirement are ADDED). Retired cases leave
+the acceptance net: load_cases skips them (a retired case must never refuse
+the set because its hypothesis went terminal), run() reports them, and
+retiring emits the coverage-drop WARN event
+(``acceptance_coverage_decreased`` — a registered event word) because the
+armed-case count shrank.
 """
 from __future__ import annotations
 
@@ -111,11 +146,20 @@ from typing import Callable
 
 import yaml
 
+from harness_common import utc_now_iso  # #863 Family F: single source
+
 SCHEMA_ID = "oracle-status/1"
 STATUS_REL = ("runs", "oracle-status.json")
 CASES_REL = ("oracle", "cases")
 DEFAULT_CLIENT_REL = ("oracle", "client.py")
 MUTATION_KINDS = ("swap", "omit", "change")
+
+# #146 case-abandonment protocol: the closed attribution taxonomy a
+# retirement justification must draw from, and the retired marker.
+RETIRED_CASE_STATUS = "retired"
+RETIREMENT_ATTRIBUTION_CLASSES = ("implementation-wrong", "case-wrong",
+                                  "client-wrong", "channel-wrong",
+                                  "capture-obsolete")
 
 Compute = Callable[[dict], dict]
 
@@ -338,6 +382,25 @@ def _parse_update_map(case_path: Path, cid: str, group: str, raw,
             "red_up": [str(h).strip() for h in red]}
 
 
+def _retired_or_stages(p: Path, cid: str, doc: dict) -> tuple[bool, dict]:
+    """#146 pre-admission doc face: (skip_retired, expected_stages).
+
+    A retired case has left the acceptance net — it is skipped BEFORE the
+    admission lints (a retired case must never refuse the set because its
+    linked hypothesis went terminal or its competitor group thinned).
+    ``stages`` is the optional case key pinning expected stage values; a
+    non-mapping is a loud refusal."""
+    if str(doc.get("status") or "").strip() == RETIRED_CASE_STATUS:
+        return True, {}
+    stages = doc.get("stages")
+    if stages is not None and not isinstance(stages, dict):
+        raise OracleCaseError(
+            f"{p.name}: case {cid!r}: `stages` must be a mapping of stage "
+            f"name -> expected value (the runner diffs the client's stages "
+            f"dict stage-wise, #146)")
+    return False, dict(stages or {})
+
+
 def load_cases(cases_dir) -> list[dict]:
     """Load + lint every ``*.yaml`` case. Raises OracleCaseError on the
     first refusal (#108 half C presence lint + #126 admission integrity:
@@ -365,6 +428,11 @@ def load_cases(cases_dir) -> list[dict]:
         cid = str(doc.get("id") or p.stem).strip()
         if not cid:
             raise OracleCaseError(f"{p.name}: case id is empty")
+        # #146: retired skips BEFORE the lints; stages pins expected
+        # stage values for the stage-diff forensics.
+        skip_retired, stages_expected = _retired_or_stages(p, cid, doc)
+        if skip_retired:
+            continue
         expected = _parse_expected(ws, p, cid, doc.get("expected"))
         mutations = _parse_mutations(p, cid, doc.get("mutations"))
         # #126: mutations are an admission requirement now — a case that
@@ -441,10 +509,31 @@ def load_cases(cases_dir) -> list[dict]:
             "competitor_group": hyp.competitor_group,
             "update_map": update_map,
             "params": doc.get("params") or {},
+            "expected_stages": dict(stages_expected or {}),
             "expected": expected,
             "mutations": mutations,
         })
     return cases
+
+
+def retired_case_ids(cases_dir) -> list[str]:
+    """#146: ids of cases whose file marks ``status: retired`` — they left
+    the acceptance net and are skipped by load_cases/run. Tolerant per
+    file (an unreadable case doc is not a retirement signal)."""
+    cases_dir = Path(cases_dir)
+    out: list[str] = []
+    for p in sorted(cases_dir.glob("*.yaml")):
+        try:
+            doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — unreadable is not signal
+            continue
+        if not isinstance(doc, dict):
+            continue
+        cid = str(doc.get("id") or p.stem).strip()
+        if cid and str(doc.get("status") or "").strip() == \
+                RETIRED_CASE_STATUS:
+            out.append(cid)
+    return out
 
 
 # ------------------------------------------------------------ client loader
@@ -486,33 +575,69 @@ def load_client(client_path) -> Compute | None:
 
 # ---------------------------------------------------------------- checking
 
+def _stage_divergence(observed: dict, expected_stages: dict) -> str | None:
+    """#146: first stage whose output differs from the case's expected
+    stage value — or an expected stage the client never produced (a
+    missing stage output differs from its expected value). Pure."""
+    for stage, value in observed.items():
+        if stage in expected_stages and value != expected_stages[stage]:
+            return str(stage)
+    for stage in expected_stages:
+        if stage not in observed:
+            return str(stage)
+    return None
+
+
 def check_case(case: dict, compute: Compute | None) -> dict:
-    """One case -> {"status", "pending_entries", "instrumented", "failures"}.
+    """One case -> {"status", "pending_entries", "instrumented", "failures",
+    "error", "forensics"}.
 
     status: fail (observed entry mismatched) > pending (no client / client
     crash / nothing observed / scaffold entries owed) > pass (every observed
-    entry matches and nothing is owed). "Unknown" is never "pass" (#108 A)."""
+    entry matches and nothing is owed). "Unknown" is never "pass" (#108 A).
+
+    #146 forensics (additive): params_used / meta / mismatches / stages /
+    divergence_point — the settlement records HOW it was won or lost; see
+    the module docstring for the full contract."""
     expected = case["expected"]
     pending_entries = sum(1 for e in expected if e["pending"])
     observed = [e for e in expected if not e["pending"]]
+    forensics: dict = {"params_used": {}, "meta": {}, "mismatches": [],
+                       "stages": {}, "divergence_point": None}
     row = {"status": "pending", "pending_entries": pending_entries,
-           "instrumented": False, "failures": [], "error": None}
+           "instrumented": False, "failures": [], "error": None,
+           "forensics": forensics}
     if compute is None:
         return row
     row["instrumented"] = True
+    params = dict(case["params"])
     try:
-        out = compute(dict(case["params"]))
+        out = compute(params)
     except Exception as exc:  # noqa: BLE001 — a crash is a verdict of "unknown"
         row["error"] = f"{type(exc).__name__}: {exc}"
+        forensics["params_used"] = params
         return row
+    forensics["params_used"] = params
     if not isinstance(out, dict):
         row["error"] = f"client returned {type(out).__name__}, expected dict"
         return row
+    meta = out.get("meta")
+    if isinstance(meta, dict):
+        forensics["meta"] = meta
+    stages = out.get("stages")
+    if isinstance(stages, dict):
+        forensics["stages"] = stages
+        forensics["divergence_point"] = _stage_divergence(
+            stages, case.get("expected_stages")
+            if isinstance(case.get("expected_stages"), dict) else {})
     for e in observed:
         if out.get(e["field"]) != e["value"]:
             row["failures"].append(
                 f"{e['field']}: expected {e['value']!r}, got "
                 f"{out.get(e['field'])!r}")
+            forensics["mismatches"].append(
+                {"field": e["field"], "expected": e["value"],
+                 "actual": out.get(e["field"])})
     if row["failures"]:
         row["status"] = "fail"
     elif not observed or pending_entries:
@@ -595,8 +720,12 @@ def mutation_pass(cases: list[dict], compute: Compute | None) -> dict:
 # ------------------------------------------------------------------ report
 
 def run(cases_dir, client_path, *, mutation: bool = False) -> dict:
-    """Run the whole case set. No client -> ALL pending (never green)."""
-    cases = load_cases(Path(cases_dir))
+    """Run the whole case set. No client -> ALL pending (never green).
+
+    #146: retired cases are reported, not run — they left the acceptance
+    net (load_cases skips them), so counts cover ACTIVE cases only."""
+    cases_dir = Path(cases_dir)
+    cases = load_cases(cases_dir)
     compute = load_client(client_path)
     rows = {c["id"]: check_case(c, compute) for c in cases}
     counts = {"red": 0, "green": 0, "pending": 0}
@@ -609,6 +738,7 @@ def run(cases_dir, client_path, *, mutation: bool = False) -> dict:
         "client": str(client_path) if compute is not None else None,
         "cases": rows,
         "counts": counts,
+        "retired": retired_case_ids(cases_dir),
         "mutation": mutation_pass(cases, compute)
         if (compute is not None and mutation) else None,
     }
@@ -655,6 +785,124 @@ def record_posteriors(ws, report: dict) -> Path | None:
     return led.save(ws)
 
 
+# ------------------------------------------------- #146 case abandonment
+
+def _armed_case_count(cases_dir: Path) -> int:
+    """Cases still in the acceptance net (not retired)."""
+    cases_dir = Path(cases_dir)
+    if not cases_dir.is_dir():
+        return 0
+    total = 0
+    for p in sorted(cases_dir.glob("*.yaml")):
+        try:
+            doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — unreadable is not signal
+            continue
+        if isinstance(doc, dict) and str(doc.get("status") or "").strip() \
+                != RETIRED_CASE_STATUS:
+            total += 1
+    return total
+
+
+def _emit_coverage_decreased(ws, case_id: str, before: int, after: int) -> None:
+    """#146 coverage-drop WARN: retiring shrank the acceptance net. The
+    word is a registered EMIT_ACTIONS member (the #459 controlled
+    vocabulary); fail-open — telemetry never breaks a retirement."""
+    try:
+        from kunglao_log import emit
+        emit(ws, actor="oracle_runner",
+             action="acceptance_coverage_decreased",
+             detail=(f"case={case_id} armed_cases={after} (was {before}) — "
+                     f"acceptance coverage decreased"))
+    except Exception:  # noqa: BLE001 — observability never disturbs the run
+        pass
+
+
+def retire_case(ws, case_id: str, *, attribution_class: str,
+                disconfirmation: str, replacement: str) -> dict:
+    """#146 case-abandonment protocol: retire a case, append-only, with
+    the structured justification — or loud refusal.
+
+    REQUIRED justification (anything less -> OracleCaseError, nothing
+    written):
+      - attribution_class: one of RETIREMENT_ATTRIBUTION_CLASSES (closed
+        taxonomy: implementation-wrong | case-wrong | client-wrong |
+        channel-wrong | capture-obsolete);
+      - disconfirmation: the alternatives were argued away (text);
+      - replacement: re-capture / re-derive / successor plan (text).
+
+    The case file keeps everything it had (append-only): ``status:
+    retired`` and the ``retirement`` block are ADDED. Retiring an
+    already-retired case is refused (one transition, append-only). The
+    armed-case count drop fires the acceptance_coverage_decreased WARN.
+
+    Returns the retirement record; raises OracleCaseError on refusal."""
+    cases_dir = Path(ws).joinpath(*CASES_REL)
+    if not cases_dir.is_dir():
+        raise OracleCaseError(f"no case set under {cases_dir} — nothing to "
+                              f"retire")
+    wanted = str(case_id or "").strip()
+    target: Path | None = None
+    doc: dict | None = None
+    for p in sorted(cases_dir.glob("*.yaml")):
+        try:
+            candidate = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — skip unreadable candidates
+            continue
+        if not isinstance(candidate, dict):
+            continue
+        cid = str(candidate.get("id") or p.stem).strip()
+        if cid == wanted:
+            target, doc = p, candidate
+            break
+    if target is None or doc is None:
+        raise OracleCaseError(f"no case {wanted!r} under {cases_dir} — "
+                              f"nothing to retire")
+    if str(doc.get("status") or "").strip() == RETIRED_CASE_STATUS:
+        raise OracleCaseError(f"case {wanted!r} is already retired — "
+                              f"retirement is a one-way append-only "
+                              f"transition (#146)")
+    attribution_class = str(attribution_class or "").strip()
+    disconfirmation = str(disconfirmation or "").strip()
+    replacement = str(replacement or "").strip()
+    if attribution_class not in RETIREMENT_ATTRIBUTION_CLASSES:
+        raise OracleCaseError(
+            f"case {wanted!r}: attribution_class {attribution_class!r} is "
+            f"not in the closed taxonomy "
+            f"({', '.join(RETIREMENT_ATTRIBUTION_CLASSES)}) — a retirement "
+            f"without attribution is a silent abandonment (#146)")
+    if not disconfirmation:
+        raise OracleCaseError(
+            f"case {wanted!r}: retirement needs `disconfirmation` — the "
+            f"alternatives must be argued away before the case is "
+            f"abandoned (#146)")
+    if not replacement:
+        raise OracleCaseError(
+            f"case {wanted!r}: retirement needs `replacement` — the "
+            f"acceptance-net hole must have a re-capture / re-derive / "
+            f"successor plan (#146)")
+    armed_before = _armed_case_count(cases_dir)
+    doc["status"] = RETIRED_CASE_STATUS
+    doc["retirement"] = {
+        "attribution_class": attribution_class,
+        "disconfirmation": disconfirmation,
+        "replacement": replacement,
+        "retired_at": utc_now_iso(),
+    }
+    tmp = target.with_name(target.name + ".tmp")
+    tmp.write_text(
+        yaml.safe_dump(doc, allow_unicode=True, sort_keys=False),
+        encoding="utf-8")
+    os.replace(tmp, target)
+    armed_after = _armed_case_count(cases_dir)
+    if armed_after < armed_before:
+        _emit_coverage_decreased(ws, wanted, armed_before, armed_after)
+    return {"case_id": wanted, "status": RETIRED_CASE_STATUS,
+            "retirement": dict(doc["retirement"]),
+            "armed_cases_before": armed_before,
+            "armed_cases_after": armed_after}
+
+
 # --------------------------------------------------------------------- CLI
 
 def _human(report: dict) -> str:
@@ -671,6 +919,14 @@ def _human(report: dict) -> str:
             lines.append(f"         {f}")
         if row["error"]:
             lines.append(f"         error: {row['error']}")
+        fore = row.get("forensics") or {}
+        if fore.get("divergence_point"):
+            lines.append(f"         divergence@{fore['divergence_point']} "
+                         f"(stages: {fore.get('stages')})")
+        if fore.get("meta"):
+            lines.append(f"         meta: {fore['meta']}")
+    if report.get("retired"):
+        lines.append(f"  [RETIRED, not run] {', '.join(report['retired'])}")
     mut = report.get("mutation") or {}
     for cid, rows in (mut.get("mutations") or {}).items():
         for r in rows:
@@ -698,10 +954,41 @@ def main(argv: list[str] | None = None) -> int:
                          "declared mutations (flag low_discriminativity)")
     ap.add_argument("--json", action="store_true",
                     help="machine-readable report on stdout")
+    # #146 case-abandonment face
+    ap.add_argument("--retire", metavar="CASE_ID", default=None,
+                    help="#146: retire a case (append-only status: retired "
+                         "in its case file) — requires the structured "
+                         "justification flags below")
+    ap.add_argument("--attribution-class", default=None,
+                    help="#146 retirement taxonomy: implementation-wrong | "
+                         "case-wrong | client-wrong | channel-wrong | "
+                         "capture-obsolete")
+    ap.add_argument("--disconfirmation", default=None,
+                    help="#146 retirement: how the alternative attributions "
+                         "were argued away")
+    ap.add_argument("--replacement", default=None,
+                    help="#146 retirement: re-capture / re-derive / "
+                         "successor-case plan for the coverage hole")
     args = ap.parse_args(argv)
 
     ws = Path(args.workspace)
     cases_dir = ws.joinpath(*CASES_REL)
+
+    # #146 case-abandonment face: retire before any run face (a refusal
+    # never touches the status file or the posteriors).
+    if args.retire:
+        try:
+            rec = retire_case(
+                ws, args.retire,
+                attribution_class=args.attribution_class or "",
+                disconfirmation=args.disconfirmation or "",
+                replacement=args.replacement or "")
+        except OracleCaseError as exc:
+            print(f"oracle_runner: RETIRE REFUSED — {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(rec, ensure_ascii=False, indent=2, default=repr))
+        return 0
+
     if not cases_dir.is_dir():
         print(f"oracle_runner: no {cases_dir} — nothing to bless "
               f"(no status written)", file=sys.stderr)
@@ -718,8 +1005,10 @@ def main(argv: list[str] | None = None) -> int:
     report = run(cases_dir, client, mutation=args.mutation)
     write_status(ws, report)
     record_posteriors(ws, report)
-    print(json.dumps(report, ensure_ascii=False, indent=2) if args.json
-          else _human(report))
+    # default=repr (#146): forensics carry raw client values — a
+    # non-JSON-serializable client output must never crash the report face
+    print(json.dumps(report, ensure_ascii=False, indent=2, default=repr)
+          if args.json else _human(report))
     return 1 if report["counts"]["red"] else 0
 
 
