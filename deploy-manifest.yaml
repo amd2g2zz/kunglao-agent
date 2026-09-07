@@ -828,6 +828,10 @@ files:
     dest: .claude/scripts/verify_status_watch.py
     kind: scaffold
     sha256: b1cea1f6921fb160d427d8358a102ecc15c579945fd7e66a8bbe4d9f288a89f1
+  - src: scripts/winrate_curve.py
+    dest: .claude/scripts/winrate_curve.py
+    kind: scaffold
+    sha256: e1b02a18967c9e43cdb4c018a590b3fc757ab5cae31cdd76c3865afa433402c5
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
@@ -1276,6 +1280,14 @@ files:
     dest: .claude/templates/state/task_spec.yaml
     kind: asset
     sha256: f2625490e5d6957293b80f1db85278a230d99728106f515237ec93325f4d5670
+  - src: templates/vendor/echarts-5.6.0.min.js
+    dest: .claude/templates/vendor/echarts-5.6.0.min.js
+    kind: asset
+    sha256: bf4a223524e40b77c304bec67e1222cf551f14880cf42c69dc046558e11c07b1
+  - src: templates/winrate_curve.html.j2
+    dest: .claude/templates/winrate_curve.html.j2
+    kind: asset
+    sha256: 88abba7d4401c8c40cf5aec3d3efdb7cad43dfa154e6fef75c52f2fab7e424fd
   - src: tools/README.md
     dest: .claude/tools/README.md
     kind: asset
@@ -1287,7 +1299,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 5ba9f5577b35ac48cf00227b36bc26e9d7b461202c5bbd7e9527b092a0d3119d
+    sha256: 617cbedb3087b400a832765c7a330f92b9eb82ad5e95f39684957707c3f3eb9b
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
