@@ -83,15 +83,15 @@ files:
   - src: agents/floss-filter.md
     dest: .claude/agents/floss-filter.md
     kind: agent
-    sha256: afede035009233e2343fc9a563971d0805260cab58bb462bb53597485d9fddc9
+    sha256: 60287afafdc9d4dd498f8bcc4e03aec56cf1445ed076e4cfafe62ec2eaf3c9f3
   - src: agents/ghidra-light.md
     dest: .claude/agents/ghidra-light.md
     kind: agent
-    sha256: 4361102de61789d15abf23178a1e11afb32f460e2c49a6f18de7f28da1dbd963
+    sha256: cb1cd2a1f04b4de73148351ae2052a1d5a6c2f129435f684bb58fd8321b2c790
   - src: agents/go-symbols.md
     dest: .claude/agents/go-symbols.md
     kind: agent
-    sha256: 398d5edfc1522c5b6148c35df738b452bfeda1f22e6e21aa96d9198f6a58f98c
+    sha256: b4275f45f362e8f084e469d74d046cd7e18977851e21449e73fdc9e56c84d419
   - src: agents/kunglao-init-worker.md
     dest: .claude/agents/kunglao-init-worker.md
     kind: agent
@@ -103,11 +103,11 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: d6f4c7700cb517c88e0714e074f91ad3e11e50f6f481f1675f6c366e98ec6f2a
+    sha256: 144fd8c18b58ad00f4aeb5ef42b20091b2fc0deab4e02afacb8cb0fc9dc22fdd
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
-    sha256: 9592e4e1042131c8cae738a1aab099d84385a4074d226b23a4c71ce401339832
+    sha256: 9c870100b255ccfeb947abcf75717e7d2b6bf44fa755c7643fbb866f9cb1fdd1
   - src: agents/verdict-scorer.md
     dest: .claude/agents/verdict-scorer.md
     kind: agent
@@ -115,7 +115,7 @@ files:
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
-    sha256: 2e241d6adf810b655fab62ba70af801e35ec3cb5c1cc9e3ae854b1e320e28834
+    sha256: 214d3d6830ca54d56e7b4cd8965c4c7413c0840e0ec7cf2cba430dac121700ea
   - src: scripts/_entry.py
     dest: .claude/scripts/_entry.py
     kind: scaffold

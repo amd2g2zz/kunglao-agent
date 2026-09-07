@@ -61,6 +61,23 @@ You extract two things DIE doesn't natively provide:
 1. **Authenticode digital signature** — full subject/issuer/serial/validity/cert chain via pefile
 2. **Packer family identification** — UPX/VMProtect/Themida/ASPack/MPRESS/PECompact/PELock/WinUPack via YARA + DIE cross-check
 
+## Reference lookup (aids, not mandates)
+
+- `references/_INDEX.md` — a methodology card may already cover this problem class (grep the index keywords: pe, authenticode, packer, yara).
+- `tools/_INDEX.yaml` — a registered CLI may already cover this capability (the pefile / YARA / DIE pipeline remains primary; this covers gaps outside the pipeline).
+- `scripts/` — an existing parameterized CLI may be reusable.
+
+## Working rules
+
+- Explicit error handling at every level.
+- Never swallow errors silently.
+- No hardcoded secrets.
+- Validate inputs at boundaries.
+- Small focused functions.
+- Reuse-first.
+
+These lookups are advisory; where they yield nothing applicable, proceed with a hand-rolled implementation at your discretion.
+
 ## Inputs (passed by caller)
 
 - `die_json_path`: `evidence/die.json` (already-written DIE output)
