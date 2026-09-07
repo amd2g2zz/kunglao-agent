@@ -11,55 +11,61 @@ the goal -> operationalization translation lives beside it in
     not_done:          counterexamples — "X does not count as done"
     diff_vs_verbatim:  declared delta vs the verbatim task
     probe_cases:       fresh-input / no-dependency / materialized-artifact
+    generalization:    declared structural bit — required | not-applicable |
+                       unknown
 
-Rules (the mechanical half — the ONE-round user confirmation is protocol
-text, skills/kunglao-agent/SKILL.md "Goal operationalization read-back"):
+Rules (mechanical; per the owner amendments there is NO user confirmation
+round — the human lives at the verbatim task and at the delivery receipt):
 
   R1 not_done must be non-empty: a goal without counterexamples is
      unaudited (capability substitution and scope narrowing hide exactly
      there; every later step is "honest" against a narrowed goal).
   R2 diff_vs_verbatim must be non-empty and may not rubber-stamp identity
      ("identical to the verbatim task" = silent equivalence, refused).
-  R3 capability rule: deliverables implying a reproducible capability
-     (decrypt / extract-key / offline-reproduce family) require derived
-     probe cases — validation refuses otherwise.
-  R4 edit != confirmed: a confirmed file whose content hash no longer
-     matches confirmed_sha256 validates as pending-confirmation again;
-     re-scope forces re-confirmation (the agent cannot silently rewrite).
+  R3 declared generalization bit (task taxonomy is un-enumerable — nobody
+     classifies the task, the machine holds the declaration): one
+     structural question — must the deliverable work on inputs beyond the
+     captured/observed evidence? required/unknown => probe_cases must
+     include the fresh-input case (fail-closed; for client simulation the
+     fresh-input case IS the master oracle, replay is the ladder, never
+     the closure); not-applicable => the non-generalization MUST also
+     appear as an explicit diff_vs_verbatim entry (declaring it is a
+     narrowing, made visible). Missing/invalid value = loud rejection.
+  R4 pre-registration is timestamped (declared_ts) — an unstamped
+     translation is not a record.
+  R5 post-dispatch the file is append-only: --stamp-dispatch freezes the
+     constitution (the five lists + generalization); from then on dropping
+     or rewording a not_done / deliverables / acceptance entry is REFUSED
+     (an edit that contradicts the constitution), generalization never
+     flips, and every other drift becomes a re-scope record that the
+     delivery receipt must restate. Delivery restates the not_done list +
+     the generalization declaration (restatement()) — that is the user's
+     audit point; ask_for_direction stays the only escalation channel.
 
 File IO mirrors scripts/hypothesis_store.py (read -> parse -> validate;
-writes happen only through confirm(), which refuses to seal an invalid
-file). Loud rejection (GoalOpError) for unreadable files and unknown
-schema versions — no fail-open on the version wall.
+writes happen only through stamp_dispatch(), which refuses an unaudited
+file). Loud rejection (GoalOpError) for unreadable files, unknown schema
+versions, and an undeclared generalization bit — no fail-open walls.
 """
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
 
 SCHEMA_ID = "goal-operationalization/1"
-STATUS_PENDING = "pending-confirmation"
-STATUS_CONFIRMED = "confirmed"
-STATUSES = (STATUS_PENDING, STATUS_CONFIRMED)
+GENERALIZATION_VALUES = ("required", "not-applicable", "unknown")
 
-# Payload fields — the goal content whose hash seals a confirmation (R4).
-# The optional oracle_behavior_acknowledged flag and the status/seal fields
-# themselves are bookkeeping, not goal content, and stay outside the hash.
-PAYLOAD_FIELDS = ("verbatim_ref", "deliverables", "acceptance", "not_done",
-                  "diff_vs_verbatim", "probe_cases")
-LIST_FIELDS = PAYLOAD_FIELDS[1:]
-
-# R3: deliverable text implying a reproducible capability (substring,
-# case-insensitive; fail-closed — a false hit only demands probe cases).
-CAPABILITY_MARKERS = (
-    "decrypt", "extract", "recover", "reproduce", "offline",
-    "unpack", "regenerat", "deobfuscat", "emulat",
-)
+LIST_FIELDS = ("deliverables", "acceptance", "not_done", "diff_vs_verbatim",
+               "probe_cases")
+# The post-dispatch constitution: entries here survive verbatim (append-only).
+CONSTITUTION_FIELDS = ("deliverables", "acceptance", "not_done")
+FRESH_INPUT_MARKERS = ("fresh-input", "fresh input")
+NOT_APPLICABLE_MARKERS = ("not-applicable", "not applicable")
 
 # R2: literal identity claims are rubber stamps, not declared deltas.
 RUBBER_STAMPS = frozenset((
@@ -69,19 +75,8 @@ RUBBER_STAMPS = frozenset((
 
 
 class GoalOpError(ValueError):
-    """Loud rejection: unreadable/malformed file or unknown schema version."""
-
-
-def content_hash(doc: dict) -> str:
-    """sha256 over the canonical JSON of the payload fields only (R4)."""
-    payload = {k: doc.get(k) for k in PAYLOAD_FIELDS}
-    blob = json.dumps(payload, sort_keys=True, ensure_ascii=True, default=str)
-    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
-
-
-def implies_capability(deliverables: list) -> bool:
-    text = " ".join(deliverables).lower()
-    return any(marker in text for marker in CAPABILITY_MARKERS)
+    """Loud rejection: unreadable/malformed file, unknown schema version,
+    or an undeclared generalization bit."""
 
 
 def _string_list(doc: dict, name: str) -> list:
@@ -91,8 +86,34 @@ def _string_list(doc: dict, name: str) -> list:
     return [v for v in value if isinstance(v, str) and v.strip()]
 
 
-def _content_errors(doc: dict, capability: bool) -> list[str]:
-    """R1-R3: the content rules over the five list fields."""
+def _generalization_errors(bit: str, diff: list, probes: list) -> list[str]:
+    """R3: the declared structural bit — fail-closed on both sides."""
+    errors: list[str] = []
+    if bit == "not-applicable":
+        if not any(m in " ".join(diff).lower()
+                   for m in NOT_APPLICABLE_MARKERS):
+            errors.append(
+                "generalization: not-applicable must also be declared as an "
+                "explicit diff_vs_verbatim entry — a non-generalization "
+                "claim is a scope narrowing and becomes visible")
+        return errors
+    if not probes:  # required | unknown — fail-closed
+        errors.append(
+            "probe_cases: empty while generalization is "
+            f"{bit!r} — derive the fresh-input / no-dependency / "
+            "materialized-artifact cases")
+    elif not any(m in " ".join(probes).lower()
+                 for m in FRESH_INPUT_MARKERS):
+        errors.append(
+            "probe_cases: the fresh-input case is mandatory when "
+            f"generalization is {bit!r} — generate-valid-output-for-"
+            "never-captured-inputs is the master oracle, replay is "
+            "only the ladder")
+    return errors
+
+
+def _content_errors(doc: dict) -> list[str]:
+    """R1-R4: the content rules over the declared lists + the bit."""
     errors: list[str] = []
     for name in LIST_FIELDS:
         if _string_list(doc, name) != (doc.get(name) or []):
@@ -116,61 +137,118 @@ def _content_errors(doc: dict, capability: bool) -> list[str]:
                 errors.append(
                     f"diff_vs_verbatim: {entry.strip()!r} is a rubber stamp "
                     "— silent equivalence is refused")
-    if capability and not _string_list(doc, "probe_cases"):
+    errors += _generalization_errors(
+        doc["generalization"], diff, _string_list(doc, "probe_cases"))
+    if not (doc.get("declared_ts") or "").strip():
         errors.append(
-            "probe_cases: empty while deliverables imply a reproducible "
-            "capability — derive the fresh-input / no-dependency / "
-            "materialized-artifact cases at Phase 0")
+            "declared_ts: empty — a pre-registration without a timestamp "
+            "is not a record")
     return errors
 
 
-def _status_errors(doc: dict) -> tuple[list[str], str, bool]:
-    """R4: status/seal rules. Returns (errors, effective_status, rescoped)."""
+def _constitution_errors(doc: dict) -> list[str]:
+    """R5 refusal face: post-dispatch edits that contradict the frozen
+    constitution (drop/reword of a declared entry, generalization flip)."""
+    con = doc.get("constitution")
+    if not isinstance(con, dict):
+        return ["constitution: missing on a dispatched file — stamp with "
+                "--stamp-dispatch before the first dispatch"]
     errors: list[str] = []
-    status = doc.get("status")
-    effective, rescoped = STATUS_PENDING, False
-    if status not in STATUSES:
-        errors.append(f"status: must be one of {STATUSES}, got {status!r}")
-        return errors, effective, rescoped
-    effective = status
-    if status == STATUS_CONFIRMED:
-        sealed = doc.get("confirmed_sha256") or ""
-        if not sealed:
-            errors.append(
-                "confirmed_sha256: empty on a confirmed file — confirmation "
-                "without a content seal is a claim, not a fact")
-        elif sealed != content_hash(doc):
-            # R4: edit != confirmed — content moved after the seal
-            effective, rescoped = STATUS_PENDING, True
-    return errors, effective, rescoped
+    for name in CONSTITUTION_FIELDS:
+        frozen = [e for e in (con.get(name) or []) if isinstance(e, str)]
+        current = _string_list(doc, name)
+        for entry in frozen:
+            if entry not in current:
+                errors.append(
+                    f"{name}: post-dispatch withdrawal refused — a declared "
+                    f"entry may not be withdrawn ({entry!r} left the "
+                    "append-only constitution)")
+    if doc["generalization"] != con.get("generalization"):
+        errors.append(
+            "generalization: post-dispatch flip refused — the declared bit "
+            "is immutable; narrowing goes through ask_for_direction, never "
+            "a silent edit")
+    return errors
+
+
+def _rescope_records(doc: dict) -> list[str]:
+    """R5 record face: post-dispatch drift the delivery receipt must
+    restate (appends to the constitution lists, edits to the soft fields)."""
+    con = doc.get("constitution")
+    if not isinstance(con, dict):
+        return []  # hand-corrupted constitution: the refusal face already fired
+    records: list[str] = []
+    for name in LIST_FIELDS:
+        frozen = {e for e in (con.get(name) or []) if isinstance(e, str)}
+        current = [e for e in _string_list(doc, name) if e not in frozen]
+        if current:
+            records.append(f"{name}: +{len(current)} appended post-dispatch")
+        dropped = len([e for e in (con.get(name) or [])
+                       if isinstance(e, str)]) - (
+            len(_string_list(doc, name)) - len(current))
+        if name not in CONSTITUTION_FIELDS and dropped > 0:
+            records.append(
+                f"{name}: {dropped} entry(ies) dropped post-dispatch — "
+                "delivery must restate")
+    return records
 
 
 def validate(doc: dict) -> dict:
     """Structural + rule validation. Returns a report dict; raises
-    GoalOpError only on the type/schema walls (loud, no fail-open)."""
+    GoalOpError only on the walls (type/schema/generalization — loud)."""
     if not isinstance(doc, dict):
         raise GoalOpError("goal operationalization must be a YAML mapping")
     if doc.get("schema") != SCHEMA_ID:
         raise GoalOpError(
             f"schema mismatch: expected {SCHEMA_ID!r}, got {doc.get('schema')!r} "
             "— refusing an unknown format (no-backcompat policy)")
-    capability = implies_capability(_string_list(doc, "deliverables"))
-    status_errors, effective, rescoped = _status_errors(doc)
-    errors = _content_errors(doc, capability) + status_errors
-    return {"schema": SCHEMA_ID, "errors": errors, "capability": capability,
-            "status": doc.get("status"), "effective_status": effective,
-            "rescoped": rescoped}
+    bit = doc.get("generalization")
+    if bit not in GENERALIZATION_VALUES:
+        raise GoalOpError(
+            f"generalization: must be one of {GENERALIZATION_VALUES}, got "
+            f"{bit!r} — the structural bit is declared, never inferred")
+    post_dispatch = bool((doc.get("first_dispatch_ts") or "").strip())
+    errors = _content_errors(doc)
+    rescopes: list[str] = []
+    if post_dispatch:
+        errors += _constitution_errors(doc)
+        rescopes = _rescope_records(doc)
+    return {"schema": SCHEMA_ID, "errors": errors, "rescopes": rescopes,
+            "post_dispatch": post_dispatch,
+            "generalization": bit}
 
 
-def confirm(doc: dict) -> dict:
-    """Seal a VALID pending file: returns a new dict with status confirmed
-    and the content hash. Refuses to confirm an invalid file."""
+def stamp_dispatch(doc: dict, ts: str) -> dict:
+    """R5 entry act: freeze the constitution + stamp the first dispatch.
+    Refuses an already-stamped or unaudited file. Returns a new dict."""
     report = validate(doc)
+    if (doc.get("first_dispatch_ts") or "").strip():
+        raise GoalOpError(
+            f"already stamped at {doc['first_dispatch_ts']!r} — the "
+            "constitution freezes once")
     if report["errors"]:
         raise GoalOpError(
-            "refusing to confirm an unaudited operationalization: "
+            "refusing to stamp an unaudited operationalization: "
             + "; ".join(report["errors"]))
-    return dict(doc, status=STATUS_CONFIRMED, confirmed_sha256=content_hash(doc))
+    constitution = {"generalization": doc["generalization"]}
+    for name in LIST_FIELDS:
+        constitution[name] = list(_string_list(doc, name))
+    return dict(doc, first_dispatch_ts=ts, constitution=constitution)
+
+
+def restatement(doc: dict) -> str:
+    """The delivery-receipt audit block: the not_done constitution and the
+    generalization declaration, restated verbatim (A3 item 4)."""
+    lines = [
+        "goal operationalization — delivery audit (#128)",
+        f"generalization: {doc.get('generalization')!r} "
+        f"(declared {doc.get('declared_ts')!r})",
+        "not done — none of the following counts as done:",
+    ]
+    lines += [f"- {e}" for e in _string_list(doc, "not_done")]
+    if doc.get("first_dispatch_ts"):
+        lines.append(f"first dispatch: {doc['first_dispatch_ts']}")
+    return "\n".join(lines)
 
 
 def load(path) -> dict:
@@ -199,23 +277,31 @@ def dump(path, doc: dict) -> Path:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
-        description="goal-operationalization validator (#128): validate or "
-                    "seal a workspace goal-operationalization.yaml")
+        description="goal-operationalization validator (#128): validate, "
+                    "stamp the first dispatch, or print the delivery "
+                    "restatement for a workspace goal-operationalization.yaml")
     parser.add_argument("file", help="path to goal-operationalization.yaml")
-    parser.add_argument("--confirm", action="store_true",
-                        help="seal a valid pending file (writes status: "
-                             "confirmed + confirmed_sha256)")
+    parser.add_argument("--stamp-dispatch", action="store_true",
+                        help="freeze the constitution + stamp "
+                             "first_dispatch_ts (first dispatch only)")
+    parser.add_argument("--restatement", action="store_true",
+                        help="print the delivery-audit block (not_done + "
+                             "generalization) for the final report")
     args = parser.parse_args(argv)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     try:
         doc = load(args.file)
-        if args.confirm:
-            doc = confirm(doc)
+        if args.stamp_dispatch:
+            doc = stamp_dispatch(doc, now)
             dump(args.file, doc)
         report = validate(doc)
+        if args.restatement:
+            print(restatement(doc))
     except GoalOpError as exc:
         print(json.dumps({"error": str(exc)}))
         return 2
-    print(json.dumps(report, ensure_ascii=False))
+    if not args.restatement:
+        print(json.dumps(report, ensure_ascii=False))
     return 1 if report["errors"] else 0
 
 
