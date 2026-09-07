@@ -360,6 +360,10 @@ files:
     dest: .claude/scripts/gate_telemetry.py
     kind: scaffold
     sha256: 6b781ebf1b7f79e26e2e5da83eecb806adaeeb1d84681ca573b55397a2e92d9c
+  - src: scripts/goal_operationalization.py
+    dest: .claude/scripts/goal_operationalization.py
+    kind: scaffold
+    sha256: a37c48c6e7ecef97395f7e120bef3e64cf0c1e4b3aa95a42506de55f22251535
   - src: scripts/harness_common.py
     dest: .claude/scripts/harness_common.py
     kind: scaffold
@@ -1256,6 +1260,10 @@ files:
     dest: .claude/templates/state/claim_deps.yaml
     kind: asset
     sha256: 15a4682c40b1b4ba9f594641795e58397cc68270287dd43f85f3704032868c17
+  - src: templates/state/goal-operationalization.yaml
+    dest: .claude/templates/state/goal-operationalization.yaml
+    kind: asset
+    sha256: 46d3dd90d26cf02898d5be9dd510bf14b35865a36840dd8a1a5d87d627433e1d
   - src: templates/state/task-oracle.yaml
     dest: .claude/templates/state/task-oracle.yaml
     kind: asset
@@ -1275,7 +1283,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: a1db5e71e6292a57e9d20622160f0d247c3582c9edc81d6dd665efb1184769af
+    sha256: a079369f74bef6682aa2e74947e5da90b8b68491209f8709dbe2f176d70ea48d
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
