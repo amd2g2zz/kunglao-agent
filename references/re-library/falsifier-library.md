@@ -39,6 +39,9 @@ negative proves`. A fired kill experiment is a finding either way
 | **12. Algorithm family by constant pool** (complements family 7's output-shape channel; multi-source) | (a) rodata cross-reference: known cipher tables / encodings byte-searched in the constant pool → ✓ family-level identification before any code reading; ✗ absent = table-less or recomputed constants — absence is not non-standard. (b) Parameter verification: recovered parameters (tables, IVs, key schedule) replayed through an independent implementation against captured pairs → ✓ implementation-level closure, behavior-confirmed; ✗ parameters wrong or consumed differently — re-extract from the binary. Constant presence alone stays family-level support, never closure — mirror of family 7's shape-labels-hypothesis rule. |
 | **13. Crash signature → vulnerability-hypothesis class** (thin family; evidence side only) | (a) Allocator-misuse signatures (double-free / dangling-reuse patterns in the crash allocation trace) → hypothesis class: reuse-after-free — falsify by lifetime audit of the owning allocation; ✗ trace clean → move to the arithmetic side. (b) Arithmetic-overflow signatures (allocation size derived from a controllable length, undersized buffer) → hypothesis class: integer wrap — falsify by recomputing the size expression at its extremes. (c) Boundary-adjacent access signatures (crash within a few bytes of an allocation edge) → hypothesis class: off-by-one / adjacency overwrite — falsify by bounding the index expression. (d) Mitigation state as provability fact: name each present mitigation and what it does to the hypothesis — MTE-class tagging makes memory-safety hypotheses directly provable/refutable; NX + ASLR-class makes control-flow hypotheses demand an info-leak first. Scope: concept teaching excluded (model prior covers it); exploitation walkthroughs excluded (the agent does not exploit). |
 | **14. JNI-boundary observation is detected** (channel-integrity mirror) | Experiment: env function-table pointers verified against the libart-expected addresses → ✓ table hook present — the boundary channel is blinded (falsifier-library's mirror of "import hooks see nothing"); re-route below the table layer or change channels; ✗ pointers intact — table hooks absent, but absence proves only this channel (other tells may fire). Companion to families 6 and 11: every observation channel carries a named blinding — name it when choosing the channel (dynamic-observation-ladders.md, channel-descent rule). |
+| **15. Instrumentation is detected via a trap channel** (practitioner-attested; complements family 11's file/marker channels) | (a) Self-trap probe: the target raises a SIGTRAP-class trap with its own handler installed; under an attached debugger the OS routes the signal to the debugger and the handler never runs → ✓ handler skipped / branch not taken = the trap channel is identified — pass signals through to the target (nostop+pass-class debugger configuration) or move the question to a channel without a ptrace-class debugger (emulation, static); ✗ handler runs = that channel is absent on this target. (b) Multi-detection inventory: detection checks arrive in stacks (TracerPid read, maps scan, port probe, thread-name scan, trap channel, ...); neutralizing one surfaces the next — run family 11(c)'s peel-loop channel-for-channel; termination = the target's verdict stabilizes across identical runs. (c) Kernel-floor note: a detection implemented below the userspace instrumentation layer has NO agent-side counter — routing the question to emulation or another channel is the fix; debugging the tool is not. |
+| **16. Hook detection via runtime-metadata pointer probes** (worked-instance attested) | The probe shape: the target holds a handle it treats as a raw metadata pointer (MethodID-class) and reads a flag offset from it — instrumentation frames alter the expected flag word, so the read IS the detector. Falsifier: in emulators the probed address is unmapped and the read faults → ✓ SIGSEGV at a metadata-offset read = the probe is identified (this is a detection-channel signature, NOT a stubbing bug — do not stub it away); ✗ read succeeds and flags look instrumented = the probe fired and must be answered (counter below). Counter class — probe-memory allocation: map garbage memory at the probed address so the probe read succeeds; partial-fidelity reads are tolerated when the goal is to run (consumer-acceptance gate, native-sign-recovery degradation path). |
+| **17. Anti-debug fake files must be plausible, not merely present** (emulator-context worked instance) | Faking `/proc/self/status` with `TracerPid: 0` is necessary and insufficient: status/stat/wchan-class consumers grep specific lines and fields (an R-state process line, a sleeping-syscall wchan value). Falsifier: run the target's own check in-emulator with a file-IO trace open → ✓ the check's verdict stabilizes = the fake-content set is complete; ✗ verdict still fires = a consumed field is still implausible — diff the fake against a real reference dump FIELD-BY-FIELD instead of adding more fake files (selectively editing real dump content survives field greps that wholly invented content fails). |
 
 ### Few-shot — length-extension feasibility, family 2 (synthetic)
 
@@ -70,6 +73,20 @@ isThenable(r)                              // .then callable? probe, don't read
 // assuming the wrong shape corrupts every downstream serialization step.
 ```
 
+### Few-shot — probe-memory allocation, family 16 (synthetic)
+
+```python
+# The SO treats a MethodID-class handle as a raw metadata pointer and reads
+# a flag offset from it — the read is the HOOK DETECTOR. In the emulator the
+# address is unmapped: the SIGSEGV is the probe's signature, not a stub bug.
+PROBE_ADDR = 0xAAAAB000                          # faulting address (synthetic)
+emulator.map(PROBE_ADDR, 0x1000, perms="r--")    # garbage tolerated: the probe
+# only inspects the flag word — partial-fidelity reads pass when the goal is
+# to run. Re-run the boundary pair: the fault is gone and the command
+# sequence advances. Do NOT "fix" this by stubbing the faulting read — the
+# stub answers THIS probe only and the next probe reads a different offset.
+```
+
 ## Closure summary
 
 | Gate | Minimum evidence |
@@ -94,5 +111,10 @@ isThenable(r)                              // .then callable? probe, don't read
 - Observation-channel discipline (SVC floor, JNI-boundary channel, windowing)
   the families 11/14 interventions run inside:
   [dynamic-observation-ladders.md](dynamic-observation-ladders.md)
+- The protection these detection families guard (loader, stream, VM entry):
+  [vm-protection-anatomy.md](vm-protection-anatomy.md)
+- Stubbing-loop context for the family 16 counter (probe-memory allocation)
+  and the family 17 fake-content discipline:
+  [native-sign-recovery.md](native-sign-recovery.md#the-incremental-stubbing-loop-emulation-half)
 - Which evidence type may update what after a falsifier fires:
   [verification-safety.md](verification-safety.md#evidence-type-vocabulary)
