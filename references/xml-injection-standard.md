@@ -45,7 +45,12 @@ Attribute `no-enforcement="true"` REQUIRED: lighting, the agent may ignore.
 ```
 
 ### `<case-hints>` — case-bank / similar-experience hints
-Producer: lands with **#49** (case bank). Until then no producer emits this tag.
+Producer: was assigned to **#49** (case bank); the `emit_case_hints` face
+shipped with #49 but never gained a consumer and was DELETED in #127 (the
+bank's live read face is `case_bank.retrieve`, consumed by
+hypothesis_seeder at cold start). No producer emits this tag; it stays
+RESERVED for a future dispatch-face producer that lands WITH its consumer
+contract (#459 discipline: only faces with real producers are mapped).
 ```xml
 <case-hints>similar past run: unpack first, then reconstruct the config builder</case-hints>
 ```

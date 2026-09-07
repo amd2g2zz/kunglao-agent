@@ -129,11 +129,12 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `claim_expiry.py` | STALE demotion after inactivity | lib(1), tests |
 | `complete_teardown.py` | full teardown helper | tests |
 | `dead_letter.py` | DEAD status + dead-letter quarantine | hooks, lib(1), tests |
+| `detector_liveness.py` | #127 探测器利用率证据 — unified log 里的 detector_eval/detector_fired 计数回读; DORMANT = evaluations>0 且 fires==0 (#600 DORMANT 哨兵泛化); heartbeat_tick 一次性 WARN 面; CLI: `<ws> [--json]` | tests |
 | `feedback.py` | feedback inbox processing | tests |
 | `obligation_discovery.py` | obligation discovery from claims | lib(1), tests |
 | `outcome_capture.py` | outcome ledger capture (R6) + #110 结算落库: 每个 NEW settlement 经 `_bank_case`→case_bank.append_once 落一行案例 (NEGATIVE 无 attribution 机械合成 verdict/checker/signals, ruling 4); 落库失败 fail-open `case_bank_refused` 事件 | lib(2), tests |
 | `roi_settlement.py` | #49 dispatch intent contract + entropy-gain admission gate — record_intent (MISSING_UNCERTAINTY data-channel gate, ruling 3) + settle_intent outcome-vs-intent 归因 (POSITIVE/NEUTRAL/NEGATIVE/UNRESOLVED; fact count 永不作信号, ruling 2) → runs/roi-intents.jsonl + runs/roi-settlements.jsonl; dispatch_gate enforcement wiring 属后续 | outcome_capture (_settle_new wiring), tests |
-| `case_bank.py` | #49 案例库数据层 — 对称收录 (NEGATIVE 无 attribution 拒收 CaseBankError, 无声落库即违约, ruling 4) + failures-first 检索 (反例剪枝优先于正例复用, 类内 newest-first) + `<case-hints>` 生产面 (XML 注入标准保留名, 空匹配不产空标签); `append_once` (claim×method×roi_class 幂等去重, #110); CLI: retrieve --tags --limit --json | tests, CLI |
+| `case_bank.py` | #49 案例库数据层 — 对称收录 (NEGATIVE 无 attribution 拒收 CaseBankError, 无声落库即违约, ruling 4) + failures-first 检索 (反例剪枝优先于正例复用, 类内 newest-first); #127 删除零消费者的 `<case-hints>` 包装面 (标签保留, references/xml-injection-standard.md); `append_once` (claim×method×roi_class 幂等去重, #110); CLI: retrieve --tags --limit --json | tests, CLI |
 | `reconcile_intents.py` | plan↔claims intent reconciliation | tests |
 | `reconcile_workers.py` | worker status reconciliation | lib(1), tests |
 | `refutation_propagate.py` | refutation propagation across facts | tests |
