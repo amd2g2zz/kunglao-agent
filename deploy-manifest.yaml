@@ -343,7 +343,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: a5a7c2ecd9b0aa1c510c096f32ed982331f0dfb085678970816f04b6bf8be823
+    sha256: f14ebff87900d6e58d9dc7bb0e430b0509be92e4b041dee8d42d4d037a7b181c
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -403,7 +403,7 @@ files:
   - src: scripts/hooks_selfcheck.py
     dest: .claude/scripts/hooks_selfcheck.py
     kind: scaffold
-    sha256: 048aa15248109b199efd423626add964543c99ca909aebeddfc216f68196978f
+    sha256: 9b335b3cbb673e18aac2b065480dc14997d4badba2b36378d26499e7627266bf
   - src: scripts/hypothesis_seeder.py
     dest: .claude/scripts/hypothesis_seeder.py
     kind: scaffold
@@ -503,7 +503,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 7f6adf34da41c41a870f5740176882b656ee00f704854d165d72a99c7555bb44
+    sha256: 1bb0750f0bb37e095d10fcf39455ee83f8a4f160a33e0e17f29ce5f28fa139d5
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold

@@ -34,10 +34,30 @@ if str(SCRIPTS) not in sys.path:
 import template_version as tv  # noqa: E402
 from _factories import seed_bins
 
+import pytest  # noqa: E402
+
 # #794 lesson: behavioral env vars must never leak into CLI children.
 _BEHAVIORAL_ENV_VARS = ("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",)
 
 GIT_IDENTITY = ("-c", "user.name=t", "-c", "user.email=t@localhost")
+
+
+# ---------------------------------------------------------------- #143 home isolation
+# The upgrade now purges the user-global ~/.claude/settings.json (#143 item).
+# Every real-run upgrade test in this file binds Path.home to a bare tmp home
+# (the established monkeypatch seam, canonical_install_root precedent) plus
+# HOME/USERPROFILE for subprocess children, so a pytest run can never purge
+# the production global file — same protection class as conftest.isolated_home.
+
+
+@pytest.fixture(autouse=True)
+def _isolated_upgrade_home(tmp_path, monkeypatch):
+    home = tmp_path / "fake-home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    return home
 
 
 def _run_cli(args: list[str], *, env: dict | None = None,

@@ -74,6 +74,8 @@ wire_up_settings.derive_hook_subset(
 KONG_HOOK_FILES = list(_KONG_CHAIN_FILES)
 # User-global settings: NOT a deployment target since #258. Checked only to warn
 # about leftover kunglao hooks that should be migrated to the project level.
+# #143: /kunglao-agent:upgrade now PURGES those leftovers (backup + WARN rails);
+# this check stays as the between-upgrades tripwire and is behaviorally unchanged.
 USER_SETTINGS = Path.home() / ".claude" / "settings.json"
 
 

@@ -30,6 +30,24 @@ from _factories import write_hook_state
 UGRADE_PATH = SCRIPTS / "kunglao_upgrade.py"
 
 
+# ---------------------------------------------------------------- #143 home isolation
+# The upgrade now purges the user-global ~/.claude/settings.json (#143 item).
+# Every real-run upgrade test in this file binds Path.home to a bare tmp home
+# (the established monkeypatch seam, canonical_install_root precedent) plus
+# HOME/USERPROFILE for subprocess children, so a pytest run can never purge
+# the production global file — same protection class as conftest.isolated_home.
+
+
+@pytest.fixture(autouse=True)
+def _isolated_upgrade_home(tmp_path, monkeypatch):
+    home = tmp_path / "fake-home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    return home
+
+
 def _load_upgrade():
     spec = importlib.util.spec_from_file_location("kunglao_upgrade", UGRADE_PATH)
     mod = importlib.util.module_from_spec(spec)

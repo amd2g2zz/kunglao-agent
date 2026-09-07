@@ -74,6 +74,7 @@ from hook_activation import (  # noqa: E402
     canonical_install_root,
     register_hooks,
 )
+from wire_up_settings import WIRE_UP_HOOK_FILES, hook_deployment_targets  # noqa: E402  (#143 purge matches the #372 registry single source)
 from _hooks_path import load_module_by_path  # noqa: E402  # #863 Family B: loader delegation (#671 authority)
 
 USER_DATA_DIRS: tuple[str, ...] = (
@@ -128,6 +129,141 @@ def _item_hooks_rewire(ws: Path, dry: bool) -> str:
     if not dry:
         register_hooks(ws)
     return "hooks_rewire"
+
+
+def _global_settings_path() -> Path:
+    """#143 — the user-global settings file. Reads Path.home() (never env
+    vars) so test fake-homes bind through the established monkeypatch seam
+    (hook_activation.canonical_install_root precedent)."""
+    return Path.home() / ".claude" / "settings.json"
+
+
+def _is_kunglao_hook_command(command: str) -> bool:
+    """#143 matcher: a hook command references a kunglao hook file iff a
+    WIRE_UP_HOOK_FILES registry basename appears in the command string — the
+    same basename-substring convention hooks_selfcheck.check_settings uses
+    for its present/missing scan. The registry import keeps ONE source
+    (#372): a hook file added to the registry is purged from the global
+    file without a second list to forget."""
+    cmd = command or ""
+    return any(name in cmd for name in WIRE_UP_HOOK_FILES)
+
+
+def _settings_has_live_hooks(path: Path) -> bool:
+    """True iff <path> parses and carries a non-empty hooks segment. Any
+    read/parse failure answers False — callers only use this to decide
+    whether the project layer deserves a missing-registration WARN."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return bool(isinstance(data, dict) and data.get("hooks"))
+
+
+def _item_global_hook_purge(ws: Path, dry: bool) -> str:
+    """#143: purge legacy pre-#258 kunglao hooks from the user-global
+    ~/.claude/settings.json — the upgrade-side completion of #258's
+    project-scope migration (owner ruling 2026-09-07: ships in v0.1.5).
+
+    Scope contract:
+      - ONLY the `hooks` segment is walked; env/statusLine/enabledPlugins
+        and every other top-level key are never touched.
+      - A hook entry is purged iff its command references a
+        WIRE_UP_HOOK_FILES registry basename. Non-kunglao entries survive
+        in place; containers the purge empties (matcher rows, event keys)
+        carried kunglao-only content by construction.
+      - Safety rails: the ORIGINAL file bytes are backed up to
+        <ws>/runs/global-settings-backup-<utc-ts>.json before the first
+        write (iron-rule-exempt, D4 class); a parse failure skips with a
+        WARN and leaves the file byte-untouched (never repair a corrupted
+        global file by truncation — v1.9.37 lesson); no kunglao entries ->
+        idempotent noop line, no backup, no write.
+      - Ordering: registered AFTER _item_hooks_rewire so project-level
+        registration is confirmed earlier in the SAME run (#258: no window
+        where neither layer is active). If the project layer still reads
+        hook-less, the purge proceeds but draws the missing-layer WARN —
+        stale global hooks are live pollution either way.
+      - Write-back is atomic (same-dir temp + rename) and preserves the
+        file mode. A dry run only reports what would be removed.
+    """
+    gp = _global_settings_path()
+    if not gp.is_file():
+        return "global_hook_purge(noop: absent)"
+    try:
+        original = gp.read_bytes()
+        data = json.loads(original.decode("utf-8"))
+    except (OSError, ValueError) as exc:
+        why = f"{type(exc).__name__}: {exc}"
+        _warn(f"kunglao-upgrade: WARN — global settings purge skipped: "
+              f"{gp} is unreadable/unparseable ({why}); file left "
+              f"untouched — never repair a corrupted global file",
+              why, "global_hook_purge", ws)
+        return "global_hook_purge(warn: parse-failed)"
+    hooks = data.get("hooks") if isinstance(data, dict) else None
+    if not isinstance(hooks, dict):
+        return "global_hook_purge(noop)"
+    removed: list[str] = []
+    for event in list(hooks):
+        entries = hooks.get(event)
+        if not isinstance(entries, list):
+            continue
+        kept_entries: list = []
+        for entry in entries:
+            if not isinstance(entry, dict) \
+                    or not isinstance(entry.get("hooks"), list):
+                kept_entries.append(entry)
+                continue
+            kept_hooks = []
+            for h in entry["hooks"]:
+                cmd = h.get("command", "") if isinstance(h, dict) else ""
+                if isinstance(h, dict) and _is_kunglao_hook_command(cmd):
+                    removed.append(cmd)
+                else:
+                    kept_hooks.append(h)
+            if len(kept_hooks) == len(entry["hooks"]):
+                kept_entries.append(entry)          # nothing kunglao here
+            elif kept_hooks:
+                kept_entries.append({**entry, "hooks": kept_hooks})
+        if kept_entries:
+            hooks[event] = kept_entries
+        else:
+            del hooks[event]                        # event rode only kunglao
+    if not removed:
+        return "global_hook_purge(noop)"
+    matched = ",".join(sorted(name for name in WIRE_UP_HOOK_FILES
+                              if any(name in c for c in removed)))
+    if dry:
+        return (f"global_hook_purge(dry: would remove {len(removed)}: "
+                f"{matched})")
+    # #258 ordering contract: the rewire item ran earlier in this same run;
+    # a still-hook-less project layer draws the WARN but never blocks the
+    # purge (the stale global hooks keep firing outside any workspace).
+    if not any(_settings_has_live_hooks(t)
+               for t in hook_deployment_targets(ws)):
+        _warn("kunglao-upgrade: WARN — project-level hook registration not "
+              "detected before global purge (contract: hooks rewire runs "
+              "earlier in this upgrade); purging global kunglao hooks "
+              "anyway", "project-layer-missing", "global_hook_purge", ws)
+    ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    backup = ws / "runs" / f"global-settings-backup-{ts}.json"
+    try:
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        backup.write_bytes(original)
+    except OSError as exc:
+        why = f"{type(exc).__name__}: {exc}"
+        _warn(f"kunglao-upgrade: WARN — global settings purge skipped: "
+              f"backup {backup} unwritable ({why}); global file left "
+              f"untouched — never purge without a backup",
+              why, "global_hook_purge", ws)
+        return "global_hook_purge(warn: backup-failed)"
+    tmp = gp.with_name(gp.name + ".tmp143")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                   encoding="utf-8")
+    os.chmod(tmp, gp.stat().st_mode & 0o777)
+    os.replace(tmp, gp)
+    detail = f"removed={len(removed)} files={matched}"
+    _emit(ws, "global_hook_purge", detail)
+    return f"global_hook_purge(removed={len(removed)}: {matched})"
 
 
 def _item_deployed_refresh(ws: Path, dry: bool) -> str:
@@ -599,6 +735,7 @@ def migrate_to_0_1_3(ws: Path, dry: bool) -> list[str]:
     init-report upgrade record, .agent seed. All items idempotent."""
     return [
         _item_hooks_rewire(ws, dry),
+        _item_global_hook_purge(ws, dry),  # #143 AFTER rewire (#258 completion)
         _item_always_armed_repair(ws, dry),
         _item_template_stamp_refresh(ws, dry),
         _item_init_report_note(ws, dry),
@@ -674,6 +811,13 @@ def _is_exempt(rel: str) -> bool:
     # #791 refresh item — same D4 exemption class as upgrade-snapshot.
     # Analysis data under runs/ stays byte-protected.
     if rel.startswith("runs/deploy-backup-"):
+        return True
+    # #143: the global-settings purge backup — framework-owned write of the
+    # upgrade's own #143 item (same D4 exemption class as deploy-backup);
+    # it mirrors the USER-GLOBAL settings, which the iron rule never hashed
+    # in the first place.
+    if rel.startswith("runs/global-settings-backup-") \
+            and rel.endswith(".json"):
         return True
     return False
 
