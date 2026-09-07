@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>kunglao win-rate curve (#156)</title>
+{# #156 --html face: Jinja2 template over the win-rate JSON face.
+   The vendored Apache-2.0 ECharts build (templates/vendor/echarts-5.6.0.min.js)
+   is INLINED below — checked in once, never a CDN reference; the file renders
+   offline with no build step and no server. The chart JS consumes the SAME
+   inlined face JSON the agent reads (#winrate-face), so the human rendering
+   cannot drift from the primary artifact. #}
+<style>
+body { font: 14px/1.5 -apple-system, "Segoe UI", sans-serif; margin: 24px;
+       color: #1f2937; background: #f8fafc; }
+h1 { font-size: 18px; margin: 0 0 4px; }
+h2 { font-size: 14px; margin: 20px 0 6px; }
+.meta { color: #64748b; font-size: 12px; margin-top: 0; }
+.panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+         padding: 12px; }
+#winrate-chart { width: 100%; height: 420px; }
+</style>
+</head>
+<body>
+<h1>Win-rate curve — rolling success rate over the settlement stream</h1>
+<p class="meta">schema {{ schema }} · n={{ n }} scored settlements ·
+window={{ window }} · overall win rate {{ overall_pct }}</p>
+{% if has_data %}
+<div class="panel"><div id="winrate-chart"></div></div>
+{% else %}
+<p><em>no scored settlements</em> — the settlement stream carries no
+POSITIVE/NEGATIVE rows yet; charts appear once it does.</p>
+{% endif %}
+<h2>Face data — the primary artifact, inlined</h2>
+<p class="meta">agents read this JSON; the chart above is its human rendering.</p>
+<script type="application/json" id="winrate-face">
+{{ face_json }}
+</script>
+{% if has_data %}
+<script>
+{{ echarts_js }}
+</script>
+<script>
+(function () {
+  var face = JSON.parse(document.getElementById("winrate-face").textContent);
+  var n = face.n_settlements;
+  var pct = function (rate) { return rate === null ? null : rate * 100; };
+  var pairs = function (pts) {
+    return (pts || []).map(function (p) { return [p.index, pct(p.rate)]; });
+  };
+  var bands = [];
+  (face.windowed || []).forEach(function (w, k) {
+    if (k % 2 === 0) {  // shade every other window
+      bands.push([{ xAxis: w.start + 1 }, { xAxis: w.end }]);
+    }
+  });
+  var series = [
+    { name: "cumulative", type: "line", data: pairs(face.cumulative),
+      showSymbol: n <= 50, lineStyle: { width: 2.5 },
+      markArea: { silent: true, itemStyle: { color: "#f1f5f9" },
+                  data: bands } },
+    { name: "windowed P/(P+N)", type: "line",
+      data: (face.windowed || []).map(function (w) {
+        return [w.end, pct(w.rate)]; }),
+      symbolSize: 7, lineStyle: { width: 2 } }
+  ];
+  Object.keys(face.by_family || {}).sort().forEach(function (fam) {
+    series.push({ name: "family " + fam, type: "line",
+                  data: pairs(face.by_family[fam].cumulative),
+                  showSymbol: false,
+                  lineStyle: { width: 1.5, type: "dashed" } });
+  });
+  echarts.init(document.getElementById("winrate-chart")).setOption({
+    backgroundColor: "#fff",
+    tooltip: { trigger: "axis",
+               valueFormatter: function (v) {
+                 return v === null || v === undefined ? "—" : v + "%"; } },
+    legend: { top: 0 },
+    grid: { left: 72, right: 24, top: 48, bottom: 56 },
+    xAxis: { type: "value", min: 1, max: Math.max(n, 2), minInterval: 1,
+             name: "settlement index", nameLocation: "middle", nameGap: 32 },
+    yAxis: { type: "value", min: 0, max: 100, name: "success rate (%)",
+             nameLocation: "middle", nameGap: 44,
+             axisLabel: { formatter: "{value}%" } },
+    series: series
+  });
+})();
+</script>
+{% endif %}
+</body>
+</html>
