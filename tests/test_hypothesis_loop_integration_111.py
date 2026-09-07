@@ -266,10 +266,6 @@ def _eliminated_families(ws: Path) -> set[str]:
     (the issue's round-2 face): a case-bank NEGATIVE entry whose mandatory
     attribution names the family's client and whose observed outcome failed
     every case (a partially-green family must NOT be eliminated)."""
-    # RED(#111): the retrieval channel is unwired in the RED state — round 2
-    # must replay the naive-family burn and the strict inequality must FAIL
-    # (E1 variant F). GREEN wires the cbank.retrieve body below.
-    return set()
     out: set[str] = set()
     for entry in cbank.retrieve(ws, [PQ_ID], limit=50):
         if entry.get("roi_class") != cbank.ROI_NEGATIVE:
@@ -387,9 +383,8 @@ def _round_reset(ws: Path) -> None:
     (DEAD claims, refuted/superseded hypotheses) persist."""
     claims, _ = _load_register(ws)
     for claim in claims:
-        # RED(#111): the frontier-memory channel is unwired in the RED state
-        # — DEAD adjudications are wiped too, so round 2 replays the whole
-        # naive burn and the strict inequality must FAIL (E1 variant F).
+        if claim["status"] == "DEAD":
+            continue  # terminal refutation adjudication persists (#36 DLQ)
         claim["status"] = "OPEN"
         claim["promotion_attempts"] = 0
     _save_register(ws, claims)
