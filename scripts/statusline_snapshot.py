@@ -33,13 +33,30 @@ register (OPEN count), noop breaker (stall fingerprint, #634), heartbeat
 file mtime (alive, #534/#754), ledger tail (activity rate + sparks,
 #459), hooks_selfcheck's registry constants (deployed, #381/#258).
 
+#142 (statusline v2, schema 2) — the snapshot becomes the SINGLE data
+owner for the whole kunglao segment (producer-owned data): it gains
+``v_hist`` (last ~8 v_norm points — the sparkline), ``h_bits``/``h_pq``/
+``h_trend`` (frontier PQ categorical entropy from runs/posteriors.yaml
+via posteriors.PQCategorical.entropy; trend vs the previous stored
+value), ``health{oracle,retro,dormant}`` (#473 oracle marker check /
+retro lag < 8 / #127 no DORMANT detectors), ``now{claim,op}`` (active
+worker from the lib_kunglao worker-status scan; op is a <=24-char task
+phrase), ``pq_rows`` + ``difficulty`` (the fine-grained PQ collection
+the external renderer used to read DIRECTLY from rl-signals.jsonl — a
+zero-spawn contract violation; that read is gone), and named phase-2
+placeholder slots (``v_oracle_gap`` #133, ``baseline_inv_k`` #129) so
+the renderer never changes twice.
+
 Usage: python statusline_snapshot.py <workspace>
-(attached from heartbeat_tick after the #873 cockpit sample; fail-open).
+(attached from heartbeat_tick after the #873 cockpit sample AND from the
+heartbeat_touch per-tool-use path since #142 — working-period freshness
+~= per tool call; fail-open everywhere).
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import datetime
 from pathlib import Path
@@ -56,6 +73,12 @@ from liveness_policy import HEARTBEAT_STALE_MINUTES, TICK_INTERVAL_DEFAULT_MIN
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/ root
 SNAPSHOT_REL = Path("runs") / ".kunglao-statusline.json"
 
+# #142: snapshot schema version — 2 adds the producer-owned v2 fields
+# (v_hist / h_bits / h_trend / health / now / pq_rows / difficulty and the
+# phase-2 placeholder slots). No-backcompat policy: readers probe the field
+# set, never a version ladder.
+SCHEMA_VERSION = 2
+
 TICK_MINUTES = TICK_INTERVAL_DEFAULT_MIN          # 5 — elapsed/eta wall bridge
 LEDGER_STALE_MINUTES = 90                          # ledger tail alive budget
 TOSS_WINDOW_S = 120                                # dispatch -> toss window
@@ -69,6 +92,14 @@ LEDGER_TAIL_BYTES = 65_536                         # bounded O(64KB) tail read
 # #882 probe thresholds (the cockpit trio's WARN lines)
 BACKTRACK_LAG_WARN = 8                             # settlements since retro
 UNATTRIBUTED_RATE_WARN = 0.30                      # unattributed fraction
+# #142 v2 fields
+V_HIST_POINTS = 8                                  # sparkline window (~8 points)
+H_TREND_EPS = 1e-6                                 # |ΔH| below this = flat
+NOW_OP_MAX_CHARS = 24                              # task-chip phrase budget
+# Display-only worker-status field extraction (kunglao_status precedent:
+# NOT liveness parsing — liveness stays in lib_kunglao's protocol owners).
+_CLAIM_RE = re.compile(r"claim\s*:?\s+([A-Za-z0-9][\w.-]*)")
+_STEP_RE = re.compile(r"step\s*:?\s+([^|\n]+)")
 
 # Color semantics are COMPUTED Python-side (kunglao logic stays out of Node);
 # Node only interpolates brightness on its render clock (breathing) and ramps
@@ -429,7 +460,7 @@ def _mission_state(ws: Path) -> dict:
     out = {"answered": 0, "blocked": 0, "unattempted": 0, "total": 0,
            "coverage": 0.0, "v_m": 0.0, "v_norm": 0.0,
            "d_slope": 0.0, "d_slope_norm": 0.0, "eta_ticks": None,
-           "elapsed_ticks": 0, "started_ts": None}
+           "elapsed_ticks": 0, "started_ts": None, "v_hist": []}
     try:
         led = yaml.safe_load((ws / "runs" / "mission_ledger.yaml")
                              .read_text(encoding="utf-8")) or {}
@@ -452,6 +483,7 @@ def _mission_state(ws: Path) -> dict:
             out["d_slope"] = round(slope, 6)
             if norm:
                 out["v_norm"] = round(norm[-1], 6)
+                out["v_hist"] = [round(x, 6) for x in norm[-V_HIST_POINTS:]]
                 norm_slope = _slope(norm[-5:])
                 out["d_slope_norm"] = round(norm_slope, 6)
                 out["eta_ticks"] = (round((1.0 - norm[-1]) / norm_slope, 2)
@@ -464,31 +496,39 @@ def _mission_state(ws: Path) -> dict:
     return out
 
 
-def _ledger_activity(ws: Path, now_s: float) -> dict:
-    """账本尾部（末 64KB 有界读）-> 近窗事件数 + 最近 dispatch 是否在 toss 窗口。"""
+def _ledger_rows(ws: Path) -> list[dict]:
+    """账本尾部（末 64KB 有界读）-> 已解析行。首行可能残缺，丢弃。"""
     logs = ws / "runs" / "logs"
     try:
         latest = max((p for p in logs.glob("kunglao-*.jsonl") if p.is_file()),
                      key=lambda p: p.stat().st_mtime, default=None)
         if latest is None:
-            return {"events_recent": 0, "spark_count": 0, "toss": False}
+            return []
         with latest.open("rb") as f:
             f.seek(0, os.SEEK_END)
             size = f.tell()
             f.seek(max(0, size - LEDGER_TAIL_BYTES))
             tail = f.read().decode("utf-8", errors="replace")
     except OSError:
-        return {"events_recent": 0, "spark_count": 0, "toss": False}
+        return []
     lines = tail.splitlines()
     if len(lines) > 1:
         lines = lines[1:]  # drop possibly-partial first line
-    recent = 0
-    toss = False
+    rows = []
     for line in lines:
         try:
-            row = json.loads(line)
+            rows.append(json.loads(line))
         except json.JSONDecodeError:
             continue
+    return rows
+
+
+def _ledger_activity(ws: Path, now_s: float) -> dict:
+    """账本尾部 -> 近窗事件数 + 最近 dispatch 是否在 toss 窗口。"""
+    rows = _ledger_rows(ws)
+    recent = 0
+    toss = False
+    for row in rows:
         ts = _parse_ts(row.get("ts"))
         if ts is not None and now_s - ts <= ACTIVITY_WINDOW_S:
             recent += 1
@@ -498,6 +538,172 @@ def _ledger_activity(ws: Path, now_s: float) -> dict:
     return {"events_recent": recent,
             "spark_count": min(3, recent),  # sparks: event density, capped
             "toss": toss}
+
+
+# ---------------------------------------------------------------------------
+# #142 v2 data plane (producer-owned: the renderer never reads raw logs)
+# ---------------------------------------------------------------------------
+
+def _frontier_pq_id(ws: Path) -> str | None:
+    """任务前沿 = mission_ledger PQ 序里第一个未 answered 的 PQ id。
+    读失败/全答 -> None（调用方回退 max-entropy 或缺省）。"""
+    try:
+        led = yaml.safe_load((ws / "runs" / "mission_ledger.yaml")
+                             .read_text(encoding="utf-8")) or {}
+        for p in (led.get("mission", {}) or {}).get("pqs") or []:
+            if not isinstance(p, dict):
+                continue
+            if str(p.get("state") or "") != "answered":
+                return str(p.get("id")) if p.get("id") is not None else None
+    except (OSError, yaml.YAMLError, TypeError):
+        pass
+    return None
+
+
+def _frontier_entropy(ws: Path) -> tuple[float | None, str | None]:
+    """#142 学习诚实度徽章的数据面：前沿 PQ categorical 熵（bit）。
+
+    runs/posteriors.yaml -> posteriors.PQCategorical.entropy()。前沿 id 取
+    _frontier_pq_id；前沿无后验时回退全库 max-entropy PQ（仍是一个确定性的
+    熵读数）；账本空/读失败 -> (None, None)（渲染端整体省略徽章，fail-open）。
+    """
+    try:
+        from posteriors import PosteriorLedger
+        led = PosteriorLedger.load(ws)
+        if not led.pqs:
+            return None, None
+        frontier_id = _frontier_pq_id(ws)
+        pq = led.pqs.get(frontier_id) if frontier_id is not None else None
+        if pq is None:
+            pq = max(led.pqs.values(), key=lambda p: p.entropy())
+        return round(pq.entropy(), 4), pq.pq_id
+    except Exception:  # noqa: BLE001 — 快照永不打断 tick
+        return None, None
+
+
+def _h_trend(h_bits: float | None, prev: dict | None) -> str:
+    """熵趋势 = 与上一快照存储值比较：falling / flat / rising / unknown。"""
+    if not isinstance(h_bits, (int, float)):
+        return "unknown"
+    prev_h = (prev or {}).get("h_bits")
+    if not isinstance(prev_h, (int, float)):
+        return "unknown"
+    delta = float(h_bits) - float(prev_h)
+    if delta < -H_TREND_EPS:
+        return "falling"
+    if delta > H_TREND_EPS:
+        return "rising"
+    return "flat"
+
+
+def _health_oracle(ws: Path) -> bool:
+    """>#473 门电力面：task-oracle.yaml 已注册（init skeleton marker 不算）。
+    Single-sourced on heartbeat_tick._oracle_registered（lazy import —
+    heartbeat_tick 反向只在 main() 内 lazy import 本模块，无环）。"""
+    try:
+        from heartbeat_tick import _oracle_registered
+        return bool(_oracle_registered(ws))
+    except Exception:  # noqa: BLE001 — a probe never kills the tick
+        return False
+
+
+def _health_retro(ws: Path) -> bool:
+    """retro 滞后健康 = settlements since retro < 8（runs/.retro-state.json）。
+    读失败 fail-open（无故障证据 != 故障）。"""
+    try:
+        from backtrack_loop import lag
+        return lag(ws) < BACKTRACK_LAG_WARN
+    except Exception:  # noqa: BLE001 — a probe never kills the tick
+        return True
+
+
+def _health_dormant(ws: Path) -> bool:
+    """>#127 liveness face：无 DORMANT 探测器（evaluated, never fired）。
+    读失败 fail-open。"""
+    try:
+        from detector_liveness import liveness_report
+        return not liveness_report(ws).get("dormant")
+    except Exception:  # noqa: BLE001 — a probe never kills the tick
+        return True
+
+
+def _health(ws: Path) -> dict:
+    """#142 三颗健康点：oracle 已注册 / retro 滞后 < 8 / 无 DORMANT。"""
+    return {"oracle": _health_oracle(ws), "retro": _health_retro(ws),
+            "dormant": _health_dormant(ws)}
+
+
+def _last_dispatch_claim(ws: Path) -> str | None:
+    """>parked 状态的 `last C-<id>`：账本尾部逆序第一条带 claim 的行。"""
+    for row in reversed(_ledger_rows(ws)):
+        claim = row.get("claim")
+        if isinstance(claim, str) and claim.strip():
+            return claim.strip()
+    return None
+
+
+def _now_chip(ws: Path) -> dict:
+    """#142 当前任务 chip：活跃 worker 的 claim + 短任务短语（<=24 字符）。
+
+    活跃 = lib_kunglao.iter_worker_states 里 LAST status 非 terminal 且非
+    waiting 的 worker（liveness 协议归 lib_kunglao 所有；此处只取身份），
+    多活跃取 mtime 最新。空闲时 claim 回退最近一次 dispatch（`last C-<id>`）。
+    全程 fail-open -> {claim: None, op: None}。
+    """
+    claim: str | None = None
+    op: str | None = None
+    try:
+        from _hooks_path import load_hooks_lib
+        lib = load_hooks_lib()
+        states = lib.iter_worker_states(ws)
+        active = [s for s in states
+                  if s.get("status") not in lib.TERMINAL_WORKER_STATUSES
+                  and s.get("status") != lib.WAITING_WORKER_STATUS]
+        if active:
+            cur = max(active, key=lambda s: s.get("mtime"))
+            text = cur["file"].read_text(encoding="utf-8", errors="replace")
+            m = _CLAIM_RE.search(text)
+            if m:
+                claim = m.group(1)
+            steps = _STEP_RE.findall(text)
+            if steps:
+                op = steps[-1].strip()[:NOW_OP_MAX_CHARS]
+        if claim is None:
+            claim = _last_dispatch_claim(ws)
+    except Exception:  # noqa: BLE001 — 快照永不打断 tick
+        pass
+    return {"claim": claim, "op": op}
+
+
+def _pq_detail(ws: Path) -> list[dict]:
+    """细粒度 PQ 面（原 external renderer 直接读 rl-signals.jsonl 的那部分
+    数据 — 合同违规，#142 收归 producer）：逐 PQ {id,state,coverage}。"""
+    rows: list[dict] = []
+    try:
+        led = yaml.safe_load((ws / "runs" / "mission_ledger.yaml")
+                             .read_text(encoding="utf-8")) or {}
+        for p in (led.get("mission", {}) or {}).get("pqs") or []:
+            if not isinstance(p, dict):
+                continue
+            try:
+                cov = round(float(p.get("coverage") or 0.0), 4)
+            except (TypeError, ValueError):
+                cov = 0.0
+            rows.append({"id": str(p.get("id")), "state": p.get("state"),
+                         "coverage": cov})
+    except (OSError, yaml.YAMLError, TypeError):
+        pass
+    return rows
+
+
+def _difficulty(ws: Path) -> str | None:
+    """难度档（mission_ledger.read_difficulty_tier — evidence/difficulty.json
+    first, task_spec.yaml second）。缺/读失败 -> None（渲染端省略）。"""
+    try:
+        import mission_ledger
+        return mission_ledger.read_difficulty_tier(ws)
+    except Exception:  # noqa: BLE001 — 快照永不打断 tick
+        return None
 
 
 def _eta_fade_cells(d_slope: float) -> int:
@@ -600,7 +806,6 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
 
     pq = _mission_state(ws)
     activity = _ledger_activity(ws, now_s)
-    activity = _ledger_activity(ws, now_s)
     state = _detect_state(ws, alive_ok=alive_ok, open_claims=open_claims,
                           failed_claims=failed_claims, pq=pq, toss=activity["toss"],
                           stall_ok=stall_ok)
@@ -643,8 +848,17 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     except OSError:
         pass
 
+    # #142 v2 producer-owned fields — each traced to its disk observation,
+    # each fail-open (the snapshot never breaks the tick / the touch).
+    h_bits, h_pq = _frontier_entropy(ws)
+    h_trend = _h_trend(h_bits, prev)
+    health = _health(ws)
+    now_chip = _now_chip(ws)
+    pq_rows = _pq_detail(ws)
+    difficulty = _difficulty(ws)
+
     return {
-        "schema": 1,
+        "schema": SCHEMA_VERSION,
         "ts": now_iso,
         "workspace": str(ws.resolve()),
         "tick": tick,
@@ -658,6 +872,19 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         "pq": pq,
         "v_m": pq["v_m"],
         "v_norm": pq["v_norm"],
+        # ---- #142 v2: producer-owned data (the renderer is a dumb view) ----
+        "v_hist": pq.get("v_hist") or [],
+        "h_bits": h_bits,
+        "h_pq": h_pq,
+        "h_trend": h_trend,
+        "health": health,
+        "now": now_chip,
+        "pq_rows": pq_rows,
+        "difficulty": difficulty,
+        # #142 phase-2 slots: named now, populated later — no renderer change
+        # twice (#133 v_norm-v_oracle gap, #129 1/k baseline).
+        "v_oracle_gap": None,
+        "baseline_inv_k": None,
         "d_slope": pq["d_slope"],
         "d_slope_norm": pq["d_slope_norm"],
         "eta_ticks": pq["eta_ticks"],

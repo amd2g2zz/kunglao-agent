@@ -412,7 +412,7 @@ class TestSnapshotWriter:
         _emit(ws, "tool_call")
         _mission(ws, answered=1, total=4)
         snap = sls.build_snapshot(ws)
-        assert snap["schema"] == 1
+        assert snap["schema"] == 2  # #142: schema 2 — producer-owned v2 fields
         for key in ("ts", "workspace", "state", "state_since", "prev_state",
                     "color", "probe_codes", "probe_detail", "pq", "v_m",
                     "d_slope", "eta_ticks", "eta_fade_cells", "elapsed",
@@ -427,7 +427,7 @@ class TestSnapshotWriter:
         out = ws / "runs" / ".kunglao-statusline.json"
         assert out.exists()
         assert not (ws / "runs" / ".kunglao-statusline.json.tmp").exists()
-        assert json.loads(out.read_text(encoding="utf-8"))["schema"] == 1
+        assert json.loads(out.read_text(encoding="utf-8"))["schema"] == 2  # #142
 
     def test_down_auto_flip(self, tmp_path):
         """kill kunglao（停 touch）→ 下一次 writer 看到陈旧 heartbeat → down。"""
@@ -457,7 +457,7 @@ class TestSnapshotWriter:
         assert out.exists(), (
             f"tick must pre-write the statusline snapshot; rc={r.returncode} "
             f"stderr={r.stderr[-300:]}")
-        assert json.loads(out.read_text(encoding="utf-8"))["schema"] == 1
+        assert json.loads(out.read_text(encoding="utf-8"))["schema"] == 2  # #142
 
     def test_tick_survives_snapshot_failure(self, tmp_path, monkeypatch):
         """writer 崩溃不得失败 tick：fail-open 同款（#873 cockpit 惯例）。"""

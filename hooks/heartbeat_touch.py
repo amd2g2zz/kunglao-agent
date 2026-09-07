@@ -80,6 +80,16 @@ def main() -> int:
                     hbmod.append_tick_log(ws, actor="hook")
             except Exception:  # noqa: BLE001 — liveness substrate best-effort
                 pass
+            # #142: per-tool-use statusline snapshot refresh — the v2
+            # freshness contract rides the existing touch path so the
+            # working-period snapshot mtime advances ~= per tool call,
+            # without waiting for the 5-min tick. Fail-open: the statusline
+            # is cosmetic and must never block or fail a tool call.
+            try:
+                import statusline_snapshot  # scripts/ on path via #671 boot
+                statusline_snapshot.write_snapshot(ws)
+            except Exception:  # noqa: BLE001 — statusline never blocks tools
+                pass
             return 0
         except Exception as exc:  # noqa: BLE001 — never break the tool call
             print(f"heartbeat_touch: heartbeat refresh failed ({exc})",
