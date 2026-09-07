@@ -1,6 +1,6 @@
 === 1 claim(s) BLOCKED (failed attempt, no current analysis) ===
 
-=== BLOCKED: C-1 (status=OPEN, attempts=1) ===
+=== BLOCKED: C-1 (status=OPEN, red_settlements=1 over 1 linked case(s)) ===
 claim: 
 
 Before re-dispatching OR concluding NEGATIVE, answer three questions

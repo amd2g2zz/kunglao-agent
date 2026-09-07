@@ -221,8 +221,21 @@ class TestTop1Enforcement:
         reg = yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
         reg["claims"].append({"id": "C-4", "status": "OPEN",
                               "statement": "background work",
+                              "answers_question": "q4",
                               "promotion_attempts": 1})
         _write(ws / "claim-register.yaml", reg)
+        # #146: arm the failure-blocked slice the live way — a linked
+        # oracle case carrying a fail settlement in the #106 ledger.
+        import posteriors as po
+        cdir = ws / "oracle" / "cases"
+        cdir.mkdir(parents=True, exist_ok=True)
+        (cdir / "case-c-4.yaml").write_text(
+            yaml.safe_dump({"id": "case-c-4", "target_pq": "q4"}),
+            encoding="utf-8")
+        led = po.PosteriorLedger.load(ws)
+        led.cases["case-c-4"] = po.CasePosterior("case-c-4", alpha=1.0,
+                                                 beta=2.0)
+        led.save(ws)
         r = _run_gate(root, ws, "[T1 tools=grep] claim C-4 retry the failed")
         assert r.returncode == 0, (
             f"failure-blocked slice belongs to the #495 injection, not the "

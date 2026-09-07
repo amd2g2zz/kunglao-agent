@@ -26,20 +26,46 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import failure_analysis_gate as fag  # noqa: E402
+import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 import yaml  # noqa: E402
 
 
 # ---------- helpers ----------
 
+PQ = "q1"
+
+
 def _write_register(ws: Path, claims: list[dict]) -> None:
+    """Write the register and ARM the #146 way: every claim with
+    promotion_attempts > 0 gets a linked oracle case (target_pq == its
+    answers_question) carrying that many fail settlements in the #106
+    posterior ledger (beta = 1 + reds)."""
     (ws / "claim-register.yaml").write_text(
         yaml.safe_dump({"claims": claims}, allow_unicode=True, sort_keys=False),
         encoding="utf-8")
+    led = po.PosteriorLedger.load(ws)
+    for c in claims:
+        attempts = int(c.get("promotion_attempts") or 0)
+        if attempts <= 0:
+            continue
+        case_id = f"case-{str(c['id']).lower()}"
+        cdir = ws / "oracle" / "cases"
+        cdir.mkdir(parents=True, exist_ok=True)
+        (cdir / f"{case_id}.yaml").write_text(
+            yaml.safe_dump({"id": case_id,
+                            "target_pq": str(c.get("answers_question")
+                                              or PQ)},
+                           sort_keys=False),
+            encoding="utf-8")
+        led.cases[case_id] = po.CasePosterior(case_id, alpha=1.0,
+                                              beta=1.0 + attempts)
+    led.save(ws)
 
 
 def _claim(cid: str, attempts: int = 3, statement: str = "sample does X") -> dict:
     return {"id": cid, "status": "OPEN", "boundary_type": "positive_observation",
             "evidence_tier_attempted": 1, "promotion_attempts": attempts,
+            "answers_question": PQ,
             "depends_on": [], "statement": statement}
 
 
@@ -111,7 +137,7 @@ def test_record_outcome_writes_fields_and_preserves_prior(tmp_path):
     assert entry["assumption_validity"] == "not-justified"     # preserved
     assert entry["next_method"] == "runtime Frida hook"        # preserved
     assert entry["analyzed_at"] == prior_analyzed_at           # preserved
-    assert entry["covers_attempt"] == 3
+    assert entry["covers_settlements"] == 3
 
 
 def test_record_outcome_validation(tmp_path):
@@ -158,7 +184,7 @@ def test_record_legacy_fields_unchanged(tmp_path):
 
     # Assert
     assert set(r["entry"].keys()) == {
-        "claim", "covers_attempt", "method_assumption",
+        "claim", "covers_settlements", "method_assumption",
         "assumption_validity", "next_method",
         "next_method_source",               # #495 provenance
         "validated_capability", "identified_obstacle",   # #495 artifacts
@@ -400,7 +426,10 @@ def test_failure_blocked_parsing_backward_compatible(tmp_path):
     _write_register(ws, [_claim("C-10", attempts=2),       # no analysis -> BLOCKED
                          _claim("C-11", attempts=2)])      # analysis w/o outcome -> covered
     _record(ws, "C-11", assumption="a", validity="not-justified", next_method="b")
-    expected = {"C-10"}
+    # the default obstacle in _record promotes child C-12; it inherits
+    # answers_question, so the pq's red settlements arm it too (#146:
+    # arming follows the linkage, not the dispatch counter)
+    expected = {"C-10", "C-12"}
 
     # Act
     blocked_legacy = {b["claim_id"] for b in fag.scan_workspace(ws)}
@@ -414,7 +443,8 @@ def test_failure_blocked_parsing_backward_compatible(tmp_path):
 
     # Assert — unchanged: new fields do not alter the gate decision
     assert blocked_new == expected
-    assert fag._analysis_covers(fag._load_analysis(ws, "C-11"), _claim("C-11", attempts=2))
+    assert fag._analysis_covers(fag._load_analysis(ws, "C-11"),
+                                fag.linked_fail_settlements(ws, _claim("C-11")))
 
 
 # ---------- CLI wiring regression (orchestrator verification) ----------

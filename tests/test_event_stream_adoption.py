@@ -33,6 +33,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
+
 # hook-level fixtures reuse the #496 suite's builders (same test dir is on
 # sys.path under pytest's rootdir collection; test_decide_state_machine.py
 # uses the same cross-test import convention).
@@ -373,8 +375,20 @@ class TestFailureAnalysisEmit:
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text(yaml.safe_dump({"claims": [
             {"id": "C-1", "status": "OPEN",
+             "answers_question": "q1",
              "promotion_attempts": attempts}]}, sort_keys=False),
             encoding="utf-8")
+        # #146: arm the gate the live way — a linked case carrying red
+        # settlements (beta = 1 + reds in the #106 ledger).
+        cdir = ws / "oracle" / "cases"
+        cdir.mkdir(parents=True)
+        (cdir / "case-c-1.yaml").write_text(
+            yaml.safe_dump({"id": "case-c-1", "target_pq": "q1"}),
+            encoding="utf-8")
+        led = po.PosteriorLedger.load(ws)
+        led.cases["case-c-1"] = po.CasePosterior("case-c-1", alpha=1.0,
+                                                 beta=1.0 + attempts)
+        led.save(ws)
         return ws
 
     def test_record_success_emits_analysis_recorded(self, tmp, events):
@@ -415,20 +429,30 @@ class TestFailureAnalysisEmit:
         assert rows[-1].get("claim") == "C-1"
 
     def test_stale_coverage_blocked_keeps_failure_blocked(self, tmp, events):
-        """Split pin: BLOCKED because covers_attempt lags (artifacts all
-        present) keeps the pre-existing word failure_blocked — the word
-        carries the REASON, no double emission."""
+        """Split pin: BLOCKED because covers_settlements lags the red total
+        (artifacts all present) keeps the pre-existing word
+        failure_blocked — the word carries the REASON, no double emission."""
         import yaml
         import failure_analysis_gate as fag
         ws = tmp / "ws"
         ws.mkdir(parents=True)
         (ws / "claim-register.yaml").write_text(yaml.safe_dump({"claims": [
-            {"id": "C-1", "status": "OPEN", "promotion_attempts": 2}]},
+            {"id": "C-1", "status": "OPEN", "answers_question": "q1",
+             "promotion_attempts": 2}]},
             sort_keys=False), encoding="utf-8")
+        cdir = ws / "oracle" / "cases"
+        cdir.mkdir(parents=True)
+        (cdir / "case-c-1.yaml").write_text(
+            yaml.safe_dump({"id": "case-c-1", "target_pq": "q1"}),
+            encoding="utf-8")
+        led = po.PosteriorLedger.load(ws)
+        led.cases["case-c-1"] = po.CasePosterior("case-c-1", alpha=1.0,
+                                                 beta=3.0)  # 2 red settlements
+        led.save(ws)
         adir = ws / "analyses"
         adir.mkdir()
         (adir / "failure-C-1.yaml").write_text(yaml.safe_dump({
-            "claim": "C-1", "covers_attempt": 1,
+            "claim": "C-1", "covers_settlements": 1,   # lags the red total
             "validated_capability": "frida works",
             "identified_obstacle": "spawn timeout"}, sort_keys=False),
             encoding="utf-8")
