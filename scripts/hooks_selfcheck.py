@@ -127,6 +127,40 @@ def rebuild_project_level(workspace: Path) -> dict:
         return {"rebuilt": False, "error": str(exc)}
 
 
+def check_statusline(settings_path: Path) -> dict:
+    """#142 keep-alive face: the project-level `statusLine` settings key must
+    reference the repo renderer (scripts/statusline_render.mjs). Not a hook —
+    a different key in the same #258 project file, checked by the same
+    keep-alive discipline (lives and dies with the workspace). Absent file /
+    unparseable settings -> not ok (repair face rewrites the key)."""
+    try:
+        from hook_activation import STATUSLINE_RENDER_FILE, STATUSLINE_SETTINGS_KEY
+    except Exception as exc:  # noqa: BLE001 — keep-alive never crashes the tick
+        return {"present": False, "ok": True, "command": None,
+                "detail": f"statusline constants unavailable (fail-open): {exc}"}
+    try:
+        s = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return {"present": False, "ok": False, "command": None,
+                "detail": f"unreadable settings ({exc})"}
+    entry = s.get(STATUSLINE_SETTINGS_KEY) if isinstance(s, dict) else None
+    cmd = str(entry.get("command", "")) if isinstance(entry, dict) else None
+    ok = (isinstance(entry, dict) and entry.get("type") == "command"
+          and STATUSLINE_RENDER_FILE in (cmd or ""))
+    return {"present": bool(entry), "ok": ok, "command": cmd}
+
+
+def repair_statusline(ws: Path) -> dict:
+    """#142 repair face: re-register the project-scoped statusLine key via
+    hook_activation.register_statusline (THE registration entry). Returns
+    the registration report; never raises."""
+    try:
+        from hook_activation import register_statusline
+        return register_statusline(ws)
+    except Exception as exc:  # noqa: BLE001 — keep-alive never crashes the tick
+        return {"ok": False, "error": str(exc)}
+
+
 def check_stamp_version(ws: Path) -> dict:
     """#536: three-carrier template version stamp consistency.
 
@@ -167,6 +201,22 @@ def main() -> int:
             # maker-checker: re-read the file — don't trust the subprocess claim.
             proj_check = check_settings(proj_settings)
 
+    # #142: statusline keep-alive — same project file, different key. The
+    # hooks rebuild above already re-registers the statusline (wire-up flow);
+    # when hooks were fine but the statusLine key drifted, repair just it.
+    # Cosmetic face: a failed repair is reported and WARNed, never fails
+    # the tick (the rc weights stay hook-owned).
+    sl_check = check_statusline(proj_settings)
+    sl_repair: dict = {}
+    if not sl_check.get("ok"):
+        sl_repair = repair_statusline(ws)
+        if sl_repair.get("ok"):
+            sl_check = check_statusline(proj_settings)
+        else:
+            print(f"WARNING: statusline keep-alive repair failed "
+                  f"({sl_repair.get('error') or sl_repair}) — the statusLine "
+                  f"key stays missing from {proj_settings}", file=sys.stderr)
+
     report = {
         "ts": utc_now(),
         "project_settings": str(proj_settings),
@@ -175,6 +225,7 @@ def main() -> int:
         "user_level": user_check,
         "user_migration_warning": migration_warning,
         "project_rebuild": rebuilt,
+        "statusline": {**sl_check, "repair": sl_repair},
         # #536: stamp faults = per-carrier missing/mismatch map
         "template_version_stamps": check_stamp_version(ws),
     }
@@ -187,6 +238,8 @@ def main() -> int:
 
     proj_ok = proj_check.get("hooks_segment") and not proj_check.get("missing")
     status = f"project={'OK' if proj_ok else 'MISSING ' + str(proj_check.get('missing'))}"
+    # #142: statusline keep-alive rides the status line (non-fatal).
+    status += f" statusline={'OK' if sl_check.get('ok') else 'MISSING'}"
     if migration_warning:
         status += " (global has leftover kunglao hooks — migrate)"
     # #536: stamp faults ride the status line (non-fatal here — see
