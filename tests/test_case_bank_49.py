@@ -8,7 +8,8 @@ RED-first tests pin the contract before implementation (owner ruling 4):
   silent banking of unattributed failures.
 - Retrieval: matching entries with FAILURES FIRST (counterexample pruning >
   positive reuse), newest first within each class; tag-intersection matching.
-- Agent-context output: emit_case_hints wraps in <case-hints> per
+- #127: the emit_case_hints <case-hints> wrapper face was DELETED (zero
+  callers — dead dispatch face); tests for it removed with it.
   references/xml-injection-standard.md (the reserved producer is THIS PR).
 """
 import json
@@ -146,36 +147,6 @@ class TestRetrieve:
         assert cb.retrieve(tmp_path, ["nomatch"], limit=5) == []
 
 
-# ---------- emit_case_hints: the reserved <case-hints> producer ----------
-
-class TestEmitCaseHints:
-    def test_wrapper_per_xml_standard(self, tmp_path):
-        """references/xml-injection-standard.md reserves <case-hints> for
-        THIS producer; output is the wrapped text block."""
-        cb.append(tmp_path, _entry(claim_id="C-2"))
-        out = cb.emit_case_hints(tmp_path, ["re"], limit=3)
-        assert out.startswith("<case-hints>") and out.endswith("</case-hints>")
-        assert "C-2" in out
-        assert "ghidra-light" in out
-
-    def test_failures_before_positives_in_text(self, tmp_path):
-        cb.append(tmp_path, _entry(claim_id="C-1"))
-        cb.append(tmp_path, _entry(claim_id="C-2", roi_class="NEGATIVE",
-                                   attribution="wrong unpack order",
-                                   premise_correction="entrypoint != OEP"))
-        out = cb.emit_case_hints(tmp_path, ["re"], limit=5)
-        assert out.index("C-2") < out.index("C-1")
-        assert "wrong unpack order" in out
-
-    def test_empty_bank_returns_empty_string(self, tmp_path):
-        """No entries -> no injection at all (never an empty tag)."""
-        assert cb.emit_case_hints(tmp_path, ["re"], limit=3) == ""
-
-    def test_unmatched_tags_return_empty_string(self, tmp_path):
-        cb.append(tmp_path, _entry())
-        assert cb.emit_case_hints(tmp_path, ["nomatch"], limit=3) == ""
-
-
 # ---------- CLI face ----------
 
 class TestCli:
@@ -187,12 +158,16 @@ class TestCli:
         rows = json.loads(capsys.readouterr().out)
         assert [r["claim_id"] for r in rows] == ["C-1"]
 
-    def test_retrieve_text_shows_case_hints_block(self, tmp_path, capsys):
+    def test_retrieve_text_shows_plain_lines(self, tmp_path, capsys):
+        """#127: the <case-hints> wrapper face was deleted (zero
+        consumers); the CLI text face prints plain hint lines — ordering
+        contract unchanged (failures-first header kept)."""
         cb.append(tmp_path, _entry(claim_id="C-1"))
         rc = cb.main([str(tmp_path), "retrieve", "--tags", "re", "--limit", "3"])
         assert rc == 0
         out = capsys.readouterr().out
-        assert "<case-hints>" in out and "C-1" in out
+        assert "<case-hints>" not in out, "deleted wrapper face must be gone"
+        assert "C-1" in out and "case-bank: 1 past run(s)" in out
 
     def test_retrieve_empty_bank_text(self, tmp_path, capsys):
         rc = cb.main([str(tmp_path), "retrieve", "--tags", "re",

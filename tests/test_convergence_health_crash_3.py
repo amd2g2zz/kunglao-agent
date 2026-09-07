@@ -102,7 +102,7 @@ def test_assess_crash_exits_4_with_stderr_diagnostic(tmp_path, monkeypatch, caps
     ws.mkdir()
     _write_ledger(ws, [_snap(i, 2, ["C-1"]) for i in range(4)])
 
-    def boom(_ledger):
+    def boom(_ledger, ws=None):  # ws: #127 optional liveness-telemetry arg
         raise RuntimeError("synthetic assess failure (#3)")
 
     monkeypatch.setattr(ch, "assess", boom)

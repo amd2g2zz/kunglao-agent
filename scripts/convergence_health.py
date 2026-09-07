@@ -219,7 +219,7 @@ def _queued_count(ledger: list) -> int | None:
     return len(set(ledger[-1].get("open_ids") or []) - set(tail_dispatched))
 
 
-def assess(ledger: list) -> dict:
+def assess(ledger: list, ws=None) -> dict:
     # #1: rollup/operator-action rows share the ledger but are events, not
     # snapshots — no open_count, so they must not enter the trajectory.
     snaps = [e for e in ledger if "type" not in e and "open_count" in e]
@@ -307,11 +307,49 @@ def assess(ledger: list) -> dict:
     # carries dispatch evidence; absent on old-format rows (prior shape kept)
     if queued is not None:
         r = {**r, "queued_claims": queued}
+    # #127 detector liveness telemetry (helper owns the ws=None / fail-open
+    # branches — assess stays under the complexity budget)
+    _emit_liveness_telemetry(ws, r)
     # surface excluded event rows — observability over silence; absent when 0
     # so pure-snapshot ledgers keep their exact prior output shape (#1)
     if non_snapshot_rows:
         return {**r, "non_snapshot_rows": non_snapshot_rows}
     return r
+
+
+def _emit_liveness_telemetry(ws, r: dict) -> None:
+    """#127: dispatch convergence_health's liveness telemetry. ws is
+    OPTIONAL so the pure function stays pure (callers without a workspace
+    — existing tests — stay silent and uncounted); the CLI face and both
+    module consumers pass theirs. Fail-open: telemetry never breaks the
+    verdict."""
+    if ws is None:
+        return
+    try:
+        emit_detector_telemetry(Path(ws), r)
+    except Exception:  # noqa: BLE001 — telemetry must not break the check
+        pass
+
+
+def emit_detector_telemetry(ws: Path, r: dict) -> None:
+    """#127: convergence_health's detector_eval / detector_fired rows (the
+    liveness read face is detector_liveness.liveness_report)."""
+    import kunglao_log
+    verdict = r.get("verdict")
+    kunglao_log.emit(ws, "convergence_health", "detector_eval",
+                     detail=json.dumps(
+                         {"detector": "convergence_health",
+                          "verdict": verdict,
+                          "rounds": r.get("rounds")}, ensure_ascii=False))
+    if r.get("exit_code") in (EXIT_STALLED, EXIT_SPINNING):
+        kunglao_log.emit(ws, "convergence_health", "detector_fired",
+                         detail=json.dumps(
+                             {"detector": "convergence_health",
+                              "verdict": verdict,
+                              "flatline_run": r.get("flatline_run"),
+                              "churn": bool((r.get("churn") or {})
+                                            .get("is_churning"))},
+                             ensure_ascii=False))
 
 
 def _human(r: dict) -> str:
@@ -356,7 +394,7 @@ def main() -> int:
     # as a stalled mission. Exit 4 (distinct from the 0/1/2/3 protocol);
     # consumer fails open on it. argparse + the no-ledger path stay outside.
     try:
-        r = assess(ledger)
+        r = assess(ledger, ws=workspace)
         if args.json:
             print(json.dumps(r, indent=2, ensure_ascii=False))
         else:

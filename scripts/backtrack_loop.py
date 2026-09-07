@@ -201,11 +201,43 @@ def micro_lessons(ws: Path, claim_id: str | None,
     return [e for e in entries if isinstance(e, dict)][-(k or MICRO_K):]
 
 
+def _index_fake_success(ws: Path, claim_id: str, to: str,
+                        flags: list) -> None:
+    """#127 consumer wiring: the settlement retro's FAKE-SUCCESS flags join
+    the O(1) micro-retro index (runs/.retro-index.json) so the dispatch
+    face's 前车之鉴 block surfaces them. Pre-#127 the flags landed only in
+    runs/<ts>-retro-<claim>.md — a face consumed by nothing. The most
+    recent index entry for (claim, to) is patched in place; a missing
+    entry (settlement_retro driven without record_settlement) appends one,
+    so the flag can never fall out of the consumed face. Advisory data
+    only — NO new blocking semantics (#130 owns that decision)."""
+    if not flags:
+        return
+    key = _key_str(*scene_operation_key(ws, claim_id))
+    index = _read_json(ws / INDEX_REL)
+    index = {k: v for k, v in index.items() if isinstance(v, list)}
+    entries = index.setdefault(key, [])
+    marked = [str(f) for f in flags]
+    for e in reversed(entries):
+        if (str(e.get("claim") or "") == str(claim_id)
+                and str(e.get("to") or "") == str(to)):
+            e["fake_success"] = marked
+            break
+    else:
+        entries.append({"ts": utc_now(), "claim": str(claim_id),
+                        "to": str(to), "outcome": str(to), "tools": [],
+                        "trace_id": None, "fake_success": marked})
+    index[key] = entries[-MICRO_K:]
+    _write_json_atomic(ws / INDEX_REL, index)
+
+
 def micro_lessons_context(ws: Path, claim_id: str | None,
                           k: int | None = None) -> str | None:
     """The 前车之鉴 block for the dispatch contract; None when the claim's
     key has no settlement history (zero-noise #754 — nothing to look back
-    at, nothing injected)."""
+    at, nothing injected). #127: entries carrying FAKE-SUCCESS flags
+    render them — a PROVEN settlement that could not move PQ coverage is
+    exactly the "lesson" this block exists to surface."""
     hits = micro_lessons(ws, claim_id, k)
     if not hits:
         return None
@@ -220,6 +252,8 @@ def micro_lessons_context(ws: Path, claim_id: str | None,
         lines.append(
             f"- {e.get('ts')} {e.get('claim')} -> {e.get('outcome')} "
             f"tools={tools}")
+        for flag in (e.get("fake_success") or []):
+            lines.append(f"  FAKE-SUCCESS: {flag}")
     lines.append(
         "Same-key attempts failed before; change the method (or show the "
         "disproof) instead of re-running the same shape — repeats are the "
@@ -287,6 +321,30 @@ def settlement_retro(ws: Path, claim_id: str, *, to: str, frm: str | None =
     except Exception:  # noqa: BLE001 — ledger read failure degrades to empty
         rows = []
     flags = fake_success_flags(ws, claim_id, to)
+    # #127 detector liveness: the fake-success probe is a detector — its
+    # evaluations and fires are counted like any other (detector_liveness).
+    try:
+        kunglao_log.emit(ws, "backtrack_loop", "detector_eval",
+                         claim=str(claim_id),
+                         detail=json.dumps(
+                             {"detector": "fake_success", "to": str(to)},
+                             ensure_ascii=False))
+        if flags:
+            kunglao_log.emit(ws, "backtrack_loop", "detector_fired",
+                             claim=str(claim_id),
+                             detail=json.dumps(
+                                 {"detector": "fake_success",
+                                  "to": str(to)}, ensure_ascii=False))
+    except Exception:  # noqa: BLE001 — telemetry never breaks settlement
+        pass
+    # #127: the flag joins the O(1) micro-retro index — the dispatch face's
+    # 前车之鉴 block is the consumed surface (the retro .md alone had zero
+    # consumers). Fail-open: bookkeeping never breaks settlement.
+    try:
+        _index_fake_success(ws, claim_id, to, flags)
+    except Exception as exc:  # noqa: BLE001
+        print(f"backtrack_loop: fake-success index write failed ({exc!r})",
+              file=sys.stderr, flush=True)
     stamp = (ts or utc_now()).replace(":", "").replace("-", "")
     doc = ws / "runs" / f"{stamp}-retro-{claim_id}.md"
     doc.parent.mkdir(parents=True, exist_ok=True)

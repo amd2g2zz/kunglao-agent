@@ -198,7 +198,7 @@ def health_check(ws: Path) -> dict:
     """
     try:
         import convergence_health as ch
-        r = ch.assess(ch._read_ledger(ws))
+        r = ch.assess(ch._read_ledger(ws), ws=ws)  # #127 liveness telemetry
     except Exception as exc:
         return {"verdict": "HEALTHY", "raw": "NO_DATA",
                 "detail": f"convergence_health unavailable ({exc})"}

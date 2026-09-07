@@ -1591,7 +1591,7 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
     # conditional-key precedent).
     try:
         from mission_stall import stall_mission
-        ms = stall_mission(workspace)
+        ms = stall_mission(workspace, emit=emit_snapshot)
         if ms.get("stalled"):
             decision["mission_stall"] = ms
             # #823-P3: stall response face — THINK bet guidance (always-on
