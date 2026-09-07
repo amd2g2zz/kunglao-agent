@@ -639,3 +639,64 @@ def test_bank_retrieval_unchanged_with_how(tmp_path):
     got = cb.retrieve(tmp_path, ["re"])
     assert [e["claim_id"] for e in got] == ["C-2", "C-1"]
     assert got[0]["how"]["mechanism"].startswith("key schedule")
+
+
+# ========== review r1 fixes: regression pins (findings 1-3, 5) ==========
+
+def test_version_wall_raises_not_silently_disarms(tmp_path):
+    """r1-1: a WRONG-schema posterior ledger must RAISE (the version
+    wall), never silently read as "no settlements" — that would un-arm
+    the gate exactly when the ledger is untrustworthy."""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    _write_register(ws, [_claim("C-1")])
+    _arm_red(ws, "CASE-1", reds=1)
+    (ws / "runs" / "posteriors.yaml").write_text(
+        "schema: posteriors-schema/999\ncases: {}\npqs: {}\n",
+        encoding="utf-8")
+    with pytest.raises(po.PosteriorSchemaError):
+        fag.linked_fail_settlements(ws, _claim("C-1"))
+
+
+def test_non_mapping_params_contained_as_case_error(tmp_path):
+    """r1-2: a non-mapping params is a per-case ERROR row (crash
+    containment), never a whole-run crash."""
+    ws = _mk_ws(tmp_path, [CASE_MAIN], GOOD_CLIENT)
+    case_file = ws / "oracle" / "cases" / "case-00.yaml"
+    doc = yaml.safe_load(case_file.read_text(encoding="utf-8"))
+    doc["params"] = "oops"
+    case_file.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    cases = orun.load_cases(ws / "oracle" / "cases")
+    row = orun.check_case(cases[0], orun.load_client(ws / "oracle"
+                                                     / "client.py"))
+    assert row["status"] == "pending"
+    assert "dict" in (row["error"] or "")
+    assert row["forensics"]["params_used"] == {}
+
+
+MUTATING_CLIENT = '''def compute(params):
+    params["k"] = "MUTATED-BY-CLIENT"
+    return {"auth_algo": "hmac-sha256", "nonce_len": 2}
+'''
+
+
+def test_params_used_survives_client_mutation(tmp_path):
+    """r1-3: params_used is a SNAPSHOT taken before compute — a client
+    that mutates its input cannot corrupt the forensic record."""
+    ws = _mk_ws(tmp_path, [CASE_MAIN], MUTATING_CLIENT)
+    cases = orun.load_cases(ws / "oracle" / "cases")
+    row = orun.check_case(cases[0], orun.load_client(ws / "oracle"
+                                                     / "client.py"))
+    assert row["status"] == "pass"
+    assert row["forensics"]["params_used"] == {"user": "alice",
+                                               "nonce": 10}
+
+
+def test_retire_cli_empty_case_id_refuses(tmp_path, capsys):
+    """r1-5: `--retire ""` must refuse, never fall through to a run face."""
+    ws = _mk_ws(tmp_path, [CASE_MAIN], None)
+    rc = orun.main([str(ws), "--retire", "",
+                    "--attribution-class", "case-wrong",
+                    "--disconfirmation", "x", "--replacement", "y"])
+    assert rc == 2
+    assert "REFUSED" in capsys.readouterr().err

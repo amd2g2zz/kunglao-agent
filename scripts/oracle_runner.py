@@ -610,14 +610,22 @@ def check_case(case: dict, compute: Compute | None) -> dict:
     if compute is None:
         return row
     row["instrumented"] = True
-    params = dict(case["params"])
+    # crash containment (base behavior, #146 review r1-2): a non-mapping
+    # params is a per-case error, never a whole-run crash
+    try:
+        params = dict(case["params"])
+    except Exception as exc:  # noqa: BLE001 — contained as a verdict of "unknown"
+        row["error"] = f"{type(exc).__name__}: {exc}"
+        return row
+    # #146 snapshot BEFORE the call (review r1-3): the forensic record holds
+    # the derivation INPUT — a client that mutates its argument cannot
+    # corrupt params_used
+    forensics["params_used"] = dict(params)
     try:
         out = compute(params)
     except Exception as exc:  # noqa: BLE001 — a crash is a verdict of "unknown"
         row["error"] = f"{type(exc).__name__}: {exc}"
-        forensics["params_used"] = params
         return row
-    forensics["params_used"] = params
     if not isinstance(out, dict):
         row["error"] = f"client returned {type(out).__name__}, expected dict"
         return row
@@ -975,8 +983,10 @@ def main(argv: list[str] | None = None) -> int:
     cases_dir = ws.joinpath(*CASES_REL)
 
     # #146 case-abandonment face: retire before any run face (a refusal
-    # never touches the status file or the posteriors).
-    if args.retire:
+    # never touches the status file or the posteriors). `is not None` — an
+    # empty --retire value must refuse loudly, never fall through to a run
+    # face (review r1-5).
+    if args.retire is not None:
         try:
             rec = retire_case(
                 ws, args.retire,

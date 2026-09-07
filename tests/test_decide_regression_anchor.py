@@ -481,7 +481,7 @@ def _c_sched_failure_partial_artifacts(base: Path) -> Path:
     _reg(ws, [_claim("C-1", promotion_attempts=1, answers_question="q1")])
     _arm_red(ws, "C-1", reds=1)
     _ts(ws, _pq("[]"))
-    _analysis(ws, "C-1", covers_attempt=1,
+    _analysis(ws, "C-1", covers_settlements=1,
               validated_capability="frida bridge works",
               identified_obstacle="")
     return ws

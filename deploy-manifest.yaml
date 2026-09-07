@@ -351,7 +351,7 @@ files:
   - src: scripts/failure_analysis_gate.py
     dest: .claude/scripts/failure_analysis_gate.py
     kind: scaffold
-    sha256: 0d8c0d1b05e9be82de327c0f76f4a1134ea1b247c34b8684606a172e56119dd1
+    sha256: b2c4090b6f88987aac78a3cbc8df860f3df1ee064917951990db52bc17c8456e
   - src: scripts/feedback.py
     dest: .claude/scripts/feedback.py
     kind: scaffold
@@ -583,7 +583,7 @@ files:
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: 8c1c4c083ec3fbed0a4f2308eabbc4b4533125b054eb39a7aa2da388c86020d1
+    sha256: 4c9bc8a3e7d2b024bcd0bd09991a99b83ceb44b8999587d7cdbfb7379aa9b1bb
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold

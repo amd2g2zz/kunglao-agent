@@ -125,7 +125,9 @@ def _trajectory1_ws(root: Path) -> Path:
     led.cases["case-c-1"] = po.CasePosterior("case-c-1", alpha=1.0, beta=3.0)
     led.save(ws)
     _write(ws / "analyses" / "failure-C-1.yaml", {
-        "claim": "C-1", "covers_attempt": 2,
+        "claim": "C-1", "covers_settlements": 2,  # coverage CURRENT so the
+        # death declaration is blocked by the MISSING-ARTIFACT tooth (#495),
+        # not incidentally by stale coverage (review r1-4)
         "method_assumption": "spawn mode keeps the app alive long enough",
         "assumption_validity": "justified-adequate",
         "next_method": "method was adequate",

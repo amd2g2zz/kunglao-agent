@@ -422,9 +422,9 @@ def test_blocked_lists_missing_artifacts(tmp_path):
     adir.mkdir()
     (adir / "failure-C-1.yaml").write_text(
         "claim: C-1\n"
-        "covers_attempt: 1\n"
-        "method_assumption: a\n"
-        "assumption_validity: not-justified\n"
+        "covers_settlements: 1\n"   # #146: coverage CURRENT (reds=1) ...
+        "method_assumption: a\n"      # ... so the BLOCKED below fires on
+        "assumption_validity: not-justified\n"  # the missing ARTIFACT tooth
         "next_method: b\n"
         "validated_capability: frida bridge works\n"
         "analyzed_at: 2026-08-19T00:00:00+00:00\n",

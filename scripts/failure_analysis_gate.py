@@ -248,9 +248,13 @@ def linked_fail_settlements(ws: Path, claim: dict) -> dict[str, int]:
         linked[case_id] = 0
     if not linked:
         return {}
+    import posteriors as po
     try:
-        import posteriors as po
         led = po.PosteriorLedger.load(ws)
+    except po.PosteriorSchemaError:
+        raise  # the version wall: a wrong-schema ledger must never be
+        # silently read as "no settlements" — that would un-arm the gate
+        # exactly when the ledger is untrustworthy (#146 review r1-1)
     except Exception:  # noqa: BLE001 — missing ledger degrades, not blocks
         return {}
     for case_id in linked:
