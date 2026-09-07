@@ -9,10 +9,15 @@ Owner ruling 4 (this module's whole contract):
   attribution raises CaseBankError — no silent banking of unattributed
   failures.
 - COUNTEREXAMPLE PRUNING > POSITIVE REUSE: retrieve() returns matching
-  entries with FAILURES FIRST, newest first within each class; emit_case_hints
-  preserves that order inside the reserved <case-hints> wrapper
-  (references/xml-injection-standard.md: the producer "lands with #49" —
-  this file is that producer).
+  entries with FAILURES FIRST, newest first within each class.
+- #127: the old emit_case_hints dispatch-context face (<case-hints>
+  wrapper) is DELETED — it had zero callers (hypothesis_seeder retrieves
+  via case_bank.retrieve directly; the only emit_case_hints callers were
+  this module's own CLI and its tests). Per the no-backcompat policy the
+  half-utilized "wired-but-unread" face ends: the bank's read face is
+  retrieve(), its consumers are the hypothesis seeder and this CLI. The
+  <case-hints> tag stays RESERVED in references/xml-injection-standard.md
+  for a future dispatch-face producer with an actual consumer contract.
 
 Schema (runs/case-bank.jsonl, one JSON object per line):
   {ts, claim_id, method, context_tags, intent_uncertainty, outcome_observed,
@@ -175,21 +180,6 @@ def _hint_line(entry: dict) -> str:
     return " | ".join(parts)
 
 
-def emit_case_hints(ws: Path, context_tags: list, limit: int = 5) -> str:
-    """Agent-context face: <case-hints>-wrapped hints per the XML injection
-    standard (lighting, not enforcement). Empty result -> "" (never an empty
-    tag); failure lines come first, mirroring retrieve() ordering."""
-    entries = retrieve(ws, context_tags, limit)
-    if not entries:
-        return ""
-    n_fail = sum(1 for e in entries if e.get("roi_class") == ROI_NEGATIVE)
-    lines = [f"case-bank: {len(entries)} past run(s)"
-             + (f", {n_fail} failure(s) FIRST (counterexample pruning)"
-                if n_fail else "")]
-    lines.extend(_hint_line(e) for e in entries)
-    return "<case-hints>" + "\n".join(lines) + "\n</case-hints>"
-
-
 def main(argv: list[str] | None = None) -> int:
     """CLI: python case_bank.py <ws> retrieve --tags a,b --limit 3 [--json]"""
     ap = argparse.ArgumentParser(
@@ -208,8 +198,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         print(json.dumps(entries, ensure_ascii=False, indent=2))
     else:
-        text = emit_case_hints(Path(args.workspace), tags, args.limit)
-        print(text if text else "case-bank: no matching entries")
+        # #127: plain lines (the <case-hints> wrapper face was deleted —
+        # zero consumers); ordering contract unchanged (failures first).
+        if not entries:
+            print("case-bank: no matching entries")
+        else:
+            n_fail = sum(1 for e in entries
+                         if e.get("roi_class") == ROI_NEGATIVE)
+            print(f"case-bank: {len(entries)} past run(s)"
+                  + (f", {n_fail} failure(s) FIRST (counterexample pruning)"
+                     if n_fail else ""))
+            for e in entries:
+                print(_hint_line(e))
     return 0
 
 

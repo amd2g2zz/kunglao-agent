@@ -114,7 +114,7 @@ def cmd_health(args) -> int:
         print(f"FAIL: no {ch.LEDGER_NAME} under {ws} (run convergence_check.py first)",
               file=sys.stderr)
         return ch.EXIT_NO_DATA
-    r = ch.assess(ledger)
+    r = ch.assess(ledger, ws=ws)  # ws -> #127 detector liveness telemetry
     print(ch._human(r))
     return r["exit_code"]
 

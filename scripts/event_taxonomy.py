@@ -177,6 +177,8 @@ EMIT_ACTIONS = [
     "death_verdict_rejected",
     "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face
     "decision_snapshot",  # #818 batch-1: decide() per-verdict input snapshot
+    "detector_eval",      # #127 a detector ran (detail JSON carries `detector` name + counters)
+    "detector_fired",     # #127 a detector FIRED on the pathology it exists for (liveness evidence)
     "dispatch",
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
