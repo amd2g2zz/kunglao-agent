@@ -93,6 +93,23 @@ five-section methodology is internalized below; read the quickref for depth).
 > structurally impossible; switch to the instruction-trace methodology
 > before burning more AST passes.
 
+## Reference lookup (aids, not mandates)
+
+- `references/_INDEX.md` — a methodology card may already cover this problem class (for the web lane the source of record is `references/re-library/web-re-quickref.md`).
+- `tools/_INDEX.yaml` — a registered CLI may already cover this capability (camoufox/CDP instrumentation and the quickref's unpack/deobfuscate CLIs remain primary; this covers gaps outside the pipeline).
+- `scripts/` — an existing parameterized CLI may be reusable.
+
+## Working rules
+
+- Explicit error handling at every level.
+- Never swallow errors silently.
+- No hardcoded secrets.
+- Validate inputs at boundaries.
+- Small focused functions.
+- Reuse-first.
+
+These lookups are advisory; where they yield nothing applicable, proceed with a hand-rolled implementation at your discretion.
+
 ## ⚡ GOLDEN RULES
 
 1. **MAKER, never CHECKER** (kunglao-agent §1b) — raw evidence only, never a
