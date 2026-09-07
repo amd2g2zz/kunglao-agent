@@ -95,6 +95,22 @@ HYP_NAIVE_ID = "H-01"
 HYP_SALTED_ID = "H-02"
 ROUND1_ANCHOR_FACT = "F001"       # refuting/confirming byte anchor (fixture)
 
+# #126 fixture lift: the case docs name live hypotheses (hypothesis_ref +
+# update_map) and the linked competitor group must hold >=2 OPEN members at
+# EVERY oracle load. H-01 refutes mid-round-1 and H-02 confirms at the
+# round-1 green, so the case docs name two hypotheses that no settlement
+# ever adjudicates: H-03 sits under a never-green naive claim, H-04 under a
+# PARKed claim (status_defs.SUSPENDED — excluded from the dispatch frontier,
+# so it can never green and never disturb the ranking). Both stay OPEN for
+# the whole run -> the live-group census never drops below 2.
+HYP_NAIVE_VARIANT_ID = "H-03"     # live naive-side candidate (case ref)
+HYP_SALTED_VARIANT_ID = "H-04"    # live salted-side candidate (update pole)
+PARKED_CLAIM_ID = "C-107"         # H-04's claim: PARK = never dispatchable
+# C-107 is salted-side but PARKed: outside ALL_CLAIMS (it never joins the
+# dispatch frontier), still mapped so register-wide scans that read the
+# family don't miss it. priority_ratio excludes PARK claims itself.
+CLAIM_FAMILY[PARKED_CLAIM_ID] = "salted"
+
 # The three captures (F001..F003): params observed on the wire + the sign
 # value they carried. params are the protocol data; signs are computed.
 CAPTURES = [
@@ -163,7 +179,13 @@ _DISPATCH_PROMPT = (
 def _make_loop_ws(tmp_path: Path) -> Path:
     """Build the synthetic workspace: register, deps, task_spec, #759 worth
     overrides, 3 byte-anchored oracle cases, the two candidate clients,
-    F001..F003 + _INDEX, and the two competing hypotheses (#528 shape)."""
+    F001..F003 + _INDEX, and the competing hypotheses (#528 shape).
+
+    #126 lift (fixture docs only — driver and assertions unchanged): every
+    case doc carries channel / hypothesis_ref / update_map / resolvable
+    evidence refs / non-empty mutations, and the linked competitor group
+    holds >=2 OPEN hypotheses across all three rounds (H-03/H-04 are
+    settlement-immortal; see the constants note)."""
     ws = tmp_path / "ws"
     for rel in ("facts", "hypotheses", "runs", "oracle", "oracle/cases"):
         (ws / rel).mkdir(parents=True, exist_ok=True)
@@ -181,11 +203,26 @@ def _make_loop_ws(tmp_path: Path) -> Path:
             "promotion_attempts": 0,
             "evidence_tier_attempted": 0,
         })
+    # #126 live-group census anchor: H-04's claim, PARKed. PARK is
+    # SUSPENDED (status_defs) — never ranked, never dispatched, never
+    # green, so H-04 can never be confirmed and the census stays >= 2.
+    claims.append({
+        "id": PARKED_CLAIM_ID,
+        "status": "PARK",
+        "statement": f"Parked salted inner-salt variant of the {PQ_ID} "
+                     "sign field (pending outer-salt confirmation)",
+        "answers_question": PQ_ID,
+        "competitor_group": PQ_ID,
+        "promotion_attempts": 0,
+        "evidence_tier_attempted": 0,
+        "wake_condition": "outer-salt evidence arrives from the case bank",
+    })
     (ws / "claim-register.yaml").write_text(
         yaml.safe_dump({"claims": claims}, sort_keys=False), encoding="utf-8")
     (ws / "claim_deps.yaml").write_text(
         yaml.safe_dump({"depends_on": {},
-                        "competitor_groups": {PQ_ID: list(ALL_CLAIMS)}},
+                        "competitor_groups": {PQ_ID: sorted(
+                            list(ALL_CLAIMS) + [PARKED_CLAIM_ID])}},
                        sort_keys=False), encoding="utf-8")
     (ws / "task_spec.yaml").write_text(
         yaml.safe_dump({"primary_questions": [PQ_ID]}, sort_keys=False),
@@ -210,6 +247,16 @@ def _make_loop_ws(tmp_path: Path) -> Path:
         case = {
             "id": f"CASE-S{i}",
             "target_pq": PQ_ID,
+            # #126 lift: declared observation channel (distinct per capture
+            # — the signature dedup axis is (channel, competitor_group)),
+            # the live bet the case realizes, and the cross-candidate
+            # separation map over settlement-immortal OPEN hypotheses.
+            "channel": f"replay-capture-{i}",
+            "hypothesis_ref": HYP_NAIVE_VARIANT_ID,
+            "update_map": {
+                "green_up": [HYP_NAIVE_VARIANT_ID, HYP_SALTED_VARIANT_ID],
+                "red_up": [HYP_SALTED_VARIANT_ID],
+            },
             "params": params,
             "expected": [
                 {"field": "sign", "value": sign, "evidence_refs": [fid]},
@@ -243,6 +290,24 @@ def _make_loop_ws(tmp_path: Path) -> Path:
                                "client"),
         body=f"pq:{PQ_ID}\n\nCompeting hypothesis: sign = md5(salt + "
              "md5(canon(params))). Falsifier: any case red.\n"))
+    # #126 live-group census anchors: both stay OPEN for the whole run.
+    store.create(Hypothesis(
+        id=HYP_NAIVE_VARIANT_ID, claim_id="C-102",
+        competitor_group=f"pq-{PQ_ID}",
+        candidates=["naive-md5-sorted-composite"], status="open",
+        predicted_observation=("oracle cases go green under a naive sorted "
+                               "canonicalization"),
+        body=f"pq:{PQ_ID}\n\nNaive-family variant: sorted canonical form "
+             "under the plain md5 composite. Falsifier: any case red.\n"))
+    store.create(Hypothesis(
+        id=HYP_SALTED_VARIANT_ID, claim_id=PARKED_CLAIM_ID,
+        competitor_group=f"pq-{PQ_ID}",
+        candidates=["salted-inner-variant-composite"], status="open",
+        predicted_observation=("oracle cases go green under a salted "
+                               "inner-variant client"),
+        body=f"pq:{PQ_ID}\n\nRetained salted-side variant (its claim is "
+             "PARKed pending outer-salt confirmation). Falsifier: any case "
+             "red under a salted client.\n"))
 
     write_hook_state(ws, active_hooks=["dispatch_gate"])
     return ws
@@ -380,11 +445,13 @@ def _round_reset(ws: Path) -> None:
     """Fresh attempt on the SAME task: claims closed BY a round's green
     reopen (the green must be re-earned through the oracle every round —
     no degenerate cached answer), while terminal refutation adjudications
-    (DEAD claims, refuted/superseded hypotheses) persist."""
+    (DEAD claims, refuted/superseded hypotheses) persist. PARKed claims
+    (#126 lift: H-04's census anchor) are SUSPENDED, never part of the
+    round frontier — the reset must not reopen them."""
     claims, _ = _load_register(ws)
     for claim in claims:
-        if claim["status"] == "DEAD":
-            continue  # terminal refutation adjudication persists (#36 DLQ)
+        if claim["status"] in ("DEAD", "PARK"):
+            continue  # terminal refutation / suspension persists
         claim["status"] = "OPEN"
         claim["promotion_attempts"] = 0
     _save_register(ws, claims)
