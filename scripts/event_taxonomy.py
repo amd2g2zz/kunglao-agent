@@ -184,6 +184,8 @@ EMIT_ACTIONS = [
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "heartbeat_gap",      # #618 dead-window alarm: durable sidecar newest tick over threshold
+    "hypothesis_admission_fail_open",  # #109 store-read failure WARN face — admission not enforced, dispatch proceeds
+    "hypothesis_admission_reject",  # #109 PQ first-dispatch admission REJECT face (empty competitor field)
     "hypothesis_seed",    # #662 PQ scaffold seeding
     "hypothesis_superseded",  # #759 note-supersedes-hypothesis wiring (K3)
     "infeasible_candidate",  # #823 A4 doomed-trajectory early-stop signal
