@@ -1,0 +1,7 @@
+cases:
+  case-c-1:
+    alpha: 1.0
+    beta: 2.0
+    pending_entries: 0
+pqs: {}
+schema: posteriors-schema/1

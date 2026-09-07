@@ -225,14 +225,23 @@ def test_dispatch_gate_must_stop_verdict_wrapped(tmp_path, capsys):
 
 
 def _failure_blocked_ws(root: Path) -> Path:
-    """Workspace whose claim C-1 was attempted (promotion_attempts > 0) but
-    has no failure_analysis -> dispatch_gate's #495 corrective injection."""
+    """Workspace whose claim C-1 carries a fail settlement on a
+    target_pq-linked oracle case but no failure_analysis -> dispatch_gate's
+    #495 corrective injection (#146: arming is settlement-derived)."""
     ws = root / "malware-analysis-workspace"
     ws.mkdir(parents=True)
     (ws / "claim-register.yaml").write_text(yaml.safe_dump(
         {"claims": [{"id": "C-1", "status": "OPEN", "statement": "x",
-                     "promotion_attempts": 1}]},
+                     "answers_question": "q1", "promotion_attempts": 1}]},
         allow_unicode=True, sort_keys=False), encoding="utf-8")
+    import posteriors as po
+    cdir = ws / "oracle" / "cases"
+    cdir.mkdir(parents=True)
+    (cdir / "case-c-1.yaml").write_text(
+        "id: case-c-1\ntarget_pq: q1\n", encoding="utf-8")
+    led = po.PosteriorLedger.load(ws)
+    led.cases["case-c-1"] = po.CasePosterior("case-c-1", alpha=1.0, beta=2.0)
+    led.save(ws)
     write_hook_state(ws, active_hooks=["dispatch_gate"])
     return ws
 

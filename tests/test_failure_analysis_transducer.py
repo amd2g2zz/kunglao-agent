@@ -32,21 +32,47 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import failure_analysis_gate as fag  # noqa: E402
+import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 import yaml  # noqa: E402
 
 
 # ---------- helpers ----------
 
+PQ = "q1"
+
+
 def _write_register(ws: Path, claims: list[dict]) -> None:
+    """Write the register and ARM the #146 way: every claim with
+    promotion_attempts > 0 gets a linked oracle case (target_pq == its
+    answers_question) carrying that many fail settlements in the #106
+    posterior ledger (beta = 1 + reds)."""
     (ws / "claim-register.yaml").write_text(
         yaml.safe_dump({"claims": claims}, allow_unicode=True, sort_keys=False),
         encoding="utf-8")
+    led = po.PosteriorLedger.load(ws)
+    for c in claims:
+        attempts = int(c.get("promotion_attempts") or 0)
+        if attempts <= 0:
+            continue
+        case_id = f"case-{str(c['id']).lower()}"
+        cdir = ws / "oracle" / "cases"
+        cdir.mkdir(parents=True, exist_ok=True)
+        (cdir / f"{case_id}.yaml").write_text(
+            yaml.safe_dump({"id": case_id,
+                            "target_pq": str(c.get("answers_question")
+                                              or PQ)},
+                           sort_keys=False),
+            encoding="utf-8")
+        led.cases[case_id] = po.CasePosterior(case_id, alpha=1.0,
+                                              beta=1.0 + attempts)
+    led.save(ws)
 
 
 def _claim(cid: str, attempts: int = 2, statement: str = "sample does X",
            **extra) -> dict:
     c = {"id": cid, "status": "OPEN", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 1, "promotion_attempts": attempts,
+         "answers_question": PQ,
          "depends_on": [], "statement": statement}
     c.update(extra)
     return c
@@ -396,9 +422,9 @@ def test_blocked_lists_missing_artifacts(tmp_path):
     adir.mkdir()
     (adir / "failure-C-1.yaml").write_text(
         "claim: C-1\n"
-        "covers_attempt: 1\n"
-        "method_assumption: a\n"
-        "assumption_validity: not-justified\n"
+        "covers_settlements: 1\n"   # #146: coverage CURRENT (reds=1) ...
+        "method_assumption: a\n"      # ... so the BLOCKED below fires on
+        "assumption_validity: not-justified\n"  # the missing ARTIFACT tooth
         "next_method: b\n"
         "validated_capability: frida bridge works\n"
         "analyzed_at: 2026-08-19T00:00:00+00:00\n",

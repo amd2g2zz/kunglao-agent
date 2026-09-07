@@ -91,11 +91,23 @@ def test_convergence_check(tmp: Path) -> None:
     check("cc.saturated", d["decision"] == "SATURATED" and d["exit_code"] == 3, str(d))
 
     # Branch 4: BLOCKED (open but all blocked) — via failure_analysis_gate scan
-    make_claim_reg(ws, [{"id": "C-1", "status": "PROVEN"}, {"id": "C-2", "status": "OPEN", "attempts": 3}])
+    make_claim_reg(ws, [{"id": "C-1", "status": "PROVEN"},
+                        {"id": "C-2", "status": "OPEN", "attempts": 3,
+                         "extra": {"answers_question": "q1"}}])
     (ws / "runs" / "worker-status-w1.md").unlink()
     (ws / "runs" / "worker-status-w2.md").unlink()
     (ws / "runs" / "worker-status-w3.md").unlink()
-    # C-2 with promotion_attempts=3 triggers failure-analysis BLOCKED state
+    # C-2 arms via a fail settlement on a target_pq-linked oracle case
+    # (#146: settlement-derived arming — promotion_attempts is not a
+    # writer-backed signal)
+    import posteriors as po
+    cdir = ws / "oracle" / "cases"
+    cdir.mkdir(parents=True)
+    (cdir / "case-c-2.yaml").write_text(
+        "id: case-c-2\ntarget_pq: q1\n", encoding="utf-8")
+    led = po.PosteriorLedger.load(ws)
+    led.cases["case-c-2"] = po.CasePosterior("case-c-2", alpha=1.0, beta=2.0)
+    led.save(ws)
     d = cc.decide(ws)
     check("cc.blocked", d["decision"] == "BLOCKED" and d["exit_code"] == 4, str(d))
 

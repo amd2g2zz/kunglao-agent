@@ -204,14 +204,18 @@ def test_failure_event_consumes_495_artifact_gate() -> None:
     Event = _surface("Event")
     base = Path(tempfile.mkdtemp(prefix="sm-495-"))
     partial = anchor._ws(base, "partial")
-    anchor._reg(partial, [anchor._claim("C-1", promotion_attempts=1)])
+    anchor._reg(partial, [anchor._claim("C-1", promotion_attempts=1,
+                                        answers_question="q1")])
+    anchor._arm_red(partial, "C-1", reds=1)  # #146: settlement-derived arming
     anchor._ts(partial, anchor._pq("[]"))
-    anchor._analysis(partial, "C-1", covers_attempt=1,
+    anchor._analysis(partial, "C-1", covers_settlements=1,
                      validated_capability="frida works", identified_obstacle="")
     full = anchor._ws(base, "full")
-    anchor._reg(full, [anchor._claim("C-1", promotion_attempts=1)])
+    anchor._reg(full, [anchor._claim("C-1", promotion_attempts=1,
+                                     answers_question="q1")])
+    anchor._arm_red(full, "C-1", reds=1)
     anchor._ts(full, anchor._pq("[]"))
-    anchor._analysis(full, "C-1", covers_attempt=1,
+    anchor._analysis(full, "C-1", covers_settlements=1,
                      validated_capability="frida works",
                      identified_obstacle="vm network blocked")
     assert PRED[Event.FAILURE_ARTIFACTS_DUE](_decide_inputs(partial)) is True

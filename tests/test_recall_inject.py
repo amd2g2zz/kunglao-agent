@@ -251,8 +251,20 @@ def test_failure_gate_blocked_output_recalls_failure_modes(tmp_path, capsys):
         yaml.safe_dump({"claims": [{
             "id": "C-50", "status": "OPEN", "boundary_type": "observation",
             "evidence_tier_attempted": 1, "promotion_attempts": 1,
+            "answers_question": "q1",
             "depends_on": [], "statement": "sample does X",
         }]}, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # #146: arm the gate the live way — a linked case carrying a red
+    # settlement in the #106 ledger (the counter no longer arms).
+    import posteriors as po
+    cdir = ws / "oracle" / "cases"
+    cdir.mkdir(parents=True)
+    (cdir / "case-c-50.yaml").write_text(
+        "id: case-c-50\ntarget_pq: q1\n", encoding="utf-8")
+    led = po.PosteriorLedger.load(ws)
+    led.cases["case-c-50"] = po.CasePosterior("case-c-50", alpha=1.0,
+                                              beta=2.0)
+    led.save(ws)
 
     import failure_analysis_gate as fag
     r = fag.check_claim(ws, "C-50")

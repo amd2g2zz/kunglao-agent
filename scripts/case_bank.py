@@ -21,10 +21,14 @@ Owner ruling 4 (this module's whole contract):
 
 Schema (runs/case-bank.jsonl, one JSON object per line):
   {ts, claim_id, method, context_tags, intent_uncertainty, outcome_observed,
-   roi_class, attribution, premise_correction}
+   roi_class, attribution, premise_correction, how}
   - ts / claim_id / method / roi_class: required (ts filled on append).
   - attribution: required non-empty IFF roi_class == NEGATIVE (ruling 4).
   - premise_correction: optional.
+  - how (#146): OPTIONAL structured forensics block (the outcome's
+    mechanism: mismatch_class / mechanism note) — a mapping when present,
+    refused otherwise (free text is a label, not a lesson); NEVER
+    required: banked rows predating #146 read back with how=None.
   - context_tags: normalized to list[str]; intent_uncertainty: the named
     uncertainty from the dispatch intent (roi_settlement gate, ruling 3).
   - roi_class: roi_settlement's four classes (POSITIVE/NEUTRAL/NEGATIVE/
@@ -102,6 +106,15 @@ def append(ws: Path, entry: dict) -> dict:
     tags = e.get("context_tags")
     if isinstance(tags, str):
         tags = [tags]
+    # #146: `how` is the structured forensics block — a mapping when
+    # present, refused otherwise (free text is a label, not a lesson);
+    # absent stays absent (back-compat with banked rows).
+    how = e.get("how")
+    if how is not None and not isinstance(how, dict):
+        raise CaseBankError(
+            f"case-bank entry for {e['claim_id']} refused: `how` must be a "
+            f"structured mapping (mismatch_class / mechanism), not "
+            f"{type(how).__name__} — a label is not a lesson (#146)")
     stored = {
         "ts": str(e.get("ts") or utc_now_iso()),
         "claim_id": str(e["claim_id"]),
@@ -114,6 +127,7 @@ def append(ws: Path, entry: dict) -> dict:
         "attribution": attribution or None,
         "premise_correction": str(e.get("premise_correction") or "").strip()
         or None,
+        "how": dict(how) if isinstance(how, dict) else None,
     }
     p = bank_path(ws)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -174,7 +188,8 @@ def retrieve(ws: Path, context_tags: list, limit: int = 5) -> list[dict]:
 
 
 def _hint_line(entry: dict) -> str:
-    """One human-readable line; failures carry attribution + correction."""
+    """One human-readable line; failures carry attribution + correction;
+    the #146 `how` block surfaces its mechanism when present."""
     tags = ",".join(entry.get("context_tags") or [])
     head = (f"[{entry.get('roi_class')}] {entry.get('claim_id')} "
             f"method={entry.get('method')} tags={tags}")
@@ -185,6 +200,12 @@ def _hint_line(entry: dict) -> str:
         parts.append(f"attribution: {entry['attribution']}")
     if entry.get("premise_correction"):
         parts.append(f"correction: {entry['premise_correction']}")
+    how = entry.get("how")
+    if isinstance(how, dict):
+        mcls = str(how.get("mismatch_class") or "").strip()
+        mech = str(how.get("mechanism") or "").strip()
+        if mcls or mech:
+            parts.append(f"how: {mcls}{': ' + mech if mech else ''}")
     return " | ".join(parts)
 
 

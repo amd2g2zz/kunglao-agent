@@ -44,6 +44,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import convergence_check  # module under test (== baseline before #443 GREEN)
+import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 
 # 2026-09-06 SEMANTIC re-pin verification (#107 Thompson rebuild): the
 # owner ruling "探索和价值网络完全重构，之前的不要了" replaced the
@@ -88,6 +89,18 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # re-pin entry below). The oracle-blocking semantics themselves are
 # unanchored by construction (the matrix has no oracle-bearing DRAIN case);
 # covered by the #108 block in tests/test_decide_state_machine.py.
+# 2026-09-07 zero-drift verification (#146 failure-gate arming re-point):
+# failure_analysis_gate's arming moved from the never-written
+# promotion_attempts counter to settlement-derived case reds
+# (answers_question <-> target_pq linkage over runs/posteriors.yaml). The
+# four failure-gate matrix cases (sched_blocked_failure_due,
+# sched_failure_partial_artifacts, order_queue_beats_failure,
+# order_failure_beats_all_infra) were re-pointed at the live arming path in
+# their FIXTURES (answers_question + linked fail settlements); the frozen
+# outputs are unchanged — all 32 cases re-verified byte-identical after the
+# change, so NO re-pin was needed. The claim-register field itself remains
+# schema-valid (decide()'s own #497 ladder-exhaustion face still reads it);
+# only the gate stopped consuming it.
 # 2026-09-06 zero-drift verification (#98 DRAIN worker gates): the DRAIN
 # probe table gained STUCK_WORKERS_PRESENT + ACTIVE_WORKERS_PRESENT,
 # appended AFTER the frozen completion-transaction order (orphan >
@@ -249,6 +262,22 @@ def _blocker_files(ws: Path, names: list[str]) -> None:
 
 def _claim(cid: str, **fields) -> dict:
     return {"id": cid, "status": "OPEN", **fields}
+
+
+def _arm_red(ws: Path, cid: str, pq: str = "q1", reds: int = 1) -> None:
+    """#146 arming fixture: one oracle case linked to the claim's PQ
+    carrying `reds` fail settlements in the #106 posterior ledger
+    (beta = 1 + reds) — the gate's live arming path."""
+    cdir = ws / "oracle" / "cases"
+    cdir.mkdir(parents=True, exist_ok=True)
+    case_id = f"case-{cid.lower()}"
+    (cdir / f"{case_id}.yaml").write_text(
+        yaml.safe_dump({"id": case_id, "target_pq": pq}),
+        encoding="utf-8")
+    led = po.PosteriorLedger.load(ws)
+    led.cases[case_id] = po.CasePosterior(case_id, alpha=1.0,
+                                          beta=1.0 + reds)
+    led.save(ws)
 
 
 # ------------------------------------------------------------- the matrix
@@ -435,19 +464,24 @@ def _c_sched_unexpected_partials_no_slots(base: Path) -> Path:
 
 
 def _c_sched_blocked_failure_due(base: Path) -> Path:
-    """#495: failed attempt with NO analysis → failure artifacts due."""
+    """#495/#146: fail settlements on a target_pq-linked case with NO
+    analysis -> failure artifacts due (arming is settlement-derived)."""
     ws = _ws(base, "sched_blocked_failure_due")
-    _reg(ws, [_claim("C-1", promotion_attempts=2)])
+    _reg(ws, [_claim("C-1", promotion_attempts=2, answers_question="q1")])
+    _arm_red(ws, "C-1", reds=2)
     _ts(ws, _pq("[]"))
     return ws
 
 
 def _c_sched_failure_partial_artifacts(base: Path) -> Path:
-    """#495: analysis missing identified_obstacle → still BLOCKED."""
+    """#495/#146: analysis missing identified_obstacle → still BLOCKED
+    (arming via linked fail settlements — covers_attempt alone covers
+    nothing anymore)."""
     ws = _ws(base, "sched_failure_partial_artifacts")
-    _reg(ws, [_claim("C-1", promotion_attempts=1)])
+    _reg(ws, [_claim("C-1", promotion_attempts=1, answers_question="q1")])
+    _arm_red(ws, "C-1", reds=1)
     _ts(ws, _pq("[]"))
-    _analysis(ws, "C-1", covers_attempt=1,
+    _analysis(ws, "C-1", covers_settlements=1,
               validated_capability="frida bridge works",
               identified_obstacle="")
     return ws
@@ -516,7 +550,9 @@ def _c_order_opens_beat_partials(base: Path) -> Path:
 def _c_order_queue_beats_failure(base: Path) -> Path:
     """Order anchor: full queue (SATURATED) wins over failure artifacts due."""
     ws = _ws(base, "order_queue_beats_failure")
-    _reg(ws, [_claim("C-1"), _claim("C-2", promotion_attempts=1)])
+    _reg(ws, [_claim("C-1"),
+              _claim("C-2", promotion_attempts=1, answers_question="q1")])
+    _arm_red(ws, "C-2", reds=1)
     _ts(ws, _pq("[]"))
     _workers(ws, 3)
     return ws
@@ -524,7 +560,9 @@ def _c_order_queue_beats_failure(base: Path) -> Path:
 
 def _c_order_failure_beats_all_infra(base: Path) -> Path:
     ws = _ws(base, "order_failure_beats_all_infra")
-    _reg(ws, [_claim("C-1", promotion_attempts=2), _claim("C-2", blocked=True)])
+    _reg(ws, [_claim("C-1", promotion_attempts=2, answers_question="q1"),
+              _claim("C-2", blocked=True)])
+    _arm_red(ws, "C-1", reds=2)
     _ts(ws, _pq("[]"))
     return ws
 

@@ -89,6 +89,16 @@ def _authority_ws(path: Path, *, failure_case: bool = False) -> Path:
                        "answers_question": "PQ-8", "promotion_attempts": 1})
         claims.append({"id": "C-E", "status": "OPEN", "statement": "background work"})
         depends_on["C-E"] = ["C-F"]
+        # #146: arm the gate the live way — a linked case carrying a fail
+        # settlement in the #106 ledger (the counter no longer arms).
+        cdir = path / "oracle" / "cases"
+        cdir.mkdir(parents=True)
+        (cdir / "case-c-f.yaml").write_text(
+            '{"id": "case-c-f", "target_pq": "PQ-8"}', encoding="utf-8")
+        (path / "runs" / "posteriors.yaml").write_text(
+            '{"schema": "posteriors-schema/1", "cases": '
+            '{"case-c-f": {"alpha": 1.0, "beta": 2.0, "pending_entries": 0}}, '
+            '"pqs": {}}', encoding="utf-8")
     reg = {"claims": claims}
     deps = {
         "depends_on": depends_on,

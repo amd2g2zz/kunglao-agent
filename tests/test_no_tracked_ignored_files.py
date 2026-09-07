@@ -41,6 +41,10 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "golden fixture: F-03 replay input (runs/ rule over-matches depth)",
     "tests/fixtures/golden/F-06/ws/runs/worker-status-w1.md":
         "golden fixture: F-06 replay input (runs/ rule over-matches depth)",
+    "tests/fixtures/golden/F-04/ws/runs/posteriors.yaml":
+        "golden fixture: F-04 replay input (#146 settlement arming; runs/ rule over-matches depth)",
+    "tests/fixtures/golden/F-12/ws/runs/posteriors.yaml":
+        "golden fixture: F-12 replay input (#146 settlement arming; runs/ rule over-matches depth)",
     # .subagent-review/*.json (rule .gitignore:44) — committed review
     # receipts are deliberate Gate-5 execution evidence (devkit/quality_gates.py).
     # 2026-08-19-gate5.json is additionally pinned by

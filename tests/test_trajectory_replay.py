@@ -101,19 +101,33 @@ def _fag(ws: Path, *extra: str) -> subprocess.CompletedProcess:
 # ===========================================================================
 
 def _trajectory1_ws(root: Path) -> Path:
-    """The v0.1.1 trajectory-1 shape: C-1 attempted twice (spawn-timeout
-    class transient failures), a failure analysis that answers the three
-    questions in prose but records NONE of the #495 artifacts."""
+    """The v0.1.1 trajectory-1 shape: C-1 carries two fail settlements on a
+    target_pq-linked oracle case (spawn-timeout class transient failures),
+    a failure analysis that answers the three questions in prose but
+    records NONE of the #495 artifacts."""
     ws = root / "ws"
     _write(ws / "claim-register.yaml", {"claims": [
         {"id": "C-1", "status": "OPEN",
          "boundary_type": "positive_observation",
          "evidence_tier_attempted": 1, "promotion_attempts": 2,
+         "answers_question": "q1",
          "depends_on": [], "statement":
          "app calls badger.a under real Context (frida spawn path)"}]})
     _write(ws / "task_spec.yaml", {"primary_questions": []})
+    # #146: arm the gate the live way — linked case + red settlements in
+    # the #106 posterior ledger (the dispatch counter no longer arms).
+    import posteriors as po
+    cdir = ws / "oracle" / "cases"
+    cdir.mkdir(parents=True)
+    (cdir / "case-c-1.yaml").write_text(
+        "id: case-c-1\ntarget_pq: q1\n", encoding="utf-8")
+    led = po.PosteriorLedger.load(ws)
+    led.cases["case-c-1"] = po.CasePosterior("case-c-1", alpha=1.0, beta=3.0)
+    led.save(ws)
     _write(ws / "analyses" / "failure-C-1.yaml", {
-        "claim": "C-1", "covers_attempt": 2,
+        "claim": "C-1", "covers_settlements": 2,  # coverage CURRENT so the
+        # death declaration is blocked by the MISSING-ARTIFACT tooth (#495),
+        # not incidentally by stale coverage (review r1-4)
         "method_assumption": "spawn mode keeps the app alive long enough",
         "assumption_validity": "justified-adequate",
         "next_method": "method was adequate",

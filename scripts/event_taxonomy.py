@@ -154,6 +154,7 @@ ALL_EVENT_TYPES = [
 #                                toolchain_install #700 per-item install events
 #   git_snapshot_skipped  kunglao_upgrade.py / kunglao-init.py  #739 git snapshot WARN faces
 EMIT_ACTIONS = [
+    "acceptance_coverage_decreased",  # #146 oracle_runner case-retirement coverage-drop WARN
     "agents_refresh",     # #755 A2 upgrade L2 subagents re-copy face
     "analysis_blocked",
     "analysis_recorded",

@@ -207,7 +207,7 @@ files:
   - src: scripts/case_bank.py
     dest: .claude/scripts/case_bank.py
     kind: scaffold
-    sha256: 39221df879fa1e7ade6d9c6628ddde01dd1092e825f77bb87d646d2a003e6471
+    sha256: bf2be8f370f50dab53f3b18b13b213f2b20138c69c95a5c6c8cf2ef5f012b12a
   - src: scripts/challenge_ledger.py
     dest: .claude/scripts/challenge_ledger.py
     kind: scaffold
@@ -339,7 +339,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 77af56acf70b22ad008f086b702eab2f2535bdc3b14446807680a27604809902
+    sha256: d09e0ef3a8b46a51197ac06bae40753e9c66b755630549ce8151f238111145e2
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -351,7 +351,7 @@ files:
   - src: scripts/failure_analysis_gate.py
     dest: .claude/scripts/failure_analysis_gate.py
     kind: scaffold
-    sha256: 768f0f67db4e6b7ed15763a23859114be707fa2b4029f441349a1754e4c72a0a
+    sha256: b2c4090b6f88987aac78a3cbc8df860f3df1ee064917951990db52bc17c8456e
   - src: scripts/feedback.py
     dest: .claude/scripts/feedback.py
     kind: scaffold
@@ -483,7 +483,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: 9c923141071642f27afd7af1249fe2a3c2180822683154d127bb74ef5ee66327
+    sha256: 860ee9b60e35ca9f9fccc99f3dd1dcf09d5671fb7c9e53851e9da9459dba9045
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -583,7 +583,7 @@ files:
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: 3f390170a677f731eaa4c39ec4e6bc0912ef4655a70e239749dc0ce7c326c27b
+    sha256: 4c9bc8a3e7d2b024bcd0bd09991a99b83ceb44b8999587d7cdbfb7379aa9b1bb
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold

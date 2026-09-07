@@ -51,13 +51,20 @@ blocks the record. `novel-hypothesis` additionally requires non-empty
 candidates: at least the lessons rung must have a recorded hit before a
 novel experiment may be declared (it occupies budget).
 
-Enforcement: a claim with a prior failed attempt (promotion_attempts > 0,
-status non-terminal) that has NO current failure_analysis — or whose
-analysis is missing either artifact — is BLOCKED. The orchestrator cannot
-re-dispatch through the normal flow until the analysis is recorded.
+Enforcement (#146 re-point): the DEAD promotion_attempts arming is removed.
+A claim ARMS when it has >=1 recorded fail settlement on an oracle case
+linked via the claim's ``answers_question`` <-> case ``target_pq`` (the
+same linkage priority_ratio.py uses) and has no covering analysis — then
+re-dispatch is BLOCKED until the analysis is recorded. Settlement state
+comes from the #106 posterior ledger (runs/posteriors.yaml): each red run
+is beta+1 over the Beta(1,1) prior, so a case's fail-settlement count is
+beta-1. Coverage is settlement-versioned too: an analysis records
+``covers_settlements`` (the red total at record time); a NEW red settlement
+drives the total past it and re-arms the gate — each failed attempt needs
+its own analysis, derived, not counted by a writer no live path has.
 
-Each failed attempt needs its own analysis (covers_attempt versioning) — you can't
-coast on the reasoning from attempt 1 when attempt 3 also fails.
+Each failed attempt needs its own analysis (covers_settlements versioning) —
+you can't coast on the reasoning from attempt 1 when attempt 3 also fails.
 
 Usage:
   # check mode — which claims need analysis?
@@ -142,8 +149,8 @@ def _emit_failure_blocked(workspace: Path, d: dict) -> None:
     log. #495 split (#459): a BLOCKED whose analysis is missing the three
     failure artifacts emits analysis_blocked with the missing list (the
     Orient layer's direct to-do); a pure stale-coverage BLOCKED
-    (covers_attempt lags, artifacts all present) keeps failure_blocked —
-    one event per BLOCKED, the word carries the reason.
+    (covers_settlements lags the red total, artifacts all present) keeps
+    failure_blocked — one event per BLOCKED, the word carries the reason.
 
     Guarded — logging must never break the gate (a failed analysis run keeps
     its exit code and BLOCKED output even if the log write fails).
@@ -151,16 +158,18 @@ def _emit_failure_blocked(workspace: Path, d: dict) -> None:
     try:
         from kunglao_log import emit
         missing = d.get("missing_artifacts") or []
+        red_total = sum(int(v) for v in
+                        (d.get("red_settlements") or {}).values())
         if missing:
             emit(workspace, actor="orchestrator", action="analysis_blocked",
                  claim=d.get("claim_id"),
                  detail=f"missing_artifacts={','.join(missing)} "
-                        f"attempts={d.get('promotion_attempts')}")
+                        f"red_settlements={red_total}")
         else:
             emit(workspace, actor="orchestrator", action="failure_blocked",
                  claim=d.get("claim_id"),
                  detail=f"status={d.get('status')} "
-                        f"attempts={d.get('promotion_attempts')}")
+                        f"red_settlements={red_total}")
     except Exception:
         pass
 
@@ -202,13 +211,68 @@ def _load_analysis(workspace: Path, claim_id: str):
         return None
 
 
-def _needs_analysis(claim: dict) -> bool:
-    """A claim needs failure analysis if it was attempted (promotion_attempts > 0)
-    but hasn't reached terminal status — a dispatch happened and didn't close it."""
+def linked_fail_settlements(ws: Path, claim: dict) -> dict[str, int]:
+    """#146 arming data: case_id -> recorded fail-settlement count, for the
+    oracle cases linked to this claim via ``target_pq == answers_question``
+    (the priority_ratio linkage).
+
+    Settlement state = the #106 posterior ledger (runs/posteriors.yaml) —
+    "runner red/green is the only reward signal": each red run is beta+1
+    over the Beta(1,1) case prior, so a case's fail count is beta-1. A
+    retired case has left the acceptance net (#146) and arms nothing.
+    Missing ledger degrades per posteriors.py's fail-open load contract; a
+    WRONG ledger schema raises (the version wall — never a silent wrong
+    read).
+    """
+    pq = str((claim or {}).get("answers_question") or "").strip()
+    if not pq:
+        return {}
+    from oracle_runner import RETIRED_CASE_STATUS  # lazy: no new import edge
+    cdir = Path(ws) / "oracle" / "cases"
+    if not cdir.is_dir():
+        return {}
+    linked: dict[str, int] = {}
+    for p in sorted(cdir.glob("*.yaml")):
+        try:
+            doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001 — unreadable case is not evidence
+            continue
+        if not isinstance(doc, dict):
+            continue
+        case_id = str(doc.get("id") or p.stem).strip()
+        target_pq = str(doc.get("target_pq") or "").strip()
+        if not case_id or not target_pq or target_pq != pq:
+            continue
+        if str(doc.get("status") or "").strip() == RETIRED_CASE_STATUS:
+            continue  # retired left the acceptance net — arms nothing
+        linked[case_id] = 0
+    if not linked:
+        return {}
+    import posteriors as po
+    try:
+        led = po.PosteriorLedger.load(ws)
+    except po.PosteriorSchemaError:
+        raise  # the version wall: a wrong-schema ledger must never be
+        # silently read as "no settlements" — that would un-arm the gate
+        # exactly when the ledger is untrustworthy (#146 review r1-1)
+    except Exception:  # noqa: BLE001 — missing ledger degrades, not blocks
+        return {}
+    for case_id in linked:
+        cp = led.cases.get(case_id)
+        linked[case_id] = int(round(max((cp.beta if cp else 1.0) - 1.0, 0.0)))
+    return {cid: n for cid, n in linked.items() if n > 0}
+
+
+def _needs_analysis(claim: dict, reds: dict[str, int]) -> bool:
+    """A claim needs failure analysis when the settlements say it does:
+    >=1 fail settlement on a linked oracle case (reds non-empty) while the
+    claim is non-terminal. The promotion_attempts counter is GONE from the
+    arming predicate (#146: it had no live writer — init seeded 0, retract
+    reset 0 — so it never fired in production)."""
     status = (claim.get("status") or "UNKNOWN").upper()
     if status in TERMINAL:
         return False
-    return int(claim.get("promotion_attempts") or 0) > 0
+    return sum(int(v) for v in (reds or {}).values()) > 0
 
 
 def _artifact_gaps(analysis: dict) -> list[str]:
@@ -223,19 +287,18 @@ def _artifact_gaps(analysis: dict) -> list[str]:
     return gaps
 
 
-def _analysis_covers(analysis: dict, claim: dict) -> bool:
-    """Does the recorded analysis cover the latest failed attempt?
-    covers_attempt must match (or exceed) the claim's current promotion_attempts.
-    #495: the three failure artifacts must ALSO be present — an analysis that
-    answers the three questions in prose but records no validated_capability /
-    identified_obstacle is exactly the v0.1.1 trajectory-1 evidence evaporation
-    (decomposition-level knowledge lived in narrative and evaporated on pivot);
-    it does not unblock re-dispatch."""
+def _analysis_covers(analysis: dict, reds: dict[str, int]) -> bool:
+    """Does the recorded analysis cover the CURRENT settlements?
+    #495: the three failure artifacts must be present. #146: coverage is
+    settlement-versioned — the analysis carries ``covers_settlements``
+    (the linked red total at record time); a NEW red settlement drives the
+    total past it and the gate re-arms. Each failed attempt needs its own
+    analysis, derived from the settlement ledger instead of the unwritten
+    promotion_attempts counter."""
     if not analysis:
         return False
-    covers = int(analysis.get("covers_attempt") or 0)
-    attempts = int(claim.get("promotion_attempts") or 0)
-    if covers < attempts:
+    red_total = sum(int(v) for v in (reds or {}).values())
+    if int(analysis.get("covers_settlements") or 0) < red_total:
         return False
     return not _artifact_gaps(analysis)
 
@@ -250,21 +313,23 @@ def check_claim(workspace: Path, claim_id: str, library: Path | None = None) -> 
     if status in TERMINAL:
         return {"state": "TERMINAL", "claim_id": claim_id, "status": status}
 
-    if not _needs_analysis(claim):
+    # #146: arming is settlement-derived — the linked case reds.
+    reds = linked_fail_settlements(workspace, claim)
+    if not _needs_analysis(claim, reds):
         return {"state": "OK_NO_PRIOR_FAILURE", "claim_id": claim_id,
-                "promotion_attempts": claim.get("promotion_attempts")}
+                "red_settlements": reds}
 
     analysis = _load_analysis(workspace, claim_id)
-    if _analysis_covers(analysis, claim):
+    if _analysis_covers(analysis, reds):
         return {"state": "OK_COVERED", "claim_id": claim_id,
-                "promotion_attempts": claim.get("promotion_attempts"),
+                "red_settlements": reds,
                 "analysis": analysis}
 
     return {
         "state": "BLOCKED",
         "claim_id": claim_id,
         "status": status,
-        "promotion_attempts": claim.get("promotion_attempts"),
+        "red_settlements": reds,
         "evidence_tier_attempted": claim.get("evidence_tier_attempted"),
         "statement": (claim.get("statement") or "")[:200],
         "evidence": claim.get("evidence") or [],
@@ -281,14 +346,16 @@ def check_claim(workspace: Path, claim_id: str, library: Path | None = None) -> 
 
 
 def scan_workspace(workspace: Path, library: Path | None = None) -> list:
-    """Return all claims that currently BLOCK (failed attempt, no current analysis)."""
+    """Return all claims that currently BLOCK (a linked case carries fail
+    settlements and no covering analysis)."""
     claims, _ = _load_claims(workspace)
     blocked = []
     for c in claims:
-        if not _needs_analysis(c):
+        reds = linked_fail_settlements(workspace, c)
+        if not _needs_analysis(c, reds):
             continue
         analysis = _load_analysis(workspace, c.get("id"))
-        if not _analysis_covers(analysis, c):
+        if not _analysis_covers(analysis, reds):
             blocked.append(check_claim(workspace, c.get("id"), library=library))
     return blocked
 
@@ -385,9 +452,13 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
 
     adir = workspace / ANALYSES_DIR
     adir.mkdir(parents=True, exist_ok=True)
+    # #146: coverage versioning derives from the settlement ledger (the
+    # linked red total at record time) — the unwritten counter is gone.
+    red_total = sum(int(v) for v in
+                    linked_fail_settlements(workspace, claim).values())
     entry = {
         "claim": claim_id,
-        "covers_attempt": int(claim.get("promotion_attempts") or 0),
+        "covers_settlements": red_total,
         "method_assumption": assumption,
         "assumption_validity": validity,
         "next_method": next_method,
@@ -829,12 +900,18 @@ def _failure_modes_recall() -> tuple[str, ...]:
 
 def _print_blocked(d: dict) -> None:
     cid = d["claim_id"]
-    print(f"=== BLOCKED: {cid} (status={d.get('status')}, attempts={d.get('promotion_attempts')}) ===")
+    red_total = sum(int(v) for v in (d.get("red_settlements") or {}).values())
+    print(f"=== BLOCKED: {cid} (status={d.get('status')}, "
+          f"red_settlements={red_total} over "
+          f"{len(d.get('red_settlements') or {})} linked case(s)) ===")
     print(f"claim: {d.get('statement','')}")
     if d.get("evidence"):
         print(f"evidence so far: {d['evidence']}")
     if d.get("stale_analysis"):
-        print(f"stale analysis (covers attempt {d['stale_analysis'].get('covers_attempt')}): update it")
+        print(f"stale analysis (covers_settlements="
+              f"{d['stale_analysis'].get('covers_settlements')} < "
+              f"{red_total}): update it — a NEW fail settlement needs a "
+              f"fresh analysis")
     print()
     print("Before re-dispatching OR concluding NEGATIVE, answer three questions")
     print("(reason from THIS specific failure - do not pick from a fixed menu):")
@@ -1044,11 +1121,13 @@ def main(argv: list[str] | None = None) -> int:
             if r["state"] == "BLOCKED":
                 _print_blocked(r)
             elif r["state"] == "OK_COVERED":
-                print(f"OK: {args.claim_id} - analysis covers attempt {r.get('promotion_attempts')}")
+                print(f"OK: {args.claim_id} - analysis covers "
+                      f"{r.get('red_settlements')} fail settlement(s)")
             elif r["state"] == "TERMINAL":
                 print(f"OK: {args.claim_id} - terminal ({r.get('status')}), no analysis needed")
             elif r["state"] == "OK_NO_PRIOR_FAILURE":
-                print(f"OK: {args.claim_id} - no prior failed attempt (attempts={r.get('promotion_attempts')})")
+                print(f"OK: {args.claim_id} - no fail settlements on linked "
+                      f"oracle cases (red_settlements={r.get('red_settlements')})")
             else:
                 print(f"FAIL: claim {args.claim_id} not found")
         return 1 if r["state"] == "BLOCKED" else (2 if r["state"] == "NOT_FOUND" else 0)

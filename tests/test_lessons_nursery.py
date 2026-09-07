@@ -297,6 +297,21 @@ def test_blocked_retrieval_tags_draft_lessons(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
     _write_register(ws, [_claim("C-7", attempts=3, statement="frida attach fails on vm")])
+    # #146: arm the gate the live way — a linked case carrying red
+    # settlements in the #106 ledger (the counter no longer arms).
+    import posteriors as po
+    cdir = ws / "oracle" / "cases"
+    cdir.mkdir(parents=True)
+    (cdir / "case-c-7.yaml").write_text(
+        "id: case-c-7\ntarget_pq: q1\n", encoding="utf-8")
+    led = po.PosteriorLedger.load(ws)
+    led.cases["case-c-7"] = po.CasePosterior("case-c-7", alpha=1.0, beta=4.0)
+    led.save(ws)
+    import yaml as _yaml
+    reg = _yaml.safe_load((ws / "claim-register.yaml").read_text(encoding="utf-8"))
+    reg["claims"][0]["answers_question"] = "q1"
+    (ws / "claim-register.yaml").write_text(
+        _yaml.safe_dump(reg, sort_keys=False), encoding="utf-8")
     lib = tmp_path / "lib"
     lib.mkdir()
     # seed 3 lessons that overlap the topic; all draft by default
