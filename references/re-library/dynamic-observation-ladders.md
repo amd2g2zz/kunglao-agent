@@ -1,6 +1,6 @@
 ---
 name: dynamic-observation-ladders
-description: Channel-descent discipline for instrumented dynamic observation on hardened Android targets — static reading is the first observation channel to go blind, libc import hooks the second, inline-syscall sites the floor, and the JNI function table is the boundary channel; tracing must be windowed to the target module, funnelled macro-to-micro, and module loads latched before their code runs. Use when hooks fire never or partially, when tracing crashes or stalls the target, when a memory patch must be proven, when Java/native boundary traffic needs systematic observation, or when runtime observation stays empty and the next channel down must be chosen deliberately.
+description: Channel-descent discipline for instrumented dynamic observation on hardened Android targets — static reading is the first observation channel to go blind, libc import hooks the second, inline-syscall sites the floor, and the JNI function table is the boundary channel; tracing must be windowed to the target module, funnelled macro-to-micro, module loads latched before their code runs (the latch doubles as the load-trace diagnosis for attach kills), and Java-face hooks need the runtime classloader switch before a crypto-class census. Use when hooks fire never or partially, when tracing crashes or stalls the target, when the agent dies at attach, when a memory patch must be proven, when Java/native boundary traffic needs systematic observation, or when runtime observation stays empty and the next channel down must be chosen deliberately.
 ---
 
 # Dynamic Observation Ladders (channel descent + windowed discipline)
@@ -37,6 +37,8 @@ Default: enable full instruction events and grep afterwards. This fails because 
 
 Default: attach, then look up the module by name. This fails for late-loaded modules: the lookup races the module's own initialization, and a base seized mid-init yields offsets that work once and never again. Fix: latch the loader — hook the linker's `do_dlopen` + `call_constructor` pair (re-entrancy flag so recursive dlopens do not re-trigger), or the portable `android_dlopen_ext` `onLeave` variant, and **seize the module base before its code runs**. Convergent across three independent sources — treat as an invariant of the observation plan, not a stylistic choice.
 
+**Diagnosis direction (the same latch, run backwards).** Default when the agent keeps dying at attach: blame the agent version or device stability and retry. That fails because hardened targets ship a dedicated anti-instrumentation module whose initialization performs the kill — the retry loop is measuring the kill, not the stability. Run the latch as a tracer instead: record every load with its position in the sequence, and the module loaded immediately before the process dies is the offender. Neutralize it (patch its init to a no-op via the scan-patch loop, or remove it from the package when the app tolerates absence), then re-attach. The load-order record is the evidence — keep it in the ledger next to the kill.
+
 ## The scan-patch loop (write without protect is the failure)
 
 Default: scan for the pattern, write the patch. This fails with an access violation — code pages are `r-x`. Fix loop: pattern scan → `Memory.protect` (to `rwx`) **before** the write → retry on the access-violation signature → behavioral verification. Verification is the closure gate and borrows the replay-gate philosophy: the patch is proven when **the target's own verdict flips** under identical inputs — write success proves only that bytes moved. Length constraint: replacement <= original bytes (+ trailing NUL for string-class writes); longer corrupts adjacent memory and manufactures a second bug on top of the first.
@@ -46,6 +48,12 @@ Default: scan for the pattern, write the patch. This fails with an access violat
 Default: hook the individual exports the Java layer reaches (`GetStringUtfChars`-class) one attach at a time. This fails two ways: the surface runs ~230 functions deep, so per-export hooking degenerates into whack-a-mole and silently misses the calls nobody thought to name; and each hook site is its own detection surface. Fix: hook the **JNIEnv function table** once — resolve the env pointer, attach to the table slots — and a single attach point observes every call crossing the Java/native boundary. Boundary arguments and returns render from the JNI signatures; local/global reference tracking renders object lifecycles (the reuse trap: after a local reference is deleted the runtime reuses its value, so unexpired references mislabel later arguments — track and expire them).
 
 This is the boundary channel native-sign-recovery's boundary-first ladder hooks into at step 2: the ladder locates the boundary method, this channel observes everything crossing it. Filtering discipline: full-table tracing is enormous noise — class/method scoping at trace time is mandatory, the same window-first philosophy as above. Known blinding: table-integrity checks compare the env-table pointers against the libart-expected addresses and detect table hooks (falsifier-library family 14) — every channel in this card carries a named blinding. Tool note: jnitrace-class tools implement this channel; standing rule — old-tool corpus entries carry a version-compat audit against the current Frida surface before distillation (rows below).
+
+## The Java-face channels (loader switch first, then census)
+
+Default on the Java face: attach and hook the classes you remember — the digest/MAC/cipher/signature getters and their engine methods. That fails two ways. First, business classes often live in a dex loaded at run time, so hooks resolved against the default class factory never fire — the Java twin of the "hook never fires" miss (row below). Fix: latch the loader — hook the loader class (`BaseDexClassLoader`-family), gate on the dex path carrying the target marker, **switch the class factory's loader** to that instance, then install the class hooks. This is the Java counterpart of the native `do_dlopen` latch; the convergent latch discipline now holds across four independent sources. Second, per-class hooking degenerates into the JNI-table lesson repeated: names get missed and each hook site is its own detection surface. Fix: census the whole crypto-class family in one pattern — every overload of the digest/MAC/cipher/signature getters and do-final-class methods — with three capture rules: (1) dual-encode every dump, hex AND base64 (which encoding the consumer sees is unknown a priori; the shape triage downstream needs raw bytes); (2) keep the stack trace with every capture (call-stack membership is the signing-entry falsifier, falsifier-library family 5b); (3) null-check arguments inside the hook and enumerate the overloads — an unguarded hook that assumes a non-null argument crashes the target and manufactures the instability being debugged.
+
+Plaintext-recovery variant: when the request body is assembled into a map/container class, hook the put/insert filtered to the assembling class — the plaintext exists at insertion time even when the wire format is encrypted. Unfiltered, collection-class hooks drown the capture in framework traffic; the class filter is the Java face of window-first.
 
 ## Failure-signature → fix
 
@@ -57,6 +65,8 @@ This is the boundary channel native-sign-recovery's boundary-first ladder hooks 
 | import hooks see nothing | inline syscalls bypass libc | descend to the SVC floor (channel-descent rule) |
 | `TypeError: Memory.readUtf8String is not a function` on frida >= 16 | 15.x-era static memory helpers removed in 16.0.0 | NativePointer instance methods (`ptr.readUtf8String()`) — already the norm in modern agents |
 | agent runs on 16.x, dies on 17.x at `Module.findExportByName` | static Module APIs removed in 17.0.0 | `Process.getModuleByName(m).getExportByName(n)`; cache the Module object |
+| Java-layer hooks fire never | business classes resolve under a runtime-loaded classloader, not the default factory's | loader switch: latch the loader, switch the factory's loader, re-install hooks (Java-face channels) |
+| target dies at/just after attach, no hook ran | dedicated anti-instrumentation module initialized | load-trace diagnosis: the module loaded immediately before the kill is the offender; neutralize, re-attach (early-load latch, diagnosis direction) |
 
 ## Channel capability boundary
 
@@ -146,6 +156,7 @@ for (const off of SVC_OFFSETS) Interceptor.attach(base.add(off), function () {
 | Window bounded | Follow/unfollow pair + exclude list recorded with the trace |
 | Load latched | Module base seized before its first instruction — latch record in the evidence file |
 | Boundary observed | JNI-table hook + trace-time class/method filter recorded; reference-expiry accounted |
+| Java hooks live | Loader switched to the target's instance before class-hook install; crypto census captures carry hex+base64 dumps and stack traces |
 | Patch proven | Target's own verdict flips under identical inputs — behavioral, not write-success |
 | Findings persisted | Structured records in `evidence/*.json` — printed output is not evidence |
 
@@ -153,5 +164,6 @@ for (const off of SVC_OFFSETS) Interceptor.attach(base.add(off), function () {
 
 - Tool quick-reference behind every channel: [tools-dynamic.md](tools-dynamic.md)
 - When observation itself is detected and blocked: [anti-analysis.md](anti-analysis.md)
+- The protection whose detection shell kills the agent (build-side view of the diagnosis direction): [vm-protection-anatomy.md](vm-protection-anatomy.md)
 - Verdict-stability, constant-pool, and channel-integrity falsifier rows: [falsifier-library.md](falsifier-library.md)
 - The boundary-first ladder this card's JNI channel hooks into: [native-sign-recovery.md](native-sign-recovery.md)
