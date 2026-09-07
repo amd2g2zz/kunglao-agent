@@ -53,6 +53,8 @@ assets:
     - templates/state/claim_deps.yaml
     - templates/state/claim-register.yaml
     - templates/state/task-oracle.yaml
+    # #128: Phase-0 goal operationalization read-back skeleton
+    - templates/state/goal-operationalization.yaml
     - templates/state/task_spec.yaml
     # #356 W2: single-source workspace CLAUDE.md template (OS delta injected
     # by kunglao-init at render; replaces the 4 pre-#356 variant templates)
