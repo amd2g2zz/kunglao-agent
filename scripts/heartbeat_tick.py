@@ -358,6 +358,19 @@ def main(argv: list[str] | None = None) -> int:
     report["oracle_registered"] = _oracle_registered(ws)
     if not report["oracle_registered"]:
         print(ORACLE_MISSING_LINE)
+    # #127: detector liveness — DORMANT detectors (evaluated, never fired)
+    # surface as a ONE-TIME WARN (the #600 DORMANT_SENTINEL generalized to
+    # every detector emitting the detector_eval/detector_fired pair). The
+    # report carries the names; the nag line prints from dormant_warn.
+    # Fail-open like every watcher: a crashed liveness read never fails
+    # the tick.
+    try:
+        import detector_liveness as _dl
+        dormant = _dl.dormant_warn(ws)
+        if dormant:
+            report["detector_dormant"] = dormant
+    except Exception:  # noqa: BLE001 — liveness evidence must not fail the tick
+        pass
     # #878: registry-driven mechanism scheduling — the tick is the ONLY time
     # host, so the advisory children are no longer hand-wired here. The
     # scheduler walks mechanisms.yaml (schema gate: trigger/cost_class/

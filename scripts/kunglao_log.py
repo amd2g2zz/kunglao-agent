@@ -75,6 +75,7 @@ LEGACY_ACTORS = frozenset({
     "backtrack_loop",  # #882 retrospective-loop host (retro_report/retro_policy faces)
     "bash_fact_guard", "blind_gate", "carrier_consistency", "cockpit_summary",
     "complete_teardown", "completion_gate", "convergence_check",
+    "convergence_health",  # #127 detector liveness telemetry (detector_eval/detector_fired)
     "decision_pending", "digest_build", "dispatch_context", "dual_gate",
     "env_check", "env_check_gate", "env_repair_l1", "env_state_probe",
     "event_taxonomy", "external_kicker", "failure_analysis",
