@@ -28,6 +28,7 @@ map:
   kunglao-status: status:query
   kunglao_log: log:event-stream
   convergence_check: converge:check
+  oracle_runner: oracle:run
   convergence_health: converge:health
   priority: dispatch:priority
   priority_ratio: dispatch:priority-ratio

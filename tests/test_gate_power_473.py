@@ -296,18 +296,17 @@ def test_fault_injection_empty_oracle_reports_unregistered(tmp_path):
 
 
 def test_fault_injection_unreadable_oracle_fails_open_to_unregistered(tmp_path):
-    """注入: oracle 存在但不可读（权限故障）→ _oracle_registered 的
-    OSError 防护必须 fail-open 为 False 并催告（不 crash tick）。"""
+    """注入: oracle 存在但不可读 → _oracle_registered 的
+    OSError 防护必须 fail-open 为 False 并催告（不 crash tick）。
+    不可读通道用目录节点而非 chmod 000：macOS Docker bind mount（virtiofs）
+    不执行权限位，chmod 后文件仍可读，该注入在 kunglao-runner（本机
+    Docker Desktop）上必绿他处必红 = runner 依赖 flake。IsADirectoryError
+    ⊂ OSError，在一切文件系统上都稳定触发同一条防护路径。"""
     import heartbeat_tick as ht
     ws = _make_tick_ws(tmp_path)
-    oracle = ws / "task-oracle.yaml"
-    oracle.write_text("task_text: x\n", encoding="utf-8")
-    oracle.chmod(0o000)
-    try:
-        assert ht._oracle_registered(ws) is False, (
-            "unreadable oracle must fail-open to False, never raise")
-    finally:
-        oracle.chmod(0o644)  # tmp_path cleanup needs the bit back
+    (ws / "task-oracle.yaml").mkdir()
+    assert ht._oracle_registered(ws) is False, (
+        "unreadable oracle must fail-open to False, never raise")
 
 
 def test_fault_injection_detector_survives_malformed_declaration():

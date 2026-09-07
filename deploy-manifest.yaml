@@ -247,7 +247,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: d7dfaa9679cb56391a6798bbba38f6600606cff0cc2202571ded5f0e54367b1a
+    sha256: 131cf31825ec49185234ae8f4a0943e8c6c5f522a72590defe1b8b054cf4dca8
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -576,6 +576,10 @@ files:
     dest: .claude/scripts/obligation_discovery.py
     kind: scaffold
     sha256: dd94e5003639701888eaa908965ddab413a62e159cd1275e89cc5973fc3103e7
+  - src: scripts/oracle_runner.py
+    dest: .claude/scripts/oracle_runner.py
+    kind: scaffold
+    sha256: a63fb2d1319855294af3a7f4f4c1e70c1ed2265fdd9e2749b74862982a5ca6d1
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
@@ -1271,11 +1275,11 @@ files:
   - src: tools/_INDEX.ext.map.yaml
     dest: .claude/tools/_INDEX.ext.map.yaml
     kind: asset
-    sha256: f30be3a3a9c294e6ea6b6a30138978a438fbf786eeee1fe792508cbd2a958c91
+    sha256: 5c86922e914d1c3b664662c6388d16e4759e67d92864a9a92f717328c1415802
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 307a93c473daa3b4c1035d41570d13483ff328f81afe9023b1598d69eff581fb
+    sha256: 5c677e5b90eaefe2026424797a772652c5f561425c7018ecaad63c90090adc97
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

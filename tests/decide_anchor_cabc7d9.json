@@ -29,6 +29,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -64,6 +72,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [
       {
         "id": "C-2",
@@ -104,6 +120,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -139,6 +163,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -174,6 +206,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -209,6 +249,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -244,6 +292,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -286,6 +342,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -332,6 +396,14 @@
     "open_count": 2,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -380,6 +452,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -428,6 +508,14 @@
     "open_count": 2,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -465,6 +553,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -506,6 +602,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 1,
     "partial_facts": [
@@ -546,6 +650,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [
       {
         "id": "C-2",
@@ -604,6 +716,14 @@
     "open_count": 2,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -641,6 +761,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -692,6 +820,14 @@
     "open_count": 2,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -735,6 +871,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -778,6 +922,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -819,6 +971,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -860,6 +1020,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -901,6 +1069,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -944,6 +1120,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -985,6 +1169,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -1026,6 +1218,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -1067,6 +1267,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -1102,6 +1310,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 1,
     "partial_facts": [
@@ -1142,6 +1358,14 @@
     "open_count": 0,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 1,
     "partial_facts": [
@@ -1188,6 +1412,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -1229,6 +1461,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],
@@ -1270,6 +1510,14 @@
     "open_count": 1,
     "open_hypotheses": [],
     "open_hypothesis_count": 0,
+    "oracle": {
+      "absent": true,
+      "blocked": [],
+      "green": 0,
+      "low_discriminativity": [],
+      "pending": 0,
+      "red": 0
+    },
     "orphan_claims": [],
     "partial_count": 0,
     "partial_facts": [],

@@ -341,6 +341,58 @@ def _load_task_spec(workspace: Path) -> dict:
     return _load_yaml(workspace / "task_spec.yaml")
 
 
+# #108: the oracle acceptance face. The runner's red/green verdict is the
+# system's only reward signal (posteriors.py); before this file the oracle
+# appeared ZERO times in the judgment chain — the loop could mark every
+# claim PROVEN while the runner was all red.
+ORACLE_STATUS_REL = ("runs", "oracle-status.json")
+
+
+def _load_oracle_status(workspace: Path) -> dict:
+    """Read the oracle runner's verdict file (#108 synthetic convention).
+
+    Returns {"cases": [...], "low_discriminativity": [...], "error": None}
+    where each case record is {id, status: pass|fail|pending,
+    pending_entries, instrumented}.
+
+    Fail-open/closed split:
+      - file ABSENT -> empty face + no error: the oracle face is optional,
+        legacy workspaces (no runner yet) converge untouched;
+      - file PRESENT but unreadable/malformed -> error set: the caller
+        BLOCKS with the cause (fail-closed, the contradiction-gate
+        precedent — a corrupt verdict file cannot silently re-enable
+        CONVERGED). Unknown status values normalize to "pending" (the
+        conservative member of the triad).
+    """
+    path = workspace.joinpath(*ORACLE_STATUS_REL)
+    if not path.exists():
+        return {"cases": [], "low_discriminativity": [], "error": None}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        cases_raw = doc.get("cases")
+        if not isinstance(cases_raw, dict):
+            raise ValueError("top-level `cases` is not a mapping")
+        cases = []
+        for cid, raw in cases_raw.items():
+            if not isinstance(raw, dict):
+                raise ValueError(f"case {cid!r}: payload is not a mapping")
+            status = str(raw.get("status") or "pending").lower()
+            if status not in ("pass", "fail", "pending"):
+                status = "pending"
+            cases.append({
+                "id": str(cid),
+                "status": status,
+                "pending_entries": int(raw.get("pending_entries") or 0),
+                "instrumented": bool(raw.get("instrumented")),
+            })
+        low = doc.get("low_discriminativity")
+        low = [str(x) for x in low] if isinstance(low, list) else []
+    except (OSError, TypeError, ValueError) as exc:
+        return {"cases": [], "low_discriminativity": [],
+                "error": f"{type(exc).__name__}: {exc}"}
+    return {"cases": cases, "low_discriminativity": low, "error": None}
+
+
 def _parse_pq_item(q: dict) -> tuple[str | None, str | None, str | None]:
     """Parse ONE primary_questions list item (canonical or legacy form).
 
@@ -619,6 +671,7 @@ class Event(str, Enum):
     # ACTIVE is DRAIN-only (SCHEDULE already routes work by claim face).
     STUCK_WORKERS_PRESENT = "STUCK_WORKERS_PRESENT"   # #595 SCHEDULE / #98 DRAIN: stuck workers gate both stages
     ACTIVE_WORKERS_PRESENT = "ACTIVE_WORKERS_PRESENT"  # #98 DRAIN: live worker on a drained claim surface
+    ORACLE_CASE_RED = "ORACLE_CASE_RED"               # #108 DRAIN: runner verdict joins the completion transaction
     DRAIN_CLEAN = "DRAIN_CLEAN"                        # DRAIN catch-all
     # SCHEDULE stage
     WORK_AND_FREE_SLOT = "WORK_AND_FREE_SLOT"
@@ -677,6 +730,7 @@ class _DecideInputs:
     _ladder_ids: list | None = field(default=None, repr=False)
     _anomalies: list | None = field(default=None, repr=False)
     _open_hyps: list | None = field(default=None, repr=False)
+    _oracle: dict | None = field(default=None, repr=False)
 
     def open_hypotheses(self) -> list:
         """#662 unadjudicated-hypothesis gate input (lazy + cached).
@@ -717,6 +771,60 @@ class _DecideInputs:
                 anomalies = []  # fail-open per design.md D5
             self._anomalies = anomalies
         return self._anomalies
+
+    def oracle_status(self) -> dict:
+        """#108 oracle acceptance face (lazy + cached).
+
+        Reads the oracle runner's verdict file — see _load_oracle_status for
+        the absent/unreadable contract. This is the data the DRAIN probe
+        table used to ignore entirely: the runner's red/green verdict now
+        joins the completion transaction."""
+        if self._oracle is None:
+            self._oracle = _load_oracle_status(self.workspace)
+        return self._oracle
+
+    def oracle_blocks(self) -> list[str]:
+        """#108 blocking reasons, one per offending case (the action names
+        them). A case blocks when RED, or PENDING on live instrumentation —
+        "unknown" is not "pass", a pending case is not satisfiable. A
+        pending case whose instrumentation never ran (scaffold / the runner
+        ran with no client) does NOT block (backward compatibility); an
+        unreadable verdict file blocks as a whole (fail-closed)."""
+        st = self.oracle_status()
+        if st["error"]:
+            return [f"oracle status unreadable — the acceptance face "
+                    f"cannot be verified ({st['error']})"]
+        blocks: list[str] = []
+        for c in st["cases"]:
+            if c["status"] == "fail":
+                blocks.append(f"oracle case {c['id']} RED")
+            elif c["status"] == "pending" and c["instrumented"]:
+                blocks.append(f"oracle case {c['id']} pending "
+                              f"({c['pending_entries']} observation(s) owed "
+                              f"on live instrumentation)")
+        return blocks
+
+    def oracle_face(self) -> dict:
+        """The decide-output face (#108): per-case red/green/pending counts —
+        the honest progress signal, ALWAYS present (the issue's primary
+        progress face). Without a verdict file the face is all-zero + an
+        explicit ``absent`` marker (legacy workspaces report an absent
+        oracle face, never fake counts); a corrupt file reports zeros with
+        the cause named in the BLOCKED action."""
+        st = self.oracle_status()
+        counts = {"red": 0, "green": 0, "pending": 0}
+        for c in st["cases"]:
+            counts[{"fail": "red", "pass": "green",
+                    "pending": "pending"}[c["status"]]] += 1
+        face = {**counts,
+                "low_discriminativity": list(st["low_discriminativity"]),
+                "blocked": [c["id"] for c in st["cases"]
+                            if c["status"] == "fail"
+                            or (c["status"] == "pending"
+                                and c["instrumented"])]}
+        if st["error"] is None and not st["cases"]:
+            face["absent"] = True
+        return face
 
     def discovery_reason(self) -> str:
         """#147 discovery scan, cached. Computed only when DRAIN asks for it."""
@@ -906,6 +1014,16 @@ def _active_workers_present(s: _DecideInputs) -> bool:
     return s.active > 0
 
 
+def _oracle_case_red(s: _DecideInputs) -> bool:
+    # #108: the oracle runner's verdict joins the completion transaction —
+    # the acceptance face can no longer be red while the judgment face reads
+    # CONVERGED. Blocks on a RED case, on a PENDING case with live
+    # instrumentation ("unknown" is not "pass"), and on an unreadable
+    # verdict file (fail-closed); a missing file is legal (legacy
+    # workspaces, no runner yet) — see oracle_blocks().
+    return bool(s.oracle_blocks())
+
+
 def _work_no_free_slot(s: _DecideInputs) -> bool:
     return bool(s.unblocked_open) and s.free_slots == 0
 
@@ -951,6 +1069,7 @@ _EVENT_PREDICATES = {
     Event.PARTIALS_AND_FREE_SLOT: _partials_and_free_slot,
     Event.STUCK_WORKERS_PRESENT: _stuck_workers_present,
     Event.ACTIVE_WORKERS_PRESENT: _active_workers_present,
+    Event.ORACLE_CASE_RED: _oracle_case_red,
     Event.WORK_NO_FREE_SLOT: _work_no_free_slot,
     Event.FAILURE_ARTIFACTS_DUE: _failure_artifacts_due,
     Event.LADDER_REQUIRED_BLOCKER: _ladder_required_blocker,
@@ -1116,6 +1235,16 @@ def _act_active_workers(s: _DecideInputs) -> str:
     return (f"{s.active} worker(s) still in flight on an otherwise-drained "
             f"claim surface ({s.free_slots} free slot(s) under cap {WORKER_CAP}). "
             f"Poll workers - do not deliver; re-check convergence after they report.")
+
+
+def _act_oracle_red(s: _DecideInputs) -> str:
+    # #108: name the offending cases — the orchestrator fixes the
+    # implementation (or the case) and re-runs oracle_runner.py.
+    blocks = "; ".join(s.oracle_blocks())
+    return (f"Cannot CONVERGE: oracle runner verdict is not clean ({blocks}) "
+            f"-> fix the implementation or strengthen the case, re-run "
+            f"oracle_runner.py. A red or pending-instrumented case is not "
+            f"satisfiable: 'unknown' is not 'pass' (#108).")
 
 
 def _act_stuck_workers(s: _DecideInputs) -> str:
@@ -1309,11 +1438,15 @@ STAGE_PROBES = {
     # is busy (SATURATED: poll) or escalated (BLOCKED: #595 action, which
     # also frees the stuck claims per #607), never CONVERGED. STUCK precedes
     # ACTIVE: a stuck worker is also counted active, and its escalation must
-    # win.
+    # win. #108: the oracle verdict joins right after the frozen
+    # completeness order and before the worker liveness gates — a red case
+    # is an acceptance-face fact about the analysis itself (escalate), a
+    # different class from worker bookkeeping (poll).
     State.DRAIN: [Event.ORPHAN_TERMINAL_CLAIM, Event.PRIMARY_Q_UNVERIFIED,
                   Event.NOTE_LAYER_GAP, Event.OPEN_HYPOTHESIS_AT_CLOSE,
                   Event.DISCOVERY_UNCONSUMED,
                   Event.GLOBAL_CONTRADICTION, Event.ANOMALY_DETECTED,
+                  Event.ORACLE_CASE_RED,
                   Event.STUCK_WORKERS_PRESENT, Event.ACTIVE_WORKERS_PRESENT,
                   Event.DRAIN_CLEAN],
     # SCHEDULE: dispatchable work first, then saturation, then WHY nothing
@@ -1345,6 +1478,10 @@ TRANSITIONS = {
     # reopen), plus the DRAIN-only busy-poll face for live workers.
     (State.DRAIN, Event.STUCK_WORKERS_PRESENT): (State.BLOCKED, _act_stuck_workers),
     (State.DRAIN, Event.ACTIVE_WORKERS_PRESENT): (State.SATURATED, _act_active_workers),
+    # #108: the acceptance face escalates — a red/pending-instrumented case
+    # means the analysis is wrong or unfinished, BLOCKED (fix + re-run the
+    # runner), never a poll verdict.
+    (State.DRAIN, Event.ORACLE_CASE_RED): (State.BLOCKED, _act_oracle_red),
     (State.DRAIN, Event.DRAIN_CLEAN): (State.CONVERGED, _act_converged),
     (State.SCHEDULE, Event.WORK_AND_FREE_SLOT): (State.DISPATCH, _act_dispatch_top),
     (State.SCHEDULE, Event.PARTIALS_AND_FREE_SLOT): (State.DISPATCH_VERIFIER, _act_verify_partials),
@@ -1418,6 +1555,11 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
         "note_layer_gaps": snap.pq_note_gaps,
         "pq_parse_error": snap.pq_error,
     }
+    # #108: the honest progress face — per-case red/green/pending counts,
+    # ALWAYS present (the issue's primary progress signal, the replacement
+    # for open_count in heartbeat reports). Without a verdict file the face
+    # carries all-zero counts + an explicit absent marker.
+    decision["oracle"] = snap.oracle_face()
     # #634 Part A: PARK — every open claim waits on an EXTERNAL gate
     # (blocker external:true), no active workers, no partials pending.
     # That is legal idle, not a coerced BLOCKED/DISPATCH that burns ticks
@@ -1571,6 +1713,17 @@ def _human(d: dict) -> str:
         lines.append(f"w15 (done without files): {'; '.join(w15)}")
     if d["active_blockers"]:
         lines.append(f"blockers:       {d['active_blockers']}")
+    o = d.get("oracle")  # #108: the honest progress face (always present)
+    if o is not None:
+        if o.get("absent"):
+            lines.append("oracle cases:   no runner status (absent)")
+        else:
+            line = (f"oracle cases:   {o['green']} green / {o['red']} red / "
+                    f"{o['pending']} pending")
+            if o.get("low_discriminativity"):
+                line += (f" (low-discriminativity: {o['low_discriminativity']}"
+                         f" — strengthen those cases)")
+            lines.append(line)
     if d.get("failure_blocked"):
         lines.append(f"failure-blocked: {d['failure_blocked']} (run failure_analysis_gate.py <ws> before re-dispatch or NEGATIVE)")
     if d["open_claims"] and d["open_count"] <= 12:
