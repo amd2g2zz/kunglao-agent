@@ -85,7 +85,8 @@ LEGACY_ACTORS = frozenset({
     "kunglao_record", "kunglao_resume", "kunglao_status", "kunglao_upgrade",
     "kubectl_test", "lessons_telemetry", "lint", "log_setup", "loop_state",
     "migrate_facts", "mission_ledger", "mission_stall", "notes_writer",
-    "nursery", "operator", "orchestrator_tool_guard", "outcome_capture",
+    "nursery", "operator", "oracle_runner",  # #146 retirement coverage WARN face
+    "orchestrator_tool_guard", "outcome_capture",
     "plan_drift", "plan_drift_detector", "priority", "priority_ratio",
     "queue", "recall_inject", "refutation_propagate", "rho_checkpoint",
     "rollup", "retract_claim", "rho_verifier", "scan_worker_budget",
