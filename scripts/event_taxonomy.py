@@ -153,6 +153,7 @@ ALL_EVENT_TYPES = [
 #   install_attempt / install_declined / install_failed
 #                                toolchain_install #700 per-item install events
 #   git_snapshot_skipped  kunglao_upgrade.py / kunglao-init.py  #739 git snapshot WARN faces
+#   case_vacuous / oracle_cadence_warn   oracle_cadence #132 settlement-cadence faces (the reward channel's caller made mechanical + loud)
 EMIT_ACTIONS = [
     "acceptance_coverage_decreased",  # #146 oracle_runner case-retirement coverage-drop WARN
     "agents_refresh",     # #755 A2 upgrade L2 subagents re-copy face
@@ -168,6 +169,7 @@ EMIT_ACTIONS = [
     "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face
     "case_bank_refused",  # #110 settlement->case-bank append refused (fail-open WARN face)
     "case_priors_seeded",  # #110 cold-start case-bank prior injection face
+    "case_vacuous",       # #132 cadence separation observation: a case greened under >=2 distinct candidate clients (outcome invariant across the hypothesis space — the empirical twin of #126's declared update_map)
     "channel_default",    # #727 init channel degradation/guidance WARN
     "claim_migrate",
     "claim_revive",       # #634 PARK → OPEN revival (mission_stall.revive)
@@ -219,6 +221,7 @@ EMIT_ACTIONS = [
     "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",
     "must_stop",
+    "oracle_cadence_warn",  # #132 settlement-cadence loud faces: broken client (all-red) / missing registered client / case-set refusal / runner failure — never a silent skip
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
     "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
     "plan_drift_crashed",  # #102 dispatch_gate: plan_drift --auto crash face (fail-open, observed)

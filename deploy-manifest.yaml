@@ -343,7 +343,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: f14ebff87900d6e58d9dc7bb0e430b0509be92e4b041dee8d42d4d037a7b181c
+    sha256: fdbb487ed6c40b4743386620d32b76f0a773cd60eb1086b9a3260b061d811f90
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -584,6 +584,10 @@ files:
     dest: .claude/scripts/obligation_discovery.py
     kind: scaffold
     sha256: dd94e5003639701888eaa908965ddab413a62e159cd1275e89cc5973fc3103e7
+  - src: scripts/oracle_cadence.py
+    dest: .claude/scripts/oracle_cadence.py
+    kind: scaffold
+    sha256: 3e4fbb417c97964da2ad99715d1c4902c14c9903b80a5cbc163d7e5dc0aae380
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
@@ -591,7 +595,7 @@ files:
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold
-    sha256: ec4ad9affe0d2d024e827268cf9fd271317b4432afa007a636779e22031567b7
+    sha256: 06164043a7b4d0bea8763b4a983e82ed56b6ed638eb1b1b31a68039b2df251d0
   - src: scripts/pkg_detect.py
     dest: .claude/scripts/pkg_detect.py
     kind: scaffold
@@ -807,7 +811,7 @@ files:
   - src: scripts/tuition_curve.py
     dest: .claude/scripts/tuition_curve.py
     kind: scaffold
-    sha256: e7074d625c829a9e202f3ce7e3100da403157672ae9eae2c17f3bd3c11d3af1d
+    sha256: e4ca02910d1768201e5889025af5de64f844c13b517cb64022c6fd67c3b245b2
   - src: scripts/update_index.py
     dest: .claude/scripts/update_index.py
     kind: scaffold
@@ -1307,11 +1311,11 @@ files:
   - src: tools/_INDEX.ext.map.yaml
     dest: .claude/tools/_INDEX.ext.map.yaml
     kind: asset
-    sha256: 5c86922e914d1c3b664662c6388d16e4759e67d92864a9a92f717328c1415802
+    sha256: be457741c7b8bbf5d05357ddcaeec90856cdd3ab7ad0f929b49d5e4fb5fab1df
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: def424ca3fc18d6e96068d8ac4fa5d4706f830ab3df6ccf6e5643df2c4b0becb
+    sha256: 538fab39f04e0334cee82182f047756c5b0e03d5aff93636b56b5378ca2f2b75
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
