@@ -14,6 +14,8 @@ dependencies = [
     "capstone>=5.0",
     "jsonschema>=4.0",
     "z3-solver>=4.12",  # opaque-pred (issue #306): guarded import, degrade path exit 2
+    "jinja2>=3.1",  # #156 --html face template (guarded import: the JSON
+                    # face — the primary artifact — renders without it)
 ]
 
 # Dev tooling lives in a PEP 735 dependency group, NOT an optional extra:
