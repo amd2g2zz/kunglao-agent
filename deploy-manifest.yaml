@@ -875,7 +875,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 6ad1fcb4eb75a33c27df5bc9ab4825feefb9602ea8b29dce4b48cf0d24883352
+    sha256: f66bea15279f8298377ab74140499036260b8784607784ab5c4724f4ebb2425f
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset

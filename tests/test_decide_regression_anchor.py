@@ -196,9 +196,13 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # 2026-09-08 corpus re-pin (#163 distillation): the ida-scripting-overlays
 # re-library card joined the anomaly baseline corpus. Same class as
 # #112/#884/#866-b/#728/#150: DATA drift only, 4 score floats across the 2
-# contradiction cases (0.9070282235749861 -> 0.9081614665961572,
-# 0.9035694521306032 -> 0.9026969857218403). Case-by-case diff verified
-# SCORE-ONLY programmatically over all 31 cases (anomaly
+# contradiction cases. Re-pinned twice within PR #169: first against the
+# original 169-line card (0.9070282235749861 -> 0.9081614665961572,
+# 0.9035694521306032 -> 0.9026969857218403), then again after the
+# owner-ruled scope reduction shrank the card to 128 lines — final frozen
+# values 0.9081614665961572 -> 0.9071301247771836,
+# 0.9026969857218403 -> 0.9017379679144385. Case-by-case diff verified
+# SCORE-ONLY programmatically over all 31 cases each time (anomaly
 # claim_id/fact_id/top_dimension and all non-anomaly fields byte-equal)
 # before re-pin; re-pinned via capture_current() per the docstring command.
 #
