@@ -1,6 +1,8 @@
 ---
 name: loop-stage-gates
 description: Analysis-loop stage discipline — the hard entry-anchor gate before "basic analysis complete" can be claimed (with the equivalent-path rule for import-table-less forms and failure-recorded-as-evidence), the clean-surface suspicion rule that forbids static-only negative capability conclusions, transition handoff economics (decision_delta plus carry_forward_refs; deterministic gates advance; ask only on real forks), and instruction feasibility negotiation when a requested step has a known blocked precondition. Use when moving a target between analysis stages, writing a stage-completion claim, or when an instructed step's precondition is known to be broken.
+domain: method
+family: process
 ---
 
 # Loop Stage Gates (stage latches + handoff discipline)

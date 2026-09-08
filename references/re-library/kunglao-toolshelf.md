@@ -1,3 +1,16 @@
+---
+name: kunglao-toolshelf
+description: 'The repo''s own toolshelf of `tools/` CLIs (#866 four-face registration): static triage
+  (die_probe, pe_analyze, disasm_dump, overlay_scan, shellcode_scan, stack-strings, extract-syscalls,
+  go-buildinfo-carve, binary-sweep, call-site-args, c_normalize, opaque_pred, disasm_constant_check, yara-scan,
+  yara-gen), ghidra family (run_ghidra_postscript, ghidra_job async + ghidra_diff), crypto-tool, android
+  providers (apk_mem_gate, baksmali_index), pipelines/aux (build_evidence_index, audit_legacy_proven,
+  measure_blind_coverage, capture_golden, measure_cold_start, sanitize). When choosing an in-repo CLI
+  for a RE task or checking what the shelf can already do — pair with the per-tool contract entries in
+  `tools/_index-<category>.md`.'
+domain: tools
+family: shelf
+---
 # kunglao-agent in-repo toolshelf (tools/ CLIs)
 
 > The repo's own toolshelf, registered on the four discovery faces (#866): the execution

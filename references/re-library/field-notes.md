@@ -1,3 +1,10 @@
+---
+name: field-notes
+description: Binary type quirks, anti-debug bypasses, specialized patterns. After triage, when diving
+  into specific binary type analysis.
+domain: method
+family: process
+---
 # Reverse Engineering Field Notes
 
 Detailed quick notes that support [`SKILL.md`](../../skills/kunglao-agent/SKILL.md). Read this file after triage, not before.

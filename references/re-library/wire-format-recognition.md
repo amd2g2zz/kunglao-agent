@@ -1,6 +1,8 @@
 ---
 name: wire-format-recognition
 description: Triage opaque captured bodies into three recoverability classes — standard encryption the app itself decrypts, private serialization protocol, standard serialization with unknown schema — before choosing any decoder, then recover structure (protobuf-class wire parsing without a schema, length-prefix framing conventions) and match the TLS ClientHello fingerprint surface (JA3-class) when byte-correct replays are still rejected. Use when a captured request or response body is unreadable bytes, when a framed message stream must be framed before parsing, or when an offline-reproduced request fails with no application-layer error.
+domain: method
+family: formats
 ---
 
 # Wire-Format Recognition (opaque bodies + TLS fingerprint surface)

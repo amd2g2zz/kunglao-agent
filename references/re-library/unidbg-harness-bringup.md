@@ -1,6 +1,8 @@
 ---
 name: unidbg-harness-bringup
 description: Substrate-decision field guide for unidbg-class Android native emulation — the decisions that precede environment filling (choosing an interception slot from the six-candidate shelf, when each may install relative to module load and init, the failure signatures that decode a substrate mischoice — a PLT-class hook that fires once then goes quiet, an instruction hook the fast backend ignores, a harness hang on a dispatched thread — and how an artifact that cannot run unpacked gets loaded anyway via dump-then-load). Use when a harness plan must pick a hook framework, early-only or silent hooks, an instruction hook throws or is ignored on the JIT-class backend, or a packed SO refuses to load or crashes the loader. Not for the environment answers themselves (unidbg-env-filling owns JNI/syscall/file/libc gap filling), not for the recovery ladder and its closure gate (native-sign-recovery), not for device-side detection doctrine (anti-analysis).
+domain: android
+family: emulation
 ---
 
 # unidbg harness bring-up (substrate decisions before env filling)

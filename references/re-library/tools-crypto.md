@@ -1,3 +1,10 @@
+---
+name: tools-crypto
+description: Encryption/encoding/hashing tool quick-reference. When needing to identify/decode/crack encrypted
+  data.
+domain: tools
+family: crypto
+---
 # Crypto / Encoding Tool Quick Reference
 
 > RE work constantly runs into encrypted/encoded/hashed data. This document lists the most useful tools by scenario.

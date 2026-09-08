@@ -1,3 +1,10 @@
+---
+name: patterns-debugging
+description: Debugging and dynamic-analysis patterns. When validation logic is hidden or symbolic solving
+  is needed.
+domain: patterns
+family: debugging
+---
 # RE Analysis Patterns — Debugging & Dynamic Analysis
 
 > A compilation of general RE techniques: symbolic/constraint solving, dynamic debugging (GDB/breakpoints/tracing), custom VM analysis, architecture-specific firmware, side channels and hidden-logic discovery.

@@ -1860,6 +1860,10 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
                 f"web quickref not found: {WEB_RE_QUICKREF} — "
                 "cannot render a partial web CLAUDE.md")
         qr_text = WEB_RE_QUICKREF.read_text(encoding="utf-8")
+        if qr_text.startswith("---\n"):
+            # frontmatter is the machine-consumed metadata home; the
+            # workspace handbook carries the card body only
+            qr_text = qr_text.split("---\n", 2)[2].lstrip("\n")
         text += chr(10) + qr_text
 
     # #755 G2: the render ships wrapped in the versioned frame-marker pair

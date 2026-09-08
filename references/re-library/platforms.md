@@ -1,3 +1,10 @@
+---
+name: platforms
+description: Platform-specific reversing (macOS/iOS, IoT, CAN bus). When analyzing binaries for non-desktop
+  platforms.
+domain: platforms
+family: catalog
+---
 # Platform-Specific Reversing
 
 macOS/iOS, embedded/IoT firmware, kernel driver, and automotive reverse engineering.

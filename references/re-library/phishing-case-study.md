@@ -1,3 +1,10 @@
+---
+name: phishing-case-study
+description: Same-topic contradiction incident and fact-base contamination. When a same-topic PROVEN pair
+  disagrees.
+domain: method
+family: process
+---
 # Phishing Case Study: F040 routing-claim contamination
 
 A documented incident where a same-topic PROVEN pair disagreed (F035 vs

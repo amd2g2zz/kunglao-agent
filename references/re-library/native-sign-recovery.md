@@ -1,6 +1,8 @@
 ---
 name: native-sign-recovery
 description: Boundary-first recovery of Android native request-signing algorithms — locate the Java-to-JNI boundary, capture plaintext/ciphertext sample pairs, identify the algorithm family by output shape with per-family falsifiers, extract and reproduce offline, and close with a byte-exact replay gate. Pairs with the incremental emulator stubbing loop for running the boundary under unidbg/unicorn-class emulation. Use when a captured request carries a computed signature/token field whose generation crosses into native code.
+domain: android
+family: signing
 ---
 
 # Native Sign Recovery (boundary-first ladder + stubbing loop)

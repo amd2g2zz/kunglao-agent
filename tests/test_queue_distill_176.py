@@ -79,6 +79,15 @@ def _frontmatter(path: Path) -> str:
     return text.split("---\n", 2)[1]
 
 
+def _body_lines(path: Path) -> int:
+    """Budget unit: lines after the frontmatter block. The frontmatter is
+    the machine-consumed metadata home and does not count as knowledge bulk."""
+    text = _text(path)
+    if text.startswith("---\n"):
+        return len(text.split("---\n", 2)[2].splitlines())
+    return len(text.splitlines())
+
+
 def _family_rows(card: Path) -> list[str]:
     return [ln for ln in _text(card).splitlines()
             if re.match(r"^\| \*\*\d+\.", ln)]
@@ -114,27 +123,27 @@ def test_new_card_description_carries_when_not_boundary(card: Path):
 
 @pytest.mark.parametrize("card", NEW_CARDS)
 def test_new_cards_within_200_line_budget(card: Path):
-    n = len(_text(card).splitlines())
-    assert n <= 200, f"{card.name}: {n} lines exceeds the 200-line budget"
+    n = _body_lines(card)
+    assert n <= 200, f"{card.name}: {n} body lines exceeds the 200-line budget"
 
 
 def test_unidbg_env_card_stays_within_budget():
     """unidbg-env-filling absorbs its deltas only within its budget."""
-    n = len(_text(UNIDBG_CARD).splitlines())
-    assert n <= 200, f"unidbg-env-filling grew to {n} lines (budget 200)"
+    n = _body_lines(UNIDBG_CARD)
+    assert n <= 200, f"unidbg-env-filling grew to {n} body lines (budget 200)"
 
 
 def test_web_cards_stay_within_budget():
     for card in (WEB_RISK_CARD, WEB_CRAWL_CARD, JSVMP_CARD, FALSIFIER_CARD):
-        n = len(_text(card).splitlines())
-        assert n <= 200, f"{card.name}: {n} lines exceeds the 200-line budget"
+        n = _body_lines(card)
+        assert n <= 200, f"{card.name}: {n} body lines exceeds the 200-line budget"
 
 
 def test_no_growth_cards_untouched():
     """native-sign-recovery sits at its budget and must not grow;
     anti-analysis is over budget and outside this file's scope."""
-    assert len(_text(NATIVE_SIGN_CARD).splitlines()) <= 200
-    assert len(_text(ANTI_ANALYSIS_CARD).splitlines()) <= 800  # current size, must not grow
+    assert _body_lines(NATIVE_SIGN_CARD) <= 200
+    assert _body_lines(ANTI_ANALYSIS_CARD) <= 800  # current size, must not grow
 
 
 # ---------- (c) fences ----------

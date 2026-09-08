@@ -1,6 +1,8 @@
 ---
 name: signature-check-bypass
 description: Countermeasure ladder for Android app self-integrity checks — read the resign-and-observe tell, identify which channel the check reads (PackageManager API, APK file bytes, or mutual dex/native attestation), then climb the spoof ladder from least invasive (framework-level signature spoof) to most invasive (native IO redirection serving original bytes at the file boundary). Use when a repackaged or resigned APK crashes at launch, shows a black screen, or hangs on the splash screen, or when a hook-based patch keeps getting defeated by a second copy of the check. Not for traffic pinning (stacked-protections), not for instrumentation/root/environment detection generally (anti-analysis), and not for recovering the signing algorithm itself (native-sign-recovery).
+domain: android
+family: signing
 ---
 
 # Signature-check bypass (channel-matched spoof ladder)

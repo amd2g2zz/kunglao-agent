@@ -1,3 +1,10 @@
+---
+name: awesome-re-resources
+description: Curated RE resource repos, tools, tutorials. When seeking external learning materials or
+  specialized utilities.
+domain: research
+family: resources
+---
 # Reverse Engineering Reference Resources
 
 > Curated from multiple awesome lists, ordered by practicality. During RE work, an agent can consult these resources for methodology and tooling guidance.

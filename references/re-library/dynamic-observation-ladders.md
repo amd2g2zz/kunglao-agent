@@ -1,6 +1,8 @@
 ---
 name: dynamic-observation-ladders
 description: Channel-descent discipline for instrumented dynamic observation on hardened Android targets — static reading is the first observation channel to go blind, libc import hooks the second, inline-syscall sites the floor, and the JNI function table is the boundary channel; tracing must be windowed to the target module, funnelled macro-to-micro, module loads latched before their code runs (the latch doubles as the load-trace diagnosis for attach kills), and Java-face hooks need the runtime classloader switch before a crypto-class census. Use when hooks fire never or partially, when tracing crashes or stalls the target, when the agent dies at attach, when a memory patch must be proven, when Java/native boundary traffic needs systematic observation, or when runtime observation stays empty and the next channel down must be chosen deliberately.
+domain: method
+family: process
 ---
 
 # Dynamic Observation Ladders (channel descent + windowed discipline)

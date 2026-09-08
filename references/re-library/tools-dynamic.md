@@ -1,3 +1,10 @@
+---
+name: tools-dynamic
+description: Dynamic analysis tooling (Frida, angr, lldb, x64dbg, Qiling). When performing runtime/dynamic
+  analysis or function hooking.
+domain: tools
+family: dynamic
+---
 # Dynamic Analysis Tools
 
 ## Table of Contents

@@ -1,3 +1,10 @@
+---
+name: languages-compiled
+description: 'Reversing compiled languages beyond C: Go, Rust, Swift, etc. When encountering a non-C compiled
+  binary.'
+domain: languages
+family: compiled
+---
 # Compiled Language Reversing (Go, Rust)
 
 ## Table of Contents

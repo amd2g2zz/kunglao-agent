@@ -1,3 +1,9 @@
+---
+name: platforms-elf
+description: ELF binary structure deep-dive. When reversing Linux/Android ELF binaries.
+domain: platforms
+family: elf
+---
 # ELF Binary Deep-Analysis Reference
 
 > Structure parsing, anti-analysis adversary identification, and analysis techniques for reversing Linux/Android ELF files.

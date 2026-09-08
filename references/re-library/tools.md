@@ -1,3 +1,9 @@
+---
+name: tools
+description: Core static RE tools (GDB, Radare2, Ghidra, Unicorn). When setting up a reversing workspace.
+domain: tools
+family: static
+---
 # Tools Reference
 
 ## Table of Contents

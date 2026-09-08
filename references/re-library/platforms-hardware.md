@@ -1,3 +1,10 @@
+---
+name: platforms-hardware
+description: Hardware and advanced architecture reversing. When reversing embedded hardware, RISC-V, ARM64,
+  microcontrollers.
+domain: platforms
+family: hardware
+---
 # Hardware and Advanced Architecture Reversing
 
 HD44780 LCD GPIO reconstruction, RISC-V advanced extensions and debugging, ARM64/AArch64 reversing and exploitation.

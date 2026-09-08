@@ -1,3 +1,13 @@
+---
+name: web-risk-control
+description: '风控对抗 anti-bot doctrine (#761): 信号分类学 device-fingerprint/behavioral/environment-consistency/protocol,
+  对抗决策树 bypass→仿真→real + 无头升级链 (J6), 风控栈识别 加速乐/瑞数/自研, active-challenge parameter chains (slider-class
+  backward endpoint tracing + known-library hash reimplementation + challenge-bundle obfuscation passes),
+  检测点定位 触发→观察→归因 loop with camoufox CDP instrumentation (J7). When a request is blocked / challenged /
+  a signed param is rejected on a web target — classify the signal first, then pick the branch.'
+domain: web
+family: risk-control
+---
 # Web anti-bot / risk-control field reference
 
 > Domain: web targets (`--type web` workspaces) — the defense-response face of

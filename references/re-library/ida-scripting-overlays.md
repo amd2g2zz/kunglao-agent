@@ -1,6 +1,8 @@
 ---
 name: ida-scripting-overlays
 description: Correction overlays for driving IDA programmatically — the headless analysis-wait discipline (an empty result usually means analysis has not run, not that the data is absent) and the Hex-Rays failure-channel edges (exception vs None depending on the layer you call, with MERR-code triage). Use when the ida-decompile lane returns an empty function list, when decompilation fails and the next move depends on why it failed, or when driving a batch/headless IDA scripting session. Not for debugger-tier (dbg_*) work, UI/kernel-window scripting, Ghidra scripting, bulk whole-binary disassembly, or porting/compatibility work against older IDA versions.
+domain: method
+family: process
 ---
 
 # IDA Scripting Correction Overlays (headless analysis-wait discipline + Hex-Rays failure channels)

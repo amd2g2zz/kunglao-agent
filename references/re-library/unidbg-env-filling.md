@@ -1,6 +1,8 @@
 ---
 name: unidbg-env-filling
 description: Strategy inputs and failure-signature field guide for unidbg-class Android native emulation — a capability-bounded vocabulary of observation and patching moves (emulator instruction/module trace, its own JNI-table visibility, device-side windowed path and boundary traces, IDA-class static read, patching as a path-changing move), two worked scenarios showing how to compose them, and the failure-signature catalog that decodes the WARN log, tells syscalls from JNI trampolines, and dispatches each gap class to its override point (unknown syscall / partial syscall / final-or-switch-locked handler / JNI signature switch / IOResolver file chain / libc-symbol interposition), with supply-class triage before stubbing, the vDSO trap for time-family hooks, and init-window deltas (lazy class resolution, record/replay fallback). Use when an emulation harness crashes, throws UnsupportedOperationException, stalls on an SVC, returns values a real device would not, or runs clean but answers wrong. Not for on-device dynamic analysis (tools-dynamic), not for the boundary-first algorithm-recovery ladder itself (native-sign-recovery owns the stubbing loop and the replay gate that closes it — this card widens what the agent can compose with, it does not prescribe), not for the substrate decisions that precede filling (unidbg-harness-bringup), and not for device-farm emulation detection on live targets.
+domain: android
+family: emulation
 ---
 
 # unidbg env-filling (failure-signature field guide)

@@ -1,3 +1,11 @@
+---
+name: android-fingerprint-apis
+description: Device/sensor fingerprint API taint seed table - the capability doc driving dexdc `--taint-api`
+  seeds; hypotheses (risk-control vs tracking) and anomaly concentration. When a claim asks whether the
+  sample collects fingerprint identifiers and where they flow (#692).
+domain: android
+family: emulation
+---
 # Android Fingerprint APIs — taint seed reference (#692 WP5)
 
 > Capability doc for the `android:data-flow` provider chain: the seed table

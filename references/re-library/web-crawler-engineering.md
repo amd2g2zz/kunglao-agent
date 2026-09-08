@@ -1,3 +1,11 @@
+---
+name: web-crawler-engineering
+description: '爬虫工程 sustainable collection engineering (#761): 会话维持 cookie 池/登录态, 频率伪装 human cadence, IP
+  策略 住宅/机房/轮换/sticky, CAPTCHA 分类应对 slider/点选/re-challenge. After access is solved on a `--type web` target
+  — designing sustainable collection ops or triaging a CAPTCHA surface.'
+domain: web
+family: crawler
+---
 # Web crawler engineering reference
 
 > Domain: web targets (`--type web` workspaces) — the sustainability face of

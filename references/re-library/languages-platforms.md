@@ -1,3 +1,10 @@
+---
+name: languages-platforms
+description: Platform/framework-specific RE (Android, Electron, SGX, etc.). When reversing binaries tied
+  to specific platforms/frameworks.
+domain: languages
+family: platforms
+---
 # Platform & Framework-Specific Techniques
 
 ## Table of Contents
