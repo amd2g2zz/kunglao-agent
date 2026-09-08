@@ -132,9 +132,13 @@ def _run_toolchain(ws: Path, extra: list[str] | None = None,
                 "ghidra", "sequential-thinking", "x64dbg", "gitnexus")},
         }), encoding="utf-8")
     base_env["KUNGLAO_CLAUDE_JSON"] = str(fake_claude)
+    # parallel-suite patience: stub probes stay ms-fast on a quiet machine,
+    # but an xdist worker storm can starve a 10s probe budget into a false
+    # "unavailable" verdict — raise the floor instead of the pass/fail bar
+    base_env["KUNGLAO_PROBE_TIMEOUT_FLOOR"] = "25"
     if env:
         base_env.update(env)
-    return subprocess.run(argv, capture_output=True, text=True, timeout=60,
+    return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=base_env, errors="replace")
 
 

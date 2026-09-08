@@ -564,6 +564,13 @@ def _run_cmd(args: list[str], timeout: int = 10) -> tuple[int, str, str]:
     run_args = args
     if os.name == "nt" and args and args[0].lower().endswith((".bat", ".cmd")):
         run_args = ["cmd", "/c", *args]
+    # Test harnesses that run this script under heavy parallelism (xdist on
+    # a loaded machine) may raise a floor via env so a starved-but-healthy
+    # probe is not misread as unavailable. Default floor 0: production
+    # budgets are exactly the per-call constants.
+    floor = int(os.environ.get("KUNGLAO_PROBE_TIMEOUT_FLOOR", "0") or 0)
+    if floor > timeout:
+        timeout = floor
     try:
         r = subprocess.run(
             run_args, capture_output=True, text=True, timeout=timeout,

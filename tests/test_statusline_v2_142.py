@@ -346,14 +346,18 @@ def _write_snapshot(ws: Path, snap: dict, age_s: int = 0) -> None:
 # (fixture snapshots are built via _full_snap() — fresh flash ts per call).
 
 
-def _run_renderer(ws: Path) -> subprocess.CompletedProcess:
+def _run_renderer(ws: Path, now_ms: float | None = None) -> subprocess.CompletedProcess:
     """Drive the renderer subprocess against a fixture workspace (stdin
-    JSON names the ws dir; HUD disabled via the KUNGLAO_STATUSLINE_HUD seam)."""
+    JSON names the ws dir; HUD disabled via the KUNGLAO_STATUSLINE_HUD seam).
+    now_ms pins the renderer clock via the KUNGLAO_STATUSLINE_NOW_MS seam."""
     payload = json.dumps(
         {"workspace": {"current_dir": str(ws)}, "model": {"display_name": "t"}})
+    env = dict(os.environ)
+    if now_ms is not None:
+        env["KUNGLAO_STATUSLINE_NOW_MS"] = str(int(now_ms))
     return subprocess.run(
         ["node", str(RENDERER)], input=payload, capture_output=True,
-        text=True, timeout=30, cwd=str(ws.parent))
+        text=True, timeout=30, cwd=str(ws.parent), env=env)
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node unavailable")
@@ -847,7 +851,9 @@ class TestThreeValuedStaleness142:
     def test_staleness_boundaries_are_strict(self, tmp_path):
         """Boundary pin for the three-valued horizons (strict >): just
         under 5min = fresh (own state); just over 5min = idle; just under
-        35min = still idle (alive); just over 35min = DOWN."""
+        35min = still idle (alive); just over 35min = DOWN. The renderer
+        clock is pinned via the NOW seam, so each sample sits half a
+        second inside its bucket regardless of machine load."""
         cases = [(4 * 60 + 59, "analyzing", False),
                  (5 * 60 + 1, "idle", False),
                  (34 * 60 + 59, "idle", False),
@@ -858,7 +864,10 @@ class TestThreeValuedStaleness142:
             ws = _make_ws(tmp_path / f"age-{age_s}")
             snap = _full_snap()
             _write_snapshot(ws, snap, age_s=age_s)
-            r = _run_renderer(ws)
+            mtime = (ws / "runs" / ".kunglao-statusline.json").stat().st_mtime
+            # pin "now" half a second past the nominal age: strictly on the
+            # same side of every horizon the nominal age sits on
+            r = _run_renderer(ws, now_ms=(mtime + age_s + 0.5) * 1000)
             out = _strip_ansi(r.stdout)
             assert r.returncode == 0, r.stderr
             if is_down:

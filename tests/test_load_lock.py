@@ -102,7 +102,7 @@ def test_load_sensitive_marker_covers_family_exactly(load_sensitive_registry):
     def collect(extra):
         r = subprocess.run(
             [sys.executable, "-m", "pytest", "--collect-only", "-q", *extra, *files],
-            cwd=str(ROOT), capture_output=True, text=True, timeout=300)
+            cwd=str(ROOT), capture_output=True, text=True, timeout=600)
         assert r.returncode == 0, r.stdout + r.stderr
         return {ln for ln in r.stdout.splitlines() if "::" in ln}
 
@@ -117,7 +117,10 @@ def test_autouse_fixture_holds_machine_lock_end_to_end(tmp_path):
     a pytest run of a sensitive module cannot finish until the lock is
     released. Startup-flake-safe: instead of a fixed stall window, we assert
     the nested run is still alive well past its own uncontended duration
-    (baseline includes startup), then let the holder go.
+    (baseline includes startup), then let the holder go. All wall-clock
+    bounds scale off the measured uncontended baseline, so concurrent
+    pytest sessions (xdist workers, sibling worktrees) inflate the bounds
+    instead of tripping them.
     (Lock file name mirrors conftest.LOAD_SENSITIVE_LOCK_NAME deliberately —
     a rename here must fail loudly.)"""
     import tempfile
@@ -126,15 +129,19 @@ def test_autouse_fixture_holds_machine_lock_end_to_end(tmp_path):
     release = tmp_path / "release"
     fast_module = ROOT / "tests" / "test_env_ports_wiring.py"
 
-    def run_pytest():
+    def run_pytest(timeout: float) -> float:
         t0 = time.monotonic()
         r = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(fast_module)],
-            cwd=str(ROOT), capture_output=True, text=True, timeout=180)
+            cwd=str(ROOT), capture_output=True, text=True, timeout=timeout)
         assert r.returncode == 0, r.stdout + r.stderr
         return time.monotonic() - t0
 
-    free = run_pytest()  # uncontended baseline (startup + module run)
+    free = run_pytest(timeout=300)  # uncontended baseline (startup + module run)
+    # the holder must outlast the whole observation window below plus the
+    # blocked nested run's own lock wait — a fixed ceiling desyncs from the
+    # baseline as the serialized family grows
+    hold_iters = int((free * 2 + 120.0) / 0.05)
 
     holder = subprocess.Popen(
         [sys.executable, "-c",
@@ -142,7 +149,7 @@ def test_autouse_fixture_holds_machine_lock_end_to_end(tmp_path):
          f"fd = os.open({str(lock)!r}, os.O_CREAT | os.O_RDWR, 0o644)\n"
          "fcntl.flock(fd, fcntl.LOCK_EX)\n"
          "print('held', flush=True)\n"
-         f"for _ in range(1200):\n"
+         f"for _ in range({hold_iters}):\n"
          f"    if os.path.exists({str(release)!r}):\n"
          "        break\n"
          "    time.sleep(0.05)\n"
@@ -159,8 +166,10 @@ def test_autouse_fixture_holds_machine_lock_end_to_end(tmp_path):
         assert p.poll() is None, (
             "wiring broken: sensitive module finished while the machine lock was held")
         release.write_text("", encoding="utf-8")  # let the holder go
-        out, _ = p.communicate(timeout=180)
+        # a contended machine stretches the post-release tail too: scale the
+        # budget off the measured baseline instead of a fixed ceiling
+        out, _ = p.communicate(timeout=max(180.0, free * 8))
         assert p.returncode == 0, out
     finally:
         release.write_text("", encoding="utf-8")  # belt-and-braces holder release
-        holder.wait(timeout=30)
+        holder.wait(timeout=60)
