@@ -211,7 +211,7 @@ K_RESIDUAL_PINS = {
 
 
 @pytest.mark.parametrize(
-    "name", tuple(set(K_RESIDUAL_PINS) - {"kunglao_log"}))
+    "name", tuple(sorted(set(K_RESIDUAL_PINS) - {"kunglao_log"})))
 def test_family_k_files_delegate_to_iter_jsonl(name: str):
     src = (SCRIPTS / f"{name}.py").read_text(encoding="utf-8")
     assert "from kunglao_log import iter_jsonl" in src, (
