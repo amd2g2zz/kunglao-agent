@@ -14,16 +14,33 @@ Filters (combinable, AND semantics):
   --cost-max probe|cheap|deep   budget filter: probe < cheap < deep
                                 (inclusive — cheap returns probe + cheap)
 
-Discovery mode (issue #476, the query face of the #494 "search before
-you build" contract):
+Discovery mode (issue #476, #162: THE single search entry — no per-tier
+search tools exist):
   --find <keyword>              case-insensitive substring search across
-                                the internal registry AND the ext catalog
-                                (tools/_INDEX.ext.yaml — describe-only
-                                entries: entry-point scripts/ CLIs, hooks/
-                                gates, references/re-library/ capability
-                                docs). Hits carry name + kind + source +
-                                usage. --find is mutually exclusive with
-                                the internal filters (ext entries carry no
+                                ALL THREE data sources:
+                                  1. the internal registry
+                                     (tools/_INDEX.yaml);
+                                  2. the typed ext catalog
+                                     (tools/_INDEX.ext.yaml — entry-point
+                                     scripts/ CLIs, hooks/ gates,
+                                     templates/**/*.tmpl skeletons,
+                                     references/re-library/ capability
+                                     docs; entries carry generated
+                                     type + consume fields);
+                                  3. the references index
+                                     (references/_INDEX.yaml file list —
+                                     its own generator's schema is left
+                                     untouched; type/consume are DERIVED
+                                     at query time: type=reference,
+                                     consume=read).
+                                Hits carry name + kind + type + consume +
+                                source + usage + one-line description —
+                                a hit decides without opening the file.
+                                A source path enumerated by both the ext
+                                index and the references index surfaces
+                                ONCE (the typed ext entry wins). --find is
+                                mutually exclusive with the internal
+                                filters (ext/reference entries carry no
                                 tier/cost_tier — ANDing would silently
                                 drop them; refuse instead).
 
@@ -66,8 +83,13 @@ TIERS = ("T1", "T2", "T3")
 PUBLIC_KEYS = ("name", "category", "capability", "tier", "cost_tier",
                "input_output")
 
-EXT_INDEX_NAME = "_INDEX.ext.yaml"   # describe-only catalog (#476)
+EXT_INDEX_NAME = "_INDEX.ext.yaml"   # describe-only catalog (#476, #162)
 INTERNAL_SOURCE = "tools/_INDEX.yaml"  # resolution registry for internal hits
+# #162 third data source: the references index (its own generator's file
+# list; type/consume derived at query time — the file is never rewritten).
+REFERENCES_INDEX_REL = ("references", "_INDEX.yaml")
+REFERENCES_HEAD_LINES = 80   # haystack/description read depth per card
+REFERENCE_USAGE_TEMPLATE = "read {source} (capability reference)"
 
 
 def load_index(index_path: Path) -> list[dict]:
@@ -137,6 +159,74 @@ def format_text(tools: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# ---- #162 third data source: references index (query-time typing) ---------
+
+def load_reference_paths(refs_index_path: Path) -> list[str]:
+    """references/_INDEX.yaml `files:` mapping keys -> sorted source paths.
+
+    Absent/broken index -> empty list: the third source degrades to
+    silence (the other two stay fully queryable — one index's problem
+    must not brick the query face)."""
+    if not refs_index_path.is_file():
+        return []
+    import yaml
+    try:
+        data = yaml.safe_load(refs_index_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - unreadable index = no reference hits
+        return []
+    files = data.get("files") if isinstance(data, dict) else None
+    if not isinstance(files, dict):
+        return []
+    return sorted(str(k) for k in files)
+
+
+def _reference_head(repo_root: Path, source: str) -> str:
+    """First lines of the card — the haystack/description read depth.
+    Unreadable cards match on their path alone."""
+    p = repo_root / source
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace") \
+            .splitlines()
+    except OSError:
+        return ""
+    return "\n".join(lines[:REFERENCES_HEAD_LINES])
+
+
+def _reference_description(head: str) -> str:
+    """Frontmatter `description:`, else the first `# ` heading."""
+    lines = head.splitlines()
+    if lines and lines[0].strip() == "---":
+        for ln in lines[1:]:
+            if ln.strip() == "---":
+                break
+            if ln.startswith("description:"):
+                return ln.partition(":")[2].strip()
+    for ln in lines:
+        if ln.startswith("# "):
+            return ln[2:].strip()
+    return ""
+
+
+def find_references(repo_root: Path, ref_paths: list[str],
+                    keyword: str) -> list[dict]:
+    kw = keyword.lower()
+    hits: list[dict] = []
+    for source in ref_paths:
+        head = _reference_head(repo_root, source)
+        if kw not in f"{source}\n{head}".lower():
+            continue
+        hits.append({
+            "name": Path(source).stem,
+            "kind": "reference",
+            "type": "reference",       # derived at query time (#162)
+            "consume": "read",         # derived at query time (#162)
+            "source": source,
+            "usage": REFERENCE_USAGE_TEMPLATE.format(source=source),
+            "description": _reference_description(head),
+        })
+    return hits
+
+
 # ---- --find discovery mode (#476) -----------------------------------------
 
 def _io_text(value: object) -> str:
@@ -177,6 +267,8 @@ def _find_projection_internal(entry: dict) -> dict:
     return {
         "name": entry.get("name"),
         "kind": "internal",
+        "type": "tool",
+        "consume": "invoke",
         "category": entry.get("category"),
         "capability": entry.get("capability"),
         "tier": entry.get("tier"),
@@ -195,6 +287,8 @@ def _find_projection_ext(entry: dict) -> dict:
     return {
         "name": entry.get("name"),
         "kind": kind,
+        "type": entry.get("type"),        # generated tier label (#162)
+        "consume": entry.get("consume"),  # generated consume label (#162)
         "capability": entry.get("capability"),
         "source": entry.get("source"),
         "usage": entry.get("usage"),
@@ -203,10 +297,11 @@ def _find_projection_ext(entry: dict) -> dict:
 
 
 def format_find_text(hits: list[dict]) -> str:
-    """One line per hit: name, capability, source, usage."""
+    """One line per hit: name, type, consume, source, description (#162
+    display contract — a hit decides without opening the file)."""
     return "\n".join(
         "\t".join(str(h.get(k, "") or "") for k in
-                  ("name", "capability", "source", "usage"))
+                  ("name", "type", "consume", "source", "description"))
         for h in hits)
 
 
@@ -253,7 +348,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.find is not None:
         ext = load_ext_index(index_path.parent / EXT_INDEX_NAME)
+        refs_index = index_path.parent.parent.joinpath(
+            *REFERENCES_INDEX_REL)
+        ref_paths = load_reference_paths(refs_index)
+        repo_root = index_path.parent.parent
+        # #162 single search entry: internal + typed ext + query-time-typed
+        # references, deduped by source path (a re-library card enumerated
+        # by both sources surfaces once — the typed ext entry wins).
         hits = find_internal(tools, args.find) + find_ext(ext, args.find)
+        seen_sources = {str(h.get("source", "")) for h in hits}
+        for h in find_references(repo_root, ref_paths, args.find):
+            if h["source"] not in seen_sources:
+                hits.append(h)
         if args.json:
             print(json.dumps({"count": len(hits), "tools": hits},
                              ensure_ascii=False))
