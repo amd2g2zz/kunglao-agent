@@ -8,7 +8,9 @@ import acceptance_check as ac
 
 
 def test_acceptance_overall_passes():
+    import json as _json
     report = ac.run_acceptance()
+    print("ACCEPTANCE-REPORT-170: " + _json.dumps(report, ensure_ascii=False))  # TEMP DIAGNOSTIC, do not merge
     failed = [c["name"] for c in report["checks"] if not c["passed"]]
     assert report["overall_passed"], f"acceptance failures: {failed}"
 
