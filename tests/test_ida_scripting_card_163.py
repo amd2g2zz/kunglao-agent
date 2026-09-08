@@ -2,9 +2,11 @@
 """tests/test_ida_scripting_card_163.py — card contract for the #163 distillation.
 
 The ida-scripting-overlays card (references/re-library/ida-scripting-overlays.md)
-lands the #163 correction overlays: legacy-idc -> modern ida_* migration,
-headless analysis-wait discipline, Hex-Rays failure-channel edges, and the
-rule-10 IDA 9.x version-compat audit rows. This file pins the CARD contract
+lands the #163 correction overlays: headless analysis-wait discipline and the
+Hex-Rays failure-channel edges. (The legacy-idc migration map and the rule-10
+version-compat audit rows were REMOVED by owner ruling during PR #169 review —
+the deployed IDA is 9.x-only and legacy-call recovery is out of scope; the
+assertions below PIN their absence.) This file pins the CARD contract
 (house card format + #163 quality bar), not the card's technical claims.
 
 Contract sources:
@@ -16,7 +18,7 @@ Contract sources:
   - synthetic-value markers on worked listings (distillation quality bar)
   - when-not boundary in the desc/body (noise bar: zero false hits)
   - consumer + behavior change named (rule 6 gate)
-  - rule-10 audit rows present: old -> break -> modern
+  - legacy-recovery content stays OUT (owner ruling, PR #169)
 """
 from __future__ import annotations
 
@@ -108,22 +110,22 @@ def test_consumer_and_behavior_change_named():
     ), "card must state the behavior change it causes"
 
 
-def test_correction_overlays_and_compat_rows_present():
+def test_correction_overlays_present():
     text = _card_text()
     low = text.lower()
-    # overlay 1: legacy idc -> modern ida_* migration map
-    assert "idc" in low and re.search(r"ida_[a-z]", text), (
-        "idc -> ida_* migration overlay expected"
-    )
-    # overlay 2: headless analysis-wait discipline
+    # overlay 1: headless analysis-wait discipline
     assert "auto_wait" in low, "headless analysis-wait overlay expected"
-    # overlay 3: Hex-Rays failure-channel edge behavior
+    # overlay 2: Hex-Rays failure-channel edge behavior
     assert "decompile" in low, "Hex-Rays failure-edge overlay expected"
-    # rule 10: version-compat audit rows (old -> break -> modern)
-    assert "inf_get_" in low or "get_inf_structure" in low, (
-        "rule-10 ida_ida accessor break row expected"
-    )
-    assert "ida_typeinf" in low, "rule-10 ida_typeinf rewrite row expected"
+    assert "merr_" in low, "MERR-code triage expected in the failure-channel row"
+    # owner ruling (PR #169): legacy-call recovery is out of scope — the card
+    # must NOT carry the idc->ida_* migration table or the 9.x break audit
+    # rows. Rejection boundaries (when_not wording) may still name them.
+    for token in (
+        "camelcase", "ida_struct", "ida_enum", "get_inf_structure",
+        "inf_get_", "udt_type_data_t", "find_binary", "get_ordinal",
+    ):
+        assert token not in low, f"removed legacy-recovery content leaked back: {token!r}"
 
 
 def test_cross_references_resolve():

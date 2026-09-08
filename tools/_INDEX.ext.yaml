@@ -541,7 +541,7 @@ ext:
     consume: "read"
     source: "references/re-library/ida-scripting-overlays.md"
     usage: "read references/re-library/ida-scripting-overlays.md (capability reference)"
-    description: "Correction overlays for driving IDA programmatically — the failure signatures that repeat when an agent scripts or queries IDA, and the modern-module fixes for each. Use when the ida-decompile lane returns an empty function list, when an IDA query or snippet fails with a legacy-module AttributeError, when Hex-Rays decompilation fails and the failure channel is unclear, when writing or reviewing any ida_* scripting snippet, or when an old script must be ported to the current IDA API (9.x breaks audited). Not for debugger-tier (dbg_*) work, UI/kernel-window scripting, Ghidra scripting, or bulk whole-binary disassembly."
+    description: "Correction overlays for driving IDA programmatically — the headless analysis-wait discipline (an empty result usually means analysis has not run, not that the data is absent) and the Hex-Rays failure-channel edges (exception vs None depending on the layer you call, with MERR-code triage). Use when the ida-decompile lane returns an empty function list, when decompilation fails and the next move depends on why it failed, or when driving a batch/headless IDA scripting session. Not for debugger-tier (dbg_*) work, UI/kernel-window scripting, Ghidra scripting, bulk whole-binary disassembly, or porting/compatibility work against older IDA versions."
   - name: "infeasible_proposal"
     capability: "unknown"
     type: "tool"
