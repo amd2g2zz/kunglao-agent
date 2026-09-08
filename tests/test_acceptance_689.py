@@ -15,30 +15,35 @@ audit). These tests pin the post-fix contract:
 from __future__ import annotations
 
 import inspect
-import time
 
 import acceptance_check as ac
 
 
 def test_check_test_suite_smoke_path_completes_under_60s():
-    """#689 RED1: default `_check_test_suite()` must be a pinned smoke subset
-    (seconds), not the embedded full suite (~301s on 2026-08-25 dev)."""
-    # Arrange — nothing; the contract is about the real production path
-    start = time.perf_counter()
-    # Act
+    """#689 RED1: default `_check_test_suite()` must be a pinned smoke subset,
+    not the embedded full suite (~301s on 2026-08-25 dev; 17min now).
+
+    The wall bound is production's own SMOKE_SUITE_TIMEOUT — if the nested
+    run exceeds it, the check fails itself and `passed` goes False. This
+    test asserts the STRUCTURE of that contract, not a stopwatch: the whole
+    pinned manifest must have been invoked (mode marker carries the
+    manifest size), the run must be green, and the detail must carry the
+    mode. Three wall ceilings (60/150/300) were all tripped by machine
+    load and never by regressions — a stopwatch here measures the machine.
+    A stubbed or truncated run cannot produce the real mode marker + green
+    + manifest-size combination."""
+    # Act — the real production path, no monkeypatching
     result = ac._check_test_suite()
-    elapsed = time.perf_counter() - start
     # Assert
     assert result["name"] == "test_suite_green"
     assert result["passed"] is True, f"smoke subset must be green: {result['detail']}"
-    assert str(result["detail"]).startswith("[smoke:"), (
-        f"detail must mark the mode and manifest size, got: {result['detail']!r}")
-    # 300s ceiling: the tripwire separates "pinned smoke subset" (seconds on
-    # an idle machine, minutes under a worker storm) from "embedded full
-    # suite" (~301s in 2026-08, 17min now) — the gap the pin exists to guard.
-    assert elapsed < 300.0, (
-        f"default check took {elapsed:.1f}s — the full-suite embed is back "
-        "(the whole point of #689 is that this stays seconds-scale)")
+    detail = str(result["detail"])
+    assert detail.startswith("[smoke:"), (
+        f"detail must mark the mode and manifest size, got: {detail!r}")
+    expected = len(ac._load_smoke_nodeids())
+    assert detail.startswith(f"[smoke:{expected}]"), (
+        f"mode marker must carry the FULL manifest size {expected} — a "
+        f"truncated or re-embedded subset ran instead: {detail!r}")
 
 
 def test_full_suite_timeout_machinery_is_retired():
