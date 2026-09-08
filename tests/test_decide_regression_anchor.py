@@ -1,31 +1,21 @@
 # -*- coding: utf-8 -*-
-"""#443 regression anchor — decide() output equality against a frozen ref.
+"""decide() regression anchor — frozen-snapshot output equality.
 
-Design (openspec/changes/issue-443-decide-state-machine/design.md §5):
-decide() is reorganized into an explicit state machine. The anchor proof
-ran TWO channels while a pre-refactor baseline existed:
-
-  1. LIVE BASELINE (maker-checker, RETIRED 2026-09-05): extract the
-     pre-refactor decide() from git at test time and diff it against the
-     current decide() on the SAME fixture workspace. Retired with the
-     8804dcd baseline object (see the 2026-09-05 re-pin entry below):
-     the commit is unrecoverable after the history rewrite, and #51 is an
-     INTENTIONAL decide() contract change — no pre-#51 baseline can ever
-     equal current again, so the equality premise is void until a future
-     pre-refactor refactor re-introduces a live baseline.
-  2. FROZEN SNAPSHOT (permanent, sole active proof): tests/decide_anchor_<ref>.json
-     holds the machine-generated outputs of decide() at BASELINE_COMMIT
-     (design §5 regen command, now capture_current()); the current
-     decide() must reproduce them byte-for-byte per case. Survives git
-     history pruning.
-
-Matrix: ~30 cases covering every branch of the old elif chain, gate
-interleavings where ORDER decides (schema>dispatch, orphan>unverified,
+tests/decide_anchor_<ref>.json holds machine-generated decide() outputs
+for the case matrix (every branch of the historical elif chain, gate
+interleavings where ORDER decides: schema>dispatch, orphan>unverified,
 unverified>note-gap, note-gap>discovery, discovery>contradiction,
-opens>partials, queue>failure, failure>all-blocked), and the #495/#497
-interleavings (failure three-artifact protocol, ladder-exhaustion).
+opens>partials, queue>failure, failure>all-blocked, plus the
+failure-protocol and ladder-exhaustion faces); the current decide() must
+reproduce them byte-for-byte per case. BASELINE_COMMIT below names the
+commit the frozen corpus was captured at.
 
-Determinism: worker-status files are freshly written (mtime fresh →
+Intentional decide() contract changes and corpus-growth data drift are
+absorbed by re-capturing via capture_current() and appending a one-line
+precedent entry to the chain below; diff old-vs-new BEFORE committing,
+and verify data-drift entries are score-only.
+
+Determinism: worker-status files are freshly written (mtime fresh ->
 stuck_workers always []), removing age_min time drift from the anchor.
 """
 from __future__ import annotations
