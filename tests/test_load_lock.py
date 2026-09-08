@@ -138,6 +138,10 @@ def test_autouse_fixture_holds_machine_lock_end_to_end(tmp_path):
         return time.monotonic() - t0
 
     free = run_pytest(timeout=300)  # uncontended baseline (startup + module run)
+    # the holder must outlast the whole observation window below plus the
+    # blocked nested run's own lock wait — a fixed ceiling desyncs from the
+    # baseline as the serialized family grows
+    hold_iters = int((free * 2 + 120.0) / 0.05)
 
     holder = subprocess.Popen(
         [sys.executable, "-c",
@@ -145,7 +149,7 @@ def test_autouse_fixture_holds_machine_lock_end_to_end(tmp_path):
          f"fd = os.open({str(lock)!r}, os.O_CREAT | os.O_RDWR, 0o644)\n"
          "fcntl.flock(fd, fcntl.LOCK_EX)\n"
          "print('held', flush=True)\n"
-         f"for _ in range(2400):\n"
+         f"for _ in range({hold_iters}):\n"
          f"    if os.path.exists({str(release)!r}):\n"
          "        break\n"
          "    time.sleep(0.05)\n"
