@@ -205,6 +205,36 @@ A record without a machine_check (or with any `passed=false`) fails schema
 validation and the claim cannot promote — the orchestrator's
 `kunglao_verify` enforces this mechanically.
 
+### Reproduction claims — EXECUTE the controlled comparison
+
+For a claim whose predicate asserts reproduction/offline-equivalence
+("works offline", "reproduces the device output", declared via the
+question's `reproduction: true` bit or the claim's `replay_evidence:`
+field), reading the worker's `evidence/replay-*.json` is NOT verification:
+you and the maker can share the same blind spot, and a fabricated
+artifact reads exactly like a real one. You EXECUTE the comparison
+yourself — run the reproduction on the CAPTURED inputs and byte-compare
+against the reference outputs:
+
+```
+python scripts/replay_equivalence.py --execute <repro_client.py> --artifact evidence/replay-<claim>.json
+```
+
+Re-run the comparison live where the lane provides a channel (Android:
+unidbg/`traceCode` over the captured JNI sequence; Windows: the real-VM
+rewrite harness over captured VM outputs; Linux: qiling/unicorn over
+captured syscalls; web: node/JS-sandbox over captured browser traces).
+The tool re-executes every captured pair and reports per-pair
+byte-equality with the first-divergent byte offset (the environment gap's
+location), and it REFUSES to execute an invalid artifact — schema,
+coverage hole, invented input ids, or zero matched pairs mean the claim's
+evidence is refused, not waved through. Zero matched pairs is honest RED
+evidence (the reproduction diverges from the reference); it is a REFUTED
+or UNVERIFIED-WITH-GAP verdict, never a pass. A silent-green oracle (one
+that stays green under a one-byte perturbation) is a broken oracle — the
+tool enforces mutation-must-red; if you re-execute with your own
+comparator, enforce the same discipline.
+
 ## Output format (your final report)
 
 Write `runs/verify-redteam-<target>.md`:
