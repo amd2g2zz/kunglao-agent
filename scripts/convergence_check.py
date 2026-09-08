@@ -68,6 +68,11 @@ from liveness_policy import DEAD_WORKER_MINUTES as _DEAD_WORKER_MINUTES
 # `generalization` bit is the coverage contract the DRAIN oracle face
 # enforces — convergence requires DECLARED oracle coverage.
 import goal_operationalization as _goal_op
+# The controlled-variable I/O equivalence oracle. Its declared faces
+# (`reproduction: true` on a primary question, `replay_evidence:` on a
+# claim) arm the verdict face — a reproduction question is not answerable
+# by PROVEN status alone, only by matched controlled-comparison pairs.
+import replay_equivalence as _replay_eq
 # #863 Family C: workspace resolution is single-sourced in ws_layout (this
 # module used to be the ONLY manifest-aware copy — now every consumer is).
 from ws_layout import resolve_quiet as _resolve_ws
@@ -256,7 +261,40 @@ def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) 
     return out
 
 
-def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
+def _reproduction_face(workspace: Path | None, claims: list,
+                       qid: str, repro_qids: set[str]) -> tuple[bool, str]:
+    """Can a declared-reproduction question be answered? One PROVEN
+    answering claim must carry a valid controlled-comparison artifact
+    (evidence/replay-*.json) with >=1 matched pair.
+
+    Fail-closed: no workspace to read evidence from -> (False, named
+    reason); face-checker degradation (unreadable task_spec, corrupt
+    artifact) -> (False, the cause)."""
+    if workspace is None:
+        return False, (
+            f"{_replay_eq.NO_RUN_NOT_EVIDENCE}; the artifact face could "
+            f"not be checked (no workspace available) — fail closed")
+    reasons: list[str] = []
+    for c in claims:
+        if c.get("answers_question") != qid:
+            continue
+        if str(c.get("status") or "").upper() != "PROVEN":
+            continue
+        try:
+            ok, reason = _replay_eq.equivalence_verdict(
+                workspace, c, repro_qids=repro_qids)
+        except _GATE_INPUT_EXC as exc:
+            reasons.append(f"face check unavailable ({exc})")
+            continue
+        if ok:
+            return True, ""
+        reasons.append(reason)
+    return False, (reasons[0] if reasons else
+                   f"{_replay_eq.NO_RUN_NOT_EVIDENCE}")
+
+
+def _unverified_primary_questions(reg: dict, task_spec: dict,
+                                  workspace: Path | None = None) -> list:
     """Find primary_questions that have NO answering claim.
 
     A primary_question is "verified" when a claim with
@@ -268,7 +306,15 @@ def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
         yes/no question (PROVEN / VERIFIED / NEGATIVE / REFUTED).
     STAMP, UNVERIFIED, PARTIAL etc. do NOT satisfy.
 
-    Returns list of {"question": q_id, "answering_claims": [...]} dicts.
+    Verdict face: a question that DECLARES the reproduction
+    predicate (`reproduction: true`) is additionally NOT satisfiable by
+    status alone — a PROVEN answering claim must carry a valid controlled-
+    comparison artifact with matched pairs, or the question is unverified
+    with the refusal reason NAMED ("ran without error" is not evidence of
+    equivalence). Questions without the declared bit are untouched.
+
+    Returns list of {"question": q_id, "answering_claims": [...],
+    "reason": str (reproduction face only)} dicts.
     """
     pqs, _ = _parse_primary_questions(task_spec)
     if not pqs:
@@ -276,6 +322,7 @@ def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
 
     # Map question id -> need (single canonical parse, issue #77)
     question_need = dict(pqs)
+    repro_qids = _replay_eq.declared_reproduction_qids(task_spec)
 
     claims = reg.get("claims") or []
     unverified = []
@@ -290,6 +337,14 @@ def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
             satisfied = any(a["status"] in terminal_ok for a in answering)
         else:
             satisfied = any(a["status"] == "PROVEN" for a in answering)
+        if satisfied and qid in repro_qids:
+            face_ok, reason = _reproduction_face(workspace, claims, qid,
+                                                 repro_qids)
+            if not face_ok:
+                unverified.append({"question": qid,
+                                   "answering_claims": answering,
+                                   "reason": reason})
+                continue
         if not satisfied:
             unverified.append({"question": qid, "answering_claims": answering})
     return unverified
@@ -1037,7 +1092,8 @@ def _decide_inputs(workspace: Path) -> _DecideInputs:
 
     # M2 completeness gates + note layer (diagnostics regardless of verdict)
     orphans = _orphan_terminal_claims(reg, pq_ids)
-    unverified_pqs = _unverified_primary_questions(reg, task_spec)
+    unverified_pqs = _unverified_primary_questions(reg, task_spec,
+                                                   workspace=workspace)
     pq_note_gaps = _note_layer_gaps(workspace, pq_ids, reg)
 
     blocked_claims = [c for c in opens if c["blocked"]]

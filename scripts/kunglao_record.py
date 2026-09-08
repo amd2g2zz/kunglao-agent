@@ -415,6 +415,34 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
         # protocol failure, not a verdict-quality issue: hard-refuse with the
         # dispatch repair path (fail closed — register not modified).
         if effective_status == "PROVEN":
+            # ---- I/O equivalence admission gate ----
+            # A claim whose DECLARED predicate asserts reproduction/offline-
+            # equivalence (the question's declared `reproduction: true` bit,
+            # or the claim's own `replay_evidence:` field) must CARRY a
+            # structured controlled-comparison artifact (evidence/
+            # replay-*.json: same captured input -> byte-identical output),
+            # or the promotion is REJECTED. A determined refusal (missing /
+            # unresolving / schema-invalid / zero-matched artifact)
+            # hard-rejects; a checker FAILURE (crash, corrupt task_spec)
+            # degrades to STAMP.
+            try:
+                from replay_equivalence import check_claim_admission
+            except Exception as exc:
+                return (False, _required_gate_receipt(
+                    "replay_equivalence:check_claim_admission", exc,
+                    claim_id))
+            try:
+                r_ok, r_reason = check_claim_admission(ws, register, claim_id)
+            except Exception as exc:
+                effective_status = STAMP
+                gate_msg += (f" [REPLAY EQUIVALENCE GATE: checker error "
+                             f"({type(exc).__name__}: {exc}); degraded to "
+                             f"STAMP (guardrails SS1b self_caveat allowed)]")
+            else:
+                if not r_ok:
+                    return (False, f"REPLAY EQUIVALENCE GATE (admission "
+                                   f"REJECT): {r_reason} — register not "
+                                   f"modified (fail closed)")
             try:
                 from blind_gate import check_verifier_dispatch_evidence
             except Exception as exc:

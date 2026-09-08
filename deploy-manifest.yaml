@@ -99,7 +99,7 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: e0cfdbf4676158e413bdf36ae15df8e59f0ca562d25435498da74e53bc7f9f8c
+    sha256: bf5047c252347f72e4574de1a19ffebfe08e4a7f269867234d02448104cfa9e4
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
@@ -111,7 +111,7 @@ files:
   - src: agents/verdict-scorer.md
     dest: .claude/agents/verdict-scorer.md
     kind: agent
-    sha256: 30c6be0bbb56aa22c8e11bad9da6ef98136874114d1f068761e8d7dafdc345bc
+    sha256: 92b6bab9cd2c16068ed367f2e3cf7508db2d3aff42d0c2a6021f8ec467817905
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
@@ -247,7 +247,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: b87ed658df3c97a88388694a1d3fab583dc097992c6accf530e8d089ee1ffeb5
+    sha256: b3e930115043e66cc069a6cb693146579368ffc9417aa1540eb78ebc294522fb
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -495,7 +495,7 @@ files:
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
-    sha256: c744d7f9a526b165fbd83f49a0354f418070200a1472494a149c2e0a94d086ef
+    sha256: 9e482c77cbeeda9669ea3f577a55f0ebfdaa0f9647f5d5a44426533a98d6b61d
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
@@ -688,6 +688,10 @@ files:
     dest: .claude/scripts/relib_audit.py
     kind: scaffold
     sha256: 4be8a4172e022669aefcc34f4da179651b47670deef374dfdf436fefdc2b8092
+  - src: scripts/replay_equivalence.py
+    dest: .claude/scripts/replay_equivalence.py
+    kind: scaffold
+    sha256: f2a48dd645e7c938163950ba2f67083fe3814b21b5ab1ed2bda2e7cb7acb627b
   - src: scripts/report_consistency_check.py
     dest: .claude/scripts/report_consistency_check.py
     kind: scaffold
