@@ -1355,7 +1355,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 8f967618eb3168df184574e805db4c8647e49d7cf5ade4dd8dc7ea452f9ec109
+    sha256: fb317cd053d26885f3f4c76d8808d331bb58e5ccff983b32d3ae74b246a5fe8c
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
