@@ -29,6 +29,7 @@ Companion: tests/test_subagent_review.py pins the schema boundary
 real injection scenarios from the field report.
 """
 from __future__ import annotations
+import functools
 import pytest
 import json
 import subprocess
@@ -478,12 +479,20 @@ class TestExtNameResolution:
         assert sr._index_tool_names(root) == \
             {"ghidra-recon", "ghidra-decompile-functions"}
 
-    def test_real_repo_ext_citations_resolve(self) -> None:
+    def test_real_repo_ext_citations_resolve(self, monkeypatch) -> None:
         ext = REPO_ROOT / "tools" / "_INDEX.ext.yaml"
         assert ext.is_file(), "ext index missing (#476)"
         data = yaml.safe_load(ext.read_text(encoding="utf-8"))
         names = [e["name"] for e in data.get("ext", [])]
         assert names, "ext index is empty"
+        # _tool_resolves re-reads the tool index on every bare-name citation;
+        # one real-repo citation-set proof does not need one full index parse
+        # PER name — memoize the name set for this test only (monkeypatch
+        # restores the original function; the production predicate itself is
+        # left untouched, so what is asserted here does not change).
+        monkeypatch.setattr(
+            sr, "_index_tool_names",
+            functools.lru_cache(maxsize=None)(sr._index_tool_names))
         bad = [n for n in names if not sr._tool_resolves(n, REPO_ROOT)]
         assert not bad, f"ext names failing resolution: {bad[:5]}"
 

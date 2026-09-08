@@ -24,10 +24,24 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import relib_audit  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def real_audit() -> dict:
+    """One real-repo audit shared by the four real-repo pins.
+
+    audit_production walks and re-judges every scripts/+tools/ subject;
+    re-running it per test re-pays the same walk without changing anything
+    any assertion observes (all four tests only READ the report). The repo
+    is not mutated mid-session, so a module-scoped snapshot is equivalent
+    to four fresh runs."""
+    return relib_audit.audit_production(ROOT)
 
 
 def _mkrepo(tmp_path: Path) -> Path:
@@ -152,33 +166,33 @@ def test_infra_tools_are_not_subjects(tmp_path):
 
 # ---- real-repo pins (the plan's +/- examples; ratchet pins, see module doc) ----
 
-def test_real_repo_crypto_tool_is_wired():
-    r = relib_audit.audit_production(ROOT)
+def test_real_repo_crypto_tool_is_wired(real_audit):
+    r = real_audit
     assert "tools/crypto/crypto-tool.py" in r["wired"]["tools"]
 
 
-def test_real_repo_ghidra_job_is_registered_wired():
+def test_real_repo_ghidra_job_is_registered_wired(real_audit):
     # PR 866-b flipped this pin (was: unwired): the tools/_INDEX.yaml
     # registry mention + SKILL/references teaching registered ghidra_job,
     # so the index_yaml seed face now reaches it.
-    r = relib_audit.audit_production(ROOT)
+    r = real_audit
     assert "tools/ghidra/ghidra_job.py" in r["wired"]["tools"]
 
 
-def test_real_repo_opaque_pred_is_registered_wired():
+def test_real_repo_opaque_pred_is_registered_wired(real_audit):
     # PR 866-b flipped this pin (was: unwired) via the _INDEX.yaml registry
     # mention on the opaque-pred entry (issue-named RE-necessity tool).
-    r = relib_audit.audit_production(ROOT)
+    r = real_audit
     assert "tools/static/opaque_pred.py" in r["wired"]["tools"]
 
 
-def test_real_repo_full_run_shape():
+def test_real_repo_full_run_shape(real_audit):
     # NO absolute subject-count pin here: the CI runner workspace carries
     # transient scripts/*.py noise, and a hard number would break on it
     # (172 != 169 lesson). Pin the self-consistency of the split and the
     # disposition-ledger memberships instead; snapshot numbers live in the
     # README/Recon with an as-of label.
-    r = relib_audit.audit_production(ROOT)
+    r = real_audit
     subjects = relib_audit.production_subjects(ROOT)
     n_scripts = sum(1 for rel in subjects if rel.startswith("scripts/"))
     n_tools = sum(1 for rel in subjects if rel.startswith("tools/"))

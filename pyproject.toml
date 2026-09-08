@@ -36,6 +36,7 @@ dev = [
     # #463 Gate 4 (test effectiveness): mutation testing on changed code.
     "mutmut>=2.4",
     "ruff>=0.6",
+    "pytest-xdist>=3.8.0",
 ]
 
 # NOTE: pytest configuration lives in pytest.ini (single source of truth).
