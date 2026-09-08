@@ -59,7 +59,7 @@ From any directory, in Claude Code:
 > Constraints: static-first; never execute the sample on the host.
 ```
 
-Write the brief so an independent reviewer could judge the result: **analysis goal** (what you need to know), **verification logic** (what makes an answer trustworthy — e.g. "the signature must be reproducible from the same inputs"), **constraints** (e.g. "no execution on the host"). Everything is recorded in `task_spec.yaml`; from there the loop drives itself.
+Write the brief so an independent reviewer could judge the result: **analysis goal** (what you need to know), **verification logic** (what makes an answer trustworthy — e.g. "the signature must be reproducible from the same inputs"), **constraints** (e.g. "no execution on the host"). Everything is recorded in `task_spec.yaml`; from there the loop drives itself. For how the common asks turn into well-formed statements, see [How to state the task](#how-to-state-the-task).
 
 ### 4. Read the deliverable
 
@@ -69,6 +69,96 @@ facts/F<NNN>.md       # byte-anchored, reproducible, frontmatter contract
 evidence/_index.json  # every fact → raw artifact (sha256 + path)
 runs/                 # session audit trail
 ```
+
+## How to state the task
+
+The loop derives its completion criterion — the **oracle** — mechanically from the end-state you state. A vague statement yields a vague oracle, and the analysis drifts toward whatever can be proven instead of what you needed. Four phrasings cover most of that drift. For each: what users say, what it usually means, a well-formed statement, and what the oracle anchors on.
+
+### "我要纯算" — "just the pure algorithm"
+
+**Usually means:** offline reproduction of the app's signing/crypto routine — a unidbg harness or a rewrite that runs with no device and no app at run time. Not "analyze the app"; the app is only where the algorithm lives.
+
+```
+> Sample: the v7.2 APK; behavior: the signer producing the `sign`
+>   header on api.example.com/v2/* requests.
+> Criterion: a standalone reproduction (unidbg or rewrite) replays
+>   every captured (input → sign) pair byte-exact — including the
+>   withheld pairs — with no device or app at run time.
+> Attach: captures/sign-pairs.jsonl — 20 input/output pairs captured
+>   from a live session; 10 of them withheld from the analysis.
+```
+
+**Oracle anchors on:** byte-exact replay on every pair, including the withheld ones — and the reproduction running standalone.
+
+### "我要解密" — "I want decryption"
+
+**Usually means one of two different targets — say which:**
+
+- **(a) decrypt one captured body** — a one-off answer about this data: "produce the plaintext of this captured cache file."
+- **(b) a decryption capability** — algorithm + key recovery, reusable on data you capture tomorrow.
+
+Well-formed (a):
+
+```
+> Sample: the v7.2 APK; behavior: the local config cache
+>   files/.cfg/v2.dat is encrypted at rest.
+> Criterion: produce the plaintext of the captured v2.dat and validate
+>   it against what the app renders (field names and values match the
+>   screenshot captured alongside).
+```
+
+Well-formed (b):
+
+```
+> Sample: the v7.2 APK; behavior: request bodies on
+>   api.example.com/v2/* are encrypted with a static key.
+> Criterion: identify the algorithm and the key, then run a canary
+>   round-trip — encrypt a known plaintext with the recovered key and
+>   match the ciphertext the device produced, byte for byte.
+> Attach: captures/request-bodies.jsonl — ciphertext bodies captured
+>   from the device, with the requests that produced them.
+```
+
+**Oracle anchors on:** (a) the plaintext validating against what the app renders; (b) algorithm + key identified and the canary round-trip byte-identical to device-produced ciphertext. "It decrypted once" satisfies neither.
+
+### "帮我分析这个协议" — "analyze this protocol for me"
+
+**Usually means:** wire-format recovery — framing, field semantics, and a codec you can run.
+
+```
+> Sample: the Android chat app; behavior: the TCP protocol on
+>   gateway.example.com:443, as captured in gateway-session.pcap.
+> Criterion: a codec that round-trips every captured frame byte-exact,
+>   and decodes the held-out frame to fields matching the observed app
+>   behavior.
+> Attach: captures/gateway-session.pcap — 40 frames, plus 1 held-out
+>   frame kept out of the analysis.
+```
+
+**Oracle anchors on:** the codec round-tripping every captured frame byte-exact, and the held-out frame decoding to fields that match observed app behavior.
+
+### "这个 sign 在哪算的" — "where does this sign get computed?"
+
+**Usually means:** a location with proof. Naming a point in the code is cheap; the answer is only useful with evidence that this point is the point.
+
+```
+> Sample: the v7.2 APK; behavior: the `sign` header attached to every
+>   request.
+> Criterion: name the class/method (or native function) where `sign`
+>   is computed, and hook that point to reproduce the captured `sign`
+>   values from the same inputs.
+> Attach: captures/sign-session.jsonl — captured `sign` values with
+>   their request inputs.
+```
+
+**Oracle anchors on:** a named class/method/native function, plus a hook at that point reproducing the captured values.
+
+### What these have in common
+
+- **Name the sample and the behavior** — which parameter, entry, or flow — not the category. "我要纯算" is a category; "the signer producing the `sign` header on api.example.com/v2/*" is a target.
+- **Success must be data.** Attach captured input/output pairs; the withheld pairs are what make the check honest — a reproduction cannot overfit data it never saw.
+- **The oracle is derived from your stated end-state.** Vague statement, vague verification, drifting analysis.
+- **Constraints change the plan.** Static-only? A device available? Which channel? Say so up front — it decides the route before work starts (see [Bring your own environment](#bring-your-own-environment)).
 
 ## Subcommands
 
