@@ -561,6 +561,57 @@ def posterior_rng(ws) -> random.Random:
     return random.Random(case_face_seed(ledger))
 
 
+# ---------- #157 algorithm event log: rank_feeds (one emit per RUN) --------
+
+def _evidence_digest(evidence: EvidenceView) -> str:
+    """Canonical digest of the ranking-relevant evidence view (#157 input
+    fingerprint component): the terminal-fact set (candidate filter), the
+    verified count, and the #759 worth weights — only what the rank actually
+    consumed, not the whole index."""
+    doc = {
+        "terminal_fact_claims": sorted(evidence.terminal_fact_claims),
+        "verified_fact_count": evidence.verified_fact_count,
+        "value_class_weights": dict(sorted(
+            evidence.value_class_weights.items())),
+        "value_claim_overrides": dict(sorted(
+            evidence.value_claim_overrides.items())),
+    }
+    payload = json.dumps(doc, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
+                     rng_base: int, actions: list[Action]) -> None:
+    """#157: ONE ``rank_feeds`` event per priority_ratio() run — the
+    per-claim Thompson feeds + the input fingerprint (claims hash,
+    evidence-view digest, rng base draw). Given the seed, the ranking is
+    exactly replayable from the event tail. SILENT FAIL-OPEN (the
+    decide_fail_open contract, #569): a crash in payload build or emit
+    never reaches the ranking result."""
+    try:
+        claims_hash = hashlib.sha256(json.dumps(
+            claims, sort_keys=True, ensure_ascii=False, default=repr)
+            .encode("utf-8")).hexdigest()
+        evidence_hash = _evidence_digest(evidence)
+        fp_doc = {"claims_hash": claims_hash,
+                  "evidence_hash": evidence_hash,
+                  "rng_base": rng_base}
+        fingerprint = hashlib.sha256(json.dumps(
+            fp_doc, sort_keys=True, ensure_ascii=False)
+            .encode("utf-8")).hexdigest()
+        payload = {
+            "feeds": {a.claim_id: dict(a.feeds) for a in actions},
+            "scores": {a.claim_id: a.score for a in actions},
+            "ranked_order": [a.claim_id for a in actions],
+            "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
+        }
+        kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
+                         detail=json.dumps(payload, sort_keys=True,
+                                           ensure_ascii=False))
+    except Exception:  # noqa: BLE001 — observability never disturbs the rank
+        pass
+
+
 def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
                    rng: random.Random | None = None) -> list[Action]:
     """#107 Thompson ranking (purely mechanical, zero LLM).
@@ -672,6 +723,13 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         ))
     # #107 spec sort: Thompson sample descending, stable tie-break claim_id.
     actions.sort(key=lambda a: (-a.score, a.claim_id))
+    # #157: one rank_feeds event per RUN (post-decision, silent fail-open).
+    # The emit consumes the ALREADY-BUILT actions — a crash inside it can
+    # never change the ranking result (pinned by
+    # tests/test_algorithm_event_log_157.py). No ws -> pure in-memory
+    # surface, nothing to log to (bare-EvidenceView calls stay pure).
+    if evidence.ws is not None:
+        _emit_rank_feeds(evidence.ws, claims, evidence, base, actions)
     return actions
 
 

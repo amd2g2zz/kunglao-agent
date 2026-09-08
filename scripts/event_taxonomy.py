@@ -221,14 +221,17 @@ EMIT_ACTIONS = [
     "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",
     "must_stop",
+    "observation",        # #157 oracle_runner per-case result row (id/status + #146 forensics summary class) — the reward signal's event face
     "oracle_cadence_warn",  # #132 settlement-cadence loud faces: broken client (all-red) / missing registered client / case-set refusal / runner failure — never a silent skip
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
     "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
     "plan_drift_crashed",  # #102 dispatch_gate: plan_drift --auto crash face (fail-open, observed)
     "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
+    "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
     "priority_deviation",
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
+    "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking
     "recall_injected",    # #814 recall hook injected knowledge files
     "recall_skip",        # #814 recall hook pass-through with attribution
     "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
