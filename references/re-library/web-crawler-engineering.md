@@ -63,6 +63,17 @@ solve (that loop-back lives in web-risk-control.md's decision tree).
 | re-challenge / 无感验证 | 页面无可见交互却反复弹挑战、cookie 刚发又收 | 不要当验证码解——这是环境/行为分判决，走 risk-control 决策树 B2/B3 分支修根因；solver 通过率永远低于把分数修好 |
 | 高频出现型 | 每个请求都弹，甚至静态资源也弹 | 不是验证问题而是分数崩塌：逐项核查会话/频率/IP 三节哪条违约，优先恢复到"偶尔弹"的基线再谈应对 |
 
+### 滑块匹配与厂商判别 (queue delta)
+
+| 问题 | 定位 | 应对 |
+|---|---|---|
+| 缺口匹配在纹理/噪声背景上漂移（raw template match 置信度低或结果跳动） | 对比 raw 匹配置信度与已知缺口位置的偏差 | **canny-edge-first**：先对背景图与缺口图各跑一遍边缘检测，在边缘图上做缺口定位——对纹理、噪点、抗模板干扰显著更稳；输出坐标仍要过上一行的轨迹仿真，匹配只解决"缺口在哪" |
+| 四家滑块厂商互相误判（混淆：解法配方跨厂商不通用） | challenge 页静态痕迹判别：脚本路径形态、参数命名、缺口图下发方式 | **先判厂商再选配方**——错配方的失败不只烧预算，还会把错误配方写进 site note 污染下一个案例；判别证据随配方一起存档 |
+| 验证码端点定位（aliyun 系前缀/SceneId 三元组） | challenge 请求的路径前缀 + `SceneId` 参数 + 场景注册关系 | 前缀定产品族、SceneId 定场景实例、二者与站点身份三方一致才算定位完成；scene 判错则下游所有假设作废，回炉先于调参 |
+
+(queue attestation: 2 web-crawler sources; families: image-matching
+fallback ladder, vendor-trace taxonomy, endpoint-locating triad)
+
 红线：CAPTCHA 应对永不改变任务的声明边界（授权范围/数据用途照 task_spec 执行）；
 任何外部识别服务的引入、用量、数据流向必须在 plan 与 evidence 中可见。
 

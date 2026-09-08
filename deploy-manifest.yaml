@@ -875,11 +875,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 68bfabdf5f4425eb66e9cf8206ed66c5255ed0d619b208e2f8c60029e5fb54d5
+    sha256: 6a4d780b95622c68311cc04e70116821b33c2225cefa3add0f52237c3ea2c744
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 24498b4acabc680605283d1355f3b6f8ba3277b969831c210d59872103742102
+    sha256: 02948e8c11c458f042cc93934b8e58ec2e68ff0b92eadabafee0eefc71abf663
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
@@ -891,7 +891,7 @@ files:
   - src: references/_index-methodology.md
     dest: .claude/references/_index-methodology.md
     kind: asset
-    sha256: cd4744acd6bac9e7353ac164d3f28d9e34412cb108c8e1edcfd7cd3647a0b683
+    sha256: 64daac89238402f4872a87746ab8cccf8866fcc5999dedcd882ec3440326476a
   - src: references/_index-osint.md
     dest: .claude/references/_index-osint.md
     kind: asset
@@ -1055,7 +1055,7 @@ files:
   - src: references/re-library/falsifier-library.md
     dest: .claude/references/re-library/falsifier-library.md
     kind: asset
-    sha256: 910b081033228fd8bf5ba4641c85055b8e41e4cbaacc6915b6ed3c69be0fbd90
+    sha256: 6a7ceb5a83418c1c78fb075cf796b2bcf23466baa07036e252ae9cfed44a2c81
   - src: references/re-library/field-notes.md
     dest: .claude/references/re-library/field-notes.md
     kind: asset
@@ -1067,7 +1067,7 @@ files:
   - src: references/re-library/jsvmp-triage.md
     dest: .claude/references/re-library/jsvmp-triage.md
     kind: asset
-    sha256: 179a621ffb5e992ae7474bf48ee840f29a165f803d3828810b0a32f99a54a500
+    sha256: f0fe8eb740b1f4a742bac6b913c22e0d6a30058a814dd925a1ccd052bcf35a8d
   - src: references/re-library/kunglao-toolshelf.md
     dest: .claude/references/re-library/kunglao-toolshelf.md
     kind: asset
@@ -1192,10 +1192,18 @@ files:
     dest: .claude/references/re-library/tools.md
     kind: asset
     sha256: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
+  - src: references/re-library/unidbg-algo-recovery.md
+    dest: .claude/references/re-library/unidbg-algo-recovery.md
+    kind: asset
+    sha256: 3727553caf4b56fb5ba0d92881c251ecdcad8f81bbc8cacbce1a59a8930fc130
   - src: references/re-library/unidbg-env-filling.md
     dest: .claude/references/re-library/unidbg-env-filling.md
     kind: asset
-    sha256: d8cf573c4a6d49246273aedb8a4344c843eba75417061f7300f264fb6e8d9796
+    sha256: 87caef822ce7cfce0a5fdb23e9118f5294763e85cdd3e8fb7d82cf52b6e9551f
+  - src: references/re-library/unidbg-harness-bringup.md
+    dest: .claude/references/re-library/unidbg-harness-bringup.md
+    kind: asset
+    sha256: 07d09530b17eeeee3e4d310a76ca89c9416329e374397c2aa9e1394e63292ab6
   - src: references/re-library/verification-safety.md
     dest: .claude/references/re-library/verification-safety.md
     kind: asset
@@ -1211,7 +1219,7 @@ files:
   - src: references/re-library/web-crawler-engineering.md
     dest: .claude/references/re-library/web-crawler-engineering.md
     kind: asset
-    sha256: 887b6ca7a08f2bb6cfaae81bf9d602f749d4a4c38373a13eb4d3a0a8a69545a2
+    sha256: 67e1269aea737bf5a9970c32461e65810ee149fe9ea706271da0886f560f3e0c
   - src: references/re-library/web-re-quickref.md
     dest: .claude/references/re-library/web-re-quickref.md
     kind: asset
@@ -1219,7 +1227,7 @@ files:
   - src: references/re-library/web-risk-control.md
     dest: .claude/references/re-library/web-risk-control.md
     kind: asset
-    sha256: bc17c317546313342f15600819da7bb463d624891d6a8469e28f74f5f9a1e794
+    sha256: 30d341ef589e2149c8488f79e01a825aaf9f77e738f5715423bee2f475dc45ba
   - src: references/re-library/wire-format-recognition.md
     dest: .claude/references/re-library/wire-format-recognition.md
     kind: asset
@@ -1343,7 +1351,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 52f050b9840834f16f2edfa0333e75726a8c9553ec25c4f5d9ec259213b33bcc
+    sha256: 8f967618eb3168df184574e805db4c8647e49d7cf5ade4dd8dc7ea452f9ec109
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

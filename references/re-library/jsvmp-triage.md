@@ -66,3 +66,45 @@ The triage verdict only opens the door. The instruction-trace methodology
 Advisory posture: this card is methodology guidance, not a proof artifact —
 verdicts are evidence to verify, same discipline as every other kunglao
 output (maker-checker applies to your own triage reading too).
+
+## Vendor-verified instance: the sensor-VM anatomy
+
+**Family: instruction-trace methodology, vendor-verified face (queue
+cluster: web; verified against real shipped code, not docs)**
+
+The hardened anti-bot sensor VMs (request-sensor blob producers behind
+interstitial challenges) are the JSVMP shape at production hardness — this
+instance adds three mechanics the generic outline above does not name, and
+serves as existence proof that the trace → opcode → lifter route survives
+them:
+
+- **Property-resolution memory model.** Property access inside the VM goes
+  through a resolution layer that records HOW a value was reached, not just
+  the value — resolution order, absence, and the path taken are all
+  observable state. Practical face: hooking the property GETTER answers the
+  value but blinds the resolution metadata; the observation point is the
+  resolution path itself (the VM's own access helper), and an environment
+  that answers values without reproducing resolution behavior diverges on
+  the next consistency check.
+- **Exit via a nonexistent opcode.** The generation loop terminates by
+  dispatching an opcode index with NO handler — a tamper exit, not a
+  normal termination. Signature: the trace ends mid-generation at an
+  unmapped opcode. Practical face: instrumentation that forces extra
+  iterations, and any lifter that assumes handler totality, both die
+  there; treat the unmapped-index exit as the VM saying "observed", and
+  capture around it (split the generation, or let that exit pass through
+  unmodified) instead of "fixing" it.
+- **Trace → opcode → lifter → CFG, end to end.** The vendor-verified
+  pipeline for business-logic recovery: (1) capture one complete
+  generation trace; (2) build the opcode map per the methodology outline
+  above; (3) write a lifter — case bodies become pseudo-instructions, the
+  stack discipline from the opcode map gives each one its signature;
+  (4) lift the generation to a CFG — the sensor-field assembly becomes
+  readable as dataflow over the CFG, which is what makes the output
+  reproducible offline.
+
+Scope boundary (do not overclaim): the sensor blob's serialized FIELD
+LAYOUT is publicly documented at pointer level only — field names and
+ordering circulate as unverified claims. Treat any format assertion as a
+prior to verify against a live capture before building a serializer; this
+card lands the anatomy and the pipeline, not a field map.

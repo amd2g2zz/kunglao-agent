@@ -1,6 +1,6 @@
 ---
 name: unidbg-env-filling
-description: Strategy inputs and failure-signature field guide for unidbg-class Android native emulation — a capability-bounded vocabulary of observation and patching moves (emulator instruction/module trace, its own JNI-table visibility, device-side windowed path and boundary traces, IDA-class static read, patching as a path-changing move), two worked scenarios showing how to compose them, and the failure-signature catalog that decodes the WARN log, tells syscalls from JNI trampolines, and dispatches each gap class to its override point (unknown syscall / partial syscall / final-or-switch-locked handler / JNI signature switch / IOResolver file chain / libc-symbol interposition). Use when an emulation harness crashes, throws UnsupportedOperationException, stalls on an SVC, returns values a real device would not, or runs clean but answers wrong. Not for on-device dynamic analysis (tools-dynamic), not for the boundary-first algorithm-recovery ladder itself (native-sign-recovery owns the stubbing loop and the replay gate that closes it — this card widens what the agent can compose with, it does not prescribe), and not for device-farm emulation detection on live targets.
+description: Strategy inputs and failure-signature field guide for unidbg-class Android native emulation — a capability-bounded vocabulary of observation and patching moves (emulator instruction/module trace, its own JNI-table visibility, device-side windowed path and boundary traces, IDA-class static read, patching as a path-changing move), two worked scenarios showing how to compose them, and the failure-signature catalog that decodes the WARN log, tells syscalls from JNI trampolines, and dispatches each gap class to its override point (unknown syscall / partial syscall / final-or-switch-locked handler / JNI signature switch / IOResolver file chain / libc-symbol interposition), with supply-class triage before stubbing, the vDSO trap for time-family hooks, and init-window deltas (lazy class resolution, record/replay fallback). Use when an emulation harness crashes, throws UnsupportedOperationException, stalls on an SVC, returns values a real device would not, or runs clean but answers wrong. Not for on-device dynamic analysis (tools-dynamic), not for the boundary-first algorithm-recovery ladder itself (native-sign-recovery owns the stubbing loop and the replay gate that closes it — this card widens what the agent can compose with, it does not prescribe), not for the substrate decisions that precede filling (unidbg-harness-bringup), and not for device-farm emulation detection on live targets.
 ---
 
 # unidbg env-filling (failure-signature field guide)
@@ -113,7 +113,24 @@ deliberately and price its blindness into the closure claim.
 | Collections crossing the boundary | Wrap a real host-language map/list object as a proxy DVM object; implement accessor calls against the real object | 2/4 | Any rich object crossing a boundary can be proxied instead of reimplemented |
 | Struct-like objects or raw pointer returns | Either intercept the field-access calls, or `malloc` emulator memory, fill fields at offsets, and return the address as a long | 1 article | Struct-fill at explicit offsets is the same skill as syscall-struct fill (rows below) |
 
+### Init-window deltas (queue aggregation)
+
+**Family: init alignment (stubbing-loop vocabulary; queue cluster: unidbg harness operations)**
+
+| Failure signature / trap | Do this first | Evidence | Variant inspiration |
+|---|---|---|---|
+| **Class-hierarchy pre-resolution trap** — init behaves differently after you force-resolve the target's class hierarchy ahead of it ("pre-loading to save time") | Do not pre-resolve: eager class-hierarchy resolution makes init observe a population it never sees on device and can divert its registration/check path. Resolve lazily — what the trace demands, when it demands it | 1 queue source | Lazy-vs-eager supply: eager supply is itself an environment change (same lesson as maps — serve what the caller looks for) |
+| Init cannot be made to run at all (hardened, self-checking, or emulator-incompatible init) | Record init's device-side effects once (registered natives, set fields, created objects) and replay them into the harness as canned answers — then let the boundary-pair replay gate decide whether the canned init suffices | 1 queue source | Capture the answer instead of re-fighting the gate — the record/replay posture |
+
 ### Syscall gaps
+
+**Supply-class triage (queue aggregation):** classify the gap into one of
+three supply classes BEFORE writing the stub — (1) value-answer (compute
+from register inputs, no world state), (2) struct-fill (write through
+caller pointers per the man page), (3) dispatch-integrity (handle it AND
+preserve the parent dispatch — poison the NR, call the parent so PC
+advances). The class decides which override point applies; a class-(3) gap
+answered as class-(1) passes one probe and freezes the next run.
 
 | Failure signature | Do this first | Evidence | Variant inspiration |
 |---|---|---|---|
@@ -122,6 +139,7 @@ deliberately and price its blindness into the closure claim.
 | Handler method is `final` / buried in a switch | Override the **top-level dispatch** instead: read the syscall-number register, handle your NR, write results, then poison the number register with an invalid value so the parent re-dispatch cannot overwrite — and always call the parent so PC advances | 1 article (2 cases) | "Intercept at the earliest unowned layer" — same move as pre-load interposition on device |
 | Callers expect environment variation (CPU id changes per call, affinity mask reflects N cores) | Return values a real kernel would vary: randomize within a plausible core count, set low bitmask bits for N cores, never all-zero | 1 article | Emulation-vs-device tell: constant answers where hardware varies is a fingerprint — vary deliberately |
 | Time-family syscall throws on non-wall clocks | Map clock classes: wall-clock ids to host time, monotonic ids to a monotonic host source, CPU-time ids to a small monotonically growing value (never zero); unknown ids degrade to wall time instead of raising | 1 article | Degrade-don't-throw keeps the run alive long enough to reach the next real gap |
+| Time-family hook installed at NR level never fires, yet clock values flow | The platform routed the call through the **vDSO** userspace fast path — no SVC, no NR dispatch, so an NR-level hook is structurally blind. Intercept at the libc symbol level instead (clock-class symbol hook), or disable vDSO exposure in the emulator's memory layout | 1 queue source (explicit trap) | A skipped virtualization layer blinds hooks at THAT layer — drop one layer down; do not arm harder at the same one |
 
 ### File-access gaps
 
