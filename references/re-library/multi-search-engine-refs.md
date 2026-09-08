@@ -1,3 +1,10 @@
+---
+name: multi-search-engine-refs
+description: Advanced search operators for multiple engines. When performing OSINT with precise multi-engine
+  queries.
+domain: research
+family: osint
+---
 # International Search Engine Deep Search Guide
 
 ## 🔍 Google Deep Search

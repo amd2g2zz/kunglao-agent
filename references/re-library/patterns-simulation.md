@@ -1,3 +1,9 @@
+---
+name: patterns-simulation
+description: Simulation and execution patterns. When a sample contains custom VM/emulator or shellcode.
+domain: patterns
+family: simulation
+---
 # RE Analysis Patterns — Simulation & Execution
 
 > A compilation of general RE techniques: custom VM/emulator reversing, shellcode and multi-stage loader execution analysis, in-memory code decryption and runtime key extraction.

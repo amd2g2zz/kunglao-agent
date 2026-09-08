@@ -1,6 +1,8 @@
 ---
 name: unidbg-algo-recovery
 description: Discrimination and verification moves for native algorithm recovery that runs THROUGH the emulator — orient the constant search by output-length priors (including the asymmetric face where modulus-length blocks point at RSA-class), the three constant-search traps (endianness, ARM64 movz/movk split constants, shared-IV ambiguity), a five-posture key-provenance ladder, the bignum modular-exponentiation choke point for RSA-family capture, signature-reuse detection (establish that the signature is computed at all before recovering it), and the emulator-as-verifier move with failure-class triage and stack-reading discipline. Use when the algorithm family is still ambiguous, a constant byte-search keeps missing, the key's origin is unknown, or the rewrite needs a cheaper oracle than device round-trips. Not for the boundary-first ladder and its closure gate (native-sign-recovery owns the six-step ladder), not for the falsifier experiments behind family labels (falsifier-library families 1/2/7), not for the environment-answer filling the harness consumes (unidbg-env-filling).
+domain: android
+family: emulation
 ---
 
 # unidbg algo-recovery (discrimination + verification moves, emulation half)

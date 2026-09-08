@@ -1,6 +1,8 @@
 ---
 name: falsifier-library
 description: Hypothesis-family to falsification-experiment library — for the recurring reverse-engineering hypothesis families (digest family, HMAC structure, block-cipher mode, protobuf body, signing entry point, absent network capability, native-standard algorithm, fact conflict, async entry point, obfuscation variant) this card lists the kill experiments — the trigger to run and what the positive and the negative outcome each prove. Use when registering a candidate in the hypothesis layer (every candidate must enter with a named falsifier), when an open hypothesis has stalled without an executed experiment, or when choosing the one experiment that discriminates two competing candidates.
+domain: method
+family: process
 ---
 
 # Falsifier Library (hypothesis family → kill experiment)

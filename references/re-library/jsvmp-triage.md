@@ -1,6 +1,8 @@
 ---
 name: jsvmp-triage
 description: JSVMP/VMP bytecode-VM triage for deobfuscated web bundles. Use when a deobfuscated bundle may hide a bytecode VM (big consumed array + dispatch-switch loop + stack-op handlers), to decide between continuing AST-level recovery and switching to the instruction-trace methodology, or to interpret a jsvmp-triage CLI verdict (votes/confidence).
+domain: web
+family: vm
 ---
 
 # JSVMP/VMP Triage (three-feature, three-of-two)

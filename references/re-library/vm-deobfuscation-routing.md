@@ -1,6 +1,8 @@
 ---
 name: vm-deobfuscation-routing
 description: Routing gate for obfuscated targets in two lanes — (A) screening RAW minified JavaScript BEFORE deobfuscation to decide whether it carries a custom bytecode VM, with a negative-exclusion table that routes WASM, embedded-WASM, bundler, and mis-labeled-binary shapes away from the JS-VM lane, and (B) classifying native control-flow-flattening VARIANTS from the decompiled dispatcher shape, because "flattening" is a family of adversaries whose countermeasures do not interchange. Use when a target arrives as opaque one-line JS or as a flattened native binary and the first decision is which recovery lane to enter.
+domain: patterns
+family: vm
 ---
 
 # VM & Deobfuscation Routing (pre-unpack JS screening + flattening-variant ecology)

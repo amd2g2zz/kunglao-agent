@@ -1,6 +1,8 @@
 ---
 name: stacked-protections
 description: Protection dimensions — SSL pinning, RASP, obfuscation, certificate-or-parameter encryption — are orthogonal and stackable over any main analysis route; recognize each from static observables and clear them in observation-first order before analyzing the target algorithm. Includes the recon sequence and the model-vs-mechanical-tool division of labor for dispatching analysis steps. Use when hooks fail or die, captures come back empty, or a decompile stays unreadable and the cause may be a protection layer rather than the target's complexity.
+domain: android
+family: protections
 ---
 
 # Stacked Protections (orthogonal layers over any route)

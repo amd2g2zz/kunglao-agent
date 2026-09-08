@@ -1,3 +1,10 @@
+---
+name: platforms-kernel
+description: Windows and Linux kernel driver reversing. When analyzing kernel-mode code (drivers, rootkits,
+  minifilters).
+domain: platforms
+family: kernel
+---
 # Kernel Driver Reverse Engineering Reference
 
 > Covers Windows/Linux kernel driver reversing, rootkit analysis, and C/C++ binary pattern recognition.

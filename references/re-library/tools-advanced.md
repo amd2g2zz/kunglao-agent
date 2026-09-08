@@ -1,3 +1,10 @@
+---
+name: tools-advanced
+description: 'Advanced RE tooling: unpackers, diffing, symbolic exec. When facing heavily packed/obfuscated
+  binaries.'
+domain: tools
+family: static
+---
 # Advanced Tools & Deobfuscation
 
 Advanced tooling for commercial packers/protectors, binary diffing, deobfuscation frameworks, emulation, and symbolic execution beyond angr.

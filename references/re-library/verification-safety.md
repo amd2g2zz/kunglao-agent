@@ -1,6 +1,8 @@
 ---
 name: verification-safety
 description: Safety and evidence discipline around the verification loop — the safe-to-invoke gate that decides whether a differential-verification harness may call a candidate function at all, the minimal-patch discipline that keeps every bypass a probe license rather than a modification license, and the evidence-type vocabulary that bounds what each evidence class may and may not update in the claim and hypothesis layers. Use before auto-invoking candidate functions against captured samples, before applying any bypass patch, and when typing a new evidence item to decide which state transition it justifies.
+domain: method
+family: process
 ---
 
 # Verification Safety (invocation gate + patch discipline + evidence vocabulary)

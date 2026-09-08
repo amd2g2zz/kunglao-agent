@@ -1,3 +1,9 @@
+---
+name: languages
+description: Scripting and esoteric language reversing. When facing non-standard language targets.
+domain: languages
+family: scripting
+---
 # Language-Specific Techniques
 
 ## Table of Contents

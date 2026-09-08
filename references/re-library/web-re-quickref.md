@@ -1,3 +1,12 @@
+---
+name: web-re-quickref
+description: 'Browser JS reverse engineering quick-reference: hook/boundary quick reference, signed-parameter
+  workflow, layered peeling (unbundle → deobfuscate → VM boundary), crypto signatures, anti-patterns.
+  Before opening the browser on a web target (`--type web`); injected into web workspace CLAUDE.md at
+  init.'
+domain: web
+family: labs
+---
 # Web reverse engineering quick reference (labs)
 
 > Domain: browser JS targets (`--type web` workspaces). Supply face: the

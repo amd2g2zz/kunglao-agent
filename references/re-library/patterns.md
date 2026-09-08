@@ -1,3 +1,10 @@
+---
+name: patterns
+description: Foundational catalog of general RE patterns. When identifying which general pattern category
+  a sample falls under.
+domain: patterns
+family: catalog
+---
 # Patterns & Techniques
 
 ## Table of Contents

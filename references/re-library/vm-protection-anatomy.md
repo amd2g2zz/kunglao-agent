@@ -1,6 +1,8 @@
 ---
 name: vm-protection-anatomy
 description: Anatomy of VM-class native-library protection kept as one build-side/peel-side map — what the protector constructs (method bodies hollowed into a custom interpreter VM, encrypted instruction stream loaded at runtime, controlled symbol exports with runtime JNI registration, damaged branch targets, detection shell around the loader) is exactly where the analyst peels (handler-table recovery, loader-first key recovery, RegisterNatives as the address map, branch repair to READ, shell peel before VM peel), plus the versioned-SO adaptation loop and the dispatch-bridge marginal. Use when a hardened native function decompiles into a dispatch loop with semantic-free case bodies, when the .so exposes no usable business symbols, when the decompiler CFG reads as corrupted by construction, when an encrypted code stream must be peeled, or when the same protected SO family must be re-analyzed after a version bump.
+domain: patterns
+family: vm
 ---
 
 # VM Protection Anatomy (build side ↔ peel side)

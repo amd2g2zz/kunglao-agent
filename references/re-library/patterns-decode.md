@@ -1,3 +1,9 @@
+---
+name: patterns-decode
+description: Decode and deobfuscation patterns. When a sample uses layered decryption or obfuscated strings.
+domain: patterns
+family: decode
+---
 # RE Analysis Patterns — Decode & Deobfuscation
 
 > A compilation of general RE techniques: self-decryption/multi-layer decryption, string deobfuscation (.rodata XOR etc.), embedded data extraction, ROP chain obfuscation analysis, constraint solving (lattice/GF(2^8)).

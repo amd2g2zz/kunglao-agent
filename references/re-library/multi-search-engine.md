@@ -1,3 +1,10 @@
+---
+name: multi-search-engine
+description: MCP tool integration for 17 search engines. When programmatically querying multiple search
+  engines.
+domain: research
+family: osint
+---
 # Multi Search Engine
 
 Multi search engine integration, 17 engines supported.

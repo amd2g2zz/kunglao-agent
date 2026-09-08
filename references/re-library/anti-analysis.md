@@ -1,3 +1,10 @@
+---
+name: anti-analysis
+description: Anti-debugging, anti-VM, anti-DBI, code-integrity bypass. When encountering binaries detecting
+  debuggers/VMs/instrumentation.
+domain: anti-analysis
+family: catalog
+---
 # Anti-Analysis Techniques & Bypasses
 
 Comprehensive reference for anti-debugging, anti-VM, anti-DBI, and integrity-check techniques encountered in malware and hardened targets, with practical bypasses.

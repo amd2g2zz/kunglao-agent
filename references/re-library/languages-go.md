@@ -1,3 +1,9 @@
+---
+name: languages-go
+description: End-to-end Go binary reversing. When analyzing a statically-linked Go binary.
+domain: languages
+family: compiled
+---
 # Go Binary Reverse Engineering Guide
 
 > Go-compiled binaries pose unique challenges: static linking makes them huge, function counts reach tens of thousands, the string format is unusual, and stripped symbols are hard to recover.
