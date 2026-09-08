@@ -871,11 +871,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 3a5c52b85d2a28f273be477c4c0fc542f9fe8961a3a7d0222ce9d980a41f4f83
+    sha256: f010eccd4d604e7a51c51f444bd7ded5a69550c1c8b536790c71bbd14fa12787
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 1184aec7911f095b3948275003674a8e3a7fa14d293c83ba69d71c82d23c7419
+    sha256: f66bea15279f8298377ab74140499036260b8784607784ab5c4724f4ebb2425f
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
@@ -1056,6 +1056,10 @@ files:
     dest: .claude/references/re-library/field-notes.md
     kind: asset
     sha256: 8afaff77a88e61173f7981aa421e775c7ca6447825fcdb41bebb722ef2a18436
+  - src: references/re-library/ida-scripting-overlays.md
+    dest: .claude/references/re-library/ida-scripting-overlays.md
+    kind: asset
+    sha256: 884a61d3950cf15e7fc6df99fe283c5ecfc9760404c85b5a3bb00f16aa8b0b59
   - src: references/re-library/jsvmp-triage.md
     dest: .claude/references/re-library/jsvmp-triage.md
     kind: asset
@@ -1319,7 +1323,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: ac2679f1ed6333c215c48ebda54dba45a9013e35acdffbc6aa9aff2451890db9
+    sha256: 65dd1ba6f7a71036ad0d38199fc10c53744357b3b34ce43b231ec48ea8f2b909
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

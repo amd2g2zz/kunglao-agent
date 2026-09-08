@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 3a5c52b85d2a28f273be477c4c0fc542f9fe8961a3a7d0222ce9d980a41f4f83
+  references/_INDEX.md: f010eccd4d604e7a51c51f444bd7ded5a69550c1c8b536790c71bbd14fa12787
   references/_index-anti-analysis.md: 77ae0fe0834dde577e39d1124d4941962b1e4d7af1012434cac89c7d3f381431
   references/_index-languages.md: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
   references/_index-methodology.md: 4183b6f86c4ccd299452d41d2532fde6487301175804cb84729d41d3b4cf08aa
@@ -47,6 +47,7 @@ files:
   references/re-library/dynamic-observation-ladders.md: 42b5d229ef4fdef82c3f0b49213b2250b7ca1f7823284e58f69210e1882a6532
   references/re-library/falsifier-library.md: d4857f2e8ee4e245e11a2777eff85ffe263830e6bb66c4a9110b4b29e424cf16
   references/re-library/field-notes.md: 8afaff77a88e61173f7981aa421e775c7ca6447825fcdb41bebb722ef2a18436
+  references/re-library/ida-scripting-overlays.md: 884a61d3950cf15e7fc6df99fe283c5ecfc9760404c85b5a3bb00f16aa8b0b59
   references/re-library/jsvmp-triage.md: 179a621ffb5e992ae7474bf48ee840f29a165f803d3828810b0a32f99a54a500
   references/re-library/kunglao-toolshelf.md: 6ffccd0d3008c086e9109779a09337914e36ea48a4199b9bb9fb87cfeae7bb41
   references/re-library/languages-compiled.md: 2b995c280ea34211a326545828b4bda2639a2a39e53539667ed395ea0ee55780
