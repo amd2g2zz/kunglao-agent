@@ -1,0 +1,197 @@
+/**
+ * windowed-stalker.js — Frida windowed instruction-tracing skeleton
+ * (template: templates/frida/windowed-stalker.js.tmpl, #162).
+ * consume: adapt
+ *
+ * Requires: frida >= 17 (module API: Process.getModuleByName(mod)
+ * .getExportByName(name); NativePointer instance memory accessors).
+ *
+ * Windowed tracing skeleton: attach on a {{TARGET_MODULE}} entry point,
+ * Stalker.follow ON ENTER, Stalker.unfollow ON LEAVE — the trace window
+ * covers only the target's own execution, never the whole process.
+ * Structure: a MACRO census pass (onCallSummary hot offsets) runs BEFORE
+ * any micro instruction filtering, so the filter is aimed at measured
+ * hot code instead of guessed addresses.
+ *
+ * KNOWN-VARIANCE REGIONS (adapt-expected — rework these per target):
+ *   1. Module set — {{TARGET_MODULE}} plus the Stalker.exclude list
+ *      ({{EXCLUDE_MODULES}}): which modules belong to the target and
+ *      which are noise (system libs, JIT ranges) changes per sample.
+ *   2. Offset resolution path — the onCallSummary offsets are
+ *      module-relative (addr - module.base); turning them into
+ *      symbols/functions (DebugSymbol.fromAddress vs. a static-export
+ *      map carried over from the Ghidra face) is target-specific.
+ *   3. Filter predicate — the memory-op classifier below is a SHAPE,
+ *      not a policy: which operand sizes / access kinds count as
+ *      "interesting" is defined by THIS analysis question.
+ *
+ * FRIDA >= 16 API AUDIT (legacy -> modern; in-file binding so the
+ * breakage is annotated, not silent):
+ *   Memory.readByteArray(ptr, len)     -> ptr.readByteArray(len)
+ *   Memory.writeByteArray(ptr, bytes)  -> ptr.writeByteArray(bytes)
+ *   Memory.readPointer(ptr)            -> ptr.readPointer()
+ *   Memory.readUtf8String(ptr, len)    -> ptr.readUtf8String(len)
+ *   Memory.protect(ptr, len, prot)     -> unchanged (still valid)
+ * The legacy static Memory.read* and Memory.write* accessors were
+ * REMOVED in Frida 16 — calling them aborts the script. The body below
+ * uses only the modern NativePointer instance forms.
+ *
+ * VM-ONLY ARTIFACT (hard prohibition #5): this script must ONLY ever run
+ * inside the analysis VM via the VM channel (<VM_IP>:1337). The host
+ * channel is forbidden — never run Frida hooks against host processes.
+ *
+ * All values in this file are SYNTHETIC (libtarget.so, 0x0001000-range
+ * offsets) — instantiate with THIS sample's data, never shipped data.
+ */
+'use strict';
+
+// ---- parameters (instantiated manually; see templates/frida/README.md) ----
+var TARGET_MODULE = '{{TARGET_MODULE}}';
+var EXCLUDE_MODULES = '{{EXCLUDE_MODULES}}'
+    .split(',')
+    .map(function (s) { return s.trim(); })
+    .filter(Boolean);
+var OUTFILE = '{{OUTFILE}}';
+var SAMPLE_SHA256 = '{{SAMPLE_SHA256}}';
+
+var SUMMARY_WINDOW = 32;      // onCallSummary batches per census flush (tune)
+var outBuffer = [];           // census records waiting for the flush
+var tracing = false;          // window state: one thread followed at a time
+
+// ---- phase 1: MACRO CENSUS — hot offsets before any instruction filter ----
+
+function recordCensus(summary) {
+    // summary: { offset or "module-ctrl": count, ... } — module-relative
+    // addrs produced by Stalker call summaries (VAR: offset resolution
+    // path, see header region 2).
+    var keys = Object.keys(summary);
+    for (var i = 0; i < keys.length; i++) {
+        outBuffer.push({
+            phase: "macro",
+            sample_sha256: SAMPLE_SHA256,
+            module: TARGET_MODULE,
+            offset: keys[i],
+            calls: summary[keys[i]]
+        });
+    }
+    if (outBuffer.length >= SUMMARY_WINDOW) {
+        flushBuffer();
+    }
+}
+
+// ---- window control: follow on enter / unfollow on leave ------------------
+
+function followWindow(threadId) {
+    if (tracing) {
+        return;
+    }
+    tracing = true;
+    Stalker.follow(threadId, {
+        events: { call: true },
+        onCallSummary: function (summary) {
+            recordCensus(summary);
+        }
+        // VAR: promote to per-instruction events (events: { ret: true,
+        // block: true }, transform with Stalker.transform to feed
+        // inspectInstruction) only AFTER the census proves the hot set.
+    });
+}
+
+function unfollowWindow(threadId) {
+    if (!tracing) {
+        return;
+    }
+    Stalker.unfollow(threadId);
+    tracing = false;
+    flushBuffer();
+}
+
+// ---- phase 2: MICRO — instruction filter shape (memory-op census) ---------
+
+function isMemoryOp(insn) {
+    // VAR: filter predicate, see header region 3 — this SHAPE classifies
+    // by mnemonic family + operand access; the POLICY (which families and
+    // access kinds matter for THIS question) is the analyst's adaptation.
+    // Example shape: loads/stores touching unmapped-adjacent pages, or
+    // crypto-textbook widths (8/16/32/64-bit block operands).
+    return insn.mnemonic.indexOf("mov") === 0 ||
+           insn.mnemonic.indexOf("ldr") === 0 ||
+           insn.mnemonic.indexOf("str") === 0;
+}
+
+function inspectInstruction(insn) {
+    // Micro stage: reached only for code the macro census marked hot.
+    // Modern memory reads on demand — ptr.readByteArray(len), never the
+    // removed static Memory.read* accessors (see header audit).
+    if (!isMemoryOp(insn)) {
+        return;
+    }
+    outBuffer.push({
+        phase: "micro",
+        sample_sha256: SAMPLE_SHA256,
+        module: TARGET_MODULE,
+        address: insn.address.toString(16),
+        mnemonic: insn.mnemonic,
+        operands: insn.opStr
+    });
+}
+
+function readWindowBytes(ptr, len) {
+    // modern form (Frida >= 16); returns ArrayBuffer or null on fault
+    try {
+        var buf = ptr.readByteArray(len);
+        return buf;
+    } catch (e) {
+        return null;
+    }
+}
+
+function flushBuffer() {
+    if (outBuffer.length === 0) {
+        return;
+    }
+    var lines = outBuffer.map(function (r) { return JSON.stringify(r); });
+    outBuffer = [];
+    // 'a' keeps windows append-only across follow/unfollow cycles.
+    var f = new File(OUTFILE, "a");
+    f.write(lines.join("\n") + "\n");
+    f.flush();
+    f.close();
+}
+
+// ---- module set (VAR: header region 1) ------------------------------------
+
+function excludeModules() {
+    // Non-target modules are excluded BEFORE the first follow so their
+    // code never enters the trace budget.
+    var mod = Process.getModuleByName(TARGET_MODULE);
+    for (var i = 0; i < EXCLUDE_MODULES.length; i++) {
+        try {
+            Stalker.exclude(Process.getModuleByName(EXCLUDE_MODULES[i]));
+        } catch (e) {
+            console.warn("[windowed-stalker] exclude miss: "
+                + EXCLUDE_MODULES[i]);
+        }
+    }
+    return mod.base;
+}
+
+// ---- entry point: attach the window opener --------------------------------
+
+function main() {
+    var mod = excludeModules();
+    var entry = mod.getExportByName("target_entry");   // SYNTHETIC export name
+    console.log("[windowed-stalker] base=" + mod.base
+        + " windowing exports of " + TARGET_MODULE);
+
+    Interceptor.attach(entry, {
+        onEnter: function () {
+            followWindow(this.threadId);
+        },
+        onLeave: function () {
+            unfollowWindow(this.threadId);
+        }
+    });
+}
+
+main();

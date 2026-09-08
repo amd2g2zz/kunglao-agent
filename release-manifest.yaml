@@ -69,6 +69,8 @@ assets:
     # #335/#278: frida + scripts templates (template_gen.py inputs)
     - templates/frida/cfg-analyze.py.tmpl
     - templates/frida/cfg-hook.js.tmpl
+    # #162: first adapt-expected template (windowed Stalker tracing)
+    - templates/frida/windowed-stalker.js.tmpl
     - templates/scripts/decryption-analysis.py.tmpl
     - templates/scripts/disasm-pipeline.py.tmpl
     - templates/scripts/stage-unpack.py.tmpl

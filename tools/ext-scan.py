@@ -311,6 +311,28 @@ def _template_description(text: str) -> str:
     return ""
 
 
+def _variance_regions(text: str) -> list[str]:
+    """Known-variance region NAMES from an adapt-expected template's
+    leading header (criterion 2: the desc MUST name them). Mechanical
+    shape: a header line containing `KNOWN-VARIANCE REGIONS` starts the
+    section; subsequent `N. <name> — ...` numbered lines contribute the
+    name (text before the first dash)."""
+    lines = _leading_comment_lines(text)
+    names: list[str] = []
+    in_regions = False
+    for ln in lines:
+        stripped = ln.lstrip("/*#<!-> \t").strip()
+        if "KNOWN-VARIANCE REGIONS" in stripped:
+            in_regions = True
+            continue
+        if not in_regions:
+            continue
+        m = re.match(r"^\d+\.\s+([^—-]+?)\s*[—-]", stripped)
+        if m:
+            names.append(m.group(1).strip())
+    return names
+
+
 def derive_entry(source: str, kind: str, root: Path) -> dict:
     path = root / source
     stem = Path(source).stem
@@ -330,10 +352,16 @@ def derive_entry(source: str, kind: str, root: Path) -> dict:
         consume = _template_consume(text)
         # description: leading header comment first (JS-flavored), then
         # the module docstring (python-flavored .py.tmpl parses as
-        # python), then the bare-name fallback.
+        # python), then the bare-name fallback. Adapt-expected templates
+        # append their known-variance region names (criterion 2).
         description = (_template_description(text)
                        or _first_doc_line(_module_docstring(path))
                        or f"{name} (template)")
+        if consume == "adapt":
+            regions = _variance_regions(text)
+            if regions:
+                description = (f"{description} — known-variance regions: "
+                               f"{', '.join(regions)}")
         usage = ((ADAPT_USAGE_PREFIX + source + ADAPT_USAGE_SUFFIX)
                  if consume == "adapt"
                  else FILL_USAGE_PREFIX + source + FILL_USAGE_SUFFIX)

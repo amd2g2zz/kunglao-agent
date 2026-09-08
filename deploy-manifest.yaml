@@ -1239,7 +1239,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: f126bf03e7dd079ca69cad429a958f6ff2f5d79c454964a612ce31dfb0600ee6
+    sha256: 24ea3ca139e82aff5fe00f91dc8462f859520b89b71061b99eb07b6ec39e6a75
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset
@@ -1251,7 +1251,7 @@ files:
   - src: templates/frida/README.md
     dest: .claude/templates/frida/README.md
     kind: asset
-    sha256: 63be095c814ddd6c2a63c002d54de57c1c0cfadd11247c169563513a5c4e1c10
+    sha256: e884d88b6e7dcb10c06a3081248fb2f2db9f1a7e58b544c31cc944083cd204f2
   - src: templates/frida/cfg-analyze.py.tmpl
     dest: .claude/templates/frida/cfg-analyze.py.tmpl
     kind: asset
@@ -1260,6 +1260,10 @@ files:
     dest: .claude/templates/frida/cfg-hook.js.tmpl
     kind: asset
     sha256: 0d779c321691f5ea8050f6b82118f0d9e64fbc8910cf901b2267b1ad261d4665
+  - src: templates/frida/windowed-stalker.js.tmpl
+    dest: .claude/templates/frida/windowed-stalker.js.tmpl
+    kind: asset
+    sha256: 3b3d2654b795f11ce170e8f9089d69938ae575c6bb4d09a40c8cf6afd1bbf515
   - src: templates/scripts/README.md
     dest: .claude/templates/scripts/README.md
     kind: asset
@@ -1311,7 +1315,7 @@ files:
   - src: tools/README.md
     dest: .claude/tools/README.md
     kind: asset
-    sha256: c7d9c868a0fe62c759b2f11c1edd0a0de3d1a6f76a1a99816624f07f31fa3713
+    sha256: 85cbefd8fa6f882fe967171e1399958a17366798beb9b2b4ef413017057ac28e
   - src: tools/_INDEX.ext.map.yaml
     dest: .claude/tools/_INDEX.ext.map.yaml
     kind: asset
@@ -1319,7 +1323,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 8a1e2568c502d42872d74c4a1ef13de8481fb65cfb7e4d70b8443798f5054c39
+    sha256: c252a7b5394a5b83c9198ad9fefe182c850ba7cef811720ac72ab3abac904048
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
@@ -1415,7 +1419,7 @@ files:
   - src: tools/ext-scan.py
     dest: .claude/tools/ext-scan.py
     kind: asset
-    sha256: f342609c6c3b1204fa411b5a1e199eec1072c30d87cbb92144a7e4bf8d6af712
+    sha256: 1714922f8fd3a8bf3829c1703362103d01b402eba66de75806cedab5621a1a24
   - src: tools/ghidra/DecompileFunctions.java
     dest: .claude/tools/ghidra/DecompileFunctions.java
     kind: asset
@@ -1575,7 +1579,7 @@ files:
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: 981de141cea75ae4b21dfbd87fbd6228d9a30b671db926227152a6fb4b0f5a27
+    sha256: 8e746bb27f678b1aed1891f3d8c243547b6b943b93a92742ce078e3125b8b5e7
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
