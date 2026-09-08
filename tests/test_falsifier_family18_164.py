@@ -52,7 +52,11 @@ def test_card_within_line_budget() -> None:
 
 
 def test_family_count_is_18() -> None:
-    assert len(_rows()) == 18, f"expected 18 family rows, found {len(_rows())}"
+    # 2026-09-08 (#176): family 19 (emulator-detection faces + FAKE_RESULT
+    # score model) joins the table per that wave's falsifier deliverable;
+    # the count assert moves with reality — family 18's own schema tests
+    # below are unchanged.
+    assert len(_rows()) == 19, f"expected 19 family rows, found {len(_rows())}"
 
 
 # ---------- row schema (identical to families 15/17) ----------

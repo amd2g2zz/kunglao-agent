@@ -116,7 +116,22 @@ shapes persist. Identify from static traces BEFORE opening the browser.
 |---|---|---|---|
 | 加速乐 (JiaSuLe) | cookie `__jsluid_*` + 首响应页内嵌短混淆 JS 计算 `jsl_clearance_s` 后 reload | curl 两连发看 set-cookie 序列；view-source 找内嵌 eval 段 | 按 loader 顺序解 JS 得 clearance 计算式；通常纯 JS 可离线算 |
 | 瑞数 (RiverSecurity) | 动态多变 JS loader（每次响应都不同长度）、`$_ts` 全局变量、meta-refresh 自跳、200 却无正文 | 对比两次响应 diff；搜 `$_ts`/`$_t` 特征名 | loader 动态生成不可硬存——要么 hook 其 VM 边界（quickref Path A），要么完整环境仿真走 B2/B3 |
+| Cloudflare | challenge 页 + `cf_clearance` cookie + `__cf_chl*`/turnstile 形态 JS 挑段 | 对比首响应 set-cookie 序列 + challenge 页 source 特征（queue attestation: 1 web source; family: protocol-cookie binding） | **cf_clearance 与出口 IP 绑定**：cookie 本身有效期内也随出口切换即刻失效——出口粘性与 cookie 同寿命管理（三元组绑定见 crawler-engineering），换出口必须连 cookie 一起重取，单独复用旧 cookie 是自伤 |
 | 自研栈 | 命名线索散在 cookie 前缀/loader 路径/challenge 返回形态（如 412+retry-after、随机大写前缀 cookie） | 全量响应头收集 + challenge 页 source 存档进 evidence | 没有现成路线就走检测点定位 loop（下节）逐字段归因 |
+
+### challenge 元素定位梯 (locator ladder, queue delta)
+
+交互元素被层层混淆、selector 首选即失败时的爬梯纪律——一次升一档，成功档位
+记入 site note：
+
+1. **稳定属性/DOM 路径** selector 首选（最便宜）；
+2. **HTML 结构 fallback**——属性被随机化时，按 landmark 元素的相对位置与
+   class 形态匹配定位（结构比属性稳）；
+3. **vision 定位**（截图 + 元素形态识别）兜底——成本最高，但 DOM 层面的一切
+   混淆对它无效；布局改版会静默失效，每会话需重验。
+
+(queue attestation: 1 web source; family: locator ladder; variant
+inspiration: escalation ladders — J6 升级链同构，每档携带上一档的失败证据)
 
 识别产出必须落到 claim/fact：栈名 + 痕迹证据 + 应对选择 + 失败历史，下一个
 案例先读 note 再开浏览器（site note 制度）。
