@@ -19,9 +19,12 @@ Shape-level assertions for the unidbg deployment-preconditions installer:
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "install_unidbg.sh"
@@ -29,6 +32,8 @@ SCRIPT = ROOT / "scripts" / "install_unidbg.sh"
 TEXT = SCRIPT.read_text(encoding="utf-8")
 _ABS_PATH = re.compile(r"(?:[A-Za-z]:\\|/(?:Users|home|tmp|opt|var|etc)/)")
 _IP = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
+
+_HAS_JDK = all(shutil.which(t) for t in ("java", "javac"))
 
 
 def _run(*args: str, env_home: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -80,6 +85,7 @@ def test_failed_step_reports_and_nonzero_exit():
 
 # ---------- (e) dry-run performs no side effects ----------
 
+@pytest.mark.skipif(not _HAS_JDK, reason="green-path dry run reports the JDK step; a JDK-less runner skips with reason (the script's own log_skip philosophy)")
 def test_dry_run_lists_plan_without_side_effects(tmp_path: Path):
     target = tmp_path / "vendor" / "unidbg"
     result = subprocess.run(

@@ -169,6 +169,9 @@ def test_native_sign_recovery_card_untouched_by_pointer_only():
     UNIDBG_CARD,
     SIGNATURE_CARD,
     ROOT / "templates" / "frida" / "rpc-skeleton.js.tmpl",
+    ROOT / "templates" / "unidbg" / "harness.java.tmpl",
+    ROOT / "scripts" / "install_unidbg.sh",
+    ROOT / "scripts" / "install_unidbg.py",
 ])
 def test_zero_corpus_identifiers(artifact: Path):
     assert artifact.is_file(), f"artifact missing: {artifact}"
