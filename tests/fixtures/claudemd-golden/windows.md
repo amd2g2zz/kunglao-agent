@@ -36,7 +36,7 @@ The convergence loop runs every round and is the only rule set that survives con
 
 Analysis is driven by `/kunglao-agent` (skill at `/kunglao/skill-sentinel`). Key scripts under `/kunglao/skill-sentinel/scripts/`, run from the workspace root with `.venv` activated: `convergence_check.py`, `priority_ratio.py`, `convergence_health.py`, `failure_analysis_gate.py`, `env_check.py` (writes `runs/.env-check.json`), `hook_activation.py --renew` (30-min hook TTL).
 
-Capability discovery across the asset tiers goes through `python /kunglao/skill-sentinel/tools/tool-search.py --find <keyword>`: each result states a `type` and a `consume`, meaning a tool may be invoked, a template filled or adapted, and a reference read.
+Capability discovery across the asset tiers goes through `python /kunglao/skill-sentinel/tools/tool-search.py --find <keyword>`: each result states a `type`, a `consume`, and a keyword match score (lexical, not semantic) that ranks candidates for the agent's own judgment — a tool may be invoked, a template filled or adapted, a reference read. The score measures word overlap only, never gates surfacing, so near-miss results stay visible, and result descriptions state expected outcomes rather than guaranteed facts.
 
 ## State files (read every turn, disk is truth)
 

@@ -117,9 +117,12 @@ def test_base_mcp_table_type_placeholder():
 
 
 def test_base_carries_capability_search_usage_line():
-    """#162: the Skill & orchestrator section names the unified
-    capability-search command plus the type semantics in ONE sentence —
-    tool=invoke, template=fill/adapt, reference=read. Worker-doc rules:
+    """#162 (+ owner addendum): the Skill & orchestrator section names the
+    unified capability-search command plus the type semantics and the
+    score contract — tool=invoke, template=fill/adapt, reference=read;
+    score = keyword match strength, lexical not semantic, ranking only;
+    the wide boundary (near-miss results stay surfaced); descriptions
+    state expected outcomes, not guaranteed facts. Worker-doc rules:
     pure insertion, formal register, discretionary voice (may, not
     must), no meta-commentary."""
     text = BASE_TMPL.read_text(encoding="utf-8")
@@ -131,6 +134,9 @@ def test_base_carries_capability_search_usage_line():
     for kw in ("tool", "template", "reference",
                "invoke", "fill", "adapt", "read"):
         assert kw in body, f"type semantics word missing: {kw!r}"
+    for needle in ("score", "lexical, not semantic",
+                   "expected outcomes"):
+        assert needle in body, f"score-contract wording missing: {needle!r}"
     assert "may" in body, "discretionary voice (may) missing"
     assert re.search(r"\bmust\b", body) is None, \
         "covert mandate (must) must not appear in the usage line"

@@ -3,6 +3,10 @@
  * (template: templates/frida/windowed-stalker.js.tmpl, #162).
  * consume: adapt
  *
+ * Scenario: instruction-level visibility is needed inside the target's own execution window (API-behavior claims the CFG capture cannot resolve).
+ * How: attach on a {{TARGET_MODULE}} entry point, Stalker.follow on-enter / Stalker.unfollow on-leave, Stalker.exclude for the non-target module set, macro census (onCallSummary hot offsets) before micro instruction filtering.
+ * Expected outcome: a bounded hot-offset census that narrows the micro filter to measured code — NOT a full instruction trace and not a verified behavior claim by itself.
+ *
  * Requires: frida >= 17 (module API: Process.getModuleByName(mod)
  * .getExportByName(name); NativePointer instance memory accessors).
  *
