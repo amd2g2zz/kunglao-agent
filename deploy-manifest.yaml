@@ -839,7 +839,7 @@ files:
   - src: scripts/winrate_curve.py
     dest: .claude/scripts/winrate_curve.py
     kind: scaffold
-    sha256: 01eced2fe55c387040f472818f9e0a221309d8718f5f713634673ae6ffd08cd9
+    sha256: 13d5b1d743d2800ef1c408bb0575f776195890c775fc768bc234e93f6388faa5
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
@@ -1239,7 +1239,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: 24ea3ca139e82aff5fe00f91dc8462f859520b89b71061b99eb07b6ec39e6a75
+    sha256: 9cf976dee421c108c89e721d9eba350482f92a34fa655e247d285c784f4b7ac5
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset
@@ -1263,7 +1263,7 @@ files:
   - src: templates/frida/windowed-stalker.js.tmpl
     dest: .claude/templates/frida/windowed-stalker.js.tmpl
     kind: asset
-    sha256: 3b3d2654b795f11ce170e8f9089d69938ae575c6bb4d09a40c8cf6afd1bbf515
+    sha256: 88d6a2cd7045de3ff4a6ee97021ef2cb27bf6fab9e1ae998f01d13bac1cfcb97
   - src: templates/scripts/README.md
     dest: .claude/templates/scripts/README.md
     kind: asset
@@ -1319,7 +1319,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: c252a7b5394a5b83c9198ad9fefe182c850ba7cef811720ac72ab3abac904048
+    sha256: ac2679f1ed6333c215c48ebda54dba45a9013e35acdffbc6aa9aff2451890db9
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
@@ -1415,7 +1415,7 @@ files:
   - src: tools/ext-scan.py
     dest: .claude/tools/ext-scan.py
     kind: asset
-    sha256: 1714922f8fd3a8bf3829c1703362103d01b402eba66de75806cedab5621a1a24
+    sha256: 93bea2cb46a1655ee9afa5735a9171c2ca3f9111efb10b40b4b2184523c5ef1a
   - src: tools/ghidra/DecompileFunctions.java
     dest: .claude/tools/ghidra/DecompileFunctions.java
     kind: asset
@@ -1575,7 +1575,7 @@ files:
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: 8e746bb27f678b1aed1891f3d8c243547b6b943b93a92742ce078e3125b8b5e7
+    sha256: c3bcb1215bea04c8da1cdce627483cb6c78cbb684bf156324263927e618780af
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
