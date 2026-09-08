@@ -261,6 +261,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `release_receipt.py` | release receipt generation + CLI probe | CI, tests |
 | `release_check_selfcheck.py` | release-check self-verification | CI |
 | `check_global_rule_subset.py` | global-rule subset compliance check | CI, tests |
+| `comment_hygiene_lint.py` | formal-content hygiene gate over scripts/+tests/ — tracker-ref pattern (R1), narrative markers (R2), shrink-only per-file baseline ratchet (`scripts/hygiene_baseline.yaml`), plus re-library mapping and frontmatter passes (inert until the mapping lands; `--emit-baseline` regenerates the ledger) | CI, tests |
 | `kunglao_export.py` | workspace export by zone (contract_carriers/evidence/scratch) + manifest (#540, D5) | tests |
 | `structural_check.py` | repo structure + broken-link + index drift check | CI, tests |
 | `run_test_matrix.py` | matrix-style scoped pytest runs (issue-lane suites); canonical full-suite entry stays the README Quick-start pytest line | lane tooling, tests |

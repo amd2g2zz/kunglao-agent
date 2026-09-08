@@ -70,6 +70,11 @@ jobs:
     - name: Check global-rule hard prohibitions subset (issue #99)
       run: uv run python scripts/check_global_rule_subset.py
 
+    - name: Formal-content hygiene lint (scripts + tests)
+      # fail-loud gate: tracker refs / narrative markers / baseline ratchet
+      # over scripts/** and tests/** (constitution rule on formal content)
+      run: uv run python scripts/comment_hygiene_lint.py
+
     - name: Run standard test command
       # #463 quality-gate framework: coverage is OBSERVATION only.
       # pytest.ini MUST NOT carry --cov-fail-under; we pass --cov here just

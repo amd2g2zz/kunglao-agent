@@ -228,6 +228,10 @@ files:
     dest: .claude/scripts/claudemd_frame.py
     kind: scaffold
     sha256: 4dc4525959db5eaa1be89da8da2c8811afee81a64f3043ba6336609a92a0d821
+  - src: scripts/comment_hygiene_lint.py
+    dest: .claude/scripts/comment_hygiene_lint.py
+    kind: scaffold
+    sha256: 2c301f5c7650d9baf3101e61320003d3fe63e8abd187bdc4dace208cffebbd30
   - src: scripts/complete_teardown.py
     dest: .claude/scripts/complete_teardown.py
     kind: scaffold
@@ -1355,7 +1359,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: fb317cd053d26885f3f4c76d8808d331bb58e5ccff983b32d3ae74b246a5fe8c
+    sha256: 428456a761962593ddc68209460ee3dae9bf4d9ca2c387c99d7f9e4c3f040776
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

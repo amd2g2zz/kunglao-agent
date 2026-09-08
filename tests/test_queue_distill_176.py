@@ -1,40 +1,14 @@
 # -*- coding: utf-8 -*-
-"""tests/test_queue_distill_176.py — #176 queue-distillation contracts.
+"""Shape contracts for the unidbg harness-bringup and algo-recovery cards
+and the five amended cards they neighbor (unidbg-env-filling,
+falsifier-library, jsvmp-triage, web-risk-control, web-crawler-engineering).
 
-RED-first contract tests for the anti-bot/unidbg queue distillation wave.
-The queue's landing plan is AGGREGATION-FIRST: the dedup baseline (#165's
-landed cards) is already in dev, so this wave lands verified DELTAS only:
-
-  Cluster B (unidbg harness operations) -> aggregate into the landed
-  unidbg-env-filling card the deltas that fit its remaining budget
-  (syscall 3-class supply taxonomy + vDSO trap, init-window discipline:
-  class-hierarchy pre-resolution trap + record-replay fallback); the
-  substrate cluster (hook-framework selection, xHook refresh-missing,
-  never-stack-two, timing matrix, CodeHook/JIT incompatibility, packed-SO
-  dump-then-load, thread-dispatcher hang) exceeds that budget and lands as
-  ONE new adjacent card (split rationale: the landed card owns environment
-  ANSWERS, the new card owns the substrate DECISIONS that precede filling).
-
-  Cluster A (recovery deltas) -> native-sign-recovery is AT its 200-line
-  budget and must not grow; folding recovery-shaped moves into
-  unidbg-env-filling is not thematically coherent (that card explicitly
-  scopes the recovery ladder OUT). One new small card carries the
-  discrimination/verification moves.
-
-  Cluster C -> falsifier-library family 19 (emulator-detection faces +
-  FAKE_RESULT-not-abort score model), one family row in the house schema.
-
-  Cluster D -> web increments: sensor-VM anatomy as a vendor-verified
-  instance inside jsvmp-triage (budget: the routing card has no headroom),
-  cf_clearance + locator ladder in web-risk-control, aliyun triad +
-  canny-edge slider matching + vendor confusion taxonomy in
-  web-crawler-engineering.
-
-Shape-level assertions only, mirroring the #165/#164 test precedents:
-frontmatter + when-not boundary, budgets, balanced fences, attribution
-format (evidence count + variant inspiration + pinned methodology family),
-heuristic voice, and the ZERO-LITERAL corpus-identifier guard (pre-computed
-token digests only — this file carries no identifying literal).
+Shape-level assertions only: frontmatter (name + description with a
+when-not boundary), the 200-line budget, balanced code fences, the
+attribution format (evidence count + variant inspiration + pinned
+methodology family rows), landed-delta content assertions per card, and
+the ZERO-LITERAL corpus-identifier guard (pre-computed token digests
+only — this file carries no identifying literal).
 """
 from __future__ import annotations
 
@@ -61,20 +35,19 @@ CHANGED_CARDS = [UNIDBG_CARD, FALSIFIER_CARD, JSVMP_CARD, WEB_RISK_CARD, WEB_CRA
 
 ALL_TOUCHED = NEW_CARDS + CHANGED_CARDS
 
-# Cards that must NOT grow (over budget or pinned by earlier issues).
+# Cards that must NOT grow (at budget, or over budget).
 NATIVE_SIGN_CARD = RELIB / "native-sign-recovery.md"
 ANTI_ANALYSIS_CARD = RELIB / "anti-analysis.md"
 
 # Source-identifying tokens matched by PRE-COMPUTED sha256 digests (the
-# ZERO-LITERAL standard: the corpus appears only in the issue; this guard
-# file learns nothing from reading it). Digests are of lowercased tokens as
-# produced by the tokenizer below, computed out of band:
+# ZERO-LITERAL standard: only pre-computed digests appear in this file).
+# Digests are of lowercased tokens as produced by the tokenizer below,
+# computed out of band:
 #   hashlib.sha256(token.encode()).hexdigest()
-# Coverage: the queue's community/site name, the distinctive repo-name
-# fragments of its GitHub sources, and a romanized article-title token.
-# Tokens that tokenize into generic vocabulary (vendor names, single common
-# words) are intentionally absent — they are guarded by the per-wave manual
-# grep recorded in the PR body, not by a false-positive-prone denylist.
+# Coverage: distinctive source-repo name fragments and a romanized
+# article-title token. Tokens that tokenize into generic vocabulary
+# (vendor names, single common words) are intentionally absent — a
+# false-positive-prone denylist guards less than a targeted one.
 FORBIDDEN_TOKEN_HASHES = {
     "1889c7e0e5b4be9b8f2a2f4386c3e62d793c217897c10f97abe04e634da88841",
     "269b49b563282d581f793525602cbc4f3e7e1a3ed4a8dd4e6f609773cd6593a2",
@@ -145,8 +118,8 @@ def test_new_cards_within_200_line_budget(card: Path):
     assert n <= 200, f"{card.name}: {n} lines exceeds the 200-line budget"
 
 
-def test_aggregation_target_stays_within_budget():
-    """Cluster B aggregates into unidbg-env-filling only within its budget."""
+def test_unidbg_env_card_stays_within_budget():
+    """unidbg-env-filling absorbs its deltas only within its budget."""
     n = len(_text(UNIDBG_CARD).splitlines())
     assert n <= 200, f"unidbg-env-filling grew to {n} lines (budget 200)"
 
@@ -158,8 +131,8 @@ def test_web_cards_stay_within_budget():
 
 
 def test_no_growth_cards_untouched():
-    """native-sign-recovery is at budget (issue: must NOT grow);
-    anti-analysis is over budget and out of scope for this wave."""
+    """native-sign-recovery sits at its budget and must not grow;
+    anti-analysis is over budget and outside this file's scope."""
     assert len(_text(NATIVE_SIGN_CARD).splitlines()) <= 200
     assert len(_text(ANTI_ANALYSIS_CARD).splitlines()) <= 800  # current size, must not grow
 
@@ -199,9 +172,9 @@ def test_new_card_catalog_rows_have_minimum_hit_information(card: Path, minimum:
     assert len(rows) >= minimum, f"{card.name}: only {len(rows)} catalog rows (need >= {minimum})"
 
 
-# ---------- (e) cluster B deltas: aggregation target + adjacent card ----------
+# ---------- (e) unidbg deltas: env card + adjacent bring-up card ----------
 
-def test_unidbg_card_lands_verified_cluster_b_deltas():
+def test_unidbg_card_lands_env_deltas():
     text = _text(UNIDBG_CARD)
     assert "vDSO" in text, "vDSO trap delta missing from the syscall section"
     assert re.search(r"three (supply )?classes|3-class", text, re.IGNORECASE), (
@@ -213,7 +186,7 @@ def test_unidbg_card_lands_verified_cluster_b_deltas():
     )
 
 
-def test_bringup_card_lands_substrate_deltas():
+def test_bringup_card_lands_setup_deltas():
     text = _text(BRINGUP_CARD)
     assert "xHook" in text, "xHook delta missing"
     assert re.search(r"refresh", text, re.IGNORECASE), "xHook refresh-missing signature missing"
@@ -232,7 +205,7 @@ def test_bringup_card_states_split_rationale():
     assert "native-sign-recovery" in text, "must point at the loop this card feeds"
 
 
-# ---------- (f) cluster A: recovery deltas card ----------
+# ---------- (f) recovery deltas card ----------
 
 def test_algo_card_lands_recovery_deltas():
     text = _text(ALGO_CARD)
@@ -264,7 +237,7 @@ def test_ladder_card_not_duplicated():
     )
 
 
-# ---------- (g) cluster C: falsifier family 19 ----------
+# ---------- (g) falsifier family 19 ----------
 
 def test_falsifier_has_family_19_row():
     rows = _family_rows(FALSIFIER_CARD)
@@ -304,7 +277,7 @@ def test_family19_no_hard_always_rule():
     assert "always" not in row.lower(), "no hard always-rules in falsifier rows"
 
 
-# ---------- (h) cluster D: sensor-VM anatomy in jsvmp-triage ----------
+# ---------- (h) sensor-VM anatomy in jsvmp-triage ----------
 
 def test_jsvmp_card_lands_sensor_vm_anatomy():
     text = _text(JSVMP_CARD)
@@ -327,7 +300,7 @@ def test_jsvmp_card_carries_pointer_level_disclaimer():
     )
 
 
-# ---------- (i) cluster D: web increments ----------
+# ---------- (i) web increments ----------
 
 def test_web_risk_card_lands_cloudflare_deltas():
     text = _text(WEB_RISK_CARD)
