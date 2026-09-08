@@ -12,7 +12,8 @@ RED-first tests pin the contract before implementation:
 - NEUTRAL / UNRESOLVED settlements are never win-rate observations
   (roi_settlement ruling 2: nothing comparable observed != negative)
 - --html: self-contained single-file rendering with REAL plotted charts
-  (vendored ECharts inlined via a Jinja2 template), the JSON face inlined
+  (the Apache-2.0 ECharts library INLINED in the .j2 template itself under
+  a Jinja2 {% raw %} block, #162 de-vendor), the JSON face inlined
   verbatim and feeding the chart, zero external fetch references
 - oracle status face counts join the face where present; case-bank
   summary counts join without entering the rate denominators
@@ -315,9 +316,54 @@ class TestTolerantShapeGaps:
 
 
 # ------------------------------ html face ----------------------------------
-# Rendering contract (owner revision on #156): Jinja2 template + the
-# vendored Apache-2.0 ECharts build INLINED into the output — real plotted
-# charts, zero CDN, zero build, zero server; double-click opens offline.
+# Rendering contract (owner revision on #156, de-vendored by #162): Jinja2
+# template with the Apache-2.0 ECharts library INLINED in the .j2 itself
+# under {% raw %}...{% endraw %} — real plotted charts, zero CDN, zero
+# build, zero server, zero vendored file; double-click opens offline.
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+CHART_TMPL = ROOT_DIR / "templates" / "winrate_curve.html.j2"
+VENDOR_LIB = ROOT_DIR / "templates" / "vendor" / "echarts-5.6.0.min.js"
+
+
+class TestDevendoredChartLib162:
+    """#162 de-vendor: the 1 MB vendor file is gone; the library rides
+    inside the .j2 (Jinja2 {% raw %} guard so {{ sequences in the minified
+    JS are not interpreted); output stays single-file offline."""
+
+    def test_vendor_file_deleted(self):
+        assert not VENDOR_LIB.exists(), \
+            "templates/vendor/echarts-5.6.0.min.js must be deleted (#162)"
+
+    def test_template_inlines_library_under_raw_block(self):
+        text = CHART_TMPL.read_text(encoding="utf-8")
+        assert "{% raw %}" in text and "{% endraw %}" in text, \
+            "inlined JS must sit inside {% raw %}...{% endraw %} (Jinja2 " \
+            "would otherwise interpret {{ sequences in the minified lib)"
+        assert "{{ echarts_js }}" not in text, \
+            "the echarts_js render param must be gone (library is in-file)"
+        assert "Licensed to the Apache Software Foundation" in text, \
+            "the Apache-2.0 library build is not inlined in the template"
+
+    def test_script_carries_no_vendor_dependency(self):
+        src = (ROOT_DIR / "scripts" / "winrate_curve.py").read_text(
+            encoding="utf-8")
+        assert "vendor" not in src, \
+            "winrate_curve.py still references the deleted vendor path"
+        assert "_ECHARTS_VENDOR_REL" not in src
+
+    def test_rendered_html_still_selfcontained_offline(self, tmp_path):
+        ws = _mk_ws(tmp_path)
+        _seed_stream(ws, _fixture_rows())
+        out = tmp_path / "curve.html"
+        assert wc.main([str(ws), "--html", str(out)]) == 0
+        html = out.read_text(encoding="utf-8")
+        assert len(html) > 500_000, "library no longer inlined (stub output?)"
+        assert "5.6.0" in html, "ECharts library build missing from output"
+        assert "setOption" in html
+        assert "<script src" not in html
+        assert html.rstrip().endswith("</html>")
+
 
 class TestHtmlFace:
     def test_html_contains_real_charts_and_inlined_data(self, tmp_path):
