@@ -1,0 +1,9 @@
+# web domain index (file level)
+> GENERATED FILE — regenerate with `python scripts/reference_index_build.py`.
+> Row summaries are the card frontmatter descriptions, byte-for-byte.
+| File | Summary |
+|---|---|
+| [jsvmp-triage.md](re-library/jsvmp-triage.md) | JSVMP/VMP bytecode-VM triage for deobfuscated web bundles. Use when a deobfuscated bundle may hide a bytecode VM (big consumed array + dispatch-switch loop + stack-op handlers), to decide between continuing AST-level recovery and switching to the instruction-trace methodology, or to interpret a jsvmp-triage CLI verdict (votes/confidence). |
+| [web-crawler-engineering.md](re-library/web-crawler-engineering.md) | 爬虫工程 sustainable collection engineering (#761): 会话维持 cookie 池/登录态, 频率伪装 human cadence, IP 策略 住宅/机房/轮换/sticky, CAPTCHA 分类应对 slider/点选/re-challenge. After access is solved on a `--type web` target — designing sustainable collection ops or triaging a CAPTCHA surface. |
+| [web-re-quickref.md](re-library/web-re-quickref.md) | Browser JS reverse engineering quick-reference: hook/boundary quick reference, signed-parameter workflow, layered peeling (unbundle → deobfuscate → VM boundary), crypto signatures, anti-patterns. Before opening the browser on a web target (`--type web`); injected into web workspace CLAUDE.md at init. |
+| [web-risk-control.md](re-library/web-risk-control.md) | 风控对抗 anti-bot doctrine (#761): 信号分类学 device-fingerprint/behavioral/environment-consistency/protocol, 对抗决策树 bypass→仿真→real + 无头升级链 (J6), 风控栈识别 加速乐/瑞数/自研, active-challenge parameter chains (slider-class backward endpoint tracing + known-library hash reimplementation + challenge-bundle obfuscation passes), 检测点定位 触发→观察→归因 loop with camoufox CDP instrumentation (J7). When a request is blocked / challenged / a signed param is rejected on a web target — classify the signal first, then pick the branch. |

@@ -39,7 +39,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: a4943fb00c4c2794762b19dbf806978ef85e8df605e9278deccc4548aa0a62b2
+    sha256: 3221b999ecd161b8b03a7bd4c7b4ee39ea3147d86b105a27d15ce7b20de52080
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -651,7 +651,7 @@ files:
   - src: scripts/re_pin_references.py
     dest: .claude/scripts/re_pin_references.py
     kind: scaffold
-    sha256: a4f2c3ad510ea9526b834d5b12c29d1168351a68287e43ae99cbe851134f10ef
+    sha256: a4487b1701b60c78e53909ff1483749b0bf9186769fce5ab3000cca7481c7f81
   - src: scripts/recall_metrics.py
     dest: .claude/scripts/recall_metrics.py
     kind: scaffold
@@ -668,10 +668,14 @@ files:
     dest: .claude/scripts/recov_metrics.py
     kind: scaffold
     sha256: c1024b3c29de0c454d8cb60a65dff43c646e3e93eaacdbb819fcfbf49f86c210
+  - src: scripts/reference_index_build.py
+    dest: .claude/scripts/reference_index_build.py
+    kind: scaffold
+    sha256: f819e49a677fc4724815463014848cdae2f1e388e702e116050f5e042d55a21c
   - src: scripts/references_recall.py
     dest: .claude/scripts/references_recall.py
     kind: scaffold
-    sha256: a5432041dc10461d9f022ea8729a2408815b6173fa4c9de4899d3d56f1169cc8
+    sha256: 2d62e40e9c9fb63ada5605bb4f07a61f480e5e7db534e9fd4db2feef1d20692a
   - src: scripts/refutation_propagate.py
     dest: .claude/scripts/refutation_propagate.py
     kind: scaffold
@@ -691,7 +695,7 @@ files:
   - src: scripts/relib_audit.py
     dest: .claude/scripts/relib_audit.py
     kind: scaffold
-    sha256: 4be8a4172e022669aefcc34f4da179651b47670deef374dfdf436fefdc2b8092
+    sha256: 73e81c89916b673b044974054822f44e7d620a32a791568e0facb7a5e8fa34ec
   - src: scripts/replay_equivalence.py
     dest: .claude/scripts/replay_equivalence.py
     kind: scaffold
@@ -771,7 +775,7 @@ files:
   - src: scripts/structural_check.py
     dest: .claude/scripts/structural_check.py
     kind: scaffold
-    sha256: 37c97ffed21c7369b2c587d207632a034c9e0173c8bbb6d0efe2ef2e0c3d2ee9
+    sha256: 9538f5882bce0bff80c6c10581e20cb47696aa5f9bbb9c550caada9134f2df61
   - src: scripts/summary_discriminator.py
     dest: .claude/scripts/summary_discriminator.py
     kind: scaffold
@@ -887,55 +891,51 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 6a4d780b95622c68311cc04e70116821b33c2225cefa3add0f52237c3ea2c744
+    sha256: 0677dbeecc7d6856a9e5b9d62555ef94907d3563e1c7c733595194ebb7d8a068
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 731a185bfacb6bd8d640f747f1c724060dbc6d3ea65bc638327adff6e9738bce
+    sha256: c9a37b52be4da762a7be5e68edc5140a1ae43f5dc6245e030a399c66aa76e92f
+  - src: references/_index-android.md
+    dest: .claude/references/_index-android.md
+    kind: asset
+    sha256: 8f82d9b1cef4be251da977b89bad0d46528e73954816fbe9ed8d1fd7688b2c92
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
-    sha256: 708dab6abdd2da3fc41ca3e5b05833a53a6ede0293c547f508d8d276da441028
+    sha256: 33025a62505ba872e536200746564f1194438f3332870e46da2daa0ee308616b
   - src: references/_index-languages.md
     dest: .claude/references/_index-languages.md
     kind: asset
-    sha256: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
-  - src: references/_index-methodology.md
-    dest: .claude/references/_index-methodology.md
+    sha256: 4a03d86889474508d5a5e0c5b7b0994378de1cae6d9a2c263f2d184533e2ddf8
+  - src: references/_index-malware.md
+    dest: .claude/references/_index-malware.md
     kind: asset
-    sha256: 64daac89238402f4872a87746ab8cccf8866fcc5999dedcd882ec3440326476a
-  - src: references/_index-osint.md
-    dest: .claude/references/_index-osint.md
+    sha256: f26bd61f16bff9a324a24e7c7017cf74e0e79f12eead1c28613163249ccbf69c
+  - src: references/_index-method.md
+    dest: .claude/references/_index-method.md
     kind: asset
-    sha256: de3ca124abaa9b0d36383d086aaa82e58054e8a4c865cb27e08cefbab123a793
+    sha256: 6b959caa44e2c6f581d6d2537bfc927e1c908d46748c0c583052d7fb055b3299
   - src: references/_index-patterns.md
     dest: .claude/references/_index-patterns.md
     kind: asset
-    sha256: 11bb2c6224de8391fba7e2b1fdca2c76e5cf6aa3e0902df2562c57a9c9dedeb1
+    sha256: d321327c8c7ae31e60a2349fae5d8c72fcb35a00166845bf2f4993b724dcd315
   - src: references/_index-platforms.md
     dest: .claude/references/_index-platforms.md
     kind: asset
-    sha256: eb4224a8cde683873a422a5a21ca62067b46efe09a46a7ff2c0f981ce57b6c7b
-  - src: references/_index-resources.md
-    dest: .claude/references/_index-resources.md
+    sha256: 2be04299e1395be23fae6ef2642b0f511ed8cb42798bbbb561a6a635c1e8f1d7
+  - src: references/_index-research.md
+    dest: .claude/references/_index-research.md
     kind: asset
-    sha256: d58750800fcd490ed014fbef7ee6dae2228180c44996d937a1130cc1c0f50196
+    sha256: ff5ffdb39e171090888daa56a82702444ba247d745781eef98bf90a92195d2e7
   - src: references/_index-tools.md
     dest: .claude/references/_index-tools.md
     kind: asset
-    sha256: d83a45b5c67afaaa72c537edb42501181a51b4cfd2d3cebba7f7a7e0faf2b431
-  - src: references/_index-web-crawler-engineering.md
-    dest: .claude/references/_index-web-crawler-engineering.md
+    sha256: 29406fabc4e24cfc9117e91e3ec3fd09458c6ff928ddd564d3016a83dd1c04db
+  - src: references/_index-web.md
+    dest: .claude/references/_index-web.md
     kind: asset
-    sha256: 2df8708cfd912dcd0a2e808e08f445044fd59a6c4f22c8b2cfebb845d67f6482
-  - src: references/_index-web-labs.md
-    dest: .claude/references/_index-web-labs.md
-    kind: asset
-    sha256: 12a33e5641f3f39738f46cd7bbe38c2d5d8b1d4c06fc89b4ec44a203669faf95
-  - src: references/_index-web-risk-control.md
-    dest: .claude/references/_index-web-risk-control.md
-    kind: asset
-    sha256: b1dfc4eada8237536f95690986788735a136f75f940142d052a4e78c90841adf
+    sha256: c76f0f8db7900d59cf6bf5c7b8ad9193331c439f155a4b1a735e6c1706c00789
   - src: references/agent-three-state-charter.md
     dest: .claude/references/agent-three-state-charter.md
     kind: asset
@@ -1043,7 +1043,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: 01aa4201037e7088e8839670ef9e3a19816685dc60bb27406c0a98f82ea705a2
+    sha256: 62412e3795352494ae80afabd8cada20a4d5c07cf504717e36f7d29b86f1ea80
   - src: references/re-library/android-fingerprint-apis.md
     dest: .claude/references/re-library/android-fingerprint-apis.md
     kind: asset
@@ -1071,7 +1071,7 @@ files:
   - src: references/re-library/falsifier-library.md
     dest: .claude/references/re-library/falsifier-library.md
     kind: asset
-    sha256: 67f84b3cd3bb9f3d872e218746161260e8ca29d148ec661cbade5aac381ca4b4
+    sha256: 7c2f9d813f2ec725419d10a7d7f68c1e1b87fc2bfe50fdd517025036d9440be8
   - src: references/re-library/field-notes.md
     dest: .claude/references/re-library/field-notes.md
     kind: asset
@@ -1367,7 +1367,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 19d2e647b79925658addd4a50796f86aaf0aadd987b81ffd29b2e6f283427da3
+    sha256: bfe31aef954838bc4a9f18a48ec8b441d5401cb6d6b12a90bc87587758e3d26c
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
@@ -1463,7 +1463,7 @@ files:
   - src: tools/ext-scan.py
     dest: .claude/tools/ext-scan.py
     kind: asset
-    sha256: 93bea2cb46a1655ee9afa5735a9171c2ca3f9111efb10b40b4b2184523c5ef1a
+    sha256: b93443e187eda432d5e4dc69b9a93a0d615002af5076dbdab1410dad86c84871
   - src: tools/ghidra/DecompileFunctions.java
     dest: .claude/tools/ghidra/DecompileFunctions.java
     kind: asset

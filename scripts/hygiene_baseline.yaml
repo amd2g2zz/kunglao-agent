@@ -263,8 +263,6 @@ files:
     r1: 3
   scripts/release_receipt.py:
     r1: 5
-  scripts/relib_audit.py:
-    r1: 4
   scripts/report_consistency_check.py:
     r1: 1
   scripts/retirement_gate.py:
@@ -986,7 +984,7 @@ files:
   tests/test_redteam_antitemplate_827.py:
     r1: 1
   tests/test_references_recall.py:
-    r1: 6
+    r1: 5
   tests/test_refresh_deployed_783.py:
     r1: 1
   tests/test_refutation_propagate.py:

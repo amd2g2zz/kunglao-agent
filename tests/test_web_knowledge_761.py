@@ -151,12 +151,11 @@ class TestJ1IndexedAndRecalled:
         assert "re-library/web-risk-control.md" in paths
         assert "re-library/web-crawler-engineering.md" in paths
         doms = {d.name for d in idx.domains.values()}
-        assert {"web-risk-control", "web-crawler-engineering"} <= doms
+        assert "web" in doms
 
     def test_per_domain_index_files_exist(self) -> None:
-        for f in ("_index-web-risk-control.md", "_index-web-crawler-engineering.md"):
-            p = ROOT / "references" / f
-            assert p.is_file(), f"missing per-domain index: {f}"
+        p = ROOT / "references" / "_index-web.md"
+        assert p.is_file(), "missing per-domain index: _index-web.md"
 
     def test_recall_hits_risk_control_by_dictionary(self) -> None:
         """A web risk-control query recalls the NEW doc as the top hit."""

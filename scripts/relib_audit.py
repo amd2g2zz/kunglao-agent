@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""relib_audit.py — #817 re-library 知识库审查器。
+"""relib_audit.py — re-library 知识库审查器。
 
 三类问题检出 + 可逆 quarantine + 质量度量：
   孤儿        .md 文件未出现在任何 _index-*.md / _INDEX.md 目录中
@@ -13,7 +13,7 @@ CLI:
   python scripts/relib_audit.py <lib_dir> [--json]
   python scripts/relib_audit.py --quarantine <lib_dir> <file.md> --reason <why>
 
-Production-semantics tier (#866 de-whitewash):
+Production-semantics tier (de-whitewash):
   python scripts/relib_audit.py --production <repo_root> [--json]
 
   Judges every scripts/*.py module and every tools/ ``__main__`` CLI by
@@ -40,7 +40,7 @@ _MD_REF_RE = re.compile(r"\b([A-Za-z0-9-]+\.md)\b")
 _DECL = "recall_useful:"
 
 
-# ---- production-semantics tier (#866) --------------------------------------
+# ---- production-semantics tier ----------------------------------------------
 
 # tools-root infra trio: by their own discipline the generator/querier never
 # enters the registry it serves (ext-scan docstring) — they are not subjects.
@@ -63,7 +63,7 @@ _PROD_SEED_FACES = {
     "index_yaml": ("tools/_INDEX.yaml",),
 }
 
-# Diagnostic faces: recorded per subject, never counted (the #817 lesson —
+# Diagnostic faces: recorded per subject, never counted (a hard lesson —
 # "tests count as references" was the single-metric whitewash; shipping in a
 # manifest is the same lie one level up once deploy-manifest grew to the
 # full tree).
@@ -193,7 +193,7 @@ def _hits(rel: str, text: str, *, bare_stem: bool) -> bool:
 
 
 def audit_production(root) -> dict:
-    """#866 production-wiring audit over scripts/ + tools/ CLIs.
+    """Production-wiring audit over scripts/ + tools/ CLIs.
 
     Returns subjects/wired/unwired per side, per-subject face hits (seed
     faces + diagnostics + 'lib_closure'), and LOC of the unwired set.
@@ -280,12 +280,42 @@ def _catalog(lib: Path) -> set:
     return catalog
 
 
+def _mapped_cards(lib: Path) -> list:
+    """Card files from the mapping: the face that exists right now (the
+    destination post-move, the source before it). Data files ride with
+    their consumer card and are not audited. A library without a mapping
+    (tmp fixtures, legacy layouts) falls back to flat discovery — the
+    comment-hygiene lint enforces mapping coverage where the mapping lives."""
+    map_path = lib / "_mapping.yaml"
+    if not map_path.is_file():
+        return sorted(p for p in lib.glob("*.md") if not p.name.startswith("_"))
+    import yaml
+
+    doc = yaml.safe_load(map_path.read_text(encoding="utf-8")) or {}
+    roots = (lib, *lib.parents)
+    out: list = []
+    for row in doc.get("cards") or []:
+        for key in ("to", "from"):
+            rel = str(row.get(key, ""))
+            if not rel.endswith(".md"):
+                continue
+            for base in roots:
+                cand = base / rel
+                if cand.is_file():
+                    out.append(cand)
+                    break
+        else:
+            continue
+    return sorted(set(out))
+
+
 def audit(lib_dir) -> dict:
     """审查库目录。返回 {orphans, trackers, missing_decl, counts, metrics}。"""
     lib = Path(lib_dir)
     catalog = _catalog(lib)
-    files = sorted(p for p in lib.glob("*.md") if not p.name.startswith("_"))
-    orphans = [p.name for p in files if p.name not in catalog]
+    files = sorted(_mapped_cards(lib))
+    rel_key = lambda p: str(p.relative_to(lib))
+    orphans = [rel_key(p) for p in files if p.name not in catalog]
     trackers: dict = {}
     missing_decl: list = []
     for p in files:
@@ -295,9 +325,9 @@ def audit(lib_dir) -> dict:
             continue
         tids = sorted(set(_TRACKER_RE.findall(text)))
         if tids:
-            trackers[p.name] = tids
+            trackers[rel_key(p)] = tids
         if _DECL not in text:
-            missing_decl.append(p.name)
+            missing_decl.append(rel_key(p))
     return {
         "orphans": orphans,
         "trackers": trackers,
@@ -331,7 +361,7 @@ def quarantine(lib_dir, name: str, reason: str):
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="re-library 审查器 (#817)")
+    ap = argparse.ArgumentParser(description="re-library 审查器")
     ap.add_argument("lib_dir", nargs="?", default=None,
                     help="library dir (legacy lib audit) or repo root "
                          "(with --production)")
@@ -339,7 +369,7 @@ def main() -> int:
     ap.add_argument("--quarantine", metavar="FILE")
     ap.add_argument("--reason", default="orphan-audit")
     ap.add_argument("--production", action="store_true",
-                    help="#866 production-wiring audit over scripts/ + tools/ "
+                    help="production-wiring audit over scripts/ + tools/ "
                          "CLIs (lib_dir is the repo root)")
     args = ap.parse_args()
     if args.production:
