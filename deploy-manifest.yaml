@@ -875,11 +875,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 0b1322db9d029c03c2869d4275b34cc75d9667a9e494d8f26253f181aa0c41a3
+    sha256: 68bfabdf5f4425eb66e9cf8206ed66c5255ed0d619b208e2f8c60029e5fb54d5
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: c8ad27b80d921eee9f5bf00a6ee926a7b21909b1df9ee2756aa16d0feb9694a1
+    sha256: 24498b4acabc680605283d1355f3b6f8ba3277b969831c210d59872103742102
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
@@ -1055,7 +1055,7 @@ files:
   - src: references/re-library/falsifier-library.md
     dest: .claude/references/re-library/falsifier-library.md
     kind: asset
-    sha256: d4857f2e8ee4e245e11a2777eff85ffe263830e6bb66c4a9110b4b29e424cf16
+    sha256: 910b081033228fd8bf5ba4641c85055b8e41e4cbaacc6915b6ed3c69be0fbd90
   - src: references/re-library/field-notes.md
     dest: .claude/references/re-library/field-notes.md
     kind: asset
@@ -1343,7 +1343,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: ecabe9fcfa1e3043bd40373e0f7155ef97e9e8f61139e56b0f43e78e8186fff8
+    sha256: 52f050b9840834f16f2edfa0333e75726a8c9553ec25c4f5d9ec259213b33bcc
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

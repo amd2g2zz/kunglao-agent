@@ -3,7 +3,7 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 0b1322db9d029c03c2869d4275b34cc75d9667a9e494d8f26253f181aa0c41a3
+  references/_INDEX.md: 68bfabdf5f4425eb66e9cf8206ed66c5255ed0d619b208e2f8c60029e5fb54d5
   references/_index-anti-analysis.md: 708dab6abdd2da3fc41ca3e5b05833a53a6ede0293c547f508d8d276da441028
   references/_index-languages.md: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
   references/_index-methodology.md: cd4744acd6bac9e7353ac164d3f28d9e34412cb108c8e1edcfd7cd3647a0b683
@@ -45,7 +45,7 @@ files:
   references/re-library/awesome-re-resources.md: 8252476aa2b40d76b01572e7df910fc9c6a83337fc2e48385dd15885a1ab96f0
   references/re-library/detection-engineer.md: fc06be71641d31a6e8da60f3b2084197da9bc1b2bffc7ecf3d07b076b0aa9072
   references/re-library/dynamic-observation-ladders.md: 42b5d229ef4fdef82c3f0b49213b2250b7ca1f7823284e58f69210e1882a6532
-  references/re-library/falsifier-library.md: d4857f2e8ee4e245e11a2777eff85ffe263830e6bb66c4a9110b4b29e424cf16
+  references/re-library/falsifier-library.md: 910b081033228fd8bf5ba4641c85055b8e41e4cbaacc6915b6ed3c69be0fbd90
   references/re-library/field-notes.md: 8afaff77a88e61173f7981aa421e775c7ca6447825fcdb41bebb722ef2a18436
   references/re-library/ida-scripting-overlays.md: 884a61d3950cf15e7fc6df99fe283c5ecfc9760404c85b5a3bb00f16aa8b0b59
   references/re-library/jsvmp-triage.md: 179a621ffb5e992ae7474bf48ee840f29a165f803d3828810b0a32f99a54a500
