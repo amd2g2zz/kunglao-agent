@@ -6,14 +6,16 @@ description: Correction overlays for driving IDA programmatically — the headle
 # IDA Scripting Correction Overlays (headless analysis-wait discipline + Hex-Rays failure channels)
 
 Consumer: the agent driving the IDA lane (`tools/_index-static.md`, the
-ida-decompile row) — today through the lane's bridge-discovery and decompile
-calls, and through any scripting-grade execution surface (arbitrary Python
-evaluated inside the IDA process) when the environment exposes one. The
-behavior change this card causes: the agent waits for autoanalysis before
-trusting any query result, and guards both Hex-Rays failure channels instead
-of one — so an empty list reads as a diagnosis (analysis not drained) rather
-than as absence of data, and a decompile failure names its code before the
-next move is chosen.
+ida-decompile row) — through the lane's bridge-discovery and decompile
+calls, and through the lane's scripting-grade execution surface (arbitrary
+Python evaluated inside the IDA process). That surface is live now: the
+environment exposes one, so the earlier conditional ("when the environment
+exposes one") is resolved and the eval face is a first-class consumer of
+this card. The behavior change this card causes: the agent waits for
+autoanalysis before trusting any query result, and guards both Hex-Rays
+failure channels instead of one — so an empty list reads as a diagnosis
+(analysis not drained) rather than as absence of data, and a decompile
+failure names its code before the next move is chosen.
 
 These are CORRECTION overlays, not a tutorial. Core iteration/xref/byte/decompile
 patterns are training-rich and are not repeated here — a generic prior is
@@ -111,6 +113,18 @@ for fva in idautils.Functions():
     print(hex(fva), idc.get_func_name(fva), args)
 idc.qexit(0)                              # overlay 1: batch scripts must exit
 ```
+
+## Session-persistence note: the eval face is a stateful REPL
+
+Prior-sparse face: a model does not know that an MCP Python-eval call is a
+stateful REPL — the generic prior treats every programmatic call as
+stateless (fresh interpreter, fresh globals). Wrong on this lane: state
+carries across the lane's Python-eval calls. Locals persist from call to
+call (Jupyter-style), so a name bound in an earlier call is still live
+later; only an explicit fresh-locals reset wipes them, and the pre-imported
+globals are rebuilt fresh per call. Plan sessions accordingly: build state
+once and reuse it, do not re-derive it per call; after a reset, re-bind
+before relying on any name.
 
 ## Closure summary
 
