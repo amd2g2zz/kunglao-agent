@@ -49,11 +49,10 @@ assets:
     - hooks/bash_fact_guard.py        # #809 Bash PostToolUse facts-write lint recorder
     - hooks/cost_input_capture.py     # #873 PostToolUse cost input recorder
   templates:
-    # #156: --html rendering assets (Jinja2 face template + the
-    # vendored Apache-2.0 ECharts build it inlines — offline
-    # discipline: checked in once, never a CDN reference)
+    # #156: --html rendering assets (Jinja2 face template — the Apache-2.0
+    # ECharts library is inlined in the .j2 itself under {% raw %}, #162
+    # de-vendor; offline discipline: never a CDN reference)
     - templates/winrate_curve.html.j2
-    - templates/vendor/echarts-5.6.0.min.js
     - templates/state/blocker.md
     - templates/state/claim_deps.yaml
     - templates/state/claim-register.yaml
@@ -69,6 +68,8 @@ assets:
     # #335/#278: frida + scripts templates (template_gen.py inputs)
     - templates/frida/cfg-analyze.py.tmpl
     - templates/frida/cfg-hook.js.tmpl
+    # #162: first adapt-expected template (windowed Stalker tracing)
+    - templates/frida/windowed-stalker.js.tmpl
     - templates/scripts/decryption-analysis.py.tmpl
     - templates/scripts/disasm-pipeline.py.tmpl
     - templates/scripts/stage-unpack.py.tmpl

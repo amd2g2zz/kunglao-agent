@@ -41,11 +41,11 @@ Counting contract (belief-side, owner-approved minimal slice):
 
 The JSON face is the primary artifact (agent and human read the same data);
 --html OUT is its human rendering: a self-contained single file whose charts
-come from the VENDORED Apache-2.0 ECharts build (templates/vendor/, checked
-in once and INLINED at render time — never a CDN reference) through a Jinja2
-template (templates/winrate_curve.html.j2). No build step, no server;
-double-click to open, works fully offline. The chart JS consumes the SAME
-inlined face JSON the agent reads.
+come from the Apache-2.0 ECharts library INLINED IN THE .j2 TEMPLATE
+(templates/winrate_curve.html.j2, under a {% raw %} block, #162 — the
+separate library file is deleted, never a CDN reference). No build step,
+no server; double-click to open, works fully offline. The chart JS
+consumes the SAME inlined face JSON the agent reads.
 """
 from __future__ import annotations
 
@@ -256,17 +256,14 @@ def summarize(data: dict) -> str:
 
 
 # --------------------------------------------------------------- html face
-# Rendering contract (owner revision on #156): Jinja2 template + the
-# vendored Apache-2.0 ECharts build inlined into the output — real plotted
-# charts with zero CDN, zero build step, zero server; double-click opens
-# the file offline. Vendored build provenance (checked in ONCE, so the
-# generated HTML never reaches for the network either): npm registry
-# tarball https://registry.npmjs.org/echarts/-/echarts-5.6.0.tgz
-# (dist/echarts.min.js, sha256 bf4a223524e40b77c304bec67e1222cf551f14880
-# cf42c69dc046558e11c07b1).
+# Rendering contract (owner revision on #156, chart file removed by #162):
+# Jinja2 template carrying the Apache-2.0 ECharts library INLINED under a
+# {% raw %}...{% endraw %} block — real plotted charts with zero CDN, zero
+# build step, zero server, no separate library file; double-click opens
+# the file offline. Library provenance lives in the template's leading
+# comment (npm registry tarball, dist/echarts.min.js, sha256 pinned there).
 
 _TEMPLATE_REL = ("templates", "winrate_curve.html.j2")
-_ECHARTS_VENDOR_REL = ("templates", "vendor", "echarts-5.6.0.min.js")
 
 
 def _asset(rel) -> Path:
@@ -279,9 +276,10 @@ def _asset(rel) -> Path:
 def render_html(data: dict) -> str:
     """Face dict -> self-contained single-file HTML (the human rendering).
 
-    The chart JS consumes the SAME inlined face JSON the agent reads —
-    the human rendering cannot drift from the primary artifact. Guarded
-    jinja2 import: the JSON face never needs it (--json works without)."""
+    The chart library rides inside the .j2 (in-file since #162) and
+    consumes the SAME inlined face JSON the agent reads — the human
+    rendering cannot drift from the primary artifact. Guarded jinja2
+    import: the JSON face never needs it (--json works without)."""
     try:
         from jinja2 import Template
     except ImportError as exc:  # declared in pyproject; degrade loudly
@@ -290,13 +288,10 @@ def render_html(data: dict) -> str:
             "in pyproject; `uv sync` installs it) — the --json face does "
             "not") from exc
     template_path = _asset(_TEMPLATE_REL)
-    echarts_path = _asset(_ECHARTS_VENDOR_REL)
-    missing = [p for p in (template_path, echarts_path) if not p.is_file()]
-    if missing:
+    if not template_path.is_file():
         raise FileNotFoundError(
-            "winrate-curve: --html rendering assets missing (the vendored "
-            "ECharts build is required — never a CDN reference): "
-            + ", ".join(str(p) for p in missing))
+            "winrate-curve: --html rendering assets missing "
+            f"(the .j2 carries the chart library, #162): {template_path}")
     data = data or {}
     rate = (data.get("overall") or {}).get("rate")
     overall_pct = "n/a" if rate is None else f"{rate * 100:.1f}%"
@@ -315,8 +310,7 @@ def render_html(data: dict) -> str:
         window=data.get("window", 0),
         overall_pct=overall_pct,
         has_data=bool(data.get("n_settlements")),
-        face_json=data_json,
-        echarts_js=echarts_path.read_text(encoding="utf-8"))
+        face_json=data_json)
 
 
 # --------------------------------------------------------------------- CLI

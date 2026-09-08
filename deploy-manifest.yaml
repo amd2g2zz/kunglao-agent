@@ -839,7 +839,7 @@ files:
   - src: scripts/winrate_curve.py
     dest: .claude/scripts/winrate_curve.py
     kind: scaffold
-    sha256: e1b02a18967c9e43cdb4c018a590b3fc757ab5cae31cdd76c3865afa433402c5
+    sha256: 13d5b1d743d2800ef1c408bb0575f776195890c775fc768bc234e93f6388faa5
   - src: scripts/wire_up_settings.py
     dest: .claude/scripts/wire_up_settings.py
     kind: scaffold
@@ -1239,7 +1239,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: f126bf03e7dd079ca69cad429a958f6ff2f5d79c454964a612ce31dfb0600ee6
+    sha256: 9cf976dee421c108c89e721d9eba350482f92a34fa655e247d285c784f4b7ac5
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset
@@ -1251,7 +1251,7 @@ files:
   - src: templates/frida/README.md
     dest: .claude/templates/frida/README.md
     kind: asset
-    sha256: 63be095c814ddd6c2a63c002d54de57c1c0cfadd11247c169563513a5c4e1c10
+    sha256: e884d88b6e7dcb10c06a3081248fb2f2db9f1a7e58b544c31cc944083cd204f2
   - src: templates/frida/cfg-analyze.py.tmpl
     dest: .claude/templates/frida/cfg-analyze.py.tmpl
     kind: asset
@@ -1260,6 +1260,10 @@ files:
     dest: .claude/templates/frida/cfg-hook.js.tmpl
     kind: asset
     sha256: 0d779c321691f5ea8050f6b82118f0d9e64fbc8910cf901b2267b1ad261d4665
+  - src: templates/frida/windowed-stalker.js.tmpl
+    dest: .claude/templates/frida/windowed-stalker.js.tmpl
+    kind: asset
+    sha256: 88d6a2cd7045de3ff4a6ee97021ef2cb27bf6fab9e1ae998f01d13bac1cfcb97
   - src: templates/scripts/README.md
     dest: .claude/templates/scripts/README.md
     kind: asset
@@ -1300,18 +1304,14 @@ files:
     dest: .claude/templates/state/task_spec.yaml
     kind: asset
     sha256: f2625490e5d6957293b80f1db85278a230d99728106f515237ec93325f4d5670
-  - src: templates/vendor/echarts-5.6.0.min.js
-    dest: .claude/templates/vendor/echarts-5.6.0.min.js
-    kind: asset
-    sha256: bf4a223524e40b77c304bec67e1222cf551f14880cf42c69dc046558e11c07b1
   - src: templates/winrate_curve.html.j2
     dest: .claude/templates/winrate_curve.html.j2
     kind: asset
-    sha256: 88abba7d4401c8c40cf5aec3d3efdb7cad43dfa154e6fef75c52f2fab7e424fd
+    sha256: 19d07aabff81b8ffa4a372a2c89a7ceaef895f85956ac91efa42adf4faafea58
   - src: tools/README.md
     dest: .claude/tools/README.md
     kind: asset
-    sha256: c7d9c868a0fe62c759b2f11c1edd0a0de3d1a6f76a1a99816624f07f31fa3713
+    sha256: 85cbefd8fa6f882fe967171e1399958a17366798beb9b2b4ef413017057ac28e
   - src: tools/_INDEX.ext.map.yaml
     dest: .claude/tools/_INDEX.ext.map.yaml
     kind: asset
@@ -1319,7 +1319,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 8a1e2568c502d42872d74c4a1ef13de8481fb65cfb7e4d70b8443798f5054c39
+    sha256: ac2679f1ed6333c215c48ebda54dba45a9013e35acdffbc6aa9aff2451890db9
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
@@ -1415,7 +1415,7 @@ files:
   - src: tools/ext-scan.py
     dest: .claude/tools/ext-scan.py
     kind: asset
-    sha256: f342609c6c3b1204fa411b5a1e199eec1072c30d87cbb92144a7e4bf8d6af712
+    sha256: 93bea2cb46a1655ee9afa5735a9171c2ca3f9111efb10b40b4b2184523c5ef1a
   - src: tools/ghidra/DecompileFunctions.java
     dest: .claude/tools/ghidra/DecompileFunctions.java
     kind: asset
@@ -1575,7 +1575,7 @@ files:
   - src: tools/tool-search.py
     dest: .claude/tools/tool-search.py
     kind: asset
-    sha256: 981de141cea75ae4b21dfbd87fbd6228d9a30b671db926227152a6fb4b0f5a27
+    sha256: c3bcb1215bea04c8da1cdce627483cb6c78cbb684bf156324263927e618780af
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset

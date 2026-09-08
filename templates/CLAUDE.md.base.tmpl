@@ -35,6 +35,8 @@ The convergence loop runs every round and is the only rule set that survives con
 
 Analysis is driven by `/kunglao-agent` (skill at `{{skill_dir}}`). Key scripts under `{{skill_dir}}/scripts/`, run from the workspace root with `.venv` activated: `convergence_check.py`, `priority_ratio.py`, `convergence_health.py`, `failure_analysis_gate.py`, `env_check.py` (writes `runs/.env-check.json`), `hook_activation.py --renew` (30-min hook TTL).
 
+Capability discovery across the asset tiers goes through `python {{skill_dir}}/tools/tool-search.py --find <keyword>`: each result states a `type`, a `consume`, and a keyword match score (lexical, not semantic) that ranks candidates for the agent's own judgment — a tool may be invoked, a template filled or adapted, a reference read. The score measures word overlap only, never gates surfacing, so near-miss results stay visible, and result descriptions state expected outcomes rather than guaranteed facts.
+
 ## State files (read every turn, disk is truth)
 
 | File | Purpose |

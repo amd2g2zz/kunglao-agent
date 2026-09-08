@@ -93,11 +93,15 @@ tools/
 ### Ext catalog (`_INDEX.ext.yaml`, describe-only — issue #476)
 
 Capabilities that live OUTSIDE this toolshelf registry but are callable repo
-surface: entry-point `scripts/` CLIs, `hooks/` gates, and
-`references/re-library/` capability-declaration docs. Enumerated
-mechanically by `ext-scan.py` (AST `__main__` entry-point detection — no
-filename lists) into `_INDEX.ext.yaml`; each entry carries
-`name / capability / source / usage / description`.
+surface: entry-point `scripts/` CLIs, `hooks/` gates,
+`templates/**/*.tmpl` skeletons, and `references/re-library/`
+capability-declaration docs. Enumerated mechanically by `ext-scan.py`
+(AST `__main__` entry-point detection — no filename lists) into
+`_INDEX.ext.yaml`; each entry carries
+`name / capability / type / consume / source / usage / description`.
+`type` (tool|template|reference) and `consume`
+(invoke|fill|adapt|read) are the #162 tier labels — classification
+criteria 1-3 are recorded in the `ext-scan.py` docstring.
 
 - **Zero new trust mechanism**: entries are DESCRIBED, never executed from
   the index. Consumption is read/print (`tool-search.py --find <keyword>`,
