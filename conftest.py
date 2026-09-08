@@ -52,6 +52,7 @@ LOAD_SENSITIVE_MODULES = frozenset({
     "test_env_check",             # tick-chain adjacent (issue #369 audited set)
     "test_env_check_gate",        # real subprocess.run probes (timeout=60 each)
     "test_env_ports_wiring",      # tick-chain adjacent (issue #369 audited set)
+    "test_toolchain",             # android stub probes + fixed-port listeners
 })
 LOAD_SENSITIVE_LOCK_NAME = "kunglao-pytest-load-sensitive.lock"
 LOAD_SENSITIVE_ACQUIRE_TIMEOUT_S = 600.0  # generous: several queued suites under load

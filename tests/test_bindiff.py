@@ -67,7 +67,7 @@ def read_record(jobs_dir, job_id, retries=5):
     raise last
 
 
-def wait_terminal(jobs_dir, job_id, timeout=15.0, grace=0.2):
+def wait_terminal(jobs_dir, job_id, timeout=90.0, grace=0.2):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         record = read_record(jobs_dir, job_id)

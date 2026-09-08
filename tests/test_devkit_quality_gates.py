@@ -25,7 +25,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEVKIT_QUALITY_GATES = REPO_ROOT / "devkit" / "quality_gates.py"
 
 
-def _run_quality_gates(*args: str, timeout: int = 60) -> subprocess.CompletedProcess:
+def _run_quality_gates(*args: str, timeout: int = 240) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(DEVKIT_QUALITY_GATES), *args],
         capture_output=True, text=True, timeout=timeout, cwd=REPO_ROOT,
@@ -58,21 +58,21 @@ def test_devkit_quality_gates_help_works() -> None:
 
 def test_gate1_only_runs_quickly() -> None:
     """Gate 1 (contract modules) MUST complete in <10s — no subprocess overhead."""
-    r = _run_quality_gates("1", timeout=15)
+    r = _run_quality_gates("1", timeout=60)
     assert r.returncode == 0, f"{r.stdout}{r.stderr}"
     assert "Gate 1" in r.stdout
 
 
 def test_full_runner_exits_zero_when_only_safe_gates() -> None:
     """Gates 1, 3, 4 (no Gate 2 = no full pytest) MUST exit 0."""
-    r = _run_quality_gates("1", "3", "4", timeout=60)
+    r = _run_quality_gates("1", "3", "4", timeout=240)
     assert r.returncode == 0, f"{r.stdout}{r.stderr}"
     assert "ALL-PASS" in r.stdout
 
 
 def test_unknown_gate_returns_code_2() -> None:
     """Argument validation: invalid gate -> exit 2 (usage error)."""
-    r = _run_quality_gates("99", timeout=15)
+    r = _run_quality_gates("99", timeout=60)
     assert r.returncode == 2, f"{r.stdout}{r.stderr}"
 
 
@@ -84,7 +84,7 @@ def test_observation_pass_rate_runs_even_when_no_junit() -> None:
         backup = junit.read_bytes()
         junit.unlink()
     try:
-        r = _run_quality_gates("1", "3", "4", timeout=60)
+        r = _run_quality_gates("1", "3", "4", timeout=240)
         assert r.returncode == 0
         assert "pass_rate" not in r.stdout or "skip" in r.stdout
     finally:

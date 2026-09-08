@@ -90,6 +90,13 @@ const HUD = process.env.KUNGLAO_STATUSLINE_HUD !== undefined
   ? process.env.KUNGLAO_STATUSLINE_HUD
   : `${process.env.HOME}/.claude/plugins/cache/claude-hud/claude-hud/0.1.0/dist/index.js`;
 
+// Test seam: KUNGLAO_STATUSLINE_NOW_MS pins "now" (epoch ms) so staleness
+// horizons can be sampled deterministically regardless of machine load —
+// same test-only seam pattern as the HUD variable above. Unset = real clock.
+const NOW_MS = process.env.KUNGLAO_STATUSLINE_NOW_MS !== undefined
+  ? Number(process.env.KUNGLAO_STATUSLINE_NOW_MS)
+  : Date.now();
+
 const FLASH_WINDOW_MS = 5000; // 5s fade window (render-clock side, kept)
 
 // Four-meaning palette (ANSI SGR; color IS data — no decorative hues).
@@ -308,7 +315,7 @@ function main() {
   })();
 
   const snapPath = findSnapshot(cwd);
-  const kunglaoSeg = snapPath ? renderKunglao(snapPath, Date.now()) : '';
+  const kunglaoSeg = snapPath ? renderKunglao(snapPath, NOW_MS) : '';
 
   const lines = hudOut.replace(/\n+$/, '').split('\n').filter((l) => l !== '');
   if (!kunglaoSeg) {

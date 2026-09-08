@@ -807,7 +807,7 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: e84941a1eccc81c026944d8441206d024a8c8903d38f7698a8dba6cd36237380
+    sha256: b7b77eb9fa4fd429a86ae11252e8b320b6ce5b9fa9661e9bd0a3ce493ad4e439
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
@@ -879,7 +879,7 @@ files:
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
-    sha256: 285f75f6eae4f2c019a92d4071b451d5e19fd2c0059779356528a3a51dfbe626
+    sha256: b45436cff3796ff3f7ee09031b59e0d83f944615db0f44729702b299fc983df0
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
