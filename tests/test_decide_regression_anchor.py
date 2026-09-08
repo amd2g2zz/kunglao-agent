@@ -220,6 +220,19 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # claim_id/fact_id/top_dimension and all non-anomaly fields byte-equal)
 # before re-pin; re-pinned via capture_current() per the docstring command.
 #
+# 2026-09-08 corpus re-pin (#164 distillation): the falsifier-library card
+# gained the debuggability-enablement family row (family 18) and its
+# frontmatter description lost a yaml-hostile ': ' (plain-scalar fix), both
+# shifting lexical rarity in the anomaly baseline corpus (re-library/*.md).
+# Stacks on the #163/#165 corpus in the same dev series (rebased onto
+# b57b568). Same class as #112/#884/#866-b/#728/#150/#161/#163: DATA drift
+# only, the same 4 score floats across the 2 contradiction cases
+# (0.9117835414665385 -> 0.9116714240405962,
+# 0.9051392891450528 -> 0.905209324452902). Case-by-case diff
+# verified SCORE-ONLY programmatically over all 31 cases (anomaly
+# claim_id/fact_id/top_dimension and all non-anomaly fields byte-equal)
+# before re-pin; re-pinned via capture_current() per the docstring command.
+#
 # 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web-re-quickref.md
 # joined the anomaly baseline corpus (anomaly_detector._load_baseline ingests
 # re-library/*.md), shifting every lexical rarity score in the 4th decimal. This
