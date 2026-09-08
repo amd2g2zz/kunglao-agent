@@ -2,6 +2,37 @@ schema: re-library-mapping/1
 purpose: 'Single home of card placement (constitution rule on the mapping): from = pre-move path, to =
   post-move path (depth cap 3, level 3 reserved), domain/family must equal the card frontmatter. Generators
   resolve placement exclusively through this file.'
+domains:
+  tools: Static/dynamic/advanced/crypto tooling quick-reference plus the in-repo toolshelf
+  patterns: 'General RE techniques: pattern catalog, simulation, decode, dynamic debugging, VM protections'
+  languages: 'Language-specific RE: scripting and esoteric targets, compiled binaries, platform stacks'
+  platforms: 'Platform and format RE: catalog, ELF, kernel drivers, hardware'
+  anti-analysis: Anti-debug, anti-VM and anti-DBI detection and bypass
+  android: 'Android RE: unidbg emulation, fingerprint seeds, signature recovery, stacked protections'
+  malware: 'Malware analysis application domain: workflow, triage, reporting'
+  method: 'Analysis method: process discipline (falsifiers, stage gates, verification, IDA lane) and wire
+    formats'
+  web: 'Web RE: labs quick-reference, JS VM triage, risk-control doctrine, crawler engineering'
+  research: 'External research: multi-engine OSINT search and RE resource collections'
+scenarios:
+  Disassembly / static analysis: tools (tools, tools-advanced, ida-scripting-overlays) + patterns (patterns,
+    patterns-decode)
+  Dynamic debugging (x64dbg / Frida / Qiling / VM): tools (tools-dynamic, dynamic-observation-ladders)
+    + patterns (patterns-debugging)
+  Packed / obfuscated / anti-analysis: anti-analysis + tools (tools-advanced) + android (stacked-protections)
+  Firmware / hardware: platforms (platforms-hardware)
+  Kernel driver / module: platforms (platforms-kernel)
+  Language-specific: languages
+  Platform-specific: platforms
+  Detection rules / reports: malware (detection-engineer, malware-report-writer)
+  Intelligence / search: research (multi-search-engine, multi-search-engine-refs)
+  Browser JS target (`--type web`): web (web-re-quickref, jsvmp-triage)
+  Anti-bot decisions & crawler ops: web (web-risk-control, web-crawler-engineering)
+  Android emulation harness (unidbg): android (unidbg-env-filling, unidbg-harness-bringup, unidbg-algo-recovery,
+    android-fingerprint-apis)
+  Malware sample intake / triage: malware (malware-triage, malware-analysis-workflow, malware-analysis)
+  Action error / tool-VM-install failure response: error-response-taxonomy
+  Ask-the-user / irreversible-action decision: agent-three-state-charter
 cards:
 - from: references/re-library/android-fingerprint-apis.md
   to: references/re-library/android/emulation/android-fingerprint-apis.md

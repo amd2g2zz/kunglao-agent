@@ -1,6 +1,6 @@
 # anti-analysis domain index (file level)
-> Domain: deobfuscation / anti-analysis adversary techniques. When a worker faces anti-debug/anti-VM/anti-DBI samples, read this file first.
-| File | One-line summary | When to read |
-|---|---|---|
-| [anti-analysis.md](re-library/anti-analysis.md) | Catalog of anti-debug/anti-VM/anti-DBI/code-integrity techniques with Linux/Windows dual-platform bypass methods | Sample detects debuggers/VMs/instrumentation frameworks (Frida/Pin), or integrity/self-check bypasses are needed |
-| [signature-check-bypass.md](re-library/signature-check-bypass.md) | Signature-check bypass: read-channel table + 5-rung spoof ladder + rung-selection heuristics | Resigned/repackaged APK crashes at launch, black-screens, or the check keeps re-arming |
+> GENERATED FILE — regenerate with `python scripts/reference_index_build.py`.
+> Row summaries are the card frontmatter descriptions, byte-for-byte.
+| File | Summary |
+|---|---|
+| [anti-analysis.md](re-library/anti-analysis.md) | Anti-debugging, anti-VM, anti-DBI, code-integrity bypass. When encountering binaries detecting debuggers/VMs/instrumentation. |

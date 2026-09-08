@@ -219,6 +219,9 @@ def iter_entry_sources(root: Path) -> list[tuple[str, str]]:
     enumerate wholesale (a .tmpl/.md is catalogued as-is)."""
     out: list[tuple[str, str]] = []
     for rel_dir, pattern, kind in SOURCE_DIRS:
+        if kind == "reference":
+            out.extend((face, kind) for face in _mapped_references(root))
+            continue
         d = root / rel_dir
         if not d.is_dir():
             continue
@@ -228,6 +231,36 @@ def iter_entry_sources(root: Path) -> list[tuple[str, str]]:
             if kind in ("reference", "template") or has_entry_point(p):
                 out.append((p.relative_to(root).as_posix(), kind))
     return sorted(out)
+
+
+def _mapped_references(root: Path) -> list[str]:
+    """Card faces for the reference tier, resolved through the mapping.
+
+    The mapping (references/re-library/_mapping.yaml) is the single home
+    of card placement; each row contributes its destination once the move
+    has landed, its source before. Data files ride with their consumer
+    card and carry no catalog row. A file on disk outside the mapping is
+    never catalogued — the comment-hygiene lint fails it instead.
+    """
+    map_path = root / "references/re-library/_mapping.yaml"
+    if not map_path.is_file():
+        # mapping-less tree (sandbox fixtures, legacy layouts): legacy flat
+        # enumeration; where the mapping lives, the lint enforces coverage
+        d = root / "references/re-library"
+        return sorted(p.relative_to(root).as_posix() for p in d.glob("*.md"))
+    import yaml  # dev-time generator; PyYAML is a locked repo dependency
+
+    doc = yaml.safe_load(map_path.read_text(encoding="utf-8")) or {}
+    faces: list[str] = []
+    for row in doc.get("cards") or []:
+        if not str(row.get("from", "")).endswith(".md"):
+            continue
+        for key in ("to", "from"):
+            rel = str(row.get(key, ""))
+            if rel and (root / rel).is_file():
+                faces.append(rel)
+                break
+    return sorted(faces)
 
 
 # ---- field derivation -----------------------------------------------------

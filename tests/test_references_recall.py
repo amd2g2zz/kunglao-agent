@@ -302,13 +302,13 @@ class TestCli:
         r = _cli("zzz-nonsense")
         assert r.returncode == 1
         assert "no match" in r.stdout
-        assert "dynamic-analysis" in r.stdout  # closest-category listing
+        assert "anti-analysis" in r.stdout  # closest-category listing
 
     def test_cli_list_categories(self) -> None:
         r = _cli("--list-categories")
         assert r.returncode == 0
-        assert "tools (6)" in r.stdout  # 6 since #866-b (kunglao-toolshelf.md joined the tools domain)
-        assert "governance (4)" in r.stdout  # +1: mechanisms.md cataloged 2026-08-25
+        assert "tools (6)" in r.stdout  # 5 tool cards + tool-inventory from the Population B region
+        assert "governance (4)" in r.stdout  # Population B hand-region rows keep their labels
 
     def test_cli_scene_map(self) -> None:
         r = _cli("--scene-map")

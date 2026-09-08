@@ -19,7 +19,7 @@ def check_re_library_orphans(root):
     index = (root / 'references' / 'INDEX.md').read_text(encoding='utf-8') if (root / 'references' / 'INDEX.md').exists() else ''
     all_refs = refs_text + skill_text + index
     orphans = []
-    for p in sorted(re_lib.glob('*.md')):
+    for p in sorted(re_lib.rglob('*.md')):
         if p.name not in all_refs:
             orphans.append(str(p.relative_to(root)))
     return orphans

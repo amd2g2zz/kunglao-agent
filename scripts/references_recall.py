@@ -265,11 +265,46 @@ def _parse_domain_index(path: Path) -> dict[str, tuple[str, str]]:
 
 # ---------- path resolution ----------
 
+_MAPPING_CACHE: dict | None = None
+
+
+def _mapping_short_faces(refs_dir: Path) -> dict:
+    """Card short name -> references-relative face from the mapping (the
+    destination once the move lands, the source before it). Cached per
+    process; empty when the mapping is absent (legacy layouts)."""
+    global _MAPPING_CACHE
+    if _MAPPING_CACHE is not None:
+        return _MAPPING_CACHE
+    faces: dict = {}
+    map_path = refs_dir / "re-library" / "_mapping.yaml"
+    if map_path.is_file():
+        try:
+            import yaml as _map_yaml
+            doc = _map_yaml.safe_load(map_path.read_text(encoding="utf-8")) or {}
+            for row in doc.get("cards") or []:
+                for key in ("to", "from"):
+                    rel = str(row.get(key, ""))
+                    if rel and (refs_dir / rel).is_file():
+                        stem = Path(rel).stem
+                        if stem not in faces:
+                            faces[stem] = rel
+                        break
+        except Exception:
+            faces = {}
+    _MAPPING_CACHE = faces
+    return faces
+
+
 def _short_to_path(short: str, refs_dir: Path) -> str:
-    """Map a short file name ("tools-crypto") to a repo-relative path."""
+    """Map a short file name ("tools-crypto") to a references-relative
+    path. Mapped cards resolve through the mapping face; everything else
+    keeps the legacy top-level probes."""
     short = short.strip()
     if short.endswith(".md"):
         short = short[:-3]
+    face = _mapping_short_faces(refs_dir).get(short)
+    if face:
+        return face
     for rel in (f"re-library/{short}.md", f"{short}.md"):
         if (refs_dir / rel).is_file():
             return rel
