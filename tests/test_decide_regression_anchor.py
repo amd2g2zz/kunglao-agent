@@ -89,6 +89,20 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # re-pin entry below). The oracle-blocking semantics themselves are
 # unanchored by construction (the matrix has no oracle-bearing DRAIN case);
 # covered by the #108 block in tests/test_decide_state_machine.py.
+# 2026-09-08 corpus re-pin (#165 course distillation — DATA drift, not
+# semantics): two re-library cards joined the references corpus
+# (unidbg-env-filling, signature-check-bypass), shifting lexical rarity in
+# the anomaly baseline on top of the #163 card set (re-run during the
+# merge-order rebase onto the stacked tree). Programmatic pre-commit diff
+# verified SCORE-ONLY: exactly 4 anomaly score floats across the 2
+# contradiction cases (drain_blocked_contradiction,
+# order_discovery_beats_contradiction — 0.907028->0.911784 and
+# 0.903569->0.905139 original-to-final; re-verified SCORE-ONLY after the
+# card reached its landed wording), every non-anomaly field and all other
+# cases byte-equal. Same documented drift class as
+# #884/#866-b/#728/#112/#150/#161/#169. Re-captured via capture_current()
+# from the current tree (the only sanctioned channel — see 2026-09-05
+# entry).
 # 2026-09-07 zero-drift verification (#146 failure-gate arming re-point):
 # failure_analysis_gate's arming moved from the never-written
 # promotion_attempts counter to settlement-derived case reds

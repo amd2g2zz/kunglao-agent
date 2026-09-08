@@ -3,3 +3,4 @@
 | File | One-line summary | When to read |
 |---|---|---|
 | [anti-analysis.md](re-library/anti-analysis.md) | Catalog of anti-debug/anti-VM/anti-DBI/code-integrity techniques with Linux/Windows dual-platform bypass methods | Sample detects debuggers/VMs/instrumentation frameworks (Frida/Pin), or integrity/self-check bypasses are needed |
+| [signature-check-bypass.md](re-library/signature-check-bypass.md) | Signature-check bypass: read-channel table + 5-rung spoof ladder + rung-selection heuristics | Resigned/repackaged APK crashes at launch, black-screens, or the check keeps re-arming |

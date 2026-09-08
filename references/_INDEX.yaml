@@ -3,10 +3,10 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: f010eccd4d604e7a51c51f444bd7ded5a69550c1c8b536790c71bbd14fa12787
-  references/_index-anti-analysis.md: 77ae0fe0834dde577e39d1124d4941962b1e4d7af1012434cac89c7d3f381431
+  references/_INDEX.md: 0b1322db9d029c03c2869d4275b34cc75d9667a9e494d8f26253f181aa0c41a3
+  references/_index-anti-analysis.md: 708dab6abdd2da3fc41ca3e5b05833a53a6ede0293c547f508d8d276da441028
   references/_index-languages.md: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
-  references/_index-methodology.md: 4183b6f86c4ccd299452d41d2532fde6487301175804cb84729d41d3b4cf08aa
+  references/_index-methodology.md: cd4744acd6bac9e7353ac164d3f28d9e34412cb108c8e1edcfd7cd3647a0b683
   references/_index-osint.md: de3ca124abaa9b0d36383d086aaa82e58054e8a4c865cb27e08cefbab123a793
   references/_index-patterns.md: 11bb2c6224de8391fba7e2b1fdca2c76e5cf6aa3e0902df2562c57a9c9dedeb1
   references/_index-platforms.md: eb4224a8cde683873a422a5a21ca62067b46efe09a46a7ff2c0f981ce57b6c7b
@@ -73,11 +73,13 @@ files:
   references/re-library/platforms-hardware.md: f1b9c9de747215018856fb64149687c9b2061c3ad331c8901a95666ef128d4bc
   references/re-library/platforms-kernel.md: 352e95fdac3bec430fc5c4ef6a0adabbbe926a5932661e4c6a573127bca26b54
   references/re-library/platforms.md: 98038fb241229936a12e58486f6adbf50fab104bf6c9a50efb45a8d362dff1e0
+  references/re-library/signature-check-bypass.md: 96e33d0dbd7bb419df64bf8775241e8f5b9e38de705afd5e22e2c4626d1cca27
   references/re-library/stacked-protections.md: 7090556f1d45a74f6d90ce1b54e469bde3bd01a708f7a2ae8ce983271c2374f0
   references/re-library/tools-advanced.md: c93d6dde0de4f70b6b13bab095e1c111e790cbe7618f2da6f6867dfda946614e
   references/re-library/tools-crypto.md: 4c49547085ef4a173591eae2533e5845f998ef07a0ed534958b62d320e2bdfa5
   references/re-library/tools-dynamic.md: af6d0539a253366cf76b3266922bc4551478ebe32576fc216b68d91d0ea5f7de
   references/re-library/tools.md: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
+  references/re-library/unidbg-env-filling.md: d8cf573c4a6d49246273aedb8a4344c843eba75417061f7300f264fb6e8d9796
   references/re-library/verification-safety.md: 74db768faee847585462bebe1ab5ffd2d2dbaccb89d695361d712097d8f3869b
   references/re-library/vm-deobfuscation-routing.md: 97854404fd51099fc31589cfcefe894f4c81716b1326e503083b4acb9ad9dd29
   references/re-library/vm-protection-anatomy.md: 4c6f031473ab71ed0fe001ed0d17e9efad1d415913b7c304192c07422f5345e7

@@ -432,6 +432,10 @@ files:
     dest: .claude/scripts/install_reference.py
     kind: scaffold
     sha256: 6b0a71e70bc8430608ea073fdb6cfb356c5e69dd95e9ea30ae66511b05101cc5
+  - src: scripts/install_unidbg.py
+    dest: .claude/scripts/install_unidbg.py
+    kind: scaffold
+    sha256: 79f32b7c2aed6d3509887953bab827ef01704c692e46f79ad23cc00db708e921
   - src: scripts/intake_one.py
     dest: .claude/scripts/intake_one.py
     kind: scaffold
@@ -871,15 +875,15 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: f010eccd4d604e7a51c51f444bd7ded5a69550c1c8b536790c71bbd14fa12787
+    sha256: 0b1322db9d029c03c2869d4275b34cc75d9667a9e494d8f26253f181aa0c41a3
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: f66bea15279f8298377ab74140499036260b8784607784ab5c4724f4ebb2425f
+    sha256: c8ad27b80d921eee9f5bf00a6ee926a7b21909b1df9ee2756aa16d0feb9694a1
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
-    sha256: 77ae0fe0834dde577e39d1124d4941962b1e4d7af1012434cac89c7d3f381431
+    sha256: 708dab6abdd2da3fc41ca3e5b05833a53a6ede0293c547f508d8d276da441028
   - src: references/_index-languages.md
     dest: .claude/references/_index-languages.md
     kind: asset
@@ -887,7 +891,7 @@ files:
   - src: references/_index-methodology.md
     dest: .claude/references/_index-methodology.md
     kind: asset
-    sha256: 4183b6f86c4ccd299452d41d2532fde6487301175804cb84729d41d3b4cf08aa
+    sha256: cd4744acd6bac9e7353ac164d3f28d9e34412cb108c8e1edcfd7cd3647a0b683
   - src: references/_index-osint.md
     dest: .claude/references/_index-osint.md
     kind: asset
@@ -1164,6 +1168,10 @@ files:
     dest: .claude/references/re-library/platforms.md
     kind: asset
     sha256: 98038fb241229936a12e58486f6adbf50fab104bf6c9a50efb45a8d362dff1e0
+  - src: references/re-library/signature-check-bypass.md
+    dest: .claude/references/re-library/signature-check-bypass.md
+    kind: asset
+    sha256: 96e33d0dbd7bb419df64bf8775241e8f5b9e38de705afd5e22e2c4626d1cca27
   - src: references/re-library/stacked-protections.md
     dest: .claude/references/re-library/stacked-protections.md
     kind: asset
@@ -1184,6 +1192,10 @@ files:
     dest: .claude/references/re-library/tools.md
     kind: asset
     sha256: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
+  - src: references/re-library/unidbg-env-filling.md
+    dest: .claude/references/re-library/unidbg-env-filling.md
+    kind: asset
+    sha256: d8cf573c4a6d49246273aedb8a4344c843eba75417061f7300f264fb6e8d9796
   - src: references/re-library/verification-safety.md
     dest: .claude/references/re-library/verification-safety.md
     kind: asset
@@ -1264,6 +1276,10 @@ files:
     dest: .claude/templates/frida/cfg-hook.js.tmpl
     kind: asset
     sha256: 0d779c321691f5ea8050f6b82118f0d9e64fbc8910cf901b2267b1ad261d4665
+  - src: templates/frida/rpc-skeleton.js.tmpl
+    dest: .claude/templates/frida/rpc-skeleton.js.tmpl
+    kind: asset
+    sha256: 02b09a4a1b03a19cf43a4478155f7b1ea5e4561adc66bfca6a9d78c7a1dbed93
   - src: templates/frida/windowed-stalker.js.tmpl
     dest: .claude/templates/frida/windowed-stalker.js.tmpl
     kind: asset
@@ -1308,6 +1324,10 @@ files:
     dest: .claude/templates/state/task_spec.yaml
     kind: asset
     sha256: f2625490e5d6957293b80f1db85278a230d99728106f515237ec93325f4d5670
+  - src: templates/unidbg/harness.java.tmpl
+    dest: .claude/templates/unidbg/harness.java.tmpl
+    kind: asset
+    sha256: 8c607d2962336e7949a792258fba1995def304e383e915afa78240eda5cba14c
   - src: templates/winrate_curve.html.j2
     dest: .claude/templates/winrate_curve.html.j2
     kind: asset
@@ -1323,7 +1343,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 65dd1ba6f7a71036ad0d38199fc10c53744357b3b34ce43b231ec48ea8f2b909
+    sha256: ecabe9fcfa1e3043bd40373e0f7155ef97e9e8f61139e56b0f43e78e8186fff8
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

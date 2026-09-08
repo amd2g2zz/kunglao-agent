@@ -3,6 +3,8 @@
 | File | One-line summary | When to read |
 |---|---|---|
 | [field-notes.md](re-library/field-notes.md) | Field notes: binary-type quirks (.pyc/WASM/APK/Flutter/.NET/packed), anti-debugging bypasses, specialized RE patterns | After initial triage, moving into hands-on analysis of a specific sample type |
+| [unidbg-env-filling.md](re-library/unidbg-env-filling.md) | unidbg env-filling field guide: deployment preconditions, WARN-log decode, failure-signature->fix tables (JNI/syscall/file/libc), divergence tells | Emulation harness crashes, throws UnsupportedOperationException, stalls on an SVC, or diverges from device answers |
+| [signature-check-bypass.md](re-library/signature-check-bypass.md) | Signature-check bypass: read-channel table + 5-rung spoof ladder + rung-selection heuristics | Resigned/repackaged APK crashes at launch, black-screens, or the check keeps re-arming |
 | [malware-analysis.md](re-library/malware-analysis.md) | Six-phase malware analysis methodology: triage/static/dynamic/behavior extraction/IOC identification/anti-analysis bypass | End-to-end analysis of PE/ELF/Mach-O/APK/script samples |
 | [malware-analysis-workflow.md](re-library/malware-analysis-workflow.md) | Malware analysis workflow orchestration: routes by file type and phase to dedicated sub-workflows | Single entry-point orchestration when starting any malware analysis |
 | [malware-analysis-quickstart.md](re-library/malware-analysis-quickstart.md) | Analysis skill-suite installation and verification quick reference | First-time setup of the malware analysis skill suite and confirming it works |

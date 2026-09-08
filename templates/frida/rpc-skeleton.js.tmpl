@@ -1,0 +1,125 @@
+/**
+ * rpc-skeleton.js — Frida RPC export-surface skeleton
+ * (template: templates/frida/rpc-skeleton.js.tmpl, #165).
+ * consume: adapt
+ *
+ * Scenario: a host-side driver must call target functions over the Frida RPC channel (device-free invocation of an already-validated calling convention — the output-shape/capture work happened earlier per native-sign-recovery).
+ * How: script exports a {{JAVA_CLASS}}.{{JAVA_METHOD}} Java-face call and a {{NATIVE_LIB}}!{{NATIVE_SYMBOL}} native-face call over rpc.exports, streams progress over send(), and returns only final values; the host attaches (or spawns+resumes) {{TARGET_PROCESS}}, discriminates send/error in on_message, and keeps the host alive for the script's lifetime.
+ * Expected outcome: a callable export surface reachable from the host driver — NOT an algorithm recovery: every value returned is a hypothesis until the replay gate (native-sign-recovery step 6) closes it.
+ *
+ * Requires: frida >= 16 (NativePointer instance memory accessors).
+ *
+ * KNOWN-VARIANCE REGIONS (adapt-expected — rework these per target):
+ *   1. Exported surface — the functions registered on rpc.exports define
+ *      the entire callable surface; the two worked shapes (Java static
+ *      call, native symbol call) are placeholders for the target's real
+ *      entry points.
+ *   2. Message protocol — the {kind, stage, payload} schema is a
+ *      placeholder contract; version it when the driver needs to
+ *      discriminate generations.
+ *   3. Error channel — errors surface two ways (thrown -> host exception;
+ *      caught -> send({type:'error'})); which path a caller discriminates
+ *      is driver policy.
+ *
+ * FRIDA >= 16 API AUDIT (inline): the legacy static surface
+ *   Memory.readCString(addr) / Memory.readByteArray(addr, len)
+ *   Memory.writeByteArray(addr, bytes)
+ * is REMOVED from the modern API — the operations live on NativePointer
+ * instance methods: addr.readCString() / addr.readByteArray(len) /
+ * addr.writeByteArray(bytes). Code below uses only the instance-method
+ * surface; the static forms appear here solely as this migration note.
+ *
+ * Host-side contract (python, unrendered here):
+ *   device  = frida.get_usb_device()            # or add_remote_device(...)
+ *   pid     = device.spawn(["{{TARGET_PROCESS}}"])  # attach path: device.attach(name)
+ *   session = device.attach(pid)                # then device.resume(pid)
+ *   script  = session.create_script(source)
+ *   script.on('message', on_message)            # on_message discriminates
+ *        message['type'] == 'send'  -> payload  (message protocol region)
+ *        message['type'] == 'error' -> message['stack'] (error channel)
+ *   script.load()
+ *   script.exports.java_face(...)               # sync return path
+ *   sys.stdin.read()                            # keep-alive: script dies with the host
+ */
+
+'use strict';
+
+// Frida >= 16 API audit (inline): the legacy static surface
+//   Memory.readCString(addr) / Memory.readByteArray(addr, len)
+//   Memory.writeByteArray(addr, bytes)
+// is REMOVED from the modern API — the operations live on NativePointer
+// instance methods: addr.readCString() / addr.readByteArray(len) /
+// addr.writeByteArray(bytes). Code below uses only the instance-method
+// surface; the static forms appear here solely as this migration note.
+
+var TARGET_PROCESS = '{{TARGET_PROCESS}}';
+var JAVA_CLASS = '{{JAVA_CLASS}}';
+var JAVA_METHOD = '{{JAVA_METHOD}}';
+var NATIVE_LIB = '{{NATIVE_LIB}}';
+var NATIVE_SYMBOL = '{{NATIVE_SYMBOL}}';
+
+function _fail(stage, err) {
+    // Error channel: emit a structured, stack-bearing record, then rethrow
+    // so the host-side caller can also discriminate on the throw path.
+    send({ type: 'error', kind: 'rpc-skeleton', stage: stage, message: String(err) });
+    throw err;
+}
+
+// Worked shape 1 — Java face: call a static method and return the result.
+// Adapt point: replace the class/method placeholders and argument vector.
+function java_face(payload) {
+    try {
+        var out = null;
+        Java.perform(function () {
+            var Klass = Java.use(JAVA_CLASS);
+            var ret = Klass[JAVA_METHOD](payload);
+            out = ret !== null ? ret.toString() : null;
+            send({ type: 'send', kind: 'java_face', stage: 'done', payload: out });
+        });
+        return out;
+    } catch (err) {
+        _fail('java_face', err);
+    }
+}
+
+// Worked shape 2 — native face: resolve a symbol, read through the
+// returned pointer with the instance-method surface, return bytes.
+// Adapt point: replace module/symbol placeholders; the caller decides
+// the read length from the target's contract (here: NUL-terminated).
+function native_face() {
+    try {
+        var mod = Process.getModuleByName(NATIVE_LIB);
+        var addr = mod.getExportByName(NATIVE_SYMBOL);
+        var fn = new NativeFunction(addr, 'pointer', []);
+        var p = fn();
+        if (p.isNull()) {
+            send({ type: 'send', kind: 'native_face', stage: 'null-result', payload: null });
+            return null;
+        }
+        var bytes = p.readCString(); // instance method — not Memory.readCString(p)
+        send({ type: 'send', kind: 'native_face', stage: 'done', payload: bytes });
+        return bytes;
+    } catch (err) {
+        _fail('native_face', err);
+    }
+}
+
+// Worked shape 3 — probe: verify the exported surface is reachable in the
+// attached process before the host driver commits to a run.
+function ping() {
+    var ok = true;
+    try {
+        Java.perform(function () { Java.use(JAVA_CLASS); });
+        Process.getModuleByName(NATIVE_LIB).getExportByName(NATIVE_SYMBOL);
+    } catch (err) {
+        ok = false;
+        send({ type: 'error', kind: 'ping', stage: 'probe', message: String(err) });
+    }
+    return { target: TARGET_PROCESS, reachable: ok };
+}
+
+rpc.exports = {
+    javaFace: java_face,
+    nativeFace: native_face,
+    ping: ping
+};
