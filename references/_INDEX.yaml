@@ -3,10 +3,10 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 68bfabdf5f4425eb66e9cf8206ed66c5255ed0d619b208e2f8c60029e5fb54d5
+  references/_INDEX.md: 6a4d780b95622c68311cc04e70116821b33c2225cefa3add0f52237c3ea2c744
   references/_index-anti-analysis.md: 708dab6abdd2da3fc41ca3e5b05833a53a6ede0293c547f508d8d276da441028
   references/_index-languages.md: af20e07689d7380ee891093cd2521c0889304cbe786d53252e783040f075e73b
-  references/_index-methodology.md: cd4744acd6bac9e7353ac164d3f28d9e34412cb108c8e1edcfd7cd3647a0b683
+  references/_index-methodology.md: 64daac89238402f4872a87746ab8cccf8866fcc5999dedcd882ec3440326476a
   references/_index-osint.md: de3ca124abaa9b0d36383d086aaa82e58054e8a4c865cb27e08cefbab123a793
   references/_index-patterns.md: 11bb2c6224de8391fba7e2b1fdca2c76e5cf6aa3e0902df2562c57a9c9dedeb1
   references/_index-platforms.md: eb4224a8cde683873a422a5a21ca62067b46efe09a46a7ff2c0f981ce57b6c7b
@@ -45,10 +45,10 @@ files:
   references/re-library/awesome-re-resources.md: 8252476aa2b40d76b01572e7df910fc9c6a83337fc2e48385dd15885a1ab96f0
   references/re-library/detection-engineer.md: fc06be71641d31a6e8da60f3b2084197da9bc1b2bffc7ecf3d07b076b0aa9072
   references/re-library/dynamic-observation-ladders.md: 42b5d229ef4fdef82c3f0b49213b2250b7ca1f7823284e58f69210e1882a6532
-  references/re-library/falsifier-library.md: 910b081033228fd8bf5ba4641c85055b8e41e4cbaacc6915b6ed3c69be0fbd90
+  references/re-library/falsifier-library.md: 6a7ceb5a83418c1c78fb075cf796b2bcf23466baa07036e252ae9cfed44a2c81
   references/re-library/field-notes.md: 8afaff77a88e61173f7981aa421e775c7ca6447825fcdb41bebb722ef2a18436
   references/re-library/ida-scripting-overlays.md: 884a61d3950cf15e7fc6df99fe283c5ecfc9760404c85b5a3bb00f16aa8b0b59
-  references/re-library/jsvmp-triage.md: 179a621ffb5e992ae7474bf48ee840f29a165f803d3828810b0a32f99a54a500
+  references/re-library/jsvmp-triage.md: f0fe8eb740b1f4a742bac6b913c22e0d6a30058a814dd925a1ccd052bcf35a8d
   references/re-library/kunglao-toolshelf.md: 6ffccd0d3008c086e9109779a09337914e36ea48a4199b9bb9fb87cfeae7bb41
   references/re-library/languages-compiled.md: 2b995c280ea34211a326545828b4bda2639a2a39e53539667ed395ea0ee55780
   references/re-library/languages-go.md: 75b7d09b4d57bd8655c5d26ea4209548916bca06b74b43aa269238ea9282a8c2
@@ -79,13 +79,15 @@ files:
   references/re-library/tools-crypto.md: 4c49547085ef4a173591eae2533e5845f998ef07a0ed534958b62d320e2bdfa5
   references/re-library/tools-dynamic.md: af6d0539a253366cf76b3266922bc4551478ebe32576fc216b68d91d0ea5f7de
   references/re-library/tools.md: 93ea80d2c69e62c9f00cae15db212c595a22094b4716ea0224084c96b702377d
-  references/re-library/unidbg-env-filling.md: d8cf573c4a6d49246273aedb8a4344c843eba75417061f7300f264fb6e8d9796
+  references/re-library/unidbg-algo-recovery.md: 3727553caf4b56fb5ba0d92881c251ecdcad8f81bbc8cacbce1a59a8930fc130
+  references/re-library/unidbg-env-filling.md: 87caef822ce7cfce0a5fdb23e9118f5294763e85cdd3e8fb7d82cf52b6e9551f
+  references/re-library/unidbg-harness-bringup.md: 07d09530b17eeeee3e4d310a76ca89c9416329e374397c2aa9e1394e63292ab6
   references/re-library/verification-safety.md: 74db768faee847585462bebe1ab5ffd2d2dbaccb89d695361d712097d8f3869b
   references/re-library/vm-deobfuscation-routing.md: 97854404fd51099fc31589cfcefe894f4c81716b1326e503083b4acb9ad9dd29
   references/re-library/vm-protection-anatomy.md: 4c6f031473ab71ed0fe001ed0d17e9efad1d415913b7c304192c07422f5345e7
-  references/re-library/web-crawler-engineering.md: 887b6ca7a08f2bb6cfaae81bf9d602f749d4a4c38373a13eb4d3a0a8a69545a2
+  references/re-library/web-crawler-engineering.md: 67e1269aea737bf5a9970c32461e65810ee149fe9ea706271da0886f560f3e0c
   references/re-library/web-re-quickref.md: dd2d9a2634eb695bcda8fea30cb76a65b4a4b050d898d52688fa1dc67422a1ca
-  references/re-library/web-risk-control.md: bc17c317546313342f15600819da7bb463d624891d6a8469e28f74f5f9a1e794
+  references/re-library/web-risk-control.md: 30d341ef589e2149c8488f79e01a825aaf9f77e738f5715423bee2f475dc45ba
   references/re-library/wire-format-recognition.md: b03b9e97f4330451af7f087ec839986c84caaceb37e95ed27f8d3aec9f1711c1
   references/schema.md: 7dc8e2cffb88a819c8ae7196003763c34bfb8e3cfa5b08cb42b4559c5c28d31b
   references/search-policy.md: 46807e75ef0cf4381b747ffc9495618aad9c0eb320d5007f1c9bfc4bb7cf547f
