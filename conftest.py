@@ -48,6 +48,14 @@ LOAD_SENSITIVE_MODULES = frozenset({
 LOAD_SENSITIVE_LOCK_NAME = "kunglao-pytest-load-sensitive.lock"
 LOAD_SENSITIVE_ACQUIRE_TIMEOUT_S = 600.0  # generous: several queued suites under load
 
+# xdist affinity: the lock-holding modules and the lock-probe module share
+# one xdist worker (--dist loadgroup), so a lock holder, its waiter and the
+# nested probes in test_load_lock never contend against their own run.
+# test_load_lock stays OUT of LOAD_SENSITIVE_MODULES on purpose: a
+# module-scoped machine lock would deadlock the external holder its
+# end-to-end test spawns. It joins the grouping only.
+XDIST_AFFINITY_EXTRA_MODULES = frozenset({"test_load_lock"})
+
 
 @contextmanager
 def load_sensitive_lock(path=None, timeout: float = LOAD_SENSITIVE_ACQUIRE_TIMEOUT_S):
@@ -86,11 +94,21 @@ def load_sensitive_lock(path=None, timeout: float = LOAD_SENSITIVE_ACQUIRE_TIMEO
 
 def pytest_collection_modifyitems(config, items):
     """Apply the load_sensitive marker via the module registry (single source
-    of truth here — no per-file edits needed in the sensitive test modules)."""
+    of truth here — no per-file edits needed in the sensitive test modules).
+
+    The load-sensitive family and the lock-probe module share an
+    xdist_group (single-worker execution): under --dist loadgroup a lock
+    holder, its waiter and the nested lock probes never land on different
+    workers of the same run. The marker is inert without xdist."""
     for item in items:
         module = getattr(item, "module", None)
-        if module is not None and module.__name__.rsplit(".", 1)[-1] in LOAD_SENSITIVE_MODULES:
+        if module is None:
+            continue
+        name = module.__name__.rsplit(".", 1)[-1]
+        if name in LOAD_SENSITIVE_MODULES:
             item.add_marker(pytest.mark.load_sensitive)
+        if name in XDIST_AFFINITY_EXTRA_MODULES:
+            item.add_marker(pytest.mark.xdist_group("load_sensitive"))
 
 
 @pytest.fixture
