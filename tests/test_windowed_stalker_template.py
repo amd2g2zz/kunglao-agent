@@ -197,7 +197,7 @@ def test_readme_carries_template_row():
         "templates/frida/README.md missing the new template row"
 
 
-def test_ext_index_entry_is_typed_adapt_with_variance_regions():
+def test_ext_index_entry_is_typed_adapt_with_contract_desc():
     import yaml
     data = yaml.safe_load(EXT_INDEX.read_text(encoding="utf-8"))
     entries = {e["name"]: e for e in data["ext"]}
@@ -209,3 +209,8 @@ def test_ext_index_entry_is_typed_adapt_with_variance_regions():
     for needle in ("module set", "offset resolution", "filter predicate"):
         assert needle in desc, \
             f"ext-index desc must name the known-variance region: {needle}"
+    # hit-information minimum contract (#162 addendum): scenario + how +
+    # expected outcome — expectation wording, never a guaranteed fact
+    assert "scenario:" in desc
+    assert "how:" in desc
+    assert "expected outcome:" in desc

@@ -333,6 +333,26 @@ def _variance_regions(text: str) -> list[str]:
     return names
 
 
+ADAPT_CONTRACT_LABELS = ("Scenario", "How", "Expected outcome")
+
+
+def _adapt_contract_summary(text: str) -> str:
+    """Scenario/How/Expected-outcome lines from an adapt-expected
+    template's leading header (one line per label) — the hit-information
+    minimum contract (#162 addendum: a desc states the scenario, the how,
+    and the EXPECTED outcome, never a guaranteed fact)."""
+    lines = _leading_comment_lines(text)
+    out: list[str] = []
+    for ln in lines:
+        stripped = ln.lstrip("/*#<!-> \t").strip()
+        for label in ADAPT_CONTRACT_LABELS:
+            if stripped.startswith(label + ":"):
+                body = stripped[len(label) + 1:].strip()
+                if body:
+                    out.append(f"{label}: {body}")
+    return " ".join(out)
+
+
 def derive_entry(source: str, kind: str, root: Path) -> dict:
     path = root / source
     stem = Path(source).stem
@@ -362,6 +382,9 @@ def derive_entry(source: str, kind: str, root: Path) -> dict:
             if regions:
                 description = (f"{description} — known-variance regions: "
                                f"{', '.join(regions)}")
+            contract = _adapt_contract_summary(text)
+            if contract:
+                description = f"{description} — {contract}"
         usage = ((ADAPT_USAGE_PREFIX + source + ADAPT_USAGE_SUFFIX)
                  if consume == "adapt"
                  else FILL_USAGE_PREFIX + source + FILL_USAGE_SUFFIX)
