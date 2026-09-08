@@ -182,6 +182,17 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # SCORE-ONLY programmatically (anomaly claim_id/fact_id/top_dimension and all
 # non-anomaly fields byte-equal) before re-pin.
 #
+# 2026-09-08 corpus re-pin (#144 second distillation pass): four re-library
+# cards amended (dynamic-observation-ladders, falsifier-library,
+# native-sign-recovery, web-risk-control) and vm-protection-anatomy joined
+# the anomaly baseline corpus. Same class as #112/#884/#866-b/#728/#150:
+# DATA drift only, the same 4 score floats across the 2 contradiction cases
+# (0.9043910880380706 -> 0.9070282235749861,
+# 0.9002271252433485 -> 0.9035694521306032). Case-by-case diff verified
+# SCORE-ONLY programmatically over all 31 cases (anomaly
+# claim_id/fact_id/top_dimension and all non-anomaly fields byte-equal)
+# before re-pin; re-pinned via capture_current() per the docstring command.
+#
 # 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web-re-quickref.md
 # joined the anomaly baseline corpus (anomaly_detector._load_baseline ingests
 # re-library/*.md), shifting every lexical rarity score in the 4th decimal. This

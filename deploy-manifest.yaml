@@ -871,11 +871,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: fbee69794365c43c9b71482093dbecffea693df3313c208b7fa1239a935a855b
+    sha256: 3a5c52b85d2a28f273be477c4c0fc542f9fe8961a3a7d0222ce9d980a41f4f83
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 99ade6a40c33a89c6036422693f85efe075dc056600b5abd01ba5998453ba24a
+    sha256: 1184aec7911f095b3948275003674a8e3a7fa14d293c83ba69d71c82d23c7419
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
@@ -1047,11 +1047,11 @@ files:
   - src: references/re-library/dynamic-observation-ladders.md
     dest: .claude/references/re-library/dynamic-observation-ladders.md
     kind: asset
-    sha256: 1642e405c053f2baf20f3089270218eb3f7168d1623f39afd9c878e8e860e649
+    sha256: 42b5d229ef4fdef82c3f0b49213b2250b7ca1f7823284e58f69210e1882a6532
   - src: references/re-library/falsifier-library.md
     dest: .claude/references/re-library/falsifier-library.md
     kind: asset
-    sha256: bc4a69ab3d009215261a9854335071f2f2fc1be5184701c5c3cf1f1500d12685
+    sha256: d4857f2e8ee4e245e11a2777eff85ffe263830e6bb66c4a9110b4b29e424cf16
   - src: references/re-library/field-notes.md
     dest: .claude/references/re-library/field-notes.md
     kind: asset
@@ -1123,7 +1123,7 @@ files:
   - src: references/re-library/native-sign-recovery.md
     dest: .claude/references/re-library/native-sign-recovery.md
     kind: asset
-    sha256: d0d8f6f090662d80319b8ba8dd22fe19998e91e982b9a911977e6f9e27582668
+    sha256: 87a76c4ac3957536110b3b29ef73869076808e9b87db594ab92a05e2f9fd41b1
   - src: references/re-library/patterns-debugging.md
     dest: .claude/references/re-library/patterns-debugging.md
     kind: asset
@@ -1188,6 +1188,10 @@ files:
     dest: .claude/references/re-library/vm-deobfuscation-routing.md
     kind: asset
     sha256: 97854404fd51099fc31589cfcefe894f4c81716b1326e503083b4acb9ad9dd29
+  - src: references/re-library/vm-protection-anatomy.md
+    dest: .claude/references/re-library/vm-protection-anatomy.md
+    kind: asset
+    sha256: 4c6f031473ab71ed0fe001ed0d17e9efad1d415913b7c304192c07422f5345e7
   - src: references/re-library/web-crawler-engineering.md
     dest: .claude/references/re-library/web-crawler-engineering.md
     kind: asset
@@ -1199,7 +1203,7 @@ files:
   - src: references/re-library/web-risk-control.md
     dest: .claude/references/re-library/web-risk-control.md
     kind: asset
-    sha256: 1b98a6af1355410f8d2d1e1043c55333153dd3ba179d99890fe6c5c756c05cd4
+    sha256: bc17c317546313342f15600819da7bb463d624891d6a8469e28f74f5f9a1e794
   - src: references/re-library/wire-format-recognition.md
     dest: .claude/references/re-library/wire-format-recognition.md
     kind: asset
@@ -1315,7 +1319,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 538fab39f04e0334cee82182f047756c5b0e03d5aff93636b56b5378ca2f2b75
+    sha256: 8a1e2568c502d42872d74c4a1ef13de8481fb65cfb7e4d70b8443798f5054c39
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

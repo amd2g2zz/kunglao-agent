@@ -121,6 +121,44 @@ shapes persist. Identify from static traces BEFORE opening the browser.
 识别产出必须落到 claim/fact：栈名 + 痕迹证据 + 应对选择 + 失败历史，下一个
 案例先读 note 再开浏览器（site note 制度）。
 
+## Active-challenge parameter chains (slider-class)
+
+The challenge-face tree's "active challenge" branch (slider / click-text /
+JS challenge) produces parameter chains: the submit request consumes values
+(fingerprint blob, challenge id, trajectory payload) that earlier responses
+and page code produced. Default: start tracing at page load or at the first
+request. That fails because the chain computes BACKWARD from the consumer —
+the parameter exists at the submit request and every producing hop hides a
+request fetch or a collector call. Fix — backward endpoint tracing:
+
+1. Start at the LAST request (the submit that gates the action). Split its
+   parameter set: server-issued earlier (cookie/session-carried) vs
+   page-computed (JS).
+2. Trace ONE hop backward per iteration: consume-point → producing function
+   → its inputs (a fetched response value or a browser-collector reading).
+   One hop per iteration keeps every attribution claim checkable — assuming
+   the whole chain does not survive contact.
+3. Leaves are terminal when they resolve to a server-issued value or a
+   captured environment reading; anything else goes another hop.
+
+Known-library leaf shortcut: when a computed parameter matches a public
+fingerprint library's hash (fingerprintjs-class `x64hash128`), do NOT
+emulate the library — reimplement the hash offline over the SAME fields the
+page feeds it. The library is public; the INPUT ASSEMBLY is the
+target-specific part. Offline output must equal the live value; mismatch
+means the assembly differs — diff fields, not the hash.
+
+Reading the challenge bundle — three shapes that defeat naive string search
+(you would grep the bundle for the parameter name; all three shapes make
+that fail by construction — each is defeated by a mechanical pass, not a
+search):
+
+| Shape | What it looks like | Mechanical pass |
+|---|---|---|
+| decoder-call reassembly | strings live in a string array consumed as decoder calls concatenated at run time (`e("0x4c")+"gth"` shape) | run the decoder, dump its output table — or hook the decoder at run time and record arguments |
+| proxy-wrapper collapse | property access routes through generated wrapper functions; the call site shows the wrapper, not the operation | collapse wrappers to their target operation before reading control flow |
+| object-literal key obfuscation | config/map keys are computed, so a parameter table reads as noise | resolve computed keys once, rename, re-read — the table falls out |
+
 ## 检测点定位方法论：触发 → 观察 → 归因 loop (J7 一等能力)
 
 Camoufox 是可调试/可插桩的浏览器（ruling 2026-08-27）——不是"可达的页面容器"。

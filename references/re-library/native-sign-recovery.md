@@ -5,18 +5,17 @@ description: Boundary-first recovery of Android native request-signing algorithm
 
 # Native Sign Recovery (boundary-first ladder + stubbing loop)
 
-Reproducing request-signing fields computed inside Android native code.
-Two coupled halves — **A** the boundary-first ladder (six ordered steps to
-byte-equal offline reproduction), **B** the incremental stubbing loop (the
-emulation discipline). Shared closure gate (step 6): unverified replay =
-hypothesis, not result.
+Reproducing request-signing fields computed inside Android native code —
+two coupled halves: **A** the boundary-first ladder (six ordered steps to
+byte-equal offline reproduction), **B** the incremental stubbing loop
+(the emulation discipline). Shared closure gate (step 6): unverified
+replay = hypothesis, not result.
 
 ## When to Use
 
 - A captured request carries a digest/signature-shaped field the Java layer
-  merely forwards into a `native` declaration near request construction
-  (`System.loadLibrary` + `native` methods feeding the outgoing request),
-  and the goal is offline generation.
+  forwards into a `native` declaration near request construction; the goal
+  is offline generation.
 - The emulation harness keeps crashing: jump to the stubbing loop — but do
   not skip step 2; every stub validates against those captured samples.
 
@@ -36,8 +35,8 @@ Search the decompiled Java layer (jadx) around request construction:
 - Loading seams: `System.loadLibrary` / `System.load` and the `native`
   declarations they serve.
 
-Deliverable: the boundary method — class name, method name, JNI signature.
-Everything later hooks or re-implements exactly this signature. If the
+Deliverable: the boundary method — class name, method name, JNI signature;
+everything later hooks or re-implements exactly this signature. If the
 matching `Java_...` symbol is missing from the `.so`, the library registers
 handlers dynamically — resolve via `JNI_OnLoad` / `RegisterNatives` first
 (see [languages-platforms.md](languages-platforms.md#android-jni-registernatives-obfuscation-htb-wondersms))
@@ -45,14 +44,12 @@ before assuming the boundary is unrecoverable.
 
 ### Step 2 — Confirm parameters dynamically (multi-sample, never single)
 
-Capture several real requests. Several, not one: a single capture cannot
+Capture several real requests — several, not one: a single capture cannot
 distinguish static inputs from dynamic ones (timestamps, nonces, counters,
-per-install seeds), and step 6 needs the variety.
-
-Hook the boundary method on-device (Frida-class instrumentation) and dump
-per invocation: the full argument vector in, the raw return value out.
-This yields plaintext→ciphertext pairs — the ground truth every later step
-is validated against.
+per-install seeds). Hook the boundary method on-device (Frida-class
+instrumentation) and dump per invocation: full argument vector in, raw
+return value out — the plaintext→ciphertext pairs every later step
+validates against.
 
 ### Step 3 — Identify the family by output shape (hypothesis only)
 
@@ -70,29 +67,27 @@ Classify each dumped output by length and character set:
 > an implementation. Deployed targets are known to mutate standard
 > algorithms — altered IVs, swapped table entries, truncated or
 > double-applied digests, custom alphabets. Run the captured pairs through
-> the reference implementation BEFORE trusting any family label. A
-> shape-matching label that fails the reference match is the common case,
-> not the exception: it means extract the real constants from the binary
+> the reference implementation BEFORE trusting any family label: a
+> shape-matching label that fails the reference match is the common case —
+> it means extract the real constants from the binary
 > (step 4), not force the reference.
 
 ### Step 4 — Extract the actual algorithm
 
 Decompile the boundary function and read the algorithm as implemented, not
-as labeled. Where the function is flattened (control-flow-flattening-class
-obfuscation), recover the real state machine from the dispatcher instead of
-reading blocks in file order — handling per
+as labeled. Where the function is flattened, recover the real state machine
+from the dispatcher instead of reading blocks in file order — handling per
 [anti-analysis.md](anti-analysis.md). Constants found here (IVs, tables,
-key material, embedded salts) are the ground truth that step 3's shape
-hypothesis was only approximating.
+key material, embedded salts) are the ground truth step 3's shape label was
+only approximating.
 
 ### Step 5 — Reproduce offline
 
 1. **Emulate** (preferred): unicorn/unidbg-class harness — exact code paths,
    no rewrite risk; pay the stubbing-loop cost below.
 2. **Rewrite**: Python from the step-4 reading — fast to iterate; every
-   rewrite decision stays a hypothesis until step 6.
-
-Validate against the step-2 pairs continuously while building.
+   rewrite decision stays a hypothesis until step 6. Validate against the
+   step-2 pairs continuously while building.
 
 ### Step 6 — Replay gate (closure)
 
@@ -106,32 +101,39 @@ the test vector.
 ## The incremental stubbing loop (emulation half)
 
 Discipline: every crash, missing symbol, and unimplemented JNI callback is
-one loop iteration — never a cue to write the whole environment in one
-patch.
+one loop iteration — never write the whole environment in one patch.
 
 - **The crash trace decides what to stub next.** Stub exactly what the
   trace names; leave everything else unimplemented so the next crash still
   points at something real.
 - **Validate each stub immediately.** After adding one stub, re-run a
-  step-2 pair through the boundary. Pass → keep it and move to the next
-  crash. Fail → the stub changed behavior it should not have; fix or revert
-  before stacking another stub on top.
+  step-2 pair through the boundary. Pass → keep it; fail → the stub changed
+  behavior it should not have — fix or revert before stacking another.
 - **Order heuristic** (empirical): 1. `JNI_OnLoad` (hosts integrity checks
   and dynamic registration later calls depend on) → 2. invoke the target
   boundary directly → 3. JNI callbacks per crash → 4. syscalls/files/
-  properties per crash.
+  properties per crash. **Order is a dependency chain**: environment-material
+  patches precede the commands that consume them (package code path first —
+  signature data is READ from the real APK; store/lib-dir/lifecycle stubs
+  precede business commands); hardened targets run 10-20 patches deep, each
+  documented + verified individually, anti-debug files with plausible
+  CONTENT (falsifier-library family 17).
 - **Dynamic items.** Multi-sample cross-compare (step 2) classifies which
   inputs vary (timestamp/nonce/counter) vs stable (keys, salts, device
-  constants); only varying ones need fixed-value injection, and the
-  reproduction must accept them as parameters to pass step 6.
+  constants); inject fixed values only for the varying ones, as parameters.
 - **Degradation path.** Emulator-side deadlocks, thread dependence, or
   timing-sensitive logic that will not stabilize → fall back to pure
   on-device hooking (Frida-class) and extract results from the live
-  process. Emulation is a convenience; the replay gate is the requirement.
+  process. When the goal is to RUN (not to know), emulation is the
+  strategy, not the fallback: partial-fidelity output accepted by the real
+  consumer is a validated closure — worked-instance attested on the
+  hardest target class and generalized cross-target. Name the gate you
+  close under: byte-exact step-6 replay = algorithm recovery; consumer
+  acceptance = run-don't-know recovery.
 
 ## Worked micro-examples (synthetic)
 
-Four code-listing decision points; values invented, shapes transferable.
+Values invented, shapes transferable.
 
 ### Example 1 — falsify the SHA-1 label
 
@@ -194,5 +196,5 @@ sig(ts="1717000060") != sig(ts="1717000000")   # next minute  -> differs
 
 - Dynamic JNI registration: [languages-platforms.md](languages-platforms.md#android-jni-registernatives-obfuscation-htb-wondersms)
 - Tooling: [tools.md](tools.md#unicorn-emulation), [tools-dynamic.md](tools-dynamic.md#frida-dynamic-instrumentation)
-- Flattening countermeasures: [anti-analysis.md](anti-analysis.md)
-- Framework-level hiding: [languages-platforms.md](languages-platforms.md#framework-first-routing-android)
+- Flattening countermeasures + framework-level hiding: [anti-analysis.md](anti-analysis.md), [languages-platforms.md](languages-platforms.md#framework-first-routing-android)
+- VM-protected target anatomy (this card's hardest input): [vm-protection-anatomy.md](vm-protection-anatomy.md)
