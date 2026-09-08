@@ -30,5 +30,5 @@ Record with:
       --validated-capability "..." --identified-obstacle "..." \
       --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance)
 
-See failure-modes reference (recall): failure-modes.md, failure-modes-lifecycle.md, failure-modes-monitoring.md, failure-modes-state.md, case-book.md, lessons/README.md, convergence-loop.md, re-library/ida-scripting-overlays.md, re-library/dynamic-observation-ladders.md
+See failure-modes reference (recall): failure-modes.md, failure-modes-lifecycle.md, failure-modes-monitoring.md, failure-modes-state.md, case-book.md, lessons/README.md, convergence-loop.md, re-library/ida-scripting-overlays.md, re-library/signature-check-bypass.md, re-library/unidbg-env-filling.md
 

@@ -70,6 +70,9 @@ assets:
     - templates/frida/cfg-hook.js.tmpl
     # #162: first adapt-expected template (windowed Stalker tracing)
     - templates/frida/windowed-stalker.js.tmpl
+    - templates/frida/rpc-skeleton.js.tmpl   # #165 Frida RPC export-surface skeleton (adapt)
+    - templates/unidbg/harness.java.tmpl   # #165 unidbg minimal-harness skeleton (adapt)
+
     - templates/scripts/decryption-analysis.py.tmpl
     - templates/scripts/disasm-pipeline.py.tmpl
     - templates/scripts/stage-unpack.py.tmpl
