@@ -116,6 +116,26 @@ def test_base_mcp_table_type_placeholder():
         "MCP probe command must carry the {{type}} injection placeholder"
 
 
+def test_base_carries_capability_search_usage_line():
+    """#162: the Skill & orchestrator section names the unified
+    capability-search command plus the type semantics in ONE sentence —
+    tool=invoke, template=fill/adapt, reference=read. Worker-doc rules:
+    pure insertion, formal register, discretionary voice (may, not
+    must), no meta-commentary."""
+    text = BASE_TMPL.read_text(encoding="utf-8")
+    m = re.search(r"## Skill & orchestrator(.*?)(?=\n## )", text, re.S)
+    assert m, "Skill & orchestrator section missing"
+    body = m.group(1)
+    assert "{{skill_dir}}/tools/tool-search.py --find" in body, \
+        "unified capability-search command missing from Skill & orchestrator"
+    for kw in ("tool", "template", "reference",
+               "invoke", "fill", "adapt", "read"):
+        assert kw in body, f"type semantics word missing: {kw!r}"
+    assert "may" in body, "discretionary voice (may) missing"
+    assert re.search(r"\bmust\b", body) is None, \
+        "covert mandate (must) must not appear in the usage line"
+
+
 def test_base_references_workspace_env_file():
     """Env table points at the workspace .env (W4 deployment surface)."""
     text = BASE_TMPL.read_text(encoding="utf-8")
