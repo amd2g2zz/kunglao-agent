@@ -130,8 +130,9 @@ def _check_test_suite(full: bool = False) -> dict:
             mode, timeout = f"smoke:{len(nodeids)}", SMOKE_SUITE_TIMEOUT
         r = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
         last = (r.stdout or "").strip().splitlines()[-1] if r.stdout else ""
+        # TEMP DIAGNOSTIC (diag/170-acceptance-detail, do not merge): attach full tails
         return {"name": "test_suite_green", "passed": r.returncode == 0,
-                "detail": f"[{mode}] {last[:120]}"}
+                "detail": f"[{mode}] rc={r.returncode} {last[:120]} || STDOUT-TAIL: {(r.stdout or '')[-2500:]} || STDERR-TAIL: {(r.stderr or '')[-1500:]}"}
     except Exception as exc:
         return {"name": "test_suite_green", "passed": False, "detail": f"error: {exc}"}
 
