@@ -136,6 +136,7 @@ import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-befor
 import intake_promise  # noqa: E402  # #813: Phase 0 prescan promise (apkid/DIE/混淆先验/java 可达性显式落盘)
 import difficulty_calibration  # noqa: E402  # #15: sample difficulty calibration (intrinsic factors -> evidence/difficulty.json + task_spec difficulty: 键)
 import init_channel_default  # noqa: E402  # #727 channel resolution (local fallback)
+import oracle_anchors  # noqa: E402  # the three required intake answers (task_spec first-class fields)
 # #408: ask-then-install — interactive install prompts + MCP registration +
 # re-probe (graceful degrade on decline; --assume-yes for CI/headless).
 # #455: the interactive consent channel is gone (no stdin); ask_then_install
@@ -2424,20 +2425,35 @@ ORACLE_BACKFILL_MARKER = "pending-user-input-backfill"
 ORACLE_FILE = "task-oracle.yaml"
 
 
-def write_task_oracle_skeleton(ws: Path) -> bool:
+def write_task_oracle_skeleton(ws: Path,
+                               task_text: str | None = None) -> bool:
     """#473: write the workspace task-oracle.yaml skeleton. Returns True when
     written; an existing non-empty oracle is never clobbered (Phase-0
-    backfill survives re-inits); empty/corrupt remnants are replaced."""
+    backfill survives re-inits); empty/corrupt remnants are replaced.
+    `task_text` pre-fills the verbatim goal when the init interview already
+    collected it (task_spec.yaml goal_verbatim) — the completion gate then
+    judges a real anchor from the first tick instead of the backfill
+    marker; None keeps the marker (the orchestrator backfills at Phase 1)."""
     target = ws / ORACLE_FILE
     if target.exists() and target.read_text(encoding="utf-8").strip():
         return False
+    if task_text and str(task_text).strip():
+        task_line = f"task_text: {json.dumps(str(task_text), ensure_ascii=False)}\n"
+        backfill_note = (
+            "# task_text came from the init intake (task_spec.yaml\n"
+            "# goal_verbatim); the orchestrator restates it at the delivery\n"
+            "# receipt.\n")
+    else:
+        task_line = f"task_text: {ORACLE_BACKFILL_MARKER}\n"
+        backfill_note = (
+            "# Skeleton written by kunglao-init; the orchestrator backfills\n"
+            "# task_text with the user's verbatim task at Phase 1 (SKILL.md)\n"
+            "# before the first dispatch.\n")
     text = (
         "# task-oracle.yaml — pre-registered completion anchor (#55, #473).\n"
-        "# Skeleton written by kunglao-init; the orchestrator backfills\n"
-        "# task_text with the user's verbatim task at Phase 1 (SKILL.md)\n"
-        "# before the first dispatch.\n"
-        f"task_text: {ORACLE_BACKFILL_MARKER}\n"
-        "open_items: []\n"
+        + backfill_note
+        + task_line
+        + "open_items: []\n"
         "deferrals: []\n"
         "adjudication:\n"
         "  stop_hook_active:\n"
@@ -2537,10 +2553,25 @@ def initialize(ws: Path, hooks_json: Path | None,
     # (SKILL.md). Idempotent: a pre-existing oracle is never clobbered, and
     # the file is deliberately OUTSIDE the state-hash inputs (it is a
     # workspace artifact, not scaffold state).
-    oracle_written = write_task_oracle_skeleton(ws)
+    # The verbatim goal, when the init interview already collected it,
+    # lands in the completion anchor at scaffold time; the reminder line
+    # keeps a not-yet-answered interview visible without blocking init
+    # (the analysis-entry gate owns the refusal).
+    _anchor_view = oracle_anchors.load(ws)
+    _goal = _anchor_view.get("goal_verbatim")
+    _has_goal = isinstance(_goal, str) and bool(_goal.strip())
+    oracle_written = write_task_oracle_skeleton(
+        ws, task_text=_goal if _has_goal else None)
     if oracle_written:
-        print("kunglao-init: task-oracle.yaml skeleton registered "
-              "(task_text pending Phase-0 backfill by the orchestrator)")
+        if _has_goal:
+            print("kunglao-init: task-oracle.yaml registered "
+                  "(task_text pre-filled from the intake goal)")
+        else:
+            print("kunglao-init: task-oracle.yaml skeleton registered "
+                  "(task_text pending Phase-0 backfill by the orchestrator)")
+        _reminder = oracle_anchors.reminder(ws)
+        if _reminder:
+            print(_reminder)
 
     # #412: the exit message lists what init did (scaffold + env + type) and
     # does NOT summarize sample content (no sample= in the output).
@@ -2678,6 +2709,45 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         text = reg.read_text(encoding="utf-8")
         if MARKER in text:
             if is_init_complete(ws):
+                # Anchor repair re-entry: the intake answers fill ONLY the
+                # missing required fields — existing answers and all
+                # analysis state are untouched. A bad method value fails
+                # closed (never written); the analysis-entry gate keeps
+                # refusing until every anchor is present.
+                _repair = {k: answers[k] for k in oracle_anchors.FIELDS
+                           if answers.get(k) is not None
+                           and str(answers[k]).strip()}
+                if _repair:
+                    # An unreadable contract is NOT repairable in place:
+                    # the merge would see an empty document and replace the
+                    # whole intake record with the three anchors. Same
+                    # posture as the upgrade backfill — refuse, name the
+                    # full re-init, write nothing.
+                    _view, _state = oracle_anchors.read_state(ws)
+                    if _state == oracle_anchors.STATE_CORRUPT:
+                        print("kunglao-init: ERROR anchor repair refused - "
+                              + oracle_anchors.refusal_hint(
+                                  oracle_anchors.missing(_view), _state),
+                              file=sys.stderr)
+                        return RC_ERROR
+                    try:
+                        oracle_anchors.validate_values(_repair)
+                    except ValueError as exc:
+                        print(f"kunglao-init: ERROR anchor repair refused: "
+                              f"{exc}", file=sys.stderr)
+                        return RC_ERROR
+                    oracle_anchors.apply(ws, _repair)
+                    _remaining = oracle_anchors.missing(
+                        oracle_anchors.load(ws))
+                    if _remaining:
+                        print(f"kunglao-init: anchor repair applied but "
+                              f"still missing: {', '.join(_remaining)} "
+                              f"(analysis entry refuses until collected)",
+                              file=sys.stderr)
+                    else:
+                        print("kunglao-init: anchor repair complete - "
+                              "analysis entry re-run will pass the anchor "
+                              "gate")
                 # #461: resume is also an exit-0 path — re-arm the observer
                 # spine (idempotent bootstrap) before reporting resume.
                 rc = bootstrap_observability(ws, hooks_json=hooks_json,

@@ -40,6 +40,8 @@ from pathlib import Path
 
 import pytest
 
+from _factories import seed_oracle_anchors
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 if str(SCRIPTS) not in sys.path:
@@ -502,6 +504,7 @@ def _make_ws(tmp_path: Path, name: str, stamp_version: str | None) -> Path:
     body = f"# kunglao_template_version: {stamp_version}\nclaims: []\n" \
         if stamp_version else "claims: []\n"
     (ws / "claim-register.yaml").write_text(body, encoding="utf-8")
+    seed_oracle_anchors(ws)
     return ws
 
 
@@ -580,6 +583,7 @@ def test_clean_workspace_gets_no_sweep_noise(tmp_path, monkeypatch, capsys):
     (ws / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
     (ws / "claim-register.yaml").write_text(
         f"# kunglao_template_version: {cur}\nclaims: []\n", encoding="utf-8")
+    seed_oracle_anchors(ws)
     pre_md = (ws / "CLAUDE.md").read_bytes()
     assert up.main([str(ws)]) == 0
     captured = capsys.readouterr()
@@ -617,6 +621,7 @@ def test_upgrade_sweep_is_rename_invariant(tmp_path, monkeypatch):
     (ws / ".claude").mkdir(exist_ok=True)
     (ws / ".claude" / "settings.json").write_text(json.dumps({"hooks": {}}),
                                                   encoding="utf-8")
+    seed_oracle_anchors(ws)
     rc = up.main([str(ws)])
     assert rc == 0
     md = (ws / "CLAUDE.md").read_text(encoding="utf-8")

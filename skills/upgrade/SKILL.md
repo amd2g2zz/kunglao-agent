@@ -40,12 +40,25 @@ must be initialized first with `/kunglao-agent:init`.
 | `4` | iron-rule violation — user data drifted | "user-data drift detected, snapshot at `<workspace>/.kunglao-upgrade-pre-snapshot/` kept on disk; restore from snapshot" |
 | `6` | dirty owned-repo — migration needs a clean rollback anchor | "refused: commit or stash first (commands on stderr), then re-run" |
 | `7` | incomplete — migration applied but the finish sequence aborted; re-run upgrade | "warning: re-run /kunglao-agent:upgrade to complete" |
+| `8` | anchors pending — the required intake answers (goal_verbatim / success_criterion / verification_method) are missing from `task_spec.yaml`; the interview rode stdout as pending-decision JSON (flow `kunglao-upgrade`), collect via AskUserQuestion and re-run with `--resolve <answers.json>` | "collect the three anchors, re-run with --resolve" |
+
+The upgrade completion report states anchor status explicitly: `anchors:
+complete` (nothing asked, gates will pass) or `anchors: backfilled via
+interview` (the answers were collected and written this run) — so the user
+knows the analysis-entry and resume gates will pass before they start. A
+legacy workspace (initialized before the anchors existed) is backfilled
+here instead of deadlocking: analysis entry and resume both refuse on
+missing anchors, and a full re-init would destroy analysis state — the
+upgrade interview is the sanctioned repair. Only the missing fields are
+written; existing answers are never clobbered.
 
 ## CLI
 
 ```bash
 uv run --project . kunglao upgrade <workspace>            # migrate
 uv run --project . kunglao upgrade <workspace> --dry-run  # print plan only
+uv run --project . kunglao upgrade <workspace> --resolve <answers.json>
+                                 # anchor interview re-entry (after exit 8)
 ```
 
 JSON envelope (when `--json` lands in a future commit):
@@ -53,8 +66,9 @@ JSON envelope (when `--json` lands in a future commit):
 ```json
 {
   "status": "ok" | "dry-run" | "already-current" | "refused"
-          | "refused-dirty" | "iron-rule-violation" | "incomplete",
-  "rc": 0 | 3 | 4 | 6 | 7,
+          | "refused-dirty" | "iron-rule-violation" | "incomplete"
+          | "anchors-pending",
+  "rc": 0 | 3 | 4 | 6 | 7 | 8,
   "items": [{"name": "hooks_rewire", "action": "applied" | "noop" | "skipped", "detail": "..."}],
   "iron_rule_hash": {"pre": "...", "post": "..."},
   "started_at": "ISO-8601",

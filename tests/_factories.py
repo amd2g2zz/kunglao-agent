@@ -129,6 +129,23 @@ def seed_bins(ws: Path, *, name: str = "sample.exe",
     return target
 
 
+def seed_oracle_anchors(ws: Path, *, goal: str = "legacy goal",
+                        criterion: str = "legacy criterion",
+                        method: str = "manual") -> Path:
+    """Write an anchor-complete task_spec.yaml (the three REQUIRED intake
+    answers). For tests that pin semantics OTHER than the anchor
+    interview: the analysis-entry and resume gates refuse a workspace
+    whose contract lacks these, so fixture workspaces that exercise the
+    loop machinery carry a completed interview."""
+    path = ws / "task_spec.yaml"
+    if not path.exists():
+        path.write_text(
+            f"goal_verbatim: {goal}\n"
+            f"success_criterion: {criterion}\n"
+            f"verification_method: {method}\n", encoding="utf-8")
+    return path
+
+
 def write_worker_status(ws: Path, name: str, status: str,
                         age_min: float | None = None) -> Path:
     """#915 item 8: the ONE runs/worker-status-<name>.md seeding shape.

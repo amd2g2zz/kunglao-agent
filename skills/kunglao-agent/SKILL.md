@@ -105,7 +105,7 @@ Run the steps in order; any FAIL blocks the next step.
 
 5. **Workspace resolution + path reachability**: resolve the GIVEN workspace (an explicit argument, or a cwd candidate the operator confirmed in the guided prompt). Confirm cwd = project root; resolve every state file by cwd-relative path (`claim-register.yaml`, not absolute paths); if `Bash cd` to a deep path times out, read state via `Read` with cwd-relative paths. Any failure → cold-start NOT complete → log a `B1a` blocker, not "best guess".
 
-**Input contract (3 required)**: ① sample — `bins/<sha>`, sha256 verified ② `task_spec.yaml` — primary_questions / scope / constraints / depth / success_criteria (template: `templates/state/task_spec.yaml`) ③ existing artifacts — CTI/evidence/fact base, READ-ONLY, never re-query.
+**Input contract (3 required)**: ① sample — `bins/<sha>`, sha256 verified ② `task_spec.yaml` — primary_questions / scope / constraints / depth / success_criteria + the three REQUIRED oracle anchors (goal_verbatim / success_criterion / verification_method: reproduction|replay-evidence|static|manual — blank anchors refuse analysis entry) (template: `templates/state/task_spec.yaml`) ③ existing artifacts — CTI/evidence/fact base, READ-ONLY, never re-query.
 
 ## Arguments
 

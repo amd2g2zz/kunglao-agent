@@ -108,6 +108,12 @@ def _deployed_ws(tmp_path: Path, *, stamp: str | None = None,
     (ws / "CLAUDE.md").write_text(
         tv.stamp_line(stamp or tv.read_skill_version()) + "\n",
         encoding="utf-8")
+    # the three required intake answers (present: these tests pin
+    # deployment-lifecycle semantics, not the anchor interview)
+    (ws / "task_spec.yaml").write_text(
+        "goal_verbatim: lifecycle goal\n"
+        "success_criterion: lifecycle criterion\n"
+        "verification_method: manual\n", encoding="utf-8")
     return ws
 
 
@@ -380,6 +386,12 @@ def test_lifecycle_init_drift_upgrade_current(tmp_path: Path):
     tamper -> check-stale deploy-drift -> same-version upgrade restores ->
     check-stale current + zero skill-install paths -> init idempotent."""
     ws = _init_ws(tmp_path)
+    # the needs-first intake answers (SKILL flow: they land in task_spec
+    # ahead of init; this test pins the deploy lifecycle, not the interview)
+    (ws / "task_spec.yaml").write_text(
+        "goal_verbatim: lifecycle goal\n"
+        "success_criterion: lifecycle criterion\n"
+        "verification_method: manual\n", encoding="utf-8")
 
     # 1. init materialized the deployment + carrier + inverted registration
     hooks_dir = ws / ".claude" / "hooks"

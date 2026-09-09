@@ -102,6 +102,12 @@ def synth_v012_ws(tmp: Path) -> Path:
     write_hook_state(ws, active_hooks=["active_intervention"],
                      phase="IDLE", user_override={},
                      extra={"state": "active"})
+    # the three required intake answers (present: the tests below pin
+    # migration semantics, not the anchor interview)
+    (ws / "task_spec.yaml").write_text(
+        "goal_verbatim: legacy goal\n"
+        "success_criterion: legacy criterion\n"
+        "verification_method: manual\n", encoding="utf-8")
     return ws
 
 

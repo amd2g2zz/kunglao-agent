@@ -30,6 +30,26 @@ analysis; a workspace that is not initialized is refused work.
    WARN; every field the task_spec does not answer stays HARD
    (conservative default — an absent task_spec is byte-identical to a
    VM-required workspace).
+
+   **Oracle anchors (REQUIRED — same round)** — after the needs-first
+   questions, ask the three answers that steer the whole loop, and write
+   them as first-class `task_spec.yaml` fields (blank in the template):
+   1. `goal_verbatim` — the user's goal, restated VERBATIM (never
+      paraphrased; the verbatim form is what the completion oracle
+      judges, and init pre-fills `task-oracle.yaml` `task_text` from it).
+   2. `success_criterion` — what counts as done, stated as a checkable
+      end-state (the completion anchor).
+   3. `verification_method` — how the result is verified, one of:
+      `reproduction` / `replay-evidence` (either arms the
+      controlled-comparison oracle: byte-matched pairs become admission
+      and verdict requirements for every primary question) / `static` /
+      `manual`.
+   While any anchor is blank the analysis entry refuses
+   (`kunglao analysis` exit 7) — collect all three or the workspace
+   cannot enter the loop; never guess or default an anchor. For help
+   turning a folk ask ("我要纯算") into these answers, point the user at
+   the README section **"How to state the task"**
+   (`README.md`, anchor `#how-to-state-the-task`).
 1. **Target alignment ** — run
    `python <SKILL_DIR>/scripts/kunglao-init.py <workspace>` FIRST; undecided
    intake items (workspace path -> analysis target -> project type) exit 8

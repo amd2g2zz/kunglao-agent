@@ -95,7 +95,7 @@ files:
   - src: agents/kunglao-init-worker.md
     dest: .claude/agents/kunglao-init-worker.md
     kind: agent
-    sha256: 0dc914340dc10ea3084b643e70da4b2349f78d85e262992921f6a818f0457d1c
+    sha256: 8951be6a55027caa787736b7ad1f764f868040ca7847a6642c78c7677e888d81
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
@@ -463,7 +463,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 5632ab6c230c23f4d09f4eb11bd53d5e7cdb8d2bd893c82c7b48f2f2f6836cbf
+    sha256: 7d31d5a7a885a84fad4f6e5a934b015890a7f65513f99ec0ced98f535605b221
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -483,7 +483,7 @@ files:
   - src: scripts/kunglao.py
     dest: .claude/scripts/kunglao.py
     kind: scaffold
-    sha256: 76fb95aace97add75ced3cc66452ab51912ace5f23cacfa03ee0973e6a2ab289
+    sha256: a9b47adbf0cf52a8cc33c868db27c5e12b8c454792f04d46b3657f442a28b396
   - src: scripts/kunglao_eval.py
     dest: .claude/scripts/kunglao_eval.py
     kind: scaffold
@@ -511,7 +511,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 1bb0750f0bb37e095d10fcf39455ee83f8a4f160a33e0e17f29ce5f28fa139d5
+    sha256: 819714c4a0171591bbf192a69fccc47d8b500cd0f66ce9a1a2da504766ff1784
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -592,6 +592,10 @@ files:
     dest: .claude/scripts/obligation_discovery.py
     kind: scaffold
     sha256: dd94e5003639701888eaa908965ddab413a62e159cd1275e89cc5973fc3103e7
+  - src: scripts/oracle_anchors.py
+    dest: .claude/scripts/oracle_anchors.py
+    kind: scaffold
+    sha256: a89a95296bf4840145cf6d04bac159267ba45eb2c96d486528ce436cbedcfc45
   - src: scripts/oracle_cadence.py
     dest: .claude/scripts/oracle_cadence.py
     kind: scaffold
@@ -699,7 +703,7 @@ files:
   - src: scripts/replay_equivalence.py
     dest: .claude/scripts/replay_equivalence.py
     kind: scaffold
-    sha256: f2a48dd645e7c938163950ba2f67083fe3814b21b5ab1ed2bda2e7cb7acb627b
+    sha256: 10e04a6f7fa2af96198bd642fdf68ed8ec7c442ada03e7987e839339e8657762
   - src: scripts/report_consistency_check.py
     dest: .claude/scripts/report_consistency_check.py
     kind: scaffold
@@ -1347,7 +1351,7 @@ files:
   - src: templates/state/task_spec.yaml
     dest: .claude/templates/state/task_spec.yaml
     kind: asset
-    sha256: f2625490e5d6957293b80f1db85278a230d99728106f515237ec93325f4d5670
+    sha256: b24ebd1e5da8d24eddf942f56eaca045a802ce0bc0e01e074e37c7bd3ea1cdfe
   - src: templates/unidbg/harness.java.tmpl
     dest: .claude/templates/unidbg/harness.java.tmpl
     kind: asset
