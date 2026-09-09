@@ -33,11 +33,10 @@ def test_gate_finds_retired_regex_copy_in_fixture(tmp_path: Path):
     assert any(k.endswith("scripts/other.py") for k in keys), r
 
 
-def test_gate_allows_owner_and_twin(tmp_path: Path):
+def test_gate_allows_owner(tmp_path: Path):
     root = tmp_path / "case2"
     _seed(root, {
         "hooks/lib_kunglao.py": "DISPATCH_RE = re.compile(r'x')\n",
-        "scripts/lib_kunglao.py": "DISPATCH_RE = re.compile(r'x')\n",
         "scripts/clean.py": "print('no token here')\n",
     })
     r = rg.scan(root, [])

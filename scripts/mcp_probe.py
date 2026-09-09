@@ -411,13 +411,11 @@ def format_reproduce(checks: list[MCPCheck], project_type: str) -> str:
 # ---------- main ----------
 
 def main(argv: list[str] | None = None) -> int:
-    # UTF-8 stdout unification (same pattern as scripts/toolchain.py) — scoped
-    # to CLI execution so importing this module never mutates the importer's
-    # stdout (kunglao-init.py imports it for the .mcp.json scaffold).
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        pass
+    # Scoped to CLI execution so importing this module never mutates the
+    # importer's stdout (kunglao-init.py imports it for the .mcp.json scaffold).
+    from _boot import reconfigure_stdout
+
+    reconfigure_stdout()
     parser = argparse.ArgumentParser(
         prog="mcp_probe",
         description="MCP supply probe — per-type required/optional MCP servers",
@@ -470,6 +468,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

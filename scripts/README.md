@@ -13,8 +13,12 @@ this script?" — used to keep documentation, hooks, CI, and tests in sync.
 - **Orphans — test semantics**: 0 — every script has at least one live
   reference (tests/ count as references; a script referenced only by tests
   is categorized `TEST`, not orphan). This is the #230-era metric.
-- **Orphans — production semantics (#866)**: 29 unwired of 205 subjects
-  (scripts 29 + tools 0, ~6.0k LOC) as of the 2026-09-02 post-866-b sweep —
+- **Orphans — production semantics (#866)**: 18 unwired of 181 subjects
+  (scripts 18 + tools 0) as of the 2026-09-09 scripts-governance sweep —
+  down from 29 of 205 at the 2026-09-02 post-866-b sweep (the governance
+  sweep deleted the 9 surveyed orphans and merged 6 clusters; the
+  unidbg installer face flipped to production-wired via the
+  toolchain_install registry) —
   the tools side was fully dispositioned by PR 866-b (all 27 pre-gate CLIs
   registered: tools/_INDEX.yaml registry mention + skills/references
   teaching; the 27-key gate baseline `devkit/.discovery-gate-baseline.txt`
@@ -73,7 +77,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669) + #110 case-bank priors: seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` / `taint:<cat>:<api>` candidates; `seed_case_candidates` 按冷启动 (project_type+保护特征) 检索 runs/case-bank.jsonl 命中行注入 provenance 先验 (failure-first, 零行/零命中/零上下文静默跳过) | lib(1: digest_build), CLI, tests |
 | `apkid_scanner.py` | T1 apkid pre-scan wrapper (#669): fingerprints packer/compiler/obfuscator/anti-* into evidence/apkid.json (fail-open) | CLI, tests |
 | `provider_health.py` | runtime provider-failure memory (#692 WP4): record/query <ws>/provider_health.json, 24h window, fail-open; consumed by route_capability selection next round | CLI, lib(1: route_capability), tests |
-| `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4); #823 A3 feed-side terms always-on (#51) | lib(3), tests |
+| `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4); #823 A3 feed-side terms always-on (#51); also the single home of the strategy convergence four metrics (regret / cost-to-slope / P(faster|hit) / competence, `--strategy` CLI face) | lib(3), tests |
 | `relib_audit.py` | re-library 审查器 (#817) — 孤儿/tracker 残留/声明行缺失三类检查 + quarantine 可逆移动 + 质量度量; _INDEX.yaml pin 契约(改库必 re-pin) | hooks, tests |
 | `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |
@@ -95,7 +99,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao_verify.py` | L1 mechanical verify implementation (reproduce + byte-exact) | lib(3), tests |
 | `kunglao_eval.py` | eval harness implementation (episode runner + scorer) | lib(2), CI, tests |
 | `digest_build.py` | digest generation implementation | lib(2), tests |
-| `acceptance_check.py` | end-to-end acceptance criteria runner | tests |
 
 ## Enforcement gates (reject/allow decision scripts)
 
@@ -114,8 +117,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `plan_reviser.py` | plan state machine + suggest_revision triggers + incremental revision segments | tests, SKILL contract |
 | `premature_termination_detect.py` | premature-done declaration detector | lib(1), tests |
 | `provenance_gate.py` | PROVEN provenance chain gate | lib(1), tests |
-| `reuse_gate.py` | evidence-reuse gate | tests |
-| `search_gate.py` | search-before-work gate | tests |
 | `troubleshooting_gate.py` | report completeness gate | tests |
 | `review_gate.py` | review evidence mint/check (key-init/mint/check) | tests, docs |
 | `adversarial_gate.py` | verdict-scorer 签名前对抗门 — open challenge/链断/summary 鉴权失败/轮数低于 register 高水位一律 BLOCKED，无 override | tests |
@@ -130,7 +131,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | --- | --- | --- |
 | `kunglao_upgrade.py` | workspace upgrade via declarative convergence (#726): 5 idempotent migrations + version wall + user-data sha256 iron rule + dry-run/snapshot; dispatched from `kunglao upgrade` subcommand | kunglao, tests |
 | `claim_expiry.py` | STALE demotion after inactivity | lib(1), tests |
-| `complete_teardown.py` | full teardown helper | tests |
 | `dead_letter.py` | DEAD status + dead-letter quarantine | hooks, lib(1), tests |
 | `detector_liveness.py` | #127 探测器利用率证据 — unified log 里的 detector_eval/detector_fired 计数回读; DORMANT = evaluations>0 且 fires==0 (#600 DORMANT 哨兵泛化); heartbeat_tick 一次性 WARN 面; CLI: `<ws> [--json]` | tests |
 | `feedback.py` | feedback inbox processing | tests |
@@ -175,10 +175,10 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `mission_ledger.py` | 主线欠账表 + V_m (#823-P1, shadow) — PQ 三态 CRUD + 防傻断言(边角料全 PROVEN→增量=0) + mission_snapshot 落盘 | tests |
 | `mission_stall.py` | 主线停滞指纹 + PARK 合法化 (#634) — ΔV_m 平坦×K 检测 / PARK 必带 wake_condition / revive 通道(落账 claim_revive) | convergence_check, hooks(carrier rule f), tests |
 | `notes_discriminator.py` | notes 结构判别器 (#834) — 复制即拒/零引用/悬空引用三规则; completion_gate NOTES_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
-| `notes_gate.py` | notes 治理门 (#58 S4) — NN-slug 命名 + ICD-203 落地字段 + verified-entry 检查(pending 自写无 verify 事件即拒) + provenance 完整度; completion 路径/#57 write-guard 调用面(check_note) | tests |
 | `encoding_lint.py` | 裸 IO 编码扫描器 (#811) — AST 版 write_text/read_text/open/subprocess 无 encoding 检出; 残留清零后挂机械门防复发 | tests, CI |
 | `emit_gate.py` | EMIT_ACTIONS 双向门 (#880) — 正向: 词表孤儿扫描(每个 action 须有 ≥1 生产发射者, quoted-literal 宽网); 反向: emit-site literal 未注册扫描(#459 pattern 表); CI 挂 tests/test_emit_gate_880.py | tests, CI |
-| `utf8_boot.py` | CLI 入口 UTF-8 双保险 (#811) — PYTHONUTF8 setdefault + stdout/stderr reconfigure; 全入口 __main__ 接线 | hooks, tests |
+| `report_render.py` | the report/console rendering face of the toolchain — ToolMeta guidance metadata + FIXES table (incl. derived mcp:<name> entries) + fix_text accessor + closed NextAction vocabulary; single home of the guidance-facing port defaults; pairs with toolchain_install | lib, tests |
+| `_boot.py` | THE CLI boot module — UTF-8 stdio insurance (PYTHONUTF8 setdefault + stdout/stderr reconfigure, stdout-only scoped face) + the script-dir path bootstrap; single home of the entry-time prologue | hooks, tests |
 | `plan_stages.py` | plan 阶段模型 (#822) — runs/plan-stages.yaml 工件 + BIG_BANG_PLAN 检测(校验面 fail-closed) + 盘点裁决 maintain/adjust/replan(adjust/replan 必带 reason) + plan_review 落账 | CLI, tests |
 | `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |
 | `tuition_curve.py` | 学费曲线聚合器 + 座舱 V/D/ETA 数据面 (#823-P4) — settled rho_pair → mission 记录, stratum 聚合, got_cheaper 判定, cockpit_summary | tests |
@@ -192,7 +192,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao_log.py` | structured JSONL event log | lib(4), tests |
 | `kunglao_resume.py` | /kunglao-agent:resume — crash-recovery brief (read-only: health/13-source summary/open-hypothesis pointers/table-lookup next-step; issue #466, #528) | CLI, tests |
 | `heartbeat_touch.py` | lightweight heartbeat timestamp refresh — companion to heartbeat_tick.py (one-shot, no side effects; #534) | hooks, tests |
-| `strategy_metrics.py` | strategy convergence four metrics — regret / cost-to-slope / P(faster|hit) / competence (#529) | lib(1), tests |
 | `summary_discriminator.py` | summary 结构合同判别器 (#826) — R1 完成词需暂定节 / R2 不确定性传播(fact-id 或 WAIVED) / R3 未答主问题节; completion_gate SUMMARY_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
 
 ## Support libraries & utilities
@@ -216,11 +215,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
 | `dispatch_context.py` | structured dispatch context block (fact snapshot + priority state + validated capability + plan + siblings; #527) | lib(3), tests |
 | `lessons_telemetry.py` | per-lesson CBM quartet + utility score + tombstone (#526) | tests |
-| `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
 | `_hooks_path.py` | scripts-side bridge to hooks/_path_hygiene — the canonical by-path loader delegation (#863 Family B, #671 authority; guarded append, never reorders) | hooks, lib(13), tests |
 | `ws_layout.py` | manifest-aware workspace resolution single source — resolve_quiet/resolve_strict (#863 Family C; B2 fix: all 9 former _resolve_ws copies honor layout.workspace_dir/claim_register) | lib(9), tests |
 | `harness_common.py` | harness-wide time-stamp single source (#863 Family F) — utc_now (tz-aware datetime) / utc_now_z ("YYYY-MM-DDTHH:MM:SSZ", byte-equivalent collapse of the 43 strftime/isoformat copies) / utc_now_iso (+00:00 variant); 53 former def copies delegate | lib(52: scripts+hooks/heartbeat_touch+tools/static trio), tests |
-| `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
 | `toolchain.py` | type-aware toolchain probe matrix (#304) with probe tiers presence/liveness/capability + jdwp handshake (#474) | lib(1), tests, docs |
 | `tool_tiers.py` | 工具族档位表加载/选择/契约注入 (#812) — 场景×工具→四档降级链（#670 估算 + C-006 实录），dispatch_context 可选键 | dispatch_context, tests |
 | `tool_value.py` | 工具价值聚合器 (#881) — 四输入（toolfirst 行/facts steps/结算+runs outcome/operation label）按 claim id join → (scene,operation,tool) cite/burn/reject + β-Bernoulli utility（先验=静态链 rank）；runs/.tool-value.json 表；CLI --report 查询；接线 tool_tiers 排序与 recall_files rerank | tool_tiers, hooks/recall_inject, dispatch_context, tests |
@@ -231,8 +228,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `decision_pending.py` | pending-decision list schema + serialization (stdout JSON, exit 8, `--resolve` answers; shared intake channel #455/#449/#451) | lib(2), tests |
 | `log_setup.py` | shared stdlib-logging facade (FileHandler + stderr StreamHandler, idempotent; #454/#459) | lib, tests |
 | `platform_paths.py` | platform-correct analyzeHeadless + venv python resolution (#409) | lib(2), tests |
-| `chunker.py` | length-measured batch chunking (#309) | tests |
-| `cost_estimate.py` | pre-dispatch cost estimator (#309) | lib(1), tests |
 | `event_taxonomy.py` | 25-class event taxonomy (#309) | tests |
 | `recov_metrics.py` | symbol/type recovery quality metrics (#309) | lib(1), tests |
 | `tool_error_policy.py` | same-tool consecutive-error hysteresis (#309) | tests |
@@ -248,8 +243,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `bench_grade.py` | zero-LLM L1 scoring + z_self + arm-blind sealed map + 12-case oracle selfcheck | CLI, tests |
 | `bench_redteam.py` | L2 divergent-only arm-blind red-team pipeline (briefs + merge-back) | CLI, tests |
 | `bench_analyze.py` | stdlib statistics — exact McNemar, Wilcoxon, tuition slopes, H1-H4 pre-registered verdicts, --demo | CLI, tests |
-| `answer_key_lint.py` | answer-key quality gate: schema + PQ-to-top-level consistency + IOC normalizability | CLI |
-| `intake_one.py` | single manifest entry immediate validation (sha256/first_seen/sources/pq lists) | CLI |
 | `intake_promise.py` | Phase 0 预扫描 promise 块 (#813) — apkid/DIE 探测状态显式记录 + 混淆先验(apkid.json 同源提取) + java 可达性判定(#807 死胡同面)；task_spec `promise:` 键合并 / runs 降级 | kunglao-init, CLI, tests; 下游 enforcement consumer 未接线(#53 裁定: 休眠保留, 消费面=#54 Android-lighting, 不在此 fake-wire) |
 | `difficulty_calibration.py` | #15 样本内在难度标定 (easy/medium/hard/max) — 纯函数组合既有扫描器证据(die.json/apkid.json)为 per-factor 评分 + 多正面 MAX 发现规则；缺证据 → easy+evidence_gap(缺失永不计为难度)；evidence/difficulty.json + task_spec `difficulty:` 键(#16 开环输入) | kunglao-init, CLI, tests |
 | `oracle_anchors.py` | task_spec 三个必答 oracle 锚点 (goal_verbatim / success_criterion / verification_method: reproduction\|replay-evidence\|static\|manual) — fail-closed 校验(空白/越界枚举=缺失，绝不猜默认)；merge 写入 task_spec(不覆盖既有答案)；analysis 入口拒绝面(kunglao analysis rc=7) + init 提醒行；replay_equivalence 消费枚举作 declared-bit 武装 | kunglao-init, kunglao(analysis gate), replay_equivalence, tests |
@@ -263,11 +256,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `release_check_selfcheck.py` | release-check self-verification | CI |
 | `check_global_rule_subset.py` | global-rule subset compliance check | CI, tests |
 | `comment_hygiene_lint.py` | formal-content hygiene gate over scripts/+tests/ — tracker-ref pattern (R1), narrative markers (R2), shrink-only per-file baseline ratchet (`scripts/hygiene_baseline.yaml`), plus re-library mapping and frontmatter passes (inert until the mapping lands; `--emit-baseline` regenerates the ledger) | CI, tests |
-| `scaffold_card.py` | card scaffolder — emits the standard-shaped skeleton (FM name/description/domain/family + When to Use + When Not To Use + worked example) at a mapping-registered `to` path; refuses unregistered paths, so placement stays declared data-first in `_mapping.yaml` | tests |
-| `reference_index_build.py` | generates the re-library two-tier index (`references/_INDEX.md` + 10 `_index-<domain>.md`) from `_mapping.yaml` + card frontmatter; entries byte-match FM; preserves the marked Population B hand region; `--check` is the drift gate | tests |
+| `reference_index_build.py` | the re-library authoring CLI, keyed on `_mapping.yaml` — default face generates the two-tier index (`references/_INDEX.md` + 10 `_index-<domain>.md`) from mapping + card frontmatter (entries byte-match FM, marked hand region preserved, `--check` is the drift gate); `--scaffold` face emits the standard-shaped card skeleton (FM name/description/domain/family + When to Use + When Not To Use + worked example) at a mapping-registered `to` path and refuses unregistered paths, so placement stays declared data-first | tests |
 | `kunglao_export.py` | workspace export by zone (contract_carriers/evidence/scratch) + manifest (#540, D5) | tests |
 | `structural_check.py` | repo structure + broken-link + index drift check | CI, tests |
-| `run_test_matrix.py` | matrix-style scoped pytest runs (issue-lane suites); canonical full-suite entry stays the README Quick-start pytest line | lane tooling, tests |
 | `deploy_manifest.py` | deployment manifest builder/verifier - hooks+agents+scaffold closure, per-file sha256 (newline-normalized); feeds init copy-deploy and upgrade refresh | CLI, tests |
 | `deployed_refresh.py` | upgrade-side framework-copy refresh - overwrite semantics with forensic backups (runs/deploy-backup-*), orphan double-confirm prune; migration item face for #783 | tests, CLI via kunglao_upgrade chain |
 
@@ -292,18 +283,10 @@ by the now-registered `tools/auxiliary/capture_golden.py` golden cases
 | `infeasible_proposal.py` | #815 early-stop wiring, MERGED — INFEASIBLE-as-claim proposal semantics (L1/L2/L3 + evidence gate) | REGISTERED (proposal generator); consumer = orchestrator loop on recovery-ladder exhaustion |
 | `plan_stages.py` | #822 plan stage model, MERGED — `runs/plan-stages.yaml` + BIG_BANG detection + inventory rulings | REGISTERED; consumer = plan-phase ritual |
 | `emit_gate.py` | #880, MERGED — EMIT vocabulary double-ended gate (write-side actions must have >=1 emitter; read-side consumers must exist) | REGISTERED (CI-runnable checker); consumer = release-check extension candidate |
-| `search_gate.py` | user-painpoint-driven (search-before-research gate; no issue ref) | REGISTERED as orchestrator-loop gate; consumer = post-worker fact promotion |
-| `reuse_gate.py` | user-painpoint-driven (reuse-before-recompute; no issue ref) | REGISTERED as dispatch-side gate; consumer = dispatch audit chain |
-| `complete_teardown.py` | search-problem abstraction (user-verbatim driven; no issue ref) — 1-call operator chain returning a fact bundle | REGISTERED as search-operator entry; consumer = deep-search scenario |
-| `strategy_metrics.py` | #529, MERGED — convergence four metrics, pure functions atop `priority_ratio` | REGISTERED as lib+CLI; consumer = convergence reporting |
-| `acceptance_check.py` | #6/#689, MERGED — end-to-end static acceptance | REGISTERED as milestone-acceptance entry (same family as `run_test_matrix.py`) |
-| `run_test_matrix.py` | v0.1.3 acceptance orchestrator (`docs/v0.1.3-test-plan.md`) | REGISTERED as milestone-acceptance entry |
+| `acceptance_check.py` | MERGED milestone-acceptance entry — static battery (default / --full) + absorbed category matrix (`--smoke`, `--categories smoke,complexity,regression,integration,fault,mutation`; per-category artifacts under KUNGLAO_OUT) | tests |
 | `report_consistency_check.py` | #57, MERGED — report-INTERNAL contradiction checker | REGISTERED; consumer = report QA phase (hr-report pipeline sibling) |
 | `fixture_excerpt_lint.py` | #58, MERGED — condensed-excerpt conversion/speculation lint | REGISTERED; consumer = report QA phase |
-| `chunker.py` | #309, MERGED — length-measured batch chunking (kong absorption) | REGISTERED as utility lib; consumer = batch dispatch flows |
-| `env_file.py` | #309, MERGED — CLAUDE_ENV_FILE loader (stdlib parser) | REGISTERED as init-path lib; consumer = env bootstrap |
 | `kunglao_export.py` | #540, MERGED — workspace export by zone | REGISTERED as workspace utility CLI |
 | `local_gate.py` | dev-loop infra (2026-09-01): cwd-immune unified local quality gate — pytest + Gate 9 + ext-scan + deploy-manifest verify (Gate 9 wired by PR 866-a) | REGISTERED as the per-PR local-gate entry (plan §0.5 workflow) |
 | `encoding_lint.py` | #811, MERGED — AST bare-IO encoding scanner over the production IO face | REGISTERED as dev-loop linter; CI/local_gate wiring = follow-up card |
 | `error_response.py` | #448, MERGED — mechanical layer of `references/contracts/error-response-taxonomy.md` (the taxonomy doc is the live LLM channel; zero code importers — 866-a verified) | REGISTERED as the taxonomy's enforcement layer; CLI wiring = follow-up card |
-| `answer_key_lint.py` / `intake_one.py` | SUSPECT — docstrings bind to `COLLECTION_PROTOCOL.md` §5 steps 5/7, which does NOT exist anywhere in the repo; zero tests, zero consumers; function overlap with the merged `bench_answer_key.validate_key` (#823) | SUSPECT, not DEAD (answer-key files from `bench_answer_key` may still be linted manually). Retirement candidate for the follow-up governance card after owner ruling on the missing protocol doc |

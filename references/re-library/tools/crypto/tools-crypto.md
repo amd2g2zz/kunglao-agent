@@ -22,7 +22,7 @@ family: crypto
 ### Using Ciphey
 
 ```bash
-pip install ciphey
+# install ciphey via pip/uv (toolchain registry: scripts/toolchain_install.py)
 # Auto-detect and decrypt
 ciphey -t "ciphertext"
 # Read from file

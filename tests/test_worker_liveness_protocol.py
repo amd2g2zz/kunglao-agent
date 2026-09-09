@@ -196,7 +196,6 @@ WIRING = {
     "hooks/worker_budget.py": "load_module_by_path",
     "hooks/worker_pulse.py": "parse_worker_status",
     "scripts/convergence_check.py": "load_hooks_lib",
-    "scripts/lib_kunglao.py": "load_hooks_lib",
     "scripts/external_kicker.py": "load_hooks_lib",
     "scripts/event_taxonomy.py": "load_hooks_lib",
     "scripts/kunglao_status.py": "load_hooks_lib",

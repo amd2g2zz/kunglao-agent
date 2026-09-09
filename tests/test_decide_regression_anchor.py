@@ -36,6 +36,17 @@ if str(SCRIPTS) not in sys.path:
 import convergence_check  # module under test (== baseline before #443 GREEN)
 import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 
+# 2026-09-09 DATA-coupled freeze refresh (the scripts-governance sweep):
+# the anomaly baseline corpus is built FROM references/ (anomaly_detector
+# design D2), and the governance sweep converted nine re-library cards'
+# install commands to describe-only pointers to the toolchain registry.
+# That intentional corpus edit shifted lexical-rarity statistics, so
+# `anomalies[].score` moved in the 3rd decimal on 4 of 31 cases.
+# Case-by-case verification of capture_current() vs the previous anchor:
+# zero drift in action, decision order, phase fields, anomaly counts,
+# fact_ids and top_dimension — only the four anomaly scores changed. No
+# ranker or decide() code path was touched by the sweep.
+#
 # 2026-09-06 SEMANTIC re-pin verification (#107 Thompson rebuild): the
 # owner ruling "探索和价值网络完全重构，之前的不要了" replaced the
 # ranking layer — priority_ratio is now the Thompson composite

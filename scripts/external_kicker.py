@@ -79,7 +79,7 @@ import wire_up_settings
 import hook_activation
 
 from _hooks_path import (  # #863 Family B: loader delegation (#671 authority)
-    load_hooks_lib, load_module_by_path)
+    load_hooks_lib)
 
 # D6: activation TTL from hook_activation.py DEFAULT_TTL_MINUTES — the tick
 # interval MUST stay below it or the TTL-expiry→next-tick gap silently closes
@@ -366,18 +366,13 @@ def should_kick(workspace: Path) -> bool:
     progressing worker exempts at every level (never kick a session whose
     workers move).
 
-    Bare-name `lib_kunglao` is ambiguous under pytest (pythonpath = . hooks
-    scripts tools — hooks first, so hooks/worker_budget.py resolves its own
-    hooks/lib_kunglao.py). Production is unambiguous (this script runs with
-    scripts/ at sys.path[0]); the test harness loads the same module by
-    explicit path under the same unique name, so both share one instance.
-
-    #863 Family B: the by-path prologue collapsed into the canonical loader
-    (hooks/_path_hygiene.load_module_by_path, via scripts/_hooks_path) —
-    unique name + registration semantics unchanged.
+    The drift library is the hooks lib (single source: hooks/lib_kunglao.py
+    owns both the worker-status protocol and the drift block). It loads via
+    the canonical by-path loader (hooks/_path_hygiene.load_hooks_lib, via
+    scripts/_hooks_path) — order-independent and cached, and the test
+    harness uses the same loader so both share one instance.
     """
-    lib = load_module_by_path(
-        "lib_kunglao_scripts", Path(__file__).resolve().parent / "lib_kunglao.py")
+    lib = load_hooks_lib()
     return (lib.drift_detected(workspace)
             and lib.signature_rotation(workspace) >= lib.DRIFT_ESCALATE_ROWS)
 
@@ -873,6 +868,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

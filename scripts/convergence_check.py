@@ -118,7 +118,7 @@ def _load_worker_lib():
     ``lib_kunglao_hooks`` (the external_kicker.should_kick /
     state_anchor._load_drift_lib precedent): bare ``import lib_kunglao`` is
     ambiguous under pytest (pythonpath = . hooks scripts — hooks first)
-    because scripts/lib_kunglao.py (drift lib) shares the name. All
+    because the drift lib (hooks/lib_kunglao.py) shares the name. All
     scripts-side consumers use the SAME name, so one process shares one
     module instance.
 
@@ -2015,6 +2015,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

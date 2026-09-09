@@ -562,9 +562,9 @@ SCAFFOLD_FILES = {
 from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
-# #863 Family H: single source in utf8_boot (#811 stdio-insurance module);
+# single source in _boot (the stdio-insurance boot module);
 # alias binds the SHARED function; the call site stays in main() unchanged.
-from utf8_boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
+from _boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
 
 
 def atomic_write(path: Path, text: str) -> None:

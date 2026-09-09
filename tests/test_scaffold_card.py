@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Contract tests for the card scaffolder.
+"""Contract tests for the card scaffolder (the authoring CLI's scaffold face).
+
+The scaffolder lives in scripts/reference_index_build.py — one authoring
+CLI keyed on the re-library mapping: default mode generates the two-tier
+index, --scaffold emits a card skeleton at a mapping-registered path.
 
 Fixtures build tmp repo roots whose mapping registers exactly one card
 destination; the emitted skeleton must carry the three standard
@@ -19,7 +23,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import comment_hygiene_lint as chl  # noqa: E402
-import scaffold_card as sc  # noqa: E402
+import reference_index_build as sc  # noqa: E402
 
 REGISTERED = "references/re-library/web/vm/brand-new-card.md"
 SEED_FM = "---\nname: seed\ndescription: seed card\ndomain: web\nfamily: vm\n---\n\nbody\n"
@@ -38,7 +42,7 @@ def _root(tmp_path: Path) -> Path:
 
 
 def _run(tmp_path: Path, *extra: str) -> int:
-    argv = ["--root", str(tmp_path), "--path", REGISTERED,
+    argv = ["--scaffold", "--root", str(tmp_path), "--path", REGISTERED,
             "--description", "covers the x case; not for y targets", *extra]
     return sc.main(argv)
 
@@ -72,7 +76,7 @@ def test_name_override_lands_in_frontmatter(tmp_path: Path):
 
 def test_refuses_unregistered_path(tmp_path: Path):
     _root(tmp_path)
-    assert sc.main(["--root", str(tmp_path),
+    assert sc.main(["--scaffold", "--root", str(tmp_path),
                     "--path", "references/re-library/unregistered.md",
                     "--description", "d"]) == 1
     assert not (tmp_path / "references/re-library/unregistered.md").exists()
@@ -91,20 +95,20 @@ def test_refuses_when_mapping_absent(tmp_path: Path):
 
 def test_refuses_path_outside_re_library(tmp_path: Path):
     _root(tmp_path)
-    assert sc.main(["--root", str(tmp_path), "--path", "docs/x.md",
+    assert sc.main(["--scaffold", "--root", str(tmp_path), "--path", "docs/x.md",
                     "--description", "d"]) == 1
 
 
 def test_refuses_empty_description(tmp_path: Path):
     _root(tmp_path)
-    assert sc.main(["--root", str(tmp_path), "--path", REGISTERED,
+    assert sc.main(["--scaffold", "--root", str(tmp_path), "--path", REGISTERED,
                     "--description", "   "]) == 1
 
 
 def test_exit_codes_via_subprocess(tmp_path: Path):
     _root(tmp_path)
-    argv = [sys.executable, str(SCRIPTS / "scaffold_card.py"),
-            "--root", str(tmp_path), "--path", REGISTERED,
+    argv = [sys.executable, str(SCRIPTS / "reference_index_build.py"),
+            "--scaffold", "--root", str(tmp_path), "--path", REGISTERED,
             "--description", "covers x; not y"]
     done = subprocess.run(argv, capture_output=True, text=True, check=False)
     assert done.returncode == 0

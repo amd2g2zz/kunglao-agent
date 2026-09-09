@@ -410,7 +410,7 @@ FEEDBACK_VERDICTS = ("yes", "no", "misleading")
 def _feedback_parser():
     """The single parse point lives in hooks/lib_kunglao.py (#444 AC-1).
 
-    NOTE: a different ``scripts/lib_kunglao.py`` (scripts-side drift lib)
+    NOTE: the hooks lib ``hooks/lib_kunglao.py`` (drift block's single home)
     shares the module NAME, and a caller may have already imported that one
     into sys.modules. Import by explicit FILE path so the hooks-side grammar
     owner is loaded regardless of sys.path order or module-cache pollution.
@@ -887,11 +887,9 @@ def main(argv: list[str]) -> int:
     # output (agents, CI) round-trips on Windows consoles regardless of the
     # active code page. errors="replace" per the #317 unified-stdout contract
     # (belt-and-braces for unpaired surrogates).
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        pass
+    from _boot import reconfigure_stdout
 
+    reconfigure_stdout()
     if len(argv) < 2 or argv[1] in ("-h", "--help"):
         print(USAGE)
         return 0 if len(argv) >= 2 else 2

@@ -34,7 +34,7 @@ The 18 failure modes are split into 3 domain files (progressive disclosure):
 | F9 | Cost warning interrupts workflow | are you at tier=advisory / pause_non_essential / HARD_PAUSE? (cost_gate.py output) | - | B1h |
 | F10 | Hook noise (all hooks always on) | did you check is_active() before running? (hook_activation.py) | - | B1i |
 | F11 | Stuck worker doesn't backtrack | did you require ## backtrack section? (stuck > 20 min -> backtrack_gate.py) | - | B1j |
-| F12 | Workers do repeat work, no reuse | did you cite existing fact or justify fresh? (reuse_gate.py) | - | B1k |
+| F12 | Workers do repeat work, no reuse | did you cite existing fact or justify fresh? (reuse-before-recompute rule) | - | B1k |
 | F13 | Orchestrator fan-wen (should I dispatch?) | are you about to ask user? (NO - see F-13: just decide) | - | B1k (self-redirect) |
 | F14 | Stale blockers not pruned | is this blocker still active? (closed claim -> stale_blocker_prune.py) | - | B1n |
 | F15 | OPEN claims hours old, equal priority | is this claim STALE? (>24h no activity -> claim_expiry.py) | - | (priority demote) |

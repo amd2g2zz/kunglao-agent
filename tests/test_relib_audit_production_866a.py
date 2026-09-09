@@ -207,7 +207,12 @@ def test_real_repo_full_run_shape(real_audit):
     assert "tools/ghidra/ghidra_job.py" in r["wired"]["tools"]
     assert "tools/crypto/crypto-tool.py" in r["wired"]["tools"]
     assert r["counts"]["unwired_tools"] == 0
-    assert r["counts"]["unwired_total"] >= 25  # scripts-side #866 debt remains (ledger in scripts/README.md); lower bound, not exact: CI runners carry transient scripts/*.py noise
+    # The scripts-governance sweep (9 orphan deletions + 6 merge clusters)
+    # retired the scripts-side #866 debt: unwired fell 31 -> 18 at the
+    # 2026-09-09 sweep. Keep a small floor purely as the audit's
+    # sensitivity sanity bound; lower bound, not exact: CI runners carry
+    # transient scripts/*.py noise.
+    assert r["counts"]["unwired_total"] >= 10
 
 
 # ---- README dual-metric anti-whitewash regression guard ----

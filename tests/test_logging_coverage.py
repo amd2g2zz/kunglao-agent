@@ -52,7 +52,6 @@ TOP_20_MODULES = (
     ("retract_claim", "scripts/retract_claim.py"),
     ("refutation_propagate", "scripts/refutation_propagate.py"),
     ("outcome_capture", "scripts/outcome_capture.py"),
-    ("complete_teardown", "scripts/complete_teardown.py"),
     ("toolchain_install", "scripts/toolchain_install.py"),
     ("env_repair_l1", "scripts/env_repair_l1.py"),
     ("loop_state", "scripts/loop_state.py"),

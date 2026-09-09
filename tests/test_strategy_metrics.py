@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""tests/test_strategy_metrics.py — #529 strategy convergence four metrics.
+"""tests/test_strategy_metrics.py — strategy convergence four metrics.
 
 Pure-function metrics layered atop priority_ratio.Action / EvidenceView:
 
@@ -8,9 +8,10 @@ Pure-function metrics layered atop priority_ratio.Action / EvidenceView:
   p_faster_given_hit among hits, fraction actually faster than the median.
   competence_cov    capability coverage: validated_families / required_families.
 
-TDD: this file pins the four behaviors in the RED step.  Tests use tiny
-synthetic input — no filesystem, no LLM.  All four metrics live in
-scripts/strategy_metrics.py and are importable as `strategy_metrics as sm`.
+Tests use tiny synthetic input — no filesystem, no LLM.  The four
+metrics live in scripts/priority_ratio.py (the ranker module is their
+single home) and are exercised through the `priority_ratio as sm`
+module face.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import strategy_metrics as sm
+import priority_ratio as sm
 
 
 # ---------- synthetic fixtures ----------
@@ -197,3 +198,16 @@ def test_compute_all_returns_four_keys():
         assert key in snap, f"missing metric: {key}"
     assert snap["regret"]["regret"] == pytest.approx(0.0)
     assert snap["competence"]["coverage"] == pytest.approx(0.5)
+
+
+# ---------- merged milestone surface ----------
+
+def test_strategy_snapshot_cli_flag(capsys, tmp_path):
+    """The ranker CLI carries the strategy snapshot face: --strategy prints
+    the four-metric snapshot for a workspace (JSON when --json)."""
+    rc = sm.main([str(tmp_path), "--strategy", "--json"])
+    out = capsys.readouterr().out
+    snap = __import__("json").loads(out)
+    assert rc == 0
+    assert set(snap) == {"regret", "cost_to_slope", "p_faster_given_hit",
+                         "competence"}

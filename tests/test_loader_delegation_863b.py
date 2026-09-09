@@ -80,11 +80,11 @@ WIRING = {
     "scripts/backtrack_gate.py": "load_hooks_lib",
     "scripts/convergence_check.py": "load_hooks_lib",
     "scripts/event_taxonomy.py": "load_hooks_lib",
-    # external_kicker hosts TWO former prologues: the hooks-lib protocol
-    # loader and the should_kick drift-twin loader.
-    "scripts/external_kicker.py": ("load_hooks_lib", "load_module_by_path"),
+    # external_kicker hosted TWO former prologues (hooks-lib protocol
+    # loader + the should_kick drift loader); the drift block's merge into
+    # the hooks lib collapsed both onto the canonical loader.
+    "scripts/external_kicker.py": "load_hooks_lib",
     "scripts/kunglao_status.py": "load_hooks_lib",
-    "scripts/lib_kunglao.py": "load_hooks_lib",
     "scripts/progress_report.py": "load_hooks_lib",
     "scripts/reconcile_workers.py": "load_hooks_lib",
     # generic by-path loads route through the util:
@@ -95,7 +95,9 @@ WIRING = {
     "scripts/release_check_selfcheck.py": "load_module_by_path",
     # hooks-side consumers (same-dir import, no plumbing):
     "hooks/completion_gate.py": "load_module_by_path",
-    "hooks/state_anchor.py": "load_module_by_path",
+    # state_anchor's drift loader collapsed onto the canonical loader (the
+    # drift block merged into the hooks lib)
+    "hooks/state_anchor.py": "load_hooks_lib",
     "hooks/worker_budget.py": "load_module_by_path",
     "hooks/recall_inject.py": "load_module_by_path",
     # devkit consumers:

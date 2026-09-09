@@ -1,40 +1,37 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""install_unidbg.py — typed CLI face for scripts/install_unidbg.sh (#165).
+"""install_unidbg.py — the registered operator face of the unidbg plan.
 
-The bash installer carries the unidbg deployment preconditions (JDK + Maven
-checks, remote clone of the MCP-capable master line, first-build dependency
-resolution, verify-after-repair). This wrapper exists so the installer is
-reachable through the house tool surface: the ext-index scanner enumerates
-scripts/*.py CLIs (type: tool, consume: invoke) and does not enumerate
-shell scripts, so the index entry delegates here, and here delegates to the
-bash implementation. Single source of logic: scripts/install_unidbg.sh.
+The INSTALL_PLANS registry in toolchain_install.py is the single
+registration point for tool installation: this entry is a THIN caller of
+install_script_plan("unidbg") — resolution (JDK prerequisite check),
+implementation execution (install_unidbg.sh: remote clone, first build,
+verify-after-repair), and the verify face all live in the registry. The
+single source of installation LOGIC stays scripts/install_unidbg.sh.
 
-Usage mirrors the bash script:
+Usage (mirrors the bash script):
   install_unidbg.py [--target DIR] [--force] [--dry-run]
-Exit code propagates from the bash script (0 green / 1 failed step / 2
+Exit code propagates from the registry runner (0 green / 1 failed step / 2
 usage error).
 """
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
-_SCRIPT = Path(__file__).resolve().parent / "install_unidbg.sh"
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from _boot import force_utf8  # noqa: E402
+import toolchain_install  # noqa: E402  (the registry — single registration point)
 
 
 def main(argv: list[str] | None = None) -> int:
-    if not _SCRIPT.is_file():
-        print(f"install_unidbg: implementation missing: {_SCRIPT}", file=sys.stderr)
-        return 1
-    try:
-        result = subprocess.run(["bash", str(_SCRIPT), *(argv or sys.argv[1:])], check=False)
-    except OSError as exc:
-        print(f"install_unidbg: cannot execute installer: {exc}", file=sys.stderr)
-        return 1
-    return result.returncode
+    return toolchain_install.install_script_plan(
+        "unidbg", list(argv if argv is not None else sys.argv[1:]))
 
 
 if __name__ == "__main__":
+    force_utf8()
     sys.exit(main())

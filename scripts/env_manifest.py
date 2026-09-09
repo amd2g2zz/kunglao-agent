@@ -60,11 +60,10 @@ from pathlib import Path
 
 import yaml
 
-# UTF-8 stdout unification (same pattern as toolchain.py)
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass
+from _boot import reconfigure_stdout  # single boot module (own dir is on path)
+
+# UTF-8 stdout unification at import (the env-facts CLI face).
+reconfigure_stdout()
 
 MANIFEST_FILENAME = "env-facts.yaml"
 # Pre-rename facts name (#450 governance 2026-08-19: it collided with the
@@ -748,6 +747,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

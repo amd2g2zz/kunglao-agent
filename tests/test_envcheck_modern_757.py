@@ -714,3 +714,57 @@ class TestT3GateThirdCheck:
         }, overall="PASS")
         rc, stderr, ctx = evaluate(self._payload(ws), environ={FLAG_NAME: ""})
         assert rc == 0
+
+
+# ---------------------------------------------------------------------------
+# fix-string delegation: remediation sentences are sourced from the render
+# module's FIXES table (single home), never re-written by hand here
+# ---------------------------------------------------------------------------
+
+def test_vm_unset_detail_delegates_to_fix_text(monkeypatch):
+    import env_check
+    monkeypatch.setitem(
+        tc.FIXES, "vm_reachable",
+        tc.ToolMeta(fix="SENTINEL-VM-FIX", description="d", url=None))
+    monkeypatch.setattr(env_check, "VM_HOST", "")
+    ok, detail = env_check.check_vm()
+    assert ok is False
+    assert "SENTINEL-VM-FIX" in detail
+    assert "static may proceed" in detail  # the env_check-owned consequence
+
+
+def test_ghidra_unset_detail_delegates_to_fix_text(monkeypatch):
+    import env_check
+    monkeypatch.setitem(
+        tc.FIXES, "ghidra",
+        tc.ToolMeta(fix="SENTINEL-GHIDRA-FIX", description="d", url=None))
+    monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", None)
+    ok, detail = env_check.check_ghidra()
+    assert ok is False
+    assert "SENTINEL-GHIDRA-FIX" in detail
+    assert "GHIDRA_HOME unset" in detail  # pinned phrase (757 suite)
+
+
+def test_ghidra_notfound_detail_delegates_to_fix_text(monkeypatch, tmp_path):
+    import env_check
+    monkeypatch.setitem(
+        tc.FIXES, "ghidra",
+        tc.ToolMeta(fix="SENTINEL-GHIDRA-FIX", description="d", url=None))
+    missing = tmp_path / "nope" / "analyzeHeadless"
+    monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", missing)
+    ok, detail = env_check.check_ghidra()
+    assert ok is False
+    assert "SENTINEL-GHIDRA-FIX" in detail
+    assert str(missing) in detail
+
+
+def test_camoufox_fail_detail_delegates_to_fix_text(monkeypatch, tmp_path):
+    import env_check
+    monkeypatch.setitem(
+        tc.FIXES, "mcp:camoufox-reverse",
+        tc.ToolMeta(fix="SENTINEL-CAMOUFOX-FIX", description="d", url=None))
+    import mcp_probe
+    monkeypatch.setattr(mcp_probe, "registered_names", lambda *a, **k: set())
+    status, detail = env_check.check_mcp_registered(tmp_path, "web")
+    assert status == "FAIL"
+    assert "SENTINEL-CAMOUFOX-FIX" in detail
