@@ -349,19 +349,28 @@ class TestA7UvSync:
         up = _load_upgrade()
         self._patch_which(monkeypatch, up, "/fake/uv")
 
-        seen: dict = {}
+        calls: list = []
 
         def fake_run(argv, **kw):
-            seen["argv"] = argv
-            seen["timeout"] = kw.get("timeout")
+            calls.append((argv, kw))
             return subprocess.CompletedProcess(argv, 0, "", "")
 
         monkeypatch.setattr(up.subprocess, "run", fake_run)
         label = up._item_uv_sync(ws, False)
         assert "ok" in label
-        assert "--locked" in seen["argv"]
-        assert "--project" in seen["argv"]
-        assert seen["timeout"], "sync must be timeout-bounded"
+        # The success path also stamps the ledger via kunglao_log._repo_sha
+        # (`git rev-parse HEAD` through the same patched subprocess.run), so
+        # capture every call and select the uv-sync call — a single
+        # last-call slot gets overwritten by the git call.
+        uv_calls = [(argv, kw) for argv, kw in calls
+                    if "--locked" in argv
+                    or (argv and str(argv[0]).endswith("uv"))]
+        assert len(uv_calls) == 1, (
+            f"expected exactly one uv-sync call, got {calls!r}")
+        uv_argv, uv_kw = uv_calls[0]
+        assert "--locked" in uv_argv
+        assert "--project" in uv_argv
+        assert uv_kw.get("timeout"), "sync must be timeout-bounded"
         assert self.ERR in capsys.readouterr().err
 
     def test_failure_is_warn_not_fatal(self, tmp_path, monkeypatch, capsys):
