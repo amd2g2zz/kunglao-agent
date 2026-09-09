@@ -18,9 +18,14 @@ Design (mirrors dispatch_gate / env_check_gate, inject-only):
     (dynamic-debugging scene / verify-static-vs-dynamic.md); tier 2 + default ->
     "static analysis" (disasm/static-analysis scene — "disasm" itself matches nothing
     in the index).
-  - Each query runs `python scripts/references_recall.py <query>` as a
-    subprocess (timeout 5s). FAIL_OPEN at every layer: any failure -> no
-    injection, exit 0 pass-through — recall must NEVER block dispatch.
+  - All queries of a dispatch run in ONE `references_recall.py --queries
+    <q1> <q2> ...` subprocess (timeout RECALL_BATCH_TIMEOUT). The layered
+    index is parsed once per dispatch, not once per query — the per-query
+    child made every query individually flake-prone under CI xdist
+    contention (#194: a child past its timeout is swallowed by fail-open
+    and the affected query silently contributes nothing). FAIL_OPEN at
+    every layer: any failure -> no injection, exit 0 pass-through — recall
+    must NEVER block dispatch.
   - On a match it emits the hookSpecificOutput.additionalContext JSON shape
     (same as dispatch_gate.py:137-142 / env_check_gate main()) with a
     "Before dispatching, read: <files>" guidance. rc is ALWAYS 0: this hook
@@ -52,7 +57,15 @@ from _path_hygiene import (  # #671 sys.path hygiene authority
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 RECALL_SCRIPT = SKILL_DIR / "scripts" / "references_recall.py"
-RECALL_TIMEOUT = 5.0          # recall must never hold dispatch hostage
+# #194: every recall subprocess is ONE batched child per dispatch — it
+# parses the layered index ONCE (the parse, not the scoring, is the cost;
+# ~2.5 s on a fast unloaded machine) and answers all queries. The former
+# per-query children (5 s each, 4-5 per dispatch) each re-paid that parse
+# and individually tipped past their timeout under CI xdist contention,
+# which fail-open swallowed into silently missing queries — the #194
+# recall-injection flake. One window with real headroom, bounded by the
+# old serial envelope (len(queries) x 5 s).
+RECALL_BATCH_TIMEOUT = 20.0
 FILES_PER_QUERY = 4           # top hits only — guidance stays compact;
 # four keeps the verification-method file reachable for VM-class claims
 # NOTE (#357): ranking below is token-overlap scoring, which is
@@ -191,22 +204,44 @@ def _parse_files(stdout: str) -> tuple[str, ...]:
     return tuple(files)
 
 
-def _run_recall(query: str, cwd: Path | None = None) -> tuple[int, str]:
-    """One recall query as a subprocess. Returns (rc, stdout). Any failure
-    (missing script, timeout, unreadable index) -> (rc != 0, '').
-    #814: passes --ws so workspace demotion multipliers close the loop."""
-    cmd = [sys.executable, str(RECALL_SCRIPT), query]
+_BATCH_QUERY_SEP = "# ==== query: "
+
+
+def _run_recall_batch(queries: list[str],
+                      cwd: Path | None = None) -> tuple[int, str]:
+    """#194: ALL of a dispatch's recall queries in ONE child subprocess
+    (`references_recall.py --queries ...`) — the layered index is parsed
+    once instead of once per query. Returns (rc, stdout); any failure
+    (missing script, timeout, usage error) -> (rc != 0, '')."""
+    if not queries:
+        return 0, ""
+    cmd = [sys.executable, str(RECALL_SCRIPT), "--queries", *queries]
     if cwd is not None:
         cmd += ["--ws", str(cwd)]
     try:
         r = subprocess.run(
             cmd,
             capture_output=True, text=True, encoding="utf-8", errors="replace",
-            cwd=str(cwd) if cwd else None, timeout=RECALL_TIMEOUT,
+            cwd=str(cwd) if cwd else None, timeout=RECALL_BATCH_TIMEOUT,
         )
         return r.returncode, r.stdout or ""
     except Exception:  # noqa: BLE001 — recall must NEVER block dispatch
         return 1, ""
+
+
+def _split_batch_stdout(stdout: str, queries: list[str]) -> dict[str, str]:
+    """Per-query stdout sections from a --queries batch run. Each section
+    starts at its exact `# ==== query: <q>` separator line; a query with
+    no section parses as empty (equivalent to no match)."""
+    sections: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in stdout.splitlines():
+        if line.startswith(_BATCH_QUERY_SEP):
+            current = line[len(_BATCH_QUERY_SEP):].strip()
+            sections.setdefault(current, [])
+        elif current is not None:
+            sections[current].append(line)
+    return {q: "\n".join(sections.get(q, [])) for q in queries}
 
 
 def _utility_rerank(files: tuple[str, ...], ws: Path) -> tuple[str, ...]:
@@ -246,10 +281,18 @@ def recall_files(query: str, cwd: Path | None = None,
     face) and a tool-value table exists, the result is reranked by pooled tool
     utility. Callers without a workspace (failure_analysis_gate._failure_modes_recall)
     are structurally unaffected. Fail-open: no table / corrupt table / any
-    error -> the original query-match order."""
-    runner = recall_runner if recall_runner is not None else _run_recall
+    error -> the original query-match order.
+
+    #194: the runner-less subprocess path rides the batch face too (one
+    index parse, RECALL_BATCH_TIMEOUT window) — the standalone 5 s per-query
+    child is gone; its tight window was the other half of the #194 flake
+    (failure_analysis_gate's single recall query timed out under the same
+    CI contention). An injected recall_runner keeps its exact per-query
+    contract."""
+    if recall_runner is None:
+        return recall_files_batch([query], cwd=cwd)[0]
     try:
-        rc, stdout = runner(query)
+        rc, stdout = recall_runner(query)
     except Exception:  # noqa: BLE001 — FAIL_OPEN at every layer
         return ()
     if rc != 0 or not stdout:
@@ -258,6 +301,42 @@ def recall_files(query: str, cwd: Path | None = None,
     if cwd is not None:
         files = _utility_rerank(files, Path(cwd))
     return tuple(files)
+
+
+def recall_files_batch(queries: list[str], cwd: Path | None = None,
+                       recall_runner=None) -> list[tuple[str, ...]]:
+    """#194: per-query file tuples for one dispatch, answered by ONE
+    references_recall.py child (`--queries` batch face — the layered index
+    is parsed once, not once per query). The per-query subprocess was the
+    #194 flake: every child re-parsed the full index and individually
+    flirted with its timeout under CI xdist contention, and fail-open then
+    silently dropped whole queries (pinned doc-set assertions flapped with
+    a different failing membership every run).
+
+    Contract:
+      - recall_runner injected (pure tests, sibling callers): delegated to
+        the per-query recall_files path — one runner call per query, same
+        shapes as before.
+      - no runner: one batched child; rc != 0 or empty stdout fails open
+        for the whole dispatch (all tuples empty) — same failure semantics
+        the per-query path had, now at dispatch granularity.
+      - rerank: when cwd is supplied, each non-empty query result is
+        utility-reranked exactly like recall_files does.
+    """
+    if recall_runner is not None:
+        return [recall_files(q, cwd=cwd, recall_runner=recall_runner)
+                for q in queries]
+    rc, stdout = _run_recall_batch(queries, cwd)
+    if rc != 0 or not stdout:
+        return [() for _ in queries]
+    sections = _split_batch_stdout(stdout, queries)
+    out: list[tuple[str, ...]] = []
+    for q in queries:
+        files = _parse_files(sections.get(q, ""))
+        if cwd is not None and files:
+            files = _utility_rerank(files, Path(cwd))
+        out.append(files)
+    return out
 
 
 def _guidance(queries: list[str], files: list[str]) -> str:
@@ -333,8 +412,10 @@ def evaluate(payload: dict, recall_runner=None) -> tuple[int, str, str | None]:
 
     files: list[str] = []
     seen: set[str] = set()
-    for query in queries:
-        for f in recall_files(query, cwd=ws, recall_runner=recall_runner)[:FILES_PER_QUERY]:
+    per_query = recall_files_batch(queries, cwd=ws,
+                                   recall_runner=recall_runner)
+    for batch_files in per_query:
+        for f in batch_files[:FILES_PER_QUERY]:
             if f not in seen:
                 seen.add(f)
                 files.append(f)
