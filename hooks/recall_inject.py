@@ -18,12 +18,18 @@ Design (mirrors dispatch_gate / env_check_gate, inject-only):
     (dynamic-debugging scene / verify-static-vs-dynamic.md); tier 2 + default ->
     "static analysis" (disasm/static-analysis scene — "disasm" itself matches nothing
     in the index).
-  - All queries of a dispatch run in ONE `references_recall.py --queries
-    <q1> <q2> ...` subprocess (timeout RECALL_BATCH_TIMEOUT). The layered
-    index is parsed once per dispatch, not once per query — the per-query
-    child made every query individually flake-prone under CI xdist
-    contention (#194: a child past its timeout is swallowed by fail-open
-    and the affected query silently contributes nothing). FAIL_OPEN at
+  - All queries of a dispatch are answered IN-PROCESS: the layered index
+    is parsed once per process and memoized (first recall in a process
+    pays ~2.5 s, every later query is milliseconds), and the per-query
+    file tuples come straight from the recall engine — no subprocess on
+    the fast path. History: per-query children re-parsed the index every
+    time and individually blew their wall-clock windows under CI xdist
+    contention (the recall-injection flake); even one batched child per
+    dispatch kept a window around a parse, and CI-class 2-4 core runners
+    pushed that parse to 10-30 s. A window around a parse is load-fragile
+    by construction; memoized in-process recall has no window to blow.
+    The batched child (`references_recall.py --queries`) survives as the
+    fail-open fallback when the in-process path cannot run. FAIL_OPEN at
     every layer: any failure -> no injection, exit 0 pass-through — recall
     must NEVER block dispatch.
   - On a match it emits the hookSpecificOutput.additionalContext JSON shape
@@ -57,15 +63,15 @@ from _path_hygiene import (  # #671 sys.path hygiene authority
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 RECALL_SCRIPT = SKILL_DIR / "scripts" / "references_recall.py"
-# #194: every recall subprocess is ONE batched child per dispatch — it
-# parses the layered index ONCE (the parse, not the scoring, is the cost;
-# ~2.5 s on a fast unloaded machine) and answers all queries. The former
-# per-query children (5 s each, 4-5 per dispatch) each re-paid that parse
-# and individually tipped past their timeout under CI xdist contention,
-# which fail-open swallowed into silently missing queries — the #194
-# recall-injection flake. One window with real headroom, bounded by the
-# old serial envelope (len(queries) x 5 s).
+# Fallback window for the batched child (see _run_recall_batch): the
+# fast path is in-process memoized recall with NO window; the child only
+# runs when the in-process path cannot. One window with real headroom,
+# bounded by the old serial envelope (len(queries) x 5 s).
 RECALL_BATCH_TIMEOUT = 20.0
+# Recall engine, loaded once per process; parsed index memoized per
+# (resolved path, mtime_ns, size) so a changed index file re-parses.
+_RECALL_MODULE = None
+_INDEX_CACHE: dict = {}
 FILES_PER_QUERY = 4           # top hits only — guidance stays compact;
 # four keeps the verification-method file reachable for VM-class claims
 # NOTE (#357): ranking below is token-overlap scoring, which is
@@ -244,6 +250,56 @@ def _split_batch_stdout(stdout: str, queries: list[str]) -> dict[str, str]:
     return {q: "\n".join(sections.get(q, [])) for q in queries}
 
 
+def _recall_module():
+    """The references_recall engine, loaded by explicit path once per
+    process (the loader understands the hooks/scripts module split; the
+    module object is memoized so repeated dispatches skip the import)."""
+    global _RECALL_MODULE
+    if _RECALL_MODULE is None:
+        _RECALL_MODULE = load_module_by_path(
+            "kunglao_references_recall", RECALL_SCRIPT)
+    return _RECALL_MODULE
+
+
+def _memoized_index(mod):
+    """Parsed layered index, memoized per (resolved path, mtime_ns, size).
+    The parse is the cost (~2.5 s CPU unloaded, 10-30 s on loaded CI-class
+    runners) — it must happen once per process, never once per dispatch
+    and never once per query. A stat change on the index file invalidates
+    the memo (tests and live index regeneration both rely on that)."""
+    path = mod.default_index_path()
+    st = path.stat()
+    key = (str(path.resolve()), st.st_mtime_ns, st.st_size)
+    idx = _INDEX_CACHE.get(key)
+    if idx is None:
+        idx = mod.build_index(path)
+        _INDEX_CACHE.clear()  # keep only the current generation
+        _INDEX_CACHE[key] = idx
+    return idx
+
+
+def _inprocess_batch(queries: list[str],
+                     cwd: Path | None = None) -> list[tuple[str, ...]]:
+    """All of a dispatch's queries answered IN-PROCESS against the
+    memoized index. Raises on any problem (missing module, unreadable
+    index, stat failure) — the caller owns the fail-open ladder."""
+    if not queries:
+        return []
+    mod = _recall_module()
+    idx = _memoized_index(mod)
+    entries, scenes = list(idx.entries), list(idx.scenes)
+    ws = Path(cwd) if cwd is not None else None
+    demotions = mod.demotion_map(ws) if ws is not None else None
+    out: list[tuple[str, ...]] = []
+    for q in queries:
+        result = mod.recall(entries, scenes, q, demotions=demotions)
+        files = tuple(result.files)
+        if ws is not None and files:
+            files = _utility_rerank(files, ws)
+        out.append(files)
+    return out
+
+
 def _utility_rerank(files: tuple[str, ...], ws: Path) -> tuple[str, ...]:
     """#881 wiring 2: post-recall utility rerank — recall was pure query-match
     with no value signal; reference docs whose filename names a tool with a
@@ -283,12 +339,10 @@ def recall_files(query: str, cwd: Path | None = None,
     are structurally unaffected. Fail-open: no table / corrupt table / any
     error -> the original query-match order.
 
-    #194: the runner-less subprocess path rides the batch face too (one
-    index parse, RECALL_BATCH_TIMEOUT window) — the standalone 5 s per-query
-    child is gone; its tight window was the other half of the #194 flake
-    (failure_analysis_gate's single recall query timed out under the same
-    CI contention). An injected recall_runner keeps its exact per-query
-    contract."""
+    #194: the runner-less path rides the in-process memoized face (one
+    parse per process, no window); the batched child is only the
+    fail-open fallback. An injected recall_runner keeps its exact
+    per-query contract."""
     if recall_runner is None:
         return recall_files_batch([query], cwd=cwd)[0]
     try:
@@ -305,27 +359,29 @@ def recall_files(query: str, cwd: Path | None = None,
 
 def recall_files_batch(queries: list[str], cwd: Path | None = None,
                        recall_runner=None) -> list[tuple[str, ...]]:
-    """#194: per-query file tuples for one dispatch, answered by ONE
-    references_recall.py child (`--queries` batch face — the layered index
-    is parsed once, not once per query). The per-query subprocess was the
-    #194 flake: every child re-parsed the full index and individually
-    flirted with its timeout under CI xdist contention, and fail-open then
-    silently dropped whole queries (pinned doc-set assertions flapped with
-    a different failing membership every run).
-
-    Contract:
+    """Per-query file tuples for one dispatch. Fast path: IN-PROCESS
+    against the memoized layered index — the parse happens once per
+    process, every later dispatch is milliseconds, and no subprocess is
+    spawned (a wall-clock window around a parse is load-fragile by
+    construction; the batched child's window was exactly that, and it is
+    what kept the flake alive on CI-class runners). Fail-open ladder:
       - recall_runner injected (pure tests, sibling callers): delegated to
         the per-query recall_files path — one runner call per query, same
         shapes as before.
-      - no runner: one batched child; rc != 0 or empty stdout fails open
-        for the whole dispatch (all tuples empty) — same failure semantics
-        the per-query path had, now at dispatch granularity.
+      - no runner: in-process first; if that raises for any reason, fall
+        back to the batched child (`--queries`, RECALL_BATCH_TIMEOUT);
+        rc != 0 or empty stdout there -> all tuples empty (no injection),
+        rc stays 0, never a raise.
       - rerank: when cwd is supplied, each non-empty query result is
         utility-reranked exactly like recall_files does.
     """
     if recall_runner is not None:
         return [recall_files(q, cwd=cwd, recall_runner=recall_runner)
                 for q in queries]
+    try:
+        return _inprocess_batch(queries, cwd)
+    except Exception:  # noqa: BLE001 — fail-open ladder: child fallback next
+        pass
     rc, stdout = _run_recall_batch(queries, cwd)
     if rc != 0 or not stdout:
         return [() for _ in queries]

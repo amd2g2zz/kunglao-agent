@@ -175,67 +175,177 @@ def test_recall_partial_match_keeps_matched_files(tmp_path):
     assert ctx and "dynamic-re-tool-priority.md" in ctx
 
 
-# ---- one recall child per dispatch, not one per query ----
+# ---- recall parses the index ONCE per process, in-process ----
 #
-# Issue 194: evaluate() spawned one references_recall.py subprocess PER
-# QUERY. Every child re-parses the whole layered index (~2.5 s on an
-# unloaded fast machine; slower on the CI runner), so each of the 4-5
-# queries per dispatch individually flirted with the 5 s RECALL_TIMEOUT
-# guillotine. Under CI xdist contention individual children tipped past
-# 5 s, TimeoutExpired was swallowed by fail-open, the affected query
-# silently contributed nothing, and the pinned doc-set assertions flapped
-# with a different failing membership every run (same sha PASS and FAIL
-# minutes apart). Mechanism fix: ONE batched child parses the index once
-# and answers all queries; the injected recall_runner contract (fake
-# runners called once per query) is preserved for pure tests.
+# Issue 194, iteration 2. The first fix batched all queries of a dispatch
+# into one child, but the child still re-parsed the whole layered index
+# (~2.5 s CPU unloaded; measured 7-9 s under a local 4-worker storm and
+# 10-30 s on CI-class 2-4 core runners), so any wall-clock window around
+# the child stayed load-fragile. The mechanism fix is to parse the index
+# IN-PROCESS and memoize it: the first recall in a process pays the parse
+# once, every later query is milliseconds, and no recall child is spawned
+# on the fast path at all (the batched child survives only as the
+# fail-open fallback when the in-process path cannot run). The injected
+# recall_runner contract (fake runners called once per query) is
+# preserved for pure tests.
+
+_RECALL_SCRIPT_MARK = "references_recall"
+
+
+def _count_recall_children(recall_inject, monkeypatch):
+    """Monkeypatch subprocess.run to record only references_recall.py
+    child spawns (other incidental spawns, e.g. the git rev-parse the
+    trace logger makes, must not pollute the count)."""
+    import subprocess as sp
+
+    spawns = []
+    real_run = sp.run
+
+    def counting_run(cmd, **kw):
+        if any(_RECALL_SCRIPT_MARK in str(part) for part in cmd):
+            spawns.append(list(cmd))
+        return real_run(cmd, **kw)
+
+    monkeypatch.setattr(recall_inject.subprocess, "run", counting_run)
+    return spawns
+
+
+def _count_index_parses(recall_inject, monkeypatch):
+    """Monkeypatch build_index on the loaded recall module and clear the
+    memoization cache so a test observes fresh parses. Returns the parse
+    count list."""
+    mod = recall_inject._recall_module()
+    recall_inject._INDEX_CACHE.clear()
+    parses = []
+    real_build = mod.build_index
+
+    def counting_build(path):
+        parses.append(str(path))
+        return real_build(path)
+
+    monkeypatch.setattr(mod, "build_index", counting_build)
+    return parses
 
 
 def test_batch_timeout_is_a_single_bounded_hostage_window():
-    """The batched call has its own budget — ONE bounded window per
-    dispatch, never per-query. The budget must give the single index parse
-    real CI headroom (>= 15 s); no per-query 5 s window may remain, since
+    """The fallback batched child keeps ONE bounded window per dispatch
+    (>= 15 s of real headroom); no per-query 5 s window may remain, since
     that tight window was the guillotine the flake tripped."""
     import recall_inject
 
     assert recall_inject.RECALL_BATCH_TIMEOUT >= 15, (
-        "batched recall needs one window with real headroom, not 4-5 tight "
-        "per-query windows")
+        "the fallback child needs one window with real headroom, not 4-5 "
+        "tight per-query windows")
     assert not hasattr(recall_inject, "RECALL_TIMEOUT"), (
         "the per-query 5 s guillotine must stay retired")
 
 
-def test_all_queries_answered_by_one_subprocess(tmp_path, monkeypatch):
-    """Core pin: a dispatch with N recall queries spawns exactly ONE
-    references_recall.py child (the index is parsed once), via the
-    `--queries` batch face. (Pre-fix this spawned one child per query.)"""
+def test_recall_fast_path_spawns_no_child_and_parses_once(tmp_path, monkeypatch):
+    """Core pin: a dispatch's recall is answered IN-PROCESS — zero
+    references_recall children spawned, the layered index parsed exactly
+    once, and the pinned doc set still injected."""
+    import recall_inject
+
+    ws = _kunglao_ws(tmp_path)
+    spawns = _count_recall_children(recall_inject, monkeypatch)
+    parses = _count_index_parses(recall_inject, monkeypatch)
+
+    rc, stderr, ctx = evaluate(_payload(ws, VM_CLAIM))
+    assert rc == 0 and stderr == "" and ctx
+    assert spawns == [], (
+        f"fast path must spawn no recall children; got {spawns}")
+    assert len(parses) == 1, (
+        f"index must be parsed exactly once per dispatch; got {parses}")
+    for expected in ("dynamic-re-tool-priority.md", "tools-dynamic.md",
+                     "verify-static-vs-dynamic.md"):
+        assert expected in ctx, f"{expected} missing from in-process recall"
+
+
+def test_index_parse_memoized_across_dispatches(tmp_path, monkeypatch):
+    """Second dispatch in the SAME process must not re-parse the index —
+    the memoization is the whole point: one parse per process, not one
+    per dispatch (and historically, not one per query)."""
+    import recall_inject
+
+    spawns = _count_recall_children(recall_inject, monkeypatch)
+    parses = _count_index_parses(recall_inject, monkeypatch)
+
+    rc1, _, ctx1 = evaluate(_payload(_kunglao_ws(tmp_path / "a"), VM_CLAIM))
+    rc2, _, ctx2 = evaluate(_payload(_kunglao_ws(tmp_path / "b"), VM_CLAIM))
+    assert rc1 == 0 and rc2 == 0 and ctx1 and ctx2
+    assert len(parses) == 1, (
+        f"one parse per process expected; got {len(parses)}: {parses}")
+    assert spawns == [], "memoized dispatches must spawn no children"
+
+
+def test_index_cache_invalidates_when_index_file_changes(tmp_path, monkeypatch):
+    """The memo key carries the index file's stat; when the file changes
+    (mtime/size), the next recall re-parses instead of serving stale
+    entries. Unchanged file -> served from cache with zero re-parse.
+    Runs against a TMP copy of the index — bumping the shared repo file's
+    mtime would race other xdist workers' memo keys mid-run."""
+    import os
+    import shutil
+
+    import recall_inject
+
+    mod = recall_inject._recall_module()
+    tmp_index = tmp_path / "references" / "_INDEX.md"
+    tmp_index.parent.mkdir(parents=True)
+    shutil.copyfile(mod.default_index_path(), tmp_index)
+    monkeypatch.setattr(mod, "default_index_path", lambda: tmp_index)
+
+    recall_inject._INDEX_CACHE.clear()
+    parses = []
+    real_build = mod.build_index
+
+    def counting_build(path):
+        parses.append(str(path))
+        return real_build(path)
+
+    monkeypatch.setattr(mod, "build_index", counting_build)
+
+    recall_inject._memoized_index(mod)
+    recall_inject._memoized_index(mod)
+    assert len(parses) == 1, "unchanged index must be served from cache"
+
+    os.utime(tmp_index, None)  # content unchanged, mtime bumped
+    recall_inject._memoized_index(mod)
+    assert len(parses) == 2, "changed index stat must invalidate the cache"
+
+
+def test_inprocess_results_match_subprocess_cli(tmp_path, monkeypatch):
+    """Parity guard: the in-process answer for a query set must equal what
+    the references_recall CLI subprocess answers for the same set (the
+    pinned ranking contract may not drift between the two faces)."""
     import subprocess as sp
 
     import recall_inject
 
     ws = _kunglao_ws(tmp_path)
-    spawns = []
+    queries = ["vm", "dynamic"]
 
-    real_run = sp.run
+    spawns = _count_recall_children(recall_inject, monkeypatch)
+    inproc = recall_inject.recall_files_batch(list(queries), cwd=ws)
+    assert spawns == [], "parity baseline must come from the in-process face"
 
-    def counting_run(cmd, **kw):
-        spawns.append(list(cmd))
-        return real_run(cmd, **kw)
-
-    monkeypatch.setattr(recall_inject.subprocess, "run", counting_run)
-    rc, stderr, ctx = evaluate(_payload(ws, VM_CLAIM))
-    assert rc == 0 and stderr == "" and ctx
-    assert len(spawns) == 1, (
-        f"one dispatch = one recall child; got {len(spawns)}: {spawns}")
-    assert "--queries" in spawns[0], (
-        f"child must use the --queries batch face: {spawns[0]}")
-    assert "vm" in spawns[0] and "dynamic" in spawns[0], (
-        "every query must travel in the single child")
+    cmd = [sp.sys.executable if hasattr(sp, "sys") else "python3",
+           str(recall_inject.RECALL_SCRIPT), "--queries", *queries,
+           "--ws", str(ws)]
+    r = sp.run(cmd, capture_output=True, text=True, encoding="utf-8",
+               errors="replace", cwd=str(ws), timeout=120)
+    assert r.returncode == 0, r.stderr
+    sections = recall_inject._split_batch_stdout(r.stdout, queries)
+    from_cli = tuple(recall_inject._parse_files(sections[q])
+                     for q in queries)
+    assert inproc == list(from_cli), (
+        f"in-process {inproc} != CLI {list(from_cli)}")
 
 
 def test_batched_stdout_splits_per_query(tmp_path, monkeypatch):
-    """The batched child answers each query in its own `# ====
-    query:` section; evaluate() must split and merge them exactly like the
-    per-query path did (dedup, FILES_PER_QUERY per query, order kept)."""
+    """Fallback face: when the in-process path cannot run, the batched
+    child answers each query in its own `# ==== query:` section and
+    evaluate() splits and merges them (dedup, FILES_PER_QUERY, order)."""
     import recall_inject
 
     ws = _kunglao_ws(tmp_path)
@@ -259,6 +369,10 @@ def test_batched_stdout_splits_per_query(tmp_path, monkeypatch):
         assert "--queries" in cmd, f"batch face expected: {cmd}"
         return Done()
 
+    def broken_inprocess(queries, cwd):
+        raise RuntimeError("in-process recall unavailable")
+
+    monkeypatch.setattr(recall_inject, "_inprocess_batch", broken_inprocess)
     monkeypatch.setattr(recall_inject.subprocess, "run", fake_run)
     rc, stderr, ctx = evaluate(_payload(ws, VM_CLAIM))
     assert rc == 0 and stderr == ""
@@ -269,9 +383,9 @@ def test_batched_stdout_splits_per_query(tmp_path, monkeypatch):
 
 
 def test_batch_child_failure_fails_open_all_queries(tmp_path, monkeypatch):
-    """The single batched child dying (timeout/crash) fails open for
-    the whole dispatch — (0, '', None), never a raise. Same fail-open
-    contract the per-query path had, now at dispatch granularity."""
+    """When BOTH faces fail (in-process unavailable AND the fallback child
+    times out), recall fails open for the whole dispatch — (0, '', None),
+    never a raise."""
     import subprocess as sp
 
     import recall_inject
@@ -281,6 +395,10 @@ def test_batch_child_failure_fails_open_all_queries(tmp_path, monkeypatch):
     def timeout_run(cmd, **kw):
         raise sp.TimeoutExpired(cmd, 20.0)
 
+    def broken_inprocess(queries, cwd):
+        raise RuntimeError("in-process recall unavailable")
+
+    monkeypatch.setattr(recall_inject, "_inprocess_batch", broken_inprocess)
     monkeypatch.setattr(recall_inject.subprocess, "run", timeout_run)
     rc, stderr, ctx = evaluate(_payload(ws, VM_CLAIM))
     assert rc == 0 and stderr == "" and ctx is None
