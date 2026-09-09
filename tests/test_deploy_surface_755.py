@@ -602,11 +602,20 @@ class TestT6Registry:
             "0.1.3-stamped workspace re-plans instead of short-circuiting")
         assert versions.index("0.1.3") < versions.index("0.1.4"), \
             "registry stays linear"
+        # 0.1.4's OWN cargo, pinned by key (the entry is not guaranteed to
+        # stay the registry tail as releases land new entries).
+        ws = _fixture_ws(tmp_path)
+        items_014 = dict(up.MIGRATIONS)["0.1.4"](ws, True)
+        assert any(i.startswith("template_stamp_refresh") for i in items_014), \
+            "0.1.4 must carry the stamp refresh"
+        assert any("uv_sync" in i for i in items_014)
+        # Linear-registry invariant: the stamp refresh rides the LAST
+        # migration, whatever release is newest (the G4 tail gate trusts
+        # the plan to carry the stamp face).
         last_fn = up.MIGRATIONS[-1][1]
-        items = last_fn(_fixture_ws(tmp_path), True)
-        assert any(i.startswith("template_stamp_refresh") for i in items), \
+        assert any(i.startswith("template_stamp_refresh")
+                   for i in last_fn(ws, True)), \
             "the stamp refresh must ride the LAST migration"
-        assert any("uv_sync" in i for i in items)
 
     @pytest.fixture(autouse=True)
     def _offline_uv(self, monkeypatch):
@@ -660,14 +669,14 @@ class TestT6Registry:
 
     def test_already_at_target_still_plans_deploy_items(self, tmp_path,
                                                         pinned=False):
-        """The live-run sample problem (real-world shape): a 0.1.3-stamped workspace
-        (stamped before this release) whose deploy surface is incomplete —
-        the 0.1.4 registry entry must make plan non-empty so the fast
-        path cannot skip the repair."""
-        maj, mi, pa = (int(x) for x in tv.read_skill_version().split("."))
-        prev = ".".join(str(x) for x in (maj, mi, max(pa - 1, 0)))
+        """The live-run sample problem (real-world shape): a 0.1.3-stamped
+        workspace (stamped before the 0.1.4 release) whose deploy surface
+        is incomplete — the 0.1.4 registry entry must make plan non-empty
+        so the fast path cannot skip the repair. The stamp pins the version
+        BEFORE the cargo-carrying entry (a prev-of-CUR derivation would
+        silently drift below the entry on the next bump)."""
         up = _load_upgrade()
-        ws = self._stamped_ws(tmp_path, prev)
+        ws = self._stamped_ws(tmp_path, "0.1.3")
         pre_notes = self._snap(ws)["notes/keep.md"]
         rc = up.main([str(ws)])
         assert rc == 0

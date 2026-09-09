@@ -8,8 +8,7 @@ release (see the mapping table at the end).
 
 ## [0.1.5] - 2026-09-10
 
-### Added
-- **Oracle-grade task intake (#191)**: init elicits `goal_verbatim` /
+### Added- **Oracle-grade task intake (#191)**: init elicits `goal_verbatim` /
   `success_criterion` / `verification_method` as first-class task_spec
   fields; analysis entry AND resume refuse (rc=7) while anchors are
   missing; upgrade backfills via structured interview (no deadlock).
@@ -21,16 +20,20 @@ release (see the mapping table at the end).
   hole; declared fast path for not-applicable tasks.
 - **Outcome forensics (#146)**: case settlements record HOW they were
   won/lost; failure-analysis arming fixed; case-abandonment protocol.
-- **Value-loop data spine (#156, #157)**: rolling win-rate curve over the
-  settlement stream; algorithm event log (rank_feeds / posterior_update /
-  observation) through the unified log — TS, posteriors and reward are
-  auditable.
+- **Win-rate curve aggregator (#156)**: rolling success-rate over the
+  settlement stream — belief-side counting curve.
+- **Algorithm event log (#157)**: rank_feeds / posterior_update /
+  observation events through the unified log — TS, posteriors and reward
+  are auditable.
 - **Worker-entry lookup constitution (#145)**: front-loaded reference /
   tool / script lookup block and compressed rule slices in agent files.
 - **Typed asset-tier retrieval (#162)**: tools / templates / references
   typed recall, windowed-stalker template, echarts de-vendored.
-- **Envelope and decision work (#126–#133, #142–#144)**: intent envelope,
-  candidate scoring and difficulty-wave items landed across the loop.
+- **Intent envelope and scoring wave (#128)**:
+  envelope normalization, candidate scoring and coverage generalization
+  bit landed across the loop.
+- **Difficulty wave (#142)**: difficulty shaping, oracle
+  arming and case-difficulty items through the settlement pipeline.
 
 ### Changed
 - **References tree governance (#166)**: two-population audit, three-level
