@@ -18,8 +18,9 @@ SMART = narrow + alive-only:
 
 #496 decision teeth (value selection gets enforcement on this face):
   - top-1: dispatching a non-top-1 claim (rank >= 2 under
-    worker_budget.check_priority — the single ranking source, #499
-    authority = priority_ratio) without an `agent-reasoning:` prefix
+    worker_budget.check_priority — the single ranking source, #499/#107
+    authority = priority_ratio Thompson ranker, one value) without an
+    `agent-reasoning:` prefix
     REJECTs; with the reason it passes and leaves a
     priority_deviation trace in the unified log (exact copy of the #310
     agenttype-deviation structure).
@@ -84,6 +85,24 @@ except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 HOOK_STATE = Path(".hook_state.json")
+
+# #55 XML injection standard: the gate's DECISION faces (REJECT guidance,
+# must-stop refusal, failure-blocked corrective injection) land in the
+# agent's context wrapped in <gate-verdict>...</gate-verdict> so the agent
+# can tell a kunglao gate verdict from third-party tool output
+# (references/contracts/xml-injection-standard.md). The verdict text — including the
+# repair path — sits INSIDE the tag; the Claude Code hook JSON contract
+# (hookSpecificOutput.additionalContext, rc/decision fields) is untouched,
+# and STDERR summaries (the operator channel) stay untagged. Tags mark,
+# they never gate: rc and payload shape are unchanged.
+GATE_VERDICT_TAG = "gate-verdict"
+
+
+def _gate_verdict(text: str) -> str:
+    """Wrap one gate verdict face in the #55 producer tag."""
+    return f"<{GATE_VERDICT_TAG}>\n{text}\n</{GATE_VERDICT_TAG}>"
+
+
 # #603: append-only top-1 REJECT ledger — one JSON row per REJECT, the
 # durable face of `_top1_enforcement`'s rc=2 path (pre-#603 the REJECT was
 # trace-only; an orchestrator looping on the same deviation accumulated
@@ -216,7 +235,7 @@ def _declared_irreversible(text: str) -> bool:
 
     Load-bearing enforcement order for must-stop:
       1. declared field (this function) — v1 only
-      2. command grammar (_DISPATCH_MUST_STOP_PATTERNS) — vmrun delete /
+      2. command grammar (_DISPATCH_MUST_STOP_RULES) — vmrun delete /
          git push --force are commands, a finite grammar, enumerable
     Prose sniffing lives in scripts/ask_for_direction_gate.py as a
     best-effort tripwire, never load-bearing."""
@@ -248,7 +267,7 @@ def _warn_unparseable(claim_id: str | None, reason: str | None) -> None:
             "additionalContext": (
                 "dispatch_gate: WARN — unrecognized dispatch protocol "
                 "(v0/v1 both unmatched). Gate is INACTIVE for this dispatch. "
-                "See references/dispatch-protocol.md. Add a JSON "
+                "See references/orchestration/dispatch-protocol.md. Add a JSON "
                 '{"kunglao_dispatch":{"version":1,"claim":"C-NN","tier":N,...}} '
                 "prefix to the Agent prompt."
             ),
@@ -301,11 +320,6 @@ _DISPATCH_MUST_STOP_RULES: tuple[tuple[str, str], ...] = (
      r"\b(?:sudo|doas|pkexec)\s+(?!-l\b|-V\b|-h\b|--list\b)(?:--?\S+\s+)*(?![\s-])\S"),
 )
 
-# Back-compat name (dispatch_context.py:437 cites it; no code imports it —
-# the tuple form above replaced the bare pattern list in #601).
-_DISPATCH_MUST_STOP_PATTERNS = [p for _r, p in _DISPATCH_MUST_STOP_RULES]
-
-
 def _must_stop_dispatch(prompt_text: str) -> str | None:
     """Return the FIRST matching rule id, or None (#601: rule identity, not
     matched text — the id rides the trace row's matched_rule field; the only
@@ -330,7 +344,7 @@ def _warn_must_stop(ws: Path, claim_id: str | None, prompt_text: str,
     Unlike scripts/ask_for_direction_gate.py which sees the orchestrator's
     PRINTED text, this hook sees the dispatch PROMPT itself — catching
     irreversible actions BEFORE the worker runs. Per
-    references/agent-three-state-charter.md: must-stop events MUST HARD_PAUSE regardless
+    references/contracts/agent-three-state-charter.md: must-stop events MUST HARD_PAUSE regardless
     of any other state (precedence over Type C convergence)."""
     excerpt = prompt_text[:300].replace("\n", " ")
     cid = claim_id or "(no claim)"
@@ -345,11 +359,11 @@ def _warn_must_stop(ws: Path, claim_id: str | None, prompt_text: str,
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "additionalContext": (
+            "additionalContext": _gate_verdict(
                 f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447, "
                 f"rule={rule_label}). Irreversible action detected in "
                 f"dispatch for {cid}. "
-                f"Per references/agent-three-state-charter.md, irreversible actions "
+                f"Per references/contracts/agent-three-state-charter.md, irreversible actions "
                 f"MUST be explicitly approved by the user. Refusing to "
                 f"dispatch this worker. Excerpt: {excerpt!r}"
             ),
@@ -374,17 +388,20 @@ STRATEGY_LOG = "runs/strategy-log.jsonl"
 STRATEGY_LOG_MAX = 200
 
 
-def _reject_with_guidance(name: str, msg: str, fix: str) -> int:
+def _reject_with_guidance(name: str, msg: str, fix: str,
+                          issue: str = "496") -> int:
     """#496: REJECT with guidance — the exact structure worker_budget._reject
     and _warn_must_stop already use: stderr `REJECT <name>` summary + stdout
     hookSpecificOutput.additionalContext carrying a concrete fix path +
-    exit 2 (block the Agent call)."""
+    exit 2 (block the Agent call). `issue` attributes the face to its own
+    issue (default keeps the four #496-era call sites byte-identical)."""
     print(f"REJECT {name}: {msg}", file=sys.stderr, flush=True)
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
-            "additionalContext": (
-                f"dispatch_gate: REJECT {name} (#496). {msg}\n\nHow to fix:\n{fix}"
+            "additionalContext": _gate_verdict(
+                f"dispatch_gate: REJECT {name} (#{issue}). {msg}\n\n"
+                f"How to fix:\n{fix}"
             ),
         },
     }, ensure_ascii=False), flush=True)
@@ -467,8 +484,9 @@ def _top1_enforcement(ws: Path, claim_id: str, prompt_text: str,
                       trace_id: str | None = None) -> int | None:
     """① #496: top-1 enforcement — exact copy of the #310 agenttype-deviation
     pattern with the ranking source swapped for worker_budget.check_priority
-    (which ranks by priority_ratio, the #499 authority — reusing it keeps
-    this hook and worker_budget's devreason audit on ONE ranking, never two).
+    (which ranks by priority_ratio, the #499/#107 Thompson authority — reusing
+    it keeps this hook and worker_budget's devreason audit on ONE ranking,
+    never two).
 
     deviated (rank >= 2) + no `agent-reasoning:` prefix -> REJECT (exit 2);
     with the prefix -> pass + stderr `TOP1 (deviation recorded)` +
@@ -731,7 +749,8 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
         "the validated family.")
 
 
-def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str) -> int | None:
+def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str,
+                     trace_id: str | None = None) -> int | None:
     """#602: plan-drift auto-integration wire-up for L621 dispatch path entry.
 
     Shells out to scripts/plan_drift_detector.py --auto and translates its
@@ -739,7 +758,13 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str) -> int | None:
       - exit 2 (drift-severe, 1+ non-WARN drift)     -> return 2 (BLOCKED)
       - exit 3 (WARN-only, STALE_PLAN_ON_NEW_EVIDENCE) -> return 3 (SATURATED)
       - exit 0 (no drift)                            -> return None (fall through)
-      - any other / missing / unparseable workspace  -> return None (fail-open)
+      - any OTHER rc (crash / unknown drift)         -> crash face (#102):
+          return None (fail-open) BUT observed — stderr note + a
+          plan_drift_crashed trace row carrying the rc and the detector's
+          last stderr line. Under --auto the only contracted bytes are the
+          contracts.PLAN_DRIFT_AUTO_RCS trio; pre-#102 anything else fell
+          through SILENTLY (dispatch proceeded, traceback discarded, zero
+          telemetry).
 
     NON-FATAL by design: a false-positive is acceptable — the operator
     can re-dispatch. This is a PreToolUse safety net, NOT a hard gate;
@@ -756,6 +781,13 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str) -> int | None:
     script = SKILL_DIR / "scripts" / "plan_drift_detector.py"
     if not script.exists():
         return None
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            from contracts import PLAN_DRIFT_AUTO_RCS
+    except Exception:  # noqa: BLE001 — registry unavailable: degraded copy
+        # of the documented trio (hook crash-safety, NOT a second authority;
+        # contracts.py owns the value — #102).
+        PLAN_DRIFT_AUTO_RCS = frozenset({0, 2, 3})
     try:
         proc = _sp.run(
             [sys.executable, str(script), str(ws), "--auto"],
@@ -782,7 +814,29 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str) -> int | None:
               "WARN-only, observe-first",
               file=sys.stderr, flush=True)
         return 3
-    # rc 0 (no drift) or any unexpected -> fall through
+    if rc == 0:
+        # no drift -> fall through
+        return None
+    # #102 crash face: rc outside contracts.PLAN_DRIFT_AUTO_RCS (rc=1 = an
+    # unhandled exception inside the detector, e.g. a malformed
+    # claim-register.yaml). Fail-open stays (NON-FATAL posture), but the
+    # degradation is OBSERVABLE on both channels — stderr for the operator
+    # tail, plan_drift_crashed trace row (exit=rc + stderr tail) for the
+    # post-mortem. Never a silent fall-through again.
+    try:
+        err_lines = [ln.strip() for ln in (proc.stderr or "").splitlines()
+                     if ln.strip()]
+        err_tail = err_lines[-1] if err_lines else ""
+    except Exception:  # noqa: BLE001 — the observation must not be the crash
+        err_tail = ""
+    print(f"dispatch_gate: plan-drift auto CRASHED (rc={rc}) ({claim_id}): "
+          f"detector degraded, dispatch proceeding (fail-open). "
+          f"last stderr: {err_tail[:200]}",
+          file=sys.stderr, flush=True)
+    _emit_trace(ws, "plan_drift_crashed", claim_id,
+                f"reason=plan_drift_crash; rc={rc}; "
+                f"stderr_tail={err_tail[:200]}",
+                exit_code=rc, trace_id=trace_id)
     return None
 
 
@@ -826,6 +880,122 @@ def _log_strategy_dispatch(ws: Path, claim_id: str, prompt_text: str) -> None:
     except OSError as exc:
         print(f"dispatch_gate: strategy-log write failed ({exc!r})",
               file=sys.stderr, flush=True)
+
+
+# ===================== #105 dispatch intent record =====================
+
+# THE roi-intents producer (audit A8): #49 shipped record_intent with zero
+# production callers, so runs/roi-intents.jsonl stayed empty and the value
+# spine (outcome_capture -> settle_intent -> case_bank) never received data.
+# The dispatch ALLOW tail is the one face every real dispatch passes, so the
+# intent row is recorded THERE — after the #496 teeth, before the worker
+# starts.
+#
+# Declaration faces parsed from the dispatch prompt (#97 owns the prompt
+# FIELD contract; this issue only lands the writer):
+#   v1 structured — kunglao_dispatch meta keys uncertainty / preconditions /
+#                   expected_artifact
+#   prose         — `uncertainty:` / `preconditions:` / `expected_artifact:`
+#                   markers, case-insensitive, first match wins
+#
+# Schema mapping onto the frozen #49 record_intent contract:
+#   declared uncertainty -> uncertainty  (the ruling-3 "WHICH uncertainty")
+#   preconditions        -> context_tags (ruling 1's context dimension:
+#                           value = method x context x outcome; the
+#                           applicability preconditions ARE that context)
+#   dispatched agent     -> method       (the executed-method identity)
+#
+# Fail-open: a missing declaration, a declaration-parse failure or a
+# record-write failure NEVER blocks the dispatch — the face degrades to an
+# `intent_unparsed` event (kunglao_log, registered word) and rc stays 0.
+_INTENT_UNCERTAINTY_RE = re.compile(r"\buncertainty:\s*([^\n]+)",
+                                    re.IGNORECASE)
+_INTENT_PRECONDITIONS_RE = re.compile(r"\bpreconditions?:\s*([^\n]+)",
+                                      re.IGNORECASE)
+_INTENT_ARTIFACT_RE = re.compile(r"\bexpected[-_]artifact:\s*([^\n]+)",
+                                 re.IGNORECASE)
+
+
+def _intent_precondition_list(value) -> list[str]:
+    """Normalize a preconditions declaration to a clean tag list."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        parts = re.split(r"[,;]", value)
+    elif isinstance(value, (list, tuple)):
+        parts = [str(v) for v in value]
+    else:
+        parts = [str(value)]
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _parse_intent_declaration(prompt_text: str) -> dict:
+    """(uncertainty, preconditions, expected_artifact) from the dispatch
+    prompt — v1 JSON meta first, prose markers second. Absent fields
+    degrade to "" / []; a structurally broken meta raises (the caller
+    catches and emits intent_unparsed)."""
+    text = prompt_text or ""
+    meta: dict = {}
+    try:
+        parsed = load_hooks_lib().parse_dispatch_json(text)
+        if isinstance(parsed[3], dict):
+            meta = parsed[3]
+    except Exception:  # noqa: BLE001 — structured face best-effort
+        meta = {}
+
+    def _declared(key: str, pattern: re.Pattern) -> str:
+        v = meta.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+        m = pattern.search(text)
+        return m.group(1).strip() if m else ""
+
+    def _declared_tags(key: str, pattern: re.Pattern) -> list[str]:
+        v = meta.get(key)
+        if isinstance(v, (str, list, tuple)):
+            tags = _intent_precondition_list(v)
+            if tags:
+                return tags
+        return _intent_precondition_list(
+            m.group(1) if (m := pattern.search(text)) else None)
+
+    return {
+        "uncertainty": _declared("uncertainty", _INTENT_UNCERTAINTY_RE),
+        "preconditions": _declared_tags("preconditions",
+                                        _INTENT_PRECONDITIONS_RE),
+        "expected_artifact": _declared("expected_artifact",
+                                       _INTENT_ARTIFACT_RE),
+    }
+
+
+def _record_dispatch_intent(ws: Path, claim_id: str, prompt_text: str,
+                            payload: dict) -> None:
+    """#105: record the dispatch intent row (runs/roi-intents.jsonl) via
+    roi_settlement.record_intent — the producer #50's settlement and the
+    #97 case history both read. Called on the #496-teeth-pass tail only:
+    a REJECTed/blocked dispatch never declares an intent it did not start.
+    Fail-open by contract (see block comment above): every failure face
+    emits `intent_unparsed` and returns — never blocks the dispatch."""
+    try:
+        decl = _parse_intent_declaration(prompt_text)
+        with scripts_on_path():  # #671 scoped membership
+            import roi_settlement
+        res = roi_settlement.record_intent(
+            ws, claim_id,
+            method=_resolve_dispatch_agent(payload, prompt_text)
+            or "dispatch",
+            context_tags=decl["preconditions"],
+            uncertainty=decl["uncertainty"],
+            expected_artifact=decl["expected_artifact"])
+        if not res.get("ok"):
+            # Ruling-3 gate declined (MISSING_UNCERTAINTY): the dispatch
+            # proceeds unbanked — the event IS the durable signal.
+            _emit_trace(ws, "intent_unparsed", claim_id,
+                        f"reason={res.get('reason')} (no named uncertainty "
+                        f"in dispatch prompt)")
+    except Exception as exc:  # noqa: BLE001 — an intent must never block dispatch
+        _emit_trace(ws, "intent_unparsed", claim_id,
+                    f"intent parse/record failed ({exc!r})")
 
 
 # #567 SECURITY: MCP tool prefix enforcement.
@@ -966,6 +1136,171 @@ def _tools_rack_gate(payload: dict, prompt_text: str) -> int | None:
         f"`[T<N> tools=Read,Write,Grep]`. A rack without a file writer "
         f"(mm_x86: ida-pro-mcp only) forces the worker to fake files through "
         f"in-process interpreters; that output is untrusted by design.")
+
+
+# ===================== #109 hypothesis admission gate =====================
+
+# THE other roi-intents face (read side): #105 made the dispatch ALLOW tail
+# the producer of runs/roi-intents.jsonl; the first-dispatch face here reads
+# the SAME file back as one of the two production dispatch-history sources
+# (the other being the #496/#120 strategy-log read path below). Together
+# they answer "was this PQ neighborhood already dispatched once?" —
+# claim-keyed rows joined to claim-register answers_question.
+ROI_INTENTS_LOG = Path("runs/roi-intents.jsonl")
+# #109 admission bar: fewer competing candidates than this in the hypothesis
+# layer for a PQ means nothing can contradict the one story being chased.
+MIN_ADMITTED_CANDIDATES = 2
+
+
+def _claim_question_map(ws: Path) -> dict[str, str]:
+    """claim id -> answers_question, from claim-register.yaml. Empty map on
+    any read failure (an unreadable register cannot identify PQ claims —
+    the gate stays silent, same posture as _capability_guard)."""
+    try:
+        reg = yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — unreadable register -> no PQ map
+        return {}
+    out: dict[str, str] = {}
+    for c in (reg.get("claims") or []):
+        if isinstance(c, dict) and c.get("id") and c.get("answers_question"):
+            out[str(c["id"])] = str(c["answers_question"])
+    return out
+
+
+def _workspace_pq_ids(ws: Path) -> set[str]:
+    """Primary-question ids from task_spec.yaml via THE canonical parse
+    (#77 — the same parser hypothesis_seeder and mission_ledger consume;
+    a local twin would re-create the two-parsers drift #77 exists to
+    prevent). Empty set on absence/read failure: a workspace with no
+    readable task_spec has no PQ neighborhoods, so the admission gate has
+    nothing to guard (fail-open)."""
+    try:
+        spec = yaml.safe_load(
+            (ws / "task_spec.yaml").read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — no/unreadable task_spec -> no PQs
+        return set()
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            from convergence_check import _parse_primary_questions
+        pqs, _err = _parse_primary_questions(
+            spec if isinstance(spec, dict) else {})
+    except Exception:  # noqa: BLE001 — parser outage -> no PQs, gate silent
+        return set()
+    return {str(qid) for qid, _need in (pqs or [])}
+
+
+def _pq_dispatched_before(ws: Path, qid: str,
+                          claim_question: dict[str, str]) -> bool:
+    """#109 first-dispatch face: True when any dispatch-history row's claim
+    answers `qid`. Two production row sources, both claim-keyed:
+      - runs/strategy-log.jsonl  event=dispatch rows (#496 writer / #120
+        priority_ratio read path);
+      - runs/roi-intents.jsonl   claim_id rows (#105 producer).
+    Fail-open by direction: an unreadable/absent face reads as "no history",
+    which can only make the gate check MORE (the admission itself then
+    decides), never silently allow. A REJECTed dispatch writes no row
+    (both faces sit on the ALLOW tail), so the REJECT->file-candidates->
+    re-dispatch loop stays inside "first dispatch" until it passes."""
+    faces = (
+        (ws / STRATEGY_LOG, "event", "claim"),
+        (ws / ROI_INTENTS_LOG, None, "claim_id"),
+    )
+    for path, event_key, claim_key in faces:
+        try:
+            if not path.is_file():
+                continue
+            lines = path.read_text(
+                encoding="utf-8", errors="replace").splitlines()
+        except OSError:  # unreadable face -> no history from it
+            continue
+        for ln in lines:
+            ln = ln.strip()
+            if not ln:
+                continue
+            try:
+                row = json.loads(ln)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            if event_key is not None and row.get(event_key) != "dispatch":
+                continue
+            cid = str(row.get(claim_key) or "").strip()
+            if cid and claim_question.get(cid) == qid:
+                return True
+    return False
+
+
+def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
+                          trace_id: str | None = None) -> int | None:
+    """#109: PQ-neighborhood first-dispatch admission (framework-rigidity
+    layer — protocol completeness, not strategy judgment; per the owner's
+    two-layer ruling the REJECT reason is "protocol not fulfilled", never
+    "method looks bad").
+
+    Trigger: the target claim's answers_question names a task_spec
+    primary_question AND that PQ is being dispatched for the FIRST time
+    (no claim-keyed dispatch-history row answers it yet). The check: the
+    hypothesis layer (#528 store) must hold >= 2 non-adjudicated candidates
+    for the PQ — the #412 seeding contract's "orchestrator fills candidates
+    BEFORE dispatching the first C-NN", now enforced on the one
+    un-bypassable face. Subsequent dispatches on the same PQ are
+    unrestricted: the first hypothesis round supplies the prior.
+    Parks/reinstatements are unaffected (answers_question null -> silent).
+
+    Same enforcement layer as must-stop/top1: activated main flow,
+    REJECT-capable (exit 2 + <gate-verdict> repair path via
+    _reject_with_guidance). Fail-open (#103 tiering): a hypothesis-store
+    read failure emits hypothesis_admission_fail_open (WARN + trace) and
+    proceeds — a broken store must not block dispatch.
+    """
+    claim_question = _claim_question_map(ws)
+    qid = claim_question.get(claim_id)
+    if not qid or qid not in _workspace_pq_ids(ws):
+        return None  # non-PQ claim (or PQ-less workspace) — never triggers
+    if _pq_dispatched_before(ws, qid, claim_question):
+        return None  # not the first dispatch — the prior exists, pass
+    try:
+        with scripts_on_path():  # #671 scoped membership
+            import hypothesis_store as hs
+        candidates = hs.open_candidates_for_question(
+            hs.HypothesisStore(ws / "hypotheses").list_all(), qid,
+            claim_question)
+    except Exception as exc:  # noqa: BLE001 — #103 tiering: store outage
+        # must not block. WARN + trace, dispatch proceeds unadmitted.
+        print(
+            f"dispatch_gate: WARN hypothesis-admission fail-open (#109) — "
+            f"hypothesis store unreadable ({type(exc).__name__}), admission "
+            f"not enforced for {qid}",
+            file=sys.stderr, flush=True,
+        )
+        _emit_trace(ws, "hypothesis_admission_fail_open", claim_id,
+                    f"qid={qid}; reason=store_read_failed; "
+                    f"exc={type(exc).__name__}: {exc}", trace_id=trace_id)
+        return None
+    if len(candidates) >= MIN_ADMITTED_CANDIDATES:
+        return None
+    # #459: the REJECT face reaches the unified log like top1/capability.
+    _emit_trace(ws, "hypothesis_admission_reject", claim_id,
+                f"qid={qid}; candidates={len(candidates)}; "
+                f"need>={MIN_ADMITTED_CANDIDATES}", exit_code=2,
+                trace_id=trace_id)
+    return _reject_with_guidance(
+        "hypothesis_admission",
+        f"{claim_id} answers {qid}, but the hypothesis layer holds only "
+        f"{len(candidates)} non-adjudicated candidate(s) for {qid} — the "
+        f"first dispatch into a PQ neighborhood requires competing "
+        f"explanations (anchoring risk is highest exactly when the system "
+        f"knows least; a single-hypothesis entry is how edge findings get "
+        f"chased as major ones).",
+        f"file ≥2 competing candidates for {qid}, each naming its falsifier "
+        f"(what observation would eliminate it — the falsifier-library "
+        f"semantics: a candidate that cannot say what would kill it is an "
+        f"opinion, not a candidate): fill `candidates:` "
+        f"on the open `pq:{qid}` scaffold hypothesis in hypotheses/ (or "
+        f"file one hypothesis per competitor via hypothesis_store), then "
+        f"re-dispatch.", issue="109")
 
 
 # ===================== #772 redo-leak WARN (L4) =====================
@@ -1163,7 +1498,7 @@ def main() -> int:
     #      (finite grammar, enumerable), not prose
     # Fires BEFORE the failure-blocked lookup — an irreversible action in
     # a healthy claim's dispatch is just as irreversible. Single source:
-    # references/agent-three-state-charter.md.
+    # references/contracts/agent-three-state-charter.md.
     # #601: the grammar returns its rule id; both faces land in the trace
     # row's matched_rule field (declared face -> declared:reversible_false).
     rule = _must_stop_dispatch(prompt_text)
@@ -1185,7 +1520,7 @@ def main() -> int:
         print(json.dumps({
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
-                "additionalContext": (
+                "additionalContext": _gate_verdict(
                     f"dispatch_gate: {claim_id} is failure-blocked - a prior attempt "
                     f"failed and no failure_analysis is recorded. Per SKILL.md "
                     f"'A failed attempt is not a negative result', run:\n"
@@ -1202,8 +1537,19 @@ def main() -> int:
     # #602: plan-drift auto-integration — runs BEFORE the existing dispatch
     # block. Drift-severe -> BLOCKED (rc=2); drift-warning -> SATURATED
     # (rc=3); no drift -> None (fall through). NON-FATAL: false-positive is
-    # acceptable (operator can re-dispatch).
-    rc = _plan_drift_auto(ws, claim_id, prompt_text)
+    # acceptable (operator can re-dispatch). #102: a crash rc takes the
+    # observable degrade face (plan_drift_crashed trace row) — trace_id
+    # rides so the row attributes to the mission chain.
+    rc = _plan_drift_auto(ws, claim_id, prompt_text, trace_id=trace_id)
+    if rc is not None:
+        return rc
+
+    # #109 hypothesis admission — same enforcement layer as must-stop/top1
+    # (activated main flow, REJECT-capable). Protocol completeness precedes
+    # the value teeth: a dispatch into an empty PQ competitor field is a
+    # protocol violation (#412's unguarded back half) and must not burn a
+    # top1 deviation trace first. Fail-open on store outages (#103 tiering).
+    rc = _hypothesis_admission(ws, claim_id, payload, trace_id=trace_id)
     if rc is not None:
         return rc
 
@@ -1239,6 +1585,10 @@ def main() -> int:
                     "mission-stable allocation (envelope trace_id absent "
                     "or format-invalid)", trace_id=trace_id)
     _log_strategy_dispatch(ws, claim_id, prompt_text)
+    # #105: THE roi-intents producer — record the declared intent at the
+    # dispatch ALLOW tail (all teeth passed, worker not yet started).
+    # Fail-open: intent_unparsed event only, never a blocked dispatch.
+    _record_dispatch_intent(ws, claim_id, prompt_text, payload)
     # UNWAIT: this dispatch targets a worker parked in the wait loop — write
     # the wake signal so its poll loop re-arms it (fire-and-forget, above).
     _write_wait_signal(ws, _resolve_dispatch_agent(payload, prompt_text),

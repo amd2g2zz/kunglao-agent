@@ -31,7 +31,25 @@ if str(SCRIPTS) not in sys.path:
 
 import template_version as tv  # noqa: E402
 from event_taxonomy import EMIT_ACTIONS  # noqa: E402
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
+
+
+# ---------------------------------------------------------------- #143 home isolation
+# The upgrade now purges the user-global ~/.claude/settings.json (#143 item).
+# Every real-run upgrade test in this file binds Path.home to a bare tmp home
+# (the established monkeypatch seam, canonical_install_root precedent) plus
+# HOME/USERPROFILE for subprocess children, so a pytest run can never purge
+# the production global file — same protection class as conftest.isolated_home.
+
+
+@pytest.fixture(autouse=True)
+def _isolated_upgrade_home(tmp_path, monkeypatch):
+    home = tmp_path / "fake-home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    return home
 
 
 def _load_upgrade():
@@ -62,6 +80,7 @@ def _fixture_ws(tmp_path: Path) -> Path:
     (ws / ".claude").mkdir()
     (ws / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
     (ws / "runs").mkdir()
+    seed_oracle_anchors(ws)
     return ws
 
 
@@ -331,19 +350,28 @@ class TestA7UvSync:
         up = _load_upgrade()
         self._patch_which(monkeypatch, up, "/fake/uv")
 
-        seen: dict = {}
+        calls: list = []
 
         def fake_run(argv, **kw):
-            seen["argv"] = argv
-            seen["timeout"] = kw.get("timeout")
+            calls.append((argv, kw))
             return subprocess.CompletedProcess(argv, 0, "", "")
 
         monkeypatch.setattr(up.subprocess, "run", fake_run)
         label = up._item_uv_sync(ws, False)
         assert "ok" in label
-        assert "--locked" in seen["argv"]
-        assert "--project" in seen["argv"]
-        assert seen["timeout"], "sync must be timeout-bounded"
+        # The success path also stamps the ledger via kunglao_log._repo_sha
+        # (`git rev-parse HEAD` through the same patched subprocess.run), so
+        # capture every call and select the uv-sync call — a single
+        # last-call slot gets overwritten by the git call.
+        uv_calls = [(argv, kw) for argv, kw in calls
+                    if "--locked" in argv
+                    or (argv and str(argv[0]).endswith("uv"))]
+        assert len(uv_calls) == 1, (
+            f"expected exactly one uv-sync call, got {calls!r}")
+        uv_argv, uv_kw = uv_calls[0]
+        assert "--locked" in uv_argv
+        assert "--project" in uv_argv
+        assert uv_kw.get("timeout"), "sync must be timeout-bounded"
         assert self.ERR in capsys.readouterr().err
 
     def test_failure_is_warn_not_fatal(self, tmp_path, monkeypatch, capsys):
@@ -403,15 +431,24 @@ class TestA7UvSync:
         ws = _fixture_ws(tmp_path)
         up = _load_upgrade()
         self._patch_which(monkeypatch, up, "/fake/uv")
-        seen: dict = {}
+        calls: list = []
 
         def fake_run(argv, **kw):
-            seen["argv"] = list(argv)
+            calls.append((list(argv), kw))
             return subprocess.CompletedProcess(argv, 0, "", "")
 
         monkeypatch.setattr(up.subprocess, "run", fake_run)
         up._item_uv_sync(ws, False)
-        proj = seen["argv"][seen["argv"].index("--project") + 1]
+        # Same ledger-clobber face as test_success_event_ok: the success
+        # path's kunglao_log._repo_sha git call lands in the same capture,
+        # so select the uv-sync call instead of reading a single slot.
+        uv_calls = [argv for argv, kw in calls
+                    if "--locked" in argv
+                    or (argv and str(argv[0]).endswith("uv"))]
+        assert len(uv_calls) == 1, (
+            f"expected exactly one uv-sync call, got {calls!r}")
+        uv_argv = uv_calls[0]
+        proj = uv_argv[uv_argv.index("--project") + 1]
         assert Path(proj).resolve() != ws.resolve(), (
             "the analysis venv lives under the INSTALL root (#752 seam), "
             "never inside the user workspace")
@@ -565,11 +602,20 @@ class TestT6Registry:
             "0.1.3-stamped workspace re-plans instead of short-circuiting")
         assert versions.index("0.1.3") < versions.index("0.1.4"), \
             "registry stays linear"
+        # 0.1.4's OWN cargo, pinned by key (the entry is not guaranteed to
+        # stay the registry tail as releases land new entries).
+        ws = _fixture_ws(tmp_path)
+        items_014 = dict(up.MIGRATIONS)["0.1.4"](ws, True)
+        assert any(i.startswith("template_stamp_refresh") for i in items_014), \
+            "0.1.4 must carry the stamp refresh"
+        assert any("uv_sync" in i for i in items_014)
+        # Linear-registry invariant: the stamp refresh rides the LAST
+        # migration, whatever release is newest (the G4 tail gate trusts
+        # the plan to carry the stamp face).
         last_fn = up.MIGRATIONS[-1][1]
-        items = last_fn(_fixture_ws(tmp_path), True)
-        assert any(i.startswith("template_stamp_refresh") for i in items), \
+        assert any(i.startswith("template_stamp_refresh")
+                   for i in last_fn(ws, True)), \
             "the stamp refresh must ride the LAST migration"
-        assert any("uv_sync" in i for i in items)
 
     @pytest.fixture(autouse=True)
     def _offline_uv(self, monkeypatch):
@@ -613,6 +659,7 @@ class TestT6Registry:
         (ws / "notes" ).mkdir()
         (ws / "notes" / "keep.md").write_text("precious bytes",
                                               encoding="utf-8")
+        seed_oracle_anchors(ws)
         return ws
 
     @staticmethod
@@ -622,14 +669,14 @@ class TestT6Registry:
 
     def test_already_at_target_still_plans_deploy_items(self, tmp_path,
                                                         pinned=False):
-        """The live-run sample problem (real-world shape): a 0.1.3-stamped workspace
-        (stamped before this release) whose deploy surface is incomplete —
-        the 0.1.4 registry entry must make plan non-empty so the fast
-        path cannot skip the repair."""
-        maj, mi, pa = (int(x) for x in tv.read_skill_version().split("."))
-        prev = ".".join(str(x) for x in (maj, mi, max(pa - 1, 0)))
+        """The live-run sample problem (real-world shape): a 0.1.3-stamped
+        workspace (stamped before the 0.1.4 release) whose deploy surface
+        is incomplete — the 0.1.4 registry entry must make plan non-empty
+        so the fast path cannot skip the repair. The stamp pins the version
+        BEFORE the cargo-carrying entry (a prev-of-CUR derivation would
+        silently drift below the entry on the next bump)."""
         up = _load_upgrade()
-        ws = self._stamped_ws(tmp_path, prev)
+        ws = self._stamped_ws(tmp_path, "0.1.3")
         pre_notes = self._snap(ws)["notes/keep.md"]
         rc = up.main([str(ws)])
         assert rc == 0

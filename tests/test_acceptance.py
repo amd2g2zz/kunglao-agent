@@ -4,17 +4,33 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
 import acceptance_check as ac
 
+# both tests consume the SAME module-scoped report; the xdist group keeps
+# them on one worker (--dist loadgroup) so the nested pinned smoke run
+# inside executes once per suite, not once per worker
+pytestmark = pytest.mark.xdist_group("acceptance")
 
-def test_acceptance_overall_passes():
-    report = ac.run_acceptance()
+
+@pytest.fixture(scope="module")
+def acceptance_report() -> dict:
+    """run_acceptance() once per module: the report is deterministic and the
+    nested pinned smoke run inside it is the expensive part — computing it
+    per test re-pays a full nested pytest collection for an identical
+    result (both tests only READ the report)."""
+    return ac.run_acceptance()
+
+
+def test_acceptance_overall_passes(acceptance_report):
+    report = acceptance_report
     failed = [c["name"] for c in report["checks"] if not c["passed"]]
     assert report["overall_passed"], f"acceptance failures: {failed}"
 
 
-def test_acceptance_has_five_checks():
-    report = ac.run_acceptance()
+def test_acceptance_has_five_checks(acceptance_report):
+    report = acceptance_report
     names = {c["name"] for c in report["checks"]}
     must = {"oracle_10_10", "cli_surface_8", "priority_voi_formula",
             "digest_builds", "test_suite_green"}

@@ -21,6 +21,7 @@
 | `call-site-args` | Call-site argument extraction from disassembly text (x64/x86) | Read when extracting call-site arguments from disassembly text; for precise dataflow use ghidra-recon/emulated execution |
 | `c-normalize` | Decompiled-C normalization (modulo idioms/dead stores) | Read to normalize before a worker reads Ghidra decompiled C; for semantic deobfuscation use opaque-pred |
 | `opaque-pred` | Opaque predicate/MBA equivalence decision (z3) | Read when statically resolving opaque predicates/proving MBA equivalences; not when z3 is absent or the task is not expression-level |
+| `ida-decompile` | IDA lane tool family over the ida-pro-vm MCP bridge (`ida:decompile` sole + `ida-py-eval` scripting face; typed surfaces: analyze_funcs/xrefs_to/find_bytes class; queue-serial, stateful REPL) | Read when a function-level decompile must come from IDA's analyzer (ghidra unavailable/insufficient) or scripting-grade in-process IDA execution is needed; not for bulk whole-binary disassembly (ghidra-decompile-functions) or dynamic-lane (x64dbg/frida) questions |
 | `yara-scan` | YARA rule scanning (built-in crypto-tables) | Read for rule-based byte scanning (family/IOC evidence); not when yara-python is missing |
 | `yara-gen` | YARA rule text generation from analysis findings | Read when generating detection rules from hex/string traits; not without a rule-generation need |
 | `jadx-decompile` | DEX-to-Java decompiler (jadx; android:java-source high) | Read when java-like source is needed AND the apk_mem_gate verdict is jadx-ok/targeted-jadx; not for 1:1 bytecode truth (baksmali-xref) |
@@ -213,6 +214,23 @@
 - **exit code**: 0 decided / 1 unknown / 2 error (missing z3 with install guidance).
 - **when_not**: Not for non-single-expression truth-value/MBA-equivalence decisions; not when z3-solver is not installed and installing is not allowed.
 
+### ida-decompile
+
+> MCP-channel tool family (like the dynamic domain): the faces are `mcp__ida-pro-vm__*` calls, not local .py scripts — the `_INDEX.yaml` `ida-decompile` entry is the routing/catalog anchor only. Registration is env-side (`ida-pro-vm` in `~/.claude.json` / `.mcp.json`, owner's local registration of upstream ida-pro-mcp); the toolshelf never auto-installs IDA.
+
+- **Purpose**: IDA lane tool family: `ida-decompile` (native Hex-Rays decompilation — the ghidra-alternative path when IDA's analyzer is authoritative: OOL/ELF edge cases, FLIRT-signed libs, existing .idb analysis state) + `ida-py-eval` (scripting-grade Python executed inside the IDA process) + typed-surface pointers reachable through the eval face (analyze_funcs / xrefs_to / find_bytes class).
+- **Usage**:
+  ```bash
+  mcp__ida-pro-vm__decompile_function   # bridge discovery first: mcp__ida-pro-vm__list_functions / mcp__ida-pro-vm__get_function_by_name
+  mcp__ida-pro-vm__py_eval              # scripting face: arbitrary Python inside the IDA process (session semantics below)
+  ```
+- **Inputs**: Function address(es)/name(s) — or Python source for the eval face — against the .i64/.idb opened by the bridge (the workspace sample must be loaded in the remote IDA instance).
+- **Outputs**: Decompiled pseudocode + disassembly context per function; eval-face returns the AST last-expression value plus captured stdout/stderr — quote verbatim into `facts/Fxxx.md`.
+- **exit code**: 0 pseudocode/eval result returned / 2 error (bridge unreachable — verify the env-side `ida-pro-vm` registration; the toolshelf never auto-installs IDA).
+- **Queue-serial contract (design, not a constraint)**: all calls to the lane enqueue and execute in order — this is the design, not a limitation to work around. Parallel/concurrent invocation is channel misuse and freezes IDA. One call at a time, always; never fan out simultaneous lane calls across workers.
+- **py_eval session semantics (stateful REPL)**: locals persist across calls (Jupyter-style) — state carries from call to call; an explicit `new_locals=True` reset wipes them; the exec globals (all `ida_*` modules pre-imported) are rebuilt per call. The eval surface is `@unsafe`-classed upstream — treat its source with shell-grade care, not as a read-only query.
+- **when_not**: Not when ghidra is available and sufficient — use ghidra-decompile-functions; not for bulk whole-binary disassembly (IDA licenses are seat-bound; keep the bridge for targeted function claims); not for dynamic-lane (x64dbg/frida) questions — those tools own runtime state, this lane is static only.
+
 ### yara-scan
 
 - **Purpose**: YARA rule scanning (built-in crypto-tables by default); emits a hit listing.
@@ -297,7 +315,7 @@
   ```bash
   python tools/static/dexdc_scanner.py <workspace> --target <apk-or-dex> [--mode index|taint|both] [--method CLASS#METHOD ...] [--only-package PKG] [--seeds API ...]
   ```
-- **Inputs**: APK/DEX target; optional targeted methods (index mode), package filter, taint seed APIs (default: the `references/re-library/android-fingerprint-seeds.yaml` table).
+- **Inputs**: APK/DEX target; optional targeted methods (index mode), package filter, taint seed APIs (default: the `references/re-library/android/emulation/android-fingerprint-seeds.yaml` table).
 - **Outputs**: `evidence/dexdc_index.json` (gitnexus-shape classes/methods/xrefs + per-method cfg nodes/edges) + `evidence/dexdc_taint.json` (`issues[].{rule, source, sink, traces}`, count).
 - **exit code**: 0 ok/unavailable (fail-open, never raises) / 1 hard usage error.
 - **when_not**: Not the highest-fidelity java source when jadx runs within budget (jadx stays high); its value is data-flow/string-decrypt/algorithm-verify which jadx lacks; not for dex rewrite (baksmali/dexlib2).

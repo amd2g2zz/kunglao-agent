@@ -201,13 +201,24 @@ def test_blockers_scanned_real_lifecycle(tmp_path):
 
 def test_gate_blocked_from_real_failure_analysis(tmp_path):
     """gate_blocked = failure_analysis_gate.scan_workspace BLOCKED entries —
-    a claim with a failed attempt (promotion_attempts > 0), non-terminal,
-    and no analyses/failure-<claim>.yaml (the source priority.py consumes)."""
+    a non-terminal claim with >=1 fail settlement on a target_pq-linked
+    oracle case and no analyses/failure-<claim>.yaml (#146: arming is
+    settlement-derived; the source priority.py consumes)."""
     ws = tmp_path
     (ws / "claim-register.yaml").write_text(
         "claims:\n"
-        "- id: C-G\n  status: OPEN\n  statement: x\n  promotion_attempts: 1\n",
+        "- id: C-G\n  status: OPEN\n  statement: x\n"
+        "  answers_question: q1\n  promotion_attempts: 1\n",
         encoding="utf-8")
+    cdir = ws / "oracle" / "cases"
+    cdir.mkdir(parents=True)
+    (cdir / "case-c-g.yaml").write_text(
+        "id: case-c-g\ntarget_pq: q1\n", encoding="utf-8")
+    (ws / "runs").mkdir(parents=True)
+    (ws / "runs" / "posteriors.yaml").write_text(
+        '{"schema": "posteriors-schema/1", "cases": '
+        '{"case-c-g": {"alpha": 1.0, "beta": 2.0, "pending_entries": 0}}, '
+        '"pqs": {}}', encoding="utf-8")
     counts = et.classify_workspace(ws)
     assert counts["gate_blocked"] == 1
 

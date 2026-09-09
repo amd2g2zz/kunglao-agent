@@ -198,7 +198,11 @@ def test_wire_up_preserves_existing_keys(tmp_path, fake_home):
     register_hooks(workspace=ws)
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     assert settings["env"]["KUNGLAO_VM_HOST"] == "192.168.20.128", "env keys preserved"
-    assert settings["statusLine"]["command"] == "echo hi", "statusLine preserved"
+    # #142: statusLine is now a KUNGLAO-OWNED key (project-scoped, keep-alive
+    # repaired every tick) — a pre-existing value is repointed at the repo
+    # renderer, not preserved (same ownership discipline as `hooks`).
+    assert "statusline_render.mjs" in settings["statusLine"]["command"], \
+        "statusLine key owned by kunglao (#142), repointed at the repo renderer"
     other = [e for e in settings["hooks"]["PreToolUse"] if e.get("matcher") == "Bash"
              and "other/hook.py" in e.get("hooks", [{}])[0].get("command", "")]
     assert other, "unrelated hook entries preserved"

@@ -8,8 +8,8 @@ fake blocker) exposed that every kunglao mechanical gate was read-side
 write side — how state comes to exist: verify_status stamping, expected
 anchor provenance, defer reasons — was bare. This module adds the
 write-side mechanical constraints, symmetric with the read-side gates.
-Audit targets follow the repo's real schemas (references/schema.md,
-references/guardrails.md §1b):
+Audit targets follow the repo's real schemas (references/schemas/schema.md,
+references/governance/guardrails.md §1b):
 
 - R1 maker-checker stamp re-verification:
   * a notes/*.md note with verify_status=passes must have an independent
@@ -33,7 +33,7 @@ references/guardrails.md §1b):
   tautological verification) → violation.
 - R3 defer_reason traceability: a decision-rights row number cited by a
   defer_reason in claim-register.yaml must hit a row that actually
-  exists in references/decision-rights.md (parsed from the file, no
+  exists in references/governance/decision-rights.md (parsed from the file, no
   hardcoded row counts); citing a nonexistent row = fake-blocker vector.
   Only decision-reference shapes are recognized ("decision-rights row N"
   / "治理行 N" / "决策矩阵 N" / a bare trailing "row N"), avoiding
@@ -55,7 +55,7 @@ from pathlib import Path
 
 from plan_drift_detector import credible_redteam_files  # #827 反模板筛选层
 
-# fact statuses counting as "stamped" (terminal subset of references/schema.md fact.status)
+# fact statuses counting as "stamped" (terminal subset of references/schemas/schema.md fact.status)
 FACT_VERIFIED_STATUSES = ("PROVEN", "VERIFIED")
 # W-2 (#532): a fact does not escape the R1 verification requirement by
 # inventing a status word. The 2026-08-20 external dump used
@@ -346,7 +346,7 @@ def _check_fact(ws: Path, p: Path) -> list[dict]:
 
     if signoff:
         vid = signoff.get("verifier_id", "")
-        verdict = (signoff.get("verdict") or "CONFIRMED").upper()
+        verdict = str(signoff.get("verdict", "")).upper()  # #53: no CONFIRMED default — verdict-less sign-off fails R1 evidence
         if vid and verdict == "CONFIRMED":
             if worker_id and _same_actor(vid, worker_id, ws):
                 violations.append({"rule": "R1", "file": rel, "detail": (
@@ -461,7 +461,7 @@ def check_workspace_defer_reasons(ws: Path) -> list[dict]:
     reg_path = ws / "claim-register.yaml"
     if not reg_path.exists():
         return []
-    rows = parse_decision_rights(ws / "references" / "decision-rights.md")
+    rows = parse_decision_rights(ws / "references" / "governance" / "decision-rights.md")
     text = reg_path.read_text(encoding="utf-8", errors="replace")
     out: list[dict] = []
     for m in _CLAIM_BLOCK_RE.finditer(text):
@@ -521,6 +521,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

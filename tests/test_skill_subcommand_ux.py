@@ -146,14 +146,18 @@ def test_each_skill_has_examples_section() -> None:
 # ---------------------------------------------------------------------------
 
 def test_readme_has_command_reference_table() -> None:
-    """README documents a Command Reference table: command / args / purpose / example."""
+    """README documents a Subcommands table: command / use-when / what-it-does."""
+    # 2026-09-06 re-pin (#96): the "Command Reference" table became the
+    # "## Subcommands" table (args inline in the command cell, examples in
+    # the walkthrough section); the coverage loop now pins the root family
+    # token plus all five registry subcommands.
     text = README.read_text(encoding="utf-8")
-    assert "Command Reference" in text, "README missing Command Reference heading"
-    m = re.search(r"\|\s*Command\s*\|\s*Args?\w*\s*\|\s*Purpose\s*\|\s*Example\s*\|", text)
-    assert m, "README command table must have command/args/purpose/example columns"
-    # the table covers all four commands
+    assert "## Subcommands" in text, "README missing Subcommands heading"
+    m = re.search(r"\|\s*Command\s*\|", text)
+    assert m, "README command table must have a Command column"
+    # the table covers the whole subcommand family
     table_region = text[m.end():]
-    for cmd in ("`/kunglao-agent`", ":init", ":analysis", ":help"):
+    for cmd in ("/kunglao-agent", ":init", ":analysis", ":resume", ":upgrade", ":help"):
         assert cmd in text, f"README command table missing {cmd}"
     assert table_region.strip(), "README command table must have body rows"
 

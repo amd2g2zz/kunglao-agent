@@ -36,8 +36,8 @@ ROOT = Path(__file__).resolve().parents[1]
 # ---------------------------------------------------------------------------
 
 SURVEYED_CONSTANTS: dict[str, int] = {
-    # worker-status staleness — hooks/lib_kunglao.py:229 STUCK_MINUTES = 20
-    # (scripts/lib_kunglao.py:44 WORKER_PROGRESS_MINUTES = 20 sibling,
+    # worker-status staleness — hooks/lib_kunglao.py STUCK_MINUTES = 20
+    # (WORKER_PROGRESS_MINUTES = 20 sibling, same module after the merge,
     #  external_kicker.py:92 FRESH_WORKER_MINUTES = 20 mirror,
     #  kunglao_resume.py:79 WORKER_FRESH_MINUTES alias)
     "STUCK_MINUTES": 20,
@@ -105,8 +105,7 @@ def test_liveness_policy_documents_each_rationale() -> None:
 # file -> symbols that must NO LONGER be assigned a bare literal there
 # (they may appear only as import-bound names).
 CONSUMER_EXPECTED_IMPORTS: dict[str, tuple[str, ...]] = {
-    "hooks/lib_kunglao.py": ("STUCK_MINUTES",),
-    "scripts/lib_kunglao.py": ("WORKER_PROGRESS_MINUTES",),
+    "hooks/lib_kunglao.py": ("STUCK_MINUTES", "WORKER_PROGRESS_MINUTES"),
     "scripts/heartbeat.py": ("STALE_MINUTES",),
     "scripts/hook_activation.py": ("DEFAULT_TTL_MINUTES",),
     "scripts/external_kicker.py": ("ACTIVATION_TTL_MINUTES", "FRESH_WORKER_MINUTES", "DEFAULT_STALE_MINUTES"),

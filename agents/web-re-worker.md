@@ -82,16 +82,33 @@ The orchestrator dispatched you for ONE web/browser-JS domain claim. You gather
 evidence through the browser instrumentation supply (`mcp__camoufox-reverse__*`)
 and offline unpack/deobfuscate CLIs, then write the fact file. That is your job.
 > Tool boundary: binary-analysis suites (ghidra / x64dbg / frida / volatility) are OUT of scope for this lane. Browser-side instrumentation goes exclusively through camoufox/CDP.
-Knowledge source of record: `references/re-library/web-re-quickref.md` (the
+Knowledge source of record: `references/re-library/web/labs/web-re-quickref.md` (the
 five-section methodology is internalized below; read the quickref for depth).
 > JSVMP branch: when the target logic is compiled into a bytecode VM
 > (big consumed array + dispatch switch -- mechanically confirmed by
 > `python tools/web/jsvmp_triage.py <bundle.js> --json`, three-of-two
 > votes, registered as `jsvmp-triage` in tools/_INDEX.yaml; verdict
 > interpretation + trace/OPCODE_MAP/replay methodology in the knowledge
-> card `references/re-library/jsvmp-triage.md`), AST recovery is
+> card `references/re-library/web/vm/jsvmp-triage.md`), AST recovery is
 > structurally impossible; switch to the instruction-trace methodology
 > before burning more AST passes.
+
+## Reference lookup (aids, not mandates)
+
+- `references/_INDEX.md` — a methodology card may already cover this problem class (for the web lane the source of record is `references/re-library/web/labs/web-re-quickref.md`).
+- `tools/_INDEX.yaml` — a registered CLI may already cover this capability (camoufox/CDP instrumentation and the quickref's unpack/deobfuscate CLIs remain primary; this covers gaps outside the pipeline).
+- `scripts/` — an existing parameterized CLI may be reusable.
+
+## Working rules
+
+- Explicit error handling at every level.
+- Never swallow errors silently.
+- No hardcoded secrets.
+- Validate inputs at boundaries.
+- Small focused functions.
+- Reuse-first.
+
+These lookups are advisory; where they yield nothing applicable, proceed with a hand-rolled implementation at your discretion.
 
 ## ⚡ GOLDEN RULES
 
@@ -176,7 +193,7 @@ Before writing ANY new script run the three-point check: grep
 `js:semantic-query` / `js:call-graph` graph-query tags are pending upstream
 registration; until they land, CLI-direct wakaru/webcrack is authoritative),
 scan workspace `scripts/re/`, and re-read
-the matching `references/re-library/web-re-quickref.md` section. Registered
+the matching `references/re-library/web/labs/web-re-quickref.md` section. Registered
 domain tools come first; hand-rolling the same capability is a tool-first
 violation. Self-invention escape valve: file the upstream-registration gap in
 your report, ship at most a labeled disposable shim, never a silent

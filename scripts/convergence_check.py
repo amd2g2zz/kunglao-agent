@@ -21,14 +21,18 @@ Decision matrix:
   open_claims>0 AND all open are blocked   → BLOCKED        (escalate with specifics)
   non-empty malformed primary_questions    → INVALID        (escalate, target undefined)
 
-Exit codes (machine-readable for hooks):
+Exit codes (machine-readable for hooks — consumer contract, see the
+registry constant block for #99):
   0 = CONVERGED (nothing to do)
   1 = DISPATCH (open work + free slots)
   2 = DISPATCH_VERIFIER (partial facts need checking)
   3 = SATURATED (busy, poll)
   4 = BLOCKED (open work but all blocked — escalate); INVALID (bad task_spec) reuses this
      so hooks that accept returncodes 0–4 keep parsing the JSON decision.
+  5 = PARK (#634: suspended on external gates — legal idle with wake_condition)
   64 = MISSING_WORKSPACE (no claim-register.yaml found — caller passed wrong path)
+  65 = CRASHED (#99: the check itself crashed — stdout {"decision": "CRASHED"},
+     traceback on stderr; never a decided state)
 
 Usage:
   python scripts/convergence_check.py [workspace]          # human-readable
@@ -54,22 +58,51 @@ from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671
 # the dispatch-facing terminal set; RETRACTED is a withdrawn verdict, NOT an
 # open claim and NOT an orphan (a retracted claim answers no question by design).
 from retract_claim import RETRACTED, TERMINAL_WITH_RETRACTED
+# #11: worker-death records + artifact snapshot — the resume signal for
+# workers that are GONE (silent > DEAD_WORKER_MINUTES, liveness_policy).
+# Consumed inside _act_stuck_workers so the dead band rides the existing
+# STUCK_WORKERS_PRESENT path (no parallel detector, no second scan pass).
+import worker_death as _worker_death
+from liveness_policy import DEAD_WORKER_MINUTES as _DEAD_WORKER_MINUTES
+# #147: the Phase-0 goal operationalization validator (#128). Its declared
+# `generalization` bit is the coverage contract the DRAIN oracle face
+# enforces — convergence requires DECLARED oracle coverage.
+import goal_operationalization as _goal_op
+# The controlled-variable I/O equivalence oracle. Its declared faces
+# (`reproduction: true` on a primary question, `replay_evidence:` on a
+# claim) arm the verdict face — a reproduction question is not answerable
+# by PROVEN status alone, only by matched controlled-comparison pairs.
+import replay_equivalence as _replay_eq
 # #863 Family C: workspace resolution is single-sourced in ws_layout (this
 # module used to be the ONLY manifest-aware copy — now every consumer is).
 from ws_layout import resolve_quiet as _resolve_ws
 
 WORKER_CAP = 3
 
-# Exit codes
-EXIT_CONVERGED = 0
-EXIT_DISPATCH = 1
-EXIT_VERIFY = 2
-EXIT_SATURATED = 3
-EXIT_BLOCKED = 4
-EXIT_PARK = 5  # #634: suspended on external gates — legal idle with wake_condition
+# Exit codes — CONSUMER CONTRACT (#99). The registry itself moved to
+# scripts/contracts.py (#102: producers and consumers kept re-stating the
+# same bytes in separate comments — the root cause of the #102 drift
+# family). This module imports its face; the names below ARE the registry
+# values (single definition in contracts.py; the human-facing copy stays
+# skills/kunglao-agent/SKILL.md's decision table). The #99 rationale for
+# EXIT_CRASHED=65 (64 taken by MISSING_WORKSPACE; a crash must never share
+# EXIT_DISPATCH's byte — stdout {"decision": "CRASHED"}, stderr traceback)
+# lives with the definition.
+from contracts import (EXIT_BLOCKED, EXIT_CONVERGED, EXIT_CRASHED,  # noqa: E402
+                       EXIT_DISPATCH, EXIT_MISSING_WORKSPACE, EXIT_PARK,
+                       EXIT_SATURATED, EXIT_VERIFY)
 
 
 from harness_common import utc_now  # #863 Family F: single source (was a local def)
+
+# #103 exception tiering: the exception family a JUDGMENT-INPUT reader
+# (gate / discriminator / settlement input) may degrade on — IO, parse,
+# and data-shape errors from operator-editable files. Anything outside
+# this tuple is a programming error and must SURFACE (upstream it becomes
+# a conservative BLOCKED with an `error` field), not be eaten by a blanket
+# `except Exception` that silently turns a broken input into a pass.
+_GATE_INPUT_EXC = (AttributeError, ImportError, KeyError, OSError,
+                   TypeError, ValueError, yaml.YAMLError)
 
 
 def _load_yaml(p: Path):
@@ -85,7 +118,7 @@ def _load_worker_lib():
     ``lib_kunglao_hooks`` (the external_kicker.should_kick /
     state_anchor._load_drift_lib precedent): bare ``import lib_kunglao`` is
     ambiguous under pytest (pythonpath = . hooks scripts — hooks first)
-    because scripts/lib_kunglao.py (drift lib) shares the name. All
+    because the drift lib (hooks/lib_kunglao.py) shares the name. All
     scripts-side consumers use the SAME name, so one process shares one
     module instance.
 
@@ -228,7 +261,40 @@ def _orphan_terminal_claims(reg: dict, primary_question_ids: set | None = None) 
     return out
 
 
-def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
+def _reproduction_face(workspace: Path | None, claims: list,
+                       qid: str, repro_qids: set[str]) -> tuple[bool, str]:
+    """Can a declared-reproduction question be answered? One PROVEN
+    answering claim must carry a valid controlled-comparison artifact
+    (evidence/replay-*.json) with >=1 matched pair.
+
+    Fail-closed: no workspace to read evidence from -> (False, named
+    reason); face-checker degradation (unreadable task_spec, corrupt
+    artifact) -> (False, the cause)."""
+    if workspace is None:
+        return False, (
+            f"{_replay_eq.NO_RUN_NOT_EVIDENCE}; the artifact face could "
+            f"not be checked (no workspace available) — fail closed")
+    reasons: list[str] = []
+    for c in claims:
+        if c.get("answers_question") != qid:
+            continue
+        if str(c.get("status") or "").upper() != "PROVEN":
+            continue
+        try:
+            ok, reason = _replay_eq.equivalence_verdict(
+                workspace, c, repro_qids=repro_qids)
+        except _GATE_INPUT_EXC as exc:
+            reasons.append(f"face check unavailable ({exc})")
+            continue
+        if ok:
+            return True, ""
+        reasons.append(reason)
+    return False, (reasons[0] if reasons else
+                   f"{_replay_eq.NO_RUN_NOT_EVIDENCE}")
+
+
+def _unverified_primary_questions(reg: dict, task_spec: dict,
+                                  workspace: Path | None = None) -> list:
     """Find primary_questions that have NO answering claim.
 
     A primary_question is "verified" when a claim with
@@ -240,7 +306,15 @@ def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
         yes/no question (PROVEN / VERIFIED / NEGATIVE / REFUTED).
     STAMP, UNVERIFIED, PARTIAL etc. do NOT satisfy.
 
-    Returns list of {"question": q_id, "answering_claims": [...]} dicts.
+    Verdict face: a question that DECLARES the reproduction
+    predicate (`reproduction: true`) is additionally NOT satisfiable by
+    status alone — a PROVEN answering claim must carry a valid controlled-
+    comparison artifact with matched pairs, or the question is unverified
+    with the refusal reason NAMED ("ran without error" is not evidence of
+    equivalence). Questions without the declared bit are untouched.
+
+    Returns list of {"question": q_id, "answering_claims": [...],
+    "reason": str (reproduction face only)} dicts.
     """
     pqs, _ = _parse_primary_questions(task_spec)
     if not pqs:
@@ -248,6 +322,7 @@ def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
 
     # Map question id -> need (single canonical parse, issue #77)
     question_need = dict(pqs)
+    repro_qids = _replay_eq.declared_reproduction_qids(task_spec)
 
     claims = reg.get("claims") or []
     unverified = []
@@ -262,6 +337,14 @@ def _unverified_primary_questions(reg: dict, task_spec: dict) -> list:
             satisfied = any(a["status"] in terminal_ok for a in answering)
         else:
             satisfied = any(a["status"] == "PROVEN" for a in answering)
+        if satisfied and qid in repro_qids:
+            face_ok, reason = _reproduction_face(workspace, claims, qid,
+                                                 repro_qids)
+            if not face_ok:
+                unverified.append({"question": qid,
+                                   "answering_claims": answering,
+                                   "reason": reason})
+                continue
         if not satisfied:
             unverified.append({"question": qid, "answering_claims": answering})
     return unverified
@@ -315,6 +398,132 @@ def _note_layer_gaps(workspace: Path, pq_ids: set, reg: dict) -> list:
 def _load_task_spec(workspace: Path) -> dict:
     """Load task_spec.yaml for primary_questions. Returns {} if missing."""
     return _load_yaml(workspace / "task_spec.yaml")
+
+
+# #108: the oracle acceptance face. The runner's red/green verdict is the
+# system's only reward signal (posteriors.py); before this file the oracle
+# appeared ZERO times in the judgment chain — the loop could mark every
+# claim PROVEN while the runner was all red.
+ORACLE_STATUS_REL = ("runs", "oracle-status.json")
+
+
+def _load_oracle_status(workspace: Path) -> dict:
+    """Read the oracle runner's verdict file (#108 synthetic convention).
+
+    Returns {"cases": [...], "low_discriminativity": [...], "error": None}
+    where each case record is {id, status: pass|fail|pending,
+    pending_entries, instrumented}.
+
+    Fail-open/closed split:
+      - file ABSENT -> empty face + no error: the oracle face is optional,
+        legacy workspaces (no runner yet) converge untouched;
+      - file PRESENT but unreadable/malformed -> error set: the caller
+        BLOCKS with the cause (fail-closed, the contradiction-gate
+        precedent — a corrupt verdict file cannot silently re-enable
+        CONVERGED). Unknown status values normalize to "pending" (the
+        conservative member of the triad).
+
+    #147 revocation: the absent-file fail-open above is REVOKED at the
+    gate for workspaces under the coverage contract — a declared
+    required/unknown generalization turns the absent/armed-empty face into
+    a BLOCK (see _load_goal_op + _DecideInputs.coverage_blocks). The
+    untouched behavior now applies ONLY to true-legacy workspaces (no
+    goal-operationalization.yaml AND no task-oracle.yaml).
+    """
+    path = workspace.joinpath(*ORACLE_STATUS_REL)
+    if not path.exists():
+        return {"cases": [], "low_discriminativity": [], "error": None}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        cases_raw = doc.get("cases")
+        if not isinstance(cases_raw, dict):
+            raise ValueError("top-level `cases` is not a mapping")
+        cases = []
+        for cid, raw in cases_raw.items():
+            if not isinstance(raw, dict):
+                raise ValueError(f"case {cid!r}: payload is not a mapping")
+            status = str(raw.get("status") or "pending").lower()
+            if status not in ("pass", "fail", "pending"):
+                status = "pending"
+            cases.append({
+                "id": str(cid),
+                "status": status,
+                "pending_entries": int(raw.get("pending_entries") or 0),
+                "instrumented": bool(raw.get("instrumented")),
+            })
+        low = doc.get("low_discriminativity")
+        low = [str(x) for x in low] if isinstance(low, list) else []
+    except (OSError, TypeError, ValueError) as exc:
+        return {"cases": [], "low_discriminativity": [],
+                "error": f"{type(exc).__name__}: {exc}"}
+    return {"cases": cases, "low_discriminativity": low, "error": None}
+
+
+# #147 declared oracle coverage: the Phase-0 declaration files. The
+# goal-operationalization.yaml `generalization` bit (#128) is the coverage
+# contract; task-oracle.yaml (#473, the verbatim task heartbeat_tick marks
+# registered) is the marker that a workspace OWES that contract — a
+# workspace carrying neither predates it entirely (true legacy) and keeps
+# the pre-#147 untouched behavior.
+GOAL_OP_NAME = "goal-operationalization.yaml"
+TASK_ORACLE_NAME = "task-oracle.yaml"
+
+# The two named block reasons (issue text, quoted verbatim in the action).
+COVERAGE_UNDECLARED = (
+    "verification requirements undeclared — complete the Phase-0 "
+    "operationalization")
+COVERAGE_MISSING = (
+    "verification declared required but no oracle coverage delivered")
+
+
+def _load_goal_op(workspace: Path) -> dict:
+    """Classify the workspace's declared-coverage contract (#147).
+
+    Returns {"present", "valid", "legacy", "generalization", "declared_ts",
+    "post_dispatch", "errors", "error"}:
+      - legacy=True: neither contract file exists (pre-#473 workspace) —
+        the coverage gate stays silent, #108 behavior untouched;
+      - present=False (and task-oracle.yaml registered): the workspace owes
+        the Phase-0 operationalization and does not have it — undeclared;
+      - present + load/validate failure (unreadable, schema mismatch,
+        undeclared bit — GoalOpError walls) or validator errors (incl. the
+        R4 unstamped face): invalid — fail-closed with the cause;
+      - valid: carries the declared bit + the R4 timestamp.
+
+    Loud-rejection domain (#103 tiering): GoalOpError is a ValueError, so
+    the _GATE_INPUT_EXC net below catches IO/parse/shape degradation; the
+    classification treats every degradation as INVALID (fail-closed), the
+    same posture as the contradiction scan.
+    """
+    op_path = workspace / GOAL_OP_NAME
+    legacy = not op_path.exists() and not (workspace / TASK_ORACLE_NAME).exists()
+    if legacy:
+        return {"present": False, "valid": True, "legacy": True,
+                "generalization": None, "declared_ts": "",
+                "post_dispatch": False, "errors": [], "error": None}
+    if not op_path.exists():
+        return {"present": False, "valid": False, "legacy": False,
+                "generalization": None, "declared_ts": "",
+                "post_dispatch": False, "errors": [], "error": None}
+    try:
+        doc = _goal_op.load(op_path)
+        report = _goal_op.validate(doc)
+    except _goal_op.GoalOpError as exc:
+        return {"present": True, "valid": False, "legacy": False,
+                "generalization": None, "declared_ts": "",
+                "post_dispatch": False, "errors": [],
+                "error": f"{type(exc).__name__}: {exc}"}
+    except _GATE_INPUT_EXC as exc:  # defensive net — load/validate raise GoalOpError
+        return {"present": True, "valid": False, "legacy": False,
+                "generalization": None, "declared_ts": "",
+                "post_dispatch": False, "errors": [],
+                "error": f"{type(exc).__name__}: {exc}"}
+    errors = [str(e) for e in report["errors"]]
+    return {"present": True, "valid": not errors, "legacy": False,
+            "generalization": report["generalization"],
+            "declared_ts": str(doc.get("declared_ts") or ""),
+            "post_dispatch": bool(report["post_dispatch"]),
+            "errors": errors, "error": None}
 
 
 def _parse_pq_item(q: dict) -> tuple[str | None, str | None, str | None]:
@@ -424,6 +633,43 @@ def _pq_ids(task_spec: dict) -> set:
     return {qid for qid, _ in _parse_primary_questions(task_spec)[0]}
 
 
+def _dispatched_ids(workspace: Path) -> list:
+    """Live claims with dispatch evidence (#2 stuck-vs-queued disambiguation).
+
+    Dispatched = in flight (status in IN_PROGRESS_STATUSES) or with a
+    recorded worker attempt (promotion_attempts >= 1). Terminal/PARK claims
+    are never live frontier work. Consumer: convergence_health._stuck_claims
+    — a claim sitting in open_ids is only "stuck" if it was ever dispatched;
+    open_ids minus this set is the never-dispatched queue.
+
+    #103 per-claim tolerance: a dirty promotion_attempts on ONE claim must
+    not wipe the dispatch evidence of ALL claims — the pre-#103 blanket
+    except turned one bad row into [] for the whole register, killing stuck
+    detection downstream. Rows now degrade individually; only a whole-file
+    read/parse failure returns [] (absence of data, not silence about it).
+    """
+    try:
+        reg = _load_yaml(workspace / "claim-register.yaml")
+    except (AttributeError, OSError, TypeError, ValueError, yaml.YAMLError):
+        # whole-register unread: settlement input keeps its absence shape,
+        # narrowed to the realistic IO/parse family (#103 tiering)
+        return []
+    out = []
+    for c in (reg.get("claims") or []):
+        try:
+            if not c.get("id"):
+                continue
+            status = (c.get("status") or "").upper()
+            if status in TERMINAL_WITH_RETRACTED or status in SUSPENDED:
+                continue
+            if status in IN_PROGRESS_STATUSES or int(c.get("promotion_attempts") or 0) >= 1:
+                out.append(c["id"])
+        except (AttributeError, TypeError, ValueError):
+            # dirty row (#103): skip it, keep the rest of the collection
+            continue
+    return out
+
+
 def _append_ledger(workspace: Path, d: dict) -> None:
     """Append one state snapshot per call. convergence_health.py reads the trajectory.
 
@@ -441,6 +687,10 @@ def _append_ledger(workspace: Path, d: dict) -> None:
             "active_workers": d["active_workers"],
             "blockers": d["active_blockers"],
             "facts_total": _count_facts(workspace),
+            # #2: dispatch evidence per snapshot — lets convergence_health
+            # tell "dispatched but flat" (stuck) from "never dispatched"
+            # (frontier queue). Old-format readers ignore the extra field.
+            "dispatched_ids": _dispatched_ids(workspace),
         }
         with open(workspace / LEDGER_NAME, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -486,7 +736,9 @@ def _failure_blocked(workspace: Path) -> list:
         return []
     try:
         return [b["claim_id"] for b in fag.scan_workspace(workspace) if b.get("state") == "BLOCKED"]
-    except Exception:
+    except _GATE_INPUT_EXC:
+        # #103 tiering: judgment input (failure-analysis gate) — IO/parse/
+        # shape errors degrade, programming errors surface, never blanket.
         return []
 
 
@@ -499,8 +751,9 @@ def _failure_blocked(workspace: Path) -> list:
 #   - outcomes live in TRANSITIONS ((State, Event) -> (State, action builder))
 #   - a new gate is a table row, never a new elif rung
 # Gate SEMANTICS and every action string are byte-identical to the
-# pre-refactor chain — proven per-case against the c5cb1ae baseline by
-# tests/test_decide_regression_anchor.py (frozen snapshot + live baseline).
+# pre-refactor chain — proven per-case by tests/test_decide_regression_anchor.py
+# (frozen snapshot channel; the live-baseline channel retired 2026-09-05,
+# see the re-pin header there).
 
 
 class State(str, Enum):
@@ -543,11 +796,19 @@ class Event(str, Enum):
     DISCOVERY_UNCONSUMED = "DISCOVERY_UNCONSUMED"     # #147 discovery consumption
     GLOBAL_CONTRADICTION = "GLOBAL_CONTRADICTION"     # #147 completion transaction
     ANOMALY_DETECTED = "ANOMALY_DETECTED"           # #663 anomaly observation gate
+    # #98: DRAIN worker gates. The DRAIN probe table had ZERO worker
+    # predicates — worker data was collected into the snapshot but never
+    # consulted — so an all-IN_PROGRESS claim surface (excluded from opens
+    # by _open_claims, by design) drained straight to CONVERGED over live
+    # work. STUCK is shared with SCHEDULE (one #595 semantics, two stages);
+    # ACTIVE is DRAIN-only (SCHEDULE already routes work by claim face).
+    STUCK_WORKERS_PRESENT = "STUCK_WORKERS_PRESENT"   # #595 SCHEDULE / #98 DRAIN: stuck workers gate both stages
+    ACTIVE_WORKERS_PRESENT = "ACTIVE_WORKERS_PRESENT"  # #98 DRAIN: live worker on a drained claim surface
+    ORACLE_CASE_RED = "ORACLE_CASE_RED"               # #108 DRAIN: runner verdict joins the completion transaction; #147: the declared-coverage gate composes into the same acceptance face
     DRAIN_CLEAN = "DRAIN_CLEAN"                        # DRAIN catch-all
     # SCHEDULE stage
     WORK_AND_FREE_SLOT = "WORK_AND_FREE_SLOT"
     PARTIALS_AND_FREE_SLOT = "PARTIALS_AND_FREE_SLOT"
-    STUCK_WORKERS_PRESENT = "STUCK_WORKERS_PRESENT"   # #595: silent-detect consumes stuck_workers
     WORK_NO_FREE_SLOT = "WORK_NO_FREE_SLOT"
     FAILURE_ARTIFACTS_DUE = "FAILURE_ARTIFACTS_DUE"    # #495: analysis lacks
     #      validated_capability / identified_obstacle (or is absent/stale)
@@ -602,6 +863,8 @@ class _DecideInputs:
     _ladder_ids: list | None = field(default=None, repr=False)
     _anomalies: list | None = field(default=None, repr=False)
     _open_hyps: list | None = field(default=None, repr=False)
+    _oracle: dict | None = field(default=None, repr=False)
+    _goal_op: dict | None = field(default=None, repr=False)
 
     def open_hypotheses(self) -> list:
         """#662 unadjudicated-hypothesis gate input (lazy + cached).
@@ -616,8 +879,8 @@ class _DecideInputs:
             try:
                 from hypothesis_store import HypothesisStore
                 hyps = HypothesisStore(self.workspace / "hypotheses").list_open()
-            except Exception:
-                hyps = []  # layer error — fail-open per design D7
+            except _GATE_INPUT_EXC:
+                hyps = []  # layer error — fail-open per design D7 (#103: narrowed to IO/parse/shape)
             self._open_hyps = hyps
         return self._open_hyps
 
@@ -638,10 +901,110 @@ class _DecideInputs:
                     self.workspace / "facts" / "_INDEX.md",
                     self.workspace / "facts",
                 )
-            except Exception:
+            except Exception:  # fail-open: telemetry side channel (informational observation, D5)
                 anomalies = []  # fail-open per design.md D5
             self._anomalies = anomalies
         return self._anomalies
+
+    def oracle_status(self) -> dict:
+        """#108 oracle acceptance face (lazy + cached).
+
+        Reads the oracle runner's verdict file — see _load_oracle_status for
+        the absent/unreadable contract. This is the data the DRAIN probe
+        table used to ignore entirely: the runner's red/green verdict now
+        joins the completion transaction."""
+        if self._oracle is None:
+            self._oracle = _load_oracle_status(self.workspace)
+        return self._oracle
+
+    def oracle_blocks(self) -> list[str]:
+        """#108 blocking reasons, one per offending case (the action names
+        them). A case blocks when RED, or PENDING on live instrumentation —
+        "unknown" is not "pass", a pending case is not satisfiable. A
+        pending case whose instrumentation never ran (scaffold / the runner
+        ran with no client) does NOT block (backward compatibility); an
+        unreadable verdict file blocks as a whole (fail-closed)."""
+        st = self.oracle_status()
+        if st["error"]:
+            return [f"oracle status unreadable — the acceptance face "
+                    f"cannot be verified ({st['error']})"]
+        blocks: list[str] = []
+        for c in st["cases"]:
+            if c["status"] == "fail":
+                blocks.append(f"oracle case {c['id']} RED")
+            elif c["status"] == "pending" and c["instrumented"]:
+                blocks.append(f"oracle case {c['id']} pending "
+                              f"({c['pending_entries']} observation(s) owed "
+                              f"on live instrumentation)")
+        return blocks
+
+    def oracle_face(self) -> dict:
+        """The decide-output face (#108): per-case red/green/pending counts —
+        the honest progress signal, ALWAYS present (the issue's primary
+        progress face). Without a verdict file the face is all-zero + an
+        explicit ``absent`` marker (legacy workspaces report an absent
+        oracle face, never fake counts); a corrupt file reports zeros with
+        the cause named in the BLOCKED action."""
+        st = self.oracle_status()
+        counts = {"red": 0, "green": 0, "pending": 0}
+        for c in st["cases"]:
+            counts[{"fail": "red", "pass": "green",
+                    "pending": "pending"}[c["status"]]] += 1
+        face = {**counts,
+                "low_discriminativity": list(st["low_discriminativity"]),
+                "blocked": [c["id"] for c in st["cases"]
+                            if c["status"] == "fail"
+                            or (c["status"] == "pending"
+                                and c["instrumented"])]}
+        if st["error"] is None and not st["cases"]:
+            face["absent"] = True
+        return face
+
+    def goal_op(self) -> dict:
+        """#147 declared-coverage classification (lazy + cached).
+
+        See _load_goal_op for the classification contract. Pure reads —
+        the resume path (emit_snapshot=False) stays side-effect free."""
+        if self._goal_op is None:
+            self._goal_op = _load_goal_op(self.workspace)
+        return self._goal_op
+
+    def armed_cases(self) -> list:
+        """#147: ARMED oracle cases — cases with live instrumentation (the
+        #108 `instrumented` flag). A scaffold case (never instrumented) is
+        not coverage: the runner never ran it against a live client, so it
+        cannot witness the deliverable."""
+        return [c for c in self.oracle_status()["cases"]
+                if c["instrumented"]]
+
+    def coverage_blocks(self) -> list[str]:
+        """#147: the DECLARED oracle-coverage gate — zero or one reason.
+
+        The final semantics (issue body + owner amendments):
+          - true legacy (no contract files) -> silent, #108 untouched;
+          - contract owed but the operationalization missing / invalid /
+            unstamped -> COVERAGE_UNDECLARED (fail-closed on the
+            undeclared, named reason + cause);
+          - generalization required|unknown AND zero armed cases ->
+            COVERAGE_MISSING (an absent verdict file is this block, never
+            untouched — the documented _load_oracle_status fail-open is
+            revoked at this gate for contracted workspaces);
+          - required|unknown + armed cases -> silent here (per-case
+            red/pending stays oracle_blocks()'s call);
+          - not-applicable -> silent (the DECLARED fast path — the
+            timestamped declaration is the audit record; a red verdict on
+            an existing case still blocks via oracle_blocks(): a
+            declaration covers absence of coverage, not failed cases)."""
+        op = self.goal_op()
+        if op["legacy"]:
+            return []
+        if not op["present"] or not op["valid"]:
+            cause = op["error"] or "; ".join(op["errors"]) or "undeclared"
+            return [f"{COVERAGE_UNDECLARED} ({GOAL_OP_NAME}: {cause})"]
+        if op["generalization"] in ("required", "unknown"):
+            if not self.armed_cases():
+                return [COVERAGE_MISSING]
+        return []
 
     def discovery_reason(self) -> str:
         """#147 discovery scan, cached. Computed only when DRAIN asks for it."""
@@ -660,7 +1023,9 @@ class _DecideInputs:
                     reason = (
                         f"{len(discoveries)} unconsumed discovery(s) in {names} "
                         f"-> create child obligations or record materiality rejection")
-            except Exception as exc:
+            except _GATE_INPUT_EXC as exc:
+                # #103 tiering: obligation-gate input; degradation stays
+                # VISIBLE via the explicit "scan unavailable" reason.
                 reason = f"discovery scan unavailable ({type(exc).__name__})"
             self._discovery_reason = reason
         return self._discovery_reason
@@ -682,6 +1047,9 @@ class _DecideInputs:
                             f"{c['fact_a']} <-> {c['fact_b']}" for c in conflicts)
                         reason = f"GLOBAL CONTRADICTION: {pairs}"
                 except Exception as exc:  # fail-closed: cannot verify → cannot converge
+                    # #103 classification: judgment input handled as an
+                    # explicit surfaced reason (any exception BLOCKS with
+                    # the cause) — intentional blanket, keep.
                     reason = f"contradiction scan unavailable ({type(exc).__name__})"
             self._contradiction_reason = reason
         return self._contradiction_reason
@@ -698,7 +1066,7 @@ class _DecideInputs:
             try:
                 import ask_for_direction_gate as afdg
                 ids = list(afdg.find_ladder_exhaustion(self.workspace))
-            except Exception:
+            except Exception:  # fail-open: telemetry side channel (event-label flavor only)
                 ids = []
             open_ids = {c["id"] for c in self.opens}
             self._ladder_ids = [i for i in ids if i in open_ids]
@@ -724,7 +1092,8 @@ def _decide_inputs(workspace: Path) -> _DecideInputs:
 
     # M2 completeness gates + note layer (diagnostics regardless of verdict)
     orphans = _orphan_terminal_claims(reg, pq_ids)
-    unverified_pqs = _unverified_primary_questions(reg, task_spec)
+    unverified_pqs = _unverified_primary_questions(reg, task_spec,
+                                                   workspace=workspace)
     pq_note_gaps = _note_layer_gaps(workspace, pq_ids, reg)
 
     blocked_claims = [c for c in opens if c["blocked"]]
@@ -813,7 +1182,31 @@ def _stuck_workers_present(s: _DecideInputs) -> bool:
     # #595: silent-detect — collected stuck_workers were never consumed by the
     # machine. Firing here escalates to BLOCKED so orchestrator intervention
     # can resolve instead of looping against a frozen worker.
+    # #98: now probed in DRAIN too — the drained claim face must not read
+    # CONVERGED while a worker has gone silent.
     return bool(s.stuck)
+
+
+def _active_workers_present(s: _DecideInputs) -> bool:
+    # #98 DRAIN leg: work is in flight even when the claim face looks empty
+    # (IN_PROGRESS is excluded from opens by design). A drained claim face
+    # with a live worker means the loop is busy, not done — poll, never
+    # deliver.
+    return s.active > 0
+
+
+def _oracle_case_red(s: _DecideInputs) -> bool:
+    # #108: the oracle runner's verdict joins the completion transaction —
+    # the acceptance face can no longer be red while the judgment face reads
+    # CONVERGED. Blocks on a RED case, on a PENDING case with live
+    # instrumentation ("unknown" is not "pass"), and on an unreadable
+    # verdict file (fail-closed); a missing file is legal (legacy
+    # workspaces, no runner yet) — see oracle_blocks().
+    # #147: the declared-coverage gate composes into the same acceptance
+    # event — an undeclared operationalization, or a declared
+    # required/unknown with zero armed cases, blocks exactly here (no
+    # second probe row; the issue scopes the gate INTO the oracle face).
+    return bool(s.oracle_blocks() or s.coverage_blocks())
 
 
 def _work_no_free_slot(s: _DecideInputs) -> bool:
@@ -860,6 +1253,8 @@ _EVENT_PREDICATES = {
     Event.WORK_AND_FREE_SLOT: _work_and_free_slot,
     Event.PARTIALS_AND_FREE_SLOT: _partials_and_free_slot,
     Event.STUCK_WORKERS_PRESENT: _stuck_workers_present,
+    Event.ACTIVE_WORKERS_PRESENT: _active_workers_present,
+    Event.ORACLE_CASE_RED: _oracle_case_red,
     Event.WORK_NO_FREE_SLOT: _work_no_free_slot,
     Event.FAILURE_ARTIFACTS_DUE: _failure_artifacts_due,
     Event.LADDER_REQUIRED_BLOCKER: _ladder_required_blocker,
@@ -904,7 +1299,7 @@ def _scan_proven_facts(workspace: Path) -> dict[str, str]:
     proven: dict[str, str] = {}
     try:
         text = idx.read_text(encoding="utf-8", errors="replace")
-    except Exception:
+    except OSError:  # #103: only a read can fail here — narrowed, no blanket
         return {}
     for line in text.splitlines():
         if "|" not in line:
@@ -951,7 +1346,7 @@ def _detect_contradiction(hyp_body: str, candidates: list[str],
                         if cand.lower() == after:
                             snippet = conclusion[:80]
                             return f"Contradicted: {fid} ({kw.rstrip()} {cand}, conclusion: {snippet})"
-    except Exception:
+    except Exception:  # fail-open: telemetry side channel (annotation flavor on an already-blocking verdict)
         pass
     return None
 
@@ -966,7 +1361,7 @@ def _act_open_hypothesis(s: _DecideInputs) -> str:
     # Scan PROVEN facts for contradiction annotations
     try:
         proven = _scan_proven_facts(s.workspace)
-    except Exception:
+    except OSError:  # #103: annotation input, read-only failure mode — narrowed
         proven = {}
     annotations: list[str] = []
     for h in hyps:
@@ -1018,6 +1413,44 @@ def _act_saturated_queue(s: _DecideInputs) -> str:
             f"Poll workers - do not wait idly.")
 
 
+def _act_active_workers(s: _DecideInputs) -> str:
+    # #98 DRAIN leg: healthy in-flight work on a drained claim face. SATURATED
+    # (busy: poll) rather than BLOCKED (escalate) — nothing is wrong, the loop
+    # is simply not done. Delivery over live work is forbidden either way.
+    return (f"{s.active} worker(s) still in flight on an otherwise-drained "
+            f"claim surface ({s.free_slots} free slot(s) under cap {WORKER_CAP}). "
+            f"Poll workers - do not deliver; re-check convergence after they report.")
+
+
+def _act_oracle_red(s: _DecideInputs) -> str:
+    # #108: name the offending cases — the orchestrator fixes the
+    # implementation (or the case) and re-runs oracle_runner.py.
+    # #147: the declared-coverage reasons ride the same face. A pure
+    # coverage block (no case verdict exists to name) gets the coverage
+    # directive verbatim, plus the v0.1.5 SKELETON marker (explicitly
+    # interim): the segment boundary is a POLICY point over the designed
+    # action space and currently routes through failure-analysis routing;
+    # the policy-driven action space is the #12/#13/#59 v0.2 design
+    # landing — no operators/rollouts are implemented here.
+    cov = s.coverage_blocks()
+    case_blocks = s.oracle_blocks()
+    marker = (" [interim #147] the segment boundary routes through "
+              "failure-analysis routing; the policy-driven action space "
+              "is the #12/#13/#59 v0.2 design landing.")
+    if cov and not case_blocks:
+        return (f"Cannot CONVERGE: {cov[0]} -> deliver the declared "
+                f"verification: arm and pass oracle cases via "
+                f"oracle_runner.py (required/unknown generalization), or "
+                f"complete goal-operationalization.yaml first."
+                f"{marker}")
+    blocks = "; ".join(case_blocks + cov)
+    return (f"Cannot CONVERGE: oracle runner verdict is not clean ({blocks}) "
+            f"-> fix the implementation or strengthen the case, re-run "
+            f"oracle_runner.py. A red or pending-instrumented case is not "
+            f"satisfiable: 'unknown' is not 'pass' (#108)."
+            f"{marker if cov else ''}")
+
+
 def _act_stuck_workers(s: _DecideInputs) -> str:
     """#595: a worker older than STUCK_MINUTES is the loud signal we were
     silently collecting. Escalate to BLOCKED + drop a per-workspace
@@ -1026,12 +1459,26 @@ def _act_stuck_workers(s: _DecideInputs) -> str:
     state machine must still return a verdict even on a read-only filesystem
     or a permission error. Order probe (SCHEDULE index 2) gates this: it
     fires BEFORE WORK_NO_FREE_SLOT/FAILURE/LADDER/UNEXPECTED, so a stuck
-    worker always wins over those flavors."""
+    worker always wins over those flavors.
+
+    #11 composition: stuck entries flagged ``dead`` (silent >
+    DEAD_WORKER_MINUTES — the worker is GONE, backtrack_gate territory ends)
+    additionally get a death record with the artifact snapshot
+    (runs/.worker-death-<stem>.json) BEFORE the reopen, so the report, the
+    summary, and the reopened claim's history line all reference it: the
+    resume contract is continue-from-the-snapshot, not redo-from-zero."""
     stems = ", ".join(f"{w['worker']} ({w['age_min']}m)" for w in s.stuck)
     summary = (f"Stuck worker(s) detected: {stems}. "
                f"Older than {_load_worker_lib().STUCK_MINUTES}m with status "
                f"in-progress. Orchestrator intervention required before any "
                f"further dispatch.")
+    dead = [w for w in s.stuck if w.get("dead")]
+    death_paths: list = []
+    if dead:
+        try:
+            death_paths = _worker_death.write_death_records(s.workspace, dead)
+        except OSError:
+            death_paths = []
     try:
         report = s.workspace / "runs" / ".stuck-report.md"
         report.parent.mkdir(parents=True, exist_ok=True)
@@ -1042,17 +1489,53 @@ def _act_stuck_workers(s: _DecideInputs) -> str:
         lines.append("")
         lines.append("## Workers")
         for w in s.stuck:
-            lines.append(f"- **{w['worker']}** — age {w['age_min']} min")
+            suffix = ""
+            if w.get("dead"):
+                suffix = (f" — **DEAD** (silent > {_DEAD_WORKER_MINUTES}m, "
+                          f"death record: runs/"
+                          f"{_worker_death.RECORD_NAME.format(stem=w['worker'])})")
+            lines.append(f"- **{w['worker']}** — age {w['age_min']} min{suffix}")
         lines.append("")
+        if dead:
+            lines.append("## Dead workers (#11)")
+            for w in dead:
+                rec = _worker_death.record_path(s.workspace, w["worker"])
+                lines.append(f"- **{w['worker']}** — gone (no writes > "
+                             f"{_DEAD_WORKER_MINUTES}m). Death record: "
+                             f"{rec.name} carries the artifact snapshot "
+                             f"(已完成产物清单).")
+            lines.append("")
         lines.append("## Action")
         lines.append("Investigate each worker above. Either: (a) restart the "
                      "worker if it is genuinely hung, or (b) close the worker "
                      "if the claim should be re-dispatched. Do NOT dispatch "
                      "more work while stuck workers remain.")
+        if dead:
+            lines.append("")
+            lines.append("### Death-resume contract (#11)")
+            lines.append("For each DEAD worker above: its claim was flipped "
+                         "back to OPEN with the death record referenced. "
+                         "Dispatch a RESUME claim that reads the death "
+                         "record's artifacts list first — verify and absorb "
+                         "the existing products, continue from where the "
+                         "worker died. Do NOT redo from zero.")
         report.write_text("\n".join(lines), encoding="utf-8")
     except OSError:
         # Non-fatal: the verdict and summary still surface to the caller.
         pass
+    if dead:
+        # #11: the guidance line matters as much as the mechanism — name the
+        # records and the continue-from contract right in the decide summary.
+        rec_names = ", ".join(
+            f"runs/{_worker_death.RECORD_NAME.format(stem=w['worker'])}"
+            for w in dead)
+        summary += (f" Dead worker(s) (no writes > {_DEAD_WORKER_MINUTES}m): "
+                    f"{len(dead)}. Death record(s) with artifact snapshot: "
+                    f"{rec_names}. Resume contract: dispatch a RESUME claim "
+                    f"referencing the artifacts list — continue from where "
+                    f"the worker died, do not redo from zero.")
+        if death_paths:
+            summary += f" ({len(death_paths)} record(s) written this scan.)"
     # #607 闭环: a stuck worker must FREE its claim — claim_expiry covers
     # IN_PROGRESS but has zero mechanical callers, so the loop had NO machine
     # path out of IN_PROGRESS. Reopen stuck workers' IN_PROGRESS claims →
@@ -1073,7 +1556,9 @@ def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
 
     Worker stem convention is ``worker-status-<claim-ish>-<suffix>``; match by
     prefix (``worker-status-C-400*`` → claim ``C-400``). Returns the reopened
-    claim ids; OSError family propagates to the caller's fail-open."""
+    claim ids; OSError family propagates to the caller's fail-open.
+    #11: claims reopened from DEAD workers get a death-record-referencing
+    history line — that reference IS the resume signal."""
     import yaml as _yaml
     reg = s.workspace / "claim-register.yaml"
     if not reg.exists():
@@ -1081,6 +1566,7 @@ def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
     data = _yaml.safe_load(reg.read_text(encoding="utf-8")) or {}
     claims = data.get("claims") or []
     prefixes = []
+    dead_prefixes: dict[str, str] = {}
     for w in s.stuck:
         stem = w["worker"].removeprefix("worker-status-")
         # strip ONE trailing retry/version token (C-400v2 → C-400, C400v2 →
@@ -1088,7 +1574,10 @@ def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
         # trailing [vV]<digits> suffix or a separate hyphenated numeric tail
         # is removed).
         m = re.search(r"^(.*?)[vV]\d+$", stem) or re.search(r"^(.*)-\d+$", stem)
-        prefixes.append(m.group(1) if m and m.group(1) else stem)
+        pfx = m.group(1) if m and m.group(1) else stem
+        prefixes.append(pfx)
+        if w.get("dead"):
+            dead_prefixes[_worker_death.norm_key(pfx)] = w["worker"]
     reopened: list[str] = []
     now = utc_now()
     norm = lambda x: x.replace("-", "").replace("_", "").lower()
@@ -1097,11 +1586,22 @@ def _reopen_stuck_claims(s: _DecideInputs) -> list[str]:
         if not cid or c.get("status") != "IN_PROGRESS":
             continue
         # shape-insensitive compare: C400 ≡ C-400 (worker stems drop the id's hyphen)
+        matched_dead = next((stem for pfx_key, stem in dead_prefixes.items()
+                             if norm(cid) == pfx_key
+                             or norm(cid).startswith(pfx_key)
+                             or pfx_key.startswith(norm(cid))), None)
         if any(norm(cid) == norm(p) or norm(cid).startswith(norm(p))
                or norm(p).startswith(norm(cid)) for pfx in prefixes for p in [pfx]):
             c["status"] = "OPEN"
             hist = c.setdefault("history", [])
-            hist.append(f"#607 reopened from IN_PROGRESS (worker stuck) {now}")
+            if matched_dead:
+                hist.append(
+                    f"#11 death-resume reopened from IN_PROGRESS (worker dead; "
+                    f"record: runs/"
+                    f"{_worker_death.RECORD_NAME.format(stem=matched_dead)}) "
+                    f"{now}")
+            else:
+                hist.append(f"#607 reopened from IN_PROGRESS (worker stuck) {now}")
             reopened.append(cid)
     if reopened:
         data["_audit"] = (data.get("_audit") or []) + [
@@ -1136,11 +1636,22 @@ STAGE_PROBES = {
     State.SCHEMA: [Event.SCHEMA_INVALID, Event.WORK_PENDING, Event.DRAINED],
     # DRAIN: the pre-#443 completion-transaction order, frozen by the
     # regression anchor (orphan > unverified > note-gap > discovery >
-    # contradiction > clean).
+    # contradiction > clean). #98: worker gates sit AFTER that frozen order
+    # (every completeness gate keeps its verdict priority) but BEFORE the
+    # DRAIN_CLEAN catch-all — a drained claim face with live/stuck workers
+    # is busy (SATURATED: poll) or escalated (BLOCKED: #595 action, which
+    # also frees the stuck claims per #607), never CONVERGED. STUCK precedes
+    # ACTIVE: a stuck worker is also counted active, and its escalation must
+    # win. #108: the oracle verdict joins right after the frozen
+    # completeness order and before the worker liveness gates — a red case
+    # is an acceptance-face fact about the analysis itself (escalate), a
+    # different class from worker bookkeeping (poll).
     State.DRAIN: [Event.ORPHAN_TERMINAL_CLAIM, Event.PRIMARY_Q_UNVERIFIED,
                   Event.NOTE_LAYER_GAP, Event.OPEN_HYPOTHESIS_AT_CLOSE,
                   Event.DISCOVERY_UNCONSUMED,
                   Event.GLOBAL_CONTRADICTION, Event.ANOMALY_DETECTED,
+                  Event.ORACLE_CASE_RED,
+                  Event.STUCK_WORKERS_PRESENT, Event.ACTIVE_WORKERS_PRESENT,
                   Event.DRAIN_CLEAN],
     # SCHEDULE: dispatchable work first, then saturation, then WHY nothing
     # is dispatchable (#495 failure artifacts, #497 ladder flavors), then
@@ -1166,6 +1677,15 @@ TRANSITIONS = {
     (State.DRAIN, Event.DISCOVERY_UNCONSUMED): (State.DISPATCH, _act_discovery),
     (State.DRAIN, Event.GLOBAL_CONTRADICTION): (State.BLOCKED, _act_contradiction),
     (State.DRAIN, Event.ANOMALY_DETECTED): (State.BLOCKED, _act_anomaly),
+    # #98: worker predicates on the drained claim face — one #595 stuck
+    # semantics shared with SCHEDULE (same builder: stuck report + #607
+    # reopen), plus the DRAIN-only busy-poll face for live workers.
+    (State.DRAIN, Event.STUCK_WORKERS_PRESENT): (State.BLOCKED, _act_stuck_workers),
+    (State.DRAIN, Event.ACTIVE_WORKERS_PRESENT): (State.SATURATED, _act_active_workers),
+    # #108: the acceptance face escalates — a red/pending-instrumented case
+    # means the analysis is wrong or unfinished, BLOCKED (fix + re-run the
+    # runner), never a poll verdict.
+    (State.DRAIN, Event.ORACLE_CASE_RED): (State.BLOCKED, _act_oracle_red),
     (State.DRAIN, Event.DRAIN_CLEAN): (State.CONVERGED, _act_converged),
     (State.SCHEDULE, Event.WORK_AND_FREE_SLOT): (State.DISPATCH, _act_dispatch_top),
     (State.SCHEDULE, Event.PARTIALS_AND_FREE_SLOT): (State.DISPATCH_VERIFIER, _act_verify_partials),
@@ -1239,6 +1759,32 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
         "note_layer_gaps": snap.pq_note_gaps,
         "pq_parse_error": snap.pq_error,
     }
+    # #108: the honest progress face — per-case red/green/pending counts,
+    # ALWAYS present (the issue's primary progress signal, the replacement
+    # for open_count in heartbeat reports). Without a verdict file the face
+    # carries all-zero counts + an explicit absent marker.
+    decision["oracle"] = snap.oracle_face()
+    # #147: the declared-coverage face — the #128 generalization declaration
+    # exactly as the gate read it. Attached ONLY when the workspace carries
+    # a coverage contract (goal-operationalization.yaml or task-oracle.yaml);
+    # a true-legacy workspace predates the contract and keeps its
+    # byte-frozen decide() shape (the #829 conditional-key precedent — the
+    # frozen anchor matrix has no contract-bearing case and stays valid
+    # without a re-pin).
+    op = snap.goal_op()
+    if not op["legacy"]:
+        cov = snap.coverage_blocks()
+        decision["declared_coverage"] = {
+            "declared": bool(op["present"] and op["valid"]),
+            "generalization": op["generalization"],
+            "declared_ts": op["declared_ts"],
+            "stamped": bool(op["declared_ts"]),
+            "post_dispatch": op["post_dispatch"],
+            "armed_cases": len(snap.armed_cases()),
+            "status": ("declared" if op["present"] and op["valid"]
+                       else "invalid" if op["present"] else "undeclared"),
+            "blocks": cov,
+        }
     # #634 Part A: PARK — every open claim waits on an EXTERNAL gate
     # (blocker external:true), no active workers, no partials pending.
     # That is legal idle, not a coerced BLOCKED/DISPATCH that burns ticks
@@ -1261,7 +1807,7 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
                                       "blockers; no active workers; no "
                                       "pending partials")
                 decision["wake_condition"] = wake
-        except Exception:  # noqa: BLE001 — downgrade is advisory-safe
+        except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (advisory PARK downgrade; failure keeps the machine verdict)
             pass
     # #634: mission-level stall fingerprint — ΔV_m flat K checkpoints while
     # open work remains. Proposal semantics: annotate + emit, never mutate
@@ -1270,34 +1816,32 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
     # conditional-key precedent).
     try:
         from mission_stall import stall_mission
-        ms = stall_mission(workspace)
+        ms = stall_mission(workspace, emit=emit_snapshot)
         if ms.get("stalled"):
             decision["mission_stall"] = ms
-            # #823-P3: stall response face — THINK bet guidance, flag-gated.
-            # Conditional-key (anchored snapshots stay identical otherwise).
+            # #823-P3: stall response face — THINK bet guidance (always-on
+            # since #51). Conditional-key (anchored snapshots stay identical
+            # when no stall is present).
             try:
-                import value_config as _vc
-                if _vc.is_enabled():
-                    from think_seat import bets_owed as _bets_owed
-                    decision["stall_response"] = {
-                        "bets_owed": _bets_owed(Path(workspace)),
-                        "guidance": ("stall confirmed - file a falsifiable "
-                                     "bet via think_seat.file_bet "
-                                     "(predicted_observation required); the "
-                                     "bet leads the next dispatch"),
-                    }
-            except Exception:  # noqa: BLE001 — advisory face only
+                from think_seat import bets_owed as _bets_owed
+                decision["stall_response"] = {
+                    "bets_owed": _bets_owed(Path(workspace)),
+                    "guidance": ("stall confirmed - file a falsifiable "
+                                 "bet via think_seat.file_bet "
+                                 "(predicted_observation required); the "
+                                 "bet leads the next dispatch"),
+                }
+            except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (advisory face only)
                 pass
             if emit_snapshot:
                 from kunglao_log import emit as _emit_stall
                 _emit_stall(workspace, actor="convergence_check",
                             action="mission_stall",
                             detail=json.dumps(ms, ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — fingerprint unavailable → no annotation
+    except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (fingerprint unavailable → no annotation)
         pass
-    # #823 A2: N-arm first-order value signals — shadow posture, flag-gated.
-    # Flag off → the dict comes back untouched (no key, no emit).
-    # Flag misread raises FlagError by design (experiment fail-loud contract).
+    # #823 A2: N-arm first-order value signals — shadow posture (always-on
+    # since #51: the dict gains the `value_signals` key and one shadow emit).
     import rho_checkpoint
     # #829: cross-carrier consistency — CONVERGED may not stand on drifting
     # carriers. Checker exception counts as drift (fail-closed for the
@@ -1306,7 +1850,7 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
         try:
             from carrier_consistency import check as _carrier_check
             cv = _carrier_check(workspace)
-        except Exception as exc:  # noqa: BLE001 — drift includes checker error
+        except Exception as exc:  # noqa: BLE001 — fail-closed via explicit violation: drift includes checker error (#103: intentional blanket, keep)
             cv = {"ok": False,
                   "violations": ["(x) carrier checker error: " + str(exc)]}
         if not cv.get("ok", True):
@@ -1328,7 +1872,7 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
     try:
         from heartbeat import gap_alarm as _gap_alarm
         gap = _gap_alarm(Path(workspace))
-    except Exception:  # noqa: BLE001 — advisory-safe, never deadlock decide
+    except Exception:  # noqa: BLE001 — fail-open: telemetry side channel (advisory alarm, never deadlocks decide)
         gap = None
     if gap is not None and gap.get("alarm") is True:
         decision["heartbeat_gap"] = gap
@@ -1337,7 +1881,12 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
             _emit_gap(workspace, actor="convergence_check",
                       action="heartbeat_gap",
                       detail=json.dumps(gap, ensure_ascii=False))
-    result = rho_checkpoint.attach_signals(workspace, decision)
+    # emit_snapshot=False (resume's #466 read-only contract) must quiesce
+    # the #51 always-on recording too: signals are computed and attached
+    # identically, but the value/rho persistence stays off (#51 regression:
+    # resume appended rho rows + wrote runs/infeasible-state.json).
+    result = rho_checkpoint.attach_signals(workspace, decision,
+                                           emit=emit_snapshot)
     if emit_snapshot:
         _emit_decision_snapshot(workspace, result)
     return result
@@ -1360,7 +1909,7 @@ def _emit_decision_snapshot(ws, d: dict) -> None:
             rows = pr.priority_ratio(claims, {}, pr.EvidenceView())
             top = [{"id": r.claim_id, "score": round(float(r.score), 4)}
                    for r in rows[:5]]
-        except Exception:
+        except Exception:  # fail-open: telemetry side channel (top-5 preview inside the snapshot)
             top = []
         from kunglao_log import emit
         emit(ws, actor="convergence_check", action="decision_snapshot",
@@ -1369,7 +1918,7 @@ def _emit_decision_snapshot(ws, d: dict) -> None:
                  "status_counts": counts,
                  "top_priorities": top,
              }, ensure_ascii=False))
-    except Exception:
+    except Exception:  # fail-open: telemetry side channel (snapshot emit, #287 contract)
         pass
 
 
@@ -1389,6 +1938,22 @@ def _human(d: dict) -> str:
         lines.append(f"w15 (done without files): {'; '.join(w15)}")
     if d["active_blockers"]:
         lines.append(f"blockers:       {d['active_blockers']}")
+    o = d.get("oracle")  # #108: the honest progress face (always present)
+    if o is not None:
+        if o.get("absent"):
+            lines.append("oracle cases:   no runner status (absent)")
+        else:
+            line = (f"oracle cases:   {o['green']} green / {o['red']} red / "
+                    f"{o['pending']} pending")
+            if o.get("low_discriminativity"):
+                line += (f" (low-discriminativity: {o['low_discriminativity']}"
+                         f" — strengthen those cases)")
+            lines.append(line)
+    dc = d.get("declared_coverage")  # #147: the declared-coverage face
+    if dc is not None:
+        lines.append(f"declared coverage: {dc['status']} "
+                     f"(generalization: {dc['generalization']}, "
+                     f"armed cases: {dc['armed_cases']})")
     if d.get("failure_blocked"):
         lines.append(f"failure-blocked: {d['failure_blocked']} (run failure_analysis_gate.py <ws> before re-dispatch or NEGATIVE)")
     if d["open_claims"] and d["open_count"] <= 12:
@@ -1414,9 +1979,20 @@ def main(argv: list[str] | None = None) -> int:
     workspace = _resolve_ws(args.workspace)
     if not (workspace / "claim-register.yaml").exists():
         print(f"FAIL: no claim-register.yaml under {workspace}", file=sys.stderr)
-        return 64
+        return EXIT_MISSING_WORKSPACE
 
-    d = decide(workspace)
+    # #99: decide() is untrusted input territory (claim-register.yaml is
+    # hand- and hook-edited YAML). An unguarded crash exits rc=1 — the SAME
+    # byte as EXIT_DISPATCH — so rc-based consumers read the crash as
+    # "dispatch now". Contain it: distinct EXIT_CRASHED byte, machine-
+    # readable stdout, traceback preserved on stderr.
+    try:
+        d = decide(workspace)
+    except Exception:  # noqa: BLE001 — #99: any crash must leave the decided-state byte space
+        import traceback
+        traceback.print_exc()
+        print(json.dumps({"decision": "CRASHED"}, ensure_ascii=False))
+        return EXIT_CRASHED
     _append_ledger(workspace, d)  # silent side channel for convergence_health.py
     # #287 observability: mirror the convergence decision to the structured
     # event log. #459: detail now carries the decision plus the counts a
@@ -1429,7 +2005,7 @@ def main(argv: list[str] | None = None) -> int:
                      f"partial={d['partial_count']} slots={d['free_slots']} "
                      f"workers={d['active_workers']}"),
              exit=d["exit_code"])
-    except Exception:
+    except Exception:  # fail-open: telemetry side channel (event-log mirror, #287)
         pass
     if args.json:
         print(json.dumps(d, indent=2, ensure_ascii=False))
@@ -1439,6 +2015,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

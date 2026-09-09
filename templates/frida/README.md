@@ -15,6 +15,7 @@ home = tools/frida/, templates = templates/frida/).
 | --- | --- | --- |
 | `cfg-hook.js.tmpl` | Frida CFG capture hook: `Interceptor.attach` on every target export, recording (caller, target, args_count, thread_id, ts) into a shared buffer, flushed in batches as JSONL to OUTFILE | TARGET_MODULE, TARGET_EXPORTS (comma-separated list), CALL_DEPTH, OUTFILE, SAMPLE_SHA256 |
 | `cfg-analyze.py.tmpl` | trace reduction analyzer: unique caller→callee edge table + per-callee call counts + top-N callers, writing edges.csv + summary.md (deterministic ordering, idempotent overwrite, explicit inputs/outputs) | TRACE_FILE, SAMPLE_SHA256, OUT_DIR |
+| `windowed-stalker.js.tmpl` | windowed instruction-tracing skeleton: `Stalker.follow` on-enter / `Stalker.unfollow` on-leave, `Stalker.exclude` for the non-target module set, macro census (onCallSummary hot offsets) before micro instruction filtering, memory-op filter shape; Frida ≥16 API audit in-file (legacy static `Memory.read*`/`Memory.write*` → NativePointer instance forms) | TARGET_MODULE, EXCLUDE_MODULES, OUTFILE, SAMPLE_SHA256 |
 
 ## When to use
 
@@ -24,6 +25,13 @@ home = tools/frida/, templates = templates/frida/).
 - **cfg-analyze**: after the hook produces a trace (already exported via the
   VM channel), reduce it to edge tables and statistics; deterministic output
   — same input reproduces and diffs cleanly.
+- **windowed-stalker**: when you need instruction-level visibility bounded
+  to the target's own execution window (follow-on-enter / unfollow-on-leave)
+  — macro census first (onCallSummary hot offsets), micro instruction
+  filter second. First **adapt-expected** template of the set: the module
+  set, the offset resolution path, and the memory-op filter predicate are
+  the known-variance regions to rework per target (consume: adapt, not
+  fill).
 
 ## Instantiation
 

@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 """A5 (#823): shadow promotion gates — the three written criteria that must
-pass before the N-arm graduates from shadow to canary (four-stage gate,
-AUDIT_REPORT §14; plan Task A5).
+pass before the value loop graduates from shadow to canary (four-stage gate,
+AUDIT_REPORT §14; plan Task A5). Always-on since #51 (#51 removed the
+experiment switch).
 
 1. ρ VOC > 0.7 — ρ sequence correlates with true progress on a synthetic
    trajectory (Pearson).
 2. fingerprint zero false-positives — a synthetic GOOD trajectory (belief
    moves between same-type actions) never trips the circuit.
 3. prior correction does not degrade the synthetic baseline ranking —
-   neutral priors reproduce the flag-off order exactly.
+   neutral priors reproduce the base order exactly.
 """
 
 import priority_ratio as pr
 import rho_checkpoint as rc
-import value_config
 import zero_output_fingerprint as zf
 
 
@@ -48,7 +48,12 @@ def test_gate_2_fingerprint_zero_false_positives(tmp_path):
         assert r["circuit_broken"] is False, f"false break at round {i}"
 
 
-def test_gate_3_prior_correction_no_degradation(monkeypatch):
+def test_gate_3_seeded_ranking_deterministic(monkeypatch):
+    """#107 re-pin: the prior-correction term is deleted with the weighted
+    formula; the gate now pins the equivalent no-degradation property of the
+    rebuilt ranker — the default-seed ranking is stable and the worth
+    channel (the one sanctioned exogenous input) does not reshuffle the arm
+    set, only reweights it."""
     claims = [
         {"id": "C-001", "status": "OPEN", "statement": "c2 config extract",
          "evidence_tier_attempted": 1, "promotion_attempts": 0},
@@ -57,11 +62,10 @@ def test_gate_3_prior_correction_no_degradation(monkeypatch):
         {"id": "C-003", "status": "OPEN", "statement": "protocol restore",
          "evidence_tier_attempted": 1, "promotion_attempts": 0},
     ]
-    monkeypatch.delenv(value_config.ENV_NAME, raising=False)
+    monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
     base = [a.claim_id for a in pr.priority_ratio(claims, {}, pr.EvidenceView())]
-    monkeypatch.setenv(value_config.ENV_NAME, "1")
-    neutral = [a.claim_id for a in pr.priority_ratio(
-        claims, {}, pr.EvidenceView(prior_p_complete=1.0))]
-    uniform = [a.claim_id for a in pr.priority_ratio(
-        claims, {}, pr.EvidenceView(prior_p_complete=0.5))]
-    assert base == neutral == uniform  # top action preserved in all three
+    again = [a.claim_id for a in pr.priority_ratio(claims, {}, pr.EvidenceView())]
+    worthed = [a.claim_id for a in pr.priority_ratio(
+        claims, {}, pr.EvidenceView(value_class_weights={"rce": 3.0}))]
+    assert base == again
+    assert sorted(base) == sorted(worthed)  # reweighted, never reshuffled

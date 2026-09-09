@@ -10,7 +10,7 @@ canonical since 2026-08-19 and v0 has had no production callers.
 
 This test file encodes the governance contract:
 
-1. The retirement ledger `references/mechanisms.md` exists, is a single
+1. The retirement ledger `references/governance/mechanisms.md` exists, is a single
    source for mechanism lifecycle (lifecycle column = ACTIVE | DEPRECATED
    | RETIRED), and lists v0 dispatch as RETIRED.
 2. The mechanism ledger is wired into the spec-impl gap table
@@ -34,7 +34,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REFERENCES_DIR = REPO_ROOT / "references"
-MECHANISMS_LEDGER = REFERENCES_DIR / "mechanisms.md"
+MECHANISMS_LEDGER = REFERENCES_DIR / "governance" / "mechanisms.md"
 MECHANISMS_STATUS = (
     REPO_ROOT / "openspec" / "archive" / "issue-446-governance-fg"
     / "mechanisms-status.md"
@@ -44,7 +44,7 @@ MECHANISMS_STATUS = (
 # ---------- helpers ----------
 
 def _load_references_mechanisms() -> str:
-    """Return the raw text of references/mechanisms.md (raises if missing)."""
+    """Return the raw text of references/governance/mechanisms.md (raises if missing)."""
     assert MECHANISMS_LEDGER.exists(), (
         f"governance ledger missing: {MECHANISMS_LEDGER.relative_to(REPO_ROOT)}"
         " — issue #446 acceptance criterion #1 is unsatisfied."

@@ -26,6 +26,14 @@ except ImportError:  # pragma: no cover - Windows
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# tests/ is an import root under pytest's prepend import mode, so the bare
+# module name resolves (same convention as tests/conftest.py -> _factories).
+# parents[1] above is the pre-existing constant and is NOT the repo root;
+# resolve the repo dir from this file's own location instead.
+REPO_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(REPO_DIR / "tests"))
+from _tiers import DOCS_MODULES, FAST_MODULES, SLOW_MODULES  # noqa: E402
+
 
 # ---------- #369: load-sensitive serialization (cross-process file lock) ----------
 #
@@ -44,9 +52,20 @@ LOAD_SENSITIVE_MODULES = frozenset({
     "test_env_check",             # tick-chain adjacent (issue #369 audited set)
     "test_env_check_gate",        # real subprocess.run probes (timeout=60 each)
     "test_env_ports_wiring",      # tick-chain adjacent (issue #369 audited set)
+    "test_toolchain",             # android stub probes + fixed-port listeners
+    "test_acceptance_689",        # nested smoke run wall-tripwire (load window)
+    "test_acceptance",            # nested smoke run inside run_acceptance()
 })
 LOAD_SENSITIVE_LOCK_NAME = "kunglao-pytest-load-sensitive.lock"
 LOAD_SENSITIVE_ACQUIRE_TIMEOUT_S = 600.0  # generous: several queued suites under load
+
+# xdist affinity: modules that touch the machine-local lock or hold it
+# must land on ONE xdist worker (run with --dist loadgroup), so a lock
+# holder, its waiter and the nested-probe in test_load_lock never contend
+# against their own run. test_load_lock deliberately stays OUT of
+# LOAD_SENSITIVE_MODULES (its module-scoped autouse lock would deadlock the
+# external holder its end-to-end test spawns) — it only joins the grouping.
+XDIST_AFFINITY_EXTRA_MODULES = frozenset({"test_load_lock"})
 
 
 @contextmanager
@@ -86,11 +105,49 @@ def load_sensitive_lock(path=None, timeout: float = LOAD_SENSITIVE_ACQUIRE_TIMEO
 
 def pytest_collection_modifyitems(config, items):
     """Apply the load_sensitive marker via the module registry (single source
-    of truth here — no per-file edits needed in the sensitive test modules)."""
+    of truth here — no per-file edits needed in the sensitive test modules).
+
+    xdist affinity: the family and the lock-probe module share an
+    xdist_group (single-worker execution) — under --dist loadgroup a lock
+    holder, its waiter and the nested lock probes never land on different
+    workers of the same run; without xdist the marker is inert.
+
+    Tier marking: fast / slow from the tests/_tiers.py registries (docs is
+    a routing tag, not a tier). Also records the per-module tier census on
+    the config object — tests/test_tier_census.py asserts over it, so the
+    gate chain can prove no collected test is left unclassified."""
+    census = getattr(config, "_kunglao_tier_census", None)
+    if census is None:
+        census = {}
+        config._kunglao_tier_census = census
     for item in items:
         module = getattr(item, "module", None)
-        if module is not None and module.__name__.rsplit(".", 1)[-1] in LOAD_SENSITIVE_MODULES:
+        if module is None:
+            continue
+        name = module.__name__.rsplit(".", 1)[-1]
+        if name in FAST_MODULES:
+            item.add_marker(pytest.mark.fast)
+            tier = "fast"
+        elif name in SLOW_MODULES:
+            item.add_marker(pytest.mark.slow)
+            tier = "slow"
+        else:
+            tier = "integration"
+        if name in DOCS_MODULES:
+            item.add_marker(pytest.mark.docs)
+        if name in LOAD_SENSITIVE_MODULES:
             item.add_marker(pytest.mark.load_sensitive)
+        if (name in LOAD_SENSITIVE_MODULES
+                or name in XDIST_AFFINITY_EXTRA_MODULES):
+            item.add_marker(pytest.mark.xdist_group("load_sensitive"))
+        entry = census.setdefault(
+            name, {"tier": tier, "items": 0, "dual": 0, "path": None})
+        entry["items"] += 1
+        if (item.get_closest_marker("fast") is not None
+                and item.get_closest_marker("slow") is not None):
+            entry["dual"] += 1
+        if getattr(module, "__file__", None):
+            entry["path"] = module.__file__
 
 
 @pytest.fixture

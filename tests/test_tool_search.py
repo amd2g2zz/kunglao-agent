@@ -81,7 +81,7 @@ def test_tier_t1_returns_all_entries():
     r = run_cli("--tier", "T1", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 38  # 38 since #866-b (ghidra_diff); 37 since #884 (jsvmp-triage); 36 since #728
+    assert out["count"] == 39  # 39 since #46 (ida-decompile, T1); 38 since #866-b (ghidra_diff); 37 since #884 (jsvmp-triage); 36 since #728
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ def test_cost_max_cheap_excludes_deep():
     r = run_cli("--cost-max", "cheap", "--json")
     assert r.returncode == 0, r.stderr
     out = parse_json(r)
-    assert out["count"] == 30  # 30 since #884 (jsvmp-triage, cheap); 29 since #728
+    assert out["count"] == 31  # 31 since #46 (ida-decompile, cheap); 30 since #884 (jsvmp-triage, cheap); 29 since #728
     assert all(t["cost_tier"] in ("probe", "cheap") for t in out["tools"])
     names = {t["name"] for t in out["tools"]}
     assert not (names & DEEP_TOOLS)

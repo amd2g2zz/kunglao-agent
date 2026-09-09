@@ -109,7 +109,11 @@
           "worker": { "type": "string" },
           "minutes": { "type": "number" },
           "last_status": { "type": "string" },
-          "last_tick": { "type": ["string", "null"] }
+          "last_tick": { "type": ["string", "null"] },
+          "dead": {
+            "type": "boolean",
+            "description": "#11: silent > DEAD_WORKER_MINUTES (2x STUCK_MINUTES) — worker gone, death record written (runs/.worker-death-<stem>.json)"
+          }
         },
         "additionalProperties": true
       },

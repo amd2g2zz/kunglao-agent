@@ -54,6 +54,12 @@ RC_STALE_WORKSPACE = 5
 # refusal to its exact remediation.
 RC_HEARTBEAT_VERIFY_FAIL = 6
 
+# The required intake answers (goal verbatim / success criterion /
+# verification method) are missing from task_spec.yaml — analysis entry
+# refuses until the init interview collects them. Never a guessed default:
+# a blank field or an out-of-enum method is missing.
+RC_ORACLE_ANCHORS_MISSING = 7
+
 
 def cmd_decide(args) -> int:
     ws = Path(args.workspace).resolve()
@@ -114,9 +120,38 @@ def cmd_health(args) -> int:
         print(f"FAIL: no {ch.LEDGER_NAME} under {ws} (run convergence_check.py first)",
               file=sys.stderr)
         return ch.EXIT_NO_DATA
-    r = ch.assess(ledger)
+    r = ch.assess(ledger, ws=ws)  # ws -> #127 detector liveness telemetry
     print(ch._human(r))
     return r["exit_code"]
+
+
+def _load_upgrade_module():
+    """#863 Family B loader (same pattern cmd_upgrade uses): the #5
+    pending-merge marker contract (path constants + record reader/clearer)
+    is single-sourced in kunglao_upgrade; check-stale borrows it instead of
+    duplicating the relpaths."""
+    mod_path = Path(__file__).resolve().parent / "kunglao_upgrade.py"
+    return load_module_by_path("kunglao_upgrade", mod_path)
+
+
+def _resolve_pending_merge(ws: Path) -> int:
+    """#5 explicit escape hatch: clear the pending CLAUDE.md manual-merge
+    marker. Idempotent — no marker is a clean rc 0."""
+    up = _load_upgrade_module()
+    if up.pending_merge_record(ws) is None:
+        print(f"no pending CLAUDE.md merge marker under {ws} — nothing to "
+              f"resolve (check-stale semantics unchanged)")
+        return 0
+    try:
+        up.clear_pending_merge(ws)
+    except OSError as exc:
+        print(f"kunglao: FAILED to remove {up.PENDING_MERGE_REL} under "
+              f"{ws} ({exc}) — remove it by hand", file=sys.stderr)
+        return 1
+    print(f"cleared {up.PENDING_MERGE_REL} under {ws} — now finish the "
+          f"refresh: run /kunglao-agent:upgrade {ws}, then check-stale "
+          f"to confirm")
+    return 0
 
 
 def cmd_check_stale(args) -> int:
@@ -128,14 +163,25 @@ def cmd_check_stale(args) -> int:
     JSON envelope:
 
         {
-          "status":     "stale" | "current" | "no-stamp" | "deploy-drift",
+          "status":     "stale" | "current" | "no-stamp" | "deploy-drift"
+                      | "manual-merge-pending",
           "rc":         0 | 5,
           "workspace_stamp": "0.1.0" | null,
           "skill_version":   "0.1.3",
           "advice":     "run /kunglao-agent:upgrade <workspace> first" | null
         }
+
+    #5: a `manual-merge-pending` status replaces the endless stale loop when
+    a previous upgrade's CLAUDE.md collect-and-merge REFUSED a user-edited
+    body (upgrade leaves runs/claudemd-pending-merge.yaml + a diff report).
+    The rc stays 5 — the frame IS still stale — but the advice is now the
+    sanctioned recovery path: review the diff, merge manually, clear the
+    marker with `check-stale --resolve`, re-run the upgrade. `--resolve`
+    alone clears the marker (rc 0) and restores normal semantics.
     """
     ws = Path(args.workspace).resolve()
+    if getattr(args, "resolve", False):
+        return _resolve_pending_merge(ws)
     skill_v = template_version.read_skill_version()
     ws_v = template_version.read_workspace_version(ws)
     if ws_v is None:
@@ -163,6 +209,37 @@ def cmd_check_stale(args) -> int:
         print(json.dumps(envelope, ensure_ascii=False))
         return RC_STALE_WORKSPACE
     if ws_key < skill_key:
+        # #5: a pending manual-merge marker means a previous upgrade run
+        # already REFUSED here — repeating "run /upgrade first" would loop
+        # forever (the merge refusal is exactly what keeps the stamp stale).
+        # Surface the sanctioned recovery path instead.
+        up = _load_upgrade_module()
+        pending = up.pending_merge_record(ws)
+        if pending is not None:
+            diff_rel = str(pending.get("diff_report")
+                           or up.PENDING_MERGE_DIFF_REL)
+            diff_path = Path(diff_rel)
+            if not diff_path.is_absolute():
+                diff_path = ws / diff_path
+            reason = str(pending.get("reason") or "(unspecified)")
+            envelope = {
+                "status": "manual-merge-pending",
+                "rc": RC_STALE_WORKSPACE,
+                "workspace_stamp": ws_v,
+                "skill_version": skill_v,
+                "pending_since": pending.get("created"),
+                "pending_reason": reason,
+                "diff_report": str(diff_path),
+                "advice": (
+                    "CLAUDE.md auto-merge was refused during a previous "
+                    f"upgrade ({reason}); review the diff at {diff_path}, "
+                    "merge it into CLAUDE.md manually, then clear the "
+                    "marker: python scripts/kunglao.py check-stale "
+                    f"--resolve {ws} — and re-run /kunglao-agent:upgrade "
+                    f"{ws}"),
+            }
+            print(json.dumps(envelope, ensure_ascii=False))
+            return RC_STALE_WORKSPACE
         envelope = {
             "status": "stale",
             "rc": RC_STALE_WORKSPACE,
@@ -219,9 +296,17 @@ def cmd_resume(args) -> int:
     trails the skill version, refuse with RC=5 and direct the operator to
     `/kunglao-agent:upgrade <workspace>` (user must explicitly act —
     no auto-fix per #748 user ruling 2026-08-26).
+
+    The required intake answers gate resume the same way they gate
+    analysis entry: no anchorless reasoning after a crash — repair the
+    anchors (in place, or full re-init on an unreadable contract) and
+    re-run.
     """
     ws = Path(args.workspace).resolve()
     rc = _gate_stale_workspace(ws)
+    if rc != 0:
+        return rc
+    rc = _gate_oracle_anchors(ws)
     if rc != 0:
         return rc
     import kunglao_resume as kresume
@@ -302,12 +387,33 @@ def _gate_heartbeat_rearm(ws: Path) -> int:
     return 0
 
 
+def _gate_oracle_anchors(ws: Path) -> int:
+    """Analysis entry AND resume refuse while the required intake answers
+    are missing. Two states, two remedies:
+
+    - answers missing on a parseable contract -> repair IN PLACE (the
+      intake re-entry fills ONLY the missing fields; analysis state is
+      preserved);
+    - contract unreadable -> not repairable in place: full re-init (the
+      register is backed up first).
+    The loop never reasons without its anchors, and never guesses one.
+    """
+    import oracle_anchors
+    ok, gaps, state = oracle_anchors.inspect(ws)
+    if ok:
+        return 0
+    print(f"kunglao: entry refused - "
+          f"{oracle_anchors.refusal_hint(gaps, state)}", file=sys.stderr)
+    return RC_ORACLE_ANCHORS_MISSING
+
+
 def cmd_analysis(args) -> int:
     """#754 T3: the /kunglao-agent:analysis ENTRY gate chain — run once
     before entering the convergence loop (SKILL.md contract):
 
       1. _gate_stale_workspace (#748, same mount-point pattern as resume);
-      2. _gate_heartbeat_rearm (#754): durable-loop aging rebuild +
+      2. _gate_oracle_anchors (the required intake answers);
+      3. _gate_heartbeat_rearm (#754): durable-loop aging rebuild +
          continuous-tick verify; rc=6 maps to the re-arm hint.
 
     Pure gate/checker surface: entering the loop remains the orchestrator's
@@ -315,6 +421,9 @@ def cmd_analysis(args) -> int:
     """
     ws = Path(args.workspace).resolve()
     rc = _gate_stale_workspace(ws)
+    if rc != 0:
+        return rc
+    rc = _gate_oracle_anchors(ws)
     if rc != 0:
         return rc
     return _gate_heartbeat_rearm(ws)
@@ -345,7 +454,11 @@ def main() -> int:
             "version) — run /kunglao-agent:upgrade <ws> first\n"
             "  6 = heartbeat verify failed (analysis entry) — run "
             "/kunglao-agent:resume for re-arm guidance\n"
-            "(resume/check-stale return 5; analysis entry returns 5 or 6)"
+            "  7 = required intake answers missing (analysis entry) — fill "
+            "goal_verbatim / success_criterion / verification_method in "
+            "task_spec.yaml (init intake; README 'How to state the task')\n"
+            "(resume/check-stale return 5; analysis entry and resume return "
+            "5 or 7; analysis entry additionally returns 6)"
         ),
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -391,6 +504,10 @@ def main() -> int:
              "/kunglao-agent:analysis or /kunglao-agent:resume on a "
              "workspace whose template stamp may trail the skill")
     p_check_stale.add_argument("workspace", nargs="?", default=".")
+    p_check_stale.add_argument("--resolve", action="store_true",
+                               help="clear a pending CLAUDE.md manual-merge "
+                                    "marker (#5) instead of running the "
+                                    "staleness check")
     p_check_stale.set_defaults(func=cmd_check_stale)
 
     p_up = sub.add_parser("upgrade",
@@ -413,6 +530,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

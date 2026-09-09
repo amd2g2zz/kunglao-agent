@@ -7,7 +7,7 @@ User pain point (verbatim, in Chinese): "kunglao-agent 需要安装hook，但是
 activated, otherwise they generate heavy noise for kunglao-agent")
 
 kunglao-agent has 7+ enforcement hooks (active_intervention, cost_gate,
-backtrack_gate, reuse_gate, etc.). Running ALL of them on EVERY
+backtrack_gate, etc.). Running ALL of them on EVERY
 orchestrator turn produces too much noise. This script implements selective
 activation: kunglao-agent decides per-hook whether it should fire, based on:
   - current cost_advice tier (from cost_gate.py)
@@ -101,9 +101,7 @@ ALL_HOOKS = {
     "active_intervention",
     "cost_gate",
     "backtrack_gate",
-    "reuse_gate",
     "troubleshooting_gate",
-    "search_gate",
     "dispatch_gate",
     "worker_pulse",
     "state_anchor",
@@ -115,10 +113,9 @@ TIER_DEFAULTS = {
     "advisory": {"active": ["active_intervention", "cost_gate"],
                   "paused": []},
     "pause_non_essential": {"active": ["active_intervention", "cost_gate"],
-                            "paused": ["reuse_gate"]},
+                            "paused": []},
     "HARD_PAUSE": {"active": ["cost_gate"],
-                   "paused": ["active_intervention",
-                              "reuse_gate", "backtrack_gate", "search_gate",
+                   "paused": ["active_intervention", "backtrack_gate",
                               "troubleshooting_gate"]},
     "none": {"active": sorted(ALL_HOOKS),
              "paused": []},
@@ -790,6 +787,89 @@ def deploy_workspace_copy(ws: Path) -> dict:
 ORCHESTRATOR_MCP_MATCHER = (
     "mcp__ghidra__.*|mcp__x64dbg__.*|mcp__frida__.*")
 
+# #142: the statusline registration — NOT a hook. It rides the top-level
+# `statusLine` settings key: same #258 PROJECT-scoped file
+# (<workspace>/.claude/settings.json), different key, so it lives and dies
+# with the workspace like the hooks do. It stays in THIS module (THE
+# registration entry, #445) and must never enter WIRE_UP_HOOK_FILES — that
+# registry is hooks-only (event-keyed) and tests pin its set + shape.
+STATUSLINE_RENDER_FILE = "statusline_render.mjs"
+STATUSLINE_SETTINGS_KEY = "statusLine"
+
+
+def statusline_render_command(workspace: Path | None) -> str:
+    """The statusLine command: absolute `node <statusline_render.mjs>`.
+
+    Path resolution mirrors the hook deployment (#783/#752): the
+    workspace-local deployed copy (<ws>/.claude/scripts/, materialized by
+    deploy_workspace_copy) wins when present — the workspace stays
+    self-contained against skill-package upgrades; otherwise the executing
+    install's copy (canonical_install_root, durable-vs-ephemeral ruling).
+    POSIX slashes: the command runs via `sh -c`.
+    """
+    if workspace is not None:
+        local = (Path(workspace).resolve() / ".claude" / "scripts"
+                 / STATUSLINE_RENDER_FILE)
+        if local.exists():
+            return f"node {local.as_posix()}"
+    canonical = canonical_install_root() / "scripts" / STATUSLINE_RENDER_FILE
+    return f"node {canonical.as_posix()}"
+
+
+def register_statusline(workspace: Path) -> dict:
+    """#142 PROJECT-scoped statusLine registration (keep-alive repair face).
+
+    Writes ONLY <workspace>/.claude/settings.json — the #258 project target,
+    different key (`statusLine`, not `hooks`). There is deliberately NO
+    global_opt_in escape hatch: the user-global ~/.claude/settings.json is
+    never a statusline deployment target (the #258 lesson applies verbatim —
+    a global entry would outlive the workspace and render a dead snapshot).
+    Idempotent: overwrites our key in place, preserves every other key.
+    Maker-checker: re-reads the written file and only reports ok when the
+    re-read entry matches what was written.
+    """
+    ws = Path(workspace).resolve()
+    target = ws / ".claude" / "settings.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict = {}
+    if target.exists():
+        try:
+            existing = json.loads(target.read_text(encoding="utf-8"))
+        except Exception:  # unparseable settings — rebuild our key alone
+            existing = {}
+    if not isinstance(existing, dict):
+        existing = {}
+    entry = {"type": "command", "command": statusline_render_command(ws)}
+    existing[STATUSLINE_SETTINGS_KEY] = entry
+    target.write_text(
+        json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+    # maker-checker: re-read from disk, never trust the in-memory dict.
+    try:
+        reread = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        reread = {}
+    ok = reread.get(STATUSLINE_SETTINGS_KEY) == entry
+    return {"ok": ok, "target": str(target), "command": entry["command"]}
+
+
+def _register_statusline_warn(ws: Path | None) -> None:
+    """Best-effort statusline registration for the wire-up flows: a failed
+    cosmetic registration must never fail hook wiring (hooks_selfcheck's
+    keep-alive face repairs it next tick)."""
+    if ws is None:
+        return
+    try:
+        res = register_statusline(ws)
+        if res.get("ok"):
+            print(f"OK: statusline registered -> {res['command']}")
+        else:
+            print(f"WARN: statusline registration self-check failed "
+                  f"({res.get('target')})", file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 — cosmetic, never blocks wiring
+        print(f"WARN: statusline registration failed ({exc})", file=sys.stderr)
+
+
+
 _DEPLOYED_WIRING = (
     # (event, matcher, hook_file) — mirrors register_hooks exactly.
     ("PreToolUse", "Agent", "env_check_gate.py"),
@@ -882,6 +962,9 @@ def register_hooks_deployed(ws: Path) -> int:
         raise HookWiringSelfcheckError(
             f"{settings_path} failed the deployed-mode self-check "
             f"({', '.join(check['mismatches'])})")
+    # #142: the statusline rides the same #258 project file (different key)
+    # so it lives and dies with the workspace — best-effort (cosmetic face).
+    _register_statusline_warn(ws)
     print(f"OK: registered {added} deployed hook entries")
     return 0
 
@@ -1072,6 +1155,11 @@ def register_hooks(workspace: Path | None = None,
             f"{settings_path} failed the post-registration self-check "
             f"({', '.join(check['mismatches'])}) — the hooks are NOT "
             f"verifiably registered on a layer that fires (#445)")
+    # #142: PROJECT-scoped statusline rides the same wire-up (different
+    # settings key). NEVER on the global_opt_in path — the user-global
+    # settings file is not a statusline deployment target (no opt-in hatch).
+    if not global_opt_in:
+        _register_statusline_warn(workspace)
     return count
 
 
@@ -1237,6 +1325,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

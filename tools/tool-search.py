@@ -14,16 +14,38 @@ Filters (combinable, AND semantics):
   --cost-max probe|cheap|deep   budget filter: probe < cheap < deep
                                 (inclusive — cheap returns probe + cheap)
 
-Discovery mode (issue #476, the query face of the #494 "search before
-you build" contract):
+Discovery mode (issue #476, #162: THE single search entry — no per-tier
+search tools exist):
   --find <keyword>              case-insensitive substring search across
-                                the internal registry AND the ext catalog
-                                (tools/_INDEX.ext.yaml — describe-only
-                                entries: entry-point scripts/ CLIs, hooks/
-                                gates, references/re-library/ capability
-                                docs). Hits carry name + kind + source +
-                                usage. --find is mutually exclusive with
-                                the internal filters (ext entries carry no
+                                ALL THREE data sources:
+                                  1. the internal registry
+                                     (tools/_INDEX.yaml);
+                                  2. the typed ext catalog
+                                     (tools/_INDEX.ext.yaml — entry-point
+                                     scripts/ CLIs, hooks/ gates,
+                                     templates/**/*.tmpl skeletons,
+                                     references/re-library/ capability
+                                     docs; entries carry generated
+                                     type + consume fields);
+                                  3. the references index
+                                     (references/_INDEX.yaml file list —
+                                     its own generator's schema is left
+                                     untouched; type/consume are DERIVED
+                                     at query time: type=reference,
+                                     consume=read).
+                                Hits carry name + score + kind + type +
+                                consume + source + usage + one-line
+                                description — a hit decides without
+                                opening the file. score = keyword match
+                                strength, LEXICAL not semantic (high =
+                                keywords overlapped, NOT relevance; low
+                                != irrelevant); it ranks candidates for
+                                inspection and never gates surfacing.
+                                A source path enumerated by both the ext
+                                index and the references index surfaces
+                                ONCE (the typed ext entry wins). --find is
+                                mutually exclusive with the internal
+                                filters (ext/reference entries carry no
                                 tier/cost_tier — ANDing would silently
                                 drop them; refuse instead).
 
@@ -66,8 +88,13 @@ TIERS = ("T1", "T2", "T3")
 PUBLIC_KEYS = ("name", "category", "capability", "tier", "cost_tier",
                "input_output")
 
-EXT_INDEX_NAME = "_INDEX.ext.yaml"   # describe-only catalog (#476)
+EXT_INDEX_NAME = "_INDEX.ext.yaml"   # describe-only catalog (#476, #162)
 INTERNAL_SOURCE = "tools/_INDEX.yaml"  # resolution registry for internal hits
+# #162 third data source: the references index (its own generator's file
+# list; type/consume derived at query time — the file is never rewritten).
+REFERENCES_INDEX_REL = ("references", "_INDEX.yaml")
+REFERENCES_HEAD_LINES = 80   # haystack/description read depth per card
+REFERENCE_USAGE_TEMPLATE = "read {source} (capability reference)"
 
 
 def load_index(index_path: Path) -> list[dict]:
@@ -137,6 +164,121 @@ def format_text(tools: list[dict]) -> str:
     return "\n".join(lines)
 
 
+# ---- #162 third data source: references index (query-time typing) ---------
+
+def load_reference_paths(refs_index_path: Path) -> list[str]:
+    """references/_INDEX.yaml `files:` mapping keys -> sorted source paths.
+
+    Absent/broken index -> empty list: the third source degrades to
+    silence (the other two stay fully queryable — one index's problem
+    must not brick the query face)."""
+    if not refs_index_path.is_file():
+        return []
+    import yaml
+    try:
+        data = yaml.safe_load(refs_index_path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - unreadable index = no reference hits
+        return []
+    files = data.get("files") if isinstance(data, dict) else None
+    if not isinstance(files, dict):
+        return []
+    return sorted(str(k) for k in files)
+
+
+def _reference_head(repo_root: Path, source: str) -> str:
+    """First lines of the card — the haystack/description read depth.
+    Unreadable cards match on their path alone."""
+    p = repo_root / source
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace") \
+            .splitlines()
+    except OSError:
+        return ""
+    return "\n".join(lines[:REFERENCES_HEAD_LINES])
+
+
+def _reference_description(head: str) -> str:
+    """Frontmatter `description:`, else the first `# ` heading."""
+    lines = head.splitlines()
+    if lines and lines[0].strip() == "---":
+        for ln in lines[1:]:
+            if ln.strip() == "---":
+                break
+            if ln.startswith("description:"):
+                return ln.partition(":")[2].strip()
+    for ln in lines:
+        if ln.startswith("# "):
+            return ln[2:].strip()
+    return ""
+
+
+def find_references(repo_root: Path, ref_paths: list[str],
+                    terms: list[str], mode: str = "any") -> list[dict]:
+    hits: list[dict] = []
+    for source in ref_paths:
+        head = _reference_head(repo_root, source)
+        if not _haystack_hit(f"{source}\n{head}".lower(), terms, mode):
+            continue
+        hits.append({
+            "name": Path(source).stem,
+            "kind": "reference",
+            "type": "reference",       # derived at query time (#162)
+            "consume": "read",         # derived at query time (#162)
+            "source": source,
+            "usage": REFERENCE_USAGE_TEMPLATE.format(source=source),
+            "description": _reference_description(head),
+        })
+    return hits
+
+
+# ---- #162 addendum: keyword match score (lexical, not semantic) ------------
+# The score is ONLY text similarity — keyword/lexical matching degree. It is
+# NOT semantic similarity and does NOT represent topical relevance. Honest
+# reading: a high score means keywords overlapped, nothing more; a low score
+# does NOT mean irrelevant (semantically related items can share no
+# keywords). The score ranks candidates for inspection and measures nothing
+# beyond word overlap. It is a REFERENCE signal for the agent's own decision
+# — never an applicability verdict — and, being lexically shallow, it never
+# gates surfacing (no threshold-drop): hits are surfaced and the agent
+# judges. Hit descriptions state EXPECTED outcomes, not guaranteed facts
+# (expectation != fact).
+
+SCORE_FIELDS = (   # (field, weight) — name matches are the strongest signal
+    ("name", 1.0),
+    ("capability", 0.8),
+    ("source", 0.6),
+    ("usage", 0.5),
+    ("description", 0.5),
+)
+
+
+def match_score(entry: dict, keyword: str) -> float:
+    """Keyword match score (lexical, not semantic): normalized 0-1
+    matching degree, 2-decimal, deterministic — the strongest per-field
+    weighted match density (occurrences * keyword length over field
+    length, capped, scaled by field weight). High = keywords overlapped,
+    NOT relevance; low != irrelevant. It ranks candidates for inspection
+    and never gates surfacing."""
+    kw = keyword.lower()
+    best = 0.0
+    for field, weight in SCORE_FIELDS:
+        text = str(entry.get(field, "") or "").lower()
+        if not text or kw not in text:
+            continue
+        density = (len(kw) * text.count(kw)) / len(text)
+        best = max(best, min(1.0, density) * weight)
+    return round(best, 2)
+
+
+def _with_score(hits: list[dict], terms: list[str]) -> list[dict]:
+    """Attach the lexical match score (strongest term) and rank by it
+    (descending, stable). Ordering only — no hit is ever dropped by
+    score (wide boundary)."""
+    for h in hits:
+        h["score"] = max(match_score(h, t) for t in terms) if terms else 0.0
+    return sorted(hits, key=lambda h: h["score"], reverse=True)
+
+
 # ---- --find discovery mode (#476) -----------------------------------------
 
 def _io_text(value: object) -> str:
@@ -161,15 +303,27 @@ def _ext_haystack(entry: dict) -> str:
                      ("name", "capability", "source", "usage", "description"))
 
 
-def find_internal(tools: list[dict], keyword: str) -> list[dict]:
-    kw = keyword.lower()
-    hits = [t for t in tools if kw in _internal_haystack(t).lower()]
+# ---- #162 keyword matching: multi-term boolean over the haystacks ----------
+
+def _haystack_hit(haystack: str, terms: list[str], mode: str) -> bool:
+    """any = boolean OR (default), all = boolean AND over the terms."""
+    hay = haystack.lower()
+    if mode == "all":
+        return all(t in hay for t in terms)
+    return any(t in hay for t in terms)
+
+
+def find_internal(tools: list[dict], terms: list[str],
+                  mode: str = "any") -> list[dict]:
+    hits = [t for t in tools
+            if _haystack_hit(_internal_haystack(t).lower(), terms, mode)]
     return [_find_projection_internal(t) for t in hits]
 
 
-def find_ext(ext: list[dict], keyword: str) -> list[dict]:
-    kw = keyword.lower()
-    hits = [e for e in ext if kw in _ext_haystack(e).lower()]
+def find_ext(ext: list[dict], terms: list[str],
+             mode: str = "any") -> list[dict]:
+    hits = [e for e in ext
+            if _haystack_hit(_ext_haystack(e).lower(), terms, mode)]
     return [_find_projection_ext(e) for e in hits]
 
 
@@ -177,6 +331,8 @@ def _find_projection_internal(entry: dict) -> dict:
     return {
         "name": entry.get("name"),
         "kind": "internal",
+        "type": "tool",
+        "consume": "invoke",
         "category": entry.get("category"),
         "capability": entry.get("capability"),
         "tier": entry.get("tier"),
@@ -195,6 +351,8 @@ def _find_projection_ext(entry: dict) -> dict:
     return {
         "name": entry.get("name"),
         "kind": kind,
+        "type": entry.get("type"),        # generated tier label (#162)
+        "consume": entry.get("consume"),  # generated consume label (#162)
         "capability": entry.get("capability"),
         "source": entry.get("source"),
         "usage": entry.get("usage"),
@@ -203,11 +361,49 @@ def _find_projection_ext(entry: dict) -> dict:
 
 
 def format_find_text(hits: list[dict]) -> str:
-    """One line per hit: name, capability, source, usage."""
+    """One line per hit: name, score, type, consume, source, description
+    (#162 display contract — a hit decides without opening the file;
+    score is a reference signal, never a verdict)."""
     return "\n".join(
         "\t".join(str(h.get(k, "") or "") for k in
-                  ("name", "capability", "source", "usage"))
+                  ("name", "score", "type", "consume", "source",
+                   "description"))
         for h in hits)
+
+
+def _emit(hits: list[dict], as_json: bool, text_formatter) -> None:
+    if as_json:
+        print(json.dumps({"count": len(hits), "tools": hits},
+                         ensure_ascii=False))
+    else:
+        text = text_formatter(hits)
+        if text:
+            print(text)
+
+
+def _find_mode(args, tools: list[dict], index_path: Path) -> int:
+    """--find: the #162 unified typed search face (all three sources)."""
+    terms = [t.strip().lower() for t in args.find.split(",") if t.strip()]
+    if not terms:
+        print("error: --find needs at least one keyword", file=sys.stderr)
+        return 2
+    mode = args.match or "any"
+    ext = load_ext_index(index_path.parent / EXT_INDEX_NAME)
+    refs_index = index_path.parent.parent.joinpath(*REFERENCES_INDEX_REL)
+    ref_paths = load_reference_paths(refs_index)
+    repo_root = index_path.parent.parent
+    # dedup by source path: a re-library card enumerated by both the ext
+    # index and the references index surfaces once (typed ext entry wins)
+    hits = find_internal(tools, terms, mode) + find_ext(ext, terms, mode)
+    seen_sources = {str(h.get("source", "")) for h in hits}
+    for h in find_references(repo_root, ref_paths, terms, mode):
+        if h["source"] not in seen_sources:
+            hits.append(h)
+    if args.type is not None:
+        hits = [h for h in hits if h.get("type") == args.type]
+    hits = _with_score(hits, terms)
+    _emit(hits, args.json, format_find_text)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -223,12 +419,43 @@ def main(argv: list[str] | None = None) -> int:
                          "T3 VM-dynamic)")
     ap.add_argument("--cost-max", choices=COST_ORDER, default=None,
                     help="cost budget filter, inclusive: probe < cheap < deep")
-    ap.add_argument("--find", default=None, metavar="KEYWORD",
-                    help="discovery mode (#476): case-insensitive keyword "
-                         "over the internal registry AND the ext catalog; "
-                         "mutually exclusive with the filters above")
+    ap.add_argument("--find", default=None, metavar="KEYWORD[,KEYWORD...]",
+                    help="discovery mode (#162): case-insensitive keyword "
+                         "search over ALL THREE data sources (internal "
+                         "registry, typed ext catalog, references index); "
+                         "comma-separated terms combine boolean-style via "
+                         "--match (default any = OR); hits carry name + "
+                         "score + type + consume + source + usage + "
+                         "description; mutually exclusive with "
+                         "--capability/--tier/--cost-max")
+    ap.add_argument("--match", choices=("any", "all"), default=None,
+                    help="multi-term boolean mode for --find: any = OR "
+                         "(default), all = AND (every term must match)")
+    ap.add_argument("--type", choices=("tool", "template", "reference"),
+                    default=None,
+                    help="tier filter on the results (#162): combinable "
+                         "with --find and with the internal filters")
     ap.add_argument("--json", action="store_true",
                     help="emit JSON {count, tools} instead of compact text")
+    ap.epilog = (
+        "keyword match score contract (#162 addendum): the score column "
+        "is keyword match strength — LEXICAL, NOT SEMANTIC. It never "
+        "represents topical relevance or applicability: a high score "
+        "means keywords overlapped, NOT that the hit is relevant; a low "
+        "score does NOT mean irrelevant (semantically related items can "
+        "share no keywords). The score ranks candidates for inspection "
+        "and measures nothing beyond word overlap. Reference signal for "
+        "the agent's own decision — the search narrows, the agent decides "
+        "fit. Because the score is lexically shallow it NEVER gates "
+        "surfacing (no threshold-drop): near-miss hits stay surfaced, "
+        "since a poorly-matching attempt sometimes solves a big problem "
+        "and a highly-matching one can still fail on variant factors. "
+        "Hit descriptions state EXPECTED outcomes, not guaranteed facts "
+        "(expectation != fact). Boolean syntax: --find takes comma-"
+        "separated terms; --match any = OR (default), --match all = AND "
+        "(every term must match). --type tool|template|reference filters "
+        "the results by tier and composes with both --find and the "
+        "internal filters.")
     ap.add_argument("index_path", nargs="?", default=None,
                     help="index yaml (default: tools/_INDEX.yaml next to "
                          "this script)")
@@ -239,6 +466,12 @@ def main(argv: list[str] | None = None) -> int:
         ap.error("--find cannot combine with --capability/--tier/--cost-max "
                  "(ext entries carry no tier/cost_tier; ANDing would "
                  "silently drop them — run two queries instead)")
+    if args.match is not None and args.find is None:
+        ap.error("--match requires --find (it has no meaning for the "
+                 "internal filters)")
+    if args.type is not None and args.type not in ("tool", "template",
+                                                   "reference"):
+        ap.error("--type must be tool|template|reference")
 
     index_path = Path(args.index_path) if args.index_path \
         else Path(__file__).resolve().parent / "_INDEX.yaml"
@@ -252,19 +485,16 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     if args.find is not None:
-        ext = load_ext_index(index_path.parent / EXT_INDEX_NAME)
-        hits = find_internal(tools, args.find) + find_ext(ext, args.find)
-        if args.json:
-            print(json.dumps({"count": len(hits), "tools": hits},
-                             ensure_ascii=False))
-        else:
-            text = format_find_text(hits)
-            if text:
-                print(text)
-        return 0
+        return _find_mode(args, tools, index_path)
 
     hits = [entry_public(t) for t in tools
             if matches(t, args.capability, args.tier, args.cost_max)]
+    if args.type is not None:
+        # the internal registry face holds only tools — a --type filter
+        # answering anything else there is a valid empty query
+        hits = hits if args.type == "tool" else []
+    _emit(hits, args.json, format_text)
+    return 0
 
     if args.json:
         print(json.dumps({"count": len(hits), "tools": hits},

@@ -134,7 +134,9 @@ if str(_SCRIPT_DIR) not in sys.path:
 import shell_defaults  # noqa: E402
 import toolchain  # noqa: E402  # #304: type-aware toolchain probes (check-before-scaffold gate)
 import intake_promise  # noqa: E402  # #813: Phase 0 prescan promise (apkid/DIE/混淆先验/java 可达性显式落盘)
+import difficulty_calibration  # noqa: E402  # #15: sample difficulty calibration (intrinsic factors -> evidence/difficulty.json + task_spec difficulty: 键)
 import init_channel_default  # noqa: E402  # #727 channel resolution (local fallback)
+import oracle_anchors  # noqa: E402  # the three required intake answers (task_spec first-class fields)
 # #408: ask-then-install — interactive install prompts + MCP registration +
 # re-probe (graceful degrade on decline; --assume-yes for CI/headless).
 # #455: the interactive consent channel is gone (no stdin); ask_then_install
@@ -560,9 +562,9 @@ SCAFFOLD_FILES = {
 from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
 
-# #863 Family H: single source in utf8_boot (#811 stdio-insurance module);
+# single source in _boot (the stdio-insurance boot module);
 # alias binds the SHARED function; the call site stays in main() unchanged.
-from utf8_boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
+from _boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
 
 
 def atomic_write(path: Path, text: str) -> None:
@@ -613,10 +615,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="skip hook deployment entirely (the ONLY "
                              "legal hooks skip; default deploys "
                              "<ws>/.claude/settings.json + self-check)")
-    parser.add_argument("--skills", metavar="A,B", default=None,
-                        help="deploy auxiliary skills (comma-separated "
-                             "names under skills/) to <ws>/.claude/skills/ — "
-                             "pure opt-in, nothing installed without the flag")
+    parser.add_argument("--builtin-skills", metavar="A,B", default=None,
+                        help="deploy kunglao's BUILT-IN auxiliary skills "
+                             "(comma-separated names under skills/) to "
+                             "<ws>/.claude/skills/ — pure opt-in, nothing "
+                             "installed without the flag; NOT for "
+                             "globally-installed skills (#25 D2)")
     parser.add_argument("--assume-yes", action="store_true",
                         help="consent to every ask-then-install prompt "
                              "(CI/headless; non-interactive stdin declines by default)")
@@ -1292,7 +1296,7 @@ AGENTS_DIR = Path(__file__).resolve().parent.parent / "agents"
 
 # #728: quickref single-source for web workspace CLAUDE.md injection.
 # If missing, write_claudemd fails closed (never silently partial).
-WEB_RE_QUICKREF = Path(__file__).resolve().parent.parent / "references" / "re-library" / "web-re-quickref.md"
+WEB_RE_QUICKREF = (Path(__file__).resolve().parent.parent / "references" / "re-library" / "web" / "labs" / "web-re-quickref.md")
 SKILL_DIR = Path(__file__).resolve().parent.parent
 
 # #356 W2: per-OS constraint blocks injected into the base template's
@@ -1710,7 +1714,7 @@ def _setup_web_env(ws: Path) -> None:
     print("kunglao-init: web (labs) setup guidance:", file=sys.stderr)
     print("  channel: KUNGLAO_CHANNEL=docker (set explicitly to override)", file=sys.stderr)
     print("  MCP: claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp", file=sys.stderr)
-    print("  docs: references/re-library/web-re-quickref.md (auto-injected into workspace CLAUDE.md)", file=sys.stderr)
+    print("  docs: references/re-library/web/labs/web-re-quickref.md (auto-injected into workspace CLAUDE.md)", file=sys.stderr)
 
 
 def os_section(project_type: str | None) -> str:
@@ -1857,6 +1861,10 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
                 f"web quickref not found: {WEB_RE_QUICKREF} — "
                 "cannot render a partial web CLAUDE.md")
         qr_text = WEB_RE_QUICKREF.read_text(encoding="utf-8")
+        if qr_text.startswith("---\n"):
+            # frontmatter is the machine-consumed metadata home; the
+            # workspace handbook carries the card body only
+            qr_text = qr_text.split("---\n", 2)[2].lstrip("\n")
         text += chr(10) + qr_text
 
     # #755 G2: the render ships wrapped in the versioned frame-marker pair
@@ -2064,22 +2072,26 @@ def _deploy_agents(ws: Path) -> list[dict]:
 
 
 def _deploy_skills(ws: Path, skills: list[str] | None) -> dict:
-    """#478 L4: pure opt-in skill deployment (`--skills a,b`).
+    """#478 L4: pure opt-in skill deployment (`--builtin-skills a,b`).
 
     Copies <repo>/skills/<name>/ -> <ws>/.claude/skills/<name>/ recursively.
     No flag -> nothing installed. Unknown name -> ValueError (caller maps
     to RC_ERROR with the valid-names list — fail fast on typo'd flags).
+    #25 D2: renamed to the builtin spelling — the bare skills name read as
+    "deploy any skills" and collided with the global-skill semantic; this
+    flag accepts kunglao-BUILT-IN names only (no compat alias, owner
+    ruling 2026-09-01).
     Returns the manifest component entry.
     """
     dst_root = ws / ".claude" / "skills"
     if not skills:
         return {"name": "skills", "path": ".claude/skills/",
-                "status": "none", "detail": "opt-in (--skills a,b)"}
+                "status": "none", "detail": "opt-in (--builtin-skills a,b)"}
     valid = sorted(d.name for d in SKILLS_SRC.iterdir() if d.is_dir())
     unknown = [s for s in skills if s not in valid]
     if unknown:
         raise ValueError(
-            f"unknown --skills name(s): {', '.join(unknown)} "
+            f"unknown --builtin-skills name(s): {', '.join(unknown)} "
             f"(available: {', '.join(valid)})")
     for name in skills:
         src = SKILLS_SRC / name
@@ -2413,20 +2425,35 @@ ORACLE_BACKFILL_MARKER = "pending-user-input-backfill"
 ORACLE_FILE = "task-oracle.yaml"
 
 
-def write_task_oracle_skeleton(ws: Path) -> bool:
+def write_task_oracle_skeleton(ws: Path,
+                               task_text: str | None = None) -> bool:
     """#473: write the workspace task-oracle.yaml skeleton. Returns True when
     written; an existing non-empty oracle is never clobbered (Phase-0
-    backfill survives re-inits); empty/corrupt remnants are replaced."""
+    backfill survives re-inits); empty/corrupt remnants are replaced.
+    `task_text` pre-fills the verbatim goal when the init interview already
+    collected it (task_spec.yaml goal_verbatim) — the completion gate then
+    judges a real anchor from the first tick instead of the backfill
+    marker; None keeps the marker (the orchestrator backfills at Phase 1)."""
     target = ws / ORACLE_FILE
     if target.exists() and target.read_text(encoding="utf-8").strip():
         return False
+    if task_text and str(task_text).strip():
+        task_line = f"task_text: {json.dumps(str(task_text), ensure_ascii=False)}\n"
+        backfill_note = (
+            "# task_text came from the init intake (task_spec.yaml\n"
+            "# goal_verbatim); the orchestrator restates it at the delivery\n"
+            "# receipt.\n")
+    else:
+        task_line = f"task_text: {ORACLE_BACKFILL_MARKER}\n"
+        backfill_note = (
+            "# Skeleton written by kunglao-init; the orchestrator backfills\n"
+            "# task_text with the user's verbatim task at Phase 1 (SKILL.md)\n"
+            "# before the first dispatch.\n")
     text = (
         "# task-oracle.yaml — pre-registered completion anchor (#55, #473).\n"
-        "# Skeleton written by kunglao-init; the orchestrator backfills\n"
-        "# task_text with the user's verbatim task at Phase 1 (SKILL.md)\n"
-        "# before the first dispatch.\n"
-        f"task_text: {ORACLE_BACKFILL_MARKER}\n"
-        "open_items: []\n"
+        + backfill_note
+        + task_line
+        + "open_items: []\n"
         "deferrals: []\n"
         "adjudication:\n"
         "  stop_hook_active:\n"
@@ -2526,10 +2553,25 @@ def initialize(ws: Path, hooks_json: Path | None,
     # (SKILL.md). Idempotent: a pre-existing oracle is never clobbered, and
     # the file is deliberately OUTSIDE the state-hash inputs (it is a
     # workspace artifact, not scaffold state).
-    oracle_written = write_task_oracle_skeleton(ws)
+    # The verbatim goal, when the init interview already collected it,
+    # lands in the completion anchor at scaffold time; the reminder line
+    # keeps a not-yet-answered interview visible without blocking init
+    # (the analysis-entry gate owns the refusal).
+    _anchor_view = oracle_anchors.load(ws)
+    _goal = _anchor_view.get("goal_verbatim")
+    _has_goal = isinstance(_goal, str) and bool(_goal.strip())
+    oracle_written = write_task_oracle_skeleton(
+        ws, task_text=_goal if _has_goal else None)
     if oracle_written:
-        print("kunglao-init: task-oracle.yaml skeleton registered "
-              "(task_text pending Phase-0 backfill by the orchestrator)")
+        if _has_goal:
+            print("kunglao-init: task-oracle.yaml registered "
+                  "(task_text pre-filled from the intake goal)")
+        else:
+            print("kunglao-init: task-oracle.yaml skeleton registered "
+                  "(task_text pending Phase-0 backfill by the orchestrator)")
+        _reminder = oracle_anchors.reminder(ws)
+        if _reminder:
+            print(_reminder)
 
     # #412: the exit message lists what init did (scaffold + env + type) and
     # does NOT summarize sample content (no sample= in the output).
@@ -2667,6 +2709,45 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         text = reg.read_text(encoding="utf-8")
         if MARKER in text:
             if is_init_complete(ws):
+                # Anchor repair re-entry: the intake answers fill ONLY the
+                # missing required fields — existing answers and all
+                # analysis state are untouched. A bad method value fails
+                # closed (never written); the analysis-entry gate keeps
+                # refusing until every anchor is present.
+                _repair = {k: answers[k] for k in oracle_anchors.FIELDS
+                           if answers.get(k) is not None
+                           and str(answers[k]).strip()}
+                if _repair:
+                    # An unreadable contract is NOT repairable in place:
+                    # the merge would see an empty document and replace the
+                    # whole intake record with the three anchors. Same
+                    # posture as the upgrade backfill — refuse, name the
+                    # full re-init, write nothing.
+                    _view, _state = oracle_anchors.read_state(ws)
+                    if _state == oracle_anchors.STATE_CORRUPT:
+                        print("kunglao-init: ERROR anchor repair refused - "
+                              + oracle_anchors.refusal_hint(
+                                  oracle_anchors.missing(_view), _state),
+                              file=sys.stderr)
+                        return RC_ERROR
+                    try:
+                        oracle_anchors.validate_values(_repair)
+                    except ValueError as exc:
+                        print(f"kunglao-init: ERROR anchor repair refused: "
+                              f"{exc}", file=sys.stderr)
+                        return RC_ERROR
+                    oracle_anchors.apply(ws, _repair)
+                    _remaining = oracle_anchors.missing(
+                        oracle_anchors.load(ws))
+                    if _remaining:
+                        print(f"kunglao-init: anchor repair applied but "
+                              f"still missing: {', '.join(_remaining)} "
+                              f"(analysis entry refuses until collected)",
+                              file=sys.stderr)
+                    else:
+                        print("kunglao-init: anchor repair complete - "
+                              "analysis entry re-run will pass the anchor "
+                              "gate")
                 # #461: resume is also an exit-0 path — re-arm the observer
                 # spine (idempotent bootstrap) before reporting resume.
                 rc = bootstrap_observability(ws, hooks_json=hooks_json,
@@ -2752,7 +2833,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     # #447 three-state charter: init's behaviour here corresponds to the
     # "must-ask" lane (Type D) — pending decisions + RC_PENDING_DECISIONS=8
     # are the MUST-ASK enforcement surface at intake. See
-    # references/agent-three-state-charter.md (single source). For runtime events
+    # references/contracts/agent-three-state-charter.md (single source). For runtime events
     # (post-init dispatch / mid-analysis), the executors are
     # scripts/ask_for_direction_gate.py + hooks/dispatch_gate.py.
     if not skip_toolchain:
@@ -2837,6 +2918,27 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 pass
         else:
             print(f"kunglao-init: intake-promise written: {_promise_path}")
+
+    # #15: sample difficulty calibration — 证据面(扫描器输出) -> easy/medium/
+    # hard/max 内在难度，落 evidence/difficulty.json + task_spec `difficulty:`
+    # 键（#16 的开环输入）。init 时证据通常未产出 → 显式 easy+evidence_gap
+    # 记录（缺证据永不计为难度）；WARN-tier：写失败不卡 init，ERROR +
+    # env_incident 落账（与 #813 同一病理防线：静默跳过才是病）。
+    if not skip_toolchain:
+        try:
+            _diff = difficulty_calibration.calibrate_workspace(ws)
+            _diff_path = difficulty_calibration.mount(ws, _diff)
+        except Exception as exc:  # noqa: BLE001 — 不卡 init，但要显式可见
+            print(f"kunglao-init: ERROR difficulty-calibration failed: {exc}",
+                  file=sys.stderr)
+            try:
+                kunglao_log.emit(ws, actor="init", action="env_incident",
+                                 detail=f"difficulty-calibration: {exc}")
+            except Exception:  # noqa: BLE001 — telemetry never deadlocks
+                pass
+        else:
+            print(f"kunglao-init: difficulty-calibration written: {_diff_path} "
+                  f"tier={_diff['tier']}")
 
     # #362: template defect (unfilled {{placeholder}}) → hard error, not a
     # silent partial CLAUDE.md. Clean up THIS RUN's scaffold entries (the
@@ -3033,8 +3135,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"kunglao-init: ERROR --resolve {args.resolve}: {exc}",
                   file=sys.stderr)
             return RC_ERROR
-    skills = ([s.strip() for s in args.skills.split(",") if s.strip()]
-              if args.skills else None)
+    skills = ([s.strip() for s in args.builtin_skills.split(",") if s.strip()]
+              if args.builtin_skills else None)
     return run(Path(args.workspace) if args.workspace else None,
                force=args.force, hooks_json=args.hooks_json,
                profile_root=args.profile_root, project_type=args.type,

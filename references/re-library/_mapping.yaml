@@ -1,0 +1,291 @@
+schema: re-library-mapping/1
+purpose: 'Single home of card placement (constitution rule on the mapping): from = pre-move path, to =
+  post-move path (depth cap 3, level 3 reserved), domain/family must equal the card frontmatter. Generators
+  resolve placement exclusively through this file.'
+domains:
+  tools: Static/dynamic/advanced/crypto tooling quick-reference plus the in-repo toolshelf
+  patterns: 'General RE techniques: pattern catalog, simulation, decode, dynamic debugging, VM protections'
+  languages: 'Language-specific RE: scripting and esoteric targets, compiled binaries, platform stacks'
+  platforms: 'Platform and format RE: catalog, ELF, kernel drivers, hardware'
+  anti-analysis: Anti-debug, anti-VM and anti-DBI detection and bypass
+  android: 'Android RE: unidbg emulation, fingerprint seeds, signature recovery, stacked protections'
+  malware: 'Malware analysis application domain: workflow, triage, reporting'
+  method: 'Analysis method: process discipline (falsifiers, stage gates, verification, IDA lane) and wire
+    formats'
+  web: 'Web RE: labs quick-reference, JS VM triage, risk-control doctrine, crawler engineering'
+  research: 'External research: multi-engine OSINT search and RE resource collections'
+scenarios:
+  Disassembly / static analysis: tools (tools, tools-advanced, ida-scripting-overlays) + patterns (patterns,
+    patterns-decode)
+  Dynamic debugging (x64dbg / Frida / Qiling / VM): tools (tools-dynamic, dynamic-observation-ladders)
+    + patterns (patterns-debugging)
+  Packed / obfuscated / anti-analysis: anti-analysis + tools (tools-advanced) + android (stacked-protections)
+  Firmware / hardware: platforms (platforms-hardware)
+  Kernel driver / module: platforms (platforms-kernel)
+  Language-specific: languages
+  Platform-specific: platforms
+  Detection rules / reports: malware (detection-engineer, malware-report-writer)
+  Intelligence / search: research (multi-search-engine, multi-search-engine-refs)
+  Browser JS target (`--type web`): web (web-re-quickref, jsvmp-triage)
+  Anti-bot decisions & crawler ops: web (web-risk-control, web-crawler-engineering)
+  Android emulation harness (unidbg): android (unidbg-env-filling, unidbg-harness-bringup, unidbg-algo-recovery,
+    android-fingerprint-apis)
+  Malware sample intake / triage: malware (malware-triage, malware-analysis-workflow, malware-analysis)
+  Action error / tool-VM-install failure response: error-response-taxonomy
+  Ask-the-user / irreversible-action decision: agent-three-state-charter
+population_b:
+- from: references/agent-three-state-charter.md
+  to: references/contracts/agent-three-state-charter.md
+- from: references/error-response-taxonomy.md
+  to: references/contracts/error-response-taxonomy.md
+- from: references/wal-protocol.md
+  to: references/contracts/wal-protocol.md
+- from: references/xml-injection-standard.md
+  to: references/contracts/xml-injection-standard.md
+- from: references/cli-script-checklist.md
+  to: references/contracts/cli-script-checklist.md
+- from: references/machine-check-contract.md
+  to: references/contracts/machine-check-contract.md
+- from: references/downstream-contract.md
+  to: references/contracts/downstream-contract.md
+- from: references/cold-start-contract.md
+  to: references/contracts/cold-start-contract.md
+- from: references/convergence-loop.md
+  to: references/contracts/convergence-loop.md
+- from: references/dispatch-protocol.md
+  to: references/orchestration/dispatch-protocol.md
+- from: references/method-constraints.md
+  to: references/orchestration/method-constraints.md
+- from: references/malware-phase-routing.md
+  to: references/orchestration/malware-phase-routing.md
+- from: references/operational-mechanics.md
+  to: references/orchestration/operational-mechanics.md
+- from: references/dynamic-re-tool-priority.md
+  to: references/orchestration/dynamic-re-tool-priority.md
+- from: references/tool-inventory.md
+  to: references/orchestration/tool-inventory.md
+- from: references/anomaly-baseline.md
+  to: references/orchestration/anomaly-baseline.md
+- from: references/verify-static-vs-dynamic.md
+  to: references/orchestration/verify-static-vs-dynamic.md
+- from: references/failure-modes.md
+  to: references/orchestration/failure-modes/failure-modes.md
+- from: references/failure-modes-lifecycle.md
+  to: references/orchestration/failure-modes/failure-modes-lifecycle.md
+- from: references/failure-modes-monitoring.md
+  to: references/orchestration/failure-modes/failure-modes-monitoring.md
+- from: references/failure-modes-state.md
+  to: references/orchestration/failure-modes/failure-modes-state.md
+- from: references/case-book.md
+  to: references/orchestration/failure-modes/case-book.md
+- from: references/decision-rights.md
+  to: references/governance/decision-rights.md
+- from: references/guardrails.md
+  to: references/governance/guardrails.md
+- from: references/mechanisms.md
+  to: references/governance/mechanisms.md
+- from: references/excerpt-lint.md
+  to: references/governance/excerpt-lint.md
+- from: references/schema.md
+  to: references/schemas/schema.md
+- from: references/state-mapping.md
+  to: references/schemas/state-mapping.md
+- from: references/machine_check_map.yaml
+  to: references/schemas/machine_check_map.yaml
+cards:
+- from: references/re-library/android-fingerprint-apis.md
+  to: references/re-library/android/emulation/android-fingerprint-apis.md
+  domain: android
+  family: emulation
+- from: references/re-library/android-fingerprint-seeds.yaml
+  to: references/re-library/android/emulation/android-fingerprint-seeds.yaml
+  domain: android
+  family: emulation
+- from: references/re-library/anti-analysis.md
+  to: references/re-library/anti-analysis/catalog/anti-analysis.md
+  domain: anti-analysis
+  family: catalog
+- from: references/re-library/detection-engineer.md
+  to: references/re-library/malware/reporting/detection-engineer.md
+  domain: malware
+  family: reporting
+- from: references/re-library/dynamic-observation-ladders.md
+  to: references/re-library/method/process/dynamic-observation-ladders.md
+  domain: method
+  family: process
+- from: references/re-library/falsifier-library.md
+  to: references/re-library/method/process/falsifier-library.md
+  domain: method
+  family: process
+- from: references/re-library/field-notes.md
+  to: references/re-library/method/process/field-notes.md
+  domain: method
+  family: process
+- from: references/re-library/ida-scripting-overlays.md
+  to: references/re-library/method/process/ida-scripting-overlays.md
+  domain: method
+  family: process
+- from: references/re-library/jsvmp-triage.md
+  to: references/re-library/web/vm/jsvmp-triage.md
+  domain: web
+  family: vm
+- from: references/re-library/kunglao-toolshelf.md
+  to: references/re-library/tools/shelf/kunglao-toolshelf.md
+  domain: tools
+  family: shelf
+- from: references/re-library/languages-compiled.md
+  to: references/re-library/languages/compiled/languages-compiled.md
+  domain: languages
+  family: compiled
+- from: references/re-library/languages-go.md
+  to: references/re-library/languages/compiled/languages-go.md
+  domain: languages
+  family: compiled
+- from: references/re-library/languages-platforms.md
+  to: references/re-library/languages/platforms/languages-platforms.md
+  domain: languages
+  family: platforms
+- from: references/re-library/languages.md
+  to: references/re-library/languages/scripting/languages.md
+  domain: languages
+  family: scripting
+- from: references/re-library/loop-stage-gates.md
+  to: references/re-library/method/process/loop-stage-gates.md
+  domain: method
+  family: process
+- from: references/re-library/malware-analysis-workflow.md
+  to: references/re-library/malware/workflow/malware-analysis-workflow.md
+  domain: malware
+  family: workflow
+- from: references/re-library/malware-analysis.md
+  to: references/re-library/malware/workflow/malware-analysis.md
+  domain: malware
+  family: workflow
+- from: references/re-library/malware-dynamic-analysis.md
+  to: references/re-library/malware/workflow/malware-dynamic-analysis.md
+  domain: malware
+  family: workflow
+- from: references/re-library/malware-report-writer.md
+  to: references/re-library/malware/reporting/malware-report-writer.md
+  domain: malware
+  family: reporting
+- from: references/re-library/malware-triage.md
+  to: references/re-library/malware/triage/malware-triage.md
+  domain: malware
+  family: triage
+- from: references/re-library/multi-search-engine-config.json
+  to: references/re-library/research/osint/multi-search-engine-config.json
+  domain: research
+  family: osint
+- from: references/re-library/multi-search-engine-refs.md
+  to: references/re-library/research/osint/multi-search-engine-refs.md
+  domain: research
+  family: osint
+- from: references/re-library/multi-search-engine.md
+  to: references/re-library/research/osint/multi-search-engine.md
+  domain: research
+  family: osint
+- from: references/re-library/native-sign-recovery.md
+  to: references/re-library/android/signing/native-sign-recovery.md
+  domain: android
+  family: signing
+- from: references/re-library/patterns-debugging.md
+  to: references/re-library/patterns/debugging/patterns-debugging.md
+  domain: patterns
+  family: debugging
+- from: references/re-library/patterns-decode.md
+  to: references/re-library/patterns/decode/patterns-decode.md
+  domain: patterns
+  family: decode
+- from: references/re-library/patterns-simulation.md
+  to: references/re-library/patterns/simulation/patterns-simulation.md
+  domain: patterns
+  family: simulation
+- from: references/re-library/patterns.md
+  to: references/re-library/patterns/catalog/patterns.md
+  domain: patterns
+  family: catalog
+- from: references/re-library/phishing-case-study.md
+  to: references/re-library/method/process/phishing-case-study.md
+  domain: method
+  family: process
+- from: references/re-library/platforms-elf.md
+  to: references/re-library/platforms/elf/platforms-elf.md
+  domain: platforms
+  family: elf
+- from: references/re-library/platforms-hardware.md
+  to: references/re-library/platforms/hardware/platforms-hardware.md
+  domain: platforms
+  family: hardware
+- from: references/re-library/platforms-kernel.md
+  to: references/re-library/platforms/kernel/platforms-kernel.md
+  domain: platforms
+  family: kernel
+- from: references/re-library/platforms.md
+  to: references/re-library/platforms/catalog/platforms.md
+  domain: platforms
+  family: catalog
+- from: references/re-library/signature-check-bypass.md
+  to: references/re-library/android/signing/signature-check-bypass.md
+  domain: android
+  family: signing
+- from: references/re-library/stacked-protections.md
+  to: references/re-library/android/protections/stacked-protections.md
+  domain: android
+  family: protections
+- from: references/re-library/tools-advanced.md
+  to: references/re-library/tools/static/tools-advanced.md
+  domain: tools
+  family: static
+- from: references/re-library/tools-crypto.md
+  to: references/re-library/tools/crypto/tools-crypto.md
+  domain: tools
+  family: crypto
+- from: references/re-library/tools-dynamic.md
+  to: references/re-library/tools/dynamic/tools-dynamic.md
+  domain: tools
+  family: dynamic
+- from: references/re-library/tools.md
+  to: references/re-library/tools/static/tools.md
+  domain: tools
+  family: static
+- from: references/re-library/unidbg-algo-recovery.md
+  to: references/re-library/android/emulation/unidbg-algo-recovery.md
+  domain: android
+  family: emulation
+- from: references/re-library/unidbg-env-filling.md
+  to: references/re-library/android/emulation/unidbg-env-filling.md
+  domain: android
+  family: emulation
+- from: references/re-library/unidbg-harness-bringup.md
+  to: references/re-library/android/emulation/unidbg-harness-bringup.md
+  domain: android
+  family: emulation
+- from: references/re-library/verification-safety.md
+  to: references/re-library/method/process/verification-safety.md
+  domain: method
+  family: process
+- from: references/re-library/vm-deobfuscation-routing.md
+  to: references/re-library/patterns/vm/vm-deobfuscation-routing.md
+  domain: patterns
+  family: vm
+- from: references/re-library/vm-protection-anatomy.md
+  to: references/re-library/patterns/vm/vm-protection-anatomy.md
+  domain: patterns
+  family: vm
+- from: references/re-library/web-crawler-engineering.md
+  to: references/re-library/web/crawler/web-crawler-engineering.md
+  domain: web
+  family: crawler
+- from: references/re-library/web-re-quickref.md
+  to: references/re-library/web/labs/web-re-quickref.md
+  domain: web
+  family: labs
+- from: references/re-library/web-risk-control.md
+  to: references/re-library/web/risk-control/web-risk-control.md
+  domain: web
+  family: risk-control
+- from: references/re-library/wire-format-recognition.md
+  to: references/re-library/method/formats/wire-format-recognition.md
+  domain: method
+  family: formats

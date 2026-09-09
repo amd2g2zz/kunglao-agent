@@ -77,6 +77,7 @@ def _worker_protocol():
 # restating a hard number here would rot silently when the value changes).
 from liveness_policy import STUCK_MINUTES  # noqa: E402
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
+from contracts import EVENT_FIELD  # noqa: E402  (#102 event-field schema single source)
 STUCK_SECONDS = STUCK_MINUTES * 60
 
 # ---------------------------------------------------------------------------
@@ -152,7 +153,9 @@ ALL_EVENT_TYPES = [
 #   install_attempt / install_declined / install_failed
 #                                toolchain_install #700 per-item install events
 #   git_snapshot_skipped  kunglao_upgrade.py / kunglao-init.py  #739 git snapshot WARN faces
+#   case_vacuous / oracle_cadence_warn   oracle_cadence #132 settlement-cadence faces (the reward channel's caller made mechanical + loud)
 EMIT_ACTIONS = [
+    "acceptance_coverage_decreased",  # #146 oracle_runner case-retirement coverage-drop WARN
     "agents_refresh",     # #755 A2 upgrade L2 subagents re-copy face
     "analysis_blocked",
     "analysis_recorded",
@@ -164,6 +167,9 @@ EMIT_ACTIONS = [
     "capability_reject",
     "capability_switch",
     "carrier_drift",      # #829 cross-carrier consistency gate: register/_INDEX/notes/facts drift face
+    "case_bank_refused",  # #110 settlement->case-bank append refused (fail-open WARN face)
+    "case_priors_seeded",  # #110 cold-start case-bank prior injection face
+    "case_vacuous",       # #132 cadence separation observation: a case greened under >=2 distinct candidate clients (outcome invariant across the hypothesis space — the empirical twin of #126's declared update_map)
     "channel_default",    # #727 init channel degradation/guidance WARN
     "claim_migrate",
     "claim_revive",       # #634 PARK → OPEN revival (mission_stall.revive)
@@ -174,13 +180,18 @@ EMIT_ACTIONS = [
     "death_verdict_rejected",
     "decide_fail_open",   # #569 kunglao-decide._conservative_blocked exception face
     "decision_snapshot",  # #818 batch-1: decide() per-verdict input snapshot
+    "detector_eval",      # #127 a detector ran (detail JSON carries `detector` name + counters)
+    "detector_fired",     # #127 a detector FIRED on the pathology it exists for (liveness evidence)
     "dispatch",
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
     "failure_blocked",
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
+    "global_hook_purge",  # #143 upgrade purge of legacy global kunglao hooks (backup/skip/noop faces)
     "heartbeat_gap",      # #618 dead-window alarm: durable sidecar newest tick over threshold
+    "hypothesis_admission_fail_open",  # #109 store-read failure WARN face — admission not enforced, dispatch proceeds
+    "hypothesis_admission_reject",  # #109 PQ first-dispatch admission REJECT face (empty competitor field)
     "hypothesis_seed",    # #662 PQ scaffold seeding
     "hypothesis_superseded",  # #759 note-supersedes-hypothesis wiring (K3)
     "infeasible_candidate",  # #823 A4 doomed-trajectory early-stop signal
@@ -190,12 +201,19 @@ EMIT_ACTIONS = [
     "install_declined",   # #700 toolchain_install per-item install events
     "install_failed",     # #700 toolchain_install per-item install events
     "install_reference_scan",  # #752 upgrade end-step sweep — stale cross-install refs reported+rewired (WARN-only face)
+    "intent_unparsed",   # #105 dispatch intent declaration unparseable/declined (fail-open face)
     "ladder_required",
     "lesson_burn",
     "lesson_citation",
     "lesson_deprecated",
     "lesson_match",
     "lesson_stage_transition",  # #525 lessons nursery draft → active
+    "lifecycle_completed",  # #58 S2 subagent delivered (digest may ride detail)
+    "lifecycle_failed",   # #58 S2 subagent terminated with failure
+    "lifecycle_reaped",   # #58 S2 subagent torn down without completion
+    "lifecycle_spawned",  # #58 S2 subagent lifecycle: Task-spawn observed
+    "lifecycle_stalled",  # #58 S2 stall detector fired on the subagent
+    "lifecycle_started",  # #58 S2 first subagent output observed
     "mcp_scaffold_refresh",  # #755 A4 .mcp.json init-parity backfill face
     "mech_reject",        # #878 scheduler registry schema-gate REJECT face (fail-closed, nothing ran)
     "mech_run",           # #878 one scheduler pass: ran/skipped/dropped mechanisms + event classes
@@ -203,17 +221,23 @@ EMIT_ACTIONS = [
     "mission_stall",      # #634 mission-level stall fingerprint (ΔV_m flat × K)
     "must_ask",
     "must_stop",
+    "observation",        # #157 oracle_runner per-case result row (id/status + #146 forensics summary class) — the reward signal's event face
+    "oracle_cadence_warn",  # #132 settlement-cadence loud faces: broken client (all-red) / missing registered client / case-set refusal / runner failure — never a silent skip
     "orchestrator_mcp_reject",  # #601 main-agent direct MCP host-channel REJECT face (orchestrator_tool_guard)
     "orchestrator_tool_violation",  # #608 orchestrator Bash-face analysis-binary WARN (emitted since #608; registered late — its literal hides behind a parenthesized emit arg)
+    "plan_drift_crashed",  # #102 dispatch_gate: plan_drift --auto crash face (fail-open, observed)
     "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
+    "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
     "priority_deviation",
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
+    "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking
     "recall_injected",    # #814 recall hook injected knowledge files
     "recall_skip",        # #814 recall hook pass-through with attribution
     "redo_leak_warn",     # #772 dispatch_gate redo-prompt value-overlap WARN face
     "reject",             # hooks/env_check_gate teammate-pollution reject face (#233)
     "renew",              # #619 hook_activation TTL renewal face
+    "result_digest",      # #58 S2b result-summary face: files_written/claims_touched/verdict
     "retro_policy",       # #882 policy retro window face (heartbeat_tick advisory step)
     "retro_report",       # #882 settlement retro report face (runs/<ts>-retro-<claim>.md)
     "rho_checkpoint",     # #823 P2 N-arm V/D/ETA shadow signal face
@@ -224,7 +248,7 @@ EMIT_ACTIONS = [
     "signal_gate_reject",    # #868 dual-gate rejection w/ disclosure mode
     "skill_install_staleness",  # #755 A1 executing-install git-lag face
     "stale_plan_on_new_evidence",
-    "statusline_snapshot",  # #883 per-tick statusline health-snapshot write face
+    "statusline_snapshot",  # #883 statusline health-snapshot write face (event-driven, #142)
     "taint_candidates",   # #692 WP5 hypothesis_seeder dexdc-taint->competitor extension
     "tool_call",          # #880 real emitter: Agent PostToolUse claim-granularity tool rows (worker_budget_sinks.post_check)
     "toolchain_manifest_check",  # #755 A6 toolchain-manifest face (code reality)
@@ -246,6 +270,16 @@ EMIT_ACTIONS = [
     "zero_output_break",  # #823 A4 same-type action thrash circuit face
 ]
 
+# #102: word -> taxonomy class for the ledger stream. The stream has TWO
+# producer faces sharing one scan (classify_workspace reads BOTH
+# ledger.jsonl and runs/logs/kunglao-*.jsonl with source="ledger"):
+#   - kunglao_record.record_event writes the word in `event_type`
+#   - kunglao_log.emit writes the SAME controlled word in `action`
+#     (contracts.EVENT_FIELD — #102 drift instance 1: this branch keyed on
+#     `event_type` only, so every kunglao_log-shaped row classified as None
+#     and the seven classes read as fabricated zeros in statusline/digest)
+# One map serves both fields — same seven words, same classes. A word under
+# either field that is not in the map classifies as None (never fabricated).
 LEDGER_EVENT_MAP = {
     "fact_written": FACT_WRITTEN,
     "fact_verified": FACT_VERIFIED,
@@ -284,9 +318,16 @@ CLAIM_STATUS_MAP = {
 
 
 def classify_event(event: dict, source: str) -> str | None:
-    """Classify one event row from a known source; None when unclassifiable."""
+    """Classify one event row from a known source; None when unclassifiable.
+
+    #102: the ledger branch reads both producer faces' word fields —
+    `event_type` (kunglao_record) and `action` (kunglao_log.emit,
+    contracts.EVENT_FIELD) — through the same LEDGER_EVENT_MAP. The
+    event_type face wins when both are present (the words are identical, so
+    the result is the same either way)."""
     if source == "ledger":
-        return LEDGER_EVENT_MAP.get(event.get("event_type", ""))
+        word = event.get("event_type") or event.get(EVENT_FIELD)
+        return LEDGER_EVENT_MAP.get(str(word) if word else "")
     if source == "convergence":
         row_type = event.get("type") or SNAPSHOT
         if row_type == SNAPSHOT:
@@ -509,6 +550,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

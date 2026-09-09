@@ -99,13 +99,8 @@ def test_llm_env_without_config_falls_back(tmp_path):
         os.environ.pop("KUNGLAO_RHO_BACKEND", None)
 
 
-def test_attach_signals_mounts_flag_gated(tmp_path, monkeypatch):
-    import value_config
+def test_attach_signals_mounts(tmp_path, monkeypatch):
+    monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
     ws = _mk_ws(tmp_path, pqs=["find the packer family"])
-    monkeypatch.setenv(value_config.ENV_NAME, "1")
     rho_checkpoint.attach_signals(ws, {"decision": "x"})
     assert len(_rows(ws, "rho_pair")) == 1
-    monkeypatch.delenv(value_config.ENV_NAME, raising=False)
-    ws2 = _mk_ws(tmp_path / "w2", pqs=["q two"])
-    rho_checkpoint.attach_signals(ws2, {"decision": "x"})
-    assert len(_rows(ws2, "rho_pair")) == 0

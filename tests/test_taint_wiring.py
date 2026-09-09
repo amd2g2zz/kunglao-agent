@@ -3,7 +3,7 @@
 
 Pins design D7 (acceptance 5):
 
-- references/re-library/android-fingerprint-seeds.yaml: extensible machine
+- references/re-library/android/emulation/android-fingerprint-seeds.yaml: extensible machine
   table {seeds: [{api, category, risk}]} covering the fingerprint-API
   families (device ids / SIM / location / network / sensors / clipboard);
   consumable by dexdc_scanner --seeds (the default seeds path resolves to
@@ -33,7 +33,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO / "scripts"
 TOOLS_STATIC = REPO / "tools" / "static"
-SEEDS = REPO / "references" / "re-library" / "android-fingerprint-seeds.yaml"
+SEEDS = REPO / "references" / "re-library" / "android" / "emulation" / "android-fingerprint-seeds.yaml"
 sys.path.insert(0, str(SCRIPTS))
 
 

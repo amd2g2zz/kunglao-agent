@@ -1,6 +1,6 @@
 # web domain index (tool layer)
 
-> Domain: browser/JS reverse-engineering tool face. When a worker is dispatched to web/JSVMP tasks, read this file first, then load on demand. Contract field meanings are in [README.md](README.md); the machine contract is [_INDEX.yaml](_INDEX.yaml). Methodology depth lives in the knowledge card [references/re-library/jsvmp-triage.md](../references/re-library/jsvmp-triage.md).
+> Domain: browser/JS reverse-engineering tool face. When a worker is dispatched to web/JSVMP tasks, read this file first, then load on demand. Contract field meanings are in [README.md](README.md); the machine contract is [_INDEX.yaml](_INDEX.yaml). Methodology depth lives in the knowledge card [references/re-library/web/vm/jsvmp-triage.md](../references/re-library/web/vm/jsvmp-triage.md).
 
 ## Tool catalog
 

@@ -41,11 +41,21 @@ TRACKED_IGNORED_ALLOWLIST: dict[str, str] = {
         "golden fixture: F-03 replay input (runs/ rule over-matches depth)",
     "tests/fixtures/golden/F-06/ws/runs/worker-status-w1.md":
         "golden fixture: F-06 replay input (runs/ rule over-matches depth)",
+    "tests/fixtures/golden/F-04/ws/runs/posteriors.yaml":
+        "golden fixture: F-04 replay input (#146 settlement arming; runs/ rule over-matches depth)",
+    "tests/fixtures/golden/F-12/ws/runs/posteriors.yaml":
+        "golden fixture: F-12 replay input (#146 settlement arming; runs/ rule over-matches depth)",
     # .subagent-review/*.json (rule .gitignore:44) — committed review
     # receipts are deliberate Gate-5 execution evidence (devkit/quality_gates.py).
     # 2026-08-19-gate5.json is additionally pinned by
     # tests/test_subagent_injection.py::test_tracked_gate5_review_citations_resolve
     # -> allowlisted, NOT git rm --cached (local-green / fresh-CI-red landmine).
+    # Issue #111: the E1 feasibility verdict is a deliberately committed PRP
+    # report — the issue brief places it at .claude/PRPs/reports/ (rule
+    # .gitignore:59). Same posture as the golden fixtures: committed on
+    # purpose, so it is allowlisted here, NOT git rm --cached.
+    ".claude/PRPs/reports/e1-111-feasibility.md":
+        "issue #111 E1 feasibility verdict — brief-required committed report",
 }
 
 

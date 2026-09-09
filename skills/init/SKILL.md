@@ -30,6 +30,26 @@ analysis; a workspace that is not initialized is refused work.
    WARN; every field the task_spec does not answer stays HARD
    (conservative default — an absent task_spec is byte-identical to a
    VM-required workspace).
+
+   **Oracle anchors (REQUIRED — same round)** — after the needs-first
+   questions, ask the three answers that steer the whole loop, and write
+   them as first-class `task_spec.yaml` fields (blank in the template):
+   1. `goal_verbatim` — the user's goal, restated VERBATIM (never
+      paraphrased; the verbatim form is what the completion oracle
+      judges, and init pre-fills `task-oracle.yaml` `task_text` from it).
+   2. `success_criterion` — what counts as done, stated as a checkable
+      end-state (the completion anchor).
+   3. `verification_method` — how the result is verified, one of:
+      `reproduction` / `replay-evidence` (either arms the
+      controlled-comparison oracle: byte-matched pairs become admission
+      and verdict requirements for every primary question) / `static` /
+      `manual`.
+   While any anchor is blank the analysis entry refuses
+   (`kunglao analysis` exit 7) — collect all three or the workspace
+   cannot enter the loop; never guess or default an anchor. For help
+   turning a folk ask ("我要纯算") into these answers, point the user at
+   the README section **"How to state the task"**
+   (`README.md`, anchor `#how-to-state-the-task`).
 1. **Target alignment ** — run
    `python <SKILL_DIR>/scripts/kunglao-init.py <workspace>` FIRST; undecided
    intake items (workspace path -> analysis target -> project type) exit 8
@@ -42,7 +62,10 @@ analysis; a workspace that is not initialized is refused work.
 2. **Scaffold** — create the workspace directory skeleton and state files:
    `runs/`, `facts/_INDEX.md`, `claim-register.yaml`, `analysis_state.txt`,
    `task_spec.yaml` (from `templates/state/`; already filled by step 0 —
-   scaffold never clobbers it).
+   scaffold never clobbers it), `goal-operationalization.yaml` (from
+   `templates/state/`; the Phase-0 goal operationalization skeleton — the
+   orchestrator pre-registers it mechanically before the first dispatch;
+   the verbatim task itself stays in `task-oracle.yaml`, #128).
 3. **Write CLAUDE.md** — render the type-appropriate workspace contract from
    `templates/CLAUDE.md.base.tmpl`; the task_spec constraints (vm_detonation,
    scope exclusions, depth) are rendered INTO the contract.
@@ -62,9 +85,16 @@ analysis; a workspace that is not initialized is refused work.
    subagents to `<ws>/.claude/agents/`, records the MCP supply state in
    `env-manifest.yaml` (missing registrations become MANUAL entries with
    their register command — init never runs `claude mcp add` itself), and
-   writes the deployment ledger. `--skills a,b` opts into auxiliary skill
-   deployment. Activation (which hooks FIRE) stays a separate
-   orchestrator act:
+   writes the deployment ledger. Deployment is WORKSPACE-SCOPED (#25 D4):
+   the hooks live in `<ws>/.claude/settings.json` and fire only for
+   sessions opened inside `<ws>` — a Claude session started elsewhere
+   (another project, the repo checkout, home) loads none of them, so
+   kunglao's gates are silently absent there; `hooks/session_start.py`
+   prints an explicit NOT-active notice when it runs without a kunglao
+   workspace. `--builtin-skills a,b` opts into auxiliary skill
+   deployment (kunglao's BUILT-IN bundled skills only — globally-installed
+   skills are a different, future surface). Activation (which hooks FIRE)
+   stays a separate orchestrator act:
    `python <SKILL_DIR>/scripts/hook_activation.py <workspace> --wire-up`
    remains the canonical re-registration/repair entry .
 
@@ -76,7 +106,8 @@ The workspace path is a positional argument (omitted -> pending decision).
 default — an undecided type pends, exit 8). `--target NAME` names the
 analysis target under `bins/`; containers additionally resolve
 `target_object`. `--no-hooks` skips hook deployment (the only legal skip);
-`--skills a,b` deploys named auxiliary skills (opt-in, default none).
+`--builtin-skills a,b` deploys named built-in auxiliary skills (opt-in,
+default none; kunglao-bundled names only, #25 D2).
 
 ## No arguments
 

@@ -2,11 +2,14 @@
 """ext-scan.py — deterministic ext-index generator over repo capabilities (#476).
 
 Enumerates the repo-local "callable capability" face OUTSIDE the internal
-tools/_INDEX.yaml execution registry (three sources, design D2):
+tools/_INDEX.yaml execution registry (four sources, design D2 as extended
+by #162):
 
   1. scripts/*.py  with an `if __name__ == "__main__"` entry point (CLI);
   2. hooks/*.py    with the same entry-point structure (gate hooks);
-  3. references/re-library/*.md — capability-declaration domain docs
+  3. templates/**/*.tmpl — fillable/adaptable skeletons (the template
+     tier, #162);
+  4. references/re-library/*.md — capability-declaration domain docs
      (the #494 three-point check's third point).
 
 Optionally merges the ENVIRONMENT-side face (#515 acceptance 1):
@@ -20,6 +23,32 @@ Emits tools/_INDEX.ext.yaml — a DESCRIBE-ONLY catalog (zero new trust
 mechanism, design D6): nothing consumes this index to EXECUTE anything.
 Consumption is read/print (tools/tool-search.py --find) and citation
 resolution (devkit/subagent_review._index_tool_names, #493 surface).
+
+#162 typed tiers: every entry carries `type:` (tool|template|reference)
+and `consume:` (invoke|fill|adapt|read) so a search hit states WHAT the
+asset is and HOW to consume it. The tier classification criteria
+(binding, issue #162 — recorded here so future assets are classified
+mechanically):
+
+  Tier classification criteria
+  1. Parameter dimensionality (tool vs template): how many dimensions
+     vary per target. Zero varying dimensions — CLI flags suffice →
+     tool. scripts/ + hooks/ entry points are tools; templates/**/*.tmpl
+     are templates.
+  2. Placeholder enumerability (template fill vs adapt): varying
+     dimensions enumerable as {{PLACEHOLDER}} keys → consume: fill;
+     structural variance (hook strategy / filter logic / data flow
+     changes per target) → consume: adapt. An adapt-expected template
+     DECLARES itself via a `consume: adapt` marker line in its leading
+     header comment, and its description MUST name its known-variance
+     regions ("what typically needs adapting").
+  3. Adaptation labor (template vs reference): the whole implementation
+     is the agent's job → reference (knowledge; code listings are
+     shapes, not fillable skeletons). references/re-library docs are
+     consume: read.
+
+Four-level labor ladder: tools (0 labor) → fill-only → adapt-expected →
+reference (full implementation).
 
 Capability tags come from the OPTIONAL tools/_INDEX.ext.map.yaml
 (name -> "<domain>:<operation>"); unmapped entries surface as
@@ -80,14 +109,28 @@ EXT_INDEX_REL = "tools/_INDEX.ext.yaml"
 EXT_MAP_REL = "tools/_INDEX.ext.map.yaml"
 INTERNAL_INDEX_REL = "tools/_INDEX.yaml"
 
-# The three sources (design D2): (repo-relative dir, glob, kind label)
+# The sources (design D2 as extended by #162): (repo-relative dir, glob,
+# kind label). The template tier is recursive (**/*.tmpl) — see
+# iter_entry_sources.
 SOURCE_DIRS = (
     ("scripts", "*.py", "script"),
     ("hooks", "*.py", "hook"),
+    ("templates", "*.tmpl", "template"),
     ("references/re-library", "*.md", "reference"),
 )
 
 UNKNOWN_CAPABILITY = "unknown"
+
+# #162 typed tiers: (type, consume) per kind — the mechanical form of the
+# classification criteria (see module docstring). Templates split
+# fill/adapt by the header marker at derivation time.
+TIER_FIELDS = {
+    "script": ("tool", "invoke"),
+    "hook": ("tool", "invoke"),
+    "template": ("template", None),   # consume derived: fill | adapt
+    "reference": ("reference", "read"),
+}
+ADAPT_MARKER = "consume: adapt"
 
 # #515: environment-side entries. source is a PROVENANCE LABEL, not a repo
 # path — the generating machine's claude-json is neither portable nor
@@ -101,19 +144,30 @@ MCP_USAGE_TEMPLATE = (
 HOOK_USAGE_TEMPLATE = ("hook {source} (settings.json wiring; "
                        "JSON on stdin; exit code = verdict)")
 REF_USAGE_TEMPLATE = "read {source} (capability reference)"
+# #162: built by concatenation, NOT str.format — a literal {{PLACEHOLDER}}
+# inside a format string would collapse to {PLACEHOLDER}.
+FILL_USAGE_PREFIX = "fill "
+FILL_USAGE_SUFFIX = " (substitute the {{PLACEHOLDER}} keys)"
+ADAPT_USAGE_PREFIX = "adapt "
+ADAPT_USAGE_SUFFIX = (" (structural variance — rework the known-variance "
+                      "regions named in the header)")
 
-INDEX_HEADER = """schema: tools-ext-index/1
+INDEX_HEADER = """schema: tools-ext-index/2
 purpose: >-
-  Descriptive catalog of callable repo capabilities OUTSIDE the internal
+  Descriptive catalog of repo capabilities OUTSIDE the internal
   tools/_INDEX.yaml execution registry: entry-point scripts/ CLIs,
-  hooks/ gates, references/re-library/ capability docs (issue #476);
-  optionally environment-side mcp server entries merged at generation
+  hooks/ gates, templates/**/*.tmpl skeletons, and references/re-library/
+  capability docs (issues #476 + #162).
+  Optionally environment-side mcp server entries merged at generation
   time via --with-mcp (issue #515 — committed regenerations run WITHOUT
   the flag, the environment face is per-machine; mcp entries carry the
   claude-json provenance label, never a repo path).
   DESCRIBE-ONLY, zero new trust mechanism — no code path executes an
   entry from this index. Consumption: tools/tool-search.py --find
   (read/print) and Gate 5 tools_used citation resolution (#493).
+  Every entry is TYPED (#162): type tool|template|reference states what
+  the asset is; consume invoke|fill|adapt|read states how to use it
+  (classification criteria 1-3 live in the ext-scan.py docstring).
   GENERATED FILE — do not hand-edit; regenerate: python tools/ext-scan.py
 """
 
@@ -160,16 +214,53 @@ def indexed_name_candidates(stem: str) -> tuple[str, ...]:
 
 def iter_entry_sources(root: Path) -> list[tuple[str, str]]:
     """(repo-relative POSIX path, kind) for every entry-point file across
-    the three source dirs, sorted for determinism."""
+    the source dirs, sorted for determinism. Python entry-point files are
+    whitelisted structurally (has_entry_point); templates and references
+    enumerate wholesale (a .tmpl/.md is catalogued as-is)."""
     out: list[tuple[str, str]] = []
     for rel_dir, pattern, kind in SOURCE_DIRS:
+        if kind == "reference":
+            out.extend((face, kind) for face in _mapped_references(root))
+            continue
         d = root / rel_dir
         if not d.is_dir():
             continue
-        for p in sorted(d.glob(pattern)):
-            if kind == "reference" or has_entry_point(p):
+        paths = sorted(d.rglob(pattern)) if kind == "template" \
+            else sorted(d.glob(pattern))
+        for p in paths:
+            if kind in ("reference", "template") or has_entry_point(p):
                 out.append((p.relative_to(root).as_posix(), kind))
     return sorted(out)
+
+
+def _mapped_references(root: Path) -> list[str]:
+    """Card faces for the reference tier, resolved through the mapping.
+
+    The mapping (references/re-library/_mapping.yaml) is the single home
+    of card placement; each row contributes its destination once the move
+    has landed, its source before. Data files ride with their consumer
+    card and carry no catalog row. A file on disk outside the mapping is
+    never catalogued — the comment-hygiene lint fails it instead.
+    """
+    map_path = root / "references/re-library/_mapping.yaml"
+    if not map_path.is_file():
+        # mapping-less tree (sandbox fixtures, legacy layouts): legacy flat
+        # enumeration; where the mapping lives, the lint enforces coverage
+        d = root / "references/re-library"
+        return sorted(p.relative_to(root).as_posix() for p in d.glob("*.md"))
+    import yaml  # dev-time generator; PyYAML is a locked repo dependency
+
+    doc = yaml.safe_load(map_path.read_text(encoding="utf-8")) or {}
+    faces: list[str] = []
+    for row in doc.get("cards") or []:
+        if not str(row.get("from", "")).endswith(".md"):
+            continue
+        for key in ("to", "from"):
+            rel = str(row.get(key, ""))
+            if rel and (root / rel).is_file():
+                faces.append(rel)
+                break
+    return sorted(faces)
 
 
 # ---- field derivation -----------------------------------------------------
@@ -214,10 +305,92 @@ def _frontmatter_field(text: str, field: str) -> str:
     return ""
 
 
+def _leading_comment_lines(text: str) -> list[str]:
+    """The leading comment header of a template: initial blank lines plus
+    every subsequent line that opens/continues a comment (`/*`, `*`, `*/`,
+    `//`, `#`, `<!--`). The scan stops at the first non-comment line — the
+    #162 adapt marker must live in the header, not in body code."""
+    out: list[str] = []
+    for ln in text.splitlines():
+        s = ln.strip()
+        if not out and not s:
+            continue
+        if s.startswith(("/*", "*", "*/", "//", "#", "<!--")):
+            out.append(s)
+        else:
+            break
+    return out
+
+
+def _template_consume(text: str) -> str:
+    """fill | adapt — criterion 2: the `consume: adapt` marker line in the
+    leading header comment declares structural variance; everything else
+    is placeholder-enumerable (fill)."""
+    return "adapt" if any(
+        ADAPT_MARKER in ln for ln in _leading_comment_lines(text)) else "fill"
+
+
+def _template_description(text: str) -> str:
+    """First non-empty header-comment line, markers stripped — the
+    template's own one-line self-description. Interpreter directives
+    (`#!`) and encoding cookies (`-*- coding: ... -*-`) are directives,
+    not descriptions."""
+    for ln in _leading_comment_lines(text):
+        if ln.startswith("#!") or "coding:" in ln and "-*-" in ln:
+            continue
+        stripped = ln.lstrip("/*#<!-> \t").strip()
+        if stripped:
+            return stripped
+    return ""
+
+
+def _variance_regions(text: str) -> list[str]:
+    """Known-variance region NAMES from an adapt-expected template's
+    leading header (criterion 2: the desc MUST name them). Mechanical
+    shape: a header line containing `KNOWN-VARIANCE REGIONS` starts the
+    section; subsequent `N. <name> — ...` numbered lines contribute the
+    name (text before the first dash)."""
+    lines = _leading_comment_lines(text)
+    names: list[str] = []
+    in_regions = False
+    for ln in lines:
+        stripped = ln.lstrip("/*#<!-> \t").strip()
+        if "KNOWN-VARIANCE REGIONS" in stripped:
+            in_regions = True
+            continue
+        if not in_regions:
+            continue
+        m = re.match(r"^\d+\.\s+([^—-]+?)\s*[—-]", stripped)
+        if m:
+            names.append(m.group(1).strip())
+    return names
+
+
+ADAPT_CONTRACT_LABELS = ("Scenario", "How", "Expected outcome")
+
+
+def _adapt_contract_summary(text: str) -> str:
+    """Scenario/How/Expected-outcome lines from an adapt-expected
+    template's leading header (one line per label) — the hit-information
+    minimum contract (#162 addendum: a desc states the scenario, the how,
+    and the EXPECTED outcome, never a guaranteed fact)."""
+    lines = _leading_comment_lines(text)
+    out: list[str] = []
+    for ln in lines:
+        stripped = ln.lstrip("/*#<!-> \t").strip()
+        for label in ADAPT_CONTRACT_LABELS:
+            if stripped.startswith(label + ":"):
+                body = stripped[len(label) + 1:].strip()
+                if body:
+                    out.append(f"{label}: {body}")
+    return " ".join(out)
+
+
 def derive_entry(source: str, kind: str, root: Path) -> dict:
     path = root / source
     stem = Path(source).stem
     name = stem  # raw-stem identity (#318 dead-name safety, design D5)
+    entry_type, consume = TIER_FIELDS[kind]
     if kind == "reference":
         text = path.read_text(encoding="utf-8", errors="replace")
         description = _frontmatter_field(text, "description")
@@ -227,6 +400,27 @@ def derive_entry(source: str, kind: str, root: Path) -> dict:
                     description = ln[2:].strip()
                     break
         usage = REF_USAGE_TEMPLATE.format(source=source)
+    elif kind == "template":
+        text = path.read_text(encoding="utf-8", errors="replace")
+        consume = _template_consume(text)
+        # description: leading header comment first (JS-flavored), then
+        # the module docstring (python-flavored .py.tmpl parses as
+        # python), then the bare-name fallback. Adapt-expected templates
+        # append their known-variance region names (criterion 2).
+        description = (_template_description(text)
+                       or _first_doc_line(_module_docstring(path))
+                       or f"{name} (template)")
+        if consume == "adapt":
+            regions = _variance_regions(text)
+            if regions:
+                description = (f"{description} — known-variance regions: "
+                               f"{', '.join(regions)}")
+            contract = _adapt_contract_summary(text)
+            if contract:
+                description = f"{description} — {contract}"
+        usage = ((ADAPT_USAGE_PREFIX + source + ADAPT_USAGE_SUFFIX)
+                 if consume == "adapt"
+                 else FILL_USAGE_PREFIX + source + FILL_USAGE_SUFFIX)
     else:
         doc = _module_docstring(path)
         description = _first_doc_line(doc) or f"{name} ({kind})"
@@ -234,7 +428,8 @@ def derive_entry(source: str, kind: str, root: Path) -> dict:
             usage = HOOK_USAGE_TEMPLATE.format(source=source)
         else:
             usage = _usage_from_docstring(doc, source)
-    return {"name": name, "kind": kind, "source": source,
+    return {"name": name, "kind": kind, "type": entry_type,
+            "consume": consume, "source": source,
             "usage": usage, "description": description}
 
 
@@ -341,6 +536,8 @@ def mcp_entries_from_probe(probe: object) -> list[dict]:
         entries.append({
             "name": entry_name,
             "kind": "mcp",
+            "type": "tool",
+            "consume": "invoke",
             "source": MCP_PROVENANCE,
             "usage": MCP_USAGE_TEMPLATE.format(server=name),
             "description": (
@@ -423,6 +620,8 @@ def render(entries: list[dict]) -> str:
     for e in sorted(entries, key=lambda e: e["name"]):
         lines.append(f"  - name: {_q(e['name'])}")
         lines.append(f"    capability: {_q(e['capability'])}")
+        lines.append(f"    type: {_q(e['type'])}")
+        lines.append(f"    consume: {_q(e['consume'])}")
         lines.append(f"    source: {_q(e['source'])}")
         lines.append(f"    usage: {_q(e['usage'])}")
         lines.append(f"    description: {_q(e['description'])}")

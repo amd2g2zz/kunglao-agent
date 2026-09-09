@@ -25,7 +25,7 @@ try:  # normal load paths (hook subprocess: script dir; pytest: pythonpath)
 except ImportError:  # by-path exec WITHOUT hooks/ on sys.path — the eight
     # scripts-side _load_worker_lib consumers (convergence_check,
     # backtrack_gate, event_taxonomy, external_kicker, kunglao_status,
-    # progress_report, reconcile_workers, scripts/lib_kunglao) load THIS
+    # progress_report, reconcile_workers) load THIS
     # file via spec_from_file_location under "lib_kunglao_hooks"; their
     # subprocess sys.path has scripts/ but not hooks/. Self-bootstrap the
     # authority by path (registered under its canonical name so every
@@ -274,7 +274,7 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
 # Rule: the LAST `status:` token in the file wins. This module is the ONLY
 # place in the repo that implements this parse (#444 AC-1, enforced by
 # tests/test_worker_liveness_protocol.py). Every other module —
-# convergence_check, worker_pulse, scripts/lib_kunglao, external_kicker,
+# convergence_check, worker_pulse, external_kicker,
 # event_taxonomy, kunglao_status, reconcile_workers — is a CONSUMER via
 # parse_worker_status(_tokens) / scan_active_workers / iter_worker_states.
 # Pre-#444 these were byte-for-byte mirrors of
@@ -282,7 +282,7 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
 # mirror is still two copies — #444 made this the one implementation and the
 # scripts side delegate (importlib by path, unique name lib_kunglao_hooks,
 # the external_kicker.should_kick precedent: bare `import lib_kunglao` is
-# ambiguous under pytest because scripts/lib_kunglao.py shares the name).
+# ambiguous under pytest because bare names resolve by path order).
 
 # #597: the stuck threshold comes from scripts/liveness_policy.py (THE
 # single source for liveness minutes). hooks/ runs with its own dir at
@@ -291,7 +291,7 @@ def is_active(ws: Path, hook_name: str, ttl_minutes: int = 30) -> bool:
 # install, not a degraded mode — hooks/ and scripts/ ship together, #444
 # posture). #671: was a literal existence check + bare insert.
 ensure_scripts_path()
-from liveness_policy import STUCK_MINUTES  # noqa: E402
+from liveness_policy import DEAD_WORKER_MINUTES, STUCK_MINUTES  # noqa: E402
 
 # #607: statuses that END a worker's liveness. Anything else — including
 # unknown tokens (planning/preflight) and None — counts as active: an
@@ -494,13 +494,20 @@ def scan_active_workers(workspace: Path, states: list | None = None) -> tuple[in
     Output shape is FROZEN (#37 consumers): ``(active, stuck)`` where each
     stuck entry is ``{"worker": <file stem>, "age_min": int}`` —
     worker_budget.check_workers_lt_3, worker_pulse flags and kunglao-decide's
-    ``stale`` derivation all read exactly this.
+    ``stale`` derivation all read exactly this. #11 ADDITIVE key: each stuck
+    entry also carries ``dead: bool`` — True when the silence exceeds
+    DEAD_WORKER_MINUTES (2x STUCK_MINUTES, liveness_policy): the worker is
+    GONE (API disconnect / crash — no more writes, ever), not merely slow.
+    backtrack_gate (#38) owns the 20-40 stuck band; the dead band feeds the
+    #11 death-event + resume path (scripts/worker_death.py via
+    convergence_check._act_stuck_workers).
     """
     if states is None:
         states = iter_worker_states(workspace)
     active = 0
     stuck = []
     cutoff = timedelta(minutes=STUCK_MINUTES)
+    dead_cutoff = timedelta(minutes=DEAD_WORKER_MINUTES)
     now = datetime.now(timezone.utc)
     for s in states:
         # #607: only TERMINAL statuses end liveness — unknown statuses
@@ -513,7 +520,8 @@ def scan_active_workers(workspace: Path, states: list | None = None) -> tuple[in
         active += 1
         if (now - s["mtime"]) > cutoff:
             stuck.append({"worker": s["file"].stem,
-                          "age_min": int((now - s["mtime"]).total_seconds() // 60)})
+                          "age_min": int((now - s["mtime"]).total_seconds() // 60),
+                          "dead": (now - s["mtime"]) > dead_cutoff})  # #11
     return active, stuck
 
 
@@ -590,3 +598,113 @@ def scan_done_artifact_violations(workspace: Path, states: list | None = None) -
                                "kind": "declared-note-missing",
                                "missing": note_missing})
     return violations
+
+
+# ---- drift detection (alive-but-stuck) — single source for both trees ----
+# The session heartbeat stays fresh and the ledger keeps writing rows,
+# but state makes ZERO progress — a frozen loop. Time-based
+# dead-session detection cannot see it; ledger SIGNATURE ROTATION can.
+# D1 signature = (decision, open_ids, partial_count, active_workers,
+#    blockers, facts_total) — ts excluded (a fresh timestamp on an
+#    identical snapshot is the false-alive signal, not progress);
+#    open_count excluded (derivable as len(open_ids)).
+# D2 rotation counting: bounded tail read (window tracks the
+#    thresholds), corrupt rows skipped — a corrupt ledger line never
+#    crashes the gate.
+# D3 workers_progressing rides the worker-status protocol above
+#    (iter_worker_states — main runs/ plus worktree runs/, last
+#    `status:` token decides); freshness flips the stuck rule.
+# ---- drift thresholds (tunable) ----
+ROTATION_WINDOW = 3            # consecutive identical signatures = drift detected
+DRIFT_ESCALATE_ROWS = 6        # persistent drift = escalate to a kick
+# minutes thresholds single-sourced in liveness_policy (values unchanged).
+from liveness_policy import WORKER_PROGRESS_MINUTES  # noqa: E402  (in-progress status file younger than this = moving)
+
+LEDGER_FILE = ".convergence_ledger.jsonl"
+
+# D1: decision-relevant fields — ts excluded (false-alive), open_count
+# excluded (derivable as len(open_ids)).
+_SIGNATURE_FIELDS = ("decision", "open_ids", "partial_count",
+                     "active_workers", "blockers", "facts_total")
+
+def _tail_signatures(ws: Path, window: int) -> list[tuple]:
+    """Last `window` valid signature tuples, oldest-first; malformed rows skipped.
+
+    errors="replace" decoding + per-row parse guard: a corrupt ledger line
+    can neither crash the gate nor anchor a run (D2). Missing/empty ledger →
+    [].
+    """
+    from kunglao_log import iter_jsonl  # function-level: scripts/ single source
+
+    path = Path(ws) / LEDGER_FILE
+    if not path.exists():
+        return []
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return []
+    sigs: list[tuple] = []
+    for row in iter_jsonl(lines[-window:]):
+        if not isinstance(row, dict):
+            continue
+        sig = tuple(row.get(k) for k in _SIGNATURE_FIELDS)
+        if any(v is None for v in sig):
+            continue
+        sigs.append(sig)
+    return sigs
+
+
+def signature_rotation(ws, window: int | None = None) -> int:
+    """Consecutive identical ledger signatures ending at the tail (D1/D2).
+
+    Reads the last `window` rows (default max(ROTATION_WINDOW,
+    DRIFT_ESCALATE_ROWS) — exactly the horizon all decisions compare
+    against), builds signature tuples, and counts the run of rows equal to
+    the last VALID row's signature walking backwards. Malformed rows are
+    skipped; 0 when there is no valid row to anchor the run.
+    """
+    n = window if window is not None else max(ROTATION_WINDOW, DRIFT_ESCALATE_ROWS)
+    sigs = _tail_signatures(Path(ws), n)
+    if not sigs:
+        return 0
+    ref = sigs[-1]
+    count = 0
+    for s in reversed(sigs):
+        if s == ref:
+            count += 1
+        else:
+            break
+    return count
+
+
+def workers_progressing(ws, now: datetime | None = None,
+                        fresh_minutes: int = WORKER_PROGRESS_MINUTES) -> bool:
+    """True when ANY in-progress worker status file is younger than fresh_minutes.
+
+    The legitimate-SATURATED exemption: with the worker pool full the
+    orchestrator correctly waits — the ledger signature can freeze longer
+    than ROTATION_WINDOW while workers grind. A freshly-written in-progress
+    status file is mechanical evidence of movement (D3).
+
+    Parsing + scan targets are the canonical worker-liveness protocol
+    (iter_worker_states — the exact scan the
+    convergence decision uses: workspace runs/ PLUS every .wt-*/ with
+    .kunglao-worktree marker worktree dir, v1.9.13 worktree isolation, last
+    `status:` token decides); only `in-progress` counts; mtime YOUNGER than
+    fresh_minutes. OSError on glob/read/stat skips that file (protocol-level).
+    """
+    if now is None:
+        now = datetime.now(tz=timezone.utc)
+    cutoff = now - timedelta(minutes=fresh_minutes)
+    states = iter_worker_states(Path(ws))
+    return any(s["status"] == "in-progress" and s["mtime"] > cutoff
+               for s in states)
+
+
+def drift_detected(ws) -> bool:
+    """Alive-but-stuck: rotation >= ROTATION_WINDOW AND no worker movement.
+
+    The regime time-based detection cannot see: heartbeat fresh, ledger
+    writing every loop, zero state progress (F2/F3, wf_5c50b792-f7c).
+    """
+    return signature_rotation(ws) >= ROTATION_WINDOW and not workers_progressing(ws)

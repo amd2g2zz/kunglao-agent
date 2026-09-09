@@ -72,6 +72,14 @@ reconcile → continuous-tick verify. Exit contract (never proceed on failure):
   re-arm guidance` — monitoring is NOT verifiably alive (a lone registration
   tick counts as dead: that was the blind spot). Direct to
   `/kunglao-agent:resume`; do not hand-wave a dispatch through.
+- `rc=7` + stderr `analysis entry refused - oracle anchors missing ...` —
+  the required intake answers are not in `task_spec.yaml`
+  (`goal_verbatim` / `success_criterion` / `verification_method`, the
+  latter one of reproduction | replay-evidence | static | manual). Route
+  back to the init intake: collect the three answers (never guess or
+  default one), write them into `task_spec.yaml`, re-run this gate. For
+  phrasing help, point the user at the README section "How to state the
+  task".
 
 The durable reconcile inside this command is idempotent: if Claude Code's
 7-day durable-schedule cap expired and removed the entry, it is re-created

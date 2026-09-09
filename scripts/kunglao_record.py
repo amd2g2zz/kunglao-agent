@@ -43,6 +43,11 @@ REQUIRED_FOR_TERMINAL_STATE = (
     "blind_gate",
     "fact_contradiction_gate",
     "blind_gate:check_inference_blind_scope",
+    "blind_gate:check_verifier_dispatch_evidence",
+    # #16: difficulty-gated depth — hard/max tiers need
+    # required_independent_verifications DISTINCT verifier records
+    # (difficulty_thresholds.THRESHOLDS); missing feed fails closed to hard.
+    "blind_gate:check_verifier_depth_evidence",
 )
 
 
@@ -283,7 +288,7 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
     # decision-rights row cited by defer_reason actually exists — citing a
     # nonexistent row = fake-blocker vector (the 2026-08-12 incident).
     # Reference violation → refuse the write, register stays as-is.
-    # Workspace without references/decision-rights.md (no governance layer)
+    # Workspace without references/governance/decision-rights.md (no governance layer)
     # → skip the check, original behavior unchanged.
     if new_status == "DEFERRED":
         try:
@@ -295,7 +300,7 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                            f"write-side gate R3; checker unavailable "
                            f"({type(exc).__name__}): {exc} — register not "
                            f"modified (fail closed)")
-        dr_path = ws / "references" / "decision-rights.md"
+        dr_path = ws / "references" / "governance" / "decision-rights.md"
         if dr_path.exists():
             rows = parse_decision_rights(dr_path)
             reason = extract_claim_defer_reason(register, claim_id)
@@ -307,7 +312,7 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                     return (False, (f"DEFER REASON REJECTED (write-side gate "
                                     f"R3): {claim_id} defer_reason cites "
                                     f"nonexistent decision-rights row(s): "
-                                    f"{cited} (references/decision-rights.md "
+                                    f"{cited} (references/governance/decision-rights.md "
                                     f"has rows {rows_fmt or '(none)'})"))
 
     # ---- required gates (#78, fail closed): PROVEN requires the BLIND /
@@ -403,6 +408,81 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
             gate_msg += (f" [PROVENANCE GATE: verifier runtime error "
                          f"({type(exc).__name__}: {exc}); degraded to STAMP "
                          f"(guardrails SS1b self_caveat allowed)]")
+        # ---- verifier-dispatch gate (#57 gate 5) ----
+        # LAST PROVEN gate: only claims that would LAND PROVEN need it (the
+        # STAMP downgrades from the gates above skip this — #98 degrade
+        # posture unchanged). A promotion without a dispatched verifier is a
+        # protocol failure, not a verdict-quality issue: hard-refuse with the
+        # dispatch repair path (fail closed — register not modified).
+        if effective_status == "PROVEN":
+            # ---- I/O equivalence admission gate ----
+            # A claim whose DECLARED predicate asserts reproduction/offline-
+            # equivalence (the question's declared `reproduction: true` bit,
+            # or the claim's own `replay_evidence:` field) must CARRY a
+            # structured controlled-comparison artifact (evidence/
+            # replay-*.json: same captured input -> byte-identical output),
+            # or the promotion is REJECTED. A determined refusal (missing /
+            # unresolving / schema-invalid / zero-matched artifact)
+            # hard-rejects; a checker FAILURE (crash, corrupt task_spec)
+            # degrades to STAMP.
+            try:
+                from replay_equivalence import check_claim_admission
+            except Exception as exc:
+                return (False, _required_gate_receipt(
+                    "replay_equivalence:check_claim_admission", exc,
+                    claim_id))
+            try:
+                r_ok, r_reason = check_claim_admission(ws, register, claim_id)
+            except Exception as exc:
+                effective_status = STAMP
+                gate_msg += (f" [REPLAY EQUIVALENCE GATE: checker error "
+                             f"({type(exc).__name__}: {exc}); degraded to "
+                             f"STAMP (guardrails SS1b self_caveat allowed)]")
+            else:
+                if not r_ok:
+                    return (False, f"REPLAY EQUIVALENCE GATE (admission "
+                                   f"REJECT): {r_reason} — register not "
+                                   f"modified (fail closed)")
+            try:
+                from blind_gate import check_verifier_dispatch_evidence
+            except Exception as exc:
+                return (False, _required_gate_receipt(
+                    "blind_gate:check_verifier_dispatch_evidence", exc,
+                    claim_id))
+            v_ok, v_reason = check_verifier_dispatch_evidence(ws, claim_id)
+            if not v_ok:
+                return (False, f"VERIFIER DISPATCH GATE: {v_reason} — "
+                               f"register not modified (fail closed)")
+            # ---- difficulty depth gate (#16) ----
+            # The sample's tier (#15 feed via difficulty_thresholds) raises
+            # the PROVEN bar: hard/max need
+            # required_independent_verifications DISTINCT verifier records.
+            # easy/medium keep the legacy single-verification flow exactly
+            # (no complexification). A missing or unknown tier fails CLOSED
+            # to hard — never silently down-grades to easy. Same
+            # REQUIRED/fail-closed policy as the gates above (#78).
+            try:
+                from difficulty_thresholds import thresholds_for_workspace
+                thresholds = thresholds_for_workspace(ws)
+            except Exception as exc:
+                return (False, _required_gate_receipt(
+                    "difficulty_thresholds:thresholds_for_workspace", exc,
+                    claim_id))
+            required = int(thresholds.get(
+                "required_independent_verifications") or 1)
+            if required > 1:
+                try:
+                    from blind_gate import check_verifier_depth_evidence
+                except Exception as exc:
+                    return (False, _required_gate_receipt(
+                        "blind_gate:check_verifier_depth_evidence", exc,
+                        claim_id))
+                d_ok, d_reason = check_verifier_depth_evidence(
+                    ws, claim_id, required)
+                if not d_ok:
+                    return (False, f"VERIFIER DEPTH GATE "
+                                   f"[{thresholds.get('tier')}]: {d_reason} — "
+                                   f"register not modified (fail closed)")
 
     if not _set_claim_status(reg_path, claim_id, effective_status):
         return (False, f"could not rewrite status for {claim_id} in claim-register.yaml")
@@ -464,6 +544,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

@@ -24,6 +24,7 @@ allowedTools:
 - mcp__context7__query-docs
 - mcp__sequential-thinking__sequentialthinking
 - mcp__ghidra__*
+- mcp__ida-pro-vm__*
 - mcp__x64dbg__*
 - mcp__frida__spawn
 - mcp__frida__attach
@@ -148,6 +149,8 @@ analysis) and READ the matched files — especially `verify-static-vs-dynamic.md
 — so your attack methods match the maker's verified method category (static vs
 dynamic). The recall list injected into your dispatch prompt by recall_inject
 is authoritative: read those files first, then write your plan-to-execute.
+(It arrives wrapped in `<kunglao-facts>` — producer-attributed injection
+tags: references/contracts/xml-injection-standard.md, #55.)
 
 ## Dynamic verification rules (when the heavyweight tools unlock)
 
@@ -175,7 +178,7 @@ then passes everything. The machine check is the oracle that ends the chain.
   decryption keys → actual decryption comparison; input bypass → VM execution
   (VM channel only, never host); numbers → raw-byte recalculation; strings →
   raw-byte offset location. Full table:
-  `references/machine_check_map.yaml` + `references/machine-check-contract.md`.
+  `references/schemas/machine_check_map.yaml` + `references/contracts/machine-check-contract.md`.
 
 Record the checks at the end of your report:
 
@@ -191,7 +194,7 @@ Record the checks at the end of your report:
 
 Exception path — ONLY for pure-CTI-class claims (no artifact bytes to check;
 declare `machine_check: none` + `reason` + `claim_kind`; see the
-exception-allowed list in `references/machine_check_map.yaml`):
+exception-allowed list in `references/schemas/machine_check_map.yaml`):
 
 ```machine_check
 {"machine_check": "none", "reason": "pure CTI correlation — no artifact bytes",
@@ -201,6 +204,36 @@ exception-allowed list in `references/machine_check_map.yaml`):
 A record without a machine_check (or with any `passed=false`) fails schema
 validation and the claim cannot promote — the orchestrator's
 `kunglao_verify` enforces this mechanically.
+
+### Reproduction claims — EXECUTE the controlled comparison
+
+For a claim whose predicate asserts reproduction/offline-equivalence
+("works offline", "reproduces the device output", declared via the
+question's `reproduction: true` bit or the claim's `replay_evidence:`
+field), reading the worker's `evidence/replay-*.json` is NOT verification:
+you and the maker can share the same blind spot, and a fabricated
+artifact reads exactly like a real one. You EXECUTE the comparison
+yourself — run the reproduction on the CAPTURED inputs and byte-compare
+against the reference outputs:
+
+```
+python scripts/replay_equivalence.py --execute <repro_client.py> --artifact evidence/replay-<claim>.json
+```
+
+Re-run the comparison live where the lane provides a channel (Android:
+unidbg/`traceCode` over the captured JNI sequence; Windows: the real-VM
+rewrite harness over captured VM outputs; Linux: qiling/unicorn over
+captured syscalls; web: node/JS-sandbox over captured browser traces).
+The tool re-executes every captured pair and reports per-pair
+byte-equality with the first-divergent byte offset (the environment gap's
+location), and it REFUSES to execute an invalid artifact — schema,
+coverage hole, invented input ids, or zero matched pairs mean the claim's
+evidence is refused, not waved through. Zero matched pairs is honest RED
+evidence (the reproduction diverges from the reference); it is a REFUTED
+or UNVERIFIED-WITH-GAP verdict, never a pass. A silent-green oracle (one
+that stays green under a one-byte perturbation) is a broken oracle — the
+tool enforces mutation-must-red; if you re-execute with your own
+comparator, enforce the same discipline.
 
 ## Output format (your final report)
 
@@ -383,7 +416,7 @@ under `tools/` is BLIND-safe for you (tools, not conclusions — core rule
 1). Before writing any check snippet, run the three-point check: (1) `ls
 scripts/re` — the workspace RE tools; (2) grep `tools/_INDEX.yaml` by
 capability — the machine-check oracle for static constants is already
-registered; (3) the matching domain reference (`references/verify-static-vs-dynamic.md`
+registered; (3) the matching domain reference (`references/orchestration/verify-static-vs-dynamic.md`
 at the root, plus the `references/re-library/` file for the claim's
 language/layer).
 Registered domain tools (verify in the index first): `disasm-constant-check`, `pe-analyze`, `disasm-dump`, `binary-sweep`, `ghidra-recon`.

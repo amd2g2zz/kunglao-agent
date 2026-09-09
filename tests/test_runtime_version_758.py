@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from _factories import seed_oracle_anchors  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO / "scripts"
 
@@ -29,6 +31,25 @@ CUR_VERSION = tv.read_skill_version()
 
 
 # =============================================================== G1a: pin
+
+
+# ---------------------------------------------------------------- #143 home isolation
+# The upgrade now purges the user-global ~/.claude/settings.json (#143 item).
+# Every real-run upgrade test in this file binds Path.home to a bare tmp home
+# (the established monkeypatch seam, canonical_install_root precedent) plus
+# HOME/USERPROFILE for subprocess children, so a pytest run can never purge
+# the production global file — same protection class as conftest.isolated_home.
+
+
+@pytest.fixture(autouse=True)
+def _isolated_upgrade_home(tmp_path, monkeypatch):
+    home = tmp_path / "fake-home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    return home
+
 
 class TestG1aPin:
     def test_python_version_file_pins_311(self):
@@ -79,6 +100,7 @@ def _mini_ws(tmp_path: Path) -> Path:
         stamp + "\nclaims: []\n# [initialized] state_hash=abc\n", encoding="utf-8")
     (ws / "analysis_state.txt").write_text(
         "state_hash=abc\nproject_type=windows\n", encoding="utf-8")
+    seed_oracle_anchors(ws)
     return ws
 
 
@@ -148,6 +170,7 @@ def _carriers(tmp_path: Path) -> Path:
         old + "\n# facts\nF001 | PROVEN | C-1 | keep me\n", encoding="utf-8")
     (ws / "claim-register.yaml").write_text(
         old + "\nclaims: []\n# [initialized] 2026-08-01\n", encoding="utf-8")
+    seed_oracle_anchors(ws)
     return ws
 
 

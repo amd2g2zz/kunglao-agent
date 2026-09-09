@@ -51,11 +51,17 @@ def test_decision_rights_table() -> None:
 
 
 def test_depth_one() -> None:
-    """One-level depth: SKILL.md must not nest references >3 levels (main file → references → inside references)."""
+    """Citation depth: SKILL.md references/ citations stay within the mapping's
+    three-level directory cap and must all resolve to existing files. The
+    one-level flat-path law predates the taxonomy; the tree re-cut makes
+    subpath citations the canonical form, so the invariant enforced here is
+    the cap, not flatness."""
     text = SKILL.read_text(encoding="utf-8")
-    # the main file should not reference deep paths that are in turn referenced inside references (signal: >1 level of subdirectories)
     deep = re.findall(r"references/([\w/-]+/[\w./-]+\.md)", text)
-    assert len(deep) <= 1, f"too many deep references: {deep}"
+    over = [d for d in deep if len(Path(d).parts) > 4]
+    assert not over, f"references/ citations exceed the three-level cap: {over}"
+    for d in deep:
+        assert (ROOT / "references" / d).is_file(), f"dangling citation: {d}"
 
 
 def test_skill_has_orchestrator_contract() -> None:

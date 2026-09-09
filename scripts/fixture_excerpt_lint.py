@@ -47,7 +47,7 @@ tradeoff is documented in design.md (D5): the lint fires loudly on the documente
 failure (the `*1000`, severity=high) and quietly on clean faithful excerpts (0 on
 the clean fixture), with the operator/exemption tables table-driven and
 extensible. Rule 2 (traceability to address+bytes) is enforced structurally by
-#50's VA anchoring; #58 cross-references it in references/excerpt-lint.md but
+#50's VA anchoring; #58 cross-references it in references/governance/excerpt-lint.md but
 does not re-check it here.
 
 CLI:  python scripts/fixture_excerpt_lint.py <excerpt.c>
@@ -285,6 +285,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

@@ -42,7 +42,10 @@ Steps executed (idempotent, all safe to re-run):
 
 Output: runs/.heartbeat-tick.json (report) + stdout summary. Exit 0 = all OK,
 1 = heartbeat stale, project hooks missing, or selfcheck failed (LLM must act;
-the report's per-step stderr tails carry the failure text).
+the report's per-step stderr tails carry the failure text), 2 = usage error
+(#6: unknown flag rejected by argparse, or a workspace path that does not
+exist — the tick runs on an INITIALIZED workspace and never creates one, so a
+typo'd/flag arg can no longer be materialized as a garbage directory tree).
 
 The report carries `action_taken` (issue #237): the orchestrator fills what
 convergence action this tick produced (dispatched/verified/solved/reactivated);
@@ -50,6 +53,7 @@ an empty field means the tick idled — a fault signal (tokens burned).
 
 Usage: python heartbeat_tick.py <workspace>
 """
+import argparse
 import json
 import subprocess
 import sys
@@ -76,7 +80,7 @@ SCRIPTS = SKILL_DIR / "scripts"
 # enough lead time to act before the NEXT tick misses the renewal entirely.
 # #597: the 10-min value is single-sourced in liveness_policy (rationale there).
 from liveness_policy import (  # noqa: E402
-    HEARTBEAT_STALE_MINUTES, RENEW_MARGIN_LOW_MINUTES)
+    HEARTBEAT_STALE_MINUTES, MISSION_SETTLE_MIN, RENEW_MARGIN_LOW_MINUTES)
 RENEW_MARGIN_LOW_LINE = "[hooks] renewal margin low (<10 min) — check tick cadence vs 30-min TTL"
 
 # #863 Family C: workspace resolution is single-sourced in ws_layout
@@ -233,6 +237,40 @@ def state_fingerprint(ws: Path) -> str:
     return h.hexdigest()
 
 
+def _mission_history_due(ws: Path) -> bool:
+    """#8: True when a new V_m history point is due (cadence gate for
+    mission_ledger.value_m in the cockpit block below).
+
+    value_m appends history on EVERY call — un-gated, the 5-min tick cadence
+    would spam runs/mission_ledger.yaml and flatten the d_slope that
+    statusline computes over the last-5 window. The gate samples at most
+    once per MISSION_SETTLE_MIN (liveness_policy, rationale there).
+
+    Gate rule (reads the history schema mission_ledger owns: entries are
+    {ts, v_m} for samples, {ts, action: repin, ...} for repins):
+      - no dated V_m entry yet          -> due (first sample after init)
+      - newest V_m entry older than the window -> due
+      - newest V_m entry undated        -> not due (hand-seeded/repin-era
+        ledger, cadence unknown — zero-noise: never spam an unknown ledger)
+      - any read/parse failure          -> not due (gate never fails the tick)
+    """
+    try:
+        import mission_ledger as _ml
+        led = _ml.load(ws) or {}
+        hist = [h for h in ((led.get("mission") or {}).get("history") or [])
+                if isinstance(h, dict) and "v_m" in h]
+        if not hist:
+            return True
+        ts = hist[-1].get("ts")
+        if not ts:
+            return False
+        last = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        age = datetime.datetime.now(datetime.timezone.utc) - last
+        return age >= datetime.timedelta(minutes=MISSION_SETTLE_MIN)
+    except Exception:  # noqa: BLE001 — the gate must never fail the tick
+        return False
+
+
 def _run_mechanisms(ws: Path, runner) -> dict:
     """#878 mechanism-scheduler face: one registry-driven scheduling pass
     (mechanisms.yaml, schema-gated + fail-closed on a broken registry),
@@ -268,12 +306,35 @@ def main(argv: list[str] | None = None) -> int:
     # stdout (kunglao.py router imports it). Without it the #365 warn line's
     # em-dash prints as cp936 on a GBK console/pipe and the caller's UTF-8
     # read sees mojibake (#457 triage #6).
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        pass  # captured stream without reconfigure (pytest capsys)
+    from _boot import reconfigure_stdout
+
+    reconfigure_stdout()  # captured stream without reconfigure (pytest capsys) tolerated
     args = sys.argv[1:] if argv is None else argv
-    ws = _resolve_ws(args[0] if args else None)
+    # #6: argparse owns the CLI boundary — flags (--help, --anything) can no
+    # longer be swallowed by _resolve_ws as a workspace path and mkdir'd into
+    # a garbage tree. --help prints usage + exits 0 with zero side effects;
+    # an unknown flag is a usage error (stderr + exit 2, argparse default).
+    parser = argparse.ArgumentParser(
+        prog="heartbeat_tick.py",
+        description="ONE-command heartbeat tick (mechanical part): "
+                    "selfcheck/reconcile/renew/heartbeat-check/oracle-check/"
+                    "mechanisms against an initialized kunglao workspace.")
+    parser.add_argument(
+        "workspace", nargs="?", default=None,
+        help="initialized workspace directory (default: probe cwd, then "
+             "cwd/<workspace_dir>; never created — init owns that)")
+    parsed = parser.parse_args(args)
+    ws_arg = parsed.workspace or None
+    # A path-shaped positional must EXIST: the tick writes telemetry into the
+    # ws (runs/ via the report write + noop_breaker), so a nonexistent path
+    # would otherwise be materialized as a garbage directory tree. Exit 2
+    # keeps the #228 strict family's "never guess a workspace" semantics.
+    if ws_arg is not None and not Path(ws_arg).is_dir():
+        print(f"ERROR: workspace {ws_arg!r} is not an existing directory — "
+              "heartbeat_tick runs on an initialized workspace and never "
+              "creates one (run kunglao init first)", file=sys.stderr)
+        return 2
+    ws = _resolve_ws(ws_arg)
     # action_taken (issue #237): the tick MUST produce a convergence action or a
     # mechanical convergence argument. The orchestrator fills this field after
     # reading the report — what it dispatched / verified / solved / reactivated.
@@ -296,6 +357,19 @@ def main(argv: list[str] | None = None) -> int:
     report["oracle_registered"] = _oracle_registered(ws)
     if not report["oracle_registered"]:
         print(ORACLE_MISSING_LINE)
+    # #127: detector liveness — DORMANT detectors (evaluated, never fired)
+    # surface as a ONE-TIME WARN (the #600 DORMANT_SENTINEL generalized to
+    # every detector emitting the detector_eval/detector_fired pair). The
+    # report carries the names; the nag line prints from dormant_warn.
+    # Fail-open like every watcher: a crashed liveness read never fails
+    # the tick.
+    try:
+        import detector_liveness as _dl
+        dormant = _dl.dormant_warn(ws)
+        if dormant:
+            report["detector_dormant"] = dormant
+    except Exception:  # noqa: BLE001 — liveness evidence must not fail the tick
+        pass
     # #878: registry-driven mechanism scheduling — the tick is the ONLY time
     # host, so the advisory children are no longer hand-wired here. The
     # scheduler walks mechanisms.yaml (schema gate: trigger/cost_class/
@@ -371,8 +445,18 @@ def main(argv: list[str] | None = None) -> int:
 
     # #873: per-checkpoint 座舱采样——V/D/ETA + cost/burn 落账。
     # mission_ledger 缺失的旧 workspace 跳过（零噪声）；异常 fail-open。
+    # #8: the tick is also the SETTLEMENT host — update() stamps PROVEN
+    # claims' answers_question -> PQ answered (idempotent, every tick);
+    # value_m() appends the V_m history point that feeds V_m/d_slope, gated
+    # by _mission_history_due so the trajectory samples once per window.
+    settlement_hosted = False
     try:
         if (ws / "runs" / "mission_ledger.yaml").exists():
+            settlement_hosted = True
+            import mission_ledger as _ml
+            _ml.update(ws)
+            if _mission_history_due(ws):
+                _ml.value_m(ws)
             from tuition_curve import cockpit_summary
             kunglao_log.emit(
                 Path(ws), actor="heartbeat_tick",
@@ -382,14 +466,42 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:  # noqa: BLE001 — cockpit 采样永不打断 tick
         pass
 
-    # #883: pre-write the statusline health snapshot (O(1) atomic; the user's
-    # combined-statusline.mjs only reads this file — zero spawn). Fail-open
-    # like the cockpit sample above: a snapshot crash must never fail the tick.
+    # step 11b (#142 follow-up, dual-use display): the SAME entropy-honesty
+    # values the statusline renders ride the tick report. Computed AFTER the
+    # settlement/cockpit block, so the frontier reflects this tick's
+    # settlements, with the PREVIOUS STORED snapshot as the trend baseline
+    # (the snapshot below is not written yet — both faces trend against the
+    # same baseline). Decision-side consumers (policy/strategy arbiter)
+    # read the display's numbers from the single-source module, never a
+    # second computation. The report was serialized early (rc summary,
+    # :416) — re-serialize here so the face lands in
+    # runs/.heartbeat-tick.json, the same re-write pattern the #634
+    # breaker uses. Fail-open like every report field.
     try:
-        import statusline_snapshot as _sls
-        _sls.write_snapshot(ws)
-    except Exception:  # noqa: BLE001 — 快照永不打断 tick
+        import entropy_face
+        _h = entropy_face.face(ws)
+        report["h_bits"] = _h["h_bits"]
+        report["h_pq"] = _h["h_pq"]
+        report["h_trend"] = _h["h_trend"]
+        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — a report face never fails the tick
         pass
+
+    # step 11c (#142 refinement, event-driven): when this tick HOSTED a
+    # settlement/rollup (mission ledger present), that IS a semantic event
+    # — it moved the frontier, and the display would otherwise lag it
+    # indefinitely during LLM-idle. Write the snapshot here, AFTER the
+    # report face above (same computed values, same stored baseline) and
+    # with NO tool-use flow required. A ledger-less workspace hosts no
+    # settlement event and writes nothing; beyond this, writes stay
+    # event-only (tool use via heartbeat_touch) — stale is truthful.
+    # Fail-open like every display dependency.
+    if settlement_hosted:
+        try:
+            import statusline_snapshot as _sls
+            _sls.write_snapshot(ws)
+        except Exception:  # noqa: BLE001 — 快照永不打断 tick
+            pass
 
     action = report["action_taken"] or "(EMPTY — must be filled: what was dispatched/verified/resolved/reactivated)"
     print(f"heartbeat_tick: {sc} | selfcheck_rc={rc_sc} | renew_rc={rc_renew} | heartbeat_rc={rc_hb} | {hb}")
@@ -405,6 +517,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

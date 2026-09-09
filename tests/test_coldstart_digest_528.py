@@ -22,7 +22,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "scripts"))
 
-COLD_START = REPO / "references" / "cold-start-contract.md"
+COLD_START = REPO / "references" / "contracts" / "cold-start-contract.md"
 MANIFEST = REPO / "docs" / "workspace-manifest.md"
 
 

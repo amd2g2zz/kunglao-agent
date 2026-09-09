@@ -634,10 +634,9 @@ def plan_view(ws: Path) -> dict:
 # ---------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        pass  # captured stream without reconfigure (pytest capsys)
+    from _boot import reconfigure_stdout  # scoped: never mutates the importer
+
+    reconfigure_stdout()  # captured stream without reconfigure (pytest capsys) tolerated
     args = sys.argv[1:] if argv is None else argv
     if "--check" in args:
         reg = None
@@ -679,6 +678,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

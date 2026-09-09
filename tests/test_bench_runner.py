@@ -39,9 +39,11 @@ def test_budget_table_locked():
     assert br.BUDGETS["S3"]["wall_h"] == 8  # the user-ruled ceiling
 
 
-def test_arm_env_flag_wiring():
-    assert br.arm_env("N") == {"KUNGLAO_VALUE_ALGO": "1"}
-    assert br.arm_env("O") == {}
+def test_no_flag_env_in_plan(tmp_path):
+    """#51: the AB-VALUE env switch is gone — plans carry no env override."""
+    for lane in ("A", "B"):
+        plan = br.build_plan(_manifest(tmp_path), "S3", lane=lane)
+        assert all("env" not in spec for spec in plan)
 
 
 def test_lane_a_plans_n_serial(tmp_path):

@@ -1,0 +1,31 @@
+# tests/fixtures/difficulty_15/corpus.yaml — #15 synthetic calibration corpus
+# Hand labels = CONSTRUCTION INTENT (synthetic corpus; no external labels).
+schema: difficulty-15-corpus/1
+profiles:
+  - profile: c_tool_unpacked
+    intended_tier: easy
+    note: "trivial unpacked C tool: full resources, low entropy"
+  - profile: go_cli_plain
+    intended_tier: easy
+    note: "plain Go CLI: no packer/obfuscator, stripped resources only (0.10)"
+  - profile: android_proguard_basic
+    intended_tier: medium
+    note: "one obfuscator rule + native lib, calm entropy"
+  - profile: go_stripped_medium
+    intended_tier: medium
+    note: "stripped Go build + one elevated-entropy section"
+  - profile: android_proguard_anti_medium
+    intended_tier: medium
+    note: "proguard + single anti-debug rule + native lib"
+  - profile: upx_windows_tool
+    intended_tier: hard
+    note: "weak packer (upx) + high entropy + stripped, 2 families"
+  - profile: android_obfuscator_anti
+    intended_tier: hard
+    note: "obfuscator(2) + anti_debug + anti_vm, NO packer: 2 families"
+  - profile: die_only_themida
+    intended_tier: hard
+    note: "severe packer via die only; absent apkid caps ceiling at hard"
+  - profile: android_max_hardened
+    intended_tier: max
+    note: "packer + obfuscator(3) + anti(3) + native + entropy + stripped: 4 families"

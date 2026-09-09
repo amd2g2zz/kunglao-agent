@@ -1,15 +1,22 @@
 # -*- coding: utf-8 -*-
 """tests/test_orchestrator_tool_guard_608.py — #608: the orchestrator running
-analysis tools via Bash gets a WARN, not silence.
+analysis tools via Bash gets a signal, not silence.
 
 RED (adjudicated): the Bash matcher carried only heartbeat_touch (exit 0
 forever) — the orchestrator ran jadx directly in production (~7 min of
 maker-checker violation, zero signal). Adjudicated fix (target-based + WARN,
 #532-style arming): NEW hooks/orchestrator_tool_guard.py on PreToolUse/Bash —
 command matches an analysis-binary pattern AND cwd is NOT inside a .wt-*
-worker worktree → WARN (exit 0, additionalContext) + kunglao_log event.
+worker worktree → signal + kunglao_log event.
 Workers (cwd inside .wt-*) pass silently. Registration: WIRE_UP_HOOK_FILES +
 external_kicker._KICKER_SKIP_FILES (else the kicker import breaks).
+
+POSTURE UPDATE (#57 gate 2, 2026-09): the owner ruling makes orchestrator
+overreach framework-layer — violations REJECT with no opt-out — and the #601
+precision fix removed the false-positive classes that motivated the WARN, so
+the Bash face upgraded WARN → REJECT (rc 2 + repair path). Wrapper bypasses
+(`sh -c 'jadx ...'`, nohup/timeout/env/xargs) are unwrapped; covered in
+tests/test_framework_rigidity_57.py.
 """
 from __future__ import annotations
 
@@ -30,13 +37,14 @@ def _load_guard():
     return mod
 
 
-def test_orchestrator_bash_jadx_gets_warn(tmp_path):
+def test_orchestrator_bash_jadx_gets_rejected(tmp_path):
     mod = _load_guard()
     ws = tmp_path / "ws"; ws.mkdir()
     rc, err, ctx = mod.evaluate({"cwd": str(ws), "tool_name": "Bash",
                                  "tool_input": {"command": "jadx -d out app.apk"}})
-    assert rc == 0, "WARN posture — never blocks"
-    assert ctx and "maker-checker" in ctx, "context explains the violation"
+    assert rc == 2, "REJECT posture — orchestrator overreach is framework-layer (#57)"
+    assert "REJECT orchestrator_tool_guard" in err, "stderr carries the verdict"
+    assert ctx and "ispatch" in ctx, "repair path says: dispatch a worker"
 
 
 def test_worker_in_worktree_passes_silently(tmp_path):
@@ -66,7 +74,9 @@ def test_warn_leaves_event(tmp_path):
         for f in sorted(log.glob("kunglao-*.jsonl")):
             rows += [json.loads(ln) for ln in f.read_text().splitlines() if ln.strip()]
     assert any(r["action"] == "orchestrator_tool_violation" for r in rows), \
-        "the WARN must also be durable"
+        "the REJECT must also be durable"
+    hits = [r for r in rows if r["action"] == "orchestrator_tool_violation"]
+    assert hits[0].get("exit") == 2, "the durable row carries the rc"
 
 
 def test_registered_in_wire_up_and_kicker_skip():

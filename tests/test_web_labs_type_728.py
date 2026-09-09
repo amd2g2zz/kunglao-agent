@@ -66,7 +66,7 @@ GENERIC_SNAKE_ALLOWLIST = frozenset({
     "camoufox_reverse_mcp",
 })
 
-QUICKREF = ROOT / "references" / "re-library" / "web-re-quickref.md"
+QUICKREF = ROOT / "references" / "re-library" / "web" / "labs" / "web-re-quickref.md"
 QUICKREF_SECTIONS = (
     "Hook & breakpoint quick reference",
     "Signed-parameter location workflow",
@@ -337,14 +337,14 @@ def test_index_yaml_validates():
 
 # ---------- 9. doc wiring ----------
 
-def test_references_index_has_web_labs_domain():
+def test_references_index_has_web_domain():
     text = (ROOT / "references" / "_INDEX.md").read_text(encoding="utf-8")
-    assert "web-labs" in text
-    assert "_index-web-labs.md" in text
+    assert "| web |" in text
+    assert "_index-web.md" in text
 
 
-def test_web_labs_domain_index_exists():
-    idx = ROOT / "references" / "_index-web-labs.md"
+def test_web_domain_index_exists():
+    idx = ROOT / "references" / "_index-web.md"
     assert idx.exists()
     assert "web-re-quickref.md" in idx.read_text(encoding="utf-8")
 
@@ -353,8 +353,8 @@ def test_references_index_yaml_pinned():
     pins = yaml.safe_load(
         (ROOT / "references" / "_INDEX.yaml").read_text(encoding="utf-8"))
     files = pins.get("files", {})
-    assert "references/_index-web-labs.md" in files
-    assert "references/re-library/web-re-quickref.md" in files
+    assert "references/_index-web.md" in files
+    assert "references/re-library/web/labs/web-re-quickref.md" in files
 
 
 def test_skill_md_lists_web():

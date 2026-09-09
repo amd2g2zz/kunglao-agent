@@ -1,13 +1,18 @@
 # release-check.yml — kunglao-agent release contract gate (issue #80)
 #
-# Clean-environment validation of the release contract:
-#   1. install with the documented command (uv sync --locked — no hidden state)
-#   2. validate the release manifest + CLI surface (release_receipt.py --check)
-#   3. run the standard test command (python -m pytest -q)
-#   4. generate + upload a machine-readable release receipt (revision, lock
-#      digest, asset inventory, CLI inventory, test result)
+# Clean-environment validation of the release contract, split into four
+# parallel legs so the PR gate wall time tracks the slowest leg, not the
+# sum of all legs:
+#   lint-hygiene   CI YAML selfcheck + manifest/CLI/structural contracts
+#   docs-contract  docs/README/governance contract tests (-m docs)
+#   unit-fast      pure-unit tier (-m "fast and not docs"), xdist -n auto
+#   integration    everything else (-m "not fast"), xdist -n auto — the
+#                  slow tier rides here on EVERY PR (stronger than a
+#                  nightly), so relocation never becomes removal
+#   Merge gate = all four jobs green; any red blocks (fail-loud, nothing
+#   dropped from the gate chain — the tier census pins the partition).
 #
-# README test counts / "shipped" claims point at this receipt artifact.
+# README test counts / "shipped" claims point at the receipt artifact.
 
 name: release-check
 
@@ -23,16 +28,17 @@ on:
   pull_request:
     branches: [ "dev", "master" ]
 
+env:
+  # Runner image pre-installs python3.11 (default python3); uv picks the
+  # interpreter via this env.
+  UV_PYTHON: python3.11
+
 jobs:
-  release-check:
+  lint-hygiene:
     # Route to runners that actually have python3.11 (kunglao-runner-py311).
     # The fleet is heterogeneous: -b / -py310 lack python3.11 and fail fast
     # with "command not found" — the python-3.11 label pins the right host.
     runs-on: [self-hosted, python-3.11]
-    env:
-      # Runner image pre-installs python3.11 (default python3); uv picks the
-      # interpreter via this env.
-      UV_PYTHON: python3.11
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -70,7 +76,100 @@ jobs:
     - name: Check global-rule hard prohibitions subset (issue #99)
       run: uv run python scripts/check_global_rule_subset.py
 
-    - name: Run standard test command
+    - name: Formal-content hygiene lint (scripts + tests)
+      # fail-loud gate: tracker refs / narrative markers / baseline ratchet
+      # over scripts/** and tests/** (constitution rule on formal content)
+      run: uv run python scripts/comment_hygiene_lint.py
+
+    - name: Structural integrity check (issue #141)
+      run: uv run python scripts/structural_check.py .
+
+  docs-contract:
+    runs-on: [self-hosted, python-3.11]
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Ensure git
+      run: |
+        if ! command -v git >/dev/null 2>&1; then
+          sudo apt-get update && sudo apt-get install -y git
+        fi
+        git --version
+
+    - name: Set up Python (pre-installed in runner image)
+      run: python3.11 --version
+
+    - name: Install uv (documented dependency manager)
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Install dependencies (locked)
+      run: uv sync --locked
+
+    - name: Docs / governance contract tier
+      run: uv run python -m pytest -m docs -n auto --dist loadgroup -q --junitxml=.pytest-docs.xml
+
+  unit-fast:
+    runs-on: [self-hosted, python-3.11]
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Ensure git
+      run: |
+        if ! command -v git >/dev/null 2>&1; then
+          sudo apt-get update && sudo apt-get install -y git
+        fi
+        git --version
+
+    - name: Set up Python (pre-installed in runner image)
+      run: python3.11 --version
+
+    - name: Install uv (documented dependency manager)
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Install dependencies (locked)
+      run: uv sync --locked
+
+    - name: Fast unit tier (xdist parallel)
+      # loadgroup keeps the machine-lock family + lock-probe module on one
+      # worker; the fast tier is their complement on this leg.
+      run: uv run python -m pytest -m "fast and not docs" -n auto --dist loadgroup -q --junitxml=.pytest-fast.xml
+
+    - name: Upload fast-tier junit (observation artifact)
+      continue-on-error: true
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: pytest-fast-junit-${{ github.sha }}
+        path: .pytest-fast.xml
+        if-no-files-found: error
+
+  integration:
+    runs-on: [self-hosted, python-3.11]
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Ensure git
+      run: |
+        if ! command -v git >/dev/null 2>&1; then
+          sudo apt-get update && sudo apt-get install -y git
+        fi
+        git --version
+
+    - name: Set up Python (pre-installed in runner image)
+      run: python3.11 --version
+
+    - name: Install uv (documented dependency manager)
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Install dependencies (locked)
+      run: uv sync --locked
+
+    - name: Integration + slow tier (xdist parallel)
       # #463 quality-gate framework: coverage is OBSERVATION only.
       # pytest.ini MUST NOT carry --cov-fail-under; we pass --cov here just
       # so the report lands in CI artifacts. Coverage % is NOT a gate.
@@ -78,7 +177,15 @@ jobs:
       # are documented in devkit/docs/quality_gates.md and run via
       # `uv run python devkit/quality_gates.py` (Gate 2 IS pytest green,
       # but Coverage / Test-Count are observation not KPI).
-      run: uv run python -m pytest -q --junitxml=.pytest-result.xml --cov=scripts --cov=hooks --cov-report=xml --cov-report=term
+      run: uv run python -m pytest -m "not fast" -n auto --dist loadgroup -q --junitxml=.pytest-result.xml --cov=scripts --cov=hooks --cov-report=xml --cov-report=term
+
+    - name: Upload coverage report (observation only, #463)
+      continue-on-error: true
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: coverage-${{ github.sha }}
+        path: coverage.xml
+        if-no-files-found: warn
 
     - name: Run quality-gate framework (Gate 1 / 3 / 4 / 8 / 9)
       # Gate 2 = pytest green (previous step). The other gates:
@@ -94,6 +201,9 @@ jobs:
       run: uv run python scripts/kunglao_eval.py --oracle-selfcheck
 
     - name: Generate release receipt
+      # The receipt counts the integration+slow junit (this leg). The fast
+      # and docs legs upload their junit artifacts alongside it, so the
+      # union is auditable from the three artifacts.
       run: uv run python scripts/release_receipt.py --pytest-junit .pytest-result.xml --out release-receipt.json
 
     - name: Upload release receipt
@@ -102,17 +212,6 @@ jobs:
       continue-on-error: true
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: release-receipt-${{ matrix.python-version }}-${{ github.sha }}
+        name: release-receipt-${{ github.sha }}
         path: release-receipt.json
         if-no-files-found: error
-
-    - name: Upload coverage report (observation only, #463)
-      continue-on-error: true
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      with:
-        name: coverage-${{ matrix.python-version }}-${{ github.sha }}
-        path: coverage.xml
-        if-no-files-found: warn
-
-    - name: Structural integrity check (issue #141)
-      run: uv run python scripts/structural_check.py .

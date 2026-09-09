@@ -45,10 +45,10 @@ try:
 except (AttributeError, ValueError):
     pass
 
-# #863 Family H: single source in utf8_boot (#811 stdio-insurance module);
+# single source in _boot (the stdio-insurance boot module);
 # alias binds the SHARED function so the module-level call below keeps its
 # exact position in module-init order (stdout first, then stderr).
-from utf8_boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
+from _boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
 
 
 _ensure_utf8_stderr(sys.stderr)
@@ -80,23 +80,17 @@ VALID_TYPES = ("windows", "linux", "android", "web", "macos")
 
 # F6 (#304 review): single source of truth for the init predicate component.
 from init_state import read_project_type  # noqa: E402
+from report_render import (  # noqa: E402  (render face — one definition)
+    ANDROID_SERVER_PORT,
+    FRIDA_PORT,
+    FIXES,
+    NEXT_ACTION_VERBS,  # noqa: F401  (re-exported render face: init/negotiation/tests)
+    NextAction,
+    ToolMeta,  # noqa: F401  (re-exported render face: init/negotiation/tests)
+    fix_text,
+    parse_port as _parse_port,
+)
 
-# #304: frida custom port convention — config-driven, default 1337
-# (frida-server renamed + non-default port to evade sample detection).
-# F7: defensive parse — garbage / out-of-range env values fall back to the
-# default instead of crashing the import (kunglao-init imports this module).
-def _parse_port(raw: str | None, default: int) -> int:
-    """Defensive port parse: int(raw) in [1, 65535], else default."""
-    try:
-        value = int((raw or "").strip() or str(default))
-    except ValueError:
-        return default
-    return value if 1 <= value <= 65535 else default
-
-
-FRIDA_PORT = _parse_port(os.environ.get("KUNGLAO_FRIDA_PORT"), 1337)
-# #356 W3: VM shell port env-configurable (was bare 9876 constant), same
-# defensive parse as FRIDA_PORT — default unchanged.
 VM_SHELL_PORT = _parse_port(os.environ.get("KUNGLAO_VM_SHELL_PORT"), 9876)
 
 # #698 dynamic channel: KUNGLAO_CHANNEL picks the agent's execution control
@@ -104,259 +98,13 @@ VM_SHELL_PORT = _parse_port(os.environ.get("KUNGLAO_VM_SHELL_PORT"), 9876)
 # backends; default vmr keeps the pre-#698 behavior byte-identical).
 SSH_CONNECT_TIMEOUT = 5    # seconds, BatchMode connect timeout
 CHANNEL_CMD_TIMEOUT = 15   # seconds, channel capability probes (ssh/docker/adb)
-ANDROID_SERVER_PORT = 23946  # IDA android_server default listener port
-
-# #304 amendment (comment 304-5289955958): per-item friendly install commands.
-# kunglao-init prints these on HARD refusal so the HUMAN knows exactly what to
-# install — init does NOT silently repair. Keyed by check item name.
-#
-# #680: FIXES values are structured ToolMeta, not bare strings. The legacy
-# guidance text survives verbatim as ToolMeta.fix (still what init prints);
-# the new fields end the "agent hunts for the install page / picks the wrong
-# package" waste — url/description always, repo/package/verify_cmd where
-# applicable. Old string callers keep a working string face: ToolMeta.__str__
-# renders the fix text, and fix_text(name) is the typed accessor.
-@dataclass(frozen=True)
-class ToolMeta:
-    """#680: metadata for one FIXES entry.
-
-    fix:         remediation guidance (the legacy FIXES string, verbatim)
-    description: one-line purpose (what the tool is FOR)
-    url:         official homepage / docs (None = unknown -> rendering omits
-                 the line; never fabricated)
-    repo:        source repository (None when none applies separately from url)
-    package:     PyPI / npm / apt package name (None when not a package)
-    verify_cmd:  post-install verification command (e.g. `jadx --version`)
-    """
-
-    fix: str
-    description: str
-    url: str | None
-    repo: str | None = None
-    package: str | None = None
-    verify_cmd: str | None = None
-
-    def __str__(self) -> str:
-        """Backward compat (#680 test 5): a FIXES value interpolated into a
-        string renders the legacy guidance text, never a dataclass repr."""
-        return self.fix
-
-
-FIXES: dict[str, ToolMeta] = {
-    # #728 web (labs): direct-npx JS recovery tools (agent-invoked, never
-    # init-gated). url/package/verify_cmd verified against upstream
-    # READMEs + execution on 2026-08-26.
-    "wakaru": ToolMeta(
-        fix="npx -y wakaru --version (first use installs via npx)",
-        description="bundler-aware JS module recovery (unpack webpack/"
-                    "esbuild/Browserify/Metro + transpiler/minifier undo)",
-        url="https://github.com/pionxzh/wakaru",
-        package="wakaru", verify_cmd="npx wakaru --version"),
-    "webcrack": ToolMeta(
-        fix="npx -y webcrack --version (first use installs via npx)",
-        description="obfuscator.io-class JS deobfuscation + unminification",
-        url="https://github.com/j4k0xb/webcrack",
-        package="webcrack", verify_cmd="npx webcrack --version"),
-    "pefile": ToolMeta(
-        fix="pip install pefile",
-        description="PE/COFF parsing and Authenticode signature extraction",
-        url="https://github.com/erocarrera/pefile",
-        package="pefile", verify_cmd="pip show pefile"),
-    "die": ToolMeta(
-        fix="install DIE (Detect It Easy) and add it to PATH",
-        description="packer/compiler detector for PE/ELF/Mach-O",
-        url="https://github.com/horsicq/Detect-It-Easy",
-        package="die", verify_cmd="diec --version"),
-    "floss": ToolMeta(
-        fix="pip install flare-floss (or add floss to PATH)",
-        description="FLARE string deobfuscation (stack/tight strings)",
-        url="https://github.com/mandiant/flare-floss",
-        package="flare-floss", verify_cmd="floss --version"),
-    "file": ToolMeta(
-        fix="install binutils (file) and add to PATH",
-        description="file-type identification",
-        url="https://www.darwinsys.com/file/",
-        repo="https://github.com/file/file",
-        package="file", verify_cmd="file --version"),
-    "readelf": ToolMeta(
-        fix="install binutils (readelf) and add to PATH",
-        description="ELF header/section/segment inspection",
-        url="https://www.gnu.org/software/binutils/",
-        repo="https://sourceware.org/git/binutils-gdb.git",
-        package="binutils", verify_cmd="readelf --version"),
-    "objdump": ToolMeta(
-        fix="install binutils (objdump) and add to PATH",
-        description="disassembly and object-file inspection",
-        url="https://www.gnu.org/software/binutils/",
-        repo="https://sourceware.org/git/binutils-gdb.git",
-        package="binutils", verify_cmd="objdump --version"),
-    "decompiler": ToolMeta(
-        fix="install Ghidra OR IDA — either satisfies this check (#408 installer: set GHIDRA_HOME=<Ghidra install root> with support/analyzeHeadless(.bat), OR put idat64 on PATH); or register the ghidra/ida-pro-vm MCP via `claude mcp add`)",
-        description="headless decompiler supply (Ghidra or IDA)",
-        url="https://ghidra-sre.org/",
-        repo="https://github.com/NationalSecurityAgency/ghidra",
-        package="ghidra", verify_cmd="analyzeHeadless"),
-    "ghidra": ToolMeta(
-        fix="set GHIDRA_HOME=<Ghidra install root> (support/analyzeHeadless must exist, platform-correct name #409)",
-        description="Ghidra reverse-engineering suite (headless analyzeHeadless)",
-        url="https://ghidra-sre.org/",
-        repo="https://github.com/NationalSecurityAgency/ghidra",
-        verify_cmd="analyzeHeadless"),
-    "ida": ToolMeta(
-        fix="install IDA and add idat64 to PATH",
-        description="IDA Pro disassembler (commercial)",
-        url="https://hex-rays.com/ida-pro/"),
-    "vm_reachable": ToolMeta(
-        fix="set KUNGLAO_VM_HOST=<live VM lease IP> (vmr-shell discovery) and ensure ports are open",
-        description="analysis VM channel liveness (vmrun/VBoxManage lease IP + open ports)",
-        url="https://github.com/amd2g2zz/kunglao-agent"),
-    "remote_debugger": ToolMeta(
-        fix="fix the root cause first: make the VM reachable (set KUNGLAO_VM_HOST), then deploy the remote debugger on the VM",
-        description="remote debugger deployed on the analysis VM",
-        url="https://github.com/amd2g2zz/kunglao-agent"),
-    "aapt": ToolMeta(
-        fix="install Android SDK build-tools (aapt/aapt2) and add to PATH (or install unzip as a substitute)",
-        description="Android asset packaging tool (APK manifest inspection)",
-        url="https://developer.android.com/tools/aapt",
-        package="aapt", verify_cmd="aapt version"),
-    "jadx": ToolMeta(
-        fix="install jadx and add it to PATH",
-        description="DEX-to-Java decompiler",
-        url="https://github.com/skylot/jadx",
-        package="jadx", verify_cmd="jadx --version"),
-    "apktool": ToolMeta(
-        fix="install apktool and add it to PATH",
-        description="APK resource decoding and rebuilding",
-        url="https://github.com/iBotPeaches/Apktool",
-        package="apktool", verify_cmd="apktool --version"),
-    "gitnexus": ToolMeta(
-        fix="npm i -g gitnexus (or install per GitNexus docs); verify `gitnexus --version`",
-        description="post-decompile code graph builder (npm)",
-        url="https://www.npmjs.com/package/gitnexus",
-        package="gitnexus", verify_cmd="gitnexus --version"),
-    "dexdc": ToolMeta(
-        fix="install dex-decompiler: build the PyO3 wheel (cd dex-decompiler-py && maturin build --release && pip install target/wheels/dex_decompiler-*.whl) or cargo build --release; verify `pip show dex_decompiler`",
-        description="Rust DEX decompiler + per-method CFG + value-flow taint + offline emulator (no JVM)",
-        url="https://github.com/androguard/dex-decompiler",
-        repo="https://github.com/androguard/dex-decompiler",
-        verify_cmd="pip show dex_decompiler"),
-    "apkid": ToolMeta(
-        fix="install apkid: `pip install apkid` (https://github.com/rednaga/APKiD); verify `apkid --version` returns 2.x",
-        description="APK packer/compiler/obfuscator fingerprinting (YARA)",
-        url="https://github.com/rednaga/APKiD",
-        package="apkid", verify_cmd="apkid --version"),
-    "baksmali": ToolMeta(
-        fix="install baksmali (https://github.com/baksmali/smali/releases - download jar or `apt install baksmali`); verify `baksmali --version` returns 2.x",
-        description="DEX disassembler to smali",
-        url="https://github.com/baksmali/smali/releases",
-        repo="https://github.com/baksmali/smali",
-        package="baksmali", verify_cmd="baksmali --version"),
-    "adb": ToolMeta(
-        fix="install Android SDK platform-tools and add adb to PATH; attach a device (`adb devices` must be non-empty)",
-        description="Android Debug Bridge host client",
-        url="https://developer.android.com/tools/adb",
-        package="adb", verify_cmd="adb --version"),
-    "device_root": ToolMeta(
-        fix="root the device: `adb root` (emulator) or su via Magisk; verify `adb shell su -c id` returns uid=0",
-        description="rooted device (su/Magisk) for dynamic instrumentation",
-        url="https://github.com/topjohnwu/Magisk"),
-    "debug_flag": ToolMeta(
-        fix="set the debug flag: `adb shell am set-debug-app -w <pkg>` or `adb shell setprop ro.debuggable 1`; verified at init via `adb shell getprop ro.debuggable` (must read back 1)",
-        description="device ro.debuggable / debug-app state for JDWP",
-        url="https://developer.android.com/tools/adb"),
-    "frida_server": ToolMeta(
-        fix="fix the root cause first (ADB); then deploy a RENAMED frida-server binary on custom port "
-            f"{FRIDA_PORT} and verify at init via `adb forward tcp:{FRIDA_PORT} tcp:{FRIDA_PORT}` + TCP connect "
-            "(default name/port 27042 is detected by samples)",
-        description="renamed frida-server on a custom port (anti-detection)",
-        url="https://frida.re/",
-        repo="https://github.com/frida/frida"),
-    "android_server": ToolMeta(
-        fix="fix the root cause first (ADB); then adb push android_server to the device and run it; "
-            f"verified at init via `adb forward tcp:{ANDROID_SERVER_PORT} tcp:{ANDROID_SERVER_PORT}` + TCP connect",
-        description="IDA remote debug server pushed to the device",
-        url="https://hex-rays.com/ida-pro/"),
-    "jdwp_debug": ToolMeta(
-        fix="optional capability (WARN): only needed when the task actually drives jdb. "
-            "To enable: ADB ok + ro.debuggable=1 + the target app running (`adb jdwp` lists "
-            "a pid); the probe forwards tcp:8700 -> jdwp:<pid> and exchanges the raw 14-byte "
-            "JDWP-Handshake (jdb stays the interactive driver; never jdb -attach — side effects)",
-        description="JDWP capability probe (jdb handoff, WARN tier)",
-        url="https://docs.oracle.com/javase/8/docs/technotes/guides/jpda/jdwp-spec.html"),
-}
-
-# #316: registration guidance for MCP supply checks — fix text rendered by the
-# formatters like every other FIXES entry (keyed by report item name mcp:<name>).
-# #680: MCP server metadata is OUT OF SCOPE (separate manifest, mcp_probe.py)
-# — the derived entries carry the register command as fix + the manifest
-# purpose as description, url=None (the fallback rendering path).
-FIXES.update({
-    f"mcp:{i.name}": ToolMeta(fix=i.register, description=i.purpose, url=None)
-    for i in mcp_probe.MANIFEST
-})
-
-
-def fix_text(name: str) -> str | None:
-    """#680: typed string face of FIXES — the remediation guidance text for
-    `name`, None when unknown. The canonical accessor for string callers
-    (kunglao-init / negotiation / deploy_shim / toolchain_install);
-    `fix_text(name) or default` preserves the old `.get(name, default)`
-    semantics. Unknown names MUST return None (never raise, never invent)."""
-    meta = FIXES.get(name)
-    return None if meta is None else meta.fix
-
-
-# ---------- #451: machine-parseable next-action on every FAIL ----------
-# Issue #451 evidence 1/4: a prose fix pushes discovery work back onto the
-# human and cannot be consumed mechanically. Every FAIL therefore carries a
-# structured next-action: a closed verb vocabulary + the exact command +
-# enumerated options, rendered as key-value lines in the human output
-# (`action:` / `command:` / `option N:`) and as a `next_action` object in
-# --json. Downstream consumers (the #451 negotiation menu, the #478
-# init-worker's AskUserQuestion relay) parse THIS, never the prose.
-
-NEXT_ACTION_VERBS = frozenset({
-    "install",          # an exact install command exists (pip/npm/pkg mgr)
-    "set-env",          # set an environment variable (GHIDRA_HOME)
-    "register-mcp",     # register via `claude mcp add`
-    "vm-enumerate",     # multiple/no candidates: enumerate (vmrun list / VBoxManage)
-    "vm-start",         # single off candidate: boot it (vmrun -T ws start)
-    "vm-reip",          # running/lease-drifted: re-resolve the live IP
-    "human-configure",  # device-side human decision (root / debug flag)
-    "human-deploy",     # device-side human deployment (frida/android_server)
-})
-
-
-@dataclass(frozen=True)
-class NextAction:
-    """One mechanically consumable remediation step (#451).
-
-    action:  verb from the closed NEXT_ACTION_VERBS vocabulary
-    command: the exact command the human/agent runs (None when the action
-             is a human decision with no single command)
-    options: enumerated candidates (VM names); menu choices are built by
-             the negotiation layer, not here
-    """
-
-    action: str
-    command: str | None = None
-    options: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        """#451 review L-1: the verb vocabulary is CLOSED — fail-closed at
-        construction. A verb outside NEXT_ACTION_VERBS raises instead of
-        silently rendering an unparseable `action:` line downstream."""
-        if self.action not in NEXT_ACTION_VERBS:
-            raise ValueError(
-                f"NextAction.action {self.action!r} is not in the closed "
-                f"NEXT_ACTION_VERBS vocabulary "
-                f"{sorted(NEXT_ACTION_VERBS)}")
-
 
 # Static per-item next actions (mirrors the FIXES name surface; vm_reachable
 # and remote_debugger are DYNAMIC — derived from the live VM inventory in
 # _vm_fail_fixes — and mcp:<name> is derived from the manifest register text).
 _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
+    "unidbg": NextAction(
+        "install", "bash scripts/install_unidbg.sh (or scripts/install_unidbg.py)"),
     "pefile": NextAction("install", "pip install pefile"),
     "die": NextAction("install"),  # platform matrix: FIXES text / #408 installer
     "floss": NextAction("install", "pip install flare-floss"),
@@ -564,6 +312,13 @@ def _run_cmd(args: list[str], timeout: int = 10) -> tuple[int, str, str]:
     run_args = args
     if os.name == "nt" and args and args[0].lower().endswith((".bat", ".cmd")):
         run_args = ["cmd", "/c", *args]
+    # Test harnesses that run this script under heavy parallelism (xdist on
+    # a loaded machine) may raise a floor via env so a starved-but-healthy
+    # probe is not misread as unavailable. Default floor 0: production
+    # budgets are exactly the per-call constants.
+    floor = int(os.environ.get("KUNGLAO_PROBE_TIMEOUT_FLOOR", "0") or 0)
+    if floor > timeout:
+        timeout = floor
     try:
         r = subprocess.run(
             run_args, capture_output=True, text=True, timeout=timeout,
@@ -1101,12 +856,21 @@ class Requirements:
     needs_vm: the windows/linux VM channel (vmr-shell + frida-to-VM) is
         required. True is the conservative default — the pre-#449 status
         quo — whenever task_spec does not explicitly say otherwise.
+    needs_debug_flag: the android JDWP device flag (ro.debuggable=1) is
+        required. True is the conservative default (#304 F3 enforcement).
+        #25 D1: ro.debuggable=1 is unreachable on Android 12+ user builds
+        (SELinux property_service lock) while frida/android_server run fine
+        via Magisk su without it — a task that does not need the flag must
+        be able to say so (constraints.dynamic_re=forbidden, or an explicit
+        constraints.debug_flag: false); the debug_flag check then downgrades
+        FAIL -> WARN instead of blocking an init that can never pass.
     basis: why (task_spec field citation, or the conservative default) —
         rides into the downgraded check details so a WARN is never mystery
         noise.
     """
 
     needs_vm: bool = True
+    needs_debug_flag: bool = True
     basis: str = "task_spec absent/unreadable — conservative default (VM HARD)"
 
 
@@ -1122,6 +886,13 @@ def requirements_from_task_spec(task_spec: dict | None) -> Requirements:
     needed. Anything else (absent, empty, non-mapping, garbage, "allowed")
     stays conservative: needs_vm=True, pre-#449 behavior.
 
+    #25 D1 debug_flag: constraints.dynamic_re == "forbidden" implies no
+    JDWP dynamics (static-only), and constraints.debug_flag: false is the
+    explicit user-build opt-out (ro.debuggable=1 unreachable on Android 12+
+    user builds; the dynamic plan runs via Magisk su without it). Only the
+    exact YAML boolean false demotes — a string "false" or any other value
+    stays conservative, the same rule dynamic_re applies to its vocabulary.
+
     primary_questions carry no env-relevant explicit field today (their
     `need:` enum says how to answer, not which environment to bring up);
     when one lands (#450+), it extends HERE, never at the checkers.
@@ -1134,13 +905,22 @@ def requirements_from_task_spec(task_spec: dict | None) -> Requirements:
     constraints = task_spec.get("constraints")
     if not isinstance(constraints, dict):
         return DEFAULT_REQUIREMENTS
+    needs_vm = True
+    needs_debug_flag = True
+    basis = DEFAULT_REQUIREMENTS.basis
     dynamic_re = str(constraints.get("dynamic_re", "")).strip().lower()
     if dynamic_re == "forbidden":
-        return Requirements(
-            needs_vm=False,
-            basis="task_spec constraints.dynamic_re=forbidden (static-only)",
-        )
-    return DEFAULT_REQUIREMENTS
+        needs_vm = False
+        needs_debug_flag = False  # static-only: no JDWP dynamics either (#25 D1)
+        basis = "task_spec constraints.dynamic_re=forbidden (static-only)"
+    if constraints.get("debug_flag") is False:
+        needs_debug_flag = False
+        basis = ("task_spec constraints.debug_flag=false "
+                 "(user build: JDWP flag not required)")
+    if needs_vm and needs_debug_flag:
+        return DEFAULT_REQUIREMENTS
+    return Requirements(needs_vm=needs_vm,
+                        needs_debug_flag=needs_debug_flag, basis=basis)
 
 
 def load_task_spec(ws: Path) -> dict | None:
@@ -1638,11 +1418,14 @@ def _check_android(report: ToolchainReport, ws: Path,
                    reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
     """Android toolchain checks (APK/DEX/SO).
 
-    #449: `reqs` is accepted for checker-signature uniformity but does not
-    relax anything — android's dynamic contract is the ADB channel
-    (device-side services), not the VMware/VBox VM channel (#455;
-    NEVER_CHECKS). Needs-first android relaxation is follow-up scope, not
-    #449 evidence."""
+    #449: `reqs` is accepted for checker-signature uniformity — android's
+    VM-face has nothing to relax (its dynamic contract is the ADB channel,
+    device-side services, not the VMware/VBox VM channel (#455;
+    NEVER_CHECKS)). #25 D1 wires the ONE android relaxation that exists:
+    the debug_flag gate downgrades FAIL -> WARN when the task does not
+    need the JDWP flag (reqs.needs_debug_flag False — static-only, or the
+    explicit constraints.debug_flag=false opt-out); the basis rides into
+    the detail. The default path is byte-identical to the pre-#25 gate."""
     # T0: venv + aapt/aapt2 (or unzip substitute)
     aapt_found = None
     for tool in ("aapt", "aapt2"):
@@ -1754,11 +1537,23 @@ def _check_android(report: ToolchainReport, ws: Path,
     # T2: debug flag (HARD, enforced — #304 F3): verified by reading back
     # ro.debuggable == 1. "Must be set" is a user design requirement, so an
     # unset flag FAILs init instead of silently warning.
+    # #25 D1: ro.debuggable=1 is unreachable on Android 12+ user builds
+    # (SELinux property_service lock) while frida/android_server run fine
+    # via Magisk su — when the task does not need the flag
+    # (reqs.needs_debug_flag False), a miss downgrades FAIL -> WARN with
+    # the task_spec basis in the detail (reported, never silently skipped;
+    # the #449 VM-downgrade contract). The default path stays byte-identical.
+    flag_optional = not reqs.needs_debug_flag
     if not adb_ok:
+        detail = "Cannot check debug flag — ADB unavailable"
+        if flag_optional:
+            detail += f" — not required by task_spec ({reqs.basis})"
         report.items.append(CheckResult(
-            name="debug_flag", status=Status.FAIL, tier=Tier.HARD,
-            detail="Cannot check debug flag — ADB unavailable",
-            root_cause="ADB",
+            name="debug_flag",
+            status=Status.WARN if flag_optional else Status.FAIL,
+            tier=Tier.WARN if flag_optional else Tier.HARD,
+            detail=detail,
+            root_cause=None if flag_optional else "ADB",
         ))
     else:
         assert adb  # noqa: S101 — adb is set when adb_ok is True
@@ -1772,11 +1567,19 @@ def _check_android(report: ToolchainReport, ws: Path,
                 probe=ProbeTier.CAPABILITY,
             ))
         else:
+            detail = (f"debug flag not set (ro.debuggable="
+                      f"{debuggable or 'unreadable'}; {err or out[:60]})")
+            if flag_optional:
+                detail += f" — not required by task_spec ({reqs.basis})"
+            else:
+                detail += " — required for Android dynamic analysis"
             report.items.append(CheckResult(
-                name="debug_flag", status=Status.FAIL, tier=Tier.HARD,
-                detail=f"debug flag not set (ro.debuggable={debuggable or 'unreadable'}; "
-                       f"{err or out[:60]}) — required for Android dynamic analysis",
-                root_cause="debug_flag", probe=ProbeTier.CAPABILITY,
+                name="debug_flag",
+                status=Status.WARN if flag_optional else Status.FAIL,
+                tier=Tier.WARN if flag_optional else Tier.HARD,
+                detail=detail,
+                root_cause=None if flag_optional else "debug_flag",
+                probe=ProbeTier.CAPABILITY,
             ))
 
     # T2: frida-server (renamed + custom port, convention 1337) — HARD, enforced
@@ -2198,7 +2001,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())
 

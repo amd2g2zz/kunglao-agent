@@ -22,8 +22,8 @@ def _seed(root: Path, files: dict) -> None:
         f.write_text(body, encoding="utf-8")
 
 
-def test_gate_finds_retired_regex_copy_in_fixture():
-    root = ROOT / "tests" / "_tmp_gate861" / "case1"
+def test_gate_finds_retired_regex_copy_in_fixture(tmp_path: Path):
+    root = tmp_path / "case1"
     _seed(root, {
         "hooks/lib_kunglao.py": "DISPATCH_RE = re.compile(r'x')\n",
         "scripts/other.py": "x = DISPATCH_RE\n",
@@ -31,37 +31,30 @@ def test_gate_finds_retired_regex_copy_in_fixture():
     r = rg.scan(root, [])
     keys = [k for k in r["findings"] if k.startswith("retired_regex_copy")]
     assert any(k.endswith("scripts/other.py") for k in keys), r
-    import shutil
-    shutil.rmtree(root.parent, ignore_errors=True)
 
 
-def test_gate_allows_owner_and_twin():
-    root = ROOT / "tests" / "_tmp_gate861" / "case2"
+def test_gate_allows_owner(tmp_path: Path):
+    root = tmp_path / "case2"
     _seed(root, {
         "hooks/lib_kunglao.py": "DISPATCH_RE = re.compile(r'x')\n",
-        "scripts/lib_kunglao.py": "DISPATCH_RE = re.compile(r'x')\n",
         "scripts/clean.py": "print('no token here')\n",
     })
     r = rg.scan(root, [])
     assert not [k for k in r["findings"] if k.startswith("retired_regex_copy")], r
-    import shutil
-    shutil.rmtree(root.parent, ignore_errors=True)
 
 
-def test_gate_flags_deprecated_module_with_live_caller():
-    root = ROOT / "tests" / "_tmp_gate861" / "case3"
+def test_gate_flags_deprecated_module_with_live_caller(tmp_path: Path):
+    root = tmp_path / "case3"
     _seed(root, {
         "scripts/legacy_mod.py": "DEPRECATED = True\n",
         "scripts/caller.py": "import legacy_mod\n",
     })
     r = rg.scan(root, [])
     assert "deprecated_live_caller:legacy_mod<-scripts/caller.py" in r["findings"], r
-    import shutil
-    shutil.rmtree(root.parent, ignore_errors=True)
 
 
-def test_gate_ratchet_baseline_hides_known_debt():
-    root = ROOT / "tests" / "_tmp_gate861" / "case4"
+def test_gate_ratchet_baseline_hides_known_debt(tmp_path: Path):
+    root = tmp_path / "case4"
     _seed(root, {
         "scripts/legacy_mod.py": "DEPRECATED = True\n",
         "scripts/caller.py": "import legacy_mod\n",
@@ -69,12 +62,10 @@ def test_gate_ratchet_baseline_hides_known_debt():
     base = ["deprecated_live_caller:legacy_mod<-scripts/caller.py"]
     r = rg.scan(root, base)
     assert r["ok"] is True and r["new_findings"] == [], r
-    import shutil
-    shutil.rmtree(root.parent, ignore_errors=True)
 
 
-def test_gate_new_finding_blocks():
-    root = ROOT / "tests" / "_tmp_gate861" / "case5"
+def test_gate_new_finding_blocks(tmp_path: Path):
+    root = tmp_path / "case5"
     _seed(root, {
         "scripts/legacy_mod.py": "DEPRECATED = True\n",
         "scripts/caller.py": "import legacy_mod\n",
@@ -85,8 +76,6 @@ def test_gate_new_finding_blocks():
     assert r["ok"] is False
     assert r["new_findings"] == [
         "deprecated_live_caller:legacy_mod<-scripts/new_caller.py"], r
-    import shutil
-    shutil.rmtree(root.parent, ignore_errors=True)
 
 
 def test_real_repo_findings_within_baseline():

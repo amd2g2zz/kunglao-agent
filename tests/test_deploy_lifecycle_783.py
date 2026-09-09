@@ -34,10 +34,30 @@ if str(SCRIPTS) not in sys.path:
 import template_version as tv  # noqa: E402
 from _factories import seed_bins
 
+import pytest  # noqa: E402
+
 # #794 lesson: behavioral env vars must never leak into CLI children.
 _BEHAVIORAL_ENV_VARS = ("CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",)
 
 GIT_IDENTITY = ("-c", "user.name=t", "-c", "user.email=t@localhost")
+
+
+# ---------------------------------------------------------------- #143 home isolation
+# The upgrade now purges the user-global ~/.claude/settings.json (#143 item).
+# Every real-run upgrade test in this file binds Path.home to a bare tmp home
+# (the established monkeypatch seam, canonical_install_root precedent) plus
+# HOME/USERPROFILE for subprocess children, so a pytest run can never purge
+# the production global file — same protection class as conftest.isolated_home.
+
+
+@pytest.fixture(autouse=True)
+def _isolated_upgrade_home(tmp_path, monkeypatch):
+    home = tmp_path / "fake-home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    return home
 
 
 def _run_cli(args: list[str], *, env: dict | None = None,
@@ -88,6 +108,12 @@ def _deployed_ws(tmp_path: Path, *, stamp: str | None = None,
     (ws / "CLAUDE.md").write_text(
         tv.stamp_line(stamp or tv.read_skill_version()) + "\n",
         encoding="utf-8")
+    # the three required intake answers (present: these tests pin
+    # deployment-lifecycle semantics, not the anchor interview)
+    (ws / "task_spec.yaml").write_text(
+        "goal_verbatim: lifecycle goal\n"
+        "success_criterion: lifecycle criterion\n"
+        "verification_method: manual\n", encoding="utf-8")
     return ws
 
 
@@ -246,9 +272,11 @@ def test_check_stale_untouched_without_deployed_copies(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 def _early_exit_ws(tmp_path: Path, tag: str) -> Path:
-    """Deployed workspace stamped ABOVE the skill target so upgrade()
-    takes the already-at-version early-exit path (plan empty)."""
-    return _deployed_ws(tmp_path, stamp="0.1.4", tag=tag)
+    """Deployed workspace stamped AT the skill target so upgrade()
+    takes the already-at-version early-exit path (plan empty). The
+    stamp tracks read_skill_version() — a hardcoded release pin would
+    silently fall below the target on the next bump."""
+    return _deployed_ws(tmp_path, tag=tag)
 
 
 def test_upgrade_early_exit_refreshes_copies_and_carrier(tmp_path: Path):
@@ -360,6 +388,12 @@ def test_lifecycle_init_drift_upgrade_current(tmp_path: Path):
     tamper -> check-stale deploy-drift -> same-version upgrade restores ->
     check-stale current + zero skill-install paths -> init idempotent."""
     ws = _init_ws(tmp_path)
+    # the needs-first intake answers (SKILL flow: they land in task_spec
+    # ahead of init; this test pins the deploy lifecycle, not the interview)
+    (ws / "task_spec.yaml").write_text(
+        "goal_verbatim: lifecycle goal\n"
+        "success_criterion: lifecycle criterion\n"
+        "verification_method: manual\n", encoding="utf-8")
 
     # 1. init materialized the deployment + carrier + inverted registration
     hooks_dir = ws / ".claude" / "hooks"

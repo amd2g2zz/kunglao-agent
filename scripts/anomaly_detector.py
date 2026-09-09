@@ -263,7 +263,7 @@ def _load_baseline() -> BaselineCorpus:
     # Source 1: RE-library pattern docs (deterministic, pre-built)
     re_lib = project_root / "references" / "re-library"
     if re_lib.is_dir():
-        for md in sorted(re_lib.glob("*.md")):
+        for md in sorted(re_lib.rglob("*.md")):
             try:
                 _ingest_re_library_doc(md, term_freq, pair_freq, path_freq)
             except Exception:
@@ -410,7 +410,8 @@ def _extract_sample_refs(fact_text: str) -> List[str]:
 # ---------- #692 WP5: taint findings as observations ----------
 
 TAINT_SEEDS_FILE = (Path(__file__).resolve().parent.parent / "references" /
-                    "re-library" / "android-fingerprint-seeds.yaml")
+                    "re-library" / "android" / "emulation" /
+                    "android-fingerprint-seeds.yaml")
 DEFAULT_TAINT_THRESHOLD = 2   # distinct high-risk categories
 
 
@@ -558,6 +559,6 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

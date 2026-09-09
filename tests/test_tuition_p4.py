@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""tests/test_tuition_p4.py — #823-P4 学习环收官测试。"""
+"""tests/test_tuition_p4.py — #823-P4 学习环收官测试。
+
+#104: the tuition_refit/optimizer_core proposal face is deleted (dead organ,
+zero consumers) — only the tuition_curve + cockpit faces are covered here."""
 from __future__ import annotations
 
 import json
@@ -9,9 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import optimizer_core  # noqa: E402
 import tuition_curve as tc  # noqa: E402
-import tuition_refit as tr  # noqa: E402
 
 
 def _mk_ws(tmp_path):
@@ -35,44 +36,6 @@ def _seed_pairs(ws, rows):
                 "artifact": None, "exit": None,
                 "detail": json.dumps({"rho": rho, "z": z, "cost": cost}),
             }, ensure_ascii=False) + "\n")
-
-
-def _good_pairs(n=12):
-    return ([(0.9, 1.0, 100000.0)] * (n // 2)
-            + [(0.1, 0.0, 400000.0)] * (n - n // 2))
-
-
-def test_refit_direction_and_constitutional_proposal(tmp_path):
-    ws = _mk_ws(tmp_path)
-    _seed_pairs(ws, _good_pairs())
-    r = tr.refit(ws)
-    assert r["ok"] is True
-    prop = r["proposal"]
-    assert prop["schema_version"] == optimizer_core.SCHEMA_VERSION
-    assert prop["kind"] == "theta_tuning"
-    new = prop["theta_new"]
-    assert new["platt_w"] > 0.5
-    assert set(new) <= optimizer_core.PARAM_NAMES
-    assert not (set(new) & optimizer_core.CONSTITUTIONAL_KEYS)
-
-
-def test_refit_insufficient_pairs(tmp_path):
-    ws = _mk_ws(tmp_path)
-    _seed_pairs(ws, [(0.9, 1.0, 1000.0)] * 3)
-    r = tr.refit(ws)
-    assert r["ok"] is False
-    assert r["reason"] == "insufficient_pairs"
-    assert "proposal" not in r
-
-
-def test_refit_writes_proposal_file(tmp_path):
-    ws = _mk_ws(tmp_path)
-    _seed_pairs(ws, _good_pairs())
-    out = tmp_path / "prop.json"
-    tr.refit(ws, out_path=out)
-    loaded = json.loads(out.read_text(encoding="utf-8"))
-    assert loaded["kind"] == "theta_tuning"
-    assert loaded["theta_new"]["platt_w"] > 0.5
 
 
 def test_curve_got_cheaper_and_insufficient(tmp_path):

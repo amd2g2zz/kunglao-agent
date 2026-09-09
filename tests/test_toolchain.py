@@ -132,9 +132,13 @@ def _run_toolchain(ws: Path, extra: list[str] | None = None,
                 "ghidra", "sequential-thinking", "x64dbg", "gitnexus")},
         }), encoding="utf-8")
     base_env["KUNGLAO_CLAUDE_JSON"] = str(fake_claude)
+    # parallel-suite patience: stub probes stay ms-fast on a quiet machine,
+    # but an xdist worker storm can starve a 10s probe budget into a false
+    # "unavailable" verdict — raise the floor instead of the pass/fail bar
+    base_env["KUNGLAO_PROBE_TIMEOUT_FLOOR"] = "25"
     if env:
         base_env.update(env)
-    return subprocess.run(argv, capture_output=True, text=True, timeout=60,
+    return subprocess.run(argv, capture_output=True, text=True, timeout=120,
                           env=base_env, errors="replace")
 
 
@@ -694,25 +698,32 @@ def test_android_server_fail_without_listener(fake_bin, kunglao_ws, monkeypatch)
 
 def test_frida_port_garbage_env_defensive(monkeypatch):
     """F7: KUNGLAO_FRIDA_PORT garbage ('abc' / out-of-range) must NOT crash
-    the import — defensive parse falls back to 1337; valid values honored."""
+    the import — defensive parse falls back to 1337; valid values honored.
+    The port is single-sourced in report_render; reload it first so the
+    re-export toolchain carries recomputes with the patched env."""
     import importlib
+    import report_render as rr
     import toolchain as tc
 
+    def reload_ports():
+        importlib.reload(rr)
+        importlib.reload(tc)
+
     monkeypatch.setenv("KUNGLAO_FRIDA_PORT", "not-a-port")
-    importlib.reload(tc)
+    reload_ports()
     assert tc.FRIDA_PORT == 1337, \
         f"garbage env must fall back to 1337, got {tc.FRIDA_PORT}"
 
     monkeypatch.setenv("KUNGLAO_FRIDA_PORT", "99999")
-    importlib.reload(tc)
+    reload_ports()
     assert tc.FRIDA_PORT == 1337, "out-of-range port must fall back to 1337"
 
     monkeypatch.setenv("KUNGLAO_FRIDA_PORT", "1555")
-    importlib.reload(tc)
+    reload_ports()
     assert tc.FRIDA_PORT == 1555, "valid override must be honored"
 
     monkeypatch.delenv("KUNGLAO_FRIDA_PORT", raising=False)
-    importlib.reload(tc)
+    reload_ports()
     assert tc.FRIDA_PORT == 1337, "default port must be 1337"
 
 

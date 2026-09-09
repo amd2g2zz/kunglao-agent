@@ -255,7 +255,7 @@ class TestBashFacePrecision:
         "echo \"run jadx from the worker, not here\"",
     ]
 
-    # command-position positives: must still WARN
+    # command-position positives: must still be caught
     COMMAND_POSITIVE = [
         "jadx -d out app.apk",
         "cd /d/tools && jadx -d out app.apk",
@@ -275,15 +275,21 @@ class TestBashFacePrecision:
             assert (rc, err, ctx) == (0, "", None), (
                 f"field false positive must vanish: {cmd!r} -> ctx={ctx!r}")
 
-    def test_command_position_still_warns(self, tmp_path):
+    def test_command_position_still_signals(self, tmp_path):
+        """#57 gate 2: the face REJECTS now (framework-layer posture, no
+        opt-out) — the #601 command-position precision itself is unchanged:
+        every command-position analysis binary is still caught, with the
+        repair path (dispatch a worker) on both channels."""
         mod = self.GUARD()
         ws = tmp_path / "ws"
         ws.mkdir()
         for cmd in self.COMMAND_POSITIVE:
             rc, err, ctx = mod.evaluate({"cwd": str(ws), "tool_name": "Bash",
                                          "tool_input": {"command": cmd}})
-            assert rc == 0 and ctx and "maker-checker" in ctx, (
-                f"command-position analysis binary must WARN: {cmd!r}")
+            assert rc == 2 and "REJECT orchestrator_tool_guard" in err, (
+                f"command-position analysis binary must REJECT: {cmd!r}")
+            assert ctx and "ispatch" in ctx, (
+                f"repair path must say: dispatch a worker: {cmd!r}")
 
     def test_warn_emit_carries_matched_rule(self, tmp_path):
         mod = self.GUARD()

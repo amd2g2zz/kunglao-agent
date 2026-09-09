@@ -1,7 +1,7 @@
 # Kunglao Convergence Loop (always-on distilled rules)
 
 > Distilled (<150 lines). The full contract lives in `SKILL.md`; behavioral
-> detail and case evidence live in `references/convergence-loop.md` — read on
+> detail and case evidence live in `references/contracts/convergence-loop.md` — read on
 > demand, not loaded by default. Deployment to `~/.claude/rules/common/` is
 > handled by a separate setup script; this file is its source.
 
@@ -63,7 +63,7 @@ remaining work back through Task dispatch.
 ## 7. Hard prohibitions
 
 1. **No asking the user mid-iteration** — defer to the **3-state charter**
-   in `references/agent-three-state-charter.md` (single source of truth; v2).
+   in `references/contracts/agent-three-state-charter.md` (single source of truth; v2).
    Default = **allowed** (decide + record + continue); identity ambiguity /
    scope change / tools-and-resources exhausted (ladder climbed) = **must-ask**;
    an in-boundary new hard error = **allowed + forced ladder** (method-ladder /
@@ -91,5 +91,5 @@ remaining work back through Task dispatch.
 ## 9. Pointers (full contract on demand)
 
 - `SKILL.md` — the full contract (loaded when the skill is invoked)
-- `references/convergence-loop.md` — convergence-loop detail + case evidence
-- `references/case-book.md` / `references/guardrails.md` — failure cases and the full guardrails text
+- `references/contracts/convergence-loop.md` — convergence-loop detail + case evidence
+- `references/orchestration/failure-modes/case-book.md` / `references/governance/guardrails.md` — failure cases and the full guardrails text

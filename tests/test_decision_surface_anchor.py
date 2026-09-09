@@ -3,7 +3,7 @@
 """tests/test_decision_surface_anchor.py — F-class decision-surface
 machine anchor (issue #446, comment 2026-08-19).
 
-The charter (references/agent-three-state-charter.md) declares itself THE
+The charter (references/contracts/agent-three-state-charter.md) declares itself THE
 single source for the three states; scripts/error_response.py carries a
 derived column (_CHARTER_STATE). Before this anchor the cross-reference
 was prose-only — nothing mechanical failed when one side drifted.
@@ -15,7 +15,7 @@ line references must be replaced by symbol references):
   - this test asserts MUTUAL PRESENCE on both faces, plus value-domain
     lockstep (_CHARTER_STATE tokens drawn from the charter vocabulary)
     and class-name lockstep with the taxonomy table
-    (references/error-response-taxonomy.md).
+    (references/contracts/error-response-taxonomy.md).
 """
 from __future__ import annotations
 
@@ -28,13 +28,13 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import error_response as er  # noqa: E402
 
-CHARTER = REPO_ROOT / "references" / "agent-three-state-charter.md"
-TAXONOMY = REPO_ROOT / "references" / "error-response-taxonomy.md"
+CHARTER = REPO_ROOT / "references" / "contracts" / "agent-three-state-charter.md"
+TAXONOMY = REPO_ROOT / "references" / "contracts" / "error-response-taxonomy.md"
 
 
 class TestCharterStatesDeclaration:
     def test_source_and_states_declared(self) -> None:
-        assert er.CHARTER_SOURCE == "references/agent-three-state-charter.md"
+        assert er.CHARTER_SOURCE == "references/contracts/agent-three-state-charter.md"
         assert set(er.CHARTER_STATES) == {"allowed", "must-ask", "must-stop"}
 
     def test_charter_state_values_draw_from_charter_vocabulary(self) -> None:
@@ -80,7 +80,7 @@ class TestTaxonomyLockstep:
             needle = label.get(cls.value, cls.value)
             assert needle in tax, (
                 f"ErrorClass {cls.value!r} has no row in "
-                f"references/error-response-taxonomy.md — table drift")
+                f"references/contracts/error-response-taxonomy.md — table drift")
 
     def test_taxonomy_names_its_mechanical_executor(self) -> None:
         tax = TAXONOMY.read_text(encoding="utf-8")

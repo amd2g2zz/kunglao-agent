@@ -5,7 +5,7 @@ Every `.py` in this directory is classified by role and by where it is
 referenced. The reference map below is the definitive answer to "who uses
 this script?" — used to keep documentation, hooks, CI, and tests in sync.
 
-- **Total scripts**: 169 (`scripts/*.py` at #866 recon, 2026-09-02; the
+- **Total scripts**: 171 (`scripts/*.py` at #49 recon, 2026-09-05; the
   historical #318-era count lineage — 72 cataloged at #318 close; +15 by
   #236/#271/#287/#304/#309/#316; +4 by #310/#331/#336 merged after the
   #320 snapshot; +1 by #409; +2 by #477 — is superseded by the live
@@ -13,8 +13,12 @@ this script?" — used to keep documentation, hooks, CI, and tests in sync.
 - **Orphans — test semantics**: 0 — every script has at least one live
   reference (tests/ count as references; a script referenced only by tests
   is categorized `TEST`, not orphan). This is the #230-era metric.
-- **Orphans — production semantics (#866)**: 29 unwired of 205 subjects
-  (scripts 29 + tools 0, ~6.0k LOC) as of the 2026-09-02 post-866-b sweep —
+- **Orphans — production semantics (#866)**: 18 unwired of 181 subjects
+  (scripts 18 + tools 0) as of the 2026-09-09 scripts-governance sweep —
+  down from 29 of 205 at the 2026-09-02 post-866-b sweep (the governance
+  sweep deleted the 9 surveyed orphans and merged 6 clusters; the
+  unidbg installer face flipped to production-wired via the
+  toolchain_install registry) —
   the tools side was fully dispositioned by PR 866-b (all 27 pre-gate CLIs
   registered: tools/_INDEX.yaml registry mention + skills/references
   teaching; the 27-key gate baseline `devkit/.discovery-gate-baseline.txt`
@@ -46,7 +50,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao_wait.py` | worker 自旋锁 CLI — 交付后 sleep 轮询 + WAIT flag 续写（mtime 心跳），signal 到达 UNWAIT 回工作（rc 0），K 轮无 signal self-kill 释放槽位（rc 3/4）；9 agents 统一接入 | agents, hooks/dispatch_gate (signal), tests |
 | `init_channel_default.py` | default local-channel resolution + KUNGLAO_CHANNEL env contract (#727); static-only probe for local + explicit-channel-never-auto-switch; consumed by kunglao-init.write_init_report(channel=) | kunglao-init, tests |
 | `kunglao-init.py` | workspace init + re-init guard + deploy_env (#478: hooks/agents/mcp-record/skills + env-manifest ledger) | CLI, tests |
-| `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + explore_gate + priority_ratio | CLI, tests |
+| `kunglao-decide.py` | M1 DECIDE — convergence_check.decide + priority_ratio (#107 Thompson, single ranking path) | CLI, tests |
 | `kunglao-verify.py` | M3 VERIFY entry (thin wrapper → `kunglao_verify.py`) | CLI, tests |
 | `kunglao-record.py` | M4 RECORD entry (thin wrapper → `kunglao_record.py`) | CLI, tests |
 | `kunglao-monitor.py` | M5 MONITOR — heartbeat + reconcile + stuck/health watch | CLI, tests |
@@ -63,17 +67,17 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `convergence_check.py` | convergence decision (DISPATCH/DISPATCH_VERIFIER/SATURATED/BLOCKED/CONVERGED) — the every-turn gate | hooks, CLI, lib(2), tests |
 | `convergence_health.py` | ledger-based HEALTHY/STALLED/SPINNING verdicts | hooks, CLI, lib(2), tests |
 | `anomaly_detector.py` | anomaly observation layer (#663): score_fact 3-dim + scan_anomalies + baseline corpus load (fail-open); feeds convergence ANOMALY_DETECTED; observe_taint taint-concentration observations (#692 WP5) | lib(1: convergence_check), CLI, tests |
-| `rho_checkpoint.py` | P2 ρ progress signal + V/D/ETA (#823): per-PQ grade expectation, σ(w·x+b) priors fallback chain, decide() value_signals attach (flag-gated shadow) | lib(1: convergence_check), tests |
+| `rho_checkpoint.py` | P2 ρ progress signal + V/D/ETA (#823): per-PQ grade expectation, σ(w·x+b) priors fallback chain, decide() value_signals attach (always-on since #51; raw rho stays shadow, prior V feeds the #9 ranking terms live) | lib(1: convergence_check), tests |
 | `rho_verifier.py` | #823-P2 ρ_t dense signal shadow — pluggable backend (deterministic default, green with no LLM), checkpoint (rho,z) pairing ledger face, Platt data path (single-source re-export) | lib(1: rho_checkpoint), tests |
 | `value_replay.py` | P1 offline replay settlement (#823): z_self four-channel relabel, evidence-gated reward score, bucket priors value-priors.yaml, replay-validation gate | CLI, lib(2: rho_checkpoint, priority_ratio), tests |
+| `replay_equivalence.py` | Controlled-variable I/O equivalence oracle: `evidence/replay-*.json` schema lint + t-way covering-array coverage over declared input variables (withheld inputs as declared coverage shadows, captured-input inventory, recorded flags recomputed); mutation gate (one-byte output perturbation must redden, silent-green raises); admission/verdict faces for reproduction-flavored claims (declared `reproduction: true` / `replay_evidence:` fields; "ran without error" is not evidence); `--execute` re-runs the reproduction on captured inputs and byte-compares (per-pair divergence offset, fabricated-record detection) | lib(2: kunglao_record PROVEN gate, convergence_check unverified-PQ face), tests |
 | `infeasible_signal.py` | P3 doomed-trajectory signal (#823/#815): flat V × zero marginal discovery → infeasible_candidate event (shadow) | lib, tests |
 | `infeasible_proposal.py` | #815 早停接线 — gated INFEASIBLE 立案（阶梯 L1/L2/L3+清单+wake_condition 要件, REJECT 零变更）+ wake 复活面; DEFERRED 自动退出派发 | hooks, tests |
 | `zero_output_fingerprint.py` | P3 same-type action thrash circuit (#823/#634): (tool,target) hash streaks N=3 zero belief change → break + failure_analysis inject (shadow) | lib, tests |
-| `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669): seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` / `taint:<cat>:<api>` candidates | lib(1: digest_build), CLI, tests |
+| `hypothesis_seeder.py` | PQ scaffold seeder (#662) + apkid candidate extension (#669) + #110 case-bank priors: seeds `pq:<qid>` hypotheses, appends `apkid:<cat>:<rule>` / `taint:<cat>:<api>` candidates; `seed_case_candidates` 按冷启动 (project_type+保护特征) 检索 runs/case-bank.jsonl 命中行注入 provenance 先验 (failure-first, 零行/零命中/零上下文静默跳过) | lib(1: digest_build), CLI, tests |
 | `apkid_scanner.py` | T1 apkid pre-scan wrapper (#669): fingerprints packer/compiler/obfuscator/anti-* into evidence/apkid.json (fail-open) | CLI, tests |
 | `provider_health.py` | runtime provider-failure memory (#692 WP4): record/query <ws>/provider_health.json, 24h window, fail-open; consumed by route_capability selection next round | CLI, lib(1: route_capability), tests |
-| `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4); #823 A3 feed-side terms behind KUNGLAO_VALUE_ALGO | lib(3), tests |
-| `value_config.py` | AB-VALUE experiment flag KUNGLAO_VALUE_ALGO (#823) — fail-loud arm switch; off = byte-identical dev behavior | lib(4), tests |
+| `priority_ratio.py` | sanctioned v1.9.29 dispatch ranker (R4); #823 A3 feed-side terms always-on (#51); also the single home of the strategy convergence four metrics (regret / cost-to-slope / P(faster|hit) / competence, `--strategy` CLI face) | lib(3), tests |
 | `relib_audit.py` | re-library 审查器 (#817) — 孤儿/tracker 残留/声明行缺失三类检查 + quarantine 可逆移动 + 质量度量; _INDEX.yaml pin 契约(改库必 re-pin) | hooks, tests |
 | `route_capability.py` | deterministic feature→capability router (#278 P4-b; #310 specialist-first gating) | lib(1), tests |
 | `failure_analysis_gate.py` | 3-question method-failure reasoning gate (no NEGATIVE without it) | hooks, CLI, lib(2), tests |
@@ -81,7 +85,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `env_check.py` | environment readiness gate (venv/toolchain/VM channel) | hooks, CLI, tests |
 | `env_manifest.py` | env-facts.yaml single source (issue #450): five fact families + LayoutConventions, priority chain yaml > task-spec > defaults; --render/--probe | CLI, lib(3), tests |
 | `env_state_probe.py` | env-state liveness snapshot writer → runs/env-state.json (tick step 9; #475) | lib(2), tests |
+| `install_unidbg.py` | Typed CLI face for `install_unidbg.sh` — unidbg deployment preconditions installer: JDK + Maven checks, remote clone of the MCP-capable master line, first-build dependency resolution, verify-after-repair; idempotent marker-based re-runs, --dry-run plan, fail-closed steps (#165) | CLI, tests |
 | `env_repair_l1.py` | L1 deterministic env repair (adb-reconnect/vm-rediscover/mcp-rehandshake; idempotent, safe no-op; #475) | CLI, tests |
+| `entropy_face.py` | #142 follow-up entropy-honesty face, SINGLE SOURCE — frontier PQ categorical entropy (posteriors.PQCategorical; frontier = first non-answered PQ, deterministic max-entropy fallback) + trend vs the previous stored snapshot value (falling/flat/rising/unknown, TREND_EPS); dual-use display (owner principle): statusline_snapshot renders it AND heartbeat_tick report carries the same h_bits/h_pq/h_trend (decision-side gear-shift signal); fail-open (empty/unreadable ledger → h_bits=None / unknown) | heartbeat_tick, statusline_snapshot, tests |
 | `heartbeat.py` | convergence-gated heartbeat bookkeeping (lib for hook_activation) | lib(1), tests |
 | `heartbeat_tick.py` | heartbeat tick runner (hook-invoked + kunglao.py) | hooks, lib(1), tests |
 | `heartbeat_loop_prompt.py` | loop-prompt generator for the tick loop | hooks, tests |
@@ -93,7 +99,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao_verify.py` | L1 mechanical verify implementation (reproduce + byte-exact) | lib(3), tests |
 | `kunglao_eval.py` | eval harness implementation (episode runner + scorer) | lib(2), CI, tests |
 | `digest_build.py` | digest generation implementation | lib(2), tests |
-| `acceptance_check.py` | end-to-end acceptance criteria runner | tests |
 
 ## Enforcement gates (reject/allow decision scripts)
 
@@ -107,14 +112,11 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `calibration_gate.py` | calibration/confidence gate | tests |
 | `completion_gate.py` | completion transaction gate | hooks, tests |
 | `cost_gate.py` | cost tier gate (advisory/pause/HARD_PAUSE) | tests |
-| `explore_gate.py` | explore-before-dispatch gate (lib for kunglao-decide) | lib(1), tests |
 | `fact_contradiction_gate.py` | cross-fact contradiction detection | hooks, lib(3), tests |
 | `plan_drift_detector.py` | plan↔reality drift detection | hooks, tests |
 | `plan_reviser.py` | plan state machine + suggest_revision triggers + incremental revision segments | tests, SKILL contract |
 | `premature_termination_detect.py` | premature-done declaration detector | lib(1), tests |
 | `provenance_gate.py` | PROVEN provenance chain gate | lib(1), tests |
-| `reuse_gate.py` | evidence-reuse gate | tests |
-| `search_gate.py` | search-before-work gate | tests |
 | `troubleshooting_gate.py` | report completeness gate | tests |
 | `review_gate.py` | review evidence mint/check (key-init/mint/check) | tests, docs |
 | `adversarial_gate.py` | verdict-scorer 签名前对抗门 — open challenge/链断/summary 鉴权失败/轮数低于 register 高水位一律 BLOCKED，无 override | tests |
@@ -129,16 +131,20 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | --- | --- | --- |
 | `kunglao_upgrade.py` | workspace upgrade via declarative convergence (#726): 5 idempotent migrations + version wall + user-data sha256 iron rule + dry-run/snapshot; dispatched from `kunglao upgrade` subcommand | kunglao, tests |
 | `claim_expiry.py` | STALE demotion after inactivity | lib(1), tests |
-| `complete_teardown.py` | full teardown helper | tests |
 | `dead_letter.py` | DEAD status + dead-letter quarantine | hooks, lib(1), tests |
+| `detector_liveness.py` | #127 探测器利用率证据 — unified log 里的 detector_eval/detector_fired 计数回读; DORMANT = evaluations>0 且 fires==0 (#600 DORMANT 哨兵泛化); heartbeat_tick 一次性 WARN 面; CLI: `<ws> [--json]` | tests |
 | `feedback.py` | feedback inbox processing | tests |
 | `obligation_discovery.py` | obligation discovery from claims | lib(1), tests |
-| `outcome_capture.py` | outcome ledger capture (R6) | lib(2), tests |
+| `outcome_capture.py` | outcome ledger capture (R6) + #110 结算落库: 每个 NEW settlement 经 `_bank_case`→case_bank.append_once 落一行案例 (NEGATIVE 无 attribution 机械合成 verdict/checker/signals, ruling 4); 落库失败 fail-open `case_bank_refused` 事件 | lib(2), tests |
+| `roi_settlement.py` | #49 dispatch intent contract + entropy-gain admission gate — record_intent (MISSING_UNCERTAINTY data-channel gate, ruling 3) + settle_intent outcome-vs-intent 归因 (POSITIVE/NEUTRAL/NEGATIVE/UNRESOLVED; fact count 永不作信号, ruling 2) → runs/roi-intents.jsonl + runs/roi-settlements.jsonl; dispatch_gate enforcement wiring 属后续 | outcome_capture (_settle_new wiring), tests |
+| `winrate_curve.py` | #156 win-rate curve aggregator — rolling success-rate over the settlement stream (runs/roi-settlements.jsonl): windowed POSITIVE/(POSITIVE+NEGATIVE) + cumulative series, per-PQ-family split (claim-register answers_question / intent context_tags fallback), case-bank counts-only summary (the settled-case mirror never joins the rate denominators — it would double-count), oracle status face counts where present; CLI: `<ws> [--json] [--html OUT] [--window N]`, --html renders the JSON face through a Jinja2 template with the VENDORED Apache-2.0 ECharts build inlined (single file, no CDN / build / server); the JSON face stays the primary artifact | tests |
+| `case_bank.py` | #49 案例库数据层 — 对称收录 (NEGATIVE 无 attribution 拒收 CaseBankError, 无声落库即违约, ruling 4) + failures-first 检索 (反例剪枝优先于正例复用, 类内 newest-first); #127 删除零消费者的 `<case-hints>` 包装面 (标签保留, references/contracts/xml-injection-standard.md); `append_once` (claim×method×roi_class 幂等去重, #110); CLI: retrieve --tags --limit --json | tests, CLI |
 | `reconcile_intents.py` | plan↔claims intent reconciliation | tests |
 | `reconcile_workers.py` | worker status reconciliation | lib(1), tests |
 | `refutation_propagate.py` | refutation propagation across facts | tests |
 | `register_proven_gate.py` | claim-register →PROVEN evidence gate (#819) — latest verify=passes + red-team ran (≠REFUTED) or justified waiver; wired as write_guard register leg | hooks/write_guard, tests |
 | `stale_blocker_prune.py` | stale blocker pruning | lib(1), tests |
+| `worker_death.py` | #11 worker-death event + artifact snapshot — dead-worker classification (silent > DEAD_WORKER_MINUTES) consumed by convergence_check._act_stuck_workers; writes runs/.worker-death-<stem>.json (claim/last-activity/已完成产物清单) as the resume signal; idempotent per worker | convergence_check, tests |
 | `status_defs.py` | claim status constants — single source of truth | hooks, lib(13), tests |
 | `statusline_snapshot.py` | #883 statusline health-snapshot writer: probe registry + semantic state machine + atomic pre-write of runs/.kunglao-statusline.json per tick (Node reads it, zero spawn); attached from heartbeat_tick, fail-open | heartbeat_tick step 11, tests |
 | `liveness_policy.py` | liveness/staleness minutes constants — single source (#597: stuck 20 / heartbeat 35 / activation+env 30 / kicker+margins 10, values adjudicated) | hooks, lib(9), tests |
@@ -156,6 +162,10 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `local_gate.py` | 本地质量门统一入口 (#873) — __file__ 自定位 cwd 免疫；pytest+ext-scan+deploy_manifest 一条命令 | CLI |
 | `rollup.py` | terminal-transition write loop — claim→outcome_capture+lessons+narrative+checkpoint (#524) | tests |
 | `hypothesis_store.py` | hypothesis layer carrier (#528) — H-*.md parse + open→refuted/superseded state machine over `hypotheses/` | digest_build (sec_g), hooks/state_anchor, kunglao-init stub, tests |
+| `posteriors.py` | #106 两个概率对象库 — oracle case=Bernoulli（CasePosterior，Beta(1,1) 先验，runner 红绿唯一 reward 信号，pending_entries 只报告不更新）+ PQ hypothesis=categorical（PQCategorical，消除/证据双更新通道，熵可计算）+ PosteriorLedger 持久层（`runs/posteriors.yaml`，schema `posteriors-schema/1`，未知版本 raise，坏 YAML fail-open 降级）；纯库，decide/priority_ratio 接线属 #107/#108 | tests |
+| `oracle_runner.py` | #108 oracle runner — 跑 `<ws>/oracle/cases/*.yaml` 案例集对 client（`compute(params)->dict`），红/绿/pending 逐案裁决写 `runs/oracle-status.json`（convergence_check DRAIN 探针消费：fail 或 pending+instrumented → 非 CONVERGED，无文件不阻塞）；`--mutation` 突变必红自测（声明字段 swap/omit/change 后案例必须变红，全绿 → `low_discriminativity` 标记）；expected entry 无 evidence_refs 且无 pending-observation → lint 拒绝（exit 2，不写 status）；真实裁决经 record_posteriors 更新 #106 后验账本；无 client 全部 pending（不是绿） | convergence_check, posteriors, tests |
+| `oracle_cadence.py` | #132 oracle reward channel mechanical cadence — the settlement-hook caller of oracle_runner (this card only CALLS the runner, #126 owns the file): `run_cadence` runs the armed case set (`<ws>/oracle/cases/*.yaml`) against the registered client (`<ws>/oracle/client.py`, the load_client contract shape) + write_status + record_posteriors with zero LLM instruction; the #108 mutation pass runs routinely (mutation=True); fail-loud faces emit `oracle_cadence_warn` (missing registered client / broken client = ALL cases RED + red Bernoulli observations, never skip / #126 case-set refusal / runner failure); `case_vacuous` fires when a case greens under >=2 distinct client fingerprints (`runs/oracle-cadence.jsonl` verdict log); `missing_intent_face` = the loud missing-intent census (intent_unparsed events + outcome claims with no recorded intent), surfaced additively on tuition_curve.cockpit_summary | outcome_capture (_settle_new cadence hook), tuition_curve (cockpit intent face), tests |
+| `goal_operationalization.py` | #128 Phase-0 goal operationalization validator — `<ws>/goal-operationalization.yaml`（schema `goal-operationalization/1`）：R1 not_done 非空（无反例=未审计）/ R2 diff_vs_verbatim 非空且拒橡皮图章（静默等价拒绝）/ R3 声明式 generalization 结构位（required/unknown → 必须含 fresh-input probe case，fail-closed；not-applicable → 必须同时出现在 diff_vs_verbatim，未声明/非法值 GoalOpError 响亮拒绝，任务分类不可枚举故不设关键词扫描）/ R4 declared_ts 预注册时间戳 / R5 `--stamp-dispatch` 冻结 constitution 后 append-only（撤回/改写 not_done、deliverables、acceptance 条目或翻转 generalization → 拒绝；其余漂移 → re-scope record 由交付收据重述）；`--restatement` 打印交付审计块；无用户确认轮（A3 修订：人只在 verbatim 任务与交付审计两点在场） | tests |
 | `verifier_identity.py` | verifier machine-identity extraction + verdict anchoring (#825) — md header / l2 field; ledger verdict_anchor append-only | register_proven_gate, write_gate, tests |
 | `dual_gate.py` | #868 双门验证引擎 — redteam 反例切分(disclosed/held-out) + verifier 正向核验 + 失败签名分流(CEGAR/Goodhart) + N=3 升级; 宪法隔离只出裁决 | hooks, tests |
 | `user_signal.py` | #868 用户信号核心 — 本体三分类（意愿/事实/元）路由 + 意愿域 repin 生效 + 事实域双门立案 + 座舱数据面 | hooks, tests |
@@ -167,13 +177,11 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `notes_discriminator.py` | notes 结构判别器 (#834) — 复制即拒/零引用/悬空引用三规则; completion_gate NOTES_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
 | `encoding_lint.py` | 裸 IO 编码扫描器 (#811) — AST 版 write_text/read_text/open/subprocess 无 encoding 检出; 残留清零后挂机械门防复发 | tests, CI |
 | `emit_gate.py` | EMIT_ACTIONS 双向门 (#880) — 正向: 词表孤儿扫描(每个 action 须有 ≥1 生产发射者, quoted-literal 宽网); 反向: emit-site literal 未注册扫描(#459 pattern 表); CI 挂 tests/test_emit_gate_880.py | tests, CI |
-| `utf8_boot.py` | CLI 入口 UTF-8 双保险 (#811) — PYTHONUTF8 setdefault + stdout/stderr reconfigure; 全入口 __main__ 接线 | hooks, tests |
-| `optimizer_core.py` | #833 θ 数值通道 — PARAM_SPEC(opt-theta-v1)+宪法隔离(CONSTITUTIONAL_KEYS 不可入 spec/提案)+SPSA(衰减步长)+replay_loss 规则近似+提案 JSON(只出提案不生效) | tests |
-| `optimizer_bandit.py` | #833 机制开关通道 — β-Bernoulli 后验(arm=机制×泳道)+ledger 归因+demotion_queue(四阶段门降级候选,不直接生效) | tests |
+| `report_render.py` | the report/console rendering face of the toolchain — ToolMeta guidance metadata + FIXES table (incl. derived mcp:<name> entries) + fix_text accessor + closed NextAction vocabulary; single home of the guidance-facing port defaults; pairs with toolchain_install | lib, tests |
+| `_boot.py` | THE CLI boot module — UTF-8 stdio insurance (PYTHONUTF8 setdefault + stdout/stderr reconfigure, stdout-only scoped face) + the script-dir path bootstrap; single home of the entry-time prologue | hooks, tests |
 | `plan_stages.py` | plan 阶段模型 (#822) — runs/plan-stages.yaml 工件 + BIG_BANG_PLAN 检测(校验面 fail-closed) + 盘点裁决 maintain/adjust/replan(adjust/replan 必带 reason) + plan_review 落账 | CLI, tests |
 | `think_seat.py` | waiting-period THINK seat (#759) — mechanical wait detection + runs/.think-<ts>.md three-section artifact + stall counter (suggested_searches); orchestrator fills the thinking | heartbeat_tick step 10, tests |
 | `tuition_curve.py` | 学费曲线聚合器 + 座舱 V/D/ETA 数据面 (#823-P4) — settled rho_pair → mission 记录, stratum 聚合, got_cheaper 判定, cockpit_summary | tests |
-| `tuition_refit.py` | Platt 系数重拟合面 (#823-P4) — ledger (ρ,z_self) 对 → fit_platt → optimizer_core 提案（只提案不生效, 宪法隔离继承） | tests |
 
 ## Observability sidecar (issue #287)
 
@@ -184,7 +192,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `kunglao_log.py` | structured JSONL event log | lib(4), tests |
 | `kunglao_resume.py` | /kunglao-agent:resume — crash-recovery brief (read-only: health/13-source summary/open-hypothesis pointers/table-lookup next-step; issue #466, #528) | CLI, tests |
 | `heartbeat_touch.py` | lightweight heartbeat timestamp refresh — companion to heartbeat_tick.py (one-shot, no side effects; #534) | hooks, tests |
-| `strategy_metrics.py` | strategy convergence four metrics — regret / cost-to-slope / P(faster|hit) / competence (#529) | lib(1), tests |
 | `summary_discriminator.py` | summary 结构合同判别器 (#826) — R1 完成词需暂定节 / R2 不确定性传播(fact-id 或 WAIVED) / R3 未答主问题节; completion_gate SUMMARY_FAKE 面 (would-PASS 拦截, 双笼 fail-open) | hooks, tests |
 
 ## Support libraries & utilities
@@ -193,6 +200,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | --- | --- | --- |
 | `gate_telemetry.py` | gate telemetry wrapper (decorator + ledger) | lib(8) |
 | `content_hash.py` | fact/content hashing (golden capture too) | tools, tests |
+| `contracts.py` | cross-process contract registry (#102) — exit-code registry (convergence 0-5 + 64/65, plan_drift --auto trio `PLAN_DRIFT_AUTO_RCS`), event field schema (`EVENT_FIELD="action"`), gate-subprocess legal rc sets; single definition imported by every producer/consumer face (drift of this class can no longer pass CI) | hooks, lib(2: convergence_check, event_taxonomy), tests |
 | `normalize_trace.py` | dynamic trace normalization | tools, tests |
 | `fixture_excerpt_lint.py` | fixture excerpt lint (standalone CLI) | tests, docs |
 | `references_recall.py` | references scored-recall CLI over the layered index — scenario → primary/supplementary; keyword → top-K ranked rows with score (no file dumps); `--list-categories` / `--scene-map` / `--ws` | tests, docs |
@@ -207,11 +215,9 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `hook_exit_codes.py` | hook exit-code constants | hooks, tests |
 | `dispatch_context.py` | structured dispatch context block (fact snapshot + priority state + validated capability + plan + siblings; #527) | lib(3), tests |
 | `lessons_telemetry.py` | per-lesson CBM quartet + utility score + tombstone (#526) | tests |
-| `lib_kunglao.py` | shared helpers for hooks/ + scripts/ | hooks, tests |
 | `_hooks_path.py` | scripts-side bridge to hooks/_path_hygiene — the canonical by-path loader delegation (#863 Family B, #671 authority; guarded append, never reorders) | hooks, lib(13), tests |
 | `ws_layout.py` | manifest-aware workspace resolution single source — resolve_quiet/resolve_strict (#863 Family C; B2 fix: all 9 former _resolve_ws copies honor layout.workspace_dir/claim_register) | lib(9), tests |
 | `harness_common.py` | harness-wide time-stamp single source (#863 Family F) — utc_now (tz-aware datetime) / utc_now_z ("YYYY-MM-DDTHH:MM:SSZ", byte-equivalent collapse of the 43 strftime/isoformat copies) / utc_now_iso (+00:00 variant); 53 former def copies delegate | lib(52: scripts+hooks/heartbeat_touch+tools/static trio), tests |
-| `env_file.py` | CLAUDE_ENV_FILE loader — single sanctioned entry (#309, #304 init linkage) | tests |
 | `toolchain.py` | type-aware toolchain probe matrix (#304) with probe tiers presence/liveness/capability + jdwp handshake (#474) | lib(1), tests, docs |
 | `tool_tiers.py` | 工具族档位表加载/选择/契约注入 (#812) — 场景×工具→四档降级链（#670 估算 + C-006 实录），dispatch_context 可选键 | dispatch_context, tests |
 | `tool_value.py` | 工具价值聚合器 (#881) — 四输入（toolfirst 行/facts steps/结算+runs outcome/operation label）按 claim id join → (scene,operation,tool) cite/burn/reject + β-Bernoulli utility（先验=静态链 rank）；runs/.tool-value.json 表；CLI --report 查询；接线 tool_tiers 排序与 recall_files rerank | tool_tiers, hooks/recall_inject, dispatch_context, tests |
@@ -222,8 +228,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `decision_pending.py` | pending-decision list schema + serialization (stdout JSON, exit 8, `--resolve` answers; shared intake channel #455/#449/#451) | lib(2), tests |
 | `log_setup.py` | shared stdlib-logging facade (FileHandler + stderr StreamHandler, idempotent; #454/#459) | lib, tests |
 | `platform_paths.py` | platform-correct analyzeHeadless + venv python resolution (#409) | lib(2), tests |
-| `chunker.py` | length-measured batch chunking (#309) | tests |
-| `cost_estimate.py` | pre-dispatch cost estimator (#309) | lib(1), tests |
 | `event_taxonomy.py` | 25-class event taxonomy (#309) | tests |
 | `recov_metrics.py` | symbol/type recovery quality metrics (#309) | lib(1), tests |
 | `tool_error_policy.py` | same-tool consecutive-error hysteresis (#309) | tests |
@@ -239,9 +243,10 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `bench_grade.py` | zero-LLM L1 scoring + z_self + arm-blind sealed map + 12-case oracle selfcheck | CLI, tests |
 | `bench_redteam.py` | L2 divergent-only arm-blind red-team pipeline (briefs + merge-back) | CLI, tests |
 | `bench_analyze.py` | stdlib statistics — exact McNemar, Wilcoxon, tuition slopes, H1-H4 pre-registered verdicts, --demo | CLI, tests |
-| `answer_key_lint.py` | answer-key quality gate: schema + PQ-to-top-level consistency + IOC normalizability | CLI |
-| `intake_one.py` | single manifest entry immediate validation (sha256/first_seen/sources/pq lists) | CLI |
-| `intake_promise.py` | Phase 0 预扫描 promise 块 (#813) — apkid/DIE 探测状态显式记录 + 混淆先验(apkid.json 同源提取) + java 可达性判定(#807 死胡同面)；task_spec `promise:` 键合并 / runs 降级 | kunglao-init, CLI, tests |
+| `intake_promise.py` | Phase 0 预扫描 promise 块 (#813) — apkid/DIE 探测状态显式记录 + 混淆先验(apkid.json 同源提取) + java 可达性判定(#807 死胡同面)；task_spec `promise:` 键合并 / runs 降级 | kunglao-init, CLI, tests; 下游 enforcement consumer 未接线(#53 裁定: 休眠保留, 消费面=#54 Android-lighting, 不在此 fake-wire) |
+| `difficulty_calibration.py` | #15 样本内在难度标定 (easy/medium/hard/max) — 纯函数组合既有扫描器证据(die.json/apkid.json)为 per-factor 评分 + 多正面 MAX 发现规则；缺证据 → easy+evidence_gap(缺失永不计为难度)；evidence/difficulty.json + task_spec `difficulty:` 键(#16 开环输入) | kunglao-init, CLI, tests |
+| `oracle_anchors.py` | task_spec 三个必答 oracle 锚点 (goal_verbatim / success_criterion / verification_method: reproduction\|replay-evidence\|static\|manual) — fail-closed 校验(空白/越界枚举=缺失，绝不猜默认)；merge 写入 task_spec(不覆盖既有答案)；analysis 入口拒绝面(kunglao analysis rc=7) + init 提醒行；replay_equivalence 消费枚举作 declared-bit 武装 | kunglao-init, kunglao(analysis gate), replay_equivalence, tests |
+| `difficulty_thresholds.py` | #16 难度分档成功阈值 — per-tier 策略表(独立验证数 1/1/2/2、red-team 轮数 1/1/1/2、关联任务一致性 F/F/T/T、heuristic-first F/F/T/T) + 查询 API(get_thresholds/thresholds_for_workspace/count_verifications)；缺 difficulty.json → fail-closed hard(绝不静默降 easy)；PROVEN 深度闸门(kunglao_record + hooks backstop) + 心跳红队 guidance 行 | kunglao_record, hooks/worker_budget_gates, heartbeat_loop_prompt, CLI, tests |
 
 ## Release & CI support
 
@@ -250,9 +255,10 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `release_receipt.py` | release receipt generation + CLI probe | CI, tests |
 | `release_check_selfcheck.py` | release-check self-verification | CI |
 | `check_global_rule_subset.py` | global-rule subset compliance check | CI, tests |
+| `comment_hygiene_lint.py` | formal-content hygiene gate over scripts/+tests/ — tracker-ref pattern (R1), narrative markers (R2), shrink-only per-file baseline ratchet (`scripts/hygiene_baseline.yaml`), plus re-library mapping and frontmatter passes (inert until the mapping lands; `--emit-baseline` regenerates the ledger) | CI, tests |
+| `reference_index_build.py` | the re-library authoring CLI, keyed on `_mapping.yaml` — default face generates the two-tier index (`references/_INDEX.md` + 10 `_index-<domain>.md`) from mapping + card frontmatter (entries byte-match FM, marked hand region preserved, `--check` is the drift gate); `--scaffold` face emits the standard-shaped card skeleton (FM name/description/domain/family + When to Use + When Not To Use + worked example) at a mapping-registered `to` path and refuses unregistered paths, so placement stays declared data-first | tests |
 | `kunglao_export.py` | workspace export by zone (contract_carriers/evidence/scratch) + manifest (#540, D5) | tests |
 | `structural_check.py` | repo structure + broken-link + index drift check | CI, tests |
-| `run_test_matrix.py` | matrix-style scoped pytest runs (issue-lane suites); canonical full-suite entry stays the README Quick-start pytest line | lane tooling, tests |
 | `deploy_manifest.py` | deployment manifest builder/verifier - hooks+agents+scaffold closure, per-file sha256 (newline-normalized); feeds init copy-deploy and upgrade refresh | CLI, tests |
 | `deployed_refresh.py` | upgrade-side framework-copy refresh - overwrite semantics with forensic backups (runs/deploy-backup-*), orphan double-confirm prune; migration item face for #783 | tests, CLI via kunglao_upgrade chain |
 
@@ -276,21 +282,11 @@ by the now-registered `tools/auxiliary/capture_golden.py` golden cases
 | `bench_intake.py` / `bench_answer_key.py` / `bench_tokens.py` / `bench_runner.py` / `bench_grade.py` / `bench_redteam.py` / `bench_analyze.py` | #823 AB-VALUE (B1-B7), MERGED — kunglao-bench pipeline; `bench_runner` is the lane entry | REGISTERED as the kunglao-bench harness; consumer = bench runs, not repo runtime. Follow-up value channel: #881 aggregation |
 | `infeasible_proposal.py` | #815 early-stop wiring, MERGED — INFEASIBLE-as-claim proposal semantics (L1/L2/L3 + evidence gate) | REGISTERED (proposal generator); consumer = orchestrator loop on recovery-ladder exhaustion |
 | `plan_stages.py` | #822 plan stage model, MERGED — `runs/plan-stages.yaml` + BIG_BANG detection + inventory rulings | REGISTERED; consumer = plan-phase ritual |
-| `optimizer_core.py` / `optimizer_bandit.py` | #833, MERGED — theta (SPSA-on-replay) + beta-Bernoulli arm accounting; constitutional isolation (proposal-only, zero auto-apply paths) | REGISTERED; consumers = proposal/derad queue faces; value wiring in #881 |
-| `tuition_refit.py` | #823-P4, MERGED — Platt refit proposals from `rho_pair` ledger rows (proposal-only) | REGISTERED; consumer = #881 aggregation side |
 | `emit_gate.py` | #880, MERGED — EMIT vocabulary double-ended gate (write-side actions must have >=1 emitter; read-side consumers must exist) | REGISTERED (CI-runnable checker); consumer = release-check extension candidate |
-| `search_gate.py` | user-painpoint-driven (search-before-research gate; no issue ref) | REGISTERED as orchestrator-loop gate; consumer = post-worker fact promotion |
-| `reuse_gate.py` | user-painpoint-driven (reuse-before-recompute; no issue ref) | REGISTERED as dispatch-side gate; consumer = dispatch audit chain |
-| `complete_teardown.py` | search-problem abstraction (user-verbatim driven; no issue ref) — 1-call operator chain returning a fact bundle | REGISTERED as search-operator entry; consumer = deep-search scenario |
-| `strategy_metrics.py` | #529, MERGED — convergence four metrics, pure functions atop `priority_ratio` | REGISTERED as lib+CLI; consumer = convergence reporting |
-| `acceptance_check.py` | #6/#689, MERGED — end-to-end static acceptance | REGISTERED as milestone-acceptance entry (same family as `run_test_matrix.py`) |
-| `run_test_matrix.py` | v0.1.3 acceptance orchestrator (`docs/v0.1.3-test-plan.md`) | REGISTERED as milestone-acceptance entry |
+| `acceptance_check.py` | MERGED milestone-acceptance entry — static battery (default / --full) + absorbed category matrix (`--smoke`, `--categories smoke,complexity,regression,integration,fault,mutation`; per-category artifacts under KUNGLAO_OUT) | tests |
 | `report_consistency_check.py` | #57, MERGED — report-INTERNAL contradiction checker | REGISTERED; consumer = report QA phase (hr-report pipeline sibling) |
 | `fixture_excerpt_lint.py` | #58, MERGED — condensed-excerpt conversion/speculation lint | REGISTERED; consumer = report QA phase |
-| `chunker.py` | #309, MERGED — length-measured batch chunking (kong absorption) | REGISTERED as utility lib; consumer = batch dispatch flows |
-| `env_file.py` | #309, MERGED — CLAUDE_ENV_FILE loader (stdlib parser) | REGISTERED as init-path lib; consumer = env bootstrap |
 | `kunglao_export.py` | #540, MERGED — workspace export by zone | REGISTERED as workspace utility CLI |
 | `local_gate.py` | dev-loop infra (2026-09-01): cwd-immune unified local quality gate — pytest + Gate 9 + ext-scan + deploy-manifest verify (Gate 9 wired by PR 866-a) | REGISTERED as the per-PR local-gate entry (plan §0.5 workflow) |
 | `encoding_lint.py` | #811, MERGED — AST bare-IO encoding scanner over the production IO face | REGISTERED as dev-loop linter; CI/local_gate wiring = follow-up card |
-| `error_response.py` | #448, MERGED — mechanical layer of `references/error-response-taxonomy.md` (the taxonomy doc is the live LLM channel; zero code importers — 866-a verified) | REGISTERED as the taxonomy's enforcement layer; CLI wiring = follow-up card |
-| `answer_key_lint.py` / `intake_one.py` | SUSPECT — docstrings bind to `COLLECTION_PROTOCOL.md` §5 steps 5/7, which does NOT exist anywhere in the repo; zero tests, zero consumers; function overlap with the merged `bench_answer_key.validate_key` (#823) | SUSPECT, not DEAD (answer-key files from `bench_answer_key` may still be linted manually). Retirement candidate for the follow-up governance card after owner ruling on the missing protocol doc |
+| `error_response.py` | #448, MERGED — mechanical layer of `references/contracts/error-response-taxonomy.md` (the taxonomy doc is the live LLM channel; zero code importers — 866-a verified) | REGISTERED as the taxonomy's enforcement layer; CLI wiring = follow-up card |

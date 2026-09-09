@@ -25,6 +25,7 @@ Self-stamp guard: verifier_id == claim's worker_id → NOT independent → STAMP
 """
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,9 +36,11 @@ import yaml
 # later be promoted to PROVEN (after obtaining sign-off) or REFUTED.
 STAMP = "STAMP"
 
-# Required fields in a verifier_sign_off block. verdict defaults to CONFIRMED
-# for backward compat with blocks written before verdict was added.
-_REQUIRED_FIELDS = ("verifier_id", "refute_attempt", "sign_off_at")
+# Required fields in a verifier_sign_off block. #53: verdict is REQUIRED —
+# the "default to CONFIRMED" shim for pre-verdict blocks was removed
+# (no-backcompat ruling 2026-09-01, #863 Package 2 discipline): a
+# verdict-less block is an invalid sign-off, not an implicit CONFIRMED.
+_REQUIRED_FIELDS = ("verifier_id", "refute_attempt", "sign_off_at", "verdict")
 
 # ---- inference-scope gate (issue #48, a2b5e25c problem 2) ----
 # A claim is *inferential* when its statement or fact text carries
@@ -134,9 +137,6 @@ def _validate_fields(fields: dict) -> dict | None:
     soa = fields.get("sign_off_at")
     if isinstance(soa, datetime):
         fields = {**fields, "sign_off_at": soa.strftime("%Y-%m-%dT%H:%M:%SZ")}
-    # verdict defaults to CONFIRMED (backward compat)
-    if "verdict" not in fields:
-        fields = {**fields, "verdict": "CONFIRMED"}
     return fields
 
 
@@ -259,13 +259,187 @@ def check_proven_gate(
         return (False, STAMP,
                 f"self-stamp rejected: verifier_id={signoff['verifier_id']!r} "
                 f"== worker_id={worker_id!r} (maker-checker §1b: maker cannot self-certify)")
-    verdict = (signoff.get("verdict") or "CONFIRMED").upper()
+    verdict = str(signoff["verdict"]).upper()  # _REQUIRED_FIELDS guarantees presence
     if verdict == "REFUTE":
         return (False, STAMP,
                 f"BLIND verifier REFUTED claim {claim_id}: {signoff.get('refute_attempt', '')}")
     return (True, "PROVEN",
             f"BLIND verified by {signoff.get('verifier_id', '?')} "
             f"at {signoff.get('sign_off_at', '?')}")
+
+
+# =====================================================================
+# Verifier-DISPATCH evidence gate (issue #57, gate 5)
+# =====================================================================
+# A claim may not reach PROVEN-candidate unless a verifier was EVER
+# dispatched for it. This composes with (does not replace) check_proven_gate:
+# the sign-off block says "a verifier approved"; this gate says "a verifier
+# was dispatched through the corridor at all" (maker-checker §1b/§6.3 — a
+# maker's self-declared result is STAMP-not-PROVEN until an independent
+# adversarial agent fails to refute it, and "dispatched" is observable).
+# NOT a verdict-quality judgment — verdicts stay with the existing BLIND /
+# contradiction / inference / provenance gates.
+
+# Verifier-class agents (agents/): the unified adversarial checker and the
+# verdict scorer. A dispatch row counts as verifier evidence when its actor
+# or detail names one of these (worker_budget's dispatch lifecycle writes
+# `agent=<name>` into the row detail, #461).
+VERIFIER_AGENT_MARKERS = ("kunglao-redteam", "verdict-scorer")
+
+# The kunglao-redteam write contract (its ONLY artifact): the DIFF at
+# runs/verify-redteam-<target>.md naming the claim.
+REDTEAM_DIFF_GLOB = "verify-redteam-*.md"
+
+
+def _dispatch_row_is_verifier(row: dict, claim_id: str) -> bool:
+    """One kunglao_log row: a dispatch-shaped row attributed to THIS claim
+    from a verifier-class actor/agent."""
+    if str(row.get("claim") or "") != claim_id:
+        return False
+    if "dispatch" not in str(row.get("action") or ""):
+        return False
+    actor = str(row.get("actor") or "")
+    detail = str(row.get("detail") or "")
+    return (actor.startswith("verifier:")
+            or any(m in actor or m in detail for m in VERIFIER_AGENT_MARKERS))
+
+
+def _verifier_dispatch_rows(ws: Path, claim_id: str) -> list[tuple[str, int]]:
+    """Distinct verifier-class dispatch rows for the claim, as (log, line)
+    identities — counted by the #16 depth gate, sensed by the #57 gate."""
+    rows: list[tuple[str, int]] = []
+    logs = Path(ws) / "runs" / "logs"
+    if not logs.is_dir():
+        return rows
+    for log in sorted(logs.glob("kunglao-*.jsonl")):
+        try:
+            lines = log.read_text(
+                encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for idx, line in enumerate(lines):
+            if not line.strip() or claim_id not in line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict) and _dispatch_row_is_verifier(
+                    row, claim_id):
+                rows.append((log.name, idx))
+    return rows
+
+
+def _log_has_verifier_dispatch_row(ws: Path, claim_id: str) -> bool:
+    """Scan runs/logs/kunglao-*.jsonl for a verifier-class dispatch row."""
+    return bool(_verifier_dispatch_rows(ws, claim_id))
+
+
+def check_verifier_dispatch_evidence(ws: Path, claim_id: str) -> tuple[bool, str]:
+    """Was a verifier EVER dispatched for this claim? (issue #57, gate 5)
+
+    Evidence (any one suffices, all read-only, claim-scoped):
+      1. the red-team write contract — a runs/verify-redteam-*.md DIFF whose
+         text names the claim;
+      2. a unified-log dispatch row — runs/logs/kunglao-*.jsonl with
+         action=dispatch, claim=<claim_id>, and a verifier-class agent named
+         in the actor or detail (or a `verifier:`-prefixed actor).
+
+    Returns (ok, reason). ok=False means the PROVEN promotion is BLOCKED and
+    `reason` carries the concrete repair path (dispatch the verifier first).
+    Missing records are NOT fail-open: a promotion without a dispatched
+    verifier is exactly the protocol failure this gate exists to stop.
+    """
+    ws = Path(ws)
+    runs = ws / "runs"
+    if runs.is_dir():
+        try:
+            for diff in sorted(runs.glob(REDTEAM_DIFF_GLOB)):
+                try:
+                    if claim_id in diff.read_text(
+                            encoding="utf-8", errors="replace"):
+                        return (True,
+                                f"verifier dispatched (red-team DIFF "
+                                f"{diff.name} names {claim_id})")
+                except OSError:
+                    continue
+        except OSError:
+            pass
+    if _log_has_verifier_dispatch_row(ws, claim_id):
+        return (True, f"verifier dispatched (dispatch row in "
+                      f"runs/logs/ for {claim_id})")
+    return (False,
+            f"no verifier dispatch evidence for {claim_id} (verifier-dispatch "
+            f"gate, #57 gate 5: a claim cannot reach PROVEN-candidate without "
+            f"a dispatched verifier). Fix: dispatch the verifier FIRST — e.g. "
+            f"`[T1 tools=Read,Grep,Write] claim {claim_id}` to agent "
+            f"kunglao-redteam (kunglao-redteam --target claim {claim_id}); "
+            f"its DIFF lands at runs/verify-redteam-{claim_id}.md and the "
+            f"dispatch row lands in runs/logs/ — then re-run the promotion.")
+
+
+# =====================================================================
+# Verifier-DEPTH evidence gate (issue #16) — difficulty-gated PROVEN bar
+# =====================================================================
+# Same record vocabulary as gate 5, COUNTED: a hard/max sample (its tier
+# resolved by difficulty_thresholds from the #15 feed) must show more than one
+# DISTINCT verifier engagement before PROVEN. The #57 gate asks "was a
+# verifier ever dispatched"; this gate asks "were there ENOUGH independent
+# engagements". Not a verdict-quality judgment — verdicts stay with the
+# existing BLIND / contradiction / inference / provenance gates.
+
+def count_claim_verifier_records(ws: Path, claim_id: str) -> dict:
+    """Count DISTINCT verifier engagement records for one claim (#16).
+
+    Two record kinds, both read-only and claim-scoped (the #57 shapes):
+      - red-team DIFFs: runs/verify-redteam-*.md whose text names the claim;
+      - verifier-class dispatch rows in runs/logs/kunglao-*.jsonl.
+    One engagement normally emits BOTH, but the DIFF path is fixed per claim
+    (re-rounds overwrite it) while dispatch rows accumulate — neither kind
+    alone upper-bounds the engagement count and their SUM double-counts one
+    round. The engagement count is therefore the MAX over kinds. worker_death
+    outcome records (PR #72) stay visible to the orchestrator but a death is
+    not a verification — they never count toward depth.
+    """
+    ws = Path(ws)
+    diff_names: set[str] = set()
+    runs = ws / "runs"
+    if runs.is_dir():
+        for diff in sorted(runs.glob(REDTEAM_DIFF_GLOB)):
+            try:
+                if claim_id in diff.read_text(
+                        encoding="utf-8", errors="replace"):
+                    diff_names.add(diff.name)
+            except OSError:
+                continue
+    rows = _verifier_dispatch_rows(ws, claim_id)
+    n_diffs, n_rows = len(diff_names), len(rows)
+    return {"diffs": n_diffs, "dispatch_rows": n_rows,
+            "verifications": max(n_diffs, n_rows)}
+
+
+def check_verifier_depth_evidence(ws: Path, claim_id: str,
+                                  required: int) -> tuple[bool, str]:
+    """Enough DISTINCT verifier records for the difficulty tier? (issue #16)
+
+    required <= 1 -> trivially satisfied whenever gate 5 would be (legacy
+    single-verification behavior — easy/medium never complexify). required > 1
+    fails closed: the reason names the count, the requirement, and the
+    concrete repair (dispatch another independent verifier round).
+    """
+    required = max(1, int(required))
+    counts = count_claim_verifier_records(ws, claim_id)
+    got = counts["verifications"]
+    if got >= required:
+        return (True, f"verifier depth ok for {claim_id} ({got} distinct "
+                      f"record(s) >= required {required})")
+    return (False, f"verifier depth insufficient for {claim_id}: {got} "
+                   f"distinct verifier record(s) < required {required} "
+                   f"(difficulty depth gate, #16). Fix: dispatch another "
+                   f"INDEPENDENT verifier round — each round must land its own "
+                   f"dispatch row in runs/logs/ and its own DIFF at "
+                   f"runs/verify-redteam-*.md naming {claim_id} — then re-run "
+                   f"the promotion.")
 
 
 # =====================================================================
@@ -385,7 +559,7 @@ def check_inference_blind_scope(
                 f"INFERENCE gate: self-stamp rejected: "
                 f"verifier_id={signoff['verifier_id']!r} == worker_id={worker_id!r} "
                 f"(maker-checker §1b: maker cannot self-certify)")
-    verdict = (signoff.get("verdict") or "CONFIRMED").upper()
+    verdict = str(signoff["verdict"]).upper()  # _REQUIRED_FIELDS guarantees presence
     if verdict == "REFUTE":
         return (False, STAMP,
                 f"INFERENCE gate: BLIND verifier REFUTED claim {claim_id}: "

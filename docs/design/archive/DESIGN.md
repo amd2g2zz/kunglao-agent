@@ -5,7 +5,7 @@
 > is `SKILL.md`; the delivery record is `CHANGELOG.md` (see its
 > internal-version mapping table for the v1.8.x markers this document
 > carries). Kept for design archaeology and § cross-references from
-> references/ (e.g. references/dynamic-re-tool-priority.md cites the §9
+> references/ (e.g. references/orchestration/dynamic-re-tool-priority.md cites the §9
 > rule 5 anti-pattern); no longer updated.
 
 > **NOTE (2026-08-11)**: DESIGN lags SKILL.md (operative contract per §17) — reconcile before relying on it. §8 C0's note-layer gate is now enforced mechanically by `scripts/convergence_check.py` (`_note_layer_gaps`, commit e2f2432). C0's spec says notes carry `answers_question` directly; the live convention links via `note.claim_id → claim.answers_question` — the gate implements the live chain.
@@ -343,7 +343,7 @@ PE/ELF/Mach-O/shellcode → 全可用。dump → volatility。pcap → deferred_
 |---|---|---|
 | 1 | **SKILL.md §6-pre "Anti-forgetting protocol"**:6 行紧凑表(F1 傻等 / F2 忘记心跳 / F3 后台监视不 ping / F4 不根据 subagent 返回优化 / F5 死锁僵尸 / F6 弃用专业 agent),把 orchestrator 在-session 反复违反的失败模式集中到 SKILL.md 主体读取位置(不再埋在 §6e / §6f.1)。每个 F 行:title 含可观察症状 + 中段引用具体 § 文件 + 末尾显式禁令 | SKILL.md §6-pre |
 | 2 | **B1c blocker type**:新阻断类型 "worker died without notification" (worker 进程退出/crash 但 post_check 未跑,status 文件停在 in-progress 死循环)。日志路径 `blockers/B1c-<timestamp>-<workerID>.md`;检测路径: cross-check `worker_budget.py::read_active_workers` + `TaskList` 双 liveness signal,**DEAD CHECK FIRST, THEN PING**(严禁 SendMessage 死 worker 会阻塞 orchestrator)| §8 + §11 |
-| 3 | **F3 单 worker focus bug 修复**:heartbeat 必须 `for worker in active-worker registry` 穷举,不能 short-circuit 到 last-dispatched worker ID。`converge-checklist.md` "Active workers" 表为 load-bearing 状态机。明确引用 `references/guardrails.md §6b.1`,SKILL.md 主体不再重复完整 prose | §6-pre F3 + §6b.1 |
+| 3 | **F3 单 worker focus bug 修复**:heartbeat 必须 `for worker in active-worker registry` 穷举,不能 short-circuit 到 last-dispatched worker ID。`converge-checklist.md` "Active workers" 表为 load-bearing 状态机。明确引用 `references/governance/guardrails.md §6b.1`,SKILL.md 主体不再重复完整 prose | §6-pre F3 + §6b.1 |
 | 4 | **F6 stage-agent-bypass 修复**:`general-purpose` 从 soft "last resort" 升级为 hard `last resort — must justify`,违反触发条件明确为 "<50-line dispatch + general-purpose 即 §6e 违规"。claim→agent map(Ghidra 关键词→ghidra-light / Go pcln→go-symbols / Authenticode→pefile-signature / floss→floss-filter / verdict→verdict-scorer / 其它→kunglao-worker);"Never general-purpose for a single-step claim" *(CTI agents removed batch 4)*| §6e + §6-pre F6 |
 | 5 | **§7 self-cap-safe-prose**:v1.8.1 `_SELF_CAP_RE` 反讽 —— SKILL.md 主体 prose("every ~5 min"/"30-min frida trace"/"Interval: 15 min T3")会让 orchestrator 写出 self-cap dispatch 触发自身 reject。§7 列 `_SELF_CAP_RE` 4 行 verbatim 模式 + 7 行 negation allowlist + 10 行 safe paraphrase 表("wait 5 min" → "heartbeat until done";"30-min frida trace" → "long-running frida trace";带 negation phrase 的 dispatch 例)| §7 |
 | 6 | **Description frontmatter 推 pushiness**:`description:` 重写把 3 个被埋的义务加粗(**actively pings silent workers every ~5 min** / **dispatches next open claim before idling** / **re-plans after every worker return**);`triggers:` 从 6 行扩展到 11 行,加 5 个英文触发器(RE orchestrator / run the RE loop / malware sample triage / claim-driven RE / byte-anchored fact base) | SKILL.md frontmatter |

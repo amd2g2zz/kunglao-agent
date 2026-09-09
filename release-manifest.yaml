@@ -6,7 +6,7 @@
 
 schema_version: "1.0"
 project: kunglao-agent
-version: "0.1.4"             # MUST equal pyproject.toml [project].version (receipt-checked)
+version: "0.1.5"             # MUST equal pyproject.toml [project].version (receipt-checked)
 requires_python: ">=3.10"
 
 dependencies:
@@ -49,10 +49,16 @@ assets:
     - hooks/bash_fact_guard.py        # #809 Bash PostToolUse facts-write lint recorder
     - hooks/cost_input_capture.py     # #873 PostToolUse cost input recorder
   templates:
+    # #156: --html rendering assets (Jinja2 face template — the Apache-2.0
+    # ECharts library is inlined in the .j2 itself under {% raw %}, #162
+    # de-vendor; offline discipline: never a CDN reference)
+    - templates/winrate_curve.html.j2
     - templates/state/blocker.md
     - templates/state/claim_deps.yaml
     - templates/state/claim-register.yaml
     - templates/state/task-oracle.yaml
+    # #128: Phase-0 goal operationalization read-back skeleton
+    - templates/state/goal-operationalization.yaml
     - templates/state/task_spec.yaml
     # #356 W2: single-source workspace CLAUDE.md template (OS delta injected
     # by kunglao-init at render; replaces the 4 pre-#356 variant templates)
@@ -62,6 +68,11 @@ assets:
     # #335/#278: frida + scripts templates (template_gen.py inputs)
     - templates/frida/cfg-analyze.py.tmpl
     - templates/frida/cfg-hook.js.tmpl
+    # #162: first adapt-expected template (windowed Stalker tracing)
+    - templates/frida/windowed-stalker.js.tmpl
+    - templates/frida/rpc-skeleton.js.tmpl   # #165 Frida RPC export-surface skeleton (adapt)
+    - templates/unidbg/harness.java.tmpl   # #165 unidbg minimal-harness skeleton (adapt)
+
     - templates/scripts/decryption-analysis.py.tmpl
     - templates/scripts/disasm-pipeline.py.tmpl
     - templates/scripts/stage-unpack.py.tmpl

@@ -1,33 +1,26 @@
 # -*- coding: utf-8 -*-
-"""#443 regression anchor — pre/post-refactor decide() output equality.
+"""decide() regression anchor — frozen-snapshot output equality.
 
-Design (openspec/changes/issue-443-decide-state-machine/design.md §5):
-decide() is reorganized into an explicit state machine with ZERO gate
-semantics change. This module proves it with TWO channels:
-
-  1. LIVE BASELINE (maker-checker): extract the pre-refactor decide()
-     from git commit c5cb1ae at test time, run it and the current
-     decide() on the SAME fixture workspace, compare full outputs.
-     Expected values are derived from the OLD code — never hand-written.
-  2. FROZEN SNAPSHOT (permanent): tests/decide_anchor_c5cb1ae.json holds
-     the machine-generated c5cb1ae outputs (design §5 regen command);
-     the current decide() must reproduce them byte-for-byte per case.
-     Survives git history pruning; channel 1 skips without history.
-
-Matrix: ~30 cases covering every branch of the old elif chain, gate
-interleavings where ORDER decides (schema>dispatch, orphan>unverified,
+tests/decide_anchor_<ref>.json holds machine-generated decide() outputs
+for the case matrix (every branch of the historical elif chain, gate
+interleavings where ORDER decides: schema>dispatch, orphan>unverified,
 unverified>note-gap, note-gap>discovery, discovery>contradiction,
-opens>partials, queue>failure, failure>all-blocked), and the #495/#497
-interleavings (failure three-artifact protocol, ladder-exhaustion).
+opens>partials, queue>failure, failure>all-blocked, plus the
+failure-protocol and ladder-exhaustion faces); the current decide() must
+reproduce them byte-for-byte per case. BASELINE_COMMIT below names the
+commit the frozen corpus was captured at.
 
-Determinism: worker-status files are freshly written (mtime fresh →
+Intentional decide() contract changes and corpus-growth data drift are
+absorbed by re-capturing via capture_current() and appending a one-line
+precedent entry to the chain below; diff old-vs-new BEFORE committing,
+and verify data-drift entries are score-only.
+
+Determinism: worker-status files are freshly written (mtime fresh ->
 stuck_workers always []), removing age_min time drift from the anchor.
 """
 from __future__ import annotations
 
-import importlib.util
 import json
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -41,7 +34,35 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import convergence_check  # module under test (== baseline before #443 GREEN)
+import posteriors as po  # noqa: E402  (#146 arming fixture: settlement ledger)
 
+# 2026-09-09 DATA-coupled freeze refresh (the scripts-governance sweep):
+# the anomaly baseline corpus is built FROM references/ (anomaly_detector
+# design D2), and the governance sweep converted nine re-library cards'
+# install commands to describe-only pointers to the toolchain registry.
+# That intentional corpus edit shifted lexical-rarity statistics, so
+# `anomalies[].score` moved in the 3rd decimal on 4 of 31 cases.
+# Case-by-case verification of capture_current() vs the previous anchor:
+# zero drift in action, decision order, phase fields, anomaly counts,
+# fact_ids and top_dimension — only the four anomaly scores changed. No
+# ranker or decide() code path was touched by the sweep.
+#
+# 2026-09-06 SEMANTIC re-pin verification (#107 Thompson rebuild): the
+# owner ruling "探索和价值网络完全重构，之前的不要了" replaced the
+# ranking layer — priority_ratio is now the Thompson composite
+# (sampled case posterior + LAMBDA_DH*dH_PQ) and the explore/exploit dual
+# path is deleted. The ranker swap is an INTENTIONAL SEMANTIC change, and
+# its visible face is kunglao-decide's `top_actions`: any ordering change
+# there is DESIGN INTENT, pinned by the rebuilt suites
+# (tests/test_kunglao_decide.py / test_scorer_authority.py /
+# test_priority_ratio.py), NOT anchor drift. This frozen corpus pins the
+# convergence_check.decide() MATRIX face, which does not consume the
+# ranker — verified empirically: capture_current() re-run over all 31
+# cases reproduced the frozen outputs byte-identically (per-case diff:
+# zero drift), so the file is re-frozen unchanged. A future case that
+# grows a top_actions-like field must land with its own semantic re-pin
+# entry per this precedent chain.
+#
 # 2026-08-25 re-pin: the anchor was re-frozen at 619ebd3 after the
 # INTENTIONAL decide() semantics additions of #662 (hypothesis seed:
 # open_hypotheses field + OPEN_HYPOTHESIS_AT_CLOSE event) and #663 (anomaly
@@ -50,8 +71,92 @@ import convergence_check  # module under test (== baseline before #443 GREEN)
 # so 31 frozen cases failed from that point on. The c5cb1ae anchor remains
 # recoverable from git history (and documents the original #443
 # zero-semantics-change proof). Machine-generated via .tmp/regen_anchor.py.
-BASELINE_COMMIT = "8804dcd"  # dev HEAD at the 2026-08-26 re-pin (#707 contradiction annotation is an intentional decide() semantics change)
-ANCHOR_FILE = Path(__file__).parent / "decide_anchor_8804dcd.json"
+BASELINE_COMMIT = "cabc7d9"  # the #51 value-flag-removal commit — decide() outputs frozen at the 2026-09-05 re-pin (see below)
+ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
+
+# 2026-09-06 corpus re-pin (#108 oracle gate — INTENTIONAL decide() contract
+# change): decide()'s output dict gains the unconditional `oracle` key
+# (per-case red/green/pending counts — the issue's primary progress face).
+# Without runs/oracle-status.json the face is all-zero + an `absent` marker;
+# with one, it blocks the DRAIN face on red / pending-instrumented cases via
+# the new ORACLE_CASE_RED probe (inserted after the frozen
+# completion-transaction order, before the DRAIN_CLEAN catch-all). Diffed
+# old-vs-new BEFORE committing, per the re-pin precedent: every one of the
+# 31 frozen cases shows EXACTLY the `oracle` key addition (all-zero counts +
+# absent marker — no corpus case writes a verdict file) and nothing else
+# moved (no decision/action/exit-code/float drift anywhere). Re-captured
+# via capture_current() from the current tree (the only sanctioned channel
+# since the 8804dcd baseline object was destroyed — see the 2026-09-05
+# re-pin entry below). The oracle-blocking semantics themselves are
+# unanchored by construction (the matrix has no oracle-bearing DRAIN case);
+# covered by the #108 block in tests/test_decide_state_machine.py.
+# 2026-09-09 corpus re-pin (#166 PR E deletions): five dead references removed (optimization-2026-08, long-horizon-architecture archive, awesome-re-resources, malware-analysis-quickstart, search-policy), shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
+# 2026-09-08 corpus re-pin (#166 FM bring-up): domain/family frontmatter landed on all 49 re-library cards, shifting lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
+# 2026-09-08 corpus re-pin (#179): the ida-scripting-overlays card body edit shifts lexical rarity in the anomaly baseline (4 anomaly score floats across the 2 contradiction cases, all else byte-equal; score-only verified, re-captured via capture_current()).
+# 2026-09-08 corpus re-pin (#165 course distillation — DATA drift, not
+# semantics): two re-library cards joined the references corpus
+# (unidbg-env-filling, signature-check-bypass), shifting lexical rarity in
+# the anomaly baseline on top of the #163 card set (re-run during the
+# merge-order rebase onto the stacked tree). Programmatic pre-commit diff
+# verified SCORE-ONLY: exactly 4 anomaly score floats across the 2
+# contradiction cases (drain_blocked_contradiction,
+# order_discovery_beats_contradiction — 0.907028->0.911784 and
+# 0.903569->0.905139 original-to-final; re-verified SCORE-ONLY after the
+# card reached its landed wording), every non-anomaly field and all other
+# cases byte-equal. Same documented drift class as
+# #884/#866-b/#728/#112/#150/#161/#169. Re-captured via capture_current()
+# from the current tree (the only sanctioned channel — see 2026-09-05
+# entry).
+# 2026-09-07 zero-drift verification (#146 failure-gate arming re-point):
+# failure_analysis_gate's arming moved from the never-written
+# promotion_attempts counter to settlement-derived case reds
+# (answers_question <-> target_pq linkage over runs/posteriors.yaml). The
+# four failure-gate matrix cases (sched_blocked_failure_due,
+# sched_failure_partial_artifacts, order_queue_beats_failure,
+# order_failure_beats_all_infra) were re-pointed at the live arming path in
+# their FIXTURES (answers_question + linked fail settlements); the frozen
+# outputs are unchanged — all 32 cases re-verified byte-identical after the
+# change, so NO re-pin was needed. The claim-register field itself remains
+# schema-valid (decide()'s own #497 ladder-exhaustion face still reads it);
+# only the gate stopped consuming it.
+# 2026-09-06 zero-drift verification (#98 DRAIN worker gates): the DRAIN
+# probe table gained STUCK_WORKERS_PRESENT + ACTIVE_WORKERS_PRESENT,
+# appended AFTER the frozen completion-transaction order (orphan >
+# unverified > note-gap > hyp > discovery > contradiction > anomaly) and
+# BEFORE the DRAIN_CLEAN catch-all — every completeness gate keeps its
+# verdict priority, and the new gates can only fire on a drained claim
+# face with live workers. All 32 frozen cases re-verified byte-identical
+# after the change (the predicates read snapshot data the corpus's DRAIN
+# cases never populate: none of them writes a worker-status file), so NO
+# re-pin was needed. Live semantic change, documented but unanchored (the
+# matrix has no worker-bearing DRAIN case — covered by the #98 block in
+# tests/test_decide_state_machine.py instead): the issue #98 probe state
+# (single IN_PROGRESS claim + aged worker-status; pre-fix decision
+# CONVERGED / exit 0 / "STOP dispatch; deliver") now reads
+# BLOCKED / exit 4 via the shared #595 stuck action (CONVERGED -> BLOCKED);
+# the same face with a fresh worker now reads SATURATED / exit 3
+# (CONVERGED -> SATURATED, busy-poll).
+# 2026-09-05 re-pin (#51 value loop unification): #51 removed the
+# KUNGLAO_VALUE_ALGO experiment flag (no-backcompat policy), making
+# rho_checkpoint.attach_signals an UNCONDITIONAL part of decide() — the
+# output dict gains the `value_signals` key on every verdict. That is an
+# INTENTIONAL decide() contract change, resolved per the established
+# re-pin precedent (2026-08-25/#662-#663-#670, 2026-08-26/#707,
+# 2026-08-27/#751, 07994e6/#866-b): re-freeze the corpus, document the
+# semantic change. Diffed old-vs-new BEFORE committing: every one of the
+# 31 cases shows exactly the `value_signals` addition and nothing else.
+# Unlike every prior re-pin, this one could NOT be captured via
+# capture_from_git_baseline(): the 8804dcd baseline object was destroyed
+# by the history rewrite (git cat-file -t 8804dcd -> fatal), so the frozen
+# snapshot was re-captured from the CURRENT tree at cabc7d9 via
+# capture_current(). With the baseline commit gone — and with #51 being a
+# deliberate decide() semantics change, which voids the "baseline ==
+# current" equality premise for any pre-#51 baseline — channel 1 (live
+# baseline extraction: _load_baseline_module /
+# test_live_baseline_output_equality) is RETIRED. The frozen-snapshot
+# channel is now the sole active proof; channel 1 returns only if a
+# future zero-semantics-change refactor re-introduces a recoverable
+# pre-refactor baseline.
 
 # 2026-08-27 corpus re-pin (#751): web-re-quickref.md grew the gitnexus
 # semantic-index step (~30 lines), shifting lexical rarity again. Same class:
@@ -61,7 +166,7 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_8804dcd.json"
 # copied lib_kunglao.py — the #671 self-bootstrap FileNotFoundError'd the
 # regen path after that merge (regen was broken for every doc-touching wave).
 #
-# 2026-09-01 corpus re-pin (#884): references/re-library/jsvmp-triage.md
+# 2026-09-01 corpus re-pin (#884): references/re-library/web/vm/jsvmp-triage.md
 # joined the anomaly baseline corpus (re-library/*.md is ingested by
 # anomaly_detector._load_baseline), shifting lexical rarity in the 4th
 # decimal. Same class: DATA drift only, 4 score floats across the 2
@@ -69,7 +174,7 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_8804dcd.json"
 # stays green on all cases. Re-captured via capture_from_git_baseline()
 # (baseline module + current corpus) per the design §5 command.
 #
-# 2026-09-02 corpus re-pin (#866-b): references/re-library/kunglao-toolshelf.md
+# 2026-09-02 corpus re-pin (#866-b): references/re-library/tools/shelf/kunglao-toolshelf.md
 # joined the anomaly baseline corpus (the #866-b discovery-face teaching page
 # for the registered tools/ CLIs). Same class: DATA drift only, 4 score floats
 # across the 2 contradiction cases (0.9059571619812584 -> 0.9054677206851119,
@@ -77,7 +182,76 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_8804dcd.json"
 # Re-captured via capture_from_git_baseline() (baseline module + current
 # corpus) per the design §5 command.
 #
-# 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web-re-quickref.md
+# 2026-09-06 corpus re-pin (#112 distillation): 7 new re-library cards
+# (native-sign-recovery, wire-format-recognition, stacked-protections,
+# falsifier-library, verification-safety, vm-deobfuscation-routing,
+# loop-stage-gates) joined the anomaly baseline corpus. Same class as
+# #884/#866-b/#728: DATA drift only, 4 score floats across the 2
+# contradiction cases (0.9054677206851119 -> 0.9030563514804202,
+# 0.9095849802371542 -> 0.9002507163323783); channel 1 stays green on all
+# cases. Case-by-case diff verified SCORE-ONLY before committing; re-pinned
+# via capture_current() per the docstring command.
+#
+# 2026-09-07 corpus re-pin (#144 distillation): the dynamic-observation-ladders
+# re-library card joined the anomaly baseline corpus. Same class as
+# #112/#884/#866-b/#728: DATA drift only, 4 score floats across the 2
+# contradiction cases (0.9030563514804202 -> 0.9043910880380706,
+# 0.9002507163323783 -> 0.9002271252433485). Case-by-case diff verified
+# SCORE-ONLY programmatically (anomaly claim_id/fact_id/top_dimension and all
+# non-anomaly fields byte-equal) before re-pin.
+#
+# 2026-09-08 corpus re-pin (#144 second distillation pass): four re-library
+# cards amended (dynamic-observation-ladders, falsifier-library,
+# native-sign-recovery, web-risk-control) and vm-protection-anatomy joined
+# the anomaly baseline corpus. Same class as #112/#884/#866-b/#728/#150:
+# DATA drift only, the same 4 score floats across the 2 contradiction cases
+# (0.9043910880380706 -> 0.9070282235749861,
+# 0.9002271252433485 -> 0.9035694521306032). Case-by-case diff verified
+# SCORE-ONLY programmatically over all 31 cases (anomaly
+# claim_id/fact_id/top_dimension and all non-anomaly fields byte-equal)
+# before re-pin; re-pinned via capture_current() per the docstring command.
+#
+# 2026-09-08 corpus re-pin (#163 distillation): the ida-scripting-overlays
+# re-library card joined the anomaly baseline corpus. Same class as
+# #112/#884/#866-b/#728/#150: DATA drift only, 4 score floats across the 2
+# contradiction cases. Re-pinned twice within PR #169: first against the
+# original 169-line card (0.9070282235749861 -> 0.9081614665961572,
+# 0.9035694521306032 -> 0.9026969857218403), then again after the
+# owner-ruled scope reduction shrank the card to 128 lines — final frozen
+# values 0.9081614665961572 -> 0.9071301247771836,
+# 0.9026969857218403 -> 0.9017379679144385. Case-by-case diff verified
+# SCORE-ONLY programmatically over all 31 cases each time (anomaly
+# claim_id/fact_id/top_dimension and all non-anomaly fields byte-equal)
+# before re-pin; re-pinned via capture_current() per the docstring command.
+#
+# 2026-09-08 corpus re-pin (#164 distillation): the falsifier-library card
+# gained the debuggability-enablement family row (family 18) and its
+# frontmatter description lost a yaml-hostile ': ' (plain-scalar fix), both
+# shifting lexical rarity in the anomaly baseline corpus (re-library/*.md).
+# Stacks on the #163/#165 corpus in the same dev series (rebased onto
+# b57b568). Same class as #112/#884/#866-b/#728/#150/#161/#163: DATA drift
+# only, the same 4 score floats across the 2 contradiction cases
+# (0.9117835414665385 -> 0.9116714240405962,
+# 0.9051392891450528 -> 0.905209324452902). Case-by-case diff
+# verified SCORE-ONLY programmatically over all 31 cases (anomaly
+# claim_id/fact_id/top_dimension and all non-anomaly fields byte-equal)
+# before re-pin; re-pinned via capture_current() per the docstring command.
+#
+# 2026-09-08 corpus re-pin (#176 queue distillation): two re-library cards
+# joined (unidbg-harness-bringup, unidbg-algo-recovery) and five were
+# amended (unidbg-env-filling, falsifier-library family 19, jsvmp-triage
+# sensor-VM anatomy, web-risk-control, web-crawler-engineering), all
+# shifting lexical rarity in the anomaly baseline corpus. Same class as
+# #112/#884/#866-b/#728/#150/#161/#163/#164: DATA drift only, the same
+# 4 score floats across the 2 contradiction cases
+# (0.9116714240405962 -> 0.9151923616961527,
+# 0.905209324452902 -> 0.9070134793597304). Case-by-case diff verified
+# SCORE-ONLY programmatically over all 31 cases (anomaly
+# claim_id/fact_id/top_dimension and all non-anomaly fields byte-equal,
+# zero structural diffs) before re-pin; re-pinned via capture_current()
+# per the docstring command.
+#
+# 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web/labs/web-re-quickref.md
 # joined the anomaly baseline corpus (anomaly_detector._load_baseline ingests
 # re-library/*.md), shifting every lexical rarity score in the 4th decimal. This
 # is DATA drift, not decide() semantics drift — the 8804dcd baseline decide()
@@ -165,6 +339,22 @@ def _blocker_files(ws: Path, names: list[str]) -> None:
 
 def _claim(cid: str, **fields) -> dict:
     return {"id": cid, "status": "OPEN", **fields}
+
+
+def _arm_red(ws: Path, cid: str, pq: str = "q1", reds: int = 1) -> None:
+    """#146 arming fixture: one oracle case linked to the claim's PQ
+    carrying `reds` fail settlements in the #106 posterior ledger
+    (beta = 1 + reds) — the gate's live arming path."""
+    cdir = ws / "oracle" / "cases"
+    cdir.mkdir(parents=True, exist_ok=True)
+    case_id = f"case-{cid.lower()}"
+    (cdir / f"{case_id}.yaml").write_text(
+        yaml.safe_dump({"id": case_id, "target_pq": pq}),
+        encoding="utf-8")
+    led = po.PosteriorLedger.load(ws)
+    led.cases[case_id] = po.CasePosterior(case_id, alpha=1.0,
+                                          beta=1.0 + reds)
+    led.save(ws)
 
 
 # ------------------------------------------------------------- the matrix
@@ -351,19 +541,24 @@ def _c_sched_unexpected_partials_no_slots(base: Path) -> Path:
 
 
 def _c_sched_blocked_failure_due(base: Path) -> Path:
-    """#495: failed attempt with NO analysis → failure artifacts due."""
+    """#495/#146: fail settlements on a target_pq-linked case with NO
+    analysis -> failure artifacts due (arming is settlement-derived)."""
     ws = _ws(base, "sched_blocked_failure_due")
-    _reg(ws, [_claim("C-1", promotion_attempts=2)])
+    _reg(ws, [_claim("C-1", promotion_attempts=2, answers_question="q1")])
+    _arm_red(ws, "C-1", reds=2)
     _ts(ws, _pq("[]"))
     return ws
 
 
 def _c_sched_failure_partial_artifacts(base: Path) -> Path:
-    """#495: analysis missing identified_obstacle → still BLOCKED."""
+    """#495/#146: analysis missing identified_obstacle → still BLOCKED
+    (arming via linked fail settlements — covers_attempt alone covers
+    nothing anymore)."""
     ws = _ws(base, "sched_failure_partial_artifacts")
-    _reg(ws, [_claim("C-1", promotion_attempts=1)])
+    _reg(ws, [_claim("C-1", promotion_attempts=1, answers_question="q1")])
+    _arm_red(ws, "C-1", reds=1)
     _ts(ws, _pq("[]"))
-    _analysis(ws, "C-1", covers_attempt=1,
+    _analysis(ws, "C-1", covers_settlements=1,
               validated_capability="frida bridge works",
               identified_obstacle="")
     return ws
@@ -432,7 +627,9 @@ def _c_order_opens_beat_partials(base: Path) -> Path:
 def _c_order_queue_beats_failure(base: Path) -> Path:
     """Order anchor: full queue (SATURATED) wins over failure artifacts due."""
     ws = _ws(base, "order_queue_beats_failure")
-    _reg(ws, [_claim("C-1"), _claim("C-2", promotion_attempts=1)])
+    _reg(ws, [_claim("C-1"),
+              _claim("C-2", promotion_attempts=1, answers_question="q1")])
+    _arm_red(ws, "C-2", reds=1)
     _ts(ws, _pq("[]"))
     _workers(ws, 3)
     return ws
@@ -440,7 +637,9 @@ def _c_order_queue_beats_failure(base: Path) -> Path:
 
 def _c_order_failure_beats_all_infra(base: Path) -> Path:
     ws = _ws(base, "order_failure_beats_all_infra")
-    _reg(ws, [_claim("C-1", promotion_attempts=2), _claim("C-2", blocked=True)])
+    _reg(ws, [_claim("C-1", promotion_attempts=2, answers_question="q1"),
+              _claim("C-2", blocked=True)])
+    _arm_red(ws, "C-1", reds=2)
     _ts(ws, _pq("[]"))
     return ws
 
@@ -515,61 +714,17 @@ def _canonical(d: dict) -> str:
     return json.dumps(_round(d), sort_keys=True, ensure_ascii=False, default=str)
 
 
-class BaselineUnavailable(RuntimeError):
-    """git history lacks BASELINE_COMMIT (shallow clone / pruned)."""
+def capture_current() -> dict:
+    """Regenerate the frozen anchor from the CURRENT tree's decide().
 
-
-def _load_baseline_module():
-    """Extract the PRE-refactor convergence_check from BASELINE_COMMIT and
-    import it under a unique name. Sibling imports (status_defs, yaml, ...)
-    resolve on sys.path to the current tree — identical to the baseline
-    tree for every module #443 does not touch (only convergence_check.py
-    changes). hooks/lib_kunglao.py is copied alongside to satisfy the
-    baseline module's __file__-relative loader.
-
-    Raises BaselineUnavailable (never skips) — usable inside AND outside
-    pytest (the frozen-snapshot regen path)."""
-    r = subprocess.run(
-        ["git", "-C", str(ROOT), "show", f"{BASELINE_COMMIT}:scripts/convergence_check.py"],
-        capture_output=True, text=True, timeout=60, errors="replace")
-    if r.returncode != 0:
-        raise BaselineUnavailable(
-            f"baseline {BASELINE_COMMIT} unavailable: {r.stderr.strip()[:200]}")
-    tmp = Path(tempfile.mkdtemp(prefix="decide-anchor-baseline-"))
-    (tmp / "scripts").mkdir(parents=True)
-    (tmp / "scripts" / "convergence_check.py").write_text(r.stdout, encoding="utf-8")
-    (tmp / "hooks").mkdir()
-    (tmp / "hooks" / "lib_kunglao.py").write_text(
-        (ROOT / "hooks" / "lib_kunglao.py").read_text(encoding="utf-8"), encoding="utf-8")
-    # #671 self-bootstrap: the copied lib resolves hooks/_path_hygiene.py by
-    # its own __file__ — ship the sibling so exec_module does not FileNotFoundError
-    _hyg = ROOT / "hooks" / "_path_hygiene.py"
-    if _hyg.is_file():
-        (tmp / "hooks" / "_path_hygiene.py").write_text(
-            _hyg.read_text(encoding="utf-8"), encoding="utf-8")
-    name = f"convergence_check_baseline_{BASELINE_COMMIT[:7]}"
-    if name in sys.modules:  # one process, one baseline instance
-        return sys.modules[name]
-    spec = importlib.util.spec_from_file_location(name, tmp / "scripts" / "convergence_check.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def _load_baseline_or_skip():
-    try:
-        return _load_baseline_module()
-    except BaselineUnavailable as exc:
-        pytest.skip(str(exc))
-
-
-def capture_from_git_baseline() -> dict:
-    """Regenerate the frozen anchor from the c5cb1ae baseline (design §5).
-
-    The returned dict is what gets written to decide_anchor_c5cb1ae.json —
-    it MUST be produced by the baseline module, never by the refactored
-    code (maker-checker).
+    Provenance note (2026-09-05 re-pin, #51): before the history rewrite
+    this helper was capture_from_git_baseline() — the frozen dict was
+    produced by the BASELINE_COMMIT module (maker-checker: expected values
+    derived from the OLD code, never hand-written). That channel is gone
+    with the 8804dcd object; an anchor re-pin is now sanctioned ONLY as a
+    documented intentional-semantics re-pin (per the precedent chain in
+    the header comment), captured from the current code, with the diff
+    against the previous anchor verified case-by-case BEFORE committing.
 
     Regenerate (from the worktree root):
       uv run python - <<'EOF'
@@ -578,44 +733,31 @@ def capture_from_git_baseline() -> dict:
       spec = importlib.util.spec_from_file_location(
           "anchor_mod", "tests/test_decide_regression_anchor.py")
       m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-      Path("tests/decide_anchor_c5cb1ae.json").write_text(
-          json.dumps(m.capture_from_git_baseline(), indent=2, sort_keys=True,
+      Path("tests/decide_anchor_" + m.BASELINE_COMMIT + ".json").write_text(
+          json.dumps(m.capture_current(), indent=2, sort_keys=True,
                      ensure_ascii=False) + "\\n", encoding="utf-8")
       EOF
     """
-    baseline = _load_baseline_module()
     base = Path(tempfile.mkdtemp(prefix="decide-anchor-capture-"))
-    return {name: baseline.decide(build_case(name, base))
+    return {name: convergence_check.decide(build_case(name, base))
             for name in sorted(CASES)}
 
 
 def _load_frozen() -> dict:
     if not ANCHOR_FILE.exists():
-        pytest.fail(f"frozen anchor {ANCHOR_FILE} missing — regenerate it from the "
-                    f"{BASELINE_COMMIT} baseline via the design §5 command "
-                    "(never from the refactored code)")
+        pytest.fail(f"frozen anchor {ANCHOR_FILE} missing — regenerate it via "
+                    "capture_current() (the docstring's design §5 command) "
+                    "and document the re-pin in the header comment")
     return json.loads(ANCHOR_FILE.read_text(encoding="utf-8"))
 
 
 # ------------------------------------------------------------------ tests
 
 @pytest.mark.parametrize("case", sorted(CASES))
-def test_live_baseline_output_equality(case: str, tmp_path: Path) -> None:
-    """Channel 1: baseline decide() (c5cb1ae) == current decide(), per case,
-    full output dict. The hard #443 acceptance."""
-    baseline = _load_baseline_or_skip()
-    ws = build_case(case, tmp_path)
-    old = baseline.decide(ws)
-    new = convergence_check.decide(ws)  # same workspace: decide() is read-only
-    assert _canonical(new) == _canonical(old), (
-        f"case {case}: decide() output drifted from {BASELINE_COMMIT} baseline\n"
-        f"--- baseline ---\n{_canonical(old)}\n--- current ---\n{_canonical(new)}")
-
-
-@pytest.mark.parametrize("case", sorted(CASES))
 def test_frozen_snapshot_output_equality(case: str, tmp_path: Path) -> None:
-    """Channel 2: current decide() == frozen c5cb1ae snapshot (permanent,
-    survives history pruning)."""
+    """The frozen-snapshot channel (permanent, survives history pruning):
+    current decide() == frozen snapshot at BASELINE_COMMIT, per case,
+    full output dict."""
     frozen = _load_frozen()
     if case not in frozen:
         pytest.fail(f"frozen anchor lacks case {case!r}; regenerate per design §5")

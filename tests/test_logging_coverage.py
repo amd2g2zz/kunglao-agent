@@ -52,7 +52,6 @@ TOP_20_MODULES = (
     ("retract_claim", "scripts/retract_claim.py"),
     ("refutation_propagate", "scripts/refutation_propagate.py"),
     ("outcome_capture", "scripts/outcome_capture.py"),
-    ("complete_teardown", "scripts/complete_teardown.py"),
     ("toolchain_install", "scripts/toolchain_install.py"),
     ("env_repair_l1", "scripts/env_repair_l1.py"),
     ("loop_state", "scripts/loop_state.py"),
@@ -84,6 +83,7 @@ SCHEMA_FIELDS = {
     "matched_rule",  # #601 additive field
     "trace_id",  # #879 additive field
     "channel",  # #699 additive field (execution surface)
+    "null_reasons",  # #58 S2b additive field (documented nulls, {} when clean)
 }
 
 

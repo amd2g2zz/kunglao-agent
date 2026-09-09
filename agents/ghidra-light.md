@@ -39,6 +39,7 @@ allowedTools:
 - Bash
 - mcp__sequential-thinking__sequentialthinking
 - mcp__ghidra__*
+- mcp__ida-pro-vm__*
 disallowedTools:
 - NotebookEdit
 - mcp__frida__spawn
@@ -60,6 +61,23 @@ isolation: none
 You perform **light static reconnaissance** via Ghidra. Two-tier strategy: try MCP first, fall back to analyzeHeadless (autonomous, no GUI).
 
 **Autonomy rule:** the subagent AUTONOMOUSLY creates a Ghidra project via analyzeHeadless when MCP is offline — does NOT degrade silently. The user does not need to manually open Ghidra GUI.
+
+## Reference lookup (aids, not mandates)
+
+- `references/_INDEX.md` — a methodology card may already cover this problem class (grep the index keywords: ghidra, xref, decompile, static analysis).
+- `tools/_INDEX.yaml` — a registered CLI may already cover this capability (the Ghidra MCP / analyzeHeadless pipeline tools remain primary; this covers gaps outside the pipeline).
+- `scripts/` — an existing parameterized CLI may be reusable.
+
+## Working rules
+
+- Explicit error handling at every level.
+- Never swallow errors silently.
+- No hardcoded secrets.
+- Validate inputs at boundaries.
+- Small focused functions.
+- Reuse-first.
+
+These lookups are advisory; where they yield nothing applicable, proceed with a hand-rolled implementation at your discretion.
 
 ## How Ghidra MCP and analyzeHeadless relate
 

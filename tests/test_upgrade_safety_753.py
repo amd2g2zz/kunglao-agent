@@ -44,6 +44,24 @@ EVENT_RE = re.compile(
 IDENTITY = ("-c", "user.name=t", "-c", "user.email=t@localhost")
 
 
+# ---------------------------------------------------------------- #143 home isolation
+# The upgrade now purges the user-global ~/.claude/settings.json (#143 item).
+# Every real-run upgrade test in this file binds Path.home to a bare tmp home
+# (the established monkeypatch seam, canonical_install_root precedent) plus
+# HOME/USERPROFILE for subprocess children, so a pytest run can never purge
+# the production global file — same protection class as conftest.isolated_home.
+
+
+@pytest.fixture(autouse=True)
+def _isolated_upgrade_home(tmp_path, monkeypatch):
+    home = tmp_path / "fake-home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: home)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    return home
+
+
 def _load_upgrade():
     spec = importlib.util.spec_from_file_location(
         "kunglao_upgrade_753", UPGRADE_PATH)
@@ -93,6 +111,12 @@ def synth_v012_ws(tmp: Path) -> Path:
     write_hook_state(ws, active_hooks=["active_intervention"],
                      phase="IDLE", user_override={},
                      extra={"state": "active"})
+    # the three required intake answers (present: the tests below pin
+    # migration semantics, not the anchor interview)
+    (ws / "task_spec.yaml").write_text(
+        "goal_verbatim: legacy goal\n"
+        "success_criterion: legacy criterion\n"
+        "verification_method: manual\n", encoding="utf-8")
     return ws
 
 

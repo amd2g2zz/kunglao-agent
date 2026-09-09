@@ -107,6 +107,24 @@ If either condition fails, mark `answered: false` with a gap explaining which co
 - At least one linked fact MUST be in a terminal PROVEN state.
 - Remaining candidate facts MUST be REFUTED or DEFERRED (not left OPEN or PARTIAL).
 
+### Step 2b: Reproduction questions demand their controlled comparison
+
+When a primary question DECLARES the reproduction predicate (`reproduction: true` in
+`task_spec.yaml`), C0a/C0b status alone can NEVER answer it. The PROVEN answering
+claim must additionally carry a controlled-comparison replay artifact
+(`evidence/replay-*.json` — the same reference-side input fed to both sides must
+produce byte-identical output, per the `replay_equivalence.py` schema):
+
+- Check the claim's `replay_evidence:` field (or `evidence/replay-*.json` naming the
+  claim's id). No artifact, a schema/coverage refusal, or zero byte-matched pairs =>
+  mark `answered: false` with gap: "ran without error is NOT evidence of
+  equivalence — no controlled comparison artifact with matched pairs" and add the
+  question to `unresolved[]`.
+- "The reproduction ran without error / env-filling stopped erroring" is a
+  means-state (env-fill progress), not the end-state. It does not answer a
+  reproduction question — record it in `degraded[].reason` when a worker offered it
+  as evidence.
+
 ### Step 3: Build the verdict
 
 - `complete`: true if ALL primary_questions have `answered: true`; false otherwise.
@@ -174,6 +192,7 @@ Read the output of `fact_contradiction_gate.py`. If it reports PROVEN facts on t
 
 - Do NOT mark a question as answered if the answering fact lacks PROVEN status.
 - Do NOT mark a question as answered if confidence_band is not PROVEN-FULL (unless C0b model_selection applies).
+- Do NOT mark a `reproduction: true` question as answered without a controlled-comparison artifact with matched pairs — "ran without error" is not evidence.
 - Do NOT ignore contradictions reported by fact_contradiction_gate.py.
 - Do NOT invent evidence or fill gaps with assumptions.
 - Do NOT modify `task_spec.yaml`, `claim-register.yaml`, or `facts/*.md` — they are inputs.

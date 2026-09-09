@@ -1,0 +1,86 @@
+/**
+ * unidbg-harness.java — minimal unidbg harness skeleton
+ * (template: templates/unidbg/harness.java.tmpl, #165).
+ * consume: adapt
+ *
+ * Scenario: a captured request's signature/token field is computed inside native code and the algorithm must run (and be observed) outside a device — the emulator harness is the vehicle, the replay gate stays with native-sign-recovery.
+ * How: build the emulator, create the Dalvik VM with a JNI provider, load the library from {{LIB_PATH}}, run JNI_OnLoad, resolve {{PACKAGE_NAME}}/{{TARGET_CLASS}} and dispatch {{TARGET_METHOD}} with the {{TARGET_SIGNATURE}} calling shape, with a module-scoped instruction trace and a file resolver installed BEFORE the load.
+ * Expected outcome: the target function executing under emulator observation — NOT a validated result: every output is a hypothesis until all captured device pairs replay byte-exact (native-sign-recovery step 6). First build needs JDK + Maven and the remote dependency tree (deployment preconditions: unidbg-env-filling card; scripts/install_unidbg.sh).
+ *
+ * KNOWN-VARIANCE REGIONS (adapt-expected — rework these per target):
+ *   1. Library path ({{LIB_PATH}}) and bitness — the emulator builder call
+ *      (32- vs 64-bit) must match the .so; the path is per-workspace.
+ *   2. Dispatch method ({{TARGET_METHOD}}) and signature
+ *      ({{TARGET_SIGNATURE}}) — static vs instance, argument vector, and
+ *      return type come from the boundary location step.
+ *   3. JNI-provider gaps — the AbstractJni-style overrides and syscall/
+ *      file answers the target needs are the env-filling work itself
+ *      (failure-signature catalog in the unidbg-env-filling card).
+ *
+ * Deployment preconditions (see scripts/install_unidbg.sh): JDK + Maven
+ * toolchain; the emulator and its dependency tree are pulled from remote
+ * (clone + first-build dependency resolution). Backend choice is a trade
+ * (fast JIT vs richer hooks) — re-check trace hooks after any switch.
+ */
+public class UnidbgHarness {
+
+    // Synthetic placeholder names throughout — replace via the KNOWN-VARIANCE regions.
+    private static final String PACKAGE_NAME = "{{PACKAGE_NAME}}";
+    private static final String LIB_PATH = "{{LIB_PATH}}";
+    private static final String TARGET_CLASS = "{{TARGET_CLASS}}";
+    private static final String TARGET_METHOD = "{{TARGET_METHOD}}";
+    private static final String TARGET_SIGNATURE = "{{TARGET_SIGNATURE}}";
+
+    private final AndroidEmulator emulator;
+    private final VM vm;
+    private final Module module;
+
+    public UnidbgHarness() {
+        // Emulator build: bitness must match the .so (KNOWN-VARIANCE 1).
+        // Backend trade: default backend keeps the richer hook surface; a
+        // fast JIT-class backend buys speed and can cost trace hooks.
+        emulator = AndroidEmulatorBuilder.for64Bit().build();
+        emulator.getSyscallHandler().addIOResolver(new TargetFileResolver());
+
+        Memory memory = emulator.getMemory();
+        memory.setLibraryResolver(new AndroidResolver(23));
+
+        // VM + JNI provider: verbose boundary logging is the gap locator —
+        // every unimplemented JNI call prints its full signature.
+        vm = emulator.createDalvikVM();
+        vm.setJni(new TargetJniProvider());
+        vm.setVerbose(true);
+
+        // Resolver BEFORE loadLibrary: a file resolver registered after the
+        // load silently never fires (IOResolver chain order).
+        DalvikModule dm = vm.loadLibrary(new File(LIB_PATH), true);
+        module = dm.getModule();
+
+        // Module-scoped instruction trace: window set at load time so
+        // init-array and JNI_OnLoad code is inside the window; stop/start
+        // per window when the noise drowns the signal.
+        emulator.traceCode(module.base, module.base + module.size);
+
+        // JNI_OnLoad runs integrity checks and dynamic registration later
+        // calls depend on — call it explicitly, after hooks are armed.
+        dm.callJNI_OnLoad(emulator);
+    }
+
+    /** Dispatch the boundary method (KNOWN-VARIANCE 2: static/instance,
+     *  argument vector, and return handling come from the boundary step). */
+    public String call(byte[] payload) {
+        DvmClass targetClass = vm.resolveClass(TARGET_CLASS);
+        return targetClass.callStaticJniMethodObject(
+            emulator, TARGET_METHOD + TARGET_SIGNATURE, payload
+        ).getValue().toString();
+    }
+
+    public static void main(String[] args) {
+        UnidbgHarness harness = new UnidbgHarness();
+        // Captured device inputs — replay values, never fresh ones: the
+        // replay gate compares against what the device actually produced.
+        byte[] capturedPayload = "captured-request-bytes".getBytes();
+        String out = harness.call(capturedPayload);
+        System.out.println("emulated result (hypothesis until replay gate): " + out);
+    }
+}

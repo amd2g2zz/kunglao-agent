@@ -24,8 +24,7 @@ V/D/ETA first-order signals:
 SHADOW POSTURE: everything here records signals, nothing intercepts.
 The only side effect is the kunglao_log emit (action "rho_checkpoint",
 registered in event_taxonomy.EMIT_ACTIONS). decide() attaches these as
-an extra `value_signals` key — flag off → the key never appears and the
-decision dict is byte-identical.
+an extra `value_signals` key (always-on since #51 — the flag is gone).
 """
 from __future__ import annotations
 
@@ -37,7 +36,6 @@ from pathlib import Path
 import yaml
 
 import kunglao_log
-import value_config
 import value_replay
 
 PRIORS_FILE = "runs/value-priors.yaml"
@@ -171,15 +169,19 @@ def eta_minutes(time_budget_min: float, enumeration_coeff: float) -> float:
     return float(time_budget_min) * float(enumeration_coeff)
 
 
-# ---------- decide() attach (flag-gated, shadow) ----------
+# ---------- decide() attach (always-on since #51) ----------
 
-def attach_signals(ws: Path, decision: dict) -> dict:
-    """Mount point for convergence_check.decide(): flag ON → compute the
+def attach_signals(ws: Path, decision: dict, *, emit: bool = True) -> dict:
+    """Mount point for convergence_check.decide(): compute the
     first-order signals from the workspace priors, attach as
-    decision["value_signals"], emit one shadow event. Flag OFF → return
-    the decision dict untouched (no key, no files)."""
-    if not value_config.is_enabled():
-        return decision
+    decision["value_signals"], emit one shadow event.
+
+    emit=False is the diagnostic/read-only face (resume's #466 contract,
+    plumbed from decide()'s emit_snapshot): the signals are computed
+    identically and attached, but NOTHING is persisted — no rho_checkpoint
+    ledger row, no rho_pair/cockpit_sample rows, no infeasible state
+    checkpoint. A diagnostic invocation must not write into the workspace
+    it diagnoses."""
     priors = {}
     p = Path(ws) / PRIORS_FILE
     try:
@@ -204,25 +206,32 @@ def attach_signals(ws: Path, decision: dict) -> dict:
     sig = {"v": round(v, 4), "source": source, "error_band": round(band, 4),
            "d": round(difficulty, 4), "eta_min": round(eta, 1)}
     # #823 A4 canary graduation: doomed-trajectory early-stop signal rides
-    # the same flag-gated mount (flag off -> never evaluated, byte-identical)
+    # the same mount (persist=False in the diagnostic face — compute only)
     try:
         import infeasible_signal
-        infeasible = infeasible_signal.evaluate(Path(ws))
+        infeasible = infeasible_signal.evaluate(Path(ws), persist=emit)
         sig["infeasible_candidate"] = infeasible.get("infeasible_candidate", False)
         sig["v_flat_rounds"] = infeasible.get("v_flat_rounds", 0)
     except Exception:
         sig["infeasible_candidate"] = False
     # #823-P2: checkpoint rho sampling + (rho, z) pairing rides the same
-    # flag-gated mount, caged: any failure degrades to no-signal (never
+    # mount, caged: any failure degrades to no-signal (never
     # disturb decide()). Shadow: sample_and_pair records only.
     try:
         import rho_verifier
-        rho_verifier.sample_and_pair(ws)
+        rho_verifier.sample_and_pair(ws, emit=emit)
     except Exception:  # noqa: BLE001 - shadow cage: signals never disturb
         pass
     decision["value_signals"] = sig
-    kunglao_log.emit(ws, actor="rho_checkpoint", action="rho_checkpoint",
-                     detail=json.dumps(sig, sort_keys=True))
+    # Shadow emit, caged like every other emit in decide()'s call graph
+    # (#51: the path is now unconditional, so it must honor the standing
+    # fail-open emit contract — a broken log write never disturbs decide()).
+    if emit:
+        try:
+            kunglao_log.emit(ws, actor="rho_checkpoint", action="rho_checkpoint",
+                             detail=json.dumps(sig, sort_keys=True))
+        except Exception:  # noqa: BLE001 — shadow cage: signals never disturb
+            pass
     return decision
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "kunglao-agent"
-version = "0.1.4"
+version = "0.1.5"
 description = "Convergence-driven reverse-engineering orchestrator — Claude Code skill (issue #80 release contract)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,6 +14,8 @@ dependencies = [
     "capstone>=5.0",
     "jsonschema>=4.0",
     "z3-solver>=4.12",  # opaque-pred (issue #306): guarded import, degrade path exit 2
+    "jinja2>=3.1",  # #156 --html face template (guarded import: the JSON
+                    # face — the primary artifact — renders without it)
 ]
 
 # Dev tooling lives in a PEP 735 dependency group, NOT an optional extra:
@@ -34,6 +36,7 @@ dev = [
     # #463 Gate 4 (test effectiveness): mutation testing on changed code.
     "mutmut>=2.4",
     "ruff>=0.6",
+    "pytest-xdist>=3.8.0",
 ]
 
 # NOTE: pytest configuration lives in pytest.ini (single source of truth).
@@ -91,11 +94,9 @@ max-complexity = 12
 "scripts/challenge_ledger.py" = ["C901"]
 "scripts/check_global_rule_subset.py" = ["E501"]
 "scripts/claim_expiry.py" = ["E501"]
-"scripts/complete_teardown.py" = ["C901", "E501"]
 "scripts/completion_gate.py" = ["C901", "E501"]
 "scripts/convergence_check.py" = ["C901", "E501"]
 "scripts/convergence_health.py" = ["E501"]
-"scripts/cost_estimate.py" = ["C901", "E501"]
 "scripts/cost_gate.py" = ["E501"]
 "scripts/dead_letter.py" = ["E501"]
 "scripts/deployed_refresh.py" = ["C901"]
@@ -105,7 +106,6 @@ max-complexity = 12
 "scripts/env_check.py" = ["E501"]
 "scripts/env_state_probe.py" = ["E501"]
 "scripts/event_taxonomy.py" = ["C901", "E501"]
-"scripts/explore_gate.py" = ["E501"]
 "scripts/external_kicker.py" = ["C901"]
 "scripts/failure_analysis_gate.py" = ["C901", "E501"]
 "scripts/feedback.py" = ["E501"]
@@ -119,7 +119,6 @@ max-complexity = 12
 "scripts/hypothesis_seeder.py" = ["C901", "E501"]
 "scripts/infeasible_proposal.py" = ["E501"]
 "scripts/init_channel_default.py" = ["E501"]
-"scripts/intake_one.py" = ["C901"]
 "scripts/kunglao-decide.py" = ["E501"]
 "scripts/kunglao-digest.py" = ["E501"]
 "scripts/kunglao-init.py" = ["C901", "E501"]
@@ -148,7 +147,6 @@ max-complexity = 12
 "scripts/relib_audit.py" = ["C901"]
 "scripts/report_consistency_check.py" = ["E501"]
 "scripts/retract_claim.py" = ["C901", "E501"]
-"scripts/reuse_gate.py" = ["E501"]
 "scripts/review_gate.py" = ["C901", "E501"]
 "scripts/rollup.py" = ["E501"]
 "scripts/route_capability.py" = ["C901"]
@@ -162,9 +160,9 @@ max-complexity = 12
 "scripts/tier_rules.py" = ["E501"]
 "scripts/tool_value.py" = ["C901"]
 "scripts/toolchain.py" = ["C901", "E501"]
+"scripts/report_render.py" = ["C901", "E501"]
 "scripts/toolchain_negotiation.py" = ["C901"]
 "scripts/troubleshooting_gate.py" = ["E501"]
-"scripts/tuition_refit.py" = ["E501"]
 "scripts/wire_up_settings.py" = ["E501"]
 "scripts/write_gate.py" = ["C901", "E501"]
 "scripts/write_guard_unlock.py" = ["E501"]

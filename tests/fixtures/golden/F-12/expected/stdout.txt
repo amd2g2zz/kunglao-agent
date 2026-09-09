@@ -1,6 +1,6 @@
 === 1 claim(s) BLOCKED (failed attempt, no current analysis) ===
 
-=== BLOCKED: C-1 (status=OPEN, attempts=1) ===
+=== BLOCKED: C-1 (status=OPEN, red_settlements=1 over 1 linked case(s)) ===
 claim: 
 
 Before re-dispatching OR concluding NEGATIVE, answer three questions
@@ -30,5 +30,5 @@ Record with:
       --validated-capability "..." --identified-obstacle "..." \
       --source lesson-hit|reference-hit|web-hit|novel-hypothesis (provenance)
 
-See failure-modes reference (recall): failure-modes.md, failure-modes-lifecycle.md, failure-modes-monitoring.md, failure-modes-state.md, case-book.md, lessons/README.md, convergence-loop.md
+See failure-modes reference (recall): orchestration/failure-modes/failure-modes.md, orchestration/failure-modes/failure-modes-lifecycle.md, orchestration/failure-modes/failure-modes-monitoring.md, orchestration/failure-modes/failure-modes-state.md, orchestration/failure-modes/case-book.md, lessons/README.md, re-library/method/process/ida-scripting-overlays.md, re-library/method/process/loop-stage-gates.md, re-library/android/emulation/unidbg-algo-recovery.md, re-library/android/emulation/unidbg-env-filling.md
 

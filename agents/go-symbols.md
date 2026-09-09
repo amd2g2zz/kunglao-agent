@@ -60,6 +60,23 @@ isolation: none
 
 Recover Go symbols/types/itabs from pclntab via unstrip (no decompile) -> emit a Ghidra apply script **plus** a decision-and-annotation plan that ghidra-light persists onto the program.
 
+## Reference lookup (aids, not mandates)
+
+- `references/_INDEX.md` — a methodology card may already cover this problem class (grep the index keywords: go, pclntab, symbol recovery).
+- `tools/_INDEX.yaml` — a registered CLI may already cover this capability (the unstrip pipeline remains primary; this covers gaps outside the pipeline).
+- `scripts/` — an existing parameterized CLI may be reusable.
+
+## Working rules
+
+- Explicit error handling at every level.
+- Never swallow errors silently.
+- No hardcoded secrets.
+- Validate inputs at boundaries.
+- Small focused functions.
+- Reuse-first.
+
+These lookups are advisory; where they yield nothing applicable, proceed with a hand-rolled implementation at your discretion.
+
 ## Inputs (passed by caller)
 - `binary_path`: local Go binary
 - `evidence_dir`: mal-recon/<sha1>/evidence/

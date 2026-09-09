@@ -1,0 +1,56 @@
+{
+  "tool": "apkid",
+  "version": "2.1.7",
+  "target": "sample.apk",
+  "scanned_at": "2026-01-01T00:00:00Z",
+  "findings": [
+    {
+      "rule": "proguard",
+      "category": "obfuscator",
+      "description": "proguard obfuscation markers",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "ptrace_attach",
+      "category": "anti_debug",
+      "description": "ptrace_attach anti-debug technique",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "dx",
+      "category": "compiler",
+      "description": "dx compiler artifacts",
+      "matched_files": [
+        "classes.dex"
+      ]
+    },
+    {
+      "rule": "Compiler: NDK",
+      "category": "compiler",
+      "description": "native library",
+      "matched_files": [
+        "lib/arm64-v8a/libsec.so"
+      ]
+    }
+  ],
+  "summary": {
+    "packer": [],
+    "compiler": [
+      "dx"
+    ],
+    "obfuscator": [
+      "proguard"
+    ],
+    "anti_vm": [],
+    "anti_debug": [
+      "ptrace_attach"
+    ],
+    "total": 4
+  },
+  "status": "ok",
+  "reason": ""
+}

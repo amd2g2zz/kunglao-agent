@@ -74,6 +74,7 @@ from hook_activation import (  # noqa: E402
     canonical_install_root,
     register_hooks,
 )
+from wire_up_settings import WIRE_UP_HOOK_FILES, hook_deployment_targets  # noqa: E402  (#143 purge matches the #372 registry single source)
 from _hooks_path import load_module_by_path  # noqa: E402  # #863 Family B: loader delegation (#671 authority)
 
 USER_DATA_DIRS: tuple[str, ...] = (
@@ -84,11 +85,25 @@ USER_DATA_DIRS: tuple[str, ...] = (
 # refresh never trips the iron rule (design D4).
 _STAMP_CARRIERS = ("facts/_INDEX.md", "claim-register.yaml")
 
+# #5 pending-manual-merge artifacts (upgrade telemetry, D4-exempt below):
+# written when the G3 collect-and-merge REFUSES a user-edited body, so
+# check-stale can point at a sanctioned recovery path instead of looping on
+# "run /kunglao-agent:upgrade first" forever. Presence of the marker IS the
+# whole state machine; the diff report is the operator's review artifact.
+PENDING_MERGE_REL = "runs/claudemd-pending-merge.yaml"
+PENDING_MERGE_DIFF_REL = "runs/claudemd-pending-merge.diff.patch"
+
 RC_OK = 0
 RC_UNKNOWN_ORIGIN = 3
 RC_IRON_RULE = 4
 RC_DIRTY_WORKSPACE = 6
 RC_INCOMPLETE = 7
+# The required intake answers are missing and no --resolve answers were
+# supplied: the pending-decision JSON rode stdout (flow=kunglao-upgrade);
+# the agent collects the answers and re-enters with --resolve. Same
+# structured channel as the init intake (exit 8 + machine-parseable
+# stdout).
+RC_ANCHORS_PENDING = 8
 
 # #758 G1a/G1b: advisory interpreter-pin echo of .python-version=3.11.
 PYTHON_PIN = (3, 11)
@@ -120,6 +135,141 @@ def _item_hooks_rewire(ws: Path, dry: bool) -> str:
     if not dry:
         register_hooks(ws)
     return "hooks_rewire"
+
+
+def _global_settings_path() -> Path:
+    """#143 — the user-global settings file. Reads Path.home() (never env
+    vars) so test fake-homes bind through the established monkeypatch seam
+    (hook_activation.canonical_install_root precedent)."""
+    return Path.home() / ".claude" / "settings.json"
+
+
+def _is_kunglao_hook_command(command: str) -> bool:
+    """#143 matcher: a hook command references a kunglao hook file iff a
+    WIRE_UP_HOOK_FILES registry basename appears in the command string — the
+    same basename-substring convention hooks_selfcheck.check_settings uses
+    for its present/missing scan. The registry import keeps ONE source
+    (#372): a hook file added to the registry is purged from the global
+    file without a second list to forget."""
+    cmd = command or ""
+    return any(name in cmd for name in WIRE_UP_HOOK_FILES)
+
+
+def _settings_has_live_hooks(path: Path) -> bool:
+    """True iff <path> parses and carries a non-empty hooks segment. Any
+    read/parse failure answers False — callers only use this to decide
+    whether the project layer deserves a missing-registration WARN."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return bool(isinstance(data, dict) and data.get("hooks"))
+
+
+def _item_global_hook_purge(ws: Path, dry: bool) -> str:
+    """#143: purge legacy pre-#258 kunglao hooks from the user-global
+    ~/.claude/settings.json — the upgrade-side completion of #258's
+    project-scope migration (owner ruling 2026-09-07: ships in v0.1.5).
+
+    Scope contract:
+      - ONLY the `hooks` segment is walked; env/statusLine/enabledPlugins
+        and every other top-level key are never touched.
+      - A hook entry is purged iff its command references a
+        WIRE_UP_HOOK_FILES registry basename. Non-kunglao entries survive
+        in place; containers the purge empties (matcher rows, event keys)
+        carried kunglao-only content by construction.
+      - Safety rails: the ORIGINAL file bytes are backed up to
+        <ws>/runs/global-settings-backup-<utc-ts>.json before the first
+        write (iron-rule-exempt, D4 class); a parse failure skips with a
+        WARN and leaves the file byte-untouched (never repair a corrupted
+        global file by truncation — v1.9.37 lesson); no kunglao entries ->
+        idempotent noop line, no backup, no write.
+      - Ordering: registered AFTER _item_hooks_rewire so project-level
+        registration is confirmed earlier in the SAME run (#258: no window
+        where neither layer is active). If the project layer still reads
+        hook-less, the purge proceeds but draws the missing-layer WARN —
+        stale global hooks are live pollution either way.
+      - Write-back is atomic (same-dir temp + rename) and preserves the
+        file mode. A dry run only reports what would be removed.
+    """
+    gp = _global_settings_path()
+    if not gp.is_file():
+        return "global_hook_purge(noop: absent)"
+    try:
+        original = gp.read_bytes()
+        data = json.loads(original.decode("utf-8"))
+    except (OSError, ValueError) as exc:
+        why = f"{type(exc).__name__}: {exc}"
+        _warn(f"kunglao-upgrade: WARN — global settings purge skipped: "
+              f"{gp} is unreadable/unparseable ({why}); file left "
+              f"untouched — never repair a corrupted global file",
+              why, "global_hook_purge", ws)
+        return "global_hook_purge(warn: parse-failed)"
+    hooks = data.get("hooks") if isinstance(data, dict) else None
+    if not isinstance(hooks, dict):
+        return "global_hook_purge(noop)"
+    removed: list[str] = []
+    for event in list(hooks):
+        entries = hooks.get(event)
+        if not isinstance(entries, list):
+            continue
+        kept_entries: list = []
+        for entry in entries:
+            if not isinstance(entry, dict) \
+                    or not isinstance(entry.get("hooks"), list):
+                kept_entries.append(entry)
+                continue
+            kept_hooks = []
+            for h in entry["hooks"]:
+                cmd = h.get("command", "") if isinstance(h, dict) else ""
+                if isinstance(h, dict) and _is_kunglao_hook_command(cmd):
+                    removed.append(cmd)
+                else:
+                    kept_hooks.append(h)
+            if len(kept_hooks) == len(entry["hooks"]):
+                kept_entries.append(entry)          # nothing kunglao here
+            elif kept_hooks:
+                kept_entries.append({**entry, "hooks": kept_hooks})
+        if kept_entries:
+            hooks[event] = kept_entries
+        else:
+            del hooks[event]                        # event rode only kunglao
+    if not removed:
+        return "global_hook_purge(noop)"
+    matched = ",".join(sorted(name for name in WIRE_UP_HOOK_FILES
+                              if any(name in c for c in removed)))
+    if dry:
+        return (f"global_hook_purge(dry: would remove {len(removed)}: "
+                f"{matched})")
+    # #258 ordering contract: the rewire item ran earlier in this same run;
+    # a still-hook-less project layer draws the WARN but never blocks the
+    # purge (the stale global hooks keep firing outside any workspace).
+    if not any(_settings_has_live_hooks(t)
+               for t in hook_deployment_targets(ws)):
+        _warn("kunglao-upgrade: WARN — project-level hook registration not "
+              "detected before global purge (contract: hooks rewire runs "
+              "earlier in this upgrade); purging global kunglao hooks "
+              "anyway", "project-layer-missing", "global_hook_purge", ws)
+    ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    backup = ws / "runs" / f"global-settings-backup-{ts}.json"
+    try:
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        backup.write_bytes(original)
+    except OSError as exc:
+        why = f"{type(exc).__name__}: {exc}"
+        _warn(f"kunglao-upgrade: WARN — global settings purge skipped: "
+              f"backup {backup} unwritable ({why}); global file left "
+              f"untouched — never purge without a backup",
+              why, "global_hook_purge", ws)
+        return "global_hook_purge(warn: backup-failed)"
+    tmp = gp.with_name(gp.name + ".tmp143")
+    tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                   encoding="utf-8")
+    os.chmod(tmp, gp.stat().st_mode & 0o777)
+    os.replace(tmp, gp)
+    detail = f"removed={len(removed)} files={matched}"
+    _emit(ws, "global_hook_purge", detail)
+    return f"global_hook_purge(removed={len(removed)}: {matched})"
 
 
 def _item_deployed_refresh(ws: Path, dry: bool) -> str:
@@ -408,6 +558,109 @@ def _frame_label(before: str, after: str) -> str:
     return f"+{adds}/-{removed}"
 
 
+def _pending_merge_diff(ws: Path, current: str, reason: str,
+                        req_block: str | None) -> str:
+    """#5 review artifact: unified diff of the current workspace body
+    (left) vs the incoming frame the refused merge would have written
+    (right). A render failure must not take the marker down with it — the
+    marker, not the diff, IS the state machine."""
+    import difflib
+    head = (
+        "# CLAUDE.md pending manual merge (issue #5)\n"
+        f"# reason: {reason}\n"
+        "# left  = current workspace body\n"
+        "# right = incoming frame the refused upgrade merge would have\n"
+        "#        written. Merge the needful changes into CLAUDE.md by\n"
+        "#        hand, then clear the marker and finish the refresh:\n"
+        "#   python scripts/kunglao.py check-stale --resolve <workspace>\n"
+        "#   python scripts/kunglao.py upgrade <workspace>\n"
+    )
+    try:
+        incoming = claudemd_frame.wrap_frame(
+            _build_current_frame(ws, current, req_block))
+    except Exception as exc:  # noqa: BLE001 — report survives, marker rules
+        return head + f"(incoming frame render failed: {exc})\n"
+    version = template_version.read_skill_version()
+    lines = difflib.unified_diff(
+        current.splitlines(), incoming.splitlines(),
+        fromfile="CLAUDE.md (current workspace body)",
+        tofile=f"CLAUDE.md (incoming frame v{version})", lineterm="")
+    return head + "\n".join(lines) + "\n"
+
+
+def _write_pending_merge(ws: Path, current: str, reason: str,
+                         req_block: str | None = None) -> str:
+    """#5 upgrade face of the deadlock breaker: a refused G3 merge used to
+    leave NOTHING behind, so the G4 gate honestly kept the old stamp and
+    check-stale looped on "run /upgrade first" forever. Leave an explicit
+    pending-manual-merge state instead. Returns the diff-report relpath
+    (also recorded inside the marker)."""
+    ws = Path(ws)
+    ws.joinpath("runs").mkdir(parents=True, exist_ok=True)
+    _atomic_write_bytes(
+        ws / PENDING_MERGE_DIFF_REL,
+        _pending_merge_diff(ws, current, reason,
+                            req_block).encode("utf-8"))
+    record = {
+        "schema": "kunglao.claudemd-pending-merge/1",
+        "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "skill_version": template_version.read_skill_version(),
+        "workspace_stamp": template_version.read_workspace_version(ws),
+        "reason": reason,
+        "diff_report": PENDING_MERGE_DIFF_REL,
+        "resolve_command": ("python scripts/kunglao.py check-stale "
+                            "--resolve <workspace>"),
+    }
+    _atomic_write_bytes(
+        ws / PENDING_MERGE_REL,
+        yaml.safe_dump(record, sort_keys=False,
+                       allow_unicode=True).encode("utf-8"))
+    return PENDING_MERGE_DIFF_REL
+
+
+def pending_merge_record(ws: Path) -> dict | None:
+    """#5 check-stale face: read the pending-merge marker. None = no
+    pending state. Presence is the whole state machine — a marker that
+    fails to parse still counts as pending (a malformed record must never
+    masquerade as a clean workspace); only its fields degrade."""
+    p = Path(ws) / PENDING_MERGE_REL
+    if not p.is_file():
+        return None
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — presence beats parse failures
+        return {"reason": "(unreadable pending-merge marker)"}
+    if not isinstance(data, dict):
+        return {"reason": "(malformed pending-merge marker)"}
+    rec = {str(k): v for k, v in data.items()}
+    rec.setdefault("reason", "(unspecified)")
+    return rec
+
+
+def clear_pending_merge(ws: Path) -> bool:
+    """#5: remove the pending-merge marker (explicit `check-stale
+    --resolve`, or a subsequent successful merge). True when a marker was
+    removed, False when none existed; OSError propagates — callers own the
+    user-facing failure face (never silently swallowed)."""
+    try:
+        (Path(ws) / PENDING_MERGE_REL).unlink()
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _clear_pending_merge_quiet(ws: Path) -> None:
+    """Best-effort marker clear once a merge SUCCEEDS (applied or
+    fixed-point noop): the pending state is resolved. A removal failure is
+    a WARN, never a merge failure — a marker left behind only keeps
+    check-stale's recovery advice alive, which is the safe direction."""
+    try:
+        clear_pending_merge(ws)
+    except OSError as exc:
+        _warn_line(f"kunglao-upgrade: WARN — could not remove "
+                   f"{PENDING_MERGE_REL} ({exc}); remove it by hand")
+
+
 def _item_claudemd_merge(ws: Path, dry: bool) -> str:
     """#755 G3 (T2/A3): three-segment collect-and-merge. Rebuild ONLY the
     frame from the CURRENT template; 需求段 (task_spec constraint block) and
@@ -415,7 +668,12 @@ def _item_claudemd_merge(ws: Path, dry: bool) -> str:
     in place; stray prose relocated with new-frame dedup). When even the
     conservative heading-walk cannot place every current heading, the merge
     REFUSES: skip + WARN, body untouched — 宁可旧也不要错删 (#758 posture).
-    After an applied merge the G4 stamp gate's positive path is unlocked."""
+    After an applied merge the G4 stamp gate's positive path is unlocked.
+
+    #5: a refusal is no longer a silent skip — it leaves the explicit
+    pending-manual-merge state (runs/claudemd-pending-merge.yaml marker +
+    .diff.patch report) that check-stale turns into the sanctioned recovery
+    path; a subsequent successful merge clears the marker again."""
     current = _claudemd_read(ws)
     if current is None:
         return "claudemd_merge(noop: no CLAUDE.md)"
@@ -428,11 +686,21 @@ def _item_claudemd_merge(ws: Path, dry: bool) -> str:
         return ("claudemd_merge(dry)" if parts.status == "applied"
                 else f"claudemd_merge(dry-skipped: {parts.reason})")
     if parts.status != "applied":
+        # #5 deadlock breaker: leave the explicit pending state (marker +
+        # diff report) instead of a bare skip — the G4 gate still honestly
+        # keeps the old stamp, but check-stale can now hand the operator a
+        # sanctioned recovery path instead of an endless stale loop.
+        diff_rel = _write_pending_merge(ws, current, parts.reason,
+                                        parts.req_block)
         _warn(f"kunglao-upgrade: WARN — CLAUDE.md merge skipped "
-              f"({parts.reason}); legacy body left untouched (G3)",
+              f"({parts.reason}); legacy body left untouched (G3); "
+              f"manual merge pending — review {diff_rel}, merge it into "
+              f"CLAUDE.md, then run: python scripts/kunglao.py "
+              f"check-stale --resolve {ws}",
               parts.reason, "claudemd_merge", ws,
-              ledger_detail=f"skipped:{parts.reason}")
-        return f"claudemd_merge(skipped: {parts.reason})"
+              ledger_detail=f"pending-merge:{parts.reason}")
+        return (f"claudemd_merge(skipped: {parts.reason}; "
+                f"pending-merge={PENDING_MERGE_REL})")
     frame_inner = _build_current_frame(ws, current, parts.req_block)
     # Fixed-point hygiene: a rebuilt frame can legitimately CONTAIN blocks
     # the classifier flagged as user content (parametric headings such as
@@ -453,12 +721,14 @@ def _item_claudemd_merge(ws: Path, dry: bool) -> str:
     merged = claudemd_frame.assemble(parts,
                                      claudemd_frame.wrap_frame(frame_inner))
     if merged == current:
+        _clear_pending_merge_quiet(ws)
         return "claudemd_merge(noop)"
     target = ws / "CLAUDE.md"
     tmp = target.with_name(target.name + ".tmp755")
     tmp.write_text(merged, encoding="utf-8")
     import os as _os
     _os.replace(tmp, target)
+    _clear_pending_merge_quiet(ws)  # #5: a successful merge resolves pending
     detail = f"{_frame_label(current, merged)} sections={len(parts.user_sections)}"
     _emit_event("claudemd_merge", "ok", detail)
     _emit(ws, "claudemd_merge", detail)
@@ -471,6 +741,7 @@ def migrate_to_0_1_3(ws: Path, dry: bool) -> list[str]:
     init-report upgrade record, .agent seed. All items idempotent."""
     return [
         _item_hooks_rewire(ws, dry),
+        _item_global_hook_purge(ws, dry),  # #143 AFTER rewire (#258 completion)
         _item_always_armed_repair(ws, dry),
         _item_template_stamp_refresh(ws, dry),
         _item_init_report_note(ws, dry),
@@ -501,11 +772,29 @@ def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
     ]
 
 
+def migrate_to_0_1_5(ws: Path, dry: bool) -> list[str]:
+    """v0.1.4 -> current: frame-currency + honest stamps (G3/G4 carry).
+
+    The 0.1.5 train ships no new deploy-surface repairs, but the per-version
+    registry convention still demands a fresh entry: without one
+    an ALREADY-0.1.4-stamped workspace plans zero migrations, the G3
+    merge and the stamp carry never run, and the G4 tail gate — which
+    trusts the plan to carry the stamp face — leaves the workspace
+    honestly stuck on 0.1.4 stamps. Same carry pair as 0.1.4's tail:
+    the G3 merge (frame currency; refuses-and-warns on a stale body)
+    followed by the G4-gated quiet stamp."""
+    return [
+        _item_claudemd_merge(ws, dry),                 # G3/T2/A3 carry
+        _item_template_stamp_refresh_quiet(ws, dry),   # G4-gated carry
+    ]
+
+
 # Linear registry: every version that needs a migration step beyond
 # "re-stamp" (the stamp refresh itself is carried by the LAST migration).
 MIGRATIONS: list[tuple[str, MigrationFn]] = [
     ("0.1.3", migrate_to_0_1_3),
     ("0.1.4", migrate_to_0_1_4),   # #755 deploy-surface completion (T6)
+    ("0.1.5", migrate_to_0_1_5),   # G3 merge + G4 stamp carry
 ]
 
 
@@ -528,7 +817,12 @@ def _vkey(version: str) -> tuple[int, ...]:
 #   runs/logs/kunglao-*.jsonl       #726 emits ONLY its own actor lines —
 #                                   line-filtered, analysis events stay
 #                                   byte-protected
-_EXEMPT_EXACT = ("runs/.init-report.json",)
+#   runs/claudemd-pending-merge.*   #5 refused-merge marker + diff report
+_EXEMPT_EXACT = (
+    "runs/.init-report.json",
+    PENDING_MERGE_REL,
+    PENDING_MERGE_DIFF_REL,
+)
 
 
 def _is_exempt(rel: str) -> bool:
@@ -541,6 +835,13 @@ def _is_exempt(rel: str) -> bool:
     # #791 refresh item — same D4 exemption class as upgrade-snapshot.
     # Analysis data under runs/ stays byte-protected.
     if rel.startswith("runs/deploy-backup-"):
+        return True
+    # #143: the global-settings purge backup — framework-owned write of the
+    # upgrade's own #143 item (same D4 exemption class as deploy-backup);
+    # it mirrors the USER-GLOBAL settings, which the iron rule never hashed
+    # in the first place.
+    if rel.startswith("runs/global-settings-backup-") \
+            and rel.endswith(".json"):
         return True
     return False
 
@@ -1195,8 +1496,100 @@ def _item_skill_staleness_check(ws: Path, dry: bool) -> str:
 # driver
 # --------------------------------------------------------------------------
 
+def _anchor_backfill(ws: Path, dry_run: bool, resolve: dict | None,
+                     items_out: list | None) -> tuple[int, dict | None]:
+    """Detect missing required intake answers in task_spec.yaml and elicit
+    them through the structured interview channel (pending JSON on stdout,
+    exit 8; answers re-enter via --resolve). A backfill writes ONLY the
+    missing fields: task_spec is the workspace's input contract (scaffold
+    class, template-refresh job), NOT one of the user-data dirs — the
+    user-data invariance check is untouched. An unreadable contract is not
+    backfillable: one stderr line directs to full re-init, the upgrade
+    itself stays successful.
+
+    Returns (rc, pending_doc) — pending_doc is the JSON document to print
+    LAST on stdout when rc == RC_ANCHORS_PENDING.
+    """
+    import oracle_anchors
+    _record = (lambda action, detail: items_out.append(
+        {"name": "oracle_anchor_backfill", "action": action,
+         "detail": detail}) if items_out is not None else None)
+    ok, gaps, state = oracle_anchors.inspect(ws)
+    if ok:
+        print("kunglao-upgrade: anchors: complete")
+        _record("noop", "anchors: complete")
+        return RC_OK, None
+    if state == oracle_anchors.STATE_CORRUPT:
+        _warn_line("kunglao-upgrade: WARN — anchors: task_spec unreadable, "
+                   "backfill impossible, full re-init required "
+                   "(kunglao-init <ws> --force --type <type>)")
+        _record("noop", "anchors: task_spec unreadable (full re-init)")
+        return RC_OK, None
+    answers = {}
+    for name in oracle_anchors.FIELDS:
+        value = (resolve or {}).get(name)
+        if isinstance(value, str) and value.strip():
+            answers[name] = value
+    if answers:
+        try:
+            oracle_anchors.validate_values(answers)
+        except ValueError as exc:
+            print(f"kunglao-upgrade: ERROR anchor backfill refused: {exc}",
+                  file=sys.stderr)
+            _record("noop", f"backfill refused: {exc}")
+            return RC_INCOMPLETE, None
+        oracle_anchors.apply(ws, answers)
+        ok, gaps, _state = oracle_anchors.inspect(ws)
+        if ok:
+            print("kunglao-upgrade: anchors: backfilled via interview")
+            _record("applied", "anchors: backfilled via interview")
+            return RC_OK, None
+    if dry_run:
+        print(f"kunglao-upgrade: anchors: pending interview "
+              f"(missing: {', '.join(gaps)})")
+        _record("noop", f"anchors: pending interview ({len(gaps)} missing)")
+        return RC_OK, None
+    pending = build_anchor_pending_doc(ws, gaps)
+    _record("noop", "anchors: pending interview")
+    return RC_ANCHORS_PENDING, pending
+
+
+def build_anchor_pending_doc(ws: Path, gaps: list[str]) -> dict:
+    """The structured interview for the missing answers — same schema,
+    same flow, same re-entry contract as the init intake."""
+    import decision_pending as dp
+    import oracle_anchors
+    questions = {
+        "goal_verbatim": ("Your goal for this workspace, restated "
+                          "verbatim — what do you want?"),
+        "success_criterion": ("What counts as done — the checkable "
+                              "end-state the result is judged against?"),
+        "verification_method": ("How is the result verified?"),
+    }
+    decisions = []
+    for name in gaps:
+        if name == "verification_method":
+            decisions.append(dp.PendingDecision(
+                decision_id=name, question=questions[name],
+                kind=dp.KIND_CHOICE,
+                options=tuple(oracle_anchors.METHOD_OPTIONS),
+                default=None))
+        else:
+            decisions.append(dp.PendingDecision(
+                decision_id=name, question=questions[name],
+                kind=dp.KIND_VALUE, options=(), default=None))
+    doc = dp.build_pending_doc(
+        flow="kunglao-upgrade", workspace=str(ws),
+        guidance=dp.GUIDANCE_TEMPLATE, decisions=decisions)
+    doc["guidance"] = doc["guidance"] + (
+        " These answers are the workspace's required oracle anchors; "
+        "analysis entry and resume refuse until they are collected.")
+    return doc
+
+
 def upgrade(ws: Path, dry_run: bool = False,
-           items_out: list | None = None) -> int:
+           items_out: list | None = None,
+           resolve: dict | None = None) -> int:
     ws = Path(ws)
     origin = template_version.read_workspace_version(ws)
     if origin is None:
@@ -1264,6 +1657,12 @@ def upgrade(ws: Path, dry_run: bool = False,
         # references (mis-wired by a pre-fix tool) — sweep applies here too.
         sweep = _install_reference_sweep(ws)
         _emit(ws, "install_reference_scan", _sweep_detail(sweep))
+        anchor_rc, anchor_pending = _anchor_backfill(
+            ws, dry_run, resolve, items_out)
+        if anchor_rc != RC_OK:
+            if anchor_pending is not None:
+                print(json.dumps(anchor_pending, ensure_ascii=False))
+            return anchor_rc
         return RC_OK
 
     if dry_run:
@@ -1274,6 +1673,9 @@ def upgrade(ws: Path, dry_run: bool = False,
                 if items_out is not None:
                     items_out.append({"name": item, "action": "noop",
                                        "detail": "dry-run"})
+        # the required intake answers: report their state in the plan,
+        # write nothing (the dry run never pends)
+        _anchor_backfill(ws, dry_run=True, resolve=resolve, items_out=items_out)
         # #752 D6: planned sweep surfaces in the dry-run plan, writes nothing
         stale_n = sum(len(v) for v in
                       install_reference.scan_workspace(
@@ -1345,6 +1747,10 @@ def upgrade(ws: Path, dry_run: bool = False,
         # the item above already emitted the one WARN this run needs.
         _guarded_stamp_refresh(ws, version=target, warn=False)
         _emit_event("stamp", "ok", f"version={target}")
+        # required intake answers: backfill BEFORE the post-state commit so
+        # the write rides the snapshot layer (the tree stays clean)
+        anchor_rc, anchor_pending = _anchor_backfill(
+            ws, dry_run=False, resolve=resolve, items_out=items_out)
         _emit(ws, "upgrade", f"{origin}->{target} items={applied}")
         print(f"kunglao-upgrade: {origin} -> {target} "
               f"({applied} item(s), snapshot {snap_path.name})")
@@ -1403,6 +1809,10 @@ def upgrade(ws: Path, dry_run: bool = False,
         # slash-commands/hooks up only after a plugin reload.
         print("kunglao-upgrade: skill package updated — run /reload-plugins "
               "in Claude Code to activate")
+        if anchor_rc != RC_OK:
+            if anchor_pending is not None:
+                print(json.dumps(anchor_pending, ensure_ascii=False))
+            return anchor_rc
     except Exception as exc:  # noqa: BLE001 — incomplete, not silent success
         tail_error = f"{type(exc).__name__}: {exc}"
         _emit_event("summary", "fail", tail_error)
@@ -1425,11 +1835,26 @@ def main(argv: list[str] | None = None) -> int:
                    help="emit a single JSON envelope on stdout (status, rc, "
                         "items, iron_rule_hash, started_at, ended_at); "
                         "the human-readable plan still goes to stderr")
+    p.add_argument("--resolve", metavar="PATH", default=None,
+                   help="answers JSON for the required-intake-answer "
+                        "interview (goal_verbatim / success_criterion / "
+                        "verification_method); re-entry after a pending "
+                        "exit 8")
     a = p.parse_args(argv)
     _warn_python_version()
     started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     items_out: list = []
-    rc = upgrade(Path(a.workspace), a.dry_run, items_out)
+    resolve_answers: dict | None = None
+    if a.resolve:
+        try:
+            loaded = json.loads(Path(a.resolve).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"kunglao-upgrade: ERROR --resolve unreadable: {exc}",
+                  file=sys.stderr)
+            return 1
+        resolve_answers = loaded if isinstance(loaded, dict) else {}
+    rc = upgrade(Path(a.workspace), a.dry_run, items_out,
+                 resolve=resolve_answers)
     ended_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     if a.json:
         status = {
@@ -1439,6 +1864,7 @@ def main(argv: list[str] | None = None) -> int:
             RC_IRON_RULE: "iron-rule-violation",
             RC_DIRTY_WORKSPACE: "refused-dirty",
             RC_INCOMPLETE: "incomplete",
+            RC_ANCHORS_PENDING: "anchors-pending",
         }
         # pick first matching key
         chosen = "ok"
@@ -1467,6 +1893,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

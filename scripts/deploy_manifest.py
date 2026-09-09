@@ -132,6 +132,11 @@ def build_entries() -> list[dict]:
         ents.append({"src": f"agents/{p.name}", "kind": "agent"})
     for p in sorted(SKILL_SCRIPTS.glob("*.py")):
         ents.append({"src": f"scripts/{p.name}", "kind": "scaffold"})
+    # #142: the statusline renderer rides the deployed scaffold like the
+    # scripts it reads — statusLine commands point at the workspace-local
+    # copy (<ws>/.claude/scripts/), so the workspace stays self-contained.
+    for p in sorted(SKILL_SCRIPTS.glob("*.mjs")):
+        ents.append({"src": f"scripts/{p.name}", "kind": "scaffold"})
     for d, p in _iter_asset_files():
         ents.append({"src": f"{d}/{p.relative_to(ROOT / d).as_posix()}",
                      "kind": "asset"})
@@ -315,6 +320,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

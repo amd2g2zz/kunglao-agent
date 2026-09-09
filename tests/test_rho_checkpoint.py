@@ -14,7 +14,6 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import rho_checkpoint as rc
-import value_config
 
 
 # ---------- V = σ(w·x+b) ----------
@@ -104,7 +103,7 @@ def test_eta_minutes():
     assert rc.eta_minutes(120, 0.5) == pytest.approx(60.0)
 
 
-# ---------- decide() attach (flag-gated) ----------
+# ---------- decide() attach (always-on since #51) ----------
 
 def _mk_ws(ws: Path):
     (ws / "runs" / "logs").mkdir(parents=True)
@@ -120,8 +119,8 @@ def _mk_ws(ws: Path):
     return ws
 
 
-def test_attach_signals_flag_on_emits(tmp_path, monkeypatch):
-    monkeypatch.setenv(value_config.ENV_NAME, "1")
+def test_attach_signals_emits(tmp_path, monkeypatch):
+    monkeypatch.delenv("KUNGLAO_VALUE_ALGO", raising=False)
     ws = _mk_ws(tmp_path / "ws")
     decision = {"decision": "DISPATCH"}
     out = rc.attach_signals(ws, decision)
@@ -137,14 +136,3 @@ def test_attach_signals_flag_on_emits(tmp_path, monkeypatch):
     rho_rows = [r for r in rows if r.get("action") == "rho_checkpoint"]
     assert rho_rows, "rho_checkpoint row not found in any ledger"
     assert rho_rows[-1]["actor"] == "rho_checkpoint"
-
-
-def test_attach_signals_flag_off_noop(tmp_path, monkeypatch):
-    monkeypatch.delenv(value_config.ENV_NAME, raising=False)
-    ws = _mk_ws(tmp_path / "ws")
-    ledger = ws / "runs" / "logs" / "kunglao-2026-08-28.jsonl"
-    before = ledger.read_text(encoding="utf-8")
-    decision = {"decision": "DISPATCH"}
-    out = rc.attach_signals(ws, decision)
-    assert "value_signals" not in out
-    assert ledger.read_text(encoding="utf-8") == before  # no shadow emit

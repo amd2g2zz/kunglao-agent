@@ -11,7 +11,7 @@ Format (one row per fact, ` | ` separated):
 
     F<id> | <status> | <claim_id> | <one-line conclusion>
 
-- status ∈ FACT_STATUSES (aligned with references/schema.md fact.status —
+- status ∈ FACT_STATUSES (aligned with references/schemas/schema.md fact.status —
   the same set lint_facts validates).
 - The conclusion column is free text and may itself contain ` | `; parsers
   must join, not split on, trailing separators (update_index parity).
@@ -31,7 +31,7 @@ from pathlib import Path
 
 SEP = " | "
 
-# references/schema.md fact.status — single canonical set (not duplicated
+# references/schemas/schema.md fact.status — single canonical set (not duplicated
 # semantics: the schema doc owns the meaning, this owns the parse set).
 FACT_STATUSES = (
     "PROVEN", "INFERRED", "NEGATIVE", "REFUTED", "OPEN", "DEFERRED", "VERIFIED",

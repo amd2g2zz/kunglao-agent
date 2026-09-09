@@ -53,7 +53,7 @@ kunglao-agent subcommands:
 
   Web environments (`--type web`): labs positioning, docker-default channel,
   camoufox-reverse MCP for browser JS reverse engineering. Quick reference:
-  references/re-library/web-re-quickref.md.
+  references/re-library/web/labs/web-re-quickref.md.
 
   /kunglao-agent:analysis  <workspace>   (alias: analyze)
                            enter the convergence loop on an initialized

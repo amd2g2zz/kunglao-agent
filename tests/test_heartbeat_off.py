@@ -47,12 +47,33 @@ def _make_ws(ws: Path, claims: list[dict] | None = None,
 
 def _closed_oracle(ws: Path) -> Path:
     """#717 dual-criterion fixture: a CLOSED task-oracle.yaml (the teardown
-    guard requires convergence AND a judge-clean oracle)."""
+    guard requires convergence AND a judge-clean oracle).
+    #147: a workspace carrying task-oracle.yaml owes the Phase-0 coverage
+    declaration — convergence now requires it, so the fixture declares
+    generalization: not-applicable (a synthetic teardown task judged on the
+    captured evidence only)."""
     (ws / "task-oracle.yaml").write_text(
         'task_text: "synthetic task"\n'
         "open_items:\n"
         "  - id: OC-1\n"
         "    closed_by: F-001\n",
+        encoding="utf-8",
+    )
+    (ws / "goal-operationalization.yaml").write_text(
+        "schema: goal-operationalization/1\n"
+        "verbatim_ref: task-oracle.yaml\n"
+        "declared_ts: '2026-08-13T00:00:00Z'\n"
+        "generalization: not-applicable\n"
+        "deliverables:\n"
+        "  - synthetic teardown fixture deliverable\n"
+        "acceptance:\n"
+        "  - convergence plus a judge-clean closed oracle (#717)\n"
+        "not_done:\n"
+        "  - an OPEN claim does not count as done\n"
+        "diff_vs_verbatim:\n"
+        "  - synthetic teardown fixture; generalization not-applicable — "
+        "judged on the captured evidence only\n"
+        "probe_cases: []\n",
         encoding="utf-8",
     )
     return ws

@@ -249,14 +249,14 @@ def test_l4_no_flag_deploys_nothing(tmp_path):
     assert r.returncode == RC_OK, r.stderr
     skills_dir = ws / ".claude" / "skills"
     assert not skills_dir.exists() or not any(skills_dir.iterdir()), (
-        "no --skills flag must install nothing")
+        "no --builtin-skills flag must install nothing")
 
 
 def test_l4_skills_flag_deploys_named_dir(tmp_path):
     ws = _mk_ws(tmp_path)
-    r = _run_init(ws, ["--skills", "analysis"])
+    r = _run_init(ws, ["--builtin-skills", "analysis"])
     assert r.returncode == RC_OK, (
-        f"--skills analysis must deploy: {r.stdout}{r.stderr}")
+        f"--builtin-skills analysis must deploy: {r.stdout}{r.stderr}")
     dst = ws / ".claude" / "skills" / "analysis"
     assert dst.is_dir(), "skills/analysis not deployed"
     assert (dst / "SKILL.md").exists(), "deployed skill lost SKILL.md"
@@ -264,9 +264,10 @@ def test_l4_skills_flag_deploys_named_dir(tmp_path):
 
 def test_l4_unknown_skill_fails_fast(tmp_path):
     ws = _mk_ws(tmp_path)
-    r = _run_init(ws, ["--skills", "definitely-not-a-skill"])
+    r = _run_init(ws, ["--builtin-skills", "definitely-not-a-skill"])
     assert r.returncode == RC_ERROR, (
-        f"unknown --skills name must fail RC_ERROR=1: {r.stdout}{r.stderr}")
+        f"unknown --builtin-skills name must fail RC_ERROR=1: "
+        f"{r.stdout}{r.stderr}")
     assert "definitely-not-a-skill" in (r.stdout + r.stderr)
 
 

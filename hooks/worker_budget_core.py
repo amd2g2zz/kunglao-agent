@@ -60,7 +60,7 @@ KNOWN_TOOLS = ('vmr-shell', 'rev-frida', 'malware-framework')
 # launched via vmr-shell. `mcp__frida__spawn` / `mcp__frida__attach` if invoked
 # with a host PID likewise run the sample on the host. Use rev-frida via the
 # VM-resident frida-server (<VM_IP>:1337) instead. See
-# `references/dynamic-re-tool-priority.md` for the launch sequence.
+# `references/orchestration/dynamic-re-tool-priority.md` for the launch sequence.
 HOST_FORBIDDEN_TOOLS = (
     'mcp__x64dbg__start_session',
     'mcp__x64dbg__connect_to_session',
@@ -73,12 +73,16 @@ HOST_FORBIDDEN_TOOLS = (
 
 # ---------- best-first priority advisory (imports scripts/priority_ratio.py) ----------
 # #499: priority_ratio is THE sanctioned next-claim scorer (specs/phase-4/
-# contract.md §1 — the DECIDE ranker, issue #2 VoI proxy). The legacy
-# weighted ranker is deprecated (retirement: #446).
+# contract.md §1 — the DECIDE ranker). #107 rebuilt it: ONE Thompson ranker
+# (sampled case posterior + LAMBDA_DH·ΔH); the explore/exploit dual path and
+# its second ranking face are deleted — there is no other authority to
+# disagree with anymore (#100/#101 die at the root).
 _SKILL_ROOT = Path(__file__).resolve().parent.parent
 ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
-    from priority_ratio import priority_ratio as _ratio_rank, EvidenceView as _EvidenceView
+    from priority_ratio import (priority_ratio as _ratio_rank,
+                                posterior_rng as _posterior_rng,
+                                EvidenceView as _EvidenceView)
     from retract_claim import RETRACTED  # retracted = terminal (#331)
     from status_defs import TERMINAL  # noqa: F401 — re-exported via gates surface
     _PRIORITY_AVAILABLE = True
@@ -177,6 +181,15 @@ def check_convergence_health(paths):
         return False, "convergence STALLED - diagnose before dispatching"
     if r.returncode == 2:
         return False, "convergence SPINNING - STOP dispatching"
+    if r.returncode == 4:
+        # #3: the check crashed — rc=4 is NOT a stall. FAIL OPEN (the same
+        # owner-sanctioned broken-gate posture as the _run_py/resolve
+        # fail-opens above) but never silently: the message is returned as
+        # the hook's reason text and echoed to stderr.
+        msg = ("convergence health check crashed (rc=4) — failing open; "
+               "investigate scripts/convergence_health.py")
+        print(f'[kunglao-agent] {msg}', file=sys.stderr)
+        return True, msg
     return True, ''
 
 
@@ -212,8 +225,12 @@ def check_backtrack_gate(paths):
 
 def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None):
     """Best-first priority audit — v1.9.24 returns (ok, msg, deviated). #499:
-    ranks by the authoritative VoI scorer (priority_ratio.py — specs/phase-4/
-    contract.md §1), NOT the deprecated weighted module.
+    ranks by the authoritative scorer (priority_ratio.py — specs/phase-4/
+    contract.md §1). #107 rebuilt that scorer as ONE Thompson ranker (sampled
+    case posterior + LAMBDA_DH·ΔH, seeded by posterior_rng(ws) — the same
+    seed DECIDE ranks with), so the audit and DECIDE share a single ranking
+    face and an authority_mismatch is structurally impossible (#100/#101 die
+    at the root; the second face is deleted with the phase gate).
 
     Silent for rank-#1 dispatches; ADVISORY when the dispatched claim is not
     the top-ranked dispatchable one. `deviated=True` means the dispatch
@@ -221,9 +238,9 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     dispatch prompt (pre_check rejects without it — anti-spoof: prevents
     "pretend-priority" dispatches that skip the recorded-deviation discipline).
 
-    task_spec_path is kept for signature stability only — the VoI weights are
-    spec-frozen (0.45/0.30/0.25); the old priority_weights/PRIORITY_WEIGHTS
-    override does not apply to the authority scorer.
+    task_spec_path is kept for signature stability only — the ranking is
+    Thompson-seeded from the posterior state; the old priority_weights/
+    PRIORITY_WEIGHTS override does not apply to the authority scorer.
 
     Caller-side filtering is the caller's job (contract §1 — the pure function
     takes no ws): failure-blocked claims (failed attempt, no current
@@ -233,10 +250,7 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     M4 guard): RETRACTED is the one status ratio.is_open misses
     (status_defs.TERMINAL is frozen without it), so it is removed here;
     DEFERRED/STALE/PROVEN/... terminal rows STAY in the list handed to
-    _ratio_rank — is_open already excludes them from candidacy, and their
-    rows feed the novelty derivation (_fact_count_by_category keys terminal
-    facts to claims by id); over-filtering silently drops their categories
-    from novelty counting.
+    _ratio_rank — is_open already excludes them from candidacy.
     """
     if not _PRIORITY_AVAILABLE or not dispatched_cid:
         return (True, '', False)
@@ -244,6 +258,7 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     deps = _load_yaml(deps_path)
     claims = [c for c in (reg.get('claims') or []) if c.get('id')]
     evidence = _EvidenceView()
+    rng = None
     if ws:
         ws_path = Path(ws)
         try:
@@ -254,12 +269,13 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
         except Exception:  # pragma: no cover - the audit stays usable, fail-open
             pass
         evidence = _EvidenceView.from_workspace(ws_path)
+        rng = _posterior_rng(ws_path)
     # RETRACTED is terminal (#331) — ratio.is_open keys off status_defs.TERMINAL
     # (frozen without RETRACTED), so THIS caller removes it. Every other
-    # terminal-status row is kept: is_open already excludes it from candidacy,
-    # and its row feeds the novelty fact counting (M4 guard).
+    # terminal-status row is kept: is_open already excludes it from candidacy.
     claims = [c for c in claims if (c.get('status') or '').upper() != RETRACTED]
-    actions = _ratio_rank(claims, deps, evidence)
+    actions = _ratio_rank(claims, deps, evidence, rng=rng)
+    authority = 'thompson'
     if not actions:
         return (True, '', False)
     top = actions[0]
@@ -268,9 +284,9 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     rank = next((i + 1 for i, a in enumerate(actions) if a.claim_id == dispatched_cid), None)
     if rank is None:
         return (True, f'ADVISORY: {dispatched_cid} not in dispatchable set '
-                      f'(rank #1 = {top.claim_id} score {top.score}); '
+                      f'({authority} rank #1 = {top.claim_id} score {top.score}); '
                       f'blocked by deps/promotion, or already terminal?', False)
-    return (True, f'ADVISORY: dispatched {dispatched_cid} rank #{rank} '
+    return (True, f'ADVISORY [{authority}]: dispatched {dispatched_cid} rank #{rank} '
                   f'(score {actions[rank - 1].score}); rank #1 is {top.claim_id} '
                   f'(score {top.score}) - record a reasoning for the deviation.', True)
 

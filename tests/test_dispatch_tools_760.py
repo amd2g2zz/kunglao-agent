@@ -7,7 +7,7 @@ Sections (added per task, TDD order):
   1. I1 — hooks/dispatch_gate.py tools= mechanical validation against the
      target agent's frontmatter allowedTools + the §1c write-capability floor.
   2. I2 — TRY-ladder boundary clause in agents/kunglao-worker.md +
-     references/operational-mechanics.md (capability mismatch -> ESCALATE).
+     references/orchestration/operational-mechanics.md (capability mismatch -> ESCALATE).
   3. I3 — macos project type: VALID_TYPES x3 layers, WARN-only toolchain face,
      OS_SECTIONS template, guidance-string union sync, Mach-O feature routing.
   4. I4 — agents/web-re-worker.md structure/routing/registration.
@@ -227,7 +227,7 @@ class TestI1FrontmatterHelperUnit:
 # ==========================================================================
 
 WORKER_MD = AGENTS_DIR / "kunglao-worker.md"
-MECHANICS_MD = REPO_ROOT / "references" / "operational-mechanics.md"
+MECHANICS_MD = REPO_ROOT / "references" / "orchestration" / "operational-mechanics.md"
 
 
 class TestI2LadderBoundary:

@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""mission_ledger.py — #823-P1 主线欠账表 + V_m（shadow 形态）。
+"""mission_ledger.py — #823-P1 主线欠账表 + V_m。
 
 欠账表 = primary_questions × 三态（answered/blocked/unattempted），V_m 锚定
 欠账表而非活动量——防傻性质：边角料 claims 全 PROVEN 而与 PQ 零关联时，
-V_m 增量严格为 0（测试锚定，蓝图 §7.2）。本模块 shadow：只计算+落盘，
-不改任何决策路径（decide/priority 行为改动属 P3）。
+V_m 增量严格为 0（测试锚定，蓝图 §7.2）。
+
+Shadow/live 边界（#104 修正，旧文"全程不改任何决策路径"已不准确）；
+#107 再修正：priority_ratio 重建为 Thompson 排序后，本账本的派生量
+（v_norm/d_slope_norm 及旧排序键首位）不再是任何排序输入——V_m 数据面
+（init/value_m/update + cockpit/tuition 消费）保留，独立于排序层。
 
 PQ 解析复用 convergence_check._parse_primary_questions（单一解析合同，
 canonical/legacy/string/mapping 四形状），文本取自原始条目。
@@ -23,6 +27,25 @@ _TERMINAL_STAMPED = {"PROVEN"}
 
 
 from harness_common import utc_now_z as _utc_now  # #863 Family F: single source (was a local def)
+from harness_common import utc_now  # #14 IN_PROGRESS freshness clock (claim_expiry-aligned)
+from status_defs import PARTIAL_STATUSES as _PARTIAL_STATUSES  # #14 single source (#34)
+from status_defs import IN_PROGRESS_STATUSES as _IN_PROGRESS_STATUSES
+
+
+# ---- #14 sub-PQ progress granularity ---------------------------------------
+# Per-claim credit weights — POLICY constants (values are tunable, not law);
+# each carries its one-line rationale.
+CREDIT_TERMINAL = 1.0    # PROVEN/VERIFIED settled with stamped evidence — full credit.
+CREDIT_PARTIAL = 0.5     # PARTIALLY-VERIFIED: evidence, no independent verification — half.
+CREDIT_ACTIVE = 0.25     # IN_PROGRESS with recent activity: work in flight — quarter.
+CREDIT_OPEN = 0.0        # OPEN / untouched in-flight: no movement — credit nothing.
+ACTIVE_FRESH_HOURS = 24  # "recent" = claim_expiry stale window; past it, in-flight work is dead.
+DAMP_HARD = 0.75         # hard tier: damp 25% — an open PQ on hard hides real remaining work.
+DAMP_MAX = 0.5           # max tier: strongest damping — max open PQs overstate the most.
+DAMP_NONE = 1.0          # easy/medium/unknown/missing: no damping (absence ≠ difficulty, #15).
+# settlement-family terminals; others stay 0.0 (PROVEN-only settlement, #69).
+_CREDIT_FULL = frozenset({"PROVEN", "VERIFIED"})
+_BAR_WIDTH = 10          # progress_report --progress bar cells per PQ row.
 
 
 def _parse_pqs(task_spec: dict) -> list[dict]:
@@ -153,26 +176,270 @@ def mark_blocked(ws, pq_id: str, blocker: str, wake: str) -> dict:
     return led
 
 
-def value_m(ws) -> dict:
-    """V_m + A_t。history 只由此函数追加（增量结算即时入账）。"""
+def _claim_last_activity(claim: dict):
+    """Single source: claim_expiry.last_activity_for (same field order); lazy
+    import keeps mission_ledger importable without the telemetry chain."""
+    from claim_expiry import last_activity_for
+    return last_activity_for(claim or {})
+
+
+def claim_credit(claim: dict, now=None) -> float:
+    """#14 per-claim credit ladder (pure; constants above carry the rationale).
+
+    PROVEN/VERIFIED → 1.0; PARTIALLY-VERIFIED family → 0.5; IN_PROGRESS with
+    recent (or unknown-age) worker activity → 0.25; everything else → 0.0.
+    Unknown activity counts as fresh (claim_expiry precedent: unknown age is
+    never staleness); other terminal statuses credit 0.0 because settlement
+    authority is PROVEN-only (PR #69) — understates rather than overstates.
+    """
+    st = ((claim or {}).get("status") or "").upper()
+    if st in _CREDIT_FULL:
+        return CREDIT_TERMINAL
+    if st in _PARTIAL_STATUSES:
+        return CREDIT_PARTIAL
+    if st in _IN_PROGRESS_STATUSES:
+        last = _claim_last_activity(claim)
+        if last is None:
+            return CREDIT_ACTIVE
+        ref = now or utc_now()
+        age_h = (ref - last).total_seconds() / 3600.0
+        if age_h <= ACTIVE_FRESH_HOURS:
+            return CREDIT_ACTIVE
+    return CREDIT_OPEN
+
+
+def _damping_for(tier: str | None) -> float:
+    """#14 difficulty damping: only hard/max damp; missing/unknown → none."""
+    return {"hard": DAMP_HARD, "max": DAMP_MAX}.get(
+        (tier or "").lower(), DAMP_NONE)
+
+
+def pq_progress(pq: dict, claims: list, now=None,
+                tier: str | None = None) -> dict:
+    """#14 sub-PQ progress (pure, no IO).
+
+    progress = max(1.0 if answered else 0.0, credit / max(1, claim_count)
+    × damping). Settlement (state answered, PR #69) stays authoritative at
+    exactly 1.0 and is never damped; unresolved PQs earn fractional credit
+    from their linked claims (answers_question == pq id) — edge claims with
+    no link stay out (the #823 anti-stupid rule, extended). Damping applies
+    ONLY to the unresolved fraction on hard/max tiers so remaining work is
+    understated, not overstated; missing difficulty → undamped.
+    """
+    answered = pq.get("state") == "answered"
+    linked = [c for c in (claims or [])
+              if str(c.get("answers_question") or "") == str(pq.get("id"))]
+    credit = sum(claim_credit(c, now) for c in linked)
+    frac = credit / max(1, len(linked))
+    damping = DAMP_NONE if answered else _damping_for(tier)
+    progress = min(max(1.0 if answered else 0.0, frac * damping), 1.0)
+    return {"progress": round(progress, 6), "credit": round(credit, 6),
+            "claim_count": len(linked), "damping": damping,
+            "damped": damping != DAMP_NONE}
+
+
+def read_difficulty_tier(ws) -> str | None:
+    """Difficulty tier for #14 damping: evidence/difficulty.json first, then
+    the ``difficulty:`` key difficulty_calibration.mount() copies into
+    task_spec.yaml (#16 open-loop contract, both mounts canonical). Missing,
+    unreadable, or non-mapping → None (no damping; absence is never scored
+    as difficulty — #15 gap rule)."""
+    ws = Path(ws)
+    doc = None
+    p = ws / "evidence" / "difficulty.json"
+    if p.exists():
+        try:
+            doc = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            doc = None
+    if not isinstance(doc, dict):
+        try:
+            spec = (yaml.safe_load(
+                (ws / "task_spec.yaml").read_text(encoding="utf-8")) or {})
+        except (OSError, yaml.YAMLError):
+            return None
+        doc = spec.get("difficulty") if isinstance(spec, dict) else None
+    tier = doc.get("tier") if isinstance(doc, dict) else None
+    return str(tier) if tier else None
+
+
+def progress_face(ws, now=None) -> dict:
+    """#14 read-only progress face (no history append, no ledger write).
+
+    {"progress_fraction": Σw·progress/Σw ∈ [0,1] (Σw<=0 → 0.0),
+     "per_pq": [{id, state, progress, credit, claim_count, damping,
+                 damped, weight}]}. Never raises on a missing claim register
+    or difficulty evidence — those degrade to zero-credit / undamped.
+    """
+    led = load(ws)
+    pqs = led.get("mission", {}).get("pqs", [])
+    reg = Path(ws) / "claim-register.yaml"
+    claims = []
+    if reg.exists():
+        try:
+            claims = ((yaml.safe_load(reg.read_text(encoding="utf-8"))
+                       or {}).get("claims")) or []
+        except yaml.YAMLError:
+            claims = []
+    tier = read_difficulty_tier(ws)
+    rows = []
+    total_w = 0.0
+    weighted = 0.0
+    for p in pqs:
+        w = float(p.get("weight", 1.0))
+        row = pq_progress(p, claims, now=now, tier=tier)
+        rows.append(dict(id=p.get("id"), state=p.get("state"),
+                         weight=w, **row))
+        total_w += w
+        weighted += w * row["progress"]
+    return {"progress_fraction":
+            round(weighted / total_w, 6) if total_w > 0 else 0.0,
+            "per_pq": rows}
+
+
+def _oracle_case_links(ws) -> list[tuple[str, str]]:
+    """#133: (case_id, target_pq) pairs over the workspace's ARMED oracle
+    case set. Single source: priority_ratio._load_oracle_cases — the SAME
+    reader the #107 Thompson case face consumes, so the value gate and the
+    ranker can never disagree about which cases belong to a PQ. Fail-open
+    contract inherited (no dir -> []; a broken case doc is skipped, not
+    signal)."""
+    from priority_ratio import _load_oracle_cases
+    return _load_oracle_cases(Path(ws))
+
+
+def _oracle_status_map(ws) -> dict[str, str] | None:
+    """#133: case_id -> runner status (pass|fail|pending) off the
+    oracle-status/1 verdict file, via the convergence DRAIN probe's own
+    reader (one schema face — no drift with the acceptance gate). None =
+    the file is PRESENT but unreadable: fail-closed, a corrupt verdict
+    never grants green (the contradiction-gate posture — unreadable
+    acceptance evidence cannot silently re-enable the value it checks)."""
+    from convergence_check import _load_oracle_status
+    face = _load_oracle_status(Path(ws))
+    if face.get("error"):
+        return None
+    return {c["id"]: c["status"] for c in face["cases"]}
+
+
+def oracle_credit_gate(pq_id, case_links: list[tuple[str, str]],
+                       status_map: dict[str, str] | None) -> bool | None:
+    """#133 coverage-credit gate (pure): may an answered PQ take full credit?
+
+    True  = every armed case bound to this PQ is green (runner pass).
+    False = armed but at least one case is NOT green — fail, pending (any
+            instrumentation state; "unknown" is never "pass", #108 A), a
+            case added after the last runner run, or an unreadable verdict
+            file. The PQ is "claimed but unproven", priced at the
+            blocked-tier credit.
+    None  = no armed case bound to this PQ — nothing to reconcile against
+            (Phase 0/1 tasks): keep current behavior.
+    """
+    armed = [cid for cid, tpq in case_links if tpq == str(pq_id)]
+    if not armed:
+        return None
+    if status_map is None:
+        return False
+    return all(status_map.get(cid) == "pass" for cid in armed)
+
+
+def value_m(ws, now=None) -> dict:
+    """V_m + A_t。history 只由此函数追加（增量结算即时入账）。
+
+    #10 归一化（additive，raw 字段原样保留）：
+      - v_norm = v_m / Σweight ∈ [0,1]（欠账表条目自带 weight，缺省 1.0；
+        未加权工作区 Σweight == len(pqs)；Σweight <= 0 → 0.0，不除零）。
+      - a_t_norm = v_norm 的每轮增量（上一 history 点的 v_norm 为基线；
+        legacy 点缺 v_norm 时按 prev_v_m/Σweight 推导）。
+    单位语义：密度按结算轮计——一次 value_m() 调用 = 一条 history 点 =
+    一轮；全程无 wall-clock 参与（墙钟 ETA 由 rho_checkpoint.eta_min /
+    statusline tick 面单独承载，不与 V_m 混用）。
+    #14 sub-PQ 进度（additive，raw 字段原样保留）：新增顶层
+    progress_fraction（Σw·progress/Σw）与 per_pq_progress 列表
+    （每行 id/state/weight/progress/credit/claim_count/damping/damped）。
+    per_pq 行保持 #10 原样投影（byte-identical 守卫在
+    test_vm_normalization_10）——进度绝不写进 raw 面；V_m/A_t 数学原样
+    不动——欠账结算仍是唯一权威；``now`` 仅参与 IN_PROGRESS 新鲜度
+    分类，不入 V_m 单位。
+    #133 value-currency reconciliation（additive，raw 字段原样保留）：
+    v_m 的 PLAN 货币与 oracle 红/绿的 ACCEPTANCE 事实对账——answered PQ
+    的全额 coverage credit 需其 armed oracle cases 全绿（runner status
+    face: runs/oracle-status.json, oracle-status/1）。全绿 → 全额
+    w*coverage（原样）；任一 armed case 非绿（fail / pending / 未判 /
+    verdict 文件不可读——fail-closed）→ 阻断档信贷 β*w（"claimed but
+    unproven"）。无 armed case 的 PQ 保持原行为（Phase 0/1：无从对账）。
+    PQ→case 归链复用 #107 Thompson case face 的同一 reader（cases/
+    target_pq），价值闸门与排序层永不各自为政。新增对齐投影
+    v_oracle/v_oracle_norm：只给 oracle-green PQ（answered 且全绿）计
+    credit——v_norm 高 + v_oracle 低 = 叙事通胀的常设暴露面（#129 消费）。
+    history 行 ADDITIVE 携带 v_oracle/v_oracle_norm；raw v_m 数学、raw
+    返回键、raw history 字段全部原样。
+    """
     led = load(ws)
     beta = float(led.get("mission", {}).get("beta", BETA))
     pqs = led.get("mission", {}).get("pqs", [])
+    tier = read_difficulty_tier(ws)
+    reg = Path(ws) / "claim-register.yaml"
+    claims = []
+    if reg.exists():
+        try:
+            claims = ((yaml.safe_load(reg.read_text(encoding="utf-8"))
+                       or {}).get("claims")) or []
+        except yaml.YAMLError:
+            claims = []
     v_m = 0.0
+    v_oracle = 0.0
+    total_w = 0.0
+    weighted_progress = 0.0
+    pq_rows = []
     per_pq = {}
+    answered_ids = [str(p.get("id")) for p in pqs
+                    if p.get("state") == "answered"]
+    # #133: the acceptance face is read only when there is something to
+    # reconcile — no answered PQ (or no armed case set) touches oracle IO.
+    case_links = _oracle_case_links(ws) if answered_ids else []
+    status_map = (_oracle_status_map(ws)
+                  if (case_links and answered_ids) else {})
     for p in pqs:
         w = float(p.get("weight", 1.0))
+        total_w += w
         cov = float(p.get("coverage", 0.0))
         st = p.get("state")
-        contrib = w * cov if st == "answered" else (
-            beta * w if st == "blocked" else 0.0)
+        oracle_green = None
+        if st == "answered":
+            oracle_green = oracle_credit_gate(p.get("id"), case_links,
+                                              status_map)
+            # None (no armed case) keeps the full credit; False (armed,
+            # not all green) damps to the blocked-tier credit.
+            contrib = w * cov if oracle_green is not False else beta * w
+        else:
+            contrib = beta * w if st == "blocked" else 0.0
         v_m += contrib
+        if oracle_green:
+            v_oracle += w * cov
+        row = pq_progress(p, claims, now=now, tier=tier)
+        weighted_progress += w * row["progress"]
+        pq_rows.append(dict(id=p.get("id"), state=st, weight=w, **row))
         per_pq[str(p.get("id"))] = {"state": st,
                                     "contrib": round(contrib, 6)}
+    progress_fraction = (round(weighted_progress / total_w, 6)
+                         if total_w > 0 else 0.0)
+    v_norm = max(0.0, min(1.0, v_m / total_w)) if total_w > 0 else 0.0
+    # #133 aligned projection: only oracle-green PQs carry acceptance value.
+    v_oracle_norm = (max(0.0, min(1.0, v_oracle / total_w))
+                     if total_w > 0 else 0.0)
     hist = led.get("mission", {}).get("history") or []
     prev = float(hist[-1].get("v_m", 0.0)) if hist else 0.0
+    if hist and "v_norm" in hist[-1]:
+        prev_norm = float(hist[-1]["v_norm"])
+    else:
+        prev_norm = (prev / total_w) if total_w > 0 else 0.0
     a_t = v_m - prev
-    hist.append({"ts": _utc_now(), "v_m": round(v_m, 6)})
+    a_t_norm = v_norm - prev_norm
+    hist.append({"ts": _utc_now(), "v_m": round(v_m, 6),
+                 "v_norm": round(v_norm, 6),
+                 "v_oracle": round(v_oracle, 6),
+                 "v_oracle_norm": round(v_oracle_norm, 6)})
     led["mission"]["history"] = hist
     _save(ws, led)
     n_answered = sum(1 for p in pqs if p.get("state") == "answered")
@@ -180,6 +447,14 @@ def value_m(ws) -> dict:
     n_unattempted = sum(1 for p in pqs if p.get("state") == "unattempted"
                         )
     return {"v_m": round(v_m, 6), "prev_v_m": prev, "a_t": round(a_t, 6),
+            "v_norm": round(v_norm, 6), "a_t_norm": round(a_t_norm, 6),
+            "total_weight": round(total_w, 6),
+            # #133 additive: acceptance currency + its normalized face —
+            # v_norm - v_oracle_norm is the standing inflation gap.
+            "v_oracle": round(v_oracle, 6),
+            "v_oracle_norm": round(v_oracle_norm, 6),
+            "progress_fraction": progress_fraction,
+            "per_pq_progress": pq_rows,
             "per_pq": per_pq, "answered": n_answered,
             "blocked": n_blocked, "unattempted": n_unattempted}
 
@@ -195,6 +470,14 @@ def emit_snapshot(ws, epoch: int | None = None, arm: str | None = None,
             "v_m": val["v_m"], "prev_v_m": val["prev_v_m"],
             "a_t": val["a_t"], "answered": val["answered"],
             "blocked": val["blocked"], "unattempted": val["unattempted"],
+            # #10 additive: normalized value + per-round normalized delta
+            "v_norm": val["v_norm"], "a_t_norm": val["a_t_norm"],
+            "total_weight": val["total_weight"],
+            # #133 additive: acceptance currency + the inflation gap face
+            "v_oracle": val["v_oracle"],
+            "v_oracle_norm": val["v_oracle_norm"],
+            # #14 additive: sub-PQ progress aggregate (see value_m)
+            "progress_fraction": val["progress_fraction"],
         }, ensure_ascii=False)
         kunglao_log.emit(ws, "mission_ledger", "mission_snapshot",
                          detail=detail, arm=arm, epoch=epoch,

@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "kunglao-agent/schemas/decide-output.json",
   "title": "kunglao-decide output (M1.3 frozen)",
-  "description": "M1 DECIDE output contract (frozen, worker_pulse parses it). Source: docs/design/archive/module-design.md M1.3 (L129-139).",
+  "description": "M1 DECIDE output contract (frozen, worker_pulse parses it). Source: docs/design/archive/module-design.md M1.3 (L129-139). #107: explore_mode deleted with the explore/exploit dual path — ONE Thompson ranking path (priority_ratio.py, posterior-seeded).",
   "type": "object",
   "required": [
     "decision",
@@ -12,13 +12,19 @@
     "failure_blocked",
     "stale",
     "drifts",
-    "explore_mode",
     "selfcheck"
   ],
   "properties": {
     "decision": {
       "type": "string",
-      "enum": ["DISPATCH", "DISPATCH_VERIFIER", "SATURATED", "BLOCKED", "CONVERGED", "INVALID"],
+      "enum": [
+        "DISPATCH",
+        "DISPATCH_VERIFIER",
+        "SATURATED",
+        "BLOCKED",
+        "CONVERGED",
+        "INVALID"
+      ],
       "description": "INVALID (#371): non-empty malformed task_spec primary_questions (issue #77 fail-closed path) — a normal convergence_check return copied verbatim; never dispatches against an undefined convergence target."
     },
     "exit_code": {
@@ -31,62 +37,106 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["claim_id", "action", "score", "skill"],
+        "required": [
+          "claim_id",
+          "action",
+          "score",
+          "skill"
+        ],
         "properties": {
-          "claim_id": { "type": "string" },
-          "action": { "type": "string", "description": "action type = method-graph.yaml node id" },
-          "score": { "type": "number" },
-          "skill": { "type": ["string", "null"], "description": "skill selected by method_router; null when routing escalates" }
+          "claim_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "description": "action type = method-graph.yaml node id"
+          },
+          "score": {
+            "type": "number",
+            "description": "#107 Thompson composite: sampled case posterior + LAMBDA_DH * dH(PQ categorical), x worth"
+          },
+          "skill": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "skill selected by method_router; null when routing escalates"
+          }
         },
         "additionalProperties": true
       }
     },
     "blocked": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "claim ids that are open and blocked"
     },
     "failure_blocked": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "claim ids with a failed attempt and no current failure_analysis"
     },
     "stale": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "stuck worker names (>20min without a status update)"
     },
     "drifts": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "plan/state drift (not computed in phase 4, always [] — see contract.md contract blank)"
-    },
-    "explore_mode": {
-      "type": "boolean",
-      "description": "true = verified_fact_count < EXPLORE_THRESHOLD (5); top_actions spread T1 by cheapness"
     },
     "selfcheck": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "behavior-contract scan violations (ask-back/self-cap); [] without --scan-text"
     },
     "escalations": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["claim_id", "action", "reason"],
+        "required": [
+          "claim_id",
+          "action",
+          "reason"
+        ],
         "properties": {
-          "claim_id": { "type": "string" },
-          "action": { "type": "string" },
-          "reason": { "type": "string" }
+          "claim_id": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       },
       "description": "method_router graph edge escalates (additional field, not frozen-required)"
     },
-    "open_count": { "type": "integer" },
-    "partial_count": { "type": "integer" },
-    "free_slots": { "type": "integer" },
-    "error": { "type": "string", "description": "error description for the conservative BLOCKED on exceptions (additional field)" }
+    "open_count": {
+      "type": "integer"
+    },
+    "partial_count": {
+      "type": "integer"
+    },
+    "free_slots": {
+      "type": "integer"
+    },
+    "error": {
+      "type": "string",
+      "description": "error description for the conservative BLOCKED on exceptions (additional field)"
+    }
   },
   "additionalProperties": true
 }

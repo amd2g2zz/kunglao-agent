@@ -18,7 +18,9 @@ from _hooks_path import load_module_by_path  # #863 Family B: loader delegation 
 # A 5-min cron tick should refresh .heartbeat.json continuously; >35 min
 # stale (5-min interval + jitter margin) means monitoring is NOT running.
 # #597: value single-sourced in liveness_policy (THE liveness-minutes source).
-from liveness_policy import STALE_MINUTES, TICK_INTERVAL_DEFAULT_MIN  # noqa: E402
+from liveness_policy import (CONTINUITY_WINDOW_HOURS,  # noqa: E402  (#4 window)
+                             CONTINUITY_WINDOW_TICKS,
+                             STALE_MINUTES, TICK_INTERVAL_DEFAULT_MIN)
 from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
 
 # #461: the cron-registration marker. --heartbeat-on alone proves only that
@@ -161,15 +163,27 @@ def _parse_hb_ts(value):
 def evaluate_tick_continuity(state: dict, *,
                              now: datetime | None = None,
                              stale_minutes: int = STALE_MINUTES,
-                             log_path=None) -> tuple[bool, str]:
+                             log_path=None,
+                             window_ticks: int = CONTINUITY_WINDOW_TICKS,
+                             window_hours: int = CONTINUITY_WINDOW_HOURS
+                             ) -> tuple[bool, str]:
     """#754 E2: THE liveness verdict shared by gate / check / verify.
 
     Alive requires ALL of:
       1. tick_history carries >= 2 parseable ticks (a lone registration tick,
          however fresh, is the #754 blind spot);
-      2. every adjacent gap <= 2 * interval_min (interval read from the file,
-         default 5min — one missed tick is jitter, two is a dead cron);
+      2. every adjacent gap INSIDE THE WINDOW <= 2 * interval_min (interval
+         read from the file, default 5min — one missed tick is jitter, two
+         is a dead cron);
       3. the newest tick <= stale_minutes old (the pre-existing 35-min line).
+
+    #4 sliding window: the verdict reads only RECENT ticks — among the last
+    window_ticks OR within the last window_hours (defaults in liveness_policy,
+    sized to the 5-min cadence). History outside the window is NOT deleted —
+    the durable sidecar stays append-only — it just stops participating, so
+    one mid-life stall (laptop asleep over a weekend) ages out instead of
+    re-rejecting the workspace forever. Aged-out stalls are counted and
+    surfaced in the detail text: no silent history rewriting.
 
     STRICT legacy handling (adjudicated): files WITHOUT tick_history REJECT —
     that format-shape IS the incident file, and a compatibility pass would
@@ -227,7 +241,23 @@ def evaluate_tick_continuity(state: dict, *,
     except (TypeError, ValueError, OverflowError):
         interval = float(TICK_INTERVAL_DEFAULT_MIN)
     max_gap = timedelta(minutes=2 * interval)
-    for prev, nxt in zip(stamps, stamps[1:]):
+    # #4: sliding window over the sorted history — union of "recent N ticks"
+    # and "recent M hours". The tick-count bound caps the scan for slow
+    # cadences; the age bound guarantees any stall ages out within ~a day.
+    n = max(1, int(window_ticks))
+    cutoff = moment - timedelta(hours=max(0, int(window_hours)))
+    window = [t for i, t in enumerate(stamps)
+              if i >= len(stamps) - n or t >= cutoff]
+    in_window = set(window)
+    # Stalls (oversized adjacent gaps) that no longer participate: the pair
+    # is not fully inside the window, so the gap loop below never sees it.
+    # Counted here so the verdict can surface them — no silent rewriting.
+    aged_out = sum(1 for prev, nxt in zip(stamps, stamps[1:])
+                   if nxt - prev > max_gap
+                   and (prev not in in_window or nxt not in in_window))
+    aged_note = (f"; window: last {len(window)} ticks (older history excluded: "
+                 f"{aged_out} stall(s) aged out)") if aged_out else ""
+    for prev, nxt in zip(window, window[1:]):
         gap = nxt - prev
         if gap > max_gap:
             return (False, durable_prefix +
@@ -235,16 +265,17 @@ def evaluate_tick_continuity(state: dict, *,
                     f"> {int(2 * interval)} min = 2x{interval:g}m): "
                     f"{prev.strftime('%Y-%m-%dT%H:%M:%SZ')} -> "
                     f"{nxt.strftime('%Y-%m-%dT%H:%M:%SZ')} - the cron stalled mid-life; re-arm with "
-                    "heartbeat_tick.py <ws> or re-register the /loop")
+                    "heartbeat_tick.py <ws> or re-register the /loop" + aged_note)
     age = moment - stamps[-1]
     if age > timedelta(minutes=stale_minutes):
         return (False, durable_prefix +
                 f"heartbeat STALE (last tick {int(age.total_seconds()//60)} min ago > "
-                f"{stale_minutes}) - continuous-tick history present but the loop died")
+                f"{stale_minutes}) - continuous-tick history present but the loop died"
+                + aged_note)
     return (True, durable_prefix +
-            f"continuous ticks OK ({len(stamps)} in window, latest "
+            f"continuous ticks OK ({len(window)} in window, latest "
             f"{stamps[-1].strftime('%Y-%m-%dT%H:%M:%SZ')}, cadence <= "
-            f"{int(2 * interval)}m)")
+            f"{int(2 * interval)}m)" + aged_note)
 
 
 from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)

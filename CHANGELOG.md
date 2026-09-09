@@ -6,6 +6,59 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
+## [0.1.5] - 2026-09-10
+
+### Added- **Oracle-grade task intake (#191)**: init elicits `goal_verbatim` /
+  `success_criterion` / `verification_method` as first-class task_spec
+  fields; analysis entry AND resume refuse (rc=7) while anchors are
+  missing; upgrade backfills via structured interview (no deadlock).
+- **I/O equivalence oracle (#172)**: reproduction claims require
+  controlled-variable replay evidence; missing or non-equivalent evidence
+  cannot converge (fail-closed PROVEN admission).
+- **Declared oracle coverage gate (#147)**: convergence requires the
+  declared oracle coverage bit — closing the case-abstention fast-fake
+  hole; declared fast path for not-applicable tasks.
+- **Outcome forensics (#146)**: case settlements record HOW they were
+  won/lost; failure-analysis arming fixed; case-abandonment protocol.
+- **Win-rate curve aggregator (#156)**: rolling success-rate over the
+  settlement stream — belief-side counting curve.
+- **Algorithm event log (#157)**: rank_feeds / posterior_update /
+  observation events through the unified log — TS, posteriors and reward
+  are auditable.
+- **Worker-entry lookup constitution (#145)**: front-loaded reference /
+  tool / script lookup block and compressed rule slices in agent files.
+- **Typed asset-tier retrieval (#162)**: tools / templates / references
+  typed recall, windowed-stalker template, echarts de-vendored.
+- **Intent envelope and scoring wave (#128)**:
+  envelope normalization, candidate scoring and coverage generalization
+  bit landed across the loop.
+- **Difficulty wave (#142)**: difficulty shaping, oracle
+  arming and case-difficulty items through the settlement pipeline.
+
+### Changed
+- **References tree governance (#166)**: two-population audit, three-level
+  re-library, mapping-driven generators, generated two-tier indexes, noise
+  cleanup (G0–G4).
+- **scripts/ governance (#189)**: six merge clusters consolidated, orphan
+  scripts removed, shared libs extracted (`scripts/_boot.py`,
+  `scripts/report_render.py`), tool installation unified under the
+  `toolchain_install` registry (unidbg as first registered plan).
+- **Distillation waves**: IDA-scripting methodology (#163), debuggability
+  enablement ladder (#164), Android-RE course aggregate with methodology
+  attribution (#165), anti-bot/unidbg queue aggregation (#176), IDA lane
+  surface — py_eval session semantics + queue-serial contract (#179),
+  task-writing taught as checkable oracle (#170).
+
+### Fixed
+- **CI acceleration (#184)**: xdist parallelization with tier markers,
+  subprocess elimination, release-check split into four parallel legs
+  (merge gate = all four green, tier census pins the partition).
+
+### Known limitations
+- Replay evidence does not yet bind to a medium (#199): simulator-source
+  replay passes are hypothesis-grade support only; device-medium binding
+  lands in v0.1.6.
+
 ## [0.1.4] - 2026-09-03
 
 ### Added
@@ -254,7 +307,7 @@ release (see the mapping table at the end).
   fact_id + score + top_dimension. `scripts/lint_facts.py` schema bump:
   `VALID_BOUNDARY_TYPE` + `EMPTY_GATE_TYPES` add `'anomaly'`; `ACTIVE_SCHEMA_REV`
   1 → 2 (additive per design.md D3); template + drift test bumped in lockstep.
-- references/anomaly-baseline.md: baseline corpus sourcing (RE-library refs +
+- references/orchestration/anomaly-baseline.md: baseline corpus sourcing (RE-library refs +
   prior samples + operator `baseline_corpus:` config), fail-open semantics
   per design.md D5, operator tuning knobs (`anomaly_threshold` in
   `analysis_state.txt`), maker-checker boundary (design.md D8 — anomaly is
@@ -434,7 +487,7 @@ release (see the mapping table at the end).
   carries the ranked provider list + constraints (optional key, #527
   backward compat) — the worker holds in-flight degradation authority.
 - taint seeds + wiring (#692 WP5):
-  references/re-library/android-fingerprint-seeds.yaml (extensible
+  references/re-library/android/emulation/android-fingerprint-seeds.yaml (extensible
   fingerprint-API seed table, yara-rules lifecycle);
   hypothesis_seeder.seed_taint_candidates + anomaly_detector.observe_taint;
   EMIT_ACTIONS "taint_candidates".
@@ -513,7 +566,7 @@ release (see the mapping table at the end).
   section build is fail-open (a hypotheses-layer crash degrades the
   digest to six sections, it never blocks cold start)
 - cold start is now the 9-file read: `runs/digest.md` joins
-  references/cold-start-contract.md as file 9, read via the
+  references/contracts/cold-start-contract.md as file 9, read via the
   kunglao-resume read-only face
 - state_anchor `hyps=` segment (hooks/state_anchor.py): structured
   open-hypothesis pointers inside the existing 500-char anti-narrative

@@ -1,6 +1,18 @@
 # task_spec.yaml — kunglao-agent input contract (Phase 0.4 fills this).
 # See DESIGN §2. The user's requirements drive the orchestrator's value function.
 
+# Oracle anchors — REQUIRED. The init interview collects all three after
+# the needs-first questions; while any is blank, analysis entry refuses
+# (`kunglao analysis`, exit 7). For help turning a folk ask into these
+# answers, see the README section "How to state the task".
+goal_verbatim: ""            # the user's goal, VERBATIM — never paraphrased
+success_criterion: ""        # what counts as done (the completion anchor)
+verification_method: ""      # reproduction | replay-evidence | static | manual
+                             #   reproduction / replay-evidence arm the
+                             #   controlled-comparison oracle for every
+                             #   primary question (byte-matched pairs
+                             #   required); static / manual do not
+
 primary_questions:            # MUST answer — convergence hard conditions C0/C0b
   - id: q1
     q: "<the question, e.g. does the sample belong to the Vidar family?>"

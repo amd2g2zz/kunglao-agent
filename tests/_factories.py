@@ -129,6 +129,23 @@ def seed_bins(ws: Path, *, name: str = "sample.exe",
     return target
 
 
+def seed_oracle_anchors(ws: Path, *, goal: str = "legacy goal",
+                        criterion: str = "legacy criterion",
+                        method: str = "manual") -> Path:
+    """Write an anchor-complete task_spec.yaml (the three REQUIRED intake
+    answers). For tests that pin semantics OTHER than the anchor
+    interview: the analysis-entry and resume gates refuse a workspace
+    whose contract lacks these, so fixture workspaces that exercise the
+    loop machinery carry a completed interview."""
+    path = ws / "task_spec.yaml"
+    if not path.exists():
+        path.write_text(
+            f"goal_verbatim: {goal}\n"
+            f"success_criterion: {criterion}\n"
+            f"verification_method: {method}\n", encoding="utf-8")
+    return path
+
+
 def write_worker_status(ws: Path, name: str, status: str,
                         age_min: float | None = None) -> Path:
     """#915 item 8: the ONE runs/worker-status-<name>.md seeding shape.
@@ -148,3 +165,42 @@ def write_worker_status(ws: Path, name: str, status: str,
         old = time.time() - age_min * 60
         os.utime(p, (old, old))
     return p
+
+
+def seed_difficulty(ws: Path, tier: str = "easy") -> Path:
+    """#16: seed evidence/difficulty.json with a fixed tier (#15 feed shape).
+
+    Promotion fixtures pinning LEGACY single-verification behavior seed
+    tier="easy" — post-#16 a feed-less workspace fails closed to hard
+    (two DISTINCT verifier records required for PROVEN)."""
+    doc = {"schema": "difficulty-calibration/1", "tier": tier, "score": 0.0,
+           "dominant_factor": "evidence_gap", "factors": {}, "families": {},
+           "coverage": {"die": False, "apkid": False},
+           "notes": ["test seed"], "generated_at": "2026-09-05T00:00:00Z"}
+    ev = ws / "evidence"
+    ev.mkdir(parents=True, exist_ok=True)
+    path = ev / "difficulty.json"
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    return path
+
+
+def seed_verifier_dispatch(ws: Path, claim_id: str = "C-001") -> Path:
+    """#57 gate 5: seed the verifier-dispatch evidence for one claim.
+
+    Writes the kunglao-redteam write contract — the DIFF at
+    runs/verify-redteam-<claim>.md whose text names the claim — i.e. the
+    on-disk proof that a verifier WAS dispatched. The PROVEN happy-path
+    fixtures (blind_gate / contradiction / inference / fail-closed suites)
+    call this before promoting, because the verifier-dispatch gate blocks a
+    claim that reaches PROVEN-candidate with no dispatched verifier.
+    """
+    runs = ws / "runs"
+    runs.mkdir(parents=True, exist_ok=True)
+    diff = runs / f"verify-redteam-{claim_id}.md"
+    diff.write_text(
+        f"# Red-team verification: {claim_id}\n\n"
+        "## My independent derivation\n"
+        "recomputed from the raw artifact; static anchors hold.\n\n"
+        "RED-TEAM VERDICT: CONFIRMED\n",
+        encoding="utf-8")
+    return diff

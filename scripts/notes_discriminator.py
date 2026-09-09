@@ -68,24 +68,29 @@ def check(notes_dir, facts_dir, max_overlap: float = DEFAULT_MAX_OVERLAP) -> dic
 
     ids = fact_ids(fact_files)
     corpus: set = set()
+    # #103: 读文件统一 errors="replace"——一个非法 UTF-8 字节降级为内容
+    # 继续判定，不许升格成 UnicodeDecodeError（否则 completion_gate 的
+    # fail-open 笼子会把它吞成 PASS，R1/R2/R3 全部失效）。
     for f in fact_files:
-        corpus |= _words(_body(f.read_text(encoding="utf-8")))
+        corpus |= _words(_body(f.read_text(encoding="utf-8",
+                                          errors="replace")))
 
     checked = 0
     for n in note_files:
-        body = _body(n.read_text(encoding="utf-8"))
+        body = _body(n.read_text(encoding="utf-8", errors="replace"))  # #103
         checked += 1
         words = _words(body)
-        if not words:
-            continue
-        # R1 复制即拒
-        overlap = len(words & corpus) / len(words)
-        if overlap > max_overlap:
-            violations.append(
-                f"{n.name}: copied fact body (word-set overlap "
-                f"{overlap:.2f} > max_overlap {max_overlap:.2f})")
-            continue
-        # R2/R3 引用检查
+        if words:
+            # R1 复制即拒——只有 R1 依赖词集。#103: _WORD_RE 只收 [a-z0-9]，
+            # 纯中文 note（本仓库工作语言！）词集为空；空词集仅跳过 R1，
+            # 决不能连 R2/R3 引用检查一起跳过——fact-id 正则与语言无关。
+            overlap = len(words & corpus) / len(words)
+            if overlap > max_overlap:
+                violations.append(
+                    f"{n.name}: copied fact body (word-set overlap "
+                    f"{overlap:.2f} > max_overlap {max_overlap:.2f})")
+                continue
+        # R2/R3 引用检查（语言无关，空词集照查）
         refs = {t.replace("-", "").upper() for t in _FACT_REF_RE.findall(body)}
         if not refs:
             violations.append(

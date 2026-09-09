@@ -46,9 +46,10 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
-from _path_hygiene import ensure_on_path, ensure_scripts_path  # #671 authority
+from _path_hygiene import ensure_on_path, ensure_scripts_path, load_hooks_lib  # noqa: E402  # #671 authority
 
 SKILL_DIR = Path(__file__).resolve().parent.parent
 # #671: module-level membership via the hygiene authority. Order-faithful to
@@ -61,6 +62,109 @@ ensure_on_path(SKILL_DIR / "hooks")
 
 RC_ALLOW = 0
 RC_BLOCK = 2
+
+# ---------- #57 gate 4: status-first (worker's first worker-surface write) ----------
+# kunglao-worker.md §1c write order: the worker-status file is the FIRST
+# thing a worker writes (rule #4 / W-15). Enforcement point: this hook sees
+# every Write/Edit target, so the first WORKER-SURFACE write of a session is
+# adjudicated here — if it is not the status sync, the write is BLOCKed with
+# the concrete repair path (the worker writes the status line, then retries:
+# the session self-heals in one step). Posture:
+#   - FAIL_OPEN without a payload session_id (no session identity = no
+#     firsts to judge) and when no dispatched worker is live (scan_active_
+#     workers = the #37 canonical liveness source — zero live workers means
+#     this face is not a worker session's);
+#   - orchestrator carriers (register / state / spec / ledger) are exempt —
+#     they have their own proven-gate legs;
+#   - writes outside the worker surfaces (facts/notes/evidence/runs) are not
+#     "first action" evidence and are not tracked;
+#   - only the FIRST worker-surface write per session is judged; state lives
+#     in runs/.status-first.json (session_id -> first target, TTL-pruned,
+#     capped, fail-open IO — bookkeeping must never break the gate).
+STATUS_FIRST_STATE = "runs/.status-first.json"
+STATUS_FIRST_TTL_SECONDS = 48 * 3600
+STATUS_FIRST_MAX_ENTRIES = 400
+STATUS_FIRST_SURFACES = frozenset({"facts", "notes", "evidence", "runs"})
+_ORCHESTRATOR_CARRIERS = frozenset({
+    "claim-register.yaml", "analysis_state.txt", "task_spec.yaml",
+    "task-oracle.yaml", "ledger.jsonl",
+})
+_WORKER_STATUS_PREFIX = "worker-status-"
+
+
+def _is_worker_status_target(rel: Path) -> bool:
+    """runs/worker-status-*.md — the status-sync write itself."""
+    return (len(rel.parts) == 2 and rel.parts[0] == "runs"
+            and rel.name.startswith(_WORKER_STATUS_PREFIX)
+            and rel.suffix == ".md")
+
+
+def _ws_has_live_workers(ws: Path) -> bool:
+    """The #37 canonical worker-liveness source; failure -> not armed."""
+    try:
+        n, _stuck = load_hooks_lib().scan_active_workers(ws)
+        return bool(n)
+    except Exception:  # noqa: BLE001 — liveness outage must not block writes
+        return False
+
+
+def _load_status_first_state(ws: Path) -> dict:
+    path = ws / STATUS_FIRST_STATE
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    now = time.time()
+    return {sid: rec for sid, rec in data.items()
+            if isinstance(rec, dict)
+            and now - float(rec.get("ts") or 0) <= STATUS_FIRST_TTL_SECONDS}
+
+
+def _record_status_first(ws: Path, sid: str, target_posix: str) -> None:
+    state = _load_status_first_state(ws)
+    state[sid] = {"target": target_posix, "ts": time.time()}
+    if len(state) > STATUS_FIRST_MAX_ENTRIES:
+        keep = sorted(state.items(), key=lambda kv: float(
+            kv[1].get("ts") or 0))[-STATUS_FIRST_MAX_ENTRIES:]
+        state = dict(keep)
+    path = ws / STATUS_FIRST_STATE
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(path)
+    except OSError:
+        pass  # persistence failure: the next write is judged as first — safe
+
+
+def status_first_block(ws: Path, payload: dict, rel: Path) -> str | None:
+    """#57 gate 4 judgment for one Write/Edit target. None = allow; str = the
+    block reason carrying the repair path. See the block comment above."""
+    sid = str(payload.get("session_id") or "").strip()
+    if not sid:
+        return None  # no session identity — cannot judge firsts (FAIL_OPEN)
+    if not _ws_has_live_workers(ws):
+        return None  # no dispatched worker live — not the worker face
+    rel_posix = rel.as_posix()
+    if rel_posix in _ORCHESTRATOR_CARRIERS:
+        return None  # orchestrator carriers have their own gate legs
+    if not rel.parts or rel.parts[0] not in STATUS_FIRST_SURFACES:
+        return None  # outside the worker write surface — not tracked
+    if _is_worker_status_target(rel):
+        _record_status_first(ws, sid, rel_posix)
+        return None  # compliant: the status sync IS the first write
+    if sid in _load_status_first_state(ws):
+        return None  # not this session's first worker-surface write
+    _record_status_first(ws, sid, rel_posix)
+    return (
+        "the worker's first worker-surface write must be the status sync "
+        "(#57 gate 4, kunglao-worker.md §1c write order). Fix: write your "
+        "worker-status FIRST — create runs/worker-status-<your-id>.md with "
+        "the first line `[HH:MM] step: started <task> | status: in-progress` "
+        "(append one line per step; the final `status: done` line declares "
+        "`artifacts:`), then retry this write.")
 
 # #686: opt-in decision-flow trace. stderr is already the block channel, so
 # debug lines are additive and only appear when the env var is set — zero
@@ -435,6 +539,22 @@ def main() -> int:
         return RC_ALLOW
     carrier = carrier_of(ws, target)
     _dbg(f"carrier_of -> {carrier}")
+    # #57 gate 4: status-first — the worker's first worker-surface write must
+    # be the status sync. Runs BEFORE the carrier early-return: the status
+    # write itself is not a carrier, and the gate must see it (and any
+    # facts/notes write that tries to precede it).
+    try:
+        rel_sf = Path(target).resolve().relative_to(Path(ws).resolve())
+    except (ValueError, OSError):
+        rel_sf = None
+    if rel_sf is not None:
+        sf_block = status_first_block(ws, payload, rel_sf)
+        if sf_block:
+            detail = f"write_guard: BLOCK — status-first gate: {sf_block}"
+            print(detail, file=sys.stderr)
+            _emit_block(ws, payload, rel_sf.as_posix(), detail)
+            _dbg("exit BLOCK rc=2 — status-first gate (#57 gate 4)")
+            return RC_BLOCK
     if carrier is None:
         _dbg("exit ALLOW rc=0 — target is not one of the four carriers")
         return RC_ALLOW

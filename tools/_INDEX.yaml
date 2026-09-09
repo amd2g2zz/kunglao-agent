@@ -373,6 +373,25 @@ tools:
     cost_hint: {mem_gb: 0.1, time: probe}
     quality: {static:opaque-predicate: high}
 
+  # -- static: native IDA decompiler bridge over the ida-pro-vm MCP (issue #46 unlock) --
+  # Registers the MCP-bridge capability in the catalog so a dispatch citing
+  # IDA keywords has a compliant `tool-catalog:` target (tool-first gate).
+  # The MCP name follows the repo convention `ida-pro-vm`
+  # (scripts/toolchain.py _DECOMPILER_MCP_NAMES, scripts/mcp_probe.py).
+  - name: ida-decompile
+    category: static
+    capability: ida:decompile
+    description: Decompile functions via IDA MCP
+    tier: T1
+    cost_tier: cheap
+    input_output: {input: 'function address(es)/name(s) in the IDB opened by the ida-pro-vm MCP bridge (mcp__ida-pro-vm__* tools, http transport)', output: decompiled pseudocode + disassembly context per function, quoted verbatim into facts/Fxxx.md}
+    when_not: not when ghidra is available and sufficient — use ghidra-decompile-functions; not for bulk whole-binary disassembly
+    provider: ida-pro-vm
+    produces: [ida:decompile]
+    requires: []
+    cost_hint: {mem_gb: 0.5, time: cheap}
+    quality: {ida:decompile: high}
+
   # -- pipeline: evidence index building (issue #284 registration) --
   - name: build-evidence-index
     category: pipelines
@@ -516,7 +535,7 @@ tools:
     description: Graph-RAG source queries, android + js
     tier: T1
     cost_tier: deep
-    input_output: {input: "indexed decompiled source tree - jadx/dexdc output (android) OR a recovered JS module tree registered into evidence/<run>.json unpack_out by wakaru/webcrack (#751 js domain); 16 MCP tools via the gitnexus server; index built lazily on claim demand, marker evidence/gitnexus_index.json", output: "dependency/call-chain/execution-flow graph answers via Graph RAG; for web signature-trace posture see references/re-library/web-re-quickref.md; end-to-end regression demo CLI: tools/static/web_gitnexus_demo.py (--selfcheck offline)"}
+    input_output: {input: "indexed decompiled source tree - jadx/dexdc output (android) OR a recovered JS module tree registered into evidence/<run>.json unpack_out by wakaru/webcrack (#751 js domain); 16 MCP tools via the gitnexus server; index built lazily on claim demand, marker evidence/gitnexus_index.json", output: "dependency/call-chain/execution-flow graph answers via Graph RAG; for web signature-trace posture see references/re-library/web/labs/web-re-quickref.md; end-to-end regression demo CLI: tools/static/web_gitnexus_demo.py (--selfcheck offline)"}
     when_not: "not a decompiler; not without an indexed source tree (lazy build - never pre-run); on js targets run only AFTER recovery (wakaru/webcrack unpack first - gitnexus parses normal source, not bundles); not for DEX without source (dexdc CFG / baksmali xref instead)"
     provider: gitnexus
     produces: [android:semantic-query, android:call-graph, js:semantic-query, js:call-graph]

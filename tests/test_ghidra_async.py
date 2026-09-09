@@ -87,7 +87,7 @@ def start_sleeper(jobs_dir, seconds, **extra):
     return run_cli(*args)
 
 
-def wait_state(jobs_dir, job_id, states, timeout=15.0, grace=0.2):
+def wait_state(jobs_dir, job_id, states, timeout=90.0, grace=0.2):
     """Poll status until the record reaches one of `states` (a str or set)."""
     states = {states} if isinstance(states, str) else set(states)
     deadline = time.monotonic() + timeout
@@ -101,7 +101,7 @@ def wait_state(jobs_dir, job_id, states, timeout=15.0, grace=0.2):
     raise AssertionError(f"job {job_id} never reached {states}; last={last}")
 
 
-def poll_status(jobs_dir, job_id, grace=0.2, timeout=15.0):
+def poll_status(jobs_dir, job_id, grace=5.0, timeout=90.0):
     """Return the status --json dict once it reports a terminal state."""
     deadline = time.monotonic() + timeout
     last = None

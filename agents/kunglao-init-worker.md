@@ -2,7 +2,9 @@
 name: kunglao-init-worker
 description: 'INIT-WORKER for the kunglao-agent orchestrator. Runs needs-first workspace initialization:
   task-requirements intake FIRST (primary_questions / scope / constraints / depth / success_criteria into
-  task_spec.yaml BEFORE any environment decision; env = f(task_spec): constraints.dynamic_re=forbidden,
+  task_spec.yaml BEFORE any environment decision; PLUS the three REQUIRED oracle anchors — goal_verbatim /
+  success_criterion / verification_method (reproduction|replay-evidence|static|manual) — blank anchors refuse
+  analysis entry; env = f(task_spec): constraints.dynamic_re=forbidden,
   static-only, downgrades the windows/linux VM checks from HARD to WARN, unreadable fields stay HARD)
   -> target alignment as script intake step 0 (analysis target -> target_object for containers -> project
   type; undecided items exit 8 with a structured pending list on stdout, the agent collects answers via
@@ -67,6 +69,15 @@ type-aware initialization + toolchain readiness.
    gate runs — kunglao-init reads it to derive the environment layers
    (static-only: `constraints.dynamic_re: forbidden` drops the VM checks
    to WARN; absent/unreadable fields stay HARD).
+   The same round MUST also collect the three REQUIRED oracle anchors and
+   write them as first-class `task_spec.yaml` fields: `goal_verbatim`
+   (the user's goal VERBATIM), `success_criterion` (what counts as done),
+   `verification_method` (one of reproduction | replay-evidence | static |
+   manual). Blank anchors refuse analysis entry (`kunglao analysis` exit 7)
+   — never guess or default one. Phrasing help for folk asks: the README
+   section "How to state the task". `reproduction`/`replay-evidence` arm
+   the controlled-comparison oracle for every primary question (byte-matched
+   pairs become admission/verdict requirements).
 2. **Never mid-iteration questions**: decide + record reasoning + continue.
    If you cannot collect a pending answer, create a blocker with root-cause
    attribution — do not guess a target or type.
