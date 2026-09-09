@@ -53,10 +53,10 @@ import env_manifest  # noqa: E402  (#450 facts file — installed ledger, #477 �
 import pkg_detect  # noqa: E402  (#477 ① manager detection + half-state)
 
 
-# #863 Family H: single source in utf8_boot (#811 stdio-insurance module);
+# single source in _boot (the stdio-insurance boot module);
 # alias binds the SHARED function so the module-level call below keeps its
 # exact position in module-init order.
-from utf8_boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
+from _boot import ensure_utf8_stderr as _ensure_utf8_stderr  # noqa: E402
 
 
 _ensure_utf8_stderr(sys.stderr)
@@ -93,10 +93,18 @@ class InstallPlan:
     - mcp_register: "ghidra" -> register the bridge after install.
     """
 
-    kind: str                                  # "auto" | "mcp_url"
+    kind: str                                  # "auto" | "mcp_url" | "script"
     degrade: str                               # "WARN" | "HARD"
     packages: tuple[PkgSpec, ...] = ()         # per-manager install data
     mcp_register: str | None = None            # "ghidra" bridge after install
+    # kind == "script": a registered standalone installer. face = the .py
+    # entry operators invoke; script_impl = the implementing entry the
+    # registry executes; deps = hard host prerequisites (binaries on PATH);
+    # verify_cmd = the post-install verification face (guidance text).
+    face: str | None = None
+    script_impl: str | None = None
+    deps: tuple[str, ...] = ()
+    verify_cmd: str | None = None
 
 
 # Per-item install plans (#408; #477 ② coverage 5 -> 17). Keyed by
@@ -113,6 +121,21 @@ class InstallPlan:
 #   ida              -> NEVER auto-installed; operator supplies the
 #                       existing MCP URL (claude mcp add --transport http)
 INSTALL_PLANS: dict[str, InstallPlan] = {
+    # --- registered standalone installers (kind="script") ---
+    # unidbg: Java analysis fallback (check: T3 WARN probe). The registry is
+    # the single registration point: the .py face is a thin caller of
+    # install_script_plan, the implementation carries the deployment
+    # preconditions (JDK hard; Maven wrapper-eligible inside the impl;
+    # remote clone; first build; verify-after-repair on the build marker).
+    # A decline/failure degrades WARN — unidbg is an optional fallback.
+    "unidbg": InstallPlan(
+        kind="script", degrade="WARN",
+        face="install_unidbg.py",
+        script_impl="install_unidbg.sh",
+        deps=("java", "javac"),
+        verify_cmd=("cat ./vendor/unidbg/.unidbg-installed.json "
+                    "(build marker present = installed)"),
+    ),
     # --- T0 Python packages ---
     "pefile": InstallPlan(
         kind="auto", degrade="WARN",
@@ -299,7 +322,6 @@ NOT_AUTO_INSTALLABLE: dict[str, str] = {
     "jdwp_debug": "capability of a running debuggable app — not a package",
     "ebpf": "target-kernel property — not installable from the host",
     "ebpf_android": "device SDK property — not installable",
-    "unidbg": "Java library consumed by analysis code, not a CLI package",
 }
 
 
@@ -315,6 +337,7 @@ RESOLVE_ELEVATION = "elevation"  # needs_sudo manager: print, never run
 RESOLVE_SET_ENV = "set-env"      # unpacked ghidra: configure, not install
 RESOLVE_MANUAL = "manual"        # no usable manager: guidance + NextAction
 RESOLVE_NONE = "none"            # mcp_url (IDA) — no install face
+RESOLVE_SCRIPT = "script"        # registered standalone installer (impl)
 
 
 @dataclass(frozen=True)
@@ -352,6 +375,22 @@ def resolve_install(
         return InstallResolution(
             mode=RESOLVE_NONE,
             reason=f"{name} is mcp_url — never auto-installed (#408)")
+    if resolved_plan.kind == "script":
+        missing = [d for d in resolved_plan.deps if shutil.which(d) is None]
+        if missing:
+            return InstallResolution(
+                mode=RESOLVE_MANUAL,
+                reason=(f"{name} prerequisites missing on PATH: "
+                        f"{', '.join(missing)}"),
+                next_action=toolchain.NextAction(
+                    "install",
+                    f"install {', '.join(missing)} (the {name} build "
+                    f"chain), then re-run"))
+        return InstallResolution(
+            mode=RESOLVE_SCRIPT,
+            argv=["bash", str(_SCRIPT_DIR / resolved_plan.script_impl)],
+            reason=(f"via registered installer {resolved_plan.face} "
+                    f"(impl: {resolved_plan.script_impl})"))
     # Half-state first: an unpacked ghidra beats a reinstall suggestion.
     if resolved_plan.mcp_register == "ghidra":
         unpacked = _find_ghidra_install()
@@ -408,6 +447,40 @@ def install_commands(name: str) -> list[str]:
     if plan.kind == "mcp_url":
         return []
     return resolve_install(name, plan=plan).argv
+
+
+def install_script_plan(name: str, extra_args: list[str] | None = None,
+                        timeout: int = 1800) -> int:
+    """Run a registered kind="script" plan end to end: resolve (prerequisite
+    check + guidance), execute the implementation with the caller's extra
+    args, print the verify face on success. rc propagates from the impl
+    (0 green / 1 failed step / 2 usage error for the unidbg impl family)."""
+    plan = INSTALL_PLANS[name]
+    res = resolve_install(name, plan=plan)
+    if res.mode == RESOLVE_MANUAL:
+        print(f"toolchain-install: {name} — {res.reason}", file=sys.stderr)
+        if res.next_action is not None:
+            print(f"toolchain-install:   action: {res.next_action.action}",
+                  file=sys.stderr)
+            if res.next_action.command:
+                print("toolchain-install:   command: "
+                      f"{res.next_action.command}", file=sys.stderr)
+        return 1
+    argv = res.argv + list(extra_args or [])
+    rc, out, err = run_install(argv, timeout=timeout)
+    if rc != 0:
+        print(f"toolchain-install: {name} install FAILED "
+              f"({err or out or 'unknown error'})", file=sys.stderr)
+        print(f"toolchain-install: official guidance — "
+              f"{_official_guidance(name)}", file=sys.stderr)
+        for line in _meta_guidance_lines(name):
+            print(line, file=sys.stderr)
+        return rc
+    if out:
+        print(out)
+    if plan.verify_cmd:
+        print(f"toolchain-install:   verify: {plan.verify_cmd}")
+    return 0
 
 
 def run_install(argv: list[str], timeout: int = 300) -> tuple[int, str, str]:
@@ -624,6 +697,12 @@ def _run_install_plan(name: str, plan: "InstallPlan", assume_yes: bool,
     rc, out, err = run_install(res.argv)
     if rc != 0:
         return rc, out, err
+    # kind="script" plans carry their own verify face (build marker) —
+    # surfaced as guidance; the impl is verify-after-repair by contract.
+    plan_meta = plan
+    if plan_meta.kind == "script" and plan_meta.verify_cmd:
+        print(f"toolchain-install:   verify: {plan_meta.verify_cmd}",
+              file=sys.stderr)
     # #680: the verify command from the structured ToolMeta lets the
     # operator confirm the install beyond the re-probe that follows.
     meta = toolchain.FIXES.get(name)
@@ -855,6 +934,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

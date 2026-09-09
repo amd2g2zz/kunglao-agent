@@ -589,7 +589,7 @@ Beyond basic switch-case (see patterns.md): modern OLLVM variants use:
 # (x | y) & ~(x & y) == x ^ y
 
 # SiMBA tool for automated simplification:
-# pip install simba-simplifier
+# simba-simplifier: install via pip (toolchain registry: scripts/toolchain_install.py)
 from simba import simplify_mba
 expr = "(a | b) + (a & b) - (~a & b)"
 print(simplify_mba(expr))  # → a

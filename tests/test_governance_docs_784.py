@@ -26,7 +26,7 @@ def test_d1_mcp_supply_deviation_documented():
 
 def test_d2_test_entry_declared():
     _has("README.md", "authoritative full-suite entry")
-    assert (ROOT / "scripts" / "run_test_matrix.py").is_file()
+    assert (ROOT / "scripts" / "acceptance_check.py").is_file()
 
 
 def test_d3_github_templates_present():
@@ -52,11 +52,9 @@ def test_d4_security_controls_mapping():
     _has("docs/security-controls.md", "_redo_leak_scan")
 
 
-def test_run_test_matrix_smoke():
+def test_milestone_cli_smoke():
     r = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "run_test_matrix.py"), "--help"],
+        [sys.executable, str(ROOT / "scripts" / "acceptance_check.py"), "--help"],
         capture_output=True, text=True)
-    if r.returncode != 0:
-        # tolerate CLI-less scripts but the file must at least parse
-        compile((ROOT / "scripts" / "run_test_matrix.py").read_text(encoding="utf-8"),
-                "run_test_matrix.py", "exec")
+    assert r.returncode == 0
+    assert "--categories" in r.stdout

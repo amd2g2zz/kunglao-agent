@@ -222,10 +222,11 @@ def check_flag() -> tuple[bool, str]:
 def check_vm() -> tuple[bool, str]:
     """VM reachability: TCP connect to vmr-shell + Frida ports, 2s timeout."""
     if not VM_HOST:
+        import toolchain  # lazy: the FIXES table is the remediation single source
+
         return (False,
-                "KUNGLAO_VM_HOST unset — set it to the live VM lease "
-                "(vmr-shell discovery). Dynamic analysis (T3) blocked; static "
-                "may proceed.")
+                f"KUNGLAO_VM_HOST unset — {toolchain.fix_text('vm_reachable')}. "
+                "Dynamic analysis (T3) blocked; static may proceed.")
     failed = []
     for port in VM_PORTS:
         try:
@@ -243,14 +244,18 @@ def check_vm() -> tuple[bool, str]:
 def check_ghidra() -> tuple[bool, str]:
     """Ghidra analyzeHeadless present (path from GHIDRA_HOME env; unset = FAIL)."""
     if GHIDRA_DEFAULT is None:
+        import toolchain  # lazy: the FIXES table is the remediation single source
+
         return (False,
-                "GHIDRA_HOME unset — set it to your Ghidra install root; "
+                f"GHIDRA_HOME unset — {toolchain.fix_text('ghidra')}; "
                 "decompilation degraded.")
     if GHIDRA_DEFAULT.exists():
         return True, f"analyzeHeadless at {GHIDRA_DEFAULT}"
+    import toolchain  # lazy: the FIXES table is the remediation single source
+
     return (False,
             f"analyzeHeadless not found at {GHIDRA_DEFAULT}. "
-            f"Set GHIDRA_HOME or install Ghidra — decompilation degraded.")
+            f"{toolchain.fix_text('ghidra')} — decompilation degraded.")
 
 
 # ---------- #757 T1: type/channel-aware check bodies ----------
@@ -354,10 +359,11 @@ def check_mcp_registered(ws: Path, project_type: str | None) -> tuple[str, str]:
             return ("PASS",
                     "camoufox-reverse registered (registry read; tools verify "
                     "at session connect)")
+        import toolchain  # lazy: the FIXES table is the remediation single source
+
         return ("FAIL",
                 "camoufox-reverse not registered — browser JS RE supply "
-                "degraded. Fix: claude mcp add camoufox-reverse -- "
-                "python -m camoufox_reverse_mcp")
+                f"degraded. Fix: {toolchain.fix_text('mcp:camoufox-reverse')}")
     if ptype == "android":
         registered = ", ".join(sorted(found)[:8]) or "none"
         return ("PASS",
@@ -865,6 +871,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

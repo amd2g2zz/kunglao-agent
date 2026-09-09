@@ -11,7 +11,7 @@ the session permission to end until a pre-registered task-oracle.yaml is
 satisfied. "done" becomes a CODE verdict, not LLM discretion.
 
 LAYERING — complementary to the three existing termination defenses:
-  #43 (runtime drift, scripts/lib_kunglao.py) — per loop iteration; reads the
+  #43 (runtime drift, hooks/lib_kunglao.py single source) — per loop iteration; reads the
       ledger signature rotation; catches a SPINNING loop. Does not block.
   #44 (per-turn re-anchor, hooks/state_anchor.py) — PostToolUse(Agent); injects
       mechanical state each turn; cures context rot. Mirrored here for the
@@ -446,6 +446,6 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

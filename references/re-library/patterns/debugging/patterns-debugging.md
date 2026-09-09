@@ -361,7 +361,7 @@ def decode_font_ligatures(font_path, encoded_text):
     # Search for <LigatureSubst> entries
 
 # Command-line approach:
-# pip install fonttools
+# fonttools: install via pip (toolchain registry: scripts/toolchain_install.py)
 # ttx font.otf  # converts to XML
 # grep -A5 'LigatureSubst' font.ttx
 ```

@@ -27,7 +27,7 @@ Failure modes covering orchestrator discipline during in-flight work:
 | F9 | Cost warning interrupts workflow | are you at tier=advisory / pause_non_essential / HARD_PAUSE? (cost_gate.py output) | B1h |
 | F10 | Hook noise (all hooks always on) | did you check is_active() before running? (hook_activation.py) | B1i |
 | F11 | Stuck worker doesn't backtrack | did you require ## backtrack section? (stuck > 20 min -> backtrack_gate.py) | B1j |
-| F12 | Workers do repeat work, no reuse | did you cite existing fact or justify fresh? (reuse_gate.py) | B1k |
+| F12 | Workers do repeat work, no reuse | did you cite existing fact or justify fresh? (reuse-before-recompute rule) | B1k |
 | F13 | Orchestrator fan-wen (should I dispatch?) | are you about to ask user? (NO - see F-13: just decide) | B1k (self-redirect) |
 
 ## Run all enforcement gates (orchestrator /loop heartbeat)

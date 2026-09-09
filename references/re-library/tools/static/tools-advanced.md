@@ -391,7 +391,7 @@ LLVM-based decompiler supporting many architectures. Free and open-source.
 
 ```bash
 # Install
-pip install retdec-decompiler
+# install retdec via pip (toolchain registry: scripts/toolchain_install.py)
 # Or use web: https://retdec.com/decompilation/
 
 # CLI

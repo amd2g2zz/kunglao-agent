@@ -10,14 +10,12 @@ All I/O is SYNTHETIC: pytest tmp_path workspaces only. The live workspace
 (`<WORKSPACE_ROOT>/samples/<YYYY-MM-DD>/malware-analysis-workspace/`) is the
 FORMAT reference only — never read or written.
 """
-import importlib.util
 import io
 import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 from _factories import write_hook_state
@@ -25,25 +23,13 @@ from _factories import write_hook_state
 _HERE = Path(__file__).parent
 SCRIPTS = _HERE.parent / "scripts"
 
-# Load scripts/lib_kunglao.py by explicit path under the unique name — SAME
-# loader as external_kicker.should_kick and tests/test_drift_detection.py.
-# Under pytest, `import lib_kunglao` is ambiguous (hooks first in pythonpath);
-# the explicit-path load is unambiguous in both prod and pytest. state_anchor
-# reuses this exact loader so the hook and these tests share one instance.
-_LIB_NAME = "lib_kunglao_scripts"
+# The drift library is the hooks lib (single source: hooks/lib_kunglao.py).
+# Load through the canonical by-path loader — the SAME loader as
+# external_kicker.should_kick and hooks/state_anchor._load_drift_lib —
+# so the hook and these tests share one module instance.
+from _hooks_path import load_hooks_lib  # noqa: E402
 
-
-def load_scripts_lib() -> ModuleType:
-    lib = sys.modules.get(_LIB_NAME)
-    if lib is None:
-        spec = importlib.util.spec_from_file_location(_LIB_NAME, SCRIPTS / "lib_kunglao.py")
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[_LIB_NAME] = lib
-        spec.loader.exec_module(lib)
-    return lib
-
-
-_lib = load_scripts_lib()
+_lib = load_hooks_lib()
 ROTATION_WINDOW = _lib.ROTATION_WINDOW
 
 def ts(minutes_ago: int = 0) -> str:

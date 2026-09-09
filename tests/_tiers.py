@@ -27,7 +27,7 @@ Membership rules:
 from __future__ import annotations
 
 FAST_MODULES = frozenset({
-    "test_adversarial_gate_909", "test_adversarial_loop_909", "test_agents_hygiene", "test_algorithm_event_log_157",
+    "test_boot", "test_report_render", "test_adversarial_gate_909", "test_adversarial_loop_909", "test_agents_hygiene", "test_algorithm_event_log_157",
     "test_anomaly_detector", "test_apk_mem_gate", "test_ask_for_direction_charter", "test_ask_for_direction_v2",
     "test_assembly_history_700", "test_audit_guard_reviewgate_799", "test_audit_legacy_proven", "test_audit_traceability",
     "test_bash_fact_guard_809", "test_bench_analyze", "test_bench_grade", "test_bench_intake",
@@ -64,7 +64,7 @@ FAST_MODULES = frozenset({
     "test_migrate_facts_809", "test_mission_ledger_823", "test_mission_repin_868", "test_mission_stall_634",
     "test_monitor_wiring_620c", "test_no_cti_agents", "test_notes_discriminator", "test_notes_fake_834",
     "test_notes_supersedes_528", "test_obligation_discovery", "test_observability_birth_880", "test_operator_action",
-    "test_oracle_cadence_132", "test_oracle_runner_108", "test_orchestration_chunker", "test_orchestration_cost_estimate",
+    "test_oracle_cadence_132", "test_oracle_runner_108",
     "test_orchestration_eval_quality", "test_orchestration_event_taxonomy", "test_orchestration_hardening", "test_orchestration_recov_metrics",
     "test_orchestrator_tool_guard_608", "test_outcome_capture", "test_outcome_forensics_146", "test_pdl_collapse_582",
     "test_pkg_detect", "test_plaintext_610", "test_plan_drift_stale_plan", "test_plan_drift_unverified",

@@ -498,7 +498,9 @@ def test_not_auto_family_membership_pinned():
         "frida_server", "android_server",    # device-side deploy (#477 ③)
         "jdwp_debug",                        # running-app capability
         "ebpf", "ebpf_android",              # kernel/SDK properties
-        "unidbg",                            # Java library, not a CLI
+        # unidbg left this family: it is now a registered kind="script"
+        # plan (the registry is the single registration point) — pinned by
+        # test_unidbg_registered_as_script_plan.
     }
     for name in never_auto_family:
         assert name in ti.NOT_AUTO_INSTALLABLE, (
@@ -617,3 +619,78 @@ def test_cli_end_to_end_one_command(monkeypatch, tmp_path, capsys):
     assert ledger == ["pefile:pip:PASS"], ledger
     out = capsys.readouterr().out
     assert '"overall": "PASS"' in out, out
+
+
+# ---------- kind="script": the registry is the single registration point ----------
+
+def test_unidbg_registered_as_script_plan():
+    """unidbg migrates from the NOT_AUTO_INSTALLABLE declaration to a
+    registered kind="script" plan: install runs the registered .py face,
+    the JDK is the hard prerequisite (Maven is wrapper-eligible inside the
+    implementation), the build marker is the verify face, and a
+    decline/failure degrades WARN (optional fallback item)."""
+    plan = ti.INSTALL_PLANS["unidbg"]
+    assert plan.kind == "script"
+    assert plan.degrade == "WARN"
+    assert {"java", "javac"} <= set(plan.deps)
+    assert plan.script_impl == "install_unidbg.sh"
+    assert plan.face == "install_unidbg.py"
+    assert ".unidbg-installed.json" in (plan.verify_cmd or "")
+
+
+def test_unidbg_no_longer_declared_not_auto_installable():
+    """The closed declaration loses the unidbg row when the plan registers
+    (union with INSTALL_PLANS still covers the check surface)."""
+    assert "unidbg" not in ti.NOT_AUTO_INSTALLABLE
+
+
+def test_resolve_script_plan_with_deps_present(monkeypatch):
+    plan = ti.INSTALL_PLANS["unidbg"]
+    monkeypatch.setattr(ti.shutil, "which",
+                        lambda name: "/usr/bin/" + name)
+    res = ti.resolve_install("unidbg", plan=plan)
+    assert res.mode == ti.RESOLVE_SCRIPT
+    assert res.argv[:2] == ["bash", str(ti._SCRIPT_DIR / plan.script_impl)]
+
+
+def test_resolve_script_plan_with_missing_deps(monkeypatch):
+    plan = ti.INSTALL_PLANS["unidbg"]
+    monkeypatch.setattr(ti.shutil, "which", lambda name: None)
+    res = ti.resolve_install("unidbg", plan=plan)
+    assert res.mode == ti.RESOLVE_MANUAL
+    assert "java" in res.reason and "javac" in res.reason
+    assert res.next_action is not None
+
+
+def test_install_commands_for_script_plan_names_the_face(monkeypatch):
+    monkeypatch.setattr(ti.shutil, "which",
+                        lambda name: "/usr/bin/" + name)
+    cmds = ti.install_commands("unidbg")
+    assert cmds and cmds[0] == "bash"
+
+
+def test_install_script_plan_runner_executes_impl(monkeypatch):
+    """The registry runner: resolve, then execute the implementation with
+    the caller's extra args; rc propagates."""
+    monkeypatch.setattr(ti.shutil, "which",
+                        lambda name: "/usr/bin/" + name)
+    seen = {}
+
+    def fake_run(argv, timeout=300):
+        seen["argv"] = argv
+        return 0, "dry-run plan", ""
+
+    monkeypatch.setattr(ti, "run_install", fake_run)
+    rc = ti.install_script_plan("unidbg", ["--dry-run"])
+    assert rc == 0
+    assert seen["argv"][-1] == "--dry-run"
+    assert seen["argv"][0] == "bash"
+
+
+def test_install_unidbg_py_is_a_registry_adapter():
+    """The standalone face is a THIN caller of the registry: it routes
+    through toolchain_install (no private bash re-implementation)."""
+    text = (Path(__file__).resolve().parents[1] / "scripts" /
+            "install_unidbg.py").read_text(encoding="utf-8")
+    assert "toolchain_install" in text
+    assert "install_script_plan" in text

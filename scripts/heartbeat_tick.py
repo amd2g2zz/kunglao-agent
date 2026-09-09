@@ -306,10 +306,9 @@ def main(argv: list[str] | None = None) -> int:
     # stdout (kunglao.py router imports it). Without it the #365 warn line's
     # em-dash prints as cp936 on a GBK console/pipe and the caller's UTF-8
     # read sees mojibake (#457 triage #6).
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        pass  # captured stream without reconfigure (pytest capsys)
+    from _boot import reconfigure_stdout
+
+    reconfigure_stdout()  # captured stream without reconfigure (pytest capsys) tolerated
     args = sys.argv[1:] if argv is None else argv
     # #6: argparse owns the CLI boundary — flags (--help, --anything) can no
     # longer be swallowed by _resolve_ws as a workspace path and mkdir'd into
@@ -518,6 +517,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

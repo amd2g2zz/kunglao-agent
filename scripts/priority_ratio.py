@@ -81,6 +81,7 @@ import json
 import random
 import re
 import sys
+from typing import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -733,16 +734,257 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
     return actions
 
 
+
+
+# ---------- strategy convergence four metrics ----------
+# Four orthogonal convergence questions layered atop the ranker's own
+# action/evidence model: reverse-regret vs an oracle selection,
+# efficient-frontier slope (diminishing returns), conditional
+# P(faster | hit), and tool-family competence coverage. Pure
+# functions (zero LLM, no I/O) — embeddable without the workspace.
+# snapshot_for_workspace assembles the full snapshot from workspace
+# artefacts (validated_capability cards + the optional hit_times
+# file); the CLI face is priority_ratio.main's --strategy flag.
+
+# ---------- regret ----------
+
+def regret(actions: list[dict], picked: set[str], oracle: set[str]) -> dict:
+    """Reverse-regret vs. oracle selection.
+
+    regret = score(oracle_top) − score(picked_top), bounded below by 0.
+    Empty actions → 0 (trivially converged).  Multi-action oracle/picked
+    supported: top score wins on each side; missing top → use 0.
+
+    Returns {"regret": float, "picked": list[str], "oracle": list[str]} —
+    the picked/oracle echoes aid debugging the metric when it spikes.
+    """
+    if not actions:
+        return {"regret": 0.0, "picked": [], "oracle": []}
+
+    def _top(ids: set[str]) -> tuple[float, str | None]:
+        if not ids:
+            return 0.0, None
+        ranked = [a for a in actions if a.get("claim_id") in ids]
+        if not ranked:
+            return 0.0, None
+        ranked.sort(key=lambda a: a.get("score", 0.0), reverse=True)
+        return ranked[0].get("score", 0.0), ranked[0].get("claim_id")
+
+    oracle_score, oracle_id = _top(oracle)
+    picked_score, picked_id = _top(picked)
+    # both empty → 0; else subtract
+    if oracle_id is None and picked_id is None:
+        return {"regret": 0.0, "picked": [], "oracle": []}
+    loss = oracle_score - picked_score
+    if loss < 0:
+        loss = 0.0  # negative regret → picked beat oracle (just luck / ahead of information)
+    return {
+        "regret": round(float(loss), 6),
+        "picked": [picked_id] if picked_id else [],
+        "oracle": [oracle_id] if oracle_id else [],
+    }
+
+
+# ---------- cost_to_slope ----------
+
+def cost_to_slope(actions: list[dict]) -> list[dict]:
+    """Efficient-frontier curve: per-action Δscore/Δcost.
+
+    Sorted by cost ascending; computes prefix sums, then per-step
+    marginal slope (cumulative Δscore / cumulative Δcost).  First row is
+    always `slope=None` (cannot form a slope with one point) so callers
+    can drop it without indexing errors.
+
+    Returns list[{"claim_id", "cost", "score", "cum_score", "cum_cost", "slope"}].
+    Empty input → [].
+    """
+    if not actions:
+        return []
+    sorted_actions = sorted(actions, key=lambda a: (a.get("cost", 0.0), a.get("claim_id", "")))
+    rows: list[dict] = []
+    prev_cum_score = 0.0
+    prev_cum_cost = 0.0
+    first = True
+    for a in sorted_actions:
+        cost = float(a.get("cost", 0.0))
+        score = float(a.get("score", 0.0))
+        cum_score = prev_cum_score + score
+        cum_cost = prev_cum_cost + cost
+        if first:
+            slope = None
+        else:
+            d_score = cum_score - prev_cum_score
+            d_cost = cum_cost - prev_cum_cost
+            slope = (d_score / d_cost) if d_cost > 0 else None
+        rows.append({
+            "claim_id": a.get("claim_id"),
+            "cost": cost,
+            "score": score,
+            "cum_score": round(cum_score, 6),
+            "cum_cost": round(cum_cost, 6),
+            "slope": round(slope, 6) if slope is not None else None,
+        })
+        prev_cum_score = cum_score
+        prev_cum_cost = cum_cost
+        first = False
+    return rows
+
+
+# ---------- P(faster | hit) ----------
+
+def _median(values: Iterable[float]) -> float:
+    """Median of a finite iterable.  Empty → 0.0 (no signal)."""
+    vs = sorted(values)
+    n = len(vs)
+    if n == 0:
+        return 0.0
+    mid = n // 2
+    if n % 2:
+        return float(vs[mid])
+    return (vs[mid - 1] + vs[mid]) / 2.0
+
+
+def p_faster_given_hit(hits: list[float], median_hit_time: float | None = None) -> dict:
+    """Conditional P(faster | hit) — fraction of hits faster than median.
+
+    If median_hit_time is omitted, compute it from the hits directly
+    (defined only when n > 0; the test pins an explicit median so the
+    formula is reproducible against a fixed reference).
+
+    Returns {"p_faster": float, "hits": int, "median": float}.
+    """
+    if not hits:
+        return {"p_faster": 0.0, "hits": 0, "median": 0.0}
+    median = median_hit_time if median_hit_time is not None else _median(hits)
+    if median <= 0:
+        # pathological: zero-or-negative median ⇒ degenerate; treat as no signal
+        return {"p_faster": 0.0, "hits": len(hits), "median": median}
+    faster = sum(1 for t in hits if t < median)
+    return {
+        "p_faster": round(faster / len(hits), 6),
+        "hits": len(hits),
+        "median": round(float(median), 6),
+    }
+
+
+# ---------- competence coverage ----------
+
+def competence_coverage(validated_families: set[str], required_families: set[str]) -> dict:
+    """Coverage = |validated ∩ required| / |required|.
+
+    Empty required → 1.0 (trivially covered; nothing missing by definition).
+    All-required-missing → 0.0 with every required family echoed in
+    `missing` (sorted) for the dispatch gate to consume.
+
+    Returns {"coverage": float, "missing": list[str], "validated": list[str]}.
+    """
+    validated = {str(f) for f in (validated_families or set())}
+    required = {str(f) for f in (required_families or set())}
+    if not required:
+        return {"coverage": 1.0, "missing": [], "validated": sorted(validated)}
+    missing = sorted(required - validated)
+    covered = required & validated
+    return {
+        "coverage": round(len(covered) / len(required), 6),
+        "missing": missing,
+        "validated": sorted(validated),
+    }
+
+
+# ---------- composite ----------
+
+def compute_all(actions: list[dict], picked: set[str], oracle: set[str],
+                hits: list[float] | None = None,
+                validated_families: set[str] | None = None,
+                required_families: set[str] | None = None) -> dict:
+    """Bundle the four metrics into one snapshot dict.
+
+    Optional inputs (hits / families) default empty; p_faster_given_hit
+    and competence_coverage each degrade to their trivial defaults.
+    """
+    return {
+        "regret": regret(actions, picked, oracle),
+        "cost_to_slope": cost_to_slope(actions),
+        "p_faster_given_hit": p_faster_given_hit(hits or []),
+        "competence": competence_coverage(validated_families or set(),
+                                          required_families or set()),
+    }
+
+
+# ---------- integration helpers (workspace-backed; optional) ----------
+
+def snapshot_for_workspace(workspace: Path,
+                           picked: set[str] | None = None,
+                           oracle: set[str] | None = None,
+                           hits: list[float] | None = None,
+                           required_families: set[str] | None = None) -> dict:
+    """Read-only integration: rank the workspace, then assemble the
+    four-metric snapshot.
+
+    Loads claim-register.yaml + claim_deps.yaml, runs the ranker to
+    produce the action list, then assembles the four-metric snapshot
+    from the workspace artefacts (validated_capability cards + the
+    optional hit_times file).  All four inputs are optional; the
+    corresponding metric degrades to its no-signal default.
+
+    Required-families defaults to nothing (the metric reports coverage=1.0
+    until the workspace declares requirements — its own contract: the
+    metric cannot fail closed without an explicit requirement list)."""
+    ws = Path(workspace)
+    reg = _load_yaml(ws / "claim-register.yaml")
+    deps = _load_yaml(ws / "claim_deps.yaml")
+    claims = reg.get("claims") or []
+    evidence = EvidenceView.from_workspace(ws)
+    actions = priority_ratio(claims, deps, evidence)
+    action_dicts = [a.to_dict() for a in actions]
+    validated = {fam for _, text in evidence.validated_capabilities
+                 for fam in _families_from_text(text)}
+    return compute_all(
+        actions=action_dicts,
+        picked=picked or set(),
+        oracle=oracle or set(),
+        hits=hits or [],
+        validated_families=validated,
+        required_families=required_families or set(),
+    )
+
+
+_FAMILY_TOKENS = ("frida", "xposed", "lsposed", "ghidra", "ida",
+                  "idapython", "x64dbg", "ollydbg", "volatility",
+                  "vmr-shell", "vmrun", "qiling", "malware-framework")
+
+
+def _families_from_text(text: str) -> set[str]:
+    """Best-effort family extraction from validated_capability text.
+    ASCII word-bounded; mirrors priority_ratio's vocabulary."""
+    import re
+    found: set[str] = set()
+    for tok in _FAMILY_TOKENS:
+        if re.search(r"(?<![A-Za-z0-9])" + re.escape(tok) + r"(?![A-Za-z0-9])",
+                     text or "", re.IGNORECASE):
+            found.add(tok)
+    return found
+
+
 def _load_yaml(path: Path) -> dict:
     return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}) if path.exists() else {}
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="priority_ratio.py", description="Thompson action ranking (#107)")
+    ap = argparse.ArgumentParser(prog="priority_ratio.py", description="Thompson action ranking")
     ap.add_argument("workspace", help="workspace root")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--strategy", action="store_true",
+                    help="print the four-metric convergence snapshot "
+                         "(regret / cost_to_slope / p_faster_given_hit / "
+                         "competence) instead of the action ranking")
     args = ap.parse_args(argv)
     ws = Path(args.workspace)
+    if args.strategy:
+        snap = snapshot_for_workspace(ws)
+        print(json.dumps(snap, ensure_ascii=False, indent=2) if args.json
+              else "\n".join(f"{k}: {v}" for k, v in snap.items()))
+        return 0
     # #534 lifeline (#104): relocated from module scope — the old block read an
     # undefined module-level `ws` and was NameError-swallowed, never emitted.
     try:
@@ -764,6 +1006,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

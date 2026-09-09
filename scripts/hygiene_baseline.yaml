@@ -48,13 +48,9 @@ files:
     r1: 8
   scripts/check_global_rule_subset.py:
     r1: 2
-  scripts/chunker.py:
-    r1: 1
   scripts/claim_expiry.py:
     r1: 2
   scripts/claudemd_frame.py:
-    r1: 3
-  scripts/complete_teardown.py:
     r1: 3
   scripts/completion_gate.py:
     r1: 21
@@ -65,8 +61,6 @@ files:
     r2: 2
   scripts/convergence_health.py:
     r1: 15
-  scripts/cost_estimate.py:
-    r1: 1
   scripts/cost_gate.py:
     r1: 2
   scripts/dead_letter.py:
@@ -99,8 +93,6 @@ files:
     r1: 1
   scripts/env_check.py:
     r1: 56
-  scripts/env_file.py:
-    r1: 1
   scripts/env_manifest.py:
     r1: 22
   scripts/env_repair_l1.py:
@@ -152,8 +144,6 @@ files:
     r1: 8
   scripts/install_reference.py:
     r1: 2
-  scripts/install_unidbg.py:
-    r1: 1
   scripts/intake_promise.py:
     r1: 2
   scripts/kunglao-decide.py:
@@ -161,7 +151,7 @@ files:
   scripts/kunglao-digest.py:
     r1: 1
   scripts/kunglao-init.py:
-    r1: 198
+    r1: 197
   scripts/kunglao-monitor.py:
     r1: 11
   scripts/kunglao-status.py:
@@ -186,12 +176,10 @@ files:
     r1: 29
   scripts/lessons_telemetry.py:
     r1: 3
-  scripts/lib_kunglao.py:
-    r1: 7
   scripts/lint_facts.py:
     r1: 25
   scripts/liveness_policy.py:
-    r1: 16
+    r1: 15
   scripts/log_setup.py:
     r1: 1
   scripts/loop_scheduler.py:
@@ -211,8 +199,6 @@ files:
     r1: 6
   scripts/notes_discriminator.py:
     r1: 5
-  scripts/notes_gate.py:
-    r1: 7
   scripts/notes_writer.py:
     r1: 6
   scripts/obligation_discovery.py:
@@ -266,7 +252,7 @@ files:
   scripts/report_consistency_check.py:
     r1: 1
   scripts/retirement_gate.py:
-    r1: 2
+    r1: 1
   scripts/retract_claim.py:
     r1: 8
   scripts/rho_checkpoint.py:
@@ -279,8 +265,6 @@ files:
     r1: 16
   scripts/route_capability.py:
     r1: 14
-  scripts/run_test_matrix.py:
-    r1: 2
   scripts/shell_defaults.py:
     r1: 1
   scripts/stale_blocker_prune.py:
@@ -289,8 +273,6 @@ files:
     r1: 1
   scripts/statusline_snapshot.py:
     r1: 34
-  scripts/strategy_metrics.py:
-    r1: 2
   scripts/structural_check.py:
     r1: 2
   scripts/summary_discriminator.py:
@@ -312,9 +294,9 @@ files:
   scripts/tool_value.py:
     r1: 3
   scripts/toolchain.py:
-    r1: 107
+    r1: 91
   scripts/toolchain_install.py:
-    r1: 39
+    r1: 38
   scripts/toolchain_negotiation.py:
     r1: 9
   scripts/troubleshooting_gate.py:
@@ -326,8 +308,6 @@ files:
   scripts/user_signal.py:
     r1: 1
     r2: 1
-  scripts/utf8_boot.py:
-    r1: 2
   scripts/value_replay.py:
     r1: 3
   scripts/verifier_identity.py:
@@ -726,7 +706,7 @@ files:
   tests/test_heartbeat_pulse_618.py:
     r1: 2
   tests/test_heartbeat_tick.py:
-    r1: 11
+    r1: 10
   tests/test_heartbeat_tick_argv.py:
     r1: 2
   tests/test_heartbeat_window_4.py:
@@ -891,7 +871,7 @@ files:
   tests/test_obligation_discovery.py:
     r1: 2
   tests/test_observability_58.py:
-    r1: 5
+    r1: 3
   tests/test_observability_birth_880.py:
     r1: 5
   tests/test_opaque_pred.py:
@@ -903,10 +883,6 @@ files:
     r2: 1
   tests/test_oracle_runner_108.py:
     r1: 8
-  tests/test_orchestration_chunker.py:
-    r1: 1
-  tests/test_orchestration_cost_estimate.py:
-    r1: 1
   tests/test_orchestration_eval_quality.py:
     r1: 1
   tests/test_orchestration_event_taxonomy.py:
@@ -1097,8 +1073,6 @@ files:
     r1: 10
   tests/test_statusline_v2_142.py:
     r1: 8
-  tests/test_strategy_metrics.py:
-    r1: 1
   tests/test_structural_check.py:
     r1: 1
   tests/test_stuck_event_595.py:
@@ -1165,7 +1139,7 @@ files:
   tests/test_toolchain_next_action.py:
     r1: 6
   tests/test_toolchain_stdio.py:
-    r1: 3
+    r1: 2
   tests/test_tools_structure_340.py:
     r1: 5
   tests/test_top1_reject_603.py:

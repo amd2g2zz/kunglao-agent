@@ -41,7 +41,7 @@ from __future__ import annotations
 # external_kicker FRESH_WORKER_MINUTES) all mirror this same 20.
 STUCK_MINUTES = 20
 
-# scripts/lib_kunglao.py (#43 drift detection D3): an in-progress status file
+# hooks/lib_kunglao.py drift detection D3: an in-progress status file
 # YOUNGER than this = the session is still moving (signature rotation vs
 # frozen loop). Same 20 as STUCK_MINUTES — freshness and stuckness are the
 # two sides of one worker-liveness line.

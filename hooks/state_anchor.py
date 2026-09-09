@@ -27,9 +27,9 @@ SMART = narrow + alive-only (same philosophy as worker_pulse / dispatch_gate):
     layer — any exception -> empty output, exit 0. A state_anchor failure
     must never block a worker completion.
 
-Drift semantics are sourced SINGLE-FILE from scripts/lib_kunglao.py (loaded
-by importlib under lib_kunglao_scripts — the exact external_kicker.should_kick
-precedent), NOT re-derived and NOT a hooks mirror: the drift signal is
+Drift semantics are sourced SINGLE-FILE from the hooks lib
+(hooks/lib_kunglao.py — the drift block's single home, the same module
+external_kicker.should_kick loads), NOT re-derived and NOT a mirror: the drift signal is
 semantically coupled between this cure layer (warn at ROTATION_WINDOW) and
 the recovery layer (external_kicker kicks at DRIFT_ESCALATE_ROWS); a single
 source guarantees the cure-first window contract cannot fork. See
@@ -58,7 +58,7 @@ import re
 import sys
 from pathlib import Path
 
-from _path_hygiene import ensure_scripts_path, load_module_by_path, scripts_on_path  # #671 authority
+from _path_hygiene import ensure_scripts_path, load_hooks_lib, scripts_on_path  # #671 authority
 
 SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/
 SCRIPTS_DIR = SKILL_DIR / "scripts"
@@ -80,18 +80,16 @@ _CLAIM_STATUS_RE = re.compile(r"^\s+status:\s*(\S+)")
 HYP_SEGMENT_CAP = 10
 
 
-# ---------- drift lib: single-source load of scripts/lib_kunglao.py ----------
+# ---------- drift lib: single-source load of the hooks lib ----------
 
 def _load_drift_lib():
-    """Load scripts/lib_kunglao.py under the unique name lib_kunglao_scripts
-    (the exact external_kicker.should_kick / tests/test_drift_detection
-    precedent). Cached in sys.modules so prod and pytest share one instance.
+    """Load the drift block from hooks/lib_kunglao.py via the canonical
+    by-path loader (the same module external_kicker.should_kick loads).
+    Cached in sys.modules so prod and pytest share one instance.
     FAIL_OPEN -> None on any failure (the anchor summary does not depend on
-    the drift warning). #863 Family B: delegates to load_module_by_path —
-    get-or-create + fail-open semantics unchanged."""
+    the drift warning)."""
     try:
-        return load_module_by_path(
-            "lib_kunglao_scripts", SKILL_DIR / "scripts" / "lib_kunglao.py")
+        return load_hooks_lib()
     except Exception:  # noqa: BLE001 — FAIL_OPEN: drift warning is optional
         return None
 

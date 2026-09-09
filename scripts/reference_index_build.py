@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""reference_index_build.py — generate the re-library two-tier index from the mapping.
+"""reference_index_build.py — the re-library authoring CLI, keyed on the mapping.
+
+One entry point over references/re-library/_mapping.yaml (schema
+re-library-mapping/1), two faces:
+
+  default       generate the two-tier index (see below)
+  --scaffold    emit a standard-shaped card skeleton at a
+                mapping-registered path (the scaffolder face)
+
+Index face — single home of card placement is the mapping
 
 Single home of card placement is references/re-library/_mapping.yaml
 (schema re-library-mapping/1, extended with `domains:` and `scenarios:`
@@ -225,6 +234,90 @@ def build_outputs(root: Path) -> dict[str, str]:
     return outputs
 
 
+
+
+# ---------- scaffold face (card skeleton at a mapping-registered path) ----------
+
+SKELETON = """---
+{fm}---
+
+# {title}
+
+## When to Use
+
+- <the scenario that makes this card the right home; concrete target state>
+
+## When Not To Use
+
+- <the boundary: what this card does not cover, and which card owns it>
+
+## Worked Example
+
+```python
+# few-shot listing with synthetic values; no corpus literals
+```
+"""
+
+
+class ScaffoldRefusal(RuntimeError):
+    """A refusal with a user-facing reason; the CLI converts it to exit 1."""
+
+
+def _scaffold_refusal(message: str) -> int:
+    print(f"scaffold: refusal: {message}", file=sys.stderr)
+    return 1
+
+
+def _scaffold_row(mapping_path: Path, rel_path: str) -> dict | None:
+    try:
+        doc = yaml.safe_load(mapping_path.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
+        raise ScaffoldRefusal(f"mapping unreadable: {exc}")
+    doc = doc or {}
+    if doc.get("schema") != MAPPING_SCHEMA:
+        raise ScaffoldRefusal(f"mapping schema must be {MAPPING_SCHEMA!r}")
+    rows = doc.get("cards") or []
+    for row in rows:
+        if isinstance(row, dict) and row.get("to") == rel_path:
+            return row
+    return None
+
+
+def scaffold_card(root: Path, rel_path: str, description: str,
+                  name: str | None = None) -> int:
+    """Emit the standard skeleton at `rel_path` (repo-relative, must equal
+    a mapping row 'to'); refuses unregistered paths, existing files, and
+    empty descriptions — placement stays declared data-first."""
+    if not rel_path.startswith(RELIB_PREFIX) or not rel_path.endswith(".md"):
+        return _scaffold_refusal("path must be a .md file under references/re-library/")
+    try:
+        row = _scaffold_row(root / MAPPING_REL, rel_path)
+    except ScaffoldRefusal as exc:
+        return _scaffold_refusal(str(exc))
+    if row is None:
+        return _scaffold_refusal(
+            f"{rel_path} is not registered in {MAPPING_REL} — add the row first")
+    target = root / rel_path
+    if target.exists():
+        return _scaffold_refusal(f"{rel_path} already exists")
+    if not description.strip():
+        return _scaffold_refusal("description must not be empty")
+
+    stem = target.stem
+    fm_doc = {
+        "name": name or stem,
+        "description": description.strip(),
+        "domain": row.get("domain"),
+        "family": row.get("family"),
+    }
+    fm = yaml.safe_dump(fm_doc, sort_keys=False, allow_unicode=True, width=100)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(SKELETON.format(fm=fm, title=stem.replace("-", " ").title()),
+                      encoding="utf-8")
+    print(f"scaffold: wrote {rel_path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate the re-library two-tier index from the mapping.")
@@ -232,8 +325,25 @@ def main(argv: list[str] | None = None) -> int:
                         help="repository root (default: this repo)")
     parser.add_argument("--check", action="store_true",
                         help="verify committed files match regeneration")
+    parser.add_argument("--scaffold", action="store_true",
+                        help="emit a card skeleton instead of generating "
+                             "the index (requires --path and --description)")
+    parser.add_argument("--path", default=None,
+                        help="[--scaffold] repo-relative card path, must "
+                             "equal a mapping row 'to'")
+    parser.add_argument("--description", default=None,
+                        help="[--scaffold] when-to-use + when-not "
+                             "description for the frontmatter")
+    parser.add_argument("--name", default=None,
+                        help="[--scaffold] frontmatter name (default: path stem)")
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
+
+    if args.scaffold:
+        if not args.path or args.description is None:
+            parser.error("--scaffold requires --path and --description")
+        return scaffold_card(root, "/".join(Path(args.path).parts),
+                             args.description, args.name)
 
     try:
         outputs = build_outputs(root)

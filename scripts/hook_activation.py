@@ -7,7 +7,7 @@ User pain point (verbatim, in Chinese): "kunglao-agent 需要安装hook，但是
 activated, otherwise they generate heavy noise for kunglao-agent")
 
 kunglao-agent has 7+ enforcement hooks (active_intervention, cost_gate,
-backtrack_gate, reuse_gate, etc.). Running ALL of them on EVERY
+backtrack_gate, etc.). Running ALL of them on EVERY
 orchestrator turn produces too much noise. This script implements selective
 activation: kunglao-agent decides per-hook whether it should fire, based on:
   - current cost_advice tier (from cost_gate.py)
@@ -101,9 +101,7 @@ ALL_HOOKS = {
     "active_intervention",
     "cost_gate",
     "backtrack_gate",
-    "reuse_gate",
     "troubleshooting_gate",
-    "search_gate",
     "dispatch_gate",
     "worker_pulse",
     "state_anchor",
@@ -115,10 +113,9 @@ TIER_DEFAULTS = {
     "advisory": {"active": ["active_intervention", "cost_gate"],
                   "paused": []},
     "pause_non_essential": {"active": ["active_intervention", "cost_gate"],
-                            "paused": ["reuse_gate"]},
+                            "paused": []},
     "HARD_PAUSE": {"active": ["cost_gate"],
-                   "paused": ["active_intervention",
-                              "reuse_gate", "backtrack_gate", "search_gate",
+                   "paused": ["active_intervention", "backtrack_gate",
                               "troubleshooting_gate"]},
     "none": {"active": sorted(ALL_HOOKS),
              "paused": []},
@@ -1328,6 +1325,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

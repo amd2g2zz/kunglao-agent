@@ -267,7 +267,8 @@ binwalk -e firmware.bin
 **ARM (most common in IoT):**
 ```bash
 # Cross-toolchain
-apt install gcc-arm-linux-gnueabihf gdb-multiarch
+# install the cross-toolchain via the host package manager
+# (toolchain registry: scripts/toolchain_install.py)
 
 # QEMU emulation
 qemu-arm -L /usr/arm-linux-gnueabihf/ ./arm_binary

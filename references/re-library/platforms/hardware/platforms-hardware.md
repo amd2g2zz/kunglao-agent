@@ -114,7 +114,8 @@ AArch64 (ARM 64-bit) appears in mobile apps, cloud servers (AWS Graviton), Apple
 
 ```bash
 # Install cross-toolchain and emulator
-apt install gcc-aarch64-linux-gnu gdb-multiarch qemu-user-static
+# install the cross-toolchain + emulator packages via the host
+# package manager (toolchain registry: scripts/toolchain_install.py)
 
 # Run AArch64 binary on x86 host
 qemu-aarch64-static -L /usr/aarch64-linux-gnu/ ./arm64_binary

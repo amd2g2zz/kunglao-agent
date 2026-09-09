@@ -63,14 +63,9 @@ if str(_SCRIPT_DIR) not in sys.path:
 import env_manifest  # noqa: E402  (#450 facts file — installed ledger)
 import toolchain  # noqa: E402  (ports + the adb-forward probe, single source)
 
-# UTF-8 stdout/stderr unification (same pattern as toolchain.py).
-for _stream in (sys.stdout, sys.stderr):
-    _reconfigure = getattr(_stream, "reconfigure", None)
-    if _reconfigure is not None:
-        try:
-            _reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
+from _boot import force_utf8  # single boot module (stdio + subprocess tree)
+
+force_utf8()
 
 RC_OK = 0
 RC_DEPLOY_FAILED = 1
@@ -303,6 +298,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

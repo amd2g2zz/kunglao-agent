@@ -4,12 +4,10 @@
 Validates (24 tests across 10 gates):
   v1.8.3:
     - troubleshooting_gate.py: complete report = OK; missing sections = REJECT
-    - search_gate.py: search_before_work present = OK; offline_first tag = OK; absent = REJECT
     - active_intervention.py: no help_request = NOOP; help_request unresponded = REJECT
   v1.8.4:
     - cost_gate.py: tier transitions (advisory / pause_non_essential / HARD_PAUSE)
     - backtrack_gate.py: stuck worker no backtrack = REJECT; with backtrack = OK
-    - reuse_gate.py: candidates exist + worker cites = OK; absent = REJECT
     - hook_activation.py: tier-default active/paused sets
   v1.8.5:
     - ask_for_direction_gate.py: Type A/B detected = REJECT; Type C with convergence = OK
@@ -31,12 +29,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 import troubleshooting_gate as tg
-import search_gate as sg
 import active_intervention as ai
 
 import cost_gate as cg
 import backtrack_gate as bg
-import reuse_gate as rg
 import hook_activation as ha
 
 import ask_for_direction_gate as adg
@@ -81,46 +77,7 @@ def test_troubleshooting_gate_rejects_incomplete():
     print("  [OK ] troubleshooting_gate rejects incomplete report")
 
 
-def test_search_gate_requires_section():
-    with tempfile.TemporaryDirectory() as tmp:
-        ws = Path(tmp)
-        (ws / "runs").mkdir()
-        ok, reason = sg.has_search_before_work(ws, "C-001", allow_offline=False)
-        assert not ok
-    print("  [OK ] search_gate rejects when no worker-status exists")
 
-
-def test_search_gate_accepts_with_section():
-    with tempfile.TemporaryDirectory() as tmp:
-        ws = Path(tmp)
-        (ws / "runs").mkdir()
-        (ws / "runs" / "worker-status-w1.md").write_text(
-            "## Claim\nC-001\n\n## search_before_work\n- query: x\n- source: y\n",
-            encoding="utf-8"
-        )
-        ok, reason = sg.has_search_before_work(ws, "C-001", allow_offline=False)
-        assert ok
-    print("  [OK ] search_gate accepts with search_before_work")
-
-
-def test_search_gate_accepts_offline_tag():
-    with tempfile.TemporaryDirectory() as tmp:
-        ws = Path(tmp)
-        # search_gate looks for claim-register.yaml in workspace or cwd
-        (ws / "claim-register.yaml").write_text(
-            "claims:\n  - id: C-001\n    status: OPEN\n    offline_first: true\n",
-            encoding="utf-8"
-        )
-        # also need the runs dir + worker-status to not be confused
-        (ws / "runs").mkdir()
-        ok, reason = sg.has_search_before_work(ws, "C-001", allow_offline=True)
-        # Currently the offline check looks in workspace/claim-register.yaml,
-        # which we did write. If the check still fails it's because
-        # has_search_before_work returns False because no worker-status exists
-        # AND the offline tag is found in workspace's claim-register.
-        # The contract: offline tag accepted → ok=True
-        assert ok, f"offline tag should accept; reason={reason}"
-    print("  [OK ] search_gate accepts offline_first tag (allow_offline)")
 
 
 def test_active_intervention_noop_when_no_help():
@@ -211,45 +168,6 @@ def test_backtrack_gate_accepts_with_backtrack():
     print("  [OK ] backtrack_gate accepts with valid backtrack decision")
 
 
-def test_reuse_gate_finds_candidates():
-    with tempfile.TemporaryDirectory() as tmp:
-        ws = Path(tmp)
-        _write_yaml(ws / "claim-register.yaml", {
-            "claims": [{
-                "id": "C-001", "status": "OPEN",
-                "statement": "Decode PE optional header magic bytes",
-                "statement_keywords": ["optional", "header", "magic", "bytes"]
-            }]
-        })
-        (ws / "facts").mkdir()
-        (ws / "facts" / "F-001.md").write_text(
-            "## PE optional header\nmagic bytes 0x10b.\n",
-            encoding="utf-8"
-        )
-        cands = rg.find_candidate_facts(ws, rg.get_claim(ws, "C-001"))
-        assert len(cands) >= 1
-        assert "F-001" in cands[0]["file"]
-    print("  [OK ] reuse_gate finds candidate facts via keyword overlap")
-
-
-def test_reuse_gate_requires_cite_or_justify():
-    with tempfile.TemporaryDirectory() as tmp:
-        ws = Path(tmp)
-        _write_yaml(ws / "claim-register.yaml", {
-            "claims": [{
-                "id": "C-001", "status": "OPEN",
-                "statement": "Decode PE optional header magic bytes",
-                "statement_keywords": ["optional", "header", "magic", "bytes"]
-            }]
-        })
-        (ws / "facts").mkdir()
-        (ws / "facts" / "F-001.md").write_text(
-            "## PE optional header\nmagic bytes 0x10b.\n",
-            encoding="utf-8"
-        )
-        rc = rg.check(ws, "C-001")
-        assert rc == 1
-    print("  [OK ] reuse_gate rejects when candidates exist but no cite/justify")
 
 
 def test_hook_activation_tier_defaults():
@@ -258,7 +176,6 @@ def test_hook_activation_tier_defaults():
         ha.update_state(ws, "HARD_PAUSE", "MONITOR")
         assert ha.is_active(ws, "cost_gate") is True
         assert ha.is_active(ws, "active_intervention") is False
-        assert ha.is_active(ws, "reuse_gate") is False
     print("  [OK ] hook_activation HARD_PAUSE keeps cost_gate only")
 
 
@@ -331,17 +248,12 @@ def main() -> int:
     _names = [
         "test_troubleshooting_gate_accepts",
         "test_troubleshooting_gate_rejects_incomplete",
-        "test_search_gate_requires_section",
-        "test_search_gate_accepts_with_section",
-        "test_search_gate_accepts_offline_tag",
         "test_active_intervention_noop_when_no_help",
         "test_active_intervention_rejects_unresponded",
         "test_cost_gate_tier_progression",
         "test_cost_gate_hard_cap_immediate",
         "test_backtrack_gate_stuck_no_backtrack",
         "test_backtrack_gate_accepts_with_backtrack",
-        "test_reuse_gate_finds_candidates",
-        "test_reuse_gate_requires_cite_or_justify",
         "test_hook_activation_tier_defaults",
         "test_hook_activation_user_override_wins",
         "test_ask_for_direction_type_a_rejected",

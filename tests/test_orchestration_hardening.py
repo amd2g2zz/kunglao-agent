@@ -12,13 +12,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import env_file
 import tool_error_policy as tep
 
 
@@ -64,45 +62,3 @@ def test_apply_policy_embeds_claim_for_blocker_attribution():
     assert "C-003" in r["blocker_note"]
 
 
-# ---- CLAUDE_ENV_FILE -------------------------------------------------------
-
-def test_parse_env_file_basic():
-    text = ("# comment\n"
-            "KUNGLAO_VM_HOST=192.168.20.128\n"
-            "GHIDRA_HOME=opt/ghidra_public\n"
-            "\n"
-            "EMPTY=\n")
-    assert env_file.parse_env_file(text) == {
-        "KUNGLAO_VM_HOST": "192.168.20.128",
-        "GHIDRA_HOME": "opt/ghidra_public",
-        "EMPTY": "",
-    }
-
-
-def test_parse_env_file_invalid_line_raises_with_line_number():
-    with pytest.raises(ValueError) as exc:
-        env_file.parse_env_file("GOOD=1\nNO_EQUALS_SIGN\n")
-    assert "line 2" in str(exc.value)
-
-
-def test_parse_env_file_rejects_nul_bytes():
-    with pytest.raises(ValueError):
-        env_file.parse_env_file("BAD=a\x00b\n")
-
-
-def test_parse_env_file_strips_whitespace():
-    assert env_file.parse_env_file("  KEY = value  \n") == {"KEY": "value"}
-
-
-def test_load_env_file_roundtrip(tmp_path):
-    p = tmp_path / "claude.env"
-    p.write_text("A=1\nB=two words\n", encoding="utf-8")
-    assert env_file.load_env_file(p) == {"A": "1", "B": "two words"}
-
-
-def test_load_env_file_missing_returns_empty(tmp_path):
-    assert env_file.load_env_file(tmp_path / "nope.env") == {}
-
-
-def test_default_env_file_path_constant():
-    assert env_file.CLAUDE_ENV_FILE == ".claude-env"

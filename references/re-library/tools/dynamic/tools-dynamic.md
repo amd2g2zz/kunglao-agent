@@ -55,7 +55,7 @@ Frida injects JavaScript into running processes for real-time hooking, tracing, 
 ### Installation
 
 ```bash
-pip install frida-tools frida
+# install frida-tools via pip/uv (toolchain registry: scripts/toolchain_install.py)
 # Verify
 frida --version
 ```
@@ -284,7 +284,7 @@ angr automatically explores program paths to find inputs satisfying constraints.
 ### angr Installation
 
 ```bash
-pip install angr
+# install angr via pip/uv (toolchain registry: scripts/toolchain_install.py)
 ```
 
 ### Basic Path Exploration
@@ -560,7 +560,7 @@ Qiling emulates binaries with OS-level support (syscalls, filesystem, registry).
 ### Qiling Installation
 
 ```bash
-pip install qiling
+# install qiling via pip/uv (toolchain registry: scripts/toolchain_install.py)
 # Download rootfs for target OS:
 git clone https://github.com/qilingframework/rootfs
 ```

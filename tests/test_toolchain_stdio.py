@@ -147,21 +147,21 @@ _UTF8_STDERR_CALL_SITE_SCRIPTS = (
 )
 
 
-def test_utf8_stderr_helpers_delegate_to_utf8_boot_863f():
-    """#863 Family H: the three per-script `_ensure_utf8_stderr` copies
-    (3x9, byte-identical bodies) are single-sourced as
-    `utf8_boot.ensure_utf8_stderr` (#811 stdio-insurance module) and each
-    script binds the SHARED function object by alias — the identity assert
-    is the strongest delegation form (the former textual helper-shape
-    tripwire could not tell a delegation from a fourth copy)."""
+def test_utf8_stderr_helpers_delegate_to_boot_module():
+    """The three per-script `_ensure_utf8_stderr` bindings are
+    single-sourced as `_boot.ensure_utf8_stderr` (the stdio-insurance boot
+    module) and each script binds the SHARED function object by alias —
+    the identity assert is the strongest delegation form (a textual
+    helper-shape tripwire could not tell a delegation from a fourth
+    copy)."""
     import toolchain as tc
     import toolchain_install as ti
-    import utf8_boot
+    import _boot
 
     for mod in (tc, ti, _load_init_module()):
-        assert mod._ensure_utf8_stderr is utf8_boot.ensure_utf8_stderr, (
+        assert mod._ensure_utf8_stderr is _boot.ensure_utf8_stderr, (
             f"{mod.__name__}._ensure_utf8_stderr must BE "
-            f"utf8_boot.ensure_utf8_stderr (#863 Family H delegation)")
+            f"_boot.ensure_utf8_stderr (single-source delegation)")
 
 
 def test_utf8_stderr_call_sites_pinned_in_source():

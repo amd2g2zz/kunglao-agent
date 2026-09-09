@@ -28,7 +28,7 @@ fingerprints:
 LAYERING — this is #54's KEY PROPERTY. It is COMPLEMENTARY to the two existing
 mechanical layers, NOT a duplicate of either:
 
-  #43 (scripts/lib_kunglao.py :: drift_detected / signature_rotation) — RUNTIME,
+  (hooks/lib_kunglao.py :: drift_detected / signature_rotation) — RUNTIME,
       per-loop-iteration; reads .convergence_ledger.jsonl signature rotation.
       Catches a loop SPINNING (frozen state), not a loop DECLARING DONE with
       open items. The 2026-08-11 failure had a HEALTHY moving ledger while the
@@ -502,6 +502,6 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
     force_utf8()
     sys.exit(main())

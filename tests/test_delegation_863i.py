@@ -188,7 +188,6 @@ K_ZERO_FILES = (
     "cost_gate",
     "kunglao_status",
     "priority_ratio",
-    "lib_kunglao",
     "ask_for_direction_gate",
 )
 

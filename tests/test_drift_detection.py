@@ -12,40 +12,24 @@ never read or written — it is only the FORMAT reference
 (ts, decision, open_count, open_ids, partial_count, active_workers,
 blockers, facts_total).
 """
-import importlib.util
 import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import ModuleType
 
 import pytest
 
 _HERE = Path(__file__).parent
 SCRIPTS = _HERE.parent / "scripts"
 
-# Bare-name `import lib_kunglao` is AMBIGUOUS under pytest: pytest.ini
-# pythonpath = ". hooks scripts tools" (hooks first — hooks/worker_budget's
-# lazy `from lib_kunglao import scan_active_workers` must resolve to
-# hooks/lib_kunglao.py). Production is unambiguous (each script runs with its
-# own directory at sys.path[0]). Load scripts/lib_kunglao.py by explicit path
-# under a unique name; external_kicker.should_kick uses the SAME loader so
-# both share one module instance.
-_LIB_NAME = "lib_kunglao_scripts"
+# The drift library is the hooks lib (single source: hooks/lib_kunglao.py
+# owns both the worker-status protocol and the drift block). Load through
+# the canonical by-path loader under its unique module name; the same
+# loader serves external_kicker.should_kick, so both share one instance.
+from _hooks_path import load_hooks_lib  # noqa: E402
 
-
-def load_scripts_lib() -> ModuleType:
-    lib = sys.modules.get(_LIB_NAME)
-    if lib is None:
-        spec = importlib.util.spec_from_file_location(_LIB_NAME, SCRIPTS / "lib_kunglao.py")
-        lib = importlib.util.module_from_spec(spec)
-        sys.modules[_LIB_NAME] = lib
-        spec.loader.exec_module(lib)
-    return lib
-
-
-_lib = load_scripts_lib()
+_lib = load_hooks_lib()
 DRIFT_ESCALATE_ROWS = _lib.DRIFT_ESCALATE_ROWS
 ROTATION_WINDOW = _lib.ROTATION_WINDOW
 WORKER_PROGRESS_MINUTES = _lib.WORKER_PROGRESS_MINUTES

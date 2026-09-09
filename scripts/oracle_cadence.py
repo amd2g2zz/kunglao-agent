@@ -293,7 +293,7 @@ if __name__ == "__main__":  # pragma: no cover — the CLI face is the hook's
     # single caller (outcome_capture); a direct run prints the census only.
     import sys
 
-    from utf8_boot import force_utf8  # 811 entry UTF-8 boot (utf8_boot)
+    from _boot import force_utf8  # entry UTF-8 boot (_boot)
 
     force_utf8()
     if len(sys.argv) != 2:
