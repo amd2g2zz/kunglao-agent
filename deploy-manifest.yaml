@@ -39,7 +39,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: abe4212d35b8b16119d4045965ace827528e664f849ddf70cf7da840b604bd69
+    sha256: febe8906d5920b1eb20ed760d8a3e420364c38087aeac96b4f1629c74ace1c60
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -679,7 +679,7 @@ files:
   - src: scripts/references_recall.py
     dest: .claude/scripts/references_recall.py
     kind: scaffold
-    sha256: 82132e68ee8ebf1ea0505cc07022539b6bded79b92a2fd552029035dfad81c06
+    sha256: 5fe601a7c4ad1488744907b9ebe47f9b740f2d53fd3394289acf2db572c70be6
   - src: scripts/refutation_propagate.py
     dest: .claude/scripts/refutation_propagate.py
     kind: scaffold
