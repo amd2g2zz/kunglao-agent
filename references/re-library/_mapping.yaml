@@ -56,8 +56,6 @@ population_b:
   to: references/orchestration/dispatch-protocol.md
 - from: references/method-constraints.md
   to: references/orchestration/method-constraints.md
-- from: references/search-policy.md
-  to: references/orchestration/search-policy.md
 - from: references/malware-phase-routing.md
   to: references/orchestration/malware-phase-routing.md
 - from: references/operational-mechanics.md
@@ -107,10 +105,6 @@ cards:
   to: references/re-library/anti-analysis/catalog/anti-analysis.md
   domain: anti-analysis
   family: catalog
-- from: references/re-library/awesome-re-resources.md
-  to: references/re-library/research/resources/awesome-re-resources.md
-  domain: research
-  family: resources
 - from: references/re-library/detection-engineer.md
   to: references/re-library/malware/reporting/detection-engineer.md
   domain: malware
@@ -159,10 +153,6 @@ cards:
   to: references/re-library/method/process/loop-stage-gates.md
   domain: method
   family: process
-- from: references/re-library/malware-analysis-quickstart.md
-  to: references/re-library/malware/workflow/malware-analysis-quickstart.md
-  domain: malware
-  family: workflow
 - from: references/re-library/malware-analysis-workflow.md
   to: references/re-library/malware/workflow/malware-analysis-workflow.md
   domain: malware

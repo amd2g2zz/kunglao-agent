@@ -58,7 +58,6 @@ LIVE_PATH_SURFACES = (
     "rules/kunglao-convergence-loop.md",
     "references/governance/decision-rights.md",
     "references/governance/guardrails.md",
-    "references/orchestration/search-policy.md",
     "references/orchestration/failure-modes/failure-modes.md",
     "references/orchestration/failure-modes/failure-modes-lifecycle.md",
     "references/_INDEX.md",

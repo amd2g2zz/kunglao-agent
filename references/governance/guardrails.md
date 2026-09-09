@@ -418,12 +418,14 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   committed files — gitignored source dirs (`mal-recon/*/work/`, `javap/`,
   `.venv/`) are ABSENT. Dispatch prompts must state the main-repo source path
   explicitly; workers fall back to the main-repo copy and record the
-  substitution. **Full text → `references/optimization-2026-08.md` §1d.2.**
+  substitution.
+
 
 - **§1d.3 — superseded-path declaration (v1.9.19).** RE-dispatches after a
   method supersession MUST open with an explicit ban of the dead path
   (`⚠️ ONLY legal path: <new>. FORBIDDEN: <old> — the previous worker was terminated for taking <old>`).
-  **Full text + case → `references/optimization-2026-08.md` §1d.3.**
+
+
 
 - **§6.1 — heartbeat loop (mandatory, start at first dispatch).** The moment
   the first worker is dispatched, self-schedule a heartbeat: `/loop 5m <poll
@@ -474,8 +476,8 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   looping; zero step delta + eta grows → spinning). Pings travel via
   SendMessage (orchestrator → worker) — the sanctioned channel (v1.9.20/21,
   #88); agent-team features (teammates, team setup, worker↔worker messaging)
-  are never used. **Full protocol + signal table →
-  `references/optimization-2026-08.md` §6.1a.**
+  are never used.
+
 
 - **§6.2 — notes capture via /malware-veri-notes (mandatory, every heartbeat).**
   Each heartbeat tick (not just at the end) MUST capture valuable content
@@ -497,7 +499,8 @@ working path. See `method-constraints.md` for Go-specific frida rules.
   (1) verifier sign-off per note, (2) notes for every fact family,
   (3) verdict re-scored on latest facts, (4) report written,
   (5) dynamic validation considered/authorized. ANY unmet item → session
-  continues. **Full checklist + rationale → `references/optimization-2026-08.md` §6.3.**
+  continues.
+
   **v1.9.24 anti-spoof double-sign**: before declaring CONVERGED publicly,
   (a) run the sign-off gate (`scripts/blind_gate.py`-backed claim_migrator
   rejects PROVEN claims without independent verifier sign-off) AND (b) re-run
