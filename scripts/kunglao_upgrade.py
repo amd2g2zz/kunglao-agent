@@ -98,6 +98,12 @@ RC_UNKNOWN_ORIGIN = 3
 RC_IRON_RULE = 4
 RC_DIRTY_WORKSPACE = 6
 RC_INCOMPLETE = 7
+# The required intake answers are missing and no --resolve answers were
+# supplied: the pending-decision JSON rode stdout (flow=kunglao-upgrade);
+# the agent collects the answers and re-enters with --resolve. Same
+# structured channel as the init intake (exit 8 + machine-parseable
+# stdout).
+RC_ANCHORS_PENDING = 8
 
 # #758 G1a/G1b: advisory interpreter-pin echo of .python-version=3.11.
 PYTHON_PIN = (3, 11)
@@ -1472,8 +1478,100 @@ def _item_skill_staleness_check(ws: Path, dry: bool) -> str:
 # driver
 # --------------------------------------------------------------------------
 
+def _anchor_backfill(ws: Path, dry_run: bool, resolve: dict | None,
+                     items_out: list | None) -> tuple[int, dict | None]:
+    """Detect missing required intake answers in task_spec.yaml and elicit
+    them through the structured interview channel (pending JSON on stdout,
+    exit 8; answers re-enter via --resolve). A backfill writes ONLY the
+    missing fields: task_spec is the workspace's input contract (scaffold
+    class, template-refresh job), NOT one of the user-data dirs — the
+    user-data invariance check is untouched. An unreadable contract is not
+    backfillable: one stderr line directs to full re-init, the upgrade
+    itself stays successful.
+
+    Returns (rc, pending_doc) — pending_doc is the JSON document to print
+    LAST on stdout when rc == RC_ANCHORS_PENDING.
+    """
+    import oracle_anchors
+    _record = (lambda action, detail: items_out.append(
+        {"name": "oracle_anchor_backfill", "action": action,
+         "detail": detail}) if items_out is not None else None)
+    ok, gaps, state = oracle_anchors.inspect(ws)
+    if ok:
+        print("kunglao-upgrade: anchors: complete")
+        _record("noop", "anchors: complete")
+        return RC_OK, None
+    if state == oracle_anchors.STATE_CORRUPT:
+        _warn_line("kunglao-upgrade: WARN — anchors: task_spec unreadable, "
+                   "backfill impossible, full re-init required "
+                   "(kunglao-init <ws> --force --type <type>)")
+        _record("noop", "anchors: task_spec unreadable (full re-init)")
+        return RC_OK, None
+    answers = {}
+    for name in oracle_anchors.FIELDS:
+        value = (resolve or {}).get(name)
+        if isinstance(value, str) and value.strip():
+            answers[name] = value
+    if answers:
+        try:
+            oracle_anchors.validate_values(answers)
+        except ValueError as exc:
+            print(f"kunglao-upgrade: ERROR anchor backfill refused: {exc}",
+                  file=sys.stderr)
+            _record("noop", f"backfill refused: {exc}")
+            return RC_INCOMPLETE, None
+        oracle_anchors.apply(ws, answers)
+        ok, gaps, _state = oracle_anchors.inspect(ws)
+        if ok:
+            print("kunglao-upgrade: anchors: backfilled via interview")
+            _record("applied", "anchors: backfilled via interview")
+            return RC_OK, None
+    if dry_run:
+        print(f"kunglao-upgrade: anchors: pending interview "
+              f"(missing: {', '.join(gaps)})")
+        _record("noop", f"anchors: pending interview ({len(gaps)} missing)")
+        return RC_OK, None
+    pending = build_anchor_pending_doc(ws, gaps)
+    _record("noop", "anchors: pending interview")
+    return RC_ANCHORS_PENDING, pending
+
+
+def build_anchor_pending_doc(ws: Path, gaps: list[str]) -> dict:
+    """The structured interview for the missing answers — same schema,
+    same flow, same re-entry contract as the init intake."""
+    import decision_pending as dp
+    import oracle_anchors
+    questions = {
+        "goal_verbatim": ("Your goal for this workspace, restated "
+                          "verbatim — what do you want?"),
+        "success_criterion": ("What counts as done — the checkable "
+                              "end-state the result is judged against?"),
+        "verification_method": ("How is the result verified?"),
+    }
+    decisions = []
+    for name in gaps:
+        if name == "verification_method":
+            decisions.append(dp.PendingDecision(
+                decision_id=name, question=questions[name],
+                kind=dp.KIND_CHOICE,
+                options=tuple(oracle_anchors.METHOD_OPTIONS),
+                default=None))
+        else:
+            decisions.append(dp.PendingDecision(
+                decision_id=name, question=questions[name],
+                kind=dp.KIND_VALUE, options=(), default=None))
+    doc = dp.build_pending_doc(
+        flow="kunglao-upgrade", workspace=str(ws),
+        guidance=dp.GUIDANCE_TEMPLATE, decisions=decisions)
+    doc["guidance"] = doc["guidance"] + (
+        " These answers are the workspace's required oracle anchors; "
+        "analysis entry and resume refuse until they are collected.")
+    return doc
+
+
 def upgrade(ws: Path, dry_run: bool = False,
-           items_out: list | None = None) -> int:
+           items_out: list | None = None,
+           resolve: dict | None = None) -> int:
     ws = Path(ws)
     origin = template_version.read_workspace_version(ws)
     if origin is None:
@@ -1541,6 +1639,12 @@ def upgrade(ws: Path, dry_run: bool = False,
         # references (mis-wired by a pre-fix tool) — sweep applies here too.
         sweep = _install_reference_sweep(ws)
         _emit(ws, "install_reference_scan", _sweep_detail(sweep))
+        anchor_rc, anchor_pending = _anchor_backfill(
+            ws, dry_run, resolve, items_out)
+        if anchor_rc != RC_OK:
+            if anchor_pending is not None:
+                print(json.dumps(anchor_pending, ensure_ascii=False))
+            return anchor_rc
         return RC_OK
 
     if dry_run:
@@ -1551,6 +1655,9 @@ def upgrade(ws: Path, dry_run: bool = False,
                 if items_out is not None:
                     items_out.append({"name": item, "action": "noop",
                                        "detail": "dry-run"})
+        # the required intake answers: report their state in the plan,
+        # write nothing (the dry run never pends)
+        _anchor_backfill(ws, dry_run=True, resolve=resolve, items_out=items_out)
         # #752 D6: planned sweep surfaces in the dry-run plan, writes nothing
         stale_n = sum(len(v) for v in
                       install_reference.scan_workspace(
@@ -1622,6 +1729,10 @@ def upgrade(ws: Path, dry_run: bool = False,
         # the item above already emitted the one WARN this run needs.
         _guarded_stamp_refresh(ws, version=target, warn=False)
         _emit_event("stamp", "ok", f"version={target}")
+        # required intake answers: backfill BEFORE the post-state commit so
+        # the write rides the snapshot layer (the tree stays clean)
+        anchor_rc, anchor_pending = _anchor_backfill(
+            ws, dry_run=False, resolve=resolve, items_out=items_out)
         _emit(ws, "upgrade", f"{origin}->{target} items={applied}")
         print(f"kunglao-upgrade: {origin} -> {target} "
               f"({applied} item(s), snapshot {snap_path.name})")
@@ -1680,6 +1791,10 @@ def upgrade(ws: Path, dry_run: bool = False,
         # slash-commands/hooks up only after a plugin reload.
         print("kunglao-upgrade: skill package updated — run /reload-plugins "
               "in Claude Code to activate")
+        if anchor_rc != RC_OK:
+            if anchor_pending is not None:
+                print(json.dumps(anchor_pending, ensure_ascii=False))
+            return anchor_rc
     except Exception as exc:  # noqa: BLE001 — incomplete, not silent success
         tail_error = f"{type(exc).__name__}: {exc}"
         _emit_event("summary", "fail", tail_error)
@@ -1702,11 +1817,26 @@ def main(argv: list[str] | None = None) -> int:
                    help="emit a single JSON envelope on stdout (status, rc, "
                         "items, iron_rule_hash, started_at, ended_at); "
                         "the human-readable plan still goes to stderr")
+    p.add_argument("--resolve", metavar="PATH", default=None,
+                   help="answers JSON for the required-intake-answer "
+                        "interview (goal_verbatim / success_criterion / "
+                        "verification_method); re-entry after a pending "
+                        "exit 8")
     a = p.parse_args(argv)
     _warn_python_version()
     started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     items_out: list = []
-    rc = upgrade(Path(a.workspace), a.dry_run, items_out)
+    resolve_answers: dict | None = None
+    if a.resolve:
+        try:
+            loaded = json.loads(Path(a.resolve).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"kunglao-upgrade: ERROR --resolve unreadable: {exc}",
+                  file=sys.stderr)
+            return 1
+        resolve_answers = loaded if isinstance(loaded, dict) else {}
+    rc = upgrade(Path(a.workspace), a.dry_run, items_out,
+                 resolve=resolve_answers)
     ended_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     if a.json:
         status = {
@@ -1716,6 +1846,7 @@ def main(argv: list[str] | None = None) -> int:
             RC_IRON_RULE: "iron-rule-violation",
             RC_DIRTY_WORKSPACE: "refused-dirty",
             RC_INCOMPLETE: "incomplete",
+            RC_ANCHORS_PENDING: "anchors-pending",
         }
         # pick first matching key
         chosen = "ok"

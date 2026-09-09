@@ -27,6 +27,8 @@ import json
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
+
+from _factories import seed_oracle_anchors  # noqa: E402
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -438,6 +440,7 @@ def _stamped_ws(tmp_path: Path) -> Path:
     ws.mkdir(parents=True)
     (ws / "CLAUDE.md").write_text("# kunglao_template_version: 9.9.9\n", encoding="utf-8")
     (ws / "runs").mkdir()
+    seed_oracle_anchors(ws)
     return ws
 
 

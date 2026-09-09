@@ -71,8 +71,13 @@ def _armed_ws(tmp_path: Path, *, name: str = "ws",
                 if k != "id":
                     lines.append(f"  {k}: {v}")
         (ws / "claim-register.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        # the three required intake answers ride the contract (these tests
+        # pin resume delegation, not the anchor interview)
         (ws / "task_spec.yaml").write_text(
-            "primary_questions:\n  - q1: sample family\n", encoding="utf-8")
+            "primary_questions:\n  - q1: sample family\n"
+            "goal_verbatim: legacy goal\n"
+            "success_criterion: legacy criterion\n"
+            "verification_method: manual\n", encoding="utf-8")
 
     # #748: stamp the workspace template version so the stale-workspace
     # gate (RC=5) passes — these tests are about resume's delegation

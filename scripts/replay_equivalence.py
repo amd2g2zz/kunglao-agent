@@ -46,6 +46,8 @@ import json
 import sys
 from pathlib import Path
 
+import oracle_anchors  # noqa: E402  — the intake method enum (single source)
+
 SCHEMA_ID = "replay-equivalence/1"
 ARTIFACT_GLOB = "replay-*.json"
 DEFAULT_STRENGTH = 2
@@ -397,10 +399,25 @@ def mutation_face(pairs: list[dict], evaluate=evaluate_pairs) -> None:
 # ---------------------------------------------------- declared faces -----
 
 def declared_reproduction_qids(task_spec: dict) -> set[str]:
-    """Question ids carrying the declared ``reproduction: true`` bit."""
+    """Question ids carrying the declared ``reproduction: true`` bit.
+
+    The workspace-level ``verification_method`` answer arms the set too:
+    when the intake collected reproduction / replay-evidence as the
+    verification method, EVERY primary question is declared — the
+    controlled-comparison face applies to the whole engagement, not only
+    to individually flagged questions. static / manual (or an absent
+    answer) leave the per-question bits as the sole source.
+    """
+    spec = task_spec or {}
     out: set[str] = set()
-    for q in (task_spec or {}).get("primary_questions") or []:
-        if isinstance(q, dict) and q.get("reproduction") is True \
+    questions = [q for q in spec.get("primary_questions") or []
+                 if isinstance(q, dict)]
+    if str(spec.get("verification_method") or "") in \
+            oracle_anchors.REPLAY_ORACLE_METHODS:
+        out.update(q["id"] for q in questions
+                   if isinstance(q.get("id"), str) and q["id"].strip())
+    for q in questions:
+        if q.get("reproduction") is True \
                 and isinstance(q.get("id"), str) and q["id"].strip():
             out.add(q["id"])
     return out

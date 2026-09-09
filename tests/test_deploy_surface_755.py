@@ -31,7 +31,7 @@ if str(SCRIPTS) not in sys.path:
 
 import template_version as tv  # noqa: E402
 from event_taxonomy import EMIT_ACTIONS  # noqa: E402
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 
 # ---------------------------------------------------------------- #143 home isolation
@@ -80,6 +80,7 @@ def _fixture_ws(tmp_path: Path) -> Path:
     (ws / ".claude").mkdir()
     (ws / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
     (ws / "runs").mkdir()
+    seed_oracle_anchors(ws)
     return ws
 
 
@@ -649,6 +650,7 @@ class TestT6Registry:
         (ws / "notes" ).mkdir()
         (ws / "notes" / "keep.md").write_text("precious bytes",
                                               encoding="utf-8")
+        seed_oracle_anchors(ws)
         return ws
 
     @staticmethod

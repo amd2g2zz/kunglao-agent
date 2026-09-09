@@ -54,6 +54,12 @@ RC_STALE_WORKSPACE = 5
 # refusal to its exact remediation.
 RC_HEARTBEAT_VERIFY_FAIL = 6
 
+# The required intake answers (goal verbatim / success criterion /
+# verification method) are missing from task_spec.yaml — analysis entry
+# refuses until the init interview collects them. Never a guessed default:
+# a blank field or an out-of-enum method is missing.
+RC_ORACLE_ANCHORS_MISSING = 7
+
 
 def cmd_decide(args) -> int:
     ws = Path(args.workspace).resolve()
@@ -290,9 +296,17 @@ def cmd_resume(args) -> int:
     trails the skill version, refuse with RC=5 and direct the operator to
     `/kunglao-agent:upgrade <workspace>` (user must explicitly act —
     no auto-fix per #748 user ruling 2026-08-26).
+
+    The required intake answers gate resume the same way they gate
+    analysis entry: no anchorless reasoning after a crash — repair the
+    anchors (in place, or full re-init on an unreadable contract) and
+    re-run.
     """
     ws = Path(args.workspace).resolve()
     rc = _gate_stale_workspace(ws)
+    if rc != 0:
+        return rc
+    rc = _gate_oracle_anchors(ws)
     if rc != 0:
         return rc
     import kunglao_resume as kresume
@@ -373,12 +387,33 @@ def _gate_heartbeat_rearm(ws: Path) -> int:
     return 0
 
 
+def _gate_oracle_anchors(ws: Path) -> int:
+    """Analysis entry AND resume refuse while the required intake answers
+    are missing. Two states, two remedies:
+
+    - answers missing on a parseable contract -> repair IN PLACE (the
+      intake re-entry fills ONLY the missing fields; analysis state is
+      preserved);
+    - contract unreadable -> not repairable in place: full re-init (the
+      register is backed up first).
+    The loop never reasons without its anchors, and never guesses one.
+    """
+    import oracle_anchors
+    ok, gaps, state = oracle_anchors.inspect(ws)
+    if ok:
+        return 0
+    print(f"kunglao: entry refused - "
+          f"{oracle_anchors.refusal_hint(gaps, state)}", file=sys.stderr)
+    return RC_ORACLE_ANCHORS_MISSING
+
+
 def cmd_analysis(args) -> int:
     """#754 T3: the /kunglao-agent:analysis ENTRY gate chain — run once
     before entering the convergence loop (SKILL.md contract):
 
       1. _gate_stale_workspace (#748, same mount-point pattern as resume);
-      2. _gate_heartbeat_rearm (#754): durable-loop aging rebuild +
+      2. _gate_oracle_anchors (the required intake answers);
+      3. _gate_heartbeat_rearm (#754): durable-loop aging rebuild +
          continuous-tick verify; rc=6 maps to the re-arm hint.
 
     Pure gate/checker surface: entering the loop remains the orchestrator's
@@ -386,6 +421,9 @@ def cmd_analysis(args) -> int:
     """
     ws = Path(args.workspace).resolve()
     rc = _gate_stale_workspace(ws)
+    if rc != 0:
+        return rc
+    rc = _gate_oracle_anchors(ws)
     if rc != 0:
         return rc
     return _gate_heartbeat_rearm(ws)
@@ -416,7 +454,11 @@ def main() -> int:
             "version) — run /kunglao-agent:upgrade <ws> first\n"
             "  6 = heartbeat verify failed (analysis entry) — run "
             "/kunglao-agent:resume for re-arm guidance\n"
-            "(resume/check-stale return 5; analysis entry returns 5 or 6)"
+            "  7 = required intake answers missing (analysis entry) — fill "
+            "goal_verbatim / success_criterion / verification_method in "
+            "task_spec.yaml (init intake; README 'How to state the task')\n"
+            "(resume/check-stale return 5; analysis entry and resume return "
+            "5 or 7; analysis entry additionally returns 6)"
         ),
     )
     sub = ap.add_subparsers(dest="cmd", required=True)

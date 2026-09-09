@@ -42,7 +42,7 @@ SCRIPTS = REPO / "scripts"
 KUNGLAO_PY = SCRIPTS / "kunglao.py"
 
 import template_version as tv  # noqa: E402
-from _factories import seed_bins  # noqa: E402
+from _factories import seed_bins, seed_oracle_anchors  # noqa: E402
 
 CUR_VERSION = tv.read_skill_version()
 STAMP_KEY = tv.STAMP_KEY
@@ -117,6 +117,9 @@ def _refusing_ws(tmp: Path) -> Path:
     (ws / "runs").mkdir()
     (ws / "runs" / "worker-status-C001.txt").write_text("status line",
                                                         encoding="utf-8")
+    # the required intake answers (this file pins merge semantics, not the
+    # anchor interview)
+    seed_oracle_anchors(ws)
     return ws
 
 
