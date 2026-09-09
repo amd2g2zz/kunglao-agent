@@ -27,7 +27,7 @@ Rules enforced at write time:
 File format matches the notes layer the convergence note-gate reads
 (convergence_check._note_layer_gaps: frontmatter claim_id +
 verify_status) and the fact-CONFLICT convention's supersedes vocabulary
-(references/schema.md).
+(references/schemas/schema.md).
 
 Consumers (#528): the notes-write path behind hooks/write_guard.py
 (#532 PreToolUse face) — a Write/Edit to notes/*.md carrying no
@@ -44,7 +44,7 @@ _FM_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 _MAX_CHAIN_WALK = 64  # cycle breaker: chains deeper than this are broken
 
 # verify_status vocabulary the convergence note-gate recognizes
-# (references/schema.md note.verify_status).
+# (references/schemas/schema.md note.verify_status).
 _VERIFY_PENDING = "pending"
 
 

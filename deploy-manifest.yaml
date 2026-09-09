@@ -7,7 +7,7 @@ files:
   - src: hooks/bash_fact_guard.py
     dest: .claude/hooks/bash_fact_guard.py
     kind: hook
-    sha256: 24ab3d27f951ba34a96d89c83e7e471ff8ceec1065577c7370c29d8c7243cd1b
+    sha256: 70cc9762390245569d0589ed70cfe00bc249762e1352a3141f0c18972aea4ef5
   - src: hooks/completion_gate.py
     dest: .claude/hooks/completion_gate.py
     kind: hook
@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 2084a3988d8b866f4d4f23513e082a92bafe20abb809f855f13cc4ed2d29eaa2
+    sha256: 3cc8eb7f9814545c810521abcc51467607f39bc41e62a0bd2379ba24aaddfbea
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -39,7 +39,7 @@ files:
   - src: hooks/recall_inject.py
     dest: .claude/hooks/recall_inject.py
     kind: hook
-    sha256: 3221b999ecd161b8b03a7bd4c7b4ee39ea3147d86b105a27d15ce7b20de52080
+    sha256: abe4212d35b8b16119d4045965ace827528e664f849ddf70cf7da840b604bd69
   - src: hooks/session_start.py
     dest: .claude/hooks/session_start.py
     kind: hook
@@ -55,7 +55,7 @@ files:
   - src: hooks/violation_capture.py
     dest: .claude/hooks/violation_capture.py
     kind: hook
-    sha256: 037feb618b195693be64c4078b5419def50bead6f0d1ba23c3adfb5f3fa3a650
+    sha256: a6436c829301e60224ef467035aab25926f3f9cecee846e64786b2e22a26fe66
   - src: hooks/worker_budget.py
     dest: .claude/hooks/worker_budget.py
     kind: hook
@@ -63,19 +63,19 @@ files:
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
-    sha256: 423a895f43f2ada072096c20494be4d7504d101cafbdae0c09c688f49e374cd6
+    sha256: 86fef0d3b90d41c50595e9cc0003b9c4327abbcc3df996231df6383b71535c21
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 513542b746b13f9d0c55916dbceb7aa6f3fc9f1e9344828a54358938db1f10e1
+    sha256: 6eeb2b06d9de5a99df2afba9edcd87f742f0042e94c4e5a89082da37ebcc9a10
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: f5730c76202d5f1ebb938c330e83955a90907d120840e5542809d2b1c6b550cb
+    sha256: a2be8454a3ead67622da5100b4e309fb49e9837856274d750ebf9fd58c514fb1
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
-    sha256: 54f02b8e821bb9f1e21ca29399b53daa2ec1519a1ebf1d29ed0b3dd8d2dd0fb5
+    sha256: eb6c276194eef594606f99a76304a5f99adcee64f4a818bf1749181a4443f6bd
   - src: hooks/write_guard.py
     dest: .claude/hooks/write_guard.py
     kind: hook
@@ -99,11 +99,11 @@ files:
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
-    sha256: bf5047c252347f72e4574de1a19ffebfe08e4a7f269867234d02448104cfa9e4
+    sha256: 2f1372e869b80e92135b045c2fdb73f5193e3142414fcc21765d2f87a095dbf8
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 144fd8c18b58ad00f4aeb5ef42b20091b2fc0deab4e02afacb8cb0fc9dc22fdd
+    sha256: 8d4b20d7c508dab0c2887f20c98efae073de4ad67fa63782db68f0732c23db55
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -115,7 +115,7 @@ files:
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
-    sha256: 214d3d6830ca54d56e7b4cd8965c4c7413c0840e0ec7cf2cba430dac121700ea
+    sha256: a70f25c7a7e336e5429eab4d4a28e4bcb64f2d4d7c6c6c552b8e9d94bd208aa9
   - src: scripts/_entry.py
     dest: .claude/scripts/_entry.py
     kind: scaffold
@@ -143,7 +143,7 @@ files:
   - src: scripts/anomaly_detector.py
     dest: .claude/scripts/anomaly_detector.py
     kind: scaffold
-    sha256: 8d82c8c8b86c92a7ccb4109e4a481ea509a9f19e598b98b8d63f5ceb4447c555
+    sha256: c081e26a1d2fbbd81862f748b837acf0fa093fb72b22ea33bd2fdd59889046e4
   - src: scripts/answer_key_lint.py
     dest: .claude/scripts/answer_key_lint.py
     kind: scaffold
@@ -155,7 +155,7 @@ files:
   - src: scripts/ask_for_direction_gate.py
     dest: .claude/scripts/ask_for_direction_gate.py
     kind: scaffold
-    sha256: b2f93fa0249478a5538c4fd939bd14ff307c228f3d792b0ee75f3841d637d3d9
+    sha256: 330d808a5643fba9be463a492c8fffc2c376d663a0c3f3dc605418d85fd9faac
   - src: scripts/backtrack_gate.py
     dest: .claude/scripts/backtrack_gate.py
     kind: scaffold
@@ -207,7 +207,7 @@ files:
   - src: scripts/case_bank.py
     dest: .claude/scripts/case_bank.py
     kind: scaffold
-    sha256: bf2be8f370f50dab53f3b18b13b213f2b20138c69c95a5c6c8cf2ef5f012b12a
+    sha256: 5f1dc3f2a383b01231f5a083afa62188f3ef6434e297a08a0ea60d7c45e11b0a
   - src: scripts/challenge_ledger.py
     dest: .claude/scripts/challenge_ledger.py
     kind: scaffold
@@ -343,7 +343,7 @@ files:
   - src: scripts/error_response.py
     dest: .claude/scripts/error_response.py
     kind: scaffold
-    sha256: e29b379331849f6921b06589e4833e2c74cba2eb74ef5d9f0db98df6eed4e781
+    sha256: ca84ce0b9bf6283da5925a1b9b2745652dc3f6bfbf5bb0fe25c5f26692df9cdf
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
@@ -367,7 +367,7 @@ files:
   - src: scripts/fixture_excerpt_lint.py
     dest: .claude/scripts/fixture_excerpt_lint.py
     kind: scaffold
-    sha256: 95435ea86ae1516ac7a0d816638a4ee39319219b50892c3548d4336af999c3b3
+    sha256: 94fd4f8e164ea1ebb064a95ab99b6986bb71d6d2c338d4db90118ddc4e64fa49
   - src: scripts/gate_telemetry.py
     dest: .claude/scripts/gate_telemetry.py
     kind: scaffold
@@ -411,7 +411,7 @@ files:
   - src: scripts/hypothesis_seeder.py
     dest: .claude/scripts/hypothesis_seeder.py
     kind: scaffold
-    sha256: 4867e369d6024a92504330a019ef2746d0820bf7de68090cd6ca667e84752e3e
+    sha256: 1e70d4c70c594fb23f5388dc21bb16839c09d54285f3cc9e1843bec225046864
   - src: scripts/hypothesis_store.py
     dest: .claude/scripts/hypothesis_store.py
     kind: scaffold
@@ -463,7 +463,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 03f9430e8c053d089b8b17ad5556063a78b0abd86d2b4bede3285f76d3d0be0e
+    sha256: 5632ab6c230c23f4d09f4eb11bd53d5e7cdb8d2bd893c82c7b48f2f2f6836cbf
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -499,7 +499,7 @@ files:
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
-    sha256: 9e482c77cbeeda9669ea3f577a55f0ebfdaa0f9647f5d5a44426533a98d6b61d
+    sha256: 7b20110f6f101869026ba1c979eddb2479e3c0bb47db437d4f984defee0aa33f
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
@@ -515,7 +515,7 @@ files:
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
-    sha256: 696004dd04752ae9ff1528ca4ed3768ac086c4e5a3cb8013a746eb11aaba0b21
+    sha256: fc30e3c4aa5ed0c49290ad007f951955eac072397198f4b60d78cb57ccff5e1c
   - src: scripts/kunglao_wait.py
     dest: .claude/scripts/kunglao_wait.py
     kind: scaffold
@@ -531,7 +531,7 @@ files:
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
-    sha256: 2c103754b895065aaedc1cf492d129531382299fe3aceace618f397b2e0d7273
+    sha256: 8873d9265c75eb4ce0ca521d7bc282f042fcafb6c5114451ee0d59751d987594
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
@@ -587,7 +587,7 @@ files:
   - src: scripts/notes_writer.py
     dest: .claude/scripts/notes_writer.py
     kind: scaffold
-    sha256: a79a41426dbae647899d1fab52fce80f3527063c3ef2f3bc7108356ef2b46b7e
+    sha256: c4ec1842b38e7ea67130df62e89b6b0a97a5a518abb069b073a1b516592362d3
   - src: scripts/obligation_discovery.py
     dest: .claude/scripts/obligation_discovery.py
     kind: scaffold
@@ -675,7 +675,7 @@ files:
   - src: scripts/references_recall.py
     dest: .claude/scripts/references_recall.py
     kind: scaffold
-    sha256: 2d62e40e9c9fb63ada5605bb4f07a61f480e5e7db534e9fd4db2feef1d20692a
+    sha256: 82132e68ee8ebf1ea0505cc07022539b6bded79b92a2fd552029035dfad81c06
   - src: scripts/refutation_propagate.py
     dest: .claude/scripts/refutation_propagate.py
     kind: scaffold
@@ -871,7 +871,7 @@ files:
   - src: scripts/write_gate.py
     dest: .claude/scripts/write_gate.py
     kind: scaffold
-    sha256: 6f623da15ce5f1cc555930f0054b514132f9fd3e8041af1221a57476946e979f
+    sha256: 21aaf3e9e08f9f8dc6ab529c551020bff4dedb7e6f6279e2fb793aaa4ff5d0d6
   - src: scripts/write_guard_unlock.py
     dest: .claude/scripts/write_guard_unlock.py
     kind: scaffold
@@ -891,391 +891,391 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 0677dbeecc7d6856a9e5b9d62555ef94907d3563e1c7c733595194ebb7d8a068
+    sha256: 1d06a679c14e7bae4f5e97c7c2fa65073004ebdcc3038da5f9ceb3dd4f54b991
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: c9a37b52be4da762a7be5e68edc5140a1ae43f5dc6245e030a399c66aa76e92f
+    sha256: a7b49b013a13953f292de0a357db5bc750e941f1dfd512ee59c8aaf48e3761d3
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
-    sha256: 8f82d9b1cef4be251da977b89bad0d46528e73954816fbe9ed8d1fd7688b2c92
+    sha256: 167788909de350f289b37bb6a988982a01f42858b58719deaf7709cf5af18f71
   - src: references/_index-anti-analysis.md
     dest: .claude/references/_index-anti-analysis.md
     kind: asset
-    sha256: 33025a62505ba872e536200746564f1194438f3332870e46da2daa0ee308616b
+    sha256: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   - src: references/_index-languages.md
     dest: .claude/references/_index-languages.md
     kind: asset
-    sha256: 4a03d86889474508d5a5e0c5b7b0994378de1cae6d9a2c263f2d184533e2ddf8
+    sha256: 0f18b3824fe1cac6481404aa80cfbe901a5e7d2c01caf99c1d49d896fb070522
   - src: references/_index-malware.md
     dest: .claude/references/_index-malware.md
     kind: asset
-    sha256: f26bd61f16bff9a324a24e7c7017cf74e0e79f12eead1c28613163249ccbf69c
+    sha256: c0a29b9cf6f009ad31e91e7f328024610d0c79633185395004c432d45d47f761
   - src: references/_index-method.md
     dest: .claude/references/_index-method.md
     kind: asset
-    sha256: 6b959caa44e2c6f581d6d2537bfc927e1c908d46748c0c583052d7fb055b3299
+    sha256: 81a789b3d6435fb5d391c7788ae3d85915ed2c728eb5ea2b62e2f1e7750c8e8d
   - src: references/_index-patterns.md
     dest: .claude/references/_index-patterns.md
     kind: asset
-    sha256: d321327c8c7ae31e60a2349fae5d8c72fcb35a00166845bf2f4993b724dcd315
+    sha256: cbe4d88df5dfdb0426b2c892288e143cebfaaa2b7e528573f196d65fabe83313
   - src: references/_index-platforms.md
     dest: .claude/references/_index-platforms.md
     kind: asset
-    sha256: 2be04299e1395be23fae6ef2642b0f511ed8cb42798bbbb561a6a635c1e8f1d7
+    sha256: 69543ebc5d97be54ca3dc320af0a971923de0d01c7419e33c4013efa8c318cdd
   - src: references/_index-research.md
     dest: .claude/references/_index-research.md
     kind: asset
-    sha256: ff5ffdb39e171090888daa56a82702444ba247d745781eef98bf90a92195d2e7
+    sha256: d787284be6aa82246894adf8eb8d1f7e85130d47b07d835faa390b2414558abe
   - src: references/_index-tools.md
     dest: .claude/references/_index-tools.md
     kind: asset
-    sha256: 29406fabc4e24cfc9117e91e3ec3fd09458c6ff928ddd564d3016a83dd1c04db
+    sha256: 4ac1677fd998385286d204cde8519ee4c42c09f0eb38b4f6569e7365f32a9fb8
   - src: references/_index-web.md
     dest: .claude/references/_index-web.md
     kind: asset
-    sha256: c76f0f8db7900d59cf6bf5c7b8ad9193331c439f155a4b1a735e6c1706c00789
-  - src: references/agent-three-state-charter.md
-    dest: .claude/references/agent-three-state-charter.md
-    kind: asset
-    sha256: 0e1b73440f62dde966820172c1abf6382115d879dac414496804a5adf5ce1757
-  - src: references/anomaly-baseline.md
-    dest: .claude/references/anomaly-baseline.md
-    kind: asset
-    sha256: 5ee9c0b28421bb83060d4065166e53aad4353c3f541ccbc4f72ccf0b14d414f1
+    sha256: 6a6c7c2d7ac5d2b87cdb30911b82357a199a9a2dea5773613d79edd9dc129940
   - src: references/archive/long-horizon-architecture-2026-07.md
     dest: .claude/references/archive/long-horizon-architecture-2026-07.md
     kind: asset
-    sha256: f21adfb54ce8b5b165881ffadc2906ddc232011e99adcbf6fca3c97f32aa86ad
-  - src: references/case-book.md
-    dest: .claude/references/case-book.md
+    sha256: 35aad1731ffb38079f2a977978a023e13bd7a4775a4e2cb1d1f86ae3fa7a2ca4
+  - src: references/contracts/agent-three-state-charter.md
+    dest: .claude/references/contracts/agent-three-state-charter.md
     kind: asset
-    sha256: 7b09aa71f51ee7d12d5561d4e39cdc27a48a415f569e5d73a98e46f4dab72663
-  - src: references/cli-script-checklist.md
-    dest: .claude/references/cli-script-checklist.md
+    sha256: 43a58ff22ebc6d95f2d71c514c8b39ae422e132310b99b03cc423eed240c7d06
+  - src: references/contracts/cli-script-checklist.md
+    dest: .claude/references/contracts/cli-script-checklist.md
     kind: asset
     sha256: 4af55a6056c899c383c550c6cb0da3c931bcd8d2de8db44ff999071ddb3a33da
-  - src: references/cold-start-contract.md
-    dest: .claude/references/cold-start-contract.md
+  - src: references/contracts/cold-start-contract.md
+    dest: .claude/references/contracts/cold-start-contract.md
     kind: asset
     sha256: 7b0e9375cc55475a6f5d9a8f67637af5cc6436175f06cbb835c03acd3187bfce
-  - src: references/convergence-loop.md
-    dest: .claude/references/convergence-loop.md
+  - src: references/contracts/convergence-loop.md
+    dest: .claude/references/contracts/convergence-loop.md
     kind: asset
     sha256: 96911db12b3a8cb8a0f736bade3617b916c27dc4d9f64d767acdcf99256ec495
-  - src: references/decision-rights.md
-    dest: .claude/references/decision-rights.md
+  - src: references/contracts/downstream-contract.md
+    dest: .claude/references/contracts/downstream-contract.md
     kind: asset
-    sha256: 61758c425b2b3f5c98ef4b188d95a73c0dcde686a84a44fe0b72e7f06742df8d
-  - src: references/dispatch-protocol.md
-    dest: .claude/references/dispatch-protocol.md
+    sha256: 41bebf10cda98fedcb0dcfc05f0f8606ba79b4047f5d5b1c6beba5cb04462c6c
+  - src: references/contracts/error-response-taxonomy.md
+    dest: .claude/references/contracts/error-response-taxonomy.md
     kind: asset
-    sha256: 41cd3b28acc17143761ec99bcd8c656b91bbdaceabf6abb9f977a7d4286e65e5
-  - src: references/downstream-contract.md
-    dest: .claude/references/downstream-contract.md
+    sha256: a5710b439bc5b1df49ca68097979ccb780fbad173f25c7c9b91db542f1fa53f7
+  - src: references/contracts/machine-check-contract.md
+    dest: .claude/references/contracts/machine-check-contract.md
     kind: asset
-    sha256: c3940d2264d11332cfcf246b1eee7497df20e29d44904c9dce7344865c7db0b5
-  - src: references/dynamic-re-tool-priority.md
-    dest: .claude/references/dynamic-re-tool-priority.md
+    sha256: c0eb7ca471af3b37030d11223c25d4ba31c44515193372063727ad8819926c1b
+  - src: references/contracts/wal-protocol.md
+    dest: .claude/references/contracts/wal-protocol.md
     kind: asset
-    sha256: e40a8b6492f0c79c63366007ba3660d590d595463842cf7ee82bda4bdf3b4b39
-  - src: references/error-response-taxonomy.md
-    dest: .claude/references/error-response-taxonomy.md
+    sha256: 1d2a7f8332a595d61daa4d34a7652783c6ea0c54876504ef8d30946e0fd25d66
+  - src: references/contracts/xml-injection-standard.md
+    dest: .claude/references/contracts/xml-injection-standard.md
     kind: asset
-    sha256: bf34e24173b528cc1817724323c8f3c82679785f9f27444c158f15ddd6ba6531
-  - src: references/excerpt-lint.md
-    dest: .claude/references/excerpt-lint.md
+    sha256: 8871736fe18e456d13715458e8ece801c5115595b221dae3accd57c2ad8d0375
+  - src: references/governance/decision-rights.md
+    dest: .claude/references/governance/decision-rights.md
+    kind: asset
+    sha256: 5398a15f656d14d8ffac960b1f1e4a18a0c54e364f7ffeb920c811234e326eef
+  - src: references/governance/excerpt-lint.md
+    dest: .claude/references/governance/excerpt-lint.md
     kind: asset
     sha256: 785595a3d600621ddcb1de949078c00ded8db00351e9c3aa9e7ecb487a173ec6
-  - src: references/failure-modes-lifecycle.md
-    dest: .claude/references/failure-modes-lifecycle.md
-    kind: asset
-    sha256: 0332834698a1cd382e29a1c65311687bae48ea755857b0a16f7e4e89507f8559
-  - src: references/failure-modes-monitoring.md
-    dest: .claude/references/failure-modes-monitoring.md
-    kind: asset
-    sha256: 6731c7867df77c91c8dab8a06fa1461ef1e6feeb72aef1684d0cf7d72b31ddee
-  - src: references/failure-modes-state.md
-    dest: .claude/references/failure-modes-state.md
-    kind: asset
-    sha256: 647ad4f1dfe7500f4e993e85f30bdf2b4021e0ae486c31b2f691f5d92282529e
-  - src: references/failure-modes.md
-    dest: .claude/references/failure-modes.md
-    kind: asset
-    sha256: 969429317b34696a49268a0ad786d51f8bd11eeb9df0654934302540ab52d805
-  - src: references/guardrails.md
-    dest: .claude/references/guardrails.md
+  - src: references/governance/guardrails.md
+    dest: .claude/references/governance/guardrails.md
     kind: asset
     sha256: c5f8d9aa4b7fdc3801ecd251ef3493e9cea1f6d9be7dcf66cc5fc6fa5caa52e8
+  - src: references/governance/mechanisms.md
+    dest: .claude/references/governance/mechanisms.md
+    kind: asset
+    sha256: 89be794e793393237fe7da2601b3987c4ff2e7e6a8a19409be21dba6e0afdad5
   - src: references/lessons/README.md
     dest: .claude/references/lessons/README.md
     kind: asset
     sha256: 2d7dd200a129cca4ad73435c9e381bf090bcb7aaaffc53c5f35708c5efcc8ace
-  - src: references/machine-check-contract.md
-    dest: .claude/references/machine-check-contract.md
-    kind: asset
-    sha256: 68b2097f6b23e58f93252cd7ab742836651313ae505eabb9310ec21d5e807d4b
-  - src: references/machine_check_map.yaml
-    dest: .claude/references/machine_check_map.yaml
-    kind: asset
-    sha256: cda596f88c1bceeb98491df31733ca198888e79c4e76a7d2e5c17cb61bb51aff
-  - src: references/malware-phase-routing.md
-    dest: .claude/references/malware-phase-routing.md
-    kind: asset
-    sha256: 000a9b97bd2939fe1ae112a94a84520556fde979cee87f53498ed07fce993de9
-  - src: references/mechanisms.md
-    dest: .claude/references/mechanisms.md
-    kind: asset
-    sha256: 89be794e793393237fe7da2601b3987c4ff2e7e6a8a19409be21dba6e0afdad5
-  - src: references/method-constraints.md
-    dest: .claude/references/method-constraints.md
-    kind: asset
-    sha256: c0a51c9970a549c08663eb7faac004c259cbffe48cd5370a571d700e3f0cf7d6
-  - src: references/operational-mechanics.md
-    dest: .claude/references/operational-mechanics.md
-    kind: asset
-    sha256: 6ea8fcbb6cb001d9b032ebc32afc87f99dd96fd36c3d139be7e29673b5b1684c
   - src: references/optimization-2026-08.md
     dest: .claude/references/optimization-2026-08.md
     kind: asset
-    sha256: 5629e400054d3e16cd24ec8bee6c60c862302acba836e15334fee522607f1e9d
+    sha256: 131f4823ffab4c6d229bdd32563cdcd3fc9846ea17421ddebce4a2efafd60e78
+  - src: references/orchestration/anomaly-baseline.md
+    dest: .claude/references/orchestration/anomaly-baseline.md
+    kind: asset
+    sha256: 5ee9c0b28421bb83060d4065166e53aad4353c3f541ccbc4f72ccf0b14d414f1
+  - src: references/orchestration/dispatch-protocol.md
+    dest: .claude/references/orchestration/dispatch-protocol.md
+    kind: asset
+    sha256: ce6bc3a9b6879de8c0c4ecd2fef593dbcf7b2e2786909a6907aab76cc7a59360
+  - src: references/orchestration/dynamic-re-tool-priority.md
+    dest: .claude/references/orchestration/dynamic-re-tool-priority.md
+    kind: asset
+    sha256: e40a8b6492f0c79c63366007ba3660d590d595463842cf7ee82bda4bdf3b4b39
+  - src: references/orchestration/failure-modes/case-book.md
+    dest: .claude/references/orchestration/failure-modes/case-book.md
+    kind: asset
+    sha256: 7b09aa71f51ee7d12d5561d4e39cdc27a48a415f569e5d73a98e46f4dab72663
+  - src: references/orchestration/failure-modes/failure-modes-lifecycle.md
+    dest: .claude/references/orchestration/failure-modes/failure-modes-lifecycle.md
+    kind: asset
+    sha256: 0332834698a1cd382e29a1c65311687bae48ea755857b0a16f7e4e89507f8559
+  - src: references/orchestration/failure-modes/failure-modes-monitoring.md
+    dest: .claude/references/orchestration/failure-modes/failure-modes-monitoring.md
+    kind: asset
+    sha256: 6731c7867df77c91c8dab8a06fa1461ef1e6feeb72aef1684d0cf7d72b31ddee
+  - src: references/orchestration/failure-modes/failure-modes-state.md
+    dest: .claude/references/orchestration/failure-modes/failure-modes-state.md
+    kind: asset
+    sha256: 647ad4f1dfe7500f4e993e85f30bdf2b4021e0ae486c31b2f691f5d92282529e
+  - src: references/orchestration/failure-modes/failure-modes.md
+    dest: .claude/references/orchestration/failure-modes/failure-modes.md
+    kind: asset
+    sha256: 969429317b34696a49268a0ad786d51f8bd11eeb9df0654934302540ab52d805
+  - src: references/orchestration/malware-phase-routing.md
+    dest: .claude/references/orchestration/malware-phase-routing.md
+    kind: asset
+    sha256: 000a9b97bd2939fe1ae112a94a84520556fde979cee87f53498ed07fce993de9
+  - src: references/orchestration/method-constraints.md
+    dest: .claude/references/orchestration/method-constraints.md
+    kind: asset
+    sha256: 9315e142347621cdc650b4e372165b875f291ba9a7990eb667ba7c2c1adc8f9a
+  - src: references/orchestration/operational-mechanics.md
+    dest: .claude/references/orchestration/operational-mechanics.md
+    kind: asset
+    sha256: 6ea8fcbb6cb001d9b032ebc32afc87f99dd96fd36c3d139be7e29673b5b1684c
+  - src: references/orchestration/search-policy.md
+    dest: .claude/references/orchestration/search-policy.md
+    kind: asset
+    sha256: 46807e75ef0cf4381b747ffc9495618aad9c0eb320d5007f1c9bfc4bb7cf547f
+  - src: references/orchestration/tool-inventory.md
+    dest: .claude/references/orchestration/tool-inventory.md
+    kind: asset
+    sha256: 4c7001d5cf990c8b646410f2eba2cf06a7cec71e1839097947210f19bcf53445
+  - src: references/orchestration/verify-static-vs-dynamic.md
+    dest: .claude/references/orchestration/verify-static-vs-dynamic.md
+    kind: asset
+    sha256: d2f823da4d1890e9daeba6bbe25ff1f55b61679b43a72dc2f015b26b2165833a
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: 62412e3795352494ae80afabd8cada20a4d5c07cf504717e36f7d29b86f1ea80
-  - src: references/re-library/android-fingerprint-apis.md
-    dest: .claude/references/re-library/android-fingerprint-apis.md
+    sha256: e4631373d81e55d428cc477ce0dcd9d11caa50b3ea0b1c585dd903a0dd543e71
+  - src: references/re-library/android/emulation/android-fingerprint-apis.md
+    dest: .claude/references/re-library/android/emulation/android-fingerprint-apis.md
     kind: asset
     sha256: 4863eb94450f1ac2922ab3285e32387afee1f18884294d6bbdff09ba03ee0fba
-  - src: references/re-library/android-fingerprint-seeds.yaml
-    dest: .claude/references/re-library/android-fingerprint-seeds.yaml
+  - src: references/re-library/android/emulation/android-fingerprint-seeds.yaml
+    dest: .claude/references/re-library/android/emulation/android-fingerprint-seeds.yaml
     kind: asset
     sha256: 73fb6a3e638c3a9d0ab85488f2abd3b15842f0291408019e3937ad9f61e8cc1d
-  - src: references/re-library/anti-analysis.md
-    dest: .claude/references/re-library/anti-analysis.md
+  - src: references/re-library/android/emulation/unidbg-algo-recovery.md
+    dest: .claude/references/re-library/android/emulation/unidbg-algo-recovery.md
+    kind: asset
+    sha256: f85f27f62e8d14df6951bcc1579e39be5f824afa009955205e39acacc3bda6ac
+  - src: references/re-library/android/emulation/unidbg-env-filling.md
+    dest: .claude/references/re-library/android/emulation/unidbg-env-filling.md
+    kind: asset
+    sha256: c49b8af99dac162a66318ee0305bdf2396d3750e6d8b25f5656b14998bc1b064
+  - src: references/re-library/android/emulation/unidbg-harness-bringup.md
+    dest: .claude/references/re-library/android/emulation/unidbg-harness-bringup.md
+    kind: asset
+    sha256: 66a53d3cce67c0acc3f6e9fd32cb4791a53f92d0e3de5f7100e8b7ffb0357401
+  - src: references/re-library/android/protections/stacked-protections.md
+    dest: .claude/references/re-library/android/protections/stacked-protections.md
+    kind: asset
+    sha256: eb66735fa1136b8cac7c4b022bccff09f97228c99ed7f58cc4da0307e53d13ba
+  - src: references/re-library/android/signing/native-sign-recovery.md
+    dest: .claude/references/re-library/android/signing/native-sign-recovery.md
+    kind: asset
+    sha256: 59929cc294922c92d29c2ecb815863cab8547302c79e5aeeefb18a345196fa37
+  - src: references/re-library/android/signing/signature-check-bypass.md
+    dest: .claude/references/re-library/android/signing/signature-check-bypass.md
+    kind: asset
+    sha256: 649be93b846682fe1608d478aa87819a100bf33364fc9c80692aef8012fb5917
+  - src: references/re-library/anti-analysis/catalog/anti-analysis.md
+    dest: .claude/references/re-library/anti-analysis/catalog/anti-analysis.md
     kind: asset
     sha256: 242685a1837c4df226b3219dee060c3aa1cbed781a1d9f443faee1b47e208ce8
-  - src: references/re-library/awesome-re-resources.md
-    dest: .claude/references/re-library/awesome-re-resources.md
-    kind: asset
-    sha256: 8c140e7dcff0561c052a7c667261cfadf728ee4c41f9d017a8c65516e437f49a
-  - src: references/re-library/detection-engineer.md
-    dest: .claude/references/re-library/detection-engineer.md
-    kind: asset
-    sha256: ac1904ad5c7d2f569613e3fdc25b0dec9f18837f5b46ab1358cf1e0c9fbf4f1c
-  - src: references/re-library/dynamic-observation-ladders.md
-    dest: .claude/references/re-library/dynamic-observation-ladders.md
-    kind: asset
-    sha256: a7e3db2835911a4f98f7167e4cad882d3adb9c5cc7e8df2964ddeccdc8a5506b
-  - src: references/re-library/falsifier-library.md
-    dest: .claude/references/re-library/falsifier-library.md
-    kind: asset
-    sha256: 7c2f9d813f2ec725419d10a7d7f68c1e1b87fc2bfe50fdd517025036d9440be8
-  - src: references/re-library/field-notes.md
-    dest: .claude/references/re-library/field-notes.md
-    kind: asset
-    sha256: 8a0e4e53dd0733e8ecfc3dd2e4ac1ef369b34f641005912fbbf5b8c710ffea36
-  - src: references/re-library/ida-scripting-overlays.md
-    dest: .claude/references/re-library/ida-scripting-overlays.md
-    kind: asset
-    sha256: 862ed36ee55fc37e1e63d4f80d83ff0fa5a4120bb683aab1e18352ab65912940
-  - src: references/re-library/jsvmp-triage.md
-    dest: .claude/references/re-library/jsvmp-triage.md
-    kind: asset
-    sha256: 91e6a8a689e7ac7e5845ab0095374d7ec0d3053d2f848cca1a5f86664e19129f
-  - src: references/re-library/kunglao-toolshelf.md
-    dest: .claude/references/re-library/kunglao-toolshelf.md
-    kind: asset
-    sha256: 0f00b770201e53ae9d8fac57f57bb29d32dbe8e424b4ab97adfaaed0df62155e
-  - src: references/re-library/languages-compiled.md
-    dest: .claude/references/re-library/languages-compiled.md
+  - src: references/re-library/languages/compiled/languages-compiled.md
+    dest: .claude/references/re-library/languages/compiled/languages-compiled.md
     kind: asset
     sha256: 4ba5b98c4023333d88e5d51174edc5fcdef58a450bee6df0236fe86cbb1699d3
-  - src: references/re-library/languages-go.md
-    dest: .claude/references/re-library/languages-go.md
+  - src: references/re-library/languages/compiled/languages-go.md
+    dest: .claude/references/re-library/languages/compiled/languages-go.md
     kind: asset
     sha256: d058807151a662a5192d15be3f753d96ed547d7b230525436ddbb19baf656a45
-  - src: references/re-library/languages-platforms.md
-    dest: .claude/references/re-library/languages-platforms.md
+  - src: references/re-library/languages/platforms/languages-platforms.md
+    dest: .claude/references/re-library/languages/platforms/languages-platforms.md
     kind: asset
-    sha256: bb1aae5218ca727aafba36144d043b2915a077c40bf5dba43a9fb29aa1d96e02
-  - src: references/re-library/languages.md
-    dest: .claude/references/re-library/languages.md
+    sha256: 1ca19c9ad3dcbdf9eb2ae9a9dd9f51f36ced646441aa7a0275321e3776c7027a
+  - src: references/re-library/languages/scripting/languages.md
+    dest: .claude/references/re-library/languages/scripting/languages.md
     kind: asset
-    sha256: d3bb1b560affda8c01eaf87af7c115d3a3b657a767269d26d6d9fc98afa57eff
-  - src: references/re-library/loop-stage-gates.md
-    dest: .claude/references/re-library/loop-stage-gates.md
+    sha256: d3aeb437d448b938944850d23a40b07a31a0d189eb292860e6b1159009c89cf8
+  - src: references/re-library/malware/reporting/detection-engineer.md
+    dest: .claude/references/re-library/malware/reporting/detection-engineer.md
     kind: asset
-    sha256: 3ceb0f9fc4aa25a8a47be253899f81de13cb221ed17654981b188c62c3242a59
-  - src: references/re-library/malware-analysis-quickstart.md
-    dest: .claude/references/re-library/malware-analysis-quickstart.md
-    kind: asset
-    sha256: f9a4a2f0e370716653a25f1734cc18978057595e1e32bdc372850b65fae6ab10
-  - src: references/re-library/malware-analysis-workflow.md
-    dest: .claude/references/re-library/malware-analysis-workflow.md
-    kind: asset
-    sha256: 330fb09ef18573ac0e008b1e6ac0a834d1016d32ca8216285e5407738360a477
-  - src: references/re-library/malware-analysis.md
-    dest: .claude/references/re-library/malware-analysis.md
-    kind: asset
-    sha256: 06fadf5aab630786daa5f9a9448b099389dc060ce8bf3c010419dc2690edc58c
-  - src: references/re-library/malware-dynamic-analysis.md
-    dest: .claude/references/re-library/malware-dynamic-analysis.md
-    kind: asset
-    sha256: 104d0df70c55f2dac71b77fd31e690d76a22b9488bd7e16bc789a2686c41350b
-  - src: references/re-library/malware-report-writer.md
-    dest: .claude/references/re-library/malware-report-writer.md
+    sha256: ac1904ad5c7d2f569613e3fdc25b0dec9f18837f5b46ab1358cf1e0c9fbf4f1c
+  - src: references/re-library/malware/reporting/malware-report-writer.md
+    dest: .claude/references/re-library/malware/reporting/malware-report-writer.md
     kind: asset
     sha256: a73d41b781f841bbabb7b99902db078afc29d60e51606f84d87202809023c0b2
-  - src: references/re-library/malware-triage.md
-    dest: .claude/references/re-library/malware-triage.md
+  - src: references/re-library/malware/triage/malware-triage.md
+    dest: .claude/references/re-library/malware/triage/malware-triage.md
     kind: asset
     sha256: 2fa00553d6ea1ed6ddfca670f4b0c9405338875044f61be488f2d03ce793f567
-  - src: references/re-library/multi-search-engine-config.json
-    dest: .claude/references/re-library/multi-search-engine-config.json
+  - src: references/re-library/malware/workflow/malware-analysis-quickstart.md
+    dest: .claude/references/re-library/malware/workflow/malware-analysis-quickstart.md
     kind: asset
-    sha256: 120f98289429b9763f548266d65a48faf4d50acb39d893260386cf3c5f370d25
-  - src: references/re-library/multi-search-engine-refs.md
-    dest: .claude/references/re-library/multi-search-engine-refs.md
+    sha256: 8a9acd79c97819d1835a3022275e20c2c687b57e91ccab09349c12c95c38ffd8
+  - src: references/re-library/malware/workflow/malware-analysis-workflow.md
+    dest: .claude/references/re-library/malware/workflow/malware-analysis-workflow.md
     kind: asset
-    sha256: d00092e098ba6a85ba8cd3c15e1c706600a24f22f1dbff1e38d5ccdd9e672d16
-  - src: references/re-library/multi-search-engine.md
-    dest: .claude/references/re-library/multi-search-engine.md
+    sha256: 330fb09ef18573ac0e008b1e6ac0a834d1016d32ca8216285e5407738360a477
+  - src: references/re-library/malware/workflow/malware-analysis.md
+    dest: .claude/references/re-library/malware/workflow/malware-analysis.md
     kind: asset
-    sha256: 95e57956ed165c6fa5347154b9d4604d4b656779b8bac9b8df1037b423350c64
-  - src: references/re-library/native-sign-recovery.md
-    dest: .claude/references/re-library/native-sign-recovery.md
+    sha256: 06fadf5aab630786daa5f9a9448b099389dc060ce8bf3c010419dc2690edc58c
+  - src: references/re-library/malware/workflow/malware-dynamic-analysis.md
+    dest: .claude/references/re-library/malware/workflow/malware-dynamic-analysis.md
     kind: asset
-    sha256: bf478a57e7f4abb8c64f85f53c049fd9598a5ccae14e4bbe74740ca106eac6cb
-  - src: references/re-library/patterns-debugging.md
-    dest: .claude/references/re-library/patterns-debugging.md
+    sha256: 104d0df70c55f2dac71b77fd31e690d76a22b9488bd7e16bc789a2686c41350b
+  - src: references/re-library/method/formats/wire-format-recognition.md
+    dest: .claude/references/re-library/method/formats/wire-format-recognition.md
     kind: asset
-    sha256: 8cd2e7e322577165ed23b9872b1378bd09fa9600f2bbeaeb9489ed3030f2e0cf
-  - src: references/re-library/patterns-decode.md
-    dest: .claude/references/re-library/patterns-decode.md
+    sha256: cf42e502c06e9b33dbc66a414f759f037002d6c59b10a2928a6dd94ab8206e93
+  - src: references/re-library/method/process/dynamic-observation-ladders.md
+    dest: .claude/references/re-library/method/process/dynamic-observation-ladders.md
     kind: asset
-    sha256: 2d13b7b74148840122a50e6ee27427c5d344ddae75193329ff8d2d9c958ceef1
-  - src: references/re-library/patterns-simulation.md
-    dest: .claude/references/re-library/patterns-simulation.md
+    sha256: c74d142926e606872313b3cc9d0e9cdab0bb86256ab60438a6c26c3fd49a038a
+  - src: references/re-library/method/process/falsifier-library.md
+    dest: .claude/references/re-library/method/process/falsifier-library.md
     kind: asset
-    sha256: 15bb1cb76365b1ccd9d8ab634f8baea6dd2941442a4d446b344f3e42f753f8a0
-  - src: references/re-library/patterns.md
-    dest: .claude/references/re-library/patterns.md
+    sha256: 9ba3198ecd2a46f2008ed46955fb1ee4c32e9dc0d2728b86a94cba73d3a57756
+  - src: references/re-library/method/process/field-notes.md
+    dest: .claude/references/re-library/method/process/field-notes.md
     kind: asset
-    sha256: 21eb4b7e61db599d4a92dc39b5a6b31a85f48889ff13aaa085b7aae4cd5a4b21
-  - src: references/re-library/phishing-case-study.md
-    dest: .claude/references/re-library/phishing-case-study.md
+    sha256: 50e633dc5ce2001cca3cb99dd1430996e12d95bb63f320477f9f19aaf652c224
+  - src: references/re-library/method/process/ida-scripting-overlays.md
+    dest: .claude/references/re-library/method/process/ida-scripting-overlays.md
+    kind: asset
+    sha256: 25b510f09766ec0368dec0c40d8b0de117a3ab7aaeef98ed1e4921df5be488c2
+  - src: references/re-library/method/process/loop-stage-gates.md
+    dest: .claude/references/re-library/method/process/loop-stage-gates.md
+    kind: asset
+    sha256: 4b5658029ba7896cb3be638174e6859cf9bcc5c3b14efde8f0779f1ac2067fa3
+  - src: references/re-library/method/process/phishing-case-study.md
+    dest: .claude/references/re-library/method/process/phishing-case-study.md
     kind: asset
     sha256: 152993836c2646ed394179248a8a5dd9df27489dd1b5d152ee0e2891822b51f7
-  - src: references/re-library/platforms-elf.md
-    dest: .claude/references/re-library/platforms-elf.md
+  - src: references/re-library/method/process/verification-safety.md
+    dest: .claude/references/re-library/method/process/verification-safety.md
     kind: asset
-    sha256: 589b3227da632491a565eba0a456606054dfd5a25cb4937369a9dbdcfb606da3
-  - src: references/re-library/platforms-hardware.md
-    dest: .claude/references/re-library/platforms-hardware.md
+    sha256: b2737cf8b717b0d7897383863cc17b015188a4e945e32ab9a1d98196d73fec9e
+  - src: references/re-library/patterns/catalog/patterns.md
+    dest: .claude/references/re-library/patterns/catalog/patterns.md
     kind: asset
-    sha256: c15bc6aeec44cbe0431ae05f3c802e2477cc624f43cb5f42bed9a978ef8020b7
-  - src: references/re-library/platforms-kernel.md
-    dest: .claude/references/re-library/platforms-kernel.md
+    sha256: 21eb4b7e61db599d4a92dc39b5a6b31a85f48889ff13aaa085b7aae4cd5a4b21
+  - src: references/re-library/patterns/debugging/patterns-debugging.md
+    dest: .claude/references/re-library/patterns/debugging/patterns-debugging.md
     kind: asset
-    sha256: 9d49c7c6e3aaf6b74a9d1b59d27145d2f3d5900073bbb891d95000ceb6990015
-  - src: references/re-library/platforms.md
-    dest: .claude/references/re-library/platforms.md
+    sha256: be94ff74eb1ac8739789941f1ec9159b1efb093cb9d0afb81c691d069649cbcf
+  - src: references/re-library/patterns/decode/patterns-decode.md
+    dest: .claude/references/re-library/patterns/decode/patterns-decode.md
+    kind: asset
+    sha256: 0a3b2fca6a4f157665008f0974f3d8fe76016dca50fcf7df818b1c5f72f49a2c
+  - src: references/re-library/patterns/simulation/patterns-simulation.md
+    dest: .claude/references/re-library/patterns/simulation/patterns-simulation.md
+    kind: asset
+    sha256: 35cdbeb743c8b18baa4f3e343c86e1909687eb5128e3fee47056a29572394c78
+  - src: references/re-library/patterns/vm/vm-deobfuscation-routing.md
+    dest: .claude/references/re-library/patterns/vm/vm-deobfuscation-routing.md
+    kind: asset
+    sha256: 385fdb310f5176f8fa57d717d4ea2cdb4f80229fc0adf2c1dd36863c836a7481
+  - src: references/re-library/patterns/vm/vm-protection-anatomy.md
+    dest: .claude/references/re-library/patterns/vm/vm-protection-anatomy.md
+    kind: asset
+    sha256: 6df22f57c4f1600e78242c28aff2f4d7ce7b10047f4f45c647b0e6c085490ad5
+  - src: references/re-library/platforms/catalog/platforms.md
+    dest: .claude/references/re-library/platforms/catalog/platforms.md
     kind: asset
     sha256: 2660340fb7f58d0c2ff1ab5321c6f814554908b4bc0660f5e403ddf026abfb6b
-  - src: references/re-library/signature-check-bypass.md
-    dest: .claude/references/re-library/signature-check-bypass.md
+  - src: references/re-library/platforms/elf/platforms-elf.md
+    dest: .claude/references/re-library/platforms/elf/platforms-elf.md
     kind: asset
-    sha256: 49d2c6c491d2c429984b39be299246a2adda70a3e33c43e565cff4eb03acd6c6
-  - src: references/re-library/stacked-protections.md
-    dest: .claude/references/re-library/stacked-protections.md
+    sha256: 589b3227da632491a565eba0a456606054dfd5a25cb4937369a9dbdcfb606da3
+  - src: references/re-library/platforms/hardware/platforms-hardware.md
+    dest: .claude/references/re-library/platforms/hardware/platforms-hardware.md
     kind: asset
-    sha256: 1b7f7b085ff99395130f86089ba6c039c024f90101a5874031f8dc86885938bb
-  - src: references/re-library/tools-advanced.md
-    dest: .claude/references/re-library/tools-advanced.md
+    sha256: c15bc6aeec44cbe0431ae05f3c802e2477cc624f43cb5f42bed9a978ef8020b7
+  - src: references/re-library/platforms/kernel/platforms-kernel.md
+    dest: .claude/references/re-library/platforms/kernel/platforms-kernel.md
     kind: asset
-    sha256: a737b2351b50d71183662b9cc137e018d21526a2a9d026278c91470f90e2fbb1
-  - src: references/re-library/tools-crypto.md
-    dest: .claude/references/re-library/tools-crypto.md
+    sha256: 9d49c7c6e3aaf6b74a9d1b59d27145d2f3d5900073bbb891d95000ceb6990015
+  - src: references/re-library/research/osint/multi-search-engine-config.json
+    dest: .claude/references/re-library/research/osint/multi-search-engine-config.json
+    kind: asset
+    sha256: 120f98289429b9763f548266d65a48faf4d50acb39d893260386cf3c5f370d25
+  - src: references/re-library/research/osint/multi-search-engine-refs.md
+    dest: .claude/references/re-library/research/osint/multi-search-engine-refs.md
+    kind: asset
+    sha256: d00092e098ba6a85ba8cd3c15e1c706600a24f22f1dbff1e38d5ccdd9e672d16
+  - src: references/re-library/research/osint/multi-search-engine.md
+    dest: .claude/references/re-library/research/osint/multi-search-engine.md
+    kind: asset
+    sha256: 95e57956ed165c6fa5347154b9d4604d4b656779b8bac9b8df1037b423350c64
+  - src: references/re-library/research/resources/awesome-re-resources.md
+    dest: .claude/references/re-library/research/resources/awesome-re-resources.md
+    kind: asset
+    sha256: 8c140e7dcff0561c052a7c667261cfadf728ee4c41f9d017a8c65516e437f49a
+  - src: references/re-library/tools/crypto/tools-crypto.md
+    dest: .claude/references/re-library/tools/crypto/tools-crypto.md
     kind: asset
     sha256: 4624dda30557715598105eaa635a4b17af5cbe88e01980b946a0698a72190338
-  - src: references/re-library/tools-dynamic.md
-    dest: .claude/references/re-library/tools-dynamic.md
+  - src: references/re-library/tools/dynamic/tools-dynamic.md
+    dest: .claude/references/re-library/tools/dynamic/tools-dynamic.md
     kind: asset
     sha256: 382bf64181e5a501d8bc3d4088e6a5810d76861f62f37bbbcab8bd715b51f1ce
-  - src: references/re-library/tools.md
-    dest: .claude/references/re-library/tools.md
+  - src: references/re-library/tools/shelf/kunglao-toolshelf.md
+    dest: .claude/references/re-library/tools/shelf/kunglao-toolshelf.md
     kind: asset
-    sha256: 71e109268ddfdd4c5f508368031d15d4832f8a90f4e2c6760091a4bc2e5c76ee
-  - src: references/re-library/unidbg-algo-recovery.md
-    dest: .claude/references/re-library/unidbg-algo-recovery.md
+    sha256: 0f00b770201e53ae9d8fac57f57bb29d32dbe8e424b4ab97adfaaed0df62155e
+  - src: references/re-library/tools/static/tools-advanced.md
+    dest: .claude/references/re-library/tools/static/tools-advanced.md
     kind: asset
-    sha256: f91322a3011760e5931f25d7d67077a86edbee52c970faa7e79a042df0bb3770
-  - src: references/re-library/unidbg-env-filling.md
-    dest: .claude/references/re-library/unidbg-env-filling.md
+    sha256: a737b2351b50d71183662b9cc137e018d21526a2a9d026278c91470f90e2fbb1
+  - src: references/re-library/tools/static/tools.md
+    dest: .claude/references/re-library/tools/static/tools.md
     kind: asset
-    sha256: 29e6d80769d5a6daadce6aa35039876a0707a4763781323a61c52119d50e4b24
-  - src: references/re-library/unidbg-harness-bringup.md
-    dest: .claude/references/re-library/unidbg-harness-bringup.md
-    kind: asset
-    sha256: ffee54c536c9adaf8cebaddbe783d2562532465fe6dc9ed20edee681a4c873c3
-  - src: references/re-library/verification-safety.md
-    dest: .claude/references/re-library/verification-safety.md
-    kind: asset
-    sha256: b8e1e10ea1744b93559dc11b601cc1251d46499c789492c2d3ed6d3fbd26aca3
-  - src: references/re-library/vm-deobfuscation-routing.md
-    dest: .claude/references/re-library/vm-deobfuscation-routing.md
-    kind: asset
-    sha256: 32a35cec0f4a44c561caebb2e51e1f7bf339f9d343f27dc70b93b2226616869a
-  - src: references/re-library/vm-protection-anatomy.md
-    dest: .claude/references/re-library/vm-protection-anatomy.md
-    kind: asset
-    sha256: 11b3c935decf8ba55f528e9eed30ad025130c53dbbe863f649b7deef75505aac
-  - src: references/re-library/web-crawler-engineering.md
-    dest: .claude/references/re-library/web-crawler-engineering.md
+    sha256: 0b5d7010b1d14c4e9baa2e2077f81a4201ef699ddb7961216a38c7196c242ee2
+  - src: references/re-library/web/crawler/web-crawler-engineering.md
+    dest: .claude/references/re-library/web/crawler/web-crawler-engineering.md
     kind: asset
     sha256: b10a0b85f58e4d9b70df1326c55945f767d890d8cee9e096b5b794780cab2e19
-  - src: references/re-library/web-re-quickref.md
-    dest: .claude/references/re-library/web-re-quickref.md
+  - src: references/re-library/web/labs/web-re-quickref.md
+    dest: .claude/references/re-library/web/labs/web-re-quickref.md
     kind: asset
-    sha256: 0a02697beafdb34819bdf5728d44df029563dea5c83e611926c640f75e5510b6
-  - src: references/re-library/web-risk-control.md
-    dest: .claude/references/re-library/web-risk-control.md
+    sha256: cec32d5ce1446ebd5d21e6c6504049a893e5b0c96aacf867e41b53bd62806da4
+  - src: references/re-library/web/risk-control/web-risk-control.md
+    dest: .claude/references/re-library/web/risk-control/web-risk-control.md
     kind: asset
     sha256: 72b9b699ecbdd122bad4c007a7c4fc3f10bcf3a2e0ea8f68aacb4e027c94b6d5
-  - src: references/re-library/wire-format-recognition.md
-    dest: .claude/references/re-library/wire-format-recognition.md
+  - src: references/re-library/web/vm/jsvmp-triage.md
+    dest: .claude/references/re-library/web/vm/jsvmp-triage.md
     kind: asset
-    sha256: c8d964e47192380b65458cf9bfc035e38553eff3f8846b0bd3633a6fed106c57
-  - src: references/schema.md
-    dest: .claude/references/schema.md
+    sha256: 91e6a8a689e7ac7e5845ab0095374d7ec0d3053d2f848cca1a5f86664e19129f
+  - src: references/schemas/machine_check_map.yaml
+    dest: .claude/references/schemas/machine_check_map.yaml
     kind: asset
-    sha256: 7dc8e2cffb88a819c8ae7196003763c34bfb8e3cfa5b08cb42b4559c5c28d31b
-  - src: references/search-policy.md
-    dest: .claude/references/search-policy.md
+    sha256: 5f1727a7a3db4424230d184061cfbc8427eb9087e858826b41c411cdd47596f9
+  - src: references/schemas/schema.md
+    dest: .claude/references/schemas/schema.md
     kind: asset
-    sha256: 46807e75ef0cf4381b747ffc9495618aad9c0eb320d5007f1c9bfc4bb7cf547f
-  - src: references/state-mapping.md
-    dest: .claude/references/state-mapping.md
+    sha256: caf846433f3f918cc49bcd841bf846381a22d4663c551d3bca358c1f404b896c
+  - src: references/schemas/state-mapping.md
+    dest: .claude/references/schemas/state-mapping.md
     kind: asset
     sha256: d2cb9b62780b2c35044bc5cf0d724dafb337238480306e29fa909ad2e6bfc08f
-  - src: references/tool-inventory.md
-    dest: .claude/references/tool-inventory.md
-    kind: asset
-    sha256: 4c7001d5cf990c8b646410f2eba2cf06a7cec71e1839097947210f19bcf53445
-  - src: references/verify-static-vs-dynamic.md
-    dest: .claude/references/verify-static-vs-dynamic.md
-    kind: asset
-    sha256: d2f823da4d1890e9daeba6bbe25ff1f55b61679b43a72dc2f015b26b2165833a
-  - src: references/wal-protocol.md
-    dest: .claude/references/wal-protocol.md
-    kind: asset
-    sha256: 1d2a7f8332a595d61daa4d34a7652783c6ea0c54876504ef8d30946e0fd25d66
-  - src: references/xml-injection-standard.md
-    dest: .claude/references/xml-injection-standard.md
-    kind: asset
-    sha256: 8871736fe18e456d13715458e8ece801c5115595b221dae3accd57c2ad8d0375
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
@@ -1287,7 +1287,7 @@ files:
   - src: templates/fact-frontmatter.md
     dest: .claude/templates/fact-frontmatter.md
     kind: asset
-    sha256: ac23a0a12fdb580c9c904e64ae725e657a1a90bea556863206a5824d536fbbc6
+    sha256: 3f4dda583752241db56b443cfe0a0dd650db1ab5b5ff3526d11386144f02b336
   - src: templates/frida/README.md
     dest: .claude/templates/frida/README.md
     kind: asset
@@ -1367,7 +1367,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: bfe31aef954838bc4a9f18a48ec8b441d5401cb6d6b12a90bc87587758e3d26c
+    sha256: 089d19d737280aa9b465cea25ff96ac95da00f020fd588e3f5416816c1684ff3
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
@@ -1375,7 +1375,7 @@ files:
   - src: tools/_INDEX.yaml
     dest: .claude/tools/_INDEX.yaml
     kind: asset
-    sha256: c2ec04fae36a9afadacb61e1a4e989fded7a5e437acbe9e852e3ac42de2d0b0d
+    sha256: 02ff549d25f885bbd3e59a77b68f4032dd6b3292c37624573af3f8ac5d7fc8a7
   - src: tools/_index-auxiliary.md
     dest: .claude/tools/_index-auxiliary.md
     kind: asset
@@ -1399,15 +1399,15 @@ files:
   - src: tools/_index-static.md
     dest: .claude/tools/_index-static.md
     kind: asset
-    sha256: 52e5458182ac82dc747990a0b4296defc24f53d956ffc464ac0722f0122e88f6
+    sha256: c56a36884cdc823e0bb0a9d388c1f882216bcead57f796bb7d3a4d97b11c83cb
   - src: tools/_index-web.md
     dest: .claude/tools/_index-web.md
     kind: asset
-    sha256: 2ec793eb4f398b6f73a02ba120223c108facc9cf54b463d3a81f1cffe3b5236e
+    sha256: 8d8f8ccd787175aaf0ee0688048440648ddb37f12a1e708b4fed18242c9b1fe9
   - src: tools/_lib/index_schema.py
     dest: .claude/tools/_lib/index_schema.py
     kind: asset
-    sha256: ddf64f1ec3fa11b041e60587885f6408557572ca0602cf3074e7ad487d73d539
+    sha256: 2328fd5b080d8404a559d1d82829b013065d848842fd2af5d84746a89d940387
   - src: tools/_lib/lib_disasm.py
     dest: .claude/tools/_lib/lib_disasm.py
     kind: asset
@@ -1551,7 +1551,7 @@ files:
   - src: tools/static/dexdc_scanner.py
     dest: .claude/tools/static/dexdc_scanner.py
     kind: asset
-    sha256: 01d20a7910c8d315a56f50b8c5baa9972c03dd329583537f2e7381eb32934622
+    sha256: 9eca35c0801943c6b5786c78a8cfec096cf6238d93b3fdd37c5338a9487f20c0
   - src: tools/static/die_probe.py
     dest: .claude/tools/static/die_probe.py
     kind: asset

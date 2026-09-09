@@ -265,33 +265,38 @@ def _parse_domain_index(path: Path) -> dict[str, tuple[str, str]]:
 
 # ---------- path resolution ----------
 
-_MAPPING_CACHE: dict | None = None
+_MAPPING_CACHE: dict[Path, dict] = {}
 
 
 def _mapping_short_faces(refs_dir: Path) -> dict:
     """Card short name -> references-relative face from the mapping (the
     destination once the move lands, the source before it). Cached per
     process; empty when the mapping is absent (legacy layouts)."""
-    global _MAPPING_CACHE
-    if _MAPPING_CACHE is not None:
-        return _MAPPING_CACHE
+    key = refs_dir.resolve()
+    if key in _MAPPING_CACHE:
+        return _MAPPING_CACHE[key]
     faces: dict = {}
     map_path = refs_dir / "re-library" / "_mapping.yaml"
     if map_path.is_file():
         try:
             import yaml as _map_yaml
             doc = _map_yaml.safe_load(map_path.read_text(encoding="utf-8")) or {}
-            for row in doc.get("cards") or []:
+            repo = refs_dir.parent  # mapping rows are repo-relative
+            rows = list(doc.get("cards") or [])
+            rows.extend(doc.get("population_b") or [])
+            for row in rows:
                 for key in ("to", "from"):
                     rel = str(row.get(key, ""))
-                    if rel and (refs_dir / rel).is_file():
+                    if rel and (repo / rel).is_file():
+                        face = (rel[len("references/"):]
+                                if rel.startswith("references/") else rel)
                         stem = Path(rel).stem
                         if stem not in faces:
-                            faces[stem] = rel
+                            faces[stem] = face
                         break
         except Exception:
             faces = {}
-    _MAPPING_CACHE = faces
+    _MAPPING_CACHE[key] = faces
     return faces
 
 

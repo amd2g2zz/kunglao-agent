@@ -93,7 +93,7 @@ WEB_SIGNALS = (
 )
 
 # Recalled queries for a web-signal claim (#761 J1). "risk control" ranks
-# re-library/web-risk-control.md first (name+domain+purpose CJK tokens);
+# re-library/web/risk-control/web-risk-control.md first (name+domain+purpose CJK tokens);
 # "crawler" surfaces web-crawler-engineering.md via its bilingual purpose row.
 WEB_QUERIES = ("risk control", "crawler")
 
@@ -265,7 +265,7 @@ def _guidance(queries: list[str], files: list[str]) -> str:
     # (references/_INDEX.md + the re-library), so the producer tag is
     # <kunglao-facts> — never <external-tools>. Marks, never gates:
     # rc stays 0 and the payload shape is unchanged
-    # (references/xml-injection-standard.md).
+    # (references/contracts/xml-injection-standard.md).
     return (
         f"<kunglao-facts>\n"
         f"recall_inject: claim dispatch knowledge recall (#268) - "

@@ -74,7 +74,7 @@ One format, one parser (`tools/_lib/index_schema.py`), used by BOTH
 F<id> | <status> | <claim_id> | <one-line conclusion>
 ```
 
-- status ∈ the fact-status set (`references/schema.md`):
+- status ∈ the fact-status set (`references/schemas/schema.md`):
   `PROVEN | INFERRED | NEGATIVE | REFUTED | OPEN | DEFERRED | VERIFIED`
 - Any other value in the status column is rejected on parse AND on write
   (upsert refuses; the file is never created from a malformed row).

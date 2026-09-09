@@ -65,7 +65,7 @@ STUCK_MIN = 20  # minutes — mirrors backtrack_gate default --stuck-min 20
 
 # #55 XML injection standard: every worker_pulse additionalContext payload is
 # a worker lifecycle/status signal -> wrapped in <worker-signal>...</worker-signal>
-# (references/xml-injection-standard.md). Tags MARK information — never gate:
+# (references/contracts/xml-injection-standard.md). Tags MARK information — never gate:
 # pulse content, rc and the JSON envelope are unchanged; STDERR (the operator
 # channel, e.g. the rc=3 BLOCKED face) stays untagged.
 WORKER_SIGNAL_TAG = "worker-signal"

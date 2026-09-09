@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 """error_response.py — 动作错误强制响应分类(issue #448,机械优先层)。
 
-Single source of truth: references/error-response-taxonomy.md. 该模块是分类
+Single source of truth: references/contracts/error-response-taxonomy.md. 该模块是分类
 表的承载层 — 命令行/vmrun/init exit code/签名匹配,文法可枚举。LLM 兜底
-漏召回见 references/error-response-taxonomy.md"未分类"行。
+漏召回见 references/contracts/error-response-taxonomy.md"未分类"行。
 
 Usage:
   uv run python scripts/error_response.py classify \\
@@ -148,7 +148,7 @@ class Classification(NamedTuple):
 # asserted mechanically by tests/test_decision_surface_anchor.py
 # (charter executor table names this module back; symbolic anchors, no
 # line numbers — #446 acceptance requires symbol references).
-CHARTER_SOURCE = "references/agent-three-state-charter.md"
+CHARTER_SOURCE = "references/contracts/agent-three-state-charter.md"
 CHARTER_STATES = ("allowed", "must-ask", "must-stop")
 _RESPONSE_MAP: dict[ErrorClass, Response] = {
     ErrorClass.HUMAN_EVENT_REFUSE: Response.STOP,

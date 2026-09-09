@@ -3,7 +3,7 @@
 
 Owner-ruled design (issue #55, do not relitigate): every message kunglao
 injects into the AGENT's context is producer-attributed and trust-tagged
-with one of EIGHT fixed XML tags (references/xml-injection-standard.md).
+with one of EIGHT fixed XML tags (references/contracts/xml-injection-standard.md).
 Tags MARK information — they never gate on tag presence (lighting, not
 enforcement).
 
@@ -413,7 +413,7 @@ def test_top1_reject_end_to_end_wrapped(tmp_path):
 
 # ---------- the standard document (#55 surface 1) ----------------------------
 
-STANDARD = REPO_ROOT / "references" / "xml-injection-standard.md"
+STANDARD = REPO_ROOT / "references" / "contracts" / "xml-injection-standard.md"
 
 
 def test_standard_doc_exists_and_pins_all_eight_tags():

@@ -14,7 +14,7 @@ fails lint is unqualified and must not enter the fact base.
 | 1 | `id` | `<FNNN>-<slug>`; unique in the whole project; the file is `facts/<id>.md` for new facts |
 | 2 | `type` | `fact` |
 | 3 | `title` | Human-readable, unicode allowed |
-| 4 | `status` | Claim strength: `PROVEN`/`INFERRED`/`NEGATIVE`/`REFUTED`/`VERIFIED`/`OPEN`/`DEFERRED`. Workflow states (`PARTIALLY-VERIFIED`, `STAMP`) are NOT legal here — see `references/state-mapping.md` |
+| 4 | `status` | Claim strength: `PROVEN`/`INFERRED`/`NEGATIVE`/`REFUTED`/`VERIFIED`/`OPEN`/`DEFERRED`. Workflow states (`PARTIALLY-VERIFIED`, `STAMP`) are NOT legal here — see `references/schemas/state-mapping.md` |
 | 5 | `created` | ISO date the node was first written. Never backdate |
 | 6 | `last_reviewed` | ISO date of last audit; ≥ `created` |
 | 7 | `source` | 8-value enum (below) |
@@ -84,7 +84,7 @@ the 12 mandatory fields, but REQUIRED on every kunglao fact:
 | `trace_id` | #879 mission chain id `tr-<mission>-<seq>` (optional; worker echo, same channel as `claim_id`) |
 
 Plus the verifier gate: `verify_status` ∈ `pending`/`partial`/`passes`/`fails`/`stale`
-(schema Layer-4 field). Two-layer mapping: `references/state-mapping.md`.
+(schema Layer-4 field). Two-layer mapping: `references/schemas/state-mapping.md`.
 
 ## Complete example (passes lint_facts.py on first write)
 
@@ -119,4 +119,4 @@ On use: replace `F999`/`C-999`/hashes/dates; `content_sha256` values are the rea
 sha256 of each artifact (`python scripts/migrate_facts.py` computes them, or
 `sha256sum <path>`); delete `confidence_zh` if the 5-verb mapping does not apply.
 
-ICD-203 landing fields per rule: see `references/state-mapping.md`.
+ICD-203 landing fields per rule: see `references/schemas/state-mapping.md`.

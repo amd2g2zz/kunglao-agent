@@ -152,7 +152,7 @@ class TestRegistryEntry:
 
 # ---------- T3: quickref index step + pin freshness ----------
 
-QUICKREF = REPO / "references" / "re-library" / "web-re-quickref.md"
+QUICKREF = REPO / "references" / "re-library" / "web" / "labs" / "web-re-quickref.md"
 
 
 class TestQuickrefIndexStep:
@@ -200,7 +200,7 @@ class TestQuickrefIndexStep:
         import hashlib
         pins = yaml.safe_load((REPO / "references" / "_INDEX.yaml")
                               .read_text(encoding="utf-8"))["files"]
-        rel = "references/re-library/web-re-quickref.md"
+        rel = "references/re-library/web/labs/web-re-quickref.md"
         want = pins[rel]
         got = hashlib.sha256((REPO / rel).read_bytes()).hexdigest()
         assert want == got

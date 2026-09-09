@@ -49,8 +49,8 @@ def _payload(ws: Path, prompt: str) -> dict:
 # assertions below are pinned to the REAL references_recall.py outputs for the
 # mapped queries (verified 2026-08-13): 'go' -> languages-go.md top;
 # 'vm' -> dynamic-re-tool-priority.md top; 'dynamic' -> dynamic-re-tool-priority.md,
-# verify-static-vs-dynamic.md, re-library/tools-dynamic.md; 'static analysis'
-# -> re-library/anti-analysis.md top.
+# verify-static-vs-dynamic.md, re-library/tools/dynamic/tools-dynamic.md; 'static analysis'
+# -> re-library/anti-analysis/catalog/anti-analysis.md top.
 
 VM_CLAIM = (
     "[T3 tools=mcp__x64dbg__*,mcp__frida__*] claim C-101 observe the sample's "

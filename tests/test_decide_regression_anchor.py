@@ -154,7 +154,7 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # copied lib_kunglao.py — the #671 self-bootstrap FileNotFoundError'd the
 # regen path after that merge (regen was broken for every doc-touching wave).
 #
-# 2026-09-01 corpus re-pin (#884): references/re-library/jsvmp-triage.md
+# 2026-09-01 corpus re-pin (#884): references/re-library/web/vm/jsvmp-triage.md
 # joined the anomaly baseline corpus (re-library/*.md is ingested by
 # anomaly_detector._load_baseline), shifting lexical rarity in the 4th
 # decimal. Same class: DATA drift only, 4 score floats across the 2
@@ -162,7 +162,7 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # stays green on all cases. Re-captured via capture_from_git_baseline()
 # (baseline module + current corpus) per the design §5 command.
 #
-# 2026-09-02 corpus re-pin (#866-b): references/re-library/kunglao-toolshelf.md
+# 2026-09-02 corpus re-pin (#866-b): references/re-library/tools/shelf/kunglao-toolshelf.md
 # joined the anomaly baseline corpus (the #866-b discovery-face teaching page
 # for the registered tools/ CLIs). Same class: DATA drift only, 4 score floats
 # across the 2 contradiction cases (0.9059571619812584 -> 0.9054677206851119,
@@ -239,7 +239,7 @@ ANCHOR_FILE = Path(__file__).parent / "decide_anchor_cabc7d9.json"
 # zero structural diffs) before re-pin; re-pinned via capture_current()
 # per the docstring command.
 #
-# 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web-re-quickref.md
+# 2026-08-26 corpus re-pin (#728 web labs): references/re-library/web/labs/web-re-quickref.md
 # joined the anomaly baseline corpus (anomaly_detector._load_baseline ingests
 # re-library/*.md), shifting every lexical rarity score in the 4th decimal. This
 # is DATA drift, not decide() semantics drift — the 8804dcd baseline decide()

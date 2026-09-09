@@ -288,7 +288,7 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
     # decision-rights row cited by defer_reason actually exists — citing a
     # nonexistent row = fake-blocker vector (the 2026-08-12 incident).
     # Reference violation → refuse the write, register stays as-is.
-    # Workspace without references/decision-rights.md (no governance layer)
+    # Workspace without references/governance/decision-rights.md (no governance layer)
     # → skip the check, original behavior unchanged.
     if new_status == "DEFERRED":
         try:
@@ -300,7 +300,7 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                            f"write-side gate R3; checker unavailable "
                            f"({type(exc).__name__}): {exc} — register not "
                            f"modified (fail closed)")
-        dr_path = ws / "references" / "decision-rights.md"
+        dr_path = ws / "references" / "governance" / "decision-rights.md"
         if dr_path.exists():
             rows = parse_decision_rights(dr_path)
             reason = extract_claim_defer_reason(register, claim_id)
@@ -312,7 +312,7 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                     return (False, (f"DEFER REASON REJECTED (write-side gate "
                                     f"R3): {claim_id} defer_reason cites "
                                     f"nonexistent decision-rights row(s): "
-                                    f"{cited} (references/decision-rights.md "
+                                    f"{cited} (references/governance/decision-rights.md "
                                     f"has rows {rows_fmt or '(none)'})"))
 
     # ---- required gates (#78, fail closed): PROVEN requires the BLIND /

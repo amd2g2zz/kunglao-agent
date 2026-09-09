@@ -12,7 +12,7 @@ Mechanical gate scanning `scripts/` and `templates/CLAUDE.md.base.tmpl`:
 - `SKILL.md` and `agents/kunglao-worker.md` must carry the same dispatch
   contract wording (reusable logic -> parameterized CLI in `scripts/`;
   existing CLI preferred; no inline execution).
-- `references/cli-script-checklist.md` (the CLI-spec checklist) must exist
+- `references/contracts/cli-script-checklist.md` (the CLI-spec checklist) must exist
   and be registered in `references/_INDEX.md`.
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ SCRIPTS = ROOT / "scripts"
 TEMPLATE = ROOT / "templates" / "CLAUDE.md.base.tmpl"
 SKILL = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
 WORKER = ROOT / "agents" / "kunglao-worker.md"
-CHECKLIST = ROOT / "references" / "cli-script-checklist.md"
+CHECKLIST = ROOT / "references" / "contracts" / "cli-script-checklist.md"
 INDEX = ROOT / "references" / "_INDEX.md"
 
 # Inline-execution shapes that would carry reusable logic — banned in the tree.
@@ -118,8 +118,8 @@ def test_worker_has_script_discipline_contract() -> None:
 
 
 def test_cli_checklist_doc_registered() -> None:
-    """references/cli-script-checklist.md exists and is registered in _INDEX.md."""
-    assert CHECKLIST.exists(), "missing references/cli-script-checklist.md"
+    """references/contracts/cli-script-checklist.md exists and is registered in _INDEX.md."""
+    assert CHECKLIST.exists(), "missing references/contracts/cli-script-checklist.md"
     idx = INDEX.read_text(encoding="utf-8")
     assert "cli-script-checklist.md" in idx, (
         "cli-script-checklist.md not registered in references/_INDEX.md"
@@ -136,7 +136,7 @@ def test_worker_has_tool_first_contract() -> None:
 
 
 def test_checklist_has_tool_first_section() -> None:
-    """Issue #294: references/cli-script-checklist.md must instruct checking
+    """Issue #294: references/contracts/cli-script-checklist.md must instruct checking
     tools/_INDEX before any new script is written ("## 0. Check the catalog first")."""
     text = CHECKLIST.read_text(encoding="utf-8")
     assert "Check the catalog first" in text, (

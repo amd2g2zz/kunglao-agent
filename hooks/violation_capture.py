@@ -94,8 +94,8 @@ TRACEBACK_RE = re.compile(
 #   env_incident -> error-response-taxonomy.md (mandatory stop / retry-once /
 #     ask / escalate classification for action errors)
 DOC_POINTERS = {
-    "violation_sed_tamper": "references/guardrails.md",
-    "env_incident": "references/error-response-taxonomy.md",
+    "violation_sed_tamper": "references/governance/guardrails.md",
+    "env_incident": "references/contracts/error-response-taxonomy.md",
 }
 DOC_POINTER_SUFFIX = (" — this pattern is documented: {ptr}"
                       " — read before retrying")

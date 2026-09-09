@@ -21,7 +21,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-CARD = ROOT / "references" / "re-library" / "falsifier-library.md"
+CARD = ROOT / "references" / "re-library" / "method" / "process" / "falsifier-library.md"
 INDEX = ROOT / "references" / "_INDEX.md"
 
 CARD_LINE_BUDGET = 200  # re-library card budget (vm-protection-anatomy precedent)
@@ -122,7 +122,7 @@ def test_rule10_notes_present_in_row_not_a_section() -> None:
 def test_index_desc_tracks_family_count() -> None:
     idx = INDEX.read_text(encoding="utf-8")
     m = re.search(
-        r"re-library/falsifier-library\.md` \| [^|]+ \| "
+        r"re-library/method/process/falsifier-library\.md` \| [^|]+ \| "
         r"Hypothesis-family falsifier pattern library: (\d+) families",
         idx)
     assert m, "falsifier-library index row not found in references/_INDEX.md"

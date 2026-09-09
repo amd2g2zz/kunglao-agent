@@ -102,7 +102,7 @@ keeping action chains short enough to fit a single context window.
    `evidence_expected: <list of fact types or claim IDs>`.
 2. Worker prompt template — accept `dispatch_intent`; require worker return
    to declare which `evidence_expected` items were fulfilled.
-3. `references/verify-static-vs-dynamic.md` — extend with intent-vs-result
+3. `references/orchestration/verify-static-vs-dynamic.md` — extend with intent-vs-result
    comparison: if 0 of `evidence_expected` fulfilled, the dispatch is invalid
    even if the worker returned success.
 
@@ -129,7 +129,7 @@ failed layer.
 1. `global_plan.yaml` — split into `global_plan_tasks.yaml` +
    `global_plan_deps.yaml`. The `tasks` file lists claim IDs grouped by
    primary question; the `deps` file lists claim ID → required-evidence IDs.
-2. `references/cold-start-contract.md` §8 — update to read 9 files instead
+2. `references/contracts/cold-start-contract.md` §8 — update to read 9 files instead
    of 8.
 3. Orchestrator MONITOR — when a claim transitions OPEN → REFUTED, only
    the dep layer is re-evaluated; the task layer is unchanged.
@@ -181,7 +181,7 @@ CREATE TABLE checkpoints (
    ```
 2. Storage: JSON file (not Postgres) — kunglao-agent is workspace-isolated, not
    multi-tenant. Shallow refs avoid 100MB+ snapshots.
-3. `references/cold-start-contract.md` — extend with `.checkpoint/` read;
+3. `references/contracts/cold-start-contract.md` — extend with `.checkpoint/` read;
    if `state_<iter>.json` exists, ask user "resume from iter N?".
 
 **Production considerations** (from LangGraph):
@@ -225,7 +225,7 @@ CREATE TABLE checkpoints (
 1. `progress.json` schema — adapt to claim-centric. Replace `features` with
    `claims` (mapping to claim-register claim IDs). Status values:
    `done` / `in_progress` / `blocked` / `ctx_degraded`.
-2. `references/cold-start-contract.md` — read `progress.json` before 8 files.
+2. `references/contracts/cold-start-contract.md` — read `progress.json` before 8 files.
 3. `hooks/worker_budget.py` — add `check_progress_json` (warn if not updated
    in last N iterations).
 4. **Git checkpoint**: every MONITOR end → `git add -A && git commit -m "iter N: state checkpoint"`.

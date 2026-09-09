@@ -10,7 +10,7 @@ RED-first tests pin the contract before implementation (owner ruling 4):
   positive reuse), newest first within each class; tag-intersection matching.
 - #127: the emit_case_hints <case-hints> wrapper face was DELETED (zero
   callers — dead dispatch face); tests for it removed with it.
-  references/xml-injection-standard.md (the reserved producer is THIS PR).
+  references/contracts/xml-injection-standard.md (the reserved producer is THIS PR).
 """
 import json
 from pathlib import Path

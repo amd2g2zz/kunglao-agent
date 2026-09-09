@@ -53,8 +53,8 @@ def _real_index():
 # J1 — knowledge base documents, indexing, dictionary recall
 # ===========================================================================
 
-RISK_DOC = ROOT / "references" / "re-library" / "web-risk-control.md"
-CRAWLER_DOC = ROOT / "references" / "re-library" / "web-crawler-engineering.md"
+RISK_DOC = ROOT / "references" / "re-library" / "web" / "risk-control" / "web-risk-control.md"
+CRAWLER_DOC = ROOT / "references" / "re-library" / "web" / "crawler" / "web-crawler-engineering.md"
 
 
 class TestJ1Documents:
@@ -148,8 +148,8 @@ class TestJ1IndexedAndRecalled:
     def test_domain_table_and_catalog_rows(self) -> None:
         idx = _real_index()
         paths = {e.path for e in idx.entries}
-        assert "re-library/web-risk-control.md" in paths
-        assert "re-library/web-crawler-engineering.md" in paths
+        assert "re-library/web/risk-control/web-risk-control.md" in paths
+        assert "re-library/web/crawler/web-crawler-engineering.md" in paths
         doms = {d.name for d in idx.domains.values()}
         assert "web" in doms
 
@@ -163,13 +163,13 @@ class TestJ1IndexedAndRecalled:
         entries, scenes = list(idx.entries), list(idx.scenes)
         res = rr.recall(entries, scenes, "risk control")
         assert res.files, "risk control must recall something"
-        assert res.files[0] == "re-library/web-risk-control.md", res.files[:5]
+        assert res.files[0] == "re-library/web/risk-control/web-risk-control.md", res.files[:5]
 
     def test_recall_hits_crawler_by_cjk_dictionary(self) -> None:
         idx = _real_index()
         entries, scenes = list(idx.entries), list(idx.scenes)
         res = rr.recall(entries, scenes, "爬虫")
-        assert "re-library/web-crawler-engineering.md" in res.files[:3], res.files[:5]
+        assert "re-library/web/crawler/web-crawler-engineering.md" in res.files[:3], res.files[:5]
 
     def test_scenario_map_routes_antibot(self) -> None:
         idx = _real_index()
@@ -178,8 +178,8 @@ class TestJ1IndexedAndRecalled:
 
     def test_yaml_pins_cover_new_docs(self) -> None:
         yaml_text = (ROOT / "references" / "_INDEX.yaml").read_text(encoding="utf-8")
-        assert "references/re-library/web-risk-control.md:" in yaml_text
-        assert "references/re-library/web-crawler-engineering.md:" in yaml_text
+        assert "references/re-library/web/risk-control/web-risk-control.md:" in yaml_text
+        assert "references/re-library/web/crawler/web-crawler-engineering.md:" in yaml_text
 
 
 WEB_CLAIM = (
@@ -688,7 +688,7 @@ class TestJ4JointQueryForThink:
 # J5 — WebSearch as LEARN tier 2 + evidence discipline
 # ===========================================================================
 
-OPS_MD = ROOT / "references" / "operational-mechanics.md"
+OPS_MD = ROOT / "references" / "orchestration" / "operational-mechanics.md"
 
 
 class TestJ5WebSearchLadder:

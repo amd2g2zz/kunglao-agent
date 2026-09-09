@@ -66,7 +66,7 @@ GENERIC_SNAKE_ALLOWLIST = frozenset({
     "camoufox_reverse_mcp",
 })
 
-QUICKREF = ROOT / "references" / "re-library" / "web-re-quickref.md"
+QUICKREF = ROOT / "references" / "re-library" / "web" / "labs" / "web-re-quickref.md"
 QUICKREF_SECTIONS = (
     "Hook & breakpoint quick reference",
     "Signed-parameter location workflow",
@@ -354,7 +354,7 @@ def test_references_index_yaml_pinned():
         (ROOT / "references" / "_INDEX.yaml").read_text(encoding="utf-8"))
     files = pins.get("files", {})
     assert "references/_index-web.md" in files
-    assert "references/re-library/web-re-quickref.md" in files
+    assert "references/re-library/web/labs/web-re-quickref.md" in files
 
 
 def test_skill_md_lists_web():

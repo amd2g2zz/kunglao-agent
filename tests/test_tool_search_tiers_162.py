@@ -76,7 +76,7 @@ def test_reference_tier_hit_derived_at_query_time():
     r = run_cli("--find", "wal-protocol", "--json")
     assert r.returncode == 0, r.stderr
     hits = json.loads(r.stdout)["tools"]
-    ref = [h for h in hits if h.get("source") == "references/wal-protocol.md"]
+    ref = [h for h in hits if h.get("source") == "references/contracts/wal-protocol.md"]
     assert ref, f"references source not queried: {hits}"
     h = ref[0]
     assert h["type"] == "reference"
@@ -90,7 +90,7 @@ def test_reference_tier_re_library_card_deduped_against_ext_entry():
     r = run_cli("--find", "deobfuscation", "--json")
     assert r.returncode == 0, r.stderr
     hits = json.loads(r.stdout)["tools"]
-    card = "references/re-library/vm-deobfuscation-routing.md"
+    card = "references/re-library/patterns/vm/vm-deobfuscation-routing.md"
     srcs = [h.get("source") for h in hits if h.get("source") == card]
     assert len(srcs) == 1, f"dedup failed: {srcs}"
     winner = [h for h in hits if h.get("source") == card][0]

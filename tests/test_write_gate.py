@@ -6,8 +6,8 @@ blocker) exposed that all kunglao mechanical gates are READ-side (dispatch
 discipline, verify anchors, convergence judgment); the WRITE side (how state
 comes into being: verify_status stamping, expected-anchor origin, defer
 reasons) is bare. This module pins three write-side mechanical constraints,
-audited against the repo's REAL artifact schema (references/schema.md,
-references/guardrails.md §1b):
+audited against the repo's REAL artifact schema (references/schemas/schema.md,
+references/governance/guardrails.md §1b):
 
 - R1 maker-checker re-verification:
   * a NOTE (notes/*.md) with verify_status=passes must have an independent
@@ -25,7 +25,7 @@ references/guardrails.md §1b):
   pattern → violation.
 - R3 defer_reason checkability: decision-rights row citations in
   claim-register.yaml defer_reason must resolve to rows that exist in
-  references/decision-rights.md (fake-blocker vector). Only decision-shaped
+  references/governance/decision-rights.md (fake-blocker vector). Only decision-shaped
   citations count ("row 5 of PE header table" is not a citation).
   claim_migrator refuses DEFERRED writes whose defer_reason cites a
   nonexistent row.
@@ -40,7 +40,7 @@ import write_gate  # noqa: E402
 import kunglao_record  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-REF_FILE = ROOT / "references" / "decision-rights.md"
+REF_FILE = ROOT / "references" / "governance" / "decision-rights.md"
 
 # ---------- helpers ----------
 
@@ -61,7 +61,7 @@ def _decision_rows() -> set[int]:
 
 
 def _write_decision_rights(ws: Path) -> Path:
-    refs = ws / "references"
+    refs = ws / "references" / "governance"
     refs.mkdir(parents=True, exist_ok=True)
     p = refs / "decision-rights.md"
     p.write_text(DECISION_RIGHTS, encoding="utf-8")
@@ -443,7 +443,7 @@ def test_record_allows_deferred_write_with_valid_citation(ws_factory):
 
 
 def test_record_deferred_without_decision_rights_file_unchanged(ws_factory):
-    """Workspace without references/decision-rights.md → DEFERRED still writes."""
+    """Workspace without references/governance/decision-rights.md → DEFERRED still writes."""
     ws = ws_factory(claims=[{"id": "C-1", "status": "OPEN"}])
     ok, msg = kunglao_record.claim_migrator(ws, "C-1", "DEFERRED", "orchestrator")
     assert ok, f"no governance file → check skipped, write allowed: {msg}"
@@ -484,7 +484,7 @@ def test_cli_json_mode(tmp_path, capsys):
 
 
 def test_real_decision_rights_rows_used():
-    """Real references/decision-rights.md parses to rows 1..15 (repo fact)."""
+    """Real references/governance/decision-rights.md parses to rows 1..15 (repo fact)."""
     rows = write_gate.decision_rows_from_text(
         REF_FILE.read_text(encoding="utf-8"))
     assert rows == set(range(1, 16)), f"expected rows 1..15, got {sorted(rows)}"

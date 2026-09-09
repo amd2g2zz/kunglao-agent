@@ -535,7 +535,7 @@ tools:
     description: Graph-RAG source queries, android + js
     tier: T1
     cost_tier: deep
-    input_output: {input: "indexed decompiled source tree - jadx/dexdc output (android) OR a recovered JS module tree registered into evidence/<run>.json unpack_out by wakaru/webcrack (#751 js domain); 16 MCP tools via the gitnexus server; index built lazily on claim demand, marker evidence/gitnexus_index.json", output: "dependency/call-chain/execution-flow graph answers via Graph RAG; for web signature-trace posture see references/re-library/web-re-quickref.md; end-to-end regression demo CLI: tools/static/web_gitnexus_demo.py (--selfcheck offline)"}
+    input_output: {input: "indexed decompiled source tree - jadx/dexdc output (android) OR a recovered JS module tree registered into evidence/<run>.json unpack_out by wakaru/webcrack (#751 js domain); 16 MCP tools via the gitnexus server; index built lazily on claim demand, marker evidence/gitnexus_index.json", output: "dependency/call-chain/execution-flow graph answers via Graph RAG; for web signature-trace posture see references/re-library/web/labs/web-re-quickref.md; end-to-end regression demo CLI: tools/static/web_gitnexus_demo.py (--selfcheck offline)"}
     when_not: "not a decompiler; not without an indexed source tree (lazy build - never pre-run); on js targets run only AFTER recovery (wakaru/webcrack unpack first - gitnexus parses normal source, not bundles); not for DEX without source (dexdc CFG / baksmali xref instead)"
     provider: gitnexus
     produces: [android:semantic-query, android:call-graph, js:semantic-query, js:call-graph]

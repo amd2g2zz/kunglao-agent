@@ -16,7 +16,7 @@ Owner ruling 4 (this module's whole contract):
   this module's own CLI and its tests). Per the no-backcompat policy the
   half-utilized "wired-but-unread" face ends: the bank's read face is
   retrieve(), its consumers are the hypothesis seeder and this CLI. The
-  <case-hints> tag stays RESERVED in references/xml-injection-standard.md
+  <case-hints> tag stays RESERVED in references/contracts/xml-injection-standard.md
   for a future dispatch-face producer with an actual consumer contract.
 
 Schema (runs/case-bank.jsonl, one JSON object per line):

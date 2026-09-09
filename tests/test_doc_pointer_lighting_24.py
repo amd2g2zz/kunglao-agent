@@ -86,7 +86,7 @@ def test_tamper_warning_names_guardrails_doc(tmp_path):
     tamper = [r for r in _ledger_rows(ws)
               if r["action"] == "violation_sed_tamper"]
     assert tamper, "incident sed must still be recorded"
-    assert "references/guardrails.md" in tamper[0]["detail"]
+    assert "references/governance/guardrails.md" in tamper[0]["detail"]
     assert "read before retrying" in tamper[0]["detail"]
 
 
@@ -102,7 +102,7 @@ def test_env_incident_names_error_taxonomy_doc(tmp_path):
     assert mod.main(io.StringIO(payload)) == 0
     inc = [r for r in _ledger_rows(ws) if r["action"] == "env_incident"]
     assert inc, "traceback must still be recorded"
-    assert "references/error-response-taxonomy.md" in inc[0]["detail"]
+    assert "references/contracts/error-response-taxonomy.md" in inc[0]["detail"]
     assert "read before retrying" in inc[0]["detail"]
 
 
@@ -120,7 +120,7 @@ def test_bash_fact_guard_violation_names_schema_doc(tmp_path, capsys):
     assert mod.main(stdin_stream=io.StringIO(json.dumps(payload))) == 0
     out = capsys.readouterr().out
     assert "additionalContext" in out and "F001.md" in out
-    assert "references/schema.md" in out
+    assert "references/schemas/schema.md" in out
     assert "read before retrying" in out
 
 

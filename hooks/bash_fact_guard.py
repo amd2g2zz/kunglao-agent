@@ -45,7 +45,7 @@ _SAFE_REL_RE = re.compile(r"^[A-Za-z0-9._-]+\.md$")
 # fact-file contract lint -> schema.md (fact.type/status/boundary_type/
 # extension fields — exactly what lint_facts enforces).
 DOC_POINTERS = {
-    "facts_write_contract_lint": "references/schema.md",
+    "facts_write_contract_lint": "references/schemas/schema.md",
 }
 DOC_POINTER_SUFFIX = (" — this pattern is documented: {ptr}"
                       " — read before retrying")

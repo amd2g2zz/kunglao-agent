@@ -50,7 +50,7 @@ hookSpecificOutput.additionalContext (#270)."""
 # #55 XML injection standard: gate verdicts are producer-attributed — the
 # guidance text is wrapped in <gate-verdict>...</gate-verdict> at the
 # emission site (_reject) so the agent can tell a kunglao gate verdict from
-# third-party tool output (references/xml-injection-standard.md). Tags mark,
+# third-party tool output (references/contracts/xml-injection-standard.md). Tags mark,
 # they never gate: rc and payload shape unchanged; stderr stays untagged.
 GATE_VERDICT_TAG = "gate-verdict"
 
@@ -246,7 +246,7 @@ def _reject(name: str, msg: str, paths: dict) -> int:
 
     #55: the guidance lands in agent context wrapped in
     <gate-verdict>...</gate-verdict> — verdict + repair path read as one
-    producer-attributed unit (references/xml-injection-standard.md). The
+    producer-attributed unit (references/contracts/xml-injection-standard.md). The
     tag is applied HERE, at the emission site, so the REJECT_FIXES table
     and the stderr summary stay raw. Tags mark, never gate: rc=2 unchanged.
     """

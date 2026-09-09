@@ -33,6 +33,67 @@ scenarios:
   Malware sample intake / triage: malware (malware-triage, malware-analysis-workflow, malware-analysis)
   Action error / tool-VM-install failure response: error-response-taxonomy
   Ask-the-user / irreversible-action decision: agent-three-state-charter
+population_b:
+- from: references/agent-three-state-charter.md
+  to: references/contracts/agent-three-state-charter.md
+- from: references/error-response-taxonomy.md
+  to: references/contracts/error-response-taxonomy.md
+- from: references/wal-protocol.md
+  to: references/contracts/wal-protocol.md
+- from: references/xml-injection-standard.md
+  to: references/contracts/xml-injection-standard.md
+- from: references/cli-script-checklist.md
+  to: references/contracts/cli-script-checklist.md
+- from: references/machine-check-contract.md
+  to: references/contracts/machine-check-contract.md
+- from: references/downstream-contract.md
+  to: references/contracts/downstream-contract.md
+- from: references/cold-start-contract.md
+  to: references/contracts/cold-start-contract.md
+- from: references/convergence-loop.md
+  to: references/contracts/convergence-loop.md
+- from: references/dispatch-protocol.md
+  to: references/orchestration/dispatch-protocol.md
+- from: references/method-constraints.md
+  to: references/orchestration/method-constraints.md
+- from: references/search-policy.md
+  to: references/orchestration/search-policy.md
+- from: references/malware-phase-routing.md
+  to: references/orchestration/malware-phase-routing.md
+- from: references/operational-mechanics.md
+  to: references/orchestration/operational-mechanics.md
+- from: references/dynamic-re-tool-priority.md
+  to: references/orchestration/dynamic-re-tool-priority.md
+- from: references/tool-inventory.md
+  to: references/orchestration/tool-inventory.md
+- from: references/anomaly-baseline.md
+  to: references/orchestration/anomaly-baseline.md
+- from: references/verify-static-vs-dynamic.md
+  to: references/orchestration/verify-static-vs-dynamic.md
+- from: references/failure-modes.md
+  to: references/orchestration/failure-modes/failure-modes.md
+- from: references/failure-modes-lifecycle.md
+  to: references/orchestration/failure-modes/failure-modes-lifecycle.md
+- from: references/failure-modes-monitoring.md
+  to: references/orchestration/failure-modes/failure-modes-monitoring.md
+- from: references/failure-modes-state.md
+  to: references/orchestration/failure-modes/failure-modes-state.md
+- from: references/case-book.md
+  to: references/orchestration/failure-modes/case-book.md
+- from: references/decision-rights.md
+  to: references/governance/decision-rights.md
+- from: references/guardrails.md
+  to: references/governance/guardrails.md
+- from: references/mechanisms.md
+  to: references/governance/mechanisms.md
+- from: references/excerpt-lint.md
+  to: references/governance/excerpt-lint.md
+- from: references/schema.md
+  to: references/schemas/schema.md
+- from: references/state-mapping.md
+  to: references/schemas/state-mapping.md
+- from: references/machine_check_map.yaml
+  to: references/schemas/machine_check_map.yaml
 cards:
 - from: references/re-library/android-fingerprint-apis.md
   to: references/re-library/android/emulation/android-fingerprint-apis.md

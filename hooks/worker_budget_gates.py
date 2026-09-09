@@ -482,7 +482,7 @@ def check_host_forbidden_tools(tools: list[str]) -> tuple[bool, str]:
         return (False, (
             f'host-channel dynamic tool(s) {bad!r} forbidden - '
             f'use mcp__x64dbg__connect_remote (VM path) / rev-frida via VM '
-            f'frida-server. See kunglao-agent/references/dynamic-re-tool-priority.md'
+            f'frida-server. See kunglao-agent/references/orchestration/dynamic-re-tool-priority.md'
         ))
     return (True, 'no host-channel dynamic tools')
 
