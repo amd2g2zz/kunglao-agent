@@ -3,18 +3,17 @@ purpose: Machine-readable index of references/ for the recall engine. files[] pi
   sha256 per file; symptom_map routes worker failure symptoms (F-row ids) to reference
   files. Generated from the F-row tables in references/failure-modes-{lifecycle,monitoring,state}.md.
 files:
-  references/_INDEX.md: 1d06a679c14e7bae4f5e97c7c2fa65073004ebdcc3038da5f9ceb3dd4f54b991
+  references/_INDEX.md: 7daf97e436f088f6c41c503a0813efd677748624240205954cfae0447116ef17
   references/_index-android.md: 167788909de350f289b37bb6a988982a01f42858b58719deaf7709cf5af18f71
   references/_index-anti-analysis.md: 939aec08b408d6af4469847604ebe595ba59269ca2645b6551d358881247fccd
   references/_index-languages.md: 0f18b3824fe1cac6481404aa80cfbe901a5e7d2c01caf99c1d49d896fb070522
-  references/_index-malware.md: c0a29b9cf6f009ad31e91e7f328024610d0c79633185395004c432d45d47f761
+  references/_index-malware.md: 9ca74cb65468f24574835a1132415d585399fc65efa5633a417453c0594f4eb9
   references/_index-method.md: 81a789b3d6435fb5d391c7788ae3d85915ed2c728eb5ea2b62e2f1e7750c8e8d
   references/_index-patterns.md: cbe4d88df5dfdb0426b2c892288e143cebfaaa2b7e528573f196d65fabe83313
   references/_index-platforms.md: 69543ebc5d97be54ca3dc320af0a971923de0d01c7419e33c4013efa8c318cdd
-  references/_index-research.md: d787284be6aa82246894adf8eb8d1f7e85130d47b07d835faa390b2414558abe
+  references/_index-research.md: b2fe9a243a7a880d5a474a1211ba01d3c741894672ffed71dd99c6a8fc863921
   references/_index-tools.md: 4ac1677fd998385286d204cde8519ee4c42c09f0eb38b4f6569e7365f32a9fb8
   references/_index-web.md: 6a6c7c2d7ac5d2b87cdb30911b82357a199a9a2dea5773613d79edd9dc129940
-  references/archive/long-horizon-architecture-2026-07.md: 35aad1731ffb38079f2a977978a023e13bd7a4775a4e2cb1d1f86ae3fa7a2ca4
   references/contracts/agent-three-state-charter.md: 43a58ff22ebc6d95f2d71c514c8b39ae422e132310b99b03cc423eed240c7d06
   references/contracts/cli-script-checklist.md: 4af55a6056c899c383c550c6cb0da3c931bcd8d2de8db44ff999071ddb3a33da
   references/contracts/cold-start-contract.md: 7b0e9375cc55475a6f5d9a8f67637af5cc6436175f06cbb835c03acd3187bfce
@@ -26,10 +25,9 @@ files:
   references/contracts/xml-injection-standard.md: 8871736fe18e456d13715458e8ece801c5115595b221dae3accd57c2ad8d0375
   references/governance/decision-rights.md: 5398a15f656d14d8ffac960b1f1e4a18a0c54e364f7ffeb920c811234e326eef
   references/governance/excerpt-lint.md: 785595a3d600621ddcb1de949078c00ded8db00351e9c3aa9e7ecb487a173ec6
-  references/governance/guardrails.md: c5f8d9aa4b7fdc3801ecd251ef3493e9cea1f6d9be7dcf66cc5fc6fa5caa52e8
+  references/governance/guardrails.md: ca5c30a76f8ed534866c20fdbb81f385d15dfdebbdaae28bc05d966d1f250600
   references/governance/mechanisms.md: 89be794e793393237fe7da2601b3987c4ff2e7e6a8a19409be21dba6e0afdad5
   references/lessons/README.md: 2d7dd200a129cca4ad73435c9e381bf090bcb7aaaffc53c5f35708c5efcc8ace
-  references/optimization-2026-08.md: 131f4823ffab4c6d229bdd32563cdcd3fc9846ea17421ddebce4a2efafd60e78
   references/orchestration/anomaly-baseline.md: 5ee9c0b28421bb83060d4065166e53aad4353c3f541ccbc4f72ccf0b14d414f1
   references/orchestration/dispatch-protocol.md: ce6bc3a9b6879de8c0c4ecd2fef593dbcf7b2e2786909a6907aab76cc7a59360
   references/orchestration/dynamic-re-tool-priority.md: e40a8b6492f0c79c63366007ba3660d590d595463842cf7ee82bda4bdf3b4b39
@@ -41,7 +39,6 @@ files:
   references/orchestration/malware-phase-routing.md: 000a9b97bd2939fe1ae112a94a84520556fde979cee87f53498ed07fce993de9
   references/orchestration/method-constraints.md: 9315e142347621cdc650b4e372165b875f291ba9a7990eb667ba7c2c1adc8f9a
   references/orchestration/operational-mechanics.md: 6ea8fcbb6cb001d9b032ebc32afc87f99dd96fd36c3d139be7e29673b5b1684c
-  references/orchestration/search-policy.md: 46807e75ef0cf4381b747ffc9495618aad9c0eb320d5007f1c9bfc4bb7cf547f
   references/orchestration/tool-inventory.md: 4c7001d5cf990c8b646410f2eba2cf06a7cec71e1839097947210f19bcf53445
   references/orchestration/verify-static-vs-dynamic.md: d2f823da4d1890e9daeba6bbe25ff1f55b61679b43a72dc2f015b26b2165833a
   references/re-library/android/emulation/android-fingerprint-apis.md: 4863eb94450f1ac2922ab3285e32387afee1f18884294d6bbdff09ba03ee0fba
@@ -60,7 +57,6 @@ files:
   references/re-library/malware/reporting/detection-engineer.md: ac1904ad5c7d2f569613e3fdc25b0dec9f18837f5b46ab1358cf1e0c9fbf4f1c
   references/re-library/malware/reporting/malware-report-writer.md: a73d41b781f841bbabb7b99902db078afc29d60e51606f84d87202809023c0b2
   references/re-library/malware/triage/malware-triage.md: 2fa00553d6ea1ed6ddfca670f4b0c9405338875044f61be488f2d03ce793f567
-  references/re-library/malware/workflow/malware-analysis-quickstart.md: 8a9acd79c97819d1835a3022275e20c2c687b57e91ccab09349c12c95c38ffd8
   references/re-library/malware/workflow/malware-analysis-workflow.md: 330fb09ef18573ac0e008b1e6ac0a834d1016d32ca8216285e5407738360a477
   references/re-library/malware/workflow/malware-analysis.md: 06fadf5aab630786daa5f9a9448b099389dc060ce8bf3c010419dc2690edc58c
   references/re-library/malware/workflow/malware-dynamic-analysis.md: 104d0df70c55f2dac71b77fd31e690d76a22b9488bd7e16bc789a2686c41350b
@@ -85,7 +81,6 @@ files:
   references/re-library/research/osint/multi-search-engine-config.json: 120f98289429b9763f548266d65a48faf4d50acb39d893260386cf3c5f370d25
   references/re-library/research/osint/multi-search-engine-refs.md: d00092e098ba6a85ba8cd3c15e1c706600a24f22f1dbff1e38d5ccdd9e672d16
   references/re-library/research/osint/multi-search-engine.md: 95e57956ed165c6fa5347154b9d4604d4b656779b8bac9b8df1037b423350c64
-  references/re-library/research/resources/awesome-re-resources.md: 8c140e7dcff0561c052a7c667261cfadf728ee4c41f9d017a8c65516e437f49a
   references/re-library/tools/crypto/tools-crypto.md: 4624dda30557715598105eaa635a4b17af5cbe88e01980b946a0698a72190338
   references/re-library/tools/dynamic/tools-dynamic.md: 382bf64181e5a501d8bc3d4088e6a5810d76861f62f37bbbcab8bd715b51f1ce
   references/re-library/tools/shelf/kunglao-toolshelf.md: 0f00b770201e53ae9d8fac57f57bb29d32dbe8e424b4ab97adfaaed0df62155e

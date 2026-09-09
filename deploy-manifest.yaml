@@ -891,11 +891,11 @@ files:
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
-    sha256: 1d06a679c14e7bae4f5e97c7c2fa65073004ebdcc3038da5f9ceb3dd4f54b991
+    sha256: 7daf97e436f088f6c41c503a0813efd677748624240205954cfae0447116ef17
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: a7b49b013a13953f292de0a357db5bc750e941f1dfd512ee59c8aaf48e3761d3
+    sha256: c2c6a4bdd8ca3e5ec7d62822e0341f8aaf0b88edbc6724bf02bd12c020dad048
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -911,7 +911,7 @@ files:
   - src: references/_index-malware.md
     dest: .claude/references/_index-malware.md
     kind: asset
-    sha256: c0a29b9cf6f009ad31e91e7f328024610d0c79633185395004c432d45d47f761
+    sha256: 9ca74cb65468f24574835a1132415d585399fc65efa5633a417453c0594f4eb9
   - src: references/_index-method.md
     dest: .claude/references/_index-method.md
     kind: asset
@@ -927,7 +927,7 @@ files:
   - src: references/_index-research.md
     dest: .claude/references/_index-research.md
     kind: asset
-    sha256: d787284be6aa82246894adf8eb8d1f7e85130d47b07d835faa390b2414558abe
+    sha256: b2fe9a243a7a880d5a474a1211ba01d3c741894672ffed71dd99c6a8fc863921
   - src: references/_index-tools.md
     dest: .claude/references/_index-tools.md
     kind: asset
@@ -936,10 +936,6 @@ files:
     dest: .claude/references/_index-web.md
     kind: asset
     sha256: 6a6c7c2d7ac5d2b87cdb30911b82357a199a9a2dea5773613d79edd9dc129940
-  - src: references/archive/long-horizon-architecture-2026-07.md
-    dest: .claude/references/archive/long-horizon-architecture-2026-07.md
-    kind: asset
-    sha256: 35aad1731ffb38079f2a977978a023e13bd7a4775a4e2cb1d1f86ae3fa7a2ca4
   - src: references/contracts/agent-three-state-charter.md
     dest: .claude/references/contracts/agent-three-state-charter.md
     kind: asset
@@ -987,7 +983,7 @@ files:
   - src: references/governance/guardrails.md
     dest: .claude/references/governance/guardrails.md
     kind: asset
-    sha256: c5f8d9aa4b7fdc3801ecd251ef3493e9cea1f6d9be7dcf66cc5fc6fa5caa52e8
+    sha256: ca5c30a76f8ed534866c20fdbb81f385d15dfdebbdaae28bc05d966d1f250600
   - src: references/governance/mechanisms.md
     dest: .claude/references/governance/mechanisms.md
     kind: asset
@@ -996,10 +992,6 @@ files:
     dest: .claude/references/lessons/README.md
     kind: asset
     sha256: 2d7dd200a129cca4ad73435c9e381bf090bcb7aaaffc53c5f35708c5efcc8ace
-  - src: references/optimization-2026-08.md
-    dest: .claude/references/optimization-2026-08.md
-    kind: asset
-    sha256: 131f4823ffab4c6d229bdd32563cdcd3fc9846ea17421ddebce4a2efafd60e78
   - src: references/orchestration/anomaly-baseline.md
     dest: .claude/references/orchestration/anomaly-baseline.md
     kind: asset
@@ -1044,10 +1036,6 @@ files:
     dest: .claude/references/orchestration/operational-mechanics.md
     kind: asset
     sha256: 6ea8fcbb6cb001d9b032ebc32afc87f99dd96fd36c3d139be7e29673b5b1684c
-  - src: references/orchestration/search-policy.md
-    dest: .claude/references/orchestration/search-policy.md
-    kind: asset
-    sha256: 46807e75ef0cf4381b747ffc9495618aad9c0eb320d5007f1c9bfc4bb7cf547f
   - src: references/orchestration/tool-inventory.md
     dest: .claude/references/orchestration/tool-inventory.md
     kind: asset
@@ -1059,7 +1047,7 @@ files:
   - src: references/re-library/_mapping.yaml
     dest: .claude/references/re-library/_mapping.yaml
     kind: asset
-    sha256: e4631373d81e55d428cc477ce0dcd9d11caa50b3ea0b1c585dd903a0dd543e71
+    sha256: aea4c8e1f9fc48125f87488e309e16f59eca8b21e31445337f041866bc4f3914
   - src: references/re-library/android/emulation/android-fingerprint-apis.md
     dest: .claude/references/re-library/android/emulation/android-fingerprint-apis.md
     kind: asset
@@ -1124,10 +1112,6 @@ files:
     dest: .claude/references/re-library/malware/triage/malware-triage.md
     kind: asset
     sha256: 2fa00553d6ea1ed6ddfca670f4b0c9405338875044f61be488f2d03ce793f567
-  - src: references/re-library/malware/workflow/malware-analysis-quickstart.md
-    dest: .claude/references/re-library/malware/workflow/malware-analysis-quickstart.md
-    kind: asset
-    sha256: 8a9acd79c97819d1835a3022275e20c2c687b57e91ccab09349c12c95c38ffd8
   - src: references/re-library/malware/workflow/malware-analysis-workflow.md
     dest: .claude/references/re-library/malware/workflow/malware-analysis-workflow.md
     kind: asset
@@ -1224,10 +1208,6 @@ files:
     dest: .claude/references/re-library/research/osint/multi-search-engine.md
     kind: asset
     sha256: 95e57956ed165c6fa5347154b9d4604d4b656779b8bac9b8df1037b423350c64
-  - src: references/re-library/research/resources/awesome-re-resources.md
-    dest: .claude/references/re-library/research/resources/awesome-re-resources.md
-    kind: asset
-    sha256: 8c140e7dcff0561c052a7c667261cfadf728ee4c41f9d017a8c65516e437f49a
   - src: references/re-library/tools/crypto/tools-crypto.md
     dest: .claude/references/re-library/tools/crypto/tools-crypto.md
     kind: asset
@@ -1367,7 +1347,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 089d19d737280aa9b465cea25ff96ac95da00f020fd588e3f5416816c1684ff3
+    sha256: 93b249cde25bc223418f4fca38c2effdfccc639962e6707448551bc1acbfca9e
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset
