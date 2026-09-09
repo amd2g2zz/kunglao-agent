@@ -175,9 +175,9 @@ def test_recall_partial_match_keeps_matched_files(tmp_path):
     assert ctx and "dynamic-re-tool-priority.md" in ctx
 
 
-# ---- #194: one recall child per dispatch, not one per query ----
+# ---- one recall child per dispatch, not one per query ----
 #
-# Issue #194: evaluate() spawned one references_recall.py subprocess PER
+# Issue 194: evaluate() spawned one references_recall.py subprocess PER
 # QUERY. Every child re-parses the whole layered index (~2.5 s on an
 # unloaded fast machine; slower on the CI runner), so each of the 4-5
 # queries per dispatch individually flirted with the 5 s RECALL_TIMEOUT
@@ -191,7 +191,7 @@ def test_recall_partial_match_keeps_matched_files(tmp_path):
 
 
 def test_batch_timeout_is_a_single_bounded_hostage_window():
-    """#194: the batched call has its own budget — ONE bounded window per
+    """The batched call has its own budget — ONE bounded window per
     dispatch, never per-query. The budget must give the single index parse
     real CI headroom (>= 15 s); no per-query 5 s window may remain, since
     that tight window was the guillotine the flake tripped."""
@@ -205,7 +205,7 @@ def test_batch_timeout_is_a_single_bounded_hostage_window():
 
 
 def test_all_queries_answered_by_one_subprocess(tmp_path, monkeypatch):
-    """#194 core pin: a dispatch with N recall queries spawns exactly ONE
+    """Core pin: a dispatch with N recall queries spawns exactly ONE
     references_recall.py child (the index is parsed once), via the
     `--queries` batch face. (Pre-fix this spawned one child per query.)"""
     import subprocess as sp
@@ -233,7 +233,7 @@ def test_all_queries_answered_by_one_subprocess(tmp_path, monkeypatch):
 
 
 def test_batched_stdout_splits_per_query(tmp_path, monkeypatch):
-    """#194: the batched child answers each query in its own `# ====
+    """The batched child answers each query in its own `# ====
     query:` section; evaluate() must split and merge them exactly like the
     per-query path did (dedup, FILES_PER_QUERY per query, order kept)."""
     import recall_inject
@@ -269,7 +269,7 @@ def test_batched_stdout_splits_per_query(tmp_path, monkeypatch):
 
 
 def test_batch_child_failure_fails_open_all_queries(tmp_path, monkeypatch):
-    """#194: the single batched child dying (timeout/crash) fails open for
+    """The single batched child dying (timeout/crash) fails open for
     the whole dispatch — (0, '', None), never a raise. Same fail-open
     contract the per-query path had, now at dispatch granularity."""
     import subprocess as sp

@@ -969,12 +969,12 @@ def main(argv: list[str]) -> int:
         print_result(result, entries)
         return 0
 
-    # #194: batch face — ONE index parse answers N queries. The per-query
+    # Batch face — ONE index parse answers N queries. The per-query
     # CLI (above) re-parses the whole layered index for every invocation
     # (~2.5 s each before scoring a token); hooks/recall_inject used to pay
     # that per query per dispatch, putting every child individually inside
-    # reach of its subprocess timeout under CI xdist contention (the #194
-    # recall-injection flake). Output is per-query sections, each introduced
+    # reach of its subprocess timeout under CI xdist contention (the
+    # recall-injection CI flake). Output is per-query sections, each introduced
     # by an exact `# ==== query: <q>` separator line followed by that
     # query's normal print_result/print_no_match block, so the caller can
     # split deterministically. rc: 0 = any query matched, 1 = none, 2 =
