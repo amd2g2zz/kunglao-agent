@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """tests/test_ida_scripting_card_163.py — card contract for the #163 distillation.
 
-The ida-scripting-overlays card (references/re-library/ida-scripting-overlays.md)
+The ida-scripting-overlays card (references/re-library/method/process/ida-scripting-overlays.md)
 lands the #163 correction overlays: headless analysis-wait discipline and the
 Hex-Rays failure-channel edges. (The legacy-idc migration map and the rule-10
 version-compat audit rows were REMOVED by owner ruling during PR #169 review —
@@ -26,7 +26,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CARD = ROOT / "references" / "re-library" / "ida-scripting-overlays.md"
+CARD = ROOT / "references" / "re-library" / "method" / "process" / "ida-scripting-overlays.md"
 
 # Corpus-identity ban list (issue #163: "zero corpus identifiers in any
 # artifact"). The corpus is an IDA-scripting skill + an MCP bridge project;
@@ -132,6 +132,7 @@ def test_cross_references_resolve():
     text = _card_text()
     links = re.findall(r"\]\(([^)#]+?\.md)\)", text)
     assert links, "house cards cross-reference siblings"
+    card_dir = CARD.parent
     for rel in links:
-        target = ROOT / "references" / "re-library" / rel
+        target = (card_dir / rel).resolve()
         assert target.exists(), f"dangling cross-reference: {rel}"

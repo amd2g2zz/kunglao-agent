@@ -10,8 +10,8 @@ Pins the contract additions to the kunglao-agent repo:
 - Exception path: `machine_check: none` + reason is accepted ONLY when the
   declared claim_kind is in the mapping table's exception-allowed list AND
   matches the fact's boundary_type (pure-CTI-class claims).
-- Mapping table (references/machine_check_map.yaml) is the single source of
-  truth; references/machine-check-contract.md mirrors it and a parity test
+- Mapping table (references/schemas/machine_check_map.yaml) is the single source of
+  truth; references/contracts/machine-check-contract.md mirrors it and a parity test
   keeps them in sync (maker-checker: the mechanical gate wins).
 - verify() gates the L2 CONFIRMED path: machine_check contract failure
   downgrades overall to PARTIAL (no promotion).
@@ -24,8 +24,8 @@ RED phase: none of the pinned functions exist yet (load_machine_check_map /
 parse_machine_checks / validate_machine_check_entry /
 check_machine_check_contract / machine_check_gate / machine_check_map_coverage
 / verify() gating), so every code test below fails; the doc pins fail until
-agents/kunglao-redteam.md, references/schema.md and
-references/machine-check-contract.md are updated.
+agents/kunglao-redteam.md, references/schemas/schema.md and
+references/contracts/machine-check-contract.md are updated.
 """
 from __future__ import annotations
 
@@ -301,9 +301,9 @@ def test_map_coverage_stat_for_current_workspace_types():
 
 
 def test_map_parity_with_contract_doc():
-    """references/machine-check-contract.md table must mirror the YAML map (no drift)."""
-    doc = (ROOT / "references" / "machine-check-contract.md")
-    assert doc.exists(), "references/machine-check-contract.md must exist"
+    """references/contracts/machine-check-contract.md table must mirror the YAML map (no drift)."""
+    doc = (ROOT / "references" / "contracts" / "machine-check-contract.md")
+    assert doc.exists(), "references/contracts/machine-check-contract.md must exist"
     rows: dict[str, tuple[str, bool]] = {}
     for line in doc.read_text(encoding="utf-8", errors="replace").splitlines():
         m = re.match(r"^\|\s*([a-z_]+)\s*\|\s*([a-z_]+)\s*\|\s*(yes|no)\s*\|",
@@ -471,8 +471,8 @@ def test_redteam_agent_doc_failed_check_blocks_confirmed():
 
 
 def test_facts_schema_doc_documents_machine_check_contract():
-    """references/schema.md must point at the oracle contract + map file."""
-    text = (ROOT / "references" / "schema.md").read_text(encoding="utf-8",
+    """references/schemas/schema.md must point at the oracle contract + map file."""
+    text = (ROOT / "references" / "schemas" / "schema.md").read_text(encoding="utf-8",
                                                          errors="ignore")
     assert "machine_check" in text
     assert "machine_check_map.yaml" in text

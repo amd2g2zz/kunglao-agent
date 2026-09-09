@@ -10,13 +10,13 @@ Checks:
   table / 5 behaviors / maker-checker / tool boundary / hard prohibitions /
   file map / pointers)
 - "distill != copy": no 80+ char window of the rules text appears in
-  references/convergence-loop.md once the defined vocabulary is masked out
+  references/contracts/convergence-loop.md once the defined vocabulary is masked out
 """
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RULES = ROOT / "rules" / "kunglao-convergence-loop.md"
-REFERENCE = ROOT / "references" / "convergence-loop.md"
+REFERENCE = ROOT / "references" / "contracts" / "convergence-loop.md"
 
 MIN_SHARED = 80
 
@@ -111,7 +111,7 @@ def test_outline_markers_present() -> None:
 
 
 def test_no_long_verbatim_blocks_from_reference() -> None:
-    """No 80+ char window of the rules text may appear in references/convergence-loop.md
+    """No 80+ char window of the rules text may appear in references/contracts/convergence-loop.md
     once the defined vocabulary is masked out."""
     rules_norm = _normalize(_text())
     ref_norm = _normalize(REFERENCE.read_text(encoding="utf-8"))
@@ -124,5 +124,5 @@ def test_no_long_verbatim_blocks_from_reference() -> None:
             violations.append((i, window))
     assert not violations, (
         f"{len(violations)} verbatim block(s) of >= {MIN_SHARED} chars shared with "
-        f"references/convergence-loop.md: {violations[:3]}"
+        f"references/contracts/convergence-loop.md: {violations[:3]}"
     )

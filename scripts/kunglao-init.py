@@ -1295,7 +1295,7 @@ AGENTS_DIR = Path(__file__).resolve().parent.parent / "agents"
 
 # #728: quickref single-source for web workspace CLAUDE.md injection.
 # If missing, write_claudemd fails closed (never silently partial).
-WEB_RE_QUICKREF = Path(__file__).resolve().parent.parent / "references" / "re-library" / "web-re-quickref.md"
+WEB_RE_QUICKREF = (Path(__file__).resolve().parent.parent / "references" / "re-library" / "web" / "labs" / "web-re-quickref.md")
 SKILL_DIR = Path(__file__).resolve().parent.parent
 
 # #356 W2: per-OS constraint blocks injected into the base template's
@@ -1713,7 +1713,7 @@ def _setup_web_env(ws: Path) -> None:
     print("kunglao-init: web (labs) setup guidance:", file=sys.stderr)
     print("  channel: KUNGLAO_CHANNEL=docker (set explicitly to override)", file=sys.stderr)
     print("  MCP: claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp", file=sys.stderr)
-    print("  docs: references/re-library/web-re-quickref.md (auto-injected into workspace CLAUDE.md)", file=sys.stderr)
+    print("  docs: references/re-library/web/labs/web-re-quickref.md (auto-injected into workspace CLAUDE.md)", file=sys.stderr)
 
 
 def os_section(project_type: str | None) -> str:
@@ -2763,7 +2763,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     # #447 three-state charter: init's behaviour here corresponds to the
     # "must-ask" lane (Type D) — pending decisions + RC_PENDING_DECISIONS=8
     # are the MUST-ASK enforcement surface at intake. See
-    # references/agent-three-state-charter.md (single source). For runtime events
+    # references/contracts/agent-three-state-charter.md (single source). For runtime events
     # (post-init dispatch / mid-analysis), the executors are
     # scripts/ask_for_direction_gate.py + hooks/dispatch_gate.py.
     if not skip_toolchain:

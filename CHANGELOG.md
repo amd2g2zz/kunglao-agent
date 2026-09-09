@@ -254,7 +254,7 @@ release (see the mapping table at the end).
   fact_id + score + top_dimension. `scripts/lint_facts.py` schema bump:
   `VALID_BOUNDARY_TYPE` + `EMPTY_GATE_TYPES` add `'anomaly'`; `ACTIVE_SCHEMA_REV`
   1 → 2 (additive per design.md D3); template + drift test bumped in lockstep.
-- references/anomaly-baseline.md: baseline corpus sourcing (RE-library refs +
+- references/orchestration/anomaly-baseline.md: baseline corpus sourcing (RE-library refs +
   prior samples + operator `baseline_corpus:` config), fail-open semantics
   per design.md D5, operator tuning knobs (`anomaly_threshold` in
   `analysis_state.txt`), maker-checker boundary (design.md D8 — anomaly is
@@ -434,7 +434,7 @@ release (see the mapping table at the end).
   carries the ranked provider list + constraints (optional key, #527
   backward compat) — the worker holds in-flight degradation authority.
 - taint seeds + wiring (#692 WP5):
-  references/re-library/android-fingerprint-seeds.yaml (extensible
+  references/re-library/android/emulation/android-fingerprint-seeds.yaml (extensible
   fingerprint-API seed table, yara-rules lifecycle);
   hypothesis_seeder.seed_taint_candidates + anomaly_detector.observe_taint;
   EMIT_ACTIONS "taint_candidates".
@@ -513,7 +513,7 @@ release (see the mapping table at the end).
   section build is fail-open (a hypotheses-layer crash degrades the
   digest to six sections, it never blocks cold start)
 - cold start is now the 9-file read: `runs/digest.md` joins
-  references/cold-start-contract.md as file 9, read via the
+  references/contracts/cold-start-contract.md as file 9, read via the
   kunglao-resume read-only face
 - state_anchor `hyps=` segment (hooks/state_anchor.py): structured
   open-hypothesis pointers inside the existing 500-char anti-narrative

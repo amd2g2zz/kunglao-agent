@@ -546,7 +546,7 @@ class TestDoneLineMechanicalFace:
 def test_ops_mechanics_delivery_checklist_covers_notes():
     """The orchestrator's delivery checklist verifies the note BEFORE
     TaskStop, and names where a skipped closure resurfaces (Stop gate)."""
-    text = (ROOT / "references" / "operational-mechanics.md").read_text(encoding="utf-8")
+    text = (ROOT / "references" / "orchestration" / "operational-mechanics.md").read_text(encoding="utf-8")
     assert "notes/<claim-id>.md" in text
     assert "NOTES_DUE" in text
 

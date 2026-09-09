@@ -315,7 +315,7 @@
   ```bash
   python tools/static/dexdc_scanner.py <workspace> --target <apk-or-dex> [--mode index|taint|both] [--method CLASS#METHOD ...] [--only-package PKG] [--seeds API ...]
   ```
-- **Inputs**: APK/DEX target; optional targeted methods (index mode), package filter, taint seed APIs (default: the `references/re-library/android-fingerprint-seeds.yaml` table).
+- **Inputs**: APK/DEX target; optional targeted methods (index mode), package filter, taint seed APIs (default: the `references/re-library/android/emulation/android-fingerprint-seeds.yaml` table).
 - **Outputs**: `evidence/dexdc_index.json` (gitnexus-shape classes/methods/xrefs + per-method cfg nodes/edges) + `evidence/dexdc_taint.json` (`issues[].{rule, source, sink, traces}`, count).
 - **exit code**: 0 ok/unavailable (fail-open, never raises) / 1 hard usage error.
 - **when_not**: Not the highest-fidelity java source when jadx runs within budget (jadx stays high); its value is data-flow/string-decrypt/algorithm-verify which jadx lacks; not for dex rewrite (baksmali/dexlib2).

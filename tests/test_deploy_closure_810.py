@@ -41,7 +41,7 @@ def test_live_run_sample_15_missing_scripts_now_deployed():
 def test_data_assets_deployed():
     """references/ templates/ tools/ 数据资产随 hooks/agents 一起物化。"""
     srcs = _srcs(dm.build_entries())
-    assert "references/machine_check_map.yaml" in srcs
+    assert "references/schemas/machine_check_map.yaml" in srcs
     assert "references/_INDEX.md" in srcs
     assert "templates/CLAUDE.md.base.tmpl" in srcs
     assert "tools/_INDEX.ext.yaml" in srcs

@@ -19,11 +19,11 @@ no worker↔worker messaging).
                                             never-message-each-other,
                                             SendMessage-ping-allowed,
                                             TaskStop-on-delivery
-  3. test_cold_start_contract_isolation_first — references/cold-start-contract.md
+  3. test_cold_start_contract_isolation_first — references/contracts/cold-start-contract.md
                                             Phase 0 documents the removed
                                             CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS
                                             machine-level root cause
-  4. test_operational_mechanics_isolation_first — references/operational-mechanics.md:
+  4. test_operational_mechanics_isolation_first — references/orchestration/operational-mechanics.md:
                                             "Delivery = TaskStop" checklist +
                                             retained SendMessage ping step +
                                             no agent-team instructions
@@ -41,7 +41,7 @@ no worker↔worker messaging).
                                             no agent-team wording (verdict via
                                             runs/ report file; SendMessage
                                             permitted, not instructed)
-  8. test_monitor_background_note           — references/operational-mechanics.md
+  8. test_monitor_background_note           — references/orchestration/operational-mechanics.md
                                             states kunglao-monitor.py runs as a
                                             BACKGROUND process that never blocks
                                             the loop's scheduled tick actions
@@ -217,12 +217,12 @@ def test_skill_dispatch_contract_isolation_first() -> None:
 
 
 def test_cold_start_contract_isolation_first() -> None:
-    """references/cold-start-contract.md Phase 0 carries the isolation-first
+    """references/contracts/cold-start-contract.md Phase 0 carries the isolation-first
     rule + the cautionary note: CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS was the
     removed 2026-08-12 machine-level root cause, SHALL NOT be re-enabled."""
-    text = (ROOT / "references" / "cold-start-contract.md").read_text(encoding="utf-8")
+    text = (ROOT / "references" / "contracts" / "cold-start-contract.md").read_text(encoding="utf-8")
     phase0 = _section(text, "## Phase 0", r"^## ")
-    assert phase0, "references/cold-start-contract.md Phase 0 section not found"
+    assert phase0, "references/contracts/cold-start-contract.md Phase 0 section not found"
     assert "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS" in phase0, (
         "Phase 0: missing isolation-first rule (flag name)")
     assert "2026-08-12" in phase0, "Phase 0: missing 2026-08-12 root-cause date"
@@ -230,11 +230,11 @@ def test_cold_start_contract_isolation_first() -> None:
 
 
 def test_operational_mechanics_isolation_first() -> None:
-    """references/operational-mechanics.md: the heartbeat tick loop KEEPS the
+    """references/orchestration/operational-mechanics.md: the heartbeat tick loop KEEPS the
     SendMessage ping step (orchestrator→worker), contains no agent-team
     instructions, and a "Delivery = TaskStop" checklist orders TaskStop on
     delivery confirmation (spec REQ-2/REQ-4 scenarios)."""
-    text = (ROOT / "references" / "operational-mechanics.md").read_text(encoding="utf-8")
+    text = (ROOT / "references" / "orchestration" / "operational-mechanics.md").read_text(encoding="utf-8")
     # heartbeat tick loop (D2): SendMessage ping step retained, no team features
     tick = _section(text, "## Active workers heartbeat (the tick loop)", r"^### ")
     assert tick, "operational-mechanics.md tick loop section not found"
@@ -355,10 +355,10 @@ def test_redteam_agent_no_team_features() -> None:
 # ---------------------------------------------------------------------------
 
 def test_monitor_background_note() -> None:
-    """references/operational-mechanics.md states kunglao-monitor.py runs as a
+    """references/orchestration/operational-mechanics.md states kunglao-monitor.py runs as a
     BACKGROUND process — it never blocks the loop's scheduled tick actions
     (re-dispatch / verify) (spec REQ-3 scenario)."""
-    text = (ROOT / "references" / "operational-mechanics.md").read_text(encoding="utf-8")
+    text = (ROOT / "references" / "orchestration" / "operational-mechanics.md").read_text(encoding="utf-8")
     assert "kunglao-monitor" in text, (
         "operational-mechanics.md must name kunglao-monitor.py (background-process note)")
     assert "background" in text, (

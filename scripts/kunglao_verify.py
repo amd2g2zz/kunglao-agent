@@ -389,8 +389,8 @@ def check_cross_workflow_redteam(fact: dict, ws: Path) -> tuple[bool, str]:
 #   ```machine_check
 #   {"machine_check": "none", "reason": "...", "claim_kind": "cti_correlation"}
 #   ```
-# Mapping table: references/machine_check_map.yaml (single source of truth;
-# mirrored by references/machine-check-contract.md, parity-tested).
+# Mapping table: references/schemas/machine_check_map.yaml (single source of truth;
+# mirrored by references/contracts/machine-check-contract.md, parity-tested).
 
 MACHINE_CHECK_KEYS = ("command", "expected", "actual", "passed")
 MACHINE_CHECK_TOOLS = READONLY_TOOLS | {
@@ -398,7 +398,7 @@ MACHINE_CHECK_TOOLS = READONLY_TOOLS | {
     "frida", "ghidra", "pefile", "capstone", "objdump", "gdb",
 }
 MACHINE_CHECK_MARKERS = ("=", "!=", "assert", "0x", "|", "-s ")
-_DEFAULT_MC_MAP = Path(__file__).resolve().parent.parent / "references" / "machine_check_map.yaml"
+_DEFAULT_MC_MAP = Path(__file__).resolve().parent.parent / "references" / "schemas" / "machine_check_map.yaml"
 _MC_FENCE_RE = re.compile(
     r"```\s*(machine[-_]check)\b[^\n]*\n(.*?)```", re.IGNORECASE | re.DOTALL)
 _MC_INLINE_RE = re.compile(
@@ -406,7 +406,7 @@ _MC_INLINE_RE = re.compile(
 
 
 def load_machine_check_map(path: Path | None = None) -> dict:
-    """#332 mapping table (references/machine_check_map.yaml). Missing or
+    """#332 mapping table (references/schemas/machine_check_map.yaml). Missing or
     unparseable file → {} — fail closed: no claim kinds, no exceptions."""
     p = Path(path) if path is not None else _DEFAULT_MC_MAP
     try:
@@ -497,7 +497,7 @@ def _validate_exception(entry: dict, claim_kinds: list[str] | None,
     kinds = mc_map.get("claim_kinds") or {}
     if kind not in kinds:
         return False, (f"machine_check: none claim_kind {kind!r} not in the "
-                       "mapping table (references/machine_check_map.yaml)")
+                       "mapping table (references/schemas/machine_check_map.yaml)")
     if not kinds[kind].get("exception_allowed"):
         return False, (f"claim kind {kind!r} is not in the exception-allowed "
                        "list — a machine_check is required")
@@ -728,7 +728,7 @@ def build_redteam_prompt(claim_id: str, ws: Path) -> str:
         "\"actual\": ..., \"passed\": true|false}] — at least one byte/execution-"
         "level check per load-bearing conclusion; passed=false forbids "
         "CONFIRMED. machine_check: none + reason only for exception-allowed "
-        "claim kinds (references/machine_check_map.yaml).\n"
+        "claim kinds (references/schemas/machine_check_map.yaml).\n"
         "Verdict: CONFIRMED | REFUTED | UNVERIFIED-WITH-GAP — with concrete "
         "gaps + reproduce commands."
     )

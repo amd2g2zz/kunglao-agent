@@ -33,8 +33,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 RELIB = ROOT / "references" / "re-library"
 
-UNIDBG_CARD = RELIB / "unidbg-env-filling.md"
-SIGNATURE_CARD = RELIB / "signature-check-bypass.md"
+UNIDBG_CARD = RELIB / "android/emulation/unidbg-env-filling.md"
+SIGNATURE_CARD = RELIB / "android/signing/signature-check-bypass.md"
 
 NEW_CARDS = [UNIDBG_CARD, SIGNATURE_CARD]
 

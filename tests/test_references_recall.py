@@ -282,13 +282,13 @@ class TestCli:
         r = _cli("frida")
         assert r.returncode == 0
         assert "Dynamic debugging" in r.stdout
-        assert "re-library/tools-dynamic.md" in r.stdout
+        assert "re-library/tools/dynamic/tools-dynamic.md" in r.stdout
 
     def test_cli_scored_query_exit_zero_with_score(self) -> None:
         r = _cli("malware")
         assert r.returncode == 0
         assert "score=" in r.stdout
-        assert "re-library/malware-analysis.md" in r.stdout
+        assert "re-library/malware/workflow/malware-analysis.md" in r.stdout
 
     def test_cli_cjk_query_handled_on_english_index(self) -> None:
         """R3 #357: the real index is now all-English, so a CJK query no
@@ -364,16 +364,16 @@ class TestRealIndexAlignment:
         idx = rr.build_index(REAL_INDEX)
         r = rr.recall(list(idx.entries), list(idx.scenes), "Go")
         assert r.kind == "scored"
-        assert "re-library/languages-go.md" in r.files
+        assert "re-library/languages/compiled/languages-go.md" in r.files
 
     def test_dynamic_analysis_returns_priority_file(self) -> None:
         idx = rr.build_index(REAL_INDEX)
         r = rr.recall(list(idx.entries), list(idx.scenes), "dynamic analysis")
         assert r.kind == "scored"
-        assert r.scored[0].entry.path == "dynamic-re-tool-priority.md"
+        assert r.scored[0].entry.path == "orchestration/dynamic-re-tool-priority.md"
 
     def test_spinning_symptom_returns_convergence_loop(self) -> None:
         idx = rr.build_index(REAL_INDEX)
         r = rr.recall(list(idx.entries), list(idx.scenes), "spinning")
         assert r.kind == "scored"
-        assert "convergence-loop.md" in r.files
+        assert "contracts/convergence-loop.md" in r.files

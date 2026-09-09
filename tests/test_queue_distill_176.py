@@ -22,22 +22,22 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 RELIB = ROOT / "references" / "re-library"
 
-BRINGUP_CARD = RELIB / "unidbg-harness-bringup.md"
-ALGO_CARD = RELIB / "unidbg-algo-recovery.md"
+BRINGUP_CARD = RELIB / "android/emulation/unidbg-harness-bringup.md"
+ALGO_CARD = RELIB / "android/emulation/unidbg-algo-recovery.md"
 NEW_CARDS = [BRINGUP_CARD, ALGO_CARD]
 
-UNIDBG_CARD = RELIB / "unidbg-env-filling.md"
-FALSIFIER_CARD = RELIB / "falsifier-library.md"
-JSVMP_CARD = RELIB / "jsvmp-triage.md"
-WEB_RISK_CARD = RELIB / "web-risk-control.md"
-WEB_CRAWL_CARD = RELIB / "web-crawler-engineering.md"
+UNIDBG_CARD = RELIB / "android/emulation/unidbg-env-filling.md"
+FALSIFIER_CARD = RELIB / "method/process/falsifier-library.md"
+JSVMP_CARD = RELIB / "web/vm/jsvmp-triage.md"
+WEB_RISK_CARD = RELIB / "web/risk-control/web-risk-control.md"
+WEB_CRAWL_CARD = RELIB / "web/crawler/web-crawler-engineering.md"
 CHANGED_CARDS = [UNIDBG_CARD, FALSIFIER_CARD, JSVMP_CARD, WEB_RISK_CARD, WEB_CRAWL_CARD]
 
 ALL_TOUCHED = NEW_CARDS + CHANGED_CARDS
 
 # Cards that must NOT grow (at budget, or over budget).
-NATIVE_SIGN_CARD = RELIB / "native-sign-recovery.md"
-ANTI_ANALYSIS_CARD = RELIB / "anti-analysis.md"
+NATIVE_SIGN_CARD = RELIB / "android/signing/native-sign-recovery.md"
+ANTI_ANALYSIS_CARD = RELIB / "anti-analysis/catalog/anti-analysis.md"
 
 # Source-identifying tokens matched by PRE-COMPUTED sha256 digests (the
 # ZERO-LITERAL standard: only pre-computed digests appear in this file).

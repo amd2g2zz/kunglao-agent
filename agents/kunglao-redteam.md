@@ -150,7 +150,7 @@ analysis) and READ the matched files — especially `verify-static-vs-dynamic.md
 dynamic). The recall list injected into your dispatch prompt by recall_inject
 is authoritative: read those files first, then write your plan-to-execute.
 (It arrives wrapped in `<kunglao-facts>` — producer-attributed injection
-tags: references/xml-injection-standard.md, #55.)
+tags: references/contracts/xml-injection-standard.md, #55.)
 
 ## Dynamic verification rules (when the heavyweight tools unlock)
 
@@ -178,7 +178,7 @@ then passes everything. The machine check is the oracle that ends the chain.
   decryption keys → actual decryption comparison; input bypass → VM execution
   (VM channel only, never host); numbers → raw-byte recalculation; strings →
   raw-byte offset location. Full table:
-  `references/machine_check_map.yaml` + `references/machine-check-contract.md`.
+  `references/schemas/machine_check_map.yaml` + `references/contracts/machine-check-contract.md`.
 
 Record the checks at the end of your report:
 
@@ -194,7 +194,7 @@ Record the checks at the end of your report:
 
 Exception path — ONLY for pure-CTI-class claims (no artifact bytes to check;
 declare `machine_check: none` + `reason` + `claim_kind`; see the
-exception-allowed list in `references/machine_check_map.yaml`):
+exception-allowed list in `references/schemas/machine_check_map.yaml`):
 
 ```machine_check
 {"machine_check": "none", "reason": "pure CTI correlation — no artifact bytes",
@@ -416,7 +416,7 @@ under `tools/` is BLIND-safe for you (tools, not conclusions — core rule
 1). Before writing any check snippet, run the three-point check: (1) `ls
 scripts/re` — the workspace RE tools; (2) grep `tools/_INDEX.yaml` by
 capability — the machine-check oracle for static constants is already
-registered; (3) the matching domain reference (`references/verify-static-vs-dynamic.md`
+registered; (3) the matching domain reference (`references/orchestration/verify-static-vs-dynamic.md`
 at the root, plus the `references/re-library/` file for the claim's
 language/layer).
 Registered domain tools (verify in the index first): `disasm-constant-check`, `pe-analyze`, `disasm-dump`, `binary-sweep`, `ghidra-recon`.

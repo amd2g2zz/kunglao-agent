@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_MD = ROOT / "skills" / "kunglao-agent" / "SKILL.md"
-COLD_START = ROOT / "references" / "cold-start-contract.md"
+COLD_START = ROOT / "references" / "contracts" / "cold-start-contract.md"
 
 
 def _external_memory_line(text: str) -> str:

@@ -177,8 +177,8 @@ class _Repo:
 
 
 class TestReferencesRepin:
-    MD = "references/case-book.md"
-    MD2 = "references/guardrails.md"
+    MD = "references/orchestration/failure-modes/case-book.md"
+    MD2 = "references/governance/guardrails.md"
 
     def test_md_staged_without_yaml_hard_pauses(self, tmp_path: Path) -> None:
         r = _Repo(tmp_path)

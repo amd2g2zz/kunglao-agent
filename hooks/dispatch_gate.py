@@ -90,7 +90,7 @@ HOOK_STATE = Path(".hook_state.json")
 # must-stop refusal, failure-blocked corrective injection) land in the
 # agent's context wrapped in <gate-verdict>...</gate-verdict> so the agent
 # can tell a kunglao gate verdict from third-party tool output
-# (references/xml-injection-standard.md). The verdict text — including the
+# (references/contracts/xml-injection-standard.md). The verdict text — including the
 # repair path — sits INSIDE the tag; the Claude Code hook JSON contract
 # (hookSpecificOutput.additionalContext, rc/decision fields) is untouched,
 # and STDERR summaries (the operator channel) stay untagged. Tags mark,
@@ -267,7 +267,7 @@ def _warn_unparseable(claim_id: str | None, reason: str | None) -> None:
             "additionalContext": (
                 "dispatch_gate: WARN — unrecognized dispatch protocol "
                 "(v0/v1 both unmatched). Gate is INACTIVE for this dispatch. "
-                "See references/dispatch-protocol.md. Add a JSON "
+                "See references/orchestration/dispatch-protocol.md. Add a JSON "
                 '{"kunglao_dispatch":{"version":1,"claim":"C-NN","tier":N,...}} '
                 "prefix to the Agent prompt."
             ),
@@ -344,7 +344,7 @@ def _warn_must_stop(ws: Path, claim_id: str | None, prompt_text: str,
     Unlike scripts/ask_for_direction_gate.py which sees the orchestrator's
     PRINTED text, this hook sees the dispatch PROMPT itself — catching
     irreversible actions BEFORE the worker runs. Per
-    references/agent-three-state-charter.md: must-stop events MUST HARD_PAUSE regardless
+    references/contracts/agent-three-state-charter.md: must-stop events MUST HARD_PAUSE regardless
     of any other state (precedence over Type C convergence)."""
     excerpt = prompt_text[:300].replace("\n", " ")
     cid = claim_id or "(no claim)"
@@ -363,7 +363,7 @@ def _warn_must_stop(ws: Path, claim_id: str | None, prompt_text: str,
                 f"dispatch_gate: HARD_PAUSE Type S (must-stop, #447, "
                 f"rule={rule_label}). Irreversible action detected in "
                 f"dispatch for {cid}. "
-                f"Per references/agent-three-state-charter.md, irreversible actions "
+                f"Per references/contracts/agent-three-state-charter.md, irreversible actions "
                 f"MUST be explicitly approved by the user. Refusing to "
                 f"dispatch this worker. Excerpt: {excerpt!r}"
             ),
@@ -1498,7 +1498,7 @@ def main() -> int:
     #      (finite grammar, enumerable), not prose
     # Fires BEFORE the failure-blocked lookup — an irreversible action in
     # a healthy claim's dispatch is just as irreversible. Single source:
-    # references/agent-three-state-charter.md.
+    # references/contracts/agent-three-state-charter.md.
     # #601: the grammar returns its rule id; both faces land in the trace
     # row's matched_rule field (declared face -> declared:reversible_false).
     rule = _must_stop_dispatch(prompt_text)

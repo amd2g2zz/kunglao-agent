@@ -22,7 +22,7 @@ Design notes
 - kunglao extension layer (claim/reproduce/expected/verified) is validated for
   key presence only — value semantics stay with scripts/kunglao_verify.py (#332).
 - Two-layer state mapping (claim-register workflow state ↔ status+verify_status)
-  lives in references/state-mapping.md; drift between layers is a WARNING here,
+  lives in references/schemas/state-mapping.md; drift between layers is a WARNING here,
   never an error — the claim register is authoritative for workflow state.
 """
 from __future__ import annotations
@@ -100,7 +100,7 @@ CONFIDENCE_ZH_RULES = [
     ("不支持", {"high"}, {"NEGATIVE"}, NEGATIVE_SOURCE_VALUES),
 ]
 
-# two-layer state mapping (references/state-mapping.md) — WARNING-only drift check
+# two-layer state mapping (references/schemas/state-mapping.md) — WARNING-only drift check
 WORKFLOW_TO_GATE = {
     "PROVEN": {"passes"}, "VERIFIED": {"passes"}, "REFUTED": {"passes"},
     "NEGATIVE": {"passes", "partial"},
@@ -417,7 +417,7 @@ def _index_status_values() -> frozenset[str]:
 
     #863 conflict ruling: the workflow-layer word PARTIALLY-VERIFIED is NOT
     a legal facts/_INDEX.md status column value (workflow state belongs to
-    claim-register / references/state-mapping.md, same posture as the
+    claim-register / references/schemas/state-mapping.md, same posture as the
     frontmatter BAD_STATUS rule). Memoized: called once per _INDEX row."""
     cached = _INDEX_STATUS_CACHE.get("v")
     if cached is not None:
@@ -529,7 +529,7 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
         issues.append(_issue("error", "BAD_STATUS", fid,
                              f"status {st!r} not in {sorted(VALID_STATUS)} — "
                              "workflow states (PARTIALLY-VERIFIED/STAMP) belong to "
-                             "claim-register, not frontmatter (see references/state-mapping.md)"))
+                             "claim-register, not frontmatter (see references/schemas/state-mapping.md)"))
     for date_field in ("created", "last_reviewed"):
         dv = fm.get(date_field)
         if dv is None:
@@ -668,7 +668,7 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
     elif st in WORKFLOW_TO_GATE and vs not in WORKFLOW_TO_GATE[st]:
         issues.append(_issue("warning", "VERIFY_STATUS_STATUS_DRIFT", fid,
                              f"status={st} expects verify_status in {sorted(WORKFLOW_TO_GATE[st])} "
-                             f"(got {vs!r}) — see references/state-mapping.md"))
+                             f"(got {vs!r}) — see references/schemas/state-mapping.md"))
     # edges
     for d in (fm.get("depends_on") or []):
         if d not in fact_ids:

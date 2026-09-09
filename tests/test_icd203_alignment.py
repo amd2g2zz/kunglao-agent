@@ -29,7 +29,7 @@ MAP_JSON = str(Path(__file__).resolve().parents[1] /
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "templates" / "fact-frontmatter.md"
-STATE_MAPPING = ROOT / "references" / "state-mapping.md"
+STATE_MAPPING = ROOT / "references" / "schemas" / "state-mapping.md"
 
 # ── fixtures ──────────────────────────────────────────────────────────
 
@@ -452,7 +452,7 @@ def test_lint_rejects_nonempty_gate_on_pure_negative(tmp_path):
 # ── docs ──────────────────────────────────────────────────────────────
 
 def test_state_mapping_doc_carries_two_layer_table_and_icd203(tmp_path):
-    assert STATE_MAPPING.exists(), "references/state-mapping.md must exist"
+    assert STATE_MAPPING.exists(), "references/schemas/state-mapping.md must exist"
     text = STATE_MAPPING.read_text(encoding="utf-8")
     assert "PARTIALLY-VERIFIED" in text and "verify_status" in text
     assert "ICD-203" in text

@@ -64,7 +64,7 @@ from common import write_evidence  # noqa: E402  (#863 Family J: single source)
 PYO3_MODULE = "dex_decompiler"
 CLI_BINARY = "dex-decompile"
 DEFAULT_SEEDS_FILE = (Path(__file__).resolve().parent.parent.parent /
-                      "references" / "re-library" /
+                      "references" / "re-library" / "android" / "emulation" /
                       "android-fingerprint-seeds.yaml")
 
 

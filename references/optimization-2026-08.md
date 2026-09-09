@@ -91,10 +91,10 @@ Workers inherit stale context from the killed predecessor; without the
 explicit ban they re-walk the dead path (observed: C-010 worker "reverting
 VM snapshot" 40 min after VM path was cancelled).
 
-## Case book (full stories → references/case-book.md)
+## Case book (full stories → references/orchestration/failure-modes/case-book.md)
 
 Five real failure modes, one line each. Full stories + v1.9 fix mapping →
-`references/case-book.md`.
+`references/orchestration/failure-modes/case-book.md`.
 - **Case 1** — idling when slots are free. Open claims + free slots → dispatch.
 - **Case 2** — calling analysis tools directly. Delegate; orchestrator verifies only.
 - **Case 3** — re-issuing the same failed dispatch. First failure → backtrack decision.

@@ -247,7 +247,7 @@ _TAINT_PQ_TOKENS = ("collect", "fingerprint", "device", "track", "privacy",
                     "\u98ce\u63a7", "\u8ffd\u8e2a")
 
 _TAINT_SEEDS_FILE = (Path(__file__).resolve().parent.parent /
-                     "references" / "re-library" /
+                     "references" / "re-library" / "android" / "emulation" /
                      "android-fingerprint-seeds.yaml")
 
 

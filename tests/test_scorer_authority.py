@@ -56,11 +56,11 @@ LIVE_PATH_SURFACES = (
     "evals/evals.json",
     "skills/kunglao-agent/SKILL.md",
     "rules/kunglao-convergence-loop.md",
-    "references/decision-rights.md",
-    "references/guardrails.md",
-    "references/search-policy.md",
-    "references/failure-modes.md",
-    "references/failure-modes-lifecycle.md",
+    "references/governance/decision-rights.md",
+    "references/governance/guardrails.md",
+    "references/orchestration/search-policy.md",
+    "references/orchestration/failure-modes/failure-modes.md",
+    "references/orchestration/failure-modes/failure-modes-lifecycle.md",
     "references/_INDEX.md",
 )
 
