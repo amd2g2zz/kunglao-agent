@@ -775,8 +775,8 @@ def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
 def migrate_to_0_1_5(ws: Path, dry: bool) -> list[str]:
     """v0.1.4 -> current: frame-currency + honest stamps (G3/G4 carry).
 
-    The 0.1.5 train ships no new deploy-surface repairs, but the T6
-    registry pattern (#755 D1) still demands a fresh entry: without one
+    The 0.1.5 train ships no new deploy-surface repairs, but the per-version
+    registry convention still demands a fresh entry: without one
     an ALREADY-0.1.4-stamped workspace plans zero migrations, the G3
     merge and the stamp carry never run, and the G4 tail gate — which
     trusts the plan to carry the stamp face — leaves the workspace
