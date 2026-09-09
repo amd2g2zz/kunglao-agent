@@ -61,6 +61,7 @@ _HEADER_CELLS = {"文件", "场景", "file", "files", "domain", "scenario", "pur
 
 USAGE = (
     "Usage: references_recall.py <query>\n"
+    "       references_recall.py --queries <query> [<query> ...] [--ws <ws>]\n"
     "       references_recall.py --list-categories\n"
     "       references_recall.py --scene-map\n"
     "       references_recall.py --joint <workspace> [--joint-limit N]\n"
@@ -967,6 +968,40 @@ def main(argv: list[str]) -> int:
             return 1
         print_result(result, entries)
         return 0
+
+    # #194: batch face — ONE index parse answers N queries. The per-query
+    # CLI (above) re-parses the whole layered index for every invocation
+    # (~2.5 s each before scoring a token); hooks/recall_inject used to pay
+    # that per query per dispatch, putting every child individually inside
+    # reach of its subprocess timeout under CI xdist contention (the #194
+    # recall-injection flake). Output is per-query sections, each introduced
+    # by an exact `# ==== query: <q>` separator line followed by that
+    # query's normal print_result/print_no_match block, so the caller can
+    # split deterministically. rc: 0 = any query matched, 1 = none, 2 =
+    # usage error.
+    if argv[1] == "--queries":
+        rest = argv[2:]
+        ws_arg = None
+        if "--ws" in rest:
+            i = rest.index("--ws")
+            if i + 1 < len(rest):
+                ws_arg = Path(rest[i + 1])
+                rest = rest[:i] + rest[i + 2:]
+        queries = [q for q in rest if q]
+        if not queries:
+            print(USAGE, file=sys.stderr)
+            return 2
+        demotions = demotion_map(ws_arg) if ws_arg else None
+        any_match = False
+        for q in queries:
+            print(f"# ==== query: {q}")
+            result = recall(entries, scenes, q, demotions=demotions)
+            if result.kind == "none":
+                print_no_match(q, entries)
+            else:
+                any_match = True
+                print_result(result, entries)
+        return 0 if any_match else 1
 
     # #814: optional --ws <path> → demotion 乘子闭环进打分
     ws_arg = None
