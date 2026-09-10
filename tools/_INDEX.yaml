@@ -493,11 +493,11 @@ tools:
     description: DEX-to-Java decompiler (jadx)
     tier: T1
     cost_tier: deep
-    input_output: {input: "APK/JAR via worker-dispatched external jadx CLI (mem-gated by tools/static/apk_mem_gate.py, verdict in evidence/apk_mem_gate.json; the jadx_bin/jvm preconditions are probed at init - java -version, never read off a tool description)", output: "decompiled Java source tree under evidence/"}
-    when_not: "not when the apk_mem_gate verdict is smali-only/refuse (blocked - mem budget; the #670 gate is this provider's precondition, not a pipeline stage); not when the jvm probe failed (jadx is a Java program - probe the environment, never assume); not for 1:1 bytecode truth (baksmali-xref)"
+    input_output: {input: "APK/JAR via worker-dispatched external jadx CLI (mem-gated by tools/static/apk_mem_gate.py, verdict in evidence/apk_mem_gate.json)", output: "decompiled Java source tree under evidence/"}
+    when_not: "not when the apk_mem_gate verdict is smali-only/refuse (blocked - mem budget; the #670 gate is this provider's precondition, not a pipeline stage); not for 1:1 bytecode truth (baksmali-xref)"
     provider: jadx
     produces: [android:java-source]
-    requires: [dex, mem_budget_ok, jadx_bin, jvm]
+    requires: [dex, mem_budget_ok, jadx_bin]
     cost_hint: {mem_gb: 4.0, time: deep}
     quality: {android:java-source: high}
 
@@ -549,7 +549,7 @@ tools:
     description: Rust DEX decompiler + taint
     tier: T1
     cost_tier: deep
-    input_output: {input: "APK/DEX via tools/static/dexdc_scanner.py (PyO3 wheel dex_decompiler, CLI dex-decompile fallback; requires no JVM - a dexdc provider property, not an environment fact: probe the host JVM separately with java -version for jadx)", output: "evidence/dexdc_index.json (gitnexus-shape classes/methods/xrefs + per-method cfg) + evidence/dexdc_taint.json (IssueReport issues source->sink with traces)"}
+    input_output: {input: "APK/DEX via tools/static/dexdc_scanner.py (PyO3 wheel dex_decompiler, CLI dex-decompile fallback; no JVM)", output: "evidence/dexdc_index.json (gitnexus-shape classes/methods/xrefs + per-method cfg) + evidence/dexdc_taint.json (IssueReport issues source->sink with traces)"}
     when_not: "not the highest-fidelity java source when jadx runs within budget (jadx stays high); its value is data-flow/string-decrypt/algorithm-verify which jadx lacks; not for dex rewrite (baksmali/dexlib2)"
     provider: dexdc
     produces: [android:java-source, android:call-graph, android:data-flow, android:string-decrypt, android:algorithm-verify]

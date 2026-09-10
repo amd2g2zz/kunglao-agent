@@ -16,7 +16,6 @@ TDD RED phase: these fail before the kunglao-init.py amendment lands.
 from __future__ import annotations
 
 import importlib.util
-import json
 import os
 import subprocess
 import sys
@@ -322,38 +321,6 @@ def test_toolchain_check_runs_before_scaffold(tmp_path, monkeypatch):
     assert (ws / "claim-register.yaml").exists(), "scaffold must complete after PASS"
 
 
-def test_init_persists_tool_probes_evidence(tmp_path, monkeypatch):
-    """Finding 7 (issue 225): init persists the probed results to
-    evidence/tool-probes.json right after the toolchain check, so
-    route_capability reads REAL probe answers (a probed-false JVM can
-    actually block the jadx provider)."""
-    ws = tmp_path / "ws"
-    (ws / "bins").mkdir(parents=True)
-    (ws / "bins" / "s.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
-    monkeypatch.setenv(FLAG_NAME, "0")
-
-    mod = _load_init_module()
-    import toolchain as tc
-
-    def fake_check(ws_arg, project_type=None, **kw):
-        return tc.ToolchainReport(project_type=project_type or "windows",
-                                  items=[
-            tc.CheckResult(name="jvm", status=tc.Status.FAIL,
-                           tier=tc.Tier.WARN, detail="java not found"),
-        ])
-
-    monkeypatch.setattr(mod.toolchain, "check", fake_check)
-    seed_oracle_anchors(ws)
-    rc = mod.run(ws, project_type="windows",
-                 profile_root=tmp_path / "profile-root",
-                 answers={"host_exec_protection": "enabled"})
-    assert rc == 0, "a WARN-tier probe must not refuse init"
-    probes = ws / "evidence" / "tool-probes.json"
-    assert probes.exists(), "init must persist the probed results"
-    doc = json.loads(probes.read_text(encoding="utf-8"))
-    assert doc == {"jvm": False}, doc
-
-
 def test_library_refuse_returns_4_no_scaffold(tmp_path, monkeypatch):
     """Library-level: fake failing check -> exit 4, nothing scaffolded."""
     ws = tmp_path / "ws"
@@ -386,9 +353,8 @@ def test_library_refuse_returns_4_no_scaffold(tmp_path, monkeypatch):
 # ---------- 4. no-sample cold start friendly prompt ----------
 
 def test_no_sample_friendly_prompt(tmp_path):
-    """bins/ empty (malware lane) -> friendly prompt (place a sample into
-    bins/), non-zero exit, no scaffold. Issue 208: the lane is declared
-    explicitly; a workspace declaring nothing is asked for its lane."""
+    """bins/ empty -> friendly prompt (place a sample into bins/), non-zero exit,
+    no scaffold."""
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     (ws / "bins").mkdir()
@@ -399,7 +365,6 @@ def test_no_sample_friendly_prompt(tmp_path):
     env[FLAG_NAME] = "0"
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws),
-         "--lane", "malware",
          "--profile-root", str(profile_root)],
         capture_output=True, text=True, timeout=120, env=env, errors="replace",
     )
@@ -466,10 +431,9 @@ def test_run_hard_fail_with_assume_yes_calls_installer(tmp_path, monkeypatch):
 def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     """#409: the init toolchain gate's decompiler check must resolve
     support/analyzeHeadless by sys.platform (.bat on Windows, no extension on
-    POSIX). GHIDRA_HOME pointing at the platform-correct name -> the ONE
-    `decompiler` family item PASSes with supply=analyzeHeadless inside
-    toolchain.check — the subprocess toolchain probe in kunglao-init uses the
-    same resolver."""
+    POSIX). GHIDRA_HOME pointing at the platform-correct name -> the ghidra
+    check item PASSes inside toolchain.check — the subprocess toolchain probe
+    in kunglao-init uses the same resolver."""
     mod = _load_init_module()
     import toolchain as tc
 
@@ -484,11 +448,10 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
 
     # #454: isolate the MCP registry — _check_decompiler is MCP-first and a
     # machine with a user-global mcp:ghidra registration would short-circuit
-    # to `decompiler via MCP (ghidra)`, hiding the analyzeHeadless CLI
-    # supply this test pins. Inject an EMPTY user registry
-    # (KUNGLAO_CLAUDE_JSON is mcp_probe.claude_json_path's documented test
-    # override); the workspace surface is already isolated (fresh tmp ws, no
-    # .mcp.json).
+    # to `decompiler via MCP (ghidra)`, hiding the independent ghidra CLI
+    # item this test pins. Inject an EMPTY user registry (KUNGLAO_CLAUDE_JSON
+    # is mcp_probe.claude_json_path's documented test override); the
+    # workspace surface is already isolated (fresh tmp ws, no .mcp.json).
     isolated_registry = tmp_path / "isolated-claude.json"
     isolated_registry.write_text("{}", encoding="utf-8")
     monkeypatch.setenv("KUNGLAO_CLAUDE_JSON", str(isolated_registry))
@@ -500,21 +463,16 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     monkeypatch.setenv("PYTHONIOENCODING", "utf-8")
 
     report = tc.check(ws, "linux")
-    decomp = next((i for i in report.items if i.name == "decompiler"), None)
-    assert decomp is not None, f"decompiler check missing: {report.items}"
-    # #202: probed-found CLI supply PASSES with the wired path; issue 210:
-    # ONE family item carrying the canonical supply name (the pre-210
-    # parallel `ghidra` item is gone). What this test pins is the
-    # platform-correct PATH resolution — the resolver must find the binary
-    # and say so.
-    assert decomp.status == tc.Status.PASS, \
-        f"platform-correct analyzeHeadless must supply the decompiler " \
-        f"family (PASS, #202 probed-found): {decomp}"
-    assert decomp.supply == "analyzeHeadless", decomp
-    assert platform_paths.analyze_headless_name() in decomp.detail
-    assert "Ghidra" in decomp.detail
-    assert not [i for i in report.items if i.name in ("ida", "ghidra")], \
-        "the XOR family emits ONE item — no parallel ida/ghidra items"
+    ghidra = next((i for i in report.items if i.name == "ghidra"), None)
+    assert ghidra is not None, f"ghidra check missing from report: {report.items}"
+    # #202: probed-found CLI supply PASSES with the wired path (the #474
+    # presence-WARN is superseded for the decompiler face); what this test
+    # pins is the platform-correct PATH resolution — the resolver must find
+    # the binary and say so.
+    assert ghidra.status == tc.Status.PASS, \
+        f"platform-correct analyzeHeadless must supply the ghidra item (PASS, #202 probed-found): {ghidra}"
+    assert platform_paths.analyze_headless_name() in ghidra.detail
+    assert "Ghidra" in ghidra.detail
 
 
 # ---------- #454: test isolation from the REAL user MCP registry ----------
@@ -523,15 +481,14 @@ def test_platform_headless_isolated_from_user_global_ghidra_registration(
         tmp_path, monkeypatch):
     """#454 regression: on a machine whose user-level registry carries a
     GLOBAL mcp:ghidra registration, the platform-headless test must still
-    walk its expected path (the ONE `decompiler` family item PASSes with
-    supply=analyzeHeadless — the CLI supply) — the test must be isolated
-    from the real user registry instead of assuming one.
+    walk its expected path (independent `ghidra` CLI item PASSes) — the test
+    must be isolated from the real user registry instead of assuming one.
 
     Simulates the hostile machine deterministically (KUNGLAO_CLAUDE_JSON ->
     fake registry with mcpServers.ghidra) and calls the target test as a
     function: without in-test isolation, _check_decompiler is MCP-first, the
     fake global registration short-circuits to `decompiler via MCP (ghidra)`
-    and the target test's "analyzeHeadless CLI supply" assertion raises."""
+    and the target test's "ghidra check missing" assertion raises."""
     import json
     hostile_root = tmp_path / "hostile-home"
     hostile_root.mkdir()

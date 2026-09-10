@@ -122,14 +122,9 @@ def test_rc_matrix_flag_reject_3(tmp_path):
 
 
 def test_rc_matrix_no_sample_5(tmp_path):
-    """no-sample (bins/ empty) -> RC_NO_SAMPLE=5, friendly prompt, no scaffold.
-
-    Issue 208: the lane is declared explicitly — the malware lane keeps the
-    no-sample prompt, while a workspace that declares nothing at all (no
-    lane, no task contract, no sample) is ASKED for its lane (exit 8)
-    instead of being assumed to be malware."""
+    """no-sample (bins/ empty) -> RC_NO_SAMPLE=5, friendly prompt, no scaffold."""
     ws = _mk_ws(tmp_path, "ws", sample=False)
-    r = _run_init_cli(ws, ["--type", "windows", "--lane", "malware"])
+    r = _run_init_cli(ws, ["--type", "windows"])
     assert r.returncode == RC_NO_SAMPLE, \
         f"no-sample must exit {RC_NO_SAMPLE}, got {r.returncode}: {r.stdout}{r.stderr}"
     assert "bins/" in (r.stdout + r.stderr), "friendly prompt must mention bins/"
@@ -220,8 +215,7 @@ def test_rc_matrix_fatal_verify_2(tmp_path, monkeypatch):
     monkeypatch.setenv(FLAG_NAME, "0")
     mod = _load_init_module()
 
-    def broken_register_text(sample, sample_sha, state_hash, project_type=None,
-                             lane=None):
+    def broken_register_text(sample, sample_sha, state_hash, project_type=None):
         return "# broken register — no [initialized] marker, no seeds\n"
 
     monkeypatch.setattr(mod, "claim_register_text", broken_register_text)

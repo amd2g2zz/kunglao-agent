@@ -250,15 +250,11 @@ def test_replay_init_refuses_empty_bins(tmp_path: Path):
 
     v0.1.2 现场契约: 无 bins/ 样本时,init 必须给出确定性失败(exit 5 + 明确诊断),
     不能默默创建空 workspace 假装成功。
-    补 lane 路由后 (issue 208): 声明 malware lane 才走 bins/ 拒绝面;未声明
-    lane/task_spec/sample 的 workspace 先经 exit-8 pending 询问 lane(同样
-    非零、不静默建 workspace)——本用例钉的是 malware lane 的拒绝面。
     """
     proc = _run_cli(
         [
             str(ROOT / "scripts" / "kunglao-init.py"),
             str(tmp_path),
-            "--lane", "malware",
             "--skip-toolchain", "--host-exec-protection", "enabled",
             "--no-hooks",
             "--assume-yes",

@@ -3,12 +3,11 @@ name: kunglao-agent:init
 description: >-
   Initialize a kunglao-agent analysis workspace. Intakes task_spec.yaml
   FIRST (needs-first: the environment derives from the task), aligns the
-  analysis lane + target + project type, scaffolds the directory skeleton,
-  writes the workspace CLAUDE.md, mounts the material (a binary sample only
-  on the malware lane), probes the toolchain, and deploys hooks. One fresh
-  workspace per engagement — a lane, not necessarily a sample.
+  analysis target and project type, scaffolds the directory skeleton,
+  writes the workspace CLAUDE.md, mounts the sample, probes the toolchain,
+  and deploys hooks. One fresh workspace per sample engagement.
 arguments: [workspace]
-argument-hint: <workspace> [--type windows|linux|android|web|macos] [--lane malware|algorithm|protocol|web|data|app] — no args → guided setup
+argument-hint: <workspace> [--type windows|linux|android|web|macos] — no args → guided setup
 ---
 
 # kunglao-agent:init — workspace initialization
@@ -61,21 +60,9 @@ analysis; a workspace that is not initialized is refused work.
    guess or default an anchor. For help turning a folk ask ("我要纯算")
    into these answers, point the user at the README section **"How to
    state the task"** (`README.md`, anchor `#how-to-state-the-task`).
-   **Lane (issue 208 — asked by the script)** — `lane: malware | algorithm |
-   protocol | web | data | app` is the analysis-MATERIAL contract: it
-   decides whether `bins/<sha>` is required at all and which toolchain gate
-   applies. `malware` = binary sample (current behavior, kept byte-for-byte
-   for a lane-less contract or a mounted sample); `algorithm` = reference
-   corpora + trace dumps, no sample; `protocol` / `web` / `data` / `app` =
-   documented stub lanes. Init reads it from
-   `task_spec.yaml`, or takes `--lane` / `--resolve {"lane": ...}`; when
-   the workspace declares NOTHING (no lane, no task contract, no sample)
-   the run prints a pending document with decision id `lane` and NO
-   default — relay it like the anchors, never guess it.
 1. **Target alignment ** — run
    `python <SKILL_DIR>/scripts/kunglao-init.py <workspace>` FIRST; undecided
-   intake items (workspace path -> analysis lane -> analysis target ->
-   project type) exit 8
+   intake items (workspace path -> analysis target -> project type) exit 8
    with a structured pending list on stdout (JSON). Collect the answers via
    the native question channel (AskUserQuestion), write
    `{decision_id: value}` JSON, re-run with `--resolve <answers.json>`.
@@ -92,18 +79,8 @@ analysis; a workspace that is not initialized is refused work.
 3. **Write CLAUDE.md** — render the type-appropriate workspace contract from
    `templates/CLAUDE.md.base.tmpl`; the task_spec constraints (vm_detonation,
    scope exclusions, depth) are rendered INTO the contract.
-4. **Mount the material for the declared lane** — `lane: malware` (the
-   default when a lane-less contract or a mounted sample exists): place the
-   binary at `bins/<sha256>` and verify the hash matches `task_spec.yaml` /
-   report; an empty `bins/` on this lane is `RC_NO_SAMPLE` (exit 5).
-   `lane: algorithm`: no sample required — mount the reference corpora /
-   trace dumps under the workspace. `lane: protocol|web|data|app`:
-   documented stub lanes — mount the capture / dataset / target record;
-   init routes them, renders their material line and probes uv + python +
-   the lane's material dir, with no lane-specific toolchain claimed yet.
-   A workspace that declares no lane at all is ASKED (exit 8, no default)
-   when it also has no task contract and no sample; answering `malware`
-   keeps today's behavior.
+4. **Mount the sample** — place the binary at `bins/<sha256>` and verify the
+   hash matches `task_spec.yaml` / report.
 5. **Toolchain probe** — run per-project-type probes (Windows: Ghidra-or-IDA
    + VM; Linux: Ghidra-or-IDA + remote debugger; Android: ADB + rooted
    device + frida-server — Android NEVER probes VMware/VBox or the 9876/1337
@@ -166,5 +143,3 @@ an unresolved ambiguity is surfaced as a decision_pending item
 
 - `/kunglao-agent:init ~/cases/synth-dropper --type windows`
 - `/kunglao-agent:init /cases/android-samples/xyz --type android`
-- `/kunglao-agent:init ~/cases/codec-work --lane algorithm --type linux`
-  (no binary sample: the task is a codec/algorithm recovery)

@@ -164,7 +164,7 @@ Well-formed (b):
 
 | Command | Use when | What it does |
 |---|---|---|
-| `/kunglao-agent:init <workspace> [--type windows\|linux\|android\|web\|macos] [--lane malware\|algorithm\|protocol\|web\|data\|app]` | starting an engagement, first | scaffolds the workspace, probes the toolchain for the type, writes `CLAUDE.md` and `.mcp.json`; HARD-rejects with fix guidance when a required tool is missing |
+| `/kunglao-agent:init <workspace> [--type windows\|linux\|android\|web\|macos]` | starting an engagement, first | scaffolds the workspace, probes the toolchain for the type, writes `CLAUDE.md` and `.mcp.json`; HARD-rejects with fix guidance when a required tool is missing |
 | `/kunglao-agent:analysis <workspace>` (alias `analyze`) | after init — state the task and start | collects your goal / verification logic / constraints once, then runs the convergence loop: dispatch / verify cycles until the report |
 | `/kunglao-agent:resume <workspace>` | after a crash, reboot, or any "where was I?" | read-only breakpoint brief (health, open claims, in-flight workers, crash timeline) plus the next action from the state machine |
 | `/kunglao-agent:upgrade <workspace> [--dry-run]` | after a plugin update, on an older workspace (or when the upgrade prompt says the stamp is behind) | migrates the workspace scaffold (hooks, templates, event vocab) to the current plugin version; `--dry-run` previews; user data (claims, facts, evidence) is never touched — byte drift refuses with RC=4 |

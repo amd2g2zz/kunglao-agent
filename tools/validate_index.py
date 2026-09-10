@@ -173,7 +173,7 @@ TIERS = ("T1", "T2", "T3")
 COST_TIERS = ("probe", "cheap", "deep")
 # #692 WP1: closed precondition vocabulary (design D2) + quality tiers.
 PROVIDER_TOKENS = ("dex", "mem_budget_ok", "dexdc_wheel", "jadx_bin",
-                   "smali_toolchain", "source_tree", "gitnexus_index", "jvm")
+                   "smali_toolchain", "source_tree", "gitnexus_index")
 QUALITY_TIERS = ("high", "mid", "floor")
 REQUIRED_FIELDS = ("name", "category", "capability", "tier", "cost_tier",
                    "input_output", "description")

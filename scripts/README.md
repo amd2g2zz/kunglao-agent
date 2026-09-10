@@ -88,7 +88,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `install_unidbg.py` | Typed CLI face for `install_unidbg.sh` — unidbg deployment preconditions installer: JDK + Maven checks, remote clone of the MCP-capable master line, first-build dependency resolution, verify-after-repair; idempotent marker-based re-runs, --dry-run plan, fail-closed steps (#165) | CLI, tests |
 | `env_repair_l1.py` | L1 deterministic env repair (adb-reconnect/vm-rediscover/mcp-rehandshake; idempotent, safe no-op; #475) | CLI, tests |
 | `entropy_face.py` | #142 follow-up entropy-honesty face, SINGLE SOURCE — frontier PQ categorical entropy (posteriors.PQCategorical; frontier = first non-answered PQ, deterministic max-entropy fallback) + trend vs the previous stored snapshot value (falling/flat/rising/unknown, TREND_EPS); dual-use display (owner principle): statusline_snapshot renders it AND heartbeat_tick report carries the same h_bits/h_pq/h_trend (decision-side gear-shift signal); fail-open (empty/unreadable ledger → h_bits=None / unknown) | heartbeat_tick, statusline_snapshot, tests |
-| `rank_face.py` | Issue 218 Thompson rank face, SINGLE SOURCE — the latest `rank_feeds` event (bounded ledger tail) as `{rank: top claim / sampled score / ts / age_s / stale}` plus the `{rank_log}` emit health bit read from `runs/.rank-emit-fail.json` (a crashed priority_ratio emit becomes visible while the ranking result stays untouched — the silent fail-open contract stays); dual-use display: statusline_snapshot ships the same values the heartbeat tick report carries | priority_ratio (marker), statusline_snapshot, heartbeat_tick, tests |
 | `heartbeat.py` | convergence-gated heartbeat bookkeeping (lib for hook_activation) | lib(1), tests |
 | `heartbeat_tick.py` | heartbeat tick runner (hook-invoked + kunglao.py) | hooks, lib(1), tests |
 | `heartbeat_loop_prompt.py` | loop-prompt generator for the tick loop | hooks, tests |
@@ -113,7 +112,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `calibration_gate.py` | calibration/confidence gate | tests |
 | `completion_gate.py` | completion transaction gate | hooks, tests |
 | `cost_gate.py` | cost tier gate (advisory/pause/HARD_PAUSE) | tests |
-| `decision_lint.py` | pre-action compatibility lint (#213) — caller-supplied facts gate the next action: BLOCK on known-incompatible (package, fact) pairs, OK-with-note on unknowns; pure, never probes the environment | skills docs, tests |
 | `fact_contradiction_gate.py` | cross-fact contradiction detection | hooks, lib(3), tests |
 | `plan_drift_detector.py` | plan↔reality drift detection | hooks, tests |
 | `plan_reviser.py` | plan state machine + suggest_revision triggers + incremental revision segments | tests, SKILL contract |
@@ -247,7 +245,6 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `bench_analyze.py` | stdlib statistics — exact McNemar, Wilcoxon, tuition slopes, H1-H4 pre-registered verdicts, --demo | CLI, tests |
 | `intake_promise.py` | Phase 0 预扫描 promise 块 (#813) — apkid/DIE 探测状态显式记录 + 混淆先验(apkid.json 同源提取) + java 可达性判定(#807 死胡同面)；task_spec `promise:` 键合并 / runs 降级 | kunglao-init, CLI, tests; 下游 enforcement consumer 未接线(#53 裁定: 休眠保留, 消费面=#54 Android-lighting, 不在此 fake-wire) |
 | `difficulty_calibration.py` | #15 样本内在难度标定 (easy/medium/hard/max) — 纯函数组合既有扫描器证据(die.json/apkid.json)为 per-factor 评分 + 多正面 MAX 发现规则；缺证据 → easy+evidence_gap(缺失永不计为难度)；evidence/difficulty.json + task_spec `difficulty:` 键(#16 开环输入) | kunglao-init, CLI, tests |
-| `lane_spec.py` | task_spec lane vocabulary (issue 208: `lane: malware|algorithm|protocol|web|data|app`) — 状态感知读取(absente/undeclared/invalid=corrupt) + fail-closed 校验 + merge 写入(不覆盖其他键) + `REQUIRED_CHECKS`/`MATERIALS` 单源；legacy(无 lane)默认 malware 逐字节不变 | kunglao-init(问询/渲染/seeds), toolchain(per-lane check set), hooks/dispatch_gate(agent 门), tests |
 | `oracle_anchors.py` | task_spec 三个必答 oracle 锚点 (goal_verbatim / success_criterion / verification_method: reproduction\|replay-evidence\|static\|manual) — fail-closed 校验(空白/越界枚举=缺失，绝不猜默认)；merge 写入 task_spec(不覆盖既有答案)；analysis 入口拒绝面(kunglao analysis rc=7) + init 提醒行；replay_equivalence 消费枚举作 declared-bit 武装 | kunglao-init, kunglao(analysis gate), replay_equivalence, tests |
 | `difficulty_thresholds.py` | #16 难度分档成功阈值 — per-tier 策略表(独立验证数 1/1/2/2、red-team 轮数 1/1/1/2、关联任务一致性 F/F/T/T、heuristic-first F/F/T/T) + 查询 API(get_thresholds/thresholds_for_workspace/count_verifications)；缺 difficulty.json → fail-closed hard(绝不静默降 easy)；PROVEN 深度闸门(kunglao_record + hooks backstop) + 心跳红队 guidance 行 | kunglao_record, hooks/worker_budget_gates, heartbeat_loop_prompt, CLI, tests |
 

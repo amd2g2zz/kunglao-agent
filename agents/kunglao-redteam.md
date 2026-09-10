@@ -1,6 +1,5 @@
 ---
 name: kunglao-redteam
-lane: malware  # issue 208: analysis material contract — malware binary lane only
 description: 'RED-TEAM CHECKER for the kunglao-agent orchestrator — adversarial verification of completed
   analysis. Unified verification agent: absorbs the former verdict-checker''s input pattern. The orchestrator
   dispatches this agent to attack-test EVERY maker claim before it is promoted to PROVEN (maker-checker

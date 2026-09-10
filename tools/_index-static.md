@@ -24,10 +24,10 @@
 | `ida-decompile` | IDA lane tool family over the ida-pro-vm MCP bridge (`ida:decompile` sole + `ida-py-eval` scripting face; typed surfaces: analyze_funcs/xrefs_to/find_bytes class; queue-serial, stateful REPL) | Read when a function-level decompile must come from IDA's analyzer (ghidra unavailable/insufficient) or scripting-grade in-process IDA execution is needed; not for bulk whole-binary disassembly (ghidra-decompile-functions) or dynamic-lane (x64dbg/frida) questions |
 | `yara-scan` | YARA rule scanning (built-in crypto-tables) | Read for rule-based byte scanning (family/IOC evidence); not when yara-python is missing |
 | `yara-gen` | YARA rule text generation from analysis findings | Read when generating detection rules from hex/string traits; not without a rule-generation need |
-| `jadx-decompile` | DEX-to-Java decompiler (jadx; android:java-source high) | Read when java-like source is needed AND the apk_mem_gate verdict is jadx-ok/targeted-jadx AND the jvm probe passed; not for 1:1 bytecode truth (baksmali-xref) |
+| `jadx-decompile` | DEX-to-Java decompiler (jadx; android:java-source high) | Read when java-like source is needed AND the apk_mem_gate verdict is jadx-ok/targeted-jadx; not for 1:1 bytecode truth (baksmali-xref) |
 | `baksmali-xref` | DEX 1:1 smali + xref index (android:bytecode-truth sole) | Read when bytecode truth / mechanical fact anchors are needed, or as floor java-source/call-graph fallback; not for java-like source |
 | `apkid-prescan` | APK packer/compiler/obfuscator fingerprint | Read at android intake; its obfuscator tag raises the deobf prior (WP6) only, it is not a D0-matrix provider |
-| `dexdc-decompile` | Rust DEX decompiler + taint/CFG (android:data-flow & string-decrypt & algorithm-verify sole) | Read when data-flow/source-to-sink, string decrypt via emulator, or algorithm verify is needed; requires no JVM (a dexdc property - probe the environment's JVM separately with `java -version` for jadx); not the top java-source pick when jadx runs within budget |
+| `dexdc-decompile` | Rust DEX decompiler + taint/CFG (android:data-flow & string-decrypt & algorithm-verify sole) | Read when data-flow/source-to-sink, string decrypt via emulator, or algorithm verify is needed; no JVM - immune to jadx heap thrash; not the top java-source pick when jadx runs within budget |
 | `gitnexus-query` | Source-tree graph RAG queries (android:semantic-query sole) | Read when a claim needs semantic queries over an INDEXED source tree (lazy index, marker evidence/gitnexus_index.json); not a decompiler |
 | `wakaru-unbundle` | Bundler unpack + transpiler/minifier undo for bundled JS (`js:unbundle` sole, high; #728 web labs, external wakaru CLI) | Read when a webpack/esbuild/Browserify/Metro/Closure/ncc bundle must be split into modules; not for obfuscator.io/string-array/control-flow-flattening/VM-protected code (webcrack first) |
 | `webcrack-deobfuscate` | obfuscator.io-class JS deobfuscation + unminification (`js:deobfuscate` sole, high; #728 web labs, external webcrack CLI) | Read when classic JS obfuscation must be peeled; run BEFORE wakaru on obfuscated samples; not for VM bytecode or environment-bound code (wakaru recovers module structure after deobfuscation) |
@@ -265,8 +265,8 @@
 - **Inputs**: APK/JAR target.
 - **Outputs**: decompiled Java source tree under `evidence/`.
 - **exit code**: 0 ok/unavailable from the gate (REFUSE is an expected outcome, not an error); the external jadx CLI's own exit code is the worker's concern (budget state is a PRECONDITION — verdict `smali-only`/`refuse` blocks this provider, per #692 the #670 gate is a provider precondition, not a pipeline stage).
-- **when_not**: Not when the mem-gate verdict is smali-only/refuse; not when the `jvm` probe failed (jadx is a Java program — probe the environment with `java -version`, never read the JVM state off a tool description); not for 1:1 bytecode truth (baksmali-xref).
-- **provider**: `jadx` — requires `[dex, mem_budget_ok, jadx_bin, jvm]`; cost_hint `{mem_gb: 4.0, time: deep}`.
+- **when_not**: Not when the mem-gate verdict is smali-only/refuse; not for 1:1 bytecode truth (baksmali-xref).
+- **provider**: `jadx` — requires `[dex, mem_budget_ok, jadx_bin]`; cost_hint `{mem_gb: 4.0, time: deep}`.
 
 ### baksmali-xref
 
@@ -318,7 +318,6 @@
 - **Inputs**: APK/DEX target; optional targeted methods (index mode), package filter, taint seed APIs (default: the `references/re-library/android/emulation/android-fingerprint-seeds.yaml` table).
 - **Outputs**: `evidence/dexdc_index.json` (gitnexus-shape classes/methods/xrefs + per-method cfg nodes/edges) + `evidence/dexdc_taint.json` (`issues[].{rule, source, sink, traces}`, count).
 - **exit code**: 0 ok/unavailable (fail-open, never raises) / 1 hard usage error.
-- **JVM**: requires no JVM — a dexdc property, not an environment fact. The environment's JVM is a separate question: probe it (`java -version`) when the jadx lane is in play, and never read the host's JVM state off this entry.
 - **when_not**: Not the highest-fidelity java source when jadx runs within budget (jadx stays high); its value is data-flow/string-decrypt/algorithm-verify which jadx lacks; not for dex rewrite (baksmali/dexlib2).
 - **provider**: `dexdc` — requires `[dex, dexdc_wheel]`; detection = PyO3 wheel `import dex_decompiler` first, then `dex-decompile` CLI; index mode is pyo3-face-only, taint mode is cli-face-only (each mode uses only documented upstream surfaces).
 

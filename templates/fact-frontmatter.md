@@ -7,16 +7,6 @@ the 12 mandatory fields of the schema, plus the documented kunglao extension
 layer. Validation: `python scripts/lint_facts.py <WORKSPACE>` — a fact that
 fails lint is unqualified and must not enter the fact base.
 
-Lane scope (issue 208): the 12 mandatory fields + the kunglao extension
-layer are the STRUCTURAL core — they hold for every lane. The
-`malware-veri-notes` import is the MALWARE projection of that core: its
-`source` enum, its ICD-203 credibility defaults and the `role: sample_raw`
-provenance entry assume a binary sample under `bins/<sha>`. A non-malware
-lane (algorithm / protocol / web / data / app) keeps the same structural
-fields and re-labels the provenance roles to its own material (see
-"Lane-scoped provenance roles" below); it never fabricates a `sample_raw`
-entry for an artifact it does not have.
-
 ## 12 mandatory schema fields
 
 | # | Field | Rule |
@@ -71,25 +61,6 @@ provenance:
   - {role: recompute_script,  path: runs/verify-fNNN.py, content_sha256: "<64-hex>", credibility: A2}
 ```
 
-### Lane-scoped provenance roles (issue 208)
-
-`role: sample_raw` + `path: bins/<sha1>` is the MALWARE-lane shape. Other
-lanes name their own material with the same entry structure (`role`,
-`path`, `content_sha256`, `credibility`):
-
-| lane | first provenance role | `path` points at |
-|------|----------------------|------------------|
-| malware | `sample_raw` | `bins/<sha1>` |
-| algorithm | `reference_pair` / `trace_dump` | the recorded input→output pairs and trace dumps under `corpora/` (or the lane's own dir) |
-| protocol | `capture_log` | the pcap / frame capture under `evidence/` |
-| web | `capture_log` / `page_snapshot` | the recorded request/response or page snapshot |
-| data | `dataset` | the dataset path (record format + row count in the fact body) |
-| app | `package_raw` | the package file + its declared contract surface |
-
-A non-malware lane never writes a `sample_raw` entry for a sample it does
-not mount (the lane check set does not require `bins/`, and init seeds no
-sample claim); the credibility letter/number rules above are unchanged.
-
 - `content_sha256` = sha256 of the artifact bytes (migrate_facts.py computes it).
 - `credibility` = Admiralty code `{letter}{digit}`: source reliability A (completely
   reliable) → F (unreliable) × information credibility 1 (confirmed) → 6 (cannot be
@@ -100,7 +71,7 @@ sample claim); the credibility letter/number rules above are unchanged.
 
 ## kunglao extension layer (above the schema)
 
-kunglao keeps five fields the schema does not define. They are an explicit
+kunglao keeps four fields the schema does not define. They are an explicit
 extension layer — consumed by `scripts/kunglao_verify.py`, NOT part of
 the 12 mandatory fields, but REQUIRED on every kunglao fact:
 
@@ -111,30 +82,6 @@ the 12 mandatory fields, but REQUIRED on every kunglao fact:
 | `expected` | L1 oracle: sha256 of reproduce stdout, or assignment-class `field=value` assertions |
 | `verified` | date of last L1 pass (`pending` when none yet) |
 | `trace_id` | #879 mission chain id `tr-<mission>-<seq>` (optional; worker echo, same channel as `claim_id`) |
-
-### `evidence_class` — the evidence-grade class (claim gate input)
-
-`evidence_class` is the fifth extension field, optional in the frontmatter
-but REQUIRED whenever the fact answers an algorithm-recovery claim:
-
-| value | means |
-|-------|-------|
-| `triage` | string/byte-level scanning without decompilation or execution (unzip + grep, strings, raw byte sweeps) |
-| `decompile` | decompiled source or decompiler-grade index/taint (jadx source tree, dexdc index/taint, ghidra/IDA decompile) |
-| `dynamic` | runtime observation (frida/dynamic trace, qiling emulation) |
-
-Read it as a GRADE, not a tool name: `source: static-decompile` does NOT
-imply `evidence_class: decompile` — an unzip+grep fact carries the
-`static-decompile` source enum while its evidence class stays `triage`.
-
-`scripts/register_proven_gate.py` reads this field on `→PROVEN`
-transitions: an algorithm-recovery claim (identified by scope keywords in
-its register text: key schedule / crypto constant / state machine /
-algorithm verify) whose facts are ALL triage-grade fails admission with
-`evidence-class` named in the reason. An absent or unrecognized value is
-graded `triage` (fail-closed — an undeclared class is not a claim of
-strength); `scripts/lint_facts.py` reports an unrecognized value as
-`BAD_EVIDENCE_CLASS`.
 
 Plus the verifier gate: `verify_status` ∈ `pending`/`partial`/`passes`/`fails`/`stale`
 (schema Layer-4 field). Two-layer mapping: `references/schemas/state-mapping.md`.
@@ -152,7 +99,6 @@ verify_status: passes
 created: 2026-08-13
 last_reviewed: 2026-08-14
 source: static-decompile
-evidence_class: decompile
 confidence: high
 claim_id: C-999
 boundary_type: observation

@@ -94,8 +94,7 @@ class TestOwnershipTiers:
     def test_owner_tier_mapping(self):
         """Every check name maps to an owner class: agent-do is the default;
         rooting/VM/credentials are human-only; the decompiler face is
-        lane-conditional — ONE family key (issue 210), never three
-        per-supply tier assignments."""
+        lane-conditional."""
         assert tc.owner_for("mcp:sequential-thinking") is tc.OwnerTier.AGENT_DO
         assert tc.owner_for("mcp:ida-pro-vm") is tc.OwnerTier.AGENT_DO
         assert tc.owner_for("adb") is tc.OwnerTier.AGENT_DO
@@ -107,12 +106,8 @@ class TestOwnershipTiers:
         assert tc.owner_for("vm_reachable") is tc.OwnerTier.HUMAN_ONLY
         assert tc.owner_for("remote_debugger") is tc.OwnerTier.HUMAN_ONLY
         assert tc.owner_for("decompiler") is tc.OwnerTier.LANE_CONDITIONAL
-        # issue 210: the legacy per-supply names are NOT registry keys any
-        # more (XOR family — one tier assignment, not three)
-        assert set(tc._OWNER_BY_NAME) & {"decompiler", "ghidra", "ida"} == \
-            {"decompiler"}
-        assert tc.owner_for("ghidra") is tc.OwnerTier.AGENT_DO
-        assert tc.owner_for("ida") is tc.OwnerTier.AGENT_DO
+        assert tc.owner_for("ghidra") is tc.OwnerTier.LANE_CONDITIONAL
+        assert tc.owner_for("ida") is tc.OwnerTier.LANE_CONDITIONAL
 
     def test_every_report_item_carries_owner(self, clean_env, ws, monkeypatch,
                                              tmp_path):
@@ -314,14 +309,10 @@ class TestDecompilerLaneConditional:
                               task_spec=self._task_spec(port))
         decomp = next(i for i in report.items if i.name == "decompiler")
         assert decomp.status is tc.Status.PASS, decomp
-        assert decomp.supply == "ida-pro-vm", decomp
-        assert decomp.skipped == ("idat64", "analyzeHeadless"), decomp
         assert "ida-pro-vm" in decomp.detail
         assert "reachable" in decomp.detail
         blob = json.dumps(tc.format_json(report))
         assert "install IDA" not in blob
-        assert not [i for i in report.items if i.name in ("ida", "ghidra")], \
-            "the XOR family emits ONE item — no parallel ida/ghidra items"
 
     def test_mcp_lane_registered_but_dead_endpoint_fails_with_error(
             self, clean_env, ws):
@@ -372,8 +363,8 @@ class TestDecompilerLaneConditional:
 
     def test_local_lane_uses_probe_ladder_not_mcp(
             self, clean_env, ws, tmp_path, monkeypatch):
-        """lane=local: a seeded bundle idat64 PASSES the ONE family item
-        (wired path, supply=idat64), even with no MCP registered at all."""
+        """lane=local: a seeded bundle idat64 PASSES the face (wired path),
+        even with no MCP registered at all."""
         apps = tmp_path / "apps-local"
         apps.mkdir()
         bin_dir = apps / "IDA Professional 9.0.app" / "Contents" / "MacOS"
@@ -392,12 +383,10 @@ class TestDecompilerLaneConditional:
         report = tc.check(ws, "windows", task_spec={
             "constraints": {"dynamic_re": "forbidden"},
             "tools": {"decompiler_lane": "local"}})
-        decomp = next(i for i in report.items if i.name == "decompiler")
-        assert decomp.status is tc.Status.PASS, decomp
-        assert decomp.supply == "idat64", decomp
-        assert decomp.skipped == ("ida-pro-vm", "analyzeHeadless"), decomp
-        assert str(idat) in decomp.detail
-        assert "PATH" in decomp.detail  # wiring/export record
+        ida = next(i for i in report.items if i.name == "ida")
+        assert ida.status is tc.Status.PASS, ida
+        assert str(idat) in ida.detail
+        assert "PATH" in ida.detail  # wiring/export record
 
     def test_neither_found_pending_choice_item(
             self, clean_env, ws):
@@ -408,15 +397,12 @@ class TestDecompilerLaneConditional:
             "tools": {"mcp_servers": []}})
         decomp = next(i for i in report.items if i.name == "decompiler")
         assert decomp.status is tc.Status.FAIL, decomp
-        assert decomp.supply == "none", decomp
         assert decomp.pending_decision is not None
         pd = decomp.pending_decision
         assert pd.kind == "choice"
         assert pd.decision_id == "decompiler_lane"
         assert set(pd.options) == {
             "install-local-ida", "install-ghidra", "skip-decompiler-lane"}
-        # no parallel ida/ghidra items — the family is ONE item (issue 210)
-        assert not [i for i in report.items if i.name in ("ida", "ghidra")]
 
     def test_main_emits_exit8_pending_doc_when_sole_blocker(
             self, tmp_path, ws):

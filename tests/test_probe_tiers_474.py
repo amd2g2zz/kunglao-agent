@@ -342,10 +342,9 @@ def test_decompiler_cli_presence_is_warn_not_pass(
     monkeypatch.setenv("PATH", str(empty))
 
     report = tc.check(kunglao_ws, "windows")
-    item = next(i for i in report.items if i.name == "decompiler")
+    item = next(i for i in report.items if i.name == "ghidra")
     assert item.status == tc.Status.PASS, \
         f"#202: probed-found Ghidra must PASS with the wired path: {item}"
-    assert item.supply == "analyzeHeadless", item  # issue 210 XOR family
     assert "analyzeHeadless" in item.detail, item
     assert platform_paths.analyze_headless_name() in item.detail
 
@@ -395,9 +394,8 @@ def test_decompiler_capability_pass_under_caps_optin(
     monkeypatch.setenv("PATH", str(empty))
 
     report = tc.check(kunglao_ws, "windows", caps=True)
-    item = next(i for i in report.items if i.name == "decompiler")
+    item = next(i for i in report.items if i.name == "ghidra")
     assert item.status == tc.Status.PASS, item
-    assert item.supply == "analyzeHeadless", item  # issue 210 XOR family
     assert item.probe == tc.ProbeTier.CAPABILITY
     # the trial really invoked the headless binary with -import
     assert log.exists() and "-import" in log.read_text(encoding="utf-8")

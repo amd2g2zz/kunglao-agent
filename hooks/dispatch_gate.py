@@ -1020,8 +1020,8 @@ _FRONTMATTER_RE_760 = re.compile(r"\A---\s*\n(.*?)\n---", re.DOTALL)
 WRITE_CAPABLE_TOOLS = ("write", "edit")
 
 
-def _agent_frontmatter(agent_name: str | None) -> dict | None:
-    """agents/<name>.md frontmatter -> dict (None if unknown/unparseable).
+def _agent_allowed_tools(agent_name: str | None) -> list[str] | None:
+    """agents/<name>.md frontmatter allowedTools -> list (None if unknown).
 
     Local twin of route_capability._parse_frontmatter: hooks must not depend
     on scripts/ private API (#671 boundary); yaml is already imported here."""
@@ -1039,15 +1039,6 @@ def _agent_frontmatter(agent_name: str | None) -> dict | None:
         data = yaml.safe_load(m.group(1))
     except yaml.YAMLError:
         return None
-    return data if isinstance(data, dict) else None
-
-
-def _agent_allowed_tools(agent_name: str | None) -> list[str] | None:
-    """agents/<name>.md frontmatter allowedTools -> list (None if unknown).
-
-    Local twin of route_capability._parse_frontmatter: hooks must not depend
-    on scripts/ private API (#671 boundary); yaml is already imported here."""
-    data = _agent_frontmatter(agent_name)
     if not isinstance(data, dict):
         return None
     tools = data.get("allowedTools")
@@ -1145,82 +1136,6 @@ def _tools_rack_gate(payload: dict, prompt_text: str) -> int | None:
         f"`[T<N> tools=Read,Write,Grep]`. A rack without a file writer "
         f"(mm_x86: ida-pro-mcp only) forces the worker to fake files through "
         f"in-process interpreters; that output is untrusted by design.")
-
-
-# ======================== issue 208 lane routing gate ======================
-# The malware-only agents (pefile-signature / floss-filter / go-symbols /
-# ghidra-light / kunglao-redteam) declare `lane: malware` in their
-# frontmatter. Agent markdown cannot refuse to load — the harness loads a
-# definition, no hook observes that — so the enforceable point is the
-# dispatch: the lane gate refuses to hand a malware-lane-only methodology to
-# a workspace whose task contract declares another lane, with a structured
-# message naming the agent, the lane and the routing fix. Absent/legacy lane
-# (= today's workspaces) keeps current behavior; unknown/kept agents pass.
-
-# The lane enum mirrors scripts/lane_spec.py (the single source). Hooks load
-# standalone and must not import scripts/, so the tuple is repeated here with
-# a test pinning the two sets equal.
-LANE_ENUM = ("malware", "algorithm", "protocol", "web", "data", "app")
-MALWARE_LANE = "malware"
-LANE_TASK_SPEC = "task_spec.yaml"
-
-
-def _agent_lane_declaration(agent_name: str | None) -> str | None:
-    """agents/<name>.md frontmatter `lane:` (None when absent/unknown)."""
-    fm = _agent_frontmatter(agent_name)
-    if not isinstance(fm, dict):
-        return None
-    raw = fm.get("lane")
-    if isinstance(raw, str) and raw.strip().lower() in LANE_ENUM:
-        return raw.strip().lower()
-    return None
-
-
-def _workspace_lane(ws: Path) -> str | None:
-    """<ws>/task_spec.yaml `lane:` (None on absent/blank/unknown value).
-
-    An unrecognized value is NOT a lane: the contract is malformed, and the
-    gate must not invent a lane to refuse on (kunglao-init fails such a
-    contract closed at init)."""
-    path = ws / LANE_TASK_SPEC
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8",
-                                             errors="replace"))
-    except (OSError, yaml.YAMLError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    raw = data.get("lane")
-    if isinstance(raw, str) and raw.strip().lower() in LANE_ENUM:
-        return raw.strip().lower()
-    return None
-
-
-def _lane_gate(payload: dict, prompt_text: str, ws: Path) -> int | None:
-    """Issue 208: refuse a malware-lane-only agent on a non-malware lane.
-
-    Fires on the structural corridor (pre-activation), independent of the
-    dispatch claim-id parse: the lane binding is a routing contract, not a
-    session concern. No agent identity / no `lane:` binding / no declared
-    workspace lane -> None (pass)."""
-    agent_name = _resolve_dispatch_agent(payload, prompt_text)
-    if _agent_lane_declaration(agent_name) != MALWARE_LANE:
-        return None
-    lane = _workspace_lane(ws)
-    if lane is None or lane == MALWARE_LANE:
-        return None  # legacy / undeclared: current malware-lane behavior
-    return _reject_with_guidance(
-        "lane_routing",
-        f"{agent_name} is a malware-lane-only agent and this workspace "
-        f"declares lane: {lane} — its methodology (binary sample under "
-        f"bins/<sha>, PE/Go/Mach-O structure, packer and Authenticode "
-        f"faces) does not apply to this task's material.",
-        f"dispatch an agent whose contract matches lane: {lane} "
-        f"(kunglao-worker is the default executor; web-re-worker owns "
-        f"web/JS claims) — or, if this task really does analyze a binary "
-        f"sample, record `lane: malware` in task_spec.yaml and re-dispatch. "
-        f"The lane comes from the task contract, never from the dispatch: "
-        f"do not switch the workspace lane to unblock one worker.")
 
 
 # ===================== #109 hypothesis admission gate =====================
@@ -1567,14 +1482,6 @@ def main() -> int:
         # #772 L4: redo-marked prompts overlapping red-team DIFF value
         # strings draw a WARN (never REJECT) — same structural corridor.
         _redo_leak_check(ws, prompt_text, claim_id)
-
-    # issue 208 lane routing — the same structural corridor as the
-    # MCP-prefix and tools-rack faces above: a malware-lane-only agent on a
-    # non-malware workspace is
-    # refused regardless of the dispatch claim-id parse and of activation.
-    rc = _lane_gate(payload, prompt_text, ws)
-    if rc is not None:
-        return rc
 
     if not _kunglao_active(ws):
         return 0  # kunglao-agent not activated or expired — hooks sleep

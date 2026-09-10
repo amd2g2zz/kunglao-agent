@@ -64,9 +64,6 @@ sys.path.insert(0, str(SCRIPTS))
 # plugin countermand) joined the header; the four executable instruction
 # lines moved to the uv-run form (`uv run --project {{skill_dir}} python
 # ...`) — no other byte changed.
-# 2026-09-10 regen (issue 212 statusline assembly): one statusline note line
-# after the "Workspace at a glance" block (init wires the statusLine key,
-# --no-hooks opt-out, upgrade self-heal) — no other byte changed.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 
@@ -135,9 +132,8 @@ def test_template_gen_imports_shared_primitives():
 
 def test_base_tmpl_uses_double_brace_placeholders():
     text = BASE_TMPL.read_text(encoding="utf-8")
-    # issue 208: the four sample_* placeholders became the lane-rendered
-    # {{material_section}} slot (malware injects the sample table).
-    for ph in ("{{type_section}}", "{{type}}", "{{material_section}}",
+    for ph in ("{{type_section}}", "{{type}}", "{{sample_sha1}}",
+               "{{sample_sha256}}", "{{sample_type}}", "{{sample_path}}",
                "{{skill_dir}}", "{{venv_path}}"):
         assert ph in text, f"base.tmpl missing {ph} placeholder"
     # The old <UPPERCASE> injection placeholders must be gone. Prose tokens
@@ -268,37 +264,11 @@ def test_golden_equivalence_byte_identical(init_mod, tmp_path, monkeypatch,
 
 
 def test_golden_fixtures_are_pinned():
-    """All four golden files exist and are non-trivial (regen guard).
-
-    Issue 208 added the algorithm-lane golden: the material block is
-    lane-rendered, and its bytes are pinned like the three malware ones."""
-    for t in ("windows", "linux", "android", "algorithm"):
+    """All three golden files exist and are non-trivial (regen guard)."""
+    for t in ("windows", "linux", "android"):
         p = GOLDEN_DIR / f"{t}.md"
         assert p.is_file(), f"golden fixture missing: {p}"
         assert len(p.read_bytes()) > 1000
-
-
-def test_golden_algorithm_lane_byte_identical(init_mod, tmp_path,
-                                              monkeypatch):
-    """Issue 208: the lane render (no sample, lane material block) is
-    byte-pinned by tests/fixtures/claudemd-golden/algorithm.md — rendered
-    through the same sentinel path as the malware goldens."""
-    real_vi = sys.version_info
-    monkeypatch.setattr(sys, "version_info",
-                        types.SimpleNamespace(major=3, minor=11, micro=0))
-    try:
-        ws = tmp_path / "ws"
-        ws.mkdir(parents=True)  # lane=algorithm requires no bins/
-        target = init_mod.write_claudemd(ws, "unknown", "", project_type="linux",
-                                         lane="algorithm")
-    finally:
-        monkeypatch.setattr(sys, "version_info", real_vi)
-    text = target.read_text(encoding="utf-8")
-    golden = (GOLDEN_DIR / "algorithm.md").read_text(encoding="utf-8")
-    assert text == golden, (
-        f"algorithm golden drift: "
-        f"{sum(1 for a, b in zip(text, golden) if a != b)} first-diff chars; "
-        f"len {len(text)} vs {len(golden)}")
 
 
 # ---------- 6. dead stub removal ----------

@@ -477,12 +477,7 @@ def _eval_token(token: str, state: dict) -> tuple[str, str | None]:
         return ("blocked",
                 "mem budget verdict %s (#670 - jadx provider precondition, "
                 "not a pipeline stage)" % verdict)
-    if token in ("jadx_bin", "dexdc_wheel", "smali_toolchain", "jvm"):
-        # `jvm` is a first-class precondition of the jadx provider (issue
-        # 215): jadx is a Java program, and "no JVM" was answered from a
-        # tool description in the field instead of probing the host — the
-        # token reads the same workspace probe channel as jadx_bin, so a
-        # probed-false JVM BLOCKS the provider rather than being assumed.
+    if token in ("jadx_bin", "dexdc_wheel", "smali_toolchain"):
         probes = state.get("tool_probes") or {}
         if token not in probes:
             return ("unverified",
