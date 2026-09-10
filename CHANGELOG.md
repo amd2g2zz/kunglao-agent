@@ -56,6 +56,15 @@ release (see the mapping table at the end).
   recall_inject) delegate to one manifest-aware helper — the two copies that
   hardcoded `malware-analysis-workspace` no longer bypass env-manifest
   layout overrides.
+- **State-layered tool diagnosis (#213)**: a tool failure is diagnosed at
+  the layer where it actually failed — the `toolchain.py` MCP faces name the
+  register/connection layer with an agent-do repair (no "dead" verdict, no
+  fallback-tool recommendation while the primary is repairable); the new
+  `scripts/decision_lint.py` blocks actions that already-gathered facts
+  forbid (x86_64 libidalib + python 3.14 vs the idapro install) and never
+  blocks on unknowns; the ladder and its four rules are stated in
+  `skills/kunglao-agent/SKILL.md`, the distilled convergence rules, and the
+  init-worker doctrine.
 
 ## [0.1.3] - 2026-08-25
 
