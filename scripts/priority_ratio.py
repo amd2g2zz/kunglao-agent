@@ -595,7 +595,11 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
     the marker runs/.rank-emit-fail.json {ts, error class} (rank_face), a
     success clears it, and the statusline snapshot / heartbeat tick report
     surface it as the rank_log health bit. Neither the ranking result nor
-    the payload is touched by the marker."""
+    the payload is touched by the marker.
+
+    The real writer reports a failed write by returning False instead of
+    raising (kunglao_log.emit never raises), so the health bit keys off
+    BOTH shapes: a payload/build crash and a plain write failure."""
     try:
         claims_hash = hashlib.sha256(json.dumps(
             claims, sort_keys=True, ensure_ascii=False, default=repr)
@@ -613,12 +617,18 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             "ranked_order": [a.claim_id for a in actions],
             "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
         }
-        kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
-                         detail=json.dumps(payload, sort_keys=True,
-                                           ensure_ascii=False))
-        # Issue 218: the last attempt succeeded — the marker clears itself so
-        # the health bit recovers without operator action.
-        rank_face.clear_fail_marker(ws)
+        if kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
+                            detail=json.dumps(payload, sort_keys=True,
+                                              ensure_ascii=False)) is False:
+            # Issue 218/225: the health bit tracks the LAST ATTEMPT. The
+            # writer reports a failed write with False (it never raises) —
+            # the marker MUST be set here, and a failed attempt must never
+            # erase a marker left by an earlier failure.
+            rank_face.write_fail_marker(ws, "EmitWriteError")
+        else:
+            # The last attempt succeeded — the marker clears itself so the
+            # health bit recovers without operator action.
+            rank_face.clear_fail_marker(ws)
     except Exception as exc:  # noqa: BLE001 — observability never disturbs the rank
         # Issue 218: the fail-open contract stays (the ranking result is
         # untouched) — the crash just stops being silent (see rank_face).

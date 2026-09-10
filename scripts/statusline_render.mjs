@@ -234,8 +234,14 @@ function rankBadge(snap) {
   if (log && log.ok === false) return PALETTE.red('R✖');
   const rank = snap.rank && typeof snap.rank === 'object' ? snap.rank : null;
   if (!rank || typeof rank.claim !== 'string' || !rank.claim) return '';
-  const score = Number(rank.score);
-  const text = `R:${rank.claim}${Number.isFinite(score) ? ` ${score.toFixed(2)}` : ''}`;
+  // A missing/unusable score hides the chip entirely — Number(null) === 0
+  // once rendered a fabricated `R:C-2 0.00`, which is a value the producer
+  // never computed (the absent face, never a placeholder).
+  const score = typeof rank.score === 'number' && Number.isFinite(rank.score)
+    ? rank.score
+    : null;
+  if (score === null) return '';
+  const text = `R:${rank.claim} ${score.toFixed(2)}`;
   return rank.stale ? PALETTE.amber(text) : PALETTE.cyan(text);
 }
 

@@ -259,7 +259,7 @@ files:
   - src: scripts/decision_lint.py
     dest: .claude/scripts/decision_lint.py
     kind: scaffold
-    sha256: d0b9e3e1f1e316d10fa33684107b4d493d05a80dd053303db7b13f552bc1309f
+    sha256: e1a7d9e5b025573e50beebc5a729988ffb465939a8a8c1d9ebc04bd74d7dd65d
   - src: scripts/decision_pending.py
     dest: .claude/scripts/decision_pending.py
     kind: scaffold
@@ -315,7 +315,7 @@ files:
   - src: scripts/env_check.py
     dest: .claude/scripts/env_check.py
     kind: scaffold
-    sha256: 1a5bf3cf0c7af71b01eaec7c031094e0a70948072123a35865ca86ff02842d64
+    sha256: 1300726cef1eb603a04f12f76fd76b3eb612a60aa474b533772600f67f9e84ae
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold
@@ -447,7 +447,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 87da0532d0eefd71022891360e7b419cf6337f219a5717f0af99becd110ff7e4
+    sha256: dd4e4287484a250bf78c526e7b82fff6dd932a96532ff0e08eee6aa51cec22a2
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -479,7 +479,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: 7bdd8fee67381b25d3f104d2663ca55060fc91896b5511f3eee7838a65e79a6a
+    sha256: 2a5abb27fc2366d4c2222cf1ba08db461aaf96142abd6d90a6ec6ebd7e2cb6c2
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -619,7 +619,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: ea00b83aff92aaa74662ba05fddaf1a18dbfdbbc2f68117bff09521841945a1d
+    sha256: c7f46b86f0fda2a63d7c603199f91bafc3646e1bbc725e5984effec13cc4e767
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -635,7 +635,7 @@ files:
   - src: scripts/rank_face.py
     dest: .claude/scripts/rank_face.py
     kind: scaffold
-    sha256: 3ce63798ace6d03b6f71108e8e8fd2dec80abd2d877b537dcf656f6e2e8e0d31
+    sha256: 50b1679a957b2776ca7b181461e2a5b4c2912a6a66173f0219dbe45affe13b4d
   - src: scripts/re_pin_references.py
     dest: .claude/scripts/re_pin_references.py
     kind: scaffold
@@ -671,7 +671,7 @@ files:
   - src: scripts/register_proven_gate.py
     dest: .claude/scripts/register_proven_gate.py
     kind: scaffold
-    sha256: cd4067a9583fc07267cc43358a8593331e58f2a0c9d73d34bd6f45b0a7ae24ec
+    sha256: 63e621325a2b044f7e5cede389cc37dcdc5512b01423107c676f06657e0a3526
   - src: scripts/release_check_selfcheck.py
     dest: .claude/scripts/release_check_selfcheck.py
     kind: scaffold
@@ -787,7 +787,7 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: dcfe5240e1995569e5061b33450f89edccaf5d72bd9984e2dac86fc9cd780fdb
+    sha256: 518530fa4174b35a55f55ab05770d623e24fef4c3e4a7e76f2c3b4cdb642db08
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
@@ -855,7 +855,7 @@ files:
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
-    sha256: 96cdba73507676da987e1701bbe0761f01d3ea2f8f23b4849095ac84dd407092
+    sha256: b6d584f82aeb1618820b806c90cccd257350bc21fe91f7a9259badd3a249e5a6
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset

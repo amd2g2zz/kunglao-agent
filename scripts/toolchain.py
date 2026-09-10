@@ -2869,9 +2869,33 @@ def _check_lane_material(report: ToolchainReport, ws: Path, lane: str,
     arrives AFTER init (a capture, a dataset, a target URL), so absence is
     WARN guidance — never a HARD refusal. The deep per-lane analysis
     toolchain is a documented stub: this face checks that the workspace has
-    somewhere to mount the lane's material and says what the lane consumes."""
-    hits = sorted(d for d in LANE_MATERIAL_DIRS
-                  if (ws / d).is_dir() and any((ws / d).iterdir()))
+    somewhere to mount the lane's material and says what the lane consumes.
+
+    An unreadable material dir degrades to WARN with the real cause: a
+    permission problem is operator guidance, never a traceback out of the
+    gate (issue 225)."""
+    hits: list[str] = []
+    unreadable: list[str] = []
+    for d in LANE_MATERIAL_DIRS:
+        p = ws / d
+        try:
+            if p.is_dir() and any(p.iterdir()):
+                hits.append(d)
+        except OSError as exc:
+            unreadable.append(
+                f"{d} ({type(exc).__name__}: {exc.strerror or exc})")
+    if unreadable:
+        detail = (f"{lane} lane material probe degraded — unreadable "
+                  f"material dir(s): {', '.join(unreadable)}; fix the "
+                  f"permissions (or remount) and re-probe"
+                  + (f"; readable material present: {', '.join(sorted(hits))}/"
+                     if hits else ""))
+        report.items.append(CheckResult(
+            name=name, status=Status.WARN, tier=Tier.WARN, detail=detail,
+            probe=ProbeTier.PRESENCE,
+        ))
+        return
+    hits = sorted(hits)
     detail = (f"{lane} lane material present: {', '.join(hits)}/ — "
               f"documented stub (the deep {lane} toolchain is not implemented)"
               if hits else
@@ -3028,7 +3052,9 @@ def check(ws: Path, project_type: str | None = None,
     Issue 208: lane selects the CHECK SET. Absent (or task_spec lane
     absent, or lane=malware) = the per-type malware dispatch, byte-identical
     to the pre-lane gate; any other lane runs uv + python + the lane's
-    material probe instead of the MCP/RE analysis supply.
+    material probe instead of the MCP/RE analysis supply. A PRESENT but
+    invalid lane value raises ValueError (fail closed — a typo never runs
+    the malware gate by accident).
     """
     if project_type is None:
         project_type = read_project_type(ws)
@@ -3039,7 +3065,12 @@ def check(ws: Path, project_type: str | None = None,
             f"Set --type or add project_type=<type> to analysis_state.txt."
         )
     if lane is None and isinstance(task_spec, dict):
-        lane = lane_spec.normalize(task_spec.get(lane_spec.LANE_FIELD))
+        raw_lane = task_spec.get(lane_spec.LANE_FIELD)
+        if raw_lane is not None and str(raw_lane).strip():
+            # A PRESENT-but-invalid value fails closed here (ValueError);
+            # only a truly ABSENT/blank lane keeps the legacy malware
+            # dispatch. A typo must never silently run the malware gate.
+            lane = lane_spec.validate(raw_lane)
     if lane is not None:
         lane = lane_spec.validate(lane)  # fail closed, never a silent malware fallback
     report = ToolchainReport(project_type=project_type)
@@ -3060,6 +3091,42 @@ def check(ws: Path, project_type: str | None = None,
     report.items = [dataclasses.replace(i, owner=owner_for(i.name))
                     for i in report.items]
     return report
+
+
+# Report item -> probe token: the route_capability preconditions that read
+# evidence/tool-probes.json (a missing token stays `unverified` there; a
+# False token BLOCKS the provider). Only items actually probed in the
+# report are written — a probe answer is never invented.
+TOOL_PROBE_ITEMS: dict[str, str] = {
+    "jvm": "jvm",
+    "jadx_bin": "jadx",
+}
+
+
+def persist_tool_probes(ws: Path, report: ToolchainReport) -> Path | None:
+    """Write <ws>/evidence/tool-probes.json from the report's tool probes.
+
+    route_capability's jadx preconditions (`jadx_bin`, `jvm`) read this
+    file; before this writer existed the file appeared only in test
+    fixtures, so the tokens could never leave `unverified` and the
+    advertised probed-false JVM block could not fire (issue 225). Mapping:
+    report status PASS -> true, anything else -> false; a token whose item
+    was not probed in this report is NOT written (never a guessed answer).
+
+    Returns the written path, or None when the report probed none of the
+    tokens (nothing to say). A real write failure raises OSError — the
+    caller decides whether that is fatal (init degrades it to a warning:
+    the token just stays `unverified`)."""
+    items = {i.name: i for i in report.items}
+    probes = {token: items[name].status == Status.PASS
+              for token, name in TOOL_PROBE_ITEMS.items() if name in items}
+    if not probes:
+        return None
+    out = Path(ws) / "evidence" / "tool-probes.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(probes, indent=2, sort_keys=True) + "\n",
+                   encoding="utf-8")
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:

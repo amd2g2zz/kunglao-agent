@@ -16,6 +16,7 @@ TDD RED phase: these fail before the kunglao-init.py amendment lands.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -319,6 +320,38 @@ def test_toolchain_check_runs_before_scaffold(tmp_path, monkeypatch):
     assert calls[0]["register_existed"] is False, \
         "toolchain.check must run BEFORE scaffold (claim-register must not exist yet)"
     assert (ws / "claim-register.yaml").exists(), "scaffold must complete after PASS"
+
+
+def test_init_persists_tool_probes_evidence(tmp_path, monkeypatch):
+    """Finding 7 (issue 225): init persists the probed results to
+    evidence/tool-probes.json right after the toolchain check, so
+    route_capability reads REAL probe answers (a probed-false JVM can
+    actually block the jadx provider)."""
+    ws = tmp_path / "ws"
+    (ws / "bins").mkdir(parents=True)
+    (ws / "bins" / "s.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
+    monkeypatch.setenv(FLAG_NAME, "0")
+
+    mod = _load_init_module()
+    import toolchain as tc
+
+    def fake_check(ws_arg, project_type=None, **kw):
+        return tc.ToolchainReport(project_type=project_type or "windows",
+                                  items=[
+            tc.CheckResult(name="jvm", status=tc.Status.FAIL,
+                           tier=tc.Tier.WARN, detail="java not found"),
+        ])
+
+    monkeypatch.setattr(mod.toolchain, "check", fake_check)
+    seed_oracle_anchors(ws)
+    rc = mod.run(ws, project_type="windows",
+                 profile_root=tmp_path / "profile-root",
+                 answers={"host_exec_protection": "enabled"})
+    assert rc == 0, "a WARN-tier probe must not refuse init"
+    probes = ws / "evidence" / "tool-probes.json"
+    assert probes.exists(), "init must persist the probed results"
+    doc = json.loads(probes.read_text(encoding="utf-8"))
+    assert doc == {"jvm": False}, doc
 
 
 def test_library_refuse_returns_4_no_scaffold(tmp_path, monkeypatch):

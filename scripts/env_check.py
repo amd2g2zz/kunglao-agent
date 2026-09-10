@@ -518,11 +518,16 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     if present.
 
     issue 207: the probe dispatches the REAL runtime invocation — an in-env
-    `import yaml` executed through `uv run --project <skill_root>` — never a
-    venv binary with a hand-written dependency list. The old
+    `import yaml` executed through `uv run --locked --project <skill_root>`
+    — never a venv binary with a hand-written dependency list. The old
     ``import cryptography, yaml`` list rotted: a lock-faithful
     ``uv sync --locked`` install (yaml present, cryptography dropped from the
     declared set) was falsely refused at the blocking Phase 0 row.
+
+    issue 225: `--locked` is part of the invocation. Without it `uv run`
+    auto-relocks — the probe rewrote `<skill_root>/uv.lock` + `.venv` and
+    PASSed a drifted project that `uv sync --locked` rejects. The env still
+    syncs from the lock; a probe can never mutate it.
 
     #409: the authoritative environment is the SKILL-root uv project (uv run
     --project <skill_root>) — NOT the workspace .venv. uv's default project
@@ -541,8 +546,8 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     else:
         try:
             r = subprocess.run(
-                [uv, "run", "--project", str(SKILL_DIR), "python", "-c",
-                 "import yaml"],
+                [uv, "run", "--locked", "--project", str(SKILL_DIR), "python",
+                 "-c", "import yaml"],
                 capture_output=True, text=True,
                 timeout=UV_PROBE_TIMEOUT_SECONDS,
                 encoding="utf-8", errors="replace")

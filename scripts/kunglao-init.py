@@ -3367,6 +3367,21 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         for _rec in apkid_summary_lines(report):
             print(f"kunglao-init: {_rec}")
 
+        # Evidence probe persistence (issue 225): route_capability's jadx
+        # preconditions (jadx_bin / jvm) read evidence/tool-probes.json,
+        # which had no production writer — the tokens could only ever be
+        # `unverified`, so a probed-false JVM could not block the provider.
+        # Best-effort: a write failure leaves the token unverified and never
+        # blocks init (the gate result itself already stands).
+        try:
+            probes_path = toolchain.persist_tool_probes(ws, report)
+        except OSError as exc:
+            print(f"kunglao-init: WARNING tool-probes not persisted: {exc}",
+                  file=sys.stderr)
+        else:
+            if probes_path is not None:
+                print(f"kunglao-init: tool probes persisted: {probes_path}")
+
     # uv env deployment (the uv-managed .venv the shipped
     # faces resolve through) + host learning-plugin detection warning.
     warn_learning_style_plugins()
