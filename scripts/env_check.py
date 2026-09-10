@@ -27,8 +27,8 @@ Checks:
                          hooks dropped, the #258/#372 silent-drop class).
                          Deployment targets resolve from the wire_up_settings
                          registry (hook_deployment_targets) — never a mirror.
-  5. venv + sample     — the SKILL-root uv project answers
-                         `uv run --project <skill_root> python -c "import yaml"`
+  5. venv + sample     — the SKILL-root uv project answers an `import yaml`
+                         probe dispatched through `uv run --project <skill_root>`
                          (issue 207: dispatch the REAL invocation — never a
                          venv binary with a hand-written dep list); sample sha256
   6. python_version   — running interpreter matches the 3.11 pin (.python-version,
@@ -513,9 +513,9 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     """SKILL-root uv env answers the yaml import; sample sha256 vs task_spec
     if present.
 
-    issue 207: the probe dispatches the REAL runtime invocation —
-    ``uv run --project <skill_root> python -c "import yaml"`` — never a venv
-    binary with a hand-written dependency list. The old
+    issue 207: the probe dispatches the REAL runtime invocation — an in-env
+    `import yaml` executed through `uv run --project <skill_root>` — never a
+    venv binary with a hand-written dependency list. The old
     ``import cryptography, yaml`` list rotted: a lock-faithful
     ``uv sync --locked`` install (yaml present, cryptography dropped from the
     declared set) was falsely refused at the blocking Phase 0 row.
