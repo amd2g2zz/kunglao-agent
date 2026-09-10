@@ -142,36 +142,31 @@ FIXES: dict[str, ToolMeta] = {
         url="https://www.gnu.org/software/binutils/",
         repo="https://sourceware.org/git/binutils-gdb.git",
         package="binutils", verify_cmd="objdump --version"),
+    # Issue 210: ONE family entry — the decompiler face is XOR (local IDA
+    # XOR local Ghidra XOR the ida-pro-vm MCP). The fix string lists all
+    # three paths; there is no separate `ghidra` / `ida` registry entry to
+    # cross-reference (readers of the GHIDRA_HOME env face use THIS text).
     "decompiler": ToolMeta(
-        fix="decompiler supply is LANE-CONDITIONAL (#202): MCP lane (task_spec "
-            "tools.decompiler_lane: mcp) -> the gate verifies ida-pro-vm "
-            "registration + reachability and registers it itself via "
-            "`claude mcp add` — never a local IDA install; local lane -> the "
-            "agent probe ladder runs (PATH, mdfind, find bundle sweep incl. "
-            ".app/Contents/MacOS, brew cask, known dirs), then the Ghidra "
-            "probe (GHIDRA_HOME, ghidra dirs, brew). Ghidra OR IDA — either "
-            "satisfies this check when present; a ghidra/ida-pro-vm MCP "
-            "registration satisfies it on the MCP lane; neither -> exit-8 "
-            "PendingDecision CHOICE: install-local-ida (license) / "
-            "install-ghidra (#408 installer) / skip-decompiler-lane",
-        description="headless decompiler supply (Ghidra or IDA)",
+        fix="decompiler supply is ONE XOR family (issue 210) — three supply "
+            "paths, exactly one satisfies it: (1) local IDA — install IDA "
+            "Pro + put idat64 on PATH (the probe ladder also covers "
+            "mdfind/find bundle sweep/brew cask/known dirs); (2) local Ghidra "
+            "— install Ghidra and set GHIDRA_HOME=<root> "
+            "(support/analyzeHeadless must exist, platform-correct name "
+            "#409); (3) the ida-pro-vm MCP — `claude mcp add --transport "
+            "http ida-pro-vm <ida-mcp-url>` (task_spec tools.decompiler_lane: "
+            "mcp verifies registration + reachability, never a local IDA "
+            "install). Ghidra OR IDA — either satisfies this check when "
+            "present; a ghidra/ida-pro-vm MCP registration covers the MCP "
+            "path, and the pre-empted sibling is recorded as skipped. None "
+            "present -> exit-8 PendingDecision CHOICE: install-local-ida "
+            "(license) / install-ghidra (#408 installer) / "
+            "skip-decompiler-lane",
+        description="headless decompiler supply — XOR family "
+                    "(IDA idat64 | Ghidra analyzeHeadless | ida-pro-vm MCP)",
         url="https://ghidra-sre.org/",
         repo="https://github.com/NationalSecurityAgency/ghidra",
         package="ghidra", verify_cmd="analyzeHeadless"),
-    "ghidra": ToolMeta(
-        fix="set GHIDRA_HOME=<Ghidra install root> (support/analyzeHeadless must exist, platform-correct name #409)",
-        description="Ghidra reverse-engineering suite (headless analyzeHeadless)",
-        url="https://ghidra-sre.org/",
-        repo="https://github.com/NationalSecurityAgency/ghidra",
-        verify_cmd="analyzeHeadless"),
-    "ida": ToolMeta(
-        fix="agent-run probe ladder first (#202): PATH -> mdfind -> find "
-            "bundle sweep (.app/Contents/MacOS) -> brew cask -> known dirs; "
-            "a found idat64 is wired automatically — the HUMAN-ONLY "
-            "touchpoint is only the LICENSE purchase when the user chooses "
-            "local IDA at the exit-8 choice",
-        description="IDA Pro disassembler (commercial)",
-        url="https://hex-rays.com/ida-pro/"),
     "vm_reachable": ToolMeta(
         fix="set KUNGLAO_VM_HOST=<live VM lease IP> (vmr-shell discovery) and ensure ports are open",
         description="analysis VM channel liveness (vmrun/VBoxManage lease IP + open ports)",

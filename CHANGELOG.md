@@ -103,6 +103,16 @@ release (see the mapping table at the end).
   `uv run` → `uv sync --locked --project` repair). Stale operator copies
   cleared in the same pass: the template's `Key deps: cryptography, pyyaml`
   line and SKILL.md step 1's `python -m venv` / pip residue.
+- **Decompiler face is XOR, not AND (#210)**: the toolchain gate emits ONE
+  `decompiler` item per init — `supply` names the canonical winner
+  (`ida-pro-vm` | `idat64` | `analyzeHeadless` | `none`) and `skipped` records
+  the pre-empted siblings as informational evidence (never FAIL, never a
+  second missing item); the next-action / ownership-tier / CHECK_SETS / FIXES
+  registries collapse from three keys (`decompiler`/`ghidra`/`ida`) to the one
+  family key `decompiler`, whose single fix string spells out the three supply
+  paths (install IDA + set PATH, OR install Ghidra + GHIDRA_HOME, OR register
+  the ida-pro-vm MCP); the exit-8 PendingDecision CHOICE is unchanged and the
+  pure-DEX `has_native_so=False` WARN keeps its free skip.
 
 ## [0.1.3] - 2026-08-25
 
