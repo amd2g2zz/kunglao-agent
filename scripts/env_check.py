@@ -27,9 +27,10 @@ Checks:
                          hooks dropped, the #258/#372 silent-drop class).
                          Deployment targets resolve from the wire_up_settings
                          registry (hook_deployment_targets) — never a mirror.
-  5. venv + sample     — SKILL-root venv python exists w/ cryptography+yaml
-                         (#409: uv run --project <skill_root> is authoritative,
-                         not ws/.venv); sample sha256
+  5. venv + sample     — the SKILL-root uv project answers
+                         `uv run --project <skill_root> python -c "import yaml"`
+                         (issue 207: dispatch the REAL invocation — never a
+                         venv binary with a hand-written dep list); sample sha256
   6. python_version   — running interpreter matches the 3.11 pin (.python-version,
                          #758); drift is WARN-only (CI pins its own interpreter)
 
@@ -503,26 +504,50 @@ def check_hooks(ws: Path) -> tuple[str, str]:
             f"Fix: python <skill>/scripts/hook_activation.py <ws> --wire-up")
 
 
-def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
-    """SKILL-root venv python with cryptography+yaml; sample sha256 vs
-    task_spec if present.
+# issue 207: `uv run` may implicitly sync a cold/missing project env — the
+# probe must outlast the old 30 s venv-binary probe.
+UV_PROBE_TIMEOUT_SECONDS = 120
 
-    #409: the authoritative interpreter is the SKILL-root venv (uv run
-    --project <skill_root>) resolved by sys.platform (Scripts/python.exe |
-    bin/python) — NOT the workspace .venv (which may not exist; the old
-    ws/.venv/Scripts/python.exe constant always FAILed on macOS)."""
+
+def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
+    """SKILL-root uv env answers the yaml import; sample sha256 vs task_spec
+    if present.
+
+    issue 207: the probe dispatches the REAL runtime invocation —
+    ``uv run --project <skill_root> python -c "import yaml"`` — never a venv
+    binary with a hand-written dependency list. The old
+    ``import cryptography, yaml`` list rotted: a lock-faithful
+    ``uv sync --locked`` install (yaml present, cryptography dropped from the
+    declared set) was falsely refused at the blocking Phase 0 row.
+
+    #409: the authoritative environment is the SKILL-root uv project (uv run
+    --project <skill_root>) — NOT the workspace .venv. uv's default project
+    venv lives at <skill_root>/.venv, the same path the old probe targeted,
+    so recorded venv facts keep their shape.
+
+    Failures name the LAYER (issue 213 state ladder): uv absent = uv layer
+    (install guidance); non-zero ``uv run`` = env layer (uv sync repair)."""
     problems = []
-    venv_py = platform_paths.venv_python(SKILL_DIR / ".venv")
-    if venv_py.exists():
-        try:
-            r = subprocess.run([str(venv_py), "-c", "import cryptography, yaml"],
-                               capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
-            if r.returncode != 0:
-                problems.append(f"venv missing deps (cryptography/yaml): {r.stderr.strip()[:80]}")
-        except Exception as exc:
-            problems.append(f"venv probe failed: {exc}")
+    uv = shutil.which("uv")
+    if uv is None:
+        problems.append(
+            "uv layer missing — runtime invocations use "
+            f"uv run --project {SKILL_DIR}; fix: "
+            "curl -LsSf https://astral.sh/uv/install.sh | sh")
     else:
-        problems.append(f"no venv python at {venv_py} (skill root: {SKILL_DIR})")
+        try:
+            r = subprocess.run(
+                [uv, "run", "--project", str(SKILL_DIR), "python", "-c",
+                 "import yaml"],
+                capture_output=True, text=True,
+                timeout=UV_PROBE_TIMEOUT_SECONDS,
+                encoding="utf-8", errors="replace")
+            if r.returncode != 0:
+                problems.append(
+                    "env layer broken — repair: uv sync --locked --project "
+                    f"{SKILL_DIR}; stderr: {(r.stderr or '').strip()[:120]}")
+        except Exception as exc:
+            problems.append(f"uv run probe failed: {exc}")
     if sample_sha256 and sample_sha256 != "UNSET":
         for cand in (ws / "bins").glob("*"):
             if cand.is_file():
@@ -534,7 +559,7 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
             problems.append("no sample under bins/")
     if problems:
         return False, "; ".join(problems)
-    return True, "venv deps OK" + ("; sample sha256 OK" if sample_sha256 else "")
+    return True, "uv env OK (yaml)" + ("; sample sha256 OK" if sample_sha256 else "")
 
 
 def check_python_version() -> tuple[str, str]:
