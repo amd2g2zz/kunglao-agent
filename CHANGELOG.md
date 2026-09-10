@@ -8,53 +8,89 @@ release (see the mapping table at the end).
 
 ## [0.1.5] - 2026-09-10
 
-### Added- **Oracle-grade task intake (#191)**: init elicits `goal_verbatim` /
-  `success_criterion` / `verification_method` as first-class task_spec
-  fields; analysis entry AND resume refuse (rc=7) while anchors are
-  missing; upgrade backfills via structured interview (no deadlock).
+The oracle-integrity train: the loop now refuses to run — or to claim success —
+without user-declared goals, checkable success criteria and a declared
+verification method; every case settlement, score update and reward movement
+became auditable; and the knowledge base, scripts tree and CI were rebuilt
+around mapping-driven generation and four-leg gates.
+
+### Added
+
+- **Task intake asks and anchors (#191)**: init now elicits the analysis goal
+  (`goal_verbatim`, verbatim), a checkable success criterion and the
+  verification method (reproduction / replay-evidence / static / manual) as
+  first-class task_spec fields. Analysis entry and resume refuse (rc=7) while
+  any anchor is missing; upgrade backfills via structured interview. Existing
+  workspaces are no longer silently guessed into a loop.
 - **I/O equivalence oracle (#172)**: reproduction claims require
-  controlled-variable replay evidence; missing or non-equivalent evidence
-  cannot converge (fail-closed PROVEN admission).
-- **Declared oracle coverage gate (#147)**: convergence requires the
-  declared oracle coverage bit — closing the case-abstention fast-fake
-  hole; declared fast path for not-applicable tasks.
-- **Outcome forensics (#146)**: case settlements record HOW they were
-  won/lost; failure-analysis arming fixed; case-abandonment protocol.
+  controlled-variable replay evidence — pairs must match byte-for-byte or the
+  claim cannot converge. Missing, non-equivalent or simulator-only evidence
+  fails closed at PROVEN admission.
+- **Declared oracle coverage gate (#147)**: convergence now requires the
+  declared oracle-coverage bit; a run can no longer dodge its primary
+  questions by abstention and still claim success. Tasks that genuinely have
+  no oracle declare it explicitly.
+- **Phase-0 goal operationalization (#128)**: deliverables, not-done
+  counterexamples and capability-probe cases are read back to the user for
+  confirmation before the loop starts — the goal is operational, not prose.
+- **Outcome forensics (#146)**: case settlements record HOW they were won or
+  lost (evidence class, admission path, verdict), failure-analysis arming is
+  fixed, and case abandonment has a protocol instead of silent drift.
+- **Oracle case admission integrity (#126)**: evidence_refs resolution,
+  hypothesis_ref linkage, action-signature dedup, and a load-time mutation
+  requirement — oracle cases are structurally validated at load.
+- **Mechanism utilization verification (#127)**: detector liveness telemetry
+  plus injection trip-tests — a mechanism that never fires (or fires on
+  float-equality blindness) is now visible instead of assumed-working.
+- **Oracle reward channel cadence (#132)**: settlement-hook runner invocation
+  replaces LLM-obedience triggering; a missing intent is a loud signal.
+- **Value-currency reconciliation (#133)**: PQ coverage credit is gated on
+  armed-case oracle green — closing the value-level residue where credit
+  could accrue without oracle-passing work.
 - **Win-rate curve aggregator (#156)**: rolling success-rate over the
-  settlement stream — belief-side counting curve.
-- **Algorithm event log (#157)**: rank_feeds / posterior_update /
-  observation events through the unified log — TS, posteriors and reward
-  are auditable.
-- **Worker-entry lookup constitution (#145)**: front-loaded reference /
-  tool / script lookup block and compressed rule slices in agent files.
-- **Typed asset-tier retrieval (#162)**: tools / templates / references
-  typed recall, windowed-stalker template, echarts de-vendored.
-- **Intent envelope and scoring wave (#128)**:
-  envelope normalization, candidate scoring and coverage generalization
-  bit landed across the loop.
-- **Difficulty wave (#142)**: difficulty shaping, oracle
-  arming and case-difficulty items through the settlement pipeline.
+  settlement stream — a belief-side counting curve over real outcomes.
+- **Algorithm event log (#157)**: rank_feeds, posterior_update and
+  observation events flow through the unified log, making TS, posteriors and
+  reward movements auditable end to end.
+- **Worker-entry lookup constitution (#145)**: agent files carry a
+  front-loaded reference/tool/script lookup block and compressed rule slices
+  — workers find the knowledge base from tick one (guidance, not
+  enforcement).
+- **Typed asset-tier retrieval (#162)**: tools / templates / references are
+  recalled as typed tiers, with a windowed-stalker template and echarts
+  de-vendored.
+- **Statusline v2 (#142)**: sparkline, entropy badge, health dots and a
+  current-task chip; producer-owned data, deployed PROJECT-scoped.
 
 ### Changed
-- **References tree governance (#166)**: two-population audit, three-level
-  re-library, mapping-driven generators, generated two-tier indexes, noise
-  cleanup (G0–G4).
-- **scripts/ governance (#189)**: six merge clusters consolidated, orphan
-  scripts removed, shared libs extracted (`scripts/_boot.py`,
-  `scripts/report_render.py`), tool installation unified under the
-  `toolchain_install` registry (unidbg as first registered plan).
-- **Distillation waves**: IDA-scripting methodology (#163), debuggability
-  enablement ladder (#164), Android-RE course aggregate with methodology
-  attribution (#165), anti-bot/unidbg queue aggregation (#176), IDA lane
-  surface — py_eval session semantics + queue-serial contract (#179),
-  task-writing taught as checkable oracle (#170).
 
-### Fixed
+- **References tree governance (#166)**: two-population audit, three-level
+  re-library, mapping-driven generators and generated two-tier indexes;
+  noise documents removed and index integrity enforced by relib_audit.
+- **scripts/ governance (#189)**: six merge clusters consolidated, nine
+  orphan scripts removed (four-surface retirement), shared libs
+  (`scripts/_boot.py`, `scripts/report_render.py`) extracted, and tool
+  installation unified under the `toolchain_install` registry (unidbg as
+  the first registered plan).
+- **Upgrade purges legacy global hooks (#143)**: `~/.claude/settings.json`
+  cleanup replaces the old warn-only posture.
+- **IDA lane surface (#167, #179)**: py_eval session semantics and the
+  queue-serial contract verified and documented — the MCP lane is the
+  interface, session behavior is now specified.
+- **Task-writing taught as a checkable oracle (#170)**: README shows the
+  folk-phrasing to checkable-oracle translation with concrete RE scenarios.
+- **Distillation waves (#163, #164, #165, #176, #144)**: IDA-scripting
+  methodology (modern-module overlays, headless discipline, batch-analysis
+  template), the debuggability enablement ladder, the 26-lesson Android-RE
+  course aggregate with methodology attribution and variant inspirations,
+  the anti-bot/unidbg queue (6 landed, 7 thin, 6 rejected), and the
+  dynamic-observation / environment-integrity corpus.
 - **CI acceleration (#184)**: xdist parallelization with tier markers,
-  subprocess elimination, release-check split into four parallel legs
-  (merge gate = all four green, tier census pins the partition).
+  subprocess elimination, and release-check split into four parallel legs —
+  merge gate is all four green, tier census pins the partition.
 
 ### Known limitations
+
 - Replay evidence does not yet bind to a medium (#199): simulator-source
   replay passes are hypothesis-grade support only; device-medium binding
   lands in v0.1.6.
