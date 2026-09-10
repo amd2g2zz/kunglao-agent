@@ -27,7 +27,7 @@ Checks:
                          hooks dropped, the #258/#372 silent-drop class).
                          Deployment targets resolve from the wire_up_settings
                          registry (hook_deployment_targets) — never a mirror.
-  5. venv + sample     — SKILL-root venv python exists w/ cryptography+yaml
+  5. venv + sample     — SKILL-root venv python exists w/ yaml
                          (#409: uv run --project <skill_root> is authoritative,
                          not ws/.venv); sample sha256
   6. python_version   — running interpreter matches the 3.11 pin (.python-version,
@@ -504,8 +504,11 @@ def check_hooks(ws: Path) -> tuple[str, str]:
 
 
 def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
-    """SKILL-root venv python with cryptography+yaml; sample sha256 vs
-    task_spec if present.
+    """SKILL-root venv python with yaml; sample sha256 vs task_spec if present.
+
+    Probes the declared runtime set (PyYAML), not leftover packages dropped
+    from pyproject. A lock-faithful uv sync must PASS this row: venv_sample
+    is blocking, so probing an undeclared package fails a healthy install.
 
     #409: the authoritative interpreter is the SKILL-root venv (uv run
     --project <skill_root>) resolved by sys.platform (Scripts/python.exe |
@@ -515,10 +518,10 @@ def check_venv_sample(ws: Path, sample_sha256: str | None) -> tuple[bool, str]:
     venv_py = platform_paths.venv_python(SKILL_DIR / ".venv")
     if venv_py.exists():
         try:
-            r = subprocess.run([str(venv_py), "-c", "import cryptography, yaml"],
+            r = subprocess.run([str(venv_py), "-c", "import yaml"],
                                capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
             if r.returncode != 0:
-                problems.append(f"venv missing deps (cryptography/yaml): {r.stderr.strip()[:80]}")
+                problems.append(f"venv missing deps (yaml): {r.stderr.strip()[:80]}")
         except Exception as exc:
             problems.append(f"venv probe failed: {exc}")
     else:

@@ -4,8 +4,9 @@
 Three scenarios (mirroring the incident-driven acceptance criteria):
   1. AGENT_TEAMS flag set (process scope) -> check ① FAIL, overall FAIL, exit 1
      (the 2026-08-12 polluted-session shape)
-  2. VM unreachable (socket refused/timed out) -> vm check FAIL, exit 1
-     (dynamic analysis blocked; static may proceed — recoverable FAIL)
+  2. VM unreachable (socket refused/timed out) -> vm check FAIL
+     (dynamic analysis blocked; static may proceed — DEGRADED T3 row,
+     overall stays PASS)
   3. all five checks PASS -> exit 0 + runs/.env-check.json snapshot says PASS
 
 The check functions take explicit paths / module state so tests can monkeypatch
@@ -176,7 +177,13 @@ def test_flag_set_fails_exit_1(monkeypatch, tmp_path):
 
 
 def test_vm_unreachable_fails(monkeypatch, tmp_path):
-    """Scenario 2: VM sockets refused/timed out -> vm check FAIL, exit 1 (recoverable)."""
+    """Scenario 2: VM sockets refused/timed out -> vm check FAIL.
+
+    vm_reachability is DEGRADED (T3-restricted), so overall stays PASS.
+    Pre-fix this assertion was exit-1 only because the venv probe also
+    FAILed on the leftover cryptography import — a lock-faithful venv
+    must not keep that accidental blocking row.
+    """
     ws = _kunglao_ws(tmp_path)
     monkeypatch.delenv(FLAG_NAME, raising=False)
 
@@ -188,9 +195,11 @@ def test_vm_unreachable_fails(monkeypatch, tmp_path):
     monkeypatch.setattr(env_check, "VM_HOST", "127.0.0.1")
     monkeypatch.setattr(env_check.socket, "create_connection", _boom)
     rc = run(ws)
-    assert rc == 1
     snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
     assert snap["checks"]["vm_reachability"]["status"] == "FAIL"
+    assert rc == 0
+    assert snap["overall"] == "PASS"
+    assert "vm_reachability" in snap.get("degraded", [])
 
 
 def test_all_pass_exit_0(monkeypatch, tmp_path):
@@ -468,6 +477,51 @@ def test_venv_check_ignores_workspace_venv_when_skill_root_present(monkeypatch, 
     snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
     assert snap["checks"]["venv_sample"]["status"] == "PASS", \
         f"workspace .venv must be ignored when skill-root venv is authoritative: {snap['checks']['venv_sample']}"
+
+
+def test_venv_probe_accepts_lock_faithful_interpreter_without_cryptography(
+        monkeypatch, tmp_path):
+    """A uv-sync --locked venv ships yaml and does not ship cryptography.
+
+    cryptography was dropped from pyproject (release-contract: not imported
+    anywhere). Probing it FAIL-closes a healthy install because venv_sample
+    is a blocking Phase 0 row. The probe must import the declared runtime
+    set (yaml), not the leftover package.
+    """
+    import env_check
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.setattr(env_check, "SKILL_DIR", tmp_path / "skill-root")
+    venv_py = platform_paths.venv_python(env_check.SKILL_DIR / ".venv")
+    venv_py.parent.mkdir(parents=True)
+    venv_py.write_text("", encoding="utf-8")
+
+    def fake_run(argv, *a, **k):
+        code = argv[2] if len(argv) >= 3 and argv[1] == "-c" else ""
+        if "cryptography" in code:
+            return subprocess.CompletedProcess(
+                argv, 1, "",
+                "ModuleNotFoundError: No module named 'cryptography'\n")
+        if "yaml" in code:
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        return subprocess.CompletedProcess(argv, 1, "", "unexpected probe")
+
+    monkeypatch.setattr(env_check.subprocess, "run", fake_run)
+    ok, detail = env_check.check_venv_sample(ws, None)
+    assert ok is True, detail
+    assert "cryptography" not in detail.lower()
+
+
+def test_venv_probe_source_does_not_import_cryptography():
+    """env_check and operator-facing copies must not probe a package the lock does not ship."""
+    root = Path(__file__).resolve().parents[1]
+    src = (root / "scripts" / "env_check.py").read_text(encoding="utf-8")
+    assert "import cryptography" not in src
+    assert "cryptography+yaml" not in src
+    assert "cryptography/yaml" not in src
+    skill = (root / "skills" / "kunglao-agent" / "SKILL.md").read_text(encoding="utf-8")
+    tmpl = (root / "templates" / "CLAUDE.md.base.tmpl").read_text(encoding="utf-8")
+    assert "cryptography" not in skill
+    assert "cryptography" not in tmpl
 
 
 def test_venv_python_resolves_by_platform():

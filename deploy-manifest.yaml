@@ -311,7 +311,7 @@ files:
   - src: scripts/env_check.py
     dest: .claude/scripts/env_check.py
     kind: scaffold
-    sha256: df54cf47007d7502cd34e1dd22c00cd46a8240192db2d519b86d0f53c342a5f2
+    sha256: 076336348f94826ca7f04baf4afa3f59f997551e70f979d123386d5303d1997e
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold
@@ -1215,7 +1215,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: c0f936197382cdef12538c9f2ee5cd94ca5f6a1c075bd1ad53324cce055111fc
+    sha256: 9bb9ab4842f30d791ca28c5e74739d1065a3c64209fcc9d92710b43b29850a29
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset

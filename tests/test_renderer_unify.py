@@ -62,6 +62,8 @@ sys.path.insert(0, str(SCRIPTS))
 # plugin countermand) joined the header; the four executable instruction
 # lines moved to the uv-run form (`uv run --project {{skill_dir}} python
 # ...`) — no other byte changed.
+# 2026-09-10 regen (venv probe leftover): Key deps dropped cryptography
+# (not in the lock); pyyaml remains. Frame body otherwise unchanged.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 

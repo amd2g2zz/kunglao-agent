@@ -95,7 +95,7 @@ Run the steps in order; any FAIL blocks the next step.
    Dynamic channel (full matrix in `references/contracts/cold-start-contract.md`): `KUNGLAO_CHANNEL=vmr|ssh|docker|adb|local` — five equivalent control planes; dynamic tasks probe HARD (vmr liveness / ssh/docker/adb capability), static-only tasks WARN without probing; `local` is static-only — a dynamic task on `local` is REJECTED.
    Enter analysis only with `OVERALL=PASS`; fix each FAIL (steps 1-4 below are the repair manual) and re-run until PASS.
 
-1. **Probe the Python venv**: check activation (`$env:VIRTUAL_ENV` / `sys.prefix != sys.base_prefix` / `.venv` exists). Activated → record `venv=<path>` in `analysis_state.txt`. Not activated and `.venv/` missing → create it (`python -m venv .venv`), install dependencies (cryptography, pyyaml) into that venv only, verify with `python -c "import cryptography, yaml"`.
+1. **Probe the Python venv**: check activation (`$env:VIRTUAL_ENV` / `sys.prefix != sys.base_prefix` / `.venv` exists). Activated → record `venv=<path>` in `analysis_state.txt`. Not activated and `.venv/` missing → create it (`python -m venv .venv`), install the locked dependency set (`uv sync --locked`) into that venv only, verify with `python -c "import yaml"`.
 
 2. **Probe the toolchain**: confirm the directory layout — `scripts/`, `hooks/`, `templates/` (`state/` state templates, `scripts/` script templates, `frida/` Frida templates), `tools/` (tool homes: `crypto/` `static/` `ghidra/` `frida/` `t2/` `auxiliary/` `pipelines/`) — exist (`ls <SKILL_DIR>/scripts/`); Python + dependency libraries available; `convergence_check.py` executes.
 

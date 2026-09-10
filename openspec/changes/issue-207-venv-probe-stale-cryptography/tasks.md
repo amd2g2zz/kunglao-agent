@@ -1,0 +1,6 @@
+- [x] RED: lock-faithful venv (yaml present, cryptography absent) FAILs `check_venv_sample`
+- [x] GREEN: probe `import yaml` only; docstring / checklist text match
+- [x] Align `templates/CLAUDE.md.base.tmpl` and `skills/kunglao-agent/SKILL.md`
+- [x] Regen `tests/fixtures/claudemd-golden/{windows,linux,android}.md`
+- [x] Refresh deploy-manifest digests for touched sources
+- [x] Targeted pytest + ruff on the touched files
