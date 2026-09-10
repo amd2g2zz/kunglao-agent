@@ -113,6 +113,23 @@ release (see the mapping table at the end).
   paths (install IDA + set PATH, OR install Ghidra + GHIDRA_HOME, OR register
   the ida-pro-vm MCP); the exit-8 PendingDecision CHOICE is unchanged and the
   pure-DEX `has_native_so=False` WARN keeps its free skip.
+- **Lane routing — task types beyond binary-RE (#208)**: `task_spec.yaml`
+  gains `lane: malware | algorithm | protocol | web | data | app` — the
+  analysis-MATERIAL contract that decides whether `bins/<sha>` is required
+  at all. `lane=algorithm` initializes without a sample (uv + python +
+  reference-corpora toolchain gate, lane-rendered handbook with no
+  `{{sample_*}}` placeholder, no sample seed claims); `protocol` / `web` /
+  `data` / `app` are routed documented stub lanes. A workspace that
+  declares nothing (no lane, no task contract, no sample) is ASKED for its
+  lane through the exit-8 PendingDecision channel with no default
+  (`--lane` / `--resolve {"lane": ...}` re-entry); a lane-less task_spec or
+  a mounted sample keeps today's malware behavior byte-for-byte
+  (`RC_NO_SAMPLE` retained, `lane=malware` render byte-identical to the
+  shipped goldens). The five malware-only agents
+  (`pefile-signature` / `floss-filter` / `go-symbols` / `ghidra-light` /
+  `kunglao-redteam`) declare `lane: malware` and are refused at dispatch
+  (PreToolUse lane gate, structured REJECT naming agent + lane + routing
+  fix) on any workspace declaring another lane.
 
 ## [0.1.3] - 2026-08-25
 
