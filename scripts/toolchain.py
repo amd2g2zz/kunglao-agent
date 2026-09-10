@@ -144,6 +144,10 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "dexdc": NextAction("install",
                         "cd dex-decompiler-py && maturin build --release && pip install target/wheels/dex_decompiler-*.whl"),
     "apkid": NextAction("install", "pip install apkid"),
+    "jvm": NextAction("install",
+                      "install a JDK so `java -version` answers (jadx is a "
+                      "Java program; probe the environment, never read the "
+                      "JVM state off a tool description)"),
     "baksmali": NextAction("install",
                            "download from https://github.com/baksmali/smali/releases (or apt install baksmali)"),
     "adb": NextAction("install",
@@ -2250,6 +2254,50 @@ def _check_linux(report: ToolchainReport, ws: Path,
 
 # ---------- Android manifest ----------
 
+JAVA_VERSION_TIMEOUT_S = 10
+
+
+def _jvm_item(jadx_present: bool) -> CheckResult:
+    """The `java -version` probe item (issue 215).
+
+    Tier follows the consequence, not the tool: jadx is a Java program, so
+    a JVM miss beside a present jadx is HARD; with jadx absent nothing on
+    this lane needs one and the item stays WARN (never in the HARD exit-4
+    refusal set). Probe tier is CAPABILITY — `-version` is a real run of
+    the interpreter, the strongest layer-1 answer that executes no sample
+    code (the state-ladder lesson: answer "is it installed?" by probing,
+    never by reading a tool description).
+    """
+    java = _shutil_which("java")
+    tier = Tier.HARD if jadx_present else Tier.WARN
+    if java is None:
+        return CheckResult(
+            name="jvm", status=(Status.FAIL if jadx_present else Status.WARN),
+            tier=tier, root_cause="JVM", probe=ProbeTier.PRESENCE,
+            fix="install a JDK (java -version), then re-probe",
+            detail=("java not found in PATH — jadx cannot run without a JVM"
+                    if jadx_present else
+                    "java not found in PATH — nothing on this lane needs a "
+                    "JVM while jadx is absent"))
+    rc, out, err = _run_cmd([java, "-version"],
+                            timeout=JAVA_VERSION_TIMEOUT_S)
+    # java -version prints its banner on stderr (OpenJDK, every release);
+    # stdout is the fallback for implementations that do otherwise.
+    banner = next((ln for ln in (err or out).splitlines() if ln.strip()), "")
+    if rc == 0:
+        return CheckResult(
+            name="jvm", status=Status.PASS, tier=tier,
+            probe=ProbeTier.CAPABILITY,
+            detail=(f"java found at {java}"
+                    + (f" — {banner}" if banner else "")))
+    return CheckResult(
+        name="jvm", status=(Status.FAIL if jadx_present else Status.WARN),
+        tier=tier, root_cause="JVM", probe=ProbeTier.CAPABILITY,
+        fix="install a working JDK (java -version), then re-probe",
+        detail=(f"java at {java} but -version failed "
+                f"({banner or 'no output'}) — jadx cannot start"))
+
+
 def _check_android(report: ToolchainReport, ws: Path,
                    caps: bool = False,
                    reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
@@ -2290,8 +2338,21 @@ def _check_android(report: ToolchainReport, ws: Path,
             ))
 
     # T1: jadx + apktool
-    report.items.extend(_which_items(
-        ("jadx", "apktool"), Tier.HARD))
+    jadx_apktool = _which_items(("jadx", "apktool"), Tier.HARD)
+    report.items.extend(jadx_apktool)
+    # "jadx_bin present" = the binary resolved on PATH (PASS, or WARN when
+    # its own verify_cmd failed): either way the java-source lane needs a
+    # JVM, and only a never-found binary leaves the item WARN.
+    jadx_present = any(i.name == "jadx" and i.status != Status.FAIL
+                       for i in jadx_apktool)
+
+    # T1: JVM (java -version) — state-ladder layer 1 (issue 215): the field
+    # run answered "is there a JVM?" from dexdc's feature text ("no JVM")
+    # instead of probing the host. jadx IS a Java program, so with jadx
+    # present a missing/broken JVM is a broken environment (HARD); without
+    # jadx nothing on the android static lane needs one (WARN, so the item
+    # can never enter the HARD exit-4 refusal set on a non-jadx host).
+    report.items.append(_jvm_item(jadx_present))
 
     # T1: apkid — presence probe ONLY, WARN tier (so it can never enter the
     # HARD exit-4 refusal set). apkid is a TOOL: init probes existence and
@@ -2729,7 +2790,7 @@ CHECK_SETS: dict[str, frozenset[str]] = {
         "ebpf", "strace", "ltrace",
     }),
     "android": frozenset({
-        "aapt", "aapt2", "jadx", "apktool", "gitnexus", "apkid",
+        "aapt", "aapt2", "jadx", "apktool", "gitnexus", "apkid", "jvm",
         "decompiler", "uv",
         "adb", "device_root", "debug_flag", "frida_server",
         "android_server", "jdwp_debug", "ebpf_android", "unidbg",

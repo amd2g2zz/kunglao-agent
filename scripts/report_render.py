@@ -252,6 +252,13 @@ FIXES: dict[str, ToolMeta] = {
             "JDWP-Handshake (jdb stays the interactive driver; never jdb -attach — side effects)",
         description="JDWP capability probe (jdb handoff, WARN tier)",
         url="https://docs.oracle.com/javase/8/docs/technotes/guides/jpda/jdwp-spec.html"),
+    "jvm": ToolMeta(
+        fix="install a JDK so `java -version` answers (jadx is a Java "
+            "program — probe the environment, never read the JVM state off "
+            "a tool description)",
+        description="JVM availability for the jadx java-source lane "
+                    "(HARD when jadx is present, WARN otherwise)",
+        url="https://adoptium.net/"),
 }
 
 # Registration guidance for MCP supply checks — fix text rendered by the
