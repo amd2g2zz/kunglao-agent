@@ -75,6 +75,31 @@ def test_not_probed_is_explicit(tmp_path):
     assert "note" in p["prescan"]["die"]
 
 
+def test_apkid_promise_mirrors_probe_state_on_android(tmp_path):
+    """issue 209: once _check_android emits the apkid item, the promise
+    state mirrors the probe (FAIL → missing / WARN → degraded / PASS →
+    available) — the fabricated not_probed branch stops firing on android."""
+    ws = _ws(tmp_path)
+    for probe_status, probe_state in (("FAIL", "missing"),
+                                      ("WARN", "degraded"),
+                                      ("PASS", "available")):
+        rep = _report(_item("apkid", probe_status))
+        p = intake_promise.build(rep, None, ws)
+        assert p["prescan"]["apkid"]["state"] == probe_state, probe_status
+        assert p["prescan"]["apkid"]["tier"] == "WARN"
+
+
+def test_apkid_not_probed_retained_off_android(tmp_path):
+    """issue 209: windows/linux reports carry no apkid item → the explicit
+    not_probed record (with the first-claim note) is retained, not a
+    silently missing key."""
+    ws = _ws(tmp_path)
+    rep = _report(_item("jadx", "PASS"), _item("die", "WARN"))
+    p = intake_promise.build(rep, None, ws)
+    assert p["prescan"]["apkid"]["state"] == "not_probed"
+    assert "note" in p["prescan"]["apkid"]
+
+
 # ---------- 混淆先验（与 route_capability #692 WP6 同源同键） ----------
 
 def test_obfuscation_prior_extracted(tmp_path):
