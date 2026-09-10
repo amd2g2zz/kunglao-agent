@@ -801,10 +801,10 @@ def test_decompiler_check_single_helper():
 
 
 def test_decompiler_cli_ghidra_fallback(fake_bin, kunglao_ws, monkeypatch):
-    """#407/#202: CLI (GHIDRA_HOME + analyzeHeadless, platform-correct name
-    #409) remains a working fallback SUPPLY signal when no decompiler MCP is
-    registered — probed-found supply now PASSES with the wired path (#202
-    supersedes the #474 presence-WARN for the decompiler face)."""
+    """#407/#202 + issue 210: CLI (GHIDRA_HOME + analyzeHeadless,
+    platform-correct name #409) remains a working SUPPLY of the ONE XOR
+    family item — `decompiler` PASS with supply=analyzeHeadless (the
+    pre-210 parallel `ghidra` item is gone)."""
     _only_st_claude_json(kunglao_ws)
     (fake_bin / "support").mkdir(exist_ok=True)
     headless = fake_bin / "support" / platform_paths.analyze_headless_name()
@@ -813,16 +813,18 @@ def test_decompiler_cli_ghidra_fallback(fake_bin, kunglao_ws, monkeypatch):
     r = _run_toolchain(kunglao_ws, ["--type", "windows", "--json"],
                        env={"GHIDRA_HOME": str(fake_bin)})
     data = json.loads(r.stdout)
-    ghidra = next(c for c in data["checks"] if c["name"] == "ghidra")
-    assert ghidra["status"] == "PASS", ghidra
-    assert "analyzeHeadless" in ghidra["detail"], ghidra
-    assert "Ghidra" in ghidra["detail"], ghidra
+    decomp = next(c for c in data["checks"] if c["name"] == "decompiler")
+    assert decomp["status"] == "PASS", decomp
+    assert decomp["supply"] == "analyzeHeadless", decomp
+    assert decomp["skipped"] == ["ida-pro-vm", "idat64"], decomp
+    assert "analyzeHeadless" in decomp["detail"], decomp
+    assert "Ghidra" in decomp["detail"], decomp
 
 
 def test_decompiler_cli_ida_fallback(fake_bin, kunglao_ws, monkeypatch):
-    """#407/#202: CLI idat64 on PATH is a probe-ladder hit — PASS with the
-    wired path + PATH-wiring record (#202 supersedes the #474 presence-WARN
-    for the decompiler face)."""
+    """#407/#202 + issue 210: CLI idat64 on PATH is a probe-ladder hit of the
+    ONE XOR family item — `decompiler` PASS with supply=idat64 (the pre-210
+    parallel `ida` item is gone), wired path + PATH record in the detail."""
     _only_st_claude_json(kunglao_ws)
     if os.name == "nt":
         (fake_bin / "idat64.exe").write_text("", encoding="utf-8")
@@ -832,18 +834,21 @@ def test_decompiler_cli_ida_fallback(fake_bin, kunglao_ws, monkeypatch):
     monkeypatch.setenv("PATH", str(fake_bin), prepend=os.pathsep)
     r = _run_toolchain(kunglao_ws, ["--type", "windows", "--json"])
     data = json.loads(r.stdout)
-    ida = next(c for c in data["checks"] if c["name"] == "ida")
-    assert ida["status"] == "PASS", ida
-    assert "idat64" in ida["detail"], ida
-    assert "PATH" in ida["detail"], ida
+    decomp = next(c for c in data["checks"] if c["name"] == "decompiler")
+    assert decomp["status"] == "PASS", decomp
+    assert decomp["supply"] == "idat64", decomp
+    assert decomp["skipped"] == ["ida-pro-vm", "analyzeHeadless"], decomp
+    assert "idat64" in decomp["detail"], decomp
+    assert "PATH" in decomp["detail"], decomp
 
 
 def test_android_native_so_decompiler_passes_via_mcp(fake_bin, kunglao_ws,
                                                      monkeypatch):
-    """#407/#474: sample with native .so + ida-pro-vm MCP registered -> the
-    decompiler item is WARN 'capability unverified' (registered supply
-    defuses the native-so HARD FAIL; honest capability verdict is #474's
-    --capability business, not the registry read)."""
+    """#407/#474 + issue 210: sample with native .so + ida-pro-vm MCP
+    registered -> the ONE `decompiler` item is WARN 'capability unverified'
+    with supply=ida-pro-vm (registered supply defuses the native-so HARD
+    FAIL; honest capability verdict is #474's --capability business, not the
+    registry read)."""
     _only_st_claude_json(kunglao_ws)
     (kunglao_ws.parent / "fake-claude.json").write_text(json.dumps({
         "mcpServers": {
@@ -859,5 +864,9 @@ def test_android_native_so_decompiler_passes_via_mcp(fake_bin, kunglao_ws,
     data = json.loads(r.stdout)
     decomp = next(c for c in data["checks"] if c["name"] == "decompiler")
     assert decomp["status"] == "WARN", decomp
+    assert decomp["supply"] == "ida-pro-vm", decomp
+    assert decomp["skipped"] == ["idat64", "analyzeHeadless"], decomp
     assert "via MCP (ida-pro-vm)" in decomp["detail"], decomp
     assert "capability unverified" in decomp["detail"], decomp
+    # the XOR family never emits a parallel ida/ghidra item
+    assert not [c for c in data["checks"] if c["name"] in ("ida", "ghidra")]
