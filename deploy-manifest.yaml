@@ -379,7 +379,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: c6caaae1013329b6d32dd57cc776b249cb98f359411415951b20ffc1c6a4b354
+    sha256: adcee8d1d02cafab763c197ae6bb2d6f00e920af072d85c2a4cde576a5a4986f
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -615,7 +615,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: 67f00dcf457e28479a271d5a16ad2621bc9609028797d837ec60b25025a3dc57
+    sha256: ea00b83aff92aaa74662ba05fddaf1a18dbfdbbc2f68117bff09521841945a1d
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -628,6 +628,10 @@ files:
     dest: .claude/scripts/provider_health.py
     kind: scaffold
     sha256: b9f92d9eea4ed322c0be131f7186cf7424021aaeec22abdbf3e91dfb61cdd68c
+  - src: scripts/rank_face.py
+    dest: .claude/scripts/rank_face.py
+    kind: scaffold
+    sha256: 3ce63798ace6d03b6f71108e8e8fd2dec80abd2d877b537dcf656f6e2e8e0d31
   - src: scripts/re_pin_references.py
     dest: .claude/scripts/re_pin_references.py
     kind: scaffold
@@ -735,7 +739,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: 573f5167217e4904681c6a8dab64125437adfa011f3b479a9db9b54c77faa44b
+    sha256: 19c4b19eeb73017df62bb6f967f5c6073080f2994367a45332a4fedf726e46f1
   - src: scripts/structural_check.py
     dest: .claude/scripts/structural_check.py
     kind: scaffold
@@ -847,7 +851,7 @@ files:
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
-    sha256: 4cb5bbed5cb3cf9dac508a0edb48422d865e5ede55934cb700198029a37f6739
+    sha256: 96cdba73507676da987e1701bbe0761f01d3ea2f8f23b4849095ac84dd407092
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
