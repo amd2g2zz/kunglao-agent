@@ -781,11 +781,29 @@ def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
     ]
 
 
+def migrate_to_0_1_5(ws: Path, dry: bool) -> list[str]:
+    """v0.1.4 -> current: frame-currency + honest stamps (G3/G4 carry).
+
+    The 0.1.5 train ships no new deploy-surface repairs, but the per-version
+    registry convention still demands a fresh entry: without one
+    an ALREADY-0.1.4-stamped workspace plans zero migrations, the G3
+    merge and the stamp carry never run, and the G4 tail gate — which
+    trusts the plan to carry the stamp face — leaves the workspace
+    honestly stuck on 0.1.4 stamps. Same carry pair as 0.1.4's tail:
+    the G3 merge (frame currency; refuses-and-warns on a stale body)
+    followed by the G4-gated quiet stamp."""
+    return [
+        _item_claudemd_merge(ws, dry),                 # G3/T2/A3 carry
+        _item_template_stamp_refresh_quiet(ws, dry),   # G4-gated carry
+    ]
+
+
 # Linear registry: every version that needs a migration step beyond
 # "re-stamp" (the stamp refresh itself is carried by the LAST migration).
 MIGRATIONS: list[tuple[str, MigrationFn]] = [
     ("0.1.3", migrate_to_0_1_3),
     ("0.1.4", migrate_to_0_1_4),   # #755 deploy-surface completion (T6)
+    ("0.1.5", migrate_to_0_1_5),   # G3 merge + G4 stamp carry
 ]
 
 

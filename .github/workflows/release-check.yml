@@ -40,7 +40,7 @@ jobs:
     # with "command not found" — the python-3.11 label pins the right host.
     runs-on: [self-hosted, python-3.11]
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Ensure git (baseline replay + receipt need it on gitless runners)
       run: |
@@ -87,7 +87,7 @@ jobs:
   docs-contract:
     runs-on: [self-hosted, python-3.11]
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Ensure git
       run: |
@@ -113,7 +113,7 @@ jobs:
   unit-fast:
     runs-on: [self-hosted, python-3.11]
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Ensure git
       run: |
@@ -140,7 +140,7 @@ jobs:
 
     - name: Upload fast-tier junit (observation artifact)
       continue-on-error: true
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: pytest-fast-junit-${{ github.sha }}
         path: .pytest-fast.xml
@@ -149,7 +149,7 @@ jobs:
   integration:
     runs-on: [self-hosted, python-3.11]
     steps:
-    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Ensure git
       run: |
@@ -181,7 +181,7 @@ jobs:
 
     - name: Upload coverage report (observation only, #463)
       continue-on-error: true
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: coverage-${{ github.sha }}
         path: coverage.xml
@@ -210,7 +210,7 @@ jobs:
       # observation artifact, not a gate — self-hosted runners hit transient
       # ECONNRESET on the artifacts endpoint; the receipt is also printed in logs
       continue-on-error: true
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: release-receipt-${{ github.sha }}
         path: release-receipt.json

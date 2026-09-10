@@ -58,6 +58,8 @@ sys.path.insert(0, str(SCRIPTS))
 # responsibilities derived from agents/*.md, Project layout from the
 # scaffold contract, the per-type Quick start scaffold, Keeping this
 # handbook alive); budgets pinned by tests/test_claudemd_handbook_920.py.
+# 2026-09-10 regen (v0.1.5 release bump): the open-marker version line
+# only (kunglao:frame:v0.1.4 -> v0.1.5); every frame body byte unchanged.
 # 2026-09-10 regen (202 + uv scope): the runtime-contract block (learning-
 # plugin countermand) joined the header; the four executable instruction
 # lines moved to the uv-run form (`uv run --project {{skill_dir}} python

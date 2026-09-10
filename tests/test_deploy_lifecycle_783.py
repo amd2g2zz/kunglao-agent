@@ -272,9 +272,11 @@ def test_check_stale_untouched_without_deployed_copies(tmp_path: Path):
 # ---------------------------------------------------------------------------
 
 def _early_exit_ws(tmp_path: Path, tag: str) -> Path:
-    """Deployed workspace stamped ABOVE the skill target so upgrade()
-    takes the already-at-version early-exit path (plan empty)."""
-    return _deployed_ws(tmp_path, stamp="0.1.4", tag=tag)
+    """Deployed workspace stamped AT the skill target so upgrade()
+    takes the already-at-version early-exit path (plan empty). The
+    stamp tracks read_skill_version() — a hardcoded release pin would
+    silently fall below the target on the next bump."""
+    return _deployed_ws(tmp_path, tag=tag)
 
 
 def test_upgrade_early_exit_refreshes_copies_and_carrier(tmp_path: Path):
