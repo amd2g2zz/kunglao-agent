@@ -140,6 +140,34 @@ DEFAULT_MANIFEST_BASIS = ("no env-facts, no task_spec — conservative "
 
 
 @dataclass(frozen=True)
+class MemGateFact:
+    """Android memory-gate verdict recorded at init (issue 215).
+
+    A workspace PROBE fact, not a policy: the provider router reads the
+    authoritative copy from evidence/apk_mem_gate.json; this is the
+    documentation/env-facts mirror so an agent reading the environment
+    section sees the decompile-provider budget state without re-running
+    the gate. Verdict vocabulary: the tool's own four (jadx-ok /
+    targeted-jadx / smali-only / refuse) plus `unavailable` — the
+    recording-side value for "the probe could not run" (the tool never
+    emits it; a missing verdict must be visible, not silently absent).
+    """
+    verdict: str
+    est_heap_gb: float | None = None
+    budget_gb: float | None = None
+    reason: str = ""
+
+
+# Closed recording vocabulary (issue 215). The producer is
+# tools/static/apk_mem_gate.py; `unavailable` is added by the recorder.
+MEM_GATE_VERDICTS = ("jadx-ok", "targeted-jadx", "smali-only", "refuse",
+                     "unavailable")
+# The verdicts that satisfy the jadx provider precondition (mirror of
+# route_capability.MEM_GATE_JADX_OK — the router holds the routing copy).
+MEM_GATE_JADX_OK = ("jadx-ok", "targeted-jadx")
+
+
+@dataclass(frozen=True)
 class EnvManifest:
     """Resolved environment fact set (all five #450 fact families + the
     layout conventions + the derived requirement)."""
@@ -149,6 +177,7 @@ class EnvManifest:
     guest_channel: GuestChannel = DEFAULT_GUEST_CHANNEL
     layout: LayoutConventions = DEFAULT_LAYOUT
     source: str = "default"  # manifest-file | task-spec | default
+    mem_gate: MemGateFact | None = None
 
 
 DEFAULT_MANIFEST = EnvManifest()
@@ -283,6 +312,39 @@ def _parse_guest_channel(raw) -> GuestChannel:
                         notes=raw.get("notes") or None)
 
 
+def _parse_mem_gate(raw) -> MemGateFact | None:
+    """Parse the recorded android memory-gate fact; None when unrecorded.
+
+    Fail-closed on defect (same family as _parse_layout): a present-but-
+    garbage entry must not silently read as "no verdict recorded" — an
+    unknown verdict in particular is a defect, never a downgraded pass.
+    """
+    if raw is None:
+        return None
+    _require_mapping(raw, "mem_gate")
+    verdict = raw.get("verdict")
+    if not isinstance(verdict, str) or not verdict.strip():
+        raise ValueError("mem_gate.verdict must be a non-empty string")
+    if verdict not in MEM_GATE_VERDICTS:
+        raise ValueError(
+            f"mem_gate.verdict {verdict!r} outside the recording vocabulary "
+            f"{MEM_GATE_VERDICTS}")
+    nums: dict[str, float | None] = {}
+    for key in ("est_heap_gb", "budget_gb"):
+        value = raw.get(key)
+        if value is None:
+            nums[key] = None
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"mem_gate.{key} must be a number")
+        nums[key] = float(value)
+    reason = raw.get("reason") or ""
+    if not isinstance(reason, str):
+        raise ValueError("mem_gate.reason must be a string")
+    return MemGateFact(verdict=verdict, est_heap_gb=nums["est_heap_gb"],
+                       budget_gb=nums["budget_gb"], reason=reason)
+
+
 def _parse_layout(raw) -> LayoutConventions:
     """Per-field merge over DEFAULT_LAYOUT; present-but-empty/garbage
     fields are a DEFECT (they would silently change discovery), not a
@@ -351,6 +413,7 @@ def resolve(ws: Path) -> EnvManifest:
             vm=_parse_vm(raw.get("vm")),
             guest_channel=_parse_guest_channel(raw.get("guest_channel")),
             layout=_parse_layout(raw.get("layout")),
+            mem_gate=_parse_mem_gate(raw.get("mem_gate")),
             source="task-spec" if derived.source == "task-spec"
             else "manifest-file")
     return EnvManifest(
@@ -359,6 +422,7 @@ def resolve(ws: Path) -> EnvManifest:
         vm=_parse_vm(raw.get("vm")),
         guest_channel=_parse_guest_channel(raw.get("guest_channel")),
         layout=_parse_layout(raw.get("layout")),
+        mem_gate=_parse_mem_gate(raw.get("mem_gate")),
         source="manifest-file")
 
 
@@ -520,7 +584,33 @@ def render_section(m: EnvManifest) -> str:
     lines.append(_channel_line(m))
     if m.vm.frida_start:
         lines.append(f"- frida start: {m.vm.frida_start}")
+    lines.append(_mem_gate_line(m))
     return "\n".join(lines) + "\n"
+
+
+def _mem_gate_line(m: EnvManifest) -> str:
+    """Android memory-gate verdict line (issue 215). Absent fact -> honest
+    unknown + the exact command that records it (never an invented budget)."""
+    if m.mem_gate is None:
+        return ("- APK memory gate: unknown — run `python "
+                "tools/static/apk_mem_gate.py <workspace> <target>` (init "
+                "records the verdict for an aligned android target)")
+    parts = []
+    if m.mem_gate.est_heap_gb is not None:
+        parts.append(f"est {m.mem_gate.est_heap_gb} GB")
+    if m.mem_gate.budget_gb is not None:
+        parts.append(f"budget {m.mem_gate.budget_gb} GB")
+    if m.mem_gate.verdict in MEM_GATE_JADX_OK:
+        parts.append("jadx-ok: the jadx provider precondition is satisfied")
+    elif m.mem_gate.verdict == "refuse":
+        parts.append("no decompile path at this budget; do not dispatch jadx")
+    else:
+        parts.append("jadx blocked: use baksmali / dexdc, never string triage "
+                     "for algorithm claims")
+    if m.mem_gate.reason:
+        parts.append(m.mem_gate.reason)
+    detail = f" ({', '.join(parts)})" if parts else ""
+    return f"- APK memory gate: {m.mem_gate.verdict}{detail}"
 
 
 # ---------- probe: minimal discovery entry (fail-open) ----------
@@ -686,6 +776,61 @@ def record_installed(ws: Path, name: str, manager: str, reprobe: str,
     installed = dict(merged.get("installed") or {})
     installed[name] = entry           # per-tool update-wins (docstring)
     merged["installed"] = installed
+    path.write_text(yaml.safe_dump(merged, sort_keys=False,
+                                   allow_unicode=True), encoding="utf-8")
+    return True
+
+
+def record_mem_gate(ws: Path, verdict: str, *,
+                    est_heap_gb: float | None = None,
+                    budget_gb: float | None = None,
+                    reason: str = "", at: str | None = None) -> bool:
+    """Merge the android memory-gate verdict into <ws>/env-facts.yaml
+    (issue 215) — same write-through shape as record_installed.
+
+    mem_gate = {verdict, est_heap_gb, budget_gb, reason, at}: the init
+    probe's record of what the gate said, so the environment section and
+    the analysis loop read one fact instead of re-deriving a budget.
+    UPDATE-WINS on this one key (a re-probe replaces the stale verdict —
+    the memory state of the host is exactly what changes between runs);
+    every other top-level key survives untouched.
+
+    Raises ValueError on a verdict outside the recording vocabulary
+    (fail-closed family); returns False with stderr guidance — nothing
+    written — when the existing file is a defect (refuse-to-clobber).
+    """
+    if not isinstance(verdict, str) or not verdict.strip():
+        raise ValueError(f"mem-gate verdict must be a non-empty string, "
+                         f"got {verdict!r}")
+    if verdict not in MEM_GATE_VERDICTS:
+        raise ValueError(f"mem-gate verdict {verdict!r} outside the "
+                         f"recording vocabulary {MEM_GATE_VERDICTS}")
+    for label, value in (("est_heap_gb", est_heap_gb),
+                         ("budget_gb", budget_gb)):
+        if value is not None and (isinstance(value, bool)
+                                  or not isinstance(value, (int, float))):
+            raise ValueError(f"mem-gate {label} must be a number, "
+                             f"got {value!r}")
+    path = Path(ws) / MANIFEST_FILENAME
+    existing: dict | None = None
+    if path.exists():
+        try:
+            existing = _load_manifest_file(path)
+        except ValueError as exc:
+            print(f"ERROR: {exc} — memory-gate fact refusing to overwrite "
+                  f"(fix {path} by hand)", file=sys.stderr)
+            return False
+    from datetime import datetime, timezone
+    entry = {
+        "verdict": verdict,
+        "est_heap_gb": est_heap_gb,
+        "budget_gb": budget_gb,
+        "reason": reason or "",
+        "at": at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    merged = dict(existing or {})
+    merged["version"] = MANIFEST_VERSION
+    merged["mem_gate"] = entry
     path.write_text(yaml.safe_dump(merged, sort_keys=False,
                                    allow_unicode=True), encoding="utf-8")
     return True

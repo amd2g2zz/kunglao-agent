@@ -61,7 +61,8 @@ def ws(tmp_path: Path) -> Path:
     (ev / "apk_mem_gate.json").write_text(
         json.dumps({"verdict": "smali-only"}), encoding="utf-8")
     (ev / "tool-probes.json").write_text(json.dumps({
-        "jadx_bin": True, "dexdc_wheel": True, "smali_toolchain": True}),
+        "jadx_bin": True, "dexdc_wheel": True, "smali_toolchain": True,
+        "jvm": True}),
         encoding="utf-8")
     (ws / "facts").mkdir()
     (ws / "facts" / "_INDEX.md").write_text(
