@@ -29,6 +29,9 @@ verification_method: ""      # reproduction | replay-evidence | static | manual
                              #   required); static / manual do not
 
 primary_questions:            # MUST answer — convergence hard conditions C0/C0b
+  # Example shape (malware lane — replace it): a yes/no question with an
+  # evidence basis. Non-malware lanes phrase the same field for their
+  # material (e.g. "which state machine drives the rolling key?").
   - id: q1
     q: "<the question, e.g. does the sample belong to the Vidar family?>"
     need: yes_no_with_evidence   # yes_no_with_evidence | protocol_description | model_selection

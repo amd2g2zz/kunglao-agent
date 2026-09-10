@@ -1295,7 +1295,7 @@ files:
   - src: templates/state/task_spec.yaml
     dest: .claude/templates/state/task_spec.yaml
     kind: asset
-    sha256: c683b4d090336d7a66da8ff7eb1da5d0156c43436d0fb94375f83462f23b9ef0
+    sha256: 066feb82b9f61d78a7c39a45ae0dcf52596324ec19aabac8c877229fca3b7ecb
   - src: templates/unidbg/harness.java.tmpl
     dest: .claude/templates/unidbg/harness.java.tmpl
     kind: asset
