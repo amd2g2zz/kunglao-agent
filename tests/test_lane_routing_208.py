@@ -383,6 +383,53 @@ def test_malware_dispatch_is_unchanged_by_the_lane_gate(tmp_path):
     assert "corpora" not in [i.name for i in legacy.items]
 
 
+def test_unreadable_material_dir_degrades_to_warn_not_a_crash(tmp_path):
+    """Finding 3 repro (issue 225): an unreadable material dir made
+    iterdir() raise PermissionError straight out of toolchain.check (raw
+    traceback at the init call site). The probe degrades to WARN with a
+    readable detail, mirroring every other probe failure."""
+    import toolchain
+    if getattr(os, "geteuid", lambda: 1)() == 0:
+        pytest.skip("permission bits do not bind root")
+    ws = tmp_path / "ws"
+    (ws / "corpora").mkdir(parents=True)
+    (ws / "corpora" / "pair.txt").write_text("x", encoding="utf-8")
+    os.chmod(ws / "corpora", 0)
+    try:
+        report = toolchain.check(ws, "linux", lane="algorithm")
+        corpora = next(i for i in report.items if i.name == "corpora")
+        assert corpora.status == toolchain.Status.WARN, corpora
+        assert "unreadable" in corpora.detail.lower(), corpora.detail
+    finally:
+        os.chmod(ws / "corpora", 0o700)
+
+
+def test_invalid_lane_value_fails_closed_never_malware(tmp_path):
+    """Finding 4 repro (issue 225): an invalid lane value silently fell
+    through normalize()->None into the malware check set (17 malware items),
+    contradicting the fail-closed comment. It must fail closed with a
+    clear error instead — never a silent malware fallback."""
+    import toolchain
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    with pytest.raises(ValueError) as excinfo:
+        toolchain.check(ws, "linux", task_spec={"lane": "algorthm"})
+    assert "algorthm" in str(excinfo.value)
+
+
+@pytest.mark.parametrize("spec", [{}, {"lane": None}, {"lane": ""}])
+def test_absent_lane_stays_the_legacy_malware_set(tmp_path, spec):
+    """Hard acceptance: an ABSENT lane (no key / null / blank) keeps the
+    per-type malware dispatch byte-for-byte — never a refusal."""
+    import toolchain
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    report = toolchain.check(ws, "windows", task_spec=spec)
+    names = [i.name for i in report.items]
+    assert "corpora" not in names
+    assert "decompiler" in names, f"{spec}: malware dispatch lost"
+
+
 def test_required_checks_has_no_malware_entry():
     """Single source: the malware lane is absent from the per-lane sets on
     purpose (it keeps the per-type CHECK_SETS dispatch)."""

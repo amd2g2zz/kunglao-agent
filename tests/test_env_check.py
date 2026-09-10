@@ -475,8 +475,36 @@ def test_venv_probe_dispatches_through_uv_project(monkeypatch, tmp_path):
     ok, detail = env_check.check_venv_sample(ws, None)
     assert ok is True, detail
     assert detail == "uv env OK (yaml)"
-    assert seen == [["/fake/bin/uv", "run", "--project", str(skill_root),
-                     "python", "-c", "import yaml"]], seen
+    assert seen == [["/fake/bin/uv", "run", "--locked", "--project",
+                     str(skill_root), "python", "-c", "import yaml"]], seen
+
+
+def test_venv_probe_pins_the_lock_so_a_probe_never_relocks(
+        monkeypatch, tmp_path):
+    """Finding 10 (issue 225): `uv run` WITHOUT --locked re-locks the
+    project — it rewrites <skill_root>/uv.lock + .venv and PASSes drift
+    that `uv sync --locked` rejects. The probe must run `uv run --locked`
+    (the env still syncs from the lock; the lock is never mutated)."""
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.delenv(FLAG_NAME, raising=False)
+    import env_check
+    skill_root = tmp_path / "skill-root"
+    monkeypatch.setattr(env_check, "SKILL_DIR", skill_root)
+    seen: list[list[str]] = []
+    monkeypatch.setattr(env_check.shutil, "which",
+                        lambda name: "/fake/bin/uv" if name == "uv" else None)
+
+    def _capture(argv, **kwargs):
+        seen.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(env_check.subprocess, "run", _capture)
+
+    ok, detail = env_check.check_venv_sample(ws, None)
+    assert ok is True, detail
+    assert seen, "the probe must run"
+    assert "--locked" in seen[0], seen
+    assert seen[0][:3] == ["/fake/bin/uv", "run", "--locked"], seen
 
 
 def test_venv_probe_uv_missing_fails_naming_uv_layer(monkeypatch, tmp_path):

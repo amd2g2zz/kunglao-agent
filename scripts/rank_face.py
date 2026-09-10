@@ -61,6 +61,10 @@ def _now_z() -> str:
 def write_fail_marker(ws, error) -> None:
     """Record ONE failed rank_feeds emit (timestamp + error class).
 
+    `error` is an exception (its class name is recorded) or a short label
+    string for a failure that has no exception object — e.g. the writer
+    reporting a failed write with False.
+
     Best-effort by contract: the marker is observability, never a ranking
     dependency, so it must not be able to raise into the ranker's fail-open
     path."""
@@ -68,7 +72,8 @@ def write_fail_marker(ws, error) -> None:
         p = Path(ws) / MARKER_REL
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({"ts": _now_z(),
-                                 "error": type(error).__name__},
+                                 "error": (error if isinstance(error, str)
+                                           else type(error).__name__)},
                                 ensure_ascii=False) + "\n",
                      encoding="utf-8")
     except Exception:  # noqa: BLE001 — the marker never breaks its caller
@@ -105,8 +110,11 @@ def emit_health(ws) -> dict:
 
 def _tail_rows(ws) -> list[dict]:
     """Parsed rows from the last 64KB of the newest day file (bounded read;
-    a possibly-partial first line is dropped). [] on any read failure."""
+    a possibly-partial first line is dropped ONLY when the window actually
+    starts mid-file — a complete first line in a small file survives).
+    [] on any read failure."""
     logs = Path(ws) / LOG_DIR_REL
+    start = 0
     try:
         latest = max((p for p in logs.glob("kunglao-*.jsonl") if p.is_file()),
                      key=lambda p: p.stat().st_mtime, default=None)
@@ -115,13 +123,15 @@ def _tail_rows(ws) -> list[dict]:
         with latest.open("rb") as f:
             f.seek(0, os.SEEK_END)
             size = f.tell()
-            f.seek(max(0, size - TAIL_BYTES))
+            start = max(0, size - TAIL_BYTES)
+            f.seek(start)
             tail = f.read().decode("utf-8", errors="replace")
     except OSError:
         return []
     lines = tail.splitlines()
-    if len(lines) > 1:
-        lines = lines[1:]  # drop possibly-partial first line
+    if start > 0:
+        # the window began mid-file, so line 1 is possibly partial
+        lines = lines[1:]
     rows: list[dict] = []
     for line in lines:
         try:

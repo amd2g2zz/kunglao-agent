@@ -130,6 +130,23 @@ release (see the mapping table at the end).
   `kunglao-redteam`) declare `lane: malware` and are refused at dispatch
   (PreToolUse lane gate, structured REJECT naming agent + lane + routing
   fix) on any workspace declaring another lane.
+- **Patch1 train review findings — rank health, lint normalization, lane
+  guards, locked uv probe (#225)**: the adversarial review of the
+  v0.1.5-Patch1 train reproduced ten defects; each is closed with a
+  RED-first test. The rank emit-health marker now fires on the REAL writer
+  failure (`kunglao_log.emit` returns success — a failed write sets the
+  marker instead of clearing prior fault evidence) and the bounded tail
+  read keeps a complete first line in a small day file; the statusline
+  hides the rank chip rather than fabricating `0.00` from a null score;
+  `decision_lint` folds case/separators (IDAPRO / ida-pro / wheel paths)
+  and arch aliases (x64 ≡ amd64, aarch64 ≡ arm64), never blocks on an
+  uninstall or on undecodable stdin; `toolchain` degrades an unreadable
+  material dir to WARN and fails closed on an invalid lane value;
+  `register_proven_gate` folds hyphenated scope spellings
+  (`key-schedule` / `state-machine`); init persists the probed results to
+  `evidence/tool-probes.json`, so a probed-false JVM blocks the jadx
+  provider as advertised; the env probe runs `uv run --locked`, which
+  keeps the lock sha unchanged across a probe run (#225).
 
 ## [0.1.3] - 2026-08-25
 

@@ -200,6 +200,40 @@ class TestRankEmitFailOpen:
         assert not marker.exists()
         assert sls.build_snapshot(ws)["rank_log"]["ok"] is True
 
+    def test_real_writer_failure_marks_and_never_erases_prior_evidence(
+            self, tmp_path):
+        """Finding 1 repro (issue 225): the ledger day-file path is a
+        DIRECTORY, so the REAL writer fails. emit() must report that failure
+        — the marker is SET (prior fault evidence survives) and rank_log is
+        ok:False; the ranking result stays byte-identical (fail-open)."""
+        ws = _make_ws(tmp_path)
+        baseline = _run_rank(ws)                  # clean run, marker absent
+        marker = ws / "runs" / ".rank-emit-fail.json"
+        assert not marker.exists()
+
+        # the reviewer's repro: the day file cannot be a file — make it a dir
+        day_file = kunglao_log.log_path(ws)
+        day_file.unlink()
+        day_file.mkdir()
+
+        # prior fault evidence: a failed attempt must not erase the marker
+        rank_face.write_fail_marker(ws, RuntimeError("earlier failure"))
+        crashed = _run_rank(ws)
+        assert [(a.claim_id, a.score) for a in crashed] == \
+            [(a.claim_id, a.score) for a in baseline], \
+            "the ranking result must stay untouched (fail-open)"
+        assert marker.exists(), \
+            "a real write failure must leave the marker (never clear it)"
+        snap = sls.build_snapshot(ws)
+        assert snap["rank_log"]["ok"] is False, snap["rank_log"]
+        assert snap["rank_log"]["error"], snap["rank_log"]
+
+        # a real success clears the marker again (last-attempt semantics)
+        day_file.rmdir()
+        _run_rank(ws)
+        assert not marker.exists()
+        assert sls.build_snapshot(ws)["rank_log"]["ok"] is True
+
     def test_marker_write_leaves_the_rank_feeds_payload_byte_identical(
             self, tmp_path, monkeypatch):
         """The emit payload is built BEFORE the crash face — the marker
@@ -221,6 +255,42 @@ class TestRankEmitFailOpen:
         _run_rank(ws)                                  # recorded + written
         assert len(captured) == 2
         assert captured[0] == captured[1]
+
+
+class TestTailReadBoundary:
+    """Finding 5 (issue 225): the bounded tail read drops a possibly-partial
+    FIRST line only when the window actually starts mid-file. A complete
+    first line in a day file smaller than the window must survive."""
+
+    def test_complete_first_line_survives_a_small_day_file(self, tmp_path):
+        ws = _make_ws(tmp_path)
+        _seed_rank_event(ws, ranked_order=("C-9",), scores={"C-9": 0.5})
+        # a second row keeps the file far below the 64KB window while the
+        # rank row no longer sits alone (the reviewer's repro shape)
+        log = kunglao_log.log_path(ws)
+        with log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "ts": _iso(datetime.now(timezone.utc)),
+                "actor": "hook", "action": "heartbeat"}) + "\n")
+        assert log.stat().st_size < rank_face.TAIL_BYTES
+        actions = [r.get("action") for r in rank_face._tail_rows(ws)]
+        assert actions == ["rank_feeds", "heartbeat"], actions
+        face = rank_face.latest_rank(ws)
+        assert face["claim"] == "C-9", face
+        assert face["stale"] is False, face
+
+    def test_partial_first_line_still_dropped_past_the_window(self, tmp_path):
+        """The drop rule survives for real: a window that starts mid-file
+        still discards its partial first line (no JSON garbage row)."""
+        ws = _make_ws(tmp_path)
+        log = kunglao_log.log_path(ws)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with log.open("w", encoding="utf-8") as f:
+            f.write("x" * (rank_face.TAIL_BYTES + 10_000) + "\n")
+        _seed_rank_event(ws, ranked_order=("C-9",), scores={"C-9": 0.5})
+        assert log.stat().st_size > rank_face.TAIL_BYTES
+        face = rank_face.latest_rank(ws)
+        assert face["claim"] == "C-9", face
 
 
 # ===========================================================================
@@ -353,6 +423,31 @@ class TestRankRenderer:
         assert out.strip(), "the line still renders"
         assert "R:" not in out
         assert "R✖" not in out
+
+    @pytest.mark.parametrize("score_present,score", [
+        (True, None),          # producer's null score (JSON null)
+        (False, None),         # key absent entirely
+        (True, "not-a-number"),
+    ])
+    def test_missing_score_hides_the_chip_never_a_fabricated_zero(
+            self, tmp_path, score_present, score):
+        """Finding 6 (issue 225): `Number(null) === 0` rendered a fabricated
+        `R:C-2 0.00`. A null/undefined/unusable score hides the chip (the
+        absent face), it never invents a value."""
+        ws = _make_ws(tmp_path)
+        rank = {"claim": "C-2", "ts": _iso(datetime.now(timezone.utc)),
+                "age_s": 3.0, "stale": False}
+        if score_present:
+            rank["score"] = score
+        _write_snapshot(ws, _snap(rank=rank,
+                                  rank_log={"ok": True, "error": None,
+                                            "ts": None}))
+        r = _run_renderer(ws)
+        assert r.returncode == 0, r.stderr
+        out = ANSI_RE.sub("", r.stdout)
+        assert "0.00" not in out, out
+        assert "R:" not in out, out
+        assert "R✖" not in out, out
 
 
 def color_prefix(stdout: str, idx: int, window: int = 20) -> str:

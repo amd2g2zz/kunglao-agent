@@ -34,11 +34,24 @@ from dataclasses import dataclass, field
 # the binding refuses to import against it.
 _MAX_IDAPRO_PY = (3, 13)
 
+# Canonical arch families. Only spellings listed here are judgeable — an
+# unmatched alias (e.g. a new target name) degrades to a note, never to a
+# block (see _judge_arch).
 _ARCH_ALIASES = {
     "amd64": "x86_64",
     "x86-64": "x86_64",
+    "x86_64": "x86_64",
+    "x64": "x86_64",
     "aarch64": "arm64",
+    "arm64": "arm64",
 }
+
+# The action must be an install for the install rules to apply; a removal
+# (`pip uninstall idapro`) is the repair, never the mistake.
+_INSTALL_VERBS = frozenset({"install", "add"})
+_UNINSTALL_VERBS = frozenset({"uninstall", "remove", "purge"})
+
+_SEP_RE = re.compile(r"[-_.]+")
 
 
 @dataclass
@@ -54,9 +67,9 @@ class Verdict:
     matrix: list[str] = field(default_factory=list)
 
 
-def _norm_arch(value: str) -> str:
-    v = str(value).strip().lower()
-    return _ARCH_ALIASES.get(v, v)
+def _norm_arch(value) -> str | None:
+    """Canonical arch family for a known alias spelling, else None."""
+    return _ARCH_ALIASES.get(str(value).strip().lower())
 
 
 def _parse_py(value) -> tuple[int, int] | None:
@@ -75,7 +88,38 @@ def _judge_arch(value, facts) -> str | None:
     other = facts.get("python_arch")
     if not other:
         return None  # one side missing -> cannot judge -> note
-    return "VIOLATION" if _norm_arch(value) != _norm_arch(other) else "OK"
+    mine, theirs = _norm_arch(value), _norm_arch(other)
+    if mine is None or theirs is None:
+        return None  # unmatched alias spelling -> note, never a block
+    return "VIOLATION" if mine != theirs else "OK"
+
+
+def _fold_separators(token: str) -> str:
+    """A token with -, _ and . removed (IDAPRO / ida-pro / ida_pro fold to
+    one identity)."""
+    return _SEP_RE.sub("", token)
+
+
+def _matches_package(token: str, package: str) -> bool:
+    """Case- and separator-insensitive package identity: IDAPRO, ida-pro and
+    a ./idapro-9.0.whl path all identify the idapro package."""
+    name = token.strip().lower().rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    if not name:
+        return False
+    if _fold_separators(name) == _fold_separators(package):
+        return True
+    # a version/medium-suffixed spelling: <package>-9.0.whl, <package>.zip
+    return bool(re.match(rf"{re.escape(package)}[-_.]", name))
+
+
+def _is_install_action(tokens: list[str]) -> bool:
+    """True when the action installs packages. Removal verbs are never
+    judged — the lint exists to stop a bad INSTALL, not a repair."""
+    words = {t.strip().lower() for t in tokens}
+    if words & _UNINSTALL_VERBS:
+        return False
+    return bool(words & _INSTALL_VERBS)
+
 
 
 # rules table: package -> (fact_key, demand text, judge) entries.
@@ -99,9 +143,14 @@ def check(action: str, facts: dict) -> Verdict:
     """
     facts = facts or {}
     verdict = Verdict(blocked=False)
-    tokens = set(re.findall(r"[A-Za-z0-9_][A-Za-z0-9_.-]*", action or ""))
+    tokens = re.findall(r"[A-Za-z0-9_][A-Za-z0-9_.\-]*", action or "")
+    if not _is_install_action(tokens):
+        verdict.reasons.append(
+            "note: action is not a package install — no install rule "
+            "applies (removals are never blocked); OK (unknowns never block)")
+        return verdict
     rules = {pkg: entries for pkg, entries in _RULES.items()
-             if pkg in tokens}
+             if any(_matches_package(t, pkg) for t in tokens)}
     if not rules:
         verdict.reasons.append(
             "note: no compatibility rule matches this action — OK "
@@ -135,18 +184,36 @@ def check(action: str, facts: dict) -> Verdict:
     return verdict
 
 
+def _read_facts(raw: bytes) -> dict | None:
+    """Facts parsed from raw stdin bytes; None on bad input (exit 2).
+
+    Undecodable bytes are NOT bad input and NOT a block: they read as an
+    empty fact set (unknowns never block), so a non-UTF-8 producer stream
+    cannot turn into BLOCKED-by-crash semantics."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        print(f"warning: facts stdin is not valid UTF-8 ({exc}) — no facts "
+              f"read; an unreadable fact set never blocks", file=sys.stderr)
+        return {}
+    try:
+        facts = json.loads(text or "{}")
+    except json.JSONDecodeError as exc:
+        print(f"facts must be a JSON object on stdin: {exc}", file=sys.stderr)
+        return None
+    if not isinstance(facts, dict):
+        print("facts must be a JSON object on stdin", file=sys.stderr)
+        return None
+    return facts
+
+
 def _main(argv: list[str]) -> int:
     if len(argv) != 2:
         print('usage: echo \'{"fact": "value"}\' | '
               'python scripts/decision_lint.py "<action>"', file=sys.stderr)
         return 2
-    try:
-        facts = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError as exc:
-        print(f"facts must be a JSON object on stdin: {exc}", file=sys.stderr)
-        return 2
-    if not isinstance(facts, dict):
-        print("facts must be a JSON object on stdin", file=sys.stderr)
+    facts = _read_facts(sys.stdin.buffer.read())
+    if facts is None:
         return 2
     verdict = check(argv[1], facts)
     for line in verdict.matrix:

@@ -132,6 +132,64 @@ def test_missing_probe_evidence_is_unverified_not_blocked(tmp_path):
     assert "jadx_bin" in jadx["unverified_reason"]
 
 
+# ---------- finding 7 (issue 225): init-written probes reach the router ----
+
+def test_writer_persisted_probes_block_a_probed_false_jvm(tmp_path):
+    """evidence/tool-probes.json had NO production writer, so the `jvm`
+    token could only ever be `unverified` and the advertised "probed-false
+    JVM BLOCKS the provider" could not fire. The writer persists the REAL
+    probe answers; a probed-false JVM then BLOCKS the jadx provider."""
+    import toolchain as tc
+
+    ws = _ws(tmp_path, mem_verdict="jadx-ok")        # no tool-probes.json
+    before = next(p for p in _select(ws)["providers"]
+                  if p["provider"] == "jadx")
+    assert before["status"] == "unverified"          # precondition: no evidence
+
+    report = tc.ToolchainReport(project_type="android", items=[
+        tc.CheckResult(name="jvm", status=tc.Status.FAIL, tier=tc.Tier.WARN,
+                       detail="java not found"),
+        tc.CheckResult(name="jadx", status=tc.Status.PASS, tier=tc.Tier.HARD,
+                       detail="found"),
+    ])
+    path = tc.persist_tool_probes(ws, report)
+    assert path == ws / "evidence" / "tool-probes.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    assert doc == {"jadx_bin": True, "jvm": False}, doc
+
+    blocked = next(p for p in _select(ws)["providers"]
+                   if p["provider"] == "jadx")
+    assert blocked["status"] == "blocked", blocked
+    assert "jvm" in blocked["blocked_reason"], blocked
+
+
+def test_writer_persisted_probes_admit_a_probed_true_jvm(tmp_path):
+    import toolchain as tc
+
+    ws = _ws(tmp_path, mem_verdict="jadx-ok")
+    report = tc.ToolchainReport(project_type="android", items=[
+        tc.CheckResult(name="jvm", status=tc.Status.PASS, tier=tc.Tier.WARN,
+                       detail="java found"),
+        tc.CheckResult(name="jadx", status=tc.Status.PASS, tier=tc.Tier.HARD,
+                       detail="found"),
+    ])
+    tc.persist_tool_probes(ws, report)
+    jadx = next(p for p in _select(ws)["providers"] if p["provider"] == "jadx")
+    assert jadx["status"] == "available", jadx
+
+
+def test_writer_never_fabricates_a_token_the_report_did_not_probe(tmp_path):
+    """Only probed items are written — a lane/type whose report carries no
+    jvm item leaves the file absent (the token stays `unverified`, never a
+    guessed answer)."""
+    import toolchain as tc
+
+    ws = _ws(tmp_path)
+    report = tc.ToolchainReport(project_type="linux", items=[])
+    assert tc.persist_tool_probes(ws, report) is None
+    assert not (ws / "evidence" / "tool-probes.json").exists()
+
+
 def test_selection_never_runs_environment_probes(tmp_path):
     """load_workspace_state reads FILES only — no import/which side effects
     observable via monkeypatched importlib/shutil raising."""

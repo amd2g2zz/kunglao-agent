@@ -49,6 +49,15 @@ ALGO_SCOPE_KEYWORDS = (
     "algorithm recovery", "algorithm-recovery",
 )
 
+_SEP_RE = re.compile(r"[-_]+")
+
+
+def _fold_separators(text: str) -> str:
+    """Lowercase with _ / - folded to spaces: the same word break whatever
+    the spelling (key_schedule == key-schedule == key schedule)."""
+    return _SEP_RE.sub(" ", text.lower())
+
+
 TRIAGE_GRADE_CLASS = "triage"
 VALID_EVIDENCE_CLASSES = (TRIAGE_GRADE_CLASS, "decompile", "dynamic")
 # Classes that can carry an algorithm-recovery claim: decompiled source /
@@ -138,12 +147,14 @@ def algorithm_scope(claim: dict) -> str | None:
     (issue 215), else None.
 
     Read from the register's own text; the KEEP list is the four classes
-    the issue names, in snake_case and prose spellings."""
+    the issue names, in snake_case and prose spellings. Separator spelling
+    is folded before matching (_ / - / space are the same word break), so
+    `key-schedule` is not a scope escape hatch."""
     text = " ".join(str(claim.get(k) or "")
                     for k in ("statement", "title", "answers_question"))
-    lowered = text.lower()
+    folded = _fold_separators(text)
     for keyword in ALGO_SCOPE_KEYWORDS:
-        if keyword in lowered:
+        if _fold_separators(keyword) in folded:
             return keyword
     return None
 
