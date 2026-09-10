@@ -64,6 +64,11 @@ OPEN_BOUNDARY_TYPES = {"capability_not_executed", "link_not_closed",
                        "source_derived", "observation", "numeric"}
 EMPTY_GATE_TYPES = {"confirmed", "pure_negative", "contradiction", "coordinate", "anomaly"}
 VALID_VERIFY_STATUS = {"pending", "passes", "partial", "fails", "stale"}
+# issue 215: the evidence-class extension (claim gate input). triage =
+# string/byte scanning without decompilation or execution; decompile =
+# decompiled source or decompiler-grade index/taint; dynamic = runtime
+# observation. Absent/unrecognized reads as triage at the gate.
+VALID_EVIDENCE_CLASSES = {"triage", "decompile", "dynamic"}
 VALID_CONFIDENCE_ZH = {"可确认", "表明", "倾向于", "可关联", "不支持"}
 VALID_PROVENANCE_ROLES = {"sample_raw", "decompiled_c", "disassembled_s",
                           "recompute_script", "hex_bytes_inline", "capture_log",
@@ -136,6 +141,7 @@ KNOWN_FRONTMATTER_KEYS = frozenset({
     "depends_on", "alternatives", "supersedes", "superseded_by", "iocs",
     "hypothesis",
     "trace_id",  # #879 trace identity: mission chain id (worker echo channel)
+    "evidence_class",  # issue 215: evidence-grade class (claim-gate input)
 })
 
 # L-4 (#532): the body '## Status' line must reconcile with frontmatter status.
@@ -555,6 +561,14 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
     if src is not None and src not in VALID_SOURCE:
         issues.append(_issue("error", "BAD_SOURCE_ENUM", fid,
                              f"source {src!r} not in {sorted(VALID_SOURCE)}"))
+    ec = fm.get("evidence_class")
+    if ec is not None and str(ec) not in VALID_EVIDENCE_CLASSES:
+        issues.append(_issue("error", "BAD_EVIDENCE_CLASS", fid,
+                             f"evidence_class {ec!r} not in "
+                             f"{sorted(VALID_EVIDENCE_CLASSES)} — an "
+                             f"undeclared class reads as triage at the "
+                             f"claim gate, so a typo silently weakens "
+                             f"the fact"))
     conf = fm.get("confidence")
     if conf is not None and conf not in VALID_CONFIDENCE:
         issues.append(_issue("error", "BAD_CONFIDENCE", fid,

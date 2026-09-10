@@ -428,16 +428,26 @@ def _lint_issues(ws: Path):
     return lint_facts.lint_fact(fm.get("id", "F001-aes"), fm, set(), "")
 
 
+def _codes(issues) -> list:
+    return [code for _sev, code, _msg in issues]
+
+
+def _evidence_class_issues(issues) -> list:
+    """Only the findings that name the evidence_class key (the module also
+    reports orthogonal debt: NO_CODE_SOURCE body sections, and the
+    pre-existing schema_rev unknown-key warning)."""
+    return [msg for _sev, _code, msg in issues if "evidence_class" in msg]
+
+
 def test_lint_facts_accepts_evidence_class(tmp_path):
-    codes = [c for _sev, c, _m in _lint_issues(_lint_ws(tmp_path))]
-    assert "BAD_EVIDENCE_CLASS" not in codes, codes
-    assert "UNKNOWN_KEY" not in codes, codes
+    issues = _lint_issues(_lint_ws(tmp_path))
+    assert "BAD_EVIDENCE_CLASS" not in _codes(issues), _codes(issues)
+    assert _evidence_class_issues(issues) == [], issues
 
 
 def test_lint_facts_rejects_unknown_evidence_class(tmp_path):
-    codes = [c for _sev, c, _m in
-             _lint_issues(_lint_ws(tmp_path, evidence_class="totally-made-up"))]
-    assert "BAD_EVIDENCE_CLASS" in codes, codes
+    issues = _lint_issues(_lint_ws(tmp_path, evidence_class="totally-made-up"))
+    assert "BAD_EVIDENCE_CLASS" in _codes(issues), _codes(issues)
 
 
 def test_fact_template_documents_the_extension_field():
