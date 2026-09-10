@@ -81,6 +81,17 @@ remaining work back through Task dispatch.
 5. **VM-ONLY dynamic tools (non-negotiable)** — HOST_FORBIDDEN_TOOLS bans the host channel: mcp__x64dbg__start_session/connect_to_session/terminate_session/connect_to_instance, mcp__frida__spawn/attach; samples execute in the VM only.
 6. **No declare done on OPEN claim** — handoff-check PASS decides; the open-claim count is the truth, not self-perception.
 
+**State-layer repair (issue 213)**: on a tool failure, diagnose at the
+failed layer — walk installed? / registered? / connects? / capable? /
+input ready? and repair at the first failing layer; tool-jumping on a
+layer failure is invalid (the decompiler fallback family is chosen by
+lane, issue 210, never by a layer failure). Facts already gathered gate
+the next action (`scripts/decision_lint.py` blocks known-incompatible
+installs, never blocks on unknowns); reports name the layer
+("connection layer broken, repair = uv sync in the venv"), never a
+"dead" verdict — a fallback recommended while the primary is
+present-and-repairable is decision invalidity.
+
 ## 8. File map (re-read every round; disk is the truth)
 
 - `claim-register.yaml` — state machine (OPEN/PARTIALLY-VERIFIED/PROVEN/DEFERRED), the counting source for convergence decisions

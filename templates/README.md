@@ -7,6 +7,23 @@ Two template families live here:
 - `scripts/*.py.tmpl` — analysis script generation templates,
   instantiated deterministically by `scripts/template_gen.py`.
 
+## Lane scope (issue 208)
+
+The workspace declares its analysis lane in `task_spec.yaml`
+(`lane: malware | algorithm | protocol | web | data | app`); templates are
+selected by it:
+
+| template | malware lane | non-malware lanes |
+| --- | --- | --- |
+| `CLAUDE.md.base.tmpl` | `{{material_section}}` renders the sample identity table (byte-identical to the pre-lane render) | the slot renders the lane's own material contract (no sample hash, no `bins/` path, no `{{sample_*}}` placeholder exists) |
+| `state/task_spec.yaml` | `lane: malware` / absent | `lane: <lane>` — the contract that decides whether `bins/` is required at all |
+| `fact-frontmatter.md` | the `malware-veri-notes` projection (`role: sample_raw` → `bins/<sha1>`) | the same structural core with lane-scoped provenance roles (see that file) |
+| `scripts/*.py.tmpl` | `sample_path` / `sample_sha256` first | DOCUMENTED STUB — generated from the lane's own contract (`corpora` / capture / dataset path); no shipped lane template yet |
+| `frida/*.js.tmpl`, `frida/*.py.tmpl` | malware runtime tooling only | not used — a non-malware lane has no VM-only dynamic surface |
+
+A lane-less workspace (legacy contract) behaves as `lane: malware` — the
+pre-lane byte contract, pinned by tests.
+
 ## Script-generation templates
 
 Each `scripts/<name>.py.tmpl` carries `{{KEY}}` placeholders, a

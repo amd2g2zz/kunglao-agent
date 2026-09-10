@@ -6,6 +6,105 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
+## [0.1.6] - 2026-09-11
+
+The Patch1 train — nine field-run fixes on top of v0.1.5: the android probe surface (apkid / JVM / memory-gate verdict), one XOR decompiler face, uv-unified environment operations, lane routing for task types beyond binary-RE, the Thompson rank face on the statusline, and the adversarial-review remediation batch.
+
+### Fixed
+
+- **Statusline v2 assembly (#212)**: init deploys the statusline first — the hook + settings registration land before any analysis scaffold, and the two-part data plane (Python snapshot → Node render) ships with self-heal and an honest state face, so a fresh workspace shows live loop state instead of an empty segment.
+- **Android apkid probe at init**: `_check_android` now emits a WARN-tier
+  apkid presence item (never blocking the HARD exit-4 refusal set) and the
+  post-toolchain summary prints the first-claim fingerprinting
+  recommendation on android workspaces — apkid stays a TOOL the agent
+  decides to run; init never executes the scanner (#209).
+- **State-layered tool diagnosis (#213)**: a tool failure is diagnosed at
+  the layer where it actually failed — the `toolchain.py` MCP faces name the
+  register/connection layer with an agent-do repair (no "dead" verdict, no
+  fallback-tool recommendation while the primary is repairable); the new
+  `scripts/decision_lint.py` blocks actions that already-gathered facts
+  forbid (x86_64 libidalib + python 3.14 vs the idapro install) and never
+  blocks on unknowns; the ladder and its four rules are stated in
+  `skills/kunglao-agent/SKILL.md`, the distilled convergence rules, and the
+  init-worker doctrine.
+- **Thompson rank face on the statusline (issue 218)**: the ranker's
+  `rank_feeds` event now reaches the screen — the snapshot ships `rank`
+  (latest run's top claim + sampled score + age/staleness) and `rank_log`
+  (emit-path health bit), the renderer draws the `R:<claim> <score>` chip
+  (amber when stale, red `R✖` when the emit path is broken), and the
+  heartbeat tick report carries the same single-sourced values; a crashed
+  `kunglao_log.emit` lands `runs/.rank-emit-fail.json` and clears on the
+  next success, so the silent fail-open contract keeps the ranking result
+  byte-identical while the failure stops being invisible (#218)
+- **APK memory gate verdict gates formal analysis (#215)**: init probes
+  `tools/static/apk_mem_gate.py` for the aligned android target and records
+  the verdict (jadx-ok / targeted-jadx / smali-only / refuse / unavailable)
+  into the env facts, with an explicit `unavailable` instead of a silent
+  skip, and the environment section renders it; `java -version` joins the
+  android check set as a CAPABILITY-tier probe (HARD when jadx is present,
+  WARN otherwise) and jadx's provider requirements become
+  `[dex, mem_budget_ok, jadx_bin, jvm]` — "no JVM" was a dexdc property the
+  field run misread as an environment fact, so the dexdc index entries now
+  say so and point at the probe; a →PROVEN transition of an
+  algorithm-recovery claim (scope keywords: key schedule / crypto constant /
+  state machine / algorithm verify) whose facts are all triage-grade now
+  fails admission with `evidence-class` named, while `evidence_class`
+  (triage / decompile / dynamic, absent = triage) joins the fact
+  frontmatter as a validated extension field
+- **venv probe dispatches through uv (#207)**: `check_venv_sample` runs the
+  real runtime invocation — `uv run --project <skill_root> python -c
+  "import yaml"` — instead of spawning a venv binary with a hand-written
+  `import cryptography, yaml` list, so a lock-faithful `uv sync --locked`
+  install (cryptography left the declared set) passes the blocking Phase 0
+  row; failures name the layer (uv absent → install guidance; non-zero
+  `uv run` → `uv sync --locked --project` repair). Stale operator copies
+  cleared in the same pass: the template's `Key deps: cryptography, pyyaml`
+  line and SKILL.md step 1's `python -m venv` / pip residue.
+- **Decompiler face is XOR, not AND (#210)**: the toolchain gate emits ONE
+  `decompiler` item per init — `supply` names the canonical winner
+  (`ida-pro-vm` | `idat64` | `analyzeHeadless` | `none`) and `skipped` records
+  the pre-empted siblings as informational evidence (never FAIL, never a
+  second missing item); the next-action / ownership-tier / CHECK_SETS / FIXES
+  registries collapse from three keys (`decompiler`/`ghidra`/`ida`) to the one
+  family key `decompiler`, whose single fix string spells out the three supply
+  paths (install IDA + set PATH, OR install Ghidra + GHIDRA_HOME, OR register
+  the ida-pro-vm MCP); the exit-8 PendingDecision CHOICE is unchanged and the
+  pure-DEX `has_native_so=False` WARN keeps its free skip.
+- **Lane routing — task types beyond binary-RE (#208)**: `task_spec.yaml`
+  gains `lane: malware | algorithm | protocol | web | data | app` — the
+  analysis-MATERIAL contract that decides whether `bins/<sha>` is required
+  at all. `lane=algorithm` initializes without a sample (uv + python +
+  reference-corpora toolchain gate, lane-rendered handbook with no
+  `{{sample_*}}` placeholder, no sample seed claims); `protocol` / `web` /
+  `data` / `app` are routed documented stub lanes. A workspace that
+  declares nothing (no lane, no task contract, no sample) is ASKED for its
+  lane through the exit-8 PendingDecision channel with no default
+  (`--lane` / `--resolve {"lane": ...}` re-entry); a lane-less task_spec or
+  a mounted sample keeps today's malware behavior byte-for-byte
+  (`RC_NO_SAMPLE` retained, `lane=malware` render byte-identical to the
+  shipped goldens). The five malware-only agents
+  (`pefile-signature` / `floss-filter` / `go-symbols` / `ghidra-light` /
+  `kunglao-redteam`) declare `lane: malware` and are refused at dispatch
+  (PreToolUse lane gate, structured REJECT naming agent + lane + routing
+  fix) on any workspace declaring another lane.
+- **Patch1 train review findings — rank health, lint normalization, lane
+  guards, locked uv probe (#225)**: the adversarial review of the
+  v0.1.5-Patch1 train reproduced ten defects; each is closed with a
+  RED-first test. The rank emit-health marker now fires on the REAL writer
+  failure (`kunglao_log.emit` returns success — a failed write sets the
+  marker instead of clearing prior fault evidence) and the bounded tail
+  read keeps a complete first line in a small day file; the statusline
+  hides the rank chip rather than fabricating `0.00` from a null score;
+  `decision_lint` folds case/separators (IDAPRO / ida-pro / wheel paths)
+  and arch aliases (x64 ≡ amd64, aarch64 ≡ arm64), never blocks on an
+  uninstall or on undecodable stdin; `toolchain` degrades an unreadable
+  material dir to WARN and fails closed on an invalid lane value;
+  `register_proven_gate` folds hyphenated scope spellings
+  (`key-schedule` / `state-machine`); init persists the probed results to
+  `evidence/tool-probes.json`, so a probed-false JVM blocks the jadx
+  provider as advertised; the env probe runs `uv run --locked`, which
+  keeps the lock sha unchanged across a probe run (#225).
+
 ## [0.1.5] - 2026-09-10
 
 The oracle-integrity train: the loop now refuses to run — or to claim success —
@@ -161,7 +260,6 @@ around mapping-driven generation and four-leg gates.
   recall_inject) delegate to one manifest-aware helper — the two copies that
   hardcoded `malware-analysis-workspace` no longer bypass env-manifest
   layout overrides.
-
 ## [0.1.3] - 2026-08-25
 
 ### Round 6 — Deployment Inversion, Agent Governance & Web-Lane Depth (2026-08-27)

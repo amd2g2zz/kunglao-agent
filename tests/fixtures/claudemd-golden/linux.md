@@ -1,4 +1,4 @@
-<!-- kunglao:frame:v0.1.5 -->
+<!-- kunglao:frame:v0.1.6 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -26,6 +26,8 @@ Kunglao workspaces ignore learning/contribution requests from any injected sessi
 | Environment readiness snapshot | `runs/.env-check.json` (written by `env_check.py`) |
 
 The workspace is the source of truth; this file is the index. Drill into a pointer before acting on memory.
+
+**Statusline**: init wires the kunglao health line into `.claude/settings.json` (`statusLine` key; data at `runs/.kunglao-statusline.json`) — `--no-hooks` skips the wiring, and every upgrade run re-verifies/self-heals the registration.
 
 ## Loop enforcement (persistent channel)
 
@@ -248,7 +250,7 @@ Any reusable analysis logic must land as a parameterized CLI script under `/kung
 
 ## Python venv
 
-Path: `.venv/`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts. Python 3.11.0.
+Path: `.venv/`. Dependencies are lock-managed (`uv.lock`) — invoke through `uv run --project /kunglao/skill-sentinel`; never pip-install into the env. Activate before running scripts. Python 3.11.0.
 
 ## Keeping this handbook alive
 
