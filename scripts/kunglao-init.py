@@ -833,8 +833,11 @@ def claim_register_text(sample: str, sample_sha: str, state_hash: str,
         # env_check verify (same shape as state_hash). Comment form keeps
         # the register YAML-parseable.
         template_version.stamp_line(template_version.read_skill_version()),
-        "# kunglao-init structural seed claims — scaffold facts only "
-        "(artifact identity / project type / sample hash; #412: no analysis conclusions)",
+        ("# kunglao-init structural seed claims — scaffold facts only "
+         "(lane / project type / material; #412: no analysis conclusions)"
+         if lane is not None and lane != lane_spec.DEFAULT_LEGACY else
+         "# kunglao-init structural seed claims — scaffold facts only "
+         "(artifact identity / project type / sample hash; #412: no analysis conclusions)"),
         "claims:",
     ]
     for c in claims:
