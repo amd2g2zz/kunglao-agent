@@ -29,6 +29,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -380,3 +381,47 @@ def test_required_checks_has_no_malware_entry():
             f"lane {lane} lacks a required-check set"
         assert lane_spec.REQUIRED_CHECKS[lane][:2] == ("uv", "python"), \
             "every lane gate starts from uv + python"
+
+
+# ------------------------- 5. protocol / web / data / app (documented stubs)
+
+def test_lane_registry_splits_implemented_from_stubs():
+    """The stub lanes are declared as such (documented stub, not a promise)."""
+    import lane_spec
+    assert lane_spec.IMPLEMENTED_LANES == ("malware", "algorithm")
+    assert lane_spec.STUB_LANES == ("protocol", "web", "data", "app")
+    assert set(lane_spec.IMPLEMENTED_LANES) | set(lane_spec.STUB_LANES) == set(LANES)
+    for lane in lane_spec.STUB_LANES:
+        assert "stub" in lane_spec.material(lane), \
+            f"{lane} material line must declare the stub status"
+
+
+@pytest.mark.parametrize("lane", ["protocol", "web", "data", "app"])
+def test_stub_lane_contract(tmp_path, lane):
+    """Per-lane contract: a stub lane initializes without a sample, renders
+    no unresolved placeholder and no sample claim, and its toolchain gate is
+    uv + python + the lane's material probe (WARN) — never the RE supply."""
+    import toolchain
+    ws = _declared_ws(tmp_path, lane)
+    r = _run_init(ws, ["--type", "linux"])
+    assert r.returncode == RC_OK, \
+        f"{lane} lane init failed: {r.returncode}: {r.stdout}{r.stderr}"
+    text = (ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert "{{" not in text, f"{lane} render left a placeholder"
+    assert f"lane: {lane}" in text, f"{lane} lane not named in the render"
+    assert "stub" in text, f"{lane} render must disclose the stub status"
+    assert not any("Sample" in t for t in _seed_titles(ws)), \
+        f"{lane} lane seeded sample claims"
+    report = toolchain.check(ws, "linux", lane=lane)
+    names = [i.name for i in report.items]
+    assert names == ["uv", "python", f"{lane}_material"], names
+    assert not [n for n in names if n in toolchain.LANE_NEVER_CHECKS]
+    assert report.overall_status != toolchain.Status.FAIL, \
+        f"{lane} stub gate must not refuse a clean uv+python host"
+
+
+@pytest.mark.parametrize("lane", ["protocol", "web", "data", "app"])
+def test_stub_lane_check_set_is_documented_in_lane_spec(lane):
+    import lane_spec
+    assert lane_spec.REQUIRED_CHECKS[lane] == ("uv", "python",
+                                               f"{lane}_material")

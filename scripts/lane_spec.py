@@ -54,12 +54,20 @@ MALWARE_ONLY = "malware"
 TASK_SPEC_FILENAME = "task_spec.yaml"
 LANE_FIELD = "lane"
 
+# The lanes whose routing is IMPLEMENTED end to end. `algorithm` is the
+# one that is: no sample required, lane check set, lane render, lane seeds.
+IMPLEMENTED_LANES: tuple[str, ...] = ("malware", "algorithm")
+
+# The remaining lanes are documented STUBS (issue 208 scope): init routes
+# them, the render states their material and the toolchain gate probes the
+# lane's material dir with a WARN — but no lane-specific analysis toolchain
+# is claimed. They exist so a protocol/web/data/app task is not forced
+# through the malware scaffolding while the deep lanes are built out.
+STUB_LANES: tuple[str, ...] = ("protocol", "web", "data", "app")
+
 # What each lane analyzes — the material contract, rendered into the
 # workspace handbook and carried in the pending-decision context so the
-# agent asks an informed question. The non-algorithm lanes are documented
-# STUBS (skeleton routing only): the text says what the lane consumes, and
-# REQUIRED_CHECKS probes that the host can hold it, without claiming a
-# lane-specific analysis toolchain.
+# agent asks an informed question. The stub lanes say so in their line.
 MATERIALS: dict[str, str] = {
     "malware": "binary sample under bins/<sha> (sha256-anchored, VM-only dynamics)",
     "algorithm": "reference corpora + trace dumps (no binary sample; "
