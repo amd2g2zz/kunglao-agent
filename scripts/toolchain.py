@@ -22,18 +22,24 @@ the fix names the exact next step (the OPERATOR picks, never init).
 
 CLI: toolchain.py <workspace> [--type t] [--json] [--reproduce] [--capability]
      (consumes <workspace>/task_spec.yaml when present, #449)
-Exit codes: 0 = all PASS, 1 = any HARD FAIL, 2 = only WARN failures.
+Exit codes: 0 = all PASS, 1 = any HARD FAIL, 2 = only WARN failures,
+8 = sole blocker is a PendingDecision CHOICE (issue 202 decompiler lane — the
+pending-decision exit; the report has no other HARD FAIL).
 """
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import re
+import shlex
 import socket
 import shutil
 import subprocess
 import sys
+import time
+import urllib.parse
 import zipfile
 from dataclasses import dataclass, field
 from enum import Enum
@@ -67,6 +73,10 @@ import platform_paths  # noqa: E402  (same dir, sys.path injected above)
 # Single manifest source: scripts/mcp_probe.py MANIFEST — shared with the
 # kunglao-init .mcp.json scaffold and the CLAUDE.md/README doc tables.
 import mcp_probe  # noqa: E402  (same dir, sys.path injected above)
+
+# the exit-8 CHOICE rides the shared pending-decision schema
+# (same channel as the negotiation menu and kunglao-init intake).
+import decision_pending  # noqa: E402  (same dir, sys.path injected above)
 
 # #449 needs-first: task_spec loading for env = f(task_spec) — same YAML
 # dependency kunglao-init already uses for the CLAUDE.md constraint block.
@@ -106,6 +116,8 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "unidbg": NextAction(
         "install", "bash scripts/install_unidbg.sh (or scripts/install_unidbg.py)"),
     "pefile": NextAction("install", "pip install pefile"),
+    "uv": NextAction(
+        "install", "curl -LsSf https://astral.sh/uv/install.sh | sh"),
     "die": NextAction("install"),  # platform matrix: FIXES text / #408 installer
     "floss": NextAction("install", "pip install flare-floss"),
     "file": NextAction("install"),
@@ -194,6 +206,44 @@ class Status(Enum):
     WARN = "WARN"
 
 
+# Ownership tiers — WHO owns the remediation of a check. The blanket
+# "HARD toolchain missing = human-install event" doctrine is REPLACED by
+# these tiers: the agent attempts AGENT-DO items immediately (registering
+# MCPs via `claude mcp add`, configuring the connected rooted device over
+# adb, running registered installers), escalates ONLY genuine HUMAN-ONLY
+# failures (license purchase, physical device actions, credentials), and
+# the decompiler face branches on the task's declared lane
+# (LANE-CONDITIONAL).
+class OwnerTier(Enum):
+    """Remediation ownership of one check (issue 202)."""
+    AGENT_DO = "agent_do"                  # agent attempts immediately
+    HUMAN_ONLY = "human_only"              # license / physical / credentials
+    LANE_CONDITIONAL = "lane_conditional"  # decompiler face branches on lane
+
+
+# Owner map: agent-do is the DEFAULT (kunglao runtime agents never defer
+# tooling work to the user); the explicit exceptions are the HUMAN-ONLY
+# decisions and the LANE-CONDITIONAL decompiler face.
+_OWNER_BY_NAME: dict[str, OwnerTier] = {
+    "device_root": OwnerTier.HUMAN_ONLY,   # rooting = physical device decision
+    "vm_reachable": OwnerTier.HUMAN_ONLY,  # operator picks the VM (#451)
+    "remote_debugger": OwnerTier.HUMAN_ONLY,
+    "decompiler": OwnerTier.LANE_CONDITIONAL,
+    "ghidra": OwnerTier.LANE_CONDITIONAL,
+    "ida": OwnerTier.LANE_CONDITIONAL,
+}
+_OWNER_DEFAULT = OwnerTier.AGENT_DO
+
+
+def owner_for(name: str) -> OwnerTier:
+    """Owner class for a check item name (issue 202)."""
+    if name in _OWNER_BY_NAME:
+        return _OWNER_BY_NAME[name]
+    if name.startswith("mcp:"):
+        return OwnerTier.AGENT_DO
+    return _OWNER_DEFAULT
+
+
 @dataclass
 class CheckResult:
     """Single toolchain check result."""
@@ -205,6 +255,9 @@ class CheckResult:
     probe: ProbeTier = ProbeTier.PRESENCE  # #474: how it was verified
     fix: str | None = None  # #451: item-level dynamic fix; overrides FIXES static text
     next_action: NextAction | None = None  # #451: machine-parseable remediation
+    owner: OwnerTier = OwnerTier.AGENT_DO  # remediation ownership (issue 202)
+    attempts: tuple[str, ...] = ()  # recorded AGENT-DO attempt commands
+    pending_decision: decision_pending.PendingDecision | None = None  # issue 202
 
 
 @dataclass
@@ -580,6 +633,35 @@ def _probe_native_so(ws: Path) -> bool:
     return False
 
 
+def _agent_do_device_bringup(adb: str, port: int, name_hint: str,
+                             timeout: int = 2) -> tuple[bool, str,
+                                                        tuple[str, ...]]:
+    """AGENT-DO device-service bring-up (frida-server / gserver).
+
+    The gate looks for the (renamed) binary in /data/local/tmp over su,
+    starts it bound to the custom port, re-forwards and re-probes. Returns
+    (ok, detail, attempts) — the attempts record rides into the report so
+    the human sees exactly what the agent tried, never a bare dump."""
+    ls_argv = [adb, "shell", "ls", "/data/local/tmp"]
+    ls_rc, ls_out, ls_err = _run_cmd(ls_argv, timeout=10)
+    candidates = [ln.strip() for ln in ls_out.splitlines()
+                  if ln.strip() and name_hint in ln.lower()]
+    if not candidates:
+        return (False,
+                (f"AGENT-DO bring-up attempt: no {name_hint} binary in "
+                 f"/data/local/tmp (ls: {(ls_out or ls_err)[:80] or 'empty'})"),
+                (" ".join(ls_argv),))
+    binary = candidates[0]
+    start_argv = [adb, "shell", "su", "-c",
+                  f"nohup /data/local/tmp/{binary} -l 0.0.0.0:{port} "
+                  f">/dev/null 2>&1 &"]
+    _run_cmd(start_argv, timeout=10)
+    attempts = (" ".join(ls_argv), " ".join(start_argv))
+    time.sleep(0.5)  # device-side bring-up latency before the re-probe
+    ok, detail = _adb_forward_probe(adb, port, timeout=timeout)
+    return ok, detail, attempts
+
+
 def _adb_forward_probe(adb: str, port: int, timeout: int = 2) -> tuple[bool, str]:
     """Device-side service probe via adb forward + host TCP connect (#304 F3).
 
@@ -692,16 +774,286 @@ def _adb_jdwp_probe(adb: str, timeout: int = 2) -> tuple[bool, str]:
                 else f"JDWP agent pid {pid} alive — handshake echoed")
 
 
-# ---------- MCP supply (#316) ----------
+@dataclass(frozen=True)
+class McpServerSpec:
+    """One task_spec-declared required MCP server (issue 202, MCP face).
 
-def _check_mcp(report: ToolchainReport, ws: Path, project_type: str) -> None:
+    task_spec `tools.mcp_servers` entries: a bare name string, or a mapping
+    {name, transport, url} — the url is what makes `claude mcp add
+    --transport http ida-pro-vm <url>` a runnable AGENT-DO command."""
+    name: str
+    transport: str = "stdio"
+    url: str | None = None
+
+
+@dataclass(frozen=True)
+class Requirements:
+    """Which environment capabilities the TASK needs (env = f(task_spec)).
+
+    needs_vm: the windows/linux VM channel (vmr-shell + frida-to-VM) is
+        required. True is the conservative default — the pre-#449 status
+        quo — whenever task_spec does not explicitly say otherwise.
+    needs_debug_flag: the android JDWP device flag (ro.debuggable=1) is
+        required. True is the conservative default (#304 F3 enforcement).
+        #25 D1: ro.debuggable=1 is unreachable on Android 12+ user builds
+        (SELinux property_service lock) while frida/android_server run fine
+        via Magisk su without it — a task that does not need the flag must
+        be able to say so (constraints.dynamic_re=forbidden, or an explicit
+        constraints.debug_flag: false); the debug_flag check then downgrades
+        FAIL -> WARN instead of blocking an init that can never pass.
+    decompiler_lane: the task's declared decompiler lane (issue 202
+        LANE-CONDITIONAL): "mcp" = the ida-pro-vm MCP lane (check
+        registration + reachability, NEVER a local IDA install/license);
+        "local" = local scripting (the probe ladder); None = undeclared
+        (the pre-rework combined behavior: MCP defusal, then the ladder).
+    required_mcp: exact MCP servers the task requires (tools.mcp_servers,
+        issue 202) — when non-empty the MCP face checks THESE instead of the
+        type manifest ("the exact servers from task_spec").
+    basis: why (task_spec field citation, or the conservative default) —
+        rides into the downgraded check details so a WARN is never mystery
+        noise.
+    """
+
+    needs_vm: bool = True
+    needs_debug_flag: bool = True
+    decompiler_lane: str | None = None
+    required_mcp: tuple[McpServerSpec, ...] = ()
+    required_mcp_declared: bool = False  # explicit tools.mcp_servers key present
+    basis: str = "task_spec absent/unreadable — conservative default (VM HARD)"
+
+
+DEFAULT_REQUIREMENTS = Requirements()
+
+
+# ---------- MCP supply + AGENT-DO registration face ----------
+
+# Ownership: registering required MCP servers is AGENT work — the gate
+# attempts `claude mcp add` itself and escalates only genuine failures with
+# the error attached. Write-attempts are opt-in per process via
+# KUNGLAO_AGENT_DO=1 (kunglao-init turns it on for the init run); the bare
+# CLI stays read-only so test harnesses and forensics stay side-effect-free.
+AGENT_DO_ENV = "KUNGLAO_AGENT_DO"
+
+# Safety invariant: `claude mcp add` can only mutate the REAL registry
+# (~/.claude.json). When the probe targets an override registry
+# (KUNGLAO_CLAUDE_JSON — tests/forensics), an attempt would write a config
+# the probe cannot see: suppressed with an honest reason instead.
+CLAUDE_JSON_OVERRIDE_ENV = "KUNGLAO_CLAUDE_JSON"
+
+
+def _agent_do_enabled() -> bool:
+    """AGENT-DO write-attempts opt-in (KUNGLAO_AGENT_DO=1)."""
+    return (_env_get(AGENT_DO_ENV) or "").strip() == "1"
+
+
+# The astral installer — the AGENT-DO uv install command.
+UV_INSTALL_CMD = "curl -LsSf https://astral.sh/uv/install.sh | sh"
+_UV_FALLBACK_PATHS = ("~/.local/bin/uv", "~/bin/uv")
+
+
+def _check_uv(report: ToolchainReport) -> None:
+    """uv presence + working (issue 202 scope) — AGENT-DO ownership.
+
+    The repo standard is `uv sync --locked` + `uv run` (the shipped hook
+    commands already resolve through `uv run --project`); a missing uv is
+    installed by the GATE itself via the astral installer, then re-probed.
+    Only a genuine failure escalates — with the error attached. Desktop
+    triple only: the labs faces (web/macos) stay zero-HARD by contract."""
+    uv = _shutil_which("uv")
+    if uv:
+        rc, out, err = _run_cmd([uv, "--version"], timeout=15)
+        if rc == 0 and out:
+            report.items.append(CheckResult(
+                name="uv", status=Status.PASS, tier=Tier.HARD,
+                detail=f"uv at {uv}: {out.splitlines()[0]}",
+                probe=ProbeTier.LIVENESS,
+            ))
+        else:
+            report.items.append(CheckResult(
+                name="uv", status=Status.FAIL, tier=Tier.HARD,
+                detail=f"uv at {uv} but --version failed: {err or out[:80]}",
+                probe=ProbeTier.LIVENESS, root_cause="uv",
+            ))
+        return
+    attempts: tuple[str, ...] = ()
+    attempt_error = ""
+    if _agent_do_enabled():
+        argv = ["sh", "-c", UV_INSTALL_CMD]
+        rc, out, err = _run_cmd(argv, timeout=300)
+        attempts = (" ".join(argv),)
+        uv = _shutil_which("uv")
+        if uv is None:
+            for cand in _UV_FALLBACK_PATHS:
+                p = Path(os.path.expanduser(cand))
+                if p.is_file():
+                    uv = str(p)
+                    break
+        if uv:
+            rc2, out2, err2 = _run_cmd([uv, "--version"], timeout=15)
+            if rc2 == 0 and out2:
+                report.items.append(CheckResult(
+                    name="uv", status=Status.PASS, tier=Tier.HARD,
+                    detail=(f"AGENT-DO: uv installed via the astral "
+                            f"installer — {uv}: {out2.splitlines()[0]}"),
+                    probe=ProbeTier.LIVENESS, attempts=attempts,
+                ))
+                return
+            attempt_error = err2 or out2 or f"rc={rc2}"
+        else:
+            attempt_error = err or out or f"rc={rc}"
+    detail = ("uv not on PATH — the repo standard is `uv sync --locked` "
+              "+ `uv run` for every shipped face")
+    if attempts:
+        detail += f"; AGENT-DO install attempt failed: {attempt_error}"
+    report.items.append(CheckResult(
+        name="uv", status=Status.FAIL, tier=Tier.HARD,
+        detail=detail, probe=ProbeTier.PRESENCE, root_cause="uv",
+        attempts=attempts,
+        fix=(f"agent installs uv itself: {UV_INSTALL_CMD} (AGENT-DO); "
+             "every kunglao face runs via the uv-managed env "
+             "(`uv run --project <root>` / the recorded .venv python)"),
+        next_action=NextAction("install", UV_INSTALL_CMD),
+    ))
+
+
+def _mcp_register_attempt_allowed() -> tuple[bool, str]:
+    """Preconditions for a self-registration attempt (issue 202).
+
+    Returns (allowed, why_not) — why_not rides into the item detail so a
+    skipped attempt is never silent."""
+    if not _agent_do_enabled():
+        return False, "agent-do disabled (KUNGLAO_AGENT_DO != 1)"
+    if not _shutil_which("claude"):
+        return False, "claude CLI not on PATH — cannot self-register"
+    return True, ""
+
+
+def _attempt_mcp_register(argv: list[str]) -> tuple[bool, str]:
+    """Run `claude mcp add ...` (the AGENT-DO registration itself).
+
+    Callers gate on _mcp_register_attempt_allowed() first; this function is
+    the execution seam tests substitute. Safety invariant: `claude mcp add`
+    can only mutate the REAL registry — when the probe targets an override
+    registry (KUNGLAO_CLAUDE_JSON), the attempt is REFUSED here with an
+    honest reason (a write the probe cannot see is never attempted)."""
+    if _env_get(CLAUDE_JSON_OVERRIDE_ENV):
+        return False, ("suppressed: probe targets an override registry "
+                       f"({CLAUDE_JSON_OVERRIDE_ENV}) — claude mcp add would "
+                       "mutate the real config")
+    rc, out, err = _run_cmd(argv, timeout=60)
+    return rc == 0, (err or out or f"rc={rc}")
+
+
+def _concrete_register_argv(register_template: str,
+                            url: str | None) -> list[str] | None:
+    """Resolve a manifest register template into a runnable argv (issue 202).
+
+    `<placeholder>` tokens resolve from the task_spec url (ida-pro-vm);
+    a placeholder that cannot be resolved yields None — a literal
+    `<ida-mcp-url>` never reaches a shell."""
+    try:
+        argv = shlex.split(register_template)
+    except ValueError:
+        return None
+    placeholder = re.compile(r"<[^>]+>")
+    out: list[str] = []
+    for a in argv:
+        if placeholder.search(a):
+            # a placeholder may ride inside a larger token
+            # (<path>/bridge-mcp-ghidra.exe) — only a resolvable url keeps
+            # the template runnable
+            if url is None:
+                return None
+            out.append(placeholder.sub(url, a))
+        else:
+            out.append(a)
+    return out
+
+
+def _task_spec_mcp_checks(specs: "tuple[McpServerSpec, ...]",
+                          claude_json: Path | None,
+                          ws: Path) -> list["mcp_probe.MCPCheck"]:
+    """MCP face over the task_spec-declared server set (issue 202).
+
+    When the task declares `tools.mcp_servers`, the face checks THESE exact
+    servers instead of the type manifest (env = f(task_spec))."""
+    found = mcp_probe.registered_names(claude_json, ws)
+    checks: list[mcp_probe.MCPCheck] = []
+    for spec in specs:
+        if spec.name in found:
+            checks.append(mcp_probe.MCPCheck(
+                name=spec.name, status="PASS", tier="HARD",
+                detail=f"registered ({', '.join(found[spec.name])})",
+            ))
+            continue
+        meta = mcp_probe._BY_NAME.get(spec.name)
+        if spec.transport == "http" and spec.url:
+            register = (f"claude mcp add --transport http {spec.name} "
+                        f"{spec.url}")
+        elif meta is not None:
+            register = meta.register
+        else:
+            register = None
+        checks.append(mcp_probe.MCPCheck(
+            name=spec.name, status="FAIL", tier="HARD",
+            detail="not registered (required by task_spec tools.mcp_servers)",
+            fix=register,
+        ))
+    return checks
+
+
+def _mcp_server_url(name: str, claude_json: Path | None,
+                    ws: Path) -> str | None:
+    """Registered endpoint url for a server (first http url across the
+    registration surfaces), or None."""
+    urls = mcp_probe.registered_server_urls(claude_json, ws)
+    return urls.get(name.lower())
+
+
+def _mcp_reachability_face(item: CheckResult, name: str,
+                           claude_json: Path | None, ws: Path) -> CheckResult:
+    """Honest reachability evidence for a REGISTERED http-transport server.
+
+    Registered + endpoint reachable -> probe upgrades to LIVENESS; endpoint
+    dead -> WARN with the connect error (registration alone is not a live
+    server). stdio servers keep presence evidence (honesty rule)."""
+    url = _mcp_server_url(name, claude_json, ws)
+    if not url:
+        return item
+    parts = urllib.parse.urlsplit(url)
+    port = parts.port or (443 if parts.scheme == "https" else 80)
+    host = parts.hostname or "127.0.0.1"
+    ok, err = _tcp_connect(host, port)
+    if ok:
+        return dataclasses.replace(
+            item, probe=ProbeTier.LIVENESS,
+            detail=item.detail + f"; endpoint reachable ({host}:{port})")
+    return dataclasses.replace(
+        item, status=Status.WARN,
+        detail=item.detail + f"; registered but endpoint unreachable: {err}")
+
+
+def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
+               reqs: Requirements = DEFAULT_REQUIREMENTS,
+               claude_json: Path | None = None) -> None:
     """Append MCP supply checks (probe ~/.claude.json + workspace .mcp.json).
 
     Manifest + probe live in mcp_probe.py — single source of truth shared
     with the kunglao-init .mcp.json scaffold and the doc tables.
+    issue 202: a missing required server is an AGENT-DO item — the gate attempts
+    `claude mcp add` itself (opt-in via KUNGLAO_AGENT_DO=1) and re-verifies
+    registration; only a genuine failure escalates, with the error attached.
     """
-    for mc in mcp_probe.check_mcp(ws, project_type):
-        report.items.append(CheckResult(
+    if claude_json is None:
+        claude_json = mcp_probe.claude_json_path()
+    if reqs.required_mcp or reqs.required_mcp_declared:
+        checks = _task_spec_mcp_checks(reqs.required_mcp, claude_json, ws)
+    else:
+        checks = mcp_probe.check_mcp(ws, project_type,
+                                     claude_json=claude_json)
+    spec_urls = {s.name: s.url for s in reqs.required_mcp if s.url}
+    for mc in checks:
+        item = CheckResult(
             name=f"mcp:{mc.name}",
             status={"PASS": Status.PASS, "FAIL": Status.FAIL,
                     "WARN": Status.WARN}[mc.status],
@@ -709,22 +1061,317 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str) -> None:
             detail=mc.detail,
             # #474: registry read is presence evidence (no handshake)
             probe=ProbeTier.PRESENCE,
-        ))
+        )
+        if item.status is Status.PASS:
+            item = _mcp_reachability_face(item, mc.name, claude_json, ws)
+        elif item.status is Status.FAIL and mc.fix:
+            argv = _concrete_register_argv(mc.fix, spec_urls.get(mc.name))
+            if argv is not None:
+                allowed, why = _mcp_register_attempt_allowed()
+                if allowed:
+                    ok, err = _attempt_mcp_register(argv)
+                    item.attempts = (" ".join(argv),)
+                    if ok:
+                        found = mcp_probe.registered_names(claude_json, ws)
+                        if mc.name in found:
+                            item = CheckResult(
+                                name=item.name, status=Status.PASS,
+                                tier=item.tier,
+                                detail=(f"registered by agent via "
+                                        f"`{' '.join(argv[:3])} ...` — "
+                                        f"verified after registration"),
+                                probe=ProbeTier.PRESENCE,
+                                owner=OwnerTier.AGENT_DO,
+                                attempts=item.attempts,
+                            )
+                        else:
+                            item.detail += ("; register attempt ran but the "
+                                            "server is still not registered")
+                            item.fix = mc.fix
+                    else:
+                        item.detail += (f"; agent-do register attempt failed: "
+                                        f"{err}")
+                else:
+                    item.detail += f"; agent-do register skipped: {why}"
+        report.items.append(item)
 
 
-# ---------- #407/#474: MCP-first decompiler check (deduplicated, one helper) ----------
+# ---------- lane-conditional decompiler face ----------
+# The decompiler face branches on the task's declared lane. The
+# blanket "install IDA" dump is gone: MCP lane -> registration +
+# reachability (never a local IDA install/license); local lane -> the
+# ordered probe ladder; neither -> the exit-8 PendingDecision CHOICE.
 
 # Registry keys checked by mcp_probe.registered_names (user ~/.claude.json +
-# workspace .mcp.json). A registered MCP decompiler is the PRIMARY signal;
-# CLI (GHIDRA_HOME/analyzeHeadless, idat64 on PATH) is only a fallback.
+# workspace .mcp.json). A registered MCP decompiler is the PRIMARY signal
+# for the UNDECLARED lane; CLI supply is the probe-ladder surface.
 _DECOMPILER_MCP_NAMES = ("ghidra", "ida-pro-vm")
 
 # #474: a Python probe cannot reach into the MCP session (analysis tools
 # register only after connect_instance succeeds — agents/ghidra-light.md),
-# so the honest ceiling for registry + port evidence is WARN. Same for a
-# present-but-untrialled CLI binary. PASS requires a capability trial, and
-# trials run ONLY under the caps opt-in (init-only contract, minutes-long).
+# so the honest ceiling for registry-only evidence is WARN. Same for a
+# present-but-untrialled CLI binary on the UNDECLARED lane's MCP branch.
 _UNVERIFIED = "capability unverified"
+
+# IDA probe ladder: PATH -> mdfind -> find bundle sweep -> brew cask
+# -> known dirs (first hit wins). The find sweep and known-dir sweep MUST
+# match macOS `.app/Contents/MacOS/` bundle layouts — the addendum's
+# field-evidenced blind spot (an installed IDA reported missing because the
+# probes only knew `/Applications/IDA Pro*/idabin` shapes).
+_IDA_APP_DIRS_ENV = "KUNGLAO_IDA_APP_DIRS"
+_DEFAULT_IDA_APP_DIRS: tuple[Path, ...] = (
+    Path("/Applications"), Path.home() / "Applications")
+
+# Known-dir sweep patterns (addendum rung d): macOS classic + bundle
+# layouts, Windows and Linux equivalents. `~` expands at probe time.
+_IDA_KNOWN_DIR_PATTERNS: tuple[str, ...] = (
+    "/Applications/IDA Pro*/idabin/idat64*",        # classic macOS layout
+    "/Applications/IDA*/Contents/MacOS/idat64",     # .app bundle (addendum)
+    "/Applications/IDA*/*.app/Contents/MacOS/idat64",
+    "~/Applications/IDA*/Contents/MacOS/idat64",
+    "~/.ida*/idat64*",
+    "/opt/ida*/idat64*",                            # linux equivalents
+    "/opt/ida*/bin/idat64*",
+    "/opt/ida*/*/idat64*",
+    "C:/Program Files/IDA*/idat64.exe",             # windows equivalents
+    "C:/Program Files/IDA*/*/idat64.exe",
+)
+
+
+def _ida_app_dirs() -> tuple[Path, ...]:
+    """Application dirs for the find sweep (KUNGLAO_IDA_APP_DIRS override)."""
+    raw = _env_get(_IDA_APP_DIRS_ENV)
+    if raw and raw.strip():
+        return tuple(Path(p) for p in raw.split(os.pathsep) if p.strip())
+    return _DEFAULT_IDA_APP_DIRS
+
+
+def _is_exec_file(p: Path) -> bool:
+    try:
+        return p.is_file() and os.access(p, os.X_OK)
+    except OSError:
+        return False
+
+
+def _probe_ida_via_path() -> Path | None:
+    """Ladder rung 0: idat64 already on PATH."""
+    p = _shutil_which("idat64")
+    if p is None and os.name == "nt":
+        p = _shutil_which("idat64.exe")
+    return Path(p) if p else None
+
+
+def _probe_ida_via_mdfind() -> Path | None:
+    """Ladder rung a (addendum): Spotlight sees .app bundles that plain
+    directory probing misses. Missing mdfind / no index -> fall through."""
+    queries = (["mdfind", "-name", "idat64"],
+               ["mdfind", "kMDItemFSName == 'idat64'"])
+    for query in queries:
+        rc, out, _err = _run_cmd(query, timeout=10)
+        if rc != 0:
+            continue
+        for line in out.splitlines():
+            cand = Path(line.strip())
+            if _is_exec_file(cand):
+                return cand
+    return None
+
+
+def _walk_bounded(root: Path, max_depth: int):
+    """Yield (path, depth) under root up to max_depth levels; permission
+    walls (TCC) fail open — a silent shrink, never a crash."""
+    stack: list[tuple[Path, int]] = [(root, 0)]
+    while stack:
+        d, depth = stack.pop()
+        try:
+            entries = sorted(d.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            yield entry, depth
+            if entry.is_dir() and depth < max_depth:
+                stack.append((entry, depth + 1))
+
+
+def _probe_ida_via_find(app_dirs: tuple[Path, ...]) -> Path | None:
+    """Ladder rung b (addendum): the `find /Applications ~/Applications
+    -maxdepth 4 (-iname idat64 -o -iname 'IDA*.app' -o -iname
+    'IDAProfessional*')` sweep as a bounded pure-Python walk — same match
+    set, TCC-safe, portable. .app hits resolve to
+    <bundle>/Contents/MacOS/idat64."""
+    for root in app_dirs:
+        if not root.is_dir():
+            continue
+        for entry, _depth in _walk_bounded(root, 4):
+            name = entry.name.lower()
+            if name == "idat64" and _is_exec_file(entry):
+                return entry
+            if name.endswith(".app") and ("ida" in name):
+                for sub in ("Contents/MacOS/idat64", "Contents/MacOS/idat64.exe"):
+                    cand = entry / sub
+                    if _is_exec_file(cand):
+                        return cand
+                macos = entry / "Contents" / "MacOS"
+                if macos.is_dir():
+                    for cand, _d in _walk_bounded(macos, 1):
+                        if cand.name.lower().startswith("idat64") \
+                                and _is_exec_file(cand):
+                            return cand
+            elif name.startswith("idaprofessional") and entry.is_dir():
+                for cand, _d in _walk_bounded(entry, 4):
+                    if cand.name.lower() == "idat64" and _is_exec_file(cand):
+                        return cand
+    return None
+
+
+def _probe_ida_via_brew() -> Path | None:
+    """Ladder rung c (addendum): brew cask inventory — `brew list --cask`
+    names an ida cask, resolve the binary through the cask prefix."""
+    brew = _shutil_which("brew")
+    if not brew:
+        return None
+    rc, out, _err = _run_cmd([brew, "list", "--cask"], timeout=15)
+    if rc != 0:
+        return None
+    casks = [ln.strip() for ln in out.splitlines()
+             if "ida" in ln.lower() and ln.strip()]
+    for cask in casks:
+        rc2, prefix, _err2 = _run_cmd([brew, "--prefix", cask], timeout=15)
+        if rc2 != 0 or not prefix.strip():
+            continue
+        root = Path(prefix.strip())
+        for entry, _depth in _walk_bounded(root, 4):
+            if entry.name.lower() in ("idat64", "idat64.exe") \
+                    and _is_exec_file(entry):
+                return entry
+    return None
+
+
+def _probe_ida_via_known_dirs(
+        patterns: tuple[str, ...] | None = None) -> Path | None:
+    """Ladder rung d: the known-dir sweep — classic shapes AND the
+    .app/Contents/MacOS bundle layout, plus Windows/Linux equivalents."""
+    for pattern in (patterns or _IDA_KNOWN_DIR_PATTERNS):
+        expanded = os.path.expanduser(pattern)
+        try:
+            hits = sorted(glob.glob(expanded))
+        except Exception:  # noqa: BLE001 — a bad pattern never kills the gate
+            continue
+        for hit in hits:
+            cand = Path(hit)
+            if _is_exec_file(cand):
+                return cand
+    return None
+
+
+def _probe_local_ida(
+        app_dirs: tuple[Path, ...] | None = None) -> tuple[Path | None, str]:
+    """Ordered IDA probe ladder (issue 202 + addendum) — first hit wins.
+
+    Returns (path, strategy) so the PASS detail records HOW the binary was
+    found (probe strategy is evidence, not noise)."""
+    dirs = tuple(app_dirs) if app_dirs is not None else _ida_app_dirs()
+    hit = _probe_ida_via_path()
+    if hit:
+        return hit, "PATH"
+    hit = _probe_ida_via_mdfind()
+    if hit:
+        return hit, "mdfind"
+    hit = _probe_ida_via_find(dirs)
+    if hit:
+        return hit, "find-sweep"
+    hit = _probe_ida_via_brew()
+    if hit:
+        return hit, "brew-cask"
+    hit = _probe_ida_via_known_dirs()
+    if hit:
+        return hit, "known-dirs"
+    return None, ""
+
+
+def _probe_ghidra(
+        search_dirs: tuple[Path, ...] | None = None) -> Path | None:
+    """Ghidra probe (ladder tail): GHIDRA_HOME first (platform-correct
+    analyzeHeadless name), then the known Ghidra dirs (/opt/ghidra*,
+    /usr/local/ghidra*, ~/ghidra*) and the brew prefix."""
+    ghidra_home = _env_get("GHIDRA_HOME")
+    if ghidra_home:
+        ah = platform_paths.analyze_headless(ghidra_home)
+        if ah and Path(ah).exists():
+            return Path(ah)
+    name = platform_paths.analyze_headless_name()
+    roots = search_dirs if search_dirs is not None else (
+        Path("/opt"), Path("/usr/local"),
+        Path(os.path.expanduser("~")),
+        Path.home() / "opt" / "homebrew" / "Caskroom",
+        Path("/usr/local/Caskroom"),
+    )
+    for root in roots:
+        for pattern in (f"ghidra*/support/{name}",
+                        f"ghidra*/ghidra*/support/{name}"):
+            try:
+                hits = sorted(root.glob(pattern))
+            except OSError:
+                continue
+            for hit in hits:
+                if _is_exec_file(hit) or hit.exists():
+                    return hit
+    brew = _shutil_which("brew")
+    if brew:
+        rc, prefix, _err = _run_cmd([brew, "--prefix", "ghidra"], timeout=15)
+        if rc == 0 and prefix.strip():
+            root = Path(prefix.strip())
+            for entry, _depth in _walk_bounded(root, 4):
+                if entry.name == name and (entry.exists()):
+                    return entry
+    return None
+
+
+def _decompiler_choice(
+        context: dict | None = None) -> decision_pending.PendingDecision:
+    """The exit-8 CHOICE (issue 202): the decompiler-lane decision is the ONLY
+    user touchpoint of the decompiler face, and it is a choice."""
+    return decision_pending.PendingDecision(
+        decision_id="decompiler_lane",
+        question=(
+            "No local decompiler supply found (probed: PATH, mdfind, find "
+            "bundle sweep, brew cask, known dirs, GHIDRA_HOME, ghidra dirs, "
+            "ghidra/ida-pro-vm MCP). Choose the decompiler lane: "
+            "install-local-ida (HUMAN-ONLY: license purchase), "
+            "install-ghidra (agent-run #408 installer), or "
+            "skip-decompiler-lane (static depth limited)."),
+        kind=decision_pending.KIND_CHOICE,
+        options=("install-local-ida", "install-ghidra",
+                 "skip-decompiler-lane"),
+        default=None,  # never a silent default (#448 must-ask)
+        context=context or {},
+    )
+
+
+# The lane-conditional failure copy. Kept peer-equal (Ghidra and
+# IDA are equals — never an "install IDA" order) and anchored on the
+# init-gate tests pin the installer reference) — but phrased as the CHOICE
+# it now is, not a blocker dump.
+_DECOMPILER_NEITHER_DETAIL = (
+    "No decompiler supply found (probed: PATH, mdfind, find bundle sweep, "
+    "brew cask, known dirs, GHIDRA_HOME, ghidra dirs, ghidra/ida-pro-vm "
+    "MCP) — this is a CHOICE, not a blocker: install-local-ida "
+    "(HUMAN-ONLY: license purchase) / install-ghidra (#408 installer) / "
+    "skip-decompiler-lane (static depth limited). Ghidra OR IDA — either "
+    "satisfies this check when present."
+)
+_DECOMPILER_NEITHER_FIX = (
+    "decompiler supply is LANE-CONDITIONAL (#202): MCP lane (task_spec "
+    "tools.decompiler_lane: mcp) -> the gate verifies ida-pro-vm "
+    "registration + reachability and registers it itself via "
+    "`claude mcp add` — never a local IDA install; local lane -> the agent "
+    "probe ladder runs (PATH, mdfind, find bundle sweep incl. "
+    ".app/Contents/MacOS, brew cask, known dirs), then the Ghidra probe "
+    "(GHIDRA_HOME, ghidra dirs, brew). Ghidra OR IDA — either satisfies "
+    "this check when present; neither -> exit-8 PendingDecision CHOICE: "
+    "install-local-ida (license) / install-ghidra (#408 installer) / "
+    "skip-decompiler-lane"
+)
 
 
 def _capability_probe_ghidra(ah: Path, timeout: int = 300) -> tuple[bool, str]:
@@ -750,92 +1397,188 @@ def _capability_probe_ghidra(ah: Path, timeout: int = 300) -> tuple[bool, str]:
     return False, f"capability trial failed: {(err or out)[:120]}"
 
 
-def _check_decompiler(report: ToolchainReport, ws: Path,
-                      has_native_so: bool | None = None,
-                      caps: bool = False) -> None:
-    """Append the decompiler availability check (#407 MCP-first, #474 honest).
-
-    Three states, strongest evidence wins:
-      - capability-PASS (caps=True only): analyzeHeadless trial import
-        succeeded (CAPABILITY tier) — the only honest PASS.
-      - liveness/presence-WARN: MCP registered (+ bridge port reachable) or
-        CLI binary present — status WARN "capability unverified" (a probe
-        cannot reach into the MCP session; presence is not capability).
-      - FAIL: nothing registered/present (android pure-DEX keeps WARN).
-
-    `has_native_so` encodes the android tier nuance: None (windows/linux)
-    and True (android with native .so) -> HARD tier; False (android
-    pure-DEX) -> the FAIL/WARN wording nuance stays as before.
-    """
-    registered = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
-
-    ghidra_home = _env_get("GHIDRA_HOME")
-    ah = (platform_paths.analyze_headless(ghidra_home)
-          if ghidra_home else None)
-    ida = _shutil_which("idat64")
-
-    # capability trial — only when explicitly requested and a CLI binary
-    # exists to trial (MCP capability is unprovable from a Python probe).
-    if caps and _file_exists(ah):
-        ok, detail = _capability_probe_ghidra(ah)
+def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
+                               registered: dict[str, list[str]],
+                               reqs: Requirements) -> None:
+    """MCP lane (LANE-CONDITIONAL): the task declared the ida-pro-vm
+    MCP lane — the face gates on registration + reachability and NEVER
+    probes a local IDA install or license. Missing server -> the gate
+    registers it itself (AGENT-DO, task_spec url) and re-verifies."""
+    spec = next((s for s in reqs.required_mcp if s.name == "ida-pro-vm"),
+                McpServerSpec(name="ida-pro-vm", transport="http"))
+    claude_json = mcp_probe.claude_json_path()
+    if "ida-pro-vm" not in registered:
+        register = (f"claude mcp add --transport http ida-pro-vm {spec.url}"
+                    if spec.url else
+                    "claude mcp add --transport http ida-pro-vm <ida-mcp-url>"
+                    " (the url comes from task_spec tools.mcp_servers)")
+        detail = ("ida-pro-vm not registered (task declares the ida-pro-vm "
+                  "MCP lane)")
+        if _agent_do_enabled():
+            argv = _concrete_register_argv(
+                "claude mcp add --transport http ida-pro-vm <ida-mcp-url>",
+                spec.url)
+            if argv is not None:
+                allowed, why = _mcp_register_attempt_allowed()
+                if allowed:
+                    ok, err = _attempt_mcp_register(argv)
+                    attempts = (" ".join(argv),)
+                    registered = mcp_probe.registered_names(claude_json, ws)
+                    if "ida-pro-vm" in registered:
+                        report.items.append(CheckResult(
+                            name="decompiler", status=Status.PASS,
+                            tier=Tier.HARD,
+                            detail=("ida-pro-vm registered by agent "
+                                    "(`claude mcp add --transport http`) — "
+                                    "MCP lane, no local IDA involved"),
+                            probe=ProbeTier.PRESENCE,
+                            owner=OwnerTier.AGENT_DO, attempts=attempts,
+                        ))
+                        return
+                    detail += f"; agent-do register attempt failed: {err}"
+                    report.items.append(CheckResult(
+                        name="decompiler", status=Status.FAIL,
+                        tier=Tier.HARD, detail=detail, probe=ProbeTier.PRESENCE,
+                        fix=("verify the ida-pro-vm endpoint is up, then "
+                             "re-register: " + register),
+                        attempts=attempts,
+                    ))
+                    return
+        report.items.append(CheckResult(
+            name="decompiler", status=Status.FAIL, tier=Tier.HARD,
+            detail=detail, probe=ProbeTier.PRESENCE, fix=register,
+        ))
+        return
+    url = spec.url or _mcp_server_url("ida-pro-vm", claude_json, ws)
+    if url:
+        parts = urllib.parse.urlsplit(url)
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+        host = parts.hostname or "127.0.0.1"
+        ok, err = _tcp_connect(host, port)
         if ok:
             report.items.append(CheckResult(
-                name="ghidra", status=Status.PASS, tier=Tier.HARD,
-                detail=f"analyzeHeadless at {ah} — {detail}",
-                probe=ProbeTier.CAPABILITY,
-            ))
-            return
-        # trial ran and failed: report the FAIL honestly, fall through to
-        # the WARN evidence lines below (presence still true, capability not).
-
-    for name in _DECOMPILER_MCP_NAMES:
-        if name in registered:
-            report.items.append(CheckResult(
-                name="decompiler", status=Status.WARN, tier=Tier.HARD,
-                detail=f"via MCP ({name}) — registered, {_UNVERIFIED} "
-                       f"(registry read only; a probe cannot reach the MCP "
-                       f"session — tools register after connect_instance)",
+                name="decompiler", status=Status.PASS, tier=Tier.HARD,
+                detail=(f"via MCP lane (ida-pro-vm) — registered + endpoint "
+                        f"reachable ({host}:{port}); session capability "
+                        f"unverified (tools register after connect_instance)"),
                 probe=ProbeTier.LIVENESS,
             ))
             return
-
-    if _file_exists(ah):
         report.items.append(CheckResult(
-            name="ghidra", status=Status.WARN, tier=Tier.HARD,
-            detail=f"analyzeHeadless at {ah} — presence only, {_UNVERIFIED} "
-                   f"(run toolchain --capability for a trial import)",
+            name="decompiler", status=Status.FAIL, tier=Tier.HARD,
+            detail=(f"ida-pro-vm registered but endpoint unreachable: {err} "
+                    f"(url from task_spec/registry — bring the server up; "
+                    f"never a local IDA install)"),
+            probe=ProbeTier.LIVENESS,
+            fix=("bring the ida-pro-vm endpoint up (task_spec "
+                 "tools.mcp_servers url) — the lane is the MCP surface, "
+                 "not a local IDA install"),
+        ))
+        return
+    # registered, no url anywhere -> registry presence only (honesty)
+    report.items.append(CheckResult(
+        name="decompiler", status=Status.WARN, tier=Tier.HARD,
+        detail=(f"via MCP lane (ida-pro-vm) — registered, {_UNVERIFIED} "
+                f"(no endpoint url in task_spec or registry to probe)"),
+        probe=ProbeTier.PRESENCE,
+    ))
+
+
+def _check_decompiler(report: ToolchainReport, ws: Path,
+                      has_native_so: bool | None = None,
+                      caps: bool = False,
+                      reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """Append the decompiler availability check — LANE-CONDITIONAL (issue 202).
+
+    Face branches on the task's declared lane (task_spec
+    tools.decompiler_lane):
+      - "mcp": ida-pro-vm registration + reachability. NEVER a local IDA
+        install/license demand, never the local probe ladder.
+      - "local": the ordered probe ladder (PATH -> mdfind -> find bundle
+        sweep -> brew cask -> known dirs) -> PASS with the wired binary
+        path; then the Ghidra probe -> PASS as Ghidra.
+      - None (undeclared): the pre-rework combined behavior — MCP-first
+        defusal, then the ladder; the ladder's found-hits now PASS (issue 202)
+        with the probe strategy recorded.
+      Neither found -> exit-8 PendingDecision CHOICE (install-local-ida /
+      install-ghidra / skip-decompiler-lane) — the ONLY user touchpoint,
+      and it is a choice, not a blocker dump.
+
+    `has_native_so` keeps the android nuance: pure-DEX (False) keeps the
+    WARN (no HARD blocker, no choice needed — the lane is freely skipped).
+    """
+    registered = mcp_probe.registered_names(mcp_probe.claude_json_path(), ws)
+
+    if reqs.decompiler_lane == "mcp":
+        _check_decompiler_mcp_lane(report, ws, registered, reqs)
+        return
+
+    # MCP-first supply defusal — undeclared lane only (a declared LOCAL
+    # lane is decided by the probe ladder, never by MCP presence).
+    if reqs.decompiler_lane is None:
+        for name in _DECOMPILER_MCP_NAMES:
+            if name in registered:
+                report.items.append(CheckResult(
+                    name="decompiler", status=Status.WARN, tier=Tier.HARD,
+                    detail=f"via MCP ({name}) — registered, {_UNVERIFIED} "
+                           f"(registry read only; a probe cannot reach the "
+                           f"MCP session — tools register after "
+                           f"connect_instance)",
+                    probe=ProbeTier.LIVENESS,
+                ))
+                return
+
+    # ---- local probe ladder (issue 202 + addendum) ----
+    ida_path, strategy = _probe_local_ida()
+    if ida_path:
+        report.items.append(CheckResult(
+            name="ida", status=Status.PASS, tier=Tier.HARD,
+            detail=(f"idat64 at {ida_path} (probe: {strategy}) — wired: "
+                    f"export PATH={ida_path.parent}:$PATH"),
             probe=ProbeTier.PRESENCE,
         ))
         return
-    if ida:
+
+    ah = _probe_ghidra()
+    if ah:
+        trial_note = ""
+        probe = ProbeTier.PRESENCE
+        if caps:
+            ok, trial_detail = _capability_probe_ghidra(ah)
+            trial_note = (f"; capability trial: {trial_detail}"
+                          if ok else
+                          f"; capability trial FAILED (presence PASS stands "
+                          f"per #202): {trial_detail}")
+            if ok:
+                probe = ProbeTier.CAPABILITY
         report.items.append(CheckResult(
-            name="ida", status=Status.WARN, tier=Tier.HARD,
-            detail=f"idat64 at {ida} — presence only, {_UNVERIFIED}",
-            probe=ProbeTier.PRESENCE,
+            name="ghidra", status=Status.PASS, tier=Tier.HARD,
+            detail=f"analyzeHeadless at {ah} — Ghidra supplies the "
+                   f"decompiler lane{trial_note}",
+            probe=probe,
         ))
         return
 
     if has_native_so is False:
+        # android pure-DEX: the lane is freely skippable — WARN, no choice
         report.items.append(CheckResult(
             name="decompiler", status=Status.WARN, tier=Tier.HARD,
-            detail="No decompiler found (need Ghidra, IDA, or a ghidra/ida-pro-vm "
-                   "MCP registration) — WARN for pure-DEX samples; HARD if sample "
-                   "has .so (see the #408 installer)",
+            detail="No decompiler found (Ghidra, IDA, or a ghidra/ida-pro-vm "
+                   "MCP registration satisfies this check) — WARN for "
+                   "pure-DEX samples; HARD if the sample has .so "
+                   "(see the #408 installer)",
             probe=ProbeTier.PRESENCE,
         ))
-    else:
-        report.items.append(CheckResult(
-            name="decompiler", status=Status.FAIL, tier=Tier.HARD,
-            detail=("Sample has native .so — decompiler REQUIRED for native "
-                    "code (install Ghidra OR IDA — either satisfies this "
-                    "check)"
-                    if has_native_so
-                    else "No decompiler found (install Ghidra OR IDA — either "
-                         "satisfies this check; or register a "
-                         "ghidra/ida-pro-vm MCP — see the #408 installer)"),
-            root_cause="decompiler" if has_native_so else None,
-            probe=ProbeTier.PRESENCE,
-        ))
+        return
+
+    # Neither supply anywhere -> the exit-8 CHOICE.
+    report.items.append(CheckResult(
+        name="decompiler", status=Status.FAIL, tier=Tier.HARD,
+        detail=_DECOMPILER_NEITHER_DETAIL,
+        root_cause="decompiler" if has_native_so else None,
+        probe=ProbeTier.PRESENCE,
+        pending_decision=_decompiler_choice(),
+    ))
 
 
 # ---------- #449: env = f(task_spec) — needs-first requirements ----------
@@ -849,32 +1592,6 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
 TASK_SPEC_FILENAME = "task_spec.yaml"
 
 
-@dataclass(frozen=True)
-class Requirements:
-    """Which environment capabilities the TASK needs (env = f(task_spec)).
-
-    needs_vm: the windows/linux VM channel (vmr-shell + frida-to-VM) is
-        required. True is the conservative default — the pre-#449 status
-        quo — whenever task_spec does not explicitly say otherwise.
-    needs_debug_flag: the android JDWP device flag (ro.debuggable=1) is
-        required. True is the conservative default (#304 F3 enforcement).
-        #25 D1: ro.debuggable=1 is unreachable on Android 12+ user builds
-        (SELinux property_service lock) while frida/android_server run fine
-        via Magisk su without it — a task that does not need the flag must
-        be able to say so (constraints.dynamic_re=forbidden, or an explicit
-        constraints.debug_flag: false); the debug_flag check then downgrades
-        FAIL -> WARN instead of blocking an init that can never pass.
-    basis: why (task_spec field citation, or the conservative default) —
-        rides into the downgraded check details so a WARN is never mystery
-        noise.
-    """
-
-    needs_vm: bool = True
-    needs_debug_flag: bool = True
-    basis: str = "task_spec absent/unreadable — conservative default (VM HARD)"
-
-
-DEFAULT_REQUIREMENTS = Requirements()
 
 
 def requirements_from_task_spec(task_spec: dict | None) -> Requirements:
@@ -902,25 +1619,52 @@ def requirements_from_task_spec(task_spec: dict | None) -> Requirements:
     """
     if not isinstance(task_spec, dict):
         return DEFAULT_REQUIREMENTS
-    constraints = task_spec.get("constraints")
-    if not isinstance(constraints, dict):
-        return DEFAULT_REQUIREMENTS
     needs_vm = True
     needs_debug_flag = True
+    decompiler_lane: str | None = None
+    required_mcp: tuple[McpServerSpec, ...] = ()
+    required_mcp_declared = False
     basis = DEFAULT_REQUIREMENTS.basis
-    dynamic_re = str(constraints.get("dynamic_re", "")).strip().lower()
-    if dynamic_re == "forbidden":
-        needs_vm = False
-        needs_debug_flag = False  # static-only: no JDWP dynamics either (#25 D1)
-        basis = "task_spec constraints.dynamic_re=forbidden (static-only)"
-    if constraints.get("debug_flag") is False:
-        needs_debug_flag = False
-        basis = ("task_spec constraints.debug_flag=false "
-                 "(user build: JDWP flag not required)")
-    if needs_vm and needs_debug_flag:
+    tools = task_spec.get("tools")
+    if isinstance(tools, dict):
+        lane_raw = str(tools.get("decompiler_lane", "")).strip().lower()
+        if lane_raw in ("mcp", "local"):
+            decompiler_lane = lane_raw
+        servers = tools.get("mcp_servers")
+        if isinstance(servers, list):
+            required_mcp_declared = True  # explicit declaration, even empty
+            specs: list[McpServerSpec] = []
+            for entry in servers:
+                if isinstance(entry, str):
+                    specs.append(McpServerSpec(name=entry.strip().lower()))
+                elif isinstance(entry, dict) and entry.get("name"):
+                    specs.append(McpServerSpec(
+                        name=str(entry["name"]).strip().lower(),
+                        transport=str(entry.get("transport", "stdio")).strip()
+                        .lower() or "stdio",
+                        url=(str(entry["url"]).strip()
+                             if entry.get("url") else None)))
+            required_mcp = tuple(specs)
+    constraints = task_spec.get("constraints")
+    if isinstance(constraints, dict):
+        dynamic_re = str(constraints.get("dynamic_re", "")).strip().lower()
+        if dynamic_re == "forbidden":
+            needs_vm = False
+            needs_debug_flag = False  # static-only: no JDWP dynamics either (#25 D1)
+            basis = "task_spec constraints.dynamic_re=forbidden (static-only)"
+        if constraints.get("debug_flag") is False:
+            needs_debug_flag = False
+            basis = ("task_spec constraints.debug_flag=false "
+                     "(user build: JDWP flag not required)")
+    if (needs_vm and needs_debug_flag and decompiler_lane is None
+            and not required_mcp_declared):
         return DEFAULT_REQUIREMENTS
     return Requirements(needs_vm=needs_vm,
-                        needs_debug_flag=needs_debug_flag, basis=basis)
+                        needs_debug_flag=needs_debug_flag,
+                        decompiler_lane=decompiler_lane,
+                        required_mcp=required_mcp,
+                        required_mcp_declared=required_mcp_declared,
+                        basis=basis)
 
 
 def load_task_spec(ws: Path) -> dict | None:
@@ -1308,7 +2052,8 @@ def _check_windows(report: ToolchainReport, ws: Path,
 
     # T1: Ghidra or IDA (#407: MCP-first, CLI fallback — one shared helper;
     # #474: three-state honest, caps plumbs the capability trial)
-    _check_decompiler(report, ws, caps=caps)
+    _check_uv(report)
+    _check_decompiler(report, ws, caps=caps, reqs=reqs)
 
     # T2: VM channel (vmr-shell 9876 + frida 1337 + remote-debugger
     # cascade) — shared helper; #449 env = f(task_spec): static-only
@@ -1323,7 +2068,7 @@ def _check_windows(report: ToolchainReport, ws: Path,
         found_detail="docker at {path}"))
 
     # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
-    _check_mcp(report, ws, "windows")
+    _check_mcp(report, ws, "windows", reqs=reqs)
 
 
 # ---------- Linux manifest ----------
@@ -1338,7 +2083,8 @@ def _check_linux(report: ToolchainReport, ws: Path,
 
     # T1: Ghidra or IDA (#407: MCP-first, CLI fallback — one shared helper;
     # #474: three-state honest, caps plumbs the capability trial)
-    _check_decompiler(report, ws, caps=caps)
+    _check_uv(report)
+    _check_decompiler(report, ws, caps=caps, reqs=reqs)
 
     # T2: VM channel (vmr-shell 9876 + frida 1337 + remote-debugger
     # cascade) — shared helper; #449 env = f(task_spec): static-only
@@ -1353,7 +2099,7 @@ def _check_linux(report: ToolchainReport, ws: Path,
         found_detail="docker at {path}"))
 
     # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
-    _check_mcp(report, ws, "linux")
+    _check_mcp(report, ws, "linux", reqs=reqs)
 
     # T2: remote debugger gdbserver (host-side PATH lookup; the VM-side
     # binary is beyond host reach — verified via the VM channel)
@@ -1481,8 +2227,9 @@ def _check_android(report: ToolchainReport, ws: Path,
         ))
 
     # T1: Ghidra or IDA (native .so decompilation; #407 MCP-first helper)
+    _check_uv(report)
     _check_decompiler(report, ws, has_native_so=_probe_native_so(ws),
-                      caps=caps)
+                      caps=caps, reqs=reqs)
 
     # T2: ADB (root dependency)
     adb = _shutil_which("adb")
@@ -1511,7 +2258,9 @@ def _check_android(report: ToolchainReport, ws: Path,
             root_cause="ADB", probe=ProbeTier.PRESENCE,
         ))
 
-    # T2: device root (cascades from ADB)
+    # T2: device root (cascades from ADB) — rooting itself stays HUMAN-ONLY
+    # (physical device decision); the CHECK is an agent adb attempt.
+    rooted = False
     if not adb_ok:
         report.items.append(CheckResult(
             name="device_root", status=Status.FAIL, tier=Tier.HARD,
@@ -1522,7 +2271,8 @@ def _check_android(report: ToolchainReport, ws: Path,
         # Try adb shell su -c id
         assert adb  # noqa: S101 — adb is set when adb_ok is True
         rc, out, err = _run_cmd([adb, "shell", "su", "-c", "id"], timeout=10)
-        if rc == 0 and "uid=0" in out:
+        rooted = rc == 0 and "uid=0" in out
+        if rooted:
             report.items.append(CheckResult(
                 name="device_root", status=Status.PASS, tier=Tier.HARD,
                 detail=f"device rooted: {out}", probe=ProbeTier.CAPABILITY,
@@ -1560,7 +2310,35 @@ def _check_android(report: ToolchainReport, ws: Path,
         rc, out, err = _run_cmd([adb, "shell", "getprop", "ro.debuggable"],
                                 timeout=10)
         debuggable = out.strip() if rc == 0 else ""
-        if debuggable == "1":
+        # AGENT-DO: on a ROOTED device an unset flag is set by the gate
+        # itself (`su -c resetprop`), then read back — the user is never
+        # handed the command. Attempts fire only when the task needs the
+        # flag and AGENT-DO is enabled; failures escalate WITH the error.
+        attempts: tuple[str, ...] = ()
+        flag_attempt_error = ""
+        flag_handled = False
+        if (debuggable != "1" and rooted and _agent_do_enabled()
+                and not flag_optional):
+            set_argv = [adb, "shell", "su", "-c", "resetprop ro.debuggable 1"]
+            rc2, out2, err2 = _run_cmd(set_argv, timeout=10)
+            attempts = (" ".join(set_argv),)
+            rc, out, err = _run_cmd(
+                [adb, "shell", "getprop", "ro.debuggable"], timeout=10)
+            debuggable = out.strip() if rc == 0 else ""
+            if debuggable == "1":
+                flag_handled = True
+                report.items.append(CheckResult(
+                    name="debug_flag", status=Status.PASS, tier=Tier.HARD,
+                    detail=("AGENT-DO: ro.debuggable=1 set via "
+                            "`su -c resetprop ro.debuggable 1` (read-back "
+                            "verified)"),
+                    probe=ProbeTier.CAPABILITY, attempts=attempts,
+                ))
+            else:
+                flag_attempt_error = (err2 or out2 or f"rc={rc2}")
+        if flag_handled:
+            pass  # AGENT-DO PASS already appended
+        elif debuggable == "1":
             report.items.append(CheckResult(
                 name="debug_flag", status=Status.PASS, tier=Tier.HARD,
                 detail="ro.debuggable=1 — debug flag set (read back verified)",
@@ -1573,6 +2351,9 @@ def _check_android(report: ToolchainReport, ws: Path,
                 detail += f" — not required by task_spec ({reqs.basis})"
             else:
                 detail += " — required for Android dynamic analysis"
+            if flag_attempt_error:
+                detail += (f"; AGENT-DO resetprop attempt failed: "
+                           f"{flag_attempt_error}")
             report.items.append(CheckResult(
                 name="debug_flag",
                 status=Status.WARN if flag_optional else Status.FAIL,
@@ -1580,6 +2361,7 @@ def _check_android(report: ToolchainReport, ws: Path,
                 detail=detail,
                 root_cause=None if flag_optional else "debug_flag",
                 probe=ProbeTier.CAPABILITY,
+                attempts=attempts,
             ))
 
     # T2: frida-server (renamed + custom port, convention 1337) — HARD, enforced
@@ -1594,20 +2376,33 @@ def _check_android(report: ToolchainReport, ws: Path,
     else:
         assert adb  # noqa: S101 — adb is set when adb_ok is True
         ok, detail = _adb_forward_probe(adb, FRIDA_PORT)
+        # AGENT-DO: bring-up is agent work — the gate looks for a
+        # (renamed) frida binary on the device, starts it on the custom
+        # port over su, re-forwards and re-probes. Escalates with the
+        # attempt evidence only on genuine failure.
+        attempts: tuple[str, ...] = ()
+        if not ok and _agent_do_enabled() and rooted:
+            ok, detail, attempts = _agent_do_device_bringup(
+                adb, FRIDA_PORT, name_hint="frida")
         if ok:
+            note = (" — AGENT-DO bring-up" if attempts else "")
             report.items.append(CheckResult(
                 name="frida_server", status=Status.PASS, tier=Tier.HARD,
                 detail=f"frida-server reachable on custom port {FRIDA_PORT} "
-                       f"(renamed binary verified by port)",
-                probe=ProbeTier.LIVENESS,
+                       f"(renamed binary verified by port){note}",
+                probe=ProbeTier.LIVENESS, attempts=attempts,
             ))
         else:
+            if attempts:
+                detail += ("; AGENT-DO bring-up attempt did not bring the "
+                           "port up")
             report.items.append(CheckResult(
                 name="frida_server", status=Status.FAIL, tier=Tier.HARD,
                 detail=f"frida-server NOT verified on custom port {FRIDA_PORT}: {detail} — "
                        f"must run a RENAMED binary on the custom port "
                        f"(default name/port 27042 is detected by samples)",
                 root_cause="frida_server", probe=ProbeTier.LIVENESS,
+                attempts=attempts,
             ))
 
     # T2: android_server — HARD, enforced (#304 F3): real probe via adb forward
@@ -1621,19 +2416,29 @@ def _check_android(report: ToolchainReport, ws: Path,
     else:
         assert adb  # noqa: S101 — adb is set when adb_ok is True
         ok, detail = _adb_forward_probe(adb, ANDROID_SERVER_PORT)
+        # AGENT-DO: same bring-up shape as frida-server (gserver).
+        attempts: tuple[str, ...] = ()
+        if not ok and _agent_do_enabled() and rooted:
+            ok, detail, attempts = _agent_do_device_bringup(
+                adb, ANDROID_SERVER_PORT, name_hint="android_server")
         if ok:
+            note = (" — AGENT-DO bring-up" if attempts else "")
             report.items.append(CheckResult(
                 name="android_server", status=Status.PASS, tier=Tier.HARD,
                 detail=f"android_server listening on device port {ANDROID_SERVER_PORT} "
-                       f"(via adb forward)",
-                probe=ProbeTier.LIVENESS,
+                       f"(via adb forward){note}",
+                probe=ProbeTier.LIVENESS, attempts=attempts,
             ))
         else:
+            if attempts:
+                detail += ("; AGENT-DO bring-up attempt did not bring the "
+                           "port up")
             report.items.append(CheckResult(
                 name="android_server", status=Status.FAIL, tier=Tier.HARD,
                 detail=f"android_server NOT verified on port {ANDROID_SERVER_PORT}: {detail} — "
                        f"adb push android_server to the device and run it",
                 root_cause="android_server", probe=ProbeTier.LIVENESS,
+                attempts=attempts,
             ))
 
     # T2: jdwp_debug (#474, #474-followup 2026-08-19) — JDWP raw-handshake
@@ -1710,7 +2515,7 @@ def _check_android(report: ToolchainReport, ws: Path,
     ))
 
     # #316: MCP supply (registry: ~/.claude.json + workspace .mcp.json)
-    _check_mcp(report, ws, "android")
+    _check_mcp(report, ws, "android", reqs=reqs)
 
 
 # ---------- Web manifest (#728, labs: WARN-only) ----------
@@ -1726,7 +2531,7 @@ def _check_web(report: ToolchainReport, ws: Path,
       #698 owns the channel matrix itself)
     No VM channel, no decompiler, no caps path — the web dynamic surface is
     the browser, not a VM."""
-    _check_mcp(report, ws, "web")
+    _check_mcp(report, ws, "web", reqs=reqs)
 
     docker = _shutil_which("docker")
     if docker:
@@ -1804,11 +2609,11 @@ def _check_macos(report: ToolchainReport, ws: Path,
 # design (issue #455 evidence 2; deep manifest is #450).
 CHECK_SETS: dict[str, frozenset[str]] = {
     "windows": frozenset({
-        "pefile", "die", "floss", "decompiler", "ghidra", "ida",
+        "pefile", "die", "floss", "decompiler", "ghidra", "ida", "uv",
         "vm_reachable", "remote_debugger", "docker",
     }),
     "linux": frozenset({
-        "file", "readelf", "objdump", "decompiler", "ghidra", "ida",
+        "file", "readelf", "objdump", "decompiler", "ghidra", "ida", "uv",
         "vm_reachable", "remote_debugger", "docker", "gdbserver",
         "ebpf", "strace", "ltrace",
     }),
@@ -1856,6 +2661,9 @@ def format_human(report: ToolchainReport) -> str:
         if item.root_cause:
             line += f" (root cause: {item.root_cause})"
         lines.append(line)
+        # ownership rides every non-PASS line (who owns the fix).
+        if item.status != Status.PASS:
+            lines.append(f"      owner: {item.owner.value}")
         if item.status != Status.PASS and (item.fix or item.name in FIXES):
             lines.append(f"      fix: {item.fix or FIXES[item.name]}")
             # #680: structured metadata supplements the fix prose — the
@@ -1867,6 +2675,10 @@ def format_human(report: ToolchainReport) -> str:
                     lines.append(f"      url: {meta.url}")
                 if meta.verify_cmd:
                     lines.append(f"      verify: {meta.verify_cmd}")
+        # AGENT-DO attempt evidence — the human sees what the agent
+        # already tried, never a bare command dump.
+        for attempt in item.attempts:
+            lines.append(f"      attempted: {attempt}")
         # #451: machine-parseable key-value lines — anchored prefixes the
         # negotiation consumers grep for (never part of detail/fix prose).
         if item.status == Status.FAIL:
@@ -1892,6 +2704,7 @@ def format_json(report: ToolchainReport) -> str:
                 "status": i.status.value,
                 "tier": i.tier.value,
                 "probe": i.probe.value,  # #474: presence|liveness|capability
+                "owner": i.owner.value,  # #202: agent_do|human_only|lane_conditional
                 "detail": i.detail,
                 "root_cause": i.root_cause,
                 "fix": (i.fix or fix_text(i.name))
@@ -1902,6 +2715,11 @@ def format_json(report: ToolchainReport) -> str:
                             if i.status != Status.PASS and i.name in FIXES
                             else None),
                 "next_action": _next_action_json(i),  # #451
+                # AGENT-DO attempt evidence + pending CHOICE
+                "attempts": list(i.attempts),
+                "pending_decision": (
+                    dataclasses.asdict(i.pending_decision)
+                    if i.pending_decision is not None else None),
             }
             for i in report.items
         ],
@@ -1915,6 +2733,11 @@ def format_reproduce(report: ToolchainReport) -> str:
     for i in report.items:
         parts.append(f"{i.name}={i.status.value}")
     return " ".join(parts)
+
+
+def _report_pending(report: ToolchainReport) -> bool:
+    """True when the report carries at least one pending CHOICE item (issue 202)."""
+    return any(i.pending_decision is not None for i in report.items)
 
 
 # ---------- main ----------
@@ -1952,6 +2775,10 @@ def check(ws: Path, project_type: str | None = None,
         "macos": _check_macos,
     }
     checkers[project_type](report, ws, caps=caps, reqs=reqs)
+    # single-point owner stamping — every item leaves the gate with
+    # its ownership tier (rebuilt items, no in-place mutation).
+    report.items = [dataclasses.replace(i, owner=owner_for(i.name))
+                    for i in report.items]
     return report
 
 
@@ -1990,10 +2817,29 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
+    # the decompiler-lane CHOICE is the gate's only user touchpoint —
+    # when it is the SOLE blocker, the pending doc IS the stdout
+    # machine channel (a second JSON doc would break parsers) and the human
+    # report moves to stderr; a mixed report keeps exit 1 with the choice
+    # riding in the --json surface for the agent layer to relay.
+    pending = [i.pending_decision for i in report.items
+               if i.pending_decision is not None]
+    blocking = [i for i in report.items
+                if i.status is Status.FAIL and i.tier is Tier.HARD
+                and i.pending_decision is None]
+    if pending and not blocking:
+        doc = decision_pending.build_pending_doc(
+            flow="toolchain", workspace=str(ws),
+            guidance=decision_pending.GUIDANCE_TEMPLATE, decisions=pending)
+        print(format_human(report), file=sys.stderr)
+        print(json.dumps(doc, indent=2, ensure_ascii=False))
+        return 8
+
     if args.json:
         print(format_json(report))
     elif args.reproduce:
-        print(format_reproduce(report))
+        print(format_reproduce(report)
+              + (" pending=decompiler_lane" if _report_pending(report) else ""))
     else:
         print(format_human(report))
 

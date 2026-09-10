@@ -2901,6 +2901,18 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 if resolved.overall_status == toolchain.Status.FAIL:
                     return refuse_toolchain(ws, resolved)
 
+    # uv env deployment (the uv-managed .venv the shipped
+    # faces resolve through) + host learning-plugin detection warning.
+    warn_learning_style_plugins()
+    if not skip_toolchain:
+        uv_env = uv_sync_workspace()
+        if uv_env["ok"] and uv_env["venv"]:
+            record_venv_path(ws, uv_env["venv"])
+            print(f"kunglao-init: uv env ready: {uv_env['venv']}")
+        else:
+            print(f"kunglao-init: WARNING uv env not materialized: "
+                  f"{uv_env['detail']}", file=sys.stderr)
+
     # #813: Phase 0 预扫描 promise — apkid/DIE 探测状态、混淆先验、java
     # 可达性显式落盘（消灭"跳过且不记录"）。WARN-tier：promise 写失败不卡
     # init，但必须 ERROR + env_incident 落账——静默跳过才是病理。
@@ -3117,6 +3129,87 @@ def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
               file=sys.stderr)
     print("kunglao-init: NOT initialized (no [initialized] marker written)", file=sys.stderr)
     return RC_TOOLCHAIN_REFUSE
+
+
+# ---------- uv env deployment + learning-plugin detection ----------
+
+def uv_sync_workspace(root: Path | None = None, timeout: int = 600) -> dict:
+    """Materialize the uv-managed .venv at the skill root (issue 202 scope).
+
+    The repo standard is `uv sync --locked` + `uv run` — shipped hook
+    commands already resolve through the documented uv-run form; this
+    materializes the .venv that resolution expects so deployed faces never
+    fall back to bare python3. Best-effort + honest: failures print and
+    return ok=False (the toolchain check_uv face owns the HARD gate);
+    tests substitute the uv binary via PATH."""
+    project_root = Path(root) if root is not None else (
+        Path(__file__).resolve().parent.parent)
+    uv = shutil.which("uv")
+    if uv is None:
+        return {"ok": False, "venv": "",
+                "detail": "uv not on PATH (the toolchain check_uv face owns "
+                          "the install)"}
+    try:
+        proc = subprocess.run([uv, "sync", "--locked"], cwd=str(project_root),
+                              capture_output=True, text=True, timeout=timeout,
+                              encoding="utf-8", errors="replace")
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return {"ok": False, "venv": "", "detail": str(exc)}
+    venv = str(project_root / ".venv")
+    ok = proc.returncode == 0
+    return {"ok": ok, "venv": venv if (project_root / ".venv").exists() else "",
+            "detail": ((proc.stderr or proc.stdout or "").strip()[:200]
+                       if not ok else (proc.stdout or "").strip()[:120])}
+
+
+def record_venv_path(ws: Path, venv_path: str) -> bool:
+    """Record venv_path=<path> in analysis_state.txt (idempotent, same
+    append/update pattern as write_project_type)."""
+    p = ws / "analysis_state.txt"
+    text = p.read_text(encoding="utf-8") if p.exists() else ""
+    lines = [ln for ln in text.splitlines()
+             if not ln.strip().startswith("venv_path=")]
+    lines.append(f"venv_path={venv_path}")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(p, "\n".join(lines) + "\n")
+    return True
+
+
+_LEARNING_STYLE_PLUGINS = ("learning-output-style", "explanatory-output-style")
+
+
+def _learning_style_plugin_cache_dir() -> Path:
+    """The official plugin-cache dir (seam — tests substitute tmp dirs)."""
+    return (Path.home() / ".claude" / "plugins" / "cache"
+            / "claude-plugins-official")
+
+
+def detect_learning_style_plugins(cache_dir: Path | None = None) -> list[str]:
+    """Installed learning/explanatory output-style plugins (issue 202 scope).
+
+    Their SessionStart hooks inject "learning mode" context into every
+    session on any project; inside kunglao workspaces the CLAUDE.md runtime
+    contract countermands it (instruction layer beats injected context)."""
+    root = (cache_dir if cache_dir is not None
+            else _learning_style_plugin_cache_dir())
+    try:
+        if not root.is_dir():
+            return []
+        return [p for p in _LEARNING_STYLE_PLUGINS if (root / p).is_dir()]
+    except OSError:
+        return []
+
+
+def warn_learning_style_plugins(cache_dir: Path | None = None) -> list[str]:
+    """Print the one-line warning when the plugins are installed (issue 202)."""
+    detected = detect_learning_style_plugins(cache_dir)
+    if detected:
+        print(f"kunglao-init: WARNING output-style plugin(s) "
+              f"{', '.join(detected)} inject learning-mode session context "
+              f"on every session — neutralized inside this workspace by the "
+              f"CLAUDE.md runtime contract; uninstall them on runtime "
+              f"machines ({_learning_style_plugin_cache_dir()})")
+    return detected
 
 
 def main(argv: list[str] | None = None) -> int:
