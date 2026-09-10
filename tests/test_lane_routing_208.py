@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -425,3 +426,105 @@ def test_stub_lane_check_set_is_documented_in_lane_spec(lane):
     import lane_spec
     assert lane_spec.REQUIRED_CHECKS[lane] == ("uv", "python",
                                                f"{lane}_material")
+
+
+# ------------------------------ 6. malware-only agents are gated at dispatch
+
+MALWARE_ONLY_AGENTS = ("pefile-signature", "floss-filter", "go-symbols",
+                       "ghidra-light", "kunglao-redteam")
+LANE_AGNOSTIC_AGENTS = ("kunglao-worker", "kunglao-init-worker",
+                        "verdict-scorer", "web-re-worker")
+
+
+def _write_lane_ws(root: Path, lane: str | None) -> Path:
+    """Initialized-looking workspace (the hook's resolver needs the
+    claim-register sentinel) whose contract declares `lane`."""
+    ws = root / "malware-analysis-workspace"
+    ws.mkdir(parents=True)
+    (ws / "claim-register.yaml").write_text("claims: []\n", encoding="utf-8")
+    lines = (f"lane: {lane}\n" if lane else "") + "".join(
+        f"{k}: {v}\n" for k, v in ANCHOR_ANSWERS.items())
+    (ws / "task_spec.yaml").write_text(lines, encoding="utf-8")
+    return ws
+
+
+def _run_dispatch_gate(root: Path, ws: Path, subagent_type: str,
+                       prompt: str = "[T1] claim C-1 — test"):
+    """Feed hooks/dispatch_gate.py one PreToolUse Agent payload."""
+    payload = json.dumps({
+        "cwd": str(root),
+        "workspace": str(ws),
+        "tool_input": {"prompt": prompt, "subagent_type": subagent_type},
+    })
+    return subprocess.run(
+        [sys.executable, str(ROOT / "hooks" / "dispatch_gate.py")],
+        input=payload, capture_output=True, text=True, timeout=60,
+        cwd=str(ROOT), errors="replace")
+
+
+def test_agent_frontmatter_lane_bindings():
+    """The five malware-only agents declare `lane: malware`; the
+    lane-agnostic executors do not (issue 208 gating data)."""
+    for name in MALWARE_ONLY_AGENTS:
+        text = (ROOT / "agents" / f"{name}.md").read_text(encoding="utf-8")
+        head = text.split("---", 2)[1]
+        assert re.search(r"^lane:\s*malware\b", head, re.M), \
+            f"agents/{name}.md must declare lane: malware"
+    for name in LANE_AGNOSTIC_AGENTS:
+        text = (ROOT / "agents" / f"{name}.md").read_text(encoding="utf-8")
+        head = text.split("---", 2)[1]
+        assert not re.search(r"^lane:\s*malware\b", head, re.M), \
+            f"agents/{name}.md must not be lane-bound"
+
+
+def test_hook_lane_enum_matches_lane_spec():
+    """The hook repeats the enum (hooks load standalone) — pinned equal."""
+    import importlib.util
+    import lane_spec
+    spec = importlib.util.spec_from_file_location(
+        "dispatch_gate_lane_pin", ROOT / "hooks" / "dispatch_gate.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert tuple(mod.LANE_ENUM) == tuple(lane_spec.LANES)
+    assert mod.MALWARE_LANE == lane_spec.DEFAULT_LEGACY
+
+
+@pytest.mark.parametrize("agent", MALWARE_ONLY_AGENTS)
+def test_malware_only_agent_refused_on_non_malware_lane(tmp_path, agent):
+    """A malware-lane-only agent dispatched into an algorithm workspace is
+    REJECTed (rc=2) with a structured message naming agent + lane."""
+    ws = _write_lane_ws(tmp_path, "algorithm")
+    r = _run_dispatch_gate(tmp_path, ws, agent)
+    assert r.returncode == 2, \
+        f"{agent} must be refused on lane=algorithm: {r.returncode}: {r.stdout}{r.stderr}"
+    assert "lane_routing" in r.stdout + r.stderr
+    assert "algorithm" in r.stdout + r.stderr
+    assert agent in r.stdout + r.stderr
+
+
+def test_malware_agent_allowed_on_malware_lane(tmp_path):
+    ws = _write_lane_ws(tmp_path, "malware")
+    r = _run_dispatch_gate(tmp_path, ws, "ghidra-light")
+    assert r.returncode == 0, f"malware lane must allow it: {r.stderr}"
+
+
+def test_malware_agent_allowed_when_lane_undeclared(tmp_path):
+    """Legacy contract (no lane field) = today's behavior — never blocked."""
+    ws = _write_lane_ws(tmp_path, None)
+    r = _run_dispatch_gate(tmp_path, ws, "ghidra-light")
+    assert r.returncode == 0, f"legacy lane-less workspace must pass: {r.stderr}"
+
+
+def test_lane_agnostic_agent_allowed_on_non_malware_lane(tmp_path):
+    ws = _write_lane_ws(tmp_path, "algorithm")
+    r = _run_dispatch_gate(tmp_path, ws, "kunglao-worker")
+    assert r.returncode == 0, f"kunglao-worker is lane-agnostic: {r.stderr}"
+
+
+def test_lane_gate_is_pre_activation(tmp_path):
+    """The lane binding is a structural routing contract (fires even when
+    the hooks are dormant) — same corridor as the #567/#760 faces."""
+    ws = _write_lane_ws(tmp_path, "data")
+    r = _run_dispatch_gate(tmp_path, ws, "pefile-signature")
+    assert r.returncode == 2, \
+        "lane routing must not wait for hook activation"

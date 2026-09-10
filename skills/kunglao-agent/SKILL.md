@@ -101,11 +101,11 @@ Run the steps in order; any FAIL blocks the next step.
 
 3. **Establish the cognition baseline**: write environment conclusions to `analysis_state.txt` (venv path, Python version, toolchain readiness, verified sample sha256, fixtures list). Every later cold start reads this baseline — do not re-probe.
 
-4. **Mount the sample and verify its hash**: `bins/<SAMPLE_SHA>` exists and its `sha256sum` matches task_spec/report; mismatch → HARD STOP.
+4. **Mount the lane material and verify its identity**: on `lane: malware` (the default for a lane-less contract) `bins/<SAMPLE_SHA>` exists and its `sha256sum` matches task_spec/report — mismatch → HARD STOP; on `lane: algorithm` mount the reference corpora / trace dumps and hash-anchor THEM (no binary sample exists to verify); `protocol|web|data|app` are documented stub lanes — mount the capture / dataset / target record. Read `lane:` in `task_spec.yaml` before treating an empty `bins/` as an error.
 
 5. **Workspace resolution + path reachability**: resolve the GIVEN workspace (an explicit argument, or a cwd candidate the operator confirmed in the guided prompt). Confirm cwd = project root; resolve every state file by cwd-relative path (`claim-register.yaml`, not absolute paths); if `Bash cd` to a deep path times out, read state via `Read` with cwd-relative paths. Any failure → cold-start NOT complete → log a `B1a` blocker, not "best guess".
 
-**Input contract (3 required)**: ① sample — `bins/<sha>`, sha256 verified ② `task_spec.yaml` — primary_questions / scope / constraints / depth / success_criteria + the three REQUIRED oracle anchors (goal_verbatim / success_criterion / verification_method: reproduction|replay-evidence|static|manual — blank anchors refuse analysis entry) (template: `templates/state/task_spec.yaml`) ③ existing artifacts — CTI/evidence/fact base, READ-ONLY, never re-query.
+**Input contract (3 required)**: ① lane material — `lane: malware` requires `bins/<sha>` with a verified sha256; every other lane (algorithm / protocol / web / data / app) requires its own mounted material and no `bins/` sample ② `task_spec.yaml` (carries `lane:` when declared) — primary_questions / scope / constraints / depth / success_criteria + the three REQUIRED oracle anchors (goal_verbatim / success_criterion / verification_method: reproduction|replay-evidence|static|manual — blank anchors refuse analysis entry) (template: `templates/state/task_spec.yaml`) ③ existing artifacts — CTI/evidence/fact base, READ-ONLY, never re-query.
 
 ## Arguments
 
@@ -116,7 +116,7 @@ Invoke `/kunglao-agent [subcommand] [args]` — the first token is a subcommand 
 1. Subcommand (exact, case-insensitive):
    | subcommand | action |
    |---|---|
-   | `init <workspace> [--type windows\|linux\|android]` | Phase 0 workspace initialization (scaffold + CLAUDE.md + sample mount + task_spec intake + hooks) — full flow in `skills/init/SKILL.md` |
+   | `init <workspace> [--type windows\|linux\|android\|web\|macos] [--lane malware\|algorithm\|protocol\|web\|data\|app]` | Phase 0 workspace initialization (scaffold + CLAUDE.md + lane material mount + task_spec intake + hooks) — full flow in `skills/init/SKILL.md` |
    | `analysis <workspace>` | enter the convergence loop (dispatch/verify/update) — full flow in `skills/analysis/SKILL.md` |
    | `help` | print the subcommand usage list |
    | `verify [fact_id]` | run only the M3 verify chain (L1 mechanical + L2 redteam) |
