@@ -795,6 +795,10 @@ ORCHESTRATOR_MCP_MATCHER = (
 # registry is hooks-only (event-keyed) and tests pin its set + shape.
 STATUSLINE_RENDER_FILE = "statusline_render.mjs"
 STATUSLINE_SETTINGS_KEY = "statusLine"
+# Renderer budget is sub-second; the entry timeout kills the legacy
+# long-tick class (owner reference pattern). Single source: this constant +
+# statusline_entry_shape, which both the writer and the checker consume.
+STATUSLINE_TIMEOUT_S = 10
 
 
 def statusline_render_command(workspace: Path | None) -> str:
@@ -816,8 +820,49 @@ def statusline_render_command(workspace: Path | None) -> str:
     return f"node {canonical.as_posix()}"
 
 
+def statusline_entry_shape(workspace: Path | None) -> dict:
+    """THE statusLine settings entry shape (single source). Consumers: the
+    writer (register_statusline) and the checker
+    (verify_statusline_registration) can never drift apart."""
+    return {"type": "command",
+            "command": statusline_render_command(workspace),
+            "timeout": STATUSLINE_TIMEOUT_S}
+
+
+def verify_statusline_registration(workspace: Path) -> dict:
+    """Read-only verification face (issue 212: upgrade's every-run
+    re-verify).
+
+    ok = the settings entry equals the canonical shape AND the referenced
+    renderer file exists on disk. Never writes. reason names the fault:
+    "missing" | "stale-shape" | "renderer-missing".
+    """
+    ws = Path(workspace).resolve()
+    target = ws / ".claude" / "settings.json"
+    expected = statusline_entry_shape(ws)
+    entry = None
+    try:
+        doc = json.loads(target.read_text(encoding="utf-8"))
+        entry = doc.get(STATUSLINE_SETTINGS_KEY) if isinstance(doc, dict) else None
+    except (OSError, ValueError):
+        entry = None
+    if entry == expected:
+        renderer = expected["command"].split(" ", 1)[1]
+        if Path(renderer).exists():
+            return {"ok": True, "present": True, "reason": None,
+                    "command": expected["command"], "expected": expected}
+        return {"ok": False, "present": True, "reason": "renderer-missing",
+                "command": expected["command"], "expected": expected}
+    reason = "missing" if entry is None else "stale-shape"
+    return {"ok": False, "present": bool(entry), "reason": reason,
+            "command": (entry or {}).get("command")
+            if isinstance(entry, dict) else None,
+            "expected": expected}
+
+
 def register_statusline(workspace: Path) -> dict:
-    """#142 PROJECT-scoped statusLine registration (keep-alive repair face).
+    """#142 PROJECT-scoped statusLine registration (keep-alive repair face,
+    extended by issue 212: the init FIRST-step writer).
 
     Writes ONLY <workspace>/.claude/settings.json — the #258 project target,
     different key (`statusLine`, not `hooks`). There is deliberately NO
@@ -839,7 +884,7 @@ def register_statusline(workspace: Path) -> dict:
             existing = {}
     if not isinstance(existing, dict):
         existing = {}
-    entry = {"type": "command", "command": statusline_render_command(ws)}
+    entry = statusline_entry_shape(ws)
     existing[STATUSLINE_SETTINGS_KEY] = entry
     target.write_text(
         json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")

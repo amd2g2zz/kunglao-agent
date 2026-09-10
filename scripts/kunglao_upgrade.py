@@ -1478,6 +1478,41 @@ def _item_skill_staleness_check(ws: Path, dry: bool) -> str:
 # driver
 # --------------------------------------------------------------------------
 
+def _statusline_report(ws: Path, dry_run: bool) -> dict:
+    """Issue 212, FIRST line of every upgrade run (owner ruling): the statusline
+    registration is re-verified BEFORE any other output — it is the
+    operator's only visible success/failure signal. Read-only here: the
+    heal is deferred to the gated write points (never before the dirty
+    gate, never on a refused run, never on a dry run).
+    """
+    from hook_activation import verify_statusline_registration
+    rep = verify_statusline_registration(ws)
+    if rep["ok"]:
+        print(f"kunglao-upgrade: statusline: ok ({rep['command']})")
+        return rep
+    state = ("dry-run: would self-heal" if dry_run
+             else "self-heal at the gated write point")
+    print(f"kunglao-upgrade: statusline: {rep['reason']} "
+          f"({rep['command'] or 'unregistered'}) — {state}")
+    return rep
+
+
+def _statusline_heal(ws: Path, items_out: list | None = None) -> bool:
+    """Issue 212 self-heal: re-register the project statusLine key (overwrites
+    ONLY the kunglao-owned key; never the user-global file)."""
+    from hook_activation import register_statusline
+    try:
+        res = register_statusline(ws)
+    except Exception as exc:  # noqa: BLE001 — cosmetic face, never fails upgrade
+        _warn_line(f"kunglao-upgrade: WARN statusline self-heal failed ({exc})")
+        return False
+    print(f"kunglao-upgrade: statusline: self-healed -> {res.get('command')}")
+    if items_out is not None:
+        items_out.append({"name": "statusline_selfheal", "action": "applied",
+                          "detail": str(res.get("command") or "")})
+    return bool(res.get("ok"))
+
+
 def _anchor_backfill(ws: Path, dry_run: bool, resolve: dict | None,
                      items_out: list | None) -> tuple[int, dict | None]:
     """Detect missing required intake answers in task_spec.yaml and elicit
@@ -1574,6 +1609,11 @@ def upgrade(ws: Path, dry_run: bool = False,
            resolve: dict | None = None) -> int:
     ws = Path(ws)
     origin = template_version.read_workspace_version(ws)
+    # Issue 212: the statusline re-verify is the FIRST line of every upgrade run
+    # (owner ruling) — before the stamp refusal, before "already at
+    # version", before the plan. Read-only here; the heal runs at the gated
+    # write points below.
+    sl = _statusline_report(ws, dry_run)
     if origin is None:
         print("kunglao-upgrade: no version stamp on this workspace — "
               "cannot tell its shape. Run init on a fresh workspace.",
@@ -1645,6 +1685,12 @@ def upgrade(ws: Path, dry_run: bool = False,
             if anchor_pending is not None:
                 print(json.dumps(anchor_pending, ensure_ascii=False))
             return anchor_rc
+        # Issue 212: the already-current fast path heals too — every real run
+        # re-verifies AND self-heals (after the optional drift-refresh gate
+        # above, so this write never trips that dirty gate). Dry runs
+        # report only.
+        if not dry_run and not sl["ok"]:
+            _statusline_heal(ws, items_out)
         return RC_OK
 
     if dry_run:
@@ -1695,6 +1741,13 @@ def upgrade(ws: Path, dry_run: bool = False,
         if anchor_pending is not None:
             print(json.dumps(anchor_pending, ensure_ascii=False))
         return anchor_rc
+
+    # Issue 212: the main-path statusline heal rides the SAME position as the
+    # migration items — after the git gate + rollback anchor, inside the
+    # anchored window, so the post-state commit captures it. Never before
+    # the gate: the heal's own write must not trip _probe_dirty.
+    if not sl["ok"]:
+        _statusline_heal(ws, items_out)
 
     pre = user_data_digest(ws)
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())

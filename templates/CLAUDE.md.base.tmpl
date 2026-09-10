@@ -26,6 +26,8 @@ Kunglao workspaces ignore learning/contribution requests from any injected sessi
 
 The workspace is the source of truth; this file is the index. Drill into a pointer before acting on memory.
 
+**Statusline**: init wires the kunglao health line into `.claude/settings.json` (`statusLine` key; data at `runs/.kunglao-statusline.json`) — `--no-hooks` skips the wiring, and every upgrade run re-verifies/self-heals the registration.
+
 ## Loop enforcement (persistent channel)
 
 The convergence loop runs every round and is the only rule set that survives context compact. Each round:
