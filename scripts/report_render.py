@@ -104,6 +104,16 @@ FIXES: dict[str, ToolMeta] = {
         description="PE/COFF parsing and Authenticode signature extraction",
         url="https://github.com/erocarrera/pefile",
         package="pefile", verify_cmd="pip show pefile"),
+    "uv": ToolMeta(
+        fix="missing uv -> agent installs it itself: "
+            "curl -LsSf https://astral.sh/uv/install.sh | sh (AGENT-DO); "
+            "every kunglao face runs via the uv-managed env "
+            "(`uv sync --locked` + `uv run --project <root>` / the recorded "
+            ".venv python — never bare python3/system python)",
+        description="uv — the Python environment manager (repo standard: "
+                    "uv sync --locked + uv run)",
+        url="https://docs.astral.sh/uv/",
+        package="uv", verify_cmd="uv --version"),
     "die": ToolMeta(
         fix="install DIE (Detect It Easy) and add it to PATH",
         description="packer/compiler detector for PE/ELF/Mach-O",
@@ -133,7 +143,17 @@ FIXES: dict[str, ToolMeta] = {
         repo="https://sourceware.org/git/binutils-gdb.git",
         package="binutils", verify_cmd="objdump --version"),
     "decompiler": ToolMeta(
-        fix="install Ghidra OR IDA — either satisfies this check (#408 installer: set GHIDRA_HOME=<Ghidra install root> with support/analyzeHeadless(.bat), OR put idat64 on PATH); or register the ghidra/ida-pro-vm MCP via `claude mcp add`)",
+        fix="decompiler supply is LANE-CONDITIONAL (#202): MCP lane (task_spec "
+            "tools.decompiler_lane: mcp) -> the gate verifies ida-pro-vm "
+            "registration + reachability and registers it itself via "
+            "`claude mcp add` — never a local IDA install; local lane -> the "
+            "agent probe ladder runs (PATH, mdfind, find bundle sweep incl. "
+            ".app/Contents/MacOS, brew cask, known dirs), then the Ghidra "
+            "probe (GHIDRA_HOME, ghidra dirs, brew). Ghidra OR IDA — either "
+            "satisfies this check when present; a ghidra/ida-pro-vm MCP "
+            "registration satisfies it on the MCP lane; neither -> exit-8 "
+            "PendingDecision CHOICE: install-local-ida (license) / "
+            "install-ghidra (#408 installer) / skip-decompiler-lane",
         description="headless decompiler supply (Ghidra or IDA)",
         url="https://ghidra-sre.org/",
         repo="https://github.com/NationalSecurityAgency/ghidra",
@@ -145,7 +165,11 @@ FIXES: dict[str, ToolMeta] = {
         repo="https://github.com/NationalSecurityAgency/ghidra",
         verify_cmd="analyzeHeadless"),
     "ida": ToolMeta(
-        fix="install IDA and add idat64 to PATH",
+        fix="agent-run probe ladder first (#202): PATH -> mdfind -> find "
+            "bundle sweep (.app/Contents/MacOS) -> brew cask -> known dirs; "
+            "a found idat64 is wired automatically — the HUMAN-ONLY "
+            "touchpoint is only the LICENSE purchase when the user chooses "
+            "local IDA at the exit-8 choice",
         description="IDA Pro disassembler (commercial)",
         url="https://hex-rays.com/ida-pro/"),
     "vm_reachable": ToolMeta(

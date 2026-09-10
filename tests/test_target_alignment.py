@@ -418,7 +418,7 @@ def _stub_toolchain_probes(monkeypatch):
                         lambda args, timeout=10: (1, "", "stubbed"))
     monkeypatch.setattr(toolchain, "_tcp_connect", _count_tcp)
     monkeypatch.setattr(toolchain.mcp_probe, "check_mcp",
-                        lambda ws, t: [])
+                        lambda ws, t, claude_json=None: [])
     monkeypatch.setattr(toolchain.mcp_probe, "registered_names",
                         lambda *a, **k: set())
     monkeypatch.delenv("KUNGLAO_VM_HOST", raising=False)

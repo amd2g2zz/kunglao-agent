@@ -457,13 +457,14 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     report = tc.check(ws, "linux")
     ghidra = next((i for i in report.items if i.name == "ghidra"), None)
     assert ghidra is not None, f"ghidra check missing from report: {report.items}"
-    # #474: presence-only CLI supply is WARN "capability unverified" (PASS
-    # needs the --capability trial); what this test pins is the platform-
-    # correct PATH resolution — the resolver must find the binary and say so.
-    assert ghidra.status == tc.Status.WARN, \
-        f"platform-correct analyzeHeadless must supply the ghidra item (WARN, capability unverified): {ghidra}"
+    # #202: probed-found CLI supply PASSES with the wired path (the #474
+    # presence-WARN is superseded for the decompiler face); what this test
+    # pins is the platform-correct PATH resolution — the resolver must find
+    # the binary and say so.
+    assert ghidra.status == tc.Status.PASS, \
+        f"platform-correct analyzeHeadless must supply the ghidra item (PASS, #202 probed-found): {ghidra}"
     assert platform_paths.analyze_headless_name() in ghidra.detail
-    assert "capability unverified" in ghidra.detail
+    assert "Ghidra" in ghidra.detail
 
 
 # ---------- #454: test isolation from the REAL user MCP registry ----------

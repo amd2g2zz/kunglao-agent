@@ -95,7 +95,7 @@ files:
   - src: agents/kunglao-init-worker.md
     dest: .claude/agents/kunglao-init-worker.md
     kind: agent
-    sha256: 8951be6a55027caa787736b7ad1f764f868040ca7847a6642c78c7677e888d81
+    sha256: b9d9613e13e627f36793adadfa4ed1e724ce8cf75ef7d45b2703c4ecd4bd45f5
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
@@ -443,7 +443,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 815eccbc34abcbb27ad0072905ebc2815551efdf233418552ef90e5735ee8178
+    sha256: 2b5e65b1140fec6a6736e6bd5814f076eecc16ba7db7291b2819763241c3659e
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -531,7 +531,7 @@ files:
   - src: scripts/mcp_probe.py
     dest: .claude/scripts/mcp_probe.py
     kind: scaffold
-    sha256: 63ee283c4ff03e852bf50e015d9a8fea96ebba6052d53e89a4b497e74d689660
+    sha256: 2fbd62567b7757e192185f991be630cbd39f719db162be9b04ef0f53ef3e013a
   - src: scripts/mechanism_scheduler.py
     dest: .claude/scripts/mechanism_scheduler.py
     kind: scaffold
@@ -683,7 +683,7 @@ files:
   - src: scripts/report_render.py
     dest: .claude/scripts/report_render.py
     kind: scaffold
-    sha256: aafc31a83bce094cd03ead0a9ca60dad358f593bac1ff41e1683255afd95b927
+    sha256: 0c2b975106f7bd961f82fa0eb5a11963c430b61184aa4904f5e6da003f54e7d6
   - src: scripts/retirement_gate.py
     dest: .claude/scripts/retirement_gate.py
     kind: scaffold
@@ -775,15 +775,15 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: d49767eab35339f60311250143b7ff83bcae1cccc93f6772de4ed66c6b18c633
+    sha256: ac9e9a166b38f35cfe78e50231523d2611691eea53fd4ded0d2a1e07605da8c1
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
-    sha256: 4296690e4a44801caa297d5b2e71dbfa75aefecc410f92d9da983e0febd9fe2e
+    sha256: d7feef1dabb495fdaa87aa1bb0a88fa49d3ade18f86d49d906fbb714593c79c5
   - src: scripts/toolchain_negotiation.py
     dest: .claude/scripts/toolchain_negotiation.py
     kind: scaffold
-    sha256: 054d21e195a555b127408ff614e4f91ad8fb8098af945b43d0a04310ae6024a8
+    sha256: d969bac41263229e954ab889f4dbbb7e561db88ef85d44a2672f1326c15f1f53
   - src: scripts/troubleshooting_gate.py
     dest: .claude/scripts/troubleshooting_gate.py
     kind: scaffold
@@ -1215,7 +1215,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: 9cf976dee421c108c89e721d9eba350482f92a34fa655e247d285c784f4b7ac5
+    sha256: c0f936197382cdef12538c9f2ee5cd94ca5f6a1c075bd1ad53324cce055111fc
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset

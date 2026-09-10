@@ -82,7 +82,8 @@ def _fake_registry(tmp_path: Path, servers: list[str]) -> Path:
     return p
 
 
-def _stub_bin(tmp_path: Path, tools: tuple[str, ...] = ("die", "floss")) -> Path:
+def _stub_bin(tmp_path: Path, tools: tuple[str, ...] = ("die", "floss",
+                                              "uv")) -> Path:
     """Stub dir satisfying shutil.which presence probes on both platforms
     (.bat on Windows via PATHEXT, extensionless executable on POSIX)."""
     fb = tmp_path / "stub-bin"
@@ -92,7 +93,9 @@ def _stub_bin(tmp_path: Path, tools: tuple[str, ...] = ("die", "floss")) -> Path
             (fb / f"{tool}.bat").write_text("@echo off\r\n", encoding="utf-8")
         else:
             p = fb / tool
-            p.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            # a version line: check_uv treats an empty --version as a fail
+            p.write_text('#!/bin/sh\necho "$0 version 1.0"\nexit 0\n',
+                         encoding="utf-8")
             p.chmod(0o755)
     return fb
 
@@ -511,7 +514,7 @@ def test_init_assume_yes_reprobe_keeps_task_spec(tmp_path, monkeypatch,
     vm_reachable has no install plan, and init would refuse exit 4 on a VM
     the task does not need."""
     ws = _ws_with_sample(tmp_path)
-    fb = _stub_bin(tmp_path, tools=("floss",))  # die deliberately missing
+    fb = _stub_bin(tmp_path, tools=("floss", "uv"))  # die deliberately missing
     registry = _fake_registry(
         tmp_path, ["ghidra", "sequential-thinking", "x64dbg"])
     _hermetic_env(monkeypatch, fake_bin=fb, claude_json=registry)
