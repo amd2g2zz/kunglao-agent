@@ -242,12 +242,16 @@ def check_vm() -> tuple[bool, str]:
 
 
 def check_ghidra() -> tuple[bool, str]:
-    """Ghidra analyzeHeadless present (path from GHIDRA_HOME env; unset = FAIL)."""
+    """Ghidra analyzeHeadless present (path from GHIDRA_HOME env; unset = FAIL).
+
+    Issue 210: the fix text comes from the ONE `decompiler` family entry —
+    the Ghidra row is one supply of the XOR family (the `ghidra` registry
+    key no longer exists)."""
     if GHIDRA_DEFAULT is None:
         import toolchain  # lazy: the FIXES table is the remediation single source
 
         return (False,
-                f"GHIDRA_HOME unset — {toolchain.fix_text('ghidra')}; "
+                f"GHIDRA_HOME unset — {toolchain.fix_text('decompiler')}; "
                 "decompilation degraded.")
     if GHIDRA_DEFAULT.exists():
         return True, f"analyzeHeadless at {GHIDRA_DEFAULT}"
@@ -255,7 +259,7 @@ def check_ghidra() -> tuple[bool, str]:
 
     return (False,
             f"analyzeHeadless not found at {GHIDRA_DEFAULT}. "
-            f"{toolchain.fix_text('ghidra')} — decompilation degraded.")
+            f"{toolchain.fix_text('decompiler')} — decompilation degraded.")
 
 
 # ---------- #757 T1: type/channel-aware check bodies ----------

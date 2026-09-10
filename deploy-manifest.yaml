@@ -315,7 +315,7 @@ files:
   - src: scripts/env_check.py
     dest: .claude/scripts/env_check.py
     kind: scaffold
-    sha256: df54cf47007d7502cd34e1dd22c00cd46a8240192db2d519b86d0f53c342a5f2
+    sha256: 28dd28eed8dd2d11d65e38251f8aeaf3b60758c04bcbf0b6f5039e8cf0acf896
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold
@@ -687,7 +687,7 @@ files:
   - src: scripts/report_render.py
     dest: .claude/scripts/report_render.py
     kind: scaffold
-    sha256: 0c2b975106f7bd961f82fa0eb5a11963c430b61184aa4904f5e6da003f54e7d6
+    sha256: 42ba555bed797f824268568f88b96b5e09b4d530fff19db52c3770e61698116a
   - src: scripts/retirement_gate.py
     dest: .claude/scripts/retirement_gate.py
     kind: scaffold
@@ -779,7 +779,7 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: 899d7fc4d8d8943a98af5ba8a67737347000f9a87c7709f614be085d4a0db051
+    sha256: 4a5c9323e748476bf37675a261ac8025cf9a299e5c96e75bd8085f8e6785377c
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
