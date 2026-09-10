@@ -85,4 +85,4 @@ def test_module_imports_stay_pure_no_probing():
             imported |= {a.name.split(".")[0] for a in node.names}
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
-    assert imported <= {"re", "dataclasses", "sys", "json"}, imported
+    assert imported <= {"__future__", "re", "dataclasses", "sys", "json"}, imported
