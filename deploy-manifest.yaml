@@ -315,7 +315,7 @@ files:
   - src: scripts/env_check.py
     dest: .claude/scripts/env_check.py
     kind: scaffold
-    sha256: df54cf47007d7502cd34e1dd22c00cd46a8240192db2d519b86d0f53c342a5f2
+    sha256: 002b12de52f337790fb251f349e8b3d4b6c4b582eb3373d27e12dfdc0ef1702f
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold
@@ -603,7 +603,7 @@ files:
   - src: scripts/platform_paths.py
     dest: .claude/scripts/platform_paths.py
     kind: scaffold
-    sha256: 247e8a0621d7d423796f46edc63bc8eadaf980f9cfac8f1bc53d02771eed520f
+    sha256: 7e8670ebf812baf753f7272016ed2329ccd2413940c1d284d4fa161c626eeece
   - src: scripts/posteriors.py
     dest: .claude/scripts/posteriors.py
     kind: scaffold
@@ -1223,7 +1223,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: fa4f8790216ec4f596c33054c2f58ddcc461528fbdd9897a3059dd835d1be881
+    sha256: bafaeea796ce488c4bb41f7194d32fb0f0f2c76fcbb78737cabd5d6109f66e70
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset

@@ -94,6 +94,15 @@ release (see the mapping table at the end).
   fails admission with `evidence-class` named, while `evidence_class`
   (triage / decompile / dynamic, absent = triage) joins the fact
   frontmatter as a validated extension field
+- **venv probe dispatches through uv (#207)**: `check_venv_sample` runs the
+  real runtime invocation — `uv run --project <skill_root> python -c
+  "import yaml"` — instead of spawning a venv binary with a hand-written
+  `import cryptography, yaml` list, so a lock-faithful `uv sync --locked`
+  install (cryptography left the declared set) passes the blocking Phase 0
+  row; failures name the layer (uv absent → install guidance; non-zero
+  `uv run` → `uv sync --locked --project` repair). Stale operator copies
+  cleared in the same pass: the template's `Key deps: cryptography, pyyaml`
+  line and SKILL.md step 1's `python -m venv` / pip residue.
 
 ## [0.1.3] - 2026-08-25
 

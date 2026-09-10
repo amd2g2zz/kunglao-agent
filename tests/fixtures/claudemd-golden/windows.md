@@ -251,7 +251,7 @@ Any reusable analysis logic must land as a parameterized CLI script under `/kung
 
 ## Python venv
 
-Path: `.venv/`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts. Python 3.11.0.
+Path: `.venv/`. Dependencies are lock-managed (`uv.lock`) — invoke through `uv run --project /kunglao/skill-sentinel`; never pip-install into the env. Activate before running scripts. Python 3.11.0.
 
 ## Keeping this handbook alive
 
