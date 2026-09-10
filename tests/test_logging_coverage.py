@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -172,6 +172,7 @@ def init_ws(tmp_path) -> Path:
     ws = tmp_path / "ws"
     seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
+    seed_oracle_anchors(ws)
     return ws
 
 

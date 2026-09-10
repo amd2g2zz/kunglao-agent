@@ -36,7 +36,7 @@ from pathlib import Path
 import pytest
 
 import wire_up_settings  # pytest.ini pythonpath = . hooks scripts tools
-from _factories import write_hook_state, seed_bins
+from _factories import write_hook_state, seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -88,6 +88,7 @@ def _mk_init_ws(tmp_path: Path, name: str = "ws") -> Path:
 def _run_init(ws: Path, extra: list[str] | None = None) -> subprocess.CompletedProcess:
     """Hermetic CLI run: pinned fake claude.json + empty PATH dir + profile
     root under tmp (mirrors test_init_deploy_env._run_init)."""
+    seed_oracle_anchors(ws)
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     argv += ["--type", "windows", "--skip-toolchain",
              "--profile-root", str(ws.parent / "profile-root")]

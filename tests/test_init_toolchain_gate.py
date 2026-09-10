@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 import platform_paths  # pytest.ini pythonpath = . hooks scripts tools
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -64,7 +64,12 @@ def _run_init(ws: Path, extra: list[str] | None = None,
               claude_json: Path | None = None) -> subprocess.CompletedProcess:
     """Run kunglao-init hermetically with a HOSTILE toolchain env:
     PATH -> empty dir (no die/floss/jadx/...), GHIDRA_HOME + KUNGLAO_VM_HOST
-    removed -> toolchain HARD checks FAIL deterministically."""
+    removed -> toolchain HARD checks FAIL deterministically.
+
+    The workspace carries a completed anchor interview: this file pins the
+    gate/refusal/menu faces, and a blank-anchor run now pends (exit 8)
+    before any of them."""
+    seed_oracle_anchors(ws)
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     if profile_root is None:
         profile_root = ws.parent / "profile-root"
@@ -297,7 +302,7 @@ def test_toolchain_check_runs_before_scaffold(tmp_path, monkeypatch):
     import toolchain as tc
     calls: list[dict] = []
 
-    def fake_check(ws_arg, project_type=None):
+    def fake_check(ws_arg, project_type=None, **kw):
         calls.append({
             "ws": ws_arg,
             "type": project_type,
@@ -306,6 +311,7 @@ def test_toolchain_check_runs_before_scaffold(tmp_path, monkeypatch):
         return tc.ToolchainReport(project_type=project_type or "windows", items=[])
 
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
+    seed_oracle_anchors(ws)
     rc = mod.run(ws, project_type="windows", profile_root=profile_root, answers={"host_exec_protection": "enabled"})
     assert rc == 0, "PASS toolchain must proceed to scaffold"
     assert len(calls) == 1, f"toolchain.check must be called once, got {len(calls)}"
@@ -325,7 +331,7 @@ def test_library_refuse_returns_4_no_scaffold(tmp_path, monkeypatch):
     mod = _load_init_module()
     import toolchain as tc
 
-    def fake_fail(ws_arg, project_type=None):
+    def fake_fail(ws_arg, project_type=None, **kw):
         # #477: gitnexus became INSTALL_PLANS-covered (negotiable -> the
         # exit-8 menu); this test pins the NON-negotiable exit-4 refusal,
         # so the fixture uses the decompiler (HARD degrade, never in the
@@ -336,6 +342,7 @@ def test_library_refuse_returns_4_no_scaffold(tmp_path, monkeypatch):
         ])
 
     monkeypatch.setattr(mod.toolchain, "check", fake_fail)
+    seed_oracle_anchors(ws)
     rc = mod.run(ws, project_type="windows",
                  profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     assert rc == RC_TOOLCHAIN_REFUSE
@@ -395,14 +402,14 @@ def test_run_hard_fail_with_assume_yes_calls_installer(tmp_path, monkeypatch):
 
     calls: list[str] = []
 
-    def fake_check(ws_arg, project_type=None):
+    def fake_check(ws_arg, project_type=None, **kw):
         calls.append("check")
         return tc.ToolchainReport(project_type=project_type or "windows", items=[
             tc.CheckResult(name="die", status=tc.Status.FAIL, tier=tc.Tier.HARD,
                            detail="die not found in PATH"),
         ])
 
-    def fake_ask(report, ws_arg, project_type, assume_yes=False):
+    def fake_ask(report, ws_arg, project_type, assume_yes=False, **kw):
         calls.append(f"ask:{assume_yes}")
         return tc.ToolchainReport(project_type=project_type, items=[
             tc.CheckResult(name="die", status=tc.Status.WARN, tier=tc.Tier.HARD,
@@ -411,6 +418,7 @@ def test_run_hard_fail_with_assume_yes_calls_installer(tmp_path, monkeypatch):
 
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
     monkeypatch.setattr(mod.toolchain_install, "ask_then_install", fake_ask)
+    seed_oracle_anchors(ws)
     rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root",
                  assume_yes=True, answers={"host_exec_protection": "enabled"})
     assert rc == 0, "resolved-PASS must proceed to scaffold"
@@ -457,13 +465,14 @@ def test_init_gate_resolves_platform_headless(tmp_path, monkeypatch):
     report = tc.check(ws, "linux")
     ghidra = next((i for i in report.items if i.name == "ghidra"), None)
     assert ghidra is not None, f"ghidra check missing from report: {report.items}"
-    # #474: presence-only CLI supply is WARN "capability unverified" (PASS
-    # needs the --capability trial); what this test pins is the platform-
-    # correct PATH resolution — the resolver must find the binary and say so.
-    assert ghidra.status == tc.Status.WARN, \
-        f"platform-correct analyzeHeadless must supply the ghidra item (WARN, capability unverified): {ghidra}"
+    # #202: probed-found CLI supply PASSES with the wired path (the #474
+    # presence-WARN is superseded for the decompiler face); what this test
+    # pins is the platform-correct PATH resolution — the resolver must find
+    # the binary and say so.
+    assert ghidra.status == tc.Status.PASS, \
+        f"platform-correct analyzeHeadless must supply the ghidra item (PASS, #202 probed-found): {ghidra}"
     assert platform_paths.analyze_headless_name() in ghidra.detail
-    assert "capability unverified" in ghidra.detail
+    assert "Ghidra" in ghidra.detail
 
 
 # ---------- #454: test isolation from the REAL user MCP registry ----------
@@ -513,14 +522,14 @@ def test_run_hard_fail_non_tty_without_assume_yes_pends_menu(tmp_path, monkeypat
 
     calls: list[str] = []
 
-    def fake_check(ws_arg, project_type=None):
+    def fake_check(ws_arg, project_type=None, **kw):
         calls.append("check")
         return tc.ToolchainReport(project_type="windows", items=[
             tc.CheckResult(name="die", status=tc.Status.FAIL, tier=tc.Tier.HARD,
                            detail="die not found"),
         ])
 
-    def fake_ask(report, ws_arg, project_type, assume_yes=False):
+    def fake_ask(report, ws_arg, project_type, assume_yes=False, **kw):
         calls.append("ask")
         return report
 
@@ -528,6 +537,7 @@ def test_run_hard_fail_non_tty_without_assume_yes_pends_menu(tmp_path, monkeypat
     monkeypatch.setattr(mod.toolchain_install, "ask_then_install", fake_ask)
     monkeypatch.setattr(mod.sys, "stdin",
                        type("SI", (), {"isatty": lambda self: False})())
+    seed_oracle_anchors(ws)
     rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     out = capsys.readouterr().out
     assert rc == 8, \
@@ -548,7 +558,7 @@ def test_run_hard_fail_non_tty_mixed_still_refuses(tmp_path, monkeypatch):
     import toolchain as tc
 
     monkeypatch.setattr(mod.toolchain, "check",
-                        lambda ws_arg, project_type=None: tc.ToolchainReport(
+                        lambda ws_arg, project_type=None, **kw: tc.ToolchainReport(
                             project_type="windows", items=[
                                 tc.CheckResult(name="die", status=tc.Status.FAIL,
                                                tier=tc.Tier.HARD,
@@ -560,6 +570,7 @@ def test_run_hard_fail_non_tty_mixed_still_refuses(tmp_path, monkeypatch):
                             ]))
     monkeypatch.setattr(mod.sys, "stdin",
                        type("SI", (), {"isatty": lambda self: False})())
+    seed_oracle_anchors(ws)
     rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
     assert rc == RC_TOOLCHAIN_REFUSE
     assert not (ws / "claim-register.yaml").exists()
@@ -574,17 +585,18 @@ def test_run_ask_result_still_hard_refuses(tmp_path, monkeypatch):
     mod = _load_init_module()
     import toolchain as tc
 
-    def fake_check(ws_arg, project_type=None):
+    def fake_check(ws_arg, project_type=None, **kw):
         return tc.ToolchainReport(project_type="windows", items=[
             tc.CheckResult(name="decompiler", status=tc.Status.FAIL, tier=tc.Tier.HARD,
                            detail="no decompiler found"),
         ])
 
-    def fake_ask(report, ws_arg, project_type, assume_yes=False):
+    def fake_ask(report, ws_arg, project_type, assume_yes=False, **kw):
         return report  # decompiler cannot degrade -> still HARD
 
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
     monkeypatch.setattr(mod.toolchain_install, "ask_then_install", fake_ask)
+    seed_oracle_anchors(ws)
     rc = mod.run(ws, project_type="windows", profile_root=tmp_path / "profile-root",
                  assume_yes=True, answers={"host_exec_protection": "enabled"})
     assert rc == RC_TOOLCHAIN_REFUSE
@@ -604,7 +616,7 @@ def test_init_decline_degrades_warn_and_proceeds(tmp_path, monkeypatch):
     mod = _load_init_module()
     import toolchain as tc
 
-    def fake_check(ws_arg, project_type=None):
+    def fake_check(ws_arg, project_type=None, **kw):
         return tc.ToolchainReport(project_type="windows", items=[
             tc.CheckResult(name="die", status=tc.Status.FAIL, tier=tc.Tier.HARD,
                            detail="die not found in PATH"),
@@ -613,6 +625,7 @@ def test_init_decline_degrades_warn_and_proceeds(tmp_path, monkeypatch):
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
     monkeypatch.setattr(mod.toolchain_install, "_run_install_plan",
                         lambda name, plan, assume_yes, ws: (1, "", "no choco"))
+    seed_oracle_anchors(ws)
     rc = mod.run(ws, project_type="windows",
                  profile_root=tmp_path / "profile-root", assume_yes=True, answers={"host_exec_protection": "enabled"})
     assert rc == 0, "declined static item (die) must degrade WARN and proceed"

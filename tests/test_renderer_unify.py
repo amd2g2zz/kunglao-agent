@@ -60,6 +60,10 @@ sys.path.insert(0, str(SCRIPTS))
 # handbook alive); budgets pinned by tests/test_claudemd_handbook_920.py.
 # 2026-09-10 regen (v0.1.5 release bump): the open-marker version line
 # only (kunglao:frame:v0.1.4 -> v0.1.5); every frame body byte unchanged.
+# 2026-09-10 regen (202 + uv scope): the runtime-contract block (learning-
+# plugin countermand) joined the header; the four executable instruction
+# lines moved to the uv-run form (`uv run --project {{skill_dir}} python
+# ...`) — no other byte changed.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 

@@ -20,7 +20,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -52,6 +52,9 @@ def _mk_ws(tmp_path: Path, name: str = "ws") -> Path:
     ws = tmp_path / name
     seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
+    # completed anchor interview: these tests pin deployment faces, and a
+    # blank-anchor run now pends (exit 8) before any of them
+    seed_oracle_anchors(ws)
     return ws
 
 

@@ -44,13 +44,22 @@ RC_TOOLCHAIN_REFUSE = 4
 STATIC_ONLY_SPEC = {"constraints": {"dynamic_re": "forbidden",
                                     "vm_detonation": "forbidden"}}
 
+# the three required intake answers (the init interview asks them BEFORE
+# any environment decision, so init-facing fixtures carry them)
+ANSWERS = {"goal_verbatim": "recover the license check",
+           "success_criterion": "key matches the captured blob",
+           "verification_method": "manual"}
+
 
 def _write_task_spec(ws: Path, spec: dict) -> Path:
     """Write a task_spec.yaml mapping into the workspace (needs-first intake
-    artifact — SKILL.md Flow step 0)."""
+    artifact — SKILL.md Flow step 0). The three required intake answers are
+    merged in (caller keys win): the init interview precedes every
+    environment decision, so a spec without them pends instead of probing."""
     import yaml
     p = ws / "task_spec.yaml"
-    p.write_text(yaml.safe_dump(spec, sort_keys=False), encoding="utf-8")
+    p.write_text(yaml.safe_dump({**ANSWERS, **spec}, sort_keys=False),
+                 encoding="utf-8")
     return p
 
 
@@ -82,7 +91,8 @@ def _fake_registry(tmp_path: Path, servers: list[str]) -> Path:
     return p
 
 
-def _stub_bin(tmp_path: Path, tools: tuple[str, ...] = ("die", "floss")) -> Path:
+def _stub_bin(tmp_path: Path, tools: tuple[str, ...] = ("die", "floss",
+                                              "uv")) -> Path:
     """Stub dir satisfying shutil.which presence probes on both platforms
     (.bat on Windows via PATHEXT, extensionless executable on POSIX)."""
     fb = tmp_path / "stub-bin"
@@ -92,7 +102,9 @@ def _stub_bin(tmp_path: Path, tools: tuple[str, ...] = ("die", "floss")) -> Path
             (fb / f"{tool}.bat").write_text("@echo off\r\n", encoding="utf-8")
         else:
             p = fb / tool
-            p.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            # a version line: check_uv treats an empty --version as a fail
+            p.write_text('#!/bin/sh\necho "$0 version 1.0"\nexit 0\n',
+                         encoding="utf-8")
             p.chmod(0o755)
     return fb
 
@@ -183,7 +195,7 @@ def test_load_task_spec_valid_mapping(tmp_path):
     import toolchain as tc
     ws = _ws_with_sample(tmp_path)
     _write_task_spec(ws, STATIC_ONLY_SPEC)
-    assert tc.load_task_spec(ws) == STATIC_ONLY_SPEC
+    assert tc.load_task_spec(ws) == {**ANSWERS, **STATIC_ONLY_SPEC}
 
 
 def test_load_task_spec_garbage_fails_closed(tmp_path):
@@ -381,11 +393,12 @@ def test_cli_unparseable_task_spec_stays_conservative(tmp_path):
 
 # ---------- kunglao-init wiring: read task_spec before the gate ----------
 
-def test_init_guidance_line_when_task_spec_absent(tmp_path, monkeypatch,
-                                                  capsys):
-    """No task_spec → one guidance line on stderr + the conservative default
-    path (toolchain.check still called WITHOUT the task_spec kwarg — the
-    2-arg call shape old fakes depend on)."""
+def test_init_absent_task_spec_pends_before_the_probe(
+        tmp_path, monkeypatch, capsys):
+    """No task_spec → no anchors → the structured interview pends (exit 8)
+    BEFORE the toolchain block: the task answers are collected ahead of any
+    environment decision, and the probe is never wired against a workspace
+    whose intake is unanswered."""
     import toolchain as tc
     ws = _ws_with_sample(tmp_path)
     _hermetic_env(monkeypatch, claude_json=_fake_registry(tmp_path, []))
@@ -400,12 +413,11 @@ def test_init_guidance_line_when_task_spec_absent(tmp_path, monkeypatch,
     monkeypatch.setattr(mod.toolchain, "check", fake_check)
     rc = mod.run(ws, project_type="windows",
                  profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
-    err = capsys.readouterr().err
-    assert rc == 0, f"init failed: {err}"
-    assert "task_spec.yaml absent" in err, err
-    assert "needs-first" in err, err
-    assert calls == [{}], \
-        f"no-spec path must call check(ws, type) with no extra kwargs: {calls}"
+    captured = capsys.readouterr()
+    assert rc == 8, f"absent-spec init must pend: {rc}: {captured.err}"
+    assert "goal_verbatim" in captured.out, captured.out
+    assert calls == [], \
+        f"the probe must not run while the intake is unanswered: {calls}"
 
 
 def test_init_passes_task_spec_to_check_when_present(tmp_path, monkeypatch,
@@ -428,7 +440,7 @@ def test_init_passes_task_spec_to_check_when_present(tmp_path, monkeypatch,
     err = capsys.readouterr().err
     assert rc == 0, f"init failed: {err}"
     assert "task_spec.yaml absent" not in err, err
-    assert calls == [{"task_spec": STATIC_ONLY_SPEC}], calls
+    assert calls == [{"task_spec": {**ANSWERS, **STATIC_ONLY_SPEC}}], calls
 
 
 def test_init_unparseable_task_spec_stays_hard(tmp_path, monkeypatch, capsys):
@@ -484,22 +496,22 @@ def test_init_static_only_does_not_refuse_on_vm(tmp_path, monkeypatch):
         "static-only init must scaffold"
 
 
-def test_init_static_only_control_without_task_spec_refuses(
+def test_init_static_only_control_without_task_spec_interviews(
         tmp_path, monkeypatch, capsys):
-    """Control (status-quo anchor): the SAME otherwise-complete environment
-    WITHOUT a task_spec still refuses exit 4 with [FAIL] vm_reachable —
-    the conservative default; only an explicit static-only task_spec
-    relaxes it."""
+    """Control: the SAME otherwise-complete environment WITHOUT a task_spec
+    never reaches the VM gate at all — the anchor interview pends (exit 8)
+    first. The conservative-HARD VM refusal stays pinned by the corrupt-
+    contract scenario above; environment decisions wait for the task."""
     ws = _complete_static_env(tmp_path, monkeypatch)
     mod = _load_init_module()
     rc = mod.run(ws, project_type="windows",
                  profile_root=tmp_path / "profile-root", answers={"host_exec_protection": "enabled"})
-    err = capsys.readouterr().err
-    assert rc == RC_TOOLCHAIN_REFUSE, \
-        f"no task_spec must keep the VM refusal: {rc}: {err}"
-    assert "[FAIL] vm_reachable" in err, err
+    captured = capsys.readouterr()
+    assert rc == 8, \
+        f"no task_spec must pend the interview: {rc}: {captured.err}"
+    assert "verification_method" in captured.out, captured.out
     assert not (ws / "claim-register.yaml").exists(), \
-        "refused init must not scaffold"
+        "pending init must not scaffold"
 
 
 def test_init_assume_yes_reprobe_keeps_task_spec(tmp_path, monkeypatch,
@@ -511,7 +523,7 @@ def test_init_assume_yes_reprobe_keeps_task_spec(tmp_path, monkeypatch,
     vm_reachable has no install plan, and init would refuse exit 4 on a VM
     the task does not need."""
     ws = _ws_with_sample(tmp_path)
-    fb = _stub_bin(tmp_path, tools=("floss",))  # die deliberately missing
+    fb = _stub_bin(tmp_path, tools=("floss", "uv"))  # die deliberately missing
     registry = _fake_registry(
         tmp_path, ["ghidra", "sequential-thinking", "x64dbg"])
     _hermetic_env(monkeypatch, fake_bin=fb, claude_json=registry)
