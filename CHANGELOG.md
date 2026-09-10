@@ -79,6 +79,21 @@ release (see the mapping table at the end).
   `kunglao_log.emit` lands `runs/.rank-emit-fail.json` and clears on the
   next success, so the silent fail-open contract keeps the ranking result
   byte-identical while the failure stops being invisible (#218)
+- **APK memory gate verdict gates formal analysis (#215)**: init probes
+  `tools/static/apk_mem_gate.py` for the aligned android target and records
+  the verdict (jadx-ok / targeted-jadx / smali-only / refuse / unavailable)
+  into the env facts, with an explicit `unavailable` instead of a silent
+  skip, and the environment section renders it; `java -version` joins the
+  android check set as a CAPABILITY-tier probe (HARD when jadx is present,
+  WARN otherwise) and jadx's provider requirements become
+  `[dex, mem_budget_ok, jadx_bin, jvm]` — "no JVM" was a dexdc property the
+  field run misread as an environment fact, so the dexdc index entries now
+  say so and point at the probe; a →PROVEN transition of an
+  algorithm-recovery claim (scope keywords: key schedule / crypto constant /
+  state machine / algorithm verify) whose facts are all triage-grade now
+  fails admission with `evidence-class` named, while `evidence_class`
+  (triage / decompile / dynamic, absent = triage) joins the fact
+  frontmatter as a validated extension field
 - **venv probe dispatches through uv (#207)**: `check_venv_sample` runs the
   real runtime invocation — `uv run --project <skill_root> python -c
   "import yaml"` — instead of spawning a venv binary with a hand-written

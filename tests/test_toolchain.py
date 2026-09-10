@@ -415,11 +415,12 @@ def test_exit_2_warn_only(fake_bin, kunglao_ws, monkeypatch):
     """F5: all HARD checks PASS, only WARN-tier items outstanding -> exit 2.
     Android end-to-end: full fake toolchain + fake adb + TCP listeners for
     frida/android_server -> every HARD item passes; unidbg (WARN tier) keeps
-    the overall at WARN -> exit code 2."""
+    the overall at WARN -> exit code 2. `java` joins the stub set because
+    the JVM is a HARD precondition of a present jadx (issue 215)."""
     import socket as socket_mod
     # Platform-aware wrappers so shutil.which finds the fake tools on both
     # Windows (.bat via PATHEXT) and POSIX (extensionless + exec bit).
-    for tool in ("aapt", "jadx", "apktool"):
+    for tool in ("aapt", "jadx", "apktool", "java"):
         if os.name == "nt":
             (fake_bin / f"{tool}.bat").write_text("@echo off\r\nexit /b 0\r\n",
                                                   encoding="utf-8")

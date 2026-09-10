@@ -64,7 +64,8 @@ def _ws(tmp_path: Path, mem_verdict: str | None = None,
             encoding="utf-8")
     if tool_probes:
         (ev / "tool-probes.json").write_text(json.dumps({
-            "jadx_bin": True, "dexdc_wheel": True, "smali_toolchain": True}),
+            "jadx_bin": True, "dexdc_wheel": True, "smali_toolchain": True,
+            "jvm": True}),
             encoding="utf-8")
     return ws
 

@@ -336,6 +336,10 @@ NOT_AUTO_INSTALLABLE: dict[str, str] = {
     "jdwp_debug": "capability of a running debuggable app — not a package",
     "ebpf": "target-kernel property — not installable from the host",
     "ebpf_android": "device SDK property — not installable",
+    "jvm": "a JDK is a host toolchain decision (brew install openjdk / "
+           "distro package / SDKMAN) — the package managers here install "
+           "Python wheels, never a system JVM; the item is HARD only when "
+           "jadx is present, WARN otherwise",
 }
 
 

@@ -319,7 +319,7 @@ files:
   - src: scripts/env_manifest.py
     dest: .claude/scripts/env_manifest.py
     kind: scaffold
-    sha256: 3e69d392ffb71f18225e6024bdbac9d1ed6224c8ea3b0fe0d94bf671598adae8
+    sha256: 20c3212c8538715189b86531dac6dfb7bd9e6e74ed9c9db11c88653e2e5d3d31
   - src: scripts/env_repair_l1.py
     dest: .claude/scripts/env_repair_l1.py
     kind: scaffold
@@ -447,7 +447,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: b76033fd64e0f67135cda1564fe5f50d7c1901fdb04132939db30d9fa34bd51a
+    sha256: a7070f3d8545502db8ff92ebf65d4f3cfb6bd092f6182b42516a1caf4e0afcc3
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -511,7 +511,7 @@ files:
   - src: scripts/lint_facts.py
     dest: .claude/scripts/lint_facts.py
     kind: scaffold
-    sha256: 6354780ccc4aae54e80fad2a6c91d79cf9e5ffb0e5500378ee6d1672689682de
+    sha256: 98e6df2854b963a895d4b404ec315eef94be699533ca4023c8307bab4a614c65
   - src: scripts/liveness_policy.py
     dest: .claude/scripts/liveness_policy.py
     kind: scaffold
@@ -667,7 +667,7 @@ files:
   - src: scripts/register_proven_gate.py
     dest: .claude/scripts/register_proven_gate.py
     kind: scaffold
-    sha256: 51a8e65d0af96eea2adb27f4bbadaa38cd397ebb26a59f8b1fe6ed902df10dc8
+    sha256: cd4067a9583fc07267cc43358a8593331e58f2a0c9d73d34bd6f45b0a7ae24ec
   - src: scripts/release_check_selfcheck.py
     dest: .claude/scripts/release_check_selfcheck.py
     kind: scaffold
@@ -691,7 +691,7 @@ files:
   - src: scripts/report_render.py
     dest: .claude/scripts/report_render.py
     kind: scaffold
-    sha256: 0c2b975106f7bd961f82fa0eb5a11963c430b61184aa4904f5e6da003f54e7d6
+    sha256: 231d942d57c3550e38197527e0adb70bf0b558997a3644c5022bfa3c66b52765
   - src: scripts/retirement_gate.py
     dest: .claude/scripts/retirement_gate.py
     kind: scaffold
@@ -723,7 +723,7 @@ files:
   - src: scripts/route_capability.py
     dest: .claude/scripts/route_capability.py
     kind: scaffold
-    sha256: bcf2b0614a6d28e9b8bbeda9db77a0db7f05302cc0bf5485c8ba338501a1b18c
+    sha256: 22357585434825fc5ec89486c7a9d7d5a57b0160b568db359fd1842e72379a4e
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
@@ -783,11 +783,11 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: 899d7fc4d8d8943a98af5ba8a67737347000f9a87c7709f614be085d4a0db051
+    sha256: beb97b2c3cd892f85b5abd3608a5ad121bc23f8b4c73427d8f934796f11cc387
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
-    sha256: 85883f178158155c37fc05d604d4558cb1da0c91d3b44d105805a1dd832b1e72
+    sha256: ed1a0bda7b7c9021f08bfd3217a23e4679330b0f57a45f056ebde6975713a004
   - src: scripts/toolchain_negotiation.py
     dest: .claude/scripts/toolchain_negotiation.py
     kind: scaffold
@@ -1231,7 +1231,7 @@ files:
   - src: templates/fact-frontmatter.md
     dest: .claude/templates/fact-frontmatter.md
     kind: asset
-    sha256: 3f4dda583752241db56b443cfe0a0dd650db1ab5b5ff3526d11386144f02b336
+    sha256: 8324cbc9ab7a33db0b74baf56a2a1f5aca9bd4535acb5c60a1288a626c1302ca
   - src: templates/frida/README.md
     dest: .claude/templates/frida/README.md
     kind: asset
@@ -1319,7 +1319,7 @@ files:
   - src: tools/_INDEX.yaml
     dest: .claude/tools/_INDEX.yaml
     kind: asset
-    sha256: 02ff549d25f885bbd3e59a77b68f4032dd6b3292c37624573af3f8ac5d7fc8a7
+    sha256: a318a40e3a55e1c56493c90723dd932696c39d8ac694b7781d92e0439c34e9af
   - src: tools/_index-auxiliary.md
     dest: .claude/tools/_index-auxiliary.md
     kind: asset
@@ -1343,7 +1343,7 @@ files:
   - src: tools/_index-static.md
     dest: .claude/tools/_index-static.md
     kind: asset
-    sha256: c56a36884cdc823e0bb0a9d388c1f882216bcead57f796bb7d3a4d97b11c83cb
+    sha256: 4668180ca6cfe7439c5fdf7de4e7acb38e14f0d7ccc8ce69792b7cc673ad4376
   - src: tools/_index-web.md
     dest: .claude/tools/_index-web.md
     kind: asset
@@ -1571,7 +1571,7 @@ files:
   - src: tools/validate_index.py
     dest: .claude/tools/validate_index.py
     kind: asset
-    sha256: 131585e75a1174d5f98e3018091bb82e824f95a690d82e5130a32f8303260e8a
+    sha256: f54a97e80b5ceae7bde5f16a8b270b24e449775bc0762416f281035f50e8298b
   - src: tools/web/README.md
     dest: .claude/tools/web/README.md
     kind: asset

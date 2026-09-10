@@ -904,6 +904,85 @@ def detect_sample(ws: Path, target: str) -> tuple[str, str]:
     return p.name, sha
 
 
+# issue 215: the memory gate is a PROBE run at init for the ALIGNED android
+# target (lane gating stays issue 208's work). The tool stays the sole
+# writer of evidence/apk_mem_gate.json — the provider router's authoritative
+# copy — while the verdict is mirrored into the env facts so the analysis
+# loop reads the budget state instead of re-deriving it.
+MEM_GATE_TOOL_REL = Path("tools") / "static" / "apk_mem_gate.py"
+MEM_GATE_TIMEOUT_S = 120
+
+
+def _run_mem_gate_cli(ws: Path, target_path: Path,
+                      timeout: int = MEM_GATE_TIMEOUT_S) -> dict:
+    """Run tools/static/apk_mem_gate.py <ws> <target>; return its ONE-LINE
+    JSON verdict. Fail-open: every failure path returns an explicit
+    {"verdict": "unavailable", "reason": ...} — an android init must not
+    die because the estimator could not run (and a silent skip is the
+    pathology this probe exists to kill)."""
+    tool = _SCRIPT_DIR.parent / MEM_GATE_TOOL_REL
+    if not tool.is_file():
+        return {"verdict": "unavailable",
+                "reason": f"{MEM_GATE_TOOL_REL.as_posix()} not found"}
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(tool), str(ws), str(target_path)],
+            capture_output=True, text=True, timeout=timeout,
+            encoding="utf-8", errors="replace")
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"verdict": "unavailable", "reason": str(exc)[:200]}
+    if proc.returncode != 0:
+        return {"verdict": "unavailable",
+                "reason": f"exit {proc.returncode}: "
+                          f"{(proc.stderr or '').strip()[:160]}"}
+    for line in (proc.stdout or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(data, dict) and data.get("verdict"):
+            return data
+    return {"verdict": "unavailable",
+            "reason": "no JSON verdict line on stdout"}
+
+
+def record_mem_gate_verdict(ws: Path, project_type: str | None,
+                            target: str | None) -> dict | None:
+    """Probe the memory gate for the aligned android target and record the
+    verdict as an env fact (issue 215).
+
+    Returns the recorded dict, or None when the project type keeps the
+    android lane out. An unaligned target is recorded as an explicit
+    `unavailable` — never a silent skip, never a fabricated verdict. The
+    env-fact write is best-effort: a defect in env-facts.yaml warns and
+    leaves init running (the router's evidence copy is unaffected)."""
+    if project_type != "android":
+        return None
+    target_path = (ws / "bins" / target) if target else None
+    if target_path is None or not target_path.is_file():
+        rec = {"verdict": "unavailable",
+               "reason": ("no aligned target under bins/ — align the target, "
+                          "then re-probe")}
+    else:
+        rec = _run_mem_gate_cli(ws, target_path)
+        if rec.get("verdict") not in env_manifest.MEM_GATE_VERDICTS:
+            rec = {"verdict": "unavailable",
+                   "reason": f"unrecognized verdict {rec.get('verdict')!r}"}
+    try:
+        env_manifest.record_mem_gate(
+            ws, rec["verdict"],
+            est_heap_gb=rec.get("est_heap_gb"),
+            budget_gb=rec.get("budget_gb"),
+            reason=str(rec.get("reason") or ""))
+    except (OSError, ValueError) as exc:
+        print(f"kunglao-init: WARNING mem-gate env fact not recorded: {exc}",
+              file=sys.stderr)
+    return rec
+
+
 # ---------- #455: target alignment (intake step 0) ----------
 
 # CFBF composite-document signature (MSI / legacy OLE containers).
@@ -2636,6 +2715,16 @@ def initialize(ws: Path, hooks_json: Path | None,
     sample, sample_sha = detect_sample(ws, target)
     if target_object:
         write_state_line(ws, "analysis_target_object", target_object)
+
+    # issue 215: the memory gate runs as a PROBE right after target
+    # alignment — its verdict (jadx-ok / targeted-jadx / smali-only /
+    # refuse / unavailable) lands in the env facts, so formal analysis reads
+    # the decompile-provider budget state instead of discovering it by
+    # thrashing the host.
+    mem_gate = record_mem_gate_verdict(ws, project_type, target)
+    if mem_gate is not None:
+        _mg_note = f" ({mem_gate['reason']})" if mem_gate.get("reason") else ""
+        print(f"kunglao-init: mem-gate verdict={mem_gate['verdict']}{_mg_note}")
 
     # #304: write the resolved project type
     write_project_type(ws, project_type)
