@@ -775,11 +775,11 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: d9a5a9d6067b934e02923e9c4bfb2ef8ce1db1c566d4ba9de388e29e690eb25d
+    sha256: da9663244a0ae4380953ace1ac00d81478a7d9cb3f8dfe818cc3b33495ff6026
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
-    sha256: d7feef1dabb495fdaa87aa1bb0a88fa49d3ade18f86d49d906fbb714593c79c5
+    sha256: 85883f178158155c37fc05d604d4558cb1da0c91d3b44d105805a1dd832b1e72
   - src: scripts/toolchain_negotiation.py
     dest: .claude/scripts/toolchain_negotiation.py
     kind: scaffold
