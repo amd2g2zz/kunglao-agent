@@ -2619,7 +2619,7 @@ CHECK_SETS: dict[str, frozenset[str]] = {
     }),
     "android": frozenset({
         "aapt", "aapt2", "jadx", "apktool", "gitnexus",
-        "decompiler", "ghidra", "ida",
+        "decompiler", "ghidra", "ida", "uv",
         "adb", "device_root", "debug_flag", "frida_server",
         "android_server", "jdwp_debug", "ebpf_android", "unidbg",
     }),

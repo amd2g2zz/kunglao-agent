@@ -235,7 +235,8 @@ class TestIdaProbeLadder:
 
     def test_known_dir_sweep_covers_bundle_and_cross_platform_shapes(self):
         """The known-dir sweep defaults include the macOS bundle layout and
-        the Windows/Linux equivalents (/opt/ida*, C:\\Program Files\\IDA*)."""
+        the Windows/Linux equivalents (an /opt form and a Program Files
+        drive-letter form)."""
         import inspect
         src = inspect.getsource(tc._probe_ida_via_known_dirs)
         blob = src + repr(tc._IDA_KNOWN_DIR_PATTERNS)
@@ -671,7 +672,9 @@ class TestAgentDoDeviceFace:
         """Rooted device, no listener -> the gate brings frida-server up
         itself (found the renamed binary in /data/local/tmp), forwards, and
         re-probes: PASS with attempts recorded."""
-        port = 21337
+        free = socket.create_server(("127.0.0.1", 0))
+        port = free.getsockname()[1]
+        free.close()  # dynamic: immune to cross-run listeners on this host
         monkeypatch.setattr(tc, "FRIDA_PORT", port)
         monkeypatch.setenv("KUNGLAO_202_SERVICE_PORT", str(port))
         monkeypatch.setenv("KUNGLAO_AGENT_DO", "1")
