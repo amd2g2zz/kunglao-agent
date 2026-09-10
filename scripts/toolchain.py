@@ -996,7 +996,8 @@ def _task_spec_mcp_checks(specs: "tuple[McpServerSpec, ...]",
             register = None
         checks.append(mcp_probe.MCPCheck(
             name=spec.name, status="FAIL", tier="HARD",
-            detail="not registered (required by task_spec tools.mcp_servers)",
+            detail=("register layer: not registered (required by task_spec "
+                    "tools.mcp_servers)"),
             fix=register,
         ))
     return checks
@@ -1015,8 +1016,10 @@ def _mcp_reachability_face(item: CheckResult, name: str,
     """Honest reachability evidence for a REGISTERED http-transport server.
 
     Registered + endpoint reachable -> probe upgrades to LIVENESS; endpoint
-    dead -> WARN with the connect error (registration alone is not a live
-    server). stdio servers keep presence evidence (honesty rule)."""
+    unreachable -> WARN with the connect error, classified AT the
+    connection layer (registration alone is not a live server), with the
+    agent-do repair the layer owns. stdio servers keep presence evidence
+    (honesty rule)."""
     url = _mcp_server_url(name, claude_json, ws)
     if not url:
         return item
@@ -1030,7 +1033,14 @@ def _mcp_reachability_face(item: CheckResult, name: str,
             detail=item.detail + f"; endpoint reachable ({host}:{port})")
     return dataclasses.replace(
         item, status=Status.WARN,
-        detail=item.detail + f"; registered but endpoint unreachable: {err}")
+        detail=(f"connection layer: {item.detail} but endpoint "
+                f"unreachable: {err} — repair = connection-layer "
+                f"diagnosis (port/token/env/deps)"),
+        fix=("connection layer repair (agent-do): diagnose the endpoint "
+             "at the connection layer (port/token/env/deps); a broken "
+             "server venv repairs with `uv sync --locked` in the server "
+             "repo, then re-probe — never a fallback-tool jump"),
+    )
 
 
 def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
@@ -1077,22 +1087,25 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
                             item = CheckResult(
                                 name=item.name, status=Status.PASS,
                                 tier=item.tier,
-                                detail=(f"registered by agent via "
-                                        f"`{' '.join(argv[:3])} ...` — "
-                                        f"verified after registration"),
+                                detail=(f"register layer: registered by "
+                                        f"agent via `{' '.join(argv[:3])} "
+                                        f"...` — verified after "
+                                        f"registration"),
                                 probe=ProbeTier.PRESENCE,
                                 owner=OwnerTier.AGENT_DO,
                                 attempts=item.attempts,
                             )
                         else:
-                            item.detail += ("; register attempt ran but the "
-                                            "server is still not registered")
+                            item.detail += ("; register layer: attempt ran "
+                                            "but the server is still not "
+                                            "registered")
                             item.fix = mc.fix
                     else:
-                        item.detail += (f"; agent-do register attempt failed: "
-                                        f"{err}")
+                        item.detail += (f"; register layer: agent-do "
+                                        f"attempt failed: {err}")
                 else:
-                    item.detail += f"; agent-do register skipped: {why}"
+                    item.detail += (f"; register layer: agent-do attempt "
+                                    f"skipped: {why}")
         report.items.append(item)
 
 
@@ -1412,8 +1425,8 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
                     if spec.url else
                     "claude mcp add --transport http ida-pro-vm <ida-mcp-url>"
                     " (the url comes from task_spec tools.mcp_servers)")
-        detail = ("ida-pro-vm not registered (task declares the ida-pro-vm "
-                  "MCP lane)")
+        detail = ("register layer: ida-pro-vm not registered (task "
+                  "declares the ida-pro-vm MCP lane)")
         if _agent_do_enabled():
             argv = _concrete_register_argv(
                 "claude mcp add --transport http ida-pro-vm <ida-mcp-url>",
@@ -1435,7 +1448,7 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
                             owner=OwnerTier.AGENT_DO, attempts=attempts,
                         ))
                         return
-                    detail += f"; agent-do register attempt failed: {err}"
+                    detail += f"; register layer: agent-do attempt failed: {err}"
                     report.items.append(CheckResult(
                         name="decompiler", status=Status.FAIL,
                         tier=Tier.HARD, detail=detail, probe=ProbeTier.PRESENCE,
@@ -1466,13 +1479,14 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
             return
         report.items.append(CheckResult(
             name="decompiler", status=Status.FAIL, tier=Tier.HARD,
-            detail=(f"ida-pro-vm registered but endpoint unreachable: {err} "
-                    f"(url from task_spec/registry — bring the server up; "
-                    f"never a local IDA install)"),
+            detail=(f"connection layer: ida-pro-vm registered but endpoint "
+                    f"unreachable: {err} (url from task_spec/registry — "
+                    f"repair at the connection layer; never a local IDA "
+                    f"install, never a fallback-tool jump)"),
             probe=ProbeTier.LIVENESS,
-            fix=("bring the ida-pro-vm endpoint up (task_spec "
-                 "tools.mcp_servers url) — the lane is the MCP surface, "
-                 "not a local IDA install"),
+            fix=("connection layer repair (agent-do): bring the ida-pro-vm "
+                 "endpoint up (task_spec tools.mcp_servers url) — the lane "
+                 "is the MCP surface, not a local IDA install"),
         ))
         return
     # registered, no url anywhere -> registry presence only (honesty)

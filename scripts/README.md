@@ -112,6 +112,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `calibration_gate.py` | calibration/confidence gate | tests |
 | `completion_gate.py` | completion transaction gate | hooks, tests |
 | `cost_gate.py` | cost tier gate (advisory/pause/HARD_PAUSE) | tests |
+| `decision_lint.py` | pre-action compatibility lint (#213) — caller-supplied facts gate the next action: BLOCK on known-incompatible (package, fact) pairs, OK-with-note on unknowns; pure, never probes the environment | skills docs, tests |
 | `fact_contradiction_gate.py` | cross-fact contradiction detection | hooks, lib(3), tests |
 | `plan_drift_detector.py` | plan↔reality drift detection | hooks, tests |
 | `plan_reviser.py` | plan state machine + suggest_revision triggers + incremental revision segments | tests, SKILL contract |
