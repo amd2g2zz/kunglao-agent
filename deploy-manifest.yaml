@@ -443,7 +443,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 00cec3a2f48b509d7900d4d721c04b27f1ff7aa449203cdf9ebb7915aa4107ef
+    sha256: b76033fd64e0f67135cda1564fe5f50d7c1901fdb04132939db30d9fa34bd51a
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -775,7 +775,7 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: ac9e9a166b38f35cfe78e50231523d2611691eea53fd4ded0d2a1e07605da8c1
+    sha256: 9f86992bf460d5af41f37f2ca4ddb762799e31036fc9483be6314581cfa3f2fb
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold

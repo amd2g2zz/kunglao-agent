@@ -155,7 +155,8 @@ def test_init_summary_silent_off_android():
 
 
 def test_init_main_wires_the_summary_face():
-    """Wiring pin: the gate must actually call the summary face — a helper
-    nobody calls would pass every pure-function test above."""
+    """Wiring pin: the toolchain gate (init run()) must actually call the
+    summary face — a helper nobody calls would pass every pure-function
+    test above."""
     mod = _load_init_module()
-    assert "apkid_summary_lines(report)" in inspect.getsource(mod.main)
+    assert "apkid_summary_lines(report)" in inspect.getsource(mod.run)
