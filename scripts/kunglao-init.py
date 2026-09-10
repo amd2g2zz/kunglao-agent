@@ -147,6 +147,7 @@ import intake_promise  # noqa: E402  # #813: Phase 0 prescan promise (apkid/DIE/
 import difficulty_calibration  # noqa: E402  # #15: sample difficulty calibration (intrinsic factors -> evidence/difficulty.json + task_spec difficulty: 键)
 import init_channel_default  # noqa: E402  # #727 channel resolution (local fallback)
 import oracle_anchors  # noqa: E402  # the three required intake answers (task_spec first-class fields)
+import lane_spec  # noqa: E402  # issue 208: the task LANE (analysis material contract)
 # #408: ask-then-install — interactive install prompts + MCP registration +
 # re-probe (graceful degrade on decline; --assume-yes for CI/headless).
 # #455: the interactive consent channel is gone (no stdin); ask_then_install
@@ -597,6 +598,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                              "omitted -> pending decision")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
                         help="project type: windows|linux|android|web|macos (web=labs)")
+    parser.add_argument("--lane", choices=lane_spec.LANES, default=None,
+                        help="issue 208 analysis lane: "
+                             + "|".join(lane_spec.LANES)
+                             + " (default: the declared task_spec.yaml lane; "
+                               "a lane-less contract keeps the malware lane's "
+                               "current behavior; a workspace with no contract "
+                               "and no sample is asked)")
     parser.add_argument("--target", metavar="NAME", default=None,
                         help="explicit analysis target — a file name under bins/ "
                              "(containers get a target_object round)")
@@ -747,14 +755,21 @@ def compute_state_hash(ws: Path, register_text: str | None = None) -> str:
     return h.hexdigest()
 
 
-def seed_claims(sample: str, project_type: str, sample_sha: str) -> list[dict]:
-    """3 structural seed claims (scaffold facts only, #412: no analysis).
+def seed_claims(sample: str, project_type: str, sample_sha: str,
+                lane: str | None = None) -> list[dict]:
+    """Structural seed claims (scaffold facts only — no analysis).
 
-    C-001 sample artifact identity / C-002 project type / C-003 sample
-    sha256. Init performs NO analysis — family/verdict/attribution/
-    capability guesses are forbidden here (issue #412); the operator
-    defines the analysis task (primary_questions) after init, and claim
-    seeding from task_spec happens in the loop (DESIGN §7 0.9).
+    Malware / legacy (lane absent): C-001 sample artifact identity / C-002
+    project type / C-003 sample sha256 — unchanged, byte-for-byte.
+
+    Issue 208: a non-malware lane has NO artifact to identify — the seeds
+    are its scaffold decisions instead (lane / project type / material),
+    so no sample claim is fabricated for a workspace that mounts none.
+
+    Init performs NO analysis — family/verdict/attribution/capability
+    guesses are forbidden here (issue #412); the operator defines the
+    analysis task (primary_questions) after init, and claim seeding from
+    task_spec happens in the loop (DESIGN §7 0.9).
 
     Issue 212 (field diagnosis): the seeds are CLOSED at the success-point write,
     status PROVEN with init's own evidence attached — init verified each
@@ -766,6 +781,25 @@ def seed_claims(sample: str, project_type: str, sample_sha: str) -> list[dict]:
     artifact like before).
     """
     evidence = "init-verified by construction (scaffold gate)"
+    if lane is not None and lane != lane_spec.DEFAULT_LEGACY:
+        return [
+            {"id": "C-001", "status": "PROVEN",
+             "boundary_type": "positive_observation",
+             "evidence_tier_attempted": 0, "promotion_attempts": 0,
+             "depends_on": [], "evidence": evidence,
+             "title": f"Analysis lane — {lane} (scaffold decision)"},
+            {"id": "C-002", "status": "PROVEN",
+             "boundary_type": "positive_observation",
+             "evidence_tier_attempted": 0, "promotion_attempts": 0,
+             "depends_on": [], "evidence": evidence,
+             "title": f"Project type — {project_type} (scaffold decision)"},
+            {"id": "C-003", "status": "PROVEN",
+             "boundary_type": "positive_observation",
+             "evidence_tier_attempted": 0, "promotion_attempts": 0,
+             "depends_on": [], "evidence": evidence,
+             "title": f"Analysis material — {lane_spec.material(lane)} "
+                      f"(scaffold decision)"},
+        ]
     return [
         {"id": "C-001", "status": "PROVEN", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
@@ -783,18 +817,27 @@ def seed_claims(sample: str, project_type: str, sample_sha: str) -> list[dict]:
 
 
 def claim_register_text(sample: str, sample_sha: str, state_hash: str,
-                        project_type: str) -> str:
+                        project_type: str, lane: str | None = None) -> str:
     """Full claim-register.yaml text: [initialized] marker header + structural seed claims body."""
-    claims = seed_claims(sample, project_type, sample_sha)
+    claims = seed_claims(sample, project_type, sample_sha, lane)
+    if lane is not None and lane != lane_spec.DEFAULT_LEGACY:
+        identity = f"lane={lane}"
+    else:
+        identity = f"sample={sample}"
     lines = [
-        f"# [initialized] kunglao-init state_hash={state_hash} seeds={len(claims)} sample={sample}",
-        f"# sha256={sample_sha} ts={utc_now()}",
+        f"# [initialized] kunglao-init state_hash={state_hash} seeds={len(claims)} {identity}",
+        (f"# sha256={sample_sha} ts={utc_now()}" if lane is None
+         or lane == lane_spec.DEFAULT_LEGACY
+         else f"# lane={lane} ts={utc_now()}"),
         # #536: template version stamp — init writes, hooks_selfcheck/
         # env_check verify (same shape as state_hash). Comment form keeps
         # the register YAML-parseable.
         template_version.stamp_line(template_version.read_skill_version()),
-        "# kunglao-init structural seed claims — scaffold facts only "
-        "(artifact identity / project type / sample hash; #412: no analysis conclusions)",
+        ("# kunglao-init structural seed claims — scaffold facts only "
+         "(lane / project type / material; #412: no analysis conclusions)"
+         if lane is not None and lane != lane_spec.DEFAULT_LEGACY else
+         "# kunglao-init structural seed claims — scaffold facts only "
+         "(artifact identity / project type / sample hash; #412: no analysis conclusions)"),
         "claims:",
     ]
     for c in claims:
@@ -1214,6 +1257,66 @@ def anchor_pending_decisions(
     return out
 
 
+def lane_decision() -> "decision_pending.PendingDecision":
+    """The lane question (issue 208) as a pending decision — no default.
+
+    The lane is the analysis-material contract: it decides whether a
+    binary sample under bins/ is REQUIRED (malware) or not. Nothing in the
+    workspace state can imply it (a lane-less task_spec keeps the legacy
+    malware behavior; a workspace with no contract at all has no signal),
+    so the runtime asks instead of guessing."""
+    return decision_pending.PendingDecision(
+        decision_id="lane",
+        question="Analysis lane — what is the material this task analyzes?",
+        kind=decision_pending.KIND_CHOICE,
+        options=tuple(lane_spec.LANES),
+        default=None,  # never guessed from context
+        context={
+            "materials": {lane: lane_spec.material(lane)
+                          for lane in lane_spec.LANES},
+            "note": ("lane=malware keeps the binary-sample contract "
+                     "(bins/<sha> required, RC_NO_SAMPLE retained); every "
+                     "other lane binds the toolchain gate to its material "
+                     "instead of the MCP/RE analysis tools"),
+        },
+    )
+
+
+def _lane_intake(ws: Path, explicit_lane: str | None,
+                 answers: dict[str, str], files: "list[dict]",
+                 ) -> tuple[str | None, int | None]:
+    """The lane intake (issue 208): resolve | ask, before the no-sample gate.
+
+    Precedence (shared pending-decision contract): --lane > --resolve answer >
+    task_spec.yaml lane:. An explicit/answered lane is persisted into the
+    contract so later runs never re-ask. An undeclared lane falls back to
+    the LEGACY default (malware) when the workspace already carries a task
+    contract or a mounted sample — the pre-lane behavior, byte-identical.
+    A workspace that declares NOTHING (no lane, no contract, no sample) is
+    ASKED: exit RC_PENDING_DECISIONS with the lane decision, zero scaffold.
+    Returns (lane, exit_code | None)."""
+    lane, source, error = lane_spec.resolve(ws, explicit_lane, answers)
+    if error is not None:
+        print(f"kunglao-init: ERROR lane refused: {error}", file=sys.stderr)
+        return None, RC_ERROR
+    if lane is not None:
+        if source in ("explicit", "answer"):
+            try:
+                lane_spec.persist(ws, lane)
+            except ValueError as exc:
+                print(f"kunglao-init: ERROR lane not recorded: {exc}",
+                      file=sys.stderr)
+                return None, RC_ERROR
+            print(f"kunglao-init: lane={lane} recorded (task_spec.yaml)")
+        return lane, None
+    if (ws / lane_spec.TASK_SPEC_FILENAME).exists() or files:
+        # Legacy contract: a task_spec without the field, or a mounted
+        # sample (the malware lane's structural signature). Current
+        # behavior, never re-interviewed.
+        return lane_spec.DEFAULT_LEGACY, None
+    return None, emit_pending(ws, [lane_decision()])
+
+
 def _anchor_intake(ws: Path, answers: dict[str, str]) -> int | None:
     """Structural oracle-anchor intake: the script itself asks.
 
@@ -1350,6 +1453,7 @@ HOST_EXEC_PROTECTION_HOST_TYPES = frozenset({"windows", "linux", "macos"})
 
 def _aligned_host_exec_protection(
         answers: dict[str, str], project_type: str | None,
+        lane: str | None = None,
         ) -> tuple[str | None, "decision_pending.PendingDecision | None", int | None]:
     """#919 C: host exec protection (block_malware_exec) applies-or-not is a
     USER decision, never a written-in default — the sample-exec guard is
@@ -1358,6 +1462,9 @@ def _aligned_host_exec_protection(
     Scope: the ask fires only for host-executable sample types
     (windows/linux/macos). web/android targets never execute on the host,
     so the question is noise there — recorded as not-applicable.
+    Issue 208: a non-malware lane has no sample to execute on the host at
+    all — the guard is recorded not-applicable there too (an explicit
+    answer still wins).
     CLI flag > --resolve answer (validated against {enabled, disabled,
     not-applicable}) > pending ask."""
     val = answers.get("host_exec_protection") or None
@@ -1368,6 +1475,8 @@ def _aligned_host_exec_protection(
                   file=sys.stderr)
             return None, None, RC_ERROR
         return val, None, None
+    if lane is not None and lane != lane_spec.DEFAULT_LEGACY:
+        return "not-applicable", None, None  # issue 208: no host-executable sample
     if project_type is not None and project_type not in HOST_EXEC_PROTECTION_HOST_TYPES:
         return "not-applicable", None, None
     decision = decision_pending.PendingDecision(
@@ -1387,6 +1496,7 @@ def _aligned_host_exec_protection(
 def align_target(ws: Path, files: list[dict],
                  explicit_target: str | None, explicit_type: str | None,
                  answers: dict[str, str] | None,
+                 lane: str | None = None,
                  ) -> tuple[str | None, str | None, str | None, int | None]:
     """#455 intake step 0 decision matrix.
 
@@ -1398,7 +1508,12 @@ def align_target(ws: Path, files: list[dict],
 
     Order: target (multi-file asks; unique file is deterministic) ->
     target_object (containers list contents, type never guessed) -> type
-    (sniff hint is context only)."""
+    (sniff hint is context only).
+
+    Issue 208: a non-malware lane has no bins/ sample to align — the
+    target/target_object round is skipped when bins/ is empty (it would
+    otherwise pend an empty option list), and the host-exec posture is
+    not-applicable."""
     answers = answers or {}
     target, kind, err = _aligned_target(files, explicit_target, answers)
     if err is not None:
@@ -1413,7 +1528,8 @@ def align_target(ws: Path, files: list[dict],
             return None, None, None, err
         if decision is not None:
             pending.append(decision)
-    elif target is None:
+    elif target is None and files:
+        # a non-malware lane with an empty bins/ has no target to align
         pending.append(decision_pending.PendingDecision(
             decision_id="target",
             question="bins/ holds multiple files — which one is the "
@@ -1432,7 +1548,7 @@ def align_target(ws: Path, files: list[dict],
         pending.append(decision)
 
     host_exec_protection, decision, err = _aligned_host_exec_protection(
-        answers, project_type)
+        answers, project_type, lane)
     if err is not None:
         return None, None, None, err
     if decision is not None:
@@ -1865,13 +1981,35 @@ QUICK_START_SCAFFOLDS: dict[str, str] = {
 
 
 def quick_start_scaffold(project_type: str | None,
-                         target_name: str | None = None) -> str:
-    """Type-related opening-moves skeleton for the Quick start section.
+                         target_name: str | None = None,
+                         lane: str | None = None) -> str:
+    """Opening-moves skeleton for the Quick start section.
 
     Unknown/None type falls back to the windows scaffold (same default as
     the {{type}} slot). Always non-empty: an empty slot would read as
     "cultivated" when it is not — the scaffold is the UNcultivated state
-    and says so by being generic."""
+    and says so by being generic.
+
+    Issue 208: a non-malware lane has no `bins/<sha>` target — its scaffold
+    is the lane's material workflow (the per-type scaffolds above all open
+    on a binary sample). The stub lanes get the same shape, with their
+    material line naming what they consume."""
+    if lane is not None and lane != lane_spec.DEFAULT_LEGACY:
+        return (
+            f"**Material**: {lane_spec.material(lane)}.\n"
+            f"**Lane**: `{lane}` — no binary sample is mounted; the "
+            "toolchain gate probes uv + python + the lane's material, not "
+            "the MCP/RE supply.\n"
+            "1. Declare the task: `task_spec.yaml` primary_questions + "
+            "oracle anchors (env derives from the task, not the reverse).\n"
+            "2. Mount the material under the workspace (`corpora/`, "
+            "`references/`, `dataset/`, or the lane's own dir) and record "
+            "its provenance (path + sha256) before deriving anything.\n"
+            "3. Each unresolved observation becomes ONE claim in "
+            "claim-register.yaml; one worker per claim.\n"
+            f"4. Close: verify each answer by the declared method "
+            "(reproduction / replay-evidence against recorded pairs); "
+            "red-team before PROVEN.")
     key = project_type if project_type in QUICK_START_SCAFFOLDS else "windows"
     return QUICK_START_SCAFFOLDS[key].format(target=target_name or "sample")
 
@@ -1961,13 +2099,55 @@ def task_spec_section(ws: Path) -> str:
     return "\n".join(lines)
 
 
+def material_section(sample_name: str, sample_sha: str,
+                     lane: str | None = None,
+                     sample_type: str | None = None,
+                     sample_path: str | None = None) -> str:
+    """The CLAUDE.md material block (issue 208).
+
+    Malware / legacy (lane absent): the sample identity table, byte-identical
+    to the pre-lane render (the shipped goldens anchor it). Any other lane
+    renders ITS material contract instead — no SHA rows for an artifact the
+    lane does not have, and no `bins/` path baked in as the only shape.
+
+    sample_type / sample_path are the upgrade-parity overrides
+    (the collect-and-merge face carries the old render's values forward); None keeps init's defaults."""
+    if lane is None or lane == lane_spec.DEFAULT_LEGACY:
+        return (
+            "## Sample under analysis\n"
+            "\n"
+            "| Field | Value |\n"
+            "|-------|-------|\n"
+            f"| SHA1 (filename) | `{sample_name}` |\n"
+            f"| SHA256 | `{sample_sha}` |\n"
+            f"| Type | `{sample_type or '(detected at analysis time)'}` |\n"
+            f"| Path | `{sample_path or f'bins/{sample_name}'}` |"
+        )
+    return (
+        f"## Analysis material (lane: {lane})\n"
+        "\n"
+        "| Field | Value |\n"
+        "|-------|-------|\n"
+        f"| Lane | `{lane}` |\n"
+        f"| Material | {lane_spec.material(lane)} |\n"
+        "| Binary sample | none — this lane is not bound to a `bins/<sha>` "
+        "artifact (no sample hash, no `RC_NO_SAMPLE`) |\n"
+        "| Contract | `task_spec.yaml` (`lane:` + the oracle anchors) |"
+    )
+
+
 def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
-                  project_type: str | None = None) -> Path | None:
+                  project_type: str | None = None,
+                  lane: str | None = None) -> Path | None:
     """Write CLAUDE.md from template with project info filled in.
 
     #362: renders through the shared template_render engine ({{param}}
     single-pass + fail-closed leftover detection — an unfilled placeholder
     is a TemplateRenderError, never a silent partial file).
+
+    Issue 208: the material block is lane-rendered ({{material_section}}) —
+    a non-malware lane renders its own material contract, so no unresolved
+    {{sample_*}} placeholder can survive there.
 
     Idempotent: if CLAUDE.md exists and is non-empty, skip (do not clobber).
     Returns the written path or None if skipped.
@@ -2009,11 +2189,11 @@ def write_claudemd(ws: Path, sample_name: str, sample_sha: str,
         # the type scaffold only — kunglao-init-worker cultivates it after)
         "roles_rows": roles_rows(),
         "layout_rows": layout_rows(),
-        "quick_start_section": quick_start_scaffold(etype, sample_name),
-        "sample_sha1": sample_name,
-        "sample_sha256": sample_sha,
-        "sample_type": "(detected at analysis time)",
-        "sample_path": f"bins/{sample_name}",
+        "quick_start_section": quick_start_scaffold(etype, sample_name, lane),
+        # issue 208: the material block is lane-rendered — malware keeps the
+        # sample identity table byte-for-byte; other lanes render their
+        # material contract (no {{sample_*}} placeholder exists any more).
+        "material_section": material_section(sample_name, sample_sha, lane),
         # as_posix(): the skill dir lands in CLAUDE.md BASH command lines
         # (`python <skill>/scripts/convergence_check.py .`) where backslashes
         # are shell escapes — str(Path) breaks every rendered command on
@@ -2698,7 +2878,8 @@ def initialize(ws: Path, hooks_json: Path | None,
                 no_hooks: bool = False,
                 skills: "list[str] | None" = None,
                 plugin_mode: bool = False,
-                host_exec_protection: str | None = None) -> int:
+                host_exec_protection: str | None = None,
+                lane: str | None = None) -> int:
     """Phase 2 fresh initialization + Phase 3 idempotency verify.
 
     Returns the exit code (0 success / RC_FATAL_VERIFY verify-failure).
@@ -2706,7 +2887,12 @@ def initialize(ws: Path, hooks_json: Path | None,
     (run) keeps it in its own frame so a mid-init failure (template defect)
     can clean up exactly this run's artifacts; pre-existing content is never
     in the manifest and therefore never deleted (L2, #414).
+
+    Issue 208: lane=malware/None keeps every step byte-identical; a
+    non-malware lane skips the sample-only probes (memory gate) and renders
+    its own material block + seeds.
     """
+    _is_malware_lane = lane is None or lane == lane_spec.DEFAULT_LEGACY
     if created is None:
         created = scaffold(ws)
     if ensure_agent_teams_state(ws):
@@ -2720,18 +2906,25 @@ def initialize(ws: Path, hooks_json: Path | None,
     # alignment — its verdict (jadx-ok / targeted-jadx / smali-only /
     # refuse / unavailable) lands in the env facts, so formal analysis reads
     # the decompile-provider budget state instead of discovering it by
-    # thrashing the host.
-    mem_gate = record_mem_gate_verdict(ws, project_type, target)
-    if mem_gate is not None:
-        _mg_note = f" ({mem_gate['reason']})" if mem_gate.get("reason") else ""
-        print(f"kunglao-init: mem-gate verdict={mem_gate['verdict']}{_mg_note}")
+    # thrashing the host. Issue 208: it is a SAMPLE probe — a non-malware
+    # lane has no sample to budget for.
+    if _is_malware_lane:
+        mem_gate = record_mem_gate_verdict(ws, project_type, target)
+        if mem_gate is not None:
+            _mg_note = f" ({mem_gate['reason']})" if mem_gate.get("reason") else ""
+            print(f"kunglao-init: mem-gate verdict={mem_gate['verdict']}{_mg_note}")
 
     # #304: write the resolved project type
     write_project_type(ws, project_type)
     print(f"kunglao-init: project_type={project_type}")
+    if not _is_malware_lane:
+        # the lane is the material contract — recorded on the state line so
+        # a cold start reads it without parsing task_spec.yaml
+        write_state_line(ws, "lane", lane)
+        print(f"kunglao-init: lane={lane}")
 
     # Write CLAUDE.md from type-specific template (idempotent: skip if exists)
-    write_claudemd(ws, sample, sample_sha, project_type=project_type)
+    write_claudemd(ws, sample, sample_sha, project_type=project_type, lane=lane)
     # #536: stamp CLAUDE.md with the template version (post-render so the
     # golden render contract stays byte-identical; idempotent refresh also
     # upgrades a behind workspace on --force re-init). The register and
@@ -2748,10 +2941,10 @@ def initialize(ws: Path, hooks_json: Path | None,
             print("kunglao-init: .mcp.json created (MCP supply scaffold)")
         else:
             print("kunglao-init: .mcp.json skipped (exists — idempotent, not overwritten)")
-    draft = claim_register_text(sample, sample_sha, state_hash="", project_type=project_type)
+    draft = claim_register_text(sample, sample_sha, state_hash="", project_type=project_type, lane=lane)
     digest = compute_state_hash(ws, register_text=draft)
     reg = ws / "claim-register.yaml"
-    atomic_write(reg, claim_register_text(sample, sample_sha, state_hash=digest, project_type=project_type))
+    atomic_write(reg, claim_register_text(sample, sample_sha, state_hash=digest, project_type=project_type, lane=lane))
     # #625: dedicated state file is the PRIMARY completeness truth (YAML
     # comment stays as legacy fallback) — a YAML rewrite can no longer drop it.
     write_init_marker(ws, state_hash=digest, project_type=project_type,
@@ -2841,7 +3034,8 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         host_exec_protection_flag: str | None = None,
         no_hooks: bool = False,
         skills: list[str] | None = None,
-        plugin_mode: bool = False) -> int:
+        plugin_mode: bool = False,
+        lane: str | None = None) -> int:
     """State-machine entry (#304 amended flow, comment 304-5289955958;
     #455 target alignment as intake step 0):
 
@@ -3033,13 +3227,23 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         backup = backup_register(reg)
         print(f"kunglao-init: --force backup -> {backup}")
 
-    # #304: no-sample cold start -> friendly prompt, refuse (exit 5)
+    # no-sample cold start -> friendly prompt, refuse (exit 5).
+    # Issue 208: the lane decides whether a sample is required AT ALL —
+    # the lane intake runs first (it may pend the lane question with zero
+    # scaffold), and only the malware lane reaches the prompt below.
     files = survey_bins(ws)
-    if not files:
+    lane, lane_rc = _lane_intake(ws, lane, answers, files)
+    if lane_rc is not None:
+        return lane_rc
+    assert lane is not None  # resolved: explicit | answer | declared | legacy
+    if not files and lane == lane_spec.DEFAULT_LEGACY:
         print(
             "kunglao-init: no analysis target found — place a sample into bins/ "
             "or specify a path, then re-run "
-            "kunglao-init.py <ws> --type <windows|linux|android|web|macos>.",
+            "kunglao-init.py <ws> --type <windows|linux|android|web|macos>. "
+            "A task with no binary sample is not a sample problem: declare "
+            "its lane (--lane algorithm|protocol|web|data|app, or `lane:` in "
+            "task_spec.yaml) and init proceeds without bins/.",
             file=sys.stderr,
         )
         return RC_NO_SAMPLE
@@ -3055,10 +3259,13 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         answers = dict(answers or {})
         answers["host_exec_protection"] = host_exec_protection_flag
     target_name, target_object, host_exec_protection, pending_rc = align_target(
-        ws, files, target, project_type, answers)
+        ws, files, target, project_type, answers, lane)
     if pending_rc is not None:
         return pending_rc
-    assert target_name is not None  # aligned
+    if lane == lane_spec.DEFAULT_LEGACY:
+        # the malware gate guarantees a bins/ sample; a non-malware lane
+        # has no sample to align (issue 208)
+        assert target_name is not None
     if project_type is None:
         # align_target resolved the type from answers/persisted state —
         # mirror its precedence so the local matches what was aligned.
@@ -3241,7 +3448,8 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                               target=target_name, target_object=target_object,
                               no_hooks=no_hooks, skills=skills,
                               plugin_mode=plugin_mode,
-                              host_exec_protection=host_exec_protection)
+                              host_exec_protection=host_exec_protection,
+                              lane=lane)
     except template_render.TemplateRenderError as exc:
         # #534: failure path — log FIRST, then write the report, then return.
         # A pre-exit exception must not skip the report write.
@@ -3519,7 +3727,7 @@ def main(argv: list[str] | None = None) -> int:
                assume_yes=args.assume_yes,
                target=args.target, answers=answers,
                host_exec_protection_flag=args.host_exec_protection,
-               no_hooks=args.no_hooks, skills=skills)
+               no_hooks=args.no_hooks, skills=skills, lane=args.lane)
 
 
 # #660 dispatcher import — ALIASED: a bare `from _entry import run` would

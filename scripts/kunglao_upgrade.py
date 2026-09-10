@@ -505,6 +505,14 @@ def _build_current_frame(ws: Path, old_text: str,
     carried = _parse_sample_rows(old_text)
     # #919: type-conditional slot parity with init's write_claudemd.
     etype = ptype if ptype in init.VALID_TYPES else "windows"
+    # issue 208: the material block is lane-rendered — derive the lane from
+    # the workspace contract (absent = the legacy malware/sample table, with
+    # the old render's values carried forward).
+    lane = None
+    try:
+        lane = init.lane_spec.declared(ws)
+    except Exception:  # noqa: BLE001 — parity best-effort, frame still renders
+        lane = None
     params = {
         "type_section": type_section,
         "task_spec_section": req_block or "",
@@ -516,12 +524,13 @@ def _build_current_frame(ws: Path, old_text: str,
         # (the upgrade re-render would otherwise leave {{placeholders}}).
         "roles_rows": init.roles_rows(),
         "layout_rows": init.layout_rows(),
-        "quick_start_section": init.quick_start_scaffold(etype, sample_name),
-        "sample_sha1": carried.get("sample_sha1", sample_name),
-        "sample_sha256": carried.get("sample_sha256", sample_sha),
-        "sample_type": carried.get("sample_type",
-                                   "(detected at analysis time)"),
-        "sample_path": carried.get("sample_path", f"bins/{sample_name}"),
+        "quick_start_section": init.quick_start_scaffold(etype, sample_name,
+                                                         lane),
+        "material_section": init.material_section(
+            carried.get("sample_sha1", sample_name),
+            carried.get("sample_sha256", sample_sha), lane,
+            sample_type=carried.get("sample_type"),
+            sample_path=carried.get("sample_path")),
         "skill_dir": canonical_install_root().as_posix(),
         "venv_path": venv_path,
     }

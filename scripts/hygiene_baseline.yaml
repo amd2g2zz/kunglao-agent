@@ -151,7 +151,7 @@ files:
   scripts/kunglao-digest.py:
     r1: 1
   scripts/kunglao-init.py:
-    r1: 197
+    r1: 196
   scripts/kunglao-monitor.py:
     r1: 11
   scripts/kunglao-status.py:

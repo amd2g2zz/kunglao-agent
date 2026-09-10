@@ -1,3 +1,4 @@
+<!-- kunglao:frame:v0.1.4 -->
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -32,16 +33,16 @@ The workspace is the source of truth; this file is the index. Drill into a point
 
 The convergence loop runs every round and is the only rule set that survives context compact. Each round:
 
-- Run `uv run --project {{skill_dir}} python {{skill_dir}}/scripts/convergence_check.py .` and surface the verdict before claiming progress; its decision-table action is mandatory.
+- Run `uv run --project /kunglao/skill-sentinel python /kunglao/skill-sentinel/scripts/convergence_check.py .` and surface the verdict before claiming progress; its decision-table action is mandatory.
 - Heartbeat TTL: if `runs/.heartbeat.json` is stale (older than 35 minutes), re-anchor from disk before deciding — never reason over a stale heartbeat.
 - Oracle verdict: `task-oracle.yaml` is the authoritative completion anchor; a FAILED verdict is terminal until a blocker is filed.
 - Post-compact re-entry: re-read `analysis_state.txt`, `claim-register.yaml`, and `global_plan.txt` before the first tool call — disk is truth, memory is not.
 
 ## Skill & orchestrator
 
-Analysis is driven by `/kunglao-agent` (skill at `{{skill_dir}}`). Key scripts under `{{skill_dir}}/scripts/`, run from the workspace root with `.venv` activated: `convergence_check.py`, `priority_ratio.py`, `convergence_health.py`, `failure_analysis_gate.py`, `env_check.py` (writes `runs/.env-check.json`), `hook_activation.py --renew` (30-min hook TTL).
+Analysis is driven by `/kunglao-agent` (skill at `/kunglao/skill-sentinel`). Key scripts under `/kunglao/skill-sentinel/scripts/`, run from the workspace root with `.venv` activated: `convergence_check.py`, `priority_ratio.py`, `convergence_health.py`, `failure_analysis_gate.py`, `env_check.py` (writes `runs/.env-check.json`), `hook_activation.py --renew` (30-min hook TTL).
 
-Capability discovery across the asset tiers goes through `uv run --project {{skill_dir}} python {{skill_dir}}/tools/tool-search.py --find <keyword>`: each result states a `type`, a `consume`, and a keyword match score (lexical, not semantic) that ranks candidates for the agent's own judgment — a tool may be invoked, a template filled or adapted, a reference read. The score measures word overlap only, never gates surfacing, so near-miss results stay visible, and result descriptions state expected outcomes rather than guaranteed facts.
+Capability discovery across the asset tiers goes through `uv run --project /kunglao/skill-sentinel python /kunglao/skill-sentinel/tools/tool-search.py --find <keyword>`: each result states a `type`, a `consume`, and a keyword match score (lexical, not semantic) that ranks candidates for the agent's own judgment — a tool may be invoked, a template filled or adapted, a reference read. The score measures word overlap only, never gates surfacing, so near-miss results stay visible, and result descriptions state expected outcomes rather than guaranteed facts.
 
 ## State files (read every turn, disk is truth)
 
@@ -68,13 +69,30 @@ tool means you have left the orchestrator role — hand the work to an agent.
 
 | Agent | Responsibility | When to dispatch |
 |-------|----------------|------------------|
-{{roles_rows}}
+| `kunglao-worker` | Generic claim-executing WORKER | default executor for any claim without a stage-specific agent |
+| `kunglao-init-worker` | INIT-WORKER | workspace init, env repair, handbook cultivation |
+| `kunglao-redteam` | RED-TEAM CHECKER — adversarial verification of completed analysis | attack-test a claim before it is promoted to PROVEN |
+| `verdict-scorer` | Read `task_spec.yaml` (primary_questions[]), `claim-register.yaml`, `facts/*.md`, and… | score verdict.json against task_spec primary_questions |
+| `web-re-worker` | Web/browser JS reverse-engineering SPECIALIST WORKER (mirrors the specialist shape of… | web/browser JS claims (unpack, deobfuscate, signed parameters) |
+| `ghidra-light` | Stage 4 light static reconnaissance via Ghidra | light static recon for Go/Rust/OLLVM/C/C++/.NET local samples |
+| `go-symbols` | Stage 3.9 Go symbol recovery via unstrip (Go samples only, die.json language=Go) | Go symbol recovery when die.json reports language=Go |
+| `pefile-signature` | Read evidence/die.json + the local sample file | authenticode + packer family identification on PE samples |
+| `floss-filter` | Read `evidence/floss-raw.txt` (raw flare-floss output, up to 100k lines for Go binaries)… | de-noise flare-floss output into per-category string evidence |
 
 ## Project layout
 
 | Directory | Meaning | Caveat |
 |-----------|---------|--------|
-{{layout_rows}}
+| `bins/` | Samples + mounted inputs (sha-anchored) | read-only: never edit or rename a mounted sample; the hash is identity |
+| `facts/` | Claim fact base (F<NNN>.md + _INDEX.md) | workers only; byte-anchored, reproducible, frontmatter contract |
+| `evidence/` | Raw evidence artifacts (JSON, dumps, captures) | never reshape an artifact to fit a claim |
+| `notes/` | Results layer (verify_status notes) | corrections supersede via the supersedes chain, never silent edits |
+| `analyses/` | Long-form analysis + failure records | cross-fact synthesis lives here, not in facts/ |
+| `hypotheses/` | Assumption layer (H-*.md, competing candidates) | terminal states (refuted/superseded) never reopen |
+| `blockers/` | Unresolvable env/tooling gaps | closes only when the root cause is resolved and recorded |
+| `runs/` | Machine channel: status, heartbeat, logs (runs/logs), ledger | machines write here; human notes belong in notes/ |
+| `scratch/` | Free zone for non-contract artifacts | nothing here may carry gate or convergence weight |
+| `tools/ + scripts/` | Registered tools (tools/_INDEX.yaml) + reusable CLIs | check the registry before writing anything new |
 
 ## Quick start: how to work THIS analysis
 
@@ -83,9 +101,21 @@ type scaffold below with THIS task's concrete opening moves, distilled from
 the init Q&A, the sample, and the agent definitions' methodology (never
 invented). An untouched scaffold means cultivation has not happened yet. -->
 
-{{quick_start_section}}
+**Material**: reference corpora + trace dumps (no binary sample; run the recovered algorithm against recorded pairs).
+**Lane**: `algorithm` — no binary sample is mounted; the toolchain gate probes uv + python + the lane's material, not the MCP/RE supply.
+1. Declare the task: `task_spec.yaml` primary_questions + oracle anchors (env derives from the task, not the reverse).
+2. Mount the material under the workspace (`corpora/`, `references/`, `dataset/`, or the lane's own dir) and record its provenance (path + sha256) before deriving anything.
+3. Each unresolved observation becomes ONE claim in claim-register.yaml; one worker per claim.
+4. Close: verify each answer by the declared method (reproduction / replay-evidence against recorded pairs); red-team before PROVEN.
 
-{{material_section}}
+## Analysis material (lane: algorithm)
+
+| Field | Value |
+|-------|-------|
+| Lane | `algorithm` |
+| Material | reference corpora + trace dumps (no binary sample; run the recovered algorithm against recorded pairs) |
+| Binary sample | none — this lane is not bound to a `bins/<sha>` artifact (no sample hash, no `RC_NO_SAMPLE`) |
+| Contract | `task_spec.yaml` (`lane:` + the oracle anchors) |
 
 ## Memory carriers (write/recall contract)
 
@@ -95,8 +125,8 @@ invented). An untouched scaffold means cultivation has not happened yet. -->
 |------|------|--------------|---------------|-----------|
 | T0 transient | `runs/`, `scratch/` | Per-turn scratch, status lines, heartbeat, verify records | Every state change | Ephemeral; never cited as memory |
 | T1 workspace carriers | The six-carrier table below | Single-sample facts, claims, blockers, plans, oracle | Evidence emerges / claim transitions | Lives and dies with the workspace |
-| T2 distilled lessons | `{{skill_dir}}/references/lessons/` (two-stage nursery, rollup at claim terminal) | A pitfall or method outcome that would help ANY future SAMPLE | Claim terminal + outcome capture | Draft -> active gate -> tombstone |
-| T3 reference library | `{{skill_dir}}/references/re-library/` | Curated domain knowledge (family playbooks, tool lore) — proposals only, never auto-written from one hit | Curation decision | Curated |
+| T2 distilled lessons | `/kunglao/skill-sentinel/references/lessons/` (two-stage nursery, rollup at claim terminal) | A pitfall or method outcome that would help ANY future SAMPLE | Claim terminal + outcome capture | Draft -> active gate -> tombstone |
+| T3 reference library | `/kunglao/skill-sentinel/references/re-library/` | Curated domain knowledge (family playbooks, tool lore) — proposals only, never auto-written from one hit | Curation decision | Curated |
 | T4 project memory (Claude Code native) | `<auto>` Claude Code per-project memory dir (`MEMORY.md` index + typed files: user / feedback / project / reference) | How-we-work knowledge for THIS repo across sessions: user rulings and their WHY, governance policies, collaboration corrections, validated judgment calls, pointers to external trackers | User correction ("don't X"), explicit ruling, non-obvious approach validated in-session | Persists across sessions; update/remove stale entries rather than re-writing |
 | T5 operator global | Host-global harness config outside this repo | Machine-level conventions shared by every project | Setup-time only | Cross-everything |
 
@@ -144,30 +174,40 @@ Notes travel in six carriers; each row is the contract for what lands there, who
 
 ## Hard constraints (common)
 
-{{vm_constraint_line}}- **Orchestrator does not analyze**: the orchestrator monitors/dispatches/verifies only. Decompile, strings, grep, emulation, debugging go to workers.
+- **Dynamic tools VM-only**: x64dbg, Frida, sample execution must run on VM. Never launch/debug/inject on host.
+- **Orchestrator does not analyze**: the orchestrator monitors/dispatches/verifies only. Decompile, strings, grep, emulation, debugging go to workers.
 - **Maker-checker**: worker=maker, orchestrator=checker. Facts must be independently verified before promotion to PROVEN.
 - **BLIND verifier contract**: verifier agents receive only the raw evidence path and the questions — never producer context or the producer's reasoning.
 - **No stopping for self-answerable questions**: within the analysis loop, do not halt for questions you can answer yourself — attempt self-repair for environment failures and record the decision for decidable items. Schema ambiguity and directional choices (which change what the user asked for) must still be surfaced to the user.
 
-{{type_section}}
+## Hard constraints (linux)
 
-{{task_spec_section}}## Success criteria
+- **gdbserver**: primary remote debugger for Linux ELF targets on VM.
+- **VM required**: `KUNGLAO_VM_HOST` must be set and VM must be reachable for T2+ analysis.
+- **eBPF tracing**: requires kernel >= 6.0 (`uname -r`). Not available on older kernels — this is a WARN gate, not a hard blocker. Other analysis paths proceed normally.
+
+
+## Success criteria
 
 Key behaviors are verifiable, not aspirational. Each check names where the proof lives:
 
 - A fact may only be promoted to PROVEN with an independent verifier sign-off record — provable via `facts/_INDEX.md` (verifier column) and the fact file's verify section.
 - Every numeric fact declares its counting unit; multi-basis numbers are never collapsed — provable by reading any `facts/F*.md` numeric claim.
-- Every claim in `claim-register.yaml` has a status and evidence tier — provable by `uv run --project {{skill_dir}} python {{skill_dir}}/scripts/lint_facts.py <ws>` returning zero errors.
+- Every claim in `claim-register.yaml` has a status and evidence tier — provable by `uv run --project /kunglao/skill-sentinel python /kunglao/skill-sentinel/scripts/lint_facts.py <ws>` returning zero errors.
 - Environment failures are self-repaired before analysis dispatch — provable via `runs/.env-check.json` showing overall PASS (or a blocker file explaining why not).
 - Tool selection goes through `tools/_INDEX.yaml` (capability + description) before writing a new script — provable by the `tool-catalog:` marker in worker dispatch records.
 
 ## MCP servers (supply manifest)
 
-Analysis correctness depends on registered MCP servers — a fresh machine deployed per kunglao docs must register these (user-level `claude mcp add ...`, or fill real entries in the workspace `.mcp.json` scaffold). Mechanical check: `uv run --project {{skill_dir}} python {{skill_dir}}/scripts/mcp_probe.py . --type {{type}}` (exit 1 = HARD missing).
+Analysis correctness depends on registered MCP servers — a fresh machine deployed per kunglao docs must register these (user-level `claude mcp add ...`, or fill real entries in the workspace `.mcp.json` scaffold). Mechanical check: `uv run --project /kunglao/skill-sentinel python /kunglao/skill-sentinel/scripts/mcp_probe.py . --type linux` (exit 1 = HARD missing).
 
 | MCP server | Tier | Scope | Purpose | Registration |
 |------------|------|-------|---------|--------------|
-{{mcp_rows}}
+| `ghidra` | HARD | all types | Ghidra decompile/static analysis | `claude mcp add ghidra -- <path>/bridge-mcp-ghidra.exe` |
+| `sequential-thinking` | HARD | all types | structured reasoning | `claude mcp add sequential-thinking -- npx -y @modelcontextprotocol/server-sequential-thinking` |
+| `ida-pro-vm` | WARN | when IDA chosen | IDA remote analysis | `claude mcp add --transport http ida-pro-vm <ida-mcp-url>` |
+| `virustotal` | WARN | CTI | intelligence (family attribution) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
+| `ssh-mcp` | WARN | channel | ssh execution control plane (KUNGLAO_CHANNEL=ssh dynamics; CLI ssh fallback) | `claude mcp add ssh-mcp -- ssh-mcp` |
 
 Workspace `.mcp.json` scaffold is generated by `kunglao-init` when missing (`--no-mcp` skips; an existing file is never overwritten). Keep this table in sync with the single manifest source `scripts/mcp_probe.py` (pinned by `tests/test_mcp_supply.py`).
 
@@ -176,7 +216,10 @@ Workspace `.mcp.json` scaffold is generated by `kunglao-init` when missing (`--n
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | `0` (default disabled) | Agent-team dispatch channel. MUST stay `0`/unset — truthy values (1/true/yes/on) route subagent dispatches through the teammate channel (2026-08-12 incident). `kunglao-init` sets it to `0` in the session and in your PowerShell profile(s); `scripts/shell_defaults.py` manages profile default lines. |
-{{vm_env_rows}}| `GHIDRA_HOME` | unset | Ghidra install root; `support/analyzeHeadless.bat` must exist under it for decompilation. |
+| `KUNGLAO_VM_HOST` | unset | VM lease host for dynamic analysis (vmr-shell / Frida ports). Unset = dynamic analysis (T3) blocked; static analysis may proceed. |
+| `KUNGLAO_VM_SHELL_PORT` | `9876` | vmr-shell TCP port on the VM. |
+| `KUNGLAO_FRIDA_PORT` | `1337` | Custom Frida port (renamed frida-server convention). |
+| `GHIDRA_HOME` | unset | Ghidra install root; `support/analyzeHeadless.bat` must exist under it for decompilation. |
 | `KUNGLAO_DIE` | unset | Path to the DIE (Detect It Easy) executable; fallback to PATH. |
 | `KUNGLAO_CLAUDE_JSON` | unset | Override for the user-level `~/.claude.json` MCP registry (tests). |
 
@@ -199,11 +242,11 @@ git status/diff as ground truth for convergence decisions.
 
 ## Tool script discipline
 
-Any reusable analysis logic must land as a parameterized CLI script under `{{skill_dir}}/scripts/` (no hardcoded paths, reusable across workspaces). ad-hoc inline execution (`python -c` / heredoc) is forbidden; prefer reusing an existing CLI (e.g. `scripts/shell_defaults.py` for shell environment default lines, `scripts/env_check.py` for environment readiness). One-off commands may run via Bash, but any logic you might reuse must first become a script.
+Any reusable analysis logic must land as a parameterized CLI script under `/kunglao/skill-sentinel/scripts/` (no hardcoded paths, reusable across workspaces). ad-hoc inline execution (`python -c` / heredoc) is forbidden; prefer reusing an existing CLI (e.g. `scripts/shell_defaults.py` for shell environment default lines, `scripts/env_check.py` for environment readiness). One-off commands may run via Bash, but any logic you might reuse must first become a script.
 
 ## Python venv
 
-Path: `{{venv_path}}`. Dependencies are lock-managed (`uv.lock`) — invoke through `uv run --project {{skill_dir}}`; never pip-install into the env. Activate before running scripts.
+Path: `.venv/`. Dependencies are lock-managed (`uv.lock`) — invoke through `uv run --project /kunglao/skill-sentinel`; never pip-install into the env. Activate before running scripts. Python 3.11.0.
 
 ## Keeping this handbook alive
 
@@ -226,3 +269,4 @@ start max 40, this section max 25).
 
 Authority: kunglao-init-worker maintains this file by update and rewrite to
 the optimal form (delete stale, merge redundant) — it is NOT append-only.
+<!-- /kunglao:frame -->

@@ -90,6 +90,7 @@ VALID_TYPES = ("windows", "linux", "android", "web", "macos")
 
 # F6 (#304 review): single source of truth for the init predicate component.
 from init_state import read_project_type  # noqa: E402
+import lane_spec  # noqa: E402  (issue 208: the lane vocabulary single source)
 from report_render import (  # noqa: E402  (render face — one definition)
     ANDROID_SERVER_PORT,
     FRIDA_PORT,
@@ -118,6 +119,8 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "pefile": NextAction("install", "pip install pefile"),
     "uv": NextAction(
         "install", "curl -LsSf https://astral.sh/uv/install.sh | sh"),
+    "python": NextAction(
+        "install", "install Python 3 and put it on PATH (`python3 -V` must run)"),
     "die": NextAction("install"),  # platform matrix: FIXES text / #408 installer
     "floss": NextAction("install", "pip install flare-floss"),
     "file": NextAction("install"),
@@ -2810,6 +2813,95 @@ NEVER_CHECKS: dict[str, frozenset[str]] = {
     "macos": frozenset({"vm_reachable", "remote_debugger"}),
 }
 
+# ---------- lane check sets (issue 208) ----------
+# A task whose material is not a binary sample (algorithm / protocol / web /
+# data / app) must not be gated on the malware static + MCP supply. The
+# per-lane required sets live in lane_spec.REQUIRED_CHECKS (single source);
+# malware is ABSENT there on purpose — the malware lane keeps the per-TYPE
+# CHECK_SETS dispatch above, byte-identical to the pre-lane gate.
+#
+# The lane gate runs on a CLEAN host contract: uv + a usable Python
+# interpreter are HARD (the repo standard is `uv run`), and the lane's
+# material probe is WARN (the material is user-supplied; a fresh workspace
+# legitimately has none yet — that must not refuse init).
+LANE_MATERIAL_DIRS: tuple[str, ...] = ("corpora", "corpus", "references",
+                                       "dataset", "samples")
+
+# The negative declaration for every non-malware lane: the MCP analysis
+# supply, the decompiler family and the VM/device channel belong to the
+# binary-sample lanes. Regression-pinned by the lane tests.
+LANE_NEVER_CHECKS: frozenset[str] = frozenset({
+    "decompiler", "vm_reachable", "remote_debugger", "pefile", "floss",
+    "die", "file", "readelf", "objdump", "gdbserver", "ebpf", "strace",
+    "ltrace", "aapt", "aapt2", "jadx", "apktool", "apkid", "jvm", "adb",
+    "device_root", "debug_flag", "frida_server", "android_server",
+    "jdwp_debug", "ebpf_android", "unidbg", "otool", "class-dump",
+    "swift-demangle", "darwin_runtime", "docker", "channel:docker",
+    "gitnexus", "app_permissions", "root_available",
+}) | frozenset(f"mcp:{item.name}" for item in mcp_probe.MANIFEST)
+
+
+def _check_python(report: ToolchainReport) -> None:
+    """The lane's interpreter face: a usable Python is the repo standard
+    (`uv run`), so a broken interpreter is a HARD lane failure."""
+    exe = sys.executable or "python3"
+    rc, out, err = _run_cmd(
+        [exe, "-c", "import sys; print(sys.version.split()[0])"], timeout=15)
+    if rc == 0 and out.strip():
+        report.items.append(CheckResult(
+            name="python", status=Status.PASS, tier=Tier.HARD,
+            detail=f"interpreter at {exe}: Python {out.strip().splitlines()[0]}",
+            probe=ProbeTier.LIVENESS,
+        ))
+        return
+    report.items.append(CheckResult(
+        name="python", status=Status.FAIL, tier=Tier.HARD,
+        detail=f"interpreter {exe} failed to run: {(err or out)[:100]}",
+        probe=ProbeTier.LIVENESS, root_cause="python",
+    ))
+
+
+def _check_lane_material(report: ToolchainReport, ws: Path, lane: str,
+                         name: str) -> None:
+    """The lane's material probe (WARN, documented stub).
+
+    The material of a non-malware lane is user-supplied and routinely
+    arrives AFTER init (a capture, a dataset, a target URL), so absence is
+    WARN guidance — never a HARD refusal. The deep per-lane analysis
+    toolchain is a documented stub: this face checks that the workspace has
+    somewhere to mount the lane's material and says what the lane consumes."""
+    hits = sorted(d for d in LANE_MATERIAL_DIRS
+                  if (ws / d).is_dir() and any((ws / d).iterdir()))
+    detail = (f"{lane} lane material present: {', '.join(hits)}/ — "
+              f"documented stub (the deep {lane} toolchain is not implemented)"
+              if hits else
+              f"{lane} lane material not mounted yet ({lane_spec.material(lane)})"
+              f" — mount it under one of {', '.join(LANE_MATERIAL_DIRS)}/; "
+              f"documented stub (the deep {lane} toolchain is not implemented)")
+    report.items.append(CheckResult(
+        name=name,
+        status=Status.PASS if hits else Status.WARN,
+        tier=Tier.WARN, detail=detail, probe=ProbeTier.PRESENCE,
+    ))
+
+
+def _check_lane(report: ToolchainReport, ws: Path, lane: str,
+                caps: bool = False,
+                reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """Per-lane gate (issue 208): uv + python + the lane's material probe.
+
+    The MCP analysis supply / decompiler family / VM+device channel are
+    deliberately NOT probed here (LANE_NEVER_CHECKS) — a codec or protocol
+    task is not a malware-binary engagement, and its env must not be gated
+    on IDA/Ghidra/frida/unidbg/pefile."""
+    for name in lane_spec.REQUIRED_CHECKS.get(lane, ()):
+        if name == "uv":
+            _check_uv(report)
+        elif name == "python":
+            _check_python(report)
+        else:
+            _check_lane_material(report, ws, lane, name)
+
 # ---------- report formatting ----------
 
 def _next_action_json(item: CheckResult) -> dict | None:
@@ -2920,7 +3012,8 @@ def _report_pending(report: ToolchainReport) -> bool:
 
 def check(ws: Path, project_type: str | None = None,
           caps: bool = False,
-          task_spec: dict | None = None) -> ToolchainReport:
+          task_spec: dict | None = None,
+          lane: str | None = None) -> ToolchainReport:
     """Run type-aware toolchain checks.
 
     #474: caps=True opts into CAPABILITY-tier trial probes (decompiler
@@ -2932,6 +3025,10 @@ def check(ws: Path, project_type: str | None = None,
     defaults, every unreadable field keeps its pre-#449 HARD tier. The
     type stays the manifest selector (template default); the task_spec
     only tightens/relaxes requirement tiers on top of it.
+    Issue 208: lane selects the CHECK SET. Absent (or task_spec lane
+    absent, or lane=malware) = the per-type malware dispatch, byte-identical
+    to the pre-lane gate; any other lane runs uv + python + the lane's
+    material probe instead of the MCP/RE analysis supply.
     """
     if project_type is None:
         project_type = read_project_type(ws)
@@ -2941,6 +3038,10 @@ def check(ws: Path, project_type: str | None = None,
             f"Must be one of: {', '.join(VALID_TYPES)}. "
             f"Set --type or add project_type=<type> to analysis_state.txt."
         )
+    if lane is None and isinstance(task_spec, dict):
+        lane = lane_spec.normalize(task_spec.get(lane_spec.LANE_FIELD))
+    if lane is not None:
+        lane = lane_spec.validate(lane)  # fail closed, never a silent malware fallback
     report = ToolchainReport(project_type=project_type)
     reqs = requirements_from_task_spec(task_spec)
     checkers = {
@@ -2950,7 +3051,10 @@ def check(ws: Path, project_type: str | None = None,
         "web": _check_web,
         "macos": _check_macos,
     }
-    checkers[project_type](report, ws, caps=caps, reqs=reqs)
+    if lane is not None and lane != lane_spec.DEFAULT_LEGACY:
+        _check_lane(report, ws, lane, caps=caps, reqs=reqs)
+    else:
+        checkers[project_type](report, ws, caps=caps, reqs=reqs)
     # single-point owner stamping — every item leaves the gate with
     # its ownership tier (rebuilt items, no in-place mutation).
     report.items = [dataclasses.replace(i, owner=owner_for(i.name))

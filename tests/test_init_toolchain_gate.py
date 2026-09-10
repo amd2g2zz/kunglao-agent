@@ -353,8 +353,9 @@ def test_library_refuse_returns_4_no_scaffold(tmp_path, monkeypatch):
 # ---------- 4. no-sample cold start friendly prompt ----------
 
 def test_no_sample_friendly_prompt(tmp_path):
-    """bins/ empty -> friendly prompt (place a sample into bins/), non-zero exit,
-    no scaffold."""
+    """bins/ empty (malware lane) -> friendly prompt (place a sample into
+    bins/), non-zero exit, no scaffold. Issue 208: the lane is declared
+    explicitly; a workspace declaring nothing is asked for its lane."""
     ws = tmp_path / "ws"
     (ws / "runs").mkdir(parents=True)
     (ws / "bins").mkdir()
@@ -365,6 +366,7 @@ def test_no_sample_friendly_prompt(tmp_path):
     env[FLAG_NAME] = "0"
     r = subprocess.run(
         [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws),
+         "--lane", "malware",
          "--profile-root", str(profile_root)],
         capture_output=True, text=True, timeout=120, env=env, errors="replace",
     )
