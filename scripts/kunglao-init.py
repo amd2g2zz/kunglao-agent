@@ -757,7 +757,7 @@ def compute_state_hash(ws: Path, register_text: str | None = None) -> str:
 
 def seed_claims(sample: str, project_type: str, sample_sha: str,
                 lane: str | None = None) -> list[dict]:
-    """Structural seed claims (scaffold facts only, #412: no analysis).
+    """Structural seed claims (scaffold facts only — no analysis).
 
     Malware / legacy (lane absent): C-001 sample artifact identity / C-002
     project type / C-003 sample sha256 — unchanged, byte-for-byte.
@@ -1270,7 +1270,7 @@ def lane_decision() -> "decision_pending.PendingDecision":
         question="Analysis lane — what is the material this task analyzes?",
         kind=decision_pending.KIND_CHOICE,
         options=tuple(lane_spec.LANES),
-        default=None,  # never guessed (#455 posture)
+        default=None,  # never guessed from context
         context={
             "materials": {lane: lane_spec.material(lane)
                           for lane in lane_spec.LANES},
@@ -1287,7 +1287,7 @@ def _lane_intake(ws: Path, explicit_lane: str | None,
                  ) -> tuple[str | None, int | None]:
     """The lane intake (issue 208): resolve | ask, before the no-sample gate.
 
-    Precedence (shared #455 contract): --lane > --resolve answer >
+    Precedence (shared pending-decision contract): --lane > --resolve answer >
     task_spec.yaml lane:. An explicit/answered lane is persisted into the
     contract so later runs never re-ask. An undeclared lane falls back to
     the LEGACY default (malware) when the workspace already carries a task
@@ -2110,8 +2110,8 @@ def material_section(sample_name: str, sample_sha: str,
     renders ITS material contract instead — no SHA rows for an artifact the
     lane does not have, and no `bins/` path baked in as the only shape.
 
-    sample_type / sample_path are the upgrade-parity overrides (#755 G3
-    carries the old render's values forward); None keeps init's defaults."""
+    sample_type / sample_path are the upgrade-parity overrides
+    (the collect-and-merge face carries the old render's values forward); None keeps init's defaults."""
     if lane is None or lane == lane_spec.DEFAULT_LEGACY:
         return (
             "## Sample under analysis\n"
@@ -3227,7 +3227,7 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         backup = backup_register(reg)
         print(f"kunglao-init: --force backup -> {backup}")
 
-    # #304: no-sample cold start -> friendly prompt, refuse (exit 5).
+    # no-sample cold start -> friendly prompt, refuse (exit 5).
     # Issue 208: the lane decides whether a sample is required AT ALL —
     # the lane intake runs first (it may pend the lane question with zero
     # scaffold), and only the malware lane reaches the prompt below.

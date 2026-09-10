@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 25bc597c346c58fca9d89c5fdc340159943984450d2ffa5005f47ec740a5043b
+    sha256: 26b9ff47fb0e5e4ab264d84b4eca40db6c231e0d441e66d5820a42576edeba0b
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -447,7 +447,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: da1a5eeafea4dd87a9ab4afd62de5e2b92d819f193b4b4a316b11264d4590820
+    sha256: 87da0532d0eefd71022891360e7b419cf6337f219a5717f0af99becd110ff7e4
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -507,7 +507,7 @@ files:
   - src: scripts/lane_spec.py
     dest: .claude/scripts/lane_spec.py
     kind: scaffold
-    sha256: 2f75f9330fd0adce58eda7d5d534ac74cc86d5f99888e79c97beee816a0fa597
+    sha256: 66d4fe16efc221ae341f8bd457ba192c3440def72df05926d6499bd9f0c9ad38
   - src: scripts/lessons_telemetry.py
     dest: .claude/scripts/lessons_telemetry.py
     kind: scaffold

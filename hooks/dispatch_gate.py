@@ -1568,8 +1568,9 @@ def main() -> int:
         # strings draw a WARN (never REJECT) — same structural corridor.
         _redo_leak_check(ws, prompt_text, claim_id)
 
-    # issue 208 lane routing — same structural corridor as the #567/#760
-    # faces above: a malware-lane-only agent on a non-malware workspace is
+    # issue 208 lane routing — the same structural corridor as the
+    # MCP-prefix and tools-rack faces above: a malware-lane-only agent on a
+    # non-malware workspace is
     # refused regardless of the dispatch claim-id parse and of activation.
     rc = _lane_gate(payload, prompt_text, ws)
     if rc is not None:

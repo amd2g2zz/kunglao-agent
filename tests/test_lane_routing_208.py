@@ -68,7 +68,7 @@ def _run_init(ws: Path, extra: list[str] | None = None,
             "--skip-toolchain", *extra,
             "--profile-root", str(ws.parent / "profile-root")]
     if not any(a.startswith("--host-exec-protection") for a in argv):
-        # non-interactive tests answer the #919 ask explicitly
+        # non-interactive tests answer the host-exec ask explicitly
         argv += ["--host-exec-protection", "enabled"]
     env = dict(os.environ)
     env[FLAG_NAME] = "0"
@@ -523,7 +523,8 @@ def test_lane_agnostic_agent_allowed_on_non_malware_lane(tmp_path):
 
 def test_lane_gate_is_pre_activation(tmp_path):
     """The lane binding is a structural routing contract (fires even when
-    the hooks are dormant) — same corridor as the #567/#760 faces."""
+    the hooks are dormant) — the same structural corridor as the tool
+    rack and MCP-prefix faces."""
     ws = _write_lane_ws(tmp_path, "data")
     r = _run_dispatch_gate(tmp_path, ws, "pefile-signature")
     assert r.returncode == 2, \

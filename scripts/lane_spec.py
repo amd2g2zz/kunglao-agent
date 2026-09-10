@@ -13,7 +13,7 @@ The lane is a DECLARED intake answer — the third axis next to project_type
 
     lane: malware | algorithm | protocol | web | data | app
 
-Resolution precedence (the shared #455 contract — explicit > --resolve
+Resolution precedence (the shared pending-decision contract: explicit > --resolve
 answer > persisted value > pending; a sniff is never a source):
 
     --lane <lane>  >  --resolve {"lane": ...}  >  task_spec.yaml lane:
