@@ -775,7 +775,7 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: 9f86992bf460d5af41f37f2ca4ddb762799e31036fc9483be6314581cfa3f2fb
+    sha256: d9a5a9d6067b934e02923e9c4bfb2ef8ce1db1c566d4ba9de388e29e690eb25d
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold

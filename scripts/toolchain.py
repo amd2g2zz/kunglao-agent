@@ -2210,12 +2210,15 @@ def _check_android(report: ToolchainReport, ws: Path,
     # init summary face and the intake promise mirror one source phrase.
     # missing_status is explicit: the _which_items default compares a Tier
     # against a Status enum, which never compares equal across classes.
-    apkid_items = _which_items(("apkid",), Tier.WARN,
+    apkid_items = [
+        dataclasses.replace(
+            it,
+            detail=(it.detail + " — apkid recommended for apk fingerprinting "
+                    "(packer / obfuscator / anti-*); agent to run on "
+                    "first claim"))
+        for it in _which_items(("apkid",), Tier.WARN,
                                missing_status=Status.WARN)
-    for apkid_item in apkid_items:
-        apkid_item.detail += (" — apkid recommended for apk fingerprinting "
-                              "(packer / obfuscator / anti-*); agent to run "
-                              "on first claim")
+    ]
     report.items.extend(apkid_items)
 
     # T1: GitNexus (real probe: gitnexus --version)
