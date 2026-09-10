@@ -65,6 +65,15 @@ release (see the mapping table at the end).
   blocks on unknowns; the ladder and its four rules are stated in
   `skills/kunglao-agent/SKILL.md`, the distilled convergence rules, and the
   init-worker doctrine.
+- **Thompson rank face on the statusline (issue 218)**: the ranker's
+  `rank_feeds` event now reaches the screen — the snapshot ships `rank`
+  (latest run's top claim + sampled score + age/staleness) and `rank_log`
+  (emit-path health bit), the renderer draws the `R:<claim> <score>` chip
+  (amber when stale, red `R✖` when the emit path is broken), and the
+  heartbeat tick report carries the same single-sourced values; a crashed
+  `kunglao_log.emit` lands `runs/.rank-emit-fail.json` and clears on the
+  next success, so the silent fail-open contract keeps the ranking result
+  byte-identical while the failure stops being invisible (#218)
 
 ## [0.1.3] - 2026-08-25
 
