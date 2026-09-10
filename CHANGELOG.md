@@ -56,6 +56,11 @@ release (see the mapping table at the end).
   recall_inject) delegate to one manifest-aware helper — the two copies that
   hardcoded `malware-analysis-workspace` no longer bypass env-manifest
   layout overrides.
+- **Android apkid probe at init**: `_check_android` now emits a WARN-tier
+  apkid presence item (never blocking the HARD exit-4 refusal set) and the
+  post-toolchain summary prints the first-claim fingerprinting
+  recommendation on android workspaces — apkid stays a TOOL the agent
+  decides to run; init never executes the scanner (#209).
 
 ## [0.1.3] - 2026-08-25
 
