@@ -22,6 +22,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 TEMPLATES = ROOT / "templates"
 
+from _factories import seed_oracle_anchors
+
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
 
@@ -42,7 +44,12 @@ def _run_init(ws: Path, extra: list[str] | None = None,
     this file's tests focus on type detection/template selection/completeness).
 
     #455: no stdin channel — interactive confirm is gone; tests drive the
-    type via --resolve answers files."""
+    type via --resolve answers files.
+
+    The workspace carries a completed anchor interview: this file pins
+    type-detection/template faces, and a blank-anchor run now pends
+    (exit 8) before any of them."""
+    seed_oracle_anchors(ws)
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     if "--skip-toolchain" not in argv:
         argv.append("--skip-toolchain")

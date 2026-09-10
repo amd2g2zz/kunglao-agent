@@ -443,7 +443,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: 2b5e65b1140fec6a6736e6bd5814f076eecc16ba7db7291b2819763241c3659e
+    sha256: b4645646c839fef4f21c2f56542a55a5b89c18187d036a5b7bf01fd6d1858b7a
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -491,7 +491,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: bc073eaa641421ecc579a5a5b69c4a4a3cbc7c9eb10ec5d6850602f7beed60fa
+    sha256: 0c14f9f551ffa5e77f3bdf51246664d65adc3602952284ce73520bb06561419e
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -567,7 +567,7 @@ files:
   - src: scripts/oracle_anchors.py
     dest: .claude/scripts/oracle_anchors.py
     kind: scaffold
-    sha256: a89a95296bf4840145cf6d04bac159267ba45eb2c96d486528ce436cbedcfc45
+    sha256: 29a0f79494e4a2cb002c6fddf46191468835fde2960b130b34315d89e517b5eb
   - src: scripts/oracle_cadence.py
     dest: .claude/scripts/oracle_cadence.py
     kind: scaffold

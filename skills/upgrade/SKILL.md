@@ -45,7 +45,10 @@ must be initialized first with `/kunglao-agent:init`.
 The upgrade completion report states anchor status explicitly: `anchors:
 complete` (nothing asked, gates will pass) or `anchors: backfilled via
 interview` (the answers were collected and written this run) — so the user
-knows the analysis-entry and resume gates will pass before they start. A
+knows the analysis-entry and resume gates will pass before they start. The
+interview is the FIRST face of every upgrade run: on a workspace with
+missing anchors the pending exit 8 stops the run before any migration item
+is applied or the stamp is refreshed. A
 legacy workspace (initialized before the anchors existed) is backfilled
 here instead of deadlocking: analysis entry and resume both refuse on
 missing anchors, and a full re-init would destroy analysis state — the

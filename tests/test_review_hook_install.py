@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pytest
 
+from _factories import seed_oracle_anchors
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / ".claude" / "git-hooks" / "pre-commit"
 INIT = ROOT / "scripts" / "kunglao-init.py"
@@ -125,6 +126,9 @@ def _run_init_flag(ws: Path, home: Path, extra: list[str]) -> subprocess.Complet
     env["HOME"] = str(home)
     env["USERPROFILE"] = str(home)
     env["PYTHONIOENCODING"] = "utf-8"
+    # completed anchor interview: this file pins hook-install behavior, and
+    # a blank-anchor run now pends (exit 8) before it
+    seed_oracle_anchors(ws)
     argv = [sys.executable, str(INIT), str(ws), *extra]
     # target-alignment intake: pin the PE fixture's type explicitly — this
     # file owns hook installation behavior, not type semantics.

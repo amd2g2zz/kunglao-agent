@@ -22,7 +22,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -70,6 +70,7 @@ def test_init_hooks_output_says_wired_but_dormant(tmp_path):
     --type windows is required (sniff is never a default by design)."""
     ws = tmp_path / "ws"
     seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
+    seed_oracle_anchors(ws)
     hooks_json = ws / "seeded-settings.json"
     hooks_json.write_text(json.dumps({"hooks": {}}), encoding="utf-8")
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws),

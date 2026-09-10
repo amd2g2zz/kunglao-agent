@@ -31,7 +31,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -76,7 +76,12 @@ def run_init(ws: Path, *extra: str) -> subprocess.CompletedProcess:
     scaffold — this file's tests focus on .mcp.json scaffold behavior; gate
     semantics are covered separately by #304's test_init_toolchain_gate.py
     (same _run_init convention as tests/test_kunglao_init.py).
+
+    The workspace carries a completed anchor interview: this file pins
+    .mcp.json scaffold behavior, and a blank-anchor run now pends
+    (exit 8) before any of it.
     """
+    seed_oracle_anchors(ws)
     env = _base_env()
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *extra]
     if "--skip-toolchain" not in argv:

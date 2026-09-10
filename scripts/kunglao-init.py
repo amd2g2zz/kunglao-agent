@@ -21,6 +21,16 @@ Standalone CLI (not a kunglao.py subcommand, module-design L448):
     > analysis_state.txt) selects the toolchain contract; android never
     touches the VMware/VBox channel (toolchain.CHECK_SETS).
 
+Structural oracle-anchor intake: after target alignment, init ASKS for
+    the three required task_spec answers (goal_verbatim / success_criterion
+    / verification_method) through the same pending channel — the asking
+    lives in the script, not in agent goodwill. A run without them pends
+    (exit 8, nothing scaffolded); the --resolve re-entry fills only the
+    missing fields and pre-fills the completion oracle's task_text from
+    the verbatim goal. No exit path reports success with blank anchors;
+    the analysis-entry/resume refusal (rc 7) stays as the second line of
+    defense.
+
 #304 type-aware extension:
     --type explicit > --resolve answer > persisted project_type >
     pending (sniff suggestion rides in pending context ONLY — never
@@ -1081,6 +1091,81 @@ def emit_pending(ws: Path | None,
         file=sys.stderr,
     )
     return RC_PENDING_DECISIONS
+
+
+ANCHOR_QUESTIONS: dict[str, str] = {
+    "goal_verbatim": ("Your goal for this workspace, restated "
+                      "verbatim — what do you want?"),
+    "success_criterion": ("What counts as done — the checkable "
+                          "end-state the result is judged against?"),
+    "verification_method": ("How is the result verified?"),
+}
+
+
+def anchor_pending_decisions(
+        gaps: list[str]) -> list["decision_pending.PendingDecision"]:
+    """The oracle-anchor interview as pending decisions — mirror of the
+    upgrade runner's interview (kunglao_upgrade.build_anchor_pending_doc):
+    same decision ids, same kinds, same options, same re-entry contract."""
+    out: list[decision_pending.PendingDecision] = []
+    for name in gaps:
+        if name == "verification_method":
+            out.append(decision_pending.PendingDecision(
+                decision_id=name, question=ANCHOR_QUESTIONS[name],
+                kind=decision_pending.KIND_CHOICE,
+                options=tuple(oracle_anchors.METHOD_OPTIONS), default=None))
+        else:
+            out.append(decision_pending.PendingDecision(
+                decision_id=name, question=ANCHOR_QUESTIONS[name],
+                kind=decision_pending.KIND_VALUE, options=(), default=None))
+    return out
+
+
+def _anchor_intake(ws: Path, answers: dict[str, str]) -> int | None:
+    """Structural oracle-anchor intake: the script itself asks.
+
+    Inspects the required answers in task_spec.yaml and returns None when
+    they are complete (the caller proceeds) or the exit code that ends the
+    run: RC_PENDING_DECISIONS after emitting the pending document for the
+    missing answers, RC_ERROR on a fail-closed answer refusal. Answers
+    carried by the --resolve payload are applied FIRST (only missing
+    fields are filled, existing answers never clobbered) so a re-entry
+    completes in one more run and the completion-oracle pre-fill sees the
+    verbatim goal. No scaffold: callers run this before the toolchain
+    probe and every scaffold write — the only write the intake itself
+    makes is the sanctioned answer-merge into task_spec.yaml.
+
+    An unreadable contract is NOT interviewed (a re-entry could never
+    satisfy the pend — the repair refuses corrupt contracts and directs
+    to full re-init); the caller's render path fails the run loudly.
+    Unreadable means any inspect failure — the byte-level decode errors
+    belong to the toolchain gate's WARNING + conservative-HARD contract,
+    never a traceback out of the intake.
+    """
+    try:
+        ok, gaps, state = oracle_anchors.inspect(ws)
+    except ValueError:
+        return None
+    if ok:
+        return None
+    if state == oracle_anchors.STATE_CORRUPT:
+        return None
+    supplied = {k: answers[k] for k in oracle_anchors.FIELDS
+                if answers.get(k) is not None and str(answers[k]).strip()}
+    if supplied:
+        try:
+            oracle_anchors.validate_values(supplied)
+        except ValueError as exc:
+            print(f"kunglao-init: ERROR anchor answers refused: {exc}",
+                  file=sys.stderr)
+            return RC_ERROR
+        oracle_anchors.apply(ws, supplied)
+        ok, gaps, _state = oracle_anchors.inspect(ws)
+        if ok:
+            print("kunglao-init: oracle anchors recorded "
+                  "(goal_verbatim, success_criterion, verification_method)")
+            return None
+    return emit_pending(ws, anchor_pending_decisions(gaps))
 
 
 def _aligned_target(files: list[dict], explicit_target: str | None,
@@ -2553,25 +2638,16 @@ def initialize(ws: Path, hooks_json: Path | None,
     # (SKILL.md). Idempotent: a pre-existing oracle is never clobbered, and
     # the file is deliberately OUTSIDE the state-hash inputs (it is a
     # workspace artifact, not scaffold state).
-    # The verbatim goal, when the init interview already collected it,
-    # lands in the completion anchor at scaffold time; the reminder line
-    # keeps a not-yet-answered interview visible without blocking init
-    # (the analysis-entry gate owns the refusal).
-    _anchor_view = oracle_anchors.load(ws)
-    _goal = _anchor_view.get("goal_verbatim")
-    _has_goal = isinstance(_goal, str) and bool(_goal.strip())
+    # The verbatim goal is always present here: the structural anchor intake
+    # above refuses the scaffold while any answer is missing, so the
+    # registered oracle opens with the real completion anchor.
+    _goal = oracle_anchors.load(ws).get("goal_verbatim")
     oracle_written = write_task_oracle_skeleton(
-        ws, task_text=_goal if _has_goal else None)
+        ws, task_text=_goal if isinstance(_goal, str)
+        and bool(_goal.strip()) else None)
     if oracle_written:
-        if _has_goal:
-            print("kunglao-init: task-oracle.yaml registered "
-                  "(task_text pre-filled from the intake goal)")
-        else:
-            print("kunglao-init: task-oracle.yaml skeleton registered "
-                  "(task_text pending Phase-0 backfill by the orchestrator)")
-        _reminder = oracle_anchors.reminder(ws)
-        if _reminder:
-            print(_reminder)
+        print("kunglao-init: task-oracle.yaml registered "
+              "(task_text pre-filled from the intake goal)")
 
     # #412: the exit message lists what init did (scaffold + env + type) and
     # does NOT summarize sample content (no sample= in the output).
@@ -2748,6 +2824,12 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                         print("kunglao-init: anchor repair complete - "
                               "analysis entry re-run will pass the anchor "
                               "gate")
+                # The resume path never reports success with blank anchors
+                # either: the interview fires here too (the analysis-entry
+                # refusal stays as the second line of defense).
+                anchor_rc = _anchor_intake(ws, answers)
+                if anchor_rc is not None:
+                    return anchor_rc
                 # #461: resume is also an exit-0 path — re-arm the observer
                 # spine (idempotent bootstrap) before reporting resume.
                 rc = bootstrap_observability(ws, hooks_json=hooks_json,
@@ -2777,6 +2859,12 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 f"kunglao-init: upgraded {ws} — wrote project_type={project_type} "
                 f"(pre-issue- workspace: [initialized] without project_type)"
             )
+            # The legacy type-upgrade never reports success with blank
+            # anchors: interview before the success report (the project_type
+            # write above is state repair, not scaffold).
+            anchor_rc = _anchor_intake(ws, answers)
+            if anchor_rc is not None:
+                return anchor_rc
             # #461: legacy type-upgrade is an exit-0 path too — bootstrap
             # the observer spine so the upgraded workspace is self-armed.
             rc = bootstrap_observability(ws, hooks_json=hooks_json,
@@ -2821,6 +2909,16 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         project_type = answers.get("type") or read_project_type(ws)
     assert project_type is not None  # aligned
     assert host_exec_protection is not None  # #919: asked, never defaulted
+
+    # Structural oracle-anchor intake: the script asks for the three
+    # required answers itself — a run without them never reaches the
+    # scaffold (pending exit, zero writes), and --resolve answers are
+    # applied here so the completion-oracle pre-fill below sees the
+    # verbatim goal. Ahead of the toolchain probe on purpose: the task
+    # answers come before any environment decision (needs-first).
+    anchor_rc = _anchor_intake(ws, answers)
+    if anchor_rc is not None:
+        return anchor_rc
 
     # #304: toolchain.check BEFORE scaffold — HARD FAIL => #408
     # ask-then-install, then refuse + cleanup only for items still HARD.

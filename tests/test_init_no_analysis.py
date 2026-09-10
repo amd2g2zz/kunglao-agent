@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -62,7 +62,12 @@ def init_ws(tmp_path: Path) -> Path:
 def _run_init(ws: Path, extra: list[str] | None = None,
               profile_root: Path | None = None,
               flag: str | None = "0") -> subprocess.CompletedProcess:
-    """Run kunglao-init hermetically (--skip-toolchain + tmp profile root)."""
+    """Run kunglao-init hermetically (--skip-toolchain + tmp profile root).
+
+    The workspace carries a completed anchor interview: this file pins the
+    no-analysis scaffold contract, and a blank-anchor run now pends
+    (exit 8) before any scaffold."""
+    seed_oracle_anchors(ws)
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     if "--skip-toolchain" not in argv:
         argv.append("--skip-toolchain")
