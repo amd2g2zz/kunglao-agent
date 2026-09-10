@@ -95,7 +95,7 @@ files:
   - src: agents/kunglao-init-worker.md
     dest: .claude/agents/kunglao-init-worker.md
     kind: agent
-    sha256: b9d9613e13e627f36793adadfa4ed1e724ce8cf75ef7d45b2703c4ecd4bd45f5
+    sha256: a35fadb4694e174557fe333c697c026d9d9571eb0439434dc8d817e131ffdb63
   - src: agents/kunglao-redteam.md
     dest: .claude/agents/kunglao-redteam.md
     kind: agent
@@ -256,6 +256,10 @@ files:
     dest: .claude/scripts/dead_letter.py
     kind: scaffold
     sha256: 25abe704eec432af210d7ed2370424bbbebff9cb38bc9f513a22c39ae33696fb
+  - src: scripts/decision_lint.py
+    dest: .claude/scripts/decision_lint.py
+    kind: scaffold
+    sha256: d0b9e3e1f1e316d10fa33684107b4d493d05a80dd053303db7b13f552bc1309f
   - src: scripts/decision_pending.py
     dest: .claude/scripts/decision_pending.py
     kind: scaffold
@@ -775,7 +779,7 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: ac9e9a166b38f35cfe78e50231523d2611691eea53fd4ded0d2a1e07605da8c1
+    sha256: a726dc3238af60a06cd1bf0acba325dc340c1f0b986be39402ccde250e43e26b
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold
@@ -1303,7 +1307,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: 20061134fb998b9b9c81d74cbb61415185450c042c8553d688ae920e79f75762
+    sha256: 96f95a32223605ff82bf0be5a0d76ced6fda532273d9f508aa176ec19a2ceee8
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

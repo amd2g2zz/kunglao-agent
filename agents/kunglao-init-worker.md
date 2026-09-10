@@ -200,6 +200,40 @@ the HUMAN-ONLY boundary is rooting and physical actions.
   the status file when the analysis is expected to need the fallback path
   (AND-gated: frida data sufficient + decompilation done + still stuck).
 
+## State-layered tool diagnosis
+
+On EVERY tool miss, classify at the failed layer before acting — a single
+symptom is never evidence of total failure ("MCP unreachable" is not "the
+MCP is dead": the register layer passed and the server venv was broken —
+connection layer). Walk the ladder top-down and repair at the FIRST
+failing layer:
+
+```
+installed?   -> no -> install (ownership tier; issue 202)
+registered?  -> no -> register (`claude mcp add`, agent-do)
+connects?    -> no -> connection-layer diagnosis (port/token/env/deps;
+                      broken venv -> `uv sync --locked` in the server repo)
+capable?     -> no -> capability probe (version/API/contract)
+input ready? -> no -> input completeness (path/permission/format)
+```
+
+- **Repair AT the failed layer.** Jumping to a different tool on a layer
+  failure is INVALID; the decompiler fallback belongs to the lane XOR
+  family (issue 210), chosen by the task lane — never triggered by a
+  layer failure.
+- **Gathered facts gate the next action.** Before running an install,
+  check it against facts already in hand via `scripts/decision_lint.py`
+  (`echo '<facts-json>' | python <SKILL_DIR>/scripts/decision_lint.py
+  "<action>"`; exit 1 = BLOCKED): an x86_64 libidalib + python 3.14
+  forbids the binding install before it runs. The lint is pure — you
+  pass the facts in, it never probes the environment.
+- **No fallback while the primary is present-and-repairable** — that
+  recommendation is decision invalidity, not a repair.
+- **Reports name the layer**: "connection layer broken, repair = uv sync
+  in the venv" — never a "dead" verdict. This binds the `toolchain.py`
+  lines you relay: when a registered MCP endpoint is unreachable, the
+  detail/fix name the connection layer and propose the agent-do repair.
+
 ## Handbook cultivation (render + cultivate)
 
 CLAUDE.md is a living handbook, not a frozen render — its north star is
