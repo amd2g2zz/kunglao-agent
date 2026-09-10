@@ -7,6 +7,16 @@ the 12 mandatory fields of the schema, plus the documented kunglao extension
 layer. Validation: `python scripts/lint_facts.py <WORKSPACE>` — a fact that
 fails lint is unqualified and must not enter the fact base.
 
+Lane scope (issue 208): the 12 mandatory fields + the kunglao extension
+layer are the STRUCTURAL core — they hold for every lane. The
+`malware-veri-notes` import is the MALWARE projection of that core: its
+`source` enum, its ICD-203 credibility defaults and the `role: sample_raw`
+provenance entry assume a binary sample under `bins/<sha>`. A non-malware
+lane (algorithm / protocol / web / data / app) keeps the same structural
+fields and re-labels the provenance roles to its own material (see
+"Lane-scoped provenance roles" below); it never fabricates a `sample_raw`
+entry for an artifact it does not have.
+
 ## 12 mandatory schema fields
 
 | # | Field | Rule |
@@ -60,6 +70,25 @@ provenance:
   - {role: decompiled_c,      path: evidence/static-ghidra.json, content_sha256: "<64-hex>", credibility: A2}
   - {role: recompute_script,  path: runs/verify-fNNN.py, content_sha256: "<64-hex>", credibility: A2}
 ```
+
+### Lane-scoped provenance roles (issue 208)
+
+`role: sample_raw` + `path: bins/<sha1>` is the MALWARE-lane shape. Other
+lanes name their own material with the same entry structure (`role`,
+`path`, `content_sha256`, `credibility`):
+
+| lane | first provenance role | `path` points at |
+|------|----------------------|------------------|
+| malware | `sample_raw` | `bins/<sha1>` |
+| algorithm | `reference_pair` / `trace_dump` | the recorded input→output pairs and trace dumps under `corpora/` (or the lane's own dir) |
+| protocol | `capture_log` | the pcap / frame capture under `evidence/` |
+| web | `capture_log` / `page_snapshot` | the recorded request/response or page snapshot |
+| data | `dataset` | the dataset path (record format + row count in the fact body) |
+| app | `package_raw` | the package file + its declared contract surface |
+
+A non-malware lane never writes a `sample_raw` entry for a sample it does
+not mount (the lane check set does not require `bins/`, and init seeds no
+sample claim); the credibility letter/number rules above are unchanged.
 
 - `content_sha256` = sha256 of the artifact bytes (migrate_facts.py computes it).
 - `credibility` = Admiralty code `{letter}{digit}`: source reliability A (completely
