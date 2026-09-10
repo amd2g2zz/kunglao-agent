@@ -51,7 +51,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import yaml
-from _factories import seed_bins, write_hook_state
+from _factories import seed_bins, write_hook_state, seed_oracle_anchors
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = REPO_ROOT / "scripts"
@@ -297,6 +297,9 @@ def _mk_init_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
     (ws / "runs").mkdir()
+    # completed anchor interview: this file pins heartbeat faces, and a
+    # blank-anchor run now pends (exit 8) before any of them
+    seed_oracle_anchors(ws)
     return ws
 
 

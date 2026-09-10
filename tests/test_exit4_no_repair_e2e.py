@@ -43,7 +43,7 @@ from error_response import (  # noqa: E402
     classify_init_exit,
 )
 import env_repair_l1  # noqa: E402
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 
 PY311 = sys.executable  # venv python (>= floor); #457 hard pin broke the 3.10 job
@@ -209,8 +209,11 @@ def test_replay_init_exit4_no_repair_in_tmp_workspace(tmp_path: Path) -> None:
     ws.mkdir()
     # bins/ sample (a real placeholder; init refuses empty bins/ with exit 5
     # before reaching the toolchain check, so we need at least one sample).
-    # init refuses empty bins/ with exit 5, so seed one sample.
+    # init refuses empty bins/ with exit 5, so seed one sample. The anchor
+    # interview is answered too: a blank-anchor run pends (exit 8) before
+    # the toolchain refusal this replay pins.
     seed_bins(ws, payload=b"\x00\x01\x02")
+    seed_oracle_anchors(ws)
 
     wrapper = _build_fake_toolchain_wrapper(tmp_path, ws)
     proc = _run(str(wrapper), cwd=tmp_path, timeout=60)

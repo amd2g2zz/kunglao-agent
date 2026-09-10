@@ -24,7 +24,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -59,11 +59,17 @@ def _git(ws: Path, *args: str) -> str:
 def _make_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     seed_bins(ws, payload=PAYLOAD)
+    # completed anchor interview: this file pins git-snapshot behavior, and
+    # a blank-anchor run now pends (exit 8) before it
+    seed_oracle_anchors(ws)
     return ws
 
 
 def _run_init(mod, ws: Path, monkeypatch, project_type: str = "windows") -> int:
     monkeypatch.setenv(FLAG_NAME, "0")
+    # completed anchor interview: this file pins git-snapshot behavior, and
+    # a blank-anchor run now pends (exit 8) before it
+    seed_oracle_anchors(ws)
     return mod.run(ws, skip_toolchain=True, project_type=project_type,
                    profile_root=ws.parent / "profile-root", answers={"host_exec_protection": "enabled"})
 

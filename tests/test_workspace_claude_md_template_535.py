@@ -21,7 +21,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "templates" / "CLAUDE.md.base.tmpl"
@@ -230,6 +230,7 @@ def test_cold_start_pointers_resolve_after_real_init(tmp_path):
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
     seed_bins(ws)
+    seed_oracle_anchors(ws)
     env = {k: v for k, v in os.environ.items()
            if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "0"

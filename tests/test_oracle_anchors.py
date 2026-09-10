@@ -471,19 +471,28 @@ class TestRepairReEntry:
             oa.validate_values({"verification_method": "vibes"})
         oa.validate_values({"verification_method": "static"})  # no raise
 
-    def test_repair_fills_only_missing_and_preserves_state(self, tmp_path):
-        """The re-entry fills ONLY the missing answers: an existing answer
-        survives a conflicting repair value, and the analysis state (the
-        claim register) is byte-identical across the repair run."""
+    def _initialized_ws(self, tmp_path: Path) -> Path:
+        """A workspace initialized with a COMPLETE anchor set (exit 0 is
+        only legal with all three answers — blank-anchor runs pend, exit
+        8), then left with a partially-blank spec for the repair runs."""
         ws = tmp_path / "ws"
         seed_bins(ws)
         (ws / "runs").mkdir()
         (ws / "task_spec.yaml").write_text(
+            yaml.safe_dump(_spec()), encoding="utf-8")
+        r1 = _run_init(ws, ["--type", "windows"])
+        assert r1.returncode == 0, r1.stderr
+        return ws
+
+    def test_repair_fills_only_missing_and_preserves_state(self, tmp_path):
+        """The re-entry fills ONLY the missing answers: an existing answer
+        survives a conflicting repair value, and the analysis state (the
+        claim register) is byte-identical across the repair run."""
+        ws = self._initialized_ws(tmp_path)
+        (ws / "task_spec.yaml").write_text(
             yaml.safe_dump(_spec_without("success_criterion",
                                          "verification_method")),
             encoding="utf-8")
-        r1 = _run_init(ws, ["--type", "windows"])
-        assert r1.returncode == 0, r1.stderr
         register_before = (ws / "claim-register.yaml").read_bytes()
         answers = tmp_path / "answers.json"
         answers.write_text(json.dumps({
@@ -505,11 +514,7 @@ class TestRepairReEntry:
         assert "anchor repair complete" in r2.stdout
 
     def test_repair_refuses_bad_method_value(self, tmp_path):
-        ws = tmp_path / "ws"
-        seed_bins(ws)
-        (ws / "runs").mkdir()
-        r1 = _run_init(ws, ["--type", "windows"])
-        assert r1.returncode == 0, r1.stderr
+        ws = self._initialized_ws(tmp_path)
         answers = tmp_path / "answers.json"
         answers.write_text(json.dumps({
             "verification_method": "vibes"}), encoding="utf-8")
@@ -523,11 +528,7 @@ class TestRepairReEntry:
         the remediation names the full re-init path (in-place repair on a
         corrupt file would silently replace the whole intake record with
         just the three anchors)."""
-        ws = tmp_path / "ws"
-        seed_bins(ws)
-        (ws / "runs").mkdir()
-        r1 = _run_init(ws, ["--type", "windows"])
-        assert r1.returncode == 0, r1.stderr
+        ws = self._initialized_ws(tmp_path)
         corrupt = "primary_questions: [ unclosed\n"
         (ws / "task_spec.yaml").write_text(corrupt, encoding="utf-8")
         answers = tmp_path / "answers.json"
@@ -542,17 +543,29 @@ class TestRepairReEntry:
         assert (ws / "task_spec.yaml").read_text(encoding="utf-8") == corrupt
 
     def test_repair_reports_still_missing(self, tmp_path):
-        ws = tmp_path / "ws"
-        seed_bins(ws)
-        (ws / "runs").mkdir()
-        r1 = _run_init(ws, ["--type", "windows"])
-        assert r1.returncode == 0, r1.stderr
+        """Repair applies what it can and INTERVIEWS for the rest: the run
+        pends with a pending document naming only the remaining gaps —
+        init never reports success with blank anchors."""
+        ws = self._initialized_ws(tmp_path)
+        (ws / "task_spec.yaml").write_text(
+            yaml.safe_dump(_spec_without("success_criterion",
+                                         "verification_method")),
+            encoding="utf-8")
         answers = tmp_path / "answers.json"
         answers.write_text(json.dumps({
             "verification_method": "manual"}), encoding="utf-8")
         r2 = _run_init(ws, ["--resolve", str(answers)])
-        assert r2.returncode == 0, r2.stderr
+        assert r2.returncode == 8, r2.stderr
         assert "still missing" in r2.stderr
+        out_lines = r2.stdout.strip().splitlines()
+        start = next(i for i, ln in enumerate(out_lines)
+                     if ln.startswith("{"))
+        doc = json.loads("\n".join(out_lines[start:]))
+        assert [d["decision_id"] for d in doc["decisions"]] == \
+            ["success_criterion"]
+        spec = yaml.safe_load((ws / "task_spec.yaml").read_text(
+            encoding="utf-8"))
+        assert spec["verification_method"] == "manual"
 
 
 class TestInitEndToEnd:
@@ -562,11 +575,6 @@ class TestInitEndToEnd:
         seed_bins(ws)
         (ws / "runs").mkdir()
         return ws
-
-    def test_init_prints_reminder_while_answers_missing(self, fresh_ws):
-        r = _run_init(fresh_ws, ["--type", "windows"])
-        assert r.returncode == 0, r.stderr
-        assert "anchors incomplete" in r.stdout, r.stdout
 
     def test_init_prefills_oracle_and_skips_reminder_when_answered(
             self, fresh_ws):

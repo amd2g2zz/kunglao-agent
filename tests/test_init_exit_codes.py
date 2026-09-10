@@ -32,7 +32,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -66,12 +66,17 @@ def _load_init_module():
 
 
 def _mk_ws(tmp_path: Path, name: str, sample: bool) -> Path:
-    """Workspace with optional PE sample in bins/ and runs/ pre-created."""
+    """Workspace with optional PE sample in bins/ and runs/ pre-created.
+
+    A sample-bearing workspace carries a completed anchor interview: these
+    tests pin the RC matrix faces, and a blank-anchor run now pends
+    (exit 8) before any of them."""
     ws = tmp_path / name
     (ws / "bins").mkdir(parents=True)
     (ws / "runs").mkdir()
     if sample:
         seed_bins(ws)
+        seed_oracle_anchors(ws)
     empty = tmp_path / "empty-bin"
     empty.mkdir()
     return ws

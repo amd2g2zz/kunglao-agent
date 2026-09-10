@@ -35,7 +35,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -63,6 +63,9 @@ def _load_init_module():
 def _ws_with_sample(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
+    # completed anchor interview: this file pins menu/refusal faces, and a
+    # blank-anchor run now pends (exit 8) before any of them
+    seed_oracle_anchors(ws)
     return ws
 
 

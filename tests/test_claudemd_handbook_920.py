@@ -30,7 +30,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -255,6 +255,7 @@ def test_init_cli_render_carries_all_four_sections(tmp_path):
     import subprocess
     ws = tmp_path / "ws"
     seed_bins(ws)
+    seed_oracle_anchors(ws)
     env = {k: v for k, v in os.environ.items()
            if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "0"
