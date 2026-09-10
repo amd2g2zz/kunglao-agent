@@ -100,7 +100,16 @@ const NOW_MS = process.env.KUNGLAO_STATUSLINE_NOW_MS !== undefined
 const FLASH_WINDOW_MS = 5000; // 5s fade window (render-clock side, kept)
 
 // Four-meaning palette (ANSI SGR; color IS data — no decorative hues).
-const PALETTE = {
+// #212 terminal degradation (owner reference pattern): NO_COLOR or
+// TERM=dumb selects the ASCII tier — the same readable line, zero escape
+// sequences. (kunglao ships no truecolor tier: the four-meaning palette is
+// ANSI 256 by design, so the degradation chain is color -> ASCII.)
+const COLOR_OFF = process.env.NO_COLOR !== undefined
+  || process.env.TERM === 'dumb';
+const _plain = (s) => s;
+const PALETTE = COLOR_OFF ? {
+  cyan: _plain, green: _plain, amber: _plain, red: _plain, dim: _plain,
+} : {
   cyan: (s) => `\x1b[36m${s}\x1b[0m`,
   green: (s) => `\x1b[32m${s}\x1b[0m`,
   amber: (s) => `\x1b[33m${s}\x1b[0m`,
@@ -208,6 +217,48 @@ function entropyBadge(snap) {
   return PALETTE.amber(text);                          // flat/unknown = suspect
 }
 
+// #212 difficulty badge: calibrated tier preferred (the mounted calibration
+// output), the raw-signals calibration score as fallback, the legacy string
+// key last. Absent data = hidden segment, never a placeholder.
+function difficultyBadge(snap) {
+  const d = snap.difficulty_src && typeof snap.difficulty_src === 'object'
+    ? snap.difficulty_src
+    : null;
+  if (d && d.tier) return PALETTE.amber(`D:${d.tier}`);
+  if (d && Number.isFinite(Number(d.score))) {
+    return PALETTE.amber(`D:${Number(d.score).toFixed(2)}`);
+  }
+  if (typeof snap.difficulty === 'string' && snap.difficulty) {
+    return PALETTE.amber(`D:${snap.difficulty}`);
+  }
+  return '';
+}
+
+// #212 perf segments: claims progress (closed/total, LIVE ledger — the
+// denominator grows as discovery registers claims), rolling win-rate
+// (#156 settlement stream), worker liveness. Absent = hidden.
+function perfSegments(perf) {
+  if (!perf || typeof perf !== 'object') return [];
+  const segs = [];
+  const claims = perf.claims && typeof perf.claims === 'object' ? perf.claims : null;
+  if (claims && Number(claims.total) > 0 && Number.isFinite(Number(claims.closed))) {
+    segs.push(PALETTE.dim(`C${Number(claims.closed)}/${Number(claims.total)}`));
+  }
+  const wr = Number(perf.win_rate);
+  if (Number.isFinite(wr) && wr > 0) {
+    const text = `W${Math.round(wr * 100)}%`;
+    segs.push(wr >= 0.5 ? PALETTE.green(text) : PALETTE.amber(text));
+  }
+  const workers = perf.workers && typeof perf.workers === 'object' ? perf.workers : null;
+  if (workers && Number(workers.total) > 0) {
+    const active = Number.isFinite(Number(workers.active)) ? Number(workers.active) : 0;
+    segs.push(active > 0
+      ? PALETTE.cyan(`w${active}/${Number(workers.total)}`)
+      : PALETTE.dim(`w0/${Number(workers.total)}`));
+  }
+  return segs;
+}
+
 function renderKunglao(snapPath, nowMs) {
   let snap;
   try {
@@ -237,8 +288,10 @@ function renderKunglao(snapPath, nowMs) {
   const hue = down ? 0
     : (idleStale ? STATE_HUE_FALLBACK.idle
                  : (snap.color?.hue ?? STATE_HUE_FALLBACK[state] ?? 220));
-  const stateColor = (s) =>
-    `\x1b[38;5;${Math.max(1, Math.min(230, Math.round((hue / 360) * 230) + 16))}m${s}\x1b[0m`;
+  const stateColor = COLOR_OFF
+    ? _plain
+    : (s) =>
+      `\x1b[38;5;${Math.max(1, Math.min(230, Math.round((hue / 360) * 230) + 16))}m${s}\x1b[0m`;
 
   // Value: sparkline of v_hist + percent (fine v_norm preferred, coarse PQ
   // fraction as fallback). The coarse path is a FIRST-CLASS render, not an
@@ -271,6 +324,8 @@ function renderKunglao(snapPath, nowMs) {
   const badge = entropyBadge(snap);
   const dots = healthDots(snap.health, down);
   const chip = taskChip(snap.now);
+  const diff = difficultyBadge(snap);
+  const perfSegs = perfSegments(snap.perf);
 
   // Flash (5s window, kept): producer-detected triggers ship {seq, ts, text}.
   let flash = '';
@@ -286,7 +341,9 @@ function renderKunglao(snapPath, nowMs) {
   const parts = [stateColor(`${glyph} ${stateLabel}`)];
   if (valueSeg) parts.push(valueSeg);
   if (badge) parts.push(badge);
+  if (diff) parts.push(diff);
   if (dots) parts.push(dots);
+  if (perfSegs.length) parts.push(...perfSegs);
   if (chip) parts.push(PALETTE.dim('│'), chip);
   if (flash) parts.push(flash.trim());
   return parts.join(' ');

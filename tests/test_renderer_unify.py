@@ -62,6 +62,9 @@ sys.path.insert(0, str(SCRIPTS))
 # plugin countermand) joined the header; the four executable instruction
 # lines moved to the uv-run form (`uv run --project {{skill_dir}} python
 # ...`) — no other byte changed.
+# 2026-09-10 regen (issue 212 statusline assembly): one statusline note line
+# after the "Workspace at a glance" block (init wires the statusLine key,
+# --no-hooks opt-out, upgrade self-heal) — no other byte changed.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 

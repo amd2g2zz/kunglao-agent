@@ -27,7 +27,7 @@ files:
   - src: hooks/heartbeat_touch.py
     dest: .claude/hooks/heartbeat_touch.py
     kind: hook
-    sha256: a212e9607c15df4b80e5a61451d6bb2b57c783e8da508369638f9a5441119701
+    sha256: 9e3cd7eb1ea5f5446ec7f01fd2164c262281796418472c90c77d12f075e282ee
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
@@ -383,7 +383,7 @@ files:
   - src: scripts/hook_activation.py
     dest: .claude/scripts/hook_activation.py
     kind: scaffold
-    sha256: f09099e2410d017a04f3bead55394ae57b99106981f9f7a95f78138e11fc8734
+    sha256: 457a60aad0338c17b624cd6b84313919959dbfdf9524d7b96620d5010e72dd03
   - src: scripts/hook_exit_codes.py
     dest: .claude/scripts/hook_exit_codes.py
     kind: scaffold
@@ -443,7 +443,7 @@ files:
   - src: scripts/kunglao-init.py
     dest: .claude/scripts/kunglao-init.py
     kind: scaffold
-    sha256: b4645646c839fef4f21c2f56542a55a5b89c18187d036a5b7bf01fd6d1858b7a
+    sha256: 00cec3a2f48b509d7900d4d721c04b27f1ff7aa449203cdf9ebb7915aa4107ef
   - src: scripts/kunglao-monitor.py
     dest: .claude/scripts/kunglao-monitor.py
     kind: scaffold
@@ -491,7 +491,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 0c14f9f551ffa5e77f3bdf51246664d65adc3602952284ce73520bb06561419e
+    sha256: 1beeeb663ec477c80ccf51e822e35448de0a1c27a79fddeee28e53bdf159fb49
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -731,7 +731,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: 4e62a12ce011feb379a7a6470439e19a12c11f49b8f59bd7d4aea0c2183f9762
+    sha256: 573f5167217e4904681c6a8dab64125437adfa011f3b479a9db9b54c77faa44b
   - src: scripts/structural_check.py
     dest: .claude/scripts/structural_check.py
     kind: scaffold
@@ -843,7 +843,7 @@ files:
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
-    sha256: b45436cff3796ff3f7ee09031b59e0d83f944615db0f44729702b299fc983df0
+    sha256: 4cb5bbed5cb3cf9dac508a0edb48422d865e5ede55934cb700198029a37f6739
   - src: references/_INDEX.md
     dest: .claude/references/_INDEX.md
     kind: asset
@@ -1215,7 +1215,7 @@ files:
   - src: templates/CLAUDE.md.base.tmpl
     dest: .claude/templates/CLAUDE.md.base.tmpl
     kind: asset
-    sha256: c0f936197382cdef12538c9f2ee5cd94ca5f6a1c075bd1ad53324cce055111fc
+    sha256: fa4f8790216ec4f596c33054c2f58ddcc461528fbdd9897a3059dd835d1be881
   - src: templates/README.md
     dest: .claude/templates/README.md
     kind: asset

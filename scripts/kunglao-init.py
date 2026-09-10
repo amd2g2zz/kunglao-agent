@@ -755,16 +755,29 @@ def seed_claims(sample: str, project_type: str, sample_sha: str) -> list[dict]:
     capability guesses are forbidden here (issue #412); the operator
     defines the analysis task (primary_questions) after init, and claim
     seeding from task_spec happens in the loop (DESIGN §7 0.9).
+
+    Issue 212 (field diagnosis): the seeds are CLOSED at the success-point write,
+    status PROVEN with init's own evidence attached — init verified each
+    identity fact by construction (it computed the values it wrote), so
+    leaving them OPEN made the statusline state machine lie "analyzing"
+    forever on an idle workspace. One atomic write at the init success
+    point: no post-write mutation, no state_hash drift, and the failed-init
+    cleanup path is unchanged (the register is removed as a this-run
+    artifact like before).
     """
+    evidence = "init-verified by construction (scaffold gate)"
     return [
-        {"id": "C-001", "status": "OPEN", "boundary_type": "positive_observation",
+        {"id": "C-001", "status": "PROVEN", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
+         "evidence": evidence,
          "title": f"Sample artifact identity — {sample} (filename; sha256 in C-003)"},
-        {"id": "C-002", "status": "OPEN", "boundary_type": "positive_observation",
+        {"id": "C-002", "status": "PROVEN", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
+         "evidence": evidence,
          "title": f"Project type — {project_type} (scaffold decision)"},
-        {"id": "C-003", "status": "OPEN", "boundary_type": "positive_observation",
+        {"id": "C-003", "status": "PROVEN", "boundary_type": "positive_observation",
          "evidence_tier_attempted": 0, "promotion_attempts": 0, "depends_on": [],
+         "evidence": evidence,
          "title": f"Sample sha256 — {sample_sha}"},
     ]
 
@@ -791,6 +804,7 @@ def claim_register_text(sample: str, sample_sha: str, state_hash: str,
         lines.append(f"  evidence_tier_attempted: {c['evidence_tier_attempted']}")
         lines.append(f"  promotion_attempts: {c['promotion_attempts']}")
         lines.append(f"  depends_on: {c['depends_on']}")
+        lines.append(f"  evidence: \"{c['evidence']}\"")
         lines.append(f"  title: \"{c['title']}\"")
     return "\n".join(lines) + "\n"
 
@@ -1988,6 +2002,20 @@ def scaffold(ws: Path) -> list[Path]:
         p.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(p, stub)
         created.append(p)
+    # Mission-ledger baseline (issue 212 field diagnosis — the progress segment
+    # rendered nothing because runs/mission_ledger.yaml was never
+    # initialized). mission_ledger.init derives the 0/N PQ baseline from the
+    # needs-first task_spec (idempotent-refusing: an existing ledger is
+    # never rewritten); it is a starting baseline, never a cap — new claims
+    # grow N on the live ledger at runtime.
+    try:
+        from mission_ledger import init as _ml_init
+        _ml_init(ws)
+    except FileExistsError:
+        pass  # already initialized — the baseline is the workspace's data
+    except Exception as exc:  # noqa: BLE001 — baseline is WARN-tier
+        print(f"kunglao-init: WARN mission-ledger baseline skipped ({exc})",
+              file=sys.stderr)
     write_workspace_manifest(ws)  # #538 item 2: resume diff source
     return created
 
@@ -2075,6 +2103,38 @@ def hook_deploy_rc(report: dict) -> int:
     if report.get("deployed") and not report.get("selfcheck", {}).get("ok"):
         return RC_HOOK_WIRING
     return RC_OK
+
+
+def deploy_statusline(ws: Path) -> dict:
+    """Issue 212, FIRST step of init (owner priority update): the statusline is
+    the operator's only visible success/failure signal, so its wiring runs
+    BEFORE the toolchain probe / anchor interview / any scaffold write.
+
+    Writes ONLY the kunglao-owned `statusLine` key of
+    <ws>/.claude/settings.json via hook_activation.register_statusline (THE
+    registration entry; single source of the entry shape incl. the timeout).
+    Cosmetic face: a failed registration is a stderr WARN, never an init
+    failure. --no-hooks / plugin_mode callers skip this (the documented
+    opt-out). Later init phases (deploy_workspace_copy at deploy_hooks,
+    register_hooks at bootstrap) re-register at the fixed point: once the
+    workspace-local renderer copy exists, the command converges to it.
+    """
+    try:
+        res = hook_activation.register_statusline(ws)
+    except Exception as exc:  # noqa: BLE001 — cosmetic, never fails init
+        print(f"kunglao-init: WARN statusline registration failed ({exc})",
+              file=sys.stderr)
+        return {"ok": False, "error": str(exc)}
+    # stderr only: stdout is the machine channel — a pending exit-8 run
+    # must emit parseable JSON alone (the 455 contract), and this step runs BEFORE the
+    # intake, so any stdout line here would corrupt that contract.
+    if res.get("ok"):
+        print(f"kunglao-init: statusline registered -> {res.get('command')}",
+              file=sys.stderr)
+    else:
+        print(f"kunglao-init: WARN statusline registration self-check "
+              f"failed ({res.get('target')})", file=sys.stderr)
+    return res
 
 
 def deploy_hooks(ws: Path, hooks_json: Path | None) -> dict:
@@ -2772,6 +2832,13 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
     # be written outside the resolved workspace root. Fail fast on a defect
     # rather than polluting a sibling directory.
     _assert_workspace_boundary(ws)
+
+    # STATUSLINE DEPLOYMENT IS THE FIRST STEP of init (issue 212 owner priority
+    # update). Before the toolchain probe, before the anchor interview, so
+    # the operator's success/failure signal exists before anything else.
+    # --no-hooks / plugin_mode is the documented opt-out.
+    if not no_hooks and not plugin_mode:
+        deploy_statusline(ws)
 
     # #367: hook install first — it must also run for resume-mode workspaces
     if install_git_hooks_flag:
