@@ -245,7 +245,12 @@ class TestSingleSourceRankFace:
     def test_tick_report_carries_the_rank_face(self, tmp_path):
         ws = _make_ws(tmp_path)
         _touch_heartbeat(ws)
-        _seed_rank_event(ws, ranked_order=("C-2",), scores={"C-2": 0.61})
+        # a dispatchable claim: the tick's own rank pass then has a top action
+        (ws / "claim-register.yaml").write_text(
+            "claims:\n  - id: C-1\n    status: OPEN\n    statement: one\n",
+            encoding="utf-8")
+        _seed_rank_event(ws, ranked_order=("C-2",), scores={"C-2": 0.61},
+                         age_s=120)
         r = subprocess.run(
             [sys.executable, str(SCRIPTS / "heartbeat_tick.py"), str(ws)],
             capture_output=True, text=True, encoding="utf-8",
@@ -256,9 +261,10 @@ class TestSingleSourceRankFace:
             f"stderr={r.stderr[-300:]}")
         report = json.loads(out.read_text(encoding="utf-8"))
         face = rank_face.face(ws)
-        assert report["rank"]["claim"] == face["rank"]["claim"] == "C-2"
-        assert report["rank"]["score"] == face["rank"]["score"]
-        assert report["rank_log"]["ok"] is True
+        assert report["rank"]["claim"] is not None
+        for key in ("claim", "score", "ts", "stale"):
+            assert report["rank"][key] == face["rank"][key]
+        assert report["rank_log"] == face["rank_log"]
 
 
 # ===========================================================================
@@ -349,6 +355,8 @@ class TestRankRenderer:
         assert "R✖" not in out
 
 
-def color_prefix(stdout: str, idx: int, window: int = 12) -> str:
-    """The ANSI color that opens the segment ending at `idx`."""
-    return stdout[max(0, idx - window):idx]
+def color_prefix(stdout: str, idx: int, window: int = 20) -> str:
+    """The ANSI color that opens the segment starting at `idx` (the escape is
+    the last thing before the text)."""
+    m = re.search(r"\x1b\[[0-9;]*m$", stdout[max(0, idx - window):idx])
+    return m.group(0) if m else ""
