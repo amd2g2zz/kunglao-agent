@@ -207,6 +207,19 @@ def test_invalid_lane_declared_in_spec_fails_closed(tmp_path):
         f"invalid declared lane must fail closed: {r.returncode}: {r.stdout}{r.stderr}"
 
 
+def test_non_utf8_contract_is_corrupt_not_a_crash(tmp_path):
+    """Non-UTF-8 task_spec bytes -> the lane reader reports CORRUPT (the
+    legacy default + the existing unreadable-contract faces take over),
+    never a UnicodeDecodeError traceback out of init."""
+    import lane_spec
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "task_spec.yaml").write_bytes(b"\xff\xfe\x00garbage\x80\x81")
+    lane, state = lane_spec.read_state(ws)
+    assert (lane, state) == (None, lane_spec.STATE_CORRUPT)
+    assert lane_spec.resolve(ws, None, {}) == (None, "corrupt", None)
+
+
 # ------------------------------------------- 3. legacy + malware contracts
 
 def test_legacy_spec_without_lane_defaults_to_malware(tmp_path):

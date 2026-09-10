@@ -114,6 +114,14 @@ FIXES: dict[str, ToolMeta] = {
                     "uv sync --locked + uv run)",
         url="https://docs.astral.sh/uv/",
         package="uv", verify_cmd="uv --version"),
+    "python": ToolMeta(
+        fix="install a Python 3 interpreter and put it on PATH "
+            "(`python3 -V` must run); `uv run` resolves the project env "
+            "through it",
+        description="the Python interpreter every shipped kunglao face "
+                    "runs on (lane toolchain gate: uv + python)",
+        url="https://www.python.org/downloads/",
+        verify_cmd="python3 -V"),
     "die": ToolMeta(
         fix="install DIE (Detect It Easy) and add it to PATH",
         description="packer/compiler detector for PE/ELF/Mach-O",

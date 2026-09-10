@@ -507,7 +507,7 @@ files:
   - src: scripts/lane_spec.py
     dest: .claude/scripts/lane_spec.py
     kind: scaffold
-    sha256: 66d4fe16efc221ae341f8bd457ba192c3440def72df05926d6499bd9f0c9ad38
+    sha256: 0367c06f3d7114963a09b9dde2ff0c57e911f6493b002c9c4c8295e999f77ef7
   - src: scripts/lessons_telemetry.py
     dest: .claude/scripts/lessons_telemetry.py
     kind: scaffold
@@ -695,7 +695,7 @@ files:
   - src: scripts/report_render.py
     dest: .claude/scripts/report_render.py
     kind: scaffold
-    sha256: f40c250d1b74a87c4a1149b3dc7c00b5c196ff2864559bbf879d134e7ae2bc89
+    sha256: edbd2518106f693f71221da8e73dbfa22ace11006dfd1680b6fa398fd165ede4
   - src: scripts/retirement_gate.py
     dest: .claude/scripts/retirement_gate.py
     kind: scaffold
@@ -787,7 +787,7 @@ files:
   - src: scripts/toolchain.py
     dest: .claude/scripts/toolchain.py
     kind: scaffold
-    sha256: 82a1814480fdfd38148cd75d9f5124927f29b814785ebd6fe252e262faad7997
+    sha256: dcfe5240e1995569e5061b33450f89edccaf5d72bd9984e2dac86fc9cd780fdb
   - src: scripts/toolchain_install.py
     dest: .claude/scripts/toolchain_install.py
     kind: scaffold

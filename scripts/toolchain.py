@@ -119,6 +119,8 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "pefile": NextAction("install", "pip install pefile"),
     "uv": NextAction(
         "install", "curl -LsSf https://astral.sh/uv/install.sh | sh"),
+    "python": NextAction(
+        "install", "install Python 3 and put it on PATH (`python3 -V` must run)"),
     "die": NextAction("install"),  # platform matrix: FIXES text / #408 installer
     "floss": NextAction("install", "pip install flare-floss"),
     "file": NextAction("install"),

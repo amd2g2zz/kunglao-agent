@@ -130,13 +130,18 @@ def validate(value) -> str:
 
 
 def _read_spec(ws) -> tuple[dict, str]:
-    """(document, state) — the raw contract read ({} on absent/corrupt)."""
+    """(document, state) — the raw contract read ({} on absent/corrupt).
+
+    Non-UTF-8 bytes are CORRUPT here, not a crash: `read_text(encoding=...)`
+    raises UnicodeDecodeError (a ValueError, not an OSError), and the
+    intake must fall back to the legacy default + let the existing
+    unreadable-contract faces fail closed — never a traceback out of init."""
     path = Path(ws) / TASK_SPEC_FILENAME
     if not path.exists():
         return {}, STATE_ABSENT
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (yaml.YAMLError, OSError):
+    except (yaml.YAMLError, OSError, UnicodeDecodeError):
         return {}, STATE_CORRUPT
     if not isinstance(data, dict):
         return {}, STATE_CORRUPT
@@ -181,7 +186,7 @@ def persist(ws, lane: str) -> Path:
     if path.exists():
         try:
             loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except (yaml.YAMLError, OSError) as exc:
+        except (yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
             raise ValueError(
                 f"task_spec.yaml unreadable — lane not written: {exc}") from exc
         if not isinstance(loaded, dict):
