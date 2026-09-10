@@ -58,6 +58,13 @@ zero-spawn contract violation; that read is gone), and named phase-2
 placeholder slots (``v_oracle_gap`` #133, ``baseline_inv_k`` #129) so
 the renderer never changes twice.
 
+Issue 218 adds the Thompson rank face: ``rank`` (the latest ``rank_feeds``
+run's top action — claim id / sampled score / age / staleness) and
+``rank_log`` (the emit-path health bit — a crashed ``rank_feeds`` emit is
+observable here while the ranking result itself stays untouched, the silent
+fail-open contract). Both are single-sourced in scripts/rank_face.py so the
+heartbeat tick report reads the same values this snapshot renders.
+
 Usage: python statusline_snapshot.py <workspace>
 (attached from the heartbeat_touch per-tool-use path and from
 heartbeat_tick's post-settlement step — event-driven writes, #142
@@ -89,6 +96,11 @@ SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/ root
 # #142 follow-up: the snapshot path is single-sourced in entropy_face (the
 # trend-baseline reader owns the constant; the writer reuses it — no twin).
 from entropy_face import SNAPSHOT_REL
+
+# Issue 218: the Thompson rank face is single-sourced in rank_face (the
+# snapshot ships its latest rank_feeds reading + emit-path health bit; the
+# heartbeat tick report carries the same computed values).
+from rank_face import face as _rank_face
 
 # #142: snapshot schema version — 2 adds the producer-owned v2 fields
 # (v_hist / h_bits / h_trend / health / now / pq_rows / difficulty and the
@@ -925,6 +937,11 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     # worker liveness) — conditional segments, absent = hidden.
     difficulty_face = _difficulty_face(ws)
     perf = _perf_face(ws)
+    # Issue 218: the Thompson rank face — the latest rank_feeds run's top
+    # action (claim + sampled score + age/staleness) plus the emit-path
+    # health bit. Producer-owned like every other face: the renderer never
+    # reads the ledger. Additive fields — readers probe the field set.
+    rank = _rank_face(ws, now=now)
 
     return {
         "schema": SCHEMA_VERSION,
@@ -956,6 +973,11 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         # set, never a version ladder (no-backcompat policy).
         "difficulty_src": difficulty_face,
         "perf": perf,
+        # Issue 218: the Thompson rank face (latest rank_feeds run) + the
+        # emit-path health bit — a crashed rank_feeds emit is visible here
+        # while the ranking result itself stays untouched (fail-open).
+        "rank": rank["rank"],
+        "rank_log": rank["rank_log"],
         # #142 phase-2 slots: named now, populated later — no renderer change
         # twice (#133 v_norm-v_oracle gap, #129 1/k baseline).
         "v_oracle_gap": None,

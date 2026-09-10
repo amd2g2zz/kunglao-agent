@@ -89,6 +89,7 @@ import yaml
 
 from status_defs import TERMINAL, IN_PROGRESS_STATUSES, SUSPENDED
 import kunglao_log  # noqa: E402  (#104: #534 lifeline, emit only)
+import rank_face  # noqa: E402  (issue 218: the emit-failure marker)
 from posteriors import CasePosterior, PosteriorLedger  # noqa: E402  (#106)
 
 # #107: the single free parameter of the rebuilt value function.
@@ -586,9 +587,15 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
     """#157: ONE ``rank_feeds`` event per priority_ratio() run — the
     per-claim Thompson feeds + the input fingerprint (claims hash,
     evidence-view digest, rng base draw). Given the seed, the ranking is
-    exactly replayable from the event tail. SILENT FAIL-OPEN (the
-    decide_fail_open contract, #569): a crash in payload build or emit
-    never reaches the ranking result."""
+    exactly replayable from the event tail.
+
+    SILENT FAIL-OPEN for the ranking (the decide_fail_open contract, #569):
+    a crash in payload build or emit never reaches the ranking result. Issue
+    218 makes the crash OBSERVABLE instead of invisible: the attempt leaves
+    the marker runs/.rank-emit-fail.json {ts, error class} (rank_face), a
+    success clears it, and the statusline snapshot / heartbeat tick report
+    surface it as the rank_log health bit. Neither the ranking result nor
+    the payload is touched by the marker."""
     try:
         claims_hash = hashlib.sha256(json.dumps(
             claims, sort_keys=True, ensure_ascii=False, default=repr)
@@ -609,8 +616,13 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
         kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
                          detail=json.dumps(payload, sort_keys=True,
                                            ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — observability never disturbs the rank
-        pass
+        # Issue 218: the last attempt succeeded — the marker clears itself so
+        # the health bit recovers without operator action.
+        rank_face.clear_fail_marker(ws)
+    except Exception as exc:  # noqa: BLE001 — observability never disturbs the rank
+        # Issue 218: the fail-open contract stays (the ranking result is
+        # untouched) — the crash just stops being silent (see rank_face).
+        rank_face.write_fail_marker(ws, exc)
 
 
 def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,

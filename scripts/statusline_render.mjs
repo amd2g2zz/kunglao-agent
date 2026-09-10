@@ -18,6 +18,12 @@
 //   (entropy_face)        while H flat = luck/fake)    the SAME h_bits/h_trend ride the tick
 //                                                      report face (scripts/entropy_face.py);
 //                                                      also gates exploration budget
+//   rank chip (R:)        which action the sampler     #107 Thompson sample IS the dispatch
+//   (rank_face)           puts first right now, and    order — kunglao-decide + the dispatch
+//                         how old that ranking is     gate (worker_budget.check_priority) rank
+//                                                      through the same seed; the rank_log ✖
+//                                                      face is the fail-open emit crash made
+//                                                      visible (issue 218)
 //   health dots x3        oracle / retro / dormant     #473 completion-gate power (oracle),
 //                         one-glance liveness          #38 backtrack gate (retro lag < 8),
 //                                                      #127 detector liveness (no DORMANT)
@@ -217,6 +223,22 @@ function entropyBadge(snap) {
   return PALETTE.amber(text);                          // flat/unknown = suspect
 }
 
+// Issue 218 Thompson rank chip: the top action of the latest rank_feeds run
+// (claim id + its sampled score), pure view over the producer's rank face.
+// Fresh ranking = cyan (working face), aged past the producer's staleness
+// budget = amber (stall-suspect: no recent ranking), and a failed emit =
+// red marker INSTEAD of the chip — the fail-open crash is visible, never
+// silent (the rank result itself was never disturbed). Absent = hidden.
+function rankBadge(snap) {
+  const log = snap.rank_log && typeof snap.rank_log === 'object' ? snap.rank_log : null;
+  if (log && log.ok === false) return PALETTE.red('R✖');
+  const rank = snap.rank && typeof snap.rank === 'object' ? snap.rank : null;
+  if (!rank || typeof rank.claim !== 'string' || !rank.claim) return '';
+  const score = Number(rank.score);
+  const text = `R:${rank.claim}${Number.isFinite(score) ? ` ${score.toFixed(2)}` : ''}`;
+  return rank.stale ? PALETTE.amber(text) : PALETTE.cyan(text);
+}
+
 // #212 difficulty badge: calibrated tier preferred (the mounted calibration
 // output), the raw-signals calibration score as fallback, the legacy string
 // key last. Absent data = hidden segment, never a placeholder.
@@ -322,6 +344,7 @@ function renderKunglao(snapPath, nowMs) {
   }
 
   const badge = entropyBadge(snap);
+  const rankSeg = rankBadge(snap);
   const dots = healthDots(snap.health, down);
   const chip = taskChip(snap.now);
   const diff = difficultyBadge(snap);
@@ -341,6 +364,7 @@ function renderKunglao(snapPath, nowMs) {
   const parts = [stateColor(`${glyph} ${stateLabel}`)];
   if (valueSeg) parts.push(valueSeg);
   if (badge) parts.push(badge);
+  if (rankSeg) parts.push(rankSeg);
   if (diff) parts.push(diff);
   if (dots) parts.push(dots);
   if (perfSegs.length) parts.push(...perfSegs);
