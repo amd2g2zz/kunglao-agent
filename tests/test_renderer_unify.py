@@ -133,8 +133,9 @@ def test_template_gen_imports_shared_primitives():
 
 def test_base_tmpl_uses_double_brace_placeholders():
     text = BASE_TMPL.read_text(encoding="utf-8")
-    for ph in ("{{type_section}}", "{{type}}", "{{sample_sha1}}",
-               "{{sample_sha256}}", "{{sample_type}}", "{{sample_path}}",
+    # issue 208: the four sample_* placeholders became the lane-rendered
+    # {{material_section}} slot (malware injects the sample table).
+    for ph in ("{{type_section}}", "{{type}}", "{{material_section}}",
                "{{skill_dir}}", "{{venv_path}}"):
         assert ph in text, f"base.tmpl missing {ph} placeholder"
     # The old <UPPERCASE> injection placeholders must be gone. Prose tokens

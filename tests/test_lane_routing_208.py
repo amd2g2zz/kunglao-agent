@@ -273,3 +273,110 @@ def test_malware_lane_keeps_rc_no_sample(tmp_path):
     assert "--lane" in r.stderr, \
         "the no-sample prompt must name the non-binary lane escape"
     assert not (ws / "claim-register.yaml").exists()
+
+
+# ------------------------------------------- 4. algorithm lane end to end
+
+def _declared_ws(tmp_path: Path, lane: str) -> Path:
+    """Workspace whose contract declares the lane; NO bins/ at all."""
+    ws = tmp_path / f"ws-{lane}"
+    ws.mkdir()
+    (ws / "task_spec.yaml").write_text(
+        f"lane: {lane}\n" + "".join(f"{k}: {v}\n"
+                                    for k, v in ANCHOR_ANSWERS.items()),
+        encoding="utf-8")
+    return ws
+
+
+def test_algorithm_lane_init_without_bins_exits_ok(tmp_path):
+    """lane=algorithm: no sample required — bins/ absent, exit 0, the
+    workspace is initialized (the acceptance's core case)."""
+    ws = _declared_ws(tmp_path, "algorithm")
+    r = _run_init(ws, ["--type", "linux"])
+    assert r.returncode == RC_OK, \
+        f"algorithm lane must init without bins/: {r.returncode}: {r.stdout}{r.stderr}"
+    assert (ws / "claim-register.yaml").exists()
+    assert (ws / "CLAUDE.md").exists()
+    assert not (ws / "bins").exists()  # nothing fabricated a sample dir
+
+
+def test_algorithm_lane_render_is_sample_free(tmp_path):
+    """The rendered handbook has NO unresolved placeholder and NO sample
+    table — the material block is lane-rendered."""
+    import template_render
+    ws = _declared_ws(tmp_path, "algorithm")
+    r = _run_init(ws, ["--type", "linux"])
+    assert r.returncode == RC_OK, r.stderr
+    text = (ws / "CLAUDE.md").read_text(encoding="utf-8")
+    assert template_render.leftover_placeholders(text) == [], \
+        f"unresolved placeholders survived the lane render: {text[:400]}"
+    assert "## Sample under analysis" not in text
+    assert "## Analysis material (lane: algorithm)" in text
+    assert "bins/unknown" not in text
+
+
+def test_algorithm_lane_seeds_carry_no_sample_claims(tmp_path):
+    """No sample claim is seeded for a lane that mounts no sample."""
+    ws = _declared_ws(tmp_path, "algorithm")
+    r = _run_init(ws, ["--type", "linux"])
+    assert r.returncode == RC_OK, r.stderr
+    titles = _seed_titles(ws)
+    assert titles, "structural seeds missing"
+    assert not any("Sample" in t for t in titles), \
+        f"sample claims seeded into a non-malware lane: {titles}"
+    assert any("lane" in t.lower() for t in titles), titles
+    state = (ws / "analysis_state.txt").read_text(encoding="utf-8")
+    assert "lane=algorithm" in state
+
+
+def test_algorithm_lane_toolchain_set_is_lane_appropriate(tmp_path):
+    """The lane gate probes uv + python + the lane's material — never the
+    MCP/RE supply (a codec task is not a binary-RE engagement)."""
+    import toolchain
+    ws = _declared_ws(tmp_path, "algorithm")
+    report = toolchain.check(ws, "linux", lane="algorithm")
+    names = [i.name for i in report.items]
+    assert names == ["uv", "python", "corpora"], names
+    leaked = [n for n in names if n in toolchain.LANE_NEVER_CHECKS]
+    assert leaked == [], f"malware-lane items leaked into the lane gate: {leaked}"
+    corpora = next(i for i in report.items if i.name == "corpora")
+    assert corpora.tier == toolchain.Tier.WARN, \
+        "unmounted lane material must not refuse init (WARN contract)"
+    assert "algorithm" in corpora.detail
+
+
+def test_lane_derived_from_task_spec_without_explicit_flag(tmp_path):
+    """check() reads the lane from the parsed task_spec — the init call
+    shape stays unchanged (the lane is a contract field, not a flag)."""
+    import toolchain
+    ws = _declared_ws(tmp_path, "algorithm")
+    spec = yaml.safe_load((ws / "task_spec.yaml").read_text(encoding="utf-8"))
+    report = toolchain.check(ws, "linux", task_spec=spec)
+    assert [i.name for i in report.items] == ["uv", "python", "corpora"]
+
+
+def test_malware_dispatch_is_unchanged_by_the_lane_gate(tmp_path):
+    """lane=malware / lane absent -> the per-type check set, untouched."""
+    import toolchain
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    legacy = toolchain.check(ws, "macos")
+    explicit = toolchain.check(ws, "macos", lane="malware")
+    assert [i.name for i in legacy.items] == [i.name for i in explicit.items]
+    assert [i.status for i in legacy.items] == [i.status for i in explicit.items]
+    # and no lane item exists on the malware path
+    assert "corpora" not in [i.name for i in legacy.items]
+
+
+def test_required_checks_has_no_malware_entry():
+    """Single source: the malware lane is absent from the per-lane sets on
+    purpose (it keeps the per-type CHECK_SETS dispatch)."""
+    import lane_spec
+    assert "malware" not in lane_spec.REQUIRED_CHECKS
+    for lane in LANES:
+        if lane == "malware":
+            continue
+        assert lane_spec.REQUIRED_CHECKS.get(lane), \
+            f"lane {lane} lacks a required-check set"
+        assert lane_spec.REQUIRED_CHECKS[lane][:2] == ("uv", "python"), \
+            "every lane gate starts from uv + python"

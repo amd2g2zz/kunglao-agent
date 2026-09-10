@@ -220,7 +220,8 @@ def test_rc_matrix_fatal_verify_2(tmp_path, monkeypatch):
     monkeypatch.setenv(FLAG_NAME, "0")
     mod = _load_init_module()
 
-    def broken_register_text(sample, sample_sha, state_hash, project_type=None):
+    def broken_register_text(sample, sample_sha, state_hash, project_type=None,
+                             lane=None):
         return "# broken register — no [initialized] marker, no seeds\n"
 
     monkeypatch.setattr(mod, "claim_register_text", broken_register_text)

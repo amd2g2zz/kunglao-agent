@@ -164,17 +164,23 @@ def persist(ws, lane: str) -> Path:
     """Record the lane in <ws>/task_spec.yaml (merge, other keys survive).
 
     Creates the file when absent. The value must be pre-validated by the
-    caller — a bad lane never lands here."""
+    caller — a bad lane never lands here. A file that exists but cannot be
+    read as a mapping is REFUSED (ValueError): rewriting it would silently
+    replace a damaged contract with a lane-only document."""
     value = validate(lane)
     path = Path(ws) / TASK_SPEC_FILENAME
     doc: dict = {}
     if path.exists():
         try:
             loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except (yaml.YAMLError, OSError):
-            loaded = None
-        if isinstance(loaded, dict):
-            doc = loaded
+        except (yaml.YAMLError, OSError) as exc:
+            raise ValueError(
+                f"task_spec.yaml unreadable — lane not written: {exc}") from exc
+        if not isinstance(loaded, dict):
+            raise ValueError(
+                "task_spec.yaml is not a YAML mapping — lane not written; "
+                "repair the contract (full re-init) first")
+        doc = loaded
     doc[LANE_FIELD] = value
     text = yaml.safe_dump(doc, allow_unicode=True, sort_keys=False,
                           default_flow_style=False)
