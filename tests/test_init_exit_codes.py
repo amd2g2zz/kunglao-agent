@@ -122,9 +122,14 @@ def test_rc_matrix_flag_reject_3(tmp_path):
 
 
 def test_rc_matrix_no_sample_5(tmp_path):
-    """no-sample (bins/ empty) -> RC_NO_SAMPLE=5, friendly prompt, no scaffold."""
+    """no-sample (bins/ empty) -> RC_NO_SAMPLE=5, friendly prompt, no scaffold.
+
+    Issue 208: the lane is declared explicitly — the malware lane keeps the
+    no-sample prompt, while a workspace that declares nothing at all (no
+    lane, no task contract, no sample) is ASKED for its lane (exit 8)
+    instead of being assumed to be malware."""
     ws = _mk_ws(tmp_path, "ws", sample=False)
-    r = _run_init_cli(ws, ["--type", "windows"])
+    r = _run_init_cli(ws, ["--type", "windows", "--lane", "malware"])
     assert r.returncode == RC_NO_SAMPLE, \
         f"no-sample must exit {RC_NO_SAMPLE}, got {r.returncode}: {r.stdout}{r.stderr}"
     assert "bins/" in (r.stdout + r.stderr), "friendly prompt must mention bins/"

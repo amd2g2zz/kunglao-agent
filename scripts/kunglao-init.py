@@ -147,6 +147,7 @@ import intake_promise  # noqa: E402  # #813: Phase 0 prescan promise (apkid/DIE/
 import difficulty_calibration  # noqa: E402  # #15: sample difficulty calibration (intrinsic factors -> evidence/difficulty.json + task_spec difficulty: 键)
 import init_channel_default  # noqa: E402  # #727 channel resolution (local fallback)
 import oracle_anchors  # noqa: E402  # the three required intake answers (task_spec first-class fields)
+import lane_spec  # noqa: E402  # issue 208: the task LANE (analysis material contract)
 # #408: ask-then-install — interactive install prompts + MCP registration +
 # re-probe (graceful degrade on decline; --assume-yes for CI/headless).
 # #455: the interactive consent channel is gone (no stdin); ask_then_install
@@ -597,6 +598,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                              "omitted -> pending decision")
     parser.add_argument("--type", choices=VALID_TYPES, default=None,
                         help="project type: windows|linux|android|web|macos (web=labs)")
+    parser.add_argument("--lane", choices=lane_spec.LANES, default=None,
+                        help="issue 208 analysis lane: "
+                             + "|".join(lane_spec.LANES)
+                             + " (default: the declared task_spec.yaml lane; "
+                               "a lane-less contract keeps the malware lane's "
+                               "current behavior; a workspace with no contract "
+                               "and no sample is asked)")
     parser.add_argument("--target", metavar="NAME", default=None,
                         help="explicit analysis target — a file name under bins/ "
                              "(containers get a target_object round)")
@@ -1214,6 +1222,61 @@ def anchor_pending_decisions(
     return out
 
 
+def lane_decision() -> "decision_pending.PendingDecision":
+    """The lane question (issue 208) as a pending decision — no default.
+
+    The lane is the analysis-material contract: it decides whether a
+    binary sample under bins/ is REQUIRED (malware) or not. Nothing in the
+    workspace state can imply it (a lane-less task_spec keeps the legacy
+    malware behavior; a workspace with no contract at all has no signal),
+    so the runtime asks instead of guessing."""
+    return decision_pending.PendingDecision(
+        decision_id="lane",
+        question="Analysis lane — what is the material this task analyzes?",
+        kind=decision_pending.KIND_CHOICE,
+        options=tuple(lane_spec.LANES),
+        default=None,  # never guessed (#455 posture)
+        context={
+            "materials": {lane: lane_spec.material(lane)
+                          for lane in lane_spec.LANES},
+            "note": ("lane=malware keeps the binary-sample contract "
+                     "(bins/<sha> required, RC_NO_SAMPLE retained); every "
+                     "other lane binds the toolchain gate to its material "
+                     "instead of the MCP/RE analysis tools"),
+        },
+    )
+
+
+def _lane_intake(ws: Path, explicit_lane: str | None,
+                 answers: dict[str, str], files: "list[dict]",
+                 ) -> tuple[str | None, int | None]:
+    """The lane intake (issue 208): resolve | ask, before the no-sample gate.
+
+    Precedence (shared #455 contract): --lane > --resolve answer >
+    task_spec.yaml lane:. An explicit/answered lane is persisted into the
+    contract so later runs never re-ask. An undeclared lane falls back to
+    the LEGACY default (malware) when the workspace already carries a task
+    contract or a mounted sample — the pre-lane behavior, byte-identical.
+    A workspace that declares NOTHING (no lane, no contract, no sample) is
+    ASKED: exit RC_PENDING_DECISIONS with the lane decision, zero scaffold.
+    Returns (lane, exit_code | None)."""
+    lane, source, error = lane_spec.resolve(ws, explicit_lane, answers)
+    if error is not None:
+        print(f"kunglao-init: ERROR lane refused: {error}", file=sys.stderr)
+        return None, RC_ERROR
+    if lane is not None:
+        if source in ("explicit", "answer"):
+            lane_spec.persist(ws, lane)
+            print(f"kunglao-init: lane={lane} recorded (task_spec.yaml)")
+        return lane, None
+    if (ws / lane_spec.TASK_SPEC_FILENAME).exists() or files:
+        # Legacy contract: a task_spec without the field, or a mounted
+        # sample (the malware lane's structural signature). Current
+        # behavior, never re-interviewed.
+        return lane_spec.DEFAULT_LEGACY, None
+    return None, emit_pending(ws, [lane_decision()])
+
+
 def _anchor_intake(ws: Path, answers: dict[str, str]) -> int | None:
     """Structural oracle-anchor intake: the script itself asks.
 
@@ -1350,6 +1413,7 @@ HOST_EXEC_PROTECTION_HOST_TYPES = frozenset({"windows", "linux", "macos"})
 
 def _aligned_host_exec_protection(
         answers: dict[str, str], project_type: str | None,
+        lane: str | None = None,
         ) -> tuple[str | None, "decision_pending.PendingDecision | None", int | None]:
     """#919 C: host exec protection (block_malware_exec) applies-or-not is a
     USER decision, never a written-in default — the sample-exec guard is
@@ -1358,6 +1422,9 @@ def _aligned_host_exec_protection(
     Scope: the ask fires only for host-executable sample types
     (windows/linux/macos). web/android targets never execute on the host,
     so the question is noise there — recorded as not-applicable.
+    Issue 208: a non-malware lane has no sample to execute on the host at
+    all — the guard is recorded not-applicable there too (an explicit
+    answer still wins).
     CLI flag > --resolve answer (validated against {enabled, disabled,
     not-applicable}) > pending ask."""
     val = answers.get("host_exec_protection") or None
@@ -1368,6 +1435,8 @@ def _aligned_host_exec_protection(
                   file=sys.stderr)
             return None, None, RC_ERROR
         return val, None, None
+    if lane is not None and lane != lane_spec.DEFAULT_LEGACY:
+        return "not-applicable", None, None  # issue 208: no host-executable sample
     if project_type is not None and project_type not in HOST_EXEC_PROTECTION_HOST_TYPES:
         return "not-applicable", None, None
     decision = decision_pending.PendingDecision(
@@ -1387,6 +1456,7 @@ def _aligned_host_exec_protection(
 def align_target(ws: Path, files: list[dict],
                  explicit_target: str | None, explicit_type: str | None,
                  answers: dict[str, str] | None,
+                 lane: str | None = None,
                  ) -> tuple[str | None, str | None, str | None, int | None]:
     """#455 intake step 0 decision matrix.
 
@@ -1398,7 +1468,12 @@ def align_target(ws: Path, files: list[dict],
 
     Order: target (multi-file asks; unique file is deterministic) ->
     target_object (containers list contents, type never guessed) -> type
-    (sniff hint is context only)."""
+    (sniff hint is context only).
+
+    Issue 208: a non-malware lane has no bins/ sample to align — the
+    target/target_object round is skipped when bins/ is empty (it would
+    otherwise pend an empty option list), and the host-exec posture is
+    not-applicable."""
     answers = answers or {}
     target, kind, err = _aligned_target(files, explicit_target, answers)
     if err is not None:
@@ -1413,7 +1488,8 @@ def align_target(ws: Path, files: list[dict],
             return None, None, None, err
         if decision is not None:
             pending.append(decision)
-    elif target is None:
+    elif target is None and files:
+        # a non-malware lane with an empty bins/ has no target to align
         pending.append(decision_pending.PendingDecision(
             decision_id="target",
             question="bins/ holds multiple files — which one is the "
@@ -1432,7 +1508,7 @@ def align_target(ws: Path, files: list[dict],
         pending.append(decision)
 
     host_exec_protection, decision, err = _aligned_host_exec_protection(
-        answers, project_type)
+        answers, project_type, lane)
     if err is not None:
         return None, None, None, err
     if decision is not None:
@@ -2841,7 +2917,8 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         host_exec_protection_flag: str | None = None,
         no_hooks: bool = False,
         skills: list[str] | None = None,
-        plugin_mode: bool = False) -> int:
+        plugin_mode: bool = False,
+        lane: str | None = None) -> int:
     """State-machine entry (#304 amended flow, comment 304-5289955958;
     #455 target alignment as intake step 0):
 
@@ -3033,13 +3110,23 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         backup = backup_register(reg)
         print(f"kunglao-init: --force backup -> {backup}")
 
-    # #304: no-sample cold start -> friendly prompt, refuse (exit 5)
+    # #304: no-sample cold start -> friendly prompt, refuse (exit 5).
+    # Issue 208: the lane decides whether a sample is required AT ALL —
+    # the lane intake runs first (it may pend the lane question with zero
+    # scaffold), and only the malware lane reaches the prompt below.
     files = survey_bins(ws)
-    if not files:
+    lane, lane_rc = _lane_intake(ws, lane, answers, files)
+    if lane_rc is not None:
+        return lane_rc
+    assert lane is not None  # resolved: explicit | answer | declared | legacy
+    if not files and lane == lane_spec.DEFAULT_LEGACY:
         print(
             "kunglao-init: no analysis target found — place a sample into bins/ "
             "or specify a path, then re-run "
-            "kunglao-init.py <ws> --type <windows|linux|android|web|macos>.",
+            "kunglao-init.py <ws> --type <windows|linux|android|web|macos>. "
+            "A task with no binary sample is not a sample problem: declare "
+            "its lane (--lane algorithm|protocol|web|data|app, or `lane:` in "
+            "task_spec.yaml) and init proceeds without bins/.",
             file=sys.stderr,
         )
         return RC_NO_SAMPLE
@@ -3055,10 +3142,13 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
         answers = dict(answers or {})
         answers["host_exec_protection"] = host_exec_protection_flag
     target_name, target_object, host_exec_protection, pending_rc = align_target(
-        ws, files, target, project_type, answers)
+        ws, files, target, project_type, answers, lane)
     if pending_rc is not None:
         return pending_rc
-    assert target_name is not None  # aligned
+    if lane == lane_spec.DEFAULT_LEGACY:
+        # the malware gate guarantees a bins/ sample; a non-malware lane
+        # has no sample to align (issue 208)
+        assert target_name is not None
     if project_type is None:
         # align_target resolved the type from answers/persisted state —
         # mirror its precedence so the local matches what was aligned.
@@ -3519,7 +3609,7 @@ def main(argv: list[str] | None = None) -> int:
                assume_yes=args.assume_yes,
                target=args.target, answers=answers,
                host_exec_protection_flag=args.host_exec_protection,
-               no_hooks=args.no_hooks, skills=skills)
+               no_hooks=args.no_hooks, skills=skills, lane=args.lane)
 
 
 # #660 dispatcher import — ALIASED: a bare `from _entry import run` would

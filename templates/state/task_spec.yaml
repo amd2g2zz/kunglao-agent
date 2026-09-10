@@ -1,6 +1,21 @@
 # task_spec.yaml — kunglao-agent input contract (Phase 0.4 fills this).
 # See DESIGN §2. The user's requirements drive the orchestrator's value function.
 
+# lane — the analysis MATERIAL contract. The runtime runs one lane per
+# workspace; the lane decides whether a binary sample under bins/<sha> is
+# REQUIRED and which toolchain gate applies (issue 208). Values:
+#   malware     a binary sample under bins/<sha> (sha256-anchored;
+#               RC_NO_SAMPLE when bins/ is empty; MCP/RE toolchain gate)
+#   algorithm   reference corpora + trace dumps — no binary sample
+#   protocol    source dump or live capture (pcaps / frame samples)
+#   web         target URL + auth model
+#   data        dataset path + format
+#   app         package file with a declared contract surface
+# Blank/absent: init keeps the pre-lane malware behavior when a contract
+# or a sample exists, and ASKS through the exit-8 pending channel (no
+# default) when the workspace declares nothing at all.
+lane: ""                     # malware | algorithm | protocol | web | data | app
+
 # Oracle anchors — REQUIRED. The init interview collects all three after
 # the needs-first questions; while any is blank, analysis entry refuses
 # (`kunglao analysis`, exit 7). For help turning a folk ask into these
