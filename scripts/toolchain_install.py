@@ -151,6 +151,17 @@ INSTALL_PLANS: dict[str, InstallPlan] = {
             PkgSpec("uv", ("uv", "pip", "install", "flare-floss")),
         ),
     ),
+    # issue 209: apkid is a WARN-tier android presence probe (the agent runs
+    # it at first claim); pip-installable like pefile/floss. The plan is the
+    # closed-declaration classification — WARN tier never reaches the
+    # ask_then_install FAIL path.
+    "apkid": InstallPlan(
+        kind="auto", degrade="WARN",
+        packages=(
+            PkgSpec("pip", ("pip", "install", "apkid")),
+            PkgSpec("uv", ("uv", "pip", "install", "apkid")),
+        ),
+    ),
     # --- T0/T1 RE system tools ---
     "die": InstallPlan(
         kind="auto", degrade="WARN",

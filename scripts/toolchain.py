@@ -2216,6 +2216,25 @@ def _check_android(report: ToolchainReport, ws: Path,
     report.items.extend(_which_items(
         ("jadx", "apktool"), Tier.HARD))
 
+    # T1: apkid — presence probe ONLY, WARN tier (so it can never enter the
+    # HARD exit-4 refusal set). apkid is a TOOL: init probes existence and
+    # surfaces the first-claim recommendation; the agent decides whether or
+    # when to run it (init never executes the scanner — issue 669 ruling).
+    # The recommendation rides every apkid item's detail verbatim so the
+    # init summary face and the intake promise mirror one source phrase.
+    # missing_status is explicit: the _which_items default compares a Tier
+    # against a Status enum, which never compares equal across classes.
+    apkid_items = [
+        dataclasses.replace(
+            it,
+            detail=(it.detail + " — apkid recommended for apk fingerprinting "
+                    "(packer / obfuscator / anti-*); agent to run on "
+                    "first claim"))
+        for it in _which_items(("apkid",), Tier.WARN,
+                               missing_status=Status.WARN)
+    ]
+    report.items.extend(apkid_items)
+
     # T1: GitNexus (real probe: gitnexus --version)
     gn_path = _shutil_which("gitnexus")
     if gn_path:
@@ -2632,7 +2651,7 @@ CHECK_SETS: dict[str, frozenset[str]] = {
         "ebpf", "strace", "ltrace",
     }),
     "android": frozenset({
-        "aapt", "aapt2", "jadx", "apktool", "gitnexus",
+        "aapt", "aapt2", "jadx", "apktool", "gitnexus", "apkid",
         "decompiler", "ghidra", "ida", "uv",
         "adb", "device_root", "debug_flag", "frida_server",
         "android_server", "jdwp_debug", "ebpf_android", "unidbg",

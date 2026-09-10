@@ -3066,6 +3066,11 @@ def run(ws: Path | None, force: bool = False, hooks_json: Path | None = None,
                 if resolved.overall_status == toolchain.Status.FAIL:
                     return refuse_toolchain(ws, resolved)
 
+        # apkid recommendation summary (issue 209): the gate probed
+        # presence only; the first-claim run decision stays with the agent.
+        for _rec in apkid_summary_lines(report):
+            print(f"kunglao-init: {_rec}")
+
     # uv env deployment (the uv-managed .venv the shipped
     # faces resolve through) + host learning-plugin detection warning.
     warn_learning_style_plugins()
@@ -3243,6 +3248,28 @@ def cleanup_scaffold(ws: Path, created: "Collection[Path] | None" = None
             shutil.rmtree(d, ignore_errors=True)
             removed.append(name + "/")
     return removed, preserved
+
+
+def apkid_summary_lines(report: "toolchain.ToolchainReport") -> list[str]:
+    """Post-toolchain summary face for the apkid recommendation (issue 209).
+
+    apkid is a TOOL, not source: the gate probes presence only and the agent
+    decides at first claim (init never executes the scanner). An android
+    workspace whose WARN-tier apkid probe is not PASS yields ONE
+    recommendation line; every other project type or probe state yields
+    none."""
+    if getattr(report, "project_type", None) != "android":
+        return []
+    lines: list[str] = []
+    for item in getattr(report, "items", []):
+        if (getattr(item, "name", None) == "apkid"
+                and item.tier == toolchain.Tier.WARN
+                and item.status != toolchain.Status.PASS):
+            lines.append(
+                f"RECOMMENDATION apkid [{item.status.value}] — apkid "
+                "recommended for apk fingerprinting (packer / obfuscator "
+                "/ anti-*); agent to run on first claim")
+    return lines
 
 
 def refuse_toolchain(ws: Path, report: "toolchain.ToolchainReport") -> int:
