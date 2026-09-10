@@ -28,7 +28,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import premature_termination_detect as pt  # noqa: E402
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
@@ -156,6 +156,9 @@ def test_no_needs_human_assertion_no_evidence_duty():
 def _mk_ws(tmp_path: Path, name: str = "ws") -> Path:
     ws = tmp_path / name
     seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
+    # completed anchor interview: this file pins the task-oracle gate chain,
+    # and a blank-anchor run now pends (exit 8) before any scaffold
+    seed_oracle_anchors(ws)
     return ws
 
 

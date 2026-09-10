@@ -38,7 +38,7 @@ import types
 from pathlib import Path
 
 import pytest
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -74,6 +74,9 @@ def init_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     seed_bins(ws)
     (ws / "runs").mkdir()
+    # completed anchor interview: these tests pin render faces, and a
+    # blank-anchor run now pends (exit 8) before any of them
+    seed_oracle_anchors(ws)
     return ws
 
 
@@ -81,6 +84,7 @@ def _rendered_claudemd(tmp_path: Path, project_type: str) -> str:
     ws = tmp_path / project_type
     seed_bins(ws)
     (ws / "runs").mkdir()
+    seed_oracle_anchors(ws)
     r = _run_init(ws, project_type)
     assert r.returncode == 0, f"init {project_type} failed: {r.stderr}"
     return (ws / "CLAUDE.md").read_text(encoding="utf-8")

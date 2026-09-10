@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -210,6 +210,9 @@ def init_ws(tmp_path: Path) -> Path:
     (ws / "bins").mkdir(parents=True)
     (ws / "runs").mkdir(parents=True)
     seed_bins(ws)
+    # completed anchor interview: these tests pin render faces, and a
+    # blank-anchor run now pends (exit 8) before any of them
+    seed_oracle_anchors(ws)
     return ws
 
 

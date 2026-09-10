@@ -56,6 +56,22 @@ around mapping-driven generation and four-leg gates.
   front-loaded reference/tool/script lookup block and compressed rule slices
   — workers find the knowledge base from tick one (guidance, not
   enforcement).
+- **Proactive environment probing (#202)**: the toolchain gate now
+  resolves the environment itself — ownership tiers (agent-do / human-only
+  / lane-conditional) on every check, the decompiler face branches on the
+  declared lane (ida-pro-vm MCP reachability for MCP tasks — no local IDA
+  or license demanded), multi-strategy IDA discovery (Spotlight, .app
+  bundle layouts, brew, known dirs) with Ghidra fallback and a user choice
+  only as last resort, MCP servers auto-registered by the agent, device
+  configuration (root flag, frida/gserver) attempted over adb, and uv
+  deployed + enforced as the interpreter for every shipped script.
+- **Init and upgrade actively ask (#203)**: init always emits the three
+  anchor questions (goal, success criterion, verification method) through
+  the structured exit-8 interview channel before any scaffold; answers
+  round-trip into task_spec and pre-fill the completion oracle — an init
+  can no longer "succeed" with blank anchors, and upgrade verifies the
+  anchors on every run.
+
 - **Typed asset-tier retrieval (#162)**: tools / templates / references are
   recalled as typed tiers, with a windowed-stalker template and echarts
   de-vendored.

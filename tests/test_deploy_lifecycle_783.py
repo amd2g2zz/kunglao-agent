@@ -32,7 +32,7 @@ if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
 import template_version as tv  # noqa: E402
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 import pytest  # noqa: E402
 
@@ -373,6 +373,8 @@ def _init_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "e2e"
     ws.mkdir()
     seed_bins(ws, payload=b"\x00\x01\x02")
+    # completed anchor interview: a blank-anchor run now pends (exit 8)
+    seed_oracle_anchors(ws)
     proc = _run_cli([
         str(SCRIPTS / "kunglao-init.py"), str(ws),
         "--type", "linux", "--skip-toolchain", "--host-exec-protection", "enabled", "--assume-yes",

@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import template_version as tv  # noqa: E402
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 
 def test_skill_version_is_semver_and_matches_pyproject() -> None:
@@ -149,6 +149,7 @@ def test_init_stamps_all_three_carriers(tmp_path: Path) -> None:
     import subprocess
     ws = tmp_path / "ws"
     seed_bins(ws, payload=b"MZ\x90\x00" + b"\x00" * 64)
+    seed_oracle_anchors(ws)
     env = {k: v for k, v in os.environ.items()
            if k != "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"}
     env["CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"] = "0"

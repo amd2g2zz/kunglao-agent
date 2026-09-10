@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -213,8 +213,10 @@ def test_replay_init_minimal_workspace_contract(tmp_path: Path):
     v0.1.2 现场契约: 满足最小输入(bins/ 下有样本 + --type)时,init 必须能产出
     claim-register.yaml + .workspace-manifest.json 最小契约,且 exit 0。
     """
-    # 模拟 user 准备: 至少一个 bins/ 样本 + --type
+    # 模拟 user 准备: 至少一个 bins/ 样本 + --type (+ 完成的 anchor 采访:
+    # blank-anchor 运行现在先 pend, exit 8)
     seed_bins(tmp_path, payload=b"\x00\x01\x02")
+    seed_oracle_anchors(tmp_path)
     proc = _run_cli(
         [
             str(ROOT / "scripts" / "kunglao-init.py"),

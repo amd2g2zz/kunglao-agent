@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from hook_activation import canonical_install_root
-from _factories import seed_bins
+from _factories import seed_bins, seed_oracle_anchors
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -39,7 +39,8 @@ def init_ws(tmp_path) -> Path:
 
 def _run_init(ws: Path, extra: list[str] | None = None,
               profile_root: Path | None = None,
-              flag: str | None = "0") -> subprocess.CompletedProcess:
+              flag: str | None = "0",
+              anchors: bool = True) -> subprocess.CompletedProcess:
     """Run kunglao-init (hermetic):
     --profile-root defaults to a tmp dir (production profiles are never touched);
     flag defaults to "0" (#276 default-disabled; the outer session may be
@@ -47,7 +48,15 @@ def _run_init(ws: Path, extra: list[str] | None = None,
     carries no such variable.
     --skip-toolchain: after the #304 fix the toolchain gate precedes scaffold —
     this file's tests focus on reinit/idempotency/drift; gate semantics are
-    covered exclusively by test_init_toolchain_gate.py."""
+    covered exclusively by test_init_toolchain_gate.py.
+
+    The workspace carries a completed anchor interview: this file pins
+    re-init/idempotency faces, and a blank-anchor run now pends (exit 8)
+    before any of them. Pass anchors=False for the path-shape refusal
+    tests, where even the seeding write would violate the zero-writes
+    assertion."""
+    if anchors:
+        seed_oracle_anchors(ws)
     argv = [sys.executable, str(SCRIPTS / "kunglao-init.py"), str(ws), *(extra or [])]
     if "--skip-toolchain" not in argv:
         argv.append("--skip-toolchain")
@@ -356,7 +365,7 @@ def test_init_refuses_sample_dir_without_bins(tmp_path: Path) -> None:
     (sample_dir / "bin").mkdir(parents=True)
     (sample_dir / "bin" / "malware.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
     before = _snapshot(sample_dir)
-    r = _run_init(sample_dir)
+    r = _run_init(sample_dir, anchors=False)
     assert r.returncode == RC_PATH_SHAPE, \
         f"init on a sample dir must refuse with {RC_PATH_SHAPE}: {r.returncode}: {r.stdout}{r.stderr}"
     assert "bins/" in (r.stdout + r.stderr), \
@@ -373,7 +382,7 @@ def test_init_refuses_sample_dir_itself_named_bin(tmp_path: Path) -> None:
     container.mkdir(parents=True)
     (container / "malware.exe").write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
     before = _snapshot(tmp_path)
-    r = _run_init(container)
+    r = _run_init(container, anchors=False)
     assert r.returncode == RC_PATH_SHAPE, \
         f"init on the sample container must refuse with {RC_PATH_SHAPE}: {r.returncode}: {r.stdout}{r.stderr}"
     assert "bins/" in (r.stdout + r.stderr), \
@@ -389,7 +398,7 @@ def test_init_refuses_sample_file(tmp_path: Path) -> None:
     sample = tmp_path / "malware.exe"
     sample.write_bytes(b"MZ\x90\x00" + b"\x00" * 64)
     before = _snapshot(tmp_path)
-    r = _run_init(sample)
+    r = _run_init(sample, anchors=False)
     assert r.returncode == RC_PATH_SHAPE, \
         f"init on a sample file must refuse with {RC_PATH_SHAPE}: {r.returncode}: {r.stdout}{r.stderr}"
     assert _snapshot(tmp_path) == before, \

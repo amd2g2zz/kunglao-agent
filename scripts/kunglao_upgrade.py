@@ -1699,6 +1699,21 @@ def upgrade(ws: Path, dry_run: bool = False,
         _warn_git_skip("git status probe unreadable",
                        "cannot verify workspace cleanliness")
 
+    # The required intake answers are verified BEFORE any migration work:
+    # the structured interview is the FIRST face of every success path, so
+    # a pending exit 8 stops the run with no migration item applied and no
+    # stamp refresh — the framework never moves while the workspace's input
+    # contract is unanswered. The position is AFTER the git gate on
+    # purpose: a backfill apply must not feed the dirty gate an
+    # unsanctioned write, and the post-state commit at the tail still lands
+    # the applied answers.
+    anchor_rc, anchor_pending = _anchor_backfill(
+        ws, dry_run=False, resolve=resolve, items_out=items_out)
+    if anchor_rc != RC_OK:
+        if anchor_pending is not None:
+            print(json.dumps(anchor_pending, ensure_ascii=False))
+        return anchor_rc
+
     pre = user_data_digest(ws)
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     snap_path = ws / "runs" / f"upgrade-snapshot.{ts}.json"
@@ -1747,10 +1762,6 @@ def upgrade(ws: Path, dry_run: bool = False,
         # the item above already emitted the one WARN this run needs.
         _guarded_stamp_refresh(ws, version=target, warn=False)
         _emit_event("stamp", "ok", f"version={target}")
-        # required intake answers: backfill BEFORE the post-state commit so
-        # the write rides the snapshot layer (the tree stays clean)
-        anchor_rc, anchor_pending = _anchor_backfill(
-            ws, dry_run=False, resolve=resolve, items_out=items_out)
         _emit(ws, "upgrade", f"{origin}->{target} items={applied}")
         print(f"kunglao-upgrade: {origin} -> {target} "
               f"({applied} item(s), snapshot {snap_path.name})")
@@ -1809,10 +1820,6 @@ def upgrade(ws: Path, dry_run: bool = False,
         # slash-commands/hooks up only after a plugin reload.
         print("kunglao-upgrade: skill package updated — run /reload-plugins "
               "in Claude Code to activate")
-        if anchor_rc != RC_OK:
-            if anchor_pending is not None:
-                print(json.dumps(anchor_pending, ensure_ascii=False))
-            return anchor_rc
     except Exception as exc:  # noqa: BLE001 — incomplete, not silent success
         tail_error = f"{type(exc).__name__}: {exc}"
         _emit_event("summary", "fail", tail_error)

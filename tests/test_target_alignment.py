@@ -31,6 +31,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
+from _factories import seed_oracle_anchors
+
 FLAG_NAME = "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS"
 
 # #455 exit code: undecided intake item -> pending list on stdout, fail-closed.
@@ -46,6 +48,9 @@ def init_ws(tmp_path: Path) -> Path:
     ws = tmp_path / "ws"
     (ws / "bins").mkdir(parents=True)
     (ws / "runs").mkdir()
+    # completed anchor interview: these tests pin target/type alignment and
+    # env faces; a blank-anchor run now pends (exit 8) before any of them
+    seed_oracle_anchors(ws)
     return ws
 
 
@@ -418,7 +423,7 @@ def _stub_toolchain_probes(monkeypatch):
                         lambda args, timeout=10: (1, "", "stubbed"))
     monkeypatch.setattr(toolchain, "_tcp_connect", _count_tcp)
     monkeypatch.setattr(toolchain.mcp_probe, "check_mcp",
-                        lambda ws, t: [])
+                        lambda ws, t, claude_json=None: [])
     monkeypatch.setattr(toolchain.mcp_probe, "registered_names",
                         lambda *a, **k: set())
     monkeypatch.delenv("KUNGLAO_VM_HOST", raising=False)
@@ -531,6 +536,9 @@ def test_no_input_calls_in_scripts():
 def _write_task_spec(ws: Path, vm_detonation: str = "forbidden",
                      out: list[str] | None = None) -> None:
     (ws / "task_spec.yaml").write_text(
+        "goal_verbatim: recover the license check\n"
+        "success_criterion: key matches the captured blob\n"
+        "verification_method: static\n"
         "primary_questions:\n  - id: q1\n    q: 'is it family X?'\n"
         "    need: yes_no_with_evidence\n"
         f"scope:\n  in: []\n  out: {out or ['bitcoin_clipper', 'anti_analysis_strings']}\n"
@@ -553,13 +561,16 @@ def test_claudemd_carries_task_spec_constraints(init_ws: Path):
     assert "anti_analysis_strings" in claude
 
 
-def test_claudemd_without_task_spec_omits_section(init_ws: Path):
+def test_claudemd_without_task_spec_pends_before_render(init_ws: Path):
+    """An absent task_spec means absent anchors: the interview pends
+    (exit 8) and no CLAUDE.md is ever rendered from an unanswered
+    contract (the anchor answers are first-class task_spec fields)."""
+    (init_ws / "task_spec.yaml").unlink(missing_ok=True)
     _make_pe(init_ws, "sample.exe")
     r = _run_init(init_ws, ["--skip-toolchain", "--type", "windows"])
-    assert r.returncode == RC_OK, f"{r.stdout}{r.stderr}"
-    claude = (init_ws / "CLAUDE.md").read_text(encoding="utf-8")
-    assert "Task constraints" not in claude
-    assert "{{" not in claude, "placeholder residue in rendered CLAUDE.md"
+    assert r.returncode == RC_PENDING_DECISIONS, f"{r.stdout}{r.stderr}"
+    assert not (init_ws / "CLAUDE.md").exists()
+    assert "goal_verbatim" in _pending(r)["decisions"][0]["decision_id"]
 
 
 def test_claudemd_corrupt_task_spec_fails_closed(init_ws: Path):

@@ -131,11 +131,32 @@ def _negotiable_missing(report: "toolchain.ToolchainReport",
 
 def has_non_negotiable_hard_fail(report: "toolchain.ToolchainReport") -> bool:
     """True when any FAIL+HARD item is OUTSIDE the negotiable surface —
-    the exit-4 human-event lane owns the round (#448 / #304)."""
+    the exit-4 human-event lane owns the round (#448 / #304).
+
+    issue 202: an item carrying a pending CHOICE is not on the exit-4 lane — it
+    pends through the #455 channel instead (a choice, not a blocker)."""
     return any(i.status == toolchain.Status.FAIL
                and i.tier == toolchain.Tier.HARD
                and i.name not in NEGOTIABLE
+               and getattr(i, "pending_decision", None) is None
                for i in report.items)
+
+
+def _pending_choice_decisions(
+        report: "toolchain.ToolchainReport",
+        answers: dict[str, str],
+        ) -> list["decision_pending.PendingDecision"]:
+    """Unanswered pending CHOICE items (issue 202) as menu decisions — reused
+    verbatim (the gate built the PendingDecision; the menu relays it)."""
+    decisions: list[decision_pending.PendingDecision] = []
+    for item in report.items:
+        pd = getattr(item, "pending_decision", None)
+        if pd is None:
+            continue
+        if answers.get(pd.decision_id) is not None:
+            continue  # answered on a --resolve re-entry — never re-pend
+        decisions.append(pd)
+    return decisions
 
 
 def _install_command(name: str) -> str:
@@ -153,9 +174,12 @@ def negotiation_decisions(
         tool_dirs: tuple[Path, ...] | None = None,
         ) -> list["decision_pending.PendingDecision"]:
     """Build the install/use-path/skip/degrade menu for every unanswered
-    negotiable miss (#451 ②: enumerate FIRST, then ask)."""
+    negotiable miss (#451 ②: enumerate FIRST, then ask).
+
+    issue 202: pending CHOICE items (the decompiler lane) ride the same menu
+    channel — unanswered -> pended; answered -> never re-pended."""
     answers = answers or {}
-    decisions: list[decision_pending.PendingDecision] = []
+    decisions = _pending_choice_decisions(report, answers)
     for item in _negotiable_missing(report):
         if answers.get(f"install:{item.name}") is not None:
             continue  # answered on a --resolve re-entry — never re-pend
@@ -182,6 +206,26 @@ def negotiation_decisions(
     return decisions
 
 
+def _with_fail_note(report: "toolchain.ToolchainReport", name: str,
+                    note: str) -> "toolchain.ToolchainReport":
+    """Append `note` to item `name` while KEEPING the FAIL status (issue 202:
+    the local-IDA choice escalates to the HUMAN-ONLY license lane — it is
+    a recorded escalation, not a degrade). Immutable: new items list."""
+    new_items = []
+    for i in report.items:
+        if (i.name == name and i.status == toolchain.Status.FAIL
+                and i.tier == toolchain.Tier.HARD):
+            new_items.append(toolchain.CheckResult(
+                name=i.name, status=toolchain.Status.FAIL,
+                tier=toolchain.Tier.HARD, detail=i.detail + note,
+                root_cause=i.root_cause, probe=i.probe,
+                fix=i.fix, next_action=i.next_action))
+        else:
+            new_items.append(i)
+    return toolchain.ToolchainReport(project_type=report.project_type,
+                                     items=new_items)
+
+
 def _with_note(report: "toolchain.ToolchainReport", name: str, note: str,
                ) -> "toolchain.ToolchainReport":
     """Immutable degrade: a NEW report where item `name` (still FAIL+HARD)
@@ -200,6 +244,60 @@ def _with_note(report: "toolchain.ToolchainReport", name: str, note: str,
             new_items.append(i)
     return toolchain.ToolchainReport(project_type=report.project_type,
                                      items=new_items)
+
+
+def _apply_decompiler_lane_answer(
+        report: "toolchain.ToolchainReport", ws: Path, project_type: str,
+        answer: str | None, task_spec: dict | None = None,
+        ) -> "toolchain.ToolchainReport | None":
+    """decompiler_lane CHOICE answers -> report dispositions (issue 202).
+
+    install-local-ida   -> stays FAIL: HUMAN-ONLY (license purchase is the
+                           operator's); the detail carries the license note.
+    install-ghidra      -> the consented Ghidra install plan runs (AGENT-DO),
+                           then ONE fresh re-probe decides (a real PASS
+                           needs the re-probe to find Ghidra).
+    skip-decompiler-lane -> WARN degrade with the honest note (a real user
+                           choice; native-code static depth is limited).
+    None -> None (no lane answer this round). Anything else -> ValueError
+    (fail-closed, never a silent default)."""
+    if answer is None:
+        return None
+    ans = str(answer).strip()
+    if ans == "install-local-ida":
+        return _with_fail_note(
+            report, "decompiler",
+            " — chosen: local IDA (HUMAN-ONLY: license purchase is the "
+            "operator's; install + license IDA, then re-run, #202)")
+    if ans == "skip-decompiler-lane":
+        return _with_note(
+            report, "decompiler",
+            " — decompiler lane skipped via --resolve (#202 choice); "
+            "static analysis proceeds degraded (WARN, native-code depth "
+            "limited)")
+    if ans == "install-ghidra":
+        plan = toolchain_install.INSTALL_PLANS["decompiler"]
+        rc, out, err = toolchain_install._run_install_plan(
+            "decompiler", plan, True, ws)
+        if rc == 0:
+            print("kunglao-negotiation: decompiler_lane=install-ghidra "
+                  "consented via --resolve — installed, re-probing "
+                  "toolchain", file=sys.stderr)
+            if task_spec is not None:
+                return toolchain.check(ws, project_type, task_spec=task_spec)
+            return toolchain.check(ws, project_type)
+        print(f"kunglao-negotiation: ghidra install FAILED "
+              f"({(err or out or 'unknown error')[:120]}) — stays FAIL",
+              file=sys.stderr)
+        return _with_note(
+            report, "decompiler",
+            f" — chosen: install Ghidra; #408 installer FAILED "
+            f"({(err or out or 'unknown error')[:120]}) — re-run after "
+            f"Ghidra is installed")
+    raise ValueError(
+        f"answer for decision 'decompiler_lane' must be one of "
+        f"install-local-ida/install-ghidra/skip-decompiler-lane, "
+        f"got {ans!r}")
 
 
 def apply_answers(report: "toolchain.ToolchainReport", ws: Path,
@@ -227,6 +325,13 @@ def apply_answers(report: "toolchain.ToolchainReport", ws: Path,
                 choice — the only place that wording is allowed).
     """
     answers = dict(answers or {})
+    # 0. the decompiler-lane CHOICE answer is validated (fail-closed)
+    # and applied as its own disposition lane before anything else.
+    lane_answer = answers.pop("decompiler_lane", None)
+    lane_result = _apply_decompiler_lane_answer(
+        report, ws, project_type, lane_answer, task_spec=task_spec)
+    if lane_result is not None:
+        return lane_result
     # 1. validate everything first (no side effects on a malformed round)
     dispositions: dict[str, str] = {}
     for item in _negotiable_missing(report):

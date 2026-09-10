@@ -317,6 +317,9 @@ NOT_AUTO_INSTALLABLE: dict[str, str] = {
     "debug_flag": "device property — human-configure (#451)",
     "frida_server": "device-side deploy — scripts/deploy_shim.py deploy "
                     "(#477 ③)",
+    "uv": "installed by the toolchain gate itself (check_uv AGENT-DO face: "
+          "astral installer under KUNGLAO_AGENT_DO=1, then re-probe) — "
+          "never a consent-plan item",
     "android_server": "device-side deploy — scripts/deploy_shim.py deploy "
                       "(#477 ③)",
     "jdwp_debug": "capability of a running debuggable app — not a package",

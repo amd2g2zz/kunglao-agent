@@ -31,12 +31,23 @@ analysis; a workspace that is not initialized is refused work.
    (conservative default — an absent task_spec is byte-identical to a
    VM-required workspace).
 
-   **Oracle anchors (REQUIRED — same round)** — after the needs-first
-   questions, ask the three answers that steer the whole loop, and write
-   them as first-class `task_spec.yaml` fields (blank in the template):
+   **Oracle anchors (REQUIRED — asked by the script)** — init itself
+   asks the three answers that steer the whole loop through the
+   structured pending-decision channel: while any anchor is blank in
+   `task_spec.yaml`, the init run prints a pending document (stdout,
+   exit 8) with decision ids `goal_verbatim` / `success_criterion` /
+   `verification_method` (the last is a choice over
+   `reproduction | replay-evidence | static | manual`). Collect the
+   answers via the native question channel (AskUserQuestion — never
+   script stdin), write `{decision_id: value}` JSON, and re-run with
+   `--resolve <answers.json>`: the re-entry fills only the missing
+   fields and pre-fills `task-oracle.yaml` `task_text` from the
+   verbatim goal. Init never completes with blank anchors — there is no
+   exit-0-with-blank-anchors run to repair later. Your asking role is
+   to RELAY the machine's questions well, not to decide whether to ask:
    1. `goal_verbatim` — the user's goal, restated VERBATIM (never
       paraphrased; the verbatim form is what the completion oracle
-      judges, and init pre-fills `task-oracle.yaml` `task_text` from it).
+      judges).
    2. `success_criterion` — what counts as done, stated as a checkable
       end-state (the completion anchor).
    3. `verification_method` — how the result is verified, one of:
@@ -44,12 +55,11 @@ analysis; a workspace that is not initialized is refused work.
       controlled-comparison oracle: byte-matched pairs become admission
       and verdict requirements for every primary question) / `static` /
       `manual`.
-   While any anchor is blank the analysis entry refuses
-   (`kunglao analysis` exit 7) — collect all three or the workspace
-   cannot enter the loop; never guess or default an anchor. For help
-   turning a folk ask ("我要纯算") into these answers, point the user at
-   the README section **"How to state the task"**
-   (`README.md`, anchor `#how-to-state-the-task`).
+   While any anchor is blank the analysis entry also refuses
+   (`kunglao analysis` exit 7) — the second line of defense; never
+   guess or default an anchor. For help turning a folk ask ("我要纯算")
+   into these answers, point the user at the README section **"How to
+   state the task"** (`README.md`, anchor `#how-to-state-the-task`).
 1. **Target alignment ** — run
    `python <SKILL_DIR>/scripts/kunglao-init.py <workspace>` FIRST; undecided
    intake items (workspace path -> analysis target -> project type) exit 8

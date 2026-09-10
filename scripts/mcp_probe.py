@@ -289,6 +289,35 @@ def check_mcp(ws: Path, project_type: str,
 INVENTORY_SCHEMA = "mcp-inventory/1"
 
 
+def registered_server_urls(claude_json: Path | None,
+                           ws: Path) -> dict[str, str]:
+    """Registered endpoint urls per server name (issue 202 reachability face).
+
+    First http url per canonical (lowercased) name across the three
+    registration surfaces. Read-only JSON reads; never spawns, never
+    connects. Secret hygiene: callers MUST render host:port only — a url
+    may carry a token in its path/query, so the full value never goes into
+    report details."""
+    urls: dict[str, str] = {}
+    if claude_json is not None:
+        data = _load_json(claude_json)
+        for name, cfg in (data.get("mcpServers") or {}).items():
+            url = (cfg or {}).get("url") if isinstance(cfg, dict) else None
+            if url:
+                urls.setdefault(name.lower(), str(url))
+        for _proj, cfg_p in (data.get("projects") or {}).items():
+            for name, cfg in ((cfg_p or {}).get("mcpServers") or {}).items():
+                url = (cfg or {}).get("url") if isinstance(cfg, dict) else None
+                if url:
+                    urls.setdefault(name.lower(), str(url))
+    ws_mcp = _load_json(ws / ".mcp.json")
+    for name, cfg in (ws_mcp.get("mcpServers") or {}).items():
+        url = (cfg or {}).get("url") if isinstance(cfg, dict) else None
+        if url:
+            urls.setdefault(name.lower(), str(url))
+    return urls
+
+
 def mcp_inventory(ws: Path, claude_json: Path | None = None) -> dict:
     """Enumerate REGISTERED servers across all three registration surfaces.
 

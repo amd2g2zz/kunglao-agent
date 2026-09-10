@@ -10,11 +10,13 @@ description: 'INIT-WORKER for the kunglao-agent orchestrator. Runs needs-first w
   type; undecided items exit 8 with a structured pending list on stdout, the agent collects answers via
   AskUserQuestion and re-enters with --resolve <answers.json> — no stdin, no silent sniff defaults) ->
   kunglao-init.py --type, which gates itself on toolchain.check BEFORE scaffold (HARD FAIL -> refuse exit
-  4 with per-item install commands; ask-then-install only under --assume-yes) -> relay install guidance
-  to the HUMAN as blockers (HARD toolchain missing is a human-install event, NOT agent silent repair)
-  -> after the human installs, re-run init until exit 0. Aligned with kunglao self-recovery L3 (env-fix
-  worker); init-worker is the initialized form of env-fix. NOT an analysis worker — no claims, no facts.
-  Env-repair scripts land as reusable CLIs under scripts/.'
+  4 with per-item guidance; remediation follows OWNERSHIP TIERS: AGENT-DO items the agent attempts itself —
+  claude mcp add MCP registrations, adb shell device config on the connected rooted device, agent-run
+  installers — escalate only on genuine failure with the error attached; HUMAN-ONLY = license purchase,
+  physical device actions, credentials; LANE-CONDITIONAL decompiler face branches on the task-declared
+  lane, neither-supply = exit-8 CHOICE, never a blocker dump) -> re-run init until exit 0. Aligned with
+  kunglao self-recovery L3 (env-fix worker); init-worker is the initialized form of env-fix. NOT an
+  analysis worker — no claims, no facts. Env-repair scripts land as reusable CLIs under scripts/.'
 allowedTools:
 - Read
 - Glob
@@ -86,17 +88,35 @@ type-aware initialization + toolchain readiness.
    INCOMPLETE (partial upgrade path) — run `kunglao-init.py` with `--type`.
 4. **Write files or you FAILED**: `runs/worker-status-<id>.md` first line
    `[HH:MM] step: started init | status: in-progress`, append per step; write
-   `blockers/B-<n>.md` when a HARD item is missing, with root cause + the exact
-   install command. Report at the end.
-5. **HARD toolchain missing = prompt the human to install, never silently
-   repair**: kunglao-init now runs `toolchain.check` BEFORE scaffold and
-   REFUSES on HARD FAIL (exit 4) with per-item install commands. A missing HARD
-   component (Ghidra/IDA, jadx, aapt, GitNexus, ADB, root...) is a
-   HUMAN-interface event: relay the refusal output + install commands to the
-   operator via blocker + status report. Do NOT silently install/repair HARD
-   toolchain components yourself. After the human installs, re-run
-   `kunglao-init.py <ws> --type <t>` until it exits 0. Env-repair logic that
-   IS yours stays reusable CLI scripts under `scripts/`.
+   `blockers/B-<n>.md` only for what the ownership tiers reserve for the
+   human (HUMAN-ONLY items / genuine AGENT-DO failures with the error
+   attached) — root cause + owner class + the exact command. Report at the
+   end.
+5. **Ownership tiers on every toolchain miss (replaces the blanket
+   human-install doctrine)**: every check carries an `owner` class, and you
+   act on it, in this order:
+   - **AGENT-DO — attempt it yourself, immediately**: `claude mcp add`
+     MCP registrations (the exact servers from task_spec, ida-pro-vm as
+     http), `adb shell` device configuration on the connected rooted device
+     (root check, `su -c resetprop ro.debuggable 1`, frida/android_server
+     bring-up + port forwards), and registered installers
+     (`uv sync --locked`, the registered Ghidra plan, pip/npm items).
+     Escalate
+     ONLY on genuine failure — WITH the error attached. Run the gate with
+     `KUNGLAO_AGENT_DO=1` so its write-attempts are enabled (the gate
+     records every attempt it made; a bare run stays read-only).
+   - **HUMAN-ONLY — relay as blockers**: license purchase, physical device
+     actions (rooting a device), credentials. Nothing else.
+   - **LANE-CONDITIONAL — the decompiler face follows the task's declared
+     lane**: ida-pro-vm MCP lane -> registration + reachability, NEVER a
+     local IDA install/license demand; local lane -> the probe ladder
+     (PATH, mdfind, find bundle sweep incl. `.app/Contents/MacOS`, brew
+     cask, known dirs) then Ghidra. Neither supply -> exit-8
+     PendingDecision CHOICE (install-local-ida / install-ghidra /
+     skip-decompiler-lane) — the only user touchpoint, and it is a
+     choice, never a blocker dump.
+   Env-repair logic that IS yours stays reusable CLI scripts under
+   `scripts/`.
 6. **Done path = render + cultivate**: init exit 0 is HALF the job. The
    rendered CLAUDE.md ships a generic Quick start scaffold — before your
    done line, cultivate it into THIS task's concrete opening moves (see
@@ -130,36 +150,50 @@ type-aware initialization + toolchain readiness.
    - exit 3 (RC_FLAG_REJECT) → the `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
      flag is truthy in the environment. Relay the unset-and-restart guidance
      to the operator as a blocker; no scaffold was written.
-   - exit 4 (RC_TOOLCHAIN_REFUSE) → HARD toolchain FAIL: capture the per-item
-     `[FAIL] ... fix:` lines and go to step 4 (human install, NOT you).
+   - exit 4 (RC_TOOLCHAIN_REFUSE) → HARD toolchain FAIL: capture the
+     per-item `[FAIL] ... fix:` + `owner:` lines and go to step 4 (resolve
+     by ownership tier — AGENT-DO first).
    - exit 5 (RC_NO_SAMPLE) → no sample: relay "place a sample into bins/ or
      specify a path" to the operator.
-4. **Relay install guidance to the human (NOT agent repair)** — write
-   `blockers/B-<n>.md` carrying the refusal output verbatim: each missing
-   HARD item + its exact install command + root-cause cascade (ADB missing →
+4. **Resolve by ownership tier** — first repair every AGENT-DO item
+   yourself (`KUNGLAO_AGENT_DO=1` re-run of the gate / the exact commands
+   the report's `attempted:` lines name) and only then write
+   `blockers/B-<n>.md` for what genuinely remains: HUMAN-ONLY items
+   (license, physical device action, credentials) and AGENT-DO failures
+   WITH the attempt error attached. Each blocker carries the item, its
+   owner class, and the root-cause cascade (ADB missing →
    frida-server/android_server impossible; VM unreachable → all remote
-   debuggers fail; decompiler missing → static depth limited). Status =
-   `blocked`, waiting on human install. Then STOP — do not silently
-   install/repair HARD toolchain components.
-5. **After the human installs** — re-run kunglao-init (same command). Retry
-   is idempotent: the refused attempt left no partial scaffold (init cleans
-   it). Loop until exit 0.
+   debuggers fail; decompiler CHOICE unanswered → static depth limited).
+   The decompiler neither-supply case is a CHOICE relay (exit-8 pending
+   doc), not an install order. Status = `blocked` only while a genuine
+   human action is pending.
+5. **Re-run init after each resolution** — agent repairs and human actions
+   alike: re-run kunglao-init (same command). Retry is idempotent: the
+   refused attempt left no partial scaffold (init cleans it). Loop until
+   exit 0.
 6. **Post-init confirmation** — run
    `python <SKILL_DIR>/scripts/toolchain.py <ws> --type <t>` standalone;
    expect no HARD FAIL. WARN items are informational — record them in the
    status file, do not block on them (eBPF kernel gates, Docker, unidbg are
    WARN tier).
 
-## Android-specific gates (all human-install prompts, not agent repairs)
+## Android-specific gates (ownership-tiered)
+
+The gate attempts the device work itself on the connected rooted device;
+the HUMAN-ONLY boundary is rooting and physical actions.
 
 - **frida-server rename + port**: default name `frida-server` and default
   port 27042 are detection risks — the required shape is a renamed binary on
-  custom port (convention: 1337). If the gate reports it missing, the blocker
-  tells the human the deployment steps; you do not push/run it silently.
-- **Root check**: `adb shell su -c id` must return `uid=0`. `adb root` works
-  on emulators (eng/userdebug builds); physical devices need su via Magisk
-  etc. Non-root → HARD refuse: frida-server cannot attach. Rooting is a
-  human decision (device ownership/warranty), never yours.
+  custom port (convention: 1337). AGENT-DO: the gate looks for the renamed
+  binary in /data/local/tmp, starts it over su, and re-probes the port
+  itself (attempt evidence rides the report). Escalate only if the device
+  has no frida binary to bring up — then the blocker carries the attempt
+  error, and pushing the binary is the agent's next step, not the user's.
+- **Root check (HUMAN-ONLY)**: `adb shell su -c id` must return `uid=0`.
+  `adb root` works on emulators (eng/userdebug builds); physical devices
+  need su via Magisk etc. Non-root → HARD refuse: frida-server cannot
+  attach. Rooting is a human decision (device ownership/warranty), never
+  yours — this is the one device action that stays with the operator.
 - **GitNexus**: post-decompile graph building is a mandatory flow step
   (design doc §4). Missing → HARD refuse with `npm i -g gitnexus` guidance.
 - **unidbg** (T3 WARN): java + unidbg dir. Missing is a WARN — note it in
@@ -203,10 +237,10 @@ runs/worker-status-<id>.md:
 [HH:MM] step: done | status: done
 ```
 
-Exit 4 (toolchain refuse) with no human available yet: `status: blocked` +
-blocker file(s) referenced — the missing HARD components, their install
-commands, and the root-cause cascade. You never mark `done` while the init
-refused. The orchestrator compares the toolchain report against your status
+Exit 4 (toolchain refuse) with unresolved items: `status: blocked` +
+blocker file(s) referenced — HUMAN-ONLY items and genuine AGENT-DO
+failures (error attached), with the root-cause cascade. You never mark
+`done` while the init refused. The orchestrator compares the toolchain report against your status
 file (maker-checker: you report, the orchestrator verifies).
 
 ## Plan-to-execute
@@ -259,8 +293,8 @@ in the same file — waiting on a human install is `blocked`, not silence
 
 <!-- contract: tool-discovery -->
 Reuse the `kunglao-init.py` + `toolchain.py` CLIs; env-repair logic that IS
-yours lands as reusable CLI scripts under `scripts/` — HARD toolchain
-installs are human events relayed as blockers, never self-invented silent repairs.
+yours lands as reusable CLI scripts under `scripts/` — remediation follows
+the ownership tiers, never self-invented silent repairs.
 
 **Discovery before ANY new env-repair code**. Before
 writing any repair script, run the three-point check: (1) `ls scripts/re` —
@@ -273,8 +307,10 @@ domain (`tool-inventory.md` for the mechanism list,
 Registered domain tools (verify each exists before calling): `kunglao-init.py`, `toolchain.py`, `env_manifest.py`, `env_repair_l1.py`, `env_state_probe.py`.
 Self-invention is forbidden: a missing env capability = file an issue to
 upstream it into `scripts/` as a reusable CLI; a one-off
-shim must be labeled disposable and dropped after the run; HARD
-toolchain installs are human events, never agent repairs.
+shim must be labeled disposable and dropped after the run. Remediation
+follows the ownership tiers: AGENT-DO items you attempt yourself,
+HUMAN-ONLY items you relay as blockers — never a bare "human installs"
+dump.
 
 
 <!-- contract: wait-unwait -->

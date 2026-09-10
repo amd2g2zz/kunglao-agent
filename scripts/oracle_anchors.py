@@ -19,7 +19,8 @@ guessed anchor, and the script layer never invents one.
 
 Consumers:
   kunglao-init      pre-fills the completion-oracle task_text from the
-                    verbatim goal and prints a reminder while answers are
+                    verbatim goal and structurally asks for the answers
+                    through the pending-decision channel while they are
                     missing
   kunglao analysis  refuses entry (rc=7) while any answer is missing
   replay_equivalence.declared_reproduction_qids
@@ -87,7 +88,7 @@ def load(ws) -> dict:
 
     {} when the file is absent or unparseable — callers treat an unreadable
     contract as unanswered (the analysis-entry gate refuses; the init
-    reminder prints). Non-mapping files are {} for the same reason.
+    intake asks). Non-mapping files are {} for the same reason.
     """
     path = Path(ws) / TASK_SPEC_FILENAME
     if not path.exists():
@@ -201,11 +202,3 @@ def apply(ws, values: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
     return path
-
-
-def reminder(ws) -> str:
-    """The init stdout line while answers are missing; "" when complete."""
-    ok, gaps, state = inspect(ws)
-    if ok:
-        return ""
-    return "kunglao-init: NOTE " + refusal_hint(gaps, state)
