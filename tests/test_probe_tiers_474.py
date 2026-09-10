@@ -323,8 +323,10 @@ def test_decompiler_registered_mcp_only_is_warn_not_pass(
 
 def test_decompiler_cli_presence_is_warn_not_pass(
         kunglao_ws, tmp_path, monkeypatch):
-    """CLI analyzeHeadless exists (presence) but capability not trialed ->
-    ghidra item WARN 'capability unverified', not PASS."""
+    """The 202 gate rework supersedes the probe-tier three-state here: the
+    probed-found CLI binary now PASSES with the wired path (presence still
+    says nothing about CAPABILITY — the --capability trial remains the
+    stronger claim; the probe strategy is recorded in the detail)."""
     import toolchain as tc
     fake_claude = tmp_path / "fake-claude.json"
     fake_claude.write_text(json.dumps({"mcpServers": {}}), encoding="utf-8")
@@ -341,10 +343,10 @@ def test_decompiler_cli_presence_is_warn_not_pass(
 
     report = tc.check(kunglao_ws, "windows")
     item = next(i for i in report.items if i.name == "ghidra")
-    assert item.status == tc.Status.WARN, \
-        f"presence-only CLI must be WARN, not PASS: {item}"
-    assert "capability unverified" in item.detail.lower(), item
-    assert item.probe == tc.ProbeTier.PRESENCE
+    assert item.status == tc.Status.PASS, \
+        f"#202: probed-found Ghidra must PASS with the wired path: {item}"
+    assert "analyzeHeadless" in item.detail, item
+    assert platform_paths.analyze_headless_name() in item.detail
 
 
 def test_decompiler_absent_still_fails(kunglao_ws, tmp_path, monkeypatch):
