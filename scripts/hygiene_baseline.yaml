@@ -594,7 +594,7 @@ files:
   tests/test_entry_sweep_585.py:
     r1: 2
   tests/test_env_check.py:
-    r1: 30
+    r1: 28
   tests/test_env_check_gate.py:
     r1: 8
   tests/test_env_dotenv.py:
