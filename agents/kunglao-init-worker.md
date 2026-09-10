@@ -57,16 +57,11 @@ type-aware initialization + toolchain readiness.
 
 1. **Target alignment order (script intake step 0)**: run
    `kunglao-init.py <ws>` (flags from the dispatch prompt: `--type`,
-   `--target`, `--lane`). Undecided items exit **8** with a structured
-   pending list on
+   `--target`). Undecided items exit **8** with a structured pending list on
    stdout (JSON): workspace -> analysis target (multi-file `bins/` asks,
    never sorts) -> target_object (MSI/APK/ZIP containers list their
    contents; the type is NEVER guessed) -> project type (a magic-byte hint
-   MZ/`\x7fELF` rides in the pending context as a suggestion only) -> the
-   LANE (`lane: malware|algorithm|protocol|web|data|app`, issue 208: what
-   material the task analyzes — asked with NO default when the workspace
-   declares nothing, because the answer decides whether `bins/` is
-   required at all).
+   MZ/`\x7fELF` rides in the pending context as a suggestion only).
    Collect the answers via AskUserQuestion, write `{decision_id: value}`
    JSON, re-run with `--resolve <answers.json>`. Stdin is NOT a user
    channel — never answer via `input()` (it no longer exists).
@@ -76,13 +71,6 @@ type-aware initialization + toolchain readiness.
    gate runs — kunglao-init reads it to derive the environment layers
    (static-only: `constraints.dynamic_re: forbidden` drops the VM checks
    to WARN; absent/unreadable fields stay HARD).
-   Lane doctrine: `malware` keeps the binary-sample contract (`bins/<sha>`
-   required, RC_NO_SAMPLE, MCP/RE toolchain); `algorithm` needs no sample
-   (uv + python + reference corpora); `protocol` / `web` / `data` / `app`
-   are documented stub lanes (routed, rendered with their material line,
-   no lane-specific toolchain claimed yet). A task_spec WITHOUT a lane
-   field keeps today's malware behavior — never re-interview a legacy
-   workspace for a lane it never declared.
    The same round MUST also collect the three REQUIRED oracle anchors and
    write them as first-class `task_spec.yaml` fields: `goal_verbatim`
    (the user's goal VERBATIM), `success_criterion` (what counts as done),
@@ -137,18 +125,13 @@ type-aware initialization + toolchain readiness.
 
 ## Workflow
 
-1. **Read workspace state** — `analysis_state.txt` (project_type? lane?),
-   `claim-register.yaml` (`[initialized]` marker?), `bins/` (sample present
-   — only the malware lane needs it; read `lane:` in `task_spec.yaml` to
-   know whether an empty `bins/` is a problem at all).
+1. **Read workspace state** — `analysis_state.txt` (project_type?),
+   `claim-register.yaml` (`[initialized]` marker?), `bins/` (sample present).
    Check `blockers/` for existing init blockers.
 2. **Determine type** — per the golden rule order above. Record `reasoning:`
    in the status file.
 3. **Run init (it gates itself)** —
    `python <SKILL_DIR>/scripts/kunglao-init.py <ws> --type <t>`
-   (add `--lane <lane>` only to DECLARE it explicitly — the declared lane
-   from `task_spec.yaml` / `--resolve` otherwise wins; a fresh workspace
-   that declares nothing is asked).
    kunglao-init runs `toolchain.check` BEFORE scaffold.
    Exit codes are the documented RC contract — branch on the code,
    never on stderr text:
@@ -170,12 +153,8 @@ type-aware initialization + toolchain readiness.
    - exit 4 (RC_TOOLCHAIN_REFUSE) → HARD toolchain FAIL: capture the
      per-item `[FAIL] ... fix:` + `owner:` lines and go to step 4 (resolve
      by ownership tier — AGENT-DO first).
-   - exit 5 (RC_NO_SAMPLE) → the declared lane is `malware` and `bins/` is
-     empty: relay "place a sample into bins/ or specify a path" to the
-     operator — and, when the task has no binary sample at all, relay the
-     lane escape the prompt names (`--lane algorithm|protocol|web|data|app`
-     or `lane:` in `task_spec.yaml`) instead of asking for a sample that
-     does not exist.
+   - exit 5 (RC_NO_SAMPLE) → no sample: relay "place a sample into bins/ or
+     specify a path" to the operator.
 4. **Resolve by ownership tier** — first repair every AGENT-DO item
    yourself (`KUNGLAO_AGENT_DO=1` re-run of the gate / the exact commands
    the report's `attempted:` lines name) and only then write
@@ -220,40 +199,6 @@ the HUMAN-ONLY boundary is rooting and physical actions.
 - **unidbg** (T3 WARN): java + unidbg dir. Missing is a WARN — note it in
   the status file when the analysis is expected to need the fallback path
   (AND-gated: frida data sufficient + decompilation done + still stuck).
-
-## State-layered tool diagnosis
-
-On EVERY tool miss, classify at the failed layer before acting — a single
-symptom is never evidence of total failure ("MCP unreachable" is not "the
-MCP is dead": the register layer passed and the server venv was broken —
-connection layer). Walk the ladder top-down and repair at the FIRST
-failing layer:
-
-```
-installed?   -> no -> install (ownership tier; issue 202)
-registered?  -> no -> register (`claude mcp add`, agent-do)
-connects?    -> no -> connection-layer diagnosis (port/token/env/deps;
-                      broken venv -> `uv sync --locked` in the server repo)
-capable?     -> no -> capability probe (version/API/contract)
-input ready? -> no -> input completeness (path/permission/format)
-```
-
-- **Repair AT the failed layer.** Jumping to a different tool on a layer
-  failure is INVALID; the decompiler fallback belongs to the lane XOR
-  family (issue 210), chosen by the task lane — never triggered by a
-  layer failure.
-- **Gathered facts gate the next action.** Before running an install,
-  check it against facts already in hand via `scripts/decision_lint.py`
-  (`echo '<facts-json>' | python <SKILL_DIR>/scripts/decision_lint.py
-  "<action>"`; exit 1 = BLOCKED): an x86_64 libidalib + python 3.14
-  forbids the binding install before it runs. The lint is pure — you
-  pass the facts in, it never probes the environment.
-- **No fallback while the primary is present-and-repairable** — that
-  recommendation is decision invalidity, not a repair.
-- **Reports name the layer**: "connection layer broken, repair = uv sync
-  in the venv" — never a "dead" verdict. This binds the `toolchain.py`
-  lines you relay: when a registered MCP endpoint is unreachable, the
-  detail/fix name the connection layer and propose the agent-do repair.
 
 ## Handbook cultivation (render + cultivate)
 

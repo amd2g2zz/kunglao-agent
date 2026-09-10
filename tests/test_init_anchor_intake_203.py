@@ -123,27 +123,13 @@ class TestInitStructuralAsking:
         assert tuple(method["options"]) == oa.METHOD_OPTIONS
 
     def test_pending_exit_writes_zero_scaffold(self, tmp_path):
-        """A pended init writes zero ANALYSIS scaffold. Owner priority
-        update (issue 212): the statusline registration deliberately runs
-        FIRST — before the interview concludes — so a pended run still
-        leaves the operator's visible success/failure signal. Sanctioned
-        residue on a pended run is therefore exactly one carrier:
-        .claude/settings.json holding ONLY the statusLine key (no hooks
-        wiring, no scaffold carriers, no analysis state)."""
         ws = _fresh_ws(tmp_path)
         r = _run_init(ws, ["--type", "windows"])
         assert r.returncode == 8
         assert not (ws / "claim-register.yaml").exists()
         assert not (ws / "CLAUDE.md").exists()
         assert not (ws / "task-oracle.yaml").exists()
-        settings = ws / ".claude" / "settings.json"
-        doc = (json.loads(settings.read_text(encoding="utf-8"))
-               if settings.exists() else {})
-        assert set(doc) <= {"statusLine"}, \
-            f"pended init may write only the statusline carrier: {sorted(doc)}"
-        assert "statusLine" in doc, \
-            "the statusline registration is the FIRST step — it must survive" \
-            " a pended run (owner priority update)"
+        assert not (ws / ".claude").exists()
 
     def test_resolve_round_trip_writes_anchors_and_prefills_oracle(
             self, tmp_path):

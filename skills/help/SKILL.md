@@ -23,7 +23,7 @@ usage list (the table below) and stop. There is no missing-argument case.
 | Subcommand | Arguments | Purpose | Example |
 |---|---|---|---|
 | `/kunglao-agent` | `init <ws>` / `analysis <ws>` / `resume <ws>` / `upgrade <ws>` / `help` | command menu — with no args prints this list and waits | `/kunglao-agent` |
-| `/kunglao-agent:init` | `<workspace> [--type windows\|linux\|android\|web\|macos] [--lane malware\|algorithm\|protocol\|web\|data\|app]` | initialize a workspace (scaffold + CLAUDE.md + lane-material mount + task_spec) | `/kunglao-agent:init ~/cases/synth-dropper --type windows` · `/kunglao-agent:init ~/cases/codec --lane algorithm --type linux` |
+| `/kunglao-agent:init` | `<workspace> [--type windows\|linux\|android]` | initialize a workspace (scaffold + CLAUDE.md + sample mount + task_spec) | `/kunglao-agent:init ~/cases/synth-dropper --type windows` |
 | `/kunglao-agent:analysis` | `<workspace>` | enter the convergence loop on an initialized workspace | `/kunglao-agent:analysis ~/cases/synth-dropper` |
 | `/kunglao-agent:resume` | `<workspace>` | crash/reboot recovery: read-only breakpoint brief + re-arm advice | `/kunglao-agent:resume ~/cases/synth-dropper` |
 | `/kunglao-agent:upgrade` | `<workspace> [--dry-run]` | forward-only workspace framework-scaffold migration — hooks rewire + template refresh, user data read-only; use when a stale-gate refusal points here | `/kunglao-agent:upgrade ~/cases/synth-dropper` |

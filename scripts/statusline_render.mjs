@@ -18,12 +18,6 @@
 //   (entropy_face)        while H flat = luck/fake)    the SAME h_bits/h_trend ride the tick
 //                                                      report face (scripts/entropy_face.py);
 //                                                      also gates exploration budget
-//   rank chip (R:)        which action the sampler     #107 Thompson sample IS the dispatch
-//   (rank_face)           puts first right now, and    order — kunglao-decide + the dispatch
-//                         how old that ranking is     gate (worker_budget.check_priority) rank
-//                                                      through the same seed; the rank_log ✖
-//                                                      face is the fail-open emit crash made
-//                                                      visible (issue 218)
 //   health dots x3        oracle / retro / dormant     #473 completion-gate power (oracle),
 //                         one-glance liveness          #38 backtrack gate (retro lag < 8),
 //                                                      #127 detector liveness (no DORMANT)
@@ -106,16 +100,7 @@ const NOW_MS = process.env.KUNGLAO_STATUSLINE_NOW_MS !== undefined
 const FLASH_WINDOW_MS = 5000; // 5s fade window (render-clock side, kept)
 
 // Four-meaning palette (ANSI SGR; color IS data — no decorative hues).
-// #212 terminal degradation (owner reference pattern): NO_COLOR or
-// TERM=dumb selects the ASCII tier — the same readable line, zero escape
-// sequences. (kunglao ships no truecolor tier: the four-meaning palette is
-// ANSI 256 by design, so the degradation chain is color -> ASCII.)
-const COLOR_OFF = process.env.NO_COLOR !== undefined
-  || process.env.TERM === 'dumb';
-const _plain = (s) => s;
-const PALETTE = COLOR_OFF ? {
-  cyan: _plain, green: _plain, amber: _plain, red: _plain, dim: _plain,
-} : {
+const PALETTE = {
   cyan: (s) => `\x1b[36m${s}\x1b[0m`,
   green: (s) => `\x1b[32m${s}\x1b[0m`,
   amber: (s) => `\x1b[33m${s}\x1b[0m`,
@@ -223,70 +208,6 @@ function entropyBadge(snap) {
   return PALETTE.amber(text);                          // flat/unknown = suspect
 }
 
-// Issue 218 Thompson rank chip: the top action of the latest rank_feeds run
-// (claim id + its sampled score), pure view over the producer's rank face.
-// Fresh ranking = cyan (working face), aged past the producer's staleness
-// budget = amber (stall-suspect: no recent ranking), and a failed emit =
-// red marker INSTEAD of the chip — the fail-open crash is visible, never
-// silent (the rank result itself was never disturbed). Absent = hidden.
-function rankBadge(snap) {
-  const log = snap.rank_log && typeof snap.rank_log === 'object' ? snap.rank_log : null;
-  if (log && log.ok === false) return PALETTE.red('R✖');
-  const rank = snap.rank && typeof snap.rank === 'object' ? snap.rank : null;
-  if (!rank || typeof rank.claim !== 'string' || !rank.claim) return '';
-  // A missing/unusable score hides the chip entirely — Number(null) === 0
-  // once rendered a fabricated `R:C-2 0.00`, which is a value the producer
-  // never computed (the absent face, never a placeholder).
-  const score = typeof rank.score === 'number' && Number.isFinite(rank.score)
-    ? rank.score
-    : null;
-  if (score === null) return '';
-  const text = `R:${rank.claim} ${score.toFixed(2)}`;
-  return rank.stale ? PALETTE.amber(text) : PALETTE.cyan(text);
-}
-
-// #212 difficulty badge: calibrated tier preferred (the mounted calibration
-// output), the raw-signals calibration score as fallback, the legacy string
-// key last. Absent data = hidden segment, never a placeholder.
-function difficultyBadge(snap) {
-  const d = snap.difficulty_src && typeof snap.difficulty_src === 'object'
-    ? snap.difficulty_src
-    : null;
-  if (d && d.tier) return PALETTE.amber(`D:${d.tier}`);
-  if (d && Number.isFinite(Number(d.score))) {
-    return PALETTE.amber(`D:${Number(d.score).toFixed(2)}`);
-  }
-  if (typeof snap.difficulty === 'string' && snap.difficulty) {
-    return PALETTE.amber(`D:${snap.difficulty}`);
-  }
-  return '';
-}
-
-// #212 perf segments: claims progress (closed/total, LIVE ledger — the
-// denominator grows as discovery registers claims), rolling win-rate
-// (#156 settlement stream), worker liveness. Absent = hidden.
-function perfSegments(perf) {
-  if (!perf || typeof perf !== 'object') return [];
-  const segs = [];
-  const claims = perf.claims && typeof perf.claims === 'object' ? perf.claims : null;
-  if (claims && Number(claims.total) > 0 && Number.isFinite(Number(claims.closed))) {
-    segs.push(PALETTE.dim(`C${Number(claims.closed)}/${Number(claims.total)}`));
-  }
-  const wr = Number(perf.win_rate);
-  if (Number.isFinite(wr) && wr > 0) {
-    const text = `W${Math.round(wr * 100)}%`;
-    segs.push(wr >= 0.5 ? PALETTE.green(text) : PALETTE.amber(text));
-  }
-  const workers = perf.workers && typeof perf.workers === 'object' ? perf.workers : null;
-  if (workers && Number(workers.total) > 0) {
-    const active = Number.isFinite(Number(workers.active)) ? Number(workers.active) : 0;
-    segs.push(active > 0
-      ? PALETTE.cyan(`w${active}/${Number(workers.total)}`)
-      : PALETTE.dim(`w0/${Number(workers.total)}`));
-  }
-  return segs;
-}
-
 function renderKunglao(snapPath, nowMs) {
   let snap;
   try {
@@ -316,10 +237,8 @@ function renderKunglao(snapPath, nowMs) {
   const hue = down ? 0
     : (idleStale ? STATE_HUE_FALLBACK.idle
                  : (snap.color?.hue ?? STATE_HUE_FALLBACK[state] ?? 220));
-  const stateColor = COLOR_OFF
-    ? _plain
-    : (s) =>
-      `\x1b[38;5;${Math.max(1, Math.min(230, Math.round((hue / 360) * 230) + 16))}m${s}\x1b[0m`;
+  const stateColor = (s) =>
+    `\x1b[38;5;${Math.max(1, Math.min(230, Math.round((hue / 360) * 230) + 16))}m${s}\x1b[0m`;
 
   // Value: sparkline of v_hist + percent (fine v_norm preferred, coarse PQ
   // fraction as fallback). The coarse path is a FIRST-CLASS render, not an
@@ -350,11 +269,8 @@ function renderKunglao(snapPath, nowMs) {
   }
 
   const badge = entropyBadge(snap);
-  const rankSeg = rankBadge(snap);
   const dots = healthDots(snap.health, down);
   const chip = taskChip(snap.now);
-  const diff = difficultyBadge(snap);
-  const perfSegs = perfSegments(snap.perf);
 
   // Flash (5s window, kept): producer-detected triggers ship {seq, ts, text}.
   let flash = '';
@@ -370,10 +286,7 @@ function renderKunglao(snapPath, nowMs) {
   const parts = [stateColor(`${glyph} ${stateLabel}`)];
   if (valueSeg) parts.push(valueSeg);
   if (badge) parts.push(badge);
-  if (rankSeg) parts.push(rankSeg);
-  if (diff) parts.push(diff);
   if (dots) parts.push(dots);
-  if (perfSegs.length) parts.push(...perfSegs);
   if (chip) parts.push(PALETTE.dim('│'), chip);
   if (flash) parts.push(flash.trim());
   return parts.join(' ');

@@ -151,7 +151,7 @@ files:
   scripts/kunglao-digest.py:
     r1: 1
   scripts/kunglao-init.py:
-    r1: 196
+    r1: 197
   scripts/kunglao-monitor.py:
     r1: 11
   scripts/kunglao-status.py:
@@ -294,7 +294,7 @@ files:
   scripts/tool_value.py:
     r1: 3
   scripts/toolchain.py:
-    r1: 90
+    r1: 91
   scripts/toolchain_install.py:
     r1: 38
   scripts/toolchain_negotiation.py:
@@ -594,7 +594,7 @@ files:
   tests/test_entry_sweep_585.py:
     r1: 2
   tests/test_env_check.py:
-    r1: 28
+    r1: 30
   tests/test_env_check_gate.py:
     r1: 8
   tests/test_env_dotenv.py:

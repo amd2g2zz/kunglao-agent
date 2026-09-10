@@ -1,6 +1,5 @@
 ---
 name: go-symbols
-lane: malware  # issue 208: analysis material contract — malware binary lane only
 description: Stage 3.9 Go symbol recovery via unstrip (Go samples only, die.json language=Go). Runs unstrip
   --info / default / --format ghidra / --xref / --data-at, parses output, and WRITES evidence/unstrip-info.json
   + unstrip-symbols.json + unstrip-ghidra-apply.py + unstrip-ghidra-hints.json. The hints file carries

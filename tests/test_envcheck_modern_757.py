@@ -735,10 +735,8 @@ def test_vm_unset_detail_delegates_to_fix_text(monkeypatch):
 
 def test_ghidra_unset_detail_delegates_to_fix_text(monkeypatch):
     import env_check
-    # issue 210: the GHIDRA_HOME row reads the ONE `decompiler` family fix
-    # text (the per-supply `ghidra` FIXES key is gone)
     monkeypatch.setitem(
-        tc.FIXES, "decompiler",
+        tc.FIXES, "ghidra",
         tc.ToolMeta(fix="SENTINEL-GHIDRA-FIX", description="d", url=None))
     monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", None)
     ok, detail = env_check.check_ghidra()
@@ -750,7 +748,7 @@ def test_ghidra_unset_detail_delegates_to_fix_text(monkeypatch):
 def test_ghidra_notfound_detail_delegates_to_fix_text(monkeypatch, tmp_path):
     import env_check
     monkeypatch.setitem(
-        tc.FIXES, "decompiler",
+        tc.FIXES, "ghidra",
         tc.ToolMeta(fix="SENTINEL-GHIDRA-FIX", description="d", url=None))
     missing = tmp_path / "nope" / "analyzeHeadless"
     monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", missing)

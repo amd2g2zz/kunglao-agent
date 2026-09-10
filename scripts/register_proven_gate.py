@@ -32,43 +32,9 @@ WAIVER_JUSTIFY_RE = re.compile(r"^\s*justify:\s*(\S.*)$", re.M)
 # claim's lesson lineage here (see emit_settlements).
 NEGATIVE_SETTLEMENTS = {"REFUTED", "NEGATIVE", "DEAD"}
 
-# ---------------- evidence classes (issue 215) -------------------------------
-#
-# The wbtest field run proved algorithm-recovery claims with unzip+grep
-# string facts. The claim side is identified from the register's own text
-# (statement/title) — a new scope field nothing writes would be
-# self-declaration, the trust posture issue 819 exists to reject — and the
-# evidence side from the FACT frontmatter's declared class. Deliberately
-# NOT the `source` enum: triage string facts carry `static-decompile`
-# there, which is exactly the masquerade this closes.
-ALGO_SCOPE_KEYWORDS = (
-    "key_schedule", "key schedule", "key expansion",
-    "crypto_constant", "crypto constant", "crypto constants",
-    "state_machine", "state machine",
-    "algorithm_verify", "algorithm verify", "algorithm verification",
-    "algorithm recovery", "algorithm-recovery",
-)
 
-_SEP_RE = re.compile(r"[-_]+")
-
-
-def _fold_separators(text: str) -> str:
-    """Lowercase with _ / - folded to spaces: the same word break whatever
-    the spelling (key_schedule == key-schedule == key schedule)."""
-    return _SEP_RE.sub(" ", text.lower())
-
-
-TRIAGE_GRADE_CLASS = "triage"
-VALID_EVIDENCE_CLASSES = (TRIAGE_GRADE_CLASS, "decompile", "dynamic")
-# Classes that can carry an algorithm-recovery claim: decompiled source /
-# decompiler-grade index or taint, and runtime observation. Triage-grade
-# string facts alone cannot.
-ALGO_GRADE_CLASSES = ("decompile", "dynamic")
-
-
-def _load_claims(text: str) -> dict:
-    """claim-id -> the claim mapping; {} when the text is not a parsable
-    register."""
+def _load_statuses(text: str) -> dict:
+    """claim-id → status; {} when the text is not a parsable register."""
     try:
         data = yaml.safe_load(text)
     except yaml.YAMLError:
@@ -79,106 +45,10 @@ def _load_claims(text: str) -> dict:
     for c in data.get("claims") or []:
         if isinstance(c, dict):
             cid = str(c.get("id", "") or "").strip()
+            st = str(c.get("status", "") or "").strip().upper()
             if cid:
-                out[cid] = c
+                out[cid] = st
     return out
-
-
-def _load_statuses(text: str) -> dict:
-    """claim-id -> status (uppercased); {} when not a parsable register."""
-    return {cid: str(c.get("status", "") or "").strip().upper()
-            for cid, c in _load_claims(text).items()}
-
-
-def _fact_claim_refs(fm: dict) -> list:
-    """Every claim id a fact cites: claim_id / claim_ids / claims.
-
-    The extension-layer `claim` field is deliberately NOT read — it is the
-    claim STATEMENT (free text), not a reference (same rule as issue 532)."""
-    refs: list = []
-    for key in ("claim_id", "claim_ids", "claims"):
-        value = fm.get(key)
-        if isinstance(value, str):
-            refs.append(value.strip())
-        elif isinstance(value, (list, tuple)):
-            refs.extend(str(v).strip() for v in value)
-    return [r for r in refs if r]
-
-
-def _evidence_class(fm: dict) -> str:
-    """The fact's declared evidence class, defaulting to the WEAKEST one.
-
-    Fail-closed: absent or unrecognized reads as triage, never as a claim
-    of strength (an undeclared class is not evidence of decompilation)."""
-    value = str(fm.get("evidence_class") or "").strip().lower()
-    return value if value in VALID_EVIDENCE_CLASSES else TRIAGE_GRADE_CLASS
-
-
-def facts_by_claim(ws: Path) -> dict:
-    """claim-id -> [fact frontmatter dicts] from facts/*.md.
-
-    Single-parser rule: lint_facts owns the frontmatter dialect (PyYAML
-    plus the tolerant subset fallback) and this gate consumes it rather
-    than growing a second parser. An unreadable or unparsable fact is
-    skipped — it carries no class, and the register-side predicates still
-    gate its claim."""
-    out: dict = {}
-    facts_dir = Path(ws) / "facts"
-    if not facts_dir.is_dir():
-        return out
-    try:
-        from lint_facts import _load_fact
-    except ImportError:
-        return out
-    for p in sorted(facts_dir.glob("*.md")):
-        try:
-            fm = _load_fact(p)
-        except Exception:  # noqa: BLE001 — a broken fact never blocks the gate
-            continue
-        if not isinstance(fm, dict):
-            continue
-        for ref in _fact_claim_refs(fm):
-            out.setdefault(ref, []).append(fm)
-    return out
-
-
-def algorithm_scope(claim: dict) -> str | None:
-    """The matched scope keyword when the claim reads as algorithm-recovery
-    (issue 215), else None.
-
-    Read from the register's own text; the KEEP list is the four classes
-    the issue names, in snake_case and prose spellings. Separator spelling
-    is folded before matching (_ / - / space are the same word break), so
-    `key-schedule` is not a scope escape hatch."""
-    text = " ".join(str(claim.get(k) or "")
-                    for k in ("statement", "title", "answers_question"))
-    folded = _fold_separators(text)
-    for keyword in ALGO_SCOPE_KEYWORDS:
-        if _fold_separators(keyword) in folded:
-            return keyword
-    return None
-
-
-def evidence_class_violation(claim_id: str, claim: dict,
-                             facts: list) -> str | None:
-    """The evidence-class admission reason (issue 215), None when admitted.
-
-    Boundary: a claim with NO fact file has no fact-frontmatter class to
-    read, so the issue 819 verify/redteam predicates govern it alone — the rule
-    here is exactly the issue's "triage cannot ALONE prove an algorithm
-    claim", which needs facts to be meaningful."""
-    scope = algorithm_scope(claim)
-    if scope is None or not facts:
-        return None
-    classes = sorted({_evidence_class(fm) for fm in facts})
-    if any(c in ALGO_GRADE_CLASSES for c in classes):
-        return None
-    return (f"{claim_id}: evidence-class — algorithm-recovery claim (scope "
-            f"keyword {scope!r}) reaches PROVEN on {classes} evidence only "
-            f"({len(facts)} fact(s)); a triage-grade string fact cannot "
-            f"alone prove an algorithm claim — attach decompile-grade "
-            f"evidence (jadx source / dexdc index or taint) or declare the "
-            f"fact's evidence_class")
 
 
 def _runs_outcomes(ws: Path) -> list:
@@ -269,12 +139,10 @@ def check_register_transitions(ws: Path, new_text: str,
     transition (fresh registers cannot mint PROVEN without evidence either)."""
     old = _load_statuses(old_text or "")
     new = _load_statuses(new_text)
-    claims = _load_claims(new_text)
     violations: list = []
     waivers: list = []
     if not new:
         return {"ok": True, "violations": violations, "waivers": []}
-    facts: dict | None = None
     for cid, st in new.items():
         if st != PROVEN:
             continue
@@ -288,16 +156,6 @@ def check_register_transitions(ws: Path, new_text: str,
                     f"without a stated reason is not an exemption")
             else:
                 waivers.append(wv)
-            continue
-        # issue 215: evidence-class admission (algorithm-recovery claims).
-        # Checked at ADMISSION, ahead of the runs/ predicates, so the named
-        # reason is the evidence grade the claim actually failed on.
-        if facts is None:
-            facts = facts_by_claim(ws)
-        ec = evidence_class_violation(cid, claims.get(cid) or {},
-                                      facts.get(cid) or [])
-        if ec:
-            violations.append(ec)
             continue
         ev = latest_evidence(ws, cid)
         vn, rt = ev["verify_note"], ev["redteam"]

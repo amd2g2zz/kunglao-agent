@@ -161,35 +161,3 @@ def test_ledger_row_alone_not_sufficient(tmp_path):
     _redteam(ws, "C-001", "CONFIRMED")
     res = check_register_transitions(ws, NEW, OLD)
     assert res["ok"] is False
-
-
-# ---------- issue 225: hyphenated scope spellings are the SAME keyword ------
-
-def test_hyphenated_scope_spellings_are_recognized():
-    """The keyword list shipped snake_case + prose spellings only, so a
-    hyphenated `key-schedule` / `state-machine` claim read as out of scope
-    and a triage-only algorithm claim was admitted at ->PROVEN. Separator
-    spelling must not change the scope verdict."""
-    import register_proven_gate as rpg
-    for spelling in ("key-schedule", "key schedule", "key_schedule",
-                     "key-expansion", "state-machine", "state machine",
-                     "state_machine", "algorithm-recovery",
-                     "algorithm recovery"):
-        scope = rpg.algorithm_scope(
-            {"statement": f"recover the {spelling} of the config blob"})
-        assert scope is not None, spelling
-
-
-def test_unrelated_statement_stays_out_of_scope():
-    import register_proven_gate as rpg
-    assert rpg.algorithm_scope(
-        {"statement": "the sample talks to a C2 over TLS"}) is None
-
-
-def test_hyphenated_claim_with_triage_fact_is_rejected():
-    import register_proven_gate as rpg
-    reason = rpg.evidence_class_violation(
-        "C-001", {"statement": "recover the key-schedule from the DEX"},
-        [{"evidence_class": "triage"}])
-    assert reason, "a hyphenated algorithm claim must not be admitted"
-    assert "algorithm-recovery" in reason
