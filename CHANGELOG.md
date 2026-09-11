@@ -6,9 +6,9 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
-## [0.1.6] - 2026-09-11
+## [0.1.5-patch1] - 2026-09-11
 
-The Patch1 train — nine field-run fixes on top of v0.1.5: the android probe surface (apkid / JVM / memory-gate verdict), one XOR decompiler face, uv-unified environment operations, lane routing for task types beyond binary-RE, the Thompson rank face on the statusline, and the adversarial-review remediation batch.
+The Patch1 train — ten field-run fixes on the v0.1.5 line (released as `v0.1.5-patch1`, version `0.1.5.post1`): the android probe surface (apkid / JVM / memory-gate verdict), one XOR decompiler face, uv-unified environment operations, lane routing for task types beyond binary-RE, the Thompson rank face on the statusline, the macOS memory probe, and the adversarial-review remediation batch.
 
 ### Fixed
 
@@ -812,7 +812,6 @@ around mapping-driven generation and four-leg gates.
   sys.platform — `Scripts/python.exe` on Windows, `bin/python` on POSIX —
   instead of the workspace `ws/.venv/Scripts/python.exe` Windows layout that
   always FAILed on macOS (#409)
-86b479a (fix(#409): platform de-hardcoding — analyzeHeadless(.bat) + skill-root venv by sys.platform)
 
 ### Fixed (kunglao-init exit-code semantics, #414)
 
@@ -843,8 +842,6 @@ around mapping-driven generation and four-leg gates.
 - README gained a Command Reference table covering all four commands (#413).
 - Contract tests for the subcommand routing + menu behavior, TDD RED-first (#413).
 - `release-manifest.yaml`, `structural_check.py`, `check_global_rule_subset.py`, and docs repointed to the moved main skill (#413).
->>>>>>> 3eca5a0 
-(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table)
 
 ### Removed (plan-template dead end, #352)
 
