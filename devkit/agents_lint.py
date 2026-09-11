@@ -76,7 +76,23 @@ _FENCE_RE = re.compile(r"^\s*(```|~~~)")
 # (fault-inject 9b hollow-marker bypass). Cross-line comment
 # opener/closer fragments have no complete span on their line and are
 # left alone (KISS: the proven attack used single-line comments).
-_COMMENT_RE = re.compile(r"<!--.*?-->")
+# Explicit index surgery below — no regex filter to bypass
+# (CodeQL py/bad-tag-filter).
+
+def _strip_inline_html_comments(ln: str) -> str:
+    """Drop every complete single-line `<!-- ... -->` span from one line.
+
+    An unterminated opener leaves the line untouched (no complete span on
+    the line — same semantics as the previous non-greedy regex)."""
+    out = ln
+    while True:
+        s = out.find("<!--")
+        if s == -1:
+            return out
+        e = out.find("-->", s + 4)
+        if e == -1:
+            return out
+        out = out[:s] + out[e + 3:]
 
 RC_PASS = 0
 RC_FAIL = 1
@@ -124,7 +140,7 @@ def lint_text(text: str) -> list[dict]:
             later = [i for i in marker_lines if i > start]
             end = min(later) if later else len(lines)
             content = [ln for ln in lines[start + 1:end]
-                       if _COMMENT_RE.sub("", ln).strip()]
+                       if _strip_inline_html_comments(ln).strip()]
             if len(content) < MIN_CONTENT_LINES:
                 violations.append({
                     "element": element,

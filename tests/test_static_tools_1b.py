@@ -216,9 +216,13 @@ def test_binary_sweep_kinds(tmp_path):
     p = write_tmp(tmp_path, "blob.bin", data)
     r = run_cli("binary-sweep", "--in", str(p))
     assert r.returncode == 0, r.stderr
-    assert "http://example.com/x" in r.stdout
-    assert "192.168.1.1" in r.stdout
-    assert "evil.example.org" in r.stdout
+    rows = re.findall(r"^(\w+)@0x[0-9a-f]+: (.+)$", r.stdout, re.MULTILINE)
+    urls = [v for k, v in rows if k == "url"]
+    ips = [v for k, v in rows if k == "ipv4"]
+    domains = [v for k, v in rows if k == "domain"]
+    assert "http://example.com/x" in urls
+    assert "192.168.1.1" in ips
+    assert "evil.example.org" in domains
     assert re.search(r"url@0x[0-9a-f]+", r.stdout)
     assert re.search(r"ipv4@0x[0-9a-f]+", r.stdout)
     assert re.search(r"domain@0x[0-9a-f]+", r.stdout)
