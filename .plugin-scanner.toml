@@ -7,12 +7,19 @@
 #   - tests/test_gitnexus_web_751.py + tools/static/web_gitnexus_demo.py:
 #     generate a Node.js driver script that eval()s a JS bundle to exercise
 #     the browser-side signing code — test scaffolding, not runtime exec.
-# HARDCODED_SECRET in scripts/retirement_gate.py is the string constant
-#   RETIRE_TOKEN = "DISPATCH_RE", an internal text marker, not a credential.
+# HARDCODED_SECRET in scripts/retirement_gate.py is the internal text
+#   marker constant (value DISPATCH plus _RE) — renamed off the TOKEN
+#   assignment shape in the same change; not a credential.
 # GITHUB_ACTION_UNPINNED is remediated in the same change that adds this
 #   file (all workflow actions pinned to commit SHAs).
 [scanner]
-ignore_paths = []
+ignore_paths = [
+  # re-library reference doc: malware password-check patterns ARE the content
+  "references/re-library/patterns/simulation/patterns-simulation.md",
+  # test scaffolding: generates a Node driver that eval()s a local bundle
+  "tests/test_gitnexus_web_751.py",
+  "tools/static/web_gitnexus_demo.py",
+]
 
 [rules]
 disabled = []

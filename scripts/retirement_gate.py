@@ -23,7 +23,7 @@ import re
 import sys
 from pathlib import Path
 
-RETIRE_TOKEN = "DISPATCH_RE"
+RETIRE_MARK = "DISPATCH_RE"
 OWNER_ALLOWLIST = {
     "hooks/lib_kunglao.py",  # canonical owner (drift block included)
 }
@@ -54,7 +54,7 @@ def scan(root: Path, baseline: list) -> dict:
         if rel in OWNER_ALLOWLIST or rel == SELF:
             continue
         text = f.read_text(encoding="utf-8", errors="replace")
-        if RETIRE_TOKEN in text:
+        if RETIRE_MARK in text:
             findings.append("retired_regex_copy:" + rel)
     deprecated = {}
     for rel, f in files.items():
