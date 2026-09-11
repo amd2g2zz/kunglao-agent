@@ -40,6 +40,10 @@ CHANGELOG = ROOT / "CHANGELOG.md"
 README = ROOT / "README.md"
 
 EXPECTED_VERSION = "0.1.5.post1"
+# The Claude plugin manifests carry the SEMVER form of the same release
+# (the plugin scanner requires strict semver; PEP 440 ".post1" is not
+# semver). v0.1.5-patch1: tag v0.1.5.post1 <-> plugin 0.1.5-post1.
+PLUGIN_VERSION = "0.1.5-post1"
 # The #366 field set: identity metadata only (issue body scope item 1).
 REQUIRED_FIELDS = {"name", "description", "version", "author", "homepage", "license"}
 # Component-path fields that would change runtime behavior (#364, not #366).
@@ -58,7 +62,7 @@ def _manifest() -> dict:
 def test_manifest_exists_and_minimal():
     m = _manifest()
     assert m["name"] == "kunglao-agent"
-    assert m["version"] == EXPECTED_VERSION
+    assert m["version"] == PLUGIN_VERSION
     assert isinstance(m["description"], str) and m["description"].strip()
     assert m["author"].get("name"), "author.name missing"
     assert m["homepage"].startswith("https://"), "homepage must be an https URL"
@@ -109,9 +113,14 @@ def test_version_triple_equality():
     cl = re.search(r"^## \[0\.1\.1\]", changelog, re.MULTILINE)
     assert cl, "CHANGELOG missing the [0.1.1] header"
 
-    assert py == rel == manifest["version"] == EXPECTED_VERSION, (
-        f"version drift: pyproject={py} release-manifest={rel} "
-        f"plugin.json={manifest['version']}"
+    # Python-side sources carry the PEP 440 string; the Claude plugin
+    # manifests carry the semver form of the same release (scanner
+    # requires strict semver — see PLUGIN_VERSION above).
+    assert py == rel == EXPECTED_VERSION, (
+        f"version drift: pyproject={py} release-manifest={rel}"
+    )
+    assert manifest["version"] == PLUGIN_VERSION, (
+        f"plugin.json must carry the semver form: {manifest['version']}"
     )
 
 
@@ -207,7 +216,7 @@ def test_marketplace_plugin_entry_matches_plugin_json():
     assert entry["source"] == {"source": "url", "url": GITHUB_URL}, (
         "plugin source must be the GitHub URL as a url-type source spec"
     )
-    assert entry["version"] == EXPECTED_VERSION
+    assert entry["version"] == PLUGIN_VERSION
     assert isinstance(entry["description"], str) and entry["description"].strip()
     assert entry["description"] == m["description"], (
         "marketplace description must be the README opening one-liner "
