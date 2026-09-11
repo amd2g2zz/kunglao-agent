@@ -781,46 +781,39 @@ def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
     ]
 
 
-def migrate_to_0_1_5(ws: Path, dry: bool) -> list[str]:
-    """v0.1.4 -> current: frame-currency + honest stamps (G3/G4 carry).
-
-    The 0.1.5 train ships no new deploy-surface repairs, but the per-version
-    registry convention still demands a fresh entry: without one
-    an ALREADY-0.1.4-stamped workspace plans zero migrations, the G3
-    merge and the stamp carry never run, and the G4 tail gate — which
-    trusts the plan to carry the stamp face — leaves the workspace
-    honestly stuck on 0.1.4 stamps. Same carry pair as 0.1.4's tail:
-    the G3 merge (frame currency; refuses-and-warns on a stale body)
-    followed by the G4-gated quiet stamp."""
-    return [
-        _item_claudemd_merge(ws, dry),                 # G3/T2/A3 carry
-        _item_template_stamp_refresh_quiet(ws, dry),   # G4-gated carry
-    ]
-
-
-def migrate_to_0_1_6(ws: Path, dry: bool) -> list[str]:
-    """v0.1.5 -> current: frame-currency + honest stamps (G3/G4 carry).
-
-    The Patch1 train ships no new deploy-surface repairs, but the
-    per-version registry convention still demands a fresh entry: without
-    one an ALREADY-0.1.5-stamped workspace plans zero migrations and its
-    frame/stamp stay on 0.1.5. Same carry pair as 0.1.5's tail: the G3
-    merge (frame currency; refuses-and-warns on a stale body) followed by
-    the G4-gated quiet stamp."""
-    return [
-        _item_claudemd_merge(ws, dry),                 # G3/T2/A3 carry
-        _item_template_stamp_refresh_quiet(ws, dry),   # G4-gated carry
-    ]
-
-
-# Linear registry: every version that needs a migration step beyond
-# "re-stamp" (the stamp refresh itself is carried by the LAST migration).
+# Linear registry: version-SPECIFIC repairs only. The frame/stamp carry
+# (G3 merge + G4-gated quiet stamp) used to be a per-release boilerplate
+# entry; it is now the planner's universal terminal step (see
+# _plan_migrations) — owner ruling 2026-09-11: releases must not hand-write
+# an identical carry function for every version.
 MIGRATIONS: list[tuple[str, MigrationFn]] = [
     ("0.1.3", migrate_to_0_1_3),
     ("0.1.4", migrate_to_0_1_4),   # #755 deploy-surface completion (T6)
-    ("0.1.5", migrate_to_0_1_5),   # G3 merge + G4 stamp carry
-    ("0.1.6", migrate_to_0_1_6),   # Patch1 train: frame/stamp carry
 ]
+
+
+def _carry_tail(ws: Path, dry: bool) -> list[str]:
+    """The universal terminal carry: frame-currency (G3 merge;
+    refuses-and-warns on a stale body) followed by the G4-gated quiet
+    stamp. Planned as the tail for ANY behind workspace, so the stamp face
+    always rides the plan — the G4 tail gate trusts it."""
+    return [
+        _item_claudemd_merge(ws, dry),                 # G3/T2/A3 carry
+        _item_template_stamp_refresh_quiet(ws, dry),   # G4-gated carry
+    ]
+
+
+def _plan_migrations(origin_key: tuple[int, ...],
+                     target: str) -> list[tuple[str, MigrationFn]]:
+    """Version-gated repairs + the universal terminal carry.
+
+    A workspace already at the target plans NOTHING (fast path); any behind
+    workspace gets its version-specific repairs followed by exactly one
+    carry tail — no registry entry required for that, at any release."""
+    plan = [(v, fn) for v, fn in MIGRATIONS if _vkey(v) > origin_key]
+    if _vkey(target) > origin_key:
+        plan.append((target, _carry_tail))
+    return plan
 
 
 # --------------------------------------------------------------------------
@@ -828,8 +821,12 @@ MIGRATIONS: list[tuple[str, MigrationFn]] = [
 # --------------------------------------------------------------------------
 
 def _vkey(version: str) -> tuple[int, ...]:
+    """Sortable key for registry versions. PEP 440 post releases sort
+    after their base: "0.1.5.post1" -> (0, 1, 5, 1) > (0, 1, 5)."""
+    parts = version.strip().split(".")
     try:
-        return tuple(int(p) for p in version.strip().split("."))
+        return tuple(int(p[4:]) if p.startswith("post") else int(p)
+                     for p in parts)
     except ValueError:
         raise ValueError(f"unparseable version {version!r}")
 
@@ -1671,7 +1668,7 @@ def upgrade(ws: Path, dry_run: bool = False,
     target = template_version.read_skill_version()
     target_key = _vkey(target)
 
-    plan = [(v, fn) for v, fn in MIGRATIONS if _vkey(v) > origin_key]
+    plan = _plan_migrations(origin_key, target)
     if origin_key >= target_key and not plan:
         print(f"kunglao-upgrade: already at version {origin}")
         # #783 T5 chain-hole: the already-current fast path must still
