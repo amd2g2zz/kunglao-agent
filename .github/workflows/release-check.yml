@@ -33,6 +33,11 @@ env:
   # interpreter via this env.
   UV_PYTHON: python3.11
 
+# The four legs only read the repo and upload run artifacts — no write
+# surface is needed (CodeQL actions/missing-workflow-permissions).
+permissions:
+  contents: read
+
 jobs:
   lint-hygiene:
     # Route to runners that actually have python3.11 (kunglao-runner-py311).
