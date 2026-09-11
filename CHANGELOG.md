@@ -147,6 +147,18 @@ release (see the mapping table at the end).
   `evidence/tool-probes.json`, so a probed-false JVM blocks the jadx
   provider as advertised; the env probe runs `uv run --locked`, which
   keeps the lock sha unchanged across a probe run (#225).
+- **darwin memory probe measures real availability (#223)**: the APK
+  memory gate called `os.sysconf("SC_AVPHYS_PAGES")` — a Linux-only key
+  (`ValueError: unrecognized configuration name` on macOS) — so every Mac
+  silently took the 4 GB floor and jadx was blocked for every APK behind a
+  constant 2.6 GB budget. The avail probe now dispatches per platform
+  (windows: GlobalMemoryStatusEx, linux: sysconf — both unchanged; darwin:
+  Mach `host_statistics64` VM counters via ctypes, no subprocess) and the
+  budget is `0.65 x measured avail` again; a failed probe still floors but
+  is no longer silent — the verdict carries
+  `avail_probe: "ok" | "floor-fallback"`, the reason names the failure,
+  and the marker rides the tool's stdout line into the issue 215 env fact
+  so a dead probe never reads as a genuinely-4GB host.
 
 ## [0.1.3] - 2026-08-25
 
