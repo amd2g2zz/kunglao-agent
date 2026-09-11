@@ -796,7 +796,7 @@ files:
   tests/test_kunglao_status.py:
     r1: 1
   tests/test_kunglao_upgrade_726.py:
-    r1: 13
+    r1: 12
   tests/test_kunglao_wait_902.py:
     r1: 2
   tests/test_ledger_settlement_8.py:
@@ -1157,7 +1157,7 @@ files:
   tests/test_unidbg_harness_template.py:
     r1: 1
   tests/test_upgrade_safety_753.py:
-    r1: 9
+    r1: 8
   tests/test_upgrade_slash_command_746.py:
     r1: 4
     r2: 1
