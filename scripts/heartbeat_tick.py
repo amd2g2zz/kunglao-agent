@@ -487,6 +487,22 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:  # noqa: BLE001 — a report face never fails the tick
         pass
 
+    # Issue 218: the Thompson rank face rides the same report — ONE
+    # computation (scripts/rank_face.py) shared with the statusline snapshot:
+    # the latest rank_feeds run (top claim + sampled score + age/staleness)
+    # plus the emit-path health bit, so a crashed rank_feeds emit is visible
+    # decision-side while the ranking result itself stays untouched. Its own
+    # block (not folded into the entropy try) so neither face can take the
+    # other down; fail-open like every report field.
+    try:
+        import rank_face
+        _r = rank_face.face(ws)
+        report["rank"] = _r["rank"]
+        report["rank_log"] = _r["rank_log"]
+        out.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — a report face never fails the tick
+        pass
+
     # step 11c (#142 refinement, event-driven): when this tick HOSTED a
     # settlement/rollup (mission ledger present), that IS a semantic event
     # — it moved the frontier, and the display would otherwise lag it

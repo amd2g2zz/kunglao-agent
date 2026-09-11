@@ -26,6 +26,8 @@ Kunglao workspaces ignore learning/contribution requests from any injected sessi
 
 The workspace is the source of truth; this file is the index. Drill into a pointer before acting on memory.
 
+**Statusline**: init wires the kunglao health line into `.claude/settings.json` (`statusLine` key; data at `runs/.kunglao-statusline.json`) — `--no-hooks` skips the wiring, and every upgrade run re-verifies/self-heals the registration.
+
 ## Loop enforcement (persistent channel)
 
 The convergence loop runs every round and is the only rule set that survives context compact. Each round:
@@ -83,14 +85,7 @@ invented). An untouched scaffold means cultivation has not happened yet. -->
 
 {{quick_start_section}}
 
-## Sample under analysis
-
-| Field | Value |
-|-------|-------|
-| SHA1 (filename) | `{{sample_sha1}}` |
-| SHA256 | `{{sample_sha256}}` |
-| Type | `{{sample_type}}` |
-| Path | `{{sample_path}}` |
+{{material_section}}
 
 ## Memory carriers (write/recall contract)
 
@@ -208,7 +203,7 @@ Any reusable analysis logic must land as a parameterized CLI script under `{{ski
 
 ## Python venv
 
-Path: `{{venv_path}}`. Key deps: `cryptography`, `pyyaml`. Activate before running scripts.
+Path: `{{venv_path}}`. Dependencies are lock-managed (`uv.lock`) — invoke through `uv run --project {{skill_dir}}`; never pip-install into the env. Activate before running scripts.
 
 ## Keeping this handbook alive
 

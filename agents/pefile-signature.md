@@ -1,5 +1,6 @@
 ---
 name: pefile-signature
+lane: malware  # issue 208: analysis material contract — malware binary lane only
 description: Read evidence/die.json + the local sample file. Extract Authenticode digital signature (subject/issuer/serial/validity/cert
   chain) via pefile + identify packer family via DIE + YARA packer signatures + write evidence/signature.json
   + evidence/packer-scan.json. Pure local.

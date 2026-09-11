@@ -117,13 +117,16 @@ def test_negotiable_set_derived_from_install_plans():
     """NEGOTIABLE is DERIVED (kind=auto + degrade=WARN), not hand-listed.
     #477 expanded INSTALL_PLANS 5 -> 17, so the derived set is now every
     auto+WARN item (the issue's '可自动装项全进' requirement); the
-    decompiler (HARD degrade) and ida (mcp_url kind) stay excluded."""
+    decompiler (HARD degrade) and ida (mcp_url kind) stay excluded.
+    issue 209 adds apkid (WARN-tier android presence probe) to the plans,
+    so it joins the derived set — the android report never emits it as
+    FAIL, so it can never reach a negotiation menu."""
     import toolchain_negotiation as neg
     expected = frozenset({
         "pefile", "floss", "die",
         "file", "readelf", "objdump", "docker",
         "jadx", "apktool", "gitnexus", "adb", "aapt",
-        "gdbserver", "strace", "ltrace",
+        "gdbserver", "strace", "ltrace", "apkid",
     })
     assert neg.NEGOTIABLE == expected
     assert "decompiler" not in neg.NEGOTIABLE

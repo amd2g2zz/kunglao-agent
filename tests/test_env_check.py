@@ -13,8 +13,9 @@ deterministically: flag via os.environ, VM via socket.create_connection,
 Ghidra via GHIDRA_DEFAULT, hooks via BOTH project-level targets
 (<ws>/.claude/settings.json — the wire_up_settings --wire-up target, #258/#269;
 <ws-parent>/.claude/settings.json — the external_kicker D2 read/write target,
-#410. The user-global file is NOT a deployment target), venv probe via
-subprocess.run.
+#410. The user-global file is NOT a deployment target), venv probe via the
+uv dispatch (`uv run --project <skill_root>`, issue 207) with shutil.which /
+subprocess.run pinned — never the real machine's uv.
 
 #410 (2026-08-17): the hooks check is TRI-STATE — PASS (all registry hooks in
 either target), WARN (no target wired — per-workspace optional, static analysis
@@ -22,7 +23,6 @@ proceeds), FAIL (partial deployment — some registry hooks dropped, the
 #258/#372 silent-drop class).
 """
 import json
-import os
 import subprocess
 from pathlib import Path
 
@@ -176,7 +176,11 @@ def test_flag_set_fails_exit_1(monkeypatch, tmp_path):
 
 
 def test_vm_unreachable_fails(monkeypatch, tmp_path):
-    """Scenario 2: VM sockets refused/timed out -> vm check FAIL, exit 1 (recoverable)."""
+    """Scenario 2: VM sockets refused/timed out -> the vm_reachability ROW
+    FAILs. Per the #757 T3 grading that row is DEGRADED (static analysis may
+    proceed), so the overall stays PASS / exit 0 — the FAIL lives in the row.
+    Blocking rows are pinned (the issue 207 uv probe included) so the
+    assertion reads the VM decision, never this machine's environment."""
     ws = _kunglao_ws(tmp_path)
     monkeypatch.delenv(FLAG_NAME, raising=False)
 
@@ -187,10 +191,16 @@ def test_vm_unreachable_fails(monkeypatch, tmp_path):
     # #228: no default VM host — set one so this test exercises the socket path
     monkeypatch.setattr(env_check, "VM_HOST", "127.0.0.1")
     monkeypatch.setattr(env_check.socket, "create_connection", _boom)
+    monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", None)
+    _uv_ok(monkeypatch, env_check, tmp_path / "skill-root")
+
     rc = run(ws)
-    assert rc == 1
     snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
-    assert snap["checks"]["vm_reachability"]["status"] == "FAIL"
+    vm = snap["checks"]["vm_reachability"]
+    assert vm["status"] == "FAIL"
+    assert vm["blocking"] is False and vm["detail"].startswith("T3-restricted:")
+    assert "VM 127.0.0.1 unreachable" in vm["detail"]
+    assert rc == 0, "a degraded vm FAIL must not exit nonzero (#757)"
 
 
 def test_all_pass_exit_0(monkeypatch, tmp_path):
@@ -213,13 +223,12 @@ def test_all_pass_exit_0(monkeypatch, tmp_path):
     monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", fake_ghidra)
     # hooks: PROJECT-level <ws>/.claude/settings.json (#258/#269)
     _write_settings(ws)
-    # venv: fake SKILL-root venv python (platform layout) exists; probe
-    # subprocess returns rc=0 — #409: the authoritative interpreter is the
-    # SKILL-root venv (uv run --project <skill_root>), not ws/.venv.
+    # venv: the probe dispatches through uv (issue 207 —
+    # `uv run --project <skill_root> python -c "import yaml"`); a fake uv on
+    # PATH + a rc=0 run is the whole fixture. No venv binary path is read.
     monkeypatch.setattr(env_check, "SKILL_DIR", tmp_path / "skill-root")
-    venv_py = platform_paths.venv_python(env_check.SKILL_DIR / ".venv")
-    venv_py.parent.mkdir(parents=True)
-    venv_py.write_text("", encoding="utf-8")
+    monkeypatch.setattr(env_check.shutil, "which",
+                        lambda name: "/fake/bin/uv" if name == "uv" else None)
     monkeypatch.setattr(
         env_check.subprocess, "run",
         lambda *a, **k: subprocess.CompletedProcess(a[0], 0, "", ""),
@@ -444,40 +453,147 @@ def test_ghidra_check_uses_platform_analyze_headless_name(monkeypatch, tmp_path)
     assert platform_paths.analyze_headless_name() in detail
 
 
-def test_venv_check_ignores_workspace_venv_when_skill_root_present(monkeypatch, tmp_path):
-    """#409: the venv check probes the SKILL-root venv (uv run --project
-    <skill_root>) resolved by sys.platform (bin/python | Scripts/python.exe)
-    — NOT the workspace .venv. A workspace with NO .venv at all still PASSes
-    when the skill-root venv (platform layout) exists."""
+def test_venv_probe_dispatches_through_uv_project(monkeypatch, tmp_path):
+    """issue 207: the probe runs the REAL runtime invocation — `uv run
+    --project <SKILL_DIR> python -c "import yaml"` — never a venv binary with
+    a hand-written dep list. The workspace has NO .venv: uv owns the env."""
     ws = _kunglao_ws(tmp_path)
     monkeypatch.delenv(FLAG_NAME, raising=False)
     import env_check
-    monkeypatch.setattr(env_check, "VM_HOST", "")
-    monkeypatch.setattr(env_check, "GHIDRA_DEFAULT", None)
+    skill_root = tmp_path / "skill-root"
+    monkeypatch.setattr(env_check, "SKILL_DIR", skill_root)
+    seen: list[list[str]] = []
+    monkeypatch.setattr(env_check.shutil, "which",
+                        lambda name: "/fake/bin/uv" if name == "uv" else None)
+
+    def _capture(argv, **kwargs):
+        seen.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(env_check.subprocess, "run", _capture)
+
+    ok, detail = env_check.check_venv_sample(ws, None)
+    assert ok is True, detail
+    assert detail == "uv env OK (yaml)"
+    assert seen == [["/fake/bin/uv", "run", "--locked", "--project",
+                     str(skill_root), "python", "-c", "import yaml"]], seen
+
+
+def test_venv_probe_pins_the_lock_so_a_probe_never_relocks(
+        monkeypatch, tmp_path):
+    """Finding 10 (issue 225): `uv run` WITHOUT --locked re-locks the
+    project — it rewrites <skill_root>/uv.lock + .venv and PASSes drift
+    that `uv sync --locked` rejects. The probe must run `uv run --locked`
+    (the env still syncs from the lock; the lock is never mutated)."""
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.delenv(FLAG_NAME, raising=False)
+    import env_check
+    skill_root = tmp_path / "skill-root"
+    monkeypatch.setattr(env_check, "SKILL_DIR", skill_root)
+    seen: list[list[str]] = []
+    monkeypatch.setattr(env_check.shutil, "which",
+                        lambda name: "/fake/bin/uv" if name == "uv" else None)
+
+    def _capture(argv, **kwargs):
+        seen.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(env_check.subprocess, "run", _capture)
+
+    ok, detail = env_check.check_venv_sample(ws, None)
+    assert ok is True, detail
+    assert seen, "the probe must run"
+    assert "--locked" in seen[0], seen
+    assert seen[0][:3] == ["/fake/bin/uv", "run", "--locked"], seen
+
+
+def test_venv_probe_uv_missing_fails_naming_uv_layer(monkeypatch, tmp_path):
+    """issue 207 + the issue 213 state ladder: no uv on PATH is a UV-LAYER
+    failure carrying the install command — not a generic 'venv broken', and
+    no env probe runs at all."""
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.delenv(FLAG_NAME, raising=False)
+    import env_check
     monkeypatch.setattr(env_check, "SKILL_DIR", tmp_path / "skill-root")
-    # Only the SKILL-root venv exists (platform layout) — no ws/.venv at all
-    skill_py = platform_paths.venv_python(env_check.SKILL_DIR / ".venv")
-    skill_py.parent.mkdir(parents=True)
-    skill_py.write_text("", encoding="utf-8")
+    monkeypatch.setattr(env_check.shutil, "which", lambda name: None)
+
+    def _must_not_run(*args, **kwargs):
+        raise AssertionError("no env probe may run without uv")
+
+    monkeypatch.setattr(env_check.subprocess, "run", _must_not_run)
+
+    ok, detail = env_check.check_venv_sample(ws, None)
+    assert ok is False
+    assert "uv layer missing" in detail
+    assert "uv run --project" in detail
+    assert "astral.sh/uv/install.sh" in detail
+
+
+def test_venv_probe_broken_env_fails_with_sync_repair(monkeypatch, tmp_path):
+    """issue 207: a non-zero `uv run` is an ENV-LAYER failure carrying the
+    `uv sync --locked --project <skill_root>` repair and the stderr head."""
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.delenv(FLAG_NAME, raising=False)
+    import env_check
+    skill_root = tmp_path / "skill-root"
+    monkeypatch.setattr(env_check, "SKILL_DIR", skill_root)
+    monkeypatch.setattr(env_check.shutil, "which",
+                        lambda name: "/fake/bin/uv" if name == "uv" else None)
     monkeypatch.setattr(
         env_check.subprocess, "run",
-        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, "", ""),
-    )
+        lambda *a, **k: subprocess.CompletedProcess(
+            a[0], 1, "", "ModuleNotFoundError: No module named 'yaml'"))
 
-    run(ws)
-    snap = json.loads((ws / "runs" / ".env-check.json").read_text(encoding="utf-8"))
-    assert snap["checks"]["venv_sample"]["status"] == "PASS", \
-        f"workspace .venv must be ignored when skill-root venv is authoritative: {snap['checks']['venv_sample']}"
+    ok, detail = env_check.check_venv_sample(ws, None)
+    assert ok is False
+    assert "env layer broken" in detail
+    assert f"uv sync --locked --project {skill_root}" in detail
+    assert "No module named 'yaml'" in detail
 
 
-def test_venv_python_resolves_by_platform():
-    """#409: venv_python resolves Scripts/python.exe on Windows, bin/python
-    on POSIX — the layout the resolver picks must exist under a real venv
-    root shape."""
-    root = Path("/tmp/kunglao-test-venv")
-    py = platform_paths.venv_python(root)
-    assert py.name == platform_paths.venv_python_name()
-    if os.name == "nt":
-        assert py == root / "Scripts" / "python.exe"
-    else:
-        assert py == root / "bin" / "python"
+def _uv_ok(monkeypatch, env_check, skill_root):
+    """Pin a present uv + a rc=0 `uv run` (the lock-faithful success path)."""
+    monkeypatch.setattr(env_check, "SKILL_DIR", skill_root)
+    monkeypatch.setattr(env_check.shutil, "which",
+                        lambda name: "/fake/bin/uv" if name == "uv" else None)
+    monkeypatch.setattr(
+        env_check.subprocess, "run",
+        lambda *a, **k: subprocess.CompletedProcess(a[0], 0, "", ""))
+
+
+def test_venv_probe_lock_faithful_env_passes(monkeypatch, tmp_path):
+    """issue 207 acceptance: a lock-faithful env (yaml present, cryptography
+    absent from uv.lock) PASSes — the probe imports exactly what the lock
+    ships, so a cryptography-only failure can no longer refuse Phase 0."""
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.delenv(FLAG_NAME, raising=False)
+    import env_check
+    _uv_ok(monkeypatch, env_check, tmp_path / "skill-root")
+
+    ok, detail = env_check.check_venv_sample(ws, None)
+    assert ok is True, detail
+    assert detail == "uv env OK (yaml)"
+
+
+def test_venv_probe_sample_sha_logic_unchanged(monkeypatch, tmp_path):
+    """issue 207 keeps the sample-sha256 verdict logic byte-for-byte: match
+    -> PASS suffix; mismatch -> FAIL; empty bins/ -> FAIL."""
+    import hashlib
+    ws = _kunglao_ws(tmp_path)
+    monkeypatch.delenv(FLAG_NAME, raising=False)
+    import env_check
+    _uv_ok(monkeypatch, env_check, tmp_path / "skill-root")
+    payload = b"MZ" + b"\x00" * 16
+    (ws / "bins").mkdir()
+    (ws / "bins" / "sample.exe").write_bytes(payload)
+    good = hashlib.sha256(payload).hexdigest()
+
+    ok, detail = env_check.check_venv_sample(ws, good)
+    assert ok is True and detail == "uv env OK (yaml); sample sha256 OK", detail
+
+    ok, detail = env_check.check_venv_sample(ws, "0" * 64)
+    assert ok is False and "sha256 mismatch" in detail, detail
+
+    (ws / "bins" / "sample.exe").unlink()
+    ok, detail = env_check.check_venv_sample(ws, good)
+    assert ok is False and "no sample under bins/" in detail, detail

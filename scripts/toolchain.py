@@ -90,6 +90,7 @@ VALID_TYPES = ("windows", "linux", "android", "web", "macos")
 
 # F6 (#304 review): single source of truth for the init predicate component.
 from init_state import read_project_type  # noqa: E402
+import lane_spec  # noqa: E402  (issue 208: the lane vocabulary single source)
 from report_render import (  # noqa: E402  (render face — one definition)
     ANDROID_SERVER_PORT,
     FRIDA_PORT,
@@ -118,19 +119,26 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "pefile": NextAction("install", "pip install pefile"),
     "uv": NextAction(
         "install", "curl -LsSf https://astral.sh/uv/install.sh | sh"),
+    "python": NextAction(
+        "install", "install Python 3 and put it on PATH (`python3 -V` must run)"),
     "die": NextAction("install"),  # platform matrix: FIXES text / #408 installer
     "floss": NextAction("install", "pip install flare-floss"),
     "file": NextAction("install"),
     "readelf": NextAction("install"),
     "objdump": NextAction("install"),
+    # ONE family entry, XOR semantics (issue 210): the decompiler face is
+    # satisfied by exactly one of three supplies — local IDA (idat64), local
+    # Ghidra (analyzeHeadless), or the registered ida-pro-vm MCP. The fix
+    # string lists all three paths; `options` carries them machine-readably
+    # (the exit-8 CHOICE offers the same paths).
     "decompiler": NextAction(
         "install",
-        "choco install ghidra -y (win32) | brew install --cask ghidra (darwin) "
-        "| apt-get install -y ghidra (linux)"),
-    "ghidra": NextAction("set-env",
-                         "set GHIDRA_HOME=<Ghidra install root>"),
-    "ida": NextAction("register-mcp",
-                      "claude mcp add --transport http ida-pro-vm <ida-mcp-url>"),
+        "install IDA Pro and put idat64 on PATH, OR install Ghidra "
+        "(choco install ghidra -y / brew install --cask ghidra / "
+        "apt-get install -y ghidra) and set GHIDRA_HOME, OR register the "
+        "ida-pro-vm MCP: `claude mcp add --transport http ida-pro-vm "
+        "<ida-mcp-url>` — ONE supply satisfies the family (XOR)",
+        options=("idat64", "analyzeHeadless", "ida-pro-vm")),
     "aapt": NextAction("install",
                        "install Android SDK build-tools (aapt/aapt2)"),
     "jadx": NextAction("install"),
@@ -139,6 +147,10 @@ _STATIC_NEXT_ACTIONS: dict[str, NextAction] = {
     "dexdc": NextAction("install",
                         "cd dex-decompiler-py && maturin build --release && pip install target/wheels/dex_decompiler-*.whl"),
     "apkid": NextAction("install", "pip install apkid"),
+    "jvm": NextAction("install",
+                      "install a JDK so `java -version` answers (jadx is a "
+                      "Java program; probe the environment, never read the "
+                      "JVM state off a tool description)"),
     "baksmali": NextAction("install",
                            "download from https://github.com/baksmali/smali/releases (or apt install baksmali)"),
     "adb": NextAction("install",
@@ -224,13 +236,13 @@ class OwnerTier(Enum):
 # Owner map: agent-do is the DEFAULT (kunglao runtime agents never defer
 # tooling work to the user); the explicit exceptions are the HUMAN-ONLY
 # decisions and the LANE-CONDITIONAL decompiler face.
+# Issue 210: ONE family entry — the decompiler face is XOR (IDA XOR Ghidra
+# XOR ida-pro-vm MCP), so the family carries one tier, not three.
 _OWNER_BY_NAME: dict[str, OwnerTier] = {
     "device_root": OwnerTier.HUMAN_ONLY,   # rooting = physical device decision
     "vm_reachable": OwnerTier.HUMAN_ONLY,  # operator picks the VM (#451)
     "remote_debugger": OwnerTier.HUMAN_ONLY,
     "decompiler": OwnerTier.LANE_CONDITIONAL,
-    "ghidra": OwnerTier.LANE_CONDITIONAL,
-    "ida": OwnerTier.LANE_CONDITIONAL,
 }
 _OWNER_DEFAULT = OwnerTier.AGENT_DO
 
@@ -258,6 +270,12 @@ class CheckResult:
     owner: OwnerTier = OwnerTier.AGENT_DO  # remediation ownership (issue 202)
     attempts: tuple[str, ...] = ()  # recorded AGENT-DO attempt commands
     pending_decision: decision_pending.PendingDecision | None = None  # issue 202
+    # Issue 210 XOR-family evidence (decompiler item): which supply won
+    # (ida-pro-vm | idat64 | analyzeHeadless | none) and which sibling
+    # candidates the winner pre-empted (informational — never FAIL, never a
+    # separate item). None/() on every other check.
+    supply: str | None = None
+    skipped: tuple[str, ...] = ()
 
 
 @dataclass
@@ -996,7 +1014,8 @@ def _task_spec_mcp_checks(specs: "tuple[McpServerSpec, ...]",
             register = None
         checks.append(mcp_probe.MCPCheck(
             name=spec.name, status="FAIL", tier="HARD",
-            detail="not registered (required by task_spec tools.mcp_servers)",
+            detail=("register layer: not registered (required by task_spec "
+                    "tools.mcp_servers)"),
             fix=register,
         ))
     return checks
@@ -1015,8 +1034,10 @@ def _mcp_reachability_face(item: CheckResult, name: str,
     """Honest reachability evidence for a REGISTERED http-transport server.
 
     Registered + endpoint reachable -> probe upgrades to LIVENESS; endpoint
-    dead -> WARN with the connect error (registration alone is not a live
-    server). stdio servers keep presence evidence (honesty rule)."""
+    unreachable -> WARN with the connect error, classified AT the
+    connection layer (registration alone is not a live server), with the
+    agent-do repair the layer owns. stdio servers keep presence evidence
+    (honesty rule)."""
     url = _mcp_server_url(name, claude_json, ws)
     if not url:
         return item
@@ -1030,7 +1051,14 @@ def _mcp_reachability_face(item: CheckResult, name: str,
             detail=item.detail + f"; endpoint reachable ({host}:{port})")
     return dataclasses.replace(
         item, status=Status.WARN,
-        detail=item.detail + f"; registered but endpoint unreachable: {err}")
+        detail=(f"connection layer: {item.detail} but endpoint "
+                f"unreachable: {err} — repair = connection-layer "
+                f"diagnosis (port/token/env/deps)"),
+        fix=("connection layer repair (agent-do): diagnose the endpoint "
+             "at the connection layer (port/token/env/deps); a broken "
+             "server venv repairs with `uv sync --locked` in the server "
+             "repo, then re-probe — never a fallback-tool jump"),
+    )
 
 
 def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
@@ -1077,22 +1105,25 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
                             item = CheckResult(
                                 name=item.name, status=Status.PASS,
                                 tier=item.tier,
-                                detail=(f"registered by agent via "
-                                        f"`{' '.join(argv[:3])} ...` — "
-                                        f"verified after registration"),
+                                detail=(f"register layer: registered by "
+                                        f"agent via `{' '.join(argv[:3])} "
+                                        f"...` — verified after "
+                                        f"registration"),
                                 probe=ProbeTier.PRESENCE,
                                 owner=OwnerTier.AGENT_DO,
                                 attempts=item.attempts,
                             )
                         else:
-                            item.detail += ("; register attempt ran but the "
-                                            "server is still not registered")
+                            item.detail += ("; register layer: attempt ran "
+                                            "but the server is still not "
+                                            "registered")
                             item.fix = mc.fix
                     else:
-                        item.detail += (f"; agent-do register attempt failed: "
-                                        f"{err}")
+                        item.detail += (f"; register layer: agent-do "
+                                        f"attempt failed: {err}")
                 else:
-                    item.detail += f"; agent-do register skipped: {why}"
+                    item.detail += (f"; register layer: agent-do attempt "
+                                    f"skipped: {why}")
         report.items.append(item)
 
 
@@ -1106,6 +1137,61 @@ def _check_mcp(report: ToolchainReport, ws: Path, project_type: str,
 # workspace .mcp.json). A registered MCP decompiler is the PRIMARY signal
 # for the UNDECLARED lane; CLI supply is the probe-ladder surface.
 _DECOMPILER_MCP_NAMES = ("ghidra", "ida-pro-vm")
+
+# Issue 210 — ONE decompiler family (`decompiler`), XOR semantics: exactly
+# one of three supplies satisfies the face; the winner's siblings are
+# SKIPPED (informational), never independent missing items.
+#   ida-pro-vm       the registered ida-pro-vm MCP (MCP lane / MCP-first)
+#   idat64           the local IDA probe ladder binary
+#   analyzeHeadless  Ghidra — the local analyzeHeadless binary OR the
+#                    registered ghidra MCP bridge (same XOR branch; the
+#                    item detail records which surface answered)
+# `none` is the no-supply outcome (FAIL, or the pure-DEX WARN).
+_DECOMPILER_SUPPLY_IDA_MCP = "ida-pro-vm"
+_DECOMPILER_SUPPLY_IDA_CLI = "idat64"
+_DECOMPILER_SUPPLY_GHIDRA = "analyzeHeadless"
+_DECOMPILER_SUPPLY_NONE = "none"
+_DECOMPILER_SUPPLIES: tuple[str, ...] = (
+    _DECOMPILER_SUPPLY_IDA_MCP,
+    _DECOMPILER_SUPPLY_IDA_CLI,
+    _DECOMPILER_SUPPLY_GHIDRA,
+)
+# MCP registration name -> canonical family supply name.
+_DECOMPILER_SUPPLY_BY_MCP = {
+    "ida-pro-vm": _DECOMPILER_SUPPLY_IDA_MCP,
+    "ghidra": _DECOMPILER_SUPPLY_GHIDRA,
+}
+
+
+def _decompiler_skipped(supply: str) -> tuple[str, ...]:
+    """Family candidates NOT consulted because `supply` already won (XOR).
+
+    Informational only: skipped siblings never FAIL and never re-appear as
+    missing items. `none` means no supply won — nothing was skipped."""
+    if supply == _DECOMPILER_SUPPLY_NONE:
+        return ()
+    return tuple(s for s in _DECOMPILER_SUPPLIES if s != supply)
+
+
+def _decompiler_item(*, status: Status, supply: str, detail: str,
+                     tier: Tier = Tier.HARD,
+                     probe: ProbeTier = ProbeTier.PRESENCE,
+                     **kw) -> CheckResult:
+    """Build THE single decompiler item for one init (issue 210).
+
+    One item per init, always named `decompiler`, carrying the canonical
+    winning `supply` and the pre-empted `skipped` siblings; the prose detail
+    keeps the human evidence (strategy / path / reachable) plus a
+    greppable `supply=` / `skipped=` note."""
+    note = f"supply={supply}"
+    skipped = _decompiler_skipped(supply)
+    if skipped:
+        note += f" skipped=[{', '.join(skipped)}]"
+    return CheckResult(
+        name="decompiler", status=status, tier=tier,
+        detail=f"{detail} [{note}]", probe=probe,
+        supply=supply, skipped=skipped, **kw)
+
 
 # #474: a Python probe cannot reach into the MCP session (analysis tools
 # register only after connect_instance succeeds — agents/ghidra-light.md),
@@ -1330,13 +1416,20 @@ def _probe_ghidra(
 def _decompiler_choice(
         context: dict | None = None) -> decision_pending.PendingDecision:
     """The exit-8 CHOICE (issue 202): the decompiler-lane decision is the ONLY
-    user touchpoint of the decompiler face, and it is a choice."""
+    user touchpoint of the decompiler face, and it is a choice.
+
+    Issue 210: the three options ARE the three supply paths of the XOR
+    family — install-local-ida (idat64), install-ghidra (analyzeHeadless),
+    skip-decompiler-lane (no supply; the ida-pro-vm MCP path is agent-do and
+    rides the MCP lane / MCP-first defusal instead of a human choice)."""
     return decision_pending.PendingDecision(
         decision_id="decompiler_lane",
         question=(
-            "No local decompiler supply found (probed: PATH, mdfind, find "
-            "bundle sweep, brew cask, known dirs, GHIDRA_HOME, ghidra dirs, "
-            "ghidra/ida-pro-vm MCP). Choose the decompiler lane: "
+            "No decompiler supply found — the family is an XOR (exactly one "
+            "of three paths satisfies it): (1) local IDA idat64, (2) Ghidra "
+            "analyzeHeadless, (3) the ida-pro-vm MCP registration "
+            "(probed: PATH, mdfind, find bundle sweep, brew cask, known "
+            "dirs, GHIDRA_HOME, ghidra dirs, ghidra/ida-pro-vm MCP). Choose: "
             "install-local-ida (HUMAN-ONLY: license purchase), "
             "install-ghidra (agent-run #408 installer), or "
             "skip-decompiler-lane (static depth limited)."),
@@ -1355,22 +1448,26 @@ def _decompiler_choice(
 _DECOMPILER_NEITHER_DETAIL = (
     "No decompiler supply found (probed: PATH, mdfind, find bundle sweep, "
     "brew cask, known dirs, GHIDRA_HOME, ghidra dirs, ghidra/ida-pro-vm "
-    "MCP) — this is a CHOICE, not a blocker: install-local-ida "
-    "(HUMAN-ONLY: license purchase) / install-ghidra (#408 installer) / "
-    "skip-decompiler-lane (static depth limited). Ghidra OR IDA — either "
-    "satisfies this check when present."
+    "MCP) — ONE XOR family, three supply paths: local IDA (idat64), local "
+    "Ghidra (analyzeHeadless), or the ida-pro-vm MCP. This is a CHOICE, not "
+    "a blocker: install-local-ida (HUMAN-ONLY: license purchase) / "
+    "install-ghidra (#408 installer) / skip-decompiler-lane (static depth "
+    "limited). Ghidra OR IDA — either satisfies this check when present; "
+    "exactly one supply wins (the pre-empted sibling is recorded as "
+    "skipped)."
 )
 _DECOMPILER_NEITHER_FIX = (
-    "decompiler supply is LANE-CONDITIONAL (#202): MCP lane (task_spec "
-    "tools.decompiler_lane: mcp) -> the gate verifies ida-pro-vm "
-    "registration + reachability and registers it itself via "
-    "`claude mcp add` — never a local IDA install; local lane -> the agent "
-    "probe ladder runs (PATH, mdfind, find bundle sweep incl. "
-    ".app/Contents/MacOS, brew cask, known dirs), then the Ghidra probe "
-    "(GHIDRA_HOME, ghidra dirs, brew). Ghidra OR IDA — either satisfies "
-    "this check when present; neither -> exit-8 PendingDecision CHOICE: "
-    "install-local-ida (license) / install-ghidra (#408 installer) / "
-    "skip-decompiler-lane"
+    "decompiler supply is LANE-CONDITIONAL (#202), one XOR family (issue "
+    "210): three supply paths — (1) local IDA (idat64 on PATH or via the "
+    "probe ladder: PATH, mdfind, find bundle sweep incl. "
+    ".app/Contents/MacOS, brew cask, known dirs), (2) Ghidra "
+    "(analyzeHeadless via GHIDRA_HOME, ghidra dirs, brew), (3) the "
+    "ida-pro-vm MCP — MCP lane (task_spec tools.decompiler_lane: mcp) "
+    "verifies registration + reachability and registers it itself via "
+    "`claude mcp add`; never a local IDA install. One supply wins, the "
+    "others are SKIPPED (informational). Neither -> exit-8 PendingDecision "
+    "CHOICE: install-local-ida (license) / install-ghidra (#408 installer) "
+    "/ skip-decompiler-lane"
 )
 
 
@@ -1412,8 +1509,8 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
                     if spec.url else
                     "claude mcp add --transport http ida-pro-vm <ida-mcp-url>"
                     " (the url comes from task_spec tools.mcp_servers)")
-        detail = ("ida-pro-vm not registered (task declares the ida-pro-vm "
-                  "MCP lane)")
+        detail = ("register layer: ida-pro-vm not registered (task "
+                  "declares the ida-pro-vm MCP lane)")
         if _agent_do_enabled():
             argv = _concrete_register_argv(
                 "claude mcp add --transport http ida-pro-vm <ida-mcp-url>",
@@ -1425,28 +1522,28 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
                     attempts = (" ".join(argv),)
                     registered = mcp_probe.registered_names(claude_json, ws)
                     if "ida-pro-vm" in registered:
-                        report.items.append(CheckResult(
-                            name="decompiler", status=Status.PASS,
-                            tier=Tier.HARD,
+                        report.items.append(_decompiler_item(
+                            status=Status.PASS,
+                            supply=_DECOMPILER_SUPPLY_IDA_MCP,
                             detail=("ida-pro-vm registered by agent "
                                     "(`claude mcp add --transport http`) — "
                                     "MCP lane, no local IDA involved"),
-                            probe=ProbeTier.PRESENCE,
                             owner=OwnerTier.AGENT_DO, attempts=attempts,
                         ))
                         return
-                    detail += f"; agent-do register attempt failed: {err}"
-                    report.items.append(CheckResult(
-                        name="decompiler", status=Status.FAIL,
-                        tier=Tier.HARD, detail=detail, probe=ProbeTier.PRESENCE,
+                    detail += f"; register layer: agent-do attempt failed: {err}"
+                    report.items.append(_decompiler_item(
+                        status=Status.FAIL,
+                        supply=_DECOMPILER_SUPPLY_NONE,
+                        detail=detail,
                         fix=("verify the ida-pro-vm endpoint is up, then "
                              "re-register: " + register),
                         attempts=attempts,
                     ))
                     return
-        report.items.append(CheckResult(
-            name="decompiler", status=Status.FAIL, tier=Tier.HARD,
-            detail=detail, probe=ProbeTier.PRESENCE, fix=register,
+        report.items.append(_decompiler_item(
+            status=Status.FAIL, supply=_DECOMPILER_SUPPLY_NONE,
+            detail=detail, fix=register,
         ))
         return
     url = spec.url or _mcp_server_url("ida-pro-vm", claude_json, ws)
@@ -1456,31 +1553,31 @@ def _check_decompiler_mcp_lane(report: ToolchainReport, ws: Path,
         host = parts.hostname or "127.0.0.1"
         ok, err = _tcp_connect(host, port)
         if ok:
-            report.items.append(CheckResult(
-                name="decompiler", status=Status.PASS, tier=Tier.HARD,
+            report.items.append(_decompiler_item(
+                status=Status.PASS, supply=_DECOMPILER_SUPPLY_IDA_MCP,
+                probe=ProbeTier.LIVENESS,
                 detail=(f"via MCP lane (ida-pro-vm) — registered + endpoint "
                         f"reachable ({host}:{port}); session capability "
                         f"unverified (tools register after connect_instance)"),
-                probe=ProbeTier.LIVENESS,
             ))
             return
-        report.items.append(CheckResult(
-            name="decompiler", status=Status.FAIL, tier=Tier.HARD,
-            detail=(f"ida-pro-vm registered but endpoint unreachable: {err} "
-                    f"(url from task_spec/registry — bring the server up; "
-                    f"never a local IDA install)"),
+        report.items.append(_decompiler_item(
+            status=Status.FAIL, supply=_DECOMPILER_SUPPLY_NONE,
             probe=ProbeTier.LIVENESS,
-            fix=("bring the ida-pro-vm endpoint up (task_spec "
-                 "tools.mcp_servers url) — the lane is the MCP surface, "
-                 "not a local IDA install"),
+            detail=(f"connection layer: ida-pro-vm registered but endpoint "
+                    f"unreachable: {err} (url from task_spec/registry — "
+                    f"repair at the connection layer; never a local IDA "
+                    f"install, never a fallback-tool jump)"),
+            fix=("connection layer repair (agent-do): bring the ida-pro-vm "
+                 "endpoint up (task_spec tools.mcp_servers url) — the lane "
+                 "is the MCP surface, not a local IDA install"),
         ))
         return
     # registered, no url anywhere -> registry presence only (honesty)
-    report.items.append(CheckResult(
-        name="decompiler", status=Status.WARN, tier=Tier.HARD,
+    report.items.append(_decompiler_item(
+        status=Status.WARN, supply=_DECOMPILER_SUPPLY_IDA_MCP,
         detail=(f"via MCP lane (ida-pro-vm) — registered, {_UNVERIFIED} "
                 f"(no endpoint url in task_spec or registry to probe)"),
-        probe=ProbeTier.PRESENCE,
     ))
 
 
@@ -1489,6 +1586,11 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
                       caps: bool = False,
                       reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
     """Append the decompiler availability check — LANE-CONDITIONAL (issue 202).
+
+    ONE item per init (issue 210): always named `decompiler`, carrying the
+    canonical winning `supply` (ida-pro-vm | idat64 | analyzeHeadless |
+    none) and the sibling candidates it pre-empted as `skipped` — the face
+    is an XOR, so the loser is never a second missing item.
 
     Face branches on the task's declared lane (task_spec
     tools.decompiler_lane):
@@ -1518,24 +1620,24 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
     if reqs.decompiler_lane is None:
         for name in _DECOMPILER_MCP_NAMES:
             if name in registered:
-                report.items.append(CheckResult(
-                    name="decompiler", status=Status.WARN, tier=Tier.HARD,
-                    detail=f"via MCP ({name}) — registered, {_UNVERIFIED} "
-                           f"(registry read only; a probe cannot reach the "
-                           f"MCP session — tools register after "
-                           f"connect_instance)",
+                report.items.append(_decompiler_item(
+                    status=Status.WARN,
+                    supply=_DECOMPILER_SUPPLY_BY_MCP[name],
                     probe=ProbeTier.LIVENESS,
+                    detail=(f"via MCP ({name}) — registered, {_UNVERIFIED} "
+                            f"(registry read only; a probe cannot reach the "
+                            f"MCP session — tools register after "
+                            f"connect_instance)"),
                 ))
                 return
 
     # ---- local probe ladder (issue 202 + addendum) ----
     ida_path, strategy = _probe_local_ida()
     if ida_path:
-        report.items.append(CheckResult(
-            name="ida", status=Status.PASS, tier=Tier.HARD,
+        report.items.append(_decompiler_item(
+            status=Status.PASS, supply=_DECOMPILER_SUPPLY_IDA_CLI,
             detail=(f"idat64 at {ida_path} (probe: {strategy}) — wired: "
                     f"export PATH={ida_path.parent}:$PATH"),
-            probe=ProbeTier.PRESENCE,
         ))
         return
 
@@ -1551,32 +1653,28 @@ def _check_decompiler(report: ToolchainReport, ws: Path,
                           f"per #202): {trial_detail}")
             if ok:
                 probe = ProbeTier.CAPABILITY
-        report.items.append(CheckResult(
-            name="ghidra", status=Status.PASS, tier=Tier.HARD,
-            detail=f"analyzeHeadless at {ah} — Ghidra supplies the "
-                   f"decompiler lane{trial_note}",
-            probe=probe,
+        report.items.append(_decompiler_item(
+            status=Status.PASS, supply=_DECOMPILER_SUPPLY_GHIDRA, probe=probe,
+            detail=(f"analyzeHeadless at {ah} — Ghidra supplies the "
+                    f"decompiler lane{trial_note}"),
         ))
         return
 
     if has_native_so is False:
         # android pure-DEX: the lane is freely skippable — WARN, no choice
-        report.items.append(CheckResult(
-            name="decompiler", status=Status.WARN, tier=Tier.HARD,
-            detail="No decompiler found (Ghidra, IDA, or a ghidra/ida-pro-vm "
-                   "MCP registration satisfies this check) — WARN for "
-                   "pure-DEX samples; HARD if the sample has .so "
-                   "(see the #408 installer)",
-            probe=ProbeTier.PRESENCE,
+        report.items.append(_decompiler_item(
+            status=Status.WARN, supply=_DECOMPILER_SUPPLY_NONE,
+            detail=("No decompiler supply found (idat64 / analyzeHeadless / "
+                    "ida-pro-vm MCP) — WARN for pure-DEX samples; HARD if "
+                    "the sample has .so (see the #408 installer)"),
         ))
         return
 
     # Neither supply anywhere -> the exit-8 CHOICE.
-    report.items.append(CheckResult(
-        name="decompiler", status=Status.FAIL, tier=Tier.HARD,
+    report.items.append(_decompiler_item(
+        status=Status.FAIL, supply=_DECOMPILER_SUPPLY_NONE,
         detail=_DECOMPILER_NEITHER_DETAIL,
         root_cause="decompiler" if has_native_so else None,
-        probe=ProbeTier.PRESENCE,
         pending_decision=_decompiler_choice(),
     ))
 
@@ -2159,6 +2257,50 @@ def _check_linux(report: ToolchainReport, ws: Path,
 
 # ---------- Android manifest ----------
 
+JAVA_VERSION_TIMEOUT_S = 10
+
+
+def _jvm_item(jadx_present: bool) -> CheckResult:
+    """The `java -version` probe item (issue 215).
+
+    Tier follows the consequence, not the tool: jadx is a Java program, so
+    a JVM miss beside a present jadx is HARD; with jadx absent nothing on
+    this lane needs one and the item stays WARN (never in the HARD exit-4
+    refusal set). Probe tier is CAPABILITY — `-version` is a real run of
+    the interpreter, the strongest layer-1 answer that executes no sample
+    code (the state-ladder lesson: answer "is it installed?" by probing,
+    never by reading a tool description).
+    """
+    java = _shutil_which("java")
+    tier = Tier.HARD if jadx_present else Tier.WARN
+    if java is None:
+        return CheckResult(
+            name="jvm", status=(Status.FAIL if jadx_present else Status.WARN),
+            tier=tier, root_cause="JVM", probe=ProbeTier.PRESENCE,
+            fix="install a JDK (java -version), then re-probe",
+            detail=("java not found in PATH — jadx cannot run without a JVM"
+                    if jadx_present else
+                    "java not found in PATH — nothing on this lane needs a "
+                    "JVM while jadx is absent"))
+    rc, out, err = _run_cmd([java, "-version"],
+                            timeout=JAVA_VERSION_TIMEOUT_S)
+    # java -version prints its banner on stderr (OpenJDK, every release);
+    # stdout is the fallback for implementations that do otherwise.
+    banner = next((ln for ln in (err or out).splitlines() if ln.strip()), "")
+    if rc == 0:
+        return CheckResult(
+            name="jvm", status=Status.PASS, tier=tier,
+            probe=ProbeTier.CAPABILITY,
+            detail=(f"java found at {java}"
+                    + (f" — {banner}" if banner else "")))
+    return CheckResult(
+        name="jvm", status=(Status.FAIL if jadx_present else Status.WARN),
+        tier=tier, root_cause="JVM", probe=ProbeTier.CAPABILITY,
+        fix="install a working JDK (java -version), then re-probe",
+        detail=(f"java at {java} but -version failed "
+                f"({banner or 'no output'}) — jadx cannot start"))
+
+
 def _check_android(report: ToolchainReport, ws: Path,
                    caps: bool = False,
                    reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
@@ -2199,8 +2341,40 @@ def _check_android(report: ToolchainReport, ws: Path,
             ))
 
     # T1: jadx + apktool
-    report.items.extend(_which_items(
-        ("jadx", "apktool"), Tier.HARD))
+    jadx_apktool = _which_items(("jadx", "apktool"), Tier.HARD)
+    report.items.extend(jadx_apktool)
+    # "jadx_bin present" = the binary resolved on PATH (PASS, or WARN when
+    # its own verify_cmd failed): either way the java-source lane needs a
+    # JVM, and only a never-found binary leaves the item WARN.
+    jadx_present = any(i.name == "jadx" and i.status != Status.FAIL
+                       for i in jadx_apktool)
+
+    # T1: JVM (java -version) — state-ladder layer 1 (issue 215): the field
+    # run answered "is there a JVM?" from dexdc's feature text ("no JVM")
+    # instead of probing the host. jadx IS a Java program, so with jadx
+    # present a missing/broken JVM is a broken environment (HARD); without
+    # jadx nothing on the android static lane needs one (WARN, so the item
+    # can never enter the HARD exit-4 refusal set on a non-jadx host).
+    report.items.append(_jvm_item(jadx_present))
+
+    # T1: apkid — presence probe ONLY, WARN tier (so it can never enter the
+    # HARD exit-4 refusal set). apkid is a TOOL: init probes existence and
+    # surfaces the first-claim recommendation; the agent decides whether or
+    # when to run it (init never executes the scanner — issue 669 ruling).
+    # The recommendation rides every apkid item's detail verbatim so the
+    # init summary face and the intake promise mirror one source phrase.
+    # missing_status is explicit: the _which_items default compares a Tier
+    # against a Status enum, which never compares equal across classes.
+    apkid_items = [
+        dataclasses.replace(
+            it,
+            detail=(it.detail + " — apkid recommended for apk fingerprinting "
+                    "(packer / obfuscator / anti-*); agent to run on "
+                    "first claim"))
+        for it in _which_items(("apkid",), Tier.WARN,
+                               missing_status=Status.WARN)
+    ]
+    report.items.extend(apkid_items)
 
     # T1: GitNexus (real probe: gitnexus --version)
     gn_path = _shutil_which("gitnexus")
@@ -2597,8 +2771,9 @@ def _check_macos(report: ToolchainReport, ws: Path,
 # #455: the type IS the environment-contract selector — each type selects
 # a completely different check set. Declared here (consumed by tests as the
 # contract surface; the checkers dict in check() is the execution source):
-#   * decompiler surfaces as one of decompiler | ghidra | ida (whichever
-#     probe hits first — #407 MCP-first);
+#   * the decompiler face is ONE family key (`decompiler`, issue 210) —
+#     whichever supply wins (idat64 | analyzeHeadless | ida-pro-vm) is
+#     reported as supply/skipped on that single item;
 #   * aapt surfaces as aapt or aapt2 (aapt2 wins if found);
 #   * mcp:<name> items are dynamic (mcp_probe.MANIFEST per type).
 # ANDROID IS NOT A VM CHANNEL CONTRACT: the android set never contains
@@ -2609,17 +2784,17 @@ def _check_macos(report: ToolchainReport, ws: Path,
 # design (issue #455 evidence 2; deep manifest is #450).
 CHECK_SETS: dict[str, frozenset[str]] = {
     "windows": frozenset({
-        "pefile", "die", "floss", "decompiler", "ghidra", "ida", "uv",
+        "pefile", "die", "floss", "decompiler", "uv",
         "vm_reachable", "remote_debugger", "docker",
     }),
     "linux": frozenset({
-        "file", "readelf", "objdump", "decompiler", "ghidra", "ida", "uv",
+        "file", "readelf", "objdump", "decompiler", "uv",
         "vm_reachable", "remote_debugger", "docker", "gdbserver",
         "ebpf", "strace", "ltrace",
     }),
     "android": frozenset({
-        "aapt", "aapt2", "jadx", "apktool", "gitnexus",
-        "decompiler", "ghidra", "ida", "uv",
+        "aapt", "aapt2", "jadx", "apktool", "gitnexus", "apkid", "jvm",
+        "decompiler", "uv",
         "adb", "device_root", "debug_flag", "frida_server",
         "android_server", "jdwp_debug", "ebpf_android", "unidbg",
     }),
@@ -2637,6 +2812,119 @@ NEVER_CHECKS: dict[str, frozenset[str]] = {
     # runs dynamics natively on a Darwin host, never through vmr-shell.
     "macos": frozenset({"vm_reachable", "remote_debugger"}),
 }
+
+# ---------- lane check sets (issue 208) ----------
+# A task whose material is not a binary sample (algorithm / protocol / web /
+# data / app) must not be gated on the malware static + MCP supply. The
+# per-lane required sets live in lane_spec.REQUIRED_CHECKS (single source);
+# malware is ABSENT there on purpose — the malware lane keeps the per-TYPE
+# CHECK_SETS dispatch above, byte-identical to the pre-lane gate.
+#
+# The lane gate runs on a CLEAN host contract: uv + a usable Python
+# interpreter are HARD (the repo standard is `uv run`), and the lane's
+# material probe is WARN (the material is user-supplied; a fresh workspace
+# legitimately has none yet — that must not refuse init).
+LANE_MATERIAL_DIRS: tuple[str, ...] = ("corpora", "corpus", "references",
+                                       "dataset", "samples")
+
+# The negative declaration for every non-malware lane: the MCP analysis
+# supply, the decompiler family and the VM/device channel belong to the
+# binary-sample lanes. Regression-pinned by the lane tests.
+LANE_NEVER_CHECKS: frozenset[str] = frozenset({
+    "decompiler", "vm_reachable", "remote_debugger", "pefile", "floss",
+    "die", "file", "readelf", "objdump", "gdbserver", "ebpf", "strace",
+    "ltrace", "aapt", "aapt2", "jadx", "apktool", "apkid", "jvm", "adb",
+    "device_root", "debug_flag", "frida_server", "android_server",
+    "jdwp_debug", "ebpf_android", "unidbg", "otool", "class-dump",
+    "swift-demangle", "darwin_runtime", "docker", "channel:docker",
+    "gitnexus", "app_permissions", "root_available",
+}) | frozenset(f"mcp:{item.name}" for item in mcp_probe.MANIFEST)
+
+
+def _check_python(report: ToolchainReport) -> None:
+    """The lane's interpreter face: a usable Python is the repo standard
+    (`uv run`), so a broken interpreter is a HARD lane failure."""
+    exe = sys.executable or "python3"
+    rc, out, err = _run_cmd(
+        [exe, "-c", "import sys; print(sys.version.split()[0])"], timeout=15)
+    if rc == 0 and out.strip():
+        report.items.append(CheckResult(
+            name="python", status=Status.PASS, tier=Tier.HARD,
+            detail=f"interpreter at {exe}: Python {out.strip().splitlines()[0]}",
+            probe=ProbeTier.LIVENESS,
+        ))
+        return
+    report.items.append(CheckResult(
+        name="python", status=Status.FAIL, tier=Tier.HARD,
+        detail=f"interpreter {exe} failed to run: {(err or out)[:100]}",
+        probe=ProbeTier.LIVENESS, root_cause="python",
+    ))
+
+
+def _check_lane_material(report: ToolchainReport, ws: Path, lane: str,
+                         name: str) -> None:
+    """The lane's material probe (WARN, documented stub).
+
+    The material of a non-malware lane is user-supplied and routinely
+    arrives AFTER init (a capture, a dataset, a target URL), so absence is
+    WARN guidance — never a HARD refusal. The deep per-lane analysis
+    toolchain is a documented stub: this face checks that the workspace has
+    somewhere to mount the lane's material and says what the lane consumes.
+
+    An unreadable material dir degrades to WARN with the real cause: a
+    permission problem is operator guidance, never a traceback out of the
+    gate (issue 225)."""
+    hits: list[str] = []
+    unreadable: list[str] = []
+    for d in LANE_MATERIAL_DIRS:
+        p = ws / d
+        try:
+            if p.is_dir() and any(p.iterdir()):
+                hits.append(d)
+        except OSError as exc:
+            unreadable.append(
+                f"{d} ({type(exc).__name__}: {exc.strerror or exc})")
+    if unreadable:
+        detail = (f"{lane} lane material probe degraded — unreadable "
+                  f"material dir(s): {', '.join(unreadable)}; fix the "
+                  f"permissions (or remount) and re-probe"
+                  + (f"; readable material present: {', '.join(sorted(hits))}/"
+                     if hits else ""))
+        report.items.append(CheckResult(
+            name=name, status=Status.WARN, tier=Tier.WARN, detail=detail,
+            probe=ProbeTier.PRESENCE,
+        ))
+        return
+    hits = sorted(hits)
+    detail = (f"{lane} lane material present: {', '.join(hits)}/ — "
+              f"documented stub (the deep {lane} toolchain is not implemented)"
+              if hits else
+              f"{lane} lane material not mounted yet ({lane_spec.material(lane)})"
+              f" — mount it under one of {', '.join(LANE_MATERIAL_DIRS)}/; "
+              f"documented stub (the deep {lane} toolchain is not implemented)")
+    report.items.append(CheckResult(
+        name=name,
+        status=Status.PASS if hits else Status.WARN,
+        tier=Tier.WARN, detail=detail, probe=ProbeTier.PRESENCE,
+    ))
+
+
+def _check_lane(report: ToolchainReport, ws: Path, lane: str,
+                caps: bool = False,
+                reqs: Requirements = DEFAULT_REQUIREMENTS) -> None:
+    """Per-lane gate (issue 208): uv + python + the lane's material probe.
+
+    The MCP analysis supply / decompiler family / VM+device channel are
+    deliberately NOT probed here (LANE_NEVER_CHECKS) — a codec or protocol
+    task is not a malware-binary engagement, and its env must not be gated
+    on IDA/Ghidra/frida/unidbg/pefile."""
+    for name in lane_spec.REQUIRED_CHECKS.get(lane, ()):
+        if name == "uv":
+            _check_uv(report)
+        elif name == "python":
+            _check_python(report)
+        else:
+            _check_lane_material(report, ws, lane, name)
 
 # ---------- report formatting ----------
 
@@ -2720,6 +3008,10 @@ def format_json(report: ToolchainReport) -> str:
                 "pending_decision": (
                     dataclasses.asdict(i.pending_decision)
                     if i.pending_decision is not None else None),
+                # issue 210 XOR-family evidence: which supply won and which
+                # siblings it pre-empted (null/[] on non-family checks).
+                "supply": i.supply,
+                "skipped": list(i.skipped),
             }
             for i in report.items
         ],
@@ -2744,7 +3036,8 @@ def _report_pending(report: ToolchainReport) -> bool:
 
 def check(ws: Path, project_type: str | None = None,
           caps: bool = False,
-          task_spec: dict | None = None) -> ToolchainReport:
+          task_spec: dict | None = None,
+          lane: str | None = None) -> ToolchainReport:
     """Run type-aware toolchain checks.
 
     #474: caps=True opts into CAPABILITY-tier trial probes (decompiler
@@ -2756,6 +3049,12 @@ def check(ws: Path, project_type: str | None = None,
     defaults, every unreadable field keeps its pre-#449 HARD tier. The
     type stays the manifest selector (template default); the task_spec
     only tightens/relaxes requirement tiers on top of it.
+    Issue 208: lane selects the CHECK SET. Absent (or task_spec lane
+    absent, or lane=malware) = the per-type malware dispatch, byte-identical
+    to the pre-lane gate; any other lane runs uv + python + the lane's
+    material probe instead of the MCP/RE analysis supply. A PRESENT but
+    invalid lane value raises ValueError (fail closed — a typo never runs
+    the malware gate by accident).
     """
     if project_type is None:
         project_type = read_project_type(ws)
@@ -2765,6 +3064,15 @@ def check(ws: Path, project_type: str | None = None,
             f"Must be one of: {', '.join(VALID_TYPES)}. "
             f"Set --type or add project_type=<type> to analysis_state.txt."
         )
+    if lane is None and isinstance(task_spec, dict):
+        raw_lane = task_spec.get(lane_spec.LANE_FIELD)
+        if raw_lane is not None and str(raw_lane).strip():
+            # A PRESENT-but-invalid value fails closed here (ValueError);
+            # only a truly ABSENT/blank lane keeps the legacy malware
+            # dispatch. A typo must never silently run the malware gate.
+            lane = lane_spec.validate(raw_lane)
+    if lane is not None:
+        lane = lane_spec.validate(lane)  # fail closed, never a silent malware fallback
     report = ToolchainReport(project_type=project_type)
     reqs = requirements_from_task_spec(task_spec)
     checkers = {
@@ -2774,12 +3082,51 @@ def check(ws: Path, project_type: str | None = None,
         "web": _check_web,
         "macos": _check_macos,
     }
-    checkers[project_type](report, ws, caps=caps, reqs=reqs)
+    if lane is not None and lane != lane_spec.DEFAULT_LEGACY:
+        _check_lane(report, ws, lane, caps=caps, reqs=reqs)
+    else:
+        checkers[project_type](report, ws, caps=caps, reqs=reqs)
     # single-point owner stamping — every item leaves the gate with
     # its ownership tier (rebuilt items, no in-place mutation).
     report.items = [dataclasses.replace(i, owner=owner_for(i.name))
                     for i in report.items]
     return report
+
+
+# Report item -> probe token: the route_capability preconditions that read
+# evidence/tool-probes.json (a missing token stays `unverified` there; a
+# False token BLOCKS the provider). Only items actually probed in the
+# report are written — a probe answer is never invented.
+TOOL_PROBE_ITEMS: dict[str, str] = {
+    "jvm": "jvm",
+    "jadx_bin": "jadx",
+}
+
+
+def persist_tool_probes(ws: Path, report: ToolchainReport) -> Path | None:
+    """Write <ws>/evidence/tool-probes.json from the report's tool probes.
+
+    route_capability's jadx preconditions (`jadx_bin`, `jvm`) read this
+    file; before this writer existed the file appeared only in test
+    fixtures, so the tokens could never leave `unverified` and the
+    advertised probed-false JVM block could not fire (issue 225). Mapping:
+    report status PASS -> true, anything else -> false; a token whose item
+    was not probed in this report is NOT written (never a guessed answer).
+
+    Returns the written path, or None when the report probed none of the
+    tokens (nothing to say). A real write failure raises OSError — the
+    caller decides whether that is fatal (init degrades it to a warning:
+    the token just stays `unverified`)."""
+    items = {i.name: i for i in report.items}
+    probes = {token: items[name].status == Status.PASS
+              for token, name in TOOL_PROBE_ITEMS.items() if name in items}
+    if not probes:
+        return None
+    out = Path(ws) / "evidence" / "tool-probes.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(probes, indent=2, sort_keys=True) + "\n",
+                   encoding="utf-8")
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:

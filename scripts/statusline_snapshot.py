@@ -58,6 +58,13 @@ zero-spawn contract violation; that read is gone), and named phase-2
 placeholder slots (``v_oracle_gap`` #133, ``baseline_inv_k`` #129) so
 the renderer never changes twice.
 
+Issue 218 adds the Thompson rank face: ``rank`` (the latest ``rank_feeds``
+run's top action — claim id / sampled score / age / staleness) and
+``rank_log`` (the emit-path health bit — a crashed ``rank_feeds`` emit is
+observable here while the ranking result itself stays untouched, the silent
+fail-open contract). Both are single-sourced in scripts/rank_face.py so the
+heartbeat tick report reads the same values this snapshot renders.
+
 Usage: python statusline_snapshot.py <workspace>
 (attached from the heartbeat_touch per-tool-use path and from
 heartbeat_tick's post-settlement step — event-driven writes, #142
@@ -89,6 +96,11 @@ SKILL_DIR = Path(__file__).resolve().parent.parent  # kunglao-agent/ root
 # #142 follow-up: the snapshot path is single-sourced in entropy_face (the
 # trend-baseline reader owns the constant; the writer reuses it — no twin).
 from entropy_face import SNAPSHOT_REL
+
+# Issue 218: the Thompson rank face is single-sourced in rank_face (the
+# snapshot ships its latest rank_feeds reading + emit-path health bit; the
+# heartbeat tick report carries the same computed values).
+from rank_face import face as _rank_face
 
 # #142: snapshot schema version — 2 adds the producer-owned v2 fields
 # (v_hist / h_bits / h_trend / health / now / pq_rows / difficulty and the
@@ -676,6 +688,101 @@ def _difficulty(ws: Path) -> str | None:
         return None
 
 
+# Perf-face terminal vocabulary (claim-register status comment is the
+# shape contract: terminal = {PROVEN, VERIFIED, NEGATIVE, REFUTED, DEFERRED}).
+_PERF_TERMINAL_STATUSES = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED",
+                           "DEFERRED"}
+
+
+def _difficulty_face(ws: Path) -> dict | None:
+    """Issue 212 difficulty face: the calibrated tier first (the mounted
+    calibration output, via mission_ledger.read_difficulty_tier), the raw
+    calibration surface second — difficulty_calibration.calibrate_workspace
+    consumes the apkid/die evidence directly and is REUSED here, never
+    re-derived. Nothing usable -> None (renderer hides the badge)."""
+    try:
+        import mission_ledger
+        tier = mission_ledger.read_difficulty_tier(ws)
+    except Exception:  # noqa: BLE001 — a face never breaks the snapshot
+        tier = None
+    if tier:
+        return {"tier": str(tier), "score": None, "source": "calibrated"}
+    try:
+        from difficulty_calibration import calibrate_workspace
+        res = calibrate_workspace(ws) or {}
+        cov = res.get("coverage") or {}
+        if cov.get("die") or cov.get("apkid"):
+            score = res.get("score")
+            return {"tier": res.get("tier"),
+                    "score": (round(float(score), 4)
+                              if score is not None else None),
+                    "source": "raw-signals"}
+    except Exception:  # noqa: BLE001 — a face never breaks the snapshot
+        pass
+    return None
+
+
+def _perf_claims(ws: Path) -> dict:
+    """Issue 212 claims closed/total, recomputed from the LIVE ledger on every
+    build (owner correction: the denominator is dynamic — claims registered
+    during the loop grow N; the init baseline is a starting point, never a
+    cap). Unreadable register -> zeros (fail-open)."""
+    try:
+        reg = yaml.safe_load((ws / "claim-register.yaml")
+                             .read_text(encoding="utf-8")) or {}
+        claims = reg.get("claims") or []
+    except (OSError, yaml.YAMLError):
+        claims = []
+    closed = sum(1 for c in claims
+                 if str(c.get("status") or "").upper()
+                 in _PERF_TERMINAL_STATUSES)
+    return {"closed": closed, "total": len(claims)}
+
+
+def _perf_face(ws: Path) -> dict:
+    """Issue 212 performance face — every metric from a pre-existing pipe, every
+    read fail-open (missing source = the field stays None/0; the renderer
+    hides absent segments, it never renders a placeholder)."""
+    out: dict = {"claims": _perf_claims(ws), "win_rate": None,
+                 "heartbeat_age_min": None,
+                 "workers": {"total": 0, "active": 0,
+                             "last_activity_age_s": None}}
+    try:
+        from winrate_curve import face as _wr_face
+        f = _wr_face(ws) or {}
+        if int(f.get("n_settlements") or 0) > 0:
+            windowed = f.get("windowed") or []
+            rate = (windowed[-1].get("rate") if windowed else None) \
+                or (f.get("overall") or {}).get("rate")
+            out["win_rate"] = (round(float(rate), 4)
+                               if rate is not None else None)
+    except Exception:  # noqa: BLE001 — a face never breaks the snapshot
+        pass
+    try:
+        hb = ws / "runs" / ".heartbeat.json"
+        out["heartbeat_age_min"] = round(max(
+            0.0, (datetime.datetime.now(datetime.timezone.utc).timestamp()
+                  - hb.stat().st_mtime) / 60), 2)
+    except OSError:
+        pass
+    try:
+        from _hooks_path import load_hooks_lib
+        lib = load_hooks_lib()
+        states = list(lib.iter_worker_states(ws))
+        active = [s for s in states
+                  if s.get("status") not in lib.TERMINAL_WORKER_STATUSES
+                  and s.get("status") != lib.WAITING_WORKER_STATUS]
+        now_dt = datetime.datetime.now(datetime.timezone.utc)
+        last = max((s.get("mtime") for s in states), default=None)
+        out["workers"] = {"total": len(states), "active": len(active),
+                          "last_activity_age_s": (round(
+                              (now_dt - last).total_seconds(), 1)
+                              if last is not None else None)}
+    except Exception:  # noqa: BLE001 — a face never breaks the snapshot
+        pass
+    return out
+
+
 def _eta_fade_cells(d_slope: float) -> int:
     """条尾渐隐段长 = ETA 不确定性：斜率越接近名义健康值渐隐越短。"""
     confidence = min(1.0, abs(d_slope or 0.0) / D_SLOPE_NOMINAL)
@@ -825,6 +932,16 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     now_chip = _now_chip(ws)
     pq_rows = _pq_detail(ws)
     difficulty = _difficulty(ws)
+    # Issue 212: difficulty face (calibrated tier / raw-signals reuse) + the
+    # perf face (live-ledger claims, rolling win-rate, heartbeat age,
+    # worker liveness) — conditional segments, absent = hidden.
+    difficulty_face = _difficulty_face(ws)
+    perf = _perf_face(ws)
+    # Issue 218: the Thompson rank face — the latest rank_feeds run's top
+    # action (claim + sampled score + age/staleness) plus the emit-path
+    # health bit. Producer-owned like every other face: the renderer never
+    # reads the ledger. Additive fields — readers probe the field set.
+    rank = _rank_face(ws, now=now)
 
     return {
         "schema": SCHEMA_VERSION,
@@ -850,6 +967,17 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         "now": now_chip,
         "pq_rows": pq_rows,
         "difficulty": difficulty,
+        # Issue 212: difficulty face (calibrated/raw-signals provenance) + perf
+        # face (claims closed/total live ledger, rolling win-rate, heartbeat
+        # age, worker liveness). Additive fields — readers probe the field
+        # set, never a version ladder (no-backcompat policy).
+        "difficulty_src": difficulty_face,
+        "perf": perf,
+        # Issue 218: the Thompson rank face (latest rank_feeds run) + the
+        # emit-path health bit — a crashed rank_feeds emit is visible here
+        # while the ranking result itself stays untouched (fail-open).
+        "rank": rank["rank"],
+        "rank_log": rank["rank_log"],
         # #142 phase-2 slots: named now, populated later — no renderer change
         # twice (#133 v_norm-v_oracle gap, #129 1/k baseline).
         "v_oracle_gap": None,
