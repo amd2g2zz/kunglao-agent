@@ -495,7 +495,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 06133385bf0ad386a87055a02ea451961bb1fd03884f381738dc58cdf354df48
+    sha256: c8894c9a7a87bfa6a0d317ed4883c429f99002c58a79f4dc776178edeb3e11ab
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
