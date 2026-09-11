@@ -222,7 +222,14 @@ def test_binary_sweep_kinds(tmp_path):
     domains = [v for k, v in rows if k == "domain"]
     assert "http://example.com/x" in urls
     assert "192.168.1.1" in ips
-    assert "evil.example.org" in domains
+    # domains: the sweep also reports the URL's host as a domain hit —
+    # assert the full set by parsed hostname (the CodeQL-cleared form,
+    # mirroring the web-labs toolmeta check)
+    from urllib.parse import urlparse
+    hosts = [urlparse(f"//{d}").hostname for d in domains]
+    assert len(hosts) == 2 and len(set(hosts)) == 2
+    for h in hosts:
+        assert h in {"example.com", "evil.example.org"}, h
     assert re.search(r"url@0x[0-9a-f]+", r.stdout)
     assert re.search(r"ipv4@0x[0-9a-f]+", r.stdout)
     assert re.search(r"domain@0x[0-9a-f]+", r.stdout)
