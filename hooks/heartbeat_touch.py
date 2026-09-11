@@ -29,7 +29,8 @@ from pathlib import Path
 # #618: durable-sidecar access via the #671 path-hygiene authority (same
 # pattern as completion_gate) — the hook lands its pulse in the #830
 # append-only substrate, not just the cache file.
-from _path_hygiene import ensure_scripts_path, scripts_on_path  # noqa: E402
+from _path_hygiene import (  # noqa: E402
+    ensure_scripts_path, load_module_by_path, scripts_on_path)
 
 # #863 Family F: the harness-wide time-stamp util lives in scripts/;
 # reach it through the #671 path-hygiene authority (no second def).
@@ -40,6 +41,62 @@ import harness_common
 # PreToolUse/Bash + Stop fire often; the sidecar is a liveness substrate,
 # not a tool-call trace (growth stays ~cadence-shaped, not tool-shaped).
 PULSE_DEDUP_SECONDS = 60
+
+
+def _write_statusline_snapshot(ws: Path) -> None:
+    """#212: the statusline data plane is the DEPLOYED workspace copy.
+
+    Resolution order (each tier fail-open, each strictly more capable):
+
+      1. ``<ws>/.claude/scripts/statusline_snapshot.py`` — THE data plane
+         (workspace-relative, self-contained against skill upgrades),
+         loaded by resolved path, never by sys.path order (#671/#770);
+      2. the ambient scripts/ import (non-deployed hook mode);
+      3. the canonical install's env via one bounded subprocess — the
+         #783 deployed-mode `uv run --project <ws>` command runs on a bare
+         interpreter when the workspace carries no pyproject.toml, so a
+         yaml-importing data plane would silently never write. The env
+         degradation lands here, in the cosmetic face, and never touches
+         the heartbeat / analysis path.
+
+    Callers wrap this — the statusline never blocks a tool call.
+    """
+    deployed = ws / ".claude" / "scripts" / "statusline_snapshot.py"
+    if deployed.is_file():
+        try:
+            mod = load_module_by_path("statusline_snapshot_ws", deployed)
+            mod.write_snapshot(ws)
+            return
+        except Exception:  # noqa: BLE001 — degrade, never block the tool
+            pass
+    try:
+        import statusline_snapshot  # scripts/ on path via #671 boot
+        statusline_snapshot.write_snapshot(ws)
+        return
+    except ImportError:
+        pass  # bare-interpreter env (no yaml) — tier 3 below
+    except Exception:  # noqa: BLE001 — statusline never blocks tools
+        return
+    try:
+        import shutil
+        import subprocess
+        with scripts_on_path():
+            import hook_activation
+        root = hook_activation.canonical_install_root()
+        uv = shutil.which("uv")
+        # the CODE stays the workspace data plane (deployed copy, else the
+        # skill-root script); the canonical install only supplies the ENV
+        # (yaml et al.) the bare `uv run --project <ws>` interpreter lacks.
+        script = deployed if deployed.is_file() \
+            else root / "scripts" / "statusline_snapshot.py"
+        if uv is None or not script.is_file():
+            return
+        subprocess.run(
+            [uv, "run", "--project", str(root), "python", str(script),
+             str(ws)],
+            capture_output=True, timeout=60, check=False)
+    except Exception:  # noqa: BLE001 — cosmetic face, never blocks tools
+        pass
 
 
 utc_now = harness_common.utc_now_z  # #863 Family F: single source
@@ -80,14 +137,15 @@ def main() -> int:
                     hbmod.append_tick_log(ws, actor="hook")
             except Exception:  # noqa: BLE001 — liveness substrate best-effort
                 pass
-            # #142: per-tool-use statusline snapshot refresh — the v2
+            # #142/#212: per-tool-use statusline snapshot refresh — the v2
             # freshness contract rides the existing touch path so the
             # working-period snapshot mtime advances ~= per tool call,
-            # without waiting for the 5-min tick. Fail-open: the statusline
-            # is cosmetic and must never block or fail a tool call.
+            # without waiting for the 5-min tick. #212: the tick invokes the
+            # DEPLOYED data plane (<ws>/.claude/scripts/) when init has
+            # materialized it. Fail-open: the statusline is cosmetic and
+            # must never block or fail a tool call.
             try:
-                import statusline_snapshot  # scripts/ on path via #671 boot
-                statusline_snapshot.write_snapshot(ws)
+                _write_statusline_snapshot(ws)
             except Exception:  # noqa: BLE001 — statusline never blocks tools
                 pass
             return 0

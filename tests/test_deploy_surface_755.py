@@ -609,13 +609,15 @@ class TestT6Registry:
         assert any(i.startswith("template_stamp_refresh") for i in items_014), \
             "0.1.4 must carry the stamp refresh"
         assert any("uv_sync" in i for i in items_014)
-        # Linear-registry invariant: the stamp refresh rides the LAST
-        # migration, whatever release is newest (the G4 tail gate trusts
+        # Planner invariant (owner ruling 2026-09-11): the stamp refresh is
+        # the planner's UNIVERSAL terminal step for any behind workspace —
+        # no per-release registry entry required (the G4 tail gate trusts
         # the plan to carry the stamp face).
-        last_fn = up.MIGRATIONS[-1][1]
+        plan = up._plan_migrations(up._vkey("0.1.5"), "0.1.5.post1")
+        assert plan and plan[-1][0] == "0.1.5.post1"
         assert any(i.startswith("template_stamp_refresh")
-                   for i in last_fn(ws, True)), \
-            "the stamp refresh must ride the LAST migration"
+                   for i in plan[-1][1](ws, True)), \
+            "the stamp refresh must ride the plan tail"
 
     @pytest.fixture(autouse=True)
     def _offline_uv(self, monkeypatch):

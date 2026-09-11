@@ -1,5 +1,6 @@
 ---
 name: floss-filter
+lane: malware  # issue 208: analysis material contract — malware binary lane only
 description: 'Read `evidence/floss-raw.txt` (raw flare-floss output, up to 100k lines for Go binaries)
   + noise dictionary + family keywords. WRITE `evidence/floss-filtered.json` with two-layer output: (Layer
   A) inventory & statistics of the full survivor set; (Layer B) per-category top-K lists. Heuristic not

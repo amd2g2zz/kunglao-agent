@@ -151,7 +151,7 @@ files:
   scripts/kunglao-digest.py:
     r1: 1
   scripts/kunglao-init.py:
-    r1: 197
+    r1: 196
   scripts/kunglao-monitor.py:
     r1: 11
   scripts/kunglao-status.py:
@@ -294,7 +294,7 @@ files:
   scripts/tool_value.py:
     r1: 3
   scripts/toolchain.py:
-    r1: 91
+    r1: 90
   scripts/toolchain_install.py:
     r1: 38
   scripts/toolchain_negotiation.py:
@@ -594,7 +594,7 @@ files:
   tests/test_entry_sweep_585.py:
     r1: 2
   tests/test_env_check.py:
-    r1: 30
+    r1: 28
   tests/test_env_check_gate.py:
     r1: 8
   tests/test_env_dotenv.py:
@@ -796,7 +796,7 @@ files:
   tests/test_kunglao_status.py:
     r1: 1
   tests/test_kunglao_upgrade_726.py:
-    r1: 13
+    r1: 12
   tests/test_kunglao_wait_902.py:
     r1: 2
   tests/test_ledger_settlement_8.py:
@@ -1157,7 +1157,7 @@ files:
   tests/test_unidbg_harness_template.py:
     r1: 1
   tests/test_upgrade_safety_753.py:
-    r1: 9
+    r1: 8
   tests/test_upgrade_slash_command_746.py:
     r1: 4
     r2: 1

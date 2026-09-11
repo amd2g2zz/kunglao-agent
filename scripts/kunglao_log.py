@@ -195,9 +195,13 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
          trace_id=_UNSET,
          version: str | None = None,
          channel: str | None = None,
-         null_reasons: dict | None = None) -> None:
+         null_reasons: dict | None = None) -> bool:
     """Append one structured event line. Never raises — write failure degrades
     to a stderr warning so logging can never break analysis.
+
+    Returns True when the row reached the ledger, False when the write
+    failed (the caller-visible health bit: a caller that must know whether
+    observability actually landed checks this instead of assuming).
 
     #818 batch-1: arm/epoch/hypothesis_ref per #823 attribution contract;
     version auto-fills with the checkout git SHA when omitted (None on
@@ -290,6 +294,8 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
             os.close(fd)
     except OSError as exc:
         print(f"[kunglao_log] warning: cannot write {p}: {exc}", file=sys.stderr)
+        return False
+    return True
 
 
 # ------------------- #58 S2: subagent lifecycle events ----------------------

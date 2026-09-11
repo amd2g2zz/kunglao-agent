@@ -505,6 +505,14 @@ def _build_current_frame(ws: Path, old_text: str,
     carried = _parse_sample_rows(old_text)
     # #919: type-conditional slot parity with init's write_claudemd.
     etype = ptype if ptype in init.VALID_TYPES else "windows"
+    # issue 208: the material block is lane-rendered — derive the lane from
+    # the workspace contract (absent = the legacy malware/sample table, with
+    # the old render's values carried forward).
+    lane = None
+    try:
+        lane = init.lane_spec.declared(ws)
+    except Exception:  # noqa: BLE001 — parity best-effort, frame still renders
+        lane = None
     params = {
         "type_section": type_section,
         "task_spec_section": req_block or "",
@@ -516,12 +524,13 @@ def _build_current_frame(ws: Path, old_text: str,
         # (the upgrade re-render would otherwise leave {{placeholders}}).
         "roles_rows": init.roles_rows(),
         "layout_rows": init.layout_rows(),
-        "quick_start_section": init.quick_start_scaffold(etype, sample_name),
-        "sample_sha1": carried.get("sample_sha1", sample_name),
-        "sample_sha256": carried.get("sample_sha256", sample_sha),
-        "sample_type": carried.get("sample_type",
-                                   "(detected at analysis time)"),
-        "sample_path": carried.get("sample_path", f"bins/{sample_name}"),
+        "quick_start_section": init.quick_start_scaffold(etype, sample_name,
+                                                         lane),
+        "material_section": init.material_section(
+            carried.get("sample_sha1", sample_name),
+            carried.get("sample_sha256", sample_sha), lane,
+            sample_type=carried.get("sample_type"),
+            sample_path=carried.get("sample_path")),
         "skill_dir": canonical_install_root().as_posix(),
         "venv_path": venv_path,
     }
@@ -772,30 +781,39 @@ def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
     ]
 
 
-def migrate_to_0_1_5(ws: Path, dry: bool) -> list[str]:
-    """v0.1.4 -> current: frame-currency + honest stamps (G3/G4 carry).
+# Linear registry: version-SPECIFIC repairs only. The frame/stamp carry
+# (G3 merge + G4-gated quiet stamp) used to be a per-release boilerplate
+# entry; it is now the planner's universal terminal step (see
+# _plan_migrations) — owner ruling 2026-09-11: releases must not hand-write
+# an identical carry function for every version.
+MIGRATIONS: list[tuple[str, MigrationFn]] = [
+    ("0.1.3", migrate_to_0_1_3),
+    ("0.1.4", migrate_to_0_1_4),   # #755 deploy-surface completion (T6)
+]
 
-    The 0.1.5 train ships no new deploy-surface repairs, but the per-version
-    registry convention still demands a fresh entry: without one
-    an ALREADY-0.1.4-stamped workspace plans zero migrations, the G3
-    merge and the stamp carry never run, and the G4 tail gate — which
-    trusts the plan to carry the stamp face — leaves the workspace
-    honestly stuck on 0.1.4 stamps. Same carry pair as 0.1.4's tail:
-    the G3 merge (frame currency; refuses-and-warns on a stale body)
-    followed by the G4-gated quiet stamp."""
+
+def _carry_tail(ws: Path, dry: bool) -> list[str]:
+    """The universal terminal carry: frame-currency (G3 merge;
+    refuses-and-warns on a stale body) followed by the G4-gated quiet
+    stamp. Planned as the tail for ANY behind workspace, so the stamp face
+    always rides the plan — the G4 tail gate trusts it."""
     return [
         _item_claudemd_merge(ws, dry),                 # G3/T2/A3 carry
         _item_template_stamp_refresh_quiet(ws, dry),   # G4-gated carry
     ]
 
 
-# Linear registry: every version that needs a migration step beyond
-# "re-stamp" (the stamp refresh itself is carried by the LAST migration).
-MIGRATIONS: list[tuple[str, MigrationFn]] = [
-    ("0.1.3", migrate_to_0_1_3),
-    ("0.1.4", migrate_to_0_1_4),   # #755 deploy-surface completion (T6)
-    ("0.1.5", migrate_to_0_1_5),   # G3 merge + G4 stamp carry
-]
+def _plan_migrations(origin_key: tuple[int, ...],
+                     target: str) -> list[tuple[str, MigrationFn]]:
+    """Version-gated repairs + the universal terminal carry.
+
+    A workspace already at the target plans NOTHING (fast path); any behind
+    workspace gets its version-specific repairs followed by exactly one
+    carry tail — no registry entry required for that, at any release."""
+    plan = [(v, fn) for v, fn in MIGRATIONS if _vkey(v) > origin_key]
+    if _vkey(target) > origin_key:
+        plan.append((target, _carry_tail))
+    return plan
 
 
 # --------------------------------------------------------------------------
@@ -803,8 +821,12 @@ MIGRATIONS: list[tuple[str, MigrationFn]] = [
 # --------------------------------------------------------------------------
 
 def _vkey(version: str) -> tuple[int, ...]:
+    """Sortable key for registry versions. PEP 440 post releases sort
+    after their base: "0.1.5.post1" -> (0, 1, 5, 1) > (0, 1, 5)."""
+    parts = version.strip().split(".")
     try:
-        return tuple(int(p) for p in version.strip().split("."))
+        return tuple(int(p[4:]) if p.startswith("post") else int(p)
+                     for p in parts)
     except ValueError:
         raise ValueError(f"unparseable version {version!r}")
 
@@ -1496,6 +1518,41 @@ def _item_skill_staleness_check(ws: Path, dry: bool) -> str:
 # driver
 # --------------------------------------------------------------------------
 
+def _statusline_report(ws: Path, dry_run: bool) -> dict:
+    """Issue 212, FIRST line of every upgrade run (owner ruling): the statusline
+    registration is re-verified BEFORE any other output — it is the
+    operator's only visible success/failure signal. Read-only here: the
+    heal is deferred to the gated write points (never before the dirty
+    gate, never on a refused run, never on a dry run).
+    """
+    from hook_activation import verify_statusline_registration
+    rep = verify_statusline_registration(ws)
+    if rep["ok"]:
+        print(f"kunglao-upgrade: statusline: ok ({rep['command']})")
+        return rep
+    state = ("dry-run: would self-heal" if dry_run
+             else "self-heal at the gated write point")
+    print(f"kunglao-upgrade: statusline: {rep['reason']} "
+          f"({rep['command'] or 'unregistered'}) — {state}")
+    return rep
+
+
+def _statusline_heal(ws: Path, items_out: list | None = None) -> bool:
+    """Issue 212 self-heal: re-register the project statusLine key (overwrites
+    ONLY the kunglao-owned key; never the user-global file)."""
+    from hook_activation import register_statusline
+    try:
+        res = register_statusline(ws)
+    except Exception as exc:  # noqa: BLE001 — cosmetic face, never fails upgrade
+        _warn_line(f"kunglao-upgrade: WARN statusline self-heal failed ({exc})")
+        return False
+    print(f"kunglao-upgrade: statusline: self-healed -> {res.get('command')}")
+    if items_out is not None:
+        items_out.append({"name": "statusline_selfheal", "action": "applied",
+                          "detail": str(res.get("command") or "")})
+    return bool(res.get("ok"))
+
+
 def _anchor_backfill(ws: Path, dry_run: bool, resolve: dict | None,
                      items_out: list | None) -> tuple[int, dict | None]:
     """Detect missing required intake answers in task_spec.yaml and elicit
@@ -1592,6 +1649,11 @@ def upgrade(ws: Path, dry_run: bool = False,
            resolve: dict | None = None) -> int:
     ws = Path(ws)
     origin = template_version.read_workspace_version(ws)
+    # Issue 212: the statusline re-verify is the FIRST line of every upgrade run
+    # (owner ruling) — before the stamp refusal, before "already at
+    # version", before the plan. Read-only here; the heal runs at the gated
+    # write points below.
+    sl = _statusline_report(ws, dry_run)
     if origin is None:
         print("kunglao-upgrade: no version stamp on this workspace — "
               "cannot tell its shape. Run init on a fresh workspace.",
@@ -1606,7 +1668,7 @@ def upgrade(ws: Path, dry_run: bool = False,
     target = template_version.read_skill_version()
     target_key = _vkey(target)
 
-    plan = [(v, fn) for v, fn in MIGRATIONS if _vkey(v) > origin_key]
+    plan = _plan_migrations(origin_key, target)
     if origin_key >= target_key and not plan:
         print(f"kunglao-upgrade: already at version {origin}")
         # #783 T5 chain-hole: the already-current fast path must still
@@ -1663,6 +1725,12 @@ def upgrade(ws: Path, dry_run: bool = False,
             if anchor_pending is not None:
                 print(json.dumps(anchor_pending, ensure_ascii=False))
             return anchor_rc
+        # Issue 212: the already-current fast path heals too — every real run
+        # re-verifies AND self-heals (after the optional drift-refresh gate
+        # above, so this write never trips that dirty gate). Dry runs
+        # report only.
+        if not dry_run and not sl["ok"]:
+            _statusline_heal(ws, items_out)
         return RC_OK
 
     if dry_run:
@@ -1713,6 +1781,13 @@ def upgrade(ws: Path, dry_run: bool = False,
         if anchor_pending is not None:
             print(json.dumps(anchor_pending, ensure_ascii=False))
         return anchor_rc
+
+    # Issue 212: the main-path statusline heal rides the SAME position as the
+    # migration items — after the git gate + rollback anchor, inside the
+    # anchored window, so the post-state commit captures it. Never before
+    # the gate: the heal's own write must not trip _probe_dirty.
+    if not sl["ok"]:
+        _statusline_heal(ws, items_out)
 
     pre = user_data_digest(ws)
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())

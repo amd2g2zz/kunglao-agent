@@ -33,7 +33,7 @@ agent-three-state-charter.md "变更记录"):
   - declarative-sentence gates: v0.1.1's two recurring misbehaviours were
     NOT questions, so the interrogative layer never saw them:
       * Type E (death declaration): "这条路走不通" / "dead end" / "cannot
-        proceed" — rejected (rc=1, forced ladder re-eval) unless backed by
+        proceed" — rejected (rc=1, forced ladder re-assessment) unless backed by
         structured evidence (obstacle claim REFUTED per #495, or a
         failure_analysis outcome REFUTED = capability falsified);
       * plan-stall (Type B equivalent): "下一步:" / "next step:" declaration
@@ -173,7 +173,7 @@ TYPE_D_BLOCKER_PATTERNS = [
 # verdict is the grammar that silently killed v0.1.1 trajectory 1 — it asks
 # no question, so neither the ask-back gate nor the must-ask gate fired.
 # Legal terminal ONLY with structured evidence (find_death_evidence);
-# otherwise rc=1 = forced ladder re-eval, never a terminal.
+# otherwise rc=1 = forced ladder re-assessment, never a terminal.
 # Tripwire layer (zh+en, non-exhaustive).
 TYPE_E_PATTERNS = [
     r"走不通",
@@ -580,14 +580,14 @@ def check(workspace: Path, text: str) -> int:
             return 2
         print(f"REJECT Type D-blocker (charter v2): '{blockers[0][1]}' is an")
         print("in-authorization-boundary hard error -> allowed + FORCED LADDER,")
-        print("not must-ask (climb the ladder, then re-evaluate / 走梯后复评):")
+        print("not must-ask (climb the ladder, then reassess / 走梯后复评):")
         print("  1. method-ladder: python scripts/failure_analysis_gate.py <ws> <C-NN>")
         print("       --record --assumption ... --validity not-justified")
         print("       --next-method ... --validated-capability ...")
         print("       --identified-obstacle ... --source lesson-hit")
         print("  2. env-ladder: self-recovery L1 same-tool different mode ->")
         print("       L2 owning skill setup.sh -> L3 env-fix worker")
-        print("  3. re-evaluate after the ladder; only exhaustion (no candidates,")
+        print("  3. reassess after the ladder; only exhaustion (no candidates,")
         print("       3+ attempts) escalates back to must-ask")
         print()
         print(f"Excerpt: {excerpt}")
@@ -598,7 +598,7 @@ def check(workspace: Path, text: str) -> int:
 
     # #497 Type E (death declaration, declarative gate): a death verdict
     # without obstacle-REFUTED / capability-falsified evidence is NOT a
-    # terminal — forced ladder re-eval (v0.1.1 trajectory 1 replay class).
+    # terminal — forced ladder re-assessment (v0.1.1 trajectory 1 replay class).
     death = find_death_declarations(text)
     if death:
         excerpt = text[:300].replace("\n", " ")

@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 import yaml
@@ -322,7 +323,9 @@ def test_wakaru_webcrack_fixes_toolmeta():
     for key, package in (("wakaru", "wakaru"), ("webcrack", "webcrack")):
         meta = toolchain.FIXES[key]
         assert meta.package == package
-        assert meta.url and "github.com" in meta.url
+        assert meta.url, "toolmeta url missing"
+        assert urlparse(meta.url).hostname in {"github.com", "www.github.com"}, \
+            meta.url
         assert meta.verify_cmd and "--version" in meta.verify_cmd
         assert "npx" in meta.verify_cmd or package in meta.verify_cmd
 

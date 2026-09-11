@@ -66,7 +66,10 @@ def test_base_carries_required_sections():
     text = BASE_TMPL.read_text(encoding="utf-8")
     for section in (
         "## Workspace type",
-        "## Sample under analysis",
+        # issue 208: the material block is lane-rendered — the template
+        # carries the slot, init injects the malware sample table
+        # byte-identically or the non-malware lane's material contract.
+        "{{material_section}}",
         "## Skill & orchestrator",
         "## State files",
         "## Five-layer analysis principle",
@@ -103,8 +106,9 @@ def test_base_sample_and_venv_placeholders():
     # #362: placeholders migrated <UPPERCASE> -> {{lowercase}} (shared
     # template_gen engine convention). Syntax update only — content
     # assertions unchanged.
-    for ph in ("{{sample_sha1}}", "{{sample_sha256}}", "{{sample_type}}",
-               "{{sample_path}}", "{{skill_dir}}", "{{venv_path}}",
+    # issue 208: the four sample_* placeholders were replaced by the
+    # lane-rendered material slot (malware = the sample table, byte-equal).
+    for ph in ("{{material_section}}", "{{skill_dir}}", "{{venv_path}}",
                "{{type}}"):
         assert ph in text, f"base template missing placeholder {ph}"
 

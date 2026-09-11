@@ -22,8 +22,8 @@ from __future__ import annotations
 
 import session_start as ss  # pytest.ini pythonpath includes hooks/
 
-NOTICE_TOKEN = "kunglao hooks are NOT active"
-ACTIVATE_TOKEN = "/kunglao-agent:init"
+NOTICE_MARK = "kunglao hooks are NOT active"
+ACTIVATE_MARK = "/kunglao-agent:init"
 
 
 def test_non_workspace_session_emits_notice(tmp_path, capsys):
@@ -33,10 +33,10 @@ def test_non_workspace_session_emits_notice(tmp_path, capsys):
     rc = ss.session_start(ws)
     out = capsys.readouterr().out
     assert rc == 0, "non-workspace session must stay non-fatal"
-    assert NOTICE_TOKEN in out, f"notice missing from output: {out!r}"
-    assert ACTIVATE_TOKEN in out, f"activation hint missing: {out!r}"
+    assert NOTICE_MARK in out, f"notice missing from output: {out!r}"
+    assert ACTIVATE_MARK in out, f"activation hint missing: {out!r}"
     # one line — SessionStart output should stay a single context line
-    notice_lines = [ln for ln in out.splitlines() if NOTICE_TOKEN in ln]
+    notice_lines = [ln for ln in out.splitlines() if NOTICE_MARK in ln]
     assert len(notice_lines) == 1, f"expected exactly one notice line: {out!r}"
 
 
@@ -48,7 +48,7 @@ def test_workspace_session_emits_no_notice(tmp_path, capsys):
     rc = ss.session_start(ws)
     out = capsys.readouterr().out
     assert rc == 0
-    assert NOTICE_TOKEN not in out, f"notice must not fire in-workspace: {out!r}"
+    assert NOTICE_MARK not in out, f"notice must not fire in-workspace: {out!r}"
     assert "always_arm" in out, f"normal arm output missing: {out!r}"
 
 

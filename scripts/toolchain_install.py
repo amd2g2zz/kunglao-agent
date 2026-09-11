@@ -151,6 +151,17 @@ INSTALL_PLANS: dict[str, InstallPlan] = {
             PkgSpec("uv", ("uv", "pip", "install", "flare-floss")),
         ),
     ),
+    # issue 209: apkid is a WARN-tier android presence probe (the agent runs
+    # it at first claim); pip-installable like pefile/floss. The plan is the
+    # closed-declaration classification — WARN tier never reaches the
+    # ask_then_install FAIL path.
+    "apkid": InstallPlan(
+        kind="auto", degrade="WARN",
+        packages=(
+            PkgSpec("pip", ("pip", "install", "apkid")),
+            PkgSpec("uv", ("uv", "pip", "install", "apkid")),
+        ),
+    ),
     # --- T0/T1 RE system tools ---
     "die": InstallPlan(
         kind="auto", degrade="WARN",
@@ -325,6 +336,10 @@ NOT_AUTO_INSTALLABLE: dict[str, str] = {
     "jdwp_debug": "capability of a running debuggable app — not a package",
     "ebpf": "target-kernel property — not installable from the host",
     "ebpf_android": "device SDK property — not installable",
+    "jvm": "a JDK is a host toolchain decision (brew install openjdk / "
+           "distro package / SDKMAN) — the package managers here install "
+           "Python wheels, never a system JVM; the item is HARD only when "
+           "jadx is present, WARN otherwise",
 }
 
 

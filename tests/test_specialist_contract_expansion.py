@@ -122,9 +122,10 @@ _BACKTICK_RE = re.compile(r"`([^`]+)`")
 def _span_text(agent: str, element: str) -> str:
     """Content between the element's marker and the next marker / EOF.
 
-    Reuses the #492 lint's own span logic (_marker_spans + _COMMENT_RE) —
-    zero second parse point; substance semantics identical to Gate 6
-    (HTML-comment lines stripped before assertions).
+    Reuses the #492 lint's own span logic (_marker_spans +
+    _strip_inline_html_comments) — zero second parse point; substance
+    semantics identical to Gate 6 (HTML-comment lines stripped before
+    assertions).
     """
     path = REPO_ROOT / "agents" / f"{agent}.md"
     text = path.read_text(encoding="utf-8")
@@ -138,7 +139,8 @@ def _span_text(agent: str, element: str) -> str:
     start = starts[0]
     later = [i for i, _ in markers if i > start]
     end = min(later) if later else len(lines)
-    return "\n".join(al._COMMENT_RE.sub("", ln) for ln in lines[start + 1:end])
+    return "\n".join(al._strip_inline_html_comments(ln)
+                     for ln in lines[start + 1:end])
 
 
 def _declared_tool_names(span: str) -> list[str]:
