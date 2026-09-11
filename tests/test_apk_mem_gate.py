@@ -150,15 +150,17 @@ def test_red5_dex_bytes_total_sums_dex_sizes(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_red6_avail_gb_fallback(tmp_path, monkeypatch):
-    """When the stdlib mem detection raises (e.g., ctypes on locked-down env),
-    _avail_gb must return a positive fallback (4 GB) rather than 0."""
-    from apk_mem_gate import _avail_gb
-    monkeypatch.setattr("apk_mem_gate._mem_posix",
-                        lambda: (_ for _ in ()).throw(OSError("locked")))
-    monkeypatch.setattr("apk_mem_gate._mem_windows",
-                        lambda: (_ for _ in ()).throw(OSError("locked")))
-    val = _avail_gb()
-    assert val > 0, f"avail_gb must be > 0 even on detection failure, got {val}"
+    """When the platform mem detection raises (e.g., ctypes on a locked-down
+    env), _avail_gb must return the 4 GB floor rather than 0 — on EVERY
+    platform, darwin included (the dead probe issue 223 fixed) — and the
+    fallback must be marked as such."""
+    import apk_mem_gate as g
+    for probe in ("_mem_posix", "_mem_windows", "_mem_darwin"):
+        monkeypatch.setattr(f"apk_mem_gate.{probe}", _raises(OSError("locked")))
+    val = g._avail_gb()
+    assert val == g.DEFAULTS["apk_mem_floor_gb"], val
+    assert g._avail_probe() == (g.DEFAULTS["apk_mem_floor_gb"],
+                                "floor-fallback", "OSError: locked")
 
 
 # ---------------------------------------------------------------------------

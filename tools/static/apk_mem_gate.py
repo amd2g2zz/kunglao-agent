@@ -148,7 +148,10 @@ def _darwin_vm_page_counts() -> tuple[int, int, int]:
         ctypes.POINTER(ctypes.c_uint32),
     ]
     stats = VmStatistics64()
-    count = ctypes.c_uint32(ctypes.sizeof(stats))
+    # host_statistics64's count is in natural_t WORDS (HOST_VM_INFO64_COUNT),
+    # not bytes — the struct's own word count is the exact value.
+    count = ctypes.c_uint32(
+        ctypes.sizeof(stats) // ctypes.sizeof(ctypes.c_uint32))
     kern_return = libsystem.host_statistics64(
         libsystem.mach_host_self(), _HOST_VM_INFO64,
         ctypes.byref(stats), ctypes.byref(count))

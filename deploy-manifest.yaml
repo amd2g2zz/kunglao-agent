@@ -1475,7 +1475,7 @@ files:
   - src: tools/static/apk_mem_gate.py
     dest: .claude/tools/static/apk_mem_gate.py
     kind: asset
-    sha256: eea84b5bd458e0c12363ce351d1d8ca78dfc9979733502098619c936b3e94914
+    sha256: 3860a0b3bcc820342485d714f284643a328818c9f7dc16560ab69eef5f08e0d4
   - src: tools/static/baksmali_index.py
     dest: .claude/tools/static/baksmali_index.py
     kind: asset
