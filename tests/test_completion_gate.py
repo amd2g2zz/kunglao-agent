@@ -73,9 +73,22 @@ def _regression_oracle():
 
 
 def _all_closed_oracle():
+    """Pinned citation protocol: closures cite terminal claims C-1..C-6 from a register
+    under the oracle's workspace_path (fail-closed citation protocol)."""
+    import tempfile
+
+    import yaml
+
     o = _regression_oracle()
+    ws = Path(tempfile.mkdtemp(prefix="cg233-register-"))
+    (ws / "claim-register.yaml").write_text(
+        yaml.safe_dump({"claims": [{"id": f"C-{i}", "status": "VERIFIED"}
+                                   for i in range(1, 7)]},
+                       allow_unicode=True),
+        encoding="utf-8")
+    o["workspace_path"] = str(ws)
     for i, item in enumerate(o["open_items"], 1):
-        item["closed_by"] = f"commit {i:04d}"
+        item["closed_by"] = f"C-{i} verified"
         item["closed_at"] = f"2026-08-11T12:0{i}:00Z"
     return o
 

@@ -155,7 +155,7 @@ files:
   - src: scripts/ask_for_direction_gate.py
     dest: .claude/scripts/ask_for_direction_gate.py
     kind: scaffold
-    sha256: d4137f86632392392cb7e583f2704773f3ce4e14568df78707f7f3049faf664f
+    sha256: c453e87925bc7b18edde628bf8c2420f14352171ac38b2c61c953a1ebdd83453
   - src: scripts/backtrack_gate.py
     dest: .claude/scripts/backtrack_gate.py
     kind: scaffold
@@ -231,7 +231,7 @@ files:
   - src: scripts/completion_gate.py
     dest: .claude/scripts/completion_gate.py
     kind: scaffold
-    sha256: fbee7dc48d1ba20e1c50035e8a20193e7629e414ea560dceae070a69e04e5b43
+    sha256: 81062bd3b5daf38683b65dd45b796b93a119e23313f210ef89dbd1b3b65df5a7
   - src: scripts/content_hash.py
     dest: .claude/scripts/content_hash.py
     kind: scaffold
@@ -863,7 +863,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: ade9b230ebf9ce9a6790ec62c9680c7abf7cf1ec271d5aea6ac3bce82d48efbf
+    sha256: 697ba661f436a41dfb56dabb055c4f47e5624689eb16c4015780724a4b631d30
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -907,7 +907,7 @@ files:
   - src: references/contracts/agent-three-state-charter.md
     dest: .claude/references/contracts/agent-three-state-charter.md
     kind: asset
-    sha256: 43a58ff22ebc6d95f2d71c514c8b39ae422e132310b99b03cc423eed240c7d06
+    sha256: 28b4562ef4f2ba523bc04754c272505fcaf241674eb1a55acd84b392c9ba80d9
   - src: references/contracts/cli-script-checklist.md
     dest: .claude/references/contracts/cli-script-checklist.md
     kind: asset

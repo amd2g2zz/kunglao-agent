@@ -324,6 +324,12 @@ def find_death_evidence(workspace: Path) -> list:
         REFUTED;
       - a failure_analysis record with outcome REFUTED (capability
         falsified — the disproven method/claim is formally recorded).
+    Pinned scope semantics (issue 233): a path-scoped negative is licensed
+    only by a settled obstacle claim REFUTED (or a capability-falsified
+    failure_analysis) — this standard, unchanged; a task-scoped negative is
+    licensed only by the DEFERRED standard (V-signal + recovery ladder L1-L3
+    + non-empty attempt inventory + wake_condition, per
+    infeasible_signal/infeasible_proposal).
     Fail-closed: missing/unreadable files = no evidence = verdict rejected."""
     out = []
     for c in _load_claims(workspace):

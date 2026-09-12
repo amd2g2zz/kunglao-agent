@@ -54,7 +54,8 @@ def _activated_state(ws):
 def _would_pass_oracle(ws):
     oracle = {
         "task_text": "analyze the payload",
-        "open_items": [{"id": "OC-1", "closed_by": "verifier"}],
+        "workspace_path": str(ws),  # Pinned citation protocol: cite a terminal register claim
+        "open_items": [{"id": "OC-1", "closed_by": "C-302"}],
     }
     (ws / "task-oracle.yaml").write_text(
         yaml.safe_dump(oracle, sort_keys=False), encoding="utf-8")

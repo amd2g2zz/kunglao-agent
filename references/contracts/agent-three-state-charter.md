@@ -26,7 +26,7 @@ issue #447 证据 1 显示**三份文本对"什么时候该问用户"答案互�
 | **授权边界** | 有界授权内新硬错误 (#451 风格; v2 #497 校准) | **allowed** | **强制走梯**: 先走 method-ladder (`failure_analysis_gate --record`, #495 三产物) / env-ladder (自恢复 L1→L2→L3), **走梯后复评**; gate 的 TYPE_D blocker tripwire 无梯耗尽标记时降 rc=1 指引 |
 | **授权边界** | 工具/资源耗尽 — 梯爬完 (梯耗尽标记 = failure_analysis 记录无 `candidates` 且 claim `promotion_attempts >= 3`, #495 字段) | **must-ask** | emit Type D 信号 |
 | **范围变更** | 任务边界扩张(原计划外) | **must-ask** | emit Type D 信号 |
-| **判死宣告** | "这条路走不通/无法继续/dead end" 类陈述句 (v2 #497) | **有证据: allowed / 无证据: NEGATIVE (reject)** | 有障碍 REFUTED(#495 升格 obstacle claim 状态)或能力证伪(failure_analysis `outcome: REFUTED`)证据 → 合法终局; 无证据 → emit Type E + rc=1 强制走梯复评, **不得作为终局** |
+| **判死宣告** | "这条路走不通/无法继续/dead end" 类陈述句 (v2 #497) | **有证据: allowed / 无证据: NEGATIVE (reject)** | 有障碍 REFUTED(#495 升格 obstacle claim 状态)或能力证伪(failure_analysis `outcome: REFUTED`)证据 → 合法终局; 无证据 → emit Type E + rc=1 强制走梯复评, **不得作为终局**。#233 范围语义钉死: 路径级否定(path-scoped negative)仅由已落定的障碍 claim REFUTED 或能力证伪许可(即本行标准, 不变); 任务级否定(task-scoped negative)仅由 DEFERRED 标准许可(V 信号 + 恢复梯 L1-L3 + 非空尝试清单 + wake_condition, 见 infeasible_signal/infeasible_proposal)。任何 oracle item 的 `closed_by` 都必须引用 register 中终态 claim id(#233 citation protocol)。 |
 | **计划搁浅** | "下一步:"/"next step:" 声明后无工具动作 (v2 #497) | **NEGATIVE** (reject) | Type B 等价: rc=1, 执行该下一步或声明阻塞原因 (事件流轮次窗口判滞) |
 | **不可逆动作** | 删除 VM / 改 vmx / git push --force | **must-stop** | 阻止 + emit Type S + HARD_PAUSE |
 | **不可逆动作** | 公开 release / publish | **must-stop** | 阻止 + emit Type S |
