@@ -34,17 +34,25 @@ import completion_gate as cg  # noqa: E402  (scripts/ on sys.path)
 
 def _all_closed_oracle(workspace_path: str | None = None, task_text: str = "do X"):
     """An oracle that would PASS without the intent check — all items closed,
-    zero defers. workspace_path is optional (RED3 covers the absent case)."""
+    zero defers. workspace_path is optional (RED3 covers the absent case).
+    Pinned citation protocol: closures cite terminal claims C-1/C-2 from a
+    register written under the workspace (fail-closed verification)."""
     o = {
         "task_text": task_text,
         "open_items": [
-            {"id": "A", "desc": "A", "closed_by": "commit 0001", "closed_at": "2026-08-25T00:00:00Z"},
-            {"id": "B", "desc": "B", "closed_by": "commit 0002", "closed_at": "2026-08-25T00:00:01Z"},
+            {"id": "A", "desc": "A", "closed_by": "C-1 verified", "closed_at": "2026-08-25T00:00:00Z"},
+            {"id": "B", "desc": "B", "closed_by": "C-2 verified", "closed_at": "2026-08-25T00:00:01Z"},
         ],
         "deferrals": [],
     }
     if workspace_path is not None:
         o["workspace_path"] = workspace_path
+        import yaml
+        (Path(workspace_path) / "claim-register.yaml").write_text(
+            yaml.safe_dump({"claims": [
+                {"id": "C-1", "status": "VERIFIED"},
+                {"id": "C-2", "status": "PROVEN"}]}),
+            encoding="utf-8")
     return o
 
 
@@ -116,6 +124,16 @@ def test_red3_no_workspace_path_skips_check():
     oracle still PASSes (verdict unchanged)."""
     oracle = _all_closed_oracle(workspace_path=None,
                                 task_text="focus on the cryptographic key derivation pathway")
+    # Pinned citation protocol: without a workspace_path closure citations
+    # are unverifiable (fail-closed), so resolve the items with user-signed
+    # deferrals instead (closed_by cleared) — the test's purpose (intent
+    # check skipped without a workspace) is unchanged.
+    for item in oracle["open_items"]:
+        item["closed_by"] = ""
+    oracle["deferrals"] = [
+        {"item": "A", "authorized_by": "用户", "reason": "user decided"},
+        {"item": "B", "authorized_by": "用户", "reason": "user decided"},
+    ]
     code, reason = cg.judge(oracle)
     assert code == 0, f"expected PASS (no workspace → check skipped), got {code}: {reason}"
 

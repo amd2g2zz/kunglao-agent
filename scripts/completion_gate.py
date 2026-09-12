@@ -99,6 +99,83 @@ _TIER_RE = re.compile(
     "|".join(re.escape(t) for t in TIER_TERMS), re.IGNORECASE,
 )
 
+# Closure citation protocol (issue 233). EVERY closed_by (positive or
+# negative closure — one uniform rule, no "negative-flavored" text
+# classification) must cite a claim id. The grammar is mechanical: the
+# register vocabulary (C-1, OC-2, F-100). The cited claim must be terminal
+# (status_defs.TERMINAL) and, for scope standards:
+#   path-scoped negative  = obstacle claim (origin: failure-obstacle) REFUTED;
+#   task-scoped negative  = the DEFERRED standard (wake_condition +
+#                           infeasible_ladder — the file_proposal markers).
+# Verification reads claim-register.yaml under the oracle's workspace_path
+# and is FAIL-CLOSED: no workspace / no register / unknown id = unverifiable
+# = rejected (mirrors find_death_evidence).
+CLAIM_ID_RE = re.compile(
+    r"(?<![A-Za-z0-9-])([A-Za-z][A-Za-z0-9]*-[A-Za-z0-9]+)(?![A-Za-z0-9-])")
+
+try:  # single source for the terminal vocabulary
+    import status_defs as _status_defs
+    _TERMINAL_STATUSES = set(_status_defs.TERMINAL)
+except Exception:  # noqa: BLE001 — standalone CLI face: identical literal set
+    _TERMINAL_STATUSES = {"PROVEN", "VERIFIED", "NEGATIVE", "REFUTED",
+                          "DEFERRED", "STALE", "SUPERSEDED", "DEAD"}
+
+
+def _load_register_claims(ws_path) -> list | None:
+    """claim-register.yaml claims under the oracle workspace; None when the
+    register is absent/unreadable (unverifiable -> fail-closed)."""
+    if not ws_path:
+        return None
+    p = Path(ws_path) / "claim-register.yaml"
+    if not p.exists():
+        return None
+    try:
+        reg = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except (yaml.YAMLError, OSError):
+        return None
+    if not isinstance(reg, dict):
+        return None
+    claims = reg.get("claims")
+    return claims if isinstance(claims, list) else []
+
+
+def _closure_defect(item: dict, claims: list | None) -> str | None:
+    """Issue 233: return an INVALID_CLOSURE cause string for a closed item, or
+    None when the citation is valid. `claims` None = no workspace/register
+    available (unverifiable). Mechanical only: claim-id grammar + claim-state
+    lookup — never text classification."""
+    closed_by = str(item.get("closed_by", "") or "").strip()
+    if not closed_by:
+        return None  # empty = the pre-existing unresolved path, not a defect
+    cited = CLAIM_ID_RE.findall(closed_by)
+    if not cited:
+        return f"closed_by={closed_by!r} — no claim id cited"
+    if claims is None:
+        return (f"closed_by={closed_by!r} — unverifiable citation: no "
+                f"claim-register.yaml under workspace_path")
+    by_id = {str(c.get("id")): c for c in claims if isinstance(c, dict)}
+    for cid in cited:
+        claim = by_id.get(cid)
+        if claim is None:
+            return (f"closed_by={closed_by!r} — unverifiable citation: "
+                    f"claim {cid} not in claim-register.yaml")
+        status = str(claim.get("status") or "").upper()
+        if status not in _TERMINAL_STATUSES:
+            return (f"closed_by={closed_by!r} — cited claim {cid} is "
+                    f"{status or 'UNSET'} (not terminal)")
+        origin = str(claim.get("origin") or "")
+        if origin == "failure-obstacle" and status != "REFUTED":
+            return (f"closed_by={closed_by!r} — obstacle claim {cid} must "
+                    f"be REFUTED to license a path-scoped closure "
+                    f"(got {status})")
+        if status == "DEFERRED" and origin != "failure-obstacle":
+            if (not str(claim.get("wake_condition") or "").strip()
+                    or not str(claim.get("infeasible_ladder") or "").strip()):
+                return (f"closed_by={closed_by!r} — DEFERRED claim {cid} "
+                        f"lacks the task-scoped standard (wake_condition/"
+                        f"infeasible_ladder missing)")
+    return None
+
 
 # ---------------------------------------------------------------------------
 # #628: durable-note obligation (pending-queue face)
@@ -333,8 +410,10 @@ def judge(oracle, declaration_text=None) -> tuple[int, str]:
                  else "self-invented tier under comprehensive mandate")
         return (2, f"unsigned defer — {label}: " + "; ".join(parts))
 
-    # --- exit 1: unresolved open items ---
+    # --- exit 1: unresolved open items + invalid closure citations ---
+    register_claims = _load_register_claims(ws_path) if ws_path else None
     unresolved: list[dict] = []
+    invalid_closures: list[str] = []
     for item in open_items:
         if not isinstance(item, dict):
             # #717: a bare string item has no id/closed_by — pre-#717
@@ -346,14 +425,21 @@ def judge(oracle, declaration_text=None) -> tuple[int, str]:
                 {"id": str(item)[:60], "closed_by": "", "detail": str(item)})
             continue
         item_id = str(item.get("id", "") or "").strip()
-        closed_by = str(item.get("closed_by", "") or "").strip()
-        if closed_by:
-            continue  # resolved by completion
+        if item.get("closed_by") and str(item.get("closed_by")).strip():
+            # The closure citation protocol — one mechanical check for
+            # positive AND negative closures (claim-id grammar + terminality
+            # + scope standard, fail-closed). A defective citation does not
+            # resolve the item.
+            defect = _closure_defect(item, register_claims)
+            if defect is None:
+                continue  # valid citation — resolved by completion
+            invalid_closures.append(f"{item_id or '?'} {defect}")
+            continue
         if item_id and item_id in valid_deferred_ids:
             continue  # resolved by a user-signed defer
         unresolved.append(item)
 
-    if unresolved:
+    if unresolved or invalid_closures:
         ids = [str(it.get("id", "?")) for it in unresolved]
         comp_clause = ""
         if comprehensive:
@@ -361,7 +447,15 @@ def judge(oracle, declaration_text=None) -> tuple[int, str]:
                            "task demands exhaustive coverage; no item may be "
                            "re-tiered or deferred without user sign-off] ")
         reason = (comp_clause + f"{len(unresolved)} unresolved open item(s): "
-                  + ", ".join(ids))
+                  + ", ".join(ids) if unresolved else comp_clause.rstrip())
+        if unresolved and invalid_closures:
+            reason += " | "
+        if invalid_closures:
+            reason += (f"INVALID_CLOSURE — {len(invalid_closures)} closure "
+                       f"citation(s) rejected: " + "; ".join(invalid_closures))
+        if not unresolved:
+            reason = (f"INVALID_CLOSURE — {len(invalid_closures)} closure "
+                      f"citation(s) rejected: " + "; ".join(invalid_closures))
         # D4: optional #54 fingerprint folding (declaration never changes the code)
         if declaration_text:
             try:

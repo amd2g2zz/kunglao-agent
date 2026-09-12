@@ -52,11 +52,17 @@ def _closed_oracle(ws: Path) -> Path:
     declaration — convergence now requires it, so the fixture declares
     generalization: not-applicable (a synthetic teardown task judged on the
     captured evidence only)."""
+    # Pinned citation protocol: the closure cites terminal claim C-001 from the
+    # workspace register (fail-closed citation protocol needs workspace_path).
+    write_claims_register(ws, [{"id": "C-001",
+                                "status": "PROVEN",
+                                "boundary_type": "positive_observation"}])
     (ws / "task-oracle.yaml").write_text(
-        'task_text: "synthetic task"\n'
+        f'task_text: "synthetic task"\n'
+        f'workspace_path: "{ws}"\n'
         "open_items:\n"
         "  - id: OC-1\n"
-        "    closed_by: F-001\n",
+        "    closed_by: C-001\n",
         encoding="utf-8",
     )
     (ws / "goal-operationalization.yaml").write_text(
