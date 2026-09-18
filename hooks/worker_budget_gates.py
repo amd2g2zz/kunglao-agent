@@ -600,6 +600,19 @@ def check_no_self_cap(description: str, task_spec_path: Path) -> tuple[bool, str
 # F006-F008 were callgraph INFERENCES written as facts — a mandatory plan
 # forces the inference to be declared in the plan phase, before execution,
 # where the orchestrator can catch it.
+#
+# #239 CONTRACT CHANGE (owner ruling, live field evidence): dispatch-time
+# enforcement INVERTED plan ownership — the cheapest way to unblock the
+# orchestrator's own dispatch was to ghostwrite runs/plan-C<NN>*.md itself.
+# New contract: "Dispatch carries intent, not a plan; planning is the
+# worker's first act of execution."
+#   - the FIRST dispatch of a claim is plan-free (nothing to satisfy at
+#     dispatch time — a ghostwritten plan neither satisfies nor blocks it);
+#   - plan-first gates the worker's EXECUTION LOOP instead: a RE-dispatch
+#     (the claim already has a prior approved dispatch in its approval-point
+#     anchor log) requires the plan reference — the worker-authored plan on
+#     disk (content + provenance, #57 gate 3 below) or the plan path in the
+#     dispatch prompt (reserved for re-dispatch continuity).
 
 # #294: the plan-first gate (#239) only checked file EXISTENCE — an empty-shell
 # template (goal:/preflight:/steps:/fallback: with every field bare, no content)
@@ -635,26 +648,35 @@ def _plan_is_empty_shell(text: str) -> bool:
 
 
 def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[bool, str]:
-    """Issue #239/#294 + #57 gate 3: a claim dispatch REQUIRES its worker
-    plan, WITH CONTENT, AUTHORED IN THE WORKER'S SESSION.
+    """Issue #239 (contract v2, owner ruling) + #57 gate 3: dispatch carries
+    intent, NOT a plan — planning is the worker's first act of execution.
 
-    The dispatched claim C-NN must have `runs/plan-C<NN>*.md` on disk
-    (real-world naming is plan-c005.md, claim only, no suffix), OR the
-    dispatch prompt must reference a plan path for THAT claim (timing
-    relaxation: the plan may be written in the same turn, e.g. "write
-    runs/plan-C001-strings.md first, then execute"). A plan path for a
-    DIFFERENT claim in the prompt does NOT relax.
+    FIRST dispatch of the claim (no prior approved dispatch recorded in the
+    claim's approval-point anchor log `runs/.dispatch-anchor-<KEY>.jsonl`):
+    PASSES without any pre-existing plan. The gate does not inspect plan
+    files at all on the first dispatch — an orchestrator-ghostwritten plan
+    neither satisfies nor blocks it. The worker's first sanctioned write is
+    its own plan (kunglao-worker.md golden rule #3), carrying its dispatch
+    anchor as provenance.
+
+    RE-dispatch (>=1 prior approved dispatch for the claim — execution beyond
+    the planning round): requires the plan reference for THAT claim:
+      - the on-disk `runs/plan-C<NN>*.md` WITH CONTENT (real-world naming is
+        plan-c005.md, claim only, no suffix) and worker-session provenance
+        (#57 gate 3 plan_author_violation — a plan authored outside the
+        dispatched worker's session does not satisfy plan-first), OR
+      - the plan path referenced in the dispatch prompt (reserved for
+        RE-DISPATCH CONTINUITY — the timing relaxation lives on this leg
+        only). A plan path for a DIFFERENT claim does NOT continue.
 
     #294: an on-disk plan that is an empty-shell template (every field label
-    present but bare — `goal:\\npreflight:\\nsteps:\\nfallback:` with nothing
-    filled in) does NOT satisfy the gate — it is existence without content.
-    The prompt-relaxation path is unaffected (the file may not exist yet).
+    present but bare) does NOT satisfy the re-dispatch leg — it is existence
+    without content.
 
-    #57 gate 3 (plan-author): the on-disk leg additionally requires
-    worker-session evidence when a dispatch anchor has been issued for the
-    claim (see plan_author_violation) — a pre-written (orchestrator-authored)
-    plan does not satisfy 计划本人写. Not armed without an anchor: the
-    pre-#57 posture is unchanged for workspaces that never stamped one.
+    First-dispatch vs re-dispatch is decided ONLY from the approval-point
+    anchor log (what stamp_dispatch_anchor wrote for PRIOR dispatches): the
+    current dispatch's own KUNGLAO_DISPATCH_CONTEXT / context-file nonce is
+    composed pre-dispatch and must never count as a prior dispatch.
 
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
@@ -664,6 +686,15 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
     if not ws:
         return (True, '')  # FAIL_OPEN — mirrors check_workers_lt_3
     key = cid.replace('-', '')  # C-001 -> C001 (claim key inside plan names)
+    # #239 v2: prior approved dispatches ONLY — the approval-point log.
+    if not _anchor_log_ts_list(Path(ws), key):
+        return (True, (f'first dispatch of {cid}: no pre-existing plan '
+                       f'required (dispatch carries intent, not a plan — '
+                       f'planning is the worker\'s first act of execution; '
+                       f'the worker\'s first sanctioned write is '
+                       f'runs/plan-{key}*.md with its dispatch-anchor '
+                       f'provenance line; the plan is required from the '
+                       f'NEXT dispatch on)'))
     runs = Path(ws) / 'runs'
     if runs.is_dir():
         # uppercase + lowercase variants (Windows globs are case-insensitive,
@@ -687,12 +718,14 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
             if _plan_is_empty_shell(plan_text):
                 return (False, (
                     f'{plan_path.name} is an empty-shell template (goal/preflight/'
-                    f'steps/fallback all bare, no content) - fill in the plan '
-                    f'FIRST (kunglao-worker.md golden rule #3), then re-dispatch'
+                    f'steps/fallback all bare, no content) - the worker must '
+                    f'author its plan (kunglao-worker.md golden rule #3), '
+                    f'then re-dispatch'
                 ))
-            # #57 gate 3: plan-author — with a dispatch anchor issued for this
-            # claim, the on-disk plan must carry worker-session evidence
-            # (authored after dispatch). Not armed -> unchanged legacy posture.
+            # #57 gate 3: plan-author — a re-dispatch's plan must carry
+            # worker-session evidence (authored after a prior dispatch).
+            # Armed here by construction: a re-dispatch implies the anchor
+            # log has rows (see above).
             violation = plan_author_violation(plan_path, plan_text,
                                               Path(ws), key, prompt)
             if violation:
@@ -705,11 +738,15 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
             prompt,
         )
         if m:
-            return (True, f'plan path referenced in dispatch prompt: {m.group(0)}')
-    return (False, (f'no runs/plan-{key}*.md for claim {cid} and the dispatch '
-                    f'prompt does not reference a plan path for it - write the '
-                    f'plan FIRST (kunglao-worker.md golden rule #3: PLAN FIRST, '
-                    f'execute second)'))
+            return (True, f'plan path referenced in dispatch prompt: {m.group(0)} '
+                          f'(re-dispatch continuity)')
+    return (False, (f're-dispatch of {cid} beyond the planning round without a '
+                    f'plan reference: no runs/plan-{key}*.md on disk and the '
+                    f'dispatch prompt references no plan path for it - the '
+                    f'plan must be worker-authored (kunglao-worker.md golden '
+                    f'rule #3: the worker\'s first sanctioned write is its own '
+                    f'plan, citing its dispatch anchor; the in-prompt --plan '
+                    f'reference is reserved for re-dispatch continuity)'))
 
 
 # ---------- #57 gate 3: plan-author (worker-session evidence) ----------
@@ -733,6 +770,9 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
 # dispatch, and the nonce did not exist when it was written). No anchors for
 # the claim -> gate not armed -> legacy posture unchanged (FAIL_OPEN on
 # missing corridor, same arming discipline as the #527 machinery itself).
+# #239 v2: check_worker_plan only consults this gate on a RE-dispatch (the
+# first dispatch is plan-free), and a re-dispatch implies the approval-point
+# log has rows — so the author gate is armed exactly when a plan is required.
 DISPATCH_ANCHOR_LOG = 'runs/.dispatch-anchor-{key}.jsonl'
 _DISPATCH_ANCHOR_LINE_RE = re.compile(r'dispatch-anchor:\s*(\S+)',
                                       re.IGNORECASE)
@@ -769,10 +809,11 @@ def _dispatch_context_file_ts(ws: Path, key: str) -> str | None:
         return None
 
 
-def _dispatch_anchor_issued(ws: Path, key: str, prompt: str = '') -> list[str]:
-    """Every dispatch anchor ever issued for this claim (most useful first):
-    the approval-point log, the #527 context file, and the prompt's own
-    context block. Unparseable rows are skipped (not evidence)."""
+def _anchor_log_ts_list(ws: Path, key: str) -> list[str]:
+    """Timestamps from the claim's approval-point anchor log ONLY — the
+    record of PRIOR approved dispatches (stamp_dispatch_anchor runs after
+    the gate battery passes, so a dispatch's own nonce is never in the log
+    while it is being evaluated). Unparseable rows are skipped."""
     out: list[str] = []
     log = Path(ws) / 'runs' / f'.dispatch-anchor-{key}.jsonl'
     if log.is_file():
@@ -789,6 +830,14 @@ def _dispatch_anchor_issued(ws: Path, key: str, prompt: str = '') -> list[str]:
                     out.append(str(ts))
         except OSError:
             pass
+    return out
+
+
+def _dispatch_anchor_issued(ws: Path, key: str, prompt: str = '') -> list[str]:
+    """Every dispatch anchor ever issued for this claim (most useful first):
+    the approval-point log, the #527 context file, and the prompt's own
+    context block. Unparseable rows are skipped (not evidence)."""
+    out = _anchor_log_ts_list(ws, key)
     for ts in (_dispatch_context_file_ts(ws, key), _prompt_context_ts(prompt or '')):
         if ts:
             out.append(ts)
