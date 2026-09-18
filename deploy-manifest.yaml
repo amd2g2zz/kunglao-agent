@@ -335,7 +335,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 7bbdf98bf395d7d0d6f1bcf304c64f27faadf63269b0c867aa2dbed039bf9e9a
+    sha256: 9c33847baff88c3633e9c2e3b6bc90f88306b120af45a6a792bb0934fa292fa4
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -583,7 +583,7 @@ files:
   - src: scripts/oracle_runner.py
     dest: .claude/scripts/oracle_runner.py
     kind: scaffold
-    sha256: 5703ca78130548f010ea903c130eb484eae4fbfe47ac507942f0da0d3195c306
+    sha256: 3b5c55dea1010290d89f71018ed43e37ff59d0b37e0c09b1a73d75f8b81b79be
   - src: scripts/outcome_capture.py
     dest: .claude/scripts/outcome_capture.py
     kind: scaffold

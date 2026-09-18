@@ -119,6 +119,27 @@ narrowed to the three convergence-convention fields):
                       expected stage the client never produced; None when
                       nothing differs or no expected stages are pinned
 
+settlement writes the situational PQ categorical (ΔH goes live):
+
+At settlement (a REAL verdict — pass/fail — the same gate as the
+Bernoulli face), the case's optional `target_pq` + `pq_update:`
+declaration select the situational PQCategorical and the update_* events
+to apply: `green_up`/`red_up` (candidate -> strength, update_evidence on
+pass/fail respectively) then `eliminate_on_pass`/`eliminate_on_fail`
+(update_eliminate). Per event: entropy snapshot BEFORE (update_* mutate
+in place, return None), apply, record SIGNED
+`delta_h_bits = h_before − h_after` (negative = softening, EXP-3b) plus
+`h_standing_bits` as a separate field (the priority_ratio `dh` quantity
+— same function, different quantity; never share a field). `ledger.pqs`
+is keyed by the `answers_question`/`target_pq` string priority_ratio
+keys on; an absent categorical is seeded uniform from the task_spec
+`primary_questions[]` entry with that id (idempotent get-or-seed — the
+plan_epistemics mint-time writer may have landed it first). Unmatched candidate
+names and eliminating the last survivor are FAIL-OPEN with an emitted
+annotation (never a crash into the reward path); each event emits one
+`pq_posterior_update` event (registered word). The fixture with the
+expected 6dp numbers lives at tests/fixtures/exp3_delta_h.json (EXP-3).
+
 #146 — case-abandonment protocol (retirement lives HERE, with the case
 files and OracleCaseError): a case transitions to ``status: retired`` ONLY
 with the structured justification {attribution_class in the closed taxonomy
@@ -845,6 +866,246 @@ def _emit_observation(ws, case_id: str, row: dict) -> None:
         pass
 
 
+# ------------------- settlement -> PQ categorical face ---------------------
+
+_PQ_UPDATE_KEY = "pq_update"      # optional case-YAML declaration block
+_TASK_SPEC_FILE = "task_spec.yaml"
+
+
+def _parse_pq_update(decl) -> tuple[dict, str | None]:
+    """Validate a `pq_update:` declaration. Returns (faces, error):
+    faces = {"green_up": [(name, strength)], "red_up": [...],
+    "eliminate_on_pass": [name], "eliminate_on_fail": [name]} in
+    declaration order (design D4: declarations, never inference)."""
+    if not isinstance(decl, dict):
+        return {}, "pq_update must be a mapping"
+    faces: dict[str, list] = {"green_up": [], "red_up": [],
+                              "eliminate_on_pass": [], "eliminate_on_fail": []}
+    for face, kind in (("green_up", "evidence"), ("red_up", "evidence")):
+        block = decl.get(face) or {}
+        if not isinstance(block, dict):
+            return {}, f"pq_update.{face} must be a candidate -> strength mapping"
+        for name, strength in block.items():
+            try:
+                fs = float(strength)
+            except (TypeError, ValueError):
+                return {}, (f"pq_update.{face}[{name!r}]: strength is "
+                            f"not a number")
+            if fs != fs or fs in (float("inf"), float("-inf")) or fs < 0.0:
+                return {}, (f"pq_update.{face}[{name!r}]: strength must "
+                            f"be finite and >= 0")
+            faces[face].append((str(name), fs))
+    for face in ("eliminate_on_pass", "eliminate_on_fail"):
+        block = decl.get(face) or []
+        if not isinstance(block, list):
+            return {}, f"pq_update.{face} must be a list of candidate names"
+        faces[face].extend(str(n) for n in block)
+    return faces, None
+
+
+def _load_pq_declarations(ws) -> dict[str, dict]:
+    """Settlement-side read: case_id -> {target_pq, pq_update} from the
+    case YAMLs —
+    tolerant per file (the priority_ratio._load_oracle_cases read shape):
+    an unreadable/wrong-shaped doc is no declaration, never a refusal
+    into the settlement path (design D4 — admission lints are
+    load_cases' business; this is the settlement-side reader)."""
+    cases_dir = Path(ws).joinpath(*CASES_REL)
+    out: dict[str, dict] = {}
+    if not cases_dir.is_dir():
+        return out
+    for p in sorted(cases_dir.glob("*.yaml")):
+        try:
+            doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001 — unreadable case is not signal
+            continue
+        if not isinstance(doc, dict):
+            continue
+        cid = str(doc.get("id") or p.stem).strip()
+        if not cid:
+            continue
+        out[cid] = {
+            "target_pq": str(doc.get("target_pq") or "").strip(),
+            "pq_update": doc.get(_PQ_UPDATE_KEY),
+        }
+    return out
+
+
+def ensure_pq(led, ws, pq_id: str):
+    """Get-or-seed the situational categorical for pq_id (design
+    D5). An existing categorical is returned as-is — NEVER reseeded
+    (idempotent; the plan_epistemics mint-time writer may have
+    landed it first). Absent -> seeded uniform over the task_spec
+    `primary_questions[]` entry whose id == pq_id with a non-empty
+    candidates list, and stored into led.pqs. No task_spec entry ->
+    None (the caller annotates the skip)."""
+    import posteriors as po
+    pq = led.pqs.get(pq_id)
+    if pq is not None:
+        return pq
+    spec_path = Path(ws) / _TASK_SPEC_FILE
+    if not pq_id or not spec_path.exists():
+        return None
+    try:
+        doc = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(doc, dict) \
+            or not isinstance(doc.get("primary_questions"), list):
+        return None
+    for item in doc["primary_questions"]:
+        if not isinstance(item, dict) \
+                or str(item.get("id") or "").strip() != pq_id:
+            continue
+        cands = item.get("candidates")
+        if not isinstance(cands, list) or not cands:
+            return None
+        names = [str(c).strip() for c in cands if str(c).strip()]
+        if not names:
+            return None
+        pq = po.PQCategorical(pq_id, {n: 1.0 for n in names})
+        led.pqs[pq_id] = pq
+        return pq
+    return None
+
+
+def apply_pq_event(pq, channel: str, name: str,
+                   strength: float | None = None) -> dict:
+    """Snapshot H, apply ONE update_* event, measure — the caller-
+    owned measurement the spike pinned (update_* mutate in place, return
+    None). delta_h_bits = h_before − h_after is SIGNED information gain
+    (negative = softening, EXP-3b); h_standing_bits is the post-event
+    standing entropy as a separate field (design D2 — priority_ratio's
+    local `dh` is this same function's STANDING value, never share a
+    field). Raises nothing (designs D1/D3): an unknown candidate or the
+    settled-PQ guard is a {"status": "skipped", "reason": ...} record —
+    bookkeeping never crashes the reward path."""
+    h_before = pq.entropy()
+    record = {"channel": channel, "name": name, "strength": strength,
+              "h_before_bits": round(h_before, 6),
+              "h_after_bits": round(h_before, 6), "delta_h_bits": 0.0,
+              "h_standing_bits": round(h_before, 6),
+              "status": "applied", "reason": None}
+    try:
+        if channel == "eliminate":
+            if name not in pq.probs:
+                record.update(status="skipped", reason=(
+                    f"unknown candidate {name!r} for pq {pq.pq_id!r}"))
+                return record
+            nonzero = sum(1 for v in pq.probs.values() if v > 0.0)
+            if nonzero <= 1:
+                record.update(status="skipped", reason=(
+                    "pq already settled — single surviving candidate "
+                    "cannot be eliminated"))
+                return record
+            pq.update_eliminate(name)
+        elif channel == "evidence":
+            if name not in pq.probs:
+                record.update(status="skipped", reason=(
+                    f"unknown candidate {name!r} for pq {pq.pq_id!r}"))
+                return record
+            pq.update_evidence(name, float(strength))
+        else:
+            record.update(status="skipped",
+                          reason=f"unknown pq event channel {channel!r}")
+            return record
+    except (KeyError, ValueError) as exc:  # library-side refusal, annotated
+        record.update(status="skipped",
+                      reason=f"{type(exc).__name__}: {exc}")
+        return record
+    h_after = pq.entropy()
+    record["h_after_bits"] = round(h_after, 6)
+    record["delta_h_bits"] = round(h_before - h_after, 6)
+    record["h_standing_bits"] = round(h_after, 6)
+    return record
+
+
+def _emit_pq_update(ws, record: dict) -> None:
+    """One ``pq_posterior_update`` event per applied/skipped PQ
+    settlement event (registered EMIT_ACTIONS word) — the event tail
+    makes every ΔH and every fail-open skip auditable. SILENT FAIL-OPEN:
+    the emit lives inside the try — observability never disturbs reward
+    (same posture as _emit_posterior_update)."""
+    try:
+        from kunglao_log import emit
+        payload = {k: record[k] for k in
+                   ("case_id", "pq_id", "channel", "name", "strength",
+                    "h_before_bits", "h_after_bits", "delta_h_bits",
+                    "h_standing_bits", "status", "reason") if k in record}
+        emit(ws, actor="oracle_runner", action="pq_posterior_update",
+             detail=json.dumps(payload, sort_keys=True,
+                               ensure_ascii=False, default=repr))
+    except Exception:  # noqa: BLE001 — observability never disturbs reward
+        pass
+
+
+def record_pq_updates(ws, report: dict, led) -> list[dict]:
+    """The settlement-side writer of ledger.pqs. For every settled
+    case (verdict pass/fail) with a `target_pq` + `pq_update:`
+    declaration: get-or-seed the categorical (ensure_pq), apply the
+    declared events per the verdict face (evidence events first, then
+    eliminations — pinned deterministic order, design D4), record the
+    signed ΔH per event and emit one pq_posterior_update event per
+    event. Mutates led.pqs IN PLACE; saving is the caller's business
+    (record_posteriors batches both faces into one atomic save).
+    Returns the per-event records (applied + skipped)."""
+
+    def _stamped(record: dict, cid: str, pq_id: str) -> dict:
+        record["case_id"] = cid
+        record["pq_id"] = pq_id
+        _emit_pq_update(ws, record)
+        return record
+
+    declarations = _load_pq_declarations(ws)
+    if not declarations:
+        return []
+    records: list[dict] = []
+    settled = {cid: row.get("status") for cid, row in
+               (report.get("cases") or {}).items()
+               if row.get("status") in ("pass", "fail")}
+    for cid in sorted(declarations):
+        if cid not in settled:
+            continue  # pending/unknown is not an observation (pending is
+        # the honest unknown — it never touches a posterior)
+        info = declarations[cid]
+        pq_id = info["target_pq"]
+        if not pq_id:
+            continue  # no target face -> no PQ bookkeeping for this case
+        decl = info["pq_update"]
+        if decl is None:
+            continue  # no pq_update declaration -> no PQ bookkeeping
+        faces, error = _parse_pq_update(decl)
+        if error is not None:
+            records.append(_stamped(
+                {"channel": "declaration", "name": None, "strength": None,
+                 "h_before_bits": 0.0, "h_after_bits": 0.0,
+                 "delta_h_bits": 0.0, "h_standing_bits": 0.0,
+                 "status": "skipped", "reason": error}, cid, pq_id))
+            continue
+        face = "green_up" if settled[cid] == "pass" else "red_up"
+        eliminations = ("eliminate_on_pass" if settled[cid] == "pass"
+                        else "eliminate_on_fail")
+        events = ([("evidence", n, s) for n, s in faces[face]]
+                  + [("eliminate", n, None)
+                     for n in faces[eliminations]])
+        if not events:
+            continue  # declaration present, nothing armed for this verdict
+        pq = ensure_pq(led, ws, pq_id)
+        if pq is None:
+            records.append(_stamped(
+                {"channel": "seed", "name": None, "strength": None,
+                 "h_before_bits": 0.0, "h_after_bits": 0.0,
+                 "delta_h_bits": 0.0, "h_standing_bits": 0.0,
+                 "status": "skipped", "reason": (
+                     f"no categorical for pq {pq_id!r} and no task_spec "
+                     f"candidates to seed it from")}, cid, pq_id))
+            continue
+        for channel, name, strength in events:
+            record = apply_pq_event(pq, channel, name, strength)
+            records.append(_stamped(record, cid, pq_id))
+    return records
+
+
 def record_posteriors(ws, report: dict) -> Path | None:
     """#106 reuse: a REAL verdict (pass/fail) is one Bernoulli observation on
     the case's CasePosterior (green -> alpha+1 / red -> beta+1). Pending is
@@ -853,7 +1114,11 @@ def record_posteriors(ws, report: dict) -> Path | None:
 
     #157: each update additionally emits one ``posterior_update`` event
     (alpha/beta before -> after + the trigger fingerprint). ADDITIVE ONLY —
-    the ledger delta and the return value are exactly the pre-#157 ones."""
+    the ledger delta and the return value are exactly the pre-#157 ones.
+
+    Settlement-PQ (the delta_h writer): the same load now ALSO drives the
+    PQ-categorical settlement face (record_pq_updates); both faces land in
+    one atomic ledger save, return value unchanged."""
     import posteriors as po
     updates = {cid: row["status"] == "pass"
                for cid, row in report["cases"].items()
@@ -867,6 +1132,7 @@ def record_posteriors(ws, report: dict) -> Path | None:
         cp.update(passed)
         led.cases[cid] = cp
         _emit_posterior_update(ws, cid, before, (cp.alpha, cp.beta), report)
+    record_pq_updates(ws, report, led)  # ΔH face, same save
     return led.save(ws)
 
 
