@@ -186,7 +186,7 @@ def test_ghostwritten_plan_does_not_satisfy_redispatch(tmp_path, capsys):
     anchor citation, mtime predating the first dispatch) does not satisfy
     plan-first for the worker: the re-dispatch REJECTS on provenance."""
     import worker_budget_sinks as sinks
-    from datetime import datetime, timezone
+    from datetime import datetime
     ws = tmp_path / 'ws'
     paths = _min_paths(ws)
     assert sinks.pre_check(_payload(_dispatch_prompt()), paths) == 0, \
