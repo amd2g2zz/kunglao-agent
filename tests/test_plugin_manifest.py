@@ -47,7 +47,7 @@ EXPECTED_VERSION = "0.1.5.post1"
 # checks/claude.py:66) — neither the PEP 440 ".post1" nor a semver
 # prerelease "0.1.5-post1" (CLAUDE_VERSION_BAD_SEMVER, -5 pts) matches.
 # Mapping: pyproject "0.1.5.post1" (tag v0.1.5.post1) <-> plugin face
-# "0.1.5". (#258; scan-regression fix for PR #268)
+# "0.1.5". (Issue 258; scan-regression fix for PR 268.)
 PLUGIN_VERSION = "0.1.5"
 # The #366 field set: identity metadata only (issue body scope item 1).
 REQUIRED_FIELDS = {"name", "description", "version", "author", "homepage", "license"}
@@ -120,7 +120,7 @@ def test_version_triple_equality():
 
     # Python-side sources carry the PEP 440 string; the Claude plugin
     # manifests carry the semver form of the same release (scanner
-    # requires strict semver — see PLUGIN_VERSION above). (#258)
+    # requires strict semver — see PLUGIN_VERSION above). (Issue 258.)
     assert py == rel == EXPECTED_VERSION, (
         f"version drift: pyproject={py} release-manifest={rel}"
     )

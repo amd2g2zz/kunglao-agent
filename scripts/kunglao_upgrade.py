@@ -785,10 +785,10 @@ def migrate_to_0_1_4(ws: Path, dry: bool) -> list[str]:
 # (G3 merge + G4-gated quiet stamp) used to be a per-release boilerplate
 # entry; it is now the planner's universal terminal step (see
 # _plan_migrations) — owner ruling 2026-09-11: releases must not hand-write
-# an identical carry function for every version. (#258: comment + planner
-# ported from the release lineage — at 0.1.5.post1 the previous-release
-# workspace equals the last registry entry, so a registry-only plan could
-# no longer carry the stamp face.)
+# an identical carry function for every version. (Issue 258: comment +
+# planner ported from the release lineage — at 0.1.5.post1 the
+# previous-release workspace equals the last registry entry, so a
+# registry-only plan could no longer carry the stamp face.)
 MIGRATIONS: list[tuple[str, MigrationFn]] = [
     ("0.1.3", migrate_to_0_1_3),
     ("0.1.4", migrate_to_0_1_4),   # #755 deploy-surface completion (T6)
@@ -826,8 +826,8 @@ def _plan_migrations(origin_key: tuple[int, ...],
 def _vkey(version: str) -> tuple[int, ...]:
     """Sortable key for registry versions. PEP 440 post releases sort
     after their base: "0.1.5.post1" -> (0, 1, 5, 1) > (0, 1, 5).
-    (#258: ported from the release lineage — the naive int-split crashed
-    on the released 0.1.5.post1 skill version.)"""
+    (Ported from the release lineage for issue 258 — the naive int-split
+    crashed on the released 0.1.5.post1 skill version.)"""
     parts = version.strip().split(".")
     try:
         return tuple(int(p[4:]) if p.startswith("post") else int(p)

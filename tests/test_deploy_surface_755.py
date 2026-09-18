@@ -665,8 +665,8 @@ class TestT6Registry:
         is incomplete — the 0.1.4 registry entry must make plan non-empty
         so the fast path cannot skip the repair. The stamp pins the version
         BEFORE the cargo-carrying entry (a prev-of-CUR derivation would
-        silently drift below the entry on the next bump). #258: it also
-        crashes on a PEP 440 .postN skill version — hence the literal."""
+        silently drift below the entry on the next bump). Issue 258: it
+        also crashes on a PEP 440 .postN skill version — hence the literal."""
         up = _load_upgrade()
         ws = self._stamped_ws(tmp_path, "0.1.3")
         pre_notes = self._snap(ws)["notes/keep.md"]

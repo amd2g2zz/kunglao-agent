@@ -156,8 +156,8 @@ class TestG1bUpgradeEventLine:
 # =============================================================== G4: frame-consistency stamp gate
 
 def _prev_version() -> str:
-    # #258: post-release safe — "0.1.5.post1" derives its base before the
-    # int-split (a naive split crashes on the PEP 440 .postN suffix).
+    # Post-release safe (issue 258): "0.1.5.post1" derives its base before
+    # the int-split (a naive split crashes on the PEP 440 .postN suffix).
     base = CUR_VERSION.split(".post")[0]   # 0.1.5.post1 -> base 0.1.5
     maj, mi, pa = (int(x) for x in base.split("."))
     return ".".join(str(x) for x in (maj, mi, max(pa - 1, 0)))
