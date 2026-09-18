@@ -347,6 +347,25 @@ def process_event(payload: dict) -> int:
             print(json.dumps({"decision": "block", "reason": reason},
                              ensure_ascii=False))
             return EXIT_SUMMARY_FAKE
+        # #250: settle-time epistemic coverage annotation. R4-class
+        # anti-Goodhart: the signal SORTS (event log for the orchestrator to
+        # re-rank), it NEVER blocks — a coverage gate that blocked settlement
+        # would be gamed by cheap mint-and-settle epistemic claims. The
+        # annotation only fires when a terminal claim's presupposition is
+        # unresolved. Double-caged FAIL_OPEN like the discriminators above.
+        try:
+            with scripts_on_path():
+                import plan_epistemics as _pep
+            note = _pep.coverage_note(ws)
+            if note:
+                try:
+                    import kunglao_log as _kl
+                    _kl.emit(ws, actor="hook:completion_gate",
+                             action="epistemic_coverage", detail=note)
+                except Exception:  # noqa: BLE001 — emit never blocks
+                    pass
+        except Exception:  # noqa: BLE001 — coverage bookkeeping must never deadlock
+            pass
         return 0  # PASS — let the session end
     # non-zero → block termination with the unclosed-items reason
     print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
