@@ -9,6 +9,11 @@ the terminal status for such claims. It lives in `status_defs.TERMINAL`
 `priority._is_open` exclude DEAD claims automatically — no per-consumer edit.
 
 This script provides the explicit writer + quarantine artifact + diagnostics:
+  - record_dispatch_failure(ws, claim_id) (#234): the live promotion_attempts
+    writer (the dispatch-failure path). At the 3-strike threshold it
+    escalates to the charter MUST-ASK lane (blockers/must-ask-<claim>.md +
+    the must_ask event, status untouched) — DEAD is one explicit --mark
+    decision away, never a synchronous hook-time flip (review F6).
   - mark_dead(ws, claim_id, reason): writes status=DEAD (+ dead_at, dead_reason,
     mirroring the STALE write pattern in claim_expiry.py) and creates
     blockers/dead-letter-<claim>.md with the exit reason.
@@ -53,6 +58,14 @@ _LEGAL_STATUSES = (
 
 from harness_common import utc_now_z as utc_now_iso  # #863 Family F: single source (was a local def)
 
+# The 3-strike threshold (#36 family, same value as
+# hooks/worker_budget_core.MAX_PROMOTION_ATTEMPTS #520 — cross-linked by
+# comment, not import: scripts must not import hooks). #234 gave the family
+# its live writer: record_dispatch_failure counts dispatch failures up to
+# this threshold, then escalates to the charter must-ask lane (review F6);
+# DEAD stays the explicit --mark face.
+DLQ_ATTEMPTS = 3
+
 
 def _load_reg(workspace: Path) -> tuple[list, dict, Path]:
     """Return (claims, full_register, path). Empty register if file missing."""
@@ -88,7 +101,7 @@ def scan(workspace: Path) -> list:
             attempts = int(c.get("promotion_attempts") or 0)
         except (TypeError, ValueError):
             attempts = 0
-        if attempts >= 3:
+        if attempts >= DLQ_ATTEMPTS:
             out.append(c.get("id"))
     return out
 
@@ -100,6 +113,117 @@ def count_dead(workspace: Path) -> int:
     """
     claims, _, _ = _load_reg(workspace)
     return sum(1 for c in claims if (c.get("status") or "").upper() == "DEAD")
+
+
+def record_dispatch_failure(workspace: Path, claim_id: str) -> dict:
+    """Count one dispatch failure on a claim; at DLQ_ATTEMPTS route to the DLQ.
+
+    #234: promotion_attempts was seeded at obstacle promotion
+    (failure_analysis_gate.py:577) but had NO live writer anywhere — #146
+    removed it from the arming predicate precisely because it never fired.
+    This is that writer: the dispatch-failure path (hooked from
+    hooks/worker_budget_sinks.post_check, the Agent PostToolUse completion
+    sink) calls it when a finished worker's terminal status is
+    failed/blocked/error.
+
+    - non-terminal claim: promotion_attempts += 1 (register rewrite);
+      at >= DLQ_ATTEMPTS the claim escalates to the charter MUST-ASK lane
+      (review F6): blockers/must-ask-<claim>.md + the `must_ask` event —
+      the claim KEEPS its non-terminal status so the ask gate
+      (find_ladder_exhaustion, pa >= 3) HARD_PAUSEs the orchestrator
+      instead of the loop self-resolving. mark_dead (DEAD + dead-letter
+      artifact) stays the EXPLICIT post-mortem face (--mark); the DLQ
+      route survives, the synchronous auto-DEAD does not. An escalation
+      artifact-write failure never raises (review r2 LOW): it warns and
+      reports must_ask.escalated=False with the reason — the strike still
+      counts.
+    - terminal claim: explicit no-op {"incremented": False, "reason":
+      "terminal ..."} — a settled claim must not accrue strikes.
+    - missing claim: {"incremented": False, "reason": ...} — explicit,
+      never raises, never a silent no-op.
+    """
+    claims, reg, p = _load_reg(workspace)
+    claim = next((c for c in claims if c.get("id") == claim_id), None)
+    if claim is None:
+        return {"incremented": False,
+                "reason": f"claim {claim_id} not found"}
+    status = (claim.get("status") or "").upper()
+    if status in TERMINAL_WITH_RETRACTED:
+        return {"incremented": False,
+                "reason": f"claim {claim_id} terminal ({status}) - a "
+                          f"settled claim does not accrue strikes"}
+    try:
+        attempts = int(claim.get("promotion_attempts") or 0)
+    except (TypeError, ValueError):
+        attempts = 0
+    attempts += 1
+    claim["promotion_attempts"] = attempts
+    _write_reg(p, reg)
+    out: dict = {"incremented": True, "claim_id": claim_id,
+                 "attempts": attempts}
+    if attempts >= DLQ_ATTEMPTS:
+        out["must_ask"] = _escalate_must_ask(workspace, claim_id, attempts)
+    return out
+
+
+def _escalate_must_ask(workspace: Path, claim_id: str, attempts: int) -> dict:
+    """Strike DLQ_ATTEMPTS -> the charter must-ask lane (review F6), NOT a
+    synchronous DEAD flip.
+
+    The charter's 工具/资源耗尽 row (agent-three-state-charter.md): ladder
+    exhaustion at promotion_attempts >= 3 stays must-ask — the orchestrator
+    MUST NOT self-resolve further. Flipping the claim DEAD inside the
+    PostToolUse hook would preempt that ask: the claim would leave
+    open_ids before the ask-gate tick, and the ask lane would only ever
+    see a post-mortem DEAD claim. So the escalation writes the must-ask
+    blocker artifact (surfaces via convergence _active_blockers) + the
+    `must_ask` structured event, and leaves the status untouched. The DLQ
+    remains one explicit decision away: `dead_letter.py <ws> --mark C-NN`.
+
+    Never raises (review r2 LOW — record_dispatch_failure's contract): a
+    failed artifact write (OSError shapes — missing/permission/blocker
+    path being a file) warns to stderr and reports {"escalated": False,
+    "reason": ...}; the strike itself still counts. A broken log write
+    was already fail-open.
+    """
+    try:
+        bdir = Path(workspace) / "blockers"
+        bdir.mkdir(parents=True, exist_ok=True)
+        artifact = bdir / f"must-ask-{claim_id}.md"
+        artifact.write_text(
+            f"# MUST-ASK: 3-strike dispatch exhaustion on {claim_id}\n\n"
+            f"- promotion_attempts: {attempts} (threshold {DLQ_ATTEMPTS})\n"
+            f"- charter row: 工具/资源耗尽 — 梯爬完 -> must-ask "
+            f"(agent-three-state-charter.md, HARD_PAUSE; the orchestrator must "
+            f"NOT self-resolve further)\n"
+            f"- next Type-D blocker signal HARD_PAUSEs via "
+            f"find_ladder_exhaustion (ask_for_direction_gate)\n"
+            f"- explicit DLQ (post-mortem decision): "
+            f"python dead_letter.py <ws> --mark {claim_id}\n"
+            f"- strike note: strikes do not decay — progress between failures "
+            f"does not forgive them; resetting is an explicit orchestrator "
+            f"decision\n"
+            f"- failure history: see analyses/failure-{claim_id}.yaml\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        print(f"[kunglao-agent] #234 must-ask escalation WARN: artifact "
+              f"write failed ({type(exc).__name__}: {exc}) — strike "
+              f"counted, escalation surface not written", file=sys.stderr)
+        return {"escalated": False, "claim_id": claim_id,
+                "reason": f"artifact write failed "
+                          f"({type(exc).__name__}: {exc})"}
+    try:
+        import kunglao_log
+        kunglao_log.emit(workspace, actor="dead_letter",
+                         action="must_ask", claim=claim_id,
+                         detail=f"promotion_attempts={attempts} "
+                                f"(dispatch-failure 3-strike) — charter "
+                                f"工具/资源耗尽 row: must-ask, not auto-DEAD")
+    except Exception:  # noqa: BLE001 — logging never breaks the writer
+        pass
+    return {"escalated": True, "claim_id": claim_id,
+            "artifact": str(artifact)}
 
 
 def mark_dead(workspace: Path, claim_id: str, reason: str = "") -> dict:
