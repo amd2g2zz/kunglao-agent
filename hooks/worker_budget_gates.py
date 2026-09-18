@@ -141,6 +141,20 @@ def compare_register_change_proven_gate(
     except Exception as exc:
         return False, (f'PROMOTION GATE: blind_gate.check_inference_blind_scope '
                        f'unavailable (fail closed) - {type(exc).__name__}: {exc}')
+    # #234 target-obstacle ladder gate (review F1 — dual-face policy): the
+    # formal gate lives in claim_migrator; THIS backstop closes the direct
+    # register-edit lane, the exact bypass class this function was built for
+    # (#15/#78). An obstacle-origin claim entering PROVEN additionally needs
+    # its target ladder walked-valid + exhaustion inventory + minted
+    # strategy siblings, else the promotion is rejected like any other
+    # unmet PROVEN requirement (fail closed on a broken gate module, same
+    # REQUIRED posture as the gates above).
+    try:
+        with on_path(_SKILL_ROOT / 'scripts'):  # #671 scoped membership
+            from target_ladder import settlement_blocker
+    except Exception as exc:
+        return False, (f'PROMOTION GATE: target_ladder.settlement_blocker '
+                       f'unavailable (fail closed) - {type(exc).__name__}: {exc}')
     register_text = reg_path.read_text(encoding='utf-8', errors='replace')
     import re as _re
     violations = []
@@ -179,6 +193,13 @@ def compare_register_change_proven_gate(
                     violations.append(
                         f'{cid} [difficulty {thresholds.get("tier")}]: '
                         f'VERIFIER DEPTH GATE: {d_reason}')
+            # #234 (review F1): the register TEXT this loop already read is
+            # the snapshot settlement_blocker parses — no extra file read,
+            # same parse both faces. Non-obstacle claims are silent (None).
+            blocker = settlement_blocker(facts_dir.parent, cid,
+                                         register_text=register_text)
+            if blocker:
+                violations.append(f'{cid}: {blocker}')
     except ImportError as exc:
         # Infrastructure failure (should not happen after import above, but
         # defensive) — fail closed: code must be complete.

@@ -366,6 +366,7 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
                     what_happened: str | None = None,
                     validated_capability: str | None = None,
                     identified_obstacle: str | None = None,
+                    obstacle_class: str | None = None,
                     source: str | None = None,
                     library: Path | None = None,
                     trigger_precision: dict | None = None) -> dict:
@@ -397,6 +398,12 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
         validated_capability = prior.get("validated_capability") or ""
     if not (identified_obstacle or "").strip():
         identified_obstacle = prior.get("identified_obstacle") or ""
+    # Review F2: the obstacle class is pinned at promotion time — the
+    # promoted claim carries the authoritative class the target ladder must
+    # be walked against (see _promote_obstacle_claim). Closure backfill
+    # preserves it from the prior entry, same rule as the artifacts.
+    if not (obstacle_class or "").strip():
+        obstacle_class = prior.get("obstacle_class") or ""
 
     if validity not in ("not-justified", "justified-adequate"):
         return {"recorded": False,
@@ -471,6 +478,8 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
         entry["validated_capability"] = validated_capability
     if (identified_obstacle or "").strip():
         entry["identified_obstacle"] = identified_obstacle
+    if (obstacle_class or "").strip():
+        entry["obstacle_class"] = obstacle_class.strip()
     if failure_time:
         entry["method_ladder_query"] = ladder_query
         entry["candidates"] = candidates
@@ -497,7 +506,8 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
     promotion = {"created": False, "id": None}
     if (identified_obstacle or "").strip():
         promotion = _promote_obstacle_claim(workspace, claim_id,
-                                            identified_obstacle, claim, claims, reg)
+                                            identified_obstacle, claim, claims,
+                                            reg, obstacle_class=obstacle_class)
     # #459: the landing event fires after the entry + promotion are on disk
     # (a tail reader never sees a recorded event for a half-written state).
     _emit_analysis_recorded(workspace, claim_id, entry)
@@ -549,7 +559,8 @@ def _next_claim_id(claims: list) -> str:
 
 
 def _promote_obstacle_claim(workspace: Path, claim_id: str, obstacle: str,
-                            parent_claim: dict, claims: list, reg: dict) -> dict:
+                            parent_claim: dict, claims: list, reg: dict,
+                            obstacle_class: str | None = None) -> dict:
     """identified_obstacle is the third failure artifact: promote it to a NEW
     claim so the flat DAG grows a node (#495).
 
@@ -558,6 +569,13 @@ def _promote_obstacle_claim(workspace: Path, claim_id: str, obstacle: str,
       creates a second node;
     - new claim: OPEN, depends_on the failed claim, answers_question context
       inherited from it, origin=failure-obstacle;
+    - Review F2: an explicit --obstacle-class is pinned ON the
+      promoted claim — the authoritative class the target/attack-surface
+      ladder must later be walked against (target_ladder.settlement_blocker
+      cross-checks the artifact against this, so the artifact author cannot
+      pick their own family pool at walk time). Absent at promotion = no
+      class pinned, and obstacle settlement then fails-closed until the
+      failure is re-recorded with the class;
     - claim_deps.yaml gains the real edge (the authoritative dep store that
       plan_drift_detector / refutation_propagate walk).
     """
@@ -581,6 +599,8 @@ def _promote_obstacle_claim(workspace: Path, claim_id: str, obstacle: str,
         "obstacle_for": claim_id,
         "promoted_from": f"{ANALYSES_DIR}/failure-{claim_id}.yaml",
     }
+    if (obstacle_class or "").strip():
+        new_claim["obstacle_class"] = obstacle_class.strip()
     if (parent_claim or {}).get("answers_question"):
         new_claim["answers_question"] = parent_claim["answers_question"]
     claims.append(new_claim)
@@ -1044,6 +1064,11 @@ def main(argv: list[str] | None = None) -> int:
                         help="what this failure PROVED works — capability ok (artifact)")
     parser.add_argument("--identified-obstacle", default=None,
                         help="what specifically blocked you (artifact; auto-promoted to a claim)")
+    parser.add_argument("--obstacle-class", default=None,
+                        help="#234: obstacle class for the promoted obstacle claim "
+                             "(interception | visibility | execution | free text) — pinned "
+                             "on the claim as the authoritative class the target ladder "
+                             "must be walked against")
     parser.add_argument("--source", default=None,
                         help="provenance of next_method: "
                              "lesson-hit | reference-hit | web-hit | novel-hypothesis")
@@ -1092,6 +1117,7 @@ def main(argv: list[str] | None = None) -> int:
                            args.outcome, args.what_happened,
                            validated_capability=args.validated_capability,
                            identified_obstacle=args.identified_obstacle,
+                           obstacle_class=args.obstacle_class,
                            source=args.source,
                            library=args.library)
         if args.json:
