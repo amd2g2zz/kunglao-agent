@@ -431,6 +431,16 @@ def test_strike3_escalation_failure_never_raises(tmp_path, capsys):
     assert claim["status"] == "OPEN" and claim["promotion_attempts"] == 3
 
 
+def test_dead_letter_actor_literal_registered():
+    """The must-ask escalation emits with actor="dead_letter" — the literal
+    must stay registered in kunglao_log.LEGACY_ACTORS (the repo-wide
+    trace-identity anchor turns red otherwise)."""
+    import kunglao_log
+    ok, reason = kunglao_log.validate_actor("dead_letter")
+    assert ok, reason
+    assert "dead_letter" in kunglao_log.LEGACY_ACTORS
+
+
 def test_strike3_keeps_claim_in_ask_lane(tmp_path):
     """F6: find_ladder_exhaustion's pa>=3 precondition stays reachable —
     the claim the strikes accrued on is the one the ask gate will name."""

@@ -63,7 +63,7 @@ files:
   - src: hooks/worker_budget_core.py
     dest: .claude/hooks/worker_budget_core.py
     kind: hook
-    sha256: 86fef0d3b90d41c50595e9cc0003b9c4327abbcc3df996231df6383b71535c21
+    sha256: 227861f84b6532add31cda6e5a868929cf69639ec3c9a231c72c67b2756c1e9b
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
@@ -435,7 +435,7 @@ files:
   - src: scripts/kunglao-decide.py
     dest: .claude/scripts/kunglao-decide.py
     kind: scaffold
-    sha256: 3df3ade1e3093d8c8ef47f8cc5dcc2d539a415fe615cbfb408902c395a771a82
+    sha256: fe1469ef24c18553e8acc22dab427fd9789a0b3b67930322991a863a93ba5f79
   - src: scripts/kunglao-digest.py
     dest: .claude/scripts/kunglao-digest.py
     kind: scaffold
@@ -479,7 +479,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: 2a5abb27fc2366d4c2222cf1ba08db461aaf96142abd6d90a6ec6ebd7e2cb6c2
+    sha256: b5615f57ea64b531269f8e450a6101ef3ae09ecbabe27e3801ac67bb79bfe091
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -495,7 +495,7 @@ files:
   - src: scripts/kunglao_upgrade.py
     dest: .claude/scripts/kunglao_upgrade.py
     kind: scaffold
-    sha256: 609b7103962ed77102f6607d39cbd6d53bf1ce4fbfa67d8617fee62ef683e99f
+    sha256: 6d00a5d6c65b46d1900288528cc457f75f88108e06df7231c36c18f6cf2bda21
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
@@ -619,7 +619,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: c7f46b86f0fda2a63d7c603199f91bafc3646e1bbc725e5984effec13cc4e767
+    sha256: 06447a117514e33e9175170c6c907123d7f9c58bae57330b75693d3232965d2e
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold

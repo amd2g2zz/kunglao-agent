@@ -7,8 +7,9 @@ must be event-logged" — the dual of the display principle):
 
   1. rank_feeds       priority_ratio(), ONE emit per RUN (not per claim):
                       per-claim Thompson feeds + input fingerprint
-                      (claims hash, evidence-view hash, rng base draw) —
-                      every ranking decision exactly replayable.
+                      (claims hash, evidence-view hash, rng base draw,
+                      round) — every ranking decision exactly
+                      replayable; frozen sampling tail-observable.
   2. posterior_update record_posteriors(), per case observation:
                       alpha/beta BEFORE -> AFTER + trigger fingerprint
                       (the report hash) — belief evolution replayable.
@@ -152,14 +153,15 @@ def test_rank_feeds_one_emit_per_run_with_feeds_and_fingerprint(
         assert payload["feeds"][cid] == dict(action.feeds)
     assert payload["ranked_order"] == [a.claim_id for a in actions]
 
-    # input fingerprint: claims hash + evidence-view hash + rng base draw,
-    # replayable from the payload components alone
+    # input fingerprint: claims hash + evidence-view hash + rng base draw +
+    # the round, replayable from the payload components alone
     fp = payload["input_fingerprint"]
-    assert {"claims_hash", "evidence_hash", "rng_base",
+    assert {"claims_hash", "evidence_hash", "rng_base", "round",
             "fingerprint"} <= set(fp)
     canon = json.dumps({"claims_hash": fp["claims_hash"],
                         "evidence_hash": fp["evidence_hash"],
-                        "rng_base": fp["rng_base"]},
+                        "rng_base": fp["rng_base"],
+                        "round": fp["round"]},
                        sort_keys=True, ensure_ascii=False)
     assert fp["fingerprint"] == hashlib.sha256(
         canon.encode("utf-8")).hexdigest()
