@@ -332,6 +332,8 @@ files:
     r1: 5
   tests/conftest.py:
     r1: 1
+  tests/_tiers.py:
+    r1: 1
   tests/experiment_difficulty_15.py:
     r1: 1
   tests/test_acceptance.py:
@@ -559,6 +561,8 @@ files:
     r1: 2
   tests/test_dispatch_contract.py:
     r1: 1
+  tests/test_dispatch_gate_237_passthrough.py:
+    r1: 4
   tests/test_dispatch_intent_105.py:
     r1: 5
   tests/test_dispatch_protocol.py:
@@ -904,6 +908,8 @@ files:
     r1: 2
   tests/test_plaintext_610.py:
     r1: 2
+  tests/test_plan_drift_237_d1_d3.py:
+    r1: 6
   tests/test_plan_drift_auto_602.py:
     r1: 2
   tests/test_plan_drift_stale_plan.py:
