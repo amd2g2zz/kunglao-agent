@@ -172,6 +172,71 @@ def parse_dispatch(text: str) -> tuple[int, list[str], str | None]:
     return (tier, tools, m.group(3))
 
 
+# ---- #237 D2/H1: verifier-remediation dispatch identity (single source) ----
+
+# Verifier-class agents (the #57 blind_gate VERIFIER_AGENT_MARKERS set).
+# A dispatch targeting one of these for a PROVEN claim IS the flagged
+# UNVERIFIED_EVIDENCE set's remediation; both hook faces that ride
+# PreToolUse:Agent (dispatch_gate's drift blocker, worker_budget's drift
+# gate) must agree on that identity or the honest path deadlocks again.
+VERIFIER_REMEDIATION_AGENTS = ("kunglao-redteam", "verdict-scorer")
+
+
+def resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
+    """Dispatched agent identity from the Agent tool payload or v1 meta.
+
+    #237 H1 single source: hooks/dispatch_gate._resolve_dispatch_agent (the
+    D2 verifier pass-through face) and hooks/worker_budget_sinks.pre_check
+    (the #461 corroboration row) MUST agree on the agent identity for one
+    payload — the row's `agent=` marker is what plan_drift_detector's D3
+    log corroboration matches, so a resolver split resurrects the deadlock
+    for whichever payload shape the row face fails to resolve.
+
+    Probe order: tool_input.subagent_type (Claude Code's native Agent tool
+    shape) -> tool_input.name -> v1 dispatch meta.agent. None when no
+    candidate carries a non-blank string.
+    """
+    tool_input = payload.get("tool_input") or {}
+    if isinstance(tool_input, dict):
+        for key in ("subagent_type", "name"):
+            v = tool_input.get(key)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    _, _, _claim_id, meta = parse_dispatch_json(prompt_text or "")
+    if isinstance(meta, dict):
+        v = meta.get("agent")
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def is_verifier_remediation_dispatch(ws, claim_id: str,
+                                     payload: dict | None = None,
+                                     prompt_text: str = "") -> bool:
+    """#237 D2: True when the dispatch targets a verifier-class agent for a
+    PROVEN claim.
+
+    PROVEN is the UNVERIFIED_EVIDENCE precondition (the class fires only
+    for PROVEN claims), so the register status is the cheap intersection
+    test with the flagged set — no detector re-run in-process. A verifier
+    dispatch for a non-PROVEN claim is ordinary traffic and stays under
+    the drift gates. Register-unreadable -> False (fail-closed to the
+    legacy gate behavior).
+    """
+    agent = resolve_dispatch_agent(payload or {}, prompt_text or "") or ""
+    if not any(m in agent for m in VERIFIER_REMEDIATION_AGENTS):
+        return False
+    try:
+        import yaml
+        reg = yaml.safe_load(
+            (Path(ws) / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — register unreadable -> no pass-through
+        return False
+    target = next((c for c in (reg.get("claims") or [])
+                   if c.get("id") == claim_id), None)
+    return ((target or {}).get("status") or "").upper() == "PROVEN"
+
+
 # ---- workspace resolution (single source) ----
 def resolve_workspace(payload: dict) -> Path | None:
     """Resolve the kunglao-agent workspace from a hook payload.
