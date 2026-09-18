@@ -20,6 +20,7 @@ from worker_budget_gates import (
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
     compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
     compare_register_change_proven_gate,
+    check_zero_output_circuit,  # #256: A4 thrash breaker in the production battery
     register_worker, remove_worker,
     stamp_dispatch_anchor,  # #57 gate 3: per-dispatch nonce at the approval point
     toolfirst_pass_record,  # #880 approval-point pass face + operation label
@@ -167,6 +168,20 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'retry_different + reason + new_approach), or resolve the stall '
             'directly, then re-run uv run --project <skill> <skill>/scripts/backtrack_gate.py '
             '<ws> to confirm clean before re-dispatching.'
+        ),
+    },
+    'zerooutput': {
+        'additionalContext': (
+            'zero-output circuit tripped (v1.9.40, #256): the dispatch '
+            'would repeat a same-family action fingerprint that hit N '
+            'consecutive checkpoints with no belief change on THIS claim '
+            '(facts/_INDEX.md + claim-register.yaml content). Fix: run '
+            'uv run --project <skill> <skill>/scripts/failure_analysis_gate.py <ws> <claim> '
+            '(answer the 3 questions), record the next method — the '
+            'block clears itself once the workspace belief moves (the '
+            'gate re-checks freshness every dispatch), or remove '
+            'runs/zero-output-fingerprint.json as the last-resort escape '
+            'hatch — then re-dispatch a DIFFERENT action family.'
         ),
     },
     'plan': {
@@ -561,6 +576,17 @@ def pre_check(payload: dict, paths: dict) -> int:
         # built-but-not-wired gap (backtrack_gate.py existed but was never
         # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
         ('backtrack', check_backtrack_gate(paths)),
+        # v1.9.40 (#256): zero-output circuit — the A4 thrash breaker
+        # graduates from shadow to the production battery (the canary
+        # graduation its own module promised). A tripped fingerprint (>=
+        # ZERO_OUTPUT_N same-family actions, no belief change) REJECTs a
+        # dispatch that would REPEAT that (claim, tool-family) — other
+        # claims/families pass. The gate derives belief freshness ITSELF
+        # (stale ledger = reset), so a moved workspace can never stay
+        # blocked; missing/unreadable state FAILS OPEN. post_check feeds
+        # the streaks it reads (see _record_zero_output_fingerprint).
+        ('zerooutput', check_zero_output_circuit(paths.get('workspace'),
+                                                 cid, tools)),
         # v1.9.31 (#239): plan-to-execute gate — CONTRACT v2 (owner ruling):
         # dispatch carries intent, not a plan. The FIRST dispatch of a claim
         # passes without any pre-existing plan (planning is the worker's
@@ -770,6 +796,95 @@ def _emit_tool_calls(paths: dict, payload: dict, tool_result: str) -> None:
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
 
 
+def _scan_invoked_tools(transcript: str) -> list[str]:
+    """#256 review round 2: actually-invoked-only scan for the thrash
+    recorder. Same vocabulary as scan_actual_tools (mcp__ names + the
+    KNOWN_TOOLS set) but word-boundary anchored, so a tool name merely
+    MENTIONED inside another word ("ripgrep" mentioning grep) does not
+    count as an invocation against the fingerprint."""
+    found: set[str] = set()
+    for m in re.finditer(r'\bmcp__[a-z0-9_]+\b', transcript):
+        found.add(m.group(0))
+    for name in KNOWN_TOOLS:
+        if re.search(rf'\b{re.escape(name)}\b', transcript):
+            found.add(name)
+    return sorted(found)
+
+
+# ws -> last WARN reason (rate limit: one WARN per ws until the reason
+# changes; a persistently wedged recorder must not print per completion)
+_ZOF_WARN_LAST: dict[str, str] = {}
+
+
+def _zof_warn(ws: str, reason: str) -> None:
+    if _ZOF_WARN_LAST.get(ws) == reason:
+        return
+    _ZOF_WARN_LAST[ws] = reason
+    print(f'[kunglao-agent] zero-output fingerprint recorder WARN '
+          f'(fail-open): {reason}', file=sys.stderr)
+
+
+def _record_zero_output_fingerprint(paths: dict, payload: dict,
+                                    tool_result: str) -> None:
+    """#256: the A4 thrash recorder gets its production trigger.
+
+    post_check IS the "worker action completed" face: every tool the
+    completed dispatched worker actually invoked is counted against its
+    (tool-family, claim_id) fingerprint (claim-granularity v1 — the same
+    discriminator and the same limits as _emit_tool_calls above: only
+    workers with an [active_workers] entry carrying a claim_id record,
+    so orchestrator-side Agent calls never touch the state).
+
+    Visible fail-open (the #256 asymmetry): liveness first — a recorder
+    fault NEVER breaks post_check (rc stays 0) — but the fault is not
+    silently swallowed either: a crash AND a no-op recorder (record_action
+    returning without a streak payload) both land a stderr WARN, rate-
+    limited to once per ws+reason until the reason changes. A PARTIAL
+    recording (some tools landed before a fault) says so — it never
+    misreports a partial as a total failure. Enforcement is the SEPARATE
+    zerooutput pre_check gate, which derives belief freshness itself.
+    """
+    ws = paths.get('workspace')
+    if not ws:
+        return
+    worker_id = payload.get('tool_input', {}).get('name') or ''
+    if not worker_id:
+        return
+    try:
+        entry = next((w for w in read_active_workers(paths['state'])
+                      if w.get('worker_id') == worker_id), None)
+        if not entry or not entry.get('claim_id'):
+            return  # not a dispatched worker completion — out of scope
+        invoked = _scan_invoked_tools(tool_result)
+        if not invoked:
+            return
+        import zero_output_fingerprint  # scripts/ on path (#671 authority)
+        cid = entry['claim_id']
+        landed: list[str] = []
+        for tool in invoked:
+            try:
+                result = zero_output_fingerprint.record_action(
+                    Path(ws), tool, cid)
+            except Exception as exc:  # noqa: BLE001 - per-tool isolation
+                _zof_warn(
+                    ws, f'{type(exc).__name__}: {exc} (at tool={tool}); '
+                    f'{len(landed)}/{len(invoked)} tools recorded, tools '
+                    f'from {tool} on not counted this completion')
+                return
+            if not isinstance(result, dict) or 'streak' not in result:
+                # A no-op recorder must not pass for a healthy one.
+                _zof_warn(
+                    ws, f'no-op recorder: record_action returned '
+                    f'{type(result).__name__} without a streak payload '
+                    f'(at tool={tool}); {len(landed)}/{len(invoked)} '
+                    f'tools recorded, tools from {tool} on not counted '
+                    f'this completion')
+                return
+            landed.append(tool)
+    except Exception as exc:  # noqa: BLE001 - liveness first, fault visible
+        _zof_warn(ws, f'{type(exc).__name__}: {exc}')
+
+
 # Worker terminal statuses that mean the DISPATCH FAILED (#234). Subset of
 # lib_kunglao.TERMINAL_WORKER_STATUSES minus done (delivered) — a done
 # worker never accrues a strike.
@@ -887,6 +1002,11 @@ def post_check(payload: dict, paths: dict) -> int:
     # #880: BEFORE remove_worker — the [active_workers] entry carries the
     # claim_id the tool_call rows attribute to.
     _emit_tool_calls(paths, payload, tool_result)
+    # #256: same discriminator, same granularity — count the completed
+    # worker's actual tools against their (tool, claim) fingerprints so
+    # repeated no-progress actions trip the zero-output circuit (enforced
+    # by the zerooutput pre_check gate on the NEXT dispatch).
+    _record_zero_output_fingerprint(paths, payload, tool_result)
     # #234: same window — the dispatch-failure 3-strike face (fail-open).
     _record_dispatch_failure(
         paths, worker_id, tool_result,
