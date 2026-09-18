@@ -470,10 +470,46 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
 
 
+def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
+    """#237 H1: agent resolver single-sourced with dispatch_gate's D2 face
+    (lib_kunglao.resolve_dispatch_agent, all payload shapes). The #461
+    corroboration row must name the same agent the pass-through faces
+    resolved, or plan_drift_detector's D3 marker check can never
+    corroborate the dispatch (subagent_type-shaped dispatches used to
+    resolve to `agent=?` here)."""
+    try:
+        return load_hooks_lib().resolve_dispatch_agent(payload, prompt_text)
+    except Exception:  # noqa: BLE001 - identity best-effort, row stays ?-marked
+        return None
+
+
+def _is_verifier_remediation_dispatch(ws, claim_id: str, payload: dict,
+                                      prompt_text: str) -> bool:
+    """#237 D2: same predicate as dispatch_gate's drift pass-through (lib
+    single source). worker_budget's own pre_check drift gate rides the SAME
+    dispatch and must reach the identical verdict, or the honest remediation
+    path deadlocks at the second hook. Lib outage -> False (legacy drift
+    gate applies — an unavailable resolver must not newly open the gate)."""
+    try:
+        return load_hooks_lib().is_verifier_remediation_dispatch(
+            ws, claim_id, payload, prompt_text)
+    except Exception:  # noqa: BLE001 — degraded copy: legacy gate applies
+        return False
+
+
 def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
     prompt = payload.get('tool_input', {}).get('prompt', '')
     agent_name = payload.get('tool_input', {}).get('name') or ''
+    # #237 H1: the #461 corroboration row's agent identity is resolved by
+    # the shared resolver (all payload shapes), NOT by the legacy name-only
+    # read above — that split left subagent_type-shaped dispatches with
+    # `agent=?` in the row, so D3's marker check never corroborated them
+    # and the deadlock survived the pass-through for that shape. The gate
+    # inputs (agenttype / worker_id) keep the legacy value: their contracts
+    # are unchanged by this card.
+    row_agent = _resolve_dispatch_agent(payload, prompt) or agent_name or '?'
+    verifier_remediation = False  # set after the dispatch parse (needs cid)
     # #862: the dispatch shape belongs to the contract channel (prompt,
     # protocol v1 JSON envelope; v1-first per #861 single-source). The
     # description channel is deprecated replay-only — a shape found there
@@ -487,6 +523,14 @@ def pre_check(payload: dict, paths: dict) -> int:
                            'description channel - protocol v1 requires the '
                            'kunglao_dispatch JSON envelope in the prompt '
                            '(B4/#862).', paths)
+    # #237 D2: verifier pass-through — a kunglao-redteam / verdict-scorer
+    # dispatch for a PROVEN claim IS the flagged UNVERIFIED_EVIDENCE set's
+    # remediation; this hook's own drift gate must allow it too (the
+    # dispatch_gate face alone left the honest path blocked here, and the
+    # #461 corroboration row could never be written through a rejected
+    # dispatch).
+    verifier_remediation = _is_verifier_remediation_dispatch(
+        paths.get('workspace'), cid, payload, prompt)
     checks = [
         ('workers', check_workers_lt_3(paths)),
         ('cap', check_promotion_attempts(paths['register'], cid)),
@@ -500,7 +544,11 @@ def pre_check(payload: dict, paths: dict) -> int:
         ('heartbeat', check_heartbeat_alive(paths['state'])),
         # v1.9.29: plan drift + convergence health wired in as mechanical
         # gates (historical research-tree r3, R1/R3). FAIL_OPEN inside the checks.
-        ('drift', check_plan_drift(paths)),
+        # #237 D2: skipped for verifier-remediation dispatches (verifier +
+        # PROVEN claim) — this gate must not reject the remediation it
+        # exists to demand.
+        ('drift', (True, '') if verifier_remediation
+         else check_plan_drift(paths)),
         ('health', check_convergence_health(paths)),
         # v1.9.39 (#475): env-state freshness gate — a dispatch whose tier/
         # tools need a drifted environment capability is REJECTED; missing/
@@ -571,7 +619,10 @@ def pre_check(payload: dict, paths: dict) -> int:
     # #461: a PASSING dispatch is a lifecycle event — renew TTL / complete
     # the activation set / flip phase to DISPATCH / log the dispatch event
     # (fail-open inside; rejected dispatches above never reach this line).
-    _dispatch_lifecycle(paths, tier, tools, cid, agent_name, prompt=prompt)
+    # #237 H1: the row carries the shared-resolver identity (row_agent), so
+    # a subagent_type-shaped verifier dispatch lands `agent=kunglao-redteam`
+    # — the marker plan_drift_detector's D3 corroboration matches.
+    _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt)
     # #57 gate 3: stamp the per-dispatch nonce (dispatch anchor) at the
     # approval point — it is what arms the plan-author gate on this claim's
     # NEXT dispatch, so a pre-written plan can no longer pass as worker work.

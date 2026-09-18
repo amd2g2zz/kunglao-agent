@@ -183,6 +183,7 @@ EMIT_ACTIONS = [
     "detector_eval",      # #127 a detector ran (detail JSON carries `detector` name + counters)
     "detector_fired",     # #127 a detector FIRED on the pathology it exists for (liveness evidence)
     "dispatch",
+    "drift_verifier_passthrough",  # #237 D2 dispatch_gate: verifier dispatch allowed through the drift blocker (the remediation face, observed)
     "env_incident",       # #718 violation_capture traceback/env-crash face
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
     "failure_blocked",

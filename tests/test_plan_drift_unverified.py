@@ -14,6 +14,11 @@ This class closes that hole:
 
 Exit-code style mirrors the existing 5 classes (1 = drift, 2 = HARD_PAUSE
 when 3+ drift warnings in the same run). All I/O is synthetic (tmp_path).
+
+#237 D3 re-pin (documented contract change): a verify-redteam record counts
+only when the unified log corroborates a hook-attributed verifier dispatch
+for the claim — no-drift expectations here write the corroboration row via
+write_dispatch_corroboration().
 """
 import sys
 from pathlib import Path
@@ -42,6 +47,17 @@ def write_verify_redteam(ws: Path, cid: str) -> Path:
     p = runs / f"verify-redteam-{cid}.md"
     p.write_text("RED-TEAM VERDICT: CONFIRMED\n", encoding="utf-8")
     return p
+
+
+def write_dispatch_corroboration(ws: Path, cid: str) -> None:
+    """#237 D3 re-pin: a record counts only when the unified log carries a
+    hook-attributed verifier dispatch row for the claim. The row is written
+    through the REAL #461 emitter (worker_budget_sinks._dispatch_lifecycle)
+    so the positive fixtures pin the production row shape, not a mock of
+    it (review H1: the hardcoded mock format was the fragile coupling)."""
+    from worker_budget_sinks import _dispatch_lifecycle
+    _dispatch_lifecycle({"workspace": str(ws)}, 1, ["Read"], cid,
+                        "kunglao-redteam", prompt="")
 
 
 def write_fact(ws: Path, fact_id: str, claim_id: str, confidence: str) -> Path:
@@ -82,6 +98,7 @@ def test_proven_with_verify_redteam_no_drift(tmp_path, capsys):
     ws.mkdir()
     write_register(ws, [{"id": "C-002", "status": "PROVEN"}])
     write_verify_redteam(ws, "C-002")
+    write_dispatch_corroboration(ws, "C-002")  # #237 D3 re-pin
     (ws / "global_plan.txt").write_text("plan mentions C-002\n", encoding="utf-8")
 
     assert pdd.check(ws, active_only=True) == 0
@@ -94,6 +111,7 @@ def test_verify_redteam_dashless_filename_counts(tmp_path, capsys):
     ws.mkdir()
     write_register(ws, [{"id": "C-335", "status": "PROVEN"}])
     write_verify_redteam(ws, "C335")  # real-world naming: runs/verify-redteam-C335.md
+    write_dispatch_corroboration(ws, "C-335")  # #237 D3 re-pin (canonical id)
     (ws / "global_plan.txt").write_text("plan mentions C-335\n", encoding="utf-8")
 
     assert pdd.check(ws, active_only=True) == 0
@@ -106,6 +124,7 @@ def test_proven_with_low_confidence_fact_is_drift(tmp_path, capsys):
     ws.mkdir()
     write_register(ws, [{"id": "C-003", "status": "PROVEN"}])
     write_verify_redteam(ws, "C-003")  # reality check exists...
+    write_dispatch_corroboration(ws, "C-003")  # ...and is corroborated (#237)
     write_fact(ws, "F001", "C-003", "unlikely")  # ...but the fact is low-confidence
     (ws / "global_plan.txt").write_text("plan mentions C-003\n", encoding="utf-8")
 
@@ -121,6 +140,7 @@ def test_proven_with_high_confidence_fact_no_drift(tmp_path, capsys):
     ws.mkdir()
     write_register(ws, [{"id": "C-004", "status": "PROVEN"}])
     write_verify_redteam(ws, "C-004")
+    write_dispatch_corroboration(ws, "C-004")  # #237 D3 re-pin
     write_fact(ws, "F002", "C-004", "almost_certain")
     (ws / "global_plan.txt").write_text("plan mentions C-004\n", encoding="utf-8")
 
@@ -151,6 +171,7 @@ def test_legacy_low_confidence_names_also_flag(tmp_path, capsys):
     ws.mkdir()
     write_register(ws, [{"id": "C-010", "status": "PROVEN"}])
     write_verify_redteam(ws, "C-010")
+    write_dispatch_corroboration(ws, "C-010")  # #237 D3 re-pin
     write_fact(ws, "F004", "C-010", "suspected")  # legacy -> roughly_even (low half)
     (ws / "global_plan.txt").write_text("plan mentions C-010\n", encoding="utf-8")
 
