@@ -13,6 +13,8 @@ dispatch frontier.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import random
 import sys
 from pathlib import Path
@@ -252,3 +254,176 @@ def test_cost_field_is_tier_diagnostic_only():
     assert out["C-cheap"].cost == 1.0 and out["C-deep"].cost == 10.0
     for a in out.values():
         assert a.score == round(_replica_sample(a.claim_id), 6)
+
+
+# ---------- Thompson seed contract (EXP-1: seed = f(posterior_state, round)) ----------
+
+CASES_251 = [   # (case_id, target_pq, alpha, beta) — means .667 / .500 / .250
+    ("case-alpha", "pq.net", 4.0, 2.0),
+    ("case-beta", "pq.crypto", 2.0, 2.0),
+    ("case-gamma", "pq.pack", 1.0, 3.0),
+]
+
+CLAIMS_251 = [_claim("C1", answers_question="pq.net"),
+              _claim("C2", answers_question="pq.crypto"),
+              _claim("C3", answers_question="pq.pack")]
+
+CONV_LEDGER = ".convergence_ledger.jsonl"   # == convergence_check.LEDGER_NAME
+
+
+def _append_round(ws, open_count=3, ts="2026-09-18T00:00:00"):
+    """One convergence_check snapshot row (the writer's row shape,
+    convergence_check._append_ledger) — advances the round index by 1."""
+    row = {"ts": ts, "decision": "DISPATCH", "open_count": open_count,
+           "open_ids": ["C1", "C2", "C3"], "partial_count": 0,
+           "active_workers": 0, "blockers": [], "facts_total": 1,
+           "dispatched_ids": []}
+    with (Path(ws) / CONV_LEDGER).open("a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _rank_with_rng(ws, rng):
+    """Rank the three linked claims through the real production ranker."""
+    return tuple(a.claim_id for a in pr.priority_ratio(
+        [dict(c) for c in CLAIMS_251], _deps(), _evidence(ws=ws), rng=rng))
+
+
+def test_251_round_index_counts_convergence_snapshots_only(tmp_path):
+    """Accessor: round := RAW snapshot rows (no "type", has "open_count" —
+    the convergence_health.assess snapshot filter); OPERATOR_ACTION/event
+    rows and unparseable dirty lines are skipped; absent ledger -> 0."""
+    ws = tmp_path
+    ws.joinpath(CONV_LEDGER).write_text(
+        json.dumps({"ts": "t1", "decision": "DISPATCH", "open_count": 3,
+                    "open_ids": ["C1"], "facts_total": 1}) + "\n"
+        + json.dumps({"type": "OPERATOR_ACTION", "action": "defer",
+                      "open_count": 3}) + "\n"
+        + "not json at all\n"
+        + json.dumps({"ts": "t2", "decision": "DISPATCH", "open_count": 3,
+                      "open_ids": ["C1"], "facts_total": 1}) + "\n",
+        encoding="utf-8")
+    assert pr.round_index(ws) == 2
+    assert pr.round_index(tmp_path / "absent-ws") == 0
+
+
+def test_251_round_index_is_raw_count_not_dedup_rounds(tmp_path):
+    """The ruling's edge: two same-open_count snapshots inside the dedup
+    wall-clock window collapse in convergence_health (rounds=1) but MUST
+    advance the raw round (2) — wiring assess()["rounds"] would leak the
+    clock into the seed and break machine-independent replay."""
+    import convergence_health as ch
+    ws = tmp_path
+    for i in range(2):
+        _append_round(ws, ts=f"2026-09-18T00:00:0{i}")
+    assert pr.round_index(ws) == 2
+    ledger = [json.loads(ln) for ln
+              in (ws / CONV_LEDGER).read_text(encoding="utf-8").splitlines()
+              if ln.strip()]
+    assert ch.assess(ledger)["rounds"] == 1
+
+
+def test_251_accessor_ledger_name_matches_the_writer():
+    """The accessor reads the convergence_check writer's file, by name."""
+    import convergence_check
+    assert pr.CONV_LEDGER_NAME == convergence_check.LEDGER_NAME
+
+
+def test_251_p1_same_posteriors_same_round_is_replayable(tmp_path):
+    """P1: f(posterior_state, round) is deterministic — same inputs give
+    the identical seed, identical rng base draw AND identical ranking."""
+    ws = _posteriors_ws(tmp_path, cases=CASES_251)
+    s1 = pr.case_face_seed(pr.PosteriorLedger.load(ws), 7)
+    s2 = pr.case_face_seed(pr.PosteriorLedger.load(ws), 7)
+    assert s1 == s2
+    assert random.Random(s1).getrandbits(64) == random.Random(s2).getrandbits(64)
+    assert _rank_with_rng(ws, random.Random(s1)) == _rank_with_rng(ws, random.Random(s2))
+
+
+def test_251_p2_static_posteriors_advancing_round_moves_rng_base(tmp_path):
+    """P2 seed liveness (the hard, deterministic half): STATIC posteriors +
+    advancing round -> every posterior_rng base draw distinct. v1 froze
+    5/5 rounds onto ONE rng_base (the frozen defect; 53 consecutive in the
+    wild)."""
+    ws = _posteriors_ws(tmp_path, cases=CASES_251)
+    bases = []
+    for _ in range(5):
+        _append_round(ws)
+        bases.append(pr.posterior_rng(ws).getrandbits(64))
+    assert len(set(bases)) == 5
+
+
+def test_251_p2_static_posteriors_advancing_round_unfreezes_ranking(tmp_path):
+    """P2 ranking liveness (the separate observable — seed liveness does
+    not imply ranking liveness on a coarse register): the ranking
+    trajectory over advancing rounds is not one frozen order."""
+    ws = _posteriors_ws(tmp_path, cases=CASES_251)
+    ranks = []
+    for _ in range(5):
+        _append_round(ws)
+        ranks.append(_rank_with_rng(ws, pr.posterior_rng(ws)))
+    assert len(set(ranks)) >= 2
+
+
+def test_251_p3_posterior_change_moves_seed_and_ranking(tmp_path):
+    """P3: a runner verdict (case-beta alpha 2 -> 6, mean .5 -> .75) moves
+    the seed AND the ranking at the same round."""
+    ws_a = _posteriors_ws(tmp_path, name="a", cases=CASES_251)
+    ws_b = _posteriors_ws(tmp_path, name="b", cases=[
+        ("case-alpha", "pq.net", 4.0, 2.0),
+        ("case-beta", "pq.crypto", 6.0, 2.0),   # green verdict: mean .5 -> .75
+        ("case-gamma", "pq.pack", 1.0, 3.0)])
+    s_a = pr.case_face_seed(pr.PosteriorLedger.load(ws_a), 0)
+    s_b = pr.case_face_seed(pr.PosteriorLedger.load(ws_b), 0)
+    assert s_a != s_b
+    assert _rank_with_rng(ws_a, random.Random(s_a)) != _rank_with_rng(ws_b, random.Random(s_b))
+
+
+def test_251_cold_start_seed_moves_with_round():
+    """Cold start unfreeze (direct seed face): the empty cases doc hashes
+    WITH the round — v1's docstring presented the constant cold seed as a
+    feature ("no clock and no counter file")."""
+    assert pr.case_face_seed(pr.PosteriorLedger(), 0) != \
+        pr.case_face_seed(pr.PosteriorLedger(), 1)
+    assert len({pr.case_face_seed(pr.PosteriorLedger(), r)
+                for r in range(5)}) == 5
+
+
+def test_251_cold_start_production_rng_not_constant(tmp_path):
+    """Cold start unfreeze (production face): posterior_rng must not
+    short-circuit to Random(0) on an empty/absent posteriors ledger — a
+    workspace with a live convergence ledger but no verdicts yet still
+    moves its Thompson base draw every round."""
+    ws = _posteriors_ws(tmp_path)   # posteriors.yaml exists, zero cases
+    frozen = random.Random(0).getrandbits(64)
+    bases = []
+    for _ in range(5):
+        _append_round(ws)
+        bases.append(pr.posterior_rng(ws).getrandbits(64))
+    assert len(set(bases)) == 5
+    assert frozen not in bases
+
+
+def test_251_rank_feeds_fingerprint_carries_round(tmp_path, monkeypatch):
+    """Frozen sampling OBSERVABLE (owner ruling): the rank_feeds
+    input_fingerprint doc carries the round next to rng_base — a tail
+    reader detects frozen sampling as equal rng_base across advancing
+    rounds in a one-line delta. The fingerprint hash covers the round."""
+    import kunglao_log
+    calls: list[dict] = []
+
+    def _fake_emit(ws, actor, action, **kw):
+        calls.append({"ws": ws, "actor": actor, "action": action, **kw})
+        return True
+
+    monkeypatch.setattr(kunglao_log, "emit", _fake_emit)
+    ws = _posteriors_ws(tmp_path, cases=CASES_251)
+    _append_round(ws)
+    _append_round(ws)
+    _rank_with_rng(ws, pr.posterior_rng(ws))
+    rows = [json.loads(c["detail"]) for c in calls if c["action"] == "rank_feeds"]
+    assert len(rows) == 1
+    fp = rows[0]["input_fingerprint"]
+    assert fp["round"] == 2
+    canon = {k: v for k, v in fp.items() if k != "fingerprint"}
+    assert fp["fingerprint"] == hashlib.sha256(json.dumps(
+        canon, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()

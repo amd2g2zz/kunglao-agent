@@ -151,8 +151,9 @@ def decide(ws: Path, scan_text: str | None = None) -> dict:
         evidence = pr.EvidenceView.from_workspace(ws)
         failure_blocked_ids = set(base["failure_blocked"])
         claims = [c for c in (reg.get("claims") or []) if c.get("id") not in failure_blocked_ids]
-        actions = pr.priority_ratio(claims, deps, evidence,
-                                    rng=pr.posterior_rng(ws))
+        rng, seed_round = pr.posterior_seed_state(ws)
+        actions = pr.priority_ratio(claims, deps, evidence, rng=rng,
+                                    round_no=seed_round)
         for a in actions[: max(base["free_slots"], 0)]:
             out["top_actions"].append({
                 "claim_id": a.claim_id, "action": a.action,
