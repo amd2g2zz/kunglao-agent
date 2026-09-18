@@ -89,7 +89,7 @@ def _dynamic(i: int) -> str:
 
 
 def _network(i: int) -> str:
-    return f'network pass {i}: replay the captured http session from the pcap'
+    return f'network pass {i}: replay the captured web-session traffic from the pcap'
 
 
 def _monolithic_12() -> str:
