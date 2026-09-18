@@ -658,7 +658,7 @@ files:
   tests/test_fixture_excerpt_lint.py:
     r1: 3
   tests/test_framework_rigidity_57.py:
-    r1: 14
+    r1: 12
   tests/test_frida_templates.py:
     r1: 7
   tests/test_function_kg_530.py:
@@ -983,6 +983,8 @@ files:
     r1: 3
   tests/test_report_consistency_check.py:
     r1: 3
+  tests/test_reproduction_oracle_248.py:
+    r1: 2
   tests/test_resume_hypotheses_528.py:
     r1: 3
   tests/test_resume_prompt.py:
@@ -1064,6 +1066,8 @@ files:
   tests/test_static_tools_1c.py:
     r1: 2
   tests/test_status_contract_607.py:
+    r1: 1
+  tests/test_settle_by_need.py:
     r1: 1
   tests/test_status_defs.py:
     r1: 2
@@ -1214,7 +1218,7 @@ files:
   tests/test_wire_up_settings.py:
     r1: 14
   tests/test_worker_budget.py:
-    r1: 53
+    r1: 45
   tests/test_worker_death_resume_11.py:
     r1: 7
   tests/test_worker_liveness_protocol.py:

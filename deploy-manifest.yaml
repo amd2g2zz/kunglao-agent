@@ -67,11 +67,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 6eeb2b06d9de5a99df2afba9edcd87f742f0042e94c4e5a89082da37ebcc9a10
+    sha256: 0b6802521c0f270908691499ebdc083550e33b07aa3ed1f4a6ff67d03785493a
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: a2be8454a3ead67622da5100b4e309fb49e9837856274d750ebf9fd58c514fb1
+    sha256: 60286b870bf5c46faee4a8a1072659d17e4883140df7cfcdf23bb8d5255464be
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 8d4b20d7c508dab0c2887f20c98efae073de4ad67fa63782db68f0732c23db55
+    sha256: 57bc23d6946e761e73649002c3b3d8d0108f8eecbf73f4ba89c7eb2e118014f5
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -575,7 +575,7 @@ files:
   - src: scripts/oracle_anchors.py
     dest: .claude/scripts/oracle_anchors.py
     kind: scaffold
-    sha256: 29a0f79494e4a2cb002c6fddf46191468835fde2960b130b34315d89e517b5eb
+    sha256: 3f8dd16c596fc600ebd43bf039fdcbb31d562882c45faf06774ceecea3aae79f
   - src: scripts/oracle_cadence.py
     dest: .claude/scripts/oracle_cadence.py
     kind: scaffold
@@ -728,6 +728,10 @@ files:
     dest: .claude/scripts/route_capability.py
     kind: scaffold
     sha256: 22357585434825fc5ec89486c7a9d7d5a57b0160b568db359fd1842e72379a4e
+  - src: scripts/settle_by_need.py
+    dest: .claude/scripts/settle_by_need.py
+    kind: scaffold
+    sha256: 6ac9589c0b3a1fbe7b6151983d2199a19a9382808c5dd5d4331d328cfd09529a
   - src: scripts/shell_defaults.py
     dest: .claude/scripts/shell_defaults.py
     kind: scaffold
