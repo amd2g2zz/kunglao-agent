@@ -81,7 +81,7 @@ _SKILL_ROOT = Path(__file__).resolve().parent.parent
 ensure_scripts_path()  # #671 idempotent membership (was bare insert)
 try:
     from priority_ratio import (priority_ratio as _ratio_rank,
-                                posterior_rng as _posterior_rng,
+                                posterior_seed_state as _posterior_seed_state,
                                 EvidenceView as _EvidenceView)
     from retract_claim import RETRACTED  # retracted = terminal (#331)
     from status_defs import TERMINAL  # noqa: F401 — re-exported via gates surface
@@ -259,6 +259,7 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
     claims = [c for c in (reg.get('claims') or []) if c.get('id')]
     evidence = _EvidenceView()
     rng = None
+    seed_round = None
     if ws:
         ws_path = Path(ws)
         try:
@@ -269,12 +270,12 @@ def check_priority(reg_path, deps_path, task_spec_path, dispatched_cid, ws=None)
         except Exception:  # pragma: no cover - the audit stays usable, fail-open
             pass
         evidence = _EvidenceView.from_workspace(ws_path)
-        rng = _posterior_rng(ws_path)
+        rng, seed_round = _posterior_seed_state(ws_path)
     # RETRACTED is terminal (#331) — ratio.is_open keys off status_defs.TERMINAL
     # (frozen without RETRACTED), so THIS caller removes it. Every other
     # terminal-status row is kept: is_open already excludes it from candidacy.
     claims = [c for c in claims if (c.get('status') or '').upper() != RETRACTED]
-    actions = _ratio_rank(claims, deps, evidence, rng=rng)
+    actions = _ratio_rank(claims, deps, evidence, rng=rng, round_no=seed_round)
     authority = 'thompson'
     if not actions:
         return (True, '', False)
