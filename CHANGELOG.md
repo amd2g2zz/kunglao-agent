@@ -6,56 +6,40 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
-## [0.1.4] - 2026-09-03
+## [Unreleased]
 
-### Added
-- **WAIT/UNWAIT worker lifecycle (#902)**: subagents no longer occupy slots after
-  delivery — they run a real spin-poll (`scripts/kunglao_wait.py`) with a
-  wait-flag heartbeat; a dispatch signal re-arms them (rc 0, no timeout); a
-  worker unscheduled for 90 rounds self-kills and frees its slot (rc 3/4).
-  All 9 agents share the one CLI; `waiting` joins the status vocabulary and
-  never jams the 3-worker capacity gate.
-- **WAIT spin-lock CLI (#902)**: `kunglao_wait.py` owns the whole wait
-  mechanism (heartbeat / signal consumption / self-kill) so agents hold none
-  of it; env-tunable poll interval and round cap.
-- **Wait-signal dispatch wiring (#902)**: dispatching to a waiting worker
-  writes `runs/wait-signal-<id>.json` (single-shot, fail-open); worker_pulse
-  stops flagging waiting workers as zombies; the noop breaker exempts
-  fresh all-waiting fleets.
-- **Adversarial challenge ledger (#909)**: `challenge_ledger.py` — grounding
-  rule (no falsifier → no entry, no round cost), assertion freeze,
-  5-round hard cap, append-only HMAC-chained rounds, keyed summary
-  (forgery fails without the orchestrator key).
-- **Adversarial signature gate (#909)**: `adversarial_gate.py` blocks
-  verdict-scorer sign-off while open challenges exist / chain broken /
-  summary unauthenticated / ledger truncated (monotonic register anchor).
-- **Adversarial orchestrator CLI (#909)**: `adversarial_loop.py` —
-  begin/challenge/rebuttal/verifier-call/status/arbitrate/verify-run;
-  stalemate arbitration only after round 5; on-demand verifier summons.
-- **Agent contract layer (#909)**: redteam CONFIRMED requires ≥2 named
-  counter-example directions; verdict-scorer runs the adversarial gate with
-  no override; workers get the rebuttal right and mechanism files join the
-  BLIND list.
-- **On-demand verifier summons (#909)**: a disputed falsifier command is
-  re-run once by a fresh verifier (timeout-capped, finding archived) —
-  never a blanket re-run of every evidence command.
-- **Execution channel in the event log (#699)**: every `kunglao_log` row
-  carries `channel` (from `KUNGLAO_CHANNEL`, default `local`); explicit
-  kwarg wins for endpoint-specific stamping.
-- **Execution-surface digest summary (#699)**: digest sec_h reports
-  per-channel event counts; legacy rows aggregate under `local`.
-- feat(#919): 定位表述对齐 — malware-only 门面改写为逆向工程专家身份（README/plugin.json/SKILL 触发词）+ block_malware_exec ask 式开关（host_exec_protection 决策落账 env-manifest）
+Post-release fixes landed on dev since tag `v0.1.5.post1` (PR #231); backfilled
+by the #258 version-bookkeeping pass — not yet cut into a release.
 
 ### Fixed
-- **Toolchain probes execute for real (#697)**: `_which_items` runs the
-  tool's `verify_cmd` (fail-open, 10 s) — dead symlinks, 0-byte binaries and
-  missing shared libraries now WARN at free-time init with the real cause,
-  instead of PASSing on `which` and failing at paid-time dispatch.
-- **Workspace resolution single source (#865)**: the three hooks-side
-  `_resolve_workspace` copies (dispatch_gate / env_check_gate /
-  recall_inject) delegate to one manifest-aware helper — the two copies that
-  hardcoded `malware-analysis-workspace` no longer bypass env-manifest
-  layout overrides.
+
+- **Plan-first ownership — the gate stops gating the FIRST dispatch (#239)**:
+  `hooks/worker_budget_gates.check_worker_plan` no longer rejects a claim's
+  first dispatch for a missing `runs/plan-C<NN>*.md` — dispatch carries intent,
+  not a plan; planning is the worker's first act of execution (owner ruling on
+  the #7 regression). A RE-dispatch still requires the plan reference, with
+  worker-session provenance enforced through the #57 dispatch-anchor linkage,
+  so an orchestrator-ghostwritten plan neither satisfies the gate nor is
+  required. The contract is pinned by the `fix-239-plan-first-ownership`
+  openspec change plus RED-first tests, and the worker-budget sink/gate split
+  is folded into the same lane.
+- **Unified negative exits — closed_by citation protocol (#233)**: every
+  non-empty `closed_by` (positive or negative) must now cite a claim id and
+  the cited claim must be terminal; obstacle citations require a path-scoped
+  REFUTED, DEFERRED citations require `wake_condition` + `infeasible_ladder`
+  (task-scoped) — violations fail closed with named INVALID_CLOSURE reasons.
+  Path- vs task-scoped negative semantics are pinned in the
+  `find_death_evidence` docstring and the agent three-state charter; 13
+  RED-first tests added, existing completion tests re-pinned per the
+  documented contract change.
+
+## [0.1.5-patch1] - 2026-09-11
+
+The Patch1 train — ten field-run fixes on the v0.1.5 line (released as `v0.1.5-patch1`, version `0.1.5.post1`): the android probe surface (apkid / JVM / memory-gate verdict), one XOR decompiler face, uv-unified environment operations, lane routing for task types beyond binary-RE, the Thompson rank face on the statusline, the macOS memory probe, and the adversarial-review remediation batch.
+
+### Fixed
+
+- **Statusline v2 assembly (#212)**: init deploys the statusline first — the hook + settings registration land before any analysis scaffold, and the two-part data plane (Python snapshot → Node render) ships with self-heal and an honest state face, so a fresh workspace shows live loop state instead of an empty segment.
 - **Android apkid probe at init**: `_check_android` now emits a WARN-tier
   apkid presence item (never blocking the HARD exit-4 refusal set) and the
   post-toolchain summary prints the first-claim fingerprinting
@@ -160,6 +144,161 @@ release (see the mapping table at the end).
   and the marker rides the tool's stdout line into the issue 215 env fact
   so a dead probe never reads as a genuinely-4GB host.
 
+## [0.1.5] - 2026-09-10
+
+The oracle-integrity train: the loop now refuses to run — or to claim success —
+without user-declared goals, checkable success criteria and a declared
+verification method; every case settlement, score update and reward movement
+became auditable; and the knowledge base, scripts tree and CI were rebuilt
+around mapping-driven generation and four-leg gates.
+
+### Added
+
+- **Task intake asks and anchors (#191)**: init now elicits the analysis goal
+  (`goal_verbatim`, verbatim), a checkable success criterion and the
+  verification method (reproduction / replay-evidence / static / manual) as
+  first-class task_spec fields. Analysis entry and resume refuse (rc=7) while
+  any anchor is missing; upgrade backfills via structured interview. Existing
+  workspaces are no longer silently guessed into a loop.
+- **I/O equivalence oracle (#172)**: reproduction claims require
+  controlled-variable replay evidence — pairs must match byte-for-byte or the
+  claim cannot converge. Missing, non-equivalent or simulator-only evidence
+  fails closed at PROVEN admission.
+- **Declared oracle coverage gate (#147)**: convergence now requires the
+  declared oracle-coverage bit; a run can no longer dodge its primary
+  questions by abstention and still claim success. Tasks that genuinely have
+  no oracle declare it explicitly.
+- **Phase-0 goal operationalization (#128)**: deliverables, not-done
+  counterexamples and capability-probe cases are read back to the user for
+  confirmation before the loop starts — the goal is operational, not prose.
+- **Outcome forensics (#146)**: case settlements record HOW they were won or
+  lost (evidence class, admission path, verdict), failure-analysis arming is
+  fixed, and case abandonment has a protocol instead of silent drift.
+- **Oracle case admission integrity (#126)**: evidence_refs resolution,
+  hypothesis_ref linkage, action-signature dedup, and a load-time mutation
+  requirement — oracle cases are structurally validated at load.
+- **Mechanism utilization verification (#127)**: detector liveness telemetry
+  plus injection trip-tests — a mechanism that never fires (or fires on
+  float-equality blindness) is now visible instead of assumed-working.
+- **Oracle reward channel cadence (#132)**: settlement-hook runner invocation
+  replaces LLM-obedience triggering; a missing intent is a loud signal.
+- **Value-currency reconciliation (#133)**: PQ coverage credit is gated on
+  armed-case oracle green — closing the value-level residue where credit
+  could accrue without oracle-passing work.
+- **Win-rate curve aggregator (#156)**: rolling success-rate over the
+  settlement stream — a belief-side counting curve over real outcomes.
+- **Algorithm event log (#157)**: rank_feeds, posterior_update and
+  observation events flow through the unified log, making TS, posteriors and
+  reward movements auditable end to end.
+- **Worker-entry lookup constitution (#145)**: agent files carry a
+  front-loaded reference/tool/script lookup block and compressed rule slices
+  — workers find the knowledge base from tick one (guidance, not
+  enforcement).
+- **Proactive environment probing (#202)**: the toolchain gate now
+  resolves the environment itself — ownership tiers (agent-do / human-only
+  / lane-conditional) on every check, the decompiler face branches on the
+  declared lane (ida-pro-vm MCP reachability for MCP tasks — no local IDA
+  or license demanded), multi-strategy IDA discovery (Spotlight, .app
+  bundle layouts, brew, known dirs) with Ghidra fallback and a user choice
+  only as last resort, MCP servers auto-registered by the agent, device
+  configuration (root flag, frida/gserver) attempted over adb, and uv
+  deployed + enforced as the interpreter for every shipped script.
+- **Init and upgrade actively ask (#203)**: init always emits the three
+  anchor questions (goal, success criterion, verification method) through
+  the structured exit-8 interview channel before any scaffold; answers
+  round-trip into task_spec and pre-fill the completion oracle — an init
+  can no longer "succeed" with blank anchors, and upgrade verifies the
+  anchors on every run.
+
+- **Typed asset-tier retrieval (#162)**: tools / templates / references are
+  recalled as typed tiers, with a windowed-stalker template and echarts
+  de-vendored.
+- **Statusline v2 (#142)**: sparkline, entropy badge, health dots and a
+  current-task chip; producer-owned data, deployed PROJECT-scoped.
+
+### Changed
+
+- **References tree governance (#166)**: two-population audit, three-level
+  re-library, mapping-driven generators and generated two-tier indexes;
+  noise documents removed and index integrity enforced by relib_audit.
+- **scripts/ governance (#189)**: six merge clusters consolidated, nine
+  orphan scripts removed (four-surface retirement), shared libs
+  (`scripts/_boot.py`, `scripts/report_render.py`) extracted, and tool
+  installation unified under the `toolchain_install` registry (unidbg as
+  the first registered plan).
+- **Upgrade purges legacy global hooks (#143)**: `~/.claude/settings.json`
+  cleanup replaces the old warn-only posture.
+- **IDA lane surface (#167, #179)**: py_eval session semantics and the
+  queue-serial contract verified and documented — the MCP lane is the
+  interface, session behavior is now specified.
+- **Task-writing taught as a checkable oracle (#170)**: README shows the
+  folk-phrasing to checkable-oracle translation with concrete RE scenarios.
+- **Distillation waves (#163, #164, #165, #176, #144)**: IDA-scripting
+  methodology (modern-module overlays, headless discipline, batch-analysis
+  template), the debuggability enablement ladder, the 26-lesson Android-RE
+  course aggregate with methodology attribution and variant inspirations,
+  the anti-bot/unidbg queue (6 landed, 7 thin, 6 rejected), and the
+  dynamic-observation / environment-integrity corpus.
+- **CI acceleration (#184)**: xdist parallelization with tier markers,
+  subprocess elimination, and release-check split into four parallel legs —
+  merge gate is all four green, tier census pins the partition.
+
+### Known limitations
+
+- Replay evidence does not yet bind to a medium (#199): simulator-source
+  replay passes are hypothesis-grade support only; device-medium binding
+  lands in v0.1.6.
+
+## [0.1.4] - 2026-09-03
+
+### Added
+- **WAIT/UNWAIT worker lifecycle (#902)**: subagents no longer occupy slots after
+  delivery — they run a real spin-poll (`scripts/kunglao_wait.py`) with a
+  wait-flag heartbeat; a dispatch signal re-arms them (rc 0, no timeout); a
+  worker unscheduled for 90 rounds self-kills and frees its slot (rc 3/4).
+  All 9 agents share the one CLI; `waiting` joins the status vocabulary and
+  never jams the 3-worker capacity gate.
+- **WAIT spin-lock CLI (#902)**: `kunglao_wait.py` owns the whole wait
+  mechanism (heartbeat / signal consumption / self-kill) so agents hold none
+  of it; env-tunable poll interval and round cap.
+- **Wait-signal dispatch wiring (#902)**: dispatching to a waiting worker
+  writes `runs/wait-signal-<id>.json` (single-shot, fail-open); worker_pulse
+  stops flagging waiting workers as zombies; the noop breaker exempts
+  fresh all-waiting fleets.
+- **Adversarial challenge ledger (#909)**: `challenge_ledger.py` — grounding
+  rule (no falsifier → no entry, no round cost), assertion freeze,
+  5-round hard cap, append-only HMAC-chained rounds, keyed summary
+  (forgery fails without the orchestrator key).
+- **Adversarial signature gate (#909)**: `adversarial_gate.py` blocks
+  verdict-scorer sign-off while open challenges exist / chain broken /
+  summary unauthenticated / ledger truncated (monotonic register anchor).
+- **Adversarial orchestrator CLI (#909)**: `adversarial_loop.py` —
+  begin/challenge/rebuttal/verifier-call/status/arbitrate/verify-run;
+  stalemate arbitration only after round 5; on-demand verifier summons.
+- **Agent contract layer (#909)**: redteam CONFIRMED requires ≥2 named
+  counter-example directions; verdict-scorer runs the adversarial gate with
+  no override; workers get the rebuttal right and mechanism files join the
+  BLIND list.
+- **On-demand verifier summons (#909)**: a disputed falsifier command is
+  re-run once by a fresh verifier (timeout-capped, finding archived) —
+  never a blanket re-run of every evidence command.
+- **Execution channel in the event log (#699)**: every `kunglao_log` row
+  carries `channel` (from `KUNGLAO_CHANNEL`, default `local`); explicit
+  kwarg wins for endpoint-specific stamping.
+- **Execution-surface digest summary (#699)**: digest sec_h reports
+  per-channel event counts; legacy rows aggregate under `local`.
+- feat(#919): 定位表述对齐 — malware-only 门面改写为逆向工程专家身份（README/plugin.json/SKILL 触发词）+ block_malware_exec ask 式开关（host_exec_protection 决策落账 env-manifest）
+
+### Fixed
+- **Toolchain probes execute for real (#697)**: `_which_items` runs the
+  tool's `verify_cmd` (fail-open, 10 s) — dead symlinks, 0-byte binaries and
+  missing shared libraries now WARN at free-time init with the real cause,
+  instead of PASSing on `which` and failing at paid-time dispatch.
+- **Workspace resolution single source (#865)**: the three hooks-side
+  `_resolve_workspace` copies (dispatch_gate / env_check_gate /
+  recall_inject) delegate to one manifest-aware helper — the two copies that
+  hardcoded `malware-analysis-workspace` no longer bypass env-manifest
+  layout overrides.
 ## [0.1.3] - 2026-08-25
 
 ### Round 6 — Deployment Inversion, Agent Governance & Web-Lane Depth (2026-08-27)
@@ -700,7 +839,6 @@ release (see the mapping table at the end).
   sys.platform — `Scripts/python.exe` on Windows, `bin/python` on POSIX —
   instead of the workspace `ws/.venv/Scripts/python.exe` Windows layout that
   always FAILed on macOS (#409)
-86b479a (fix(#409): platform de-hardcoding — analyzeHeadless(.bat) + skill-root venv by sys.platform)
 
 ### Fixed (kunglao-init exit-code semantics, #414)
 
@@ -731,8 +869,6 @@ release (see the mapping table at the end).
 - README gained a Command Reference table covering all four commands (#413).
 - Contract tests for the subcommand routing + menu behavior, TDD RED-first (#413).
 - `release-manifest.yaml`, `structural_check.py`, `check_global_rule_subset.py`, and docs repointed to the moved main skill (#413).
->>>>>>> 3eca5a0 
-(feat(#413): subcommand UX + guided entry — skills/ layout, menu, hints, README table)
 
 ### Removed (plan-template dead end, #352)
 

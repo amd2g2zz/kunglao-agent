@@ -150,10 +150,13 @@ def test_rank_feeds_carries_the_selected_arm(tmp_path):
     ]
     evidence = pr.EvidenceView()
     pr._emit_rank_feeds(ws, claims=[], evidence=evidence, rng_base=0,
-                        actions=actions)
+                        actions=actions, round_no=5)
     row = _rows(ws)[0]
     assert row["action"] == "rank_feeds"
     assert row["arm"] == "C-002"
+    # axis separation: the threaded seed round rides the fingerprint, the
+    # schema epoch stays THE tick (no ledger here -> the real tick 0)
+    assert row["epoch"] == 0
 
 
 def test_rank_feeds_without_actions_keeps_arm_honestly_null(tmp_path):
@@ -161,7 +164,7 @@ def test_rank_feeds_without_actions_keeps_arm_honestly_null(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
     pr._emit_rank_feeds(ws, claims=[], evidence=pr.EvidenceView(), rng_base=0,
-                        actions=[])
+                        actions=[], round_no=0)
     row = _rows(ws)[0]
     assert row["arm"] is None
     assert row["null_reasons"]["arm"] == "omitted"
