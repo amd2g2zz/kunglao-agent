@@ -983,6 +983,8 @@ files:
     r1: 3
   tests/test_report_consistency_check.py:
     r1: 3
+  tests/test_reproduction_oracle_248.py:
+    r1: 2
   tests/test_resume_hypotheses_528.py:
     r1: 3
   tests/test_resume_prompt.py:
@@ -1064,6 +1066,8 @@ files:
   tests/test_static_tools_1c.py:
     r1: 2
   tests/test_status_contract_607.py:
+    r1: 1
+  tests/test_settle_by_need.py:
     r1: 1
   tests/test_status_defs.py:
     r1: 2
