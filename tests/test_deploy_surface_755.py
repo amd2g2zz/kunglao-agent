@@ -660,14 +660,15 @@ class TestT6Registry:
 
     def test_already_at_target_still_plans_deploy_items(self, tmp_path,
                                                         pinned=False):
-        """The live-run sample problem (real-world shape): a 0.1.3-stamped workspace
-        (stamped before this release) whose deploy surface is incomplete —
-        the 0.1.4 registry entry must make plan non-empty so the fast
-        path cannot skip the repair."""
-        maj, mi, pa = (int(x) for x in tv.read_skill_version().split("."))
-        prev = ".".join(str(x) for x in (maj, mi, max(pa - 1, 0)))
+        """The live-run sample problem (real-world shape): a 0.1.3-stamped
+        workspace (stamped before the 0.1.4 release) whose deploy surface
+        is incomplete — the 0.1.4 registry entry must make plan non-empty
+        so the fast path cannot skip the repair. The stamp pins the version
+        BEFORE the cargo-carrying entry (a prev-of-CUR derivation would
+        silently drift below the entry on the next bump). Issue 258: it
+        also crashes on a PEP 440 .postN skill version — hence the literal."""
         up = _load_upgrade()
-        ws = self._stamped_ws(tmp_path, prev)
+        ws = self._stamped_ws(tmp_path, "0.1.3")
         pre_notes = self._snap(ws)["notes/keep.md"]
         rc = up.main([str(ws)])
         assert rc == 0

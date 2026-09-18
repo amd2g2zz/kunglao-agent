@@ -87,7 +87,9 @@ def test_seed_region_untouched():
     """issue 251 boundary pin: the seed-region functions keep their signatures —
     this lane adds nothing to them."""
     import inspect
-    assert list(inspect.signature(pr.case_face_seed).parameters) == ["ledger"]
+    # seed contract v2 (dev issue 251): case_face_seed threads round_no
+    assert list(inspect.signature(pr.case_face_seed).parameters) == [
+        "ledger", "round_no"]
     assert list(inspect.signature(pr.posterior_rng).parameters) == ["ws"]
 
 

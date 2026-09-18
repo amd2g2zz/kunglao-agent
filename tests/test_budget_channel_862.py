@@ -12,6 +12,8 @@ import io
 import sys
 from pathlib import Path
 
+import yaml
+
 _HERE = Path(__file__).parent
 # #770: hooks/scripts 以 importlib 隔离名加载，禁止顶层 sys.path.insert
 # （共享名模块解析顺序会被本文件改写，殃及后续套件）。
@@ -91,8 +93,11 @@ def test_description_only_shape_rejected(tmp_path):
 
 
 def test_devreason_requires_canonical_marker(tmp_path):
-    """#862: 偏差场景（派发 rank#2 的 C-001）下裸 reasoning: 不再过门，
-    canonical agent-reasoning: 通过。"""
+    """#862: 偏差场景（派发 rank#2 的 claim）下裸 reasoning: 不再过门，
+    canonical agent-reasoning: 通过。 The deviating claim is picked via
+    the production ranking — the #251 round-seed contract intentionally
+    moved the cold-start Thompson sample, and this test pins the deviation
+    GATE, not a hand-pinned sample order."""
     ws = _healthy_ws(tmp_path)
     _write_register(ws / "claim-register.yaml", [
         {'id': 'C-001', 'status': 'OPEN', 'promotion_attempts': 0,
@@ -105,12 +110,20 @@ def test_devreason_requires_canonical_marker(tmp_path):
     (ws / 'runs' / 'plan-C002-x.md').write_text(
         'goal: c2' + chr(10) + 'steps:' + chr(10) + 'fallback:' + chr(10),
         encoding='utf-8')
-    env_c001 = ENV.replace('"tier": 1', '"tier": 2')
-    rc, err, _ = _run(_payload(env_c001 + chr(10) + 'facts-snapshot: 1 facts' + chr(10)
+    import priority_ratio as pr
+    reg = yaml.safe_load((ws / 'claim-register.yaml').read_text(encoding='utf-8'))
+    deps = yaml.safe_load((ws / 'claim_deps.yaml').read_text(encoding='utf-8'))
+    top = pr.priority_ratio(reg['claims'], deps,
+                            pr.EvidenceView.from_workspace(ws),
+                            rng=pr.posterior_rng(ws))[0].claim_id
+    dev_cid = 'C-002' if top == 'C-001' else 'C-001'
+    env = (ENV.replace('"claim": "C-001"', f'"claim": "{dev_cid}"')
+              .replace('"tier": 1', '"tier": 2'))
+    rc, err, _ = _run(_payload(env + chr(10) + 'facts-snapshot: 1 facts' + chr(10)
                                + 'reasoning: why not rank1'), _paths_for(ws))
     assert rc == 2, err
     assert 'devreason' in err, err
-    rc2, err2, _ = _run(_payload(env_c001 + chr(10) + 'facts-snapshot: 1 facts' + chr(10)
+    rc2, err2, _ = _run(_payload(env + chr(10) + 'facts-snapshot: 1 facts' + chr(10)
                                  + 'agent-reasoning: why not rank1'),
                         _paths_for(ws))
     assert rc2 == 0, err2
