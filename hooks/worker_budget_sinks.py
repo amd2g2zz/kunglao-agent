@@ -18,6 +18,7 @@ from worker_budget_gates import (
     check_workers_lt_3, check_promotion_attempts, check_tools_allowed,
     check_host_forbidden_tools, check_deadline, check_tier_gate,
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
+    check_claim_granularity,  # #241: plan-size / domain-span gate
     compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
     compare_register_change_proven_gate,
     register_worker, remove_worker,
@@ -193,6 +194,24 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'the dispatch prompt (or `tool-catalog: none (reasoning: <why '
             'not>)` if the registered tool genuinely does not apply) - then '
             're-dispatch.'
+        ),
+    },
+    'granularity': {
+        'additionalContext': (
+            'granularity gate (#241: claim granularity discipline). This '
+            'claim\'s worker-authored plan is monolithic — exceeds '
+            'GRANULARITY_MAX_STEPS=8 enumerated steps or spans multiple '
+            'mechanism domains (a monolithic claim degrades every downstream '
+            'channel: spawn-recall, evidence verification, per-unit '
+            'settlement, TS pricing). Fix: run '
+            'uv run --project <skill> <skill>/scripts/claim_granularity.py '
+            '<ws> --split <C-NN> (the #234 fan-out at creation time: mints '
+            'domain sub-claims with depends_on edges + domain_family tags, '
+            'each unit under K steps; the parent is marked SUPERSEDED with '
+            'superseded_by = the sub-claim ids so the sub-claims enter the '
+            'dispatchable pool), then dispatch the SUB-claims. The stderr '
+            'message names the observed split (which steps belong to which '
+            'family).'
         ),
     },
     'agenttype': {
@@ -521,6 +540,13 @@ def pre_check(payload: dict, paths: dict) -> int:
         # (content + #57 gate 3 provenance) or the claim's plan path in the
         # dispatch prompt (re-dispatch continuity).
         ('plan', check_worker_plan(paths, cid, prompt)),
+        # #241: claim granularity — plan-size / domain-span at the SAME
+        # plan-check point (NOT first dispatch: post-#239 the worker has
+        # authored no plan yet, so the gate arms on the approval-point log
+        # exactly like the plan gate and fires from the NEXT dispatch on).
+        # A monolithic plan REJECTS with the mechanical split directive
+        # (mint_split_claims fan-out, issue 234 operator at creation time).
+        ('granularity', check_claim_granularity(paths, cid, prompt)),
         # v1.9.32 (#294): tool-first gate — a dispatch whose text matches a
         # registered tools/_INDEX.yaml keyword must cite it (`tool-catalog:`)
         # or explicitly opt out with reasoning. Closes the Swiss-army-test gap

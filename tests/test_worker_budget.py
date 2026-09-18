@@ -745,6 +745,7 @@ REJECT_NAMES = [
     'workers', 'cap', 'tools', 'hostchan', 'deadline', 'tier',
     'selfcap', 'heartbeat', 'drift', 'health', 'backtrack', 'plan',
     'toolfirst', 'agenttype', 'snapshot', 'devreason', 'envfresh',
+    'granularity',  # issue 241: claim granularity discipline
 ]
 
 # per-REJECT keyword that proves the guidance is concrete (names the mechanism),
@@ -767,6 +768,7 @@ REJECT_FIX_KEYWORDS = {
     'snapshot': 'facts-snapshot',
     'devreason': 'agent-reasoning',
     'envfresh': 'env_repair_l1',   # #475: L1 repair script must be named
+    'granularity': 'claim_granularity.py',  # issue 241: the mint entrypoint
 }
 
 
