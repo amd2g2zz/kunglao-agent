@@ -134,14 +134,18 @@ def test_evidence_view_feeds_slimmed():
 
 
 def test_ranker_signature_rng_injection():
-    """priority_ratio(claims, deps, evidence, rng=None) — deterministic by
-    default (Random(0)), Thompson via injected rng."""
+    """priority_ratio(claims, deps, evidence, rng=None, round_no=None) —
+    deterministic by default (Random(0)), Thompson via injected rng;
+    round_no threads the seed round to the rank_feeds emit (None →
+    re-read round_index, static-fixture-only — see posterior_seed_state)."""
     import inspect
     import priority_ratio as pr
 
     sig = inspect.signature(pr.priority_ratio)
-    assert list(sig.parameters) == ["claims", "deps", "evidence", "rng"]
+    assert list(sig.parameters) == ["claims", "deps", "evidence", "rng",
+                                    "round_no"]
     assert sig.parameters["rng"].default is None
+    assert sig.parameters["round_no"].default is None
 
 
 def test_smoke_rank_is_deterministic_under_default_rng():
