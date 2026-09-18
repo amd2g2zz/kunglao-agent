@@ -187,19 +187,11 @@ class TestDeclaredBitArming:
             encoding="utf-8")
         evidence = tmp_path / "evidence"
         evidence.mkdir()
-        # Corrected contract: the armed face passes with a runnable client
-        # AND at least one recorded novel-input pair — captured rows alone
-        # are replay and cannot witness the algorithm. The nonce domain
-        # grows to [0, 1, 2]; cap-05 keeps the covering array complete and
-        # novel-06 is the recorded novel-input pair (2, x) — its id lives
-        # OUTSIDE captured_inputs, because a novel input is not a
-        # captured one.
         artifact = {
             "schema": req.SCHEMA_ID,
             "claim_id": "C-1",
-            "captured_inputs": ["cap-01", "cap-02", "cap-03", "cap-04",
-                                "cap-05"],
-            "variables": {"nonce": [0, 1, 2], "param": ["x", "y"]},
+            "captured_inputs": ["cap-01", "cap-02", "cap-03", "cap-04"],
+            "variables": {"nonce": [0, 1], "param": ["x", "y"]},
             "pairs": [
                 {"input_id": "cap-01", "inputs": {"nonce": 0, "param": "x"},
                  "ref_output": "out-0", "repro_output": "out-0",
@@ -213,28 +205,8 @@ class TestDeclaredBitArming:
                 {"input_id": "cap-04", "inputs": {"nonce": 1, "param": "y"},
                  "ref_output": "out-3", "repro_output": "out-3",
                  "byte_equal": True},
-                {"input_id": "cap-05", "inputs": {"nonce": 2, "param": "y"},
-                 "ref_output": "out-4", "repro_output": "out-4",
-                 "byte_equal": True},
-                {"input_id": "novel-06", "inputs": {"nonce": 2, "param": "x"},
-                 "ref_output": "out-5", "repro_output": "out-5",
-                 "byte_equal": True, "novel_input": True},
             ],
         }
-        # admission executes — the artifact names a runnable
-        # reproduction_client that recomputes every recorded row.
-        client = tmp_path / "oracle" / "client.py"
-        client.parent.mkdir(parents=True, exist_ok=True)
-        client.write_text(
-            "import json\n"
-            "_TABLE = "
-            + json.dumps({json.dumps(p["inputs"], sort_keys=True):
-                          p["repro_output"] for p in artifact["pairs"]},
-                         sort_keys=True) + "\n"
-            "def compute(params):\n"
-            "    return _TABLE.get(json.dumps(params, sort_keys=True))\n",
-            encoding="utf-8")
-        artifact["reproduction_client"] = "oracle/client.py"
         (evidence / "replay-C-1.json").write_text(
             json.dumps(artifact, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8")

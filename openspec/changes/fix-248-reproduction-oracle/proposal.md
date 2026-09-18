@@ -1,76 +1,68 @@
-# fix-248-reproduction-oracle — algorithm claims settle on reproduction, not endpoint observations
+# fix-248-reproduction-oracle — method-selection split (post2 slim scope)
 
 ## Why
 
-Issue #248 (owner-amended 2026-09-12, folk-in design): an algorithm-class folk ask
-("这些参数是怎么生成的") can legally take `verification_method: replay-evidence`
-(`oracle_anchors.py` places reproduction and replay-evidence in the SAME admissible
-set, `REPLAY_ORACLE_METHODS`), so a captured-parameter replay success settles a
-generation-side proposition ("algorithm known") with an acceptance-side observation.
-The artifact is internally consistent (copy-both-sides passes all consistency checks)
-and the blind red-team re-derives exactly the acceptance fact — the discriminating bit
-(compute S for a novel x without the source) is never measured.
+Issue #248 (owner-amended 2026-09-12, folk-in design; SLIMMED by owner
+ruling 2026-09-18 — post2 scope note on the issue, "exclude items with
+slip tendency"): an algorithm-class folk ask ("这些参数是怎么生成的") can
+legally take `verification_method: replay-evidence` (`oracle_anchors.py`
+places reproduction and replay-evidence in the SAME admissible set,
+`REPLAY_ORACLE_METHODS`), so a captured-parameter replay success can be
+booked against a generation-side proposition with an acceptance-side
+observation. The confusion begins at METHOD SELECTION (the two methods
+are peer-selectable for the same folk ask, `oracle_anchors.py`), so the
+post2 fix operates there. Zero user expertise required: the SYSTEM
+derives the method from the verbatim goal.
 
-## Mandatory experiment (ran BEFORE admission implementation)
+## What Changes (post2 = deterministic method-selection split only)
 
-Mock web-signer fixture (toy signer `sha256_hex(f"{appkey}|{ts}|{nonce}")`, three
-captured parameter pairs, declared `variables` domains, reference-from-source as an
-adapter interface with a stub). Proposed machinery:
+1. **Intake pinning + separate admission** (`scripts/oracle_anchors.py`):
+   generation-language detection (`is_generation_language`: 怎么生成 /
+   怎样生成 / 如何生成 / 怎么算 / 如何计算 / 什么原理 / 什么算法 / 如何构造 /
+   how is it computed / what algorithm ... — interrogative forms only;
+   bare declarative passives like "is computed" are deliberately NOT
+   markers, they also occur in acceptance statements) classifies the
+   goal as algorithm-class. `derive_verification_method` pins
+   `reproduction` for algorithm-class goals; `intake_method_gate`
+   REFUSES `replay-evidence` (or `static`/`manual`) for an
+   algorithm-class goal — reproduction and replay-evidence now have
+   SEPARATE admission where they were peers. `validate_values` refuses
+   to LAND the weak selection (the pre-write face kunglao-init /
+   kunglao-upgrade already call).
+2. **Settle by need** (`scripts/settle_by_need.py`, new): acceptance-side
+   observations (`replay-observation` evidence class) may settle
+   input-contract / param-sufficiency claims only (`need:
+   yes_no_with_evidence`); generation-side propositions (algorithm-class
+   needs: `model_selection`, `protocol_description`) admit
+   `reproduction` evidence only. `settle_attempt` returns the routing: a
+   replay observation cited by an algorithm-class claim is re-routed to
+   the input-contract claim; the algorithm claim stays open. Unknown
+   evidence classes fail closed. Library + tests only today — the
+   settle-path wiring is a follow-up.
 
-- verifier samples a NOVEL input from the declared domains (not any captured input);
-- reference output comes FROM THE SOURCE (adapter; stub in tests);
-- candidates are executed closed-book on the novel input.
+## Moved to #259 (v0.1.6) — cut from post2 by the slim ruling
 
-Results (seed 248):
-
-- replay-only submission (echo table of captured signatures): novel-input pair MISS
-  — structurally cannot pass, it has no computation to produce output for an
-  unseen input.
-- closed-book client (implements the algorithm): novel-input pair MATCH.
-- wrong-algorithm near-miss (md5): MISS — the mutation-family discriminator holds.
-
-DISCRIMINATING PROPERTY HOLDS. Proceeded to implementation.
-
-## What Changes
-
-Three logical pieces, zero user expertise required (system derives from the verbatim goal):
-
-1. **Intake pinning** (`scripts/oracle_anchors.py`): generation-language detection
-   (`is_generation_language`: 怎么生成 / 怎样生成 / 如何生成 / 怎么算 / 如何计算 /
-   什么原理 / 什么算法 / 如何构造 / how is it computed / what algorithm / how is it
-   generated / how is it constructed ...) classifies the goal as algorithm-class.
-   `derive_verification_method` pins `reproduction` for algorithm-class goals;
-   `intake_method_gate` REFUSES `replay-evidence` (or `static`/`manual`) for an
-   algorithm-class goal. Users speak folk; the method is derived.
-2. **Admission executes closed-book** (`scripts/replay_equivalence.py`, new faces):
-   the replay artifact schema gains `reproduction_client` (workspace-relative path
-   loadable by the existing `oracle_runner.load_client`). `admission_errors(ws, doc)`
-   refuses an artifact without a runnable client (the copy-both-sides artifact that
-   passed before); loads and EXECUTES the client on every captured pair — recomputed
-   output != recorded `repro_output` is a FABRICATION refusal; the mutation gate runs
-   on the recomputed rows. `sample_novel_input` samples a fresh combination from the
-   artifact's declared `variables` domains; `novel_input_pair(doc, reference_source)`
-   obtains the reference FROM THE SOURCE via the `reference_source` adapter (stub in
-   tests; server submit / browser debug-anchoring in production — the judge's
-   privilege) and requires the closed-book reproduction to match. Captured-parameter
-   replay structurally cannot pass a novel-input pair (experiment above).
-3. **Settle by need** (`scripts/settle_by_need.py`, new): acceptance-side observations
-   (`replay-observation` evidence class) may settle input-contract / param-sufficiency
-   claims only; generation-side propositions (algorithm-class needs) admit
-   `reproduction` evidence only. `settle_attempt` returns the routing: a replay
-   observation cited by an algorithm-class claim is re-routed to the input-contract
-   claim; the algorithm claim stays open.
+The closed-book reproduction admission/verdict machinery:
+`scripts/replay_equivalence.py` reproduction_client execution
+(`admission_errors`, `load_ws_client`), verifier-sampled novel inputs
+(`sample_novel_input`, `novel_input_pair`), the recorded novel-input
+floor and its schema-lint face, and the source-derived reference
+adapter. In-flight implementations of all of it (code, tests, experiment
+notes) are preserved on WIP commit `6c0b410` of branch
+`fix/248-reproduction-oracle` for salvage — this branch carries NONE of
+it (`replay_equivalence.py` is unchanged by this change).
 
 ## Out of scope (one-line hooks)
 
-Held-out calibration -> #135; nonstationary expiry -> #199; #215 keyword widening ->
-separate judgment.
+Held-out calibration -> #135; nonstationary expiry -> #199; #215 keyword
+widening -> separate judgment.
 
 ## Impact
 
-- Additive: new functions in `oracle_anchors.py` / `replay_equivalence.py`, one new
-  module `settle_by_need.py`. Existing artifacts without `reproduction_client` now
-  refuse at the new admission face (`equivalence_verdict` unchanged in shape; the new
-  face is invoked by admission/tests per the issue acceptance block).
-- Risk: false refusals for workspaces whose artifacts predate the field — refusal
-  reason names the missing runnable client explicitly.
+- Additive: new functions in `oracle_anchors.py`, one new module
+  `settle_by_need.py`. `replay_equivalence.py` is UNCHANGED.
+- Risk: a generation-language FALSE POSITIVE misfiles an acceptance-class
+  goal as algorithm-class and refuses its observational selection at
+  intake. Mitigations: markers are interrogative-only (declarative
+  passives never classify) and the refusal reason names the refused
+  method explicitly so the operator can correct the goal text.

@@ -71,13 +71,16 @@ GENERATION_LANGUAGE_MARKERS: tuple[str, ...] = (
     "如何计算", "什么原理", "什么算法", "如何构造", "怎么构造", "怎么来的",
     "怎么实现的", "如何实现",
     "how is it computed", "how is it generated", "how is it constructed",
-    "how is it derived", "what algorithm", "is computed", "is generated",
-    "is constructed",
+    "how is it derived", "what algorithm",
 )
 
 # English interrogative + computation verb need not be adjacent
 # ("how is the signature computed") — a word-pattern fallback covers the
-# gap the substring markers cannot.
+# gap the substring markers cannot. Bare passive substrings ("is
+# computed") are deliberately NOT markers: they also occur in declarative
+# acceptance statements ("the signature is computed server-side"), which
+# are not algorithm-class asks — only the interrogative forms above and
+# the interrogative+verb pattern below classify.
 _EN_INTERROGATIVE_RE = r"\b(how|what)\b"
 _EN_COMPUTATION_VERB_RE = (
     r"\b(computed|generated|constructed|derived|calculated|signed)\b")
