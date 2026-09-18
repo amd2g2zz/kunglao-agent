@@ -1,0 +1,72 @@
+{
+  "spike": "EXP-3",
+  "issues": [
+    "#250",
+    "#257"
+  ],
+  "pq_id": "q_jni_registration",
+  "priors": {
+    "jni_register_natives": 0.5,
+    "static_xref_dlsym": 0.3,
+    "runtime_dlopen": 0.2
+  },
+  "h0_bits": 1.485475,
+  "events": [
+    {
+      "call": "pq.update_evidence('static_xref_dlsym', 2.5)",
+      "detail": "evidence: dlsym-shaped xref table found in .rodata (source channel)",
+      "h_before_bits": 1.485475,
+      "h_after_bits": 1.415821,
+      "delta_h_bits": 0.069654,
+      "probs_after": {
+        "jni_register_natives": 0.344828,
+        "static_xref_dlsym": 0.517241,
+        "runtime_dlopen": 0.137931
+      },
+      "argmax_after": "static_xref_dlsym"
+    },
+    {
+      "call": "pq.update_eliminate('jni_register_natives')",
+      "detail": "settlement: closed_by citation proves no RegisterNatives call site",
+      "h_before_bits": 1.415821,
+      "h_after_bits": 0.742488,
+      "delta_h_bits": 0.673333,
+      "probs_after": {
+        "jni_register_natives": 0.0,
+        "static_xref_dlsym": 0.789474,
+        "runtime_dlopen": 0.210526
+      },
+      "argmax_after": "static_xref_dlsym"
+    },
+    {
+      "call": "pq.update_evidence('runtime_dlopen', 0.25)",
+      "detail": "evidence: traced dlopen resolution misses the target symbol",
+      "h_before_bits": 0.742488,
+      "h_after_bits": 0.33729,
+      "delta_h_bits": 0.405198,
+      "probs_after": {
+        "jni_register_natives": 0.0,
+        "static_xref_dlsym": 0.9375,
+        "runtime_dlopen": 0.0625
+      },
+      "argmax_after": "static_xref_dlsym"
+    }
+  ],
+  "softening_control": {
+    "call": "pq_ctrl.update_evidence('static_xref_dlsym', 0.5)",
+    "detail": "control: softening the leader INCREASES entropy (signed ΔH < 0)",
+    "h_before_bits": 0.33729,
+    "h_after_bits": 0.522559,
+    "delta_h_bits": -0.185269,
+    "probs_after": {
+      "static_xref_dlsym": 0.882353,
+      "runtime_dlopen": 0.117647
+    },
+    "argmax_after": "static_xref_dlsym"
+  },
+  "assertions": {
+    "all_event_delta_h_positive": true,
+    "elimination_is_largest_single_delta_h": true,
+    "softening_delta_h_negative": true
+  }
+}

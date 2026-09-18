@@ -231,6 +231,7 @@ EMIT_ACTIONS = [
     "plan_review",        # #822 stage-plan review ritual: maintain/adjust/replan verdict face
     "plan_stall",
     "posterior_update",  # #157 record_posteriors per-verdict Bernoulli delta (alpha/beta before->after + report-hash trigger) — belief evolution as an event stream
+    "pq_posterior_update",  # record_pq_updates per-event PQ-categorical delta (signed delta_h_bits + h_standing_bits + applied/skipped status) — ΔH goes live
     "priority_deviation",
     "proven_waiver_used",  # #819 justified waiver consumed by the PROVEN evidence gate
     "rank_feeds",        # #157 priority_ratio per-RUN Thompson feeds + input fingerprint (claims/evidence hashes + rng base draw) — replayable ranking

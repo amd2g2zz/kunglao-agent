@@ -743,7 +743,8 @@ def test_pre_check_accepts_dispatch_with_tool_catalog_marker(tmp_path, capsys):
 
 REJECT_NAMES = [
     'workers', 'cap', 'tools', 'hostchan', 'deadline', 'tier',
-    'selfcap', 'heartbeat', 'drift', 'health', 'backtrack', 'plan',
+    'selfcap', 'heartbeat', 'drift', 'health', 'backtrack', 'zerooutput',
+    'plan',
     'toolfirst', 'agenttype', 'snapshot', 'devreason', 'envfresh',
     'granularity',  # issue 241: claim granularity discipline
 ]
@@ -762,6 +763,7 @@ REJECT_FIX_KEYWORDS = {
     'drift': 'plan_drift_detector',
     'health': 'convergence_health',
     'backtrack': 'backtrack',
+    'zerooutput': 'failure_analysis',  # issue 256: tripped thrash circuit repair
     'plan': 'plan-C',
     'toolfirst': 'tool-catalog',
     'agenttype': 'agent-reasoning',
