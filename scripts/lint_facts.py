@@ -142,11 +142,28 @@ KNOWN_FRONTMATTER_KEYS = frozenset({
     "hypothesis",
     "trace_id",  # #879 trace identity: mission chain id (worker echo channel)
     "evidence_class",  # issue 215: evidence-grade class (claim-gate input)
+    "assumptions",  # issue 250: '<topic>=<polarity>' premises (semantic refutation)
 })
 
 # L-4 (#532): the body '## Status' line must reconcile with frontmatter status.
 BODY_STATUS_RE = re.compile(r"^##\s+Status\s*$\n+^\s*([A-Z][A-Z-]*)\s*$",
                             re.MULTILINE)
+
+# #250: observation-vs-world wording. An observational-source fact whose
+# TITLE asserts a world-existential without a tool-scope qualifier stores a
+# tool observation as a world claim ("tool X found no Y" != "no Y exists" —
+# the xref-null->uncalled incident).
+OBSERVATIONAL_SOURCES = CODE_SOURCE_VALUES | {"frida-capture"}
+WORLD_EXISTENTIAL_RE = re.compile(
+    r"\b(no callers?|no xrefs?|no references?|no call sites?|uncalled|"
+    r"not called|never called|does not exist|doesn'?t exist)\b",
+    re.IGNORECASE)
+TOOL_SCOPE_RE = re.compile(
+    r"(xref|cross[- ]reference|decompil|ghidra|ida\b|binja|frida|qiling|"
+    r"debugger|jdb\b|tracer|objdump|radare|\br2\b|static analysis|"
+    r"dynamic analysis|static dump|dynamic trace|observation:|found by|"
+    r"found via|per [a-z]|via [a-z])",
+    re.IGNORECASE)
 
 
 # ---------- frontmatter parsing ----------
@@ -696,6 +713,37 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
                 for a in alts):
             issues.append(_issue("error", "BAD_ALTERNATIVES", fid,
                                  "alternatives must be a list of {hypothesis, rejected_because} dicts"))
+    # #250: fact assumptions — the semantic-refutation anchors. Shape is
+    # error-checked; an entry without 'topic=polarity' can never be
+    # invalidated, so it warns (the premise is untrackable as written).
+    asm = fm.get("assumptions")
+    if asm is not None:
+        if not isinstance(asm, list) or not all(
+                isinstance(a, str) and a.strip() for a in asm):
+            issues.append(_issue("error", "BAD_ASSUMPTIONS", fid,
+                                 "assumptions must be a list of non-empty "
+                                 "'<topic>=<polarity>' strings "
+                                 "(issue #250)"))
+        else:
+            for entry in asm:
+                if "=" not in entry:
+                    issues.append(_issue("warning", "ASSUMPTION_UNKEYED", fid,
+                                         f"assumption {entry!r} has no "
+                                         "'<topic>=<polarity>' form — it can "
+                                         "never be semantically invalidated "
+                                         "(issue #250)"))
+    # #250: observation-vs-world wording — an observational-source fact
+    # whose title asserts a world-existential needs a tool-scope qualifier.
+    title = str(fm.get("title") or "")
+    if src in OBSERVATIONAL_SOURCES and title:
+        if WORLD_EXISTENTIAL_RE.search(title) and not TOOL_SCOPE_RE.search(title):
+            issues.append(_issue("error", "OBSERVATION_WORLD_BLUR", fid,
+                                 f"title {title!r} asserts a world claim on "
+                                 "an observational source without a tool-"
+                                 "scope qualifier — state the tool scope "
+                                 "('xref: no callers', 'found by static "
+                                 "analysis') instead of world truth "
+                                 "('no callers exist') (issue #250)"))
     # L-3 (#532): unknown frontmatter key — warn, never error (schema growth
     # must not hard-block a write; it must be SEEN and curated instead).
     for key in fm:

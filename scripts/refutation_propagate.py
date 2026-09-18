@@ -11,6 +11,11 @@ Mechanics:
   - scan claim-register.yaml for claims with status REFUTED | NEGATIVE
   - reverse-walk claim_deps.yaml depends_on: every claim whose parent list
     contains a refuted claim gets `needs_re-eval: true` on its register entry
+  - #250 SEMANTIC face: a fact carrying `assumptions: [<topic>=<polarity>]`
+    is flagged when a PROVEN/VERIFIED fact or claim's content matches the
+    assumption's topic with a contradicting polarity (the xref case: the
+    undermining is semantic — no depends_on edge exists) — the
+    assumption-carrying fact's claim_id gets the same needs_re-eval mark
   - NEVER changes statuses — marking only, no cascade avalanche; the
     convergence loop re-ranks claims carrying needs_re-eval
 
@@ -97,9 +102,32 @@ def mark_dependents(ws: Path, dry_run: bool = False) -> list:
     for missing in sorted(dependents - registered):
         print(f"  ! dependent {missing} exists in claim_deps.yaml but not in claim-register (cannot mark)")
 
+    # #250: the semantic face — assumption premises collapsed by PROVEN
+    # content. Fail-open: a broken matcher (or missing plan_epistemics)
+    # degrades to no semantic marks, never a crash.
+    undermined = []
+    try:
+        import plan_epistemics as _pe
+        undermined = _pe.semantic_undermined(ws)
+    except Exception as exc:  # noqa: BLE001 — observability, then continue
+        print(f"  ! semantic face unavailable ({exc}) — structural walk only")
+
+    semantic_ids = set()
+    for row in undermined:
+        cid = row.get("claim_id")
+        if not cid or cid not in registered:
+            continue
+        semantic_ids.add(cid)
+        print(f"  ! semantic: fact {row.get('fact_id')} assumption "
+              f"{row.get('assumption')!r} undermined by {row.get('source_id')}")
+
     marked = []
     for c in (reg or {}).get("claims", []) or []:
-        if c.get("id") in dependents and not c.get("needs_re-eval"):
+        hits = (c.get("id") in dependents) or (c.get("id") in semantic_ids)
+        if c.get("id") in dependents and c.get("id") in semantic_ids:
+            print(f"  ! {c.get('id')}: refuted dependency AND undermined "
+                  f"assumption (both faces)")
+        if hits and not c.get("needs_re-eval"):
             c["needs_re-eval"] = True
             marked.append(c.get("id"))
 

@@ -626,6 +626,22 @@ def _plan_is_empty_shell(text: str) -> bool:
     return not remaining
 
 
+def _plan_contingency_violations(plan_text: str) -> list[str]:
+    """#250: per-step if-fails violations of a plan document.
+
+    Thin re-export of plan_epistemics.lint_plan_contingency, import-guarded
+    fail-open (a broken epistemics module must never hard-block dispatch on
+    a defect it cannot name) — consistent with the gate battery's FAIL_OPEN
+    posture for infrastructure errors."""
+    try:
+        from _path_hygiene import ensure_scripts_path
+        ensure_scripts_path()
+        import plan_epistemics
+        return plan_epistemics.lint_plan_contingency(plan_text)
+    except Exception:
+        return []
+
+
 def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[bool, str]:
     """Issue #239 (contract v2, owner ruling) + #57 gate 3: dispatch carries
     intent, NOT a plan — planning is the worker's first act of execution.
@@ -701,6 +717,20 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
                     f'author its plan (kunglao-worker.md golden rule #3), '
                     f'then re-dispatch'
                 ))
+            # #250: per-step contingency — the plan schema graduates from
+            # one tail hatch to per-step branches. A plan whose ENUMERATED
+            # steps carry no if-fails branch is a linear happy-path pipeline
+            # (every step assumes the previous succeeded). Legacy inline
+            # plans (zero enumerated entries) pass unchanged.
+            contingencies = _plan_contingency_violations(plan_text)
+            if contingencies:
+                return (False, (
+                    f'{plan_path.name} is a linear happy-path plan '
+                    f'({"; ".join(contingencies[:3])}) - the worker must add '
+                    f'a per-step "if-fails: <condition> -> <action>" branch '
+                    f'under each enumerated step (issue #250: real RE is a '
+                    f'tree; dead-ends are expected structure, not an '
+                    f'afterthought)'))
             # #57 gate 3: plan-author — a re-dispatch's plan must carry
             # worker-session evidence (authored after a prior dispatch).
             # Armed here by construction: a re-dispatch implies the anchor
