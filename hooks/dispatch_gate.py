@@ -749,6 +749,28 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
         "the validated family.")
 
 
+# ===================== #237 D2: verifier pass-through =====================
+
+# #237 H1: the verifier marker set + the predicate are single-sourced in
+# lib_kunglao (VERIFIER_REMEDIATION_AGENTS / is_verifier_remediation_dispatch)
+# — worker_budget's pre_check drift gate rides the SAME dispatch (both hooks
+# sit on PreToolUse:Agent), and it must reach the identical verdict or the
+# honest remediation path deadlocks at the second hook.
+def _is_verifier_remediation_dispatch(ws: Path, claim_id: str,
+                                      payload: dict,
+                                      prompt_text: str) -> bool:
+    """#237 D2: True when the dispatch targets a verifier-class agent for a
+    PROVEN claim. Delegates to the lib single source shared with
+    worker_budget's pre_check drift gate; lib outage -> False (fail-closed
+    to the legacy gate behavior — an unavailable resolver must not NEWLY
+    open the drift gate)."""
+    try:
+        return load_hooks_lib().is_verifier_remediation_dispatch(
+            ws, claim_id, payload, prompt_text)
+    except Exception:  # noqa: BLE001 — degraded copy: legacy gate applies
+        return False
+
+
 def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str,
                      trace_id: str | None = None) -> int | None:
     """#602: plan-drift auto-integration wire-up for L621 dispatch path entry.
@@ -1059,23 +1081,18 @@ def _agent_allowed_tools(agent_name: str | None) -> list[str] | None:
 
 
 def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
-    """Dispatched agent identity from the Agent tool payload or v1 meta."""
-    tool_input = payload.get("tool_input") or {}
-    if isinstance(tool_input, dict):
-        for key in ("subagent_type", "name"):
-            v = tool_input.get(key)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
+    """Dispatched agent identity from the Agent tool payload or v1 meta.
+
+    #237 H1: delegated to lib_kunglao.resolve_dispatch_agent — the same
+    resolver worker_budget's #461 corroboration row uses, so the D2
+    pass-through face and the D3 corroborating row can never disagree on
+    the agent identity for one payload (a subagent_type-shaped dispatch
+    used to resolve here but record `agent=?` in the row, so log
+    corroboration never landed)."""
     try:
-        parse_dispatch_json = load_hooks_lib().parse_dispatch_json
-        _, _, _claim_id, meta = parse_dispatch_json(prompt_text or "")
-        if isinstance(meta, dict):
-            v = meta.get("agent")
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-    except Exception:  # noqa: BLE001 — metadata best-effort only
-        pass
-    return None
+        return load_hooks_lib().resolve_dispatch_agent(payload, prompt_text)
+    except Exception:  # noqa: BLE001 — lib outage: identity unknown
+        return None
 
 
 def _tool_matches_allowed(pattern: str, tool: str) -> bool:
@@ -1633,9 +1650,20 @@ def main() -> int:
     # acceptable (operator can re-dispatch). #102: a crash rc takes the
     # observable degrade face (plan_drift_crashed trace row) — trace_id
     # rides so the row attributes to the mission chain.
-    rc = _plan_drift_auto(ws, claim_id, prompt_text, trace_id=trace_id)
-    if rc is not None:
-        return rc
+    # #237 D2: verifier pass-through — a kunglao-redteam / verdict-scorer
+    # dispatch for a PROVEN claim IS the flagged UNVERIFIED_EVIDENCE set's
+    # remediation; the B1o blocker must allow it, not reject it (the honest
+    # path was structurally absent and self-minting became the only exit).
+    # Observed, fail-open: the trace row lands in the unified log.
+    if _is_verifier_remediation_dispatch(ws, claim_id, payload, prompt_text):
+        _pt_agent = _resolve_dispatch_agent(payload, prompt_text) or "?"
+        _emit_trace(ws, "drift_verifier_passthrough", claim_id,
+                    f"verifier dispatch allowed through the drift gate "
+                    f"(agent={_pt_agent})", trace_id=trace_id)
+    else:
+        rc = _plan_drift_auto(ws, claim_id, prompt_text, trace_id=trace_id)
+        if rc is not None:
+            return rc
 
     # #109 hypothesis admission — same enforcement layer as must-stop/top1
     # (activated main flow, REJECT-capable). Protocol completeness precedes
