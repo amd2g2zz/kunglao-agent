@@ -19,7 +19,7 @@ files:
   - src: hooks/dispatch_gate.py
     dest: .claude/hooks/dispatch_gate.py
     kind: hook
-    sha256: 26b9ff47fb0e5e4ab264d84b4eca40db6c231e0d441e66d5820a42576edeba0b
+    sha256: c512661f470461957b115a64ff6cd9dfe561776c7e061123121349c4c303ba3c
   - src: hooks/env_check_gate.py
     dest: .claude/hooks/env_check_gate.py
     kind: hook
@@ -31,7 +31,7 @@ files:
   - src: hooks/lib_kunglao.py
     dest: .claude/hooks/lib_kunglao.py
     kind: hook
-    sha256: 3ade72bbd094ee3c6b85da3e91e575dd7303d78331b5d76b54801e6387cfa991
+    sha256: d4c08343d01d5bb0844a9081d144eb6bc2bd185f66185c14ae8c128ffacc39c4
   - src: hooks/orchestrator_tool_guard.py
     dest: .claude/hooks/orchestrator_tool_guard.py
     kind: hook
@@ -71,7 +71,7 @@ files:
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: a2be8454a3ead67622da5100b4e309fb49e9837856274d750ebf9fd58c514fb1
+    sha256: 1e4a0e8a97322b787325ad3ebd7706d087affc855f7c622280205f04f32e1aa3
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -335,7 +335,7 @@ files:
   - src: scripts/event_taxonomy.py
     dest: .claude/scripts/event_taxonomy.py
     kind: scaffold
-    sha256: 63969b9761a519d11a62a5d12adc8518417ae9a9a6edcb69e925473c4cffa1e4
+    sha256: 0f401cdff6cd73769a59e489a424e361995d32b255c7b20b725bd29f9e193b89
   - src: scripts/external_kicker.py
     dest: .claude/scripts/external_kicker.py
     kind: scaffold
@@ -595,7 +595,7 @@ files:
   - src: scripts/plan_drift_detector.py
     dest: .claude/scripts/plan_drift_detector.py
     kind: scaffold
-    sha256: b8d0c396fca8fffdf43dc10a15a6f0980d9b63fb975797231d2f65f2d3dedb77
+    sha256: 3e26d05970d75d447b505683e3c5df45f213bba2422ad7ac1dab128c26b98d25
   - src: scripts/plan_reviser.py
     dest: .claude/scripts/plan_reviser.py
     kind: scaffold
