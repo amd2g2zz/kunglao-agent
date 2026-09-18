@@ -719,12 +719,127 @@ def _emit_tool_calls(paths: dict, payload: dict, tool_result: str) -> None:
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
 
 
+# Worker terminal statuses that mean the DISPATCH FAILED (#234). Subset of
+# lib_kunglao.TERMINAL_WORKER_STATUSES minus done (delivered) — a done
+# worker never accrues a strike.
+DISPATCH_FAILURE_STATUSES = frozenset({"failed", "blocked", "error"})
+
+
+def _worker_final_status(ws: str, worker_id: str, tool_result: str) -> str | None:
+    """The finished worker's liveness token (#444 single parse point).
+
+    Ground truth is runs/worker-status-<worker>.md (reconcile_workers reads
+    the same file). Only when that file is missing/empty does the completed
+    transcript serve, and even then ONLY its closing status line (F5): the
+    last non-empty line must carry the protocol's `status:` line shape, and
+    the token itself is parsed by the CANONICAL parser
+    (lib_kunglao.parse_worker_status_tokens — #444 AC-1: no hand-rolled
+    status-token regex outside the owner). Anything else yields None —
+    absence of a strike, never a guessed one; quoted/echoed `status:`
+    fragments elsewhere in the transcript (log excerpts, register quotes)
+    can never burn a false strike.
+    """
+    lib = load_hooks_lib()
+    p = Path(ws) / 'runs' / f'worker-status-{worker_id}.md'
+    text = ''
+    if p.exists():
+        text = p.read_text(encoding='utf-8', errors='replace')
+    if not text.strip():
+        for line in reversed((tool_result or '').splitlines()):
+            s = line.strip()
+            if not s:
+                continue
+            if not s.lower().startswith('status:'):
+                return None  # the transcript does not CLOSE with a status line
+            tokens = lib.parse_worker_status_tokens(s)
+            return tokens[-1] if tokens else None
+    return lib.parse_worker_status(text)
+
+
+def _record_dispatch_failure(paths: dict, worker_id: str,
+                             tool_result: str, description: str = '') -> None:
+    """#234: the dispatch-failure 3-strike face of the Agent PostToolUse sink.
+
+    A finished worker whose terminal status is failed/blocked/error counts
+    one promotion attempt against its claim
+    (dead_letter.record_dispatch_failure — the live writer the family
+    lacked); at 3 strikes the claim escalates to the charter must-ask lane
+    (review F6 — the status flip stays an explicit dead_letter --mark
+    decision). Fail-open by contract: a missing entry, an unreadable
+    register, or a broken import must never break post_check — warnings go
+    to stderr, the hook's own rc is untouched. The entry-missing starvation
+    path WARNS when a claim dispatch was actually expected (the dispatch
+    prompt carries a claim id) and stays silent for non-claim Agent calls
+    (F5): a systematic miss must be audible, an unrelated verifier
+    completion must not spam.
+    """
+    ws = paths.get('workspace')
+    if not ws or not worker_id:
+        return
+    try:
+        try:
+            entry = next((w for w in read_active_workers(paths['state'])
+                          if w.get('worker_id') == worker_id), None)
+        except Exception:  # noqa: BLE001 — liveness IO is best-effort
+            entry = None
+        claim_id = (entry or {}).get('claim_id') or ''
+        if not claim_id:
+            try:
+                _tier, _tools, expected = parse_dispatch(description or '')
+            except Exception:  # noqa: BLE001 — unparseable prompt: not a claim dispatch
+                expected = None
+            if expected:
+                print(f'[kunglao-agent] #234 dispatch-failure WARN: claim '
+                      f'{expected} was dispatched but worker {worker_id} has '
+                      f'no [active_workers] entry — strike not recorded '
+                      f'(reconcile runs/.kunglao-state)', file=sys.stderr)
+            return
+        final = _worker_final_status(ws, worker_id, tool_result)
+        if final not in DISPATCH_FAILURE_STATUSES:
+            return
+        from _path_hygiene import scripts_on_path
+        with scripts_on_path():  # #671 scoped membership (worker_pulse face)
+            import dead_letter as _dl
+        r = _dl.record_dispatch_failure(Path(ws), claim_id)
+        if r.get('incremented'):
+            if int(r.get('attempts') or 0) >= _dl.DLQ_ATTEMPTS:
+                escalation = r.get('must_ask') or {}
+                if escalation.get('escalated'):
+                    print(f'[kunglao-agent] MUST-ASK: {claim_id} hit '
+                          f'{r["attempts"]} failed dispatches — charter '
+                          f'exhaustion row '
+                          f'(blockers/must-ask-{claim_id}.md, status '
+                          f'untouched); DEAD stays an explicit '
+                          f'dead_letter --mark decision', file=sys.stderr)
+                else:
+                    # review r2 LOW: the artifact write can fail — the
+                    # strike counted, but the escalation surface did not
+                    # land; say so instead of pointing at a missing file.
+                    print(f'[kunglao-agent] #234 must-ask escalation WARN '
+                          f'on {claim_id}: '
+                          f'{escalation.get("reason")}', file=sys.stderr)
+            else:
+                print(f'[kunglao-agent] #234: dispatch failure recorded on '
+                      f'{claim_id} (promotion_attempts={r["attempts"]})',
+                      file=sys.stderr)
+        else:
+            print(f'[kunglao-agent] #234 dispatch failure not recorded: '
+                  f'{r.get("reason")}', file=sys.stderr)
+    except Exception as exc:  # noqa: BLE001 — fail-open, never break the hook
+        print(f'[kunglao-agent] #234 dispatch-failure WARN (fail-open): '
+              f'{type(exc).__name__}: {exc}', file=sys.stderr)
+
+
 def post_check(payload: dict, paths: dict) -> int:
     worker_id = payload.get('tool_input', {}).get('name') or ''
     tool_result = str(payload.get('tool_result', ''))
     # #880: BEFORE remove_worker — the [active_workers] entry carries the
     # claim_id the tool_call rows attribute to.
     _emit_tool_calls(paths, payload, tool_result)
+    # #234: same window — the dispatch-failure 3-strike face (fail-open).
+    _record_dispatch_failure(
+        paths, worker_id, tool_result,
+        description=payload.get('tool_input', {}).get('description') or '')
     if worker_id:
         remove_worker(paths['state'], worker_id)
     scan_actual_tools(tool_result)  # post-hoc audit (informational)
