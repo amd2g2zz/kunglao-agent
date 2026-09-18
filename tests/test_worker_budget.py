@@ -370,16 +370,37 @@ def _dispatch_payload(prompt: str, description: str = '') -> dict:
     }
 
 
-def test_check_worker_plan_missing_rejects(tmp_path):
-    """#239: a claim dispatch with NO runs/plan-C<NN>*.md and no plan path in
-    the prompt is REJECTED — PLAN FIRST (kunglao-worker.md golden rule #3)."""
+def test_check_worker_plan_first_dispatch_passes_without_plan(tmp_path):
+    """Issue 239 v2 (owner ruling): a FIRST dispatch of a fresh claim — no plan
+    file, no plan reference — PASSES. Dispatch carries intent, not a plan;
+    planning is the worker's first act of execution (golden rule #3)."""
     ws = tmp_path / 'ws'
     ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
+    assert ok, msg
+    assert 'first dispatch' in msg.lower()
+
+
+def _seed_prior_dispatch(ws, ts='2026-09-10T01:00:00Z'):
+    """One prior approved dispatch for C-001 (approval-point anchor log)."""
+    (ws / 'runs').mkdir(parents=True, exist_ok=True)
+    (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
+        json.dumps({'ts': ts, 'claim': 'C-001'}) + '\n', encoding='utf-8')
+
+
+def test_check_worker_plan_redispatch_without_plan_rejects(tmp_path):
+    """Issue 239 v2: a RE-dispatch (prior approved dispatch) with no plan on disk
+    and no plan reference is still REJECTED — plan-first gates the worker's
+    execution loop (re-dispatch beyond the planning round)."""
+    ws = tmp_path / 'ws'
+    _seed_prior_dispatch(ws)
+    ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
     assert not ok and 'plan' in msg.lower()
+    assert 're-dispatch' in msg.lower()
 
 
 def test_check_worker_plan_exists_accepts(tmp_path):
-    """#239: the plan file already on disk (orchestrator wrote it pre-dispatch)."""
+    """Issue 239 v2: a plan file on disk does not affect a FIRST dispatch (the
+    gate no longer inspects plans at dispatch time for the planning round)."""
     ws = tmp_path / 'ws'
     (ws / 'runs').mkdir(parents=True)
     (ws / 'runs' / 'plan-C001-strings.md').write_text(
@@ -389,10 +410,11 @@ def test_check_worker_plan_exists_accepts(tmp_path):
 
 
 def test_check_worker_plan_empty_steps_rejects(tmp_path):
-    """#294: an empty-shell plan (every field label bare, no content) does NOT
-    satisfy the gate — existence without content is the Swiss-army-test gap."""
+    """Issue 294 (updated for the issue 239 v2 contract): on a RE-dispatch, an empty-shell plan (every
+    field label bare, no content) does NOT satisfy the gate — existence
+    without content is the Swiss-army-test gap."""
     ws = tmp_path / 'ws'
-    (ws / 'runs').mkdir(parents=True)
+    _seed_prior_dispatch(ws)
     (ws / 'runs' / 'plan-C001-strings.md').write_text(
         'goal:\npreflight:\nsteps:\nfallback:\n', encoding='utf-8')
     ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
@@ -413,11 +435,12 @@ def test_check_worker_plan_partial_content_accepts(tmp_path):
 
 
 def test_check_worker_plan_bom_template_rejects(tmp_path):
-    """#294 H1: a UTF-8 BOM before `goal:` (PowerShell/Notepad utf8 output)
-    must NOT turn an empty-shell template into 'content' — the byte-level
-    bypass is closed by the utf-8-sig read + explicit lstrip."""
+    """Issue 294 H1 (updated for the issue 239 v2 contract): on a RE-dispatch, a UTF-8 BOM before
+    `goal:` (PowerShell/Notepad utf8 output) must NOT turn an empty-shell
+    template into 'content' — the byte-level bypass is closed by the
+    utf-8-sig read + explicit lstrip."""
     ws = tmp_path / 'ws'
-    (ws / 'runs').mkdir(parents=True)
+    _seed_prior_dispatch(ws)
     (ws / 'runs' / 'plan-C001-strings.md').write_bytes(
         '﻿goal:\npreflight:\nsteps:\nfallback:\n'.encode('utf-8'))
     ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
@@ -426,11 +449,12 @@ def test_check_worker_plan_bom_template_rejects(tmp_path):
 
 
 def test_check_worker_plan_unreadable_fails_open(tmp_path):
-    """#294: an unreadable plan (a directory shadowing the plan name) is a
-    system error — fail OPEN with an honest note instead of a misleading
-    empty-shell reject blaming the worker."""
+    """Issue 294 (updated for the issue 239 v2 contract): on a RE-dispatch, an unreadable plan (a
+    directory shadowing the plan name) is a system error — fail OPEN with an
+    honest note instead of a misleading empty-shell reject blaming the
+    worker."""
     ws = tmp_path / 'ws'
-    (ws / 'runs').mkdir(parents=True)
+    _seed_prior_dispatch(ws)
     (ws / 'runs' / 'plan-C001.md').mkdir()  # directory, not a file
     ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001')
     assert ok, msg
@@ -448,17 +472,19 @@ def test_check_worker_plan_exact_name_accepts(tmp_path):
 
 
 def test_check_worker_plan_prompt_path_accepts(tmp_path):
-    """#239 timing relaxation: a dispatch prompt carrying the plan path passes
-    even before the file exists (plan written in the same turn)."""
+    """Issue 239 v2: the in-prompt plan path is the RE-DISPATCH continuity leg —
+    with a prior approved dispatch it passes even before the file exists."""
     ws = tmp_path / 'ws'
+    _seed_prior_dispatch(ws)
     prompt = 'facts-snapshot: 1 facts; write runs/plan-C001-strings.md per golden rule #3'
     ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001', prompt)
     assert ok, msg
 
 
 def test_check_worker_plan_prompt_wrong_claim_rejects(tmp_path):
-    """#239: a plan path for a DIFFERENT claim in the prompt does not relax."""
+    """Issue 239: a plan path for a DIFFERENT claim does not relax the re-dispatch."""
     ws = tmp_path / 'ws'
+    _seed_prior_dispatch(ws)
     prompt = 'facts-snapshot: 1 facts; plan: runs/plan-C002-strings.md'
     ok, msg = check_worker_plan({'workspace': str(ws)}, 'C-001', prompt)
     assert not ok
@@ -476,12 +502,44 @@ def test_check_worker_plan_missing_workspace_fails_open():
     assert ok and msg == ''
 
 
-def test_pre_check_rejects_dispatch_without_plan(tmp_path, capsys):
-    """#239 e2e: dispatching claim C-001 with no plan file and no plan path in
-    the prompt is REJECTED by the 12th pre_check gate."""
+def _seed_live_heartbeat(ws):
+    """A live heartbeat (2 adjacent ticks) — needed once the first dispatch's
+    lifecycle linkage has created analysis_state.txt (the heartbeat gate
+    fail-opens only while that file is absent)."""
+    from datetime import datetime, timedelta, timezone
+    (ws / 'runs').mkdir(parents=True, exist_ok=True)
+    now_dt = datetime.now(timezone.utc)
+    prev_dt = now_dt - timedelta(minutes=5)
+    fmt = lambda dt: dt.isoformat(timespec='seconds').replace('+00:00', 'Z')
+    (ws / 'runs' / '.heartbeat.json').write_text(json.dumps({
+        'last_tick_ts': fmt(now_dt), 'activity_ts': fmt(now_dt),
+        'started_ts': fmt(prev_dt),
+        'tick_history': [fmt(prev_dt), fmt(now_dt)],
+    }), encoding='utf-8')
+
+
+def test_pre_check_accepts_first_dispatch_without_plan(tmp_path, capsys):
+    """Issue 239 v2 e2e (replay of the field evidence): dispatching a FRESH claim C-001 — no
+    plan file, no plan path in the prompt — passes the plan gate (dispatch
+    carries intent, not a plan; the worker plans as its first act)."""
     ws = tmp_path / 'ws'
     payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts')
     rc = pre_check(payload, _min_paths(ws))
+    assert rc == 0, capsys.readouterr().err
+
+
+def test_pre_check_rejects_redispatch_without_plan(tmp_path, capsys):
+    """Issue 239 v2 e2e: first dispatch approved (anchor stamped) -> a re-dispatch
+    with no worker-authored plan in between is REJECTED by the plan gate."""
+    ws = tmp_path / 'ws'
+    payload = _dispatch_payload('{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, "tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts')
+    paths = _min_paths(ws)
+    assert pre_check(payload, paths) == 0, capsys.readouterr().err
+    _seed_live_heartbeat(ws)
+    rc = pre_check(_dispatch_payload(
+        '{"kunglao_dispatch": {"version": 1, "claim": "C-001", "tier": 1, '
+        '"tools": ["grep"], "agent": "w-test"}}\nfacts-snapshot: 1 facts'),
+        paths)
     captured = capsys.readouterr()
     assert rc == 2
     assert 'REJECT plan' in captured.err
@@ -890,9 +948,13 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
     scenarios.append(('heartbeat', 'heartbeat-on',
                       lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
 
-    # 9 plan — plan-first gate (#239)
+    # 9 plan — plan-first gate (issue 239 v2): a RE-DISPATCH beyond the planning
+    # round without a plan reference (first dispatch is plan-free now)
     ws = _healthy_ws(tmp_path / 'plan')
     (ws / 'runs' / 'plan-C001-strings.md').unlink()
+    (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
+        json.dumps({'ts': '2026-09-10T01:00:00Z', 'claim': 'C-001'}) + '\n',
+        encoding='utf-8')
     scenarios.append(('plan', 'plan-C',
                       lambda ws=ws: wb.pre_check(_budget_payload(), _paths_for(ws))))
 
@@ -963,7 +1025,13 @@ def test_main_stdin_reject_emits_context_json(tmp_path):
     JSON payload on stdin -> exit 2, stderr REJECT, stdout hookSpecificOutput
     JSON with non-empty additionalContext."""
     ws = _healthy_ws(tmp_path / 'sub')
-    (ws / 'runs' / 'plan-C001-strings.md').unlink()  # force the plan REJECT
+    # issue 239 v2: force the plan REJECT on a RE-dispatch (prior approved
+    # dispatch + no plan file + no in-prompt reference); a first dispatch
+    # is plan-free now.
+    (ws / 'runs' / 'plan-C001-strings.md').unlink()
+    (ws / 'runs' / '.dispatch-anchor-C001.jsonl').write_text(
+        json.dumps({'ts': '2026-09-10T01:00:00Z', 'claim': 'C-001'}) + '\n',
+        encoding='utf-8')
     payload = {
         'hook_event_name': 'PreToolUse',
         'cwd': str(ws),

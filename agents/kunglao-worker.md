@@ -71,12 +71,19 @@ These lookups are advisory; where they yield nothing applicable, proceed with a 
    `confidence: low` + `unverified-part: <what>`. Write "unconfirmed: X may be
    A or B (missing C)" rather than "X is A". Prevents misleading the verifier
    and the report.
-3. **PLAN FIRST, execute second** (v1.9.29) — write `runs/plan-<task>.md` BEFORE
-   any tool call: `goal:` / `preflight:` (verify signatures/APIs/paths FIRST —
-   javap -s / context7 / read source — trial-and-error is the most expensive
-   path, e.g. wrong method sig → full jdb session rerun) / `steps:` with
-   expected output each / `fallback:` ≥1 alternative per step. Update the plan
-   on drift. Report `plan_vs_actual:` at the end.
+3. **PLAN FIRST, execute second** (v1.9.29; plan ownership v2 owner ruling) —
+   the dispatch that starts your session carries intent, NOT a plan: planning
+   is YOUR first act of execution. Your FIRST sanctioned write is your own
+   `runs/plan-<task>.md`: `goal:` / `preflight:` (verify signatures/APIs/
+   paths FIRST — javap -s / context7 / read source — trial-and-error is the
+   most expensive path, e.g. wrong method sig → full jdb session rerun) /
+   `steps:` with expected output each / `fallback:` ≥1 alternative per step.
+   Cite your dispatch anchor as provenance — a `dispatch-anchor:
+   <dispatch_ts>` line carrying the dispatch_ts from your
+   KUNGLAO_DISPATCH_CONTEXT block — because a plan you did not author in
+   your session does not satisfy your contract (maker != checker), and any
+   re-dispatch beyond the planning round requires that plan reference.
+   Update the plan on drift. Report `plan_vs_actual:` at the end.
 4. **Write files or you FAILED** (W-15 lesson) — worker-status first line
    `[HH:MM] step: started <task> | status: in-progress`, append per step; facts
    written IMMEDIATELY after derivation, not batched; report + progress.txt last.
