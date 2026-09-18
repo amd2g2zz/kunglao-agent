@@ -67,11 +67,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 0b6802521c0f270908691499ebdc083550e33b07aa3ed1f4a6ff67d03785493a
+    sha256: 83b76209a1fd00ec15c53782c9d4b4976441b78be469d4355bec4b531fee6b67
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 60286b870bf5c46faee4a8a1072659d17e4883140df7cfcdf23bb8d5255464be
+    sha256: 34038bd427e9ef1ab5b3e7bf4b1aab731018322123f0e61ded271d12a15b669f
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -855,7 +855,7 @@ files:
   - src: scripts/zero_output_fingerprint.py
     dest: .claude/scripts/zero_output_fingerprint.py
     kind: scaffold
-    sha256: e189a0f71e3f09131f2d33f7586b3e222771fff36b4f3f69825729decb001660
+    sha256: f1d07b32e27ce01e5be777f8941b56586bb507b1b82a1b3fad4e412199e9ccad
   - src: scripts/statusline_render.mjs
     dest: .claude/scripts/statusline_render.mjs
     kind: scaffold
