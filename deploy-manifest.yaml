@@ -479,7 +479,7 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: 2a5abb27fc2366d4c2222cf1ba08db461aaf96142abd6d90a6ec6ebd7e2cb6c2
+    sha256: e57d00da61d6a0d82224434bb76fb38c33938720d9da8314b621ff37572f0fee
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
@@ -499,7 +499,7 @@ files:
   - src: scripts/kunglao_verify.py
     dest: .claude/scripts/kunglao_verify.py
     kind: scaffold
-    sha256: 9ee7596825f2263a39d34a0abb56531f92cab1fe51ebc92988bba9e93b3af207
+    sha256: eea17eee8ca6583b4ebf021b9b48c13cf81aece4d479b564f8ffa078e5ae6c4f
   - src: scripts/kunglao_wait.py
     dest: .claude/scripts/kunglao_wait.py
     kind: scaffold
@@ -551,7 +551,7 @@ files:
   - src: scripts/mission_ledger.py
     dest: .claude/scripts/mission_ledger.py
     kind: scaffold
-    sha256: d49bb04b1506d7a9f76792b3ee27b226ba9177a87b602a29b7b2eb743082a643
+    sha256: 749c2d9ad2798c61c6d1676fd32c0ecefbfb397cfac39477c6b688abf60d5908
   - src: scripts/mission_stall.py
     dest: .claude/scripts/mission_stall.py
     kind: scaffold
@@ -619,7 +619,7 @@ files:
   - src: scripts/priority_ratio.py
     dest: .claude/scripts/priority_ratio.py
     kind: scaffold
-    sha256: c7f46b86f0fda2a63d7c603199f91bafc3646e1bbc725e5984effec13cc4e767
+    sha256: 8309fca819d64182438a3e183446bd61450bfd47ccb772c60ba72c91c9cae19b
   - src: scripts/progress_report.py
     dest: .claude/scripts/progress_report.py
     kind: scaffold
@@ -671,7 +671,7 @@ files:
   - src: scripts/register_proven_gate.py
     dest: .claude/scripts/register_proven_gate.py
     kind: scaffold
-    sha256: 63e621325a2b044f7e5cede389cc37dcdc5512b01423107c676f06657e0a3526
+    sha256: a8cb637061cc2c2297e4bc09c0c3a957b611f43cbe16dc559777fe712b414edc
   - src: scripts/release_check_selfcheck.py
     dest: .claude/scripts/release_check_selfcheck.py
     kind: scaffold

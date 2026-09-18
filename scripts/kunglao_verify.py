@@ -830,6 +830,11 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *,
     (#863: the one-cycle migration grace flag retired.)
     Output written to runs/verify-<fact_id>-<ts>.json.
     """
+    try:
+        from kunglao_log import monotonic_ms
+        _t0 = monotonic_ms()
+    except Exception:  # noqa: BLE001 — logging must never break verification
+        _t0 = None
     fact = load_fact(ws, fact_id)
     if fact is None:
         raise FileNotFoundError(f"fact {fact_id}.md not found under {ws / 'facts'}")
@@ -949,9 +954,11 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *,
     # #287 observability: mirror the verdict to the structured event log.
     # Guarded — logging must never break verification.
     try:
-        from kunglao_log import emit, emit_result_digest
+        from kunglao_log import emit, emit_result_digest, monotonic_ms
+        _dur = (max(monotonic_ms() - _t0, 0)
+                if _t0 is not None else None)
         emit(ws, actor="orchestrator", action="verify", claim=claim_id,
-             artifact=fact_id, duration_ms=None,
+             artifact=fact_id, duration_ms=_dur,
              exit=0 if overall == "VERIFIED" else 1,
              detail=(f"L1={l1['verdict']} L2={l2['verdict']} overall={overall}"
                      + (f" | {r0}" if (ok0 and r0) else "")))
