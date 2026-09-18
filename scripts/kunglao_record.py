@@ -315,6 +315,32 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                                     f"{cited} (references/governance/decision-rights.md "
                                     f"has rows {rows_fmt or '(none)'})"))
 
+    # ---- target-obstacle ladder gate (write-side, the decision-rights R3
+    # shape): an obstacle claim (origin: failure-obstacle) cannot settle
+    # CONFIRMED (PROVEN = "really can't") without its target/attack-surface
+    # ladder walked-valid + a non-empty exhaustion inventory + each
+    # inventory entry's strategy sibling minted (the fan-out). Fail-closed:
+    # a named TARGET LADDER GATE reason, register unmodified. ImportError =
+    # BLOCKED receipt (REQUIRED_FOR_TERMINAL_STATE posture). REFUTED is
+    # deliberately ungated — the path-scoped closure standard requires
+    # refuting obstacles to stay possible.
+    if new_status == "PROVEN":
+        try:
+            from target_ladder import settlement_blocker as _obstacle_gate
+        except Exception as exc:  # ImportError family: gate module broken
+            return (False, f"BLOCKED: {claim_id} PROVEN write requires the "
+                           f"target-obstacle ladder gate; checker "
+                           f"unavailable ({type(exc).__name__}): {exc} — "
+                           f"register not modified (fail closed)")
+        try:
+            blocker = _obstacle_gate(ws, claim_id, register_text=register)
+        except Exception as exc:  # noqa: BLE001 — runtime checker error
+            return (False, f"BLOCKED: {claim_id} target-obstacle ladder "
+                           f"gate raised ({type(exc).__name__}: {exc}) — "
+                           f"register not modified (fail closed)")
+        if blocker:
+            return (False, blocker)
+
     # ---- required gates (#78, fail closed): PROVEN requires the BLIND /
     # contradiction / inference verdicts.
     # #98 (D6/F15): two-tier exception classification:

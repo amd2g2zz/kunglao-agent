@@ -328,3 +328,16 @@ def test_dry_run_leaves_no_git(up, tmp_path):
     assert up.main([str(ws), "--dry-run"]) == 0
     assert not (ws / ".git").exists()
     assert not (ws / ".gitignore").exists()
+
+
+# ------------------------------------------------- PEP 440 post releases (issue 258)
+
+def test_vkey_orders_pep440_post_releases(up):
+    """The patch release string must sort after its base and before the
+    next feature version; tag-style names stay unparseable. Ported from
+    the v0.1.5-patch1 release lineage: dev's naive int-split _vkey crashes
+    on the released 0.1.5.post1 string (issue 258 version bookkeeping)."""
+    assert up._vkey("0.1.5") < up._vkey("0.1.5.post1") < up._vkey("0.1.6")
+    assert up._vkey("0.1.5.post10") > up._vkey("0.1.5.post2")
+    with pytest.raises(ValueError):
+        up._vkey("0.1.5-patch1")
