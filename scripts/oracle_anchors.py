@@ -32,6 +32,8 @@ stdlib only.
 """
 from __future__ import annotations
 
+import re
+
 from pathlib import Path
 
 import yaml
@@ -55,6 +57,80 @@ METHOD_OPTIONS: tuple[str, ...] = (
 REPLAY_ORACLE_METHODS: tuple[str, ...] = ("reproduction", "replay-evidence")
 
 TASK_SPEC_FILENAME = "task_spec.yaml"
+
+
+# ------------------------------------------- generation-language ----
+# Users speak folk (folk-in lineage): an algorithm-class ask is detected
+# from the verbatim goal, never from the user's vocabulary. A generation-
+# language goal asks HOW the artifact is produced — a generation-side
+# proposition — so the only admissible verification method is the
+# reproduction oracle; acceptance-side observational methods (replay-
+# evidence, static, manual) are refused for it.
+GENERATION_LANGUAGE_MARKERS: tuple[str, ...] = (
+    "怎么生成", "怎样生成", "如何生成", "怎么算", "怎样算", "怎么计算",
+    "如何计算", "什么原理", "什么算法", "如何构造", "怎么构造", "怎么来的",
+    "怎么实现的", "如何实现",
+    "how is it computed", "how is it generated", "how is it constructed",
+    "how is it derived", "what algorithm", "is computed", "is generated",
+    "is constructed",
+)
+
+# English interrogative + computation verb need not be adjacent
+# ("how is the signature computed") — a word-pattern fallback covers the
+# gap the substring markers cannot.
+_EN_INTERROGATIVE_RE = r"\b(how|what)\b"
+_EN_COMPUTATION_VERB_RE = (
+    r"\b(computed|generated|constructed|derived|calculated|signed)\b")
+
+
+def is_generation_language(goal) -> bool:
+    """True when the verbatim goal asks how something is GENERATED
+    (an algorithm-class question). Case-insensitive substring match over
+    the marker set, plus an interrogative + computation-verb word
+    pattern ("how is the signature computed"); non-string input is not
+    algorithm-class."""
+    if not isinstance(goal, str):
+        return False
+    text = goal.strip().lower()
+    if any(m in text for m in GENERATION_LANGUAGE_MARKERS):
+        return True
+    return bool(re.search(_EN_INTERROGATIVE_RE, text)
+                and re.search(_EN_COMPUTATION_VERB_RE, text))
+
+
+def derive_verification_method(task_spec: dict) -> str | None:
+    """The verification method the SYSTEM derives from the spec.
+
+    A generation-language goal pins ``reproduction`` regardless of what
+    was selected; otherwise the spec's own answer (None when absent or
+    out of enum — the missing() gate still owns that refusal)."""
+    spec = task_spec if isinstance(task_spec, dict) else {}
+    if is_generation_language(spec.get("goal_verbatim")):
+        return "reproduction"
+    method = spec.get("verification_method")
+    return method if _valid_method(method) else None
+
+
+def intake_method_gate(task_spec: dict) -> tuple[bool, str]:
+    """(ok, reason) for the intake method selection (piece 1).
+
+    An algorithm-class goal may ONLY carry ``reproduction``: the weak
+    observational selection (replay-evidence / static / manual) is
+    refused with the reason naming the weak method. A missing method is
+    not this gate's refusal (missing() owns it)."""
+    spec = task_spec if isinstance(task_spec, dict) else {}
+    if not is_generation_language(spec.get("goal_verbatim")):
+        return True, ""
+    method = spec.get("verification_method")
+    if not _valid_method(method):
+        return True, ""
+    if method == "reproduction":
+        return True, ""
+    return False, (
+        f"algorithm-class goal (generation language in goal_verbatim): "
+        f"{method!r} is not selectable — the reproduction oracle is the "
+        f"only admissible verification method for a generation-side "
+        f"proposition (#248)")
 
 
 def _valid_method(value) -> bool:
@@ -165,12 +241,18 @@ def refusal_hint(gaps: list[str], state: str) -> str:
 def validate_values(values: dict) -> None:
     """Fail-closed pre-write validation for repair values: a non-blank
     ``verification_method`` outside the enum raises ValueError (a bad
-    answer never lands in the contract)."""
+    answer never lands in the contract). A generation-language goal with a
+    weak observational method is refused the same way (the
+    reproduction oracle is the only admissible verification method for an
+    algorithm-class ask — the weak selection never lands)."""
     method = values.get("verification_method")
     if _answerable(method) and not _valid_method(method):
         raise ValueError(
             f"verification_method must be one of "
             f"{' | '.join(METHOD_OPTIONS)}; got {method!r}")
+    ok, reason = intake_method_gate(values)
+    if not ok:
+        raise ValueError(reason)
 
 
 def _check(gaps: list[str]) -> tuple[bool, list[str]]:

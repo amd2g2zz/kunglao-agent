@@ -57,9 +57,29 @@ def _artifact(**over) -> dict:
 
 def _write_artifact(ws: Path, doc: dict | None = None,
                     name: str = "replay-C-1.json") -> Path:
+    """Write the artifact AND the runnable reproduction client it
+    names: a table client recomputing each pair's recorded repro_output
+    from the pair's inputs (honest for the default fixture; for
+    honestly-recorded-miss fixtures it produces exactly the recorded
+    misses, so admission's fabrication face stays silent and the verdict
+    refusal is the 0-matched-pairs one)."""
     ws.mkdir(parents=True, exist_ok=True)
+    doc = doc if doc is not None else _artifact()
+    pairs = [p for p in doc.get("pairs") or [] if isinstance(p, dict)]
+    table = {json.dumps(p.get("inputs") or {}, sort_keys=True):
+             str(p.get("repro_output") or "") for p in pairs}
+    client = ws.parent / "oracle" / "client.py"
+    client.parent.mkdir(parents=True, exist_ok=True)
+    client.write_text(
+        "import json\n"
+        f"_TABLE = {json.dumps(table, sort_keys=True)}\n"
+        "def compute(params):\n"
+        "    return _TABLE.get(json.dumps(params, sort_keys=True))\n",
+        encoding="utf-8")
+    doc.setdefault("reproduction_client",
+                   str(client.relative_to(ws.parent)))
     p = ws / name
-    p.write_text(json.dumps(doc or _artifact(), ensure_ascii=False,
+    p.write_text(json.dumps(doc, ensure_ascii=False,
                             indent=2) + "\n", encoding="utf-8")
     return p
 
@@ -262,6 +282,15 @@ def _promotable_ws(ws_factory, *, claim_extra: dict | None = None,
     return ws
 
 
+def _novel_pair(ref: str = "out-012") -> dict:
+    """The recorded novel-input pair the wired admission floor requires:
+    a fresh declared-domain combination (cap-07 is declared but not run
+    as a captured row), schema-honest and byte-matched. Its id lives
+    OUTSIDE captured_inputs — a novel input is not a captured one."""
+    return _pair("novel-01", {"timestamp": "t0", "nonce": 0, "param": "y"},
+                 ref, novel_input=True)
+
+
 class TestClaimAdmissionGate:
     def test_reproduction_claim_without_artifact_rejected(self,
                                                           ws_factory):
@@ -284,7 +313,9 @@ class TestClaimAdmissionGate:
 
     def test_claim_with_valid_artifact_promotes(self, ws_factory):
         ws = _promotable_ws(ws_factory)
-        _write_artifact(ws / "evidence")
+        doc = _artifact()
+        doc["pairs"].append(_novel_pair())  # the admission floor
+        _write_artifact(ws / "evidence", doc)
         ok, msg = kunglao_record.claim_migrator(ws, "C-1", "PROVEN",
                                                 "orchestrator")
         assert ok, msg
@@ -353,7 +384,9 @@ class TestVerdictFace:
     def test_reproduction_question_verified_with_matched_artifact(
             self, tmp_path):
         ws = _ws_with_claim(tmp_path)
-        _write_artifact(ws / "evidence")
+        doc = _artifact()
+        doc["pairs"].append(_novel_pair())  # the admission floor
+        _write_artifact(ws / "evidence", doc)
         out = _unverified_primary_questions(
             {"claims": [{"id": "C-1", "status": "PROVEN",
                          "answers_question": "q1"}]},
