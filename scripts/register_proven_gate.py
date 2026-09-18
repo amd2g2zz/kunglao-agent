@@ -412,6 +412,37 @@ def _parse_dispatch_ts(ts) -> int | None:
         return None
 
 
+def _claim_hypothesis_ref(ws: Path, claim_id: str) -> tuple[str | None,
+                                                           str | None]:
+    """The claim's most recent hypothesis id (the settlement's structural
+    companion), with its honesty face: (ref, reason). The "latest" order is
+    the NUMERIC id sequence (the H-NNN suffix parsed and compared as an
+    integer — a string max would silently return H-999 over H-1000 once
+    ids cross the zero-padding width), unparseable ids sort last. Faces:
+    the store read failing (or the store root existing but not being a
+    directory) is ``(None, "hypothesis_store_unreadable")``; a readable
+    store with no hypothesis for the claim is ``(None, "no_hypothesis")``;
+    a found reference carries reason None. Fail-open overall: a settlement
+    never blocks on this face."""
+    try:
+        from hypothesis_store import HypothesisStore
+        root = Path(ws) / "hypotheses"
+        if root.exists() and not root.is_dir():
+            return None, "hypothesis_store_unreadable"
+        hyps = [h for h in HypothesisStore(root).list_all()
+                if h.claim_id == claim_id]
+    except Exception:  # noqa: BLE001 — settlement must never block on this
+        return None, "hypothesis_store_unreadable"
+    if not hyps:
+        return None, "no_hypothesis"
+
+    def _seq(h) -> int:
+        digits = "".join(c for c in h.id if c.isdigit())
+        return int(digits) if digits else -1
+
+    return max(hyps, key=_seq).id, None
+
+
 def emit_settlements(ws, new_text: str, old_text: str | None = None) -> int:
     """#880: settlement rows for claim status transitions (the issue's
     "claim 状态转换（register_proven_gate 钩子）发结算行").
@@ -463,8 +494,12 @@ def emit_settlements(ws, new_text: str, old_text: str | None = None) -> int:
                 duration_ms = max(now_ms - ts_ms, 0)
         try:
             from kunglao_log import emit
+            ref, h_reason = _claim_hypothesis_ref(ws, cid)
             emit(ws, "hook:write_guard", "claim_settled", claim=cid,
                  trace_id=trace_id, duration_ms=duration_ms,
+                 hypothesis_ref=ref,
+                 null_reasons=({"hypothesis_ref": h_reason}
+                               if h_reason else None),
                  detail=_json.dumps({"from": frm, "to": to, "tools": tools,
                                      "outcome": to}, ensure_ascii=False))
             count += 1

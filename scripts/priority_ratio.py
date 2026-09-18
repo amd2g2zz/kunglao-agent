@@ -687,6 +687,7 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
         }
         if kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
+                            arm=(actions[0].claim_id if actions else None),
                             detail=json.dumps(payload, sort_keys=True,
                                               ensure_ascii=False)) is False:
             # Issue 218/225: the health bit tracks the LAST ATTEMPT. The
@@ -839,6 +840,8 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         ))
     # #107 spec sort: Thompson sample descending, stable tie-break claim_id.
     actions.sort(key=lambda a: (-a.score, a.claim_id))
+    # The emit below reads actions[0] as the event's arm — valid only
+    # because this sort already ran: actions[0] IS the selected arm.
     # #157: one rank_feeds event per RUN (post-decision, silent fail-open).
     # The emit consumes the ALREADY-BUILT actions — a crash inside it can
     # never change the ranking result (pinned by
