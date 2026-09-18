@@ -823,10 +823,10 @@ def test_e2e_every_reject_emits_guidance(tmp_path, capsys, monkeypatch):
                             returncode=0, stderr='', stdout=''))
     # priority deviation forced for the devreason scenario (other scenarios
     # reject before priority is consulted, so the patch is harmless).
-    # #863: sinks binds check_priority BY NAME (from worker_budget_core
+    # issue 863: sinks binds check_priority BY NAME (from worker_budget_core
     # import ...), so patching only the core module is a dead force — the
     # scenario would silently ride the REAL Thompson ordering (which the
-    # #251 round-seed contract intentionally reshuffled at cold start).
+    # issue 251 round-seed contract intentionally reshuffled at cold start).
     # Same both-faces rule as _run_py above: patch the consuming face too.
     monkeypatch.setattr(worker_budget_core, 'check_priority',
                         lambda *a, **k: (True, 'ADVISORY: C-001 rank #2', True))
