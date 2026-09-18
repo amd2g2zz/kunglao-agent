@@ -124,16 +124,19 @@ class TestS3VersionStamp:
 
 class TestS2bNullReasonsAndDigest:
     def test_required_field_omission_writes_null_reasons_sibling(self, tmp):
-        """arm/epoch/hypothesis_ref/matched_rule/duration_ms are the measured
-        100%-null starved set (#58 S2b): an omission without a stated reason
-        is auto-documented, so the log stops being silently hollow."""
+        """arm/hypothesis_ref/matched_rule/duration_ms are the measured
+        100%-null starved set at adoption: an omission without a stated
+        reason is auto-documented, so the log stops being silently hollow.
+        epoch has since LEFT the set — it is the tick axis, populated by
+        construction (absent ledger = the real cold-start tick 0)."""
         kunglao_log.emit(tmp, actor="orchestrator", action="dispatch")
         row = _rows(tmp)[0]
         nr = row["null_reasons"]
-        for f in ("arm", "epoch", "hypothesis_ref", "matched_rule",
-                  "duration_ms"):
+        for f in ("arm", "hypothesis_ref", "matched_rule", "duration_ms"):
             assert f in nr, f"starved field {f} undocumented: {nr}"
             assert nr[f], f"reason must be non-empty for {f}"
+        assert row["epoch"] == 0
+        assert "epoch" not in nr
 
     def test_caller_null_reasons_win_and_present_fields_are_skipped(self, tmp):
         kunglao_log.emit(tmp, actor="orchestrator", action="dispatch",

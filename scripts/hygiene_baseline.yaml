@@ -163,7 +163,7 @@ files:
   scripts/kunglao_export.py:
     r1: 5
   scripts/kunglao_log.py:
-    r1: 29
+    r1: 28
   scripts/kunglao_record.py:
     r1: 21
   scripts/kunglao_resume.py:
@@ -875,7 +875,7 @@ files:
   tests/test_obligation_discovery.py:
     r1: 2
   tests/test_observability_58.py:
-    r1: 3
+    r1: 2
   tests/test_observability_birth_880.py:
     r1: 5
   tests/test_opaque_pred.py:

@@ -41,6 +41,8 @@ import json
 import os
 import re
 import sys
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -174,16 +176,115 @@ def current_trace(ws) -> str | None:
 # the mission trace; explicit None is the caller's documented out-of-band face.
 _UNSET = object()
 
-# #58 S2b: the measured starved set (issue evidence: arm/duration_ms/epoch/
-# hypothesis_ref/matched_rule were 100% null across the 382 live rows —
-# "exists but always null is not a stable schema, it is rot"). A field from
-# this set that lands null is documented in the row's null_reasons sibling
-# ("omitted", or the caller's stated reason). trace_id/version are handled
-# beside it (inheritance face / sha-unavailable face). Fields NOT in this set
-# (claim/tool/artifact/exit/detail) are legitimately optional per action and
-# are never auto-documented — that would make the sibling pure noise.
-AUTO_NULL_FIELDS = ("duration_ms", "arm", "epoch", "hypothesis_ref",
-                    "matched_rule")
+# The tick axis: the convergence ledger's raw snapshot-row count, written by
+# convergence_check (LEDGER_NAME — pinned equal by
+# tests/test_event_schema_255.py::test_tick_accessor_ledger_name_matches_the_writer).
+# A local constant keeps this module import-light.
+CONV_LEDGER_NAME = ".convergence_ledger.jsonl"
+
+_TICK_MEMO: dict = {"key": None, "tick": None}
+
+
+def current_tick(ws) -> int | None:
+    """The workspace's current tick: RAW snapshot-row count of the
+    convergence ledger (the single time axis; round := tick alias).
+
+    Mirrors the ranker's round contract deliberately: the RAW count, never
+    a deduped view (dedup collapses same-turn rows on wall-clock proximity
+    and would leak the clock into the axis); a snapshot row is a mapping
+    with no "type" key that carries "open_count" (event rows are not
+    snapshots); unparseable dirty lines are skipped by the tolerant reader.
+
+    Faces: absent ledger -> 0 (a REAL cold-start tick, not a fake value);
+    stat-succeeds-but-read-fails (e.g. a directory at the path) -> None —
+    that is honest "cannot know", and the emit face documents it
+    (``tick_ledger_unreadable``) instead of stamping a fabricated value.
+    A dangling symlink at the ledger path reads the same as an absent
+    file (the cold-start tick 0) — the same fail-open face the seed
+    contract accepts. Reads are memoized per (path, mtime) so the hot
+    emit path costs one stat; a ledger append bumps mtime and is picked
+    up on the next emit."""
+    ws = Path(ws)
+    state = ws / CONV_LEDGER_NAME
+    try:
+        key = (str(state), state.stat().st_mtime_ns)
+    except OSError:
+        key = (str(state), None)
+    if _TICK_MEMO["key"] == key:
+        return _TICK_MEMO["tick"]
+    tick: int | None
+    if not state.exists():
+        tick = 0
+    else:
+        try:
+            tick = sum(1 for e in iter_jsonl(
+                           state.read_text(
+                               encoding="utf-8",
+                               errors="replace").splitlines())
+                       if isinstance(e, dict)
+                       and "type" not in e and "open_count" in e)
+        except OSError:
+            tick = None
+    _TICK_MEMO["key"] = key
+    _TICK_MEMO["tick"] = tick
+    return tick
+
+
+def monotonic_ms() -> int:
+    """Monotonic clock reading in integer milliseconds (the duration_ms
+    source). Monotonic, so a concurrent clock adjustment can never produce
+    a negative duration; callers take a pair of readings around bounded
+    work and pass ``max(t1 - t0, 0)`` — a measured interval, never a
+    wall-clock guess."""
+    return int(time.perf_counter() * 1000)
+
+
+@contextmanager
+def timed():
+    """Timing wrapper for block-scoped work: yields a one-key dict that
+    carries the measured integer milliseconds on exit. The measurement
+    happens in ``finally`` so a raising block still records how long it
+    ran before the exception propagates (logging must never swallow — nor
+    be swallowed by — the caller's error path)."""
+    box: dict = {"duration_ms": None}
+    start = time.perf_counter()
+    try:
+        yield box
+    finally:
+        box["duration_ms"] = max(int((time.perf_counter() - start) * 1000), 0)
+
+# The auto-documented null set; at adoption it was the measured starved set
+# (these five fields were 100% null across the 382 live rows at the rot
+# audit — "exists but always null is not a stable schema, it is rot"). A
+# field from this set that lands null is documented in the row's
+# null_reasons sibling ("omitted", or the caller's stated reason).
+# trace_id/version are handled beside it (inheritance face /
+# sha-unavailable face). Fields NOT in this set (claim/tool/artifact/exit/
+# detail) are legitimately optional per action and are never
+# auto-documented — that would make the sibling pure noise.
+#
+# Shrinkage is earned, never declared: a field leaves the set only when it
+# is populated-by-construction at every site that emits it. epoch left via
+# the tick axis — emit inherits the convergence-ledger tick when the kwarg
+# is omitted, so every event carries the axis (an unreadable ledger stays a
+# documented null: "tick_ledger_unreadable"). duration_ms / arm /
+# hypothesis_ref / matched_rule stay: their values live in caller-side
+# execution structure (timing wrapper, actor/action context, settlement),
+# so a site that genuinely cannot know one keeps the honest documented
+# null rather than a fabricated value.
+AUTO_NULL_FIELDS = ("duration_ms", "arm", "hypothesis_ref", "matched_rule")
+
+
+def _resolve_epoch(ws, epoch: int | None) -> tuple[int | None, str | None]:
+    """The tick-axis inheritance face: an explicit epoch wins; an omitted
+    one inherits current_tick(ws). Returns (epoch, reason) — the reason is
+    non-None only for the honest unknowable face (unreadable ledger)."""
+    if epoch is not None:
+        return epoch, None
+    inherited = current_tick(ws)
+    if inherited is None:
+        return None, "tick_ledger_unreadable"
+    return inherited, None
 
 
 def emit(ws, actor: str, action: str, *, claim: str | None = None,
@@ -238,6 +339,18 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
     explained. ``null_reasons`` is an always-present explicit key ({}
     when clean) — same stable-schema rule as the null fields themselves.
 
+    epoch IS the tick axis (single time axis; round := tick alias): an
+    omitted kwarg inherits current_tick(ws) — the convergence ledger's raw
+    snapshot-row count — so events carry the axis by construction, and an
+    explicit non-null kwarg wins. Deliberately there is NO explicit-null
+    face for epoch (unlike trace_id's sentinel above): ``epoch=None`` is
+    treated exactly as omitted and the axis is stamped anyway — the axis
+    always exists (0 = cold start), so a caller passing None to mean
+    "unknown" receives the tick, not a null. Only a genuinely unreadable
+    ledger leaves the field null, documented as
+    ``tick_ledger_unreadable`` (honesty rule: a missing measurement is
+    explained, never fabricated).
+
     #58 S3: version already auto-fills from the cached _repo_sha(); an
     unavailable sha is documented (``repo_sha_unavailable``), not silent."""
     if trace_id is _UNSET:
@@ -248,6 +361,12 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
     else:  # explicit None (or empty) is the documented out-of-band face
         trace_reason = "explicit_out_of_band"
     trace_id = str(trace_id) if trace_id else None
+
+    # epoch IS the tick axis: an omitted kwarg inherits the workspace's
+    # current tick, so every event carries the single time axis by
+    # construction. Only a genuinely unreadable ledger leaves the null,
+    # documented — never faked.
+    epoch, epoch_reason = _resolve_epoch(ws, epoch)
 
     reasons: dict = {}
     if null_reasons:
@@ -274,6 +393,8 @@ def emit(ws, actor: str, action: str, *, claim: str | None = None,
     for f in AUTO_NULL_FIELDS:
         if event[f] is None and f not in reasons:
             reasons[f] = "omitted"
+    if epoch_reason and "epoch" not in reasons:
+        reasons["epoch"] = epoch_reason
     if trace_reason and "trace_id" not in reasons:
         reasons["trace_id"] = trace_reason
     if event["version"] is None and "version" not in reasons:
