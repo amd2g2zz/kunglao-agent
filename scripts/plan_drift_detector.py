@@ -116,7 +116,7 @@ def extract_claim_ids_from_deps(deps_path: Path) -> set:
     return out
 
 
-# --- #237 D1: in-progress credit via the claim_deps dependency chain ------
+# --- D1 (in-progress credit) via the claim_deps dependency chain ----------
 
 def _depends_on_edges(claims: list, deps_path: Path) -> dict:
     """child -> [ancestors] edge map for the in-progress chain walk.
@@ -155,7 +155,7 @@ def _transitive_ancestors(cid: str, edges: dict) -> set:
 
 
 def question_progress(qid: str, claims: list, deps_path: Path) -> str:
-    """#237 D1: is primary question qid answered, in-flight, or abandoned?
+    """D1: is primary question qid answered, in-flight, or abandoned?
 
     Returns one of:
       "terminal"     an answering claim reached a TERMINAL status (the
@@ -340,9 +340,9 @@ def extract_low_confidence_claim_ids(facts_dir: Path) -> set:
     return out
 
 
-# --- #237 D3: verify-record provenance (log corroboration, maker!=checker) -
+# --- D3 (verify-record provenance): log corroboration, maker!=checker -----
 
-# Verifier-class agents (the #57 blind_gate VERIFIER_AGENT_MARKERS set;
+# Verifier-class agents (the blind_gate VERIFIER_AGENT_MARKERS set;
 # mirrored — scripts/ is the private-API boundary the other direction).
 VERIFIER_AGENT_MARKERS = ("kunglao-redteam", "verdict-scorer")
 
@@ -382,8 +382,8 @@ def _load_dispatch_rows(workspace: Path) -> list:
 def _corroborating_dispatch_claims(rows: list) -> set:
     """Claim ids whose verify evidence the unified log corroborates.
 
-    A row corroborates claim C iff ALL hold (#237 D3):
-      - action contains 'dispatch' (the #461 dispatch-lifecycle face —
+    A row corroborates claim C iff ALL hold (D3):
+      - action contains 'dispatch' (the dispatch-lifecycle face —
         a hook WARN/trace row naming an agent is not dispatch evidence);
       - row claim == C in canonical form (_normalize_cid);
       - hook-attributed: actor starts with 'hook:' — a self-attested row
@@ -395,13 +395,13 @@ def _corroborating_dispatch_claims(rows: list) -> set:
         effort from trivial file creation to deliberate audit-row forgery
         and catches lazy/accidental self-minting — against exactly the
         adversary class this card names. Deliberately stricter than the
-        #57 blind_gate contract, which also accepts verifier: actors;
+        blind_gate contract, which also accepts verifier: actors;
       - a verifier-class agent is named in the actor or detail.
 
     Fail-closed on every missing piece: no log, no rows, no match -> the
     record does not count. The honest path (dispatch the verifier through
     the gate) writes the corroboration itself. Row-record AUTHENTICITY
-    binding is filed as follow-up (#263 item 2 extension).
+    binding is filed as follow-up (temporal-ordering item extension).
     """
     out: set = set()
     for row in rows:
@@ -420,13 +420,13 @@ def _corroborating_dispatch_claims(rows: list) -> set:
 
 
 def corroborated_verified_ids(workspace: Path) -> set:
-    """Claim ids whose verify-redteam record actually counts (#237 D3).
+    """Claim ids whose verify-redteam record actually counts (D3).
 
-    Intersection of the #827 content screen (:func:`extract_verified_claim_ids`
-    — semantics untouched; write_gate and tests/test_redteam_antitemplate_827
+    Intersection of the content screen (:func:`extract_verified_claim_ids`
+    — semantics untouched; write_gate and the anti-template tests
     pin it) with log-corroborated claim ids. A verify record that no
     hook-attributed verifier dispatch stands behind is self-minted — the
-    2026-09-12 wbtest incident surface.
+    field-incident surface this class closes.
     """
     screened = extract_verified_claim_ids(workspace / "runs")
     if not screened:
@@ -591,7 +591,7 @@ def check(workspace: Path, active_only: bool = False) -> int:
         qid = q.get("id") if isinstance(q, dict) else None
         if not qid:
             continue
-        # #237 D1: UNANSWERED_QUESTION is a liveness-drift only when nothing
+        # D1: UNANSWERED_QUESTION is a liveness-drift only when nothing
         # is IN FLIGHT toward the answer. A terminal answering claim answers
         # the question (PROVEN/VERIFIED confirm; REFUTED/NEGATIVE answer
         # "no"; DEFERRED/STALE record a dead-end — v1.9.29). An answering
@@ -626,7 +626,7 @@ def check(workspace: Path, active_only: bool = False) -> int:
     # wrong. A claim at status: PROVEN is drift when its reality check never
     # happened (no runs/verify-redteam-*.md on disk) or when its supporting
     # facts carry low confidence (PROVEN on shaky ground).
-    # #237 D3: a record counts only when the unified log corroborates a
+    # D3: a record counts only when the unified log corroborates a
     # hook-attributed verifier dispatch for the claim (advisory maker!=
     # checker pin — a process bar, not authenticity; fail-closed).
     # File existence + content screening alone was the
