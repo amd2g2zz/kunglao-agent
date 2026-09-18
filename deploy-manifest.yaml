@@ -67,11 +67,11 @@ files:
   - src: hooks/worker_budget_gates.py
     dest: .claude/hooks/worker_budget_gates.py
     kind: hook
-    sha256: 675d107860e2f209c96de69030e7380ad5b32bdd9e1ecdad5be58d071d5bf53a
+    sha256: ec67354e9023347e7eed08ff1ed95ed77926352a04b8fad2b0cadb4b9ff1b601
   - src: hooks/worker_budget_sinks.py
     dest: .claude/hooks/worker_budget_sinks.py
     kind: hook
-    sha256: 60286b870bf5c46faee4a8a1072659d17e4883140df7cfcdf23bb8d5255464be
+    sha256: dfb7d7e67d7cbfb43c37a4032235c3796f73d29d5a0ca4fb9d6a80f4cb83e169
   - src: hooks/worker_pulse.py
     dest: .claude/hooks/worker_pulse.py
     kind: hook
@@ -255,7 +255,7 @@ files:
   - src: scripts/dead_letter.py
     dest: .claude/scripts/dead_letter.py
     kind: scaffold
-    sha256: 25abe704eec432af210d7ed2370424bbbebff9cb38bc9f513a22c39ae33696fb
+    sha256: 080d1e86995748ff23cfa163789f507ee81dcd04616c48cf15113e5524dcc30c
   - src: scripts/decision_lint.py
     dest: .claude/scripts/decision_lint.py
     kind: scaffold
@@ -347,7 +347,7 @@ files:
   - src: scripts/failure_analysis_gate.py
     dest: .claude/scripts/failure_analysis_gate.py
     kind: scaffold
-    sha256: ccb8ee5d29c0d8855ff8065c2263263af5fee729acbb51d89a109792f65de54b
+    sha256: 543b94f473d6bdc173d6b61e5c4f9251b99b8060b244959239f4f11289914374
   - src: scripts/feedback.py
     dest: .claude/scripts/feedback.py
     kind: scaffold
@@ -479,11 +479,11 @@ files:
   - src: scripts/kunglao_log.py
     dest: .claude/scripts/kunglao_log.py
     kind: scaffold
-    sha256: 2a5abb27fc2366d4c2222cf1ba08db461aaf96142abd6d90a6ec6ebd7e2cb6c2
+    sha256: b5615f57ea64b531269f8e450a6101ef3ae09ecbabe27e3801ac67bb79bfe091
   - src: scripts/kunglao_record.py
     dest: .claude/scripts/kunglao_record.py
     kind: scaffold
-    sha256: ed8310bb36b454f836c4d2c19690366d9b38767451a4eb5e2bba4b7be259a4e6
+    sha256: 44fc99ec879617b8955211fbc0e8e12fe11e7ee2503bf74dbe5c6890612773a0
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
@@ -760,6 +760,10 @@ files:
     dest: .claude/scripts/summary_discriminator.py
     kind: scaffold
     sha256: 360201f58a8f210e531a1ff0e8a2deeb7eef478be4aadd3ce1b1a970d2436c38
+  - src: scripts/target_ladder.py
+    dest: .claude/scripts/target_ladder.py
+    kind: scaffold
+    sha256: 1a6db366b2786448665a240f959cf81a575c21edda5c42c3e2c800c3c41f2247
   - src: scripts/template_gen.py
     dest: .claude/scripts/template_gen.py
     kind: scaffold
@@ -1323,7 +1327,7 @@ files:
   - src: tools/_INDEX.ext.yaml
     dest: .claude/tools/_INDEX.ext.yaml
     kind: asset
-    sha256: bce2fb580f8d0599ff6d63704c85f5c1b172d8be32bb53281da071fe724e1ccd
+    sha256: bca54fce9110d81dd97ee0d285f6bd989b9e01d134382d3ac6d1c0517406b543
   - src: tools/_INDEX.md
     dest: .claude/tools/_INDEX.md
     kind: asset

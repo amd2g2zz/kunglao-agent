@@ -64,6 +64,7 @@ FAST_MODULES = frozenset({
     "test_migrate_facts_809", "test_mission_ledger_823", "test_mission_repin_868", "test_mission_stall_634",
     "test_monitor_wiring_620c", "test_no_cti_agents", "test_notes_discriminator", "test_notes_fake_834",
     "test_notes_supersedes_528", "test_obligation_discovery", "test_observability_birth_880", "test_operator_action",
+    "test_obstacle_ladder",
     "test_oracle_cadence_132", "test_oracle_runner_108",
     "test_orchestration_eval_quality", "test_orchestration_event_taxonomy", "test_orchestration_hardening", "test_orchestration_recov_metrics",
     "test_orchestrator_tool_guard_608", "test_outcome_capture", "test_outcome_forensics_146", "test_pdl_collapse_582",
