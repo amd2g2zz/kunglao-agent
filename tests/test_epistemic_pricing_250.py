@@ -2,13 +2,13 @@
 """Issue 250 — epistemic ΔH enters priority_ratio ranking.
 
 priority_ratio prices `LAMBDA_DH * dh` where dh is the standing entropy of
-`ledger.pqs[claim.answers_question]`. Before #250 nothing ever wrote
+`ledger.pqs[claim.answers_question]`. Before issue 250 nothing ever wrote
 ledger.pqs for situational questions (EXP-3: dh ≡ 0 STRUCTURALLY), so an
 epistemic claim was unpriced. After mint+seed, the epistemic claim's ΔH
 term is nonzero — same formula, same single LAMBDA_DH parameter. The dh
 feed line names the situational/epistemic source.
 
-The #251 boundary is pinned too: the seed region (case_face_seed /
+The issue 251 boundary is pinned too: the seed region (case_face_seed /
 posterior_rng) is NOT touched by this lane.
 """
 from __future__ import annotations
@@ -84,7 +84,7 @@ def test_landa_dh_unchanged():
 
 
 def test_seed_region_untouched():
-    """#251 boundary pin: the seed-region functions keep their signatures —
+    """issue 251 boundary pin: the seed-region functions keep their signatures —
     this lane adds nothing to them."""
     import inspect
     assert list(inspect.signature(pr.case_face_seed).parameters) == ["ledger"]

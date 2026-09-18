@@ -149,7 +149,7 @@ KNOWN_FRONTMATTER_KEYS = frozenset({
 BODY_STATUS_RE = re.compile(r"^##\s+Status\s*$\n+^\s*([A-Z][A-Z-]*)\s*$",
                             re.MULTILINE)
 
-# #250: observation-vs-world wording. An observational-source fact whose
+# issue 250: observation-vs-world wording. An observational-source fact whose
 # TITLE asserts a world-existential without a tool-scope qualifier stores a
 # tool observation as a world claim ("tool X found no Y" != "no Y exists" —
 # the xref-null->uncalled incident).
@@ -713,7 +713,7 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
                 for a in alts):
             issues.append(_issue("error", "BAD_ALTERNATIVES", fid,
                                  "alternatives must be a list of {hypothesis, rejected_because} dicts"))
-    # #250: fact assumptions — the semantic-refutation anchors. Shape is
+    # issue 250: fact assumptions — the semantic-refutation anchors. Shape is
     # error-checked; an entry without 'topic=polarity' can never be
     # invalidated, so it warns (the premise is untrackable as written).
     asm = fm.get("assumptions")
@@ -732,7 +732,7 @@ def lint_fact(fid: str, fm: dict, fact_ids: set, body: str = "") -> list:
                                          "'<topic>=<polarity>' form — it can "
                                          "never be semantically invalidated "
                                          "(issue #250)"))
-    # #250: observation-vs-world wording — an observational-source fact
+    # issue 250: observation-vs-world wording — an observational-source fact
     # whose title asserts a world-existential needs a tool-scope qualifier.
     title = str(fm.get("title") or "")
     if src in OBSERVATIONAL_SOURCES and title:

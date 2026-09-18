@@ -102,7 +102,7 @@ def mark_dependents(ws: Path, dry_run: bool = False) -> list:
     for missing in sorted(dependents - registered):
         print(f"  ! dependent {missing} exists in claim_deps.yaml but not in claim-register (cannot mark)")
 
-    # #250: the semantic face — assumption premises collapsed by PROVEN
+    # issue 250: the semantic face — assumption premises collapsed by PROVEN
     # content. Fail-open: a broken matcher (or missing plan_epistemics)
     # degrades to no semantic marks, never a crash.
     undermined = []

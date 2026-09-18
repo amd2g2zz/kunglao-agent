@@ -4,7 +4,7 @@
 RED target: `hooks/worker_budget_gates.check_worker_plan` accepts a
 re-dispatch plan whose enumerated steps carry NO if-fails branch today;
 after this change the gate REJECTS it (the linear happy-path plan is no
-longer a passing shape). The #239 v2 contract is untouched: first dispatch
+longer a passing shape). The issue 239 v2 contract is untouched: first dispatch
 stays plan-free, legacy inline plans (zero enumerated entries) pass.
 """
 from __future__ import annotations

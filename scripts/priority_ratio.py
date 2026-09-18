@@ -714,7 +714,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         pq_cat = ledger.pqs.get(pq) if pq else None
         dh = pq_cat.entropy() if pq_cat is not None else 0.0
         if pq_cat is not None and str(c.get("boundary_type") or "") == "epistemic":
-            # #250: a situational PQ (mint+seed writes ledger.pqs for
+            # issue 250: a situational PQ (mint+seed writes ledger.pqs for
             # situational unknowns) — same LAMBDA_DH term, named source.
             dh_state = (f"PQ '{pq}' situational categorical "
                         f"H={round(dh, 6)} bit (epistemic claim)")

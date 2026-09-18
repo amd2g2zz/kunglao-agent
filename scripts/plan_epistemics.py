@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""plan_epistemics.py — #250 epistemic bookkeeping (plans branch, unknowns
-mint, assumptions undermine, coverage annotates).
+"""plan_epistemics.py — issue 250 epistemic bookkeeping (plans branch,
+unknowns mint, assumptions undermine, coverage annotates).
 
-Issue #250 (owner root correction): the root is PLAN EPISTEMICS — plans are
+Owner root correction on issue 250: the root is PLAN EPISTEMICS — plans are
 linear happy-path pipelines, situational unknowns are never minted or
 priced, facts are assumption-free atoms. Fix = epistemic BOOKKEEPING, not a
 new algorithm. Four pieces live here (or wire in from here):
@@ -31,12 +31,12 @@ Signed-gain convention (pinned by the EXP-3 spike, .spike-exp3-findings.md):
     negative. NEVER clamped.
   - h_standing_bits (the entropy the categorical still carries) and
     delta_h_bits (the per-event reduction) are separate fields —
-    priority_ratio prices the STANDING entropy; #257's settlement
+    priority_ratio prices the STANDING entropy; issue 257's settlement
     bookkeeping records the PER-EVENT delta.
 
 Boundaries: no settlement code calls update_eliminate/update_evidence
-(#257 wires that); LAMBDA_DH stays the only pricing parameter; no
-VMP/Android replay infrastructure (#260).
+(issue 257 wires that); LAMBDA_DH stays the only pricing parameter; no
+VMP/Android replay infrastructure (issue 260).
 """
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ def lint_plan_contingency(text: str) -> list[str]:
     if pending is not None:
         violations.append(
             f"step {pending}: no if-fails branch (condition + action) — "
-            "per-step contingency required (#250)")
+            "per-step contingency required (issue 250)")
     return violations
 
 
@@ -198,8 +198,8 @@ def detect_target_class(ws: Path) -> str | None:
 def derive_must_master(target_class: str | None, task_spec: dict) -> list[dict]:
     """The MUST-MASTER situational unknown list for a target class.
 
-    Derived from the target class (never user-articulated — the #170
-    lineage). Copies (never the template dicts) so callers can mutate.
+    Derived from the target class (never user-articulated — the
+    issue-170 lineage). Copies (never the template dicts) so callers can mutate.
     Unknown target class -> [] (nothing derived, nothing fabricated).
     """
     if target_class not in _MUST_MASTER:
@@ -249,8 +249,8 @@ def mint_epistemic_claims(existing_claims: list[dict], unknowns: list[dict],
 
 
 def _task_spec_candidates(task_spec: dict, pq_id: str) -> dict | None:
-    """model_selection candidates for pq_id, uniform weights (#106 seeder
-    convention — scaffolds invent no analysis content, #412)."""
+    """model_selection candidates for pq_id, uniform weights (the 106
+    seeder convention — scaffolds invent no analysis content, issue 412)."""
     for q in (task_spec or {}).get("primary_questions") or []:
         if not isinstance(q, dict) or q.get("id") != pq_id:
             continue
@@ -600,7 +600,7 @@ def mint_workspace(ws: Path) -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description="plan_epistemics — mint situational unknowns as "
-                    "epistemic claims and seed their PQs (#250)")
+                    "epistemic claims and seed their PQs (issue 250)")
     ap.add_argument("--mint", metavar="WORKSPACE",
                     help="derive + mint + seed for this workspace")
     ap.add_argument("--json", action="store_true",
