@@ -217,3 +217,14 @@ _LEGACY_UNANNOTATED 冻结白名单（#729 Rule A：只许移除不许新增，�
 
 python -m pytest tests/test_index_docs_contract.py tests/test_validate_index.py -q 在
 改动前后各跑一次均绿；全量基线含 7 个已知 Windows 环境性失败（见交付说明）。
+
+## Post-audit drift note (2026-09-18, issue #262)
+
+本提案归档时点之后代码发生两处漂移，规格文本不再与当前代码一致，特此注记：
+
+1. **optimizer 行已失效**：提案中"optimizer_core/bandit（#833）…已由 863-e 在 dev
+   交付"所指向的 `scripts/optimizer_core.py` 与 `scripts/optimizer_bandit.py` 已被
+   #104（"删除死学习器官"，PR #114，commit 2771d7f）删除——模块与其测试均不在当前
+   树中。该行仅作历史记录，见 archive/issue-833-optimizer/ARCHIVE-NOTE.md。
+2. **toolshelf 路径漂移**：`references/re-library/kunglao-toolshelf.md` 已随 #166/#188
+   references 重组迁移至 `references/re-library/tools/shelf/kunglao-toolshelf.md`。

@@ -171,15 +171,17 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
     },
     'plan': {
         'additionalContext': (
-            'plan-first gate (kunglao-worker.md golden rule #3: PLAN FIRST, '
-            'execute second). Fix: have the WORKER write runs/plan-C<NN>.md '
-            '(goal / preflight / steps / fallback) for claim C-<NN> in its '
-            'own session BEFORE executing, or reference the plan path in the '
-            'dispatch prompt when writing it in the same turn - the plan '
-            'must be worker-authored (#57 gate 3): the worker cites the '
+            'plan-first gate (#239 v2: dispatch carries intent, not a plan — '
+            'planning is the worker\'s first act of execution). This is a '
+            'RE-dispatch: the claim already had an approved dispatch, so it '
+            'needs its plan reference. Fix: let the WORKER author '
+            'runs/plan-C<NN>.md (goal / preflight / steps / fallback) in its '
+            'own session — its first sanctioned write — citing its '
             'per-dispatch anchor with a `dispatch-anchor: <dispatch_ts from '
-            'the KUNGLAO_DISPATCH_CONTEXT block>` frontmatter line - then '
-            're-dispatch.'
+            'the KUNGLAO_DISPATCH_CONTEXT block>` line (worker-authored '
+            'provenance, #57 gate 3), or reference the worker-authored plan '
+            'path in the dispatch prompt (re-dispatch continuity only) - '
+            'then re-dispatch.'
         ),
     },
     'toolfirst': {
@@ -559,11 +561,13 @@ def pre_check(payload: dict, paths: dict) -> int:
         # built-but-not-wired gap (backtrack_gate.py existed but was never
         # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
         ('backtrack', check_backtrack_gate(paths)),
-        # v1.9.31 (#239): plan-to-execute gate — a claim dispatch REQUIRES
-        # runs/plan-C<NN>*.md on disk OR a plan path for that claim in the
-        # dispatch prompt (timing relaxation). Closes the 2026-08-12
-        # F006-F008 accident: inference written as facts — the plan phase
-        # exposes it before execution.
+        # v1.9.31 (#239): plan-to-execute gate — CONTRACT v2 (owner ruling):
+        # dispatch carries intent, not a plan. The FIRST dispatch of a claim
+        # passes without any pre-existing plan (planning is the worker's
+        # first act of execution); a RE-dispatch beyond the planning round
+        # requires the plan reference — the worker-authored plan on disk
+        # (content + #57 gate 3 provenance) or the claim's plan path in the
+        # dispatch prompt (re-dispatch continuity).
         ('plan', check_worker_plan(paths, cid, prompt)),
         # v1.9.32 (#294): tool-first gate — a dispatch whose text matches a
         # registered tools/_INDEX.yaml keyword must cite it (`tool-catalog:`)

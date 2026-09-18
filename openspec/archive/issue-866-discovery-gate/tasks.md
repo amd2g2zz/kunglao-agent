@@ -25,6 +25,8 @@
 - [x] Ghidra 四件套（ghidra_diff/ghidra_job/run_ghidra_postscript/job_store，~1,928L）
       登记或显式退役；基线同步收缩（ghidra_diff 独立条目+契约条目；job_store 按 lib 处置；基线 27 到 0）
 - [x] scripts 侧 29 个鉴定表（31 减 capture_golden 闭包翻转 2）：绑定在途 change 标注 / SUSPECT→DEAD 判定按产线语义档输出（退役=0；ledger 落 scripts/README.md）
-- [ ] deploy-manifest 对账：发布面与登记面对齐佐证条目（deploy 全树收录退化的纠偏
-      属此节评估）
+- [x] deploy-manifest 对账：发布面与登记面对齐佐证条目（deploy 全树收录退化的纠偏
+      属此节评估）— 2026-09-18 (#262 audit): ruled satisfied by current discipline —
+      `deploy_manifest.py --verify` green today (397 entries), manifest kept in-tree
+      and reconciled per-change since; no further action item remains.
 - [x] 基线清偿后 devkit/.discovery-gate-baseline.txt 归零核对（27 到 0，门 exit 0）
