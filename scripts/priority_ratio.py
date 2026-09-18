@@ -687,6 +687,7 @@ def _emit_rank_feeds(ws, claims: list[dict], evidence: EvidenceView,
             "input_fingerprint": dict(fp_doc, fingerprint=fingerprint),
         }
         if kunglao_log.emit(ws, actor="priority_ratio", action="rank_feeds",
+                            arm=(actions[0].claim_id if actions else None),
                             detail=json.dumps(payload, sort_keys=True,
                                               ensure_ascii=False)) is False:
             # Issue 218/225: the health bit tracks the LAST ATTEMPT. The
@@ -786,10 +787,16 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         # ΔH_PQ: H(categorical) — the updatable quantity on the claim's PQ.
         pq_cat = ledger.pqs.get(pq) if pq else None
         dh = pq_cat.entropy() if pq_cat is not None else 0.0
-        dh_state = (f"PQ '{pq}' categorical H={round(dh, 6)} bit"
-                    if pq_cat is not None else
-                    f"no PQ categorical for '{pq or '-'}' in "
-                    f"runs/posteriors.yaml -> dH=0")
+        if pq_cat is not None and str(c.get("boundary_type") or "") == "epistemic":
+            # issue 250: a situational PQ (mint+seed writes ledger.pqs for
+            # situational unknowns) — same LAMBDA_DH term, named source.
+            dh_state = (f"PQ '{pq}' situational categorical "
+                        f"H={round(dh, 6)} bit (epistemic claim)")
+        elif pq_cat is not None:
+            dh_state = f"PQ '{pq}' categorical H={round(dh, 6)} bit"
+        else:
+            dh_state = (f"no PQ categorical for '{pq or '-'}' in "
+                        f"runs/posteriors.yaml -> dH=0")
         # #759 worth channel (exogenous user ruling, not a formula DOF).
         weight = claim_value_weight(c, evidence.value_class_weights,
                                     evidence.value_claim_overrides)
@@ -819,6 +826,8 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         ))
     # #107 spec sort: Thompson sample descending, stable tie-break claim_id.
     actions.sort(key=lambda a: (-a.score, a.claim_id))
+    # The emit below reads actions[0] as the event's arm — valid only
+    # because this sort already ran: actions[0] IS the selected arm.
     # #157: one rank_feeds event per RUN (post-decision, silent fail-open).
     # The emit consumes the ALREADY-BUILT actions — a crash inside it can
     # never change the ranking result (pinned by

@@ -647,6 +647,22 @@ def _plan_is_empty_shell(text: str) -> bool:
     return not remaining
 
 
+def _plan_contingency_violations(plan_text: str) -> list[str]:
+    """#250: per-step if-fails violations of a plan document.
+
+    Thin re-export of plan_epistemics.lint_plan_contingency, import-guarded
+    fail-open (a broken epistemics module must never hard-block dispatch on
+    a defect it cannot name) — consistent with the gate battery's FAIL_OPEN
+    posture for infrastructure errors."""
+    try:
+        from _path_hygiene import ensure_scripts_path
+        ensure_scripts_path()
+        import plan_epistemics
+        return plan_epistemics.lint_plan_contingency(plan_text)
+    except Exception:
+        return []
+
+
 def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[bool, str]:
     """Issue #239 (contract v2, owner ruling) + #57 gate 3: dispatch carries
     intent, NOT a plan — planning is the worker's first act of execution.
@@ -722,6 +738,20 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
                     f'author its plan (kunglao-worker.md golden rule #3), '
                     f'then re-dispatch'
                 ))
+            # #250: per-step contingency — the plan schema graduates from
+            # one tail hatch to per-step branches. A plan whose ENUMERATED
+            # steps carry no if-fails branch is a linear happy-path pipeline
+            # (every step assumes the previous succeeded). Legacy inline
+            # plans (zero enumerated entries) pass unchanged.
+            contingencies = _plan_contingency_violations(plan_text)
+            if contingencies:
+                return (False, (
+                    f'{plan_path.name} is a linear happy-path plan '
+                    f'({"; ".join(contingencies[:3])}) - the worker must add '
+                    f'a per-step "if-fails: <condition> -> <action>" branch '
+                    f'under each enumerated step (issue #250: real RE is a '
+                    f'tree; dead-ends are expected structure, not an '
+                    f'afterthought)'))
             # #57 gate 3: plan-author — a re-dispatch's plan must carry
             # worker-session evidence (authored after a prior dispatch).
             # Armed here by construction: a re-dispatch implies the anchor
@@ -1459,15 +1489,27 @@ def check_agent_type(paths: dict, cid: str, prompt: str,
 # ---------- issue #270: REJECT guidance via hookSpecificOutput.additionalContext ----------
 
 
-def check_zero_output_circuit(workspace: str | Path) -> tuple[bool, str]:
+def check_zero_output_circuit(workspace: str | Path, cid: str | None = None,
+                              tools: list[str] | None = None) -> tuple[bool, str]:
     """#823 A4 canary graduation: same-type zero-output thrash breaker.
 
     Shadow posture (count + emit only) graduates here: a tripped circuit
-    (ZERO_OUTPUT_N=3 consecutive same-type actions with no belief change)
-    REJECTS the dispatch until a failure_analysis step lands (#634
-    design). Always-on since #51 (the experiment flag is gone); any read
-    failure -> pass (fail-open, matching this gate family's stance: a
-    broken gate must not deadlock the loop).
+    (ZERO_OUTPUT_N=3 consecutive same-family actions with no belief change)
+    REJECTs a dispatch that would REPEAT the tripped (claim, tool-family)
+    - other claims and other tool families pass, so one thrashing claim
+    can never lock the workspace. Always-on since #51 (the experiment
+    flag is gone); any read failure -> pass (fail-open, matching this
+    gate family's stance: a broken gate must not deadlock the loop).
+
+    #256 review round 2 - the gate derives belief FRESHNESS itself: it
+    compares the ledger's stored belief_hash against the CURRENT
+    belief_hash(workspace) and treats a mismatch as a reset. The reset in
+    record_action is only reachable through a successful dispatch, so a
+    gate that trusted the stale ledger deadlocks the loop exactly when
+    the circuit fires (move belief -> still REJECTed). With the freshness
+    check the documented repair ("the streak resets once the workspace
+    belief moves") is true on THIS face, and the REJECT text names the
+    state file as the manual escape hatch.
 
     Returns (ok, reason). ok=False means REJECT the dispatch.
     """
@@ -1480,18 +1522,44 @@ def check_zero_output_circuit(workspace: str | Path) -> tuple[bool, str]:
             state = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return (True, 'no circuit state - zero-output circuit passed')
+        # freshness is derived HERE, not trusted from the ledger: a
+        # belief move since the last record_action makes every stored
+        # streak stale-by-definition (record_action would reset them on
+        # its next call — this face must read the same truth, or the
+        # gate deadlocks the loop it guards).
+        stored_hash = state.get("belief_hash")
+        current_hash = zero_output_fingerprint.belief_hash(Path(workspace))
+        if stored_hash != current_hash:
+            return (True, 'circuit state stale (belief moved since last '
+                    'record) - zero-output circuit passed')
         streaks = state.get("streaks") or {}
-        tripped = {fp: n for fp, n in streaks.items()
+        tripped = {fp for fp, n in streaks.items()
                    if int(n) >= zero_output_fingerprint.ZERO_OUTPUT_N}
         if not tripped:
             return (True, 'no tripped fingerprint - zero-output circuit passed')
+        if not cid or not tools:
+            return (True, 'tripped fingerprint exists but this dispatch '
+                    'carries no claim/tool context - repetition not '
+                    'provable, passed')
+        repeat = next(
+            (t for t in tools
+             if zero_output_fingerprint.fingerprint(
+                 zero_output_fingerprint.tool_family(t), cid) in tripped),
+            None)
+        if repeat is None:
+            return (True, 'tripped fingerprint is a different claim/tool '
+                    f'family - passed for {cid}')
         return (False, (
-            'BLOCKED: zero-output circuit tripped (#823 A4 canary) - '
-            f'{len(tripped)} same-type action fingerprint(s) at >= '
-            f'{zero_output_fingerprint.ZERO_OUTPUT_N} consecutive checkpoints '
-            'with no belief change. Interrupt and run failure_analysis '
-            '(runs/failure-analysis.md) before retrying this action family; '
-            'the streak resets automatically once the workspace belief moves.'
+            'BLOCKED: zero-output circuit tripped (#823 A4 canary) - the '
+            f'dispatch would repeat tripped family {repeat} on claim '
+            f'{cid} at >= {zero_output_fingerprint.ZERO_OUTPUT_N} '
+            'consecutive checkpoints with no belief change. State: '
+            'runs/zero-output-fingerprint.json. Interrupt and run '
+            'failure_analysis (runs/failure-analysis.md); the block '
+            'clears itself once the workspace belief moves '
+            '(facts/_INDEX.md or claim-register.yaml content changes - '
+            'this gate re-checks freshness on every dispatch), or remove '
+            'the state file manually as the last-resort escape hatch.'
         ))
     except Exception:
         return (True, 'zero-output circuit error - fail-open')

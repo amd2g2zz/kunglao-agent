@@ -214,6 +214,13 @@ session had to rerun; verifying the signature with javap first takes
      now)
    - `fallback:` a fallback for each step's failure (≥1, not "retry the
      same step")
+   - `if-fails:` (per-step, issue 250) — every ENUMERATED step under
+     `steps:` is followed by an `if-fails:` line carrying condition +
+     action ("if xref index empty -> scan for RegisterNatives"). The
+     plan-first gate REJECTS a re-dispatch plan whose enumerated steps
+     carry no if-fails branch: real RE is a tree, dead-ends are expected
+     structure, not an afterthought. Legacy inline one-liner plans are
+     not rejected, but branch them anyway.
 2. **Execute** — follow the plan, compare each step against its expectation.
    Drift → **update the plan, then continue** (plan-drift is normal
    intelligence; blind execution without a plan is waste). Hitting a wall

@@ -62,6 +62,22 @@ def _spread_mtimes(paths) -> None:
         os.utime(p, (t, t))
 
 
+def _corroborate(ws, cids) -> None:
+    """check() 面的记录需统一日志中的 hook 派遣行佐证（D3 契约变更后的
+    正例夹具；行经真实 emitter 形态书写）。"""
+    import json
+    logs = ws / "runs" / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    with open(logs / "kunglao-2026-09-18.jsonl", "a", encoding="utf-8") as fh:
+        for cid in cids:
+            fh.write(json.dumps({
+                "ts": "2026-09-18T00:00:00Z", "actor": "hook:worker_budget",
+                "action": "dispatch", "claim": cid,
+                "detail": "tier=1 tools=Read agent=kunglao-redteam "
+                          "(dispatch linkage: renew + arm + phase=DISPATCH)",
+            }, ensure_ascii=False) + "\n")
+
+
 def test_incident_template_burst_excluded(tmp_path):
     """T1：8 个事故模板（无 marker）→ 全部排除 → UNVERIFIED_EVIDENCE 漂移。"""
     ws = _mk_ws(tmp_path)
@@ -127,6 +143,7 @@ def test_credible_distinct_files_counted(tmp_path):
     _spread_mtimes([runs / f"verify-redteam-C10{i}.md" for i in range(3)])
     covered = pdd.extract_verified_claim_ids(runs)
     assert covered == {"C-100", "C-101", "C-102"}, covered
+    _corroborate(ws, ["C-100", "C-101", "C-102"])  # D3 契约：需派遣行佐证
     (ws / "global_plan.txt").write_text("plan C-100 C-101 C-102\n", encoding="utf-8")
     import io, contextlib
     buf = io.StringIO()

@@ -20,6 +20,7 @@ from worker_budget_gates import (
     check_no_self_cap, check_worker_plan, check_tool_first, check_agent_type,
     compare_register_change,  # noqa: F401 — re-exported to worker_budget aggregator
     compare_register_change_proven_gate,
+    check_zero_output_circuit,  # #256: A4 thrash breaker in the production battery
     register_worker, remove_worker,
     stamp_dispatch_anchor,  # #57 gate 3: per-dispatch nonce at the approval point
     toolfirst_pass_record,  # #880 approval-point pass face + operation label
@@ -167,6 +168,20 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'retry_different + reason + new_approach), or resolve the stall '
             'directly, then re-run uv run --project <skill> <skill>/scripts/backtrack_gate.py '
             '<ws> to confirm clean before re-dispatching.'
+        ),
+    },
+    'zerooutput': {
+        'additionalContext': (
+            'zero-output circuit tripped (v1.9.40, #256): the dispatch '
+            'would repeat a same-family action fingerprint that hit N '
+            'consecutive checkpoints with no belief change on THIS claim '
+            '(facts/_INDEX.md + claim-register.yaml content). Fix: run '
+            'uv run --project <skill> <skill>/scripts/failure_analysis_gate.py <ws> <claim> '
+            '(answer the 3 questions), record the next method — the '
+            'block clears itself once the workspace belief moves (the '
+            'gate re-checks freshness every dispatch), or remove '
+            'runs/zero-output-fingerprint.json as the last-resort escape '
+            'hatch — then re-dispatch a DIFFERENT action family.'
         ),
     },
     'plan': {
@@ -472,10 +487,46 @@ def _dispatch_lifecycle(paths: dict, tier: int, tools: list[str],
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
 
 
+def _resolve_dispatch_agent(payload: dict, prompt_text: str) -> str | None:
+    """#237 H1: agent resolver single-sourced with dispatch_gate's D2 face
+    (lib_kunglao.resolve_dispatch_agent, all payload shapes). The #461
+    corroboration row must name the same agent the pass-through faces
+    resolved, or plan_drift_detector's D3 marker check can never
+    corroborate the dispatch (subagent_type-shaped dispatches used to
+    resolve to `agent=?` here)."""
+    try:
+        return load_hooks_lib().resolve_dispatch_agent(payload, prompt_text)
+    except Exception:  # noqa: BLE001 - identity best-effort, row stays ?-marked
+        return None
+
+
+def _is_verifier_remediation_dispatch(ws, claim_id: str, payload: dict,
+                                      prompt_text: str) -> bool:
+    """#237 D2: same predicate as dispatch_gate's drift pass-through (lib
+    single source). worker_budget's own pre_check drift gate rides the SAME
+    dispatch and must reach the identical verdict, or the honest remediation
+    path deadlocks at the second hook. Lib outage -> False (legacy drift
+    gate applies — an unavailable resolver must not newly open the gate)."""
+    try:
+        return load_hooks_lib().is_verifier_remediation_dispatch(
+            ws, claim_id, payload, prompt_text)
+    except Exception:  # noqa: BLE001 — degraded copy: legacy gate applies
+        return False
+
+
 def pre_check(payload: dict, paths: dict) -> int:
     desc = payload.get('tool_input', {}).get('description', '')
     prompt = payload.get('tool_input', {}).get('prompt', '')
     agent_name = payload.get('tool_input', {}).get('name') or ''
+    # #237 H1: the #461 corroboration row's agent identity is resolved by
+    # the shared resolver (all payload shapes), NOT by the legacy name-only
+    # read above — that split left subagent_type-shaped dispatches with
+    # `agent=?` in the row, so D3's marker check never corroborated them
+    # and the deadlock survived the pass-through for that shape. The gate
+    # inputs (agenttype / worker_id) keep the legacy value: their contracts
+    # are unchanged by this card.
+    row_agent = _resolve_dispatch_agent(payload, prompt) or agent_name or '?'
+    verifier_remediation = False  # set after the dispatch parse (needs cid)
     # #862: the dispatch shape belongs to the contract channel (prompt,
     # protocol v1 JSON envelope; v1-first per #861 single-source). The
     # description channel is deprecated replay-only — a shape found there
@@ -489,6 +540,14 @@ def pre_check(payload: dict, paths: dict) -> int:
                            'description channel - protocol v1 requires the '
                            'kunglao_dispatch JSON envelope in the prompt '
                            '(B4/#862).', paths)
+    # #237 D2: verifier pass-through — a kunglao-redteam / verdict-scorer
+    # dispatch for a PROVEN claim IS the flagged UNVERIFIED_EVIDENCE set's
+    # remediation; this hook's own drift gate must allow it too (the
+    # dispatch_gate face alone left the honest path blocked here, and the
+    # #461 corroboration row could never be written through a rejected
+    # dispatch).
+    verifier_remediation = _is_verifier_remediation_dispatch(
+        paths.get('workspace'), cid, payload, prompt)
     checks = [
         ('workers', check_workers_lt_3(paths)),
         ('cap', check_promotion_attempts(paths['register'], cid)),
@@ -502,7 +561,11 @@ def pre_check(payload: dict, paths: dict) -> int:
         ('heartbeat', check_heartbeat_alive(paths['state'])),
         # v1.9.29: plan drift + convergence health wired in as mechanical
         # gates (historical research-tree r3, R1/R3). FAIL_OPEN inside the checks.
-        ('drift', check_plan_drift(paths)),
+        # #237 D2: skipped for verifier-remediation dispatches (verifier +
+        # PROVEN claim) — this gate must not reject the remediation it
+        # exists to demand.
+        ('drift', (True, '') if verifier_remediation
+         else check_plan_drift(paths)),
         ('health', check_convergence_health(paths)),
         # v1.9.39 (#475): env-state freshness gate — a dispatch whose tier/
         # tools need a drifted environment capability is REJECTED; missing/
@@ -513,6 +576,17 @@ def pre_check(payload: dict, paths: dict) -> int:
         # built-but-not-wired gap (backtrack_gate.py existed but was never
         # called from pre_check). FAIL_OPEN; rc 1/2 -> REJECT.
         ('backtrack', check_backtrack_gate(paths)),
+        # v1.9.40 (#256): zero-output circuit — the A4 thrash breaker
+        # graduates from shadow to the production battery (the canary
+        # graduation its own module promised). A tripped fingerprint (>=
+        # ZERO_OUTPUT_N same-family actions, no belief change) REJECTs a
+        # dispatch that would REPEAT that (claim, tool-family) — other
+        # claims/families pass. The gate derives belief freshness ITSELF
+        # (stale ledger = reset), so a moved workspace can never stay
+        # blocked; missing/unreadable state FAILS OPEN. post_check feeds
+        # the streaks it reads (see _record_zero_output_fingerprint).
+        ('zerooutput', check_zero_output_circuit(paths.get('workspace'),
+                                                 cid, tools)),
         # v1.9.31 (#239): plan-to-execute gate — CONTRACT v2 (owner ruling):
         # dispatch carries intent, not a plan. The FIRST dispatch of a claim
         # passes without any pre-existing plan (planning is the worker's
@@ -575,7 +649,10 @@ def pre_check(payload: dict, paths: dict) -> int:
     # #461: a PASSING dispatch is a lifecycle event — renew TTL / complete
     # the activation set / flip phase to DISPATCH / log the dispatch event
     # (fail-open inside; rejected dispatches above never reach this line).
-    _dispatch_lifecycle(paths, tier, tools, cid, agent_name, prompt=prompt)
+    # #237 H1: the row carries the shared-resolver identity (row_agent), so
+    # a subagent_type-shaped verifier dispatch lands `agent=kunglao-redteam`
+    # — the marker plan_drift_detector's D3 corroboration matches.
+    _dispatch_lifecycle(paths, tier, tools, cid, row_agent, prompt=prompt)
     # #57 gate 3: stamp the per-dispatch nonce (dispatch anchor) at the
     # approval point — it is what arms the plan-author gate on this claim's
     # NEXT dispatch, so a pre-written plan can no longer pass as worker work.
@@ -719,6 +796,95 @@ def _emit_tool_calls(paths: dict, payload: dict, tool_result: str) -> None:
               f'{type(exc).__name__}: {exc}', file=sys.stderr)
 
 
+def _scan_invoked_tools(transcript: str) -> list[str]:
+    """#256 review round 2: actually-invoked-only scan for the thrash
+    recorder. Same vocabulary as scan_actual_tools (mcp__ names + the
+    KNOWN_TOOLS set) but word-boundary anchored, so a tool name merely
+    MENTIONED inside another word ("ripgrep" mentioning grep) does not
+    count as an invocation against the fingerprint."""
+    found: set[str] = set()
+    for m in re.finditer(r'\bmcp__[a-z0-9_]+\b', transcript):
+        found.add(m.group(0))
+    for name in KNOWN_TOOLS:
+        if re.search(rf'\b{re.escape(name)}\b', transcript):
+            found.add(name)
+    return sorted(found)
+
+
+# ws -> last WARN reason (rate limit: one WARN per ws until the reason
+# changes; a persistently wedged recorder must not print per completion)
+_ZOF_WARN_LAST: dict[str, str] = {}
+
+
+def _zof_warn(ws: str, reason: str) -> None:
+    if _ZOF_WARN_LAST.get(ws) == reason:
+        return
+    _ZOF_WARN_LAST[ws] = reason
+    print(f'[kunglao-agent] zero-output fingerprint recorder WARN '
+          f'(fail-open): {reason}', file=sys.stderr)
+
+
+def _record_zero_output_fingerprint(paths: dict, payload: dict,
+                                    tool_result: str) -> None:
+    """#256: the A4 thrash recorder gets its production trigger.
+
+    post_check IS the "worker action completed" face: every tool the
+    completed dispatched worker actually invoked is counted against its
+    (tool-family, claim_id) fingerprint (claim-granularity v1 — the same
+    discriminator and the same limits as _emit_tool_calls above: only
+    workers with an [active_workers] entry carrying a claim_id record,
+    so orchestrator-side Agent calls never touch the state).
+
+    Visible fail-open (the #256 asymmetry): liveness first — a recorder
+    fault NEVER breaks post_check (rc stays 0) — but the fault is not
+    silently swallowed either: a crash AND a no-op recorder (record_action
+    returning without a streak payload) both land a stderr WARN, rate-
+    limited to once per ws+reason until the reason changes. A PARTIAL
+    recording (some tools landed before a fault) says so — it never
+    misreports a partial as a total failure. Enforcement is the SEPARATE
+    zerooutput pre_check gate, which derives belief freshness itself.
+    """
+    ws = paths.get('workspace')
+    if not ws:
+        return
+    worker_id = payload.get('tool_input', {}).get('name') or ''
+    if not worker_id:
+        return
+    try:
+        entry = next((w for w in read_active_workers(paths['state'])
+                      if w.get('worker_id') == worker_id), None)
+        if not entry or not entry.get('claim_id'):
+            return  # not a dispatched worker completion — out of scope
+        invoked = _scan_invoked_tools(tool_result)
+        if not invoked:
+            return
+        import zero_output_fingerprint  # scripts/ on path (#671 authority)
+        cid = entry['claim_id']
+        landed: list[str] = []
+        for tool in invoked:
+            try:
+                result = zero_output_fingerprint.record_action(
+                    Path(ws), tool, cid)
+            except Exception as exc:  # noqa: BLE001 - per-tool isolation
+                _zof_warn(
+                    ws, f'{type(exc).__name__}: {exc} (at tool={tool}); '
+                    f'{len(landed)}/{len(invoked)} tools recorded, tools '
+                    f'from {tool} on not counted this completion')
+                return
+            if not isinstance(result, dict) or 'streak' not in result:
+                # A no-op recorder must not pass for a healthy one.
+                _zof_warn(
+                    ws, f'no-op recorder: record_action returned '
+                    f'{type(result).__name__} without a streak payload '
+                    f'(at tool={tool}); {len(landed)}/{len(invoked)} '
+                    f'tools recorded, tools from {tool} on not counted '
+                    f'this completion')
+                return
+            landed.append(tool)
+    except Exception as exc:  # noqa: BLE001 - liveness first, fault visible
+        _zof_warn(ws, f'{type(exc).__name__}: {exc}')
+
+
 # Worker terminal statuses that mean the DISPATCH FAILED (#234). Subset of
 # lib_kunglao.TERMINAL_WORKER_STATUSES minus done (delivered) — a done
 # worker never accrues a strike.
@@ -836,6 +1002,11 @@ def post_check(payload: dict, paths: dict) -> int:
     # #880: BEFORE remove_worker — the [active_workers] entry carries the
     # claim_id the tool_call rows attribute to.
     _emit_tool_calls(paths, payload, tool_result)
+    # #256: same discriminator, same granularity — count the completed
+    # worker's actual tools against their (tool, claim) fingerprints so
+    # repeated no-progress actions trip the zero-output circuit (enforced
+    # by the zerooutput pre_check gate on the NEXT dispatch).
+    _record_zero_output_fingerprint(paths, payload, tool_result)
     # #234: same window — the dispatch-failure 3-strike face (fail-open).
     _record_dispatch_failure(
         paths, worker_id, tool_result,

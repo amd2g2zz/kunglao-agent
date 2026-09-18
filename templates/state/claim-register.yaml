@@ -12,6 +12,8 @@ claims: []
 #                                 #   confirmed | capability_not_executed | link_not_closed
 #                                 #   source_derived | numeric | observation
 #                                 #   coordinate | pure_negative | contradiction
+#                                 #   issue 250: epistemic — a derived situational unknown
+#                                 #   (must-master list; answers_question = its pq_id)
 #    promotion_gate: ""           # required non-empty if boundary_type ∈ open set
 #                                 #   open = {capability_not_executed, link_not_closed,
 #                                 #           observation, source_derived, numeric}
