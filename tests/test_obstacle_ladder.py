@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Tests for #234 — the target/attack-surface ladder + strategy fan-out.
+"""Tests for issue 234 — the target/attack-surface ladder + strategy fan-out.
 
 Fast tier (tests/_tiers.py FAST_MODULES): pure unit — no process spawns,
 no network, no nested pytest (the _FAST_BANNED source scan enforces the
 same rule). The hook-face wiring lives in
 tests/test_obstacle_ladder_integration.py (integration leg).
 
-Contract (issue #234, RED first):
+Contract (issue 234, RED first):
 
 - the third ladder: 3 levels (T1/T2/T3) of mechanism-family rungs per
   obstacle class; levels are mechanism-family distinct BY CONSTRUCTION —
@@ -22,8 +22,8 @@ Contract (issue #234, RED first):
   inherited, real claim_deps.yaml edge) — OPEN, hence in the TS rank pool
   (priority_ratio.is_open). Minting is idempotent.
 - 3-strike: dead_letter.record_dispatch_failure increments
-  promotion_attempts (the writer #146 said the family lacked) and routes
-  the claim to the DLQ at 3 strikes.
+  promotion_attempts (the live writer the family lacked — the counter had
+  no writer before) and escalates the claim to must-ask at 3 strikes.
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ import target_ladder as tl  # noqa: E402
 import dead_letter as dl  # noqa: E402
 import kunglao_record  # noqa: E402
 import priority_ratio  # noqa: E402
-import worker_budget as wb  # noqa: E402  (the #568 shim; backstop lives in gates)
+import worker_budget as wb  # noqa: E402  (worker_budget shim; backstop lives in gates)
 
 
 # ---------- helpers ----------
@@ -228,7 +228,7 @@ def test_blocker_defects_class_tamper(tmp_path):
 
 
 def test_blocker_single_parse_no_reread(tmp_path, monkeypatch):
-    """Review r2 MEDIUM (the #237 H1 two-read class): with register_text
+    """Review r2 MEDIUM (the 237 H1 two-read class): with register_text
     supplied, the sibling checks consume the SAME parsed snapshot — the
     register file is never read a second time (no TOCTOU window)."""
     _write_reg(tmp_path, [_obstacle_claim()])
@@ -492,8 +492,8 @@ def _edits_ws(tmp_path: Path) -> Path:
 
 def test_backstop_rejects_register_edit_bypass(tmp_path):
     """F1: OPEN -> PROVEN by DIRECT register edit, no ladder — the hook
-    backstop (built for exactly this bypass class, #15/#78) must name the
-    TARGET LADDER GATE among the violations."""
+    backstop (built for exactly this bypass class — the 15/78 dual-face
+    precedent) must name the TARGET LADDER GATE among the violations."""
     ws = _edits_ws(tmp_path)
     reg = ws / "claim-register.yaml"
     reg.write_text(reg.read_text(encoding="utf-8").replace(

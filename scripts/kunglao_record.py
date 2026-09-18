@@ -315,14 +315,14 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
                                     f"{cited} (references/governance/decision-rights.md "
                                     f"has rows {rows_fmt or '(none)'})"))
 
-    # ---- #234 target-obstacle ladder (write-side gate, #236 R3 shape):
-    # an obstacle claim (origin: failure-obstacle) cannot settle CONFIRMED
-    # (PROVEN = "really can't") without its target/attack-surface ladder
-    # walked-valid + a non-empty exhaustion inventory + each inventory
-    # entry's strategy sibling minted (the fan-out). Fail-closed: a named
-    # TARGET LADDER GATE reason, register unmodified. ImportError = BLOCKED
-    # receipt (#78 REQUIRED_FOR_TERMINAL_STATE posture). REFUTED is
-    # deliberately ungated — the #233 path-scoped closure standard requires
+    # ---- target-obstacle ladder gate (write-side, the decision-rights R3
+    # shape): an obstacle claim (origin: failure-obstacle) cannot settle
+    # CONFIRMED (PROVEN = "really can't") without its target/attack-surface
+    # ladder walked-valid + a non-empty exhaustion inventory + each
+    # inventory entry's strategy sibling minted (the fan-out). Fail-closed:
+    # a named TARGET LADDER GATE reason, register unmodified. ImportError =
+    # BLOCKED receipt (REQUIRED_FOR_TERMINAL_STATE posture). REFUTED is
+    # deliberately ungated — the path-scoped closure standard requires
     # refuting obstacles to stay possible.
     if new_status == "PROVEN":
         try:

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Integration tests for #234 — the dispatch-failure 3-strike wiring.
+"""Integration tests for issue 234 — the dispatch-failure 3-strike wiring.
 
 The fast module (tests/test_obstacle_ladder.py) pins the pure unit
 contracts; this module drives the REAL hook face:
@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import yaml  # noqa: E402
 
-import worker_budget  # noqa: E402  (#568 shim — post_check lives in sinks)
+import worker_budget  # noqa: E402  (worker_budget shim — post_check lives in sinks)
 
 
 WORKER_LINE = ("worker_id=w-alpha | claim_id=C-001 | dispatched_at=1 | "
@@ -179,7 +179,7 @@ def test_three_failed_dispatches_escalate_must_ask(tmp_path):
 def test_post_check_rejects_obstacle_proven_register_edit(tmp_path, capsys):
     """F1: an obstacle claim flipped OPEN -> PROVEN by direct register edit
     must be BLOCKED on the hook face with the named TARGET LADDER GATE
-    reason — the dual-face policy (#15/#78), no claim_migrator bypass."""
+    reason — the dual-face policy (the 15/78 precedent), no claim_migrator bypass."""
     ws = _ws(tmp_path, "")  # worker state irrelevant here
     (ws / "claim-register.yaml").write_text(
         yaml.safe_dump({"claims": [

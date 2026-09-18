@@ -398,7 +398,7 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
         validated_capability = prior.get("validated_capability") or ""
     if not (identified_obstacle or "").strip():
         identified_obstacle = prior.get("identified_obstacle") or ""
-    # #234 (review F2): the obstacle class is pinned at promotion time — the
+    # Review F2: the obstacle class is pinned at promotion time — the
     # promoted claim carries the authoritative class the target ladder must
     # be walked against (see _promote_obstacle_claim). Closure backfill
     # preserves it from the prior entry, same rule as the artifacts.
@@ -569,7 +569,7 @@ def _promote_obstacle_claim(workspace: Path, claim_id: str, obstacle: str,
       creates a second node;
     - new claim: OPEN, depends_on the failed claim, answers_question context
       inherited from it, origin=failure-obstacle;
-    - #234 (review F2): an explicit --obstacle-class is pinned ON the
+    - Review F2: an explicit --obstacle-class is pinned ON the
       promoted claim — the authoritative class the target/attack-surface
       ladder must later be walked against (target_ladder.settlement_blocker
       cross-checks the artifact against this, so the artifact author cannot

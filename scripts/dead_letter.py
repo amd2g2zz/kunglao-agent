@@ -9,7 +9,7 @@ the terminal status for such claims. It lives in `status_defs.TERMINAL`
 `priority._is_open` exclude DEAD claims automatically — no per-consumer edit.
 
 This script provides the explicit writer + quarantine artifact + diagnostics:
-  - record_dispatch_failure(ws, claim_id) (#234): the live promotion_attempts
+  - record_dispatch_failure(ws, claim_id) (issue 234): the live promotion_attempts
     writer (the dispatch-failure path). At the 3-strike threshold it
     escalates to the charter MUST-ASK lane (blockers/must-ask-<claim>.md +
     the must_ask event, status untouched) — DEAD is one explicit --mark
@@ -58,12 +58,11 @@ _LEGAL_STATUSES = (
 
 from harness_common import utc_now_z as utc_now_iso  # #863 Family F: single source (was a local def)
 
-# The 3-strike threshold (#36 family, same value as
-# hooks/worker_budget_core.MAX_PROMOTION_ATTEMPTS #520 — cross-linked by
-# comment, not import: scripts must not import hooks). #234 gave the family
-# its live writer: record_dispatch_failure counts dispatch failures up to
-# this threshold, then escalates to the charter must-ask lane (review F6);
-# DEAD stays the explicit --mark face.
+# The 3-strike threshold — same value as
+# hooks/worker_budget_core.MAX_PROMOTION_ATTEMPTS (cross-linked by
+# comment, not import: scripts must not import hooks). The dispatch-failure
+# writer counts failures up to this threshold, then escalates to the
+# charter must-ask lane (review F6); DEAD stays the explicit --mark face.
 DLQ_ATTEMPTS = 3
 
 
@@ -116,11 +115,13 @@ def count_dead(workspace: Path) -> int:
 
 
 def record_dispatch_failure(workspace: Path, claim_id: str) -> dict:
-    """Count one dispatch failure on a claim; at DLQ_ATTEMPTS route to the DLQ.
+    """Count one dispatch failure on a claim; at DLQ_ATTEMPTS escalate to
+    the charter must-ask lane.
 
-    #234: promotion_attempts was seeded at obstacle promotion
-    (failure_analysis_gate.py:577) but had NO live writer anywhere — #146
-    removed it from the arming predicate precisely because it never fired.
+    The promotion_attempts counter was seeded at obstacle promotion
+    (failure_analysis_gate.py:577) but had NO live writer anywhere — the
+    arming refactor removed it from the predicate precisely because it
+    never fired.
     This is that writer: the dispatch-failure path (hooked from
     hooks/worker_budget_sinks.post_check, the Agent PostToolUse completion
     sink) calls it when a finished worker's terminal status is

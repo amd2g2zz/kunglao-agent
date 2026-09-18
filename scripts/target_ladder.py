@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""target_ladder.py — #234 the third ladder: target/attack-surface vocabulary.
+"""target_ladder.py — the third ladder (issue 234): target/attack-surface vocabulary.
 
-THE GAP (issue #234): the promoted obstacle claim is a one-liner statement
+THE GAP (issue 234): the promoted obstacle claim is a one-liner statement
 (failure_analysis_gate.py:579) — samplable by TS but not actionable, and the
 two existing recovery ladders (method-ladder / env-ladder,
 ask_for_direction_gate.py) are TOOL-FAILURE-shaped. There is no vocabulary for
@@ -23,18 +23,18 @@ primitive (extends vocabulary, adds no new orchestrating organ):
     enumeration: the ladder must never be unwalkable because a class string
     did not match (same fail-open posture as the instrument rule).
 
-Settlement gate (#234 required behavior 2): an obstacle claim
+Settlement gate (issue 234, required behavior 2): an obstacle claim
 (origin: failure-obstacle) cannot settle CONFIRMED — register status PROVEN,
 "really can't" is a positive verdict on the blocking — without its target
 ladder walked-valid AND a non-empty exhaustion inventory (what was tried per
 rung; the exhaustion standard, same shape as the DEFERRED inventory of
 infeasible_proposal.file_proposal) AND each inventory entry's strategy
 sibling minted. The gate itself is write-side, in kunglao_record's
-claim_migrator (#236 R3 shape); this module provides the pure predicate
-(`settlement_blocker`). REFUTED stays ungated — the #233 path-scoped closure
+claim_migrator (the decision-rights R3 shape); this module provides the pure predicate
+(`settlement_blocker`). REFUTED stays ungated — the path-scoped closure
 standard requires refuting obstacles to stay possible.
 
-Fan-out (#234 required behavior 3): `mint_sibling_claims` auto-registers one
+Fan-out (issue 234, required behavior 3): `mint_sibling_claims` auto-registers one
 OPEN sibling claim per inventory entry — origin: obstacle-alternative,
 obstacle_for edge to the parent obstacle claim, answers_question inherited,
 a real claim_deps.yaml depends_on edge (same construction as
@@ -69,7 +69,7 @@ import yaml
 # infeasible_proposal.LADDER_LEVELS — the ladder primitive's shape).
 TARGET_LADDER_LEVELS = ("T1", "T2", "T3")
 
-# Linkage vocabulary (issue #234 verbatim): the parent obstacle claims are
+# Linkage vocabulary (issue 234, verbatim): the parent obstacle claims are
 # minted by failure_analysis_gate._promote_obstacle_claim with
 # origin=failure-obstacle; the strategy siblings minted here carry
 # origin=obstacle-alternative.
@@ -78,7 +78,7 @@ SIBLING_ORIGIN = "obstacle-alternative"
 
 # Mechanism families per obstacle class (the analysis-target / attack-surface
 # axis — NOT tool failures). The tuple is the class's family pool, in
-# enumeration order. interception is the issue #234 example, verbatim.
+# enumeration order. interception is the issue 234 example, verbatim.
 OBSTACLE_CLASS_FAMILIES: dict[str, tuple[str, ...]] = {
     "interception": ("hooking", "repackaging", "ca-install",
                      "proxy-interposition"),
@@ -123,7 +123,7 @@ def ladder_defects(ladder: dict | None,
     Valid means: every level T1..T3 is covered; every rung's family is in
     the class's mechanism-family enumeration; NO family repeats (two
     same-family rungs -> the ladder is invalid — levels are
-    mechanism-family distinct BY CONSTRUCTION, issue #234 acceptance).
+    mechanism-family distinct BY CONSTRUCTION, issue-234 acceptance).
     Instrument availability is never read here (annotation, not filter).
     """
     if not isinstance(ladder, dict):
@@ -218,7 +218,7 @@ def _sibling_exists(claims: list, obstacle_claim_id: str,
 
 
 def _class_defects(claim: dict | None, ladder: dict | None) -> list[str]:
-    """The class-authority defects (#234 review F2): the authoritative
+    """The class-authority defects (issue 234, review F2): the authoritative
     obstacle_class lives on the PARENT CLAIM — pinned at promotion time by
     failure_analysis_gate._promote_obstacle_claim (--obstacle-class) — and
     the artifact must DECLARE and MATCH it. The model that authors the
@@ -285,7 +285,7 @@ def settlement_blocker(ws: Path, claim_id: str,
         return (f"TARGET LADDER GATE: obstacle claim {claim_id} exhaustion "
                 f"inventory empty — list what was tried per rung "
                 f"({ladder_path(ws, claim_id)} inventory)")
-    # review r2 (same class as the #237 H1 two-read seam): the sibling
+    # review r2 (same class as the 237 H1 two-read seam): the sibling
     # checks consume the SAME parsed register as the origin/class lookup —
     # the caller's snapshot when register_text was supplied, else the one
     # file read above. No second read, no TOCTOU window.
@@ -300,7 +300,7 @@ def settlement_blocker(ws: Path, claim_id: str,
 
 
 def mint_sibling_claims(ws: Path, obstacle_claim_id: str) -> dict:
-    """Auto-register one strategy sibling per inventory entry (#234).
+    """Auto-register one strategy sibling per inventory entry (issue 234).
 
     Same construction as _promote_obstacle_claim: OPEN claim,
     depends_on the parent, answers_question inherited, a real
@@ -415,7 +415,7 @@ def _ensure_dep_edge(ws: Path, parent_id: str, child_id: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="target_ladder.py",
-        description="#234 target/attack-surface ladder: settlement predicate "
+        description="Target/attack-surface ladder (issue 234): settlement predicate "
                     "+ strategy fan-out for obstacle claims")
     parser.add_argument("workspace", help="workspace root (claim-register.yaml)")
     parser.add_argument("--check", metavar="C-NN",
