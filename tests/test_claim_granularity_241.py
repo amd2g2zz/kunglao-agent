@@ -533,9 +533,11 @@ def test_pre_check_battery_rejects_granularity(tmp_path, capsys):
     """Wiring: the granularity check sits in the pre_check battery at the
     plan-check point; a monolithic re-dispatch exits 2 with REJECT
     granularity and the split guidance on the reject channel. The seeded
-    plan carries its dispatch-anchor provenance (issue-57 gate 3) so the PLAN
-    gate passes and the rejection lands on granularity — provenance is
-    checked first by battery order."""
+    plan carries its dispatch-anchor provenance (issue-57 gate 3) AND
+    per-step if-fails branches (the issue-271 contingency face lives in
+    the plan gate, which runs first — plan-content defects are the plan
+    gate's; granularity reads a plan that already passed them) so the
+    rejection lands on granularity."""
     import worker_budget_sinks as sinks
     ws = tmp_path / 'ws'
     paths = _min_paths(ws)
@@ -545,7 +547,15 @@ def test_pre_check_battery_rejects_granularity(tmp_path, capsys):
     anchor_ts = json.loads(
         (ws / 'runs' / '.dispatch-anchor-C001.jsonl')
         .read_text(encoding='utf-8').splitlines()[-1])['ts']
-    _seed_plan(ws, f'dispatch-anchor: {anchor_ts}\n' + _monolithic_12())
+    step_lines = [_static(i) for i in range(1, 5)] \
+        + [_dynamic(i) for i in range(1, 5)] \
+        + [_network(i) for i in range(1, 5)]
+    body = ''.join(
+        f'{i}. {s}\n   if-fails: {s[:24]} blocked -> pivot to the '
+        f'alternative arm\n' for i, s in enumerate(step_lines, 1))
+    _seed_plan(ws, f'dispatch-anchor: {anchor_ts}\n'
+               'goal: reverse the core\nsteps:\n' + body
+               + 'fallback: rerun with logs\n')
     rc = sinks.pre_check(_payload(_dispatch_prompt()), paths)
     captured = capsys.readouterr()
     assert rc == 2, captured.err
