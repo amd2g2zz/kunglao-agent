@@ -27,3 +27,10 @@ tests/conftest.py 定义同 5 个夹具，根副本 golden_master 裸 text=True 
 GBK 陷阱（删 tests/conftest.py 的方案已被仲裁否决）。已按仲裁执行：根
 conftest.py 删除 5 个被遮蔽夹具定义（保留 #369 锁 + #770 守卫），全部夹具
 单源于 tests/conftest.py（其 golden_master 带 #317 errors="replace" 修复）。
+
+## Post-audit drift note (2026-09-18, issue #262)
+
+规格中的 `scripts/utf8_boot.py::force_utf8()`（CLI 入口双保险）已在 #189
+（commit b7871ab）随文件删除；函数现位于 `scripts/_boot.py:37`
+（force_utf8）/ `:56`（ensure_utf8_stderr）。能力本身完好
+（PYTHONUTF8=1 注入仍于 hook_activation.py:518 在位），仅路径漂移，特此注记。
