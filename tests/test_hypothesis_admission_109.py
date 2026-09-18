@@ -140,9 +140,9 @@ class TestFirstDispatchAdmission:
             f"the REJECT face must carry the #55 producer tag; "
             f"stdout={r.stdout!r}")
         assert "q1" in r.stdout, f"repair text must name the PQ; {r.stdout!r}"
-        assert ("file ≥2 competing candidates for q1, each naming its "
-                "falsifier") in r.stdout, (
-            f"repair path must carry the #109 wording; stdout={r.stdout!r}")
+        assert ("mint >=2 competing family arms for q1") in r.stdout, (
+            f"repair path must name the issue 252 mint face; "
+            f"stdout={r.stdout!r}")
 
     def test_absent_hypotheses_dir_rejects(self, tmp_path) -> None:
         """No hypotheses/ at all = zero candidates — same REJECT (the layer
@@ -239,6 +239,60 @@ class TestAdmissionSatisfied:
         _write_hyp(ws, "H-002", candidates=["ChaCha20"], group="pq:q1")
         r = _run_gate(root, ws, _PROMPT)
         assert r.returncode == 0, f"stderr={r.stderr!r}"
+
+    def test_minted_family_arms_admit_first_dispatch(self, tmp_path) -> None:
+        """issue 252 (review F1): the sanctioned post-bridge state is
+        SWEPT — candidate strings drained into claim-register arms. The
+        admission read counts minted family arms, so the arm-mint path
+        passes first dispatch on a lint-clean workspace without parking
+        any string (the old repair text's banned representation)."""
+        import sys as _sys
+        root = tmp_path
+        ws = _mk_ws(root)
+        _write_hyp(ws, "H-001", candidates=[])  # drained scaffold (E1-clean)
+        scripts = str(REPO_ROOT / "scripts")
+        if scripts not in _sys.path:
+            _sys.path.insert(0, scripts)
+        import hypothesis_bridge as hb
+        import priority_ratio as pr
+        r = hb.mint_family_arms(ws, "H-001",
+                                ["AES-CBC", "custom-rolling-mac"],
+                                answers_question="q1")
+        assert r["refused"] is None, r
+        assert hb.check_bridge_lint(ws) == [], "lint-clean by construction"
+        # dispatch the deterministically top-ranked claim (the arms ARE
+        # TS-samplable — the production flow dispatches rank one); the
+        # seeded rng makes this stable.
+        reg_doc = yaml.safe_load(
+            (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
+        claims = reg_doc.get("claims") or []
+        deps = yaml.safe_load(
+            (ws / "claim_deps.yaml").read_text(encoding="utf-8")) or {}
+        ranked = pr.priority_ratio(claims, deps,
+                                   pr.EvidenceView.from_workspace(ws))
+        top = ranked[0].claim_id
+        gate = _run_gate(root, ws, f"[T1 tools=Read,Write] claim {top} "
+                                   f"probe the header mac path")
+        assert gate.returncode == 0, (
+            f"a minted-arm workspace must pass first dispatch; "
+            f"stderr={gate.stderr!r}")
+
+    def test_single_family_arm_still_rejects(self, tmp_path) -> None:
+        """The bar is on COMPETING explanations, not representation: one
+        arm alone does not admit (anchoring risk unchanged). Admission
+        precedes top1, so the REJECT is the issue 109 face."""
+        import sys as _sys
+        root = tmp_path
+        ws = _mk_ws(root)
+        _write_hyp(ws, "H-001", candidates=[])
+        scripts = str(REPO_ROOT / "scripts")
+        if scripts not in _sys.path:
+            _sys.path.insert(0, scripts)
+        import hypothesis_bridge as hb
+        hb.mint_family_arms(ws, "H-001", ["AES-CBC"])
+        r = _run_gate(root, ws, _PROMPT)
+        assert r.returncode == 2, "one arm is not a competition"
+        assert "REJECT hypothesis_admission" in r.stderr, r.stderr
 
 
 # ---------- AC 3: second dispatch on the same PQ is unrestricted ---------

@@ -809,7 +809,7 @@ def _plan_drift_auto(ws: Path, claim_id: str, prompt_text: str,
     except Exception:  # noqa: BLE001 — registry unavailable: degraded copy
         # of the documented trio (hook crash-safety, NOT a second authority;
         # contracts.py owns the value — #102).
-        PLAN_DRIFT_AUTO_RCS = frozenset({0, 2, 3})
+        PLAN_DRIFT_AUTO_RCS = frozenset({0, 2, 3})  # noqa: F841 — fallback binding
     try:
         proc = _sp.run(
             [sys.executable, str(script), str(ws), "--auto"],
@@ -1344,10 +1344,14 @@ def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
     Trigger: the target claim's answers_question names a task_spec
     primary_question AND that PQ is being dispatched for the FIRST time
     (no claim-keyed dispatch-history row answers it yet). The check: the
-    hypothesis layer (#528 store) must hold >= 2 non-adjudicated candidates
-    for the PQ — the #412 seeding contract's "orchestrator fills candidates
-    BEFORE dispatching the first C-NN", now enforced on the one
-    un-bypassable face. Subsequent dispatches on the same PQ are
+    hypothesis layer must hold >= 2 competing explanations for the PQ —
+    counted across BOTH faces since the issue 252 bridge: minted family
+    arm claims (competitor_group hyp-<H-id> bound to the PQ scaffold) and
+    parked store candidate strings (transitional; the cold-start sweep
+    converts strings into arms). The issue 412 seeding contract's
+    "competing explanations BEFORE dispatching the first C-NN", enforced
+    on the one un-bypassable face against the sanctioned representation.
+    Subsequent dispatches on the same PQ are
     unrestricted: the first hypothesis round supplies the prior.
     Parks/reinstatements are unaffected (answers_question null -> silent).
 
@@ -1369,6 +1373,22 @@ def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
         candidates = hs.open_candidates_for_question(
             hs.HypothesisStore(ws / "hypotheses").list_all(), qid,
             claim_question)
+        # issue 252: family ARMS are the sanctioned competing-explanation
+        # representation — the bridge sweep drains parked strings and the
+        # no-orphan lint bans re-parking them, so admission counts the
+        # minted arm claims too (strings + arms, transitional; a
+        # sweep-drained workspace passes through minted arms alone).
+        with scripts_on_path():
+            import hypothesis_bridge as hb
+        try:
+            reg_claims = (yaml.safe_load(
+                (ws / "claim-register.yaml").read_text(encoding="utf-8"))
+                or {}).get("claims") or []
+        except Exception:  # noqa: BLE001 — unreadable register -> no arms
+            reg_claims = []
+        arms = hb.open_family_arms_for_question(
+            reg_claims, hs.HypothesisStore(ws / "hypotheses").list_all(),
+            qid, claim_question)
     except Exception as exc:  # noqa: BLE001 — #103 tiering: store outage
         # must not block. WARN + trace, dispatch proceeds unadmitted.
         print(
@@ -1381,28 +1401,30 @@ def _hypothesis_admission(ws: Path, claim_id: str, payload: dict,
                     f"qid={qid}; reason=store_read_failed; "
                     f"exc={type(exc).__name__}: {exc}", trace_id=trace_id)
         return None
-    if len(candidates) >= MIN_ADMITTED_CANDIDATES:
+    if len(set(candidates) | set(arms)) >= MIN_ADMITTED_CANDIDATES:
         return None
     # #459: the REJECT face reaches the unified log like top1/capability.
     _emit_trace(ws, "hypothesis_admission_reject", claim_id,
-                f"qid={qid}; candidates={len(candidates)}; "
+                f"qid={qid}; candidates={len(candidates)}; arms={len(arms)}; "
                 f"need>={MIN_ADMITTED_CANDIDATES}", exit_code=2,
                 trace_id=trace_id)
     return _reject_with_guidance(
         "hypothesis_admission",
         f"{claim_id} answers {qid}, but the hypothesis layer holds only "
-        f"{len(candidates)} non-adjudicated candidate(s) for {qid} — the "
-        f"first dispatch into a PQ neighborhood requires competing "
-        f"explanations (anchoring risk is highest exactly when the system "
-        f"knows least; a single-hypothesis entry is how edge findings get "
-        f"chased as major ones).",
-        f"file ≥2 competing candidates for {qid}, each naming its falsifier "
-        f"(what observation would eliminate it — the falsifier-library "
-        f"semantics: a candidate that cannot say what would kill it is an "
-        f"opinion, not a candidate): fill `candidates:` "
-        f"on the open `pq:{qid}` scaffold hypothesis in hypotheses/ (or "
-        f"file one hypothesis per competitor via hypothesis_store), then "
-        f"re-dispatch.", issue="109")
+        f"{len(set(candidates) | set(arms))} competing explanation(s) for "
+        f"{qid} — the first dispatch into a PQ neighborhood requires "
+        f"competing explanations (anchoring risk is highest exactly when "
+        f"the system knows least; a single-hypothesis entry is how edge "
+        f"findings get chased as major ones).",
+        f"mint >=2 competing family arms for {qid} via "
+        f"`python scripts/hypothesis_bridge.py {ws} --mint <H-ID> "
+        f"'<candidate 1>,<candidate 2>'` (the sanctioned representation — "
+        f"each arm enters claim-register.yaml as a TS-samplable claim "
+        f"with the family linkage), or file one OPEN hypothesis per "
+        f"competitor via hypothesis_store, then re-dispatch. (Filling "
+        f"`candidates:` on the `pq:{qid}` scaffold also counts, "
+        f"transitionally — the cold-start sweep converts strings into "
+        f"arms.)", issue="109")
 
 
 # ===================== #772 redo-leak WARN (L4) =====================

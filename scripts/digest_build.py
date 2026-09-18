@@ -294,6 +294,32 @@ def build_digest(ws: Path) -> str:
         seed_case_candidates(ws)
     except Exception:  # noqa: BLE001 — priors never block cold start
         pass
+    # ---- issue 252: pay parked candidate strings into the claim economy --
+    # The bridge sweep mints every candidate string still parked in
+    # hypotheses/ as a family arm claim and clears the string (one
+    # representation). Fail-open: a bridge failure must never block the
+    # digest — the strings stay parked and the bridge lint names them.
+    # The lint then runs HERE (the cold-start face) — E1 parked strings /
+    # E2 orphan family files / E2b namespace capture / E3 ledger-derivation
+    # divergence surface on every cold start, not only via the CLI.
+    try:
+        from hypothesis_bridge import (check_bridge_lint,
+                                       mint_pending_candidates)
+        mint_pending_candidates(ws)
+        findings = check_bridge_lint(ws)
+        if findings:
+            try:
+                from kunglao_log import emit
+                emit(ws, actor="digest_build", action="bridge_lint_findings",
+                     detail="; ".join(findings[:10]))
+            except Exception:  # noqa: BLE001 — observability never raises
+                pass
+            print(f"digest_build: WARN hypothesis-bridge lint: "
+                  f"{'; '.join(findings[:5])}"
+                  f"{' …' if len(findings) > 5 else ''}",
+                  file=sys.stderr, flush=True)
+    except Exception:  # noqa: BLE001 — the sweep never blocks cold start
+        pass
     # ---- sec_g: open hypotheses (#528) — FAIL-OPEN ----
     # A hypotheses-layer failure must never block cold start: the digest
     # degrades to the pre-#528 six-section shape instead of raising
