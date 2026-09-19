@@ -25,11 +25,9 @@ files:
   scripts/acceptance_check.py: 4
   scripts/apkid_scanner.py: 1
   scripts/ask_for_direction_gate.py: 1
-  scripts/backtrack_loop.py: 9
   scripts/bench_answer_key.py: 1
   scripts/blind_gate.py: 1
   scripts/completion_gate.py: 2
-  scripts/convergence_check.py: 10
   scripts/convergence_health.py: 1
   scripts/dead_letter.py: 1
   scripts/digest_build.py: 3
@@ -43,7 +41,6 @@ files:
   scripts/external_kicker.py: 4
   scripts/failure_analysis_gate.py: 4
   scripts/gate_telemetry.py: 1
-  scripts/heartbeat_tick.py: 9
   scripts/hook_activation.py: 6
   scripts/hooks_selfcheck.py: 1
   scripts/hypothesis_seeder.py: 4
@@ -79,7 +76,6 @@ files:
   scripts/rho_verifier.py: 2
   scripts/rollup.py: 1
   scripts/route_capability.py: 2
-  scripts/statusline_snapshot.py: 10
   scripts/think_seat.py: 3
   scripts/tool_tiers.py: 1
   scripts/toolchain.py: 1

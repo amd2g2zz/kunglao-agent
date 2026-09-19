@@ -102,6 +102,33 @@ from entropy_face import SNAPSHOT_REL
 # heartbeat tick report carries the same computed values).
 from rank_face import face as _rank_face
 
+# issue 275 batch-2, both trace arms (issue 275 allows emit / sidecar /
+# rate-limited WARN): absent-source degradations are NORMAL in an idle
+# workspace, and this module's writes are hook-embedded (token-zero
+# contract — hook stderr must stay empty on a healthy write), so those ride
+# the SNAPSHOT ITSELF as a bounded sidecar (_note, keyed by op, drained
+# into the "degraded" field by build_snapshot — the kunglao_log
+# null_reasons precedent). Fault-class degradations (a real crash, not a
+# missing file) keep the rate-limited stderr WARN (warn — the _zof_warn
+# pattern of issue 276; one ws per process, so op is the key).
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] statusline_snapshot WARN (fail-open): "
+          f"{op}: {reason}", file=sys.stderr)
+
+
+_DEGRADED: dict[str, str] = {}
+
+
+def _note(op: str, reason: str) -> None:
+    if op not in _DEGRADED:
+        _DEGRADED[op] = reason
+
 # #142: snapshot schema version — 2 adds the producer-owned v2 fields
 # (v_hist / h_bits / h_trend / health / now / pq_rows / difficulty and the
 # phase-2 placeholder slots). No-backcompat policy: readers probe the field
@@ -313,8 +340,9 @@ def probe_hooks_declared(ws: Path, entry: dict) -> dict:
                     c = h.get("command", "")
                     if isinstance(c, str):
                         cmds.append(c)
-    except (OSError, ValueError):
-        pass  # unreadable settings == nothing declared
+    except (OSError, ValueError) as exc:
+        # unreadable/absent settings == nothing declared (normal state)
+        _note("hooks_declared_read", f"{type(exc).__name__}: {exc}")
     # test seam: module global overrides the deployment-dir candidates
     candidates = [Path(d) for d in (_hook_candidates
                                     or [ws / ".claude" / "hooks"])]
@@ -519,8 +547,9 @@ def _mission_state(ws: Path) -> dict:
             out["elapsed_ticks"] = len(vm_hist)
             first_ts = hist[0].get("ts") if isinstance(hist[0], dict) else None
             out["started_ts"] = first_ts
-    except (OSError, yaml.YAMLError, TypeError, ValueError):
-        pass  # no/old ledger -> zeros (idle-dim workspace)
+    except (OSError, yaml.YAMLError, TypeError, ValueError) as exc:
+        # no/old ledger -> zeros (idle-dim workspace); sidecar names it
+        _note("mission_state_read", f"{type(exc).__name__}: {exc}")
     return out
 
 
@@ -652,8 +681,8 @@ def _now_chip(ws: Path) -> dict:
                 op = steps[-1].strip()[:NOW_OP_MAX_CHARS]
         if claim is None:
             claim = _last_dispatch_claim(ws)
-    except Exception:  # noqa: BLE001 — 快照永不打断 tick
-        pass
+    except Exception as exc:  # noqa: BLE001 — 快照永不打断 tick
+        warn("now_chip_scan", f"{type(exc).__name__}: {exc}")
     return {"claim": claim, "op": op}
 
 
@@ -673,8 +702,8 @@ def _pq_detail(ws: Path) -> list[dict]:
                 cov = 0.0
             rows.append({"id": str(p.get("id")), "state": p.get("state"),
                          "coverage": cov})
-    except (OSError, yaml.YAMLError, TypeError):
-        pass
+    except (OSError, yaml.YAMLError, TypeError) as exc:
+        _note("pq_rows_read", f"{type(exc).__name__}: {exc}")
     return rows
 
 
@@ -717,8 +746,8 @@ def _difficulty_face(ws: Path) -> dict | None:
                     "score": (round(float(score), 4)
                               if score is not None else None),
                     "source": "raw-signals"}
-    except Exception:  # noqa: BLE001 — a face never breaks the snapshot
-        pass
+    except Exception as exc:  # noqa: BLE001 — a face never breaks the snapshot
+        warn("difficulty_raw", f"{type(exc).__name__}: {exc}")
     return None
 
 
@@ -756,15 +785,16 @@ def _perf_face(ws: Path) -> dict:
                 or (f.get("overall") or {}).get("rate")
             out["win_rate"] = (round(float(rate), 4)
                                if rate is not None else None)
-    except Exception:  # noqa: BLE001 — a face never breaks the snapshot
-        pass
+    except Exception as exc:  # noqa: BLE001 — a face never breaks the snapshot
+        warn("winrate_face", f"{type(exc).__name__}: {exc}")
     try:
         hb = ws / "runs" / ".heartbeat.json"
         out["heartbeat_age_min"] = round(max(
             0.0, (datetime.datetime.now(datetime.timezone.utc).timestamp()
                   - hb.stat().st_mtime) / 60), 2)
-    except OSError:
-        pass
+    except OSError as exc:
+        # absent heartbeat file = pre-first-touch (normal); sidecar names it
+        _note("heartbeat_age", f"{type(exc).__name__}: {exc}")
     try:
         from _hooks_path import load_hooks_lib
         lib = load_hooks_lib()
@@ -778,8 +808,8 @@ def _perf_face(ws: Path) -> dict:
                           "last_activity_age_s": (round(
                               (now_dt - last).total_seconds(), 1)
                               if last is not None else None)}
-    except Exception:  # noqa: BLE001 — a face never breaks the snapshot
-        pass
+    except Exception as exc:  # noqa: BLE001 — a face never breaks the snapshot
+        warn("workers_face", f"{type(exc).__name__}: {exc}")
     return out
 
 
@@ -871,6 +901,7 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     ws = Path(ws)
     now = now or datetime.datetime.now(datetime.timezone.utc)
     now_s = now.timestamp()
+    _DEGRADED.clear()  # sidecar drain: one build owns one degradation set
     prev = _read_prev(ws)
     open_claims, failed_claims = _claims_state(ws)
     ctx = {"open_claims": open_claims, "now": now}
@@ -922,8 +953,9 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
     try:
         audit_age_min = int((now_s - (ws / "runs" / ".hooks-selfcheck.json")
                              .stat().st_mtime) / 60)
-    except OSError:
-        pass
+    except OSError as exc:
+        # absent artifact = "no audit artifact yet" fail-open (probe contract)
+        _note("audit_age", f"{type(exc).__name__}: {exc}")
 
     # #142 v2 producer-owned fields — each traced to its disk observation,
     # each fail-open (the snapshot never breaks the tick / the touch).
@@ -955,6 +987,10 @@ def build_snapshot(ws: Path, now: datetime.datetime | None = None) -> dict:
         "color": dict(STATE_COLORS[state]),
         "probe_codes": codes,
         "probe_detail": probe_detail,
+        # issue 275 sidecar arm: absent-source degradations named here
+        # (additive field — readers probe the field set, never a version
+        # ladder); absent key pre-batch = no degradation rode the snapshot.
+        "degraded": dict(_DEGRADED),
         "pq": pq,
         "v_m": pq["v_m"],
         "v_norm": pq["v_norm"],
@@ -1015,8 +1051,8 @@ def write_snapshot(ws: Path, now: datetime.datetime | None = None) -> Path:
                              {"state": snap["state"], "schema": snap["schema"],
                               "tick": snap["tick"], "codes": snap["probe_codes"]},
                              ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — logging never breaks the write
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging never breaks the write
+        warn("snapshot_emit", f"{type(exc).__name__}: {exc}")
     return out
 
 

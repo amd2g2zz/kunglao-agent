@@ -79,6 +79,22 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 
 from harness_common import utc_now_z as utc_now  # #863 Family F: single source (was a local def)
 
+# issue 275 batch-2: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace — a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] backtrack_loop WARN (fail-open): {op}: {reason}",
+          file=sys.stderr)
+
+
 
 def _parse_ts(value) -> float | None:
     """ISO8601 Z -> epoch seconds; None on anything unparseable."""
@@ -121,8 +137,8 @@ def scene_operation_key(ws: Path, claim_id: str | None) -> tuple[str, str]:
     try:
         import tool_tiers
         scene = tool_tiers.scene_for(ws)
-    except Exception:  # noqa: BLE001 — scene sniff is best-effort
-        pass
+    except Exception as exc:  # noqa: BLE001 — scene sniff is best-effort
+        warn("scene_sniff", f"{type(exc).__name__}: {exc}")
     try:
         data = yaml.safe_load(
             (ws / "claim-register.yaml").read_text(encoding="utf-8")) or {}
@@ -134,8 +150,8 @@ def scene_operation_key(ws: Path, claim_id: str | None) -> tuple[str, str]:
                 if op:
                     operation = op
                 break
-    except (OSError, yaml.YAMLError):
-        pass
+    except (OSError, yaml.YAMLError) as exc:
+        warn("register_read", f"{type(exc).__name__}: {exc}")
     return scene, operation
 
 
@@ -335,8 +351,8 @@ def settlement_retro(ws: Path, claim_id: str, *, to: str, frm: str | None =
                              detail=json.dumps(
                                  {"detector": "fake_success",
                                   "to": str(to)}, ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — telemetry never breaks settlement
-        pass
+    except Exception as exc:  # noqa: BLE001 — telemetry never breaks settlement
+        warn("detector_emit", f"{type(exc).__name__}: {exc}")
     # #127: the flag joins the O(1) micro-retro index — the dispatch face's
     # 前车之鉴 block is the consumed surface (the retro .md alone had zero
     # consumers). Fail-open: bookkeeping never breaks settlement.
@@ -384,8 +400,8 @@ def settlement_retro(ws: Path, claim_id: str, *, to: str, frm: str | None =
                          detail=json.dumps({"to": to, "frm": frm,
                                             "fake_success": len(flags)},
                                            ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — logging never breaks settlement
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging never breaks settlement
+        warn("retro_report_emit", f"{type(exc).__name__}: {exc}")
     return doc
 
 
@@ -405,14 +421,14 @@ def policy_due(ws: Path, n: int = POLICY_EVERY_N_SETTLEMENTS) -> dict:
         import mission_stall
         if mission_stall.stall_mission(ws).get("stalled"):
             why.append("mission stall fingerprint tripped (dV_m flat x K)")
-    except Exception:  # noqa: BLE001 — a gate source must never raise
-        pass
+    except Exception as exc:  # noqa: BLE001 — a gate source must never raise
+        warn("mission_stall_gate", f"{type(exc).__name__}: {exc}")
     try:
         import plan_stages
         if plan_stages.should_review(ws).get("due"):
             why.append("plan_review ritual due (plan_stages.should_review)")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception as exc:  # noqa: BLE001 — a gate source must never raise
+        warn("plan_review_gate", f"{type(exc).__name__}: {exc}")
     return {"due": bool(why), "why": why}
 
 
@@ -532,8 +548,8 @@ def _seed_hypotheses(ws: Path, repeated: list[dict]) -> list[dict]:
                              claim=sig["last_claim"], artifact=hyp.id,
                              detail=json.dumps({"key": sig["key"]},
                                                ensure_ascii=False))
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001 — telemetry never breaks the retro
+            warn("hypothesis_seed_emit", f"{type(exc).__name__}: {exc}")
         seeded.append({"id": hyp.id, "key": sig["key"]})
     return seeded
 
@@ -716,8 +732,8 @@ def run_policy_retro(ws: Path, now: datetime | None = None) -> dict:
                               "proposals": len(proposals),
                               "seeds": len(seeds)},
                              ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — logging never breaks the retro
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging never breaks the retro
+        warn("retro_policy_emit", f"{type(exc).__name__}: {exc}")
     _write_json_atomic(ws / STATE_REL,
                        {"settlements_since_retro": 0,
                         "last_retro_ts": utc_now()})
@@ -732,8 +748,9 @@ def run_policy_retro(ws: Path, now: datetime | None = None) -> dict:
 def main(argv: list[str] | None = None) -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        pass  # captured stream without reconfigure (pytest capsys)
+    except (AttributeError, ValueError) as exc:
+        # captured stream without reconfigure (pytest capsys) tolerated
+        warn("stdout_reconfigure", f"{type(exc).__name__}: {exc}")
     args = sys.argv[1:] if argv is None else argv
     if "--policy" in args:
         rest = args[args.index("--policy") + 1:]

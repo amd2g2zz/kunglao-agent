@@ -163,7 +163,7 @@ files:
   - src: scripts/backtrack_loop.py
     dest: .claude/scripts/backtrack_loop.py
     kind: scaffold
-    sha256: c51285965cc3ae8188b5b18f49d1a470320876425482c9522a9d4091d19dbd48
+    sha256: d95c42afd313b5d403c93d6274f5d21e5a29c739cf156884b06f8465f1a119ab
   - src: scripts/bench_analyze.py
     dest: .claude/scripts/bench_analyze.py
     kind: scaffold
@@ -247,7 +247,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: 066c449203e3bda273291a5d470e974fa9be54b260fb8accffddad9db4fd8fd0
+    sha256: a55856bd3bb13b240a17a91527ea887b233d66debb2e5e0952899cd417efe6b7
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -383,7 +383,7 @@ files:
   - src: scripts/heartbeat_tick.py
     dest: .claude/scripts/heartbeat_tick.py
     kind: scaffold
-    sha256: adcee8d1d02cafab763c197ae6bb2d6f00e920af072d85c2a4cde576a5a4986f
+    sha256: cea0f49681bb7debdcdaf698820c6fa954b3f53c1f199613854b70eb65751310
   - src: scripts/heartbeat_touch.py
     dest: .claude/scripts/heartbeat_touch.py
     kind: scaffold
@@ -767,7 +767,7 @@ files:
   - src: scripts/statusline_snapshot.py
     dest: .claude/scripts/statusline_snapshot.py
     kind: scaffold
-    sha256: 19c4b19eeb73017df62bb6f967f5c6073080f2994367a45332a4fedf726e46f1
+    sha256: e5a5c5bc003b1f88ed93e17343b1547f8048b49519d5cccf35e42f2a38c07790
   - src: scripts/structural_check.py
     dest: .claude/scripts/structural_check.py
     kind: scaffold
