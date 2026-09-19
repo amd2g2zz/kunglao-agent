@@ -330,9 +330,9 @@ files:
     r1: 1
   tests/_factories.py:
     r1: 5
-  tests/conftest.py:
-    r1: 1
   tests/_tiers.py:
+    r1: 1
+  tests/conftest.py:
     r1: 1
   tests/experiment_difficulty_15.py:
     r1: 1
@@ -860,7 +860,7 @@ files:
   tests/test_no_cti_agents.py:
     r1: 1
   tests/test_no_tracked_ignored_files.py:
-    r1: 5
+    r1: 4
   tests/test_normalize_trace.py:
     r1: 1
   tests/test_notes_closure_762.py:
@@ -1046,6 +1046,8 @@ files:
     r1: 2
   tests/test_session_start_notice_25.py:
     r1: 1
+  tests/test_settle_by_need.py:
+    r1: 1
   tests/test_shell_defaults.py:
     r1: 1
   tests/test_skill_contract.py:
@@ -1072,8 +1074,6 @@ files:
   tests/test_static_tools_1c.py:
     r1: 2
   tests/test_status_contract_607.py:
-    r1: 1
-  tests/test_settle_by_need.py:
     r1: 1
   tests/test_status_defs.py:
     r1: 2
