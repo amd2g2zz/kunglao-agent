@@ -732,6 +732,20 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         depends_on = {c["id"]: list(c.get("depends_on") or [])
                       for c in claims if c.get("id") and c.get("depends_on")}
     terminal = evidence.terminal_fact_claims
+    # issue 241 (review round 1, CRITICAL): replacement lineage satisfies the
+    # dep gate alongside the facts face. A parent carrying `superseded_by` is
+    # terminal by replacement (status_defs SUPERSEDED / issue 59) — its scope
+    # lives in the successors, so its dependents must rank. This is a REGISTER
+    # consult, deliberately NOT folded into EvidenceView: the facts index is
+    # the evidence channel and its zero-rows fallback (issue 594) keeps its
+    # semantics; supersession is lineage, never an evidence artifact. The
+    # mint_split_claims fan-out writes exactly this shape (parent SUPERSEDED
+    # + superseded_by = sub ids, register only) — without this consult the
+    # split's sub-claims stay dep-blocked forever in any workspace whose
+    # facts index already carries a terminal row (settled subs cite subs,
+    # never the parent — the block would never lift).
+    superseded = {c["id"] for c in claims
+                  if c.get("id") and c.get("superseded_by")}
 
     # dispatchable candidates: OPEN + attempts<3 + all depends_on terminal
     candidates: list[dict] = []
@@ -742,7 +756,7 @@ def priority_ratio(claims: list[dict], deps: dict, evidence: EvidenceView,
         if attempts_of(c) >= 3:  # #103: dirty value → 0, never a row-crash
             continue
         parents = depends_on.get(cid, []) or []
-        if any(p not in terminal for p in parents):
+        if any(p not in terminal and p not in superseded for p in parents):
             continue
         candidates.append(c)
 

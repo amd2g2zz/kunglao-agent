@@ -647,6 +647,18 @@ def _plan_is_empty_shell(text: str) -> bool:
     return not remaining
 
 
+def _prompt_plan_ref(key: str, prompt: str) -> str | None:
+    """The claim's plan path referenced in a dispatch prompt — the #239
+    plan-naming contract, single source (the granularity gate reads the
+    same face on the re-dispatch-continuity leg)."""
+    m = re.search(
+        rf'plan-[{key[0]}{key[0].lower()}]{re.escape(key[1:])}'
+        r'(?:\.md|[-_][A-Za-z0-9._-]*\.md)',
+        prompt,
+    )
+    return m.group(0) if m else None
+
+
 def _plan_contingency_violations(plan_text: str) -> list[str]:
     """#250: per-step if-fails violations of a plan document.
 
@@ -711,64 +723,54 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
                        f'runs/plan-{key}*.md with its dispatch-anchor '
                        f'provenance line; the plan is required from the '
                        f'NEXT dispatch on)'))
-    runs = Path(ws) / 'runs'
-    if runs.is_dir():
-        # uppercase + lowercase variants (Windows globs are case-insensitive,
-        # POSIX are not — cover both so the gate is portable)
-        hits = []
-        for pat in (f'plan-{key}.md', f'plan-{key}-*.md',
-                    f'plan-{key.lower()}.md', f'plan-{key.lower()}-*.md'):
-            hits.extend(sorted(runs.glob(pat)))
-        if hits:
-            plan_path = hits[0]
-            try:
-                # utf-8-sig: strips a UTF-8 BOM so a PowerShell/Notepad-written
-                # template cannot smuggle '﻿goal:' past the empty-shell check.
-                plan_text = plan_path.read_text(encoding='utf-8-sig', errors='replace')
-            except OSError:
-                # unreadable (locked / directory shadowing the name) — fail
-                # OPEN with an honest note; a misleading empty-shell reject
-                # would blame the worker for a system error.
-                return (True, f'plan file exists (unreadable, content not '
-                              f'verified): {plan_path.name}')
-            if _plan_is_empty_shell(plan_text):
-                return (False, (
-                    f'{plan_path.name} is an empty-shell template (goal/preflight/'
-                    f'steps/fallback all bare, no content) - the worker must '
-                    f'author its plan (kunglao-worker.md golden rule #3), '
-                    f'then re-dispatch'
-                ))
-            # #250: per-step contingency — the plan schema graduates from
-            # one tail hatch to per-step branches. A plan whose ENUMERATED
-            # steps carry no if-fails branch is a linear happy-path pipeline
-            # (every step assumes the previous succeeded). Legacy inline
-            # plans (zero enumerated entries) pass unchanged.
-            contingencies = _plan_contingency_violations(plan_text)
-            if contingencies:
-                return (False, (
-                    f'{plan_path.name} is a linear happy-path plan '
-                    f'({"; ".join(contingencies[:3])}) - the worker must add '
-                    f'a per-step "if-fails: <condition> -> <action>" branch '
-                    f'under each enumerated step (issue #250: real RE is a '
-                    f'tree; dead-ends are expected structure, not an '
-                    f'afterthought)'))
-            # #57 gate 3: plan-author — a re-dispatch's plan must carry
-            # worker-session evidence (authored after a prior dispatch).
-            # Armed here by construction: a re-dispatch implies the anchor
-            # log has rows (see above).
-            violation = plan_author_violation(plan_path, plan_text,
-                                              Path(ws), key, prompt)
-            if violation:
-                return (False, violation)
-            return (True, f'plan file exists: {plan_path.name}')
+    # plan discovery: the #239 plan-naming contract, single source (#241).
+    from claim_granularity import plan_file
+    plan_path = plan_file(ws, cid)
+    if plan_path:
+        try:
+            # utf-8-sig: strips a UTF-8 BOM so a PowerShell/Notepad-written
+            # template cannot smuggle '﻿goal:' past the empty-shell check.
+            plan_text = plan_path.read_text(encoding='utf-8-sig', errors='replace')
+        except OSError:
+            # unreadable (locked / directory shadowing the name) — fail
+            # OPEN with an honest note; a misleading empty-shell reject
+            # would blame the worker for a system error.
+            return (True, f'plan file exists (unreadable, content not '
+                          f'verified): {plan_path.name}')
+        if _plan_is_empty_shell(plan_text):
+            return (False, (
+                f'{plan_path.name} is an empty-shell template (goal/preflight/'
+                f'steps/fallback all bare, no content) - the worker must '
+                f'author its plan (kunglao-worker.md golden rule #3), '
+                f'then re-dispatch'
+            ))
+        # #250: per-step contingency — the plan schema graduates from
+        # one tail hatch to per-step branches. A plan whose ENUMERATED
+        # steps carry no if-fails branch is a linear happy-path pipeline
+        # (every step assumes the previous succeeded). Legacy inline
+        # plans (zero enumerated entries) pass unchanged.
+        contingencies = _plan_contingency_violations(plan_text)
+        if contingencies:
+            return (False, (
+                f'{plan_path.name} is a linear happy-path plan '
+                f'({"; ".join(contingencies[:3])}) - the worker must add '
+                f'a per-step "if-fails: <condition> -> <action>" branch '
+                f'under each enumerated step (issue #250: real RE is a '
+                f'tree; dead-ends are expected structure, not an '
+                f'afterthought)'))
+        # #57 gate 3: plan-author — a re-dispatch's plan must carry
+        # worker-session evidence (authored after a prior dispatch).
+        # Armed here by construction: a re-dispatch implies the anchor
+        # log has rows (see above).
+        violation = plan_author_violation(plan_path, plan_text,
+                                          Path(ws), key, prompt)
+        if violation:
+            return (False, violation)
+        return (True, f'plan file exists: {plan_path.name}')
     if prompt:
-        m = re.search(
-            rf'plan-[{key[0]}{key[0].lower()}]{re.escape(key[1:])}'
-            r'(?:\.md|[-_][A-Za-z0-9._-]*\.md)',
-            prompt,
-        )
-        if m:
-            return (True, f'plan path referenced in dispatch prompt: {m.group(0)} '
+        ref = _prompt_plan_ref(key, prompt)
+        if ref:
+            return (True, f'plan path referenced in dispatch prompt: {ref} '
                           f'(re-dispatch continuity)')
     return (False, (f're-dispatch of {cid} beyond the planning round without a '
                     f'plan reference: no runs/plan-{key}*.md on disk and the '
@@ -777,6 +779,115 @@ def check_worker_plan(paths: dict, cid: str | None, prompt: str = '') -> tuple[b
                     f'rule #3: the worker\'s first sanctioned write is its own '
                     f'plan, citing its dispatch anchor; the in-prompt --plan '
                     f'reference is reserved for re-dispatch continuity)'))
+
+
+# ---------- #241: claim granularity (plan-size / domain-span) ----------
+# wbtest C-005 field evidence: a 12+-step plan hanging on ONE claim — the
+# plan-first gate reads EXISTENCE (+ #294 content + #57 provenance), never
+# SIZE or DOMAIN SPAN. Monolithic claims degrade every downstream channel
+# (spawn-recall = f(dispatch-text domain precision), evidence verification,
+# per-unit settlement, TS pricing granularity). The gate reuses the #234
+# fan-out machinery at CREATION time: scripts/claim_granularity.py holds the
+# pure predicate (granularity_defects) and the split mint
+# (mint_split_claims); this face arms it at the plan-check point of the
+# execution loop — post-#239, on the FIRST dispatch the worker has authored
+# no plan yet, so the gate arms on the approval-point log exactly like the
+# plan-first gate and fires from the NEXT dispatch on.
+
+
+def check_claim_granularity(paths: dict, cid: str | None,
+                            prompt: str = '') -> tuple[bool, str]:
+    """Issue #241: claim granularity discipline — the plan-size / domain-span
+    gate at the plan-check point of the execution loop.
+
+    Post-#239 contract: planning is the worker's first act. On the FIRST
+    dispatch (no prior approved dispatch in the approval-point anchor log)
+    the worker has authored no plan yet and the gate is NOT armed — the
+    same arming discipline as check_worker_plan. From the NEXT dispatch on,
+    the worker-authored plan is READ:
+      - step count > GRANULARITY_MAX_STEPS (8) -> monolithic; padded or
+        trivial steps ("wait"/"check") count toward K — no free passes;
+      - >= 2 distinct mechanism families with >= 2 steps each -> span.
+    Either defect REJECTS with the mechanical split directive naming the
+    mint entrypoint (scripts/claim_granularity.py --split), the parent
+    claim, and the observed domain split (#234 mechanism-family vocabulary
+    where it fits, inference-labelled otherwise). Sub-claims minted by
+    mint_split_claims carry depends_on edges + the domain_family tag and
+    enter the TS rank pool.
+
+    FAIL_OPEN: no claim, no workspace, no plan to inspect (the plan-first
+    gate owns the no-plan rejection — one rejection per gate family),
+    unreadable plan. Arming: the approval-point anchor log ONLY (the
+    current dispatch's own context nonce never counts as a prior dispatch).
+
+    Returns (ok, reason). ok=False means REJECT the dispatch.
+    """
+    if not cid:
+        return (True, 'no target claim')
+    ws = paths.get('workspace') if isinstance(paths, dict) else None
+    if not ws:
+        return (True, '')  # FAIL_OPEN — mirrors check_worker_plan
+    key = cid.replace('-', '')
+    # arming: prior approved dispatches ONLY — the approval-point log
+    # (identical discipline to check_worker_plan's plan-first arming).
+    if not _anchor_log_ts_list(Path(ws), key):
+        return (True, (f'first dispatch of {cid}: granularity gate not '
+                       f'armed (post-#239 the worker has authored no plan '
+                       f'yet — planning is the worker\'s first act; the '
+                       f'gate fires on the plan the worker authored, from '
+                       f'the NEXT dispatch on)'))
+    from claim_granularity import (GRANULARITY_MAX_STEPS, granularity_defects,
+                                   plan_file, read_plan, split_guidance)
+    plan_path = plan_file(ws, cid)
+    if plan_path is None and prompt:
+        # re-dispatch-continuity leg: the plan path rides the prompt — read
+        # THAT file when it exists (same continuity contract as #239).
+        ref = _prompt_plan_ref(key, prompt)
+        if ref:
+            cand = Path(ws) / 'runs' / ref
+            if cand.exists():
+                plan_path = cand
+    if plan_path is None:
+        # single-rejection rule: the plan-first gate owns the no-plan
+        # rejection; granularity has nothing to measure here.
+        return (True, f'no plan on disk for {cid} — granularity fail-open '
+                      f'(the plan-first gate owns the no-plan rejection)')
+    plan_text = read_plan(plan_path)
+    if plan_text is None:
+        return (True, f'plan file exists (unreadable, granularity not '
+                      f'verified): {plan_path.name}')
+    defects, detail = granularity_defects(plan_text)
+    if not defects:
+        return (True, (f'plan granularity ok: {plan_path.name} '
+                       f'({detail["step_count"]} steps <= '
+                       f'{GRANULARITY_MAX_STEPS}, '
+                       f'{len(detail["groups"])} domain group(s))'))
+    # review round 1 (MEDIUM): a SUPERSEDED parent must not loop on the
+    # generic split directive — --split is a no-op once every unit is
+    # minted (the plan on disk is the OLD parent plan, still monolithic).
+    # The automated frontier already excludes SUPERSEDED; this face catches
+    # the stale/manual re-dispatch and names the successors instead.
+    superseded_by: list[str] | None = None
+    try:
+        reg = yaml.safe_load((Path(ws) / 'claim-register.yaml')
+                             .read_text(encoding='utf-8')) or {}
+        row = next((c for c in (reg.get('claims') or [])
+                    if isinstance(c, dict) and c.get('id') == cid), None)
+        if row and row.get('superseded_by'):
+            sb = row['superseded_by']
+            superseded_by = sb if isinstance(sb, list) else [str(sb)]
+    except (yaml.YAMLError, OSError):
+        pass  # unreadable register: the generic guidance stays (fail-open)
+    if superseded_by:
+        return (False, (
+            f'GRANULARITY GATE: claim {cid} is already SUPERSEDED '
+            f'(superseded_by: {", ".join(superseded_by)}) - the split '
+            f'already happened. Dispatch the SUB-claims listed above (each '
+            f'under GRANULARITY_MAX_STEPS={GRANULARITY_MAX_STEPS} steps, '
+            f'single-domain); do NOT re-dispatch this parent and do NOT '
+            f'run --split again (idempotent no-op: every unit already '
+            f'minted).'))
+    return (False, split_guidance(cid, plan_path.name, defects, detail))
 
 
 # ---------- #57 gate 3: plan-author (worker-session evidence) ----------
