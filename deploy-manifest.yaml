@@ -103,7 +103,7 @@ files:
   - src: agents/kunglao-worker.md
     dest: .claude/agents/kunglao-worker.md
     kind: agent
-    sha256: 4cee57b091fb6d40452424174cb79f58195f68ebe8b222c466c703e8962c798d
+    sha256: 83581b0cd6b1d2922f9bd733422c9b2c9d8af3611e631e725455c48e5a3dc4d6
   - src: agents/pefile-signature.md
     dest: .claude/agents/pefile-signature.md
     kind: agent
@@ -115,7 +115,7 @@ files:
   - src: agents/web-re-worker.md
     dest: .claude/agents/web-re-worker.md
     kind: agent
-    sha256: a70f25c7a7e336e5429eab4d4a28e4bcb64f2d4d7c6c6c552b8e9d94bd208aa9
+    sha256: 551e182267f274bc5d435228d20d748bc52a76166f800526136343f2f9eeeed3
   - src: scripts/_boot.py
     dest: .claude/scripts/_boot.py
     kind: scaffold
@@ -247,7 +247,7 @@ files:
   - src: scripts/convergence_check.py
     dest: .claude/scripts/convergence_check.py
     kind: scaffold
-    sha256: ef9d659a5a4df928ee3c970ce31b32c25da2c162bbf6344db63c78b1922c5525
+    sha256: 066c449203e3bda273291a5d470e974fa9be54b260fb8accffddad9db4fd8fd0
   - src: scripts/convergence_health.py
     dest: .claude/scripts/convergence_health.py
     kind: scaffold
@@ -491,7 +491,7 @@ files:
   - src: scripts/kunglao_resume.py
     dest: .claude/scripts/kunglao_resume.py
     kind: scaffold
-    sha256: 9c5f9dfd278f158d058b2abb19784fb6038419f668d5de93655c1754068ff954
+    sha256: 67d537930bc75d8344c5549a50d7f357f5fec3f8a3c686beeb97574d5973830a
   - src: scripts/kunglao_status.py
     dest: .claude/scripts/kunglao_status.py
     kind: scaffold
@@ -632,6 +632,10 @@ files:
     dest: .claude/scripts/progress_report.py
     kind: scaffold
     sha256: 2c5332c5ade0e18d5c5e53427f838c14add16e6cc56d8a85617fd77c37823d91
+  - src: scripts/progress_timeline.py
+    dest: .claude/scripts/progress_timeline.py
+    kind: scaffold
+    sha256: 6a764a4bc8e457d21a02856f6783799fd85795590a96714cc6a2f114e71c2de6
   - src: scripts/provenance_gate.py
     dest: .claude/scripts/provenance_gate.py
     kind: scaffold
@@ -883,7 +887,7 @@ files:
   - src: references/_INDEX.yaml
     dest: .claude/references/_INDEX.yaml
     kind: asset
-    sha256: 697ba661f436a41dfb56dabb055c4f47e5624689eb16c4015780724a4b631d30
+    sha256: a47e311a356ad0ac7b79603c0fbdf8443e914fb0c46b1a3a08305088ad8e8686
   - src: references/_index-android.md
     dest: .claude/references/_index-android.md
     kind: asset
@@ -935,7 +939,7 @@ files:
   - src: references/contracts/cold-start-contract.md
     dest: .claude/references/contracts/cold-start-contract.md
     kind: asset
-    sha256: 7b0e9375cc55475a6f5d9a8f67637af5cc6436175f06cbb835c03acd3187bfce
+    sha256: 5b6a3b3bdaf422b154e5b13fccfb8c5ba18ad0e0052c0606e78afbde015ab086
   - src: references/contracts/convergence-loop.md
     dest: .claude/references/contracts/convergence-loop.md
     kind: asset

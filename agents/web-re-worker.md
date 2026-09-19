@@ -167,7 +167,9 @@ WRITE the deliverables yourself, in this order: `runs/worker-status-web-re-<task
 (one appended status line per state change), `facts/F<NNN>.md` immediately after
 each fact with the standard frontmatter schema (never `PROVEN`, always
 `self_caveat`), the final report under `runs/`, and one appended `progress.txt`
-line. The final `status: done` line MUST declare
+line (issue-282: progress.txt is regenerated from the event ledger at checkpoints —
+appended lines are preserved and mirrored into
+`runs/progress-narrative.jsonl`; append exactly as before). The final `status: done` line MUST declare
 `artifacts: evidence/unpack_out/<name>/..., facts/Fxxx.md` plus
 `notes: notes/<claim-id>.md`.
 

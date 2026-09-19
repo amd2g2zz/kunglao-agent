@@ -1895,7 +1895,7 @@ def decide(workspace: Path, *, emit_snapshot: bool = True) -> dict:
 def _emit_decision_snapshot(ws, d: dict) -> None:
     """#818 batch-1: ONE decision_snapshot event per verdict (actor=
     convergence_check): claims status counts + top-5 priority (id, score).
-    Fail-open — logging must never block the decision (#287 contract)."""
+    Fail-open — logging must never block the decision (issue-287 contract)."""
     try:
         reg = _load_yaml(Path(ws) / "claim-register.yaml")
         claims = reg.get("claims") or []
@@ -1918,7 +1918,7 @@ def _emit_decision_snapshot(ws, d: dict) -> None:
                  "status_counts": counts,
                  "top_priorities": top,
              }, ensure_ascii=False))
-    except Exception:  # fail-open: telemetry side channel (snapshot emit, #287 contract)
+    except Exception:  # fail-open: telemetry side channel (snapshot emit, issue-287 contract)
         pass
 
 
@@ -1994,6 +1994,19 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"decision": "CRASHED"}, ensure_ascii=False))
         return EXIT_CRASHED
     _append_ledger(workspace, d)  # silent side channel for convergence_health.py
+    # issue-282: refresh the rendered progress.txt timeline at the checkpoint —
+    # the snapshot append above is the tick-axis writer, so this is the one
+    # place the render is guaranteed to be in lockstep with the axis.
+    # Fail-open: a render failure never blocks the decision (issue-287 contract
+    # shape: observability side channel).
+    try:
+        from progress_timeline import render_and_repair
+        render_and_repair(workspace)
+    except Exception as exc:  # noqa: BLE001 — fail-open, never silent: the
+        # render face skips leave their own stderr trace inside; this arm
+        # covers a render-face CRASH, observed per the issue-275 WARN policy.
+        print(f'[kunglao-agent] progress timeline render skipped: {exc!r}',
+              file=sys.stderr)
     # #287 observability: mirror the convergence decision to the structured
     # event log. #459: detail now carries the decision plus the counts a
     # `kunglao_log --tail` diagnosis needs (no second read of the register).

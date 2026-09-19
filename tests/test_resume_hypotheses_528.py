@@ -129,10 +129,18 @@ def test_brief_corrupt_hypotheses_degrades(tmp_path: Path) -> None:
 
 def test_resume_still_writes_nothing_with_hypotheses(tmp_path: Path) -> None:
     """Adding the hypothesis surface must not break the #466 read-only
-    contract (test_resume_is_read_only pins the pre-#528 case)."""
+    contract (test_resume_is_read_only pins the pre-#528 case).
+
+    issue-282 amendment: resume renders the derived progress.txt timeline view
+    before reading (render-then-read), so progress.txt may appear/refresh
+    plus its runs/progress-narrative.jsonl narrative mirror — nothing else
+    may ever be added or changed."""
     ws = _armed_ws(tmp_path)
     _seed_hyps(ws)
     before = sorted(str(p.relative_to(ws)) for p in ws.rglob("*"))
     kr.main([str(ws), "--json"])
     after = sorted(str(p.relative_to(ws)) for p in ws.rglob("*"))
-    assert before == after
+    allowed = set(before) | {"progress.txt",
+                             "runs/progress-narrative.jsonl",
+                             "runs/.progress-render.lock"}
+    assert set(after) <= allowed
