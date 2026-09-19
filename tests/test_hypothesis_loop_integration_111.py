@@ -27,7 +27,7 @@ rank (priority_ratio #107) -> declare intent (#105) -> run the oracle
 (promotion_attempts, DLQ at the #36 limit) -> refute/confirm hypotheses
 (hypothesis_store state machine).
 
-Mechanism attribution (E1, .claude/PRPs/reports/e1-111-feasibility.md):
+Mechanism attribution (E1, issue #111):
 the round-2 flip is produced by (1) the case-bank premise_correction
 retrieval eliminating the refuted family BEFORE dispatch (the issue's own
 "eliminated by a retrieved premise_correction" face) and (2) the
