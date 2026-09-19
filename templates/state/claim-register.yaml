@@ -23,3 +23,6 @@ claims: []
 #                                 #   terminal = {PROVEN, VERIFIED, NEGATIVE, REFUTED, DEFERRED}
 #    source: cti                  # cti | static_re | dynamic_re | user_feedback | synthesis
 #    competitor_group: null       # v1.7 — task_spec model_selection q_id (or null)
+#                                 #   issue 252: `hyp-<H-id>` — a hypothesis-family
+#                                 #   arm (hypothesis_bridge); the family ledger
+#                                 #   (hypotheses/) syncs from this claim's settlement

@@ -148,7 +148,9 @@ REJECT_FIXES: dict[str, dict[str, str]] = {
             'to list the drifted items, then update global_plan.txt and/or '
             'runs/plan-C*.md to match what the run actually does (new claim, '
             'dropped step, superseded plan) - record the deviation reasoning - '
-            'and re-check before re-dispatching.'
+            'and re-check before re-dispatching. The gate verifies the '
+            'amendment (issue-281): the same drift persisting 3 detection '
+            'rounds emits a plan_repair_overdue escalation.'
         ),
     },
     'health': {

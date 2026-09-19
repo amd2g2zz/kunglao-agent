@@ -63,10 +63,14 @@ def _scaffold_body(qid: str, need: str | None) -> str:
     need_line = f" (need: {need})" if need else ""
     return (
         f"{MARKER_FMT.format(qid=qid)}\n\n"
-        f"Seeded from primary_question {qid}{need_line}. Scaffold only —\n"
-        "the orchestrator fills `candidates` with competing explanations\n"
-        "BEFORE dispatching the first C-NN for this question. Adjudicate by\n"
-        "refute (refuting_fact_id) or supersede (superseded_by) per #528.\n"
+        f"Seeded from primary_question {qid}{need_line}. Family ledger:\n"
+        "competing explanations enter the economy as CLAIM ARMS via\n"
+        "scripts/hypothesis_bridge.py (mint_family_arms / the sweep),\n"
+        "each carrying competitor_group: hyp-<this-id>; the family state\n"
+        "syncs from their claim settlements per #528. The orchestrator\n"
+        "dispatches and adjudicates arms — it never re-types candidates\n"
+        "into this file. Adjudication faces (refute/supersede/confirm)\n"
+        "remain the #528 transitions via the bridge sync.\n"
     )
 
 
