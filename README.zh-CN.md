@@ -2,7 +2,7 @@
 
 **kunglao-agent 是一套自主逆向工程系统：你给它目标和待解问题，它自己把问题做上几小时到几天 —— 自己规划路径，worker 死了能补位，崩溃了能续跑；只有当每个答案都从原始证据推导出来、并扛过机械校验门控之后，它才收敛交卷。**
 
-[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](.) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](.)
+[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/amd2g2zz/kunglao-agent/pulls)
 
 **简体中文** · [English](README.md)
 
@@ -162,7 +162,7 @@ runs/                 # 会话审计轨迹
 | `/kunglao-agent:upgrade <路径> [--dry-run]` | 插件升级后打开旧工作区，或升级时提示版本戳落后 | 把工作区脚手架（hooks、模板、事件词表）迁移到当前插件版，`--dry-run` 可预览；用户数据（claims、facts、evidence）绝不触碰，字节级漂移即拒绝（RC=4） |
 | `/kunglao-agent:help` | 忘了命令 | 打印用法列表 |
 
-典型顺序：`init` 建工作区 → `analysis` 提需求开跑 → （中途出岔子用 `resume`）→ 收敛读报告 → 插件升级后对旧工作区跑一次 `upgrade`。
+典型顺序：`init` 建工作区 → `analysis` 提需求开跑 → （随时用 `resume` 接续进度）→ 收敛读报告 → 插件升级后对旧工作区跑一次 `upgrade`。
 
 ## 一次分析长什么样
 
@@ -211,7 +211,7 @@ runs/                 # 会话审计轨迹
 ```
 
 - **产物落在哪：** `evidence/`（抓包、去混淆后的代码）、`facts/`（签名密钥、nonce 推导）。
-- **注意：** `web` 是 beta 阶段目标 —— 工具链门槛刻意放得很低；能力缺失由循环在实际需要时浮出来，而不是 init 卡住。
+- **轻量工具链。** web 目标在 init 只探测必需项；缺什么，等目标真用到了再装。
 
 </details>
 
@@ -260,9 +260,9 @@ verifier_sign_off: {verifier: kunglao-redteam, verdict: CONFIRMED}
 
 ## 用好它
 
-- **喂静态可解的目标。** 循环是静态优先的：已解包的 APK、未混淆的 bundle、未剥符号的二进制收敛得快得多；逼它走动态就慢。
-- **提前把动态那条腿搭好。** 如果主问题注定要执行样本，先选好 channel（见[自带分析环境](#自带分析环境)）—— 动态任务配 `local` 会被 init HARD-reject。
-- **分清"在干活"和"卡住了"** —— `runs/` 里有新条目说明循环活着；心跳死了、或同一决策反复出现而没有新 fact，就是卡了 —— `/kunglao-agent:resume <工作区>` 给出诊断和下一步。
+- **静态优先是设计。** 循环会先关掉一切能静态关掉的问题，再碰动态工具；加壳保护的目标直接路由到动态腿 —— 声明 channel，它来驱动。
+- **提前声明动态那条腿。** 如果主问题注定要执行样本，先选好 channel（见[自带分析环境](#自带分析环境)）—— 动态任务配 `local` 会被 init HARD-reject，这是设计使然。
+- **循环始终可读。** 每个 tick 都落在 `runs/`；`/kunglao-agent:resume <工作区>` 读取实时状态并给出下一步。
 
 ## 按目标类型分工具链
 
@@ -318,7 +318,7 @@ Windows 的 T3 动态还要用 `x64dbg` MCP；`volatility`（内存取证）和 
 </details>
 
 <details>
-<summary><strong>web &amp; macos（beta）</strong> —— 最小工具链，按设计没有 HARD</summary>
+<summary><strong>web &amp; macos</strong> —— 按设计轻量的工具链</summary>
 
 | Tier | 工具 | 安装 |
 |---|---|---|
@@ -327,7 +327,7 @@ Windows 的 T3 动态还要用 `x64dbg` MCP；`volatility`（内存取证）和 
 | WARN | `lipo`、`otool`、`nm`、`codesign`、`xattr`（macOS） | Xcode Command Line Tools |
 | WARN | `ghidra` MCP（macOS） | 推荐 —— 见[内部](#内部)的清单 |
 
-两者都是 beta 阶段目标：能力缺失由循环在实际需要时浮出来，而不是 init 卡住。macOS 的动态分析走 `ssh` channel（连到 Mac 主机）；要用可选的 x64dbg 浏览器侧调试，就按上面的 Windows 工具链装。
+这两类目标在 init 只探测必需项；更重的能力在目标真正需要时启用。macOS 的动态分析走 `ssh` channel（连到 Mac 主机）；要用可选的 x64dbg 浏览器侧调试，就按上面的 Windows 工具链装。
 
 </details>
 
@@ -399,7 +399,7 @@ gh pr create --base dev
 | `gitnexus` | HARD | Android 图谱构建 | 反编译后知识图谱 | `claude mcp add gitnexus -- gitnexus mcp` |
 | `virustotal` | WARN | CTI | 威胁情报（家族归属假设） | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
 | `ssh-mcp` | WARN | channel | ssh 执行控制平面 | `claude mcp add ssh-mcp -- ssh-mcp` |
-| `camoufox-reverse` | WARN | web（beta） | 浏览器 JS 逆向（hook / trace / 网络抓包） | `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp` |
+| `camoufox-reverse` | WARN | web | 浏览器 JS 逆向（hook / trace / 网络抓包） | `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp` |
 
 </details>
 

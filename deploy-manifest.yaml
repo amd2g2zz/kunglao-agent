@@ -155,7 +155,7 @@ files:
   - src: scripts/ask_for_direction_gate.py
     dest: .claude/scripts/ask_for_direction_gate.py
     kind: scaffold
-    sha256: ebeab89fdd8bbfbfc4d24b0a1d9557dc10b64a59d32bb28a8557c947b260ec4a
+    sha256: 1a4330689a323358bca5409d82ab9e4416f1b198ce342c97ebd8c646d9b89033
   - src: scripts/backtrack_gate.py
     dest: .claude/scripts/backtrack_gate.py
     kind: scaffold
@@ -715,7 +715,7 @@ files:
   - src: scripts/retirement_gate.py
     dest: .claude/scripts/retirement_gate.py
     kind: scaffold
-    sha256: 5397e97d8932fb2d85e855b1ac670e6fbde434f8701ec8a6af12c4a99946b1cd
+    sha256: 88a2c52319fbe700f6897304493b355ed789b4b95c88eec59bdbf1b18a93cc91
   - src: scripts/retract_claim.py
     dest: .claude/scripts/retract_claim.py
     kind: scaffold

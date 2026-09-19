@@ -6,10 +6,65 @@ versioning follows PEP 440. The internal iteration markers (v1.9.0–v1.9.38)
 used before v0.1 are development-era labels, folded into the v0.1 first
 release (see the mapping table at the end).
 
-## [Unreleased]
+## [0.1.5.post2] - 2026-09-19
 
-Post-release fixes landed on dev since tag `v0.1.5.post1` (PR #231); backfilled
-by the #258 version-bookkeeping pass — not yet cut into a release.
+The post2 batch: seventeen changes to the strategy-learning pipeline. The
+Thompson rank sampler now seeds replayably from the posterior state and
+round; plans carry if-fails branches and epistemic unknowns; obstacles mint
+alternative claims; a stalled loop routes itself to a decomposition remedy.
+Several built-but-unwired pieces now run for real: no_delta fingerprints,
+settlement ΔH, plan-repair verification, and the progress timeline.
+
+### Added
+
+- **Replayable rank seed `f(posterior_state, round)` (#251)**: the Thompson
+  rank face seeds from sha256(cases + round) — same posteriors and round
+  reproduce the ranking byte-for-byte; a new round re-rolls it; the seed
+  components and rng base are recorded on the `rank_feeds` event, so
+  sampling is auditable without being frozen.
+- **Plan epistemics bookkeeping (#250)**: plan steps carry `if-fails`
+  branches, unknowns mint `boundary_type: epistemic` claims with situational
+  ΔH pricing, facts declare `assumptions: []`, and refutation propagates
+  along semantic edges — a static conclusion can now be retired by the
+  dynamic-registration counterexample that contradicts it — with
+  settle-time coverage checks over open epistemic claims.
+- **Hypothesis-claim bridge (#252)**: seeded arms mint as claims under
+  `competitor_group: hyp-<H-id>`; the hypothesis store is demoted to a
+  family ledger that syncs from claim settlement (no second claim
+  register); a lint guard rejects any path that writes `hypotheses/`
+  without minting claims.
+- **Target-obstacle ladder (#234)**: obstacles resolve through a 3-rung
+  target/attack-surface ladder with mechanism-family rung distinction;
+  each exhausted rung mints a sibling claim (`origin:
+  obstacle-alternative`, `obstacle_for` edge) into the rank pool;
+  `promotion_attempts` increments on dispatch failures with a 3-strike DLQ.
+- **Plan granularity gate (#241)**: dispatch refuses plans above 8 steps or
+  cross-domain without fan-out — oversized plans split into sub-claims with
+  `depends_on` edges and domain capability tags before execution.
+- **STALLED remedy routing (#249)**: convergence STALLED verdicts route to
+  the decomposition operator (mechanical flatline-breaking claim minting)
+  through a remedy-exemption dispatch channel; the full
+  healthy→STALLED→exempt-dispatch→mint→recovery cycle is pinned by tests.
+- **Oracle method-selection split (#248)**: reproduction and replay-evidence
+  admissions are separate verdicts; generation-language intake pins
+  `verification_method: reproduction`; replay-evidence questions reroute to
+  input-contract claims.
+- **Event schema mandatory fields (#255)**: the `AUTO_NULL_FIELDS` envelope
+  fields (duration_ms, arm, epoch, hypothesis_ref, matched_rule) are
+  mechanically populated at emit time with a tick stamp; explicit nulls
+  require `null_reasons`, closing the 382-null rot.
+- **no_delta fingerprint wiring (#256)**: `zero_output_fingerprint.record_action`
+  joins post_check and the production gate list, so a zero-output cycle
+  leaves its own record.
+- **Settlement ΔH live (#257)**: settlement feeds `posteriors.update_evidence`
+  / `update_eliminate`, so ΔH is nonzero and visible after each settlement.
+- **Silent-except ledger and gate (#275)**: every fail-open handler must
+  leave one rate-limited WARN trace; the repo-wide ledger (baseline
+  `silent_except_baseline.yaml`) is empty at release and lint-gated against
+  re-growth.
+- **Progress timeline (#282)**: `progress.txt` gains a ledger-derived
+  complete timeline view — events reconstruct worker lifecycles without
+  relying on hand-maintained narrative lines.
 
 ### Fixed
 
@@ -32,6 +87,19 @@ by the #258 version-bookkeeping pass — not yet cut into a release.
   `find_death_evidence` docstring and the agent three-state charter; 13
   RED-first tests added, existing completion tests re-pinned per the
   documented contract change.
+- **B1o gate defects (#237)**: plan-drift detection credits in-progress
+  dependency chains instead of demanding exact terminal matches; the
+  verifier dispatch path is pass-through (B1o no longer blocks the red-team
+  dispatch it itself requires); and maker≠checker binding is enforced with
+  log-verified dispatch provenance, so a forged verification record is
+  rejected.
+- **Plan-repair verification window (#281)**: repair amendments are verified
+  inside a bounded 3-round window with tamper-evident state, instead of an
+  unbounded, unverified window.
+- **Version bookkeeping (#258)**: pyproject parity with the released
+  v0.1.5.post1, CHANGELOG backfill, and the plugin-manifest semver face
+  contract (`0.1.5.post1` <-> `0.1.5`) restored after the patch1 release
+  divergence.
 
 ## [0.1.5-patch1] - 2026-09-11
 

@@ -2,7 +2,7 @@
 
 **kunglao-agent is an autonomous reverse-engineering system. You hand it a target and the questions you need answered; it works the problem for hours or days on its own — planning its own path, recovering from worker deaths, resuming after crashes — and converges only when every answer is derived from raw evidence and survives mechanical verification gates.**
 
-[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](.) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](.) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](.)
+[![release-check](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml/badge.svg)](https://github.com/amd2g2zz/kunglao-agent/actions/workflows/release-check.yml) [![python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org) [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE) [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/amd2g2zz/kunglao-agent/pulls)
 
 **English** · [Simplified Chinese](README.zh-CN.md)
 
@@ -170,7 +170,7 @@ Well-formed (b):
 | `/kunglao-agent:upgrade <workspace> [--dry-run]` | after a plugin update, on an older workspace (or when the upgrade prompt says the stamp is behind) | migrates the workspace scaffold (hooks, templates, event vocab) to the current plugin version; `--dry-run` previews; user data (claims, facts, evidence) is never touched — byte drift refuses with RC=4 |
 | `/kunglao-agent:help` | anything else | prints the usage list |
 
-Typical order: `init` creates the workspace → `analysis` states the task and starts → (`resume` if anything goes sideways) → read the report at convergence → `upgrade` old workspaces after plugin updates.
+Typical order: `init` creates the workspace → `analysis` states the task and starts → (`resume` to pick the thread back up any time) → read the report at convergence → `upgrade` old workspaces after plugin updates.
 
 ## What a run looks like
 
@@ -214,7 +214,7 @@ Two more end-to-end paths — pick the one matching your target (for a plain Win
 ```
 
 - **Lands in:** `evidence/` (captures, deobfuscated code), `facts/` (signing key, nonce derivation).
-- **Note:** `web` is a beta-stage target — the toolchain bar is deliberately light; missing capability surfaces when the loop actually needs it, not at init.
+- **Light-footprint toolchain.** Web targets probe only the essentials at init; anything heavier gets set up when the target actually needs it.
 
 </details>
 
@@ -263,9 +263,9 @@ You give it a target and the questions; it works the problem for hours or days, 
 
 ## Getting good results
 
-- **Feed it static-accessible targets.** The loop is static-first: an unpacked APK, an unobfuscated bundle, or an unstripped binary converges far faster than one that forces dynamic work.
-- **Set up the dynamic leg before you need it.** If your primary questions will require execution, pick a channel first (see [Bring your own environment](#bring-your-own-environment)) — init HARD-rejects a dynamic task on `local`.
-- **Telling "working" from "stuck"** — fresh entries in `runs/` mean the loop is alive; a dead heartbeat or the same decision repeating with no new facts means it is not — `/kunglao-agent:resume <workspace>` diagnoses and names the next move.
+- **Static-first is the design.** The loop closes everything it can statically before touching dynamic tooling; protected or packed targets simply route to the dynamic leg — declare the channel and it drives it.
+- **Declare the dynamic leg before you need it.** If your primary questions will require execution, pick a channel up front (see [Bring your own environment](#bring-your-own-environment)) — init HARD-rejects a dynamic task on `local`, by design.
+- **The loop is always legible.** Every tick lands in `runs/`; `/kunglao-agent:resume <workspace>` reads the live state and names the next move.
 
 ## Toolchain by target
 
@@ -321,7 +321,7 @@ Windows T3 dynamic also uses the `x64dbg` MCP; `volatility` (memory forensics) a
 </details>
 
 <details>
-<summary><strong>web &amp; macos (beta)</strong> — minimal toolchains, no HARD items by design</summary>
+<summary><strong>web &amp; macos</strong> — lightweight toolchains by design</summary>
 
 | Tier | Tool | Install |
 |---|---|---|
@@ -330,7 +330,7 @@ Windows T3 dynamic also uses the `x64dbg` MCP; `volatility` (memory forensics) a
 | WARN | `lipo`, `otool`, `nm`, `codesign`, `xattr` (macOS) | Xcode Command Line Tools |
 | WARN | `ghidra` MCP (macOS) | recommended — see the manifest under [Internals](#internals) |
 
-Both are beta-stage targets: missing capability surfaces when the loop actually needs it, not at init. macOS dynamic work uses the `ssh` channel (to a Mac host); for the optional x64dbg browser-debug path, install the Windows toolchain above.
+Init probes only the essentials for these types; heavier capabilities engage when the target calls for them. macOS dynamic work uses the `ssh` channel (to a Mac host); for the optional x64dbg browser-debug path, install the Windows toolchain above.
 
 </details>
 
@@ -404,7 +404,7 @@ Single source of truth: `scripts/mcp_probe.py`; `kunglao-init` scaffolds a works
 | `gitnexus` | HARD | Android graph building | post-decompile knowledge graph | `claude mcp add gitnexus -- gitnexus mcp` |
 | `virustotal` | WARN | CTI | threat intel (family-attribution hypotheses) | `claude mcp add virustotal -- npx -y @burtthecoder/mcp-virustotal` |
 | `ssh-mcp` | WARN | channel | ssh execution control plane | `claude mcp add ssh-mcp -- ssh-mcp` |
-| `camoufox-reverse` | WARN | web (beta) | browser JS reversing (hooks / trace / network capture) | `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp` |
+| `camoufox-reverse` | WARN | web | browser JS reversing (hooks / trace / network capture) | `claude mcp add camoufox-reverse -- python -m camoufox_reverse_mcp` |
 
 </details>
 
