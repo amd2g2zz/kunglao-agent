@@ -73,7 +73,7 @@ FAST_MODULES = frozenset({
     "test_pkg_detect", "test_plaintext_610", "test_plan_drift_237_d1_d3", "test_plan_drift_stale_plan", "test_plan_drift_unverified",
     "test_posteriors_106", "test_pr_template_530", "test_preflight_588_590", "test_premature_termination_detect",
     "test_priority_data_hookup_9", "test_priority_inputs_594_596", "test_priority_ratio", "test_priority_value_terms",
-    "test_progress_report_663", "test_progress_txt_530", "test_prompt_command_611", "test_provenance_wiring",
+    "test_progress_report_663", "test_progress_timeline_282", "test_progress_txt_530", "test_prompt_command_611", "test_provenance_wiring",
     "test_python_floor", "test_qtable_p3", "test_queue_distill_176", "test_recall_quality_814",
     "test_reconcile_intents", "test_reconcile_workers", "test_redteam_antitemplate_827", "test_references_index",
     "test_epistemic_pricing_250", "test_lint_facts_assumptions_250",

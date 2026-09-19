@@ -57,7 +57,7 @@ files:
   scripts/contracts.py:
     r1: 9
   scripts/convergence_check.py:
-    r1: 134
+    r1: 133
     r2: 2
   scripts/convergence_health.py:
     r1: 15
@@ -167,7 +167,7 @@ files:
   scripts/kunglao_record.py:
     r1: 21
   scripts/kunglao_resume.py:
-    r1: 21
+    r1: 20
   scripts/kunglao_status.py:
     r1: 7
   scripts/kunglao_upgrade.py:
