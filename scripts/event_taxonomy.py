@@ -165,6 +165,7 @@ EMIT_ACTIONS = [
     "ask_back",
     "bet_filed",          # #711 falsifiable-bet filing face (think seat)
     "bet_settled",        # #711 bet settlement (confirmed/refuted) face
+    "bridge_lint_findings",  # issue 252 hypothesis-bridge cold-start lint findings (digest face)
     "capability_dormant",  # #600 one-time dormant WARN face: the capability tooth is a no-op while no claim carries obstacle_for
     "capability_reject",
     "capability_switch",
@@ -190,6 +191,12 @@ EMIT_ACTIONS = [
     "env_ledger_refresh",  # #755 A5 env-manifest ledger backfill/refresh face
     "epistemic_coverage",  # issue 250 settle-time epistemic-coverage annotation (sort-shaped, never blocking)
     "failure_blocked",
+    "family_arms_minted",  # issue 252 hypothesis_bridge family-arm claim mint face
+    "family_confirmed",    # issue 252 family ledger sync: family confirmed by a positive arm
+    "family_ensured",      # issue 252 hypothesis_bridge idempotent family-scaffold creation
+    "family_refuted",      # issue 252 family ledger sync: all arms settled negative
+    "family_superseded",   # issue 252 family ledger sync: competing hypothesis superseded
+    "family_sync_failed",  # issue 252 guarded sync failure WARN (claim_migrator post-settlement face)
     "git_anchor_skipped",  # #753 pre-migration rollback anchor untakeable (git missing/failed) — kunglao_upgrade
     "git_snapshot_skipped",  # #739 WARN faces — kunglao_upgrade (snapshot untakeable: git missing/failed) + kunglao-init (workspace snapshot skip)
     "global_hook_purge",  # #143 upgrade purge of legacy global kunglao hooks (backup/skip/noop faces)

@@ -587,6 +587,30 @@ def mint_workspace(ws: Path) -> dict:
             task_spec = {}
     minted = mint_epistemic_claims(
         existing, unknowns, _next_free_id_fn(existing))
+    # ---- issue 252: unknowns route into hypothesis families at this mint
+    # Each unknown joins ONE pq-bound family hypothesis (the issue 662/109
+    # binding shapes: body marker pq:<qid>, group pq-<qid> — reused when
+    # present, ensured otherwise); the minted epistemic claim IS the arm
+    # (stamped with the family linkage, never re-minted, never duplicated
+    # as a store candidate string). boundary_type: epistemic is preserved.
+    if minted:
+        from hypothesis_bridge import (ensure_family, family_group,
+                                       find_pq_bound_hypothesis,
+                                       HYPOTHESIS_REF)
+        from hypothesis_store import HypothesisStore
+        store = HypothesisStore(ws / "hypotheses")
+        for c in minted:
+            qid = str(c.get("answers_question") or "").strip()
+            fam = find_pq_bound_hypothesis(store, qid)
+            if fam is None:
+                fam = ensure_family(
+                    ws, marker=f"pq:{qid}", group=f"pq-{qid}",
+                    body=(f"Family ledger for situational unknown {qid} "
+                          f"(#250) — its epistemic claims are the arms; "
+                          f"family state syncs from their settlements "
+                          f"(#528) via hypothesis_bridge."))
+            c["competitor_group"] = family_group(fam.id)
+            c[HYPOTHESIS_REF] = fam.id
     if minted:
         doc = {"claims": list(existing) + minted}
         tmp = reg_path.with_name(reg_path.name + ".tmp")

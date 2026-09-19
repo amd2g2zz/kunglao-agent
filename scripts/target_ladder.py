@@ -346,17 +346,29 @@ def mint_sibling_claims(ws: Path, obstacle_claim_id: str) -> dict:
     if not inv:
         return {"minted": [],
                 "refused": "exhaustion inventory empty — nothing to fan out"}
+    # ---- issue 252: the fan-out family IS a hypothesis family ----
+    # One family hypothesis per obstacle claim (body-marker idempotent);
+    # every minted sibling is stamped with its linkage so the sibling arms
+    # are family-visible and their settlements sync the family ledger.
+    from hypothesis_bridge import ensure_family, family_group, HYPOTHESIS_REF
+    family = ensure_family(
+        ws,
+        marker=f"obstacle-family:{obstacle_claim_id}",
+        claim_id=obstacle_claim_id,
+        body=(f"Family ledger for obstacle claim {obstacle_claim_id} — its "
+              f"strategy siblings are the arms; family state syncs from "
+              f"their claim settlements (#528) via hypothesis_bridge."))
     reg = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     from failure_analysis_gate import _next_claim_id  # single ID grammar
     minted: list[dict] = []
     for entry in inv:
-        family = str(entry.get("family")).strip().lower()
-        if _sibling_exists(claims, obstacle_claim_id, family):
+        family_name = str(entry.get("family")).strip().lower()
+        if _sibling_exists(claims, obstacle_claim_id, family_name):
             continue
         tried = " ".join(str(entry.get("tried") or "").split())
         failed_because = " ".join(str(entry.get("failed_because") or "").split())
         statement = (f"Alternative for obstacle {obstacle_claim_id} "
-                     f"[{family}]: try {tried}")
+                     f"[{family_name}]: try {tried}")
         if failed_because:
             statement += f" — the walked rung failed because {failed_because}"
         new_id = _next_claim_id(claims)
@@ -370,8 +382,11 @@ def mint_sibling_claims(ws: Path, obstacle_claim_id: str) -> dict:
             "statement": statement,
             "origin": SIBLING_ORIGIN,
             "obstacle_for": obstacle_claim_id,
-            "ladder_family": family,
+            "ladder_family": family_name,
             "promoted_from": str(ladder_path(ws, obstacle_claim_id)),
+            # issue 252 family linkage (edge fields, the origin/obstacle_for style)
+            "competitor_group": family_group(family.id),
+            HYPOTHESIS_REF: family.id,
         }
         if (parent or {}).get("answers_question"):
             sibling["answers_question"] = parent["answers_question"]
@@ -381,7 +396,7 @@ def mint_sibling_claims(ws: Path, obstacle_claim_id: str) -> dict:
             yaml.safe_dump(reg, allow_unicode=True, sort_keys=False),
             encoding="utf-8")
         _ensure_dep_edge(ws, obstacle_claim_id, new_id)
-        minted.append({"id": new_id, "ladder_family": family})
+        minted.append({"id": new_id, "ladder_family": family_name})
     return {"minted": minted, "refused": None}
 
 
