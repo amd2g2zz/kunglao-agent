@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """RED tests for issue 252 — the hypothesis bridge (family <-> claim economy).
 
-Fast tier (tests/_tiers.py FAST_MODULES): pure unit — no subprocess, no
-network, no nested pytest.
+Fast tier (tests/_tiers.py FAST_MODULES): pure unit — spawns no
+processes, touches no network, runs no nested pytest.
 
 Contract (openspec/changes/issue-252-hypothesis-bridge):
 
