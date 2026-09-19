@@ -16,6 +16,16 @@ calls convergence_check.decide() directly and NEVER convergence_check.main()
 Re-arming a dead workspace is init's job (#461 bootstrap, merged fa08fd3);
 resume only ADVISES the chain.
 
+issue-282 AMENDMENT (scoped, documented in
+openspec/changes/issue-282-progress-timeline/design.md): resume renders the
+derived progress.txt timeline BEFORE reading it (render-then-read) — the
+only permitted writes are the progress.txt view itself (write-on-diff) and
+its runs/progress-narrative.jsonl narrative mirror, and only when the
+rendered content differs from disk (a repair; the steady state touches
+nothing). The ledger, state files, and every other artifact stay untouched;
+build_brief remains pure-read; a render failure leaves the file as-is and
+never blocks the brief.
+
 Decision source: convergence_check.decide() — the #443 state machine. The
 next-step text is a LOOKUP keyed by the decision name (mirrors the
 convergence-loop rule §3 table); resume never recomputes a decision.
@@ -52,10 +62,11 @@ import digest_build
 import external_kicker as kicker
 import hook_activation
 import kunglao_log
+import progress_timeline  # issue-282: render-then-read (main) + render_note (brief)
 # #536: workspace template version cross-check (status + resume both print it)
 import template_version
 from status_defs import ACTIVE_STATUSES, PARTIAL_STATUSES
-from kunglao_log import iter_jsonl  # noqa: E402  (#863 Family K single source)
+from kunglao_log import iter_jsonl  # noqa: E402  (kunglao_log Family-K single source)
 
 RC_RESUMABLE = 0
 RC_MANUAL = 1
@@ -453,14 +464,23 @@ def _timeline(ws: Path, now: datetime) -> list[dict]:
 
 # ---------- assembly ----------
 
+def _has_state(ws: Path) -> bool:
+    """The resumable-state predicate (register / convergence ledger / facts
+    index / runs dir) — the NO-STATE boundary. The issue-282 render face
+    shares it: a stateless workspace must stay stateless (NO-STATE guidance,
+    never a freshly scaffolded timeline)."""
+    return any(p.exists() for p in (
+        ws / "claim-register.yaml", ws / LEDGER_NAME,
+        ws / "facts" / "_INDEX.md", ws / "runs"))
+
+
 def build_brief(ws) -> dict:
     """The whole resume brief. Pure read: no write to any file under ws."""
     ws = Path(ws).resolve()
     now = _utc_now()
 
     register = ws / "claim-register.yaml"
-    has_state = any(p.exists() for p in (
-        register, ws / LEDGER_NAME, ws / "facts" / "_INDEX.md", ws / "runs"))
+    has_state = _has_state(ws)
 
     data_age = _data_age_rows(ws, now)
     heartbeat = _heartbeat_health(ws, now)
@@ -545,6 +565,7 @@ def build_brief(ws) -> dict:
         "stale_workers": _stale_workers(ws, now),
         "plan": plan,
         "timeline": _timeline(ws, now),
+        "progress_timeline": progress_timeline.render_note(ws),  # issue-282 (pure read)
         "hypotheses": _open_hypotheses(ws),
         "gate_rejections": _gate_rejections(ws),
         "next_step": next_step,
@@ -652,13 +673,33 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="kunglao_resume.py",
         description="kunglao-agent crash/reboot recovery brief — "
-                    "read-only: health, state summary, data age, breakpoint "
+                    "read-only (plus the issue-282 progress.txt timeline view "
+                    "repair): health, state summary, data age, breakpoint "
                     "timeline, next step (from convergence_check)")
     parser.add_argument("workspace", help="crashed workspace root")
     parser.add_argument("--json", action="store_true",
                         help="machine-readable brief")
     args = parser.parse_args(argv)
 
+    # issue-282 render-then-read: the brief (and the human reading the workspace)
+    # must see the CURRENT timeline — a crash may carry ledger events that
+    # landed after the last convergence checkpoint. Gated on _has_state: a
+    # stateless workspace must stay stateless. Fail-open: a render
+    # failure leaves progress.txt as-is and never blocks the brief.
+    ws_path = Path(args.workspace)
+    if _has_state(ws_path):
+        try:
+            render_state = progress_timeline.render_and_repair(ws_path)
+            if render_state.get("status") == "skipped":
+                # fail-open with a trace (issue-275 policy): the skip reason
+                # was already warned inside the render face; keep the arm
+                # observable for any future skip shape that does not self-warn.
+                print(f"[kunglao-agent] progress timeline view not refreshed: "
+                      f"{render_state.get('reason')}", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001 — fail-open, never silent: a
+            # render-face crash leaves the brief intact, observed on stderr.
+            print(f'[kunglao-agent] progress timeline render skipped: {exc!r}',
+                  file=sys.stderr)
     # Review F4 boundary: a resume tool failure is NOT a workspace verdict.
     # Catch, label on stderr, exit RC_ERROR (== 1: the 0/1/2 triage surface
     # stays stable) — never let an internal crash wear RC_MANUAL's meaning

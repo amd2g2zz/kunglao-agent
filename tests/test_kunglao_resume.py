@@ -281,14 +281,35 @@ def test_decision_counters_are_ints_not_collections(tmp_path) -> None:
 
 
 def test_resume_is_read_only(tmp_path) -> None:
-    """The load-bearing contract: resume writes NOTHING — not the ledger
+    """The load-bearing contract (issue-466, as amended by issue-282): resume writes
+    NOTHING except the derived progress.txt timeline view — not the ledger
     (cc.main appends; decide() must be called directly), not state files,
-    not even new artifacts like runs/digest.md."""
+    not even new artifacts like runs/digest.md. The one permitted write is
+    the issue-282 render-then-read repair (write-on-diff, narrative sidecar
+    mirror allowed); in the steady state (content already current) resume
+    touches nothing at all."""
     import kunglao_resume as kr
     ws = _armed_ws(tmp_path)
     before_tree, before_ledger = _snapshot_tree(ws), _ledger_lines(ws)
     kr.main([str(ws), "--json"])
-    assert _snapshot_tree(ws) == before_tree, "resume modified the workspace"
+    after_tree = _snapshot_tree(ws)
+    changed = {k for k in after_tree
+               if k in before_tree and after_tree[k] != before_tree[k]}
+    added = set(after_tree) - set(before_tree)
+    # issue-282: progress.txt may be repaired; runs/progress-narrative.jsonl
+    # (the narrative mirror it ingests) and the advisory render lock may
+    # appear; NOTHING else may move.
+    assert changed <= {"progress.txt"}, f"resume modified: {changed}"
+    assert added <= {"runs/progress-narrative.jsonl",
+                     "runs/.progress-render.lock"}, \
+        f"resume created: {added}"
+    assert _ledger_lines(ws) == before_ledger, "resume appended to the ledger"
+    # steady state: with the view already current, a second resume is a
+    # FULL no-op (byte- and mtime-identical, issue-282 write-on-diff face)
+    steady_tree = _snapshot_tree(ws)
+    kr.main([str(ws), "--json"])
+    assert _snapshot_tree(ws) == steady_tree, \
+        "steady-state resume must not write anything"
     assert _ledger_lines(ws) == before_ledger, "resume appended to the ledger"
 
 

@@ -340,6 +340,10 @@ was discarded as untrusted). Write in this order:
 3. **Report** — `runs/<YYYY-MM-DD-HHMMSS>-<task>.md` (NOT `verify-*` — that
    filename is reserved for the verifier subagent).
 4. **LAST** — append one line to `progress.txt`: `[YYYY-MM-DD HH:MM] [W-<n> DONE] <summary>`.
+   (issue-282: progress.txt is regenerated from the event ledger at checkpoints;
+   your appended lines are preserved — the renderer migrates them into the
+   rendered timeline and mirrors them in `runs/progress-narrative.jsonl`.
+   Append exactly as before; never rewrite the file yourself.)
 
 <!-- contract: knowledge-sedimentation -->
 ## Knowledge sedimentation — durable result note

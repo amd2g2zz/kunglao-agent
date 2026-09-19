@@ -163,6 +163,7 @@ scripts (count in parens) · `tests` = exercised by tests/ only.
 | `mechanisms.yaml` | 机制注册表数据 (#878) — 13 条目（8 机制入口裁定 + tick advisory 子步骤迁入），schema/词表由 mechanism_scheduler.validate_registry 机械校验（tests/test_mechanism_scheduler_878.py 守卫） | mechanism_scheduler, tests |
 | `retract_claim.py` | RETRACTED terminal state + dependency blast-radius reopening (#331) | CLI, tests |
 | `progress_report.py` | one-block progress report | tests |
+| `progress_timeline.py` | complete case timeline renderer (issue-282) — derives progress.txt from the kunglao_log event ledger (E rows, tick-ordered) with worker narrative interleaved (N rows, sidecar-mirrored in runs/progress-narrative.jsonl); ingest→render→write-on-diff faces at convergence checkpoints + resume (render-then-read); self-healing by construction, unreadable ledger never touches the file; progress.txt stays a VIEW, never machine-ingested state (issue-530 holds) | convergence_check, kunglao_resume, tests |
 | `init_state.py` | init-completeness single source of truth (#304) | hooks, lib(3), tests |
 | `template_version.py` | workspace template version stamp — write/verify/upgrade-warning (#536) | kunglao-init, hooks_selfcheck, env_check, kunglao-status, kunglao-resume, tests |
 | `local_gate.py` | 本地质量门统一入口 (#873) — __file__ 自定位 cwd 免疫；pytest+ext-scan+deploy_manifest 一条命令 | CLI |
