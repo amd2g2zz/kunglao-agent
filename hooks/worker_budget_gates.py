@@ -1,6 +1,24 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] worker_budget_gates WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 from worker_budget_core import (  # noqa: F401 — broad re-export surface:
     # tests + sinks consume these via module attributes (gates.MAX_WORKERS etc.)
     MAX_WORKERS, MAX_PROMOTION_ATTEMPTS, MAX_RETRIES, RETRY_COUNTER_FILE,
@@ -388,10 +406,10 @@ def record_retry(workspace: str | Path, worker_id: str, claim_id: str) -> int:
     counters[key] = int(counters.get(key, 0)) + 1
     try:
         _write_retry_counter(Path(workspace), counters)
-    except Exception:
+    except Exception as exc:
         # Fail-open: do not propagate — the gate will still pass since
         # the on-disk counter is the source of truth (just possibly stale).
-        pass
+        warn("record_retry", f"{type(exc).__name__}: {exc}")
     return counters[key]
 
 
@@ -876,8 +894,8 @@ def check_claim_granularity(paths: dict, cid: str | None,
         if row and row.get('superseded_by'):
             sb = row['superseded_by']
             superseded_by = sb if isinstance(sb, list) else [str(sb)]
-    except (yaml.YAMLError, OSError):
-        pass  # unreadable register: the generic guidance stays (fail-open)
+    except (yaml.YAMLError, OSError) as exc:
+        warn("check_claim_granularity", f"{type(exc).__name__}: {exc}")
     if superseded_by:
         return (False, (
             f'GRANULARITY GATE: claim {cid} is already SUPERSEDED '
@@ -969,8 +987,8 @@ def _anchor_log_ts_list(ws: Path, key: str) -> list[str]:
                     continue
                 if ts:
                     out.append(str(ts))
-        except OSError:
-            pass
+        except OSError as exc:
+            warn("_anchor_log_ts_list", f"{type(exc).__name__}: {exc}")
     return out
 
 
@@ -1309,8 +1327,8 @@ def _toolfirst_emit(ws, ev: dict) -> None:
                                'keywords': ev['keywords'],
                                'tool': ev['tool']},
                               ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — logging never breaks the gate
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging never breaks the gate
+        warn("_toolfirst_emit", f"{type(exc).__name__}: {exc}")
 
 
 def check_tool_first(paths: dict, desc: str, prompt: str) -> tuple[bool, str]:
@@ -1438,8 +1456,8 @@ def toolfirst_pass_record(paths: dict, claim_id: str | None,
                                'tool': ev['tool']},
                               ensure_ascii=False))
         emitted = True
-    except Exception:  # noqa: BLE001 — logging never breaks the dispatch
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging never breaks the dispatch
+        warn("toolfirst_pass_record", f"{type(exc).__name__}: {exc}")
     if ev['mode'] == 'matched' and ev['keywords']:
         set_claim_operation(ws, claim_id, ev['keywords'], ev['tool'])
     return emitted

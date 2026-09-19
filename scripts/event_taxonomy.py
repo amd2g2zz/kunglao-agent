@@ -49,6 +49,15 @@ Taxonomy (25 classes):
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
 import argparse
 import json
 import sys
@@ -61,8 +70,8 @@ from _hooks_path import load_hooks_lib  # #863 Family B: loader delegation (#671
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-except (AttributeError, ValueError):
-    pass
+except (AttributeError, ValueError) as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 def _worker_protocol():
     """hooks/lib_kunglao.py — THE worker-liveness protocol owner (#444).

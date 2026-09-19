@@ -31,6 +31,24 @@ Output contract: schemas/verify-output.json (M3.3 frozen, module-design
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] kunglao_verify WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import hashlib
 import json
@@ -970,8 +988,8 @@ def verify(ws: Path, fact_id: str, l2_dispatcher=None, *,
                            files_written=[str(vp.relative_to(ws))],
                            claims_touched=[claim_id], verdict=overall,
                            exit=0 if overall == "VERIFIED" else 1)
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("verify", f"{type(exc).__name__}: {exc}")
     return out
 
 

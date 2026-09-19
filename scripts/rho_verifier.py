@@ -11,6 +11,24 @@ back. Shadow: sample_and_pair records, nothing intercepts (the P3
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] rho_verifier WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import os
 import re
@@ -96,8 +114,8 @@ def get_backend(env=None):
         try:
             from rho_llm_backend import LlmBackend  # optional module
             return LlmBackend()
-        except ImportError:
-            pass
+        except ImportError as exc:
+            warn("get_backend", f"{type(exc).__name__}: {exc}")
     return DeterministicBackend()
 
 
@@ -193,8 +211,8 @@ def sample_and_pair(ws, z=None, emit=True):
                 detail=json.dumps({**cs, "cost_spent": cost,
                                    "n_cost_events": len(events)},
                                   ensure_ascii=False, default=str))
-        except Exception:  # noqa: BLE001 — 持久化永不破坏采样
-            pass
+        except Exception as exc:  # noqa: BLE001 — 持久化永不破坏采样
+            warn("sample_and_pair", f"{type(exc).__name__}: {exc}")
     out["z"] = z
     return out
 

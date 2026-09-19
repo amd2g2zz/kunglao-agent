@@ -13,6 +13,24 @@ Output contract: schemas/event.json (M0.3 Event schema, module-design §M0.3 L53
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] kunglao_record WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import os
 import hashlib
@@ -526,8 +544,8 @@ def claim_migrator(ws: Path, claim_id: str, new_status: str, actor: str) -> tupl
         from kunglao_log import emit
         emit(ws, actor=actor, action="claim_migrate", claim=claim_id,
              artifact="claim-register.yaml", detail=effective_status)
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("claim_migrator", f"{type(exc).__name__}: {exc}")
     # ---- issue 252: the family ledger syncs FROM this settlement ----
     # The register write above is the authority; the family ledger is
     # derived state. Fail-open but NOT fail-silent (the issue 275 class): a

@@ -29,6 +29,24 @@ Usage:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] dead_letter WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import sys
 from pathlib import Path
@@ -221,8 +239,8 @@ def _escalate_must_ask(workspace: Path, claim_id: str, attempts: int) -> dict:
                          detail=f"promotion_attempts={attempts} "
                                 f"(dispatch-failure 3-strike) — charter "
                                 f"工具/资源耗尽 row: must-ask, not auto-DEAD")
-    except Exception:  # noqa: BLE001 — logging never breaks the writer
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging never breaks the writer
+        warn("_escalate_must_ask", f"{type(exc).__name__}: {exc}")
     return {"escalated": True, "claim_id": claim_id,
             "artifact": str(artifact)}
 

@@ -58,6 +58,24 @@ Auto-integration mode (issue #602, --auto flag):
     2  = 1+ non-WARN drift                         -> BLOCKED (hard REJECT)
 """
 from __future__ import annotations
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] plan_drift_detector WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import gate_telemetry as _gt
 from status_defs import TERMINAL
 from harness_common import utc_now_z as utc_now  # noqa: F401 — #863 Family F contract (863g mechanical check)
@@ -486,8 +504,8 @@ def find_stale_plan_on_new_evidence(workspace: Path, plan_path, claims: list) ->
                             f"update — re-derive {plan_path.name} on the new "
                             "evidence (#497)"),
                 })
-        except OSError:
-            pass
+        except OSError as exc:
+            warn("find_stale_plan_on_new_evidence", f"{type(exc).__name__}: {exc}")
     return warns
 
 
@@ -516,8 +534,8 @@ def _emit_stale_plan_warns(workspace: Path, warns: list) -> None:
             emit(workspace, actor="orchestrator",
                  action="stale_plan_on_new_evidence",
                  claim=w.get("claim_id"), detail=w.get("fix"))
-        except Exception:
-            pass
+        except Exception as exc:
+            warn("_emit_stale_plan_warns", f"{type(exc).__name__}: {exc}")
 
 
 # --- issue-281: bounded-window plan-repair verification --------------------

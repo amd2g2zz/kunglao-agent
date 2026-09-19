@@ -32,6 +32,24 @@ same action family under a sibling operation still counts as thrash.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] zero_output_fingerprint WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import hashlib
 import json
 import sys
@@ -82,8 +100,8 @@ def _load_state(ws: Path) -> dict:
         data = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(data, dict) and isinstance(data.get("streaks"), dict):
             return data
-    except (OSError, json.JSONDecodeError):
-        pass
+    except (OSError, json.JSONDecodeError) as exc:
+        warn("_load_state", f"{type(exc).__name__}: {exc}")
     return {"belief_hash": None, "streaks": {}}
 
 
@@ -92,8 +110,8 @@ def _save_state(ws: Path, state: dict) -> None:
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
-    except OSError:
-        pass  # state loss degrades to a reset streak, never a crash
+    except OSError as exc:
+        warn("_save_state", f"{type(exc).__name__}: {exc}")
 
 
 def record_action(ws: Path, tool: str, target_type: str) -> dict:

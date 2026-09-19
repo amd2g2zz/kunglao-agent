@@ -30,6 +30,15 @@ surface, not a crash).
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -37,8 +46,8 @@ import kunglao_log  # noqa: E402
 try:
     kunglao_log.emit(ws, actor="env_repair_l1", action="write_blocked",
                           detail="module wired")
-except NameError:
-    pass
+except NameError as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 import json
 import os

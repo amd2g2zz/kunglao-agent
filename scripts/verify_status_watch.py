@@ -29,6 +29,24 @@ Usage (from heartbeat_tick, advisory):
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] verify_status_watch WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import re
 import sys
@@ -147,15 +165,15 @@ def reconcile(ws: Path) -> dict:
                     artifact=note_rel,
                     detail=f"{old} -> {status}"
                            f"{' UNWITNESSED (out-of-band write)' if not witnessed else ''}")
-            except Exception:  # noqa: BLE001 — watch, not gate
-                pass
+            except Exception as exc:  # noqa: BLE001 — watch, not gate
+                warn("reconcile", f"{type(exc).__name__}: {exc}")
     try:
         state_path.parent.mkdir(parents=True, exist_ok=True)
         state_path.write_text(
             json.dumps({"ts": report["ts"], "stamps": current}, indent=2),
             encoding="utf-8")
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("reconcile_2", f"{type(exc).__name__}: {exc}")
     return report
 
 

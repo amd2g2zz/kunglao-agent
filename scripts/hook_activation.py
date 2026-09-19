@@ -70,6 +70,25 @@ init returns RC_HOOK_WIRING — never a silent OK or a WARN.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_IMPORT_DEGRADED: list[str] = []
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] hook_activation WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 # #534: observability lifeline — module-level emit on load.
 import kunglao_log  # noqa: E402
 
@@ -77,8 +96,8 @@ import kunglao_log  # noqa: E402
 try:
     kunglao_log.emit(ws, actor="hook_activation", action="write_blocked",
                              detail="module wired")
-except NameError:
-    pass
+except NameError as exc:
+    _IMPORT_DEGRADED.append(f"module: {type(exc).__name__}: {exc}")
 
 import argparse
 import hashlib
@@ -156,8 +175,8 @@ def is_active(workspace: Path, hook_name: str) -> bool:
             exp = datetime.fromisoformat(expires.replace("Z", "+00:00"))
             if datetime.now(tz=timezone.utc) > exp:
                 return False  # expired — treated as paused
-        except (ValueError, TypeError):
-            pass  # unparseable expiry: don't block on it, fall through
+        except (ValueError, TypeError) as exc:
+            warn("is_active", f"{type(exc).__name__}: {exc}")
     override = state.get("user_override", {}).get(hook_name)
     if override == "on":
         return True
@@ -250,8 +269,8 @@ def _emit_hook_slept_once(workspace: Path, state: dict, exp: datetime) -> None:
             f"({len(record['hooks_affected'])} hook(s)). Re-arm: hook_activation.py {workspace} --renew",
             file=sys.stderr,
         )
-    except (OSError, ValueError, TypeError):
-        pass  # fail-open: observability must never change the gate verdict
+    except (OSError, ValueError, TypeError) as exc:
+        warn("_emit_hook_slept_once", f"{type(exc).__name__}: {exc}")
 
 
 def completeness_report(ws: Path) -> list:
@@ -287,8 +306,8 @@ def _emit_surface_incident(ws: Path) -> None:
                    + (f" (+{len(missing) - 20} more)" if len(missing) > 20
                       else ""),
             exit=1)
-    except Exception:
-        pass  # observability must never break the activation writer
+    except Exception as exc:
+        warn("_emit_surface_incident", f"{type(exc).__name__}: {exc}")
 
 
 def update_state(workspace: Path, tier: str, phase: str,
@@ -352,8 +371,8 @@ def renew(workspace: Path, ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
         kunglao_log.emit(workspace, "orchestrator", "renew",
                          detail=f"was_expired={str(was_expired).lower()};"
                                 f"expiry_gap_s={gap_s};ttl_min={ttl_minutes}")
-    except Exception:
-        pass  # audit is observability — never fails the renew
+    except Exception as exc:
+        warn("renew", f"{type(exc).__name__}: {exc}")
     state["ts"] = utc_now()
     state["expires_at"] = (datetime.now(tz=timezone.utc) + timedelta(minutes=ttl_minutes)).isoformat(timespec="seconds").replace("+00:00", "Z")
     write_state(workspace, state)
@@ -373,8 +392,8 @@ def renew(workspace: Path, ttl_minutes: int = DEFAULT_TTL_MINUTES) -> dict:
             hb.write_text(_json.dumps(hstate, indent=2), encoding="utf-8")
             # #830: a renew tick lands in the durable sidecar as well.
             append_tick_log(workspace, "renew")
-        except Exception:
-            pass  # heartbeat file corrupt — --heartbeat-check will report it
+        except Exception as exc:
+            warn("renew_2", f"{type(exc).__name__}: {exc}")
     return state
 
 

@@ -58,6 +58,24 @@ dispatches via the Agent tool):
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] dispatch_gate WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import re
 import sys
@@ -221,8 +239,8 @@ def _parse_dispatch(text: str) -> tuple[str | None, str | None]:
     try:
         if load_hooks_lib().parse_dispatch_json(text)[2] is not None:
             return (claim_id, "v1")
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("_parse_dispatch", f"{type(exc).__name__}: {exc}")
     return (claim_id, "v0")
 
 
@@ -703,8 +721,8 @@ def _capability_guard(ws: Path, claim_id: str, prompt_text: str,
         parent = (target or {}).get("obstacle_for")
         if parent:
             claim_ids.add(str(parent))
-    except Exception:  # noqa: BLE001 — register unreadable -> card scope is the claim
-        pass
+    except Exception as exc:  # noqa: BLE001 — register unreadable -> card scope is the claim
+        warn("_capability_guard", f"{type(exc).__name__}: {exc}")
     try:
         evidence = pr.EvidenceView.from_workspace(ws)
     except Exception:  # noqa: BLE001 — artifact scan failure -> fail open

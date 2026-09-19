@@ -48,6 +48,24 @@ JSON envelope (when `--json` is set):
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] kunglao_upgrade WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import os
 import hashlib
@@ -453,8 +471,8 @@ def _derive_project_type(ws: Path) -> str:
             pt = data.get("project_type")
             if isinstance(pt, str) and pt.strip():
                 return pt.strip()
-        except (ValueError, OSError):
-            pass
+        except (ValueError, OSError) as exc:
+            warn("_derive_project_type", f"{type(exc).__name__}: {exc}")
     state = ws / "analysis_state.txt"
     if state.is_file():
         try:
@@ -463,8 +481,8 @@ def _derive_project_type(ws: Path) -> str:
                     got = line.split("=", 1)[1].strip()
                     if got:
                         return got
-        except OSError:
-            pass
+        except OSError as exc:
+            warn("_derive_project_type_2", f"{type(exc).__name__}: {exc}")
     return "windows"
 
 
@@ -489,8 +507,8 @@ def _build_current_frame(ws: Path, old_text: str,
         if vm_req is not None and not vm_req[0]:
             type_section = em.conditionalize_vm_required(type_section,
                                                          vm_req[1])
-    except Exception:  # noqa: BLE001 — parity best-effort, frame still renders
-        pass
+    except Exception as exc:  # noqa: BLE001 — parity best-effort, frame still renders
+        warn("_build_current_frame", f"{type(exc).__name__}: {exc}")
 
     venv_candidate = ws / ".venv"
     venv_path = str(venv_candidate) if venv_candidate.exists() else ".venv/"
@@ -942,8 +960,8 @@ def _emit(ws: Path, action: str, detail: str) -> None:
     try:
         from kunglao_log import emit
         emit(ws, actor="kunglao_upgrade", action=action, detail=detail)
-    except Exception:  # noqa: BLE001 — telemetry must never block migration
-        pass
+    except Exception as exc:  # noqa: BLE001 — telemetry must never block migration
+        warn("_emit", f"{type(exc).__name__}: {exc}")
 
 
 def _emit_event(name: str, status: str, detail: str = "") -> None:
@@ -953,8 +971,8 @@ def _emit_event(name: str, status: str, detail: str = "") -> None:
     try:
         line = f"[event] name={name} status={status} detail={detail}"
         print(line.rstrip(), file=sys.stderr, flush=True)
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        warn("_emit_event", f"{type(exc).__name__}: {exc}")
 
 
 def _warn_line(msg: str) -> None:

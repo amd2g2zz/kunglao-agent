@@ -14,6 +14,24 @@ regexes; latest = max mtime. Posture: fail-closed (structure gate).
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] register_proven_gate WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -340,12 +358,12 @@ def check_register_transitions(ws: Path, new_text: str,
                     f"{cid}: redteam record {rt.get('source')} predates "
                     f"maker verify-note {vn.get('source')} (#825 provenance)")
                 continue
-        except OSError:
-            pass
+        except OSError as exc:
+            warn("check_register_transitions", f"{type(exc).__name__}: {exc}")
         try:
             vi.anchor(ws, cid, rt["source"], ident)
-        except OSError:
-            pass  # anchor is audit-grade, never a block reason
+        except OSError as exc:
+            warn("check_register_transitions_2", f"{type(exc).__name__}: {exc}")
     ok = not violations
     return {"ok": ok, "violations": violations, "waivers": waivers}
 
@@ -399,8 +417,8 @@ def _burn_lesson_lineage(ws: Path, claim_id: str) -> None:
     try:
         from lessons_telemetry import record_burn
         record_burn(None, slug, workspace=ws)
-    except Exception:  # noqa: BLE001 — lessons counting never blocks the gate
-        pass
+    except Exception as exc:  # noqa: BLE001 — lessons counting never blocks the gate
+        warn("_burn_lesson_lineage", f"{type(exc).__name__}: {exc}")
 
 
 def _parse_dispatch_ts(ts) -> int | None:
@@ -503,8 +521,8 @@ def emit_settlements(ws, new_text: str, old_text: str | None = None) -> int:
                  detail=_json.dumps({"from": frm, "to": to, "tools": tools,
                                      "outcome": to}, ensure_ascii=False))
             count += 1
-        except Exception:  # noqa: BLE001 — logging never breaks the gate
-            pass
+        except Exception as exc:  # noqa: BLE001 — logging never breaks the gate
+            warn("emit_settlements", f"{type(exc).__name__}: {exc}")
         # #882 settlement retro: index the settlement (micro-retro O(1) read
         # face + backlog lag) and replay the claim's trace subgraph locally
         # (runs/<ts>-retro-<claim>.md). Fail-open, never blocks settlement —
@@ -514,8 +532,8 @@ def emit_settlements(ws, new_text: str, old_text: str | None = None) -> int:
             record_settlement(ws, cid, to, tools=tools, outcome=to,
                               trace_id=trace_id)
             settlement_retro(ws, cid, to=to, frm=frm, trace_id=trace_id)
-        except Exception:  # noqa: BLE001 — backtrack never blocks settlement
-            pass
+        except Exception as exc:  # noqa: BLE001 — backtrack never blocks settlement
+            warn("emit_settlements_2", f"{type(exc).__name__}: {exc}")
         if to in NEGATIVE_SETTLEMENTS:
             _burn_lesson_lineage(ws, cid)
     return count

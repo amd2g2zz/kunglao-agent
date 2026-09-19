@@ -82,6 +82,24 @@ Usage:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] priority_ratio WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import hashlib
 import json
@@ -180,8 +198,8 @@ class EvidenceView:
                               or {}).get("claims") or []:
                         if str(c.get("status", "")).upper() in TERMINAL:
                             terminal_claims.add(c.get("id"))
-                except (yaml.YAMLError, OSError):
-                    pass  # fail-open: broken register must not break ranking
+                except (yaml.YAMLError, OSError) as exc:
+                    warn("from_workspace", f"{type(exc).__name__}: {exc}")
         caps, obstacles = _scan_failure_artifacts(ws)
         classes, overrides = load_value_weights(ws)
         return cls(frozenset(terminal_claims), verified, {}, lines,
@@ -1109,8 +1127,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         kunglao_log.emit(ws, actor="priority_ratio",
                          action="priority_deviation", detail="module wired")
-    except Exception:  # noqa: BLE001 — observability never disturbs the run
-        pass
+    except Exception as exc:  # noqa: BLE001 — observability never disturbs the run
+        warn("main", f"{type(exc).__name__}: {exc}")
     reg = _load_yaml(ws / "claim-register.yaml")
     deps = _load_yaml(ws / "claim_deps.yaml")
     evidence = EvidenceView.from_workspace(ws)

@@ -36,6 +36,24 @@ answer to "诊断不可解释": one command reconstructs what just happened.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] kunglao_log WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import os
@@ -602,8 +620,8 @@ def mission_id(ws: Path) -> str:
         m = (spec or {}).get("mission") if isinstance(spec, dict) else None
         if isinstance(m, str) and m.strip():
             return _sanitize_mission(m)
-    except Exception:  # noqa: BLE001 — identity is best-effort, never fatal
-        pass
+    except Exception as exc:  # noqa: BLE001 — identity is best-effort, never fatal
+        warn("mission_id", f"{type(exc).__name__}: {exc}")
     return _sanitize_mission(Path(ws).name)
 
 
@@ -647,8 +665,8 @@ def allocate_trace_id(ws, mission: str | None = None) -> tuple[str, bool]:
             json.dumps({"mission": mission, "seq": seq, "trace_id": tid},
                        ensure_ascii=False, sort_keys=True) + "\n",
             encoding="utf-8")
-    except OSError:
-        pass  # fail-open: the id is still returned, state just lags
+    except OSError as exc:
+        warn("allocate_trace_id", f"{type(exc).__name__}: {exc}")
     return tid, True
 
 
@@ -758,8 +776,8 @@ def main(argv: list[str] | None = None) -> int:
             return RC_USAGE
         try:
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError):
-            pass
+        except (AttributeError, ValueError) as exc:
+            warn("main", f"{type(exc).__name__}: {exc}")
         viols = actor_violations(ws)
         for v in viols:
             print(f"ACTOR-VIOLATION {v['ts']} actor={v['actor']!r} "
@@ -775,8 +793,8 @@ def main(argv: list[str] | None = None) -> int:
         return RC_USAGE
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        pass
+    except (AttributeError, ValueError) as exc:
+        warn("main_2", f"{type(exc).__name__}: {exc}")
     for row in tail(ws, args.n):
         # canonical form = the emit serialization (sort_keys, compact,
         # ensure_ascii=False) so tail output round-trips with the file bytes

@@ -155,6 +155,24 @@ armed-case count shrank.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] oracle_runner WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import hashlib
 import json
@@ -836,8 +854,8 @@ def _emit_posterior_update(ws, case_id: str, before: tuple,
                   "alpha_after": after[0], "beta_after": after[1],
                   "trigger_fingerprint": trigger},
                  sort_keys=True, ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — observability never disturbs reward
-        pass
+    except Exception as exc:  # noqa: BLE001 — observability never disturbs reward
+        warn("_emit_posterior_update", f"{type(exc).__name__}: {exc}")
 
 
 def _emit_observation(ws, case_id: str, row: dict) -> None:
@@ -862,8 +880,8 @@ def _emit_observation(ws, case_id: str, row: dict) -> None:
         emit(ws, actor="oracle_runner", action="observation",
              detail=json.dumps(payload, sort_keys=True, ensure_ascii=False,
                                default=repr))
-    except Exception:  # noqa: BLE001 — observability never disturbs the run
-        pass
+    except Exception as exc:  # noqa: BLE001 — observability never disturbs the run
+        warn("_emit_observation", f"{type(exc).__name__}: {exc}")
 
 
 # ------------------- settlement -> PQ categorical face ---------------------
@@ -1035,8 +1053,8 @@ def _emit_pq_update(ws, record: dict) -> None:
         emit(ws, actor="oracle_runner", action="pq_posterior_update",
              detail=json.dumps(payload, sort_keys=True,
                                ensure_ascii=False, default=repr))
-    except Exception:  # noqa: BLE001 — observability never disturbs reward
-        pass
+    except Exception as exc:  # noqa: BLE001 — observability never disturbs reward
+        warn("_emit_pq_update", f"{type(exc).__name__}: {exc}")
 
 
 def record_pq_updates(ws, report: dict, led) -> list[dict]:
@@ -1165,8 +1183,8 @@ def _emit_coverage_decreased(ws, case_id: str, before: int, after: int) -> None:
              action="acceptance_coverage_decreased",
              detail=(f"case={case_id} armed_cases={after} (was {before}) — "
                      f"acceptance coverage decreased"))
-    except Exception:  # noqa: BLE001 — observability never disturbs the run
-        pass
+    except Exception as exc:  # noqa: BLE001 — observability never disturbs the run
+        warn("_emit_coverage_decreased", f"{type(exc).__name__}: {exc}")
 
 
 def retire_case(ws, case_id: str, *, attribution_class: str,

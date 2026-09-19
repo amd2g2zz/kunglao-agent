@@ -51,6 +51,24 @@ Usage:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] mechanism_scheduler WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import os
 import sys
@@ -137,8 +155,8 @@ def _write_state(ws: Path, state: dict) -> None:
             json.dumps(state, ensure_ascii=False, sort_keys=True) + "\n",
             encoding="utf-8")
         tmp.replace(path)
-    except OSError:
-        pass  # telemetry state must never break the tick
+    except OSError as exc:
+        warn("_write_state", f"{type(exc).__name__}: {exc}")
 
 
 def _update_state(ws: Path, *, mechanisms: dict | None = None,
@@ -400,8 +418,8 @@ def _budget_s() -> float:
             v = float(raw)
             if v >= 0:
                 return v
-        except ValueError:
-            pass
+        except ValueError as exc:
+            warn("_budget_s", f"{type(exc).__name__}: {exc}")
     return DEFAULT_BUDGET_S
 
 
@@ -474,8 +492,8 @@ def run_due(ws: Path, *, budget_s: float | None = None, runner=None,
             kunglao_log.emit(ws, "orchestrator", "mech_reject",
                              detail=json.dumps({"errors": errors[:8]},
                                                ensure_ascii=False))
-        except Exception:  # noqa: BLE001 — logging never breaks the tick
-            pass
+        except Exception as exc:  # noqa: BLE001 — logging never breaks the tick
+            warn("run_due", f"{type(exc).__name__}: {exc}")
         print("mechanism_scheduler: REGISTRY REJECTED — "
               f"{len(errors)} schema violation(s); nothing ran", file=sys.stderr)
         return {"ts": utc_now(), "error": errors, "ran": [], "skipped": [],
@@ -577,8 +595,8 @@ def run_due(ws: Path, *, budget_s: float | None = None, runner=None,
                               "dropped": dropped, "events": bus["classes"],
                               "elapsed_ms": elapsed_ms},
                              ensure_ascii=False))
-    except Exception:  # noqa: BLE001 — logging never breaks the tick
-        pass
+    except Exception as exc:  # noqa: BLE001 — logging never breaks the tick
+        warn("run_due_2", f"{type(exc).__name__}: {exc}")
 
     mech_view = {}
     for e in entries:

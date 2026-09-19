@@ -40,6 +40,24 @@ VMP/Android replay infrastructure (issue 260).
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] plan_epistemics WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import re
@@ -175,23 +193,23 @@ def detect_target_class(ws: Path) -> str | None:
                          or (data or {}).get("detected_packer") or "").lower()
             if any(p in packer for p in VMP_PACKERS):
                 return "vmp"
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        warn("detect_target_class", f"{type(exc).__name__}: {exc}")
     try:
         apkid = ws / "evidence" / "apkid.json"
         if apkid.exists():
             data = json.loads(apkid.read_text(encoding="utf-8"))
             if isinstance(data, dict) and data.get("status") == "ok":
                 return "android"
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        warn("detect_target_class_2", f"{type(exc).__name__}: {exc}")
     try:
         state = ws / "analysis_state.txt"
         if state.exists() and "android" in state.read_text(
                 encoding="utf-8", errors="replace").lower():
             return "android"
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("detect_target_class_3", f"{type(exc).__name__}: {exc}")
     return None
 
 

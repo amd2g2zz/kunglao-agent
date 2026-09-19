@@ -27,6 +27,24 @@ Design notes
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] lint_facts WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import datetime
 import json
@@ -202,8 +220,8 @@ def parse_frontmatter(text: str):
             fm = yaml.safe_load(fm_text)
             if isinstance(fm, dict):
                 return _coerce_yaml_scalars(fm), body, None
-        except yaml.YAMLError:
-            pass
+        except yaml.YAMLError as exc:
+            warn("parse_frontmatter", f"{type(exc).__name__}: {exc}")
     fm = _parse_kv_block(lines[1:end])
     return fm, body, "yaml-unparseable"
 

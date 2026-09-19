@@ -15,6 +15,24 @@ State: runs/infeasible-state.json {"terminal_count": int}.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] infeasible_signal WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import json
 import sys
 from pathlib import Path
@@ -60,8 +78,8 @@ def _terminal_count(ws: Path) -> int:
             if len(parts) >= 3 and parts[0].startswith("F") \
                     and any(t in parts[1].upper() for t in _TERMINAL):
                 n += 1
-    except OSError:
-        pass
+    except OSError as exc:
+        warn("_terminal_count", f"{type(exc).__name__}: {exc}")
     return n
 
 
@@ -70,8 +88,8 @@ def _load_state(ws: Path) -> dict:
         data = json.loads((Path(ws) / STATE_FILE).read_text(encoding="utf-8"))
         if isinstance(data, dict):
             return data
-    except (OSError, json.JSONDecodeError):
-        pass
+    except (OSError, json.JSONDecodeError) as exc:
+        warn("_load_state", f"{type(exc).__name__}: {exc}")
     return {}
 
 
@@ -104,8 +122,8 @@ def evaluate(ws: Path, v_series: list[float] | None = None,
             (ws / STATE_FILE).parent.mkdir(parents=True, exist_ok=True)
             (ws / STATE_FILE).write_text(
                 json.dumps({"terminal_count": cur}, sort_keys=True), encoding="utf-8")
-        except OSError:
-            pass
+        except OSError as exc:
+            warn("evaluate", f"{type(exc).__name__}: {exc}")
     fire = flat >= K_ROUNDS and discovery_zero
     if fire and persist:
         kunglao_log.emit(ws, actor="infeasible_signal",

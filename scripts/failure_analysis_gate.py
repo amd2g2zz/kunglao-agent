@@ -102,6 +102,24 @@ Exit codes:
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] failure_analysis_gate WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import hashlib
 import json
@@ -170,8 +188,8 @@ def _emit_failure_blocked(workspace: Path, d: dict) -> None:
                  claim=d.get("claim_id"),
                  detail=f"status={d.get('status')} "
                         f"red_settlements={red_total}")
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("_emit_failure_blocked", f"{type(exc).__name__}: {exc}")
 
 
 def _emit_analysis_recorded(workspace: Path, claim_id: str, entry: dict) -> None:
@@ -185,8 +203,8 @@ def _emit_analysis_recorded(workspace: Path, claim_id: str, entry: dict) -> None
              claim=claim_id,
              detail=f"source={entry.get('next_method_source')} "
                     f"candidates={len(entry.get('candidates') or [])}")
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("_emit_analysis_recorded", f"{type(exc).__name__}: {exc}")
 
 
 def _load_claims(workspace: Path):
@@ -525,8 +543,8 @@ def record_analysis(workspace: Path, claim_id: str, assumption: str,
                 str(candidates[0].get("file") or "").removeprefix("lesson-")
                 .removesuffix(".md"),
                 workspace=workspace)
-        except Exception:  # noqa: BLE001 — lessons counting never blocks a record
-            pass
+        except Exception as exc:  # noqa: BLE001 — lessons counting never blocks a record
+            warn("record_analysis", f"{type(exc).__name__}: {exc}")
     return {"recorded": True, "entry": entry, "obstacle_claim": promotion}
 
 
@@ -1041,8 +1059,8 @@ def promote_lesson(lesson_path: Path, workspace: Path,
              artifact=p.name,
              detail=(f"draft→active promoted_by={promoted_by} "
                      f"evidence={evidence}"))
-    except Exception:
-        pass
+    except Exception as exc:
+        warn("promote_lesson", f"{type(exc).__name__}: {exc}")
 
     return {"promoted": True, "from_stage": "draft", "to_stage": "active",
             "promoted_at": now}

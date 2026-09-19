@@ -36,6 +36,24 @@ guard pins that ordering).
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] lessons_telemetry WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import argparse
 import json
 import sys
@@ -64,8 +82,8 @@ def _safe_emit(workspace: Path | None, action: str, slug: str, utility: float,
             detail = f"{detail} {detail_extra}"
         emit(ws, actor="telemetry", action=action,
              artifact=f"lesson-{slug}.md", detail=detail)
-    except Exception:
-        pass  # fail-open by contract
+    except Exception as exc:
+        warn("_safe_emit", f"{type(exc).__name__}: {exc}")
 
 
 # ---------- frontmatter read / write ----------

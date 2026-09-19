@@ -36,6 +36,24 @@ writer rejects.
 """
 from __future__ import annotations
 
+
+
+# issue 275 batch-3: fail-open handlers keep their liveness posture (never
+# raise, never change the return shape) but must leave ONE trace - a stderr
+# WARN naming the operation + reason, rate-limited to once per op until the
+# reason changes (the _zof_warn pattern of issue 276; one ws per process,
+# so op is the key).
+import sys
+_WARN_LAST: dict[str, str] = {}
+
+
+def warn(op: str, reason: str) -> None:
+    if _WARN_LAST.get(op) == reason:
+        return
+    _WARN_LAST[op] = reason
+    print(f"[kunglao-agent] notes_writer WARN (fail-open): "
+          f"{op}: {reason}",
+          file=sys.stderr)
 import re
 import sys
 from pathlib import Path
@@ -292,8 +310,8 @@ def note_supersedes_hypothesis(notes_dir: Path, note_id: str, *,
         emit(workspace, actor="notes_writer", action="hypothesis_superseded",
              artifact=f"notes/{note_id}.md",
              detail=f"{pointer} <- {note_id} | affected_claims={','.join(affected)}")
-    except Exception:  # noqa: BLE001 — observability never gates the rewrite
-        pass
+    except Exception as exc:  # noqa: BLE001 — observability never gates the rewrite
+        warn("note_supersedes_hypothesis", f"{type(exc).__name__}: {exc}")
     return {"ok": True, "note": note_id, "hypothesis": pointer,
             "status": "superseded", "superseded_by": note_id,
             "affected_claims": affected}
