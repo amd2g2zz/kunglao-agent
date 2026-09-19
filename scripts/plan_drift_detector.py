@@ -65,6 +65,7 @@ from harness_common import utc_now_z as utc_now  # noqa: F401 — #863 Family F 
 import argparse
 import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -519,6 +520,184 @@ def _emit_stale_plan_warns(workspace: Path, warns: list) -> None:
             pass
 
 
+# --- issue-281: bounded-window plan-repair verification --------------------
+#
+# The plan-drift REJECT instructs a repair ("update global_plan.txt ...")
+# that, before this face, nothing verified — the same dead-lock class the
+# issue-249 remedy verification closed on the STALLED face ("knows the
+# error but the next step doesn't move"). Mirror of that split: the drift
+# REJECT itself still gates dispatch; this face adds ONLY visibility and
+# escalation around the repair loop (plan_repair_verified closes it, a
+# plan_repair_overdue escalation fires on un-repaired drift).
+
+# The repair window, in DETECTION ROUNDS (named constant per the issue).
+# The counter is FINGERPRINT-INDEPENDENT (review round 1, HIGH): every
+# drift round advances it — a workspace whose drift set ROTATES between
+# disjoint shapes accumulates rounds exactly like one with a stable
+# fingerprint, so rotation can never reset the window. `rounds` reaching a
+# multiple of the window re-escalates (cadence, not once-forever). The
+# sinks drift guidance prose and templates/CLAUDE.md.base.tmpl carry the
+# same number as a literal — cross-face sync pinned by
+# tests/test_plan_repair_verify_281.py (this module is the single source).
+PLAN_REPAIR_WINDOW_ROUNDS = 3
+
+PLAN_REPAIR_STATE_FILE = "runs/plan-repair-state.json"
+PLAN_REPAIR_OPEN = "open"
+PLAN_REPAIR_VERIFIED = "verified"
+PLAN_REPAIR_OVERDUE_ACTION = "plan_repair_overdue"
+PLAN_REPAIR_VERIFIED_ACTION = "plan_repair_verified"
+
+
+def repair_fingerprint(drifts: list) -> dict:
+    """Canonical episode fingerprint: one item per (drift class, claim).
+
+    `TYPE:claim_id` items describe the CURRENT drift shape for telemetry;
+    they are deliberately NOT the verification unit (review round 1:
+    disjointness is not repair) — the window advances on ANY drift round
+    and verified fires only on a genuinely clean round.
+    """
+    return {
+        "items": sorted({f"{d['type']}:{d.get('claim_id')}" for d in drifts}),
+        "classes": sorted({d["type"] for d in drifts}),
+    }
+
+
+def _write_repair_state(state_path: Path, state: dict) -> None:
+    """Fail-open state write (telemetry never breaks the check). tmp +
+    os.replace so a concurrent reader sees the old or the new file, never
+    a torn one (review round 1, LOW)."""
+    try:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = state_path.with_name(state_path.name + ".tmp")
+        tmp.write_text(
+            json.dumps(state, ensure_ascii=False, sort_keys=True) + "\n",
+            encoding="utf-8")
+        os.replace(tmp, state_path)
+    except OSError as exc:
+        print(f"[kunglao-agent] plan-repair state write skipped: {exc!r}",
+              file=sys.stderr)
+
+
+def _repair_episode_detail(state: dict) -> dict:
+    fp = state.get("fingerprint") or {}
+    return {"items": fp.get("items") or [], "classes": fp.get("classes") or [],
+            "rounds": state.get("rounds") or 0,
+            "window": PLAN_REPAIR_WINDOW_ROUNDS}
+
+
+def _close_repair_episode(state: dict) -> dict:
+    return {**state, "status": PLAN_REPAIR_VERIFIED, "closed": utc_now()}
+
+
+def _repair_emit(workspace: Path, action: str, detail: dict) -> None:
+    """Fail-open event face (kunglao_record posture — same as the class-7
+    WARN emit above)."""
+    try:
+        from kunglao_log import emit
+        emit(workspace, actor="orchestrator", action=action,
+             detail=json.dumps(detail, ensure_ascii=False, sort_keys=True))
+    except Exception as exc:  # noqa: BLE001 — observability is best-effort,
+        # never silent (the annotated form the silent-except ratchet wants)
+        print(f"[kunglao-agent] plan-repair telemetry skipped: {exc!r}",
+              file=sys.stderr)
+
+
+def _plan_repair_tick(workspace: Path, drifts: list) -> dict | None:
+    state_path = Path(workspace) / PLAN_REPAIR_STATE_FILE
+    state = None
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            # fail-open, annotated: an unreadable episode never blocks or
+            # crashes the detector — verification skips for this round.
+            print("[kunglao-agent] plan-repair state unreadable - repair "
+                  "verification skipped (fail-open)", file=sys.stderr)
+            return None
+    if not drifts:
+        if not state or state.get("status") != PLAN_REPAIR_OPEN:
+            return None  # no open episode: clean rounds write nothing
+        # verified means REPAIR, not rotation (review round 1, HIGH): the
+        # only face that closes an episode positively is a genuinely
+        # clean round — the plan files actually agree with the register.
+        detail = _repair_episode_detail(state)
+        _repair_emit(workspace, PLAN_REPAIR_VERIFIED_ACTION, detail)
+        print(f"PLAN_REPAIR_VERIFIED: workspace drift-free after "
+              f"{detail['rounds']} drift round(s) - amendment verified "
+              f"(issue-281)")
+        closed = _close_repair_episode(state)
+        _write_repair_state(state_path, closed)
+        return closed
+    fp = repair_fingerprint(drifts)
+    if state and state.get("status") == PLAN_REPAIR_OPEN:
+        rounds = int(state.get("rounds") or 0) + 1
+        # a CHANGED fingerprint supersedes the recorded shape silently —
+        # same episode, no event, the cumulative window does not reset
+        # (the workspace has been drifting continuously either way).
+        state = {**state, "fingerprint": fp, "rounds": rounds,
+                 "updated": utc_now()}
+    else:
+        # first drift round of an episode: open silently (no output
+        # change — the REJECT report is the whole operator face), the
+        # round itself counts (rounds starts at 1).
+        state = {"status": PLAN_REPAIR_OPEN, "fingerprint": fp,
+                 "rounds": 1, "opened": utc_now(), "updated": utc_now()}
+    if state["rounds"] % PLAN_REPAIR_WINDOW_ROUNDS == 0:
+        # escalation cadence: fires at rounds == WINDOW, 2*WINDOW, ... —
+        # once per window of continued drift, never permanently silent
+        # (review round 1, LOW: post-overdue silence), never spam.
+        detail = _repair_episode_detail(state)
+        _repair_emit(workspace, PLAN_REPAIR_OVERDUE_ACTION, detail)
+        print(f"PLAN_REPAIR_OVERDUE: drift persisted for "
+              f"{state['rounds']} detection round(s) "
+              f"(window={PLAN_REPAIR_WINDOW_ROUNDS}) - the plan amendment "
+              f"did not land; escalate to the operator (issue-281)",
+              file=sys.stderr)
+    _write_repair_state(state_path, state)
+    return state
+
+
+def plan_repair_tick(workspace: Path, drifts: list) -> dict | None:
+    """issue-281: the bounded-window amendment check (the plan-drift
+    mirror of the issue-249 remedy verification), run by check() on EVERY
+    detection round — operator CLI, --auto dispatch-gate face and the
+    hooks gate subprocess all advance the same episode state; one source.
+
+    Episode semantics (state file runs/plan-repair-state.json):
+      - a drift round with no open episode OPENS one (rounds=1) —
+        silently; the REJECT report is the whole operator face;
+      - EVERY drift round advances the cumulative `rounds` counter,
+        regardless of fingerprint (a rotating drift shape cannot reset
+        the window — review round 1 HIGH); a changed fingerprint
+        supersedes the recorded shape in place, with no event;
+      - at every multiple of PLAN_REPAIR_WINDOW_ROUNDS a
+        plan_repair_overdue event + stderr escalation fires (cadence —
+        re-escalates each window of continued drift); never a new block
+        (the drift REJECT itself still gates dispatch);
+      - ONLY a genuinely clean round closes the episode, as verified
+        (plan_repair_verified event) — drift changing shape is not
+        evidence of repair;
+      - a clean round with no open episode writes nothing.
+
+    Fail-open: the tick never alters check()'s verdict. Unreadable state
+    skips verification (annotated); any unexpected error is caught by the
+    wrapper and reported on stderr. STALE_PLAN_ON_NEW_EVIDENCE warns never
+    enter `drifts` and can never open an episode (observe-first stays
+    observe-only). Adversarial-write acceptance: runs/ is a worker surface
+    (write_guard's contract covers the four carriers only), so the state
+    file is forgeable — accepted, the face is additive observability and
+    the REJECT verdict never depends on it (design.md, review round 1
+    MEDIUM).
+    """
+    try:
+        return _plan_repair_tick(workspace, drifts)
+    except Exception as exc:  # noqa: BLE001 — verification must never break
+        # the detector (annotated fail-open, silent-except ratchet form)
+        print(f"[kunglao-agent] plan-repair verification skipped: {exc!r}",
+              file=sys.stderr)
+        return None
+
+
 @_gt.telemetry('plan_drift_detector')
 def check(workspace: Path, active_only: bool = False) -> int:
     reg = _load_yaml(workspace / "claim-register.yaml")
@@ -660,6 +839,7 @@ def check(workspace: Path, active_only: bool = False) -> int:
     if not drifts:
         print("OK: no plan drift detected")
         _print_stale_plan_warns(stale_plan_warns)
+        plan_repair_tick(workspace, drifts)  # issue-281: repair-window face
         return 0
 
     by_type = {}
@@ -674,6 +854,7 @@ def check(workspace: Path, active_only: bool = False) -> int:
         if len(items) > 5:
             print(f"    ... and {len(items) - 5} more")
     _print_stale_plan_warns(stale_plan_warns)
+    plan_repair_tick(workspace, drifts)  # issue-281: repair-window face
     # v1.9.29: 3+ drift warnings in the same run = HARD_PAUSE (exit 2),
     # per the docstring contract that the implementation previously lacked.
     # (#497: STALE_PLAN_ON_NEW_EVIDENCE warns are NOT drift warnings for

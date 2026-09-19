@@ -77,7 +77,7 @@ FAST_MODULES = frozenset({
     "test_python_floor", "test_qtable_p3", "test_queue_distill_176", "test_recall_quality_814",
     "test_reconcile_intents", "test_reconcile_workers", "test_redteam_antitemplate_827", "test_references_index",
     "test_epistemic_pricing_250", "test_lint_facts_assumptions_250",
-    "test_plan_epistemics_250", "test_plan_gate_branching_250",
+    "test_plan_epistemics_250", "test_plan_gate_branching_250", "test_plan_repair_verify_281",
     "test_refutation_propagate", "test_refutation_semantic_250",
     "test_register_proven_gate", "test_reject_emit_624", "test_relib_audit_817",
     "test_renderer_unify", "test_renew_audit_619", "test_replay_equivalence_172", "test_report_consistency_check",

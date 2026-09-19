@@ -65,6 +65,9 @@ sys.path.insert(0, str(SCRIPTS))
 # 2026-09-10 regen (issue 212 statusline assembly): one statusline note line
 # after the "Workspace at a glance" block (init wires the statusLine key,
 # --no-hooks opt-out, upgrade self-heal) — no other byte changed.
+# 2026-09-19 regen (issue 281 plan-repair verification): one clause joined
+# the global_plan.txt carrier row (drift-REJECT amendments verified, 3-
+# detection-round escalation) — no other byte changed per fixture.
 SKILL_DIR_SENTINEL = Path("/kunglao/skill-sentinel")
 PY_VERSION_SENTINEL = "3.11.0"
 
