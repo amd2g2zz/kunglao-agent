@@ -221,8 +221,11 @@ def _stalled_remedy_exemption(ws, claim_id, payload, prompt_text):
             Path(ws), action="stalled_remedy_admitted",
             actor="hook:worker_budget", claim_id=cid,
             reason=f"issue-249 remedy dispatch admitted (depth={depth})")
-    except Exception:  # noqa: BLE001 — telemetry is best-effort
-        pass
+    except Exception as exc:  # noqa: BLE001 — telemetry is best-effort,
+        # never silent (the silent-except ratchet counts bare passes): the
+        # depth counter just misses this row, observed on stderr.
+        print(f'[kunglao-agent] remedy admit telemetry skipped: {exc!r}',
+              file=sys.stderr)
     return True, (f"stuck={state.get('stuck_ids') or []} "
                   f"flatline_open={len(state.get('flatlined_open_ids') or [])} "
                   f"depth={depth}")
