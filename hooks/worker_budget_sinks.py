@@ -566,7 +566,13 @@ def pre_check(payload: dict, paths: dict) -> int:
         # exists to demand.
         ('drift', (True, '') if verifier_remediation
          else check_plan_drift(paths)),
-        ('health', check_convergence_health(paths)),
+        # #249: the dispatch context rides along so the STALLED rc=1 face
+        # can admit the gate's own prescribed remedy (mirror of the D2
+        # drift skip above — same dispatch, both faces must agree). The
+        # exemption is INSIDE the rc=1 face: SPINNING/crash faces are
+        # untouched, and every other gate below still applies to a remedy
+        # dispatch.
+        ('health', check_convergence_health(paths, cid, payload, prompt)),
         # v1.9.39 (#475): env-state freshness gate — a dispatch whose tier/
         # tools need a drifted environment capability is REJECTED; missing/
         # stale-beyond-2xTTL state follows the FAIL_OPEN/self-heal split
